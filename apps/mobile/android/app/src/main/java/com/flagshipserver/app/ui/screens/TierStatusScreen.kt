@@ -13,7 +13,7 @@
 package com.flagshipserver.app.ui.screens
 
 import androidx.compose.ui.res.stringResource
-import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.core.FSStrings
 import com.flagshipserver.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -263,7 +263,7 @@ private fun tierLabel(tier: String): String = when (tier) {
 private fun dispatcherValue(used: Double, quota: Double?): String {
     val usedStr = String.format(Locale.US, "%.2f GB", used)
     return if (quota != null) {
-        fsString(R.string.gb_free, usedStr, String.format(Locale.US, "%.0f", quota))
+        FSStrings.get(R.string.gb_free, usedStr, String.format(Locale.US, "%.0f", quota))
     } else {
         "$usedStr / —"
     }
