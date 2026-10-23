@@ -46,7 +46,8 @@ jobs:
           node-version: 24.22.1
       - uses: actions/setup-go@v5
         with:
-          go-version-file: installer/unseal-helper/go.mod
+          # The newer of the two Go modules: flagship-tlsd needs Go 1.25 (crypto.MessageSigner).
+          go-version-file: installer/tls-frontend/go.mod
           cache: false
       - name: Install build tooling (exact lockfile, no scripts)
         run: npm ci --ignore-scripts --no-audit --no-fund

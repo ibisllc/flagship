@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -13,6 +15,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
 	"net"
@@ -115,8 +118,12 @@ func (k *fakeKeyd) serve(c net.Conn) {
 			k.mu.Lock()
 			k.signs++
 			k.mu.Unlock()
-			digest, _ := hex.DecodeString(req.Args["digest"].(string))
-			sig, err := ecdsa.SignASN1(rand.Reader, active.key, digest)
+			msg, err := keydSignedInput(req.Args)
+			var sig []byte
+			if err == nil {
+				d := sha256.Sum256(msg)
+				sig, err = ecdsa.SignASN1(rand.Reader, active.key, d[:])
+			}
 			if err != nil {
 				res = map[string]any{"id": req.ID, "ok": false, "code": "failed", "message": err.Error()}
 			} else {
@@ -316,10 +323,65 @@ func TestKeepsServingWhenKeydIsBrieflyUnreachable(t *testing.T) {
 	}
 }
 
-func TestSignerRefusesOtherHashes(t *testing.T) {
+// keydSignedInput is what keyd's tls.sign builds from its fields (packages/keyd/src/tls.ts).
+func keydSignedInput(a map[string]any) ([]byte, error) {
+	str := func(k string) []byte {
+		v, _ := a[k].(string)
+		b, _ := hex.DecodeString(v)
+		return b
+	}
+	if _, bare := a["digest"]; bare {
+		return nil, errors.New("unknown field digest")
+	}
+	switch a["tls"] {
+	case "1.3":
+		return append(append(bytes.Repeat([]byte{0x20}, 64), tls13ServerContext...), str("transcriptHash")...), nil
+	case "1.2":
+		return append(append(str("clientRandom"), str("serverRandom")...), str("params")...), nil
+	}
+	return nil, errors.New("tls must be 1.3 or 1.2")
+}
+
+func TestSignerRefusesBareDigestsAndOtherHashes(t *testing.T) {
 	s := &keydSigner{client: newKeydClient("/nonexistent", "x"), handle: "h"}
-	if _, err := s.Sign(nil, make([]byte, 20), crypto.SHA1); err == nil {
+	if _, err := s.Sign(nil, make([]byte, 32), crypto.SHA256); err == nil {
+		t.Fatal("a bare digest was signed")
+	}
+	tls13 := append(append(bytes.Repeat([]byte{0x20}, 64), tls13ServerContext...), make([]byte, 32)...)
+	if _, err := s.SignMessage(nil, tls13, crypto.SHA1); err == nil {
 		t.Fatal("SHA-1 was signed")
+	}
+	if _, err := s.SignMessage(nil, []byte("flagship/x/v1|a"), crypto.SHA256); err == nil {
+		t.Fatal("a non-TLS message was sent to keyd")
+	}
+}
+
+func TestTLSSignArgs(t *testing.T) {
+	th := bytes.Repeat([]byte{7}, 48)
+	a, err := tlsSignArgs(append(append(bytes.Repeat([]byte{0x20}, 64), tls13ServerContext...), th...))
+	if err != nil || a["tls"] != "1.3" || a["transcriptHash"] != hex.EncodeToString(th) {
+		t.Fatalf("1.3: %v %v", a, err)
+	}
+	params := append([]byte{3, 0, 0x1d, 32}, bytes.Repeat([]byte{9}, 32)...)
+	a, err = tlsSignArgs(append(append(bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)...), params...))
+	if err != nil || a["tls"] != "1.2" || a["params"] != hex.EncodeToString(params) || a["clientRandom"] != hex.EncodeToString(bytes.Repeat([]byte{1}, 32)) {
+		t.Fatalf("1.2: %v %v", a, err)
+	}
+	if _, err := tlsSignArgs(append(append(bytes.Repeat([]byte{0x20}, 64), tls13ServerContext...), 1, 2, 3)); err == nil {
+		t.Fatal("a short transcript hash was accepted")
+	}
+}
+
+func TestTLS12HandshakeSignsServerKeyExchangeThroughKeyd(t *testing.T) {
+	fc := newFakeCert(t, "h1", "home.alice.flagship.services")
+	addr, _ := startFrontend(t, startFakeKeyd(t, fc), startUpstream(t), time.Second)
+	c, err := client(t, addr, "home.alice.flagship.services", fc.cert, func(c *tls.Config) { c.MaxVersion = tls.VersionTLS12 })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if v := c.ConnectionState().Version; v != tls.VersionTLS12 {
+		t.Fatalf("version %x", v)
 	}
 }
 

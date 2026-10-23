@@ -2,9 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
@@ -144,21 +144,37 @@ func (c *keydClient) active() (*activeCert, error) {
 	return a, nil
 }
 
-// keydSigner is a crypto.Signer whose private key stays in keyd: Sign sends the digest of the
-// handshake transcript and gets back the ECDSA signature.
+// keydSigner is a crypto.MessageSigner whose private key stays in keyd. crypto/tls hands it the
+// whole signed input (Go 1.25+), and it sends keyd the TLS fields, not a digest: keyd rebuilds
+// the input itself and signs only TLS 1.3 CertificateVerify and TLS 1.2 ServerKeyExchange
+// inputs, so this process cannot use the key as a general signing oracle.
 type keydSigner struct {
 	client *keydClient
 	handle string
 	pub    crypto.PublicKey
 }
 
+var _ crypto.MessageSigner = (*keydSigner)(nil)
+
+var tls13ServerContext = []byte("TLS 1.3, server CertificateVerify\x00")
+
 func (s *keydSigner) Public() crypto.PublicKey { return s.pub }
 
-func (s *keydSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
-	if opts != nil && opts.HashFunc() != crypto.SHA256 && opts.HashFunc() != crypto.SHA384 {
-		return nil, errors.New("keyd signs SHA-256 and SHA-384 handshake digests only")
+// Sign is the bare-digest form, which keyd does not offer.
+func (s *keydSigner) Sign(_ io.Reader, _ []byte, _ crypto.SignerOpts) ([]byte, error) {
+	return nil, errors.New("keyd signs TLS handshake inputs, not digests")
+}
+
+func (s *keydSigner) SignMessage(_ io.Reader, msg []byte, opts crypto.SignerOpts) ([]byte, error) {
+	if opts == nil || opts.HashFunc() != crypto.SHA256 {
+		return nil, errors.New("keyd signs ECDSA P-256 with SHA-256 only")
 	}
-	res, err := s.client.call("tls.sign", map[string]any{"handle": s.handle, "digest": hex.EncodeToString(digest)})
+	args, err := tlsSignArgs(msg)
+	if err != nil {
+		return nil, err
+	}
+	args["handle"] = s.handle
+	res, err := s.client.call("tls.sign", args)
 	if err != nil {
 		return nil, err
 	}
@@ -167,6 +183,26 @@ func (s *keydSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([
 		return nil, err
 	}
 	return hex.DecodeString(sigHex)
+}
+
+// tlsSignArgs splits a server signature input into the fields keyd's tls.sign takes.
+func tlsSignArgs(msg []byte) (map[string]any, error) {
+	if len(msg) > 64+len(tls13ServerContext) && bytes.Equal(msg[:64], bytes.Repeat([]byte{0x20}, 64)) && bytes.Equal(msg[64:64+len(tls13ServerContext)], tls13ServerContext) {
+		th := msg[64+len(tls13ServerContext):]
+		if len(th) != 32 && len(th) != 48 {
+			return nil, errors.New("not a TLS 1.3 transcript hash")
+		}
+		return map[string]any{"tls": "1.3", "transcriptHash": hex.EncodeToString(th)}, nil
+	}
+	if len(msg) >= 64+4 {
+		return map[string]any{
+			"tls":          "1.2",
+			"clientRandom": hex.EncodeToString(msg[:32]),
+			"serverRandom": hex.EncodeToString(msg[32:64]),
+			"params":       hex.EncodeToString(msg[64:]),
+		}, nil
+	}
+	return nil, errors.New("not a TLS server signature input")
 }
 
 // buildCertificate turns keyd's active entry into a tls.Certificate that signs through keyd.
@@ -195,5 +231,3 @@ func buildCertificate(c *keydClient, a *activeCert) (*tls.Certificate, error) {
 	}
 	return &tls.Certificate{Certificate: der, PrivateKey: &keydSigner{client: c, handle: a.Handle, pub: leaf.PublicKey}, Leaf: leaf}, nil
 }
-
-var _ = rand.Reader

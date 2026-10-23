@@ -33,7 +33,7 @@ import {
   sealGossip,
   sealLlmPayload,
 } from "@flagship/protocol";
-import { AcmeAccount, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydServer, KeydService, KeydSyncClient, LETS_ENCRYPT_HOSTS, TlsKeys, encodeFrame, readKeyFile } from "../src/index.js";
+import { AcmeAccount, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydServer, KeydService, KeydSyncClient, LETS_ENCRYPT_HOSTS, TlsKeys, encodeFrame, readKeyFile, tls12ServerSignedMessage, tls13ServerSignedMessage } from "../src/index.js";
 import { KeydAcmeIssuer } from "../../server-daemon/src/acme/keydAcme.js";
 import { keydAcmeApi } from "../../server-daemon/src/keydAsync.js";
 import { MockAcme } from "../../server-daemon/tests/helpers/mockAcme.js";
@@ -51,6 +51,9 @@ const enc = (s: string) => new TextEncoder().encode(s);
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const unhex = (s: unknown) => Uint8Array.from(Buffer.from(String(s), "hex"));
 const PUB = ed.getPublicKey(SEED);
+const P256_PARAMS = Uint8Array.of(3, 0x00, 0x17, 65, 4, ...new Uint8Array(64).fill(5));
+const t13 = (th: Uint8Array) => ({ tls: "1.3", transcriptHash: hex(th) });
+const t12 = (over: Record<string, string> = {}) => ({ tls: "1.2", clientRandom: hex(new Uint8Array(32).fill(1)), serverRandom: hex(new Uint8Array(32).fill(2)), params: hex(P256_PARAMS), ...over });
 
 interface RustKeyd {
   dir: string;
@@ -447,6 +450,14 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["tls.csr", { handle: "nope" }, true], ["tls.csr", { handle: blob(16) }, true], ["tls.csr", {}, true],
         ["tls.install", { handle: blob(16), chain: "not pem!" }, true], ["tls.install", { handle: blob(16), chain: "abc" }, true], ["tls.install", { handle: "x", chain: "abc" }, true],
         ["tls.activate", { handle: blob(16) }, true], ["tls.sign", { handle: blob(16), digest: blob(31) }, true], ["tls.sign", { handle: blob(16), digest: blob(32) }, true],
+        ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(32)) }, true], ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(33)) }, true], ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(49)) }, true],
+        ["tls.sign", { handle: blob(16), tls: "1.1", transcriptHash: blob(32) }, true], ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(32)), clientRandom: blob(32) }, true],
+        ["tls.sign", { handle: blob(16), ...t12() }, true], ["tls.sign", { handle: blob(16), ...t12({ clientRandom: blob(31) }) }, true],
+        ["tls.sign", { handle: blob(16), ...t12({ params: hex(Uint8Array.of(3, 0, 0x17, 65, 2, ...new Uint8Array(64))) }) }, true],
+        ["tls.sign", { handle: blob(16), ...t12({ params: hex(Uint8Array.of(3, 0, 0x1d, 32, ...new Uint8Array(32))) }) }, true],
+        ["tls.sign", { handle: blob(16), ...t12({ params: hex(Uint8Array.of(3, 0, 0x1d, 32, ...new Uint8Array(33))) }) }, true],
+        ["tls.sign", { handle: blob(16), ...t12({ params: hex(enc("flagship/x/v1|a")) }) }, true], ["tls.sign", { handle: blob(16), ...t12({ params: "" }) }, true],
+        ["tls.sign", { handle: blob(16), tls: "1.2", transcriptHash: blob(32) }, true], ["tls.sign", { tls: "1.3", transcriptHash: blob(32) }, true],
         ["tls.remove", { handle: blob(16) }, true], ["tls.active", {}, true], ["tls.list", { x: 1 }, true],
         ["acme.jwk", {}, true], ["acme.sign", { kind: "newOrder" }, true], ["acme.sign", { kind: "x", url: "u", nonce: "n" }, true],
         ["acme.sign", { kind: "newOrder", url: "https://acme-v02.api.letsencrypt.org/acme/new-order", nonce: "abcdefghij", names: [FQDN] }, true],
@@ -486,7 +497,7 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       const csr = unhex((await c.call("tls.csr", { handle: created.handle })).csr);
       const parsed = new Pkcs10CertificateRequest(Buffer.from(csr));
       expect(parsed.subject).toContain(FQDN);
-      await expect(c.call("tls.sign", { handle: created.handle, digest: hex(sha256(new Uint8Array(3))) })).rejects.toMatchObject({ code: "forbidden", message: "this key has no certificate" });
+      await expect(c.call("tls.sign", { handle: created.handle, ...t13(new Uint8Array(32)) })).rejects.toMatchObject({ code: "forbidden", message: "this key has no certificate" });
       await expect(c.call("tls.activate", { handle: created.handle })).rejects.toMatchObject({ code: "forbidden" });
       const chain = await issueFor(csr);
       const info = await c.call("tls.install", { handle: created.handle, chain });
@@ -497,13 +508,18 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       expect(listed.allowedNames).toEqual([FQDN, `*.${FQDN}`]);
       expect((await c.call("tls.active")).active).toMatchObject({ handle: created.handle, names: [FQDN, `*.${FQDN}`].sort(), legacy: false });
       await expect(c.call("tls.createKey", { names: ["evil.example.com"] })).rejects.toMatchObject({ code: "forbidden" });
-      await expect(c.call("tls.sign", { handle: created.handle, digest: "00" })).rejects.toMatchObject({ code: "bad-request" });
+      // The bare digest form is gone: keyd signs only the TLS inputs it builds itself.
+      await expect(c.call("tls.sign", { handle: created.handle, digest: hex(sha256(new Uint8Array(3))) })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("tls.sign", { handle: created.handle, tls: "1.3", transcriptHash: "00" })).rejects.toMatchObject({ code: "bad-request" });
+      const raw = new X509Certificate(chain).publicKey.export({ type: "spki", format: "der" });
+      const pub = Uint8Array.from(raw.subarray(raw.length - 65));
       for (const len of [32, 48]) {
-        const digest = new Uint8Array(len).fill(3);
-        const sig = unhex((await c.call("tls.sign", { handle: created.handle, digest: hex(digest) })).sig);
-        const raw = new X509Certificate(chain).publicKey.export({ type: "spki", format: "der" });
-        expect(p256.verify(sig, digest, Uint8Array.from(raw.subarray(raw.length - 65)), { prehash: false, format: "der" })).toBe(true);
+        const th = new Uint8Array(len).fill(3);
+        const sig = unhex((await c.call("tls.sign", { handle: created.handle, ...t13(th) })).sig);
+        expect(p256.verify(sig, sha256(tls13ServerSignedMessage(th)), pub, { prehash: false, format: "der" })).toBe(true);
       }
+      const sig12 = unhex((await c.call("tls.sign", { handle: created.handle, ...t12() })).sig);
+      expect(p256.verify(sig12, sha256(tls12ServerSignedMessage(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), P256_PARAMS)), pub, { prehash: false, format: "der" })).toBe(true);
       await expect(c.call("tls.remove", { handle: created.handle })).rejects.toMatchObject({ code: "forbidden", message: "the key in service cannot be removed" });
       // A certificate for another key or for more names is refused.
       const b = await c.call("tls.createKey", { names: [FQDN] });
@@ -529,8 +545,8 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       const k = await spawnRust(dir);
       const c = await client(k.sock);
       expect(((await c.call("tls.active")).active as { handle: string }).handle).toBe(handle);
-      const digest = sha256(enc("transcript"));
-      expect((await c.call("tls.sign", { handle, digest: hex(digest) })).sig).toBe(hex(tsTls.sign(handle, digest)));
+      const th = sha256(enc("transcript"));
+      expect((await c.call("tls.sign", { handle, ...t13(th) })).sig).toBe(hex(tsTls.signHandshake(handle, tls13ServerSignedMessage(th))));
       expect((await c.call("tls.csr", { handle })).csr).toBe(hex(tsTls.csr(handle)));
       // Rust makes and activates a new one; TS loads it.
       const r = await c.call("tls.createKey", { names: [FQDN, `*.${FQDN}`] });
@@ -542,7 +558,8 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       expect(Object.keys(JSON.parse(readFileSync(keyFile, "utf8")))).toEqual(["names", "privHex", "spkiHex", "createdAt", "chainPem", "notBefore", "notAfter"]);
       const again = new TlsKeys(ALLOWED, join(dir, "tls"));
       expect(again.active()?.handle).toBe(rh);
-      expect(hex(again.sign(rh, digest))).toBe((await c.call("tls.sign", { handle: rh, digest: hex(digest) })).sig);
+      expect(hex(again.signHandshake(rh, tls13ServerSignedMessage(th)))).toBe((await c.call("tls.sign", { handle: rh, ...t13(th) })).sig);
+      expect(hex(again.signHandshake(rh, tls12ServerSignedMessage(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), P256_PARAMS)))).toBe((await c.call("tls.sign", { handle: rh, ...t12() })).sig);
       expect(hex(again.csr(rh))).toBe((await c.call("tls.csr", { handle: rh })).csr);
       expect(again.list().find((x) => x.handle === rh)?.spkiHex).toBe(r.spki);
       c.close();

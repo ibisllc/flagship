@@ -40,8 +40,8 @@ Nothing in the box uses it yet: the unit, the daemon and the Go frontend are unc
 | Flags | `--listen 127.0.0.1:18443 --keyd /run/flagship-keyd/keyd.sock --upstream /run/flagship-tls/upstream.sock --max-conns 4096 --handshake-timeout 10s --refresh 5s` | same names, defaults and Go syntax; extra bounds flags below | `args::tests` |
 | Startup line | `listening <addr>` on stdout | same | manual |
 | keyd protocol | v1 frames, `hello {v:1, component}` first, 4 MiB cap, one redial | same; component `flagship-ingress` | `says_hello_first_and_redials`, `an_oversize_keyd_frame_fails_closed`, `wire::tests` |
-| Key | never in the process; `crypto.Signer` → `tls.sign` | same, plus the binding above | `serves_tls_with_the_key_in_keyd_…`, `refuses_a_signature_by_another_key`, `signer::tests` |
-| Hashes | SHA-256 or SHA-384 digests | SHA-256 only (P-256 scheme) | `chooses_only_p256_sha256` |
+| Key | never in the process; `crypto.MessageSigner` → structured `tls.sign` | same, plus the binding above | `serves_tls_with_the_key_in_keyd_…`, `refuses_a_signature_by_another_key`, `signer::tests` |
+| Hashes | SHA-256 only (P-256 scheme) | SHA-256 only (P-256 scheme) | `chooses_only_p256_sha256` |
 | TLS versions | 1.2 minimum | 1.2 minimum, 1.3 preferred (rustls has no 1.1 code at all) | `classical_clients_are_still_accepted_…`; Go oracle covers 1.1 refusal |
 | ALPN | `http/1.1` only; `acme-tls/1` never negotiated | same; a client offering only an unknown protocol is refused, no ALPN is served with `alpn:""` | `refuses_acme_tls_alpn` |
 | Names | only names the leaf covers; no SNI refused | same | `refuses_a_name_the_certificate_does_not_cover` |
@@ -129,10 +129,9 @@ cargo test -p flagship-ingress
 
 ## Left before it can replace flagship-tlsd
 
-1. **keyd `tls.sign` takes a bare digest.** The ingress-side binding stops misuse through rustls, but a
-   compromised ingress can still ask keyd to sign any 32/48-byte digest with the TLS key. Close it in keyd: a
-   `tls.sign` v2 that takes the structured input (TLS 1.3 context + transcript hash, or TLS 1.2 randoms + ECDHE
-   params) and hashes it itself, plus `SO_PEERCRED` so only the ingress user may call it.
+1. **`SO_PEERCRED` on keyd.** `tls.sign` now takes the TLS fields (TLS 1.3 transcript hash, or TLS 1.2
+   randoms + ECDHE params) and builds the signed input itself, so the key signs TLS handshakes only. Any
+   client-group process can still ask for one; restricting `tls.sign` to the ingress user needs peer credentials.
 2. **Unit file.** `packages/keyd/src/unit.ts` `tlsdServiceUnit` with the binary swapped (`/opt/flagship/…/flagship-ingress`);
    decide whether it keeps the `flagship-tlsd` unit/user names (simplest: same unit, new `ExecStart`). Confirm the
    tokio runtime under `SystemCallFilter=@system-service ~@resources …` and `MemoryDenyWriteExecute=yes` on the
