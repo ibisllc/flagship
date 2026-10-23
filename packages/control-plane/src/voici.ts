@@ -213,8 +213,10 @@ export async function handleVoiciRedirect(
       return to ? found(to) : notFound("short code not found");
     }
   }
-  if (deps.voiciNames && code.length >= 4 && code.length <= 40 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(code)) {
-    const name = await deps.voiciNames.get(voiciNameKey(code));
+  // People type names with capitals (voi.ci/HalloweenParty); a name is stored lowercase.
+  const typed = code.toLowerCase();
+  if (deps.voiciNames && typed.length >= 4 && typed.length <= 40 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(typed)) {
+    const name = await deps.voiciNames.get(voiciNameKey(typed));
     if (name) {
       if (name.state === "waiting") return gone("this short link is no longer in use");
       const to = await target(name.username, name.serviceId, undefined);

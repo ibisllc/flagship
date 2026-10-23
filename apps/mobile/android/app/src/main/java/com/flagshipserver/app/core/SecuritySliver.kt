@@ -100,11 +100,12 @@ object SliverWords {
         val day = 86_400_000L
         val hour = 3_600_000L
         val min = 60_000L
+        fun count(id: Int, n: Long) = FSStrings.plural(id, n.toInt(), n)
         val body = when {
-            a >= day -> FSStrings.get(R.string.day_hours, a / day, if (a / day == 1L) "" else "s", (a % day) / hour)
-            a >= hour -> FSStrings.get(R.string.hour_minutes, a / hour, if (a / hour == 1L) "" else "s", (a % hour) / min)
-            else -> { val m = maxOf(1L, a / min); FSStrings.get(R.string.minute, m, if (m == 1L) "" else "s") }
+            a >= day -> count(R.plurals.days_count, a / day) + " " + count(R.plurals.hours_count, (a % day) / hour)
+            a >= hour -> count(R.plurals.hours_count, a / hour) + " " + count(R.plurals.minutes_count, (a % hour) / min)
+            else -> count(R.plurals.minutes_count, maxOf(1L, a / min))
         }
-        return if (ms >= 0) FSStrings.get(R.string.left, body) else "overdue by $body"
+        return if (ms >= 0) FSStrings.get(R.string.left, body) else FSStrings.get(R.string.overdue_by, body)
     }
 }
