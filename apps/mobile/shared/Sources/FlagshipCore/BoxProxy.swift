@@ -143,31 +143,31 @@ public struct BoxProxy: Equatable, Sendable {
 
     /// Why `host` is not an acceptable proxy host, or nil. Expects normalized input.
     public static func hostError(_ host: String) -> String? {
-        if host.isEmpty { return "Enter the proxy's address." }
-        if host.utf16.count > 253 { return "That address is too long." }
+        if host.isEmpty { return String(localized: "Enter the proxy's address.") }
+        if host.utf16.count > 253 { return String(localized: "That address is too long.") }
         if host.contains(":") {
             let okChars = host.unicodeScalars.allSatisfy { isDigit($0) || ("a"..."f").contains($0) || $0 == ":" || $0 == "." }
             let n = host.utf16.count
             let parts = host.split(separator: ":", omittingEmptySubsequences: false).count
             // One colon is almost always "host:port" typed into the address field.
             return okChars && n >= 2 && n <= 45 && parts >= 3
-                ? nil : "Use a host name or an IP address, without a scheme, path or port."
+                ? nil : String(localized: "Use a host name or an IP address, without a scheme, path or port.")
         }
         if isIPv4(host) { return nil }
-        if host.unicodeScalars.allSatisfy({ isDigit($0) || $0 == "." }) { return "That isn't a valid IPv4 address." }
+        if host.unicodeScalars.allSatisfy({ isDigit($0) || $0 == "." }) { return String(localized: "That isn't a valid IPv4 address.") }
         let labels = host.split(separator: ".", omittingEmptySubsequences: false)
         if labels.allSatisfy({ isLabel(String($0)) }) { return nil }
-        return "Use a host name or an IP address, without a scheme, path or port."
+        return String(localized: "Use a host name or an IP address, without a scheme, path or port.")
     }
 
     /// Why the credentials can't be used, or nil. SOCKS5 caps both at 255 bytes (RFC 1929).
     public static func credentialsError(username: String, password: String) -> String? {
         let u = username.utf8.count
         let p = password.utf8.count
-        if u == 0 || p == 0 { return "Enter a username and password." }
-        if u > 255 || p > 255 { return "The username and password can be at most 255 bytes each." }
-        if username.contains(":") { return "The username can't contain a colon." }
-        if hasCtrl(username) || hasCtrl(password) { return "The username and password can't contain control characters." }
+        if u == 0 || p == 0 { return String(localized: "Enter a username and password.") }
+        if u > 255 || p > 255 { return String(localized: "The username and password can be at most 255 bytes each.") }
+        if username.contains(":") { return String(localized: "The username can't contain a colon.") }
+        if hasCtrl(username) || hasCtrl(password) { return String(localized: "The username and password can't contain control characters.") }
         return nil
     }
 
