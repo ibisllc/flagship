@@ -169,4 +169,48 @@ run("install-box-artifact.sh", () => {
   });
 });
 
+run("rollback-box-artifact.sh and pruning", () => {
+  const ROLLBACK = join(ROOT, "installer/rollback-box-artifact.sh");
+  const rollback = (t: ReturnType<typeof sandbox>, commit: string) =>
+    spawnSync(BASH!, [ROLLBACK, commit, "--releases", t.releases, "--current", t.current, "--state", t.state, "--bin", t.bin], { encoding: "utf8" });
+  const installSeq = (name: string, commit: string, seq: number, t: ReturnType<typeof sandbox>) => {
+    const f = fixtureArtifact(name, commit);
+    f.manifest.sequence = seq;
+    writeFileSync(f.manifestPath, JSON.stringify({ manifest: f.manifest, signatures: [signBoxArtifact(f.manifest, seed)] }));
+    const r = install(f, t);
+    expect(r.status, r.stderr).toBe(0);
+  };
+
+  it("flips back to the previous release without any download, and fixes the records", () => {
+    const t = sandbox("rb-sbx");
+    installSeq("rb1", "1".repeat(40), 1, t);
+    installSeq("rb2", "2".repeat(40), 2, t);
+    expect(readlinkSync(t.current)).toBe(join(t.releases, "2".repeat(40), "app"));
+    const r = rollback(t, "1".repeat(40));
+    expect(r.status, r.stderr).toBe(0);
+    expect(readlinkSync(t.current)).toBe(join(t.releases, "1".repeat(40), "app"));
+    expect(JSON.parse(readFileSync(join(t.state, "artifact-current.json"), "utf8"))).toMatchObject({ commit: "1".repeat(40), sequence: 1 });
+    expect(readlinkSync(join(t.bin, "node"))).toBe(join(t.releases, "1".repeat(40), "app/.runtime/node/bin/node"));
+    // the anti-rollback high-water mark is NOT lowered: an install below it is still refused
+    expect(readFileSync(join(t.state, "artifact-sequence"), "utf8").trim()).toBe("2");
+  });
+
+  it("refuses a release that is not installed, a branch name and a real directory", () => {
+    const t = sandbox("rb-refuse");
+    installSeq("rbr1", "1".repeat(40), 1, t);
+    expect(rollback(t, "3".repeat(40)).status).toBe(3);
+    expect(rollback(t, "main").status).toBe(2);
+    expect(readlinkSync(t.current)).toBe(join(t.releases, "1".repeat(40), "app"));
+  });
+
+  it("keeps only the running release and the one before it", () => {
+    const t = sandbox("rb-prune");
+    installSeq("rbp1", "1".repeat(40), 1, t);
+    installSeq("rbp2", "2".repeat(40), 2, t);
+    installSeq("rbp3", "3".repeat(40), 3, t);
+    expect(readdirSync(t.releases).sort()).toEqual(["2".repeat(40), "3".repeat(40)]);
+    expect(rollback(t, "2".repeat(40)).status).toBe(0);
+  });
+});
+
 void symlinkSync;

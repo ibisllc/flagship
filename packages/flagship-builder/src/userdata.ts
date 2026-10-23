@@ -416,19 +416,6 @@ else
 fi`;
 }
 
-/**
- * A box installs and compiles only the daemon, never the whole monorepo. One
- * `--workspace` is enough: npm installs the selected workspace's full
- * dependency closure, including the `@flagship/*` workspaces it links to, so
- * nothing here goes stale when the daemon gains a dependency. The root is
- * included for typescript + tsx, which the box needs to compile and to run
- * `scripts/install-helper.ts`. `tsc -b` follows the daemon's project
- * references. The OTA rebuild (server-daemon updateConsumer.ts) and the cloud
- * demo bootstrap (control-plane demoCloudConfig.ts) use the same scope.
- */
-export const BOX_NPM_SCOPE = "--include-workspace-root --workspace=packages/server-daemon";
-export const BOX_TSC_BUILD = "npx tsc -b packages/server-daemon";
-
 export interface BootstrapTemplateArgs {
   ref: string;
   repoUrl: string;

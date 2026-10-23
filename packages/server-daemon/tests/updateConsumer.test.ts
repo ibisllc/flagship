@@ -6,13 +6,13 @@
  * Coverage (the security-critical set):
  *   1. forged / non-admin-signed order rejected WITHOUT any side effect
  *      (admin root pinned ⇒ an owner-IRK-signed order is REJECTED);
- *   2. unendorsed targetCommit rejected (admin-valid but the ReleaseGate
- *      fails) — no checkout, no marker, no exit;
+ *   2. unsigned/refused release rejected (admin-valid but the release
+ *      verifier refuses it) — no switch, no marker, no exit;
  *   3. wrong serverDomain rejected;
  *   4. fromCommit != current HEAD rejected;
  *   5. nonce replay rejected (second delivery of a consumed nonce);
  *   6. stale issuedAt rejected;
- *   7. happy path: fetch + checkout + rebuild + pending marker + exit
+ *   7. happy path: download + verify + switch release + pending marker + exit
  *      (legacy owner-IRK path with no admin root, AND the admin-root path);
  *   8. pending-verify marker present ⇒ the consumer never even fetches.
  */
@@ -28,15 +28,13 @@ import {
   buildCurrentCommitProvider,
   buildUpdateConsumerPoller,
   decodeUpdateOrderCarrier,
-  rebuildWorkspace,
   runUpdateConsumer,
   type PendingVerifyMarker,
   type PendingVerifyStore,
   type RunUpdateConsumerOptions,
-  type UpdateCommandRunner,
   type UsedNonceStore,
 } from "../src/updateConsumer.js";
-import type { ReleaseGate } from "../src/updateClient.js";
+import { ArtifactRefusedError, type ReleaseSwapper } from "../src/artifactUpdate.js";
 import type { UpdateOutcomeRecord, UpdateOutcomeStore } from "../src/updateOutcome.js";
 
 const DOMAIN = "home.alice.flagship.services";
@@ -90,21 +88,22 @@ function fetchFor(sealed: string | null): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-interface RunnerSpy {
-  calls: string[][];
-  failOn?: string;
+interface SwapSpy {
+  calls: string[];
+  install?: "refused" | "error";
+  restoreFails?: boolean;
 }
-function makeRunner(spy: RunnerSpy): UpdateCommandRunner {
-  return async (cmd, args) => {
-    const call = [cmd, ...args];
-    spy.calls.push(call);
-    if (spy.failOn && call.join(" ").includes(spy.failOn)) {
-      throw new Error(`injected failure on ${spy.failOn}`);
-    }
-    if (cmd === "git" && args.includes("rev-parse")) {
-      return { stdout: `${CURRENT}\n` };
-    }
-    return { stdout: "" };
+function makeSwapper(spy: SwapSpy): ReleaseSwapper {
+  return {
+    async install(commit) {
+      spy.calls.push(`install ${commit}`);
+      if (spy.install === "refused") throw new ArtifactRefusedError("not signed by enough release keys");
+      if (spy.install === "error") throw new Error("injected install failure");
+    },
+    async restore(commit) {
+      spy.calls.push(`restore ${commit}`);
+      if (spy.restoreFails) throw new Error("injected restore failure");
+    },
   };
 }
 
@@ -141,21 +140,14 @@ function inMemPending(
   return store;
 }
 
-const passGate: ReleaseGate = { assertCommitEndorsed: () => {} };
-const failGate: ReleaseGate = {
-  assertCommitEndorsed: () => {
-    throw new Error("not maintainer-endorsed");
-  },
-};
-
 function baseOpts(over: Partial<RunUpdateConsumerOptions> = {}): {
   opts: RunUpdateConsumerOptions;
-  runner: RunnerSpy;
+  runner: SwapSpy;
   nonces: ReturnType<typeof inMemNonces>;
   pending: ReturnType<typeof inMemPending>;
   exits: { count: number };
 } {
-  const runner: RunnerSpy = { calls: [] };
+  const runner: SwapSpy = { calls: [] };
   const nonces = inMemNonces();
   const pending = inMemPending();
   const exits = { count: 0 };
@@ -164,9 +156,8 @@ function baseOpts(over: Partial<RunUpdateConsumerOptions> = {}): {
     ownerIrkPub: OWNER_IRK.publicKey,
     username: USERNAME,
     controlPlaneBaseUrl: "https://flagshipserver.com",
-    repoPath: "/opt/flagship",
-    releaseGate: passGate,
-    runner: makeRunner(runner),
+    swapper: makeSwapper(runner),
+    currentCommit: () => CURRENT,
     usedNonceStore: nonces,
     pendingStore: pending,
     requestExit: () => {
@@ -179,8 +170,8 @@ function baseOpts(over: Partial<RunUpdateConsumerOptions> = {}): {
   return { opts, runner, nonces, pending, exits };
 }
 
-function calls(spy: RunnerSpy, verb: string): string[][] {
-  return spy.calls.filter((c) => c.includes(verb));
+function calls(spy: SwapSpy, verb: string): string[] {
+  return spy.calls.filter((c) => c.startsWith(verb));
 }
 
 describe("decodeUpdateOrderCarrier", () => {
@@ -234,12 +225,12 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
   it("rejects an unendorsed targetCommit after a valid admin signature", async () => {
     const { opts, runner, pending, exits } = baseOpts({
       adminRootPub: ADMIN_ROOT.publicKey,
-      releaseGate: failGate,
+      swapper: makeSwapper({ calls: [], install: "refused" }),
       fetchImpl: fetchFor(carrierHex(makeOrder(), ADMIN_ROOT)),
     });
     const out = await runUpdateConsumer(opts);
     expect(out).toEqual({ applied: false, reason: "unendorsed" });
-    expect(calls(runner, "checkout")).toEqual([]);
+    expect(runner.calls).toEqual([]);
     expect(pending.current).toBeNull();
     expect(exits.count).toBe(0);
   });
@@ -264,9 +255,8 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     });
     const out = await runUpdateConsumer(opts);
     expect(out).toEqual({ applied: false, reason: "from-commit-mismatch" });
-    // Only the read-only HEAD probe ran — no fetch/checkout/build.
-    expect(calls(runner, "fetch")).toEqual([]);
-    expect(calls(runner, "checkout")).toEqual([]);
+    // Nothing was downloaded, installed or switched.
+    expect(runner.calls).toEqual([]);
     expect(pending.current).toBeNull();
     expect(exits.count).toBe(0);
   });
@@ -278,7 +268,7 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     });
     const out = await runUpdateConsumer(opts);
     expect(out).toEqual({ applied: false, reason: "replayed-nonce" });
-    expect(calls(runner, "fetch")).toEqual([]);
+    expect(runner.calls).toEqual([]);
     expect(exits.count).toBe(0);
   });
 
@@ -295,19 +285,11 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
   });
 
   // 7a. happy path — legacy owner-IRK (no admin root pinned).
-  it("stages a valid owner-IRK-signed update (legacy path): fetch + checkout + rebuild + marker + exit", async () => {
+  it("stages a valid owner-IRK-signed update (legacy path): install the signed release + marker + exit", async () => {
     const { opts, runner, nonces, pending, exits } = baseOpts();
     const out = await runUpdateConsumer(opts);
     expect(out).toEqual({ applied: true, previousCommit: CURRENT, targetCommit: TARGET });
-    expect(runner.calls).toEqual([
-      ["git", "-C", "/opt/flagship", "rev-parse", "HEAD"],
-      ["git", "-C", "/opt/flagship", "fetch"],
-      ["git", "-C", "/opt/flagship", "rev-parse", "--is-shallow-repository"],
-      ["git", "-C", "/opt/flagship", "checkout", TARGET],
-      ["npm", "ci", "--no-audit", "--no-fund", "--include-workspace-root", "--workspace=packages/server-daemon"],
-      ["npx", "tsc", "-b", "packages/server-daemon"],
-      ["sync"],
-    ]);
+    expect(runner.calls).toEqual([`install ${TARGET}`]);
     expect(nonces.marked).toEqual([NONCE]);
     expect(pending.current).toEqual({
       previousCommit: CURRENT,
@@ -318,36 +300,12 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     expect(exits.count).toBe(1);
   });
 
-  // 7a-shallow. Real boxes are `git clone --depth 50`; the consumer must deepen
-  // to full history before the genesis endorsement's lineage walk, else the walk
-  // truncates at the graft boundary and the update is wrongly refused.
-  it("deepens a SHALLOW clone (git fetch --unshallow) before the endorsement gate", async () => {
-    const spy: RunnerSpy = { calls: [] };
-    const shallowRunner: UpdateCommandRunner = async (cmd, args) => {
-      spy.calls.push([cmd, ...args]);
-      if (cmd === "git" && args.includes("--is-shallow-repository")) {
-        return { stdout: "true\n" };
-      }
-      if (cmd === "git" && args.includes("rev-parse")) return { stdout: `${CURRENT}\n` };
-      return { stdout: "" };
-    };
-    const { opts } = baseOpts({ runner: shallowRunner });
-    const out = await runUpdateConsumer(opts);
-    expect(out).toEqual({ applied: true, previousCommit: CURRENT, targetCommit: TARGET });
-    // The unshallow ran, BEFORE the checkout.
-    const seq = spy.calls.map((c) => c.join(" "));
-    const unshallowIdx = seq.findIndex((c) => c.includes("fetch --unshallow"));
-    const checkoutIdx = seq.findIndex((c) => c.includes(`checkout ${TARGET}`));
-    expect(unshallowIdx).toBeGreaterThanOrEqual(0);
-    expect(checkoutIdx).toBeGreaterThan(unshallowIdx);
-  });
-
-  // 7a-complete. A COMPLETE clone is never unshallowed (`--unshallow` errors on
-  // a complete repo — issuing it would break every non-shallow box).
-  it("does NOT unshallow a complete clone", async () => {
-    const { opts, runner } = baseOpts(); // makeRunner returns CURRENT for rev-parse
-    await runUpdateConsumer(opts);
-    expect(calls(runner, "--unshallow")).toEqual([]);
+  it("refuses to update a box that was not installed from a signed release", async () => {
+    const { opts, runner, pending, exits } = baseOpts({ currentCommit: () => null });
+    expect(await runUpdateConsumer(opts)).toEqual({ applied: false, reason: "error" });
+    expect(runner.calls).toEqual([]);
+    expect(pending.current).toBeNull();
+    expect(exits.count).toBe(0);
   });
 
   // 7b. happy path — admin-root-signed with the root pinned.
@@ -388,13 +346,14 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     expect(runner.calls).toEqual([]);
   });
 
-  it("marks the update applying before it touches the tree", async () => {
+  it("marks the update applying before it switches releases", async () => {
     const seen: Array<PendingVerifyMarker | null> = [];
     const { opts, pending } = baseOpts();
-    const inner = opts.runner;
-    opts.runner = async (cmd, args, o) => {
-      if (cmd === "git" && args.includes("checkout")) seen.push(pending.current && { ...pending.current });
-      return inner(cmd, args, o);
+    opts.swapper = {
+      async install() {
+        seen.push(pending.current && { ...pending.current });
+      },
+      async restore() {},
     };
     await runUpdateConsumer(opts);
     expect(seen).toEqual([
@@ -402,34 +361,19 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     ]);
   });
 
-  it("reverts the checkout when the rebuild fails, then clears the marker", async () => {
-    const runnerSpy: RunnerSpy = { calls: [] };
-    const spyRunner = makeRunner(runnerSpy);
-    let npmCalls = 0;
-    const runner: UpdateCommandRunner = async (cmd, args, o) => {
-      // The forward rebuild's npm ci fails; the revert's succeeds.
-      if (cmd === "npm" && ++npmCalls <= 1) {
-        runnerSpy.calls.push([cmd, ...args]);
-        throw new Error("injected npm failure");
-      }
-      return spyRunner(cmd, args, o);
-    };
-    const { opts, pending, exits } = baseOpts({ runner });
+  it("switches back to the running release when the install fails, then clears the marker", async () => {
+    const spy: SwapSpy = { calls: [], install: "error" };
+    const { opts, pending, exits } = baseOpts({ swapper: makeSwapper(spy) });
     const out = await runUpdateConsumer(opts);
     expect(out).toEqual({ applied: false, reason: "apply-failed" });
-    expect(calls(runnerSpy, "checkout").map((c) => c[c.length - 1])).toEqual([TARGET]);
-    // The revert rebuilds the index from scratch so a torn checkout can't survive.
-    expect(calls(runnerSpy, "reset")).toEqual([["git", "-C", "/opt/flagship", "reset", "-q", "--hard", CURRENT]]);
-    expect(calls(runnerSpy, "rm")).toEqual([
-      ["rm", "-f", "/opt/flagship/.git/index.lock", "/opt/flagship/.git/index"],
-    ]);
+    expect(spy.calls).toEqual([`install ${TARGET}`, `restore ${CURRENT}`]);
     expect(pending.current).toBeNull();
     expect(exits.count).toBe(0);
   });
 
-  it("leaves the applying marker when the revert fails too, so the next start rolls back", async () => {
-    const runnerSpy: RunnerSpy = { calls: [], failOn: "npm" };
-    const { opts, pending, exits } = baseOpts({ runner: makeRunner(runnerSpy) });
+  it("leaves the applying marker when the switch back fails too, so the next start rolls back", async () => {
+    const spy: SwapSpy = { calls: [], install: "error", restoreFails: true };
+    const { opts, pending, exits } = baseOpts({ swapper: makeSwapper(spy) });
     const out = await runUpdateConsumer(opts);
     expect(out).toEqual({ applied: false, reason: "apply-failed" });
     expect(pending.current).toEqual({
@@ -441,87 +385,46 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     expect(exits.count).toBe(0);
   });
 
-  it("clears the marker when git refuses the checkout", async () => {
-    const runnerSpy: RunnerSpy = { calls: [], failOn: `checkout ${TARGET}` };
-    const { opts, pending, exits } = baseOpts({ runner: makeRunner(runnerSpy) });
-    expect(await runUpdateConsumer(opts)).toEqual({ applied: false, reason: "apply-failed" });
+  it("clears the marker and changes nothing when the verifier refuses the release", async () => {
+    const spy: SwapSpy = { calls: [], install: "refused" };
+    const { opts, pending, exits } = baseOpts({ swapper: makeSwapper(spy) });
+    expect(await runUpdateConsumer(opts)).toEqual({ applied: false, reason: "unendorsed" });
     expect(pending.current).toBeNull();
-    expect(calls(runnerSpy, "npm")).toEqual([]);
+    expect(spy.calls).toEqual([`install ${TARGET}`]);
     expect(exits.count).toBe(0);
-  });
-});
-
-describe("rebuildWorkspace — installs and compiles only the daemon's closure", () => {
-  const SCOPE = ["--include-workspace-root", "--workspace=packages/server-daemon"];
-
-  function cwdRunner(failOn?: string) {
-    const calls: { argv: string[]; cwd?: string }[] = [];
-    const runner: UpdateCommandRunner = async (cmd, args, opts) => {
-      const argv = [cmd, ...args];
-      calls.push({ argv, ...(opts?.cwd ? { cwd: opts.cwd } : {}) });
-      if (failOn && argv.join(" ").startsWith(failOn)) throw new Error("boom");
-      return { stdout: "" };
-    };
-    return { calls, runner };
-  }
-
-  it("runs a scoped npm ci then tsc -b of the daemon, in the repo", async () => {
-    const { calls, runner } = cwdRunner();
-    await rebuildWorkspace(runner, "/opt/flagship", () => {});
-    expect(calls).toEqual([
-      { argv: ["npm", "ci", "--no-audit", "--no-fund", ...SCOPE], cwd: "/opt/flagship" },
-      { argv: ["npx", "tsc", "-b", "packages/server-daemon"], cwd: "/opt/flagship" },
-      { argv: ["sync"] },
-    ]);
-  });
-
-  it("fails the update, without npm install, when npm ci cannot install the lock (SEC-UPD-001)", async () => {
-    const { calls, runner } = cwdRunner("npm ci");
-    const logs: string[] = [];
-    await expect(rebuildWorkspace(runner, "/opt/flagship", (m) => logs.push(m))).rejects.toThrow();
-    expect(calls.map((c) => c.argv[1])).not.toContain("install");
-    expect(calls.map((c) => c.argv[0])).not.toContain("npx");
-    expect(logs.join("\n")).toContain("the update fails");
-  });
-
-  it("never asks for the whole monorepo", async () => {
-    const { calls, runner } = cwdRunner();
-    await rebuildWorkspace(runner, "/opt/flagship", () => {});
-    for (const { argv } of calls) {
-      expect(argv).not.toContain("--workspaces");
-      if (argv[0] === "npx") expect(argv).toEqual(["npx", "tsc", "-b", "packages/server-daemon"]);
-    }
   });
 });
 
 describe("buildCurrentCommitProvider — the BFF's applied-commit truth", () => {
   const HEAD = "9f2c1ab3de4567890abcdef1234567890abcdef1";
 
-  it("reads HEAD once, normalizes, and caches (one read per process)", () => {
+  it("reads the installed release once and caches it (one read per process)", () => {
     let reads = 0;
-    const provider = buildCurrentCommitProvider("/repo", (repo) => {
+    const provider = buildCurrentCommitProvider("/state", (dir) => {
       reads++;
-      expect(repo).toBe("/repo");
-      return `${HEAD.toUpperCase()}\n`;
+      expect(dir).toBe("/state");
+      return { commit: HEAD };
     });
     expect(provider()).toBe(HEAD);
     expect(provider()).toBe(HEAD);
     expect(reads).toBe(1);
   });
 
-  it("returns null (and caches it) when the read throws — not a git checkout", () => {
+  it("returns null (and caches it) when there is no release record", () => {
     let reads = 0;
-    const provider = buildCurrentCommitProvider("/repo", () => {
+    const provider = buildCurrentCommitProvider("/state", () => {
       reads++;
-      throw new Error("not a git repository");
+      return null;
     });
     expect(provider()).toBeNull();
     expect(provider()).toBeNull();
     expect(reads).toBe(1);
   });
 
-  it("returns null on a non-SHA read (never surfaces junk as a version)", () => {
-    const provider = buildCurrentCommitProvider("/repo", () => "HEAD\n");
+  it("returns null when the read throws", () => {
+    const provider = buildCurrentCommitProvider("/state", () => {
+      throw new Error("unreadable");
+    });
     expect(provider()).toBeNull();
   });
 });
@@ -542,7 +445,7 @@ describe("buildUpdateConsumerPoller — records refusals the owner should see", 
     const outcomes = memOutcomes();
     const { opts } = baseOpts({
       adminRootPub: ADMIN_ROOT.publicKey,
-      releaseGate: failGate,
+      swapper: makeSwapper({ calls: [], install: "refused" }),
       fetchImpl: fetchFor(carrierHex(makeOrder(), ADMIN_ROOT)),
     });
     const out = await buildUpdateConsumerPoller({ ...opts, outcomeStore: outcomes }).pollOnce();

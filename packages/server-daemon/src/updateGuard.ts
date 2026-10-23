@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { writeFileDurable } from "./durableFile.js";
 
 /**
@@ -15,11 +15,14 @@ import { writeFileDurable } from "./durableFile.js";
  *   - the new code crashes before the gate runs, so the gate never counts a
  *     boot and the box would crash-loop on it forever.
  *
- * It needs only bash, git, jq and npm, never the checkout's node_modules. It
+ * A rollback only flips /opt/flagship back to the previous release, which is
+ * already on disk and was verified when it was installed: no git, npm, compiler
+ * or network. It needs only bash and jq, never the release's node_modules. It
  * always exits 0 so a guard problem can never keep the daemon from starting.
  * The daemon installs (and refreshes) it at startup, like the health reporter.
  */
 export const UPDATE_GUARD_SCRIPT_PATH = "/usr/local/sbin/flagship-update-guard.sh";
+export const ROLLBACK_SCRIPT_PATH = "/usr/local/sbin/flagship-rollback-release.sh";
 export const UPDATE_GUARD_DROPIN_PATH =
   "/etc/systemd/system/flagship-daemon.service.d/10-update-guard.conf";
 
@@ -37,15 +40,19 @@ export function buildUpdateGuardScript(args: {
   repoPath: string;
   dataDir: string;
   maxStarts?: number;
+  /** The script that flips back to an installed release (default: the copy the daemon installs). */
+  rollbackScript?: string;
 }): string {
   if (!SAFE_PATH.test(args.repoPath)) throw new Error("unsafe repo path");
   if (!SAFE_PATH.test(args.dataDir)) throw new Error("unsafe data dir");
+  const rollbackScript = args.rollbackScript ?? ROLLBACK_SCRIPT_PATH;
+  if (!SAFE_PATH.test(rollbackScript)) throw new Error("unsafe rollback script path");
   const max = args.maxStarts ?? DEFAULT_GUARD_MAX_STARTS;
   if (!Number.isInteger(max) || max < 1) throw new Error("invalid maxStarts");
   return `#!/bin/bash
 # Flagship update guard (installed by the daemon; see updateGuard.ts).
 set -u
-repo='${args.repoPath}'
+state='${args.dataDir}'
 marker='${args.dataDir}/update-pending.json'
 starts_file='${args.dataDir}/update-guard-starts'
 outcome='${args.dataDir}/update-outcome.json'
@@ -70,7 +77,7 @@ if ! [[ "$prev" =~ $sha && "$target" =~ $sha && "$attempts" =~ ^[0-9]+$ ]]; then
     log "unreadable marker and no known-good commit; leaving it to the daemon"
     exit 0
   fi
-  target=$(git -C "$repo" rev-parse HEAD 2>/dev/null)
+  target=$(jq -r '.commit // empty' "$state/artifact-current.json" 2>/dev/null)
   [[ "$target" =~ $sha ]] || target=$prev
   stage=applying
   attempts=0
@@ -90,23 +97,11 @@ else
   exit 0
 fi
 
-# Nothing else touches the checkout before the daemon starts, so a lock left
-# by a git killed mid-checkout is stale. A power cut can also leave 0-byte
-# files the index still calls clean: dropping the index makes reset rewrite
-# every tracked file (same as restoreCheckout in updateConsumer.ts).
-rm -f "$repo/.git/index.lock" "$repo/.git/index"
-if ! git -C "$repo" reset -q --hard "$prev"; then
-  log "reset to $prev failed; leaving it to the daemon"
+# Flip back to the previous release (already installed; see installer/rollback-box-artifact.sh).
+if ! ${rollbackScript} "$prev"; then
+  log "switching back to $prev failed; leaving it to the daemon"
   exit 0
 fi
-git -C "$repo" clean -fdq -- packages
-cd "$repo" || exit 0
-scope=(--include-workspace-root --workspace=packages/server-daemon)
-# No npm install fallback: an exact lock that will not install is retried, never re-resolved.
-npm ci --no-audit --no-fund "\${scope[@]}" || { log "npm ci failed; will retry next start"; exit 0; }
-npx tsc -b packages/server-daemon || { log "rebuild failed; will retry next start"; exit 0; }
-# Flush the restored tree before the marker that would retry it goes away.
-sync
 rm -f "$marker" "$starts_file"
 printf '{"outcome":"rolled-back","at":%s,"previousCommit":"%s","targetCommit":"%s","bootAttempts":%s}' \\
   "$(( $(date +%s) * 1000 ))" "$prev" "$target" "$attempts" > "$outcome.tmp" && mv "$outcome.tmp" "$outcome"
@@ -148,7 +143,9 @@ export async function installUpdateGuard(opts: UpdateGuardInstallOptions): Promi
       await mkdir(dirname(p), { recursive: true });
       await writeFileDurable(p, c, mode);
     });
+  const rollback = await read(join(opts.repoPath, "installer/rollback-box-artifact.sh"));
   const files: Array<[string, string, number]> = [
+    ...(rollback ? ([[ROLLBACK_SCRIPT_PATH, rollback, 0o700]] as Array<[string, string, number]>) : []),
     [UPDATE_GUARD_SCRIPT_PATH, buildUpdateGuardScript(opts), 0o700],
     [UPDATE_GUARD_DROPIN_PATH, UPDATE_GUARD_DROPIN, 0o644],
   ];

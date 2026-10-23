@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { keepCorruptAside, readStateFile, removeDurable, withFileLock, writeFileDurable } from "./durableFile.js";
 import { promisify } from "node:util";
@@ -8,7 +8,7 @@ import {
   type UpdateOrder,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
-import type { ReleaseGate } from "./updateClient.js";
+import { readInstalledReleaseSync, type ReleaseSwapper, ArtifactRefusedError } from "./artifactUpdate.js";
 import { refusalRecord, type UpdateOutcomeStore } from "./updateOutcome.js";
 
 const execFileP = promisify(execFile);
@@ -25,25 +25,24 @@ const execFileP = promisify(execFile);
  *      admin root / an admin-root-signed `admin` grant authorizes (the bare
  *      membership IRK CANNOT); with no admin root pinned it falls back to the
  *      legacy owner-IRK verify (a strict no-op on pre-Slice-D boxes).
- *   2. AUTHENTICITY — the target commit must be maintainer-ENDORSED via the
- *      injected `ReleaseGate` (production: `buildMaintainersReleaseGate`, the
- *      offline verify-forward-from-pin release-endorsement check). An admin
- *      key compromise is therefore NOT arbitrary code execution — only a
- *      blessed commit can ever be applied.
+ *   2. AUTHENTICITY — the target must be a release artifact signed by enough
+ *      baked-in release keys (the injected `ReleaseSwapper`, production:
+ *      `buildArtifactSwapper`). An admin key compromise is therefore NOT
+ *      arbitrary code execution — only a signed release can ever be applied.
  *
  * Anti-replay / anti-skip gates (each independently rejecting):
  *   - `serverDomain` must name THIS box;
  *   - `issuedAt` freshness window (default = the `.com` lane's 14d TTL);
  *   - `nonce` single-use (persisted used-nonce marker — `.com`'s consume-once
  *     is the primary guard, the marker survives a rollback + redelivery);
- *   - `fromCommit` must equal the CURRENT git HEAD of the box's own checkout
+ *   - `fromCommit` must equal the commit of the release the box runs now
  *     (a stale order for an older/newer base can never apply).
  *
  * Apply (CODE SWAP ONLY — never touches /var/flagship keys/data):
- *   `git fetch` → releaseGate (post-fetch so the endorsement lineage walk has
- *   the objects; nothing is checked out before BOTH gates pass) →
- *   `git checkout <target>` → rebuild → write the pending-verify marker →
- *   exit(0) so systemd restarts into the new code. The boot-time health gate
+ *   download the signed release for the target commit → verify it (k-of-n
+ *   signatures, digest, architecture, sequence, Node floor; nothing of it runs
+ *   before that) → switch releases atomically → write the pending-verify marker
+ *   → exit(0) so systemd restarts into the new code. The boot-time health gate
  *   (updateHealthGate.ts) then COMMITS the update on a healthy boot or ROLLS
  *   BACK after too many failed boots — a bad update can never brick a box.
  *
@@ -84,86 +83,27 @@ export const realUpdateCommandRunner: UpdateCommandRunner = async (cmd, args, op
 };
 
 /**
- * Install + compile only the daemon's workspace closure, as the install-time
- * bootstrap does. The scope is derived by npm and tsc from whatever checkout is
- * on disk (npm follows the daemon's `@flagship/*` links, `tsc -b` its project
- * references), so the same command serves an update (old daemon, new checkout)
- * and a rollback (new daemon, old checkout) for any commit that has
- * packages/server-daemon.
- */
-const BOX_WORKSPACE = "packages/server-daemon";
-const BOX_NPM_SCOPE = ["--include-workspace-root", `--workspace=${BOX_WORKSPACE}`];
-
-/**
- * Put the checkout back on `commit` even after a power cut mangled it: a
- * killed git can leave a stale index.lock, an index that no longer matches the
- * files, and 0-byte files the index still believes are clean. Dropping the
- * index makes `reset --hard` rewrite every tracked file, and cleaning
- * `packages/` removes files only the abandoned commit had (a truncated one
- * there would break the rebuild). Ignored output (node_modules, dist) is left
- * for the rebuild.
- */
-export async function restoreCheckout(
-  runner: UpdateCommandRunner,
-  repoPath: string,
-  commit: string,
-): Promise<void> {
-  await runner("rm", ["-f", `${repoPath}/.git/index.lock`, `${repoPath}/.git/index`]);
-  await runner("git", ["-C", repoPath, "reset", "-q", "--hard", commit]);
-  await runner("git", ["-C", repoPath, "clean", "-fdq", "--", "packages"]);
-}
-
-/**
- * `npm ci` + `npx tsc -b` of the daemon. There is no `npm install` fallback
- * (SEC-UPD-001): an exact lock that cannot be installed fails the update and
- * rolls back, rather than resolving whatever the registry serves today.
- */
-export async function rebuildWorkspace(
-  runner: UpdateCommandRunner,
-  repoPath: string,
-  log: (m: string) => void,
-): Promise<void> {
-  try {
-    await runner("npm", ["ci", "--no-audit", "--no-fund", ...BOX_NPM_SCOPE], { cwd: repoPath });
-  } catch (e) {
-    log(`[self-update] npm ci failed (${(e as Error).message}); the exact lock did not install, so the update fails`);
-    throw e;
-  }
-  await runner("npx", ["tsc", "-b", BOX_WORKSPACE], { cwd: repoPath });
-  // The checkout, node_modules and build output are all still in the page
-  // cache; flush them before a marker claims the tree is ready (home2 lost
-  // power 2 s after its rebuild and came back with thousands of 0-byte files).
-  await runner("sync", []);
-}
-
-/**
- * Lazily-cached reader of the box's own checkout HEAD — the SAME
- * applied-commit truth step 7 of the consumer enforces `fromCommit`
- * against. The screens BFF surfaces it on server-detail so clients can
- * display the current version and mint `fromCommit` from the box's real
- * HEAD instead of guessing.
+ * Lazily-cached reader of the release this box runs: the SAME applied-commit
+ * truth step 7 of the consumer enforces `fromCommit` against. The installer
+ * records it (`artifact-current.json`) when it switches releases. The screens
+ * BFF surfaces it on server-detail so clients can display the current version
+ * and mint `fromCommit` from the box's real release instead of guessing.
  *
- * Sync (the BFF's server-detail builder is synchronous) and cached after
- * the first read: HEAD only ever changes across a daemon restart (the
- * consumer exits into systemd after a checkout), so one read per process
- * is the truth for the process's lifetime. Returns null when the daemon
- * isn't running from a git checkout or the read fails — clients disable
- * the update action on null.
+ * Sync (the BFF's server-detail builder is synchronous) and cached after the
+ * first read: the running release only changes across a daemon restart (the
+ * consumer exits into systemd after the switch). Returns null when the box was
+ * not installed from a signed artifact or the read fails; clients disable the
+ * update action on null.
  */
 export function buildCurrentCommitProvider(
-  repoPath: string,
-  readHead: (repo: string) => string = (repo) =>
-    execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], {
-      encoding: "utf-8",
-      timeout: 10_000,
-    }),
+  stateDir: string = "/var/flagship",
+  readRelease: (dir: string) => { commit: string } | null = readInstalledReleaseSync,
 ): () => string | null {
   let cached: string | null | undefined;
   return () => {
     if (cached !== undefined) return cached;
     try {
-      const head = readHead(repoPath).trim().toLowerCase();
-      cached = /^[0-9a-f]{40}$/.test(head) ? head : null;
+      cached = readRelease(stateDir)?.commit ?? null;
     } catch {
       cached = null;
     }
@@ -387,12 +327,14 @@ export interface RunUpdateConsumerOptions {
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
 
-  /** The box's own code checkout (production: /opt/flagship). */
-  repoPath: string;
-  /** The AUTHENTICITY half — maintainer-endorsement check for the target. */
-  releaseGate: ReleaseGate;
-  /** Injected command runner (git / npm / npx) — tests never touch a real box. */
-  runner: UpdateCommandRunner;
+  /**
+   * The AUTHENTICITY half and the code swap in one: download the release for the target
+   * commit, verify its k-of-n signatures, digest, architecture and sequence, switch to it.
+   * Tests inject a fake; production is `buildArtifactSwapper`.
+   */
+  swapper: ReleaseSwapper;
+  /** The commit of the release this box runs now (production: the installer's record). */
+  currentCommit: () => string | null | Promise<string | null>;
   /** Single-use-nonce persistence. */
   usedNonceStore: UsedNonceStore;
   /** The staged-update sentinel the boot health gate consumes. */
@@ -517,8 +459,7 @@ export async function runUpdateConsumer(
 
 export interface AdmitUpdateOrderOptions {
   serverDomain: string;
-  repoPath: string;
-  runner: UpdateCommandRunner;
+  currentCommit: () => string | null | Promise<string | null>;
   usedNonceStore: UsedNonceStore;
   maxOrderAgeMs?: number;
   futureSkewMs?: number;
@@ -582,10 +523,14 @@ export async function admitUpdateOrder(
   //    minted against a different base never applies).
   let currentCommit: string;
   try {
-    const { stdout } = await opts.runner("git", ["-C", opts.repoPath, "rev-parse", "HEAD"]);
-    currentCommit = stdout.trim().toLowerCase();
+    const head = await opts.currentCommit();
+    if (!head) {
+      log("[self-update] this box was not installed from a signed release; cannot update it in place");
+      return refuse("error");
+    }
+    currentCommit = head.toLowerCase();
   } catch (e) {
-    log(`[self-update] cannot read current HEAD: ${(e as Error).message}`);
+    log(`[self-update] cannot read the running release: ${(e as Error).message}`);
     return refuse("error");
   }
   if (order.fromCommit.toLowerCase() !== currentCommit) {
@@ -608,9 +553,7 @@ export async function admitUpdateOrder(
 }
 
 export interface ApplyEndorsedUpdateOptions {
-  repoPath: string;
-  releaseGate: ReleaseGate;
-  runner: UpdateCommandRunner;
+  swapper: ReleaseSwapper;
   pendingStore: PendingVerifyStore;
   requestExit: () => void;
   onLog?: (m: string) => void;
@@ -651,51 +594,14 @@ async function applyEndorsedUpdateNow(
   why: string,
 ): Promise<UpdateConsumeOutcome> {
   const log = opts.onLog ?? (() => {});
-  // 9. Fetch the objects, then run the AUTHENTICITY gate (2-of-2 half #2).
-  //    Fetch first is deliberate: the gate's endorsement lineage walk needs the
-  //    target's objects locally, and a fetch only downloads into .git — nothing
-  //    is checked out or executed before the gate passes.
-  try {
-    await opts.runner("git", ["-C", opts.repoPath, "fetch"]);
-  } catch (e) {
-    log(`[self-update] git fetch failed: ${(e as Error).message}; will retry next poll`);
-    return { applied: false, reason: "apply-failed" };
-  }
-  // Real boxes are cloned SHALLOW (`git clone --depth 50`, demoCloudConfig.ts),
-  // but the AUTHENTICITY gate's first-parent lineage walk needs the target's
-  // full ancestry — the FIRST endorsement is a genesis covering the entire
-  // history, and a shallow walk truncates at the graft boundary and would
-  // count-mismatch → reject. Deepen to full history before the gate. Only when
-  // actually shallow (`--unshallow` errors on a complete repo), and best-effort:
-  // if it fails the gate simply can't verify and rejects — never a bypass.
-  try {
-    const { stdout } = await opts.runner("git", [
-      "-C",
-      opts.repoPath,
-      "rev-parse",
-      "--is-shallow-repository",
-    ]);
-    if (stdout.trim() === "true") {
-      log("[self-update] deepening shallow clone for the endorsement lineage walk");
-      await opts.runner("git", ["-C", opts.repoPath, "fetch", "--unshallow"]);
-    }
-  } catch (e) {
-    log(`[self-update] shallow-deepen skipped (${(e as Error).message}); continuing`);
-  }
-  try {
-    opts.releaseGate.assertCommitEndorsed(targetCommit);
-  } catch (e) {
-    log(`[self-update] REFUSED: ${(e as Error).message}`);
-    return { applied: false, reason: "unendorsed" };
-  }
-
-  // 10. Apply: checkout + rebuild + stage the pending-verify marker + restart.
-  //     CODE SWAP ONLY — /var/flagship (keys/data) is never touched.
+  // 9. Apply: download + verify + switch releases, stage the pending-verify marker, restart.
+  //    CODE SWAP ONLY — /var/flagship (keys/data) is never touched. The installer checks the
+  //    k-of-n release signatures, digest, architecture, sequence and Node floor before
+  //    anything of the release runs; a refusal changes nothing.
   log(`[self-update] applying ${why} update ${currentCommit} → ${targetCommit}`);
-  // The marker goes down BEFORE the tree changes: if the box dies anywhere in
-  // the checkout or rebuild, the next start finds `applying` and rolls back
-  // (updateGuard.ts before the daemon runs, the boot gate inside it). Without
-  // it an interrupted apply left half-built code and nothing to undo it.
+  // The marker goes down BEFORE the release changes: if the box dies anywhere in the
+  // switch, the next start finds `applying` and rolls back (updateGuard.ts before the
+  // daemon runs, the boot gate inside it).
   const marker = { previousCommit: currentCommit, targetCommit, bootAttempts: 0 };
   try {
     await opts.pendingStore.write({ ...marker, stage: "applying" });
@@ -704,10 +610,9 @@ async function applyEndorsedUpdateNow(
     return { applied: false, reason: "apply-failed" };
   }
   const revert = async (why: string) => {
-    log(`[self-update] ${why}; reverting checkout`);
+    log(`[self-update] ${why}; switching back to ${currentCommit}`);
     try {
-      await restoreCheckout(opts.runner, opts.repoPath, currentCommit);
-      await rebuildWorkspace(opts.runner, opts.repoPath, log);
+      await opts.swapper.restore(currentCommit);
       await opts.pendingStore.clear();
     } catch (revertErr) {
       // The `applying` marker stays, so the next start rolls back.
@@ -715,17 +620,14 @@ async function applyEndorsedUpdateNow(
     }
   };
   try {
-    await opts.runner("git", ["-C", opts.repoPath, "checkout", targetCommit]);
+    await opts.swapper.install(targetCommit);
   } catch (e) {
-    // git refuses a checkout before touching the tree, so nothing to undo.
-    log(`[self-update] checkout failed: ${(e as Error).message}`);
-    await opts.pendingStore.clear().catch(() => {});
-    return { applied: false, reason: "apply-failed" };
-  }
-  try {
-    await rebuildWorkspace(opts.runner, opts.repoPath, log);
-  } catch (e) {
-    await revert(`rebuild failed: ${(e as Error).message}`);
+    if (e instanceof ArtifactRefusedError) {
+      log(`[self-update] REFUSED: ${e.message}`);
+      await opts.pendingStore.clear().catch(() => {});
+      return { applied: false, reason: "unendorsed" };
+    }
+    await revert(`install failed: ${(e as Error).message}`);
     return { applied: false, reason: "apply-failed" };
   }
   try {

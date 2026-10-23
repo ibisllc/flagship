@@ -155,6 +155,33 @@ if [ -f "$root/$LUKS_BOOTSTRAP_REL" ] && grep -qF 'cryptsetup luksAddKey' "$root
 fi
 luks_count=$(( ${#findings[@]} - luks_start ))
 
+# (I) The install and update path resolves nothing from a package repository, a source host or a
+# compiler (SEC-INSTALL-001, SEC-NODE-001, SEC-UPD-001). Every box gets the signed release artifact
+# for an exact commit; its Node ships inside it. Fails every run, dev included, when the bootstrap
+# builders or the daemon's update code go back to NodeSource, git, npm or a Go toolchain, or when a
+# recipe default names a branch. Comment lines are not code and are skipped.
+install_start=${#findings[@]}
+for rel in packages/flagship-builder/src/userdata.ts packages/flagship-builder/src/appliance.ts \
+           packages/control-plane/src/demoCloudConfig.ts \
+           packages/server-daemon/src/updateConsumer.ts packages/server-daemon/src/updateGuard.ts \
+           packages/server-daemon/src/updateHealthGate.ts packages/server-daemon/src/artifactUpdate.ts; do
+  [ -f "$root/$rel" ] || continue
+  while IFS= read -r hit; do
+    [ -z "$hit" ] && continue
+    text="${hit#*:}"
+    case "$(printf '%s' "$text" | sed 's/^[[:space:]]*//')" in '#'*|'//'*|'*'*|'/*'*) continue ;; esac
+    findings+=("install path resolves code from the network"$'\t'"$rel:$hit")
+  done < <(grep -nE 'deb\.nodesource\.com|golang-go|git clone|npm (install|ci)\b|npx (tsx|tsc)|"npm"|"npx"|runner\("git"|apt-get install[^\n]*nodejs' "$root/$rel" 2>/dev/null)
+done
+for rel in packages/flagship-builder/src/userdata.ts packages/control-plane/src/demoAccountProvisioning.ts packages/control-plane/src/gymProvision.ts; do
+  [ -f "$root/$rel" ] || continue
+  while IFS= read -r hit; do
+    [ -z "$hit" ] && continue
+    findings+=("recipe defaults to a branch"$'\t'"$rel:$hit")
+  done < <(grep -nE 'installerGitRef[^;]*\|\|[[:space:]]*"main"|installerGitRef[^;]*\?\?[[:space:]]*"main"' "$root/$rel" 2>/dev/null)
+done
+install_count=$(( ${#findings[@]} - install_start ))
+
 # Debug access is SSH-key only. A debug password anywhere — the gate included —
 # is a regression that fails every run, dev too (header (a)).
 debug_start=${#findings[@]}
@@ -209,6 +236,14 @@ if [ "$debug_count" -gt 0 ]; then
   echo >&2
   echo "::error::Debug access must be SSH-key only and grant-verified (debugAccessGate.ts)." >&2
   echo "A debug password or a weakened gate fails every build, dev included." >&2
+  exit 1
+fi
+
+if [ "$install_count" -gt 0 ]; then
+  echo >&2
+  echo "::error::The install and update path must use the signed box artifact only: no NodeSource," >&2
+  echo "git clone, npm or Go toolchain on a box, and no recipe default that names a branch" >&2
+  echo "(installer/install-box-artifact.sh, docs SECURITY-HARDENING-PLAN.md section 8.2)." >&2
   exit 1
 fi
 

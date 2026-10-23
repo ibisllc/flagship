@@ -267,6 +267,9 @@ import {
   buildPairingDepositPoller,
   filePairingMarkerStore,
 } from "./pairingDepositConsumer.js";
+import { assertNodeFloor } from "./nodeFloor.js";
+import { buildArtifactSwapper, readInstalledReleaseSync } from "./artifactUpdate.js";
+import { buildArtifactCatalog } from "./artifactCatalog.js";
 import {
   buildCurrentCommitProvider,
   applyEndorsedUpdate,
@@ -308,33 +311,6 @@ const onRing = (lane: DoorbellLane | "aliases" | "rotations" | "grants", poll: (
   doorbellRef.current?.onRing(lane, () => void poll().catch(() => {}));
 
 
-/**
- * The maintainer-endorsement gate every in-place update passes, whoever
- * ordered it.
- *
- * BRING-UP/TEST SEAM ONLY (docs/update-server-rollout-plan.md §Phase 4): a
- * dummy validation box can override the baked maintainer pin to a throwaway
- * ca-track anchor so the whole update pipeline is exercisable in software
- * without the owner's YubiKey. Absent on every real box ⇒ the hardcoded
- * MAINTAINER_PINNED_MANDATE_HASH stands. Setting it needs root on the box
- * (root can already do anything), so it widens no attack surface — but it is
- * logged LOUDLY so an override can never be silent.
- */
-function selfUpdateReleaseGate(repoPath: string) {
-  const override = process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE;
-  if (override) {
-    console.warn(
-      "[self-update] ⚠️  MAINTAINER PIN OVERRIDDEN via " +
-        "FLAGSHIP_MAINTAINER_PIN_OVERRIDE — this box trusts a NON-production " +
-        "release authority. This must NEVER be set on a real box.",
-    );
-  }
-  return buildMaintainersReleaseGate({
-    repoPath,
-    ...(override ? { pinnedMandateHash: override } : {}),
-    onLog: (m) => console.log(m),
-  });
-}
 
 /**
  * Volume-aware backup pre-step: write CONSISTENT dumps of the data the box
@@ -601,6 +577,7 @@ export async function persistCgkHex(path: string, cgkHex: string): Promise<void>
 }
 
 async function main(): Promise<void> {
+  assertNodeFloor();
   let cfg = await tryLoadConfig();
   const env = envFromProcess();
 
@@ -762,12 +739,16 @@ async function main(): Promise<void> {
   // The box's own running commit (its /opt/flagship HEAD). Shared between the
   // public /api/leads advertisement and the authenticated screens BFF, and the
   // applied-commit truth the self-update consumer enforces `fromCommit` against.
-  const currentCommitProvider = buildCurrentCommitProvider(selfUpdateRepoPath);
+  const currentCommitProvider = buildCurrentCommitProvider(dataDir);
+  const selfUpdateSwapper = buildArtifactSwapper({
+    repoPath: selfUpdateRepoPath,
+    runner: realUpdateCommandRunner,
+    onLog: (m) => console.log(m),
+  });
   const selfUpdateHealth: UpdateHealthSignal = buildUpdateHealthSignal();
   void runUpdateBootGate({
     pendingStore: filePendingVerifyStore(`${dataDir}/update-pending.json`),
-    repoPath: selfUpdateRepoPath,
-    runner: realUpdateCommandRunner,
+    swapper: selfUpdateSwapper,
     // Generous window: first boot after an update does a full ACME + tunnel
     // bring-up; a transient network outage shouldn't burn a boot attempt.
     awaitHealthy: () => selfUpdateHealth.whenHealthy(10 * 60_000),
@@ -3226,15 +3207,14 @@ async function wireRuntimeSurfaces(deps: {
       authorizeSensitiveOrder({ ...authority, order: r, signature: sig, verify: verifyServerShareRevoke });
     // A co-manager's update order takes the owner's gates (shares/shareUpdate.ts).
     const repoPath = process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship";
-    const serverUpdate = existsSync(join(repoPath, ".git"))
+    const serverUpdate = readInstalledReleaseSync(dataDir) !== null
       ? (() => {
-          const releaseGate = selfUpdateReleaseGate(repoPath);
+          const swapper = buildArtifactSwapper({ repoPath, runner: realUpdateCommandRunner, onLog: (m) => console.log(m) });
           const pendingStore = filePendingVerifyStore(`${dataDir}/update-pending.json`);
           return buildShareUpdate({
             gate: {
               serverDomain: env.serverFqdn,
-              repoPath,
-              runner: realUpdateCommandRunner,
+              currentCommit: buildCurrentCommitProvider(dataDir),
               usedNonceStore: fileUsedNonceStore(`${dataDir}/update-used-nonces.json`),
               onLog: (m) => console.log(m),
             },
@@ -3244,9 +3224,7 @@ async function wireRuntimeSurfaces(deps: {
             apply: (from, target, why) =>
               applyEndorsedUpdate(
                 {
-                  repoPath,
-                  releaseGate,
-                  runner: realUpdateCommandRunner,
+                  swapper,
                   pendingStore,
                   requestExit: () => {
                     console.log("[self-update] restarting into the update a co-manager ordered");
@@ -3409,12 +3387,10 @@ async function wireRuntimeSurfaces(deps: {
     // The applied-commit truth the self-update consumer enforces
     // `fromCommit` against — same checkout the consumer updates. (Its own
     // cached provider; the /api/leads one lives in the outer scope.)
-    currentCommit: buildCurrentCommitProvider(
-      process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
-    ),
-    releaseCatalog: existsSync(join(process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship", ".git"))
-      ? buildReleaseCatalog({
-          repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+    currentCommit: buildCurrentCommitProvider(process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship"),
+    releaseCatalog: readInstalledReleaseSync(process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship") !== null
+      ? buildArtifactCatalog({
+          stateDir: process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship",
           onLog: (m) => console.log(m),
         })
       : null,
@@ -3995,17 +3971,17 @@ async function wireOwnerHandlers(deps: {
   {
     const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
     const repoPath = process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship";
-    if (existsSync(join(repoPath, ".git"))) {
+    if (readInstalledReleaseSync(dataDir) !== null) {
+      const artifactSwapper = buildArtifactSwapper({ repoPath, runner: realUpdateCommandRunner, onLog: (m) => console.log(m) });
       const updatePoller = buildUpdateConsumerPoller({
         serverDomain: env.serverFqdn,
         ownerIrkPub: cfg.irkPublicKey,
         ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
         username: cfg.userId,
         controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-        repoPath,
         ...bellFetch(),
-        releaseGate: selfUpdateReleaseGate(repoPath),
-        runner: realUpdateCommandRunner,
+        swapper: artifactSwapper,
+        currentCommit: buildCurrentCommitProvider(dataDir),
         usedNonceStore: fileUsedNonceStore(`${dataDir}/update-used-nonces.json`),
         pendingStore: filePendingVerifyStore(`${dataDir}/update-pending.json`),
         outcomeStore: fileUpdateOutcomeStore(`${dataDir}/update-outcome.json`),
@@ -4021,12 +3997,7 @@ async function wireOwnerHandlers(deps: {
       process.once("SIGINT", () => updatePoller.stop());
       console.log("[daemon] self-update consumer armed");
       // A new box starts on whatever its image baked in; it moves to the
-      // newest endorsed release once, before it holds any apps.
-      const firstBootGate = buildMaintainersReleaseGate({
-        repoPath,
-        ...(process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE ? { pinnedMandateHash: process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE } : {}),
-        onLog: (m) => console.log(m),
-      });
+      // newest signed release once, before it holds any apps.
       const firstBootPending = filePendingVerifyStore(`${dataDir}/update-pending.json`);
       setTimeout(() => {
         void runFirstBootUpdate({
@@ -4034,17 +4005,11 @@ async function wireOwnerHandlers(deps: {
           hasUpdateHistory: async () =>
             existsSync(`${dataDir}/update-outcome.json`) || (await firstBootPending.read().catch(() => null)) !== null,
           appCount: () => runtime.servicePlatform?.list().length ?? 0,
-          catalog: buildReleaseCatalog({
-            repoPath,
-            ...(process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE ? { pinnedMandateHash: process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE } : {}),
-            onLog: (m) => console.log(m),
-          }),
+          catalog: buildArtifactCatalog({ stateDir: dataDir, onLog: (m) => console.log(m) }),
           apply: (from, target) =>
             applyEndorsedUpdate(
               {
-                repoPath,
-                releaseGate: firstBootGate,
-                runner: realUpdateCommandRunner,
+                swapper: artifactSwapper,
                 pendingStore: firstBootPending,
                 requestExit: () => {
                   console.log("[first-boot-update] restarting into the newest release");
@@ -4054,14 +4019,14 @@ async function wireOwnerHandlers(deps: {
               },
               from,
               target,
-              "first-boot, maintainer-endorsed",
+              "first-boot, release-signed",
             ),
           log: (m) => console.log(m),
         }).catch((e: Error) => console.warn(`[first-boot-update] ${e.message}`));
       }, 30_000).unref?.();
     } else {
       console.log(
-        `[daemon] self-update consumer NOT armed (no git checkout at ${repoPath})`,
+        `[daemon] self-update consumer NOT armed (this box was not installed from a signed release)`,
       );
     }
   }

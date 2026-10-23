@@ -118,6 +118,17 @@ ln -sfn "$dest/app" "$current.new" || exit 3
 if mv -T "$current.new" "$current" 2>/dev/null; then :; else mv -f -h "$current.new" "$current" || exit 3; fi
 printf '%s\n' "$sequence" > "$state/artifact-sequence.new" && mv -f "$state/artifact-sequence.new" "$state/artifact-sequence"
 jq -n --arg c "$commit" --arg a "$arch" --argjson s "$sequence" --arg d "$expect_sha" \
-  '{commit:$c, arch:$a, sequence:$s, artifactSha256:$d}' > "$state/artifact-current.json"
+  '{commit:$c, arch:$a, sequence:$s, artifactSha256:$d}' > "$dest/INSTALLED.json" || exit 3
+cp -f "$dest/INSTALLED.json" "$state/artifact-current.json.new" && mv -f "$state/artifact-current.json.new" "$state/artifact-current.json"
+# Keep only the release now running and the one before it: rollback needs exactly those two.
+keep_prev=""
+[ -s "$state/artifact-previous" ] && keep_prev=$(basename "$(dirname "$(tr -d '[:space:]' < "$state/artifact-previous")")")
+for d in "$releases"/*/; do
+  b=$(basename "$d")
+  case "$b" in .incoming-*) continue ;; esac
+  [ "$b" = "$commit" ] && continue
+  [ -n "$keep_prev" ] && [ "$b" = "$keep_prev" ] && continue
+  rm -rf "$d"
+done
 sync
 echo "installed: $commit $arch sequence $sequence"

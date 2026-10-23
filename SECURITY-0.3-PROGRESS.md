@@ -16,10 +16,12 @@ TPM/measured boot only as far as software can prove).
 - N02/E04      git clone pinned to checked addresses, no redirects/hooks/helpers, minimal env
 - N01/E02/E03  control API on Node's strict parser (controlHttp.ts): one dispatch, framing refusals, caps
 - SEC-UPD-001  no npm install fallback in update or rollback guard
+- SEC-LOCK-001/SEC-DEADMAN-001  durable boot suspension: protocol, storage (0107), boot worker, box, webapp, iOS, Android
+- SEC-REL-001/SEC-NODE-001/SEC-INSTALL-001  signed box artifact (k-of-n, sequence, Node floor), offline verifier+installer, reproducible builder, CI workflow `box-artifact.yml`; every bootstrap (d-i, VM appliance, demo cloud-config) installs it for an exact 40-hex commit; engine, goldens, webapp/iOS/Android defaults regenerated from `release/*.json`
+- SEC-UPD-001 (artifact update)  self-update downloads the signed release, installs it with the same verifier, flips one symlink; rollback and the update guard only flip back to a release on disk (no git/npm/compiler); release index `releases.json` (advice only); daemon refuses Node below the floor; release-guard fails any return to NodeSource/git/npm/Go or a branch default
 
 ## Open, in order
-1. SEC-LOCK-001/SEC-DEADMAN-001  durable boot suspension (+ iOS, Android, webapp)
-2. SEC-REL / SEC-NODE / SEC-INSTALL / SEC-BOOTSTRAP  signed offline box artifact, Node 24.22.1+, exact commit+digest recipes
+0. Owner/operator before release: publish the first signed artifacts (run `box-artifact.yml`, sign offline, `release-index.ts`), point `release/box-release.json` at that commit and sequence, run `node scripts/gen-box-release.mjs --write`, re-pin the bootstrap sha in userdata.test.ts. Legacy git-installed boxes cannot update in place (installer refuses a real /opt/flagship); reburn. Gym boxes need an artifact for the gym commit signed by the gym trust key.
 3. SEC-RECIPE-001 raw swkHex sibling (box ignores it; needs signed offline carrier) -- left alone so far: gym + advanced/offline mode use it
 4. N03 signed recovery record; N04 recovery wait/veto; N05 transactions/revocation; N06 keyless web; N07 freshness/lead
 5. SEC-AUTH-002 central capability matrix + delegated companion build/deploy

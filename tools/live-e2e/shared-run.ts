@@ -30,6 +30,7 @@
  * Exit: 0 all green · 1 a check failed · 3 nothing failed but something was
  * skipped (inconclusive) · 2 the harness crashed.
  */
+import { BOX_RELEASE } from "@flagship/protocol";
 import { readFileSync } from "node:fs";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { deriveSWK, ed } from "@flagship/protocol";
@@ -265,7 +266,7 @@ async function main(): Promise<number> {
           const extras = s[0] === "R"
             ? { provisionExtras: { swkHex: bytesToHex(deriveSWK({ seed: acct.keys.umk }, `home.${acct.username}.${SERVICES}`)), backupIntervalMs: 60_000 } }
             : s === "B3"
-              ? { installerGitRef: "main" }
+              ? { installerGitRef: process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit }
               : {};
           const b = await addBox(acct, SLOT_NAME[s], extras);
           saveFleet(dir, accounts);
