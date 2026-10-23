@@ -284,11 +284,10 @@ tag = "v4"
 new_sqlite_classes = ["RateLimitCounter"]
 
 [vars]
-# Name dibs window (docs/naming-recovery-and-name-change.md §7, docs/named-links.md). Six months from
-# this release — OWNER: set both when announcing. Unset ⇒ dibs
-# is off and every free name is open to everyone.
-# DIBS_WINDOW_START = "2026-10-15"
-# DIBS_WINDOW_END = "2027-04-15"
+# Name dibs window (docs/naming-recovery-and-name-change.md §7, docs/named-links.md): six months
+# from the 0.3 release (owner, 2026-10-23). Removing both turns dibs off and opens every free name.
+DIBS_WINDOW_START = "2026-10-25T00:00:00Z"
+DIBS_WINDOW_END = "2027-04-25T00:00:00Z"
 # voi.ci links go to the canonical address (<label>.<user>.flagship.services) once "1".
 # Turn on only after the gym group named-links proves it reaches a running instance.
 # VOICI_CANONICAL = "1"

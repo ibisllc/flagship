@@ -1675,7 +1675,7 @@ async function serveVoiciRedirect(
               const { deriveUrlFragment } = await import("@flagship/protocol");
               const alias = await storage.userServiceAliases.get(username, serviceId);
               const label = alias?.displayLabel ?? deriveUrlFragment(serviceId, username);
-              return `https://${label}.${username}.flagship.services`;
+              return `https://${label}.${username}.${env.SERVICES_APEX ?? "flagship.services"}`;
             },
           }
         : {}),

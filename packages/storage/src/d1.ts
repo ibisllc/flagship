@@ -1223,8 +1223,14 @@ export class D1VoiciNameStorage implements VoiciNameStorage {
       throw e;
     }
   }
-  async release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number) {
-    const cur = await this.getLiveByService(username, serviceId);
+  async release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number, key?: string) {
+    const cur = key === undefined
+      ? await this.getLiveByService(username, serviceId)
+      : await this.db
+          .prepare(`SELECT ${D1VoiciNameStorage.COLS} FROM voici_names WHERE key = ? AND username = ? AND service_id = ? AND state = 'live'`)
+          .bind(key, username.toLowerCase(), serviceId)
+          .first<any>()
+          .then((r) => (r ? D1VoiciNameStorage.rec(r) : undefined));
     if (!cur) return undefined;
     const r = await this.db
       .prepare("UPDATE voici_names SET state = 'waiting', released_at = ?, release_reason = ? WHERE key = ? AND state = 'live'")
