@@ -76,7 +76,7 @@ public final class AccountSecurityViewModel {
         self.username = username
     }
 
-    /// Build the watch-delegate ("Quick approve from Apple Watch") toggle VM
+    /// Build the watch-delegate ("Approve from watch") toggle VM
     /// from the same server + username injection, so the Account-security
     /// screen can host the toggle without the app layer wiring a second
     /// dependency graph. Keystore-backed crypto/local-store use their

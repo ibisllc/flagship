@@ -89,7 +89,6 @@
   "Turn on code protection": "コード保護をオンにする",
   "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.": "この iPhone で Flagship のロックが解除されている間、Apple Watch でサーバーの起動を承認できます。それ以外（サーバーの取り消し、消去して再起動、デバイスの交換）は引き続き iPhone が必要です。既定ではオフです。",
   "Active — renews by %@": "有効 — %@ までに更新",
-  "Quick approve from Apple Watch": "Apple Watch からのクイック承認",
   "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.": "新しい管理者キーを作成し、他のすべてのデバイスから管理者権限を外します。それらはメンバーとしてサインインしたままですが、リカバリーするまでサーバーの消去・移管・廃止はできません。デバイスの紛失・盗難時や、他の管理者を外したいときに使います。サーバーは次回のチェックインで切り替わります。",
   "Admin key rotated. Other devices must recover to regain admin.": "管理者キーをローテーションしました。他のデバイスは、管理者権限を取り戻すには復旧する必要があります。",
   "Your recovery backup still holds your old admin key. Re-run recovery setup to fix this.": "リカバリーバックアップには、まだ古い管理者キーが入っています。リカバリーの設定をやり直して修正してください。",
@@ -242,7 +241,6 @@
   "Only an admin device can change this app's internet access.": "このアプリのインターネットアクセスを変更できるのは管理者デバイスだけです。",
   "Only an admin device can create or revoke API keys.": "API キーを作成または取り消せるのは管理者デバイスだけです。",
   "Only an admin device can change this app's data.": "このアプリのデータを変更できるのは管理者デバイスだけです。",
-  "Only an admin device can turn on quick approve from Apple Watch.": "Apple Watch からのクイック承認をオンにできるのは、管理者デバイスだけです。",
   "Only an admin device can delete this account.": "このアカウントを削除できるのは、管理者デバイスだけです。",
   "Only an admin device can share this server.": "このサーバーを共有できるのは管理者デバイスだけです。",
   "Only an admin device can change this server. This device can see it.": "このサーバーを変更できるのは管理者デバイスだけです。このデバイスでは表示のみ可能です。",
@@ -2492,7 +2490,6 @@
   "Your Apple Watch is waiting to approve a server's start-up. Unlock, then tap Approve on the watch again.": "Apple Watch がサーバーの起動を承認しようと待っています。ロックを解除してから、ウォッチで「承認」をもう一度タップしてください。",
   "Your watch asked to approve %@. Unlock Flagship once so it can, then tap Approve on the watch again.": "ウォッチが %@ の承認を求めました。承認できるよう Flagship のロックを一度解除してから、ウォッチで「承認」をもう一度タップしてください。",
   "%@'s start-up": "%@ の起動",
-  "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.": "まず、iPhone の Flagship で「Apple Watch からのクイック承認」をオンにしてください。",
   "Unlock Flagship on your iPhone once, then approve again.": "iPhone で Flagship のロックを一度解除してから、もう一度承認してください。",
   "Open Flagship on your iPhone and unlock it once, then approve again.": "iPhone で Flagship を開き、ロックを一度解除してから、もう一度承認してください。",
   "Sign in to Flagship on your iPhone first.": "まず、iPhone で Flagship にサインインしてください。",
@@ -2516,5 +2513,8 @@
   "%lld days": "%lld日",
   "%lld minute": "%lld分",
   "overdue by %@": "%@超過",
-  "None of your servers runs this app yet": "このアプリを実行しているサーバーはまだありません"
+  "None of your servers runs this app yet": "このアプリを実行しているサーバーはまだありません",
+  "Approve from watch": "ウォッチで承認",
+  "Only an admin device can turn on Approve from watch.": "「ウォッチで承認」をオンにできるのは、管理者デバイスだけです。",
+  "Turn on Approve from watch in Flagship on your iPhone first.": "まず、iPhone の Flagship で「ウォッチで承認」をオンにしてください。"
 }

@@ -5,7 +5,7 @@ import Flagship
 import FlagshipAPI
 import FlagshipCore
 
-/// Drives the "Quick approve from Apple Watch" toggle (docs/watch-delegate-
+/// Drives the "Approve from watch" toggle (docs/watch-delegate-
 /// key-design.md §4).
 ///
 /// ON  → mint a fresh `.userPresence` delegate key on THIS device, have the
