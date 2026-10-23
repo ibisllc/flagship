@@ -5,5 +5,15 @@
   "Done": "完了",
   "Failed — %@": "失敗：%@",
   "Couldn't reach iPhone: %@": "iPhone に接続できませんでした：%@",
-  "Approval failed.": "承認に失敗しました。"
+  "Approval failed.": "承認に失敗しました。",
+  "Flagship": "Flagship",
+  "Approve": "承認",
+  "from %@": "%@ から",
+  "Approved": "承認済み",
+  "Security": "セキュリティ",
+  "Pending approvals": "保留中の承認",
+  "Servers": "サーバー",
+  "Recent activity": "最近のアクティビティ",
+  "All quiet": "特になし",
+  "Boot approvals and account changes show up here.": "起動の承認とアカウントの変更がここに表示されます。"
 }
