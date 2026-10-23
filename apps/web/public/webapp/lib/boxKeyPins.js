@@ -18,6 +18,7 @@
 // hybrid signature too, so stripping it cannot downgrade this server back to classical.
 
 import { verifyBootKeyBindingV2, verifyPqKeyBinding } from "./pqBinding.js";
+import { strictInForce } from "./assurancePolicy.js";
 
 const TAG_BOOT_KEY_BINDING = "flagship/boot-key-binding/v1";
 const HEX32 = /^[0-9a-f]{64}$/;
@@ -161,6 +162,9 @@ export async function acceptBootKeyBinding(username, serverDomain, binding, sign
   if (!ok || (pin.bootIssuedAt ?? -1) > binding.issuedAt) return null;
   // Once this server's ML-DSA key is pinned, the boot key needs the STK's hybrid signature too.
   if (pin.mldsa && !verifyBootKeyBindingV2(binding, hybridSignatureHex, pin.stk, pin.mldsa)) return null;
+  // A server whose owner turned strict on (deps.policy, replayed by lib/assurancePolicy.js) needs
+  // it even before this browser has pinned an ML-DSA key.
+  if (!pin.mldsa && strictInForce(deps.policy)) return null;
   pins[domain] = { ...pin, boot: binding.bootPubHex, bootIssuedAt: binding.issuedAt };
   save(username, pins, deps);
   return binding.bootPubHex;

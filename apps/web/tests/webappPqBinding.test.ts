@@ -13,7 +13,7 @@ import {
   signBootKeyBinding,
   signBootKeyBindingV2,
 } from "@flagship/protocol";
-import { PqBindingError, canonicalPqKeyBinding, verifyPqKeyBinding } from "../public/webapp/lib/pqBinding.js";
+import { PqBindingError, canonicalPqKeyBinding, verifyCriticalSignature, verifyPqKeyBinding } from "../public/webapp/lib/pqBinding.js";
 import { BoxKeyChangedError, acceptBootKeyBinding, acceptStkPqBinding, pinnedBootKey, pinnedBoxPqKey, repinBoxKey } from "../public/webapp/lib/boxKeyPins.js";
 
 const V = JSON.parse(readFileSync(join(__dirname, "../../../packages/protocol/test-vectors/pq-binding/vectors.json"), "utf8"));
@@ -43,6 +43,27 @@ describe("pq key bindings in the webapp: shared vectors", () => {
   for (const c of V.bindings.invalid) {
     it(`refuses ${c.name} with ${c.code}`, () => expect(code(() => verifyPqKeyBinding(c.wire, c.expect))).toBe(c.code));
   }
+});
+
+describe("the critical-signature gate in the webapp: shared vectors", () => {
+  const policy = (p: { profile: string; rollout: string }) => ({ scope: { kind: "installation", id: "x" }, ...p, generation: 1, headDigest: "0".repeat(64), enforcedEver: false });
+  for (const c of V.gate) {
+    it(c.name, () => {
+      const vb = V.bindings.valid.find((x: { name: string }) => x.name === c.binding);
+      const binding = vb ? verifyPqKeyBinding(vb.wire, vb.expect) : null;
+      const run = () =>
+        verifyCriticalSignature({ message: unhex(c.messageHex), expectedPurpose: c.expectedPurpose, envelope: c.envelope, signerEd25519PubHex: c.signerEd25519PubHex, binding, policy: policy(c.policy) });
+      if (c.expect.ok) expect(run()).toEqual({ suite: c.expect.suite, strict: c.expect.strict });
+      else expect(code(run)).toBe(c.expect.code);
+    });
+  }
+  it("refuses a binding look-alike", () => {
+    const vb = V.bindings.valid.find((x: { name: string }) => x.name === "box-stk");
+    const fake = { ...verifyPqKeyBinding(vb.wire, vb.expect) };
+    const c = V.gate.find((x: { name: string }) => x.name === "strict-hybrid");
+    const run = () => verifyCriticalSignature({ message: unhex(c.messageHex), expectedPurpose: c.expectedPurpose, envelope: c.envelope, signerEd25519PubHex: c.signerEd25519PubHex, binding: fake, policy: policy(c.policy) });
+    expect(code(run)).toBe("no-binding");
+  });
 });
 
 describe("pinning the box's ML-DSA key", () => {
@@ -83,5 +104,13 @@ describe("pinning the box's ML-DSA key", () => {
     const w = bootKeyBindingToWire(next, unhex(v1n), signBootKeyBindingV2(next, sign));
     expect(await acceptBootKeyBinding(U, D, next, v1n, d, w.hybridSignature)).toBe(next.bootPubHex);
     expect(pinnedBootKey(U, D, d)).toBe(next.bootPubHex);
+  });
+
+  it("needs it on a strict server even before an ML-DSA pin", async () => {
+    const d = { ...deps(), policy: { scope: { kind: "installation", id: D }, profile: "strict", rollout: "enforced", generation: 1, headDigest: "0".repeat(64), enforcedEver: true } };
+    repinBoxKey(U, D, signer.ed25519PubHex, d);
+    const boot = { serverDomain: D, bootPubHex: V.signers[2].ed25519PubHex, issuedAt: 7 };
+    const v1 = hex(signBootKeyBinding(boot, (m) => ed.sign(m, unhex(signer.edSeedHex))));
+    expect(await acceptBootKeyBinding(U, D, boot, v1, d)).toBeNull();
   });
 });
