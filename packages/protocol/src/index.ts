@@ -70,3 +70,4 @@ export * from "./manifestV2.js";
 export * from "./adapterAttestation.js";
 export * from "./appRelease.js";
 export * from "./assurancePolicy.js";
+export * from "./pqHybrid.js";

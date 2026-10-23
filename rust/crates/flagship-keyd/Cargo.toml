@@ -14,14 +14,14 @@ workspace = true
 aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes", "alloc", "zeroize"] }
 base64ct = { version = "=1.8.3", features = ["alloc"] }
 ed25519-dalek = { version = "=3.0.0", default-features = false, features = ["zeroize", "fast"] }
-getrandom = { version = "=0.4.2", default-features = false, features = ["std"] }
+getrandom = { version = "=0.4.3", default-features = false, features = ["std"] }
 hkdf = "=0.13.0"
 p256 = { version = "=0.14.0", default-features = false, features = ["std", "ecdsa", "pkcs8", "arithmetic"] }
 serde_json = { version = "=1.0.151", default-features = false, features = ["std", "preserve_order"] }
 sha2 = { version = "=0.11.0", default-features = false }
 x25519-dalek = { version = "=3.0.0", default-features = false, features = ["static_secrets", "zeroize"] }
 x509-cert = { version = "=0.3.0", default-features = false, features = ["std"] }
-zeroize = { version = "=1.9.0", features = ["std"] }
+zeroize = { version = "=1.9.1", features = ["std"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "=0.31.3", default-features = false, features = ["socket", "user", "resource", "signal", "process", "fs"] }
