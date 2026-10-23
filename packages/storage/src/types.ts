@@ -9,6 +9,7 @@
  */
 
 import type { MeterBatchEntry, MeterBatchResult, MeterCounter, MeterStore } from "@ibisllc/billing-metering";
+import type { BootSuspensionOrder, BootSuspensionState, SuspensionOutcome } from "@flagship/protocol";
 import type { ServerShareStorage } from "./serverShares.js";
 import type { ServerOrderStorage } from "./serverOrders.js";
 
@@ -1119,6 +1120,23 @@ export interface BoxSealedLeaseStorage {
   revoke(serverDomain: string, leaseId: string): Promise<boolean>;
   /** Snapshot of active (non-expired) leases for a server (UI listing). */
   list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]>;
+  /** Delete every lease for a server (a lock). Returns how many went. */
+  revokeAll(serverDomain: string): Promise<number>;
+}
+
+/**
+ * The durable boot-suspension record (SEC-LOCK-001). `release` on
+ * BoxSealedLeaseStorage consults it itself, so no route can hand out a lease
+ * for a suspended server by forgetting a check.
+ */
+export interface BootSuspensionStorage {
+  /** The record, or undefined when this server has never been suspended or resumed. */
+  get(serverDomain: string): Promise<BootSuspensionState | undefined>;
+  /**
+   * Apply an already-verified order atomically (compare-and-swap on the
+   * record's epoch, seq and suspended flag). Concurrent writers retry.
+   */
+  apply(order: BootSuspensionOrder, signatureHex: string, now: number): Promise<SuspensionOutcome>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1662,6 +1680,7 @@ export interface Storage {
   serverMigrations: ServerMigrationStorage;
   adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
+  bootSuspensions: BootSuspensionStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   pushTokens: PushTokenStorage;

@@ -1,5 +1,6 @@
 import { InMemoryServerShareStorage } from "./serverShares.js";
 import { InMemoryServerOrderStorage } from "./serverOrders.js";
+import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
@@ -47,6 +48,7 @@ import type {
   AdminRootRotationStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
+  BootSuspensionStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   WebauthnRecoveryRecord,
@@ -1592,9 +1594,27 @@ export class InMemoryAdminRootRotationStorage implements AdminRootRotationStorag
   }
 }
 
+export class InMemoryBootSuspensionStorage implements BootSuspensionStorage {
+  private rows = new Map<string, BootSuspensionState>();
+
+  async get(serverDomain: string): Promise<BootSuspensionState | undefined> {
+    const r = this.rows.get(serverDomain);
+    return r ? { ...r } : undefined;
+  }
+
+  async apply(order: BootSuspensionOrder, signatureHex: string, now: number): Promise<SuspensionOutcome> {
+    const out = applyBootSuspension(this.rows.get(order.serverDomain) ?? null, order, signatureHex, now);
+    if (out.ok && out.changed) this.rows.set(order.serverDomain, { ...out.state });
+    return out.ok ? { ...out, state: { ...out.state } } : out;
+  }
+}
+
 export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   // Composite key: `${serverDomain} ${leaseId}`.
   private rows = new Map<string, BoxSealedLeaseRecord>();
+
+  /** Wired to the same suspension record `release` must honour. Unset only in isolated unit tests. */
+  constructor(private readonly suspensions?: BootSuspensionStorage) {}
   private k(server: string, lease: string): string {
     return `${server} ${lease}`;
   }
@@ -1604,6 +1624,15 @@ export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   }
 
   async release(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord | undefined> {
+    // A suspended server releases nothing; a record we cannot read counts as suspended.
+    if (this.suspensions) {
+      try {
+        const s = await this.suspensions.get(serverDomain);
+        if (s?.suspended) return undefined;
+      } catch {
+        return undefined;
+      }
+    }
     let best: BoxSealedLeaseRecord | undefined;
     const expired: string[] = [];
     for (const [k, r] of this.rows) {
@@ -1631,6 +1660,17 @@ export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
 
   async revoke(serverDomain: string, leaseId: string): Promise<boolean> {
     return this.rows.delete(this.k(serverDomain, leaseId));
+  }
+
+  async revokeAll(serverDomain: string): Promise<number> {
+    let n = 0;
+    for (const [k, r] of this.rows) {
+      if (r.serverDomain === serverDomain) {
+        this.rows.delete(k);
+        n++;
+      }
+    }
+    return n;
   }
 
   async list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]> {
@@ -2175,7 +2215,8 @@ export class InMemoryStorage implements Storage {
   serverEvictions = new InMemoryServerEvictionStorage();
   serverMigrations = new InMemoryServerMigrationStorage();
   adminRootRotations = new InMemoryAdminRootRotationStorage();
-  boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
+  bootSuspensions = new InMemoryBootSuspensionStorage();
+  boxSealedLeases = new InMemoryBoxSealedLeaseStorage(this.bootSuspensions);
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
   pushTokens = new InMemoryPushTokenStorage();

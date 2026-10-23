@@ -1,3 +1,10 @@
+import {
+  applyBootSuspension,
+  initialSuspension,
+  type BootSuspensionOrder,
+  type BootSuspensionState,
+  type SuspensionOutcome,
+} from "@flagship/protocol";
 import { D1ServerShareStorage, type ServerShareStorage } from "./serverShares.js";
 import { D1ServerOrderStorage, type ServerOrderStorage } from "./serverOrders.js";
 import type {
@@ -22,6 +29,7 @@ import type {
   AdminRootRotationStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
+  BootSuspensionStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   RecoveryWipePolicy,
@@ -2536,6 +2544,81 @@ function rowToBoxSealedLease(r: BoxSealedLeaseRow): BoxSealedLeaseRecord {
   };
 }
 
+interface BootSuspensionRow {
+  server_domain: string;
+  epoch: number;
+  seq: number;
+  suspended: number;
+  reason: string | null;
+  signer: string | null;
+  order_issued_at: number;
+  updated_at: number;
+  signature_hex: string;
+}
+
+function rowToBootSuspension(r: BootSuspensionRow): BootSuspensionState {
+  return {
+    serverDomain: r.server_domain,
+    epoch: r.epoch,
+    seq: r.seq,
+    suspended: r.suspended === 1,
+    reason: (r.reason as BootSuspensionState["reason"]) ?? null,
+    signer: (r.signer as BootSuspensionState["signer"]) ?? null,
+    orderIssuedAt: r.order_issued_at,
+    updatedAt: r.updated_at,
+    signatureHex: r.signature_hex,
+  };
+}
+
+export class D1BootSuspensionStorage implements BootSuspensionStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async get(serverDomain: string): Promise<BootSuspensionState | undefined> {
+    const r = await this.db
+      .prepare("SELECT * FROM boot_suspensions WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .first<BootSuspensionRow>();
+    return r ? rowToBootSuspension(r) : undefined;
+  }
+
+  async apply(order: BootSuspensionOrder, signatureHex: string, now: number): Promise<SuspensionOutcome> {
+    // Compare-and-swap on (epoch, seq, suspended): two writers can never both win.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const cur = (await this.get(order.serverDomain)) ?? null;
+      const out = applyBootSuspension(cur, order, signatureHex, now);
+      if (!out.ok || !out.changed) return out;
+      const st = out.state;
+      let changes: number;
+      if (cur === null) {
+        const r = await this.db
+          .prepare(
+            `INSERT OR IGNORE INTO boot_suspensions
+               (server_domain, epoch, seq, suspended, reason, signer, order_issued_at, updated_at, signature_hex)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+          )
+          .bind(st.serverDomain, st.epoch, st.seq, st.suspended ? 1 : 0, st.reason, st.signer, st.orderIssuedAt, st.updatedAt, st.signatureHex)
+          .run();
+        changes = (r as { meta?: { changes?: number } }).meta?.changes ?? 1;
+      } else {
+        const r = await this.db
+          .prepare(
+            `UPDATE boot_suspensions
+                SET epoch = ?2, seq = ?3, suspended = ?4, reason = ?5, signer = ?6,
+                    order_issued_at = ?7, updated_at = ?8, signature_hex = ?9
+              WHERE server_domain = ?1 AND epoch = ?10 AND seq = ?11 AND suspended = ?12`,
+          )
+          .bind(st.serverDomain, st.epoch, st.seq, st.suspended ? 1 : 0, st.reason, st.signer, st.orderIssuedAt, st.updatedAt, st.signatureHex, cur.epoch, cur.seq, cur.suspended ? 1 : 0)
+          .run();
+        changes = (r as { meta?: { changes?: number } }).meta?.changes ?? 1;
+      }
+      if (changes > 0) return out;
+    }
+    // Lost every race: report the freshest record as a stale write so the caller re-reads.
+    const cur = (await this.get(order.serverDomain)) ?? initialSuspension(order.serverDomain);
+    return { ok: false, code: "stale-epoch", current: cur };
+  }
+}
+
 export class D1BoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   constructor(private readonly db: D1Database) {}
 
@@ -2573,6 +2656,17 @@ export class D1BoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   }
 
   async release(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord | undefined> {
+    // A suspended server releases nothing, and a record we cannot read counts
+    // as suspended (SEC-LOCK-001): check before touching any lease row.
+    try {
+      const sus = await this.db
+        .prepare("SELECT suspended FROM boot_suspensions WHERE server_domain = ?1")
+        .bind(serverDomain)
+        .first<{ suspended: number }>();
+      if (sus && sus.suspended !== 0) return undefined;
+    } catch {
+      return undefined;
+    }
     // GC expired + exhausted rows first so they never win the pick.
     await this.db
       .prepare(
@@ -2613,6 +2707,14 @@ export class D1BoxSealedLeaseStorage implements BoxSealedLeaseStorage {
       .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+
+  async revokeAll(serverDomain: string): Promise<number> {
+    const r = await this.db
+      .prepare("DELETE FROM box_sealed_leases WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .run();
+    return (r as { meta?: { changes?: number } }).meta?.changes ?? 0;
   }
 
   async list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]> {
@@ -4435,6 +4537,7 @@ export class D1Storage implements Storage {
   serverMigrations: ServerMigrationStorage;
   adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
+  bootSuspensions: BootSuspensionStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   pushTokens: PushTokenStorage;
@@ -4490,6 +4593,7 @@ export class D1Storage implements Storage {
     this.serverMigrations = new D1ServerMigrationStorage(db);
     this.adminRootRotations = new D1AdminRootRotationStorage(db);
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
+    this.bootSuspensions = new D1BootSuspensionStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);
