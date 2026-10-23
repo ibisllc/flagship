@@ -418,8 +418,23 @@ checksum = "c0b50bfb653653f9ca9095b427bed08ab8d75a137839d9ad64eb11810d5b6393"
 name = "find-msvc-tools"
 version = "0.1.14"
 checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
+ "syn",
 name = "flagship-boot"
 version = "0.3.0"
+dependencies = [
+ "aes-gcm",
+ "base64ct",
+ "ed25519-dalek",
+ "getrandom 0.4.3",
+ "hkdf",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2",
+ "ureq",
+ "x25519-dalek",
+ "zeroize",
+]
 
 [[package]]
 name = "flagship-broker"
@@ -1448,3 +1463,41 @@ checksum = "01576e56599d01d75c5efcd5b30fa5de29e776f5a225e43fbf8c92c7302d4c8b"
  "ml-kem",
  "sha3 0.12.0",
  "x25519-dalek",
+name = "http"
+checksum = "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0"
+name = "httparse"
+version = "1.10.1"
+checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
+name = "linux-raw-sys"
+checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
+name = "percent-encoding"
+version = "2.3.2"
+checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+ "untrusted",
+name = "rustix"
+version = "1.1.4"
+checksum = "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
+ "linux-raw-sys",
+version = "1.0.228"
+checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
+checksum = "41d385c7d4ca58e59fc732af25c3983b67ac852c1a25000afe1175de458b67ad"
+checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
+ "syn",
+version = "1.0.150"
+checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
+name = "ureq"
+version = "3.4.2"
+checksum = "9a7ac20be9b7726e0bbdbf974c059676d9acb1cd414961f570a4e8231cacd7fc"
+ "percent-encoding",
+ "ureq-proto",
+ "utf8-zero",
+ "webpki-roots",
+name = "ureq-proto"
+checksum = "f86fd172ccca569e458f61b6bdd6220965a9ef36e672a6852953b51a0e1583be"
+ "http",
+ "httparse",
+name = "utf8-zero"
+checksum = "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e"
+name = "webpki-roots"
+version = "1.0.9"
+checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
