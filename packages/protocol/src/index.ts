@@ -75,6 +75,7 @@ export * from "./peerBackupMail.js";
 export * from "./securityNotice.js";
 export * from "./recoveryRecord.js";
 export * from "./manifestCapabilities.js";
+export * from "./manifestV2.js";
 export * from "./adapterAttestation.js";
 export * from "./appRelease.js";
 export * from "./nameDibs.js";
