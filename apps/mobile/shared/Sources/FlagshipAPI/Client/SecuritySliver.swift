@@ -97,10 +97,13 @@ public enum SliverWords {
     public static func remaining(_ ms: Int64?) -> String {
         guard let ms else { return "" }
         let a = abs(ms), day: Int64 = 86_400_000, hour: Int64 = 3_600_000, min: Int64 = 60_000
+        func days(_ n: Int64) -> String { n == 1 ? String(localized: "\(n) day") : String(localized: "\(n) days") }
+        func hours(_ n: Int64) -> String { n == 1 ? String(localized: "\(n) hour") : String(localized: "\(n) hours") }
+        func minutes(_ n: Int64) -> String { n == 1 ? String(localized: "\(n) minute") : String(localized: "\(n) minutes") }
         let body: String
-        if a >= day { body = String(localized: "\(a / day) day\(a / day == 1 ? "" : "s") \((a % day) / hour) hours") }
-        else if a >= hour { body = String(localized: "\(a / hour) hour\(a / hour == 1 ? "" : "s") \((a % hour) / min) minutes") }
-        else { let m = Swift.max(1, a / min); body = String(localized: "\(m) minute\(m == 1 ? "" : "s")") }
-        return ms >= 0 ? String(localized: "\(body) left") : "overdue by \(body)"
+        if a >= day { body = "\(days(a / day)) \(hours((a % day) / hour))" }
+        else if a >= hour { body = "\(hours(a / hour)) \(minutes((a % hour) / min))" }
+        else { body = minutes(Swift.max(1, a / min)) }
+        return ms >= 0 ? String(localized: "\(body) left") : String(localized: "overdue by \(body)")
     }
 }

@@ -5,5 +5,15 @@
   "Done": "完成",
   "Failed — %@": "失败：%@",
   "Couldn't reach iPhone: %@": "无法连接 iPhone：%@",
-  "Approval failed.": "批准失败。"
+  "Approval failed.": "批准失败。",
+  "Flagship": "Flagship",
+  "Approve": "批准",
+  "from %@": "来自 %@",
+  "Approved": "已批准",
+  "Security": "安全",
+  "Pending approvals": "待批准",
+  "Servers": "服务器",
+  "Recent activity": "最近活动",
+  "All quiet": "一切正常",
+  "Boot approvals and account changes show up here.": "启动批准和账户变更会显示在这里。"
 }
