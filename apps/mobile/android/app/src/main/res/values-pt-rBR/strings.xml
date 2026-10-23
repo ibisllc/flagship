@@ -504,7 +504,7 @@
     <string name="your_watch_is_waiting_to_approve">Seu relógio está aguardando para aprovar a inicialização de um servidor. Desbloqueie e toque em Aprovar no relógio de novo.</string>
     <string name="s_start_up">Inicialização de %1$s</string>
     <string name="your_watch_asked_to_approve_unlock">Seu relógio pediu para aprovar %1$s. Desbloqueie o Flagship uma vez para que ele possa, e toque em Aprovar no relógio de novo.</string>
-    <string name="turn_on_quick_approve_from_watch">Primeiro ative Aprovação rápida pelo relógio no Flagship, no seu celular.</string>
+    <string name="turn_on_quick_approve_from_watch">Primeiro ative Aprovar pelo relógio no Flagship, no seu celular.</string>
     <string name="unlock_flagship_on_your_phone_once">Desbloqueie o Flagship no seu celular uma vez e aprove de novo.</string>
     <string name="open_flagship_on_your_phone_and">Abra o Flagship no seu celular, desbloqueie-o uma vez e aprove de novo.</string>
     <string name="sign_in_to_flagship_on_your">Primeiro entre no Flagship no seu celular.</string>
@@ -2006,7 +2006,7 @@
     <string name="assistant">Assistente</string>
     <string name="build_logs">Logs de build</string>
     <string name="interrupt_with_a_follow_up">Interromper com uma mensagem adicional</string>
-    <string name="quick_approve_from_watch">Aprovação rápida pelo relógio</string>
+    <string name="quick_approve_from_watch">Aprovar pelo relógio</string>
     <string name="approve_a_server_boot_from_your">Aprove a inicialização de um servidor pelo seu relógio Wear OS enquanto o Flagship estiver desbloqueado neste celular. Outras ações (revogar servidor, apagar e reiniciar, substituir dispositivo) sempre exigem o seu celular. Desativado por padrão.</string>
     <string name="active_renews_by">Ativo — renova até %1$s</string>
     <string name="your_stuff_on">Suas coisas,\nno\u0020</string>
@@ -2031,7 +2031,7 @@
     <string name="tap_below_to_unlock">Toque abaixo para desbloquear.</string>
     <string name="this_erases_this_devices_account_key_3">Isso apaga a chave da conta e os dados deste dispositivo para que nada sensível fique armazenado. Sua conta e seus servidores não são afetados; entre de novo com sua passkey de recuperação e a mesma chave é restaurada, sem novo pareamento.</string>
     <string name="let_your_watch_approve">Deixe seu relógio aprovar</string>
-    <string name="unlock_flagship_once_so_quick_approve">Desbloqueie o Flagship uma vez para que a aprovação rápida possa assinar</string>
+    <string name="unlock_flagship_once_so_quick_approve">Desbloqueie o Flagship uma vez para que Aprovar pelo relógio possa assinar</string>
     <string name="show_your_servers">Mostrar seus servidores</string>
     <string name="confirm_its_you_to_load_your">Confirme que é você para carregar seus servidores</string>
     <string name="web_browser">Navegador web</string>
