@@ -1,0 +1,38 @@
+{
+  "_about": "What the store art is made of (docs/store-assets/store-assets-brief.md). `slides` is the story; `classes` is every image size a store asks for, with the template that draws it and where its screen captures come from. scripts/store-assets/render.mjs reads this; check the sizes against the stores' own pages before a release (brief §7). Light and dark alternate by a slide's position in its class.",
+  "slides": [
+    { "id": "01", "theme": "server",  "strings": "slide1", "state": "home-two-servers", "screen": "Home: servers home and cabin online, home is the leader" },
+    { "id": "02", "theme": "phone",   "strings": "slide2", "state": "unlock-request",   "screen": "The start-up approval for cabin, with the biometric prompt" },
+    { "id": "03", "theme": "apps",    "strings": "slide3", "state": "apps",             "screen": "The apps list: Notes, Photos, Recipes, Chess Club, Budget" },
+    { "id": "04", "theme": "people",  "strings": "slide4", "state": "members",          "screen": "Chess Club's access control: Members only, Ana, Kenji and Lea with ranks" },
+    { "id": "05", "theme": "backups", "strings": "slide5", "state": "backups",          "screen": "home's Backups: nightly, kept on this phone, last backup today" },
+    { "id": "06", "theme": "glance",  "strings": "slide6", "state": "home-two-servers", "screen": "Watch / Wear OS: two servers online, nothing waiting", "watch": true },
+    { "id": "06b", "theme": "glance", "strings": null,     "state": "unlock-request",   "screen": "Watch / Wear OS: cabin waiting for approval", "watch": true, "rawOnly": true },
+    { "id": "07", "theme": "closing", "strings": "closing", "closing": true },
+    { "id": "feature", "theme": "feature", "strings": "feature" },
+    { "id": "icon", "theme": "icon", "strings": null, "neutral": true }
+  ],
+  "classes": [
+    { "store": "appstore",  "class": "iphone-6.9",  "w": 1320, "h": 2868, "template": "phone",   "device": "iphone", "captures": { "platform": "ios", "device": "iphone-6.9" }, "standIn": "phone", "slides": ["01", "02", "03", "04", "05", "07"] },
+    { "store": "appstore",  "class": "ipad-13",     "w": 2064, "h": 2752, "template": "tablet",  "device": "ipad",   "captures": { "platform": "ios", "device": "ipad-13" }, "standIn": "tablet", "slides": ["01", "02", "03", "04", "05", "07"] },
+    { "store": "appstore",  "class": "watch-ultra", "w": 422,  "h": 514,  "template": "watch",   "device": "apple-watch", "captures": { "platform": "ios", "device": "watch-ultra" }, "slides": ["06", "06b"] },
+    { "store": "playstore", "class": "phone",       "w": 1080, "h": 1920, "template": "phone",   "device": "android-phone", "captures": { "platform": "android", "device": "phone" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "phone", "slides": ["01", "02", "03", "04", "05", "06", "07"] },
+    { "store": "playstore", "class": "tablet-7",    "w": 1200, "h": 1920, "template": "tablet",  "device": "android-tablet", "captures": { "platform": "android", "device": "tablet-7" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "tablet", "slides": ["01", "02", "03", "04", "05", "06", "07"] },
+    { "store": "playstore", "class": "tablet-10",   "w": 1600, "h": 2560, "template": "tablet",  "device": "android-tablet", "captures": { "platform": "android", "device": "tablet-10" }, "watchCaptures": { "platform": "android", "device": "wear" }, "standIn": "tablet", "slides": ["01", "02", "03", "04", "05", "06", "07"] },
+    { "store": "playstore", "class": "wear",        "w": 384,  "h": 384,  "template": "watch",   "device": "wear-os", "captures": { "platform": "android", "device": "wear" }, "slides": ["06", "06b"] },
+    { "store": "playstore", "class": "feature",     "w": 1024, "h": 500,  "template": "feature", "slides": ["feature"] },
+    { "store": "playstore", "class": "icon",        "w": 512,  "h": 512,  "template": "icon",    "slides": ["icon"], "neutral": true }
+  ],
+  "captureSize": {
+    "_about": "The pixel size each capture device writes (portrait). A capture of another size is scaled to fit the frame and reported by the check.",
+    "ios/iphone-6.9": [1320, 2868],
+    "ios/ipad-13": [2752, 2064],
+    "ios/watch-ultra": [422, 514],
+    "android/phone": [1080, 2400],
+    "android/tablet-7": [1200, 1920],
+    "android/tablet-10": [1600, 2560],
+    "android/wear": [384, 384],
+    "webapp/phone": [1290, 2796],
+    "webapp/tablet": [2048, 2732]
+  }
+}

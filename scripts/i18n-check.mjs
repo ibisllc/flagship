@@ -21,6 +21,7 @@ const CHECKS = [
   ["studio-windows", "i18n-windows.mjs", ["check"]],
   ["server", "i18n-server.mjs", ["check"]],
   ["box pages", "i18n-box.mjs", ["check"]],
+  ["store art", "i18n-store.mjs", ["check"]],
 ];
 
 if (process.argv[2] === "status") {
