@@ -17,6 +17,9 @@ describe("boot key binding vectors", () => {
   it("signs the canonical bytes deterministically", () => {
     const parsed = bootKeyBindingFromWire(v.binding.wire)!;
     expect(new TextDecoder().decode(canonicalBootKeyBinding(parsed.binding))).toBe(v.binding.canonical);
+    // The same format as the box-key-pin vectors (one binding format for every client).
+    const pin = JSON.parse(readFileSync(new URL("../test-vectors/box-key-pin/vectors.json", import.meta.url), "utf8"));
+    expect(verifiedBootKey({ binding: pin.bootKeyBinding.binding, signature: pin.bootKeyBinding.signatureHex }, { serverDomain: pin.serverDomain, stkPubHex: pin.stkPubHex })).toBe(pin.bootKeyBinding.binding.bootPubHex);
     const seed = unhex(v.stkSeedHex);
     expect(hex(signBootKeyBinding(parsed.binding, { publicKey: ed.getPublicKey(seed), privateKey: seed }))).toBe(v.binding.wire.signature);
   });
@@ -30,7 +33,7 @@ describe("boot key binding vectors", () => {
   it("refuses malformed wire shapes", () => {
     expect(bootKeyBindingFromWire(null)).toBeNull();
     expect(bootKeyBindingFromWire({ binding: { ...v.binding.wire.binding, issuedAt: "1" }, signature: v.binding.wire.signature })).toBeNull();
-    expect(bootKeyBindingFromWire({ binding: { ...v.binding.wire.binding, stkPub: "zz" }, signature: v.binding.wire.signature })).toBeNull();
+    expect(bootKeyBindingFromWire({ binding: { ...v.binding.wire.binding, bootPubHex: "zz" }, signature: v.binding.wire.signature })).toBeNull();
   });
 });
 

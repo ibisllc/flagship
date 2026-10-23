@@ -32,7 +32,7 @@ export async function handlePutBootKey(deps: BootKeyDeps, host: string, body: un
   const wire = bootKeyBindingToWire(parsed.binding, parsed.signature);
   const put = await deps.serverBootKeys.putIfNewer({
     serverDomain: host.toLowerCase(),
-    stkPubHex: wire.binding.stkPub,
+    stkPubHex: reg.identityPubKeyHex.toLowerCase(),
     bootKeyPubHex,
     issuedAt: parsed.binding.issuedAt,
     signatureHex: wire.signature,
@@ -51,8 +51,9 @@ export async function currentBootKeyBinding(
   if (!reg || reg.revokedAt) return null;
   const rec = await deps.serverBootKeys.get(host);
   if (!rec) return null;
+  if (rec.stkPubHex !== reg.identityPubKeyHex.toLowerCase()) return null;
   const wire = {
-    binding: { serverDomain: rec.serverDomain, stkPub: rec.stkPubHex, bootKeyPub: rec.bootKeyPubHex, issuedAt: rec.issuedAt },
+    binding: { serverDomain: rec.serverDomain, bootPubHex: rec.bootKeyPubHex, issuedAt: rec.issuedAt },
     signature: rec.signatureHex,
   };
   const bootKeyPubHex = verifiedBootKey(wire, { serverDomain: host, stkPubHex: reg.identityPubKeyHex });

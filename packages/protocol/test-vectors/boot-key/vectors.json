@@ -9,15 +9,15 @@
   "ownerPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
   "otherStkPubHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
   "binding": {
-    "canonical": "flagship/boot-key-binding/v1|home.alice.flagship.services|66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a|1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654|1760000000000",
+    "about": "The canonical bytes and signature are the box-key-pin vectors' format (packages/protocol/src/boxKeyPin.ts); `wire` is what PUT/GET /api/server/:host/boot-key carry.",
+    "canonical": "flagship/boot-key-binding/v1|home.alice.flagship.services|1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654|1760000000000",
     "wire": {
       "binding": {
         "serverDomain": "home.alice.flagship.services",
-        "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
-        "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+        "bootPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
         "issuedAt": 1760000000000
       },
-      "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+      "signature": "8d5c32bd74471eff0d8a54c24df5868b6bb68c802e1fb3b876cb6e6d051ddc5b7e9c8e49c6406fea5d8af92d84d321c9684c270f56872a2fbcc6962e5a55130e"
     },
     "cases": [
       {
@@ -25,11 +25,10 @@
         "wire": {
           "binding": {
             "serverDomain": "home.alice.flagship.services",
-            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
-            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "bootPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
             "issuedAt": 1760000000000
           },
-          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+          "signature": "8d5c32bd74471eff0d8a54c24df5868b6bb68c802e1fb3b876cb6e6d051ddc5b7e9c8e49c6406fea5d8af92d84d321c9684c270f56872a2fbcc6962e5a55130e"
         },
         "expect": {
           "serverDomain": "home.alice.flagship.services",
@@ -42,15 +41,14 @@
         "wire": {
           "binding": {
             "serverDomain": "home.alice.flagship.services",
-            "stkPub": "66BE7E332C7A453332BD9D0A7F7DB055F5C5EF1A06ADA66D98B39FB6810C473A",
-            "bootKeyPub": "1E2A137C7FE2279F9D7F0644030A0E9C0B45F781DCE71AE4519C0F4384031654",
+            "bootPubHex": "1E2A137C7FE2279F9D7F0644030A0E9C0B45F781DCE71AE4519C0F4384031654",
             "issuedAt": 1760000000000
           },
-          "signature": "8FC65E1CB58FD1CC86CE37CB0857584F9F588E7929C51B24EC19BF2769B763C653E088BBB64F39A113C070B768EE7AFD2291F7C1A424B32E2CBEDF846F791B02"
+          "signature": "8D5C32BD74471EFF0D8A54C24DF5868B6BB68C802E1FB3B876CB6E6D051DDC5B7E9C8E49C6406FEA5D8AF92D84D321C9684C270F56872A2FBCC6962E5A55130E"
         },
         "expect": {
           "serverDomain": "HOME.ALICE.FLAGSHIP.SERVICES",
-          "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a"
+          "stkPubHex": "66BE7E332C7A453332BD9D0A7F7DB055F5C5EF1A06ADA66D98B39FB6810C473A"
         },
         "bootKeyPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654"
       },
@@ -59,11 +57,10 @@
         "wire": {
           "binding": {
             "serverDomain": "home.alice.flagship.services",
-            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
-            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "bootPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
             "issuedAt": 1760000000000
           },
-          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+          "signature": "8d5c32bd74471eff0d8a54c24df5868b6bb68c802e1fb3b876cb6e6d051ddc5b7e9c8e49c6406fea5d8af92d84d321c9684c270f56872a2fbcc6962e5a55130e"
         },
         "expect": {
           "serverDomain": "home.alice.flagship.services",
@@ -76,11 +73,10 @@
         "wire": {
           "binding": {
             "serverDomain": "home.alice.flagship.services",
-            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
-            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "bootPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
             "issuedAt": 1760000000000
           },
-          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+          "signature": "8d5c32bd74471eff0d8a54c24df5868b6bb68c802e1fb3b876cb6e6d051ddc5b7e9c8e49c6406fea5d8af92d84d321c9684c270f56872a2fbcc6962e5a55130e"
         },
         "expect": {
           "serverDomain": "home.bob.flagship.services",
@@ -93,11 +89,10 @@
         "wire": {
           "binding": {
             "serverDomain": "home.alice.flagship.services",
-            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
-            "bootKeyPub": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+            "bootPubHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
             "issuedAt": 1760000000000
           },
-          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+          "signature": "8d5c32bd74471eff0d8a54c24df5868b6bb68c802e1fb3b876cb6e6d051ddc5b7e9c8e49c6406fea5d8af92d84d321c9684c270f56872a2fbcc6962e5a55130e"
         },
         "expect": {
           "serverDomain": "home.alice.flagship.services",
@@ -110,11 +105,10 @@
         "wire": {
           "binding": {
             "serverDomain": "home.alice.flagship.services",
-            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
-            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "bootPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
             "issuedAt": 1760000000001
           },
-          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+          "signature": "8d5c32bd74471eff0d8a54c24df5868b6bb68c802e1fb3b876cb6e6d051ddc5b7e9c8e49c6406fea5d8af92d84d321c9684c270f56872a2fbcc6962e5a55130e"
         },
         "expect": {
           "serverDomain": "home.alice.flagship.services",
@@ -127,11 +121,10 @@
         "wire": {
           "binding": {
             "serverDomain": "home.alice.flagship.services",
-            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
-            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "bootPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
             "issuedAt": 1760000000000
           },
-          "signature": "30cb938bfac39d23dd718a90a694301f488fa6c3719bcb1e4dc4aee7322e1b258f57cf39b789d19db55576b8ce8d696596a266c84bda0a1100fc98a92bb7f403"
+          "signature": "a183de2974f756bac2fa489fbd934f8d162137f79fa1f30c7ba5397663ba3828f773e842ae8c649de1b18c8d96a3c2de952f0c1433e9e669269f4b0efb1f6e09"
         },
         "expect": {
           "serverDomain": "home.alice.flagship.services",
@@ -144,11 +137,10 @@
         "wire": {
           "binding": {
             "serverDomain": "home.alice.flagship.services",
-            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
-            "bootKeyPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "bootPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
             "issuedAt": 1760000000000
           },
-          "signature": "24ea3f5a93eaf8e598ab0f5874723f33a6407612adaa30bd2433a15663d0de96f2e7b11bc47b1a2b33f25859c32cda9a2b258b4d084989b5116532bc879b1f00"
+          "signature": "f281fede70afff011da3cd2ed5ffe9569a289acb0ab20ab5f5cb5ee1027bb184b32c0f51cff8365d93a09fddd5fa242f1835100988c7d66a48e22fdb6288070c"
         },
         "expect": {
           "serverDomain": "home.alice.flagship.services",
@@ -161,11 +153,10 @@
         "wire": {
           "binding": {
             "serverDomain": "home.alice.flagship.services",
-            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
-            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "bootPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
             "issuedAt": 1760000000000
           },
-          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b"
+          "signature": "8d5c32bd74471eff0d8a54c24df5868b6bb68c802e1fb3b876cb6e6d051ddc5b7e9c8e49c6406fea5d8af92d84d321c9684c270f56872a2fbcc6962e5a5513"
         },
         "expect": {
           "serverDomain": "home.alice.flagship.services",

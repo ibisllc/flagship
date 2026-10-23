@@ -23,7 +23,7 @@ async function world() {
   return { storage, deps: { servers: storage.servers, serverBootKeys: storage.serverBootKeys, now: () => T } };
 }
 const binding = (signer = stk, issuedAt = T, bootPub = boot.publicKey) => {
-  const b = { serverDomain: S, stkPub: stk.publicKey, bootKeyPub: bootPub, issuedAt };
+  const b = { serverDomain: S, bootPubHex: hex(bootPub), issuedAt };
   return bootKeyBindingToWire(b, signBootKeyBinding(b, signer));
 };
 

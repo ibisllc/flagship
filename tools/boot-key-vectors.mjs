@@ -1,5 +1,5 @@
 // Writes packages/protocol/test-vectors/boot-key/vectors.json: the boot key
-// binding (flagship/boot-key-binding/v1, STK-signed) and the box-side check of
+// binding (flagship/boot-key-binding/v1 from boxKeyPin.ts, STK-signed) and the box-side check of
 // an auto-unlock lease before it is opened (owner signature, server, recipient,
 // expiry). Read by the TS protocol and boot-core tests, the webapp, the Go
 // helper (tools/unseal-crosscheck), the Rust flagship-boot crate, iOS and
@@ -19,11 +19,8 @@ import { sha256 } from "@noble/hashes/sha256";
 import { ed } from "../packages/protocol/src/edSync.ts";
 import { FLAGSHIP_SEAL_TAG, openSealedFromEd25519Recipient } from "../packages/protocol/src/encryption.ts";
 import { signAutoUnlockLeaseV2, verifyAutoUnlockLeaseV2 } from "../packages/protocol/src/phoneEndpoint.ts";
-import {
-  canonicalBootKeyBinding,
-  signBootKeyBinding,
-  verifiedBootKey,
-} from "../packages/protocol/src/bootKey.ts";
+import { canonicalBootKeyBinding, signBootKeyBinding } from "../packages/protocol/src/boxKeyPin.ts";
+import { verifiedBootKey } from "../packages/protocol/src/bootKey.ts";
 
 const OUT = new URL("../packages/protocol/test-vectors/boot-key/vectors.json", import.meta.url);
 const hex = (b) => Buffer.from(b).toString("hex");
@@ -40,55 +37,29 @@ const ownerPub = ed.getPublicKey(ownerSeed);
 const otherStkPub = ed.getPublicKey(otherStkSeed);
 const issuedAt = 1760000000000;
 
-function wire(b, sig) {
-  return {
-    binding: { serverDomain: b.serverDomain, stkPub: hex(b.stkPub), bootKeyPub: hex(b.bootKeyPub), issuedAt: b.issuedAt },
-    signature: hex(sig),
-  };
-}
-
-const good = { serverDomain: domain, stkPub, bootKeyPub: bootPub, issuedAt };
-const goodSig = signBootKeyBinding(good, { publicKey: stkPub, privateKey: stkSeed });
-const goodWire = wire(good, goodSig);
+const sign = (b, seed) => hex(signBootKeyBinding(b, { publicKey: ed.getPublicKey(seed), privateKey: seed }));
+const good = { serverDomain: domain, bootPubHex: hex(bootPub), issuedAt };
+const goodWire = { binding: good, signature: sign(good, stkSeed) };
+const expectStk = { serverDomain: domain, stkPubHex: hex(stkPub) };
 
 const bindingCases = [
-  { name: "valid", wire: goodWire, expect: { serverDomain: domain, stkPubHex: hex(stkPub) }, bootKeyPubHex: hex(bootPub) },
+  { name: "valid", wire: goodWire, expect: expectStk, bootKeyPubHex: hex(bootPub) },
   {
     name: "upper-case hex and domain still bind",
-    wire: { binding: { ...goodWire.binding, stkPub: hex(stkPub).toUpperCase(), bootKeyPub: hex(bootPub).toUpperCase() }, signature: goodWire.signature.toUpperCase() },
-    expect: { serverDomain: domain.toUpperCase(), stkPubHex: hex(stkPub) },
+    wire: { binding: { ...good, bootPubHex: hex(bootPub).toUpperCase() }, signature: goodWire.signature.toUpperCase() },
+    expect: { serverDomain: domain.toUpperCase(), stkPubHex: hex(stkPub).toUpperCase() },
     bootKeyPubHex: hex(bootPub),
   },
   { name: "another server's STK", wire: goodWire, expect: { serverDomain: domain, stkPubHex: hex(otherStkPub) }, bootKeyPubHex: null },
   { name: "another server", wire: goodWire, expect: { serverDomain: "home.bob.flagship.services", stkPubHex: hex(stkPub) }, bootKeyPubHex: null },
-  {
-    name: "boot key swapped after signing",
-    wire: { ...goodWire, binding: { ...goodWire.binding, bootKeyPub: hex(otherStkPub) } },
-    expect: { serverDomain: domain, stkPubHex: hex(stkPub) },
-    bootKeyPubHex: null,
-  },
-  {
-    name: "issuedAt changed after signing",
-    wire: { ...goodWire, binding: { ...goodWire.binding, issuedAt: issuedAt + 1 } },
-    expect: { serverDomain: domain, stkPubHex: hex(stkPub) },
-    bootKeyPubHex: null,
-  },
-  {
-    name: "signed by the boot key itself",
-    wire: wire(good, signBootKeyBinding(good, { publicKey: bootPub, privateKey: bootSeed })),
-    expect: { serverDomain: domain, stkPubHex: hex(stkPub) },
-    bootKeyPubHex: null,
-  },
+  { name: "boot key swapped after signing", wire: { ...goodWire, binding: { ...good, bootPubHex: hex(otherStkPub) } }, expect: expectStk, bootKeyPubHex: null },
+  { name: "issuedAt changed after signing", wire: { ...goodWire, binding: { ...good, issuedAt: issuedAt + 1 } }, expect: expectStk, bootKeyPubHex: null },
+  { name: "signed by the boot key itself", wire: { binding: good, signature: sign(good, bootSeed) }, expect: expectStk, bootKeyPubHex: null },
   (() => {
-    const same = { ...good, bootKeyPub: stkPub };
-    return {
-      name: "boot key equal to the STK",
-      wire: wire(same, signBootKeyBinding(same, { publicKey: stkPub, privateKey: stkSeed })),
-      expect: { serverDomain: domain, stkPubHex: hex(stkPub) },
-      bootKeyPubHex: null,
-    };
+    const same = { ...good, bootPubHex: hex(stkPub) };
+    return { name: "boot key equal to the STK", wire: { binding: same, signature: sign(same, stkSeed) }, expect: expectStk, bootKeyPubHex: null };
   })(),
-  { name: "short signature", wire: { ...goodWire, signature: goodWire.signature.slice(0, 126) }, expect: { serverDomain: domain, stkPubHex: hex(stkPub) }, bootKeyPubHex: null },
+  { name: "short signature", wire: { ...goodWire, signature: goodWire.signature.slice(0, 126) }, expect: expectStk, bootKeyPubHex: null },
 ];
 
 for (const c of bindingCases) {
@@ -188,6 +159,7 @@ const vectors = {
   ownerPubHex: hex(ownerPub),
   otherStkPubHex: hex(otherStkPub),
   binding: {
+    about: "The canonical bytes and signature are the box-key-pin vectors' format (packages/protocol/src/boxKeyPin.ts); `wire` is what PUT/GET /api/server/:host/boot-key carry.",
     canonical: new TextDecoder().decode(canonicalBootKeyBinding(good)),
     wire: goodWire,
     cases: bindingCases,
