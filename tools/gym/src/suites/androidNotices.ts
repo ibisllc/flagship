@@ -1,6 +1,6 @@
 /**
  * Android gym scenarios: security notices (docs/security-notices.md section
- * 6.6), the same five as the webapp's webNotices.ts. Each `harness` is a method
+ * 6.6): the webapp's five (webNotices.ts) plus the lock-screen Sign out. Each `harness` is a method
  * of GymNoticesTest (apps/mobile/android/app/src/androidTest). NO BACKEND: a
  * throwaway authority stands in for the maintainers' key and the mock `.com`
  * answers the poll.
@@ -46,6 +46,24 @@ export const ANDROID_NOTICES: readonly Scenario[] = [
         { describe: "Home is inaccessible", handle: "home-title", expect: "absent" },
       ],
       screenshots: [shot("update-lock", "The Update required screen."), shot("backup-above-lock", "The key backup above the lock.")],
+      dimension: "D4",
+    },
+  ),
+  androidTotal(
+    "android-total-notice-lock-sign-out-owner-absent",
+    "Above the app lock, the Update required screen's Sign out asks the owner first; with every biometric prompt refused no question opens and the lock stays.",
+    `${PKG}.GymNoticesTest#theUpdateLockSignOutDoesNothingWhileTheAppIsLockedAndTheOwnerIsNotThere`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=home as an admin device with real biometrics refused; sleep and wake to lock the app." },
+        { kind: "assert", describe: "Serve the notice: the lock shows above the app lock.", handle: "update-lock" },
+        { kind: "tap", describe: "Sign out.", handle: "update-lock-signout" },
+      ],
+      assertions: [
+        { describe: "No Sign out? question", handle: "Sign out?", expect: "absent" },
+        { describe: "The lock stays", handle: "update-lock-title", expect: "present" },
+      ],
+      screenshots: [shot("update-lock-sign-out-refused", "The lock after a refused Sign out.")],
       dimension: "D4",
     },
   ),

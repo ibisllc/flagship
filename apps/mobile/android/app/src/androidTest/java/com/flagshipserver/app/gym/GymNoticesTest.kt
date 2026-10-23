@@ -33,6 +33,8 @@ class GymNoticesTest : GymBase() {
     private val now = System.currentTimeMillis()
     private val authority = NoticeGymAuthority(now = now)
     private val center get() = SecurityNoticeCenter.shared!!
+    /** One build above this one, so the lock always names a build this app is below (versionCode climbs). */
+    private val nextBuild = com.flagshipserver.app.BuildConfig.VERSION_CODE.toLong() + 1
 
     /** The mock `.com` answers the next poll with [notice] (signed by [auth]), and the app polls. */
     private fun serve(notice: JsonElement, auth: NoticeGymAuthority = authority) {
@@ -48,7 +50,7 @@ class GymNoticesTest : GymBase() {
     private fun lock(seq: Long = 3, lockFrom: Long = now - 1_000, auth: NoticeGymAuthority = authority) = auth.notice(
         seq = seq, kind = "update-required", validFrom = now - day, validUntil = now + 10 * day,
         eventAt = now + 2 * day, lockFrom = lockFrom,
-        platforms = mapOf("android" to (9L to 1L), "ios" to (12L to 1L), "web" to (150L to 1L)),
+        platforms = mapOf("android" to (nextBuild to 1L), "ios" to (12L to 1L), "web" to (150L to 1L)),
         advisoryId = "FSA-2026-001", reason = "A flaw in how a signed message is checked lets an attacker act as you.",
         message = "You must update Flagship by {date}. Older versions will stop working.",
     )
@@ -225,7 +227,7 @@ class GymNoticesTest : GymBase() {
         serve(
             authority.notice(
                 seq = 9, kind = "update-required", validFrom = now - 20 * day, validUntil = now - 1 * day, eventAt = 0,
-                lockFrom = now - 10 * day, platforms = mapOf("android" to (9L to 1L)),
+                lockFrom = now - 10 * day, platforms = mapOf("android" to (nextBuild to 1L)),
                 advisoryId = "FSA-2026-002", reason = "Expired.", message = "You must update Flagship.",
             ),
         )
