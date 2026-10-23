@@ -390,6 +390,8 @@ class ServerShareClient(
         if (HexUtil.decode(stk)?.size != 32) {
             throw ShareException(ShareException.Kind.Invalid, "This server has no registered identity yet.")
         }
+        // The offer pins this key for the person it's shared with: it must be the one this phone pinned.
+        BoxKeyPins.shared.require(username, serverDomain, stk)
         val shareId = HexUtil.encode(random(16))
         val secret = random(32)
         val issuedAt = now()
@@ -603,7 +605,11 @@ class ServerShareClient(
             return
         }
         val reason = "Let them approve this server's start-up"
-        val got = call(apex, "GET", "${apexBase()}/api/server/${enc(serverDomain)}/sealed-luks-key")
+        // `.com` answers only the account's own devices: the read token.
+        val got = AccountReadTokens.authorize(username) { auth ->
+            call(apex, "GET", "${apexBase()}/api/server/${enc(serverDomain)}/sealed-luks-key", headers = auth)
+                .also { if (it.status == 401) throw HttpException(401, "") }
+        }
         if (got.status == 404) throw ShareException(ShareException.Kind.NotFound, "No disk key is on file for this server, so nobody else can unlock it.")
         expectOk(got, "read the disk key")
         val sealedBlob = HexUtil.decode(decode(got, SealedKeyWire.serializer()).sealedKey)

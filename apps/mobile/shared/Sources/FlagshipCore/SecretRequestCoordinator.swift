@@ -100,6 +100,8 @@ public final class SecretRequestCoordinator {
     private let watchDelegateKeyProvider: () -> Curve25519.Signing.PrivateKey?
     private let now: () -> Int64
     private let nonceGen: () -> Data
+    /// The box keys this device pinned; a reply is never sealed to another.
+    private let pins: BoxKeyPins
 
     public init(
         mailbox: SecretMailboxClient,
@@ -109,8 +111,10 @@ public final class SecretRequestCoordinator {
         orderKeyProvider: @escaping () async throws -> Curve25519.Signing.PrivateKey? = { nil },
         watchDelegateKeyProvider: @escaping () -> Curve25519.Signing.PrivateKey? = { nil },
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
-        nonceGen: @escaping () -> Data = { SecretRequestCoordinator.randomNonce() }
+        nonceGen: @escaping () -> Data = { SecretRequestCoordinator.randomNonce() },
+        pins: BoxKeyPins = .shared
     ) {
+        self.pins = pins
         self.mailbox = mailbox
         self.username = username
         self.irkProvider = irkProvider
@@ -139,6 +143,7 @@ public final class SecretRequestCoordinator {
         let auth = try buildMailboxAuth(irk: irk)
         let pendingResp = try await mailbox.fetchPendingRequests(auth: auth)
         let directory = try await mailbox.fetchPods(username: username)
+        pins.observe(username: username, pods: directory.pods)
 
         var verified: [VerifiedRequest] = []
         for pending in pendingResp.requests {
@@ -190,6 +195,9 @@ public final class SecretRequestCoordinator {
         else {
             throw CoordinatorError.directoryMissingServer(verified.serverDomain)
         }
+        // Before any prompt: a key other than the one this device pinned gets nothing.
+        try pins.require(username: username, serverDomain: verified.serverDomain,
+                         reportedHex: verified.directoryStkPubHex)
         let request = SecretRequest(
             serverDomain: verified.serverDomain,
             stkPub: stkPubData,
@@ -449,7 +457,7 @@ public final class SecretRequestCoordinator {
     private func buildUnlockReply(request: SecretRequest) async throws -> (sealedHex: String, luksKey: Data) {
         let sealedLuks: SealedLuksKeyResponse
         do {
-            sealedLuks = try await mailbox.fetchSealedLuksKey(serverDomain: request.serverDomain)
+            sealedLuks = try await mailbox.fetchSealedLuksKey(serverDomain: request.serverDomain, username: username)
         } catch ScreensClientError.http(let status, _) where status == 404 {
             throw CoordinatorError.noSealedLuksKey
         }

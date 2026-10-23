@@ -696,6 +696,20 @@ private fun BootUnlockApprovalCard(
                 }
             }
         }
+        is BootUnlockApprovalViewModel.State.KeyChanged -> SdSection("Boot unlock") {
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Text("This server's key changed", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleSmall)
+                    Text(s.error.message.orEmpty(), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+                    FSSecondaryButton(
+                        label = "Trust its new key",
+                        onClick = { scope.launch { vm.trustNewKey() } },
+                        block = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-approve-unlock-trust-new-key" },
+                    )
+                }
+            }
+        }
     }
 }
 

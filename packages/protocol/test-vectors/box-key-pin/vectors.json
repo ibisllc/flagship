@@ -1,0 +1,57 @@
+{
+  "about": "A device pins each server's box key (STK) the first time it learns it and refuses to seal to any other. A boot-only key is accepted only through a binding the PINNED STK signs. Seeds are 32 repeated bytes; Ed25519 signatures are deterministic.",
+  "serverDomain": "home.plucky-avocet.flagship.services",
+  "stkSeedHex": "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
+  "stkPubHex": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+  "otherSeedHex": "6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c6c",
+  "otherPubHex": "6d44f939f829d43598bcdedda90de01db69faa50caa33e8c6c328a4b900d4dac",
+  "decisions": [
+    {
+      "pinned": null,
+      "reported": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+      "verdict": "first"
+    },
+    {
+      "pinned": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+      "reported": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+      "verdict": "match"
+    },
+    {
+      "pinned": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+      "reported": "6B734A8EFF246FE734B38D4046C148EEE5F04FE87B3A0A423955A77956DE066B",
+      "verdict": "match"
+    },
+    {
+      "pinned": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+      "reported": "6d44f939f829d43598bcdedda90de01db69faa50caa33e8c6c328a4b900d4dac",
+      "verdict": "mismatch"
+    },
+    {
+      "pinned": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+      "reported": "",
+      "verdict": "invalid"
+    },
+    {
+      "pinned": null,
+      "reported": "abcd",
+      "verdict": "invalid"
+    }
+  ],
+  "bootKeyBinding": {
+    "binding": {
+      "serverDomain": "home.plucky-avocet.flagship.services",
+      "bootPubHex": "a386c3e9c8eb3f00ac670d6a5bbe5ef0d074dcc7ef0e0c8eb102a95dce43bd6a",
+      "issuedAt": 1760000000000
+    },
+    "canonical": "flagship/boot-key-binding/v1|home.plucky-avocet.flagship.services|a386c3e9c8eb3f00ac670d6a5bbe5ef0d074dcc7ef0e0c8eb102a95dce43bd6a|1760000000000",
+    "signatureHex": "1dbc5327f8df15d8cd176d890d4a40aaa0ea8dfc96955eb5f2e0155af34899b516fd31f64fe4621eac29627a492f8b7088feccfb25cec4932a84ed3c3304fa02",
+    "signedByOtherKeyHex": "4d62d304063e3a202286230f8c8f085268d3107e50ab58fc96592ac58e4bd7d2efba55fb78103cfb3fe47b2b78e786a31392d47e995509390b65b7f0bdccd701",
+    "expect": {
+      "signatureUnderPinnedStk": true,
+      "signedByOtherKeyUnderPinnedStk": false,
+      "signatureUnderOtherKey": false,
+      "otherServerDomain": "kitchen.plucky-avocet.flagship.services",
+      "signatureForOtherServer": false
+    }
+  }
+}

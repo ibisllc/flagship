@@ -31,7 +31,7 @@ final class SecretRequestCoordinatorTests: XCTestCase {
             lastPostedResponse = response
             postedResponses.append((response, bootAuth))
         }
-        func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse {
+        func fetchSealedLuksKey(serverDomain: String, username: String) async throws -> SealedLuksKeyResponse {
             guard let hex = sealedLuksKeyHex else {
                 throw ScreensClientError.http(status: 404, message: "no sealed key on file")
             }

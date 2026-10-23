@@ -114,6 +114,9 @@ public struct SwkDepositCoordinator {
         // used to cause when a box left a deposit owed.
         guard allowAuthentication || hasSessionKey() else { return }
         guard let boxIdentityPub = HexUtil.decode(identityPubKeyHex), boxIdentityPub.count == 32 else { return }
+        // A key other than the pinned one stays owed; boot approval shows the owner why.
+        guard (try? BoxKeyPins.shared.require(username: username, serverDomain: serverDomain,
+                                              reportedHex: identityPubKeyHex)) != nil else { return }
 
         // Server-migration (docs/server-migration.md invariant 4): when this pod
         // is the attached NEW box of a live migration, its SWK MUST derive from

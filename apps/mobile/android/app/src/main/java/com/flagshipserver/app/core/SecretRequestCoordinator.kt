@@ -95,6 +95,8 @@ class SecretRequestCoordinator(
     private val deadManBound: (serverDomain: String) -> DeadManBound? = { null },
     /** What this phone last confirmed about the server's lock: true = locked, null = never confirmed. */
     private val lockedServer: (serverDomain: String) -> Boolean? = { null },
+    /** The box keys this phone pinned; a reply is never sealed to another. */
+    private val pins: BoxKeyPins = BoxKeyPins.shared,
 ) {
     /** The dead-man switch's state for one server, as [DeadManLeaseBound] needs it. */
     data class DeadManBound(val enabled: Boolean, val deadline: Long?)
@@ -143,6 +145,7 @@ class SecretRequestCoordinator(
         val auth = buildMailboxAuth(material)
         val pendingResp = mailbox.fetchPendingRequests(auth)
         val directory = mailbox.fetchPods(username)
+        pins.observe(username, directory.pods)
 
         val verified = mutableListOf<VerifiedRequest>()
         for (pending in pendingResp.requests) {
@@ -193,6 +196,8 @@ class SecretRequestCoordinator(
         val stkPub = HexUtil.decode(verified.directoryStkPubHex)
             ?.takeIf { it.size == 32 }
             ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)
+        // Before any prompt: a key other than the one this phone pinned gets nothing.
+        pins.require(username, verified.serverDomain, verified.directoryStkPubHex)
 
         val material = irk.resolve("Approve your server's boot secret")
         val delegate: WatchDelegateSigner? =
@@ -482,7 +487,7 @@ class SecretRequestCoordinator(
         material: IrkMaterial,
     ): Pair<String, ByteArray> {
         val sealedLuks = try {
-            mailbox.fetchSealedLuksKey(verified.serverDomain)
+            mailbox.fetchSealedLuksKey(verified.serverDomain, username)
         } catch (e: HttpException) {
             if (e.status == 404) throw CoordinatorException.NoSealedLuksKey else throw e
         }

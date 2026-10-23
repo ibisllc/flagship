@@ -68,7 +68,7 @@ final class BootSuspensionTests: XCTestCase {
         var revokedAll = 0
         func fetchPendingRequests(auth: MailboxAuthEnvelope) async throws -> SecretRequestsResponse { throw ScreensClientError.notImplemented("x") }
         func postResponse(response: SecretResponseBody, bootAuth: String) async throws {}
-        func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse { throw ScreensClientError.notImplemented("x") }
+        func fetchSealedLuksKey(serverDomain: String, username: String) async throws -> SealedLuksKeyResponse { throw ScreensClientError.notImplemented("x") }
         func fetchPods(username: String) async throws -> PodsDirectoryResponse { throw ScreensClientError.notImplemented("x") }
         func fetchLiveSync(username: String, cursor: String?) async throws -> LiveSyncResponse { throw ScreensClientError.notImplemented("x") }
         func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {}

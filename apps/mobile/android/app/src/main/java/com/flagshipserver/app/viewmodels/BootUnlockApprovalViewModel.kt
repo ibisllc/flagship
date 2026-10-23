@@ -10,6 +10,8 @@
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.core.UserErrorText
+import com.flagshipserver.app.core.BoxKeyChangedException
+import com.flagshipserver.app.core.BoxKeyPins
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
@@ -57,6 +59,11 @@ class BootUnlockApprovalViewModel(
      *  disk key) or ENTITLEMENT (authorize the box to serve). The approve
      *  dispatch keys off this so ONE card type serves both lanes. */
     private val purpose: SecretPurpose = SecretPurpose.UNLOCK_KEY,
+    /** Re-pins after the owner confirms with a biometric. Injectable for tests. */
+    private val confirmNewKey: suspend (BoxKeyChangedException) -> Unit = { e ->
+        com.flagshipserver.app.keystore.BiometricAuthority.confirmNow("Trust the new key of ${e.serverDomain}")
+        BoxKeyPins.shared.repin(e.username, e.serverDomain, e.reportedHex)
+    },
 ) : ViewModel() {
 
     sealed interface State {
@@ -75,6 +82,10 @@ class BootUnlockApprovalViewModel(
 
         /** The approve failed (incl. the box already gave up). Retry re-arms. */
         data class Failed(val message: String) : State
+
+        /** `.com` lists a box key other than the one this phone pinned:
+         *  nothing was sent. The owner may trust the new key (a reinstall). */
+        data class KeyChanged(val error: BoxKeyChangedException) : State
     }
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -91,7 +102,7 @@ class BootUnlockApprovalViewModel(
     fun setAwaitingUnlock(awaiting: Boolean) {
         when (_state.value) {
             is State.Approving, is State.Approved -> return
-            is State.Failed -> {
+            is State.Failed, is State.KeyChanged -> {
                 // Keep a failure visible until the user acts; but if the box is
                 // no longer waiting, the failure is moot — clear it.
                 if (!awaiting) {
@@ -125,8 +136,23 @@ class BootUnlockApprovalViewModel(
                 SecretPurpose.ENTITLEMENT -> source.approvePendingEntitlement(serverDomain)
             }
             State.Approved
+        } catch (e: BoxKeyChangedException) {
+            State.KeyChanged(e)
         } catch (t: Throwable) {
             State.Failed(UserErrorText.of(t, "Approval failed. Try again."))
+        }
+    }
+
+    /** The owner says the key change is theirs (a reinstall, a replacement):
+     *  re-pin after a biometric, then back to the prompt to approve again. */
+    suspend fun trustNewKey() {
+        val changed = (_state.value as? State.KeyChanged)?.error ?: return
+        _state.value = try {
+            confirmNewKey(changed)
+            denied = false
+            State.RequestPending
+        } catch (t: Throwable) {
+            State.Failed(UserErrorText.of(t, "Couldn't confirm. Try again."))
         }
     }
 

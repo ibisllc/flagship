@@ -13,6 +13,32 @@ public protocol AccountReadTokenSource: Sendable {
     func tokenAfterRejection(for username: String) async -> String?
 }
 
+/// A token source set once the app has built its provider, for clients that
+/// are created before it (static share clients).
+public final class AccountReadTokenRelay: AccountReadTokenSource, @unchecked Sendable {
+    private let lock = NSLock()
+    private var source: (any AccountReadTokenSource)?
+
+    public init() {}
+
+    public func set(_ source: (any AccountReadTokenSource)?) {
+        lock.lock(); self.source = source; lock.unlock()
+    }
+
+    private func current() -> (any AccountReadTokenSource)? {
+        lock.lock(); defer { lock.unlock() }
+        return source
+    }
+
+    public func token(for username: String) async -> String? {
+        await current()?.token(for: username)
+    }
+
+    public func tokenAfterRejection(for username: String) async -> String? {
+        await current()?.tokenAfterRejection(for: username)
+    }
+}
+
 public struct AccountReadTokenResponse: Codable, Equatable, Sendable {
     public let token: String
     public let expiresAt: Int64

@@ -79,6 +79,8 @@ class SwkDepositCoordinator(
         if (!hasSessionKey()) return
         val boxIdentityPub = HexUtil.decode(identityPubKeyHex) ?: return
         if (boxIdentityPub.size != 32) return
+        // A key other than the pinned one stays owed; boot approval shows the owner why.
+        if (runCatching { BoxKeyPins.shared.require(username, serverDomain, identityPubKeyHex) }.isFailure) return
 
         // Server-migration (docs/server-migration.md invariant 4): when this pod
         // is the attached NEW box of a live migration, its SWK MUST derive from
