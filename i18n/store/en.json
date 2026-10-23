@@ -1,0 +1,16 @@
+{
+  "slide1_theme": { "en": "Your server", "ctx": "store screenshot 1, small uppercase label above the headline (Latin scripts are uppercased by the template)" },
+  "slide1_caption": { "en": "Your own cloud, at home.", "ctx": "store screenshot 1 headline over the Home screen (two servers online). At most two lines at headline size; the build measures it. CJK may carry \\n where the line should break; no final 。" },
+  "slide2_theme": { "en": "Your phone", "ctx": "store screenshot 2 label" },
+  "slide2_caption": { "en": "It starts only when you approve.", "ctx": "store screenshot 2 headline over the start-up approval sheet. 'It' is the server. Must not say 'always': auto-unlock exists and is opt-in" },
+  "slide3_theme": { "en": "Your apps", "ctx": "store screenshot 3 label" },
+  "slide3_caption": { "en": "Apps that live on your server.", "ctx": "store screenshot 3 headline over the apps list" },
+  "slide4_theme": { "en": "Your people", "ctx": "store screenshot 4 label" },
+  "slide4_caption": { "en": "Invite family. Keep the keys.", "ctx": "store screenshot 4 headline over an app's access control. People invited to an app get that app only, never the account keys" },
+  "slide5_theme": { "en": "Your backups", "ctx": "store screenshot 5 label" },
+  "slide5_caption": { "en": "Backups only you can open.", "ctx": "store screenshot 5 headline over the Backups section (encrypted to the account)" },
+  "slide6_theme": { "en": "At a glance", "ctx": "store screenshot 6 label (watch slide)" },
+  "slide6_caption": { "en": "Status on your wrist.", "ctx": "store screenshot 6 headline over Apple Watch / Wear OS" },
+  "closing_caption": { "en": "Flagship. Your cloud, your keys.", "ctx": "store closing card under the logo" },
+  "feature_caption": { "en": "Your cloud, your keys.", "ctx": "Google Play feature graphic (1024 x 500) beside the logo and the word Flagship" }
+}
