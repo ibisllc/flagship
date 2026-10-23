@@ -156,7 +156,7 @@ public struct AccountSecurityScreen: View {
         }
     }
 
-    /// "Quick approve from Apple Watch" — the opt-in watch-delegate toggle
+    /// "Approve from watch" — the opt-in watch-delegate toggle
     /// (docs/watch-delegate-key-design.md §4). Default-OFF. Flipping it on
     /// mints a boot-approval-only delegate key (one Face ID); off revokes it.
     @ViewBuilder
@@ -172,7 +172,7 @@ public struct AccountSecurityScreen: View {
                     HStack(spacing: FS.space.s2) {
                         Image(systemName: "applewatch")
                             .foregroundColor(c.accent)
-                        Text("Quick approve from Apple Watch")
+                        Text("Approve from watch")
                             .font(FS.font.scaled(16, weight: .semibold))
                             .foregroundColor(c.text)
                     }

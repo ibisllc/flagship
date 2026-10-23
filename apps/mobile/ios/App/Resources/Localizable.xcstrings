@@ -3691,47 +3691,6 @@
         }
       }
     },
-    "Quick approve from Apple Watch": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aprobación rápida desde Apple Watch"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Approbation rapide depuis l’Apple Watch"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Schnell genehmigen per Apple Watch"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aprovação rápida pelo Apple Watch"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple Watch からのクイック承認"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通过 Apple Watch 快速批准"
-          }
-        }
-      }
-    },
     "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.": {
       "extractionState": "manual",
       "localizations": {
@@ -9960,47 +9919,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "只有管理员设备才能更改此应用的数据。"
-          }
-        }
-      }
-    },
-    "Only an admin device can turn on quick approve from Apple Watch.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Solo un dispositivo de administrador puede activar la aprobación rápida desde Apple Watch."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seul un appareil administrateur peut activer l’approbation rapide depuis l’Apple Watch."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nur ein Admin-Gerät kann „Schnell genehmigen per Apple Watch“ einschalten."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Somente um dispositivo administrador pode ativar a aprovação rápida pelo Apple Watch."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple Watch からのクイック承認をオンにできるのは、管理者デバイスだけです。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "只有管理员设备才能开启通过 Apple Watch 快速批准。"
           }
         }
       }
@@ -102214,47 +102132,6 @@
         }
       }
     },
-    "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Primero activa Aprobación rápida desde Apple Watch en Flagship, en tu iPhone."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Activez d’abord Approbation rapide depuis l’Apple Watch dans Flagship, sur votre iPhone."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Schalte zuerst „Schnell genehmigen per Apple Watch“ in Flagship auf deinem iPhone ein."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Primeiro ative Aprovação rápida pelo Apple Watch no Flagship, no seu iPhone."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "まず、iPhone の Flagship で「Apple Watch からのクイック承認」をオンにしてください。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请先在 iPhone 上的 Flagship 中开启“通过 Apple Watch 快速批准”。"
-          }
-        }
-      }
-    },
     "Unlock Flagship on your iPhone once, then approve again.": {
       "extractionState": "manual",
       "localizations": {
@@ -103235,6 +103112,129 @@
           "stringUnit": {
             "state": "translated",
             "value": "你的服务器还都没有运行此应用"
+          }
+        }
+      }
+    },
+    "Approve from watch": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprobar desde el reloj"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuver depuis la montre"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per Uhr genehmigen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovar pelo relógio"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ウォッチで承認"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过手表批准"
+          }
+        }
+      }
+    },
+    "Only an admin device can turn on Approve from watch.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo de administrador puede activar Aprobar desde el reloj."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur peut activer Approuver depuis la montre."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät kann „Per Uhr genehmigen“ einschalten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente um dispositivo administrador pode ativar Aprovar pelo relógio."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「ウォッチで承認」をオンにできるのは、管理者デバイスだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有管理员设备才能开启“通过手表批准”。"
+          }
+        }
+      }
+    },
+    "Turn on Approve from watch in Flagship on your iPhone first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primero activa Aprobar desde el reloj en Flagship, en tu iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activez d’abord Approuver depuis la montre dans Flagship, sur votre iPhone."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schalte zuerst „Per Uhr genehmigen“ in Flagship auf deinem iPhone ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primeiro ative Aprovar pelo relógio no Flagship, no seu iPhone."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まず、iPhone の Flagship で「ウォッチで承認」をオンにしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在 iPhone 上的 Flagship 中开启“通过手表批准”。"
           }
         }
       }
