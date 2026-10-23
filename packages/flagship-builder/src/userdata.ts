@@ -731,6 +731,12 @@ chmod 600 /etc/flagship/daemon.env
 # on first real boot) and never rely on \`systemctl start\`. Two units:
 #   flagship-first-boot-register — oneshot, POSTs /api/server/register
 #   flagship-daemon              — the long-running server-daemon
+cat > /etc/sysctl.d/90-flagship-hardening.conf <<'SYSCTL'
+# SEC-KEY-003: no core dumps anywhere; a crashed daemon must not leave key material on disk.
+fs.suid_dumpable = 0
+kernel.core_pattern = |/bin/false
+SYSCTL
+sysctl -q -p /etc/sysctl.d/90-flagship-hardening.conf 2>/dev/null || true
 cat > /etc/systemd/system/flagship-daemon.service <<'UNIT'
 [Unit]
 Description=Flagship server daemon
@@ -745,6 +751,10 @@ StartLimitIntervalSec=0
 Type=simple
 WorkingDirectory=/opt/flagship
 EnvironmentFile=/etc/flagship/daemon.env
+# SEC-KEY-003: a crash must never write key material to disk, and files the daemon
+# creates are private by default.
+LimitCORE=0
+UMask=0077
 ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning packages/server-daemon/dist/index.js
 # MUST be always, NOT on-failure. The daemon deliberately exits 0 to ask the
 # supervisor to restart it once it has provisioned a post-boot secret or staged

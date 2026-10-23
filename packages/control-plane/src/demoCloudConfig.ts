@@ -384,6 +384,12 @@ chmod 600 /etc/flagship/daemon.env
 #      flagship-data-services  — docker-compose'd postgres/forgejo/chromium
 #      flagship-daemon         — the actual server-daemon
 #      flagship-first-boot-register — one-shot, POSTs /api/server/register
+cat > /etc/sysctl.d/90-flagship-hardening.conf <<'SYSCTL'
+# SEC-KEY-003: no core dumps anywhere; a crashed daemon must not leave key material on disk.
+fs.suid_dumpable = 0
+kernel.core_pattern = |/bin/false
+SYSCTL
+sysctl -q -p /etc/sysctl.d/90-flagship-hardening.conf 2>/dev/null || true
 cat > /etc/systemd/system/flagship-daemon.service <<'UNIT'
 [Unit]
 Description=Flagship server daemon
@@ -395,6 +401,10 @@ StartLimitIntervalSec=0
 Type=simple
 WorkingDirectory=/opt/flagship
 EnvironmentFile=/etc/flagship/daemon.env
+# SEC-KEY-003: a crash must never write key material to disk, and files the daemon
+# creates are private by default.
+LimitCORE=0
+UMask=0077
 ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning packages/server-daemon/dist/index.js
 # always, NOT on-failure: the daemon exits 0 to request a self-restart after
 # provisioning a post-boot secret (SWK/CGK deposit), rotating the admin root, or
