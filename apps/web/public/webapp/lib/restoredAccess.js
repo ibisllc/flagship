@@ -5,14 +5,15 @@
 
 import { bytesToHex } from "../keystore.js";
 
+import { tr, trn } from "./i18n.js";
 export const TAG_RESTORED_ACCESS_APPROVE = "flagship/restored-access-approve/v1";
 
 export const RESTORED_COPY = Object.freeze({
-  title: "Restored permissions",
-  intro: "This app came back from a backup. Until an admin approves, nobody from the old list can open it.",
-  approve: "Approve this list",
-  discard: "Discard it",
-  adminOnly: "Only an admin device can approve restored permissions.",
+  title: tr("Restored permissions"),
+  intro: tr("This app came back from a backup. Until an admin approves, nobody from the old list can open it."),
+  approve: tr("Approve this list"),
+  discard: tr("Discard it"),
+  adminOnly: tr("Only an admin device can approve restored permissions."),
 });
 
 const SERVICE_REF_RE = /^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/;
@@ -66,7 +67,7 @@ export function restoredCardHtml(draft, { admin, escape }) {
     <div class="card mt-3" id="sa-restored" data-testid="restored-access">
       <div class="card-title">${escape(RESTORED_COPY.title)}</div>
       <p class="note mt-1">${escape(RESTORED_COPY.intro)}</p>
-      <p class="mt-1">${n} ${n === 1 ? "person" : "people"} on the old list.${draft.mode === "open" ? " The app was open to all." : ""}</p>
+      <p class="mt-1">${trn(n, "{0} person on the old list.", "{0} people on the old list.")}${draft.mode === "open" ? ` ${tr("The app was open to all.")}` : ""}</p>
       ${admin
         ? `<div class="row-2 mt-2"><button type="button" id="sa-restored-approve">${escape(RESTORED_COPY.approve)}</button><button type="button" class="secondary" id="sa-restored-discard">${escape(RESTORED_COPY.discard)}</button></div>`
         : `<p class="note mt-1">${escape(RESTORED_COPY.adminOnly)}</p>`}

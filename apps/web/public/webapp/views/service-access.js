@@ -174,17 +174,17 @@ async function loadRestoredCard(serviceRef, admin) {
     try {
       const session = getSession();
       await approveRestoredDraft({ baseUrl: podBaseUrl(), serviceRef, draftSha256: draft.sha256, umk: session.umk, signWithIrk: sensitiveSigner() });
-      toast("Restored permissions approved.");
+      toast(tr("Restored permissions approved."));
       await renderServiceAccess(currentService);
     } catch (e) {
       b.disabled = false;
-      toast(e?.status === 409 ? "The restored list changed. Review it and approve again." : humanError(e), "err");
+      toast(e?.status === 409 ? tr("The restored list changed. Review it and approve again.") : humanError(e), "err");
     }
   });
   $("sa-restored-discard")?.addEventListener("click", async () => {
     try {
       await discardRestoredDraft(serviceRef, screensJson);
-      toast(`${RESTORED_COPY.title} discarded.`);
+      toast(tr("{0} discarded.", RESTORED_COPY.title));
       await renderServiceAccess(currentService);
     } catch (e) {
       toast(humanError(e), "err");
@@ -229,8 +229,8 @@ export async function renderServiceAccess(service) {
 
     <div id="sa-restored-slot"></div>
 
-    <h2 class="mt-4" id="sa-account-title">Account members</h2>
-    <div id="sa-account-people"><div class="card placeholder">loading…</div></div>
+    <h2 class="mt-4" id="sa-account-title">${tr("Account members")}</h2>
+    <div id="sa-account-people"><div class="card placeholder">${tr("loading…")}</div></div>
 
     <h2 class="mt-4" id="sa-members-title">${tr("Members")}</h2>
     <div class="row-2" id="sa-add-row">

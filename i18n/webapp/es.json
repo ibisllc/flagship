@@ -2679,5 +2679,16 @@
   "Browsers you signed in to private apps with a sign-in link. Refresh to\n          check if one's still in, or Stop to sign it out.": "Navegadores en los que iniciaste sesión en apps privadas con un enlace de inicio de sesión. Actualiza para comprobar si alguno sigue dentro o pulsa Detener para cerrarle la sesión.",
   "How this works": "Cómo funciona",
   "Scheduled": "Programada",
-  "None of your servers runs this app yet": "Ninguno de tus servidores ejecuta esta aplicación todavía"
+  "None of your servers runs this app yet": "Ninguno de tus servidores ejecuta esta aplicación todavía",
+  "Restored permissions": "Permisos restaurados",
+  "This app came back from a backup. Until an admin approves, nobody from the old list can open it.": "Esta aplicación volvió desde una copia de seguridad. Hasta que un administrador lo apruebe, nadie de la lista anterior puede abrirla.",
+  "Approve this list": "Aprobar esta lista",
+  "Discard it": "Descartarla",
+  "Only an admin device can approve restored permissions.": "Solo un dispositivo de administrador puede aprobar los permisos restaurados.",
+  "{0} person on the old list.": "{0} persona en la lista anterior.",
+  "{0} people on the old list.": "{0} personas en la lista anterior.",
+  "The app was open to all.": "La aplicación estaba abierta a todos.",
+  "Restored permissions approved.": "Permisos restaurados aprobados.",
+  "The restored list changed. Review it and approve again.": "La lista restaurada cambió. Revísala y apruébala de nuevo.",
+  "{0} discarded.": "{0} descartado."
 }
