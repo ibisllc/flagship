@@ -181,7 +181,7 @@ final class GymFeatureMirrorTests: XCTestCase {
     /// honestly: a non-admin device (no admin master root — the demo default)
     /// shows NO Rotate-admin card; with `-smoke-admin-root` the card + the
     /// Rotate control render.
-    /// "Quick approve from Apple Watch" says what it needs: the app unlocked
+    /// "Approve from watch" says what it needs: the app unlocked
     /// on this iPhone (the phone answers the watch only then).
     func test_quickApproveNoteNamesTheUnlockedApp() throws {
         let app = launch(tab: "settings")

@@ -3,7 +3,7 @@ import CryptoKit
 @testable import FlagshipAPI
 @testable import FlagshipUI
 
-/// Phase iOS-C — the "Quick approve from Apple Watch" toggle orchestration.
+/// Phase iOS-C — the "Approve from watch" toggle orchestration.
 /// All crypto + local-store side effects are injected so the test never
 /// touches the real Keystore; the Mock server captures the wire so we can
 /// assert the VM minted with the delegate key + the right scope/TTL.
