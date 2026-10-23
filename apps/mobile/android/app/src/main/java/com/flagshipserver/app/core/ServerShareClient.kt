@@ -964,7 +964,7 @@ class ServerShareClient(
         entry.entryId?.let { runCatching { inboxDelete(it) } }
     }
 
-    /** Pending start-ups this share may approve: only requests signed by the STK the owner pinned in the offer. */
+    /** Pending start-ups this share may approve: only requests signed by the STK the owner pinned in the offer, or by the boot key it vouches for. */
     suspend fun pendingStartups(entry: SharedEntry): List<ShareStartup> {
         val offer = offerFor(entry)
         val umk = keys.umk("Check whether ${entry.serverName} is starting")
@@ -972,28 +972,52 @@ class ServerShareClient(
         val r = call(apex, "GET", "${bootBase()}$path", headers = mapOf("Authorization" to shareAuth(umk, entry, "GET", path)))
         if (r.status == 403 || r.status == 404) return emptyList()
         expectOk(r, "check for start-ups")
-        return decode(r, BootSharePendingList.serializer()).requests
-            .filter { verifiedStartup(it, offer, entry.serverDomain) }
-            .map { ShareStartup(it) }
+        val out = mutableListOf<ShareStartup>()
+        var boot: String? = null
+        var bootFetched = false
+        for (p in decode(r, BootSharePendingList.serializer()).requests) {
+            if (!p.request.stkPub.equals(offer.stkPubHex, ignoreCase = true) && !bootFetched) {
+                boot = sharedBootKey(entry.serverDomain, offer.stkPubHex)
+                bootFetched = true
+            }
+            if (startupSigner(p, offer, entry.serverDomain, boot) != null) out += ShareStartup(p)
+        }
+        return out
     }
 
-    private fun verifiedStartup(p: BootSharePending, offer: ServerShare.OfferPayload, serverDomain: String): Boolean {
+    /** The boot key the STK pinned in the owner's offer vouches for, or null. */
+    private suspend fun sharedBootKey(serverDomain: String, pinnedStkHex: String): String? =
+        BootKey.sharedBootKeyFor(serverDomain, pinnedStkHex, { domain ->
+            val r = call(apex, "GET", "${apexBase()}/api/server/${enc(domain)}/boot-key")
+            if (r.status == 200) BootKey.parse(String(r.body, Charsets.UTF_8)) else null
+        })
+
+    /** The key that signed [p] (the pinned STK, or the boot key it vouches for), or null when the
+     *  request isn't from this server. The disk key is sealed to that key. */
+    private fun startupSigner(p: BootSharePending, offer: ServerShare.OfferPayload, serverDomain: String, bootKey: String?): String? {
         val req = p.request
-        if (!req.serverDomain.equals(serverDomain, ignoreCase = true)) return false
-        if (!req.stkPub.equals(offer.stkPubHex, ignoreCase = true)) return false
-        if (req.purpose != SecretPurpose.UNLOCK_KEY.wire) return false
-        if (p.expiresAt != 0L && p.expiresAt <= now()) return false
-        val stk = HexUtil.decode(offer.stkPubHex) ?: return false
-        val sig = HexUtil.decode(p.signature) ?: return false
-        return SecretRequest.verify(sig, stk, req.serverDomain, req.stkPub, SecretPurpose.UNLOCK_KEY, req.nonce, req.issuedAt)
+        if (!req.serverDomain.equals(serverDomain, ignoreCase = true)) return null
+        val signer = when {
+            req.stkPub.equals(offer.stkPubHex, ignoreCase = true) -> offer.stkPubHex.lowercase()
+            bootKey != null && req.stkPub.equals(bootKey, ignoreCase = true) -> bootKey
+            else -> return null
+        }
+        if (req.purpose != SecretPurpose.UNLOCK_KEY.wire) return null
+        if (p.expiresAt != 0L && p.expiresAt <= now()) return null
+        val key = HexUtil.decode(signer)?.takeIf { it.size == 32 } ?: return null
+        val sig = HexUtil.decode(p.signature) ?: return null
+        val ok = SecretRequest.verify(sig, key, req.serverDomain, signer, SecretPurpose.UNLOCK_KEY, req.nonce, req.issuedAt)
+        return if (ok) signer else null
     }
 
-    /** Approve one start-up: open this share's copy of the disk key and seal it for the pinned STK. */
+    /** Approve one start-up: open this share's copy of the disk key and seal it for the key that
+     *  signed the request (the pinned STK, or the boot key it vouches for). */
     suspend fun approveStartup(entry: SharedEntry, startup: ShareStartup) {
         val offer = offerFor(entry)
-        if (!verifiedStartup(startup.pending, offer, entry.serverDomain)) {
-            throw ShareException(ShareException.Kind.Refused, "This start-up request isn't from ${entry.serverName}.")
-        }
+        val boot = if (startup.pending.request.stkPub.equals(offer.stkPubHex, ignoreCase = true)) null
+        else sharedBootKey(entry.serverDomain, offer.stkPubHex)
+        val recipientHex = startupSigner(startup.pending, offer, entry.serverDomain, boot)
+            ?: throw ShareException(ShareException.Kind.Refused, "This start-up request isn't from ${entry.serverName}.")
         val umk = keys.umk("Unlock ${entry.serverName}")
         val keyPath = "/api/boot/share/key/${entry.serverDomain}"
         val got = call(apex, "GET", "${bootBase()}$keyPath", headers = mapOf("Authorization" to shareAuth(umk, entry, "GET", keyPath)))
@@ -1008,9 +1032,9 @@ class ServerShareClient(
         } catch (_: Exception) {
             throw ShareException(ShareException.Kind.Invalid, "Your start-up copy can't be opened on this phone.")
         }
-        val stk = HexUtil.decode(offer.stkPubHex)!!
+        val recipient = HexUtil.decode(recipientHex)!!
         val req = startup.pending.request
-        val sealed = HexUtil.encode(SealedSecretResponse.build(diskKey, stk, req.nonce, SecretPurpose.UNLOCK_KEY))
+        val sealed = HexUtil.encode(SealedSecretResponse.build(diskKey, recipient, req.nonce, SecretPurpose.UNLOCK_KEY))
         diskKey.fill(0)
         val path = "/api/boot/response"
         val body = BootShareResponseBody(BootShareResponse(entry.serverDomain, req.nonce, SecretPurpose.UNLOCK_KEY.wire, sealed, now()))
