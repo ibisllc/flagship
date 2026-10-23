@@ -113,7 +113,11 @@ export async function restoreCheckout(
   await runner("git", ["-C", repoPath, "clean", "-fdq", "--", "packages"]);
 }
 
-/** `npm ci` (falling back to `npm install`) + `npx tsc -b` of the daemon. */
+/**
+ * `npm ci` + `npx tsc -b` of the daemon. There is no `npm install` fallback
+ * (SEC-UPD-001): an exact lock that cannot be installed fails the update and
+ * rolls back, rather than resolving whatever the registry serves today.
+ */
 export async function rebuildWorkspace(
   runner: UpdateCommandRunner,
   repoPath: string,
@@ -122,8 +126,8 @@ export async function rebuildWorkspace(
   try {
     await runner("npm", ["ci", "--no-audit", "--no-fund", ...BOX_NPM_SCOPE], { cwd: repoPath });
   } catch (e) {
-    log(`[self-update] npm ci failed (${(e as Error).message}); falling back to npm install`);
-    await runner("npm", ["install", "--no-audit", "--no-fund", ...BOX_NPM_SCOPE], { cwd: repoPath });
+    log(`[self-update] npm ci failed (${(e as Error).message}); the exact lock did not install, so the update fails`);
+    throw e;
   }
   await runner("npx", ["tsc", "-b", BOX_WORKSPACE], { cwd: repoPath });
   // The checkout, node_modules and build output are all still in the page

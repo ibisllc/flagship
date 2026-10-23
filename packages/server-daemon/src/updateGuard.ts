@@ -102,10 +102,8 @@ fi
 git -C "$repo" clean -fdq -- packages
 cd "$repo" || exit 0
 scope=(--include-workspace-root --workspace=packages/server-daemon)
-if ! npm ci --no-audit --no-fund "\${scope[@]}"; then
-  log "npm ci failed; trying npm install"
-  npm install --no-audit --no-fund "\${scope[@]}" || { log "npm install failed; will retry next start"; exit 0; }
-fi
+# No npm install fallback: an exact lock that will not install is retried, never re-resolved.
+npm ci --no-audit --no-fund "\${scope[@]}" || { log "npm ci failed; will retry next start"; exit 0; }
 npx tsc -b packages/server-daemon || { log "rebuild failed; will retry next start"; exit 0; }
 # Flush the restored tree before the marker that would retry it goes away.
 sync

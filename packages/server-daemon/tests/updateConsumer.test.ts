@@ -407,8 +407,8 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     const spyRunner = makeRunner(runnerSpy);
     let npmCalls = 0;
     const runner: UpdateCommandRunner = async (cmd, args, o) => {
-      // The forward rebuild's npm ci + npm install fail; the revert's succeed.
-      if (cmd === "npm" && ++npmCalls <= 2) {
+      // The forward rebuild's npm ci fails; the revert's succeeds.
+      if (cmd === "npm" && ++npmCalls <= 1) {
         runnerSpy.calls.push([cmd, ...args]);
         throw new Error("injected npm failure");
       }
@@ -475,21 +475,17 @@ describe("rebuildWorkspace — installs and compiles only the daemon's closure",
     ]);
   });
 
-  it("falls back to a scoped npm install when npm ci fails", async () => {
+  it("fails the update, without npm install, when npm ci cannot install the lock (SEC-UPD-001)", async () => {
     const { calls, runner } = cwdRunner("npm ci");
     const logs: string[] = [];
-    await rebuildWorkspace(runner, "/opt/flagship", (m) => logs.push(m));
-    expect(calls.map((c) => c.argv)).toEqual([
-      ["npm", "ci", "--no-audit", "--no-fund", ...SCOPE],
-      ["npm", "install", "--no-audit", "--no-fund", ...SCOPE],
-      ["npx", "tsc", "-b", "packages/server-daemon"],
-      ["sync"],
-    ]);
-    expect(logs.join("\n")).toContain("falling back to npm install");
+    await expect(rebuildWorkspace(runner, "/opt/flagship", (m) => logs.push(m))).rejects.toThrow();
+    expect(calls.map((c) => c.argv[1])).not.toContain("install");
+    expect(calls.map((c) => c.argv[0])).not.toContain("npx");
+    expect(logs.join("\n")).toContain("the update fails");
   });
 
   it("never asks for the whole monorepo", async () => {
-    const { calls, runner } = cwdRunner("npm ci");
+    const { calls, runner } = cwdRunner();
     await rebuildWorkspace(runner, "/opt/flagship", () => {});
     for (const { argv } of calls) {
       expect(argv).not.toContain("--workspaces");

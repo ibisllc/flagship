@@ -119,11 +119,11 @@ describe("update guard script", () => {
     expect(readFileSync(join(data, "update-guard-starts"), "utf8")).toBe(`${target} 1\n`);
   });
 
-  it.skipIf(!hasJq)("falls back to npm install, and keeps the marker when the rebuild can't finish", () => {
+  it.skipIf(!hasJq)("never falls back to npm install, and keeps the marker when the rebuild can't finish", () => {
     writeMarker({ previousCommit: prev, targetCommit: target, bootAttempts: 0, stage: "applying" });
     run({ FAIL_NPM: "ci" });
-    expect(calls()).toMatch(/npm ci[^\n]*\nnpm install/);
-    expect(existsSync(join(data, "update-pending.json"))).toBe(false);
+    expect(calls()).not.toMatch(/npm install/);
+    expect(existsSync(join(data, "update-pending.json"))).toBe(true);
 
     writeMarker({ previousCommit: prev, targetCommit: target, bootAttempts: 0, stage: "applying" });
     run({ FAIL_NPM: "all" });
