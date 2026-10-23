@@ -2665,5 +2665,8 @@
   "key_settings": "Réglages de la clé",
   "hide_key_settings": "Masquer les réglages de la clé",
   "options_for": "Options de %1$s",
-  "none_of_your_servers_runs_this_app_yet": "Aucun de vos serveurs n’exécute encore cette application"
+  "none_of_your_servers_runs_this_app_yet": "Aucun de vos serveurs n’exécute encore cette application",
+  "locked_it_cant_unlock_itself_until": "verrouillé : il ne peut pas se déverrouiller seul tant que vous ne le reprenez pas",
+  "remote_lock_pending_it_will_be": "verrouillage à distance en attente : il sera retenté",
+  "it_shut_down_instead_of_restarting": "(il s’est éteint au lieu de redémarrer, car le verrouillage n’a pas pu être confirmé)"
 }
