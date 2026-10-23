@@ -440,10 +440,25 @@ data class ServerDetailResponse(
     val lastUpdate: LastUpdate? = null,
     /** The sandbox every app runs in (gVisor). Absent from older daemons. */
     val appSandbox: AppSandbox? = null,
+    /** The dead-man switch as the box holds it, so every device bounds auto-unlock leases by the
+     *  same deadline. Absent from older daemons. */
+    val deadMan: DeadManView? = null,
     /** Owner debug access (an SSH key let in until a set time). Absent from older daemons. */
     val debugAccess: DebugAccessView? = null,
     /** Disk use and each app's limits (docs/app-runtimes.md 5.3). Absent from older daemons. */
     val storage: ServerStorage? = null,
+)
+
+/** The box's own account of its dead-man switch (server-detail `deadMan`). */
+@Serializable
+data class DeadManView(
+    val enabled: Boolean,
+    /** When the current affirmation lapses (ms); 0 when it has never been affirmed. */
+    val leaseExpiry: Long = 0,
+    val windowMs: Long = 0,
+    val graceMs: Long = 0,
+    /** "off" or "restart". */
+    val lockoutMode: String = "off",
 )
 
 /** One store's use and limit (`limitBytes` null: no limit but the disk). */

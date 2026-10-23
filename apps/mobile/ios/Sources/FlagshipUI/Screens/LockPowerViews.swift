@@ -14,13 +14,17 @@ import Flagship
 struct LockPowerCard: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.lockPowerClient) private var client
+    @Environment(\.secretMailboxClient) private var mailbox
     @Environment(ToastCenter.self) private var toasts
 
     let serverDomain: String
 
     private let diskStore = DiskEncryptionStore()
+    private let lockStore = BootLockStateStore()
     @State private var vm: LockPowerViewModel?
     @State private var confirming: PowerMode?
+    @State private var lockedKnown: Bool?
+    @State private var lockPending = false
 
     private var isLuks: Bool { diskStore.isLuks(for: serverDomain) }
 
@@ -40,12 +44,29 @@ struct LockPowerCard: View {
             FSCard {
                 switch vm?.phase {
                 case .sent(let mode):
-                    Label(
-                        mode == .off ? "Powering off…" : "Restarting…",
-                        systemImage: mode == .off ? "power" : "arrow.clockwise"
-                    )
-                    .font(FS.font.body())
-                    .foregroundColor(c.text)
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        Label(
+                            mode == .off ? "Powering off…" : "Restarting…",
+                            systemImage: mode == .off ? "power" : "arrow.clockwise"
+                        )
+                        .font(FS.font.body())
+                        .foregroundColor(c.text)
+                        if let s = vm?.summary, !s.isEmpty {
+                            Text(s).font(FS.font.caption()).foregroundColor(c.textMuted)
+                                .accessibilityIdentifier("sd-lock-summary")
+                        }
+                    }
+                case .lockUnconfirmed(let message):
+                    // A restart was NOT sent: it could not be locked at the boot service.
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        Text(message).font(FS.font.body()).foregroundColor(c.text)
+                            .accessibilityIdentifier("sd-lock-unconfirmed")
+                        FSSecondaryButton("Shut down", block: true) {
+                            Task { await vm?.shutDownInstead(); refreshLockState() }
+                        }
+                        .accessibilityIdentifier("sd-shutdown-instead")
+                        FSSecondaryButton("Keep running", block: true) { vm = nil }
+                    }
                 default:
                     VStack(spacing: FS.space.s2) {
                         FSSecondaryButton(label(.off), block: true) { confirming = .off }
@@ -54,9 +75,11 @@ struct LockPowerCard: View {
                             .accessibilityIdentifier("sd-power-restart")
                     }
                     .disabled(isBusy)
+                    if isLuks { lockStateRow(c) }
                 }
             }
         }
+        .onAppear { refreshLockState() }
         .alert(item: $confirming) { mode in
             // Minimal confirm — no explanatory paragraph (spec: minimal copy).
             Alert(
@@ -69,6 +92,59 @@ struct LockPowerCard: View {
         }
     }
 
+    private func refreshLockState() {
+        lockedKnown = lockStore.lastKnownSuspended(serverDomain)
+        lockPending = lockStore.pending().contains(serverDomain.lowercased())
+    }
+
+    /// What this phone last confirmed about the lock, and the way back. The remote lock is
+    /// retried from here when the boot service hadn't confirmed it.
+    @ViewBuilder
+    private func lockStateRow(_ c: FSColors) -> some View {
+        if lockedKnown == true {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text("Locked: this server can't unlock itself. It will ask you to approve its next start.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    .accessibilityIdentifier("sd-lock-state")
+                FSSecondaryButton("Resume (allow auto-unlock again)", block: true) {
+                    Task {
+                        let m = viewModel()
+                        let r = await m.resume()
+                        if case .confirmed? = r { toasts.success("Resumed. Turn auto-unlock back on if you want it.") }
+                        else { toasts.error("Couldn't resume right now. Try again.") }
+                        refreshLockState()
+                    }
+                }
+                .accessibilityIdentifier("sd-lock-resume")
+            }
+        }
+        if lockPending {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text("Remote lock pending: the boot service hasn't confirmed it yet.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                FSSecondaryButton("Retry the remote lock", block: true) {
+                    Task {
+                        let r = await viewModel().retryPendingLock()
+                        if case .confirmed? = r { toasts.success("Locked at the boot service.") }
+                        else { toasts.error("Still couldn't reach the boot service.") }
+                        refreshLockState()
+                    }
+                }
+                .accessibilityIdentifier("sd-lock-retry")
+            }
+        }
+    }
+
+    private func viewModel() -> LockPowerViewModel {
+        if let vm { return vm }
+        let m = LockPowerViewModel(
+            client: client, serverDomain: serverDomain,
+            bootLock: isLuks ? BootLock(client: mailbox) : nil
+        )
+        vm = m
+        return m
+    }
+
     private var isBusy: Bool {
         switch vm?.phase {
         case .signing, .posting: return true
@@ -78,12 +154,12 @@ struct LockPowerCard: View {
 
     @MainActor
     private func fire(_ mode: PowerMode) async {
-        let m = vm ?? LockPowerViewModel(client: client, serverDomain: serverDomain)
-        vm = m
+        let m = viewModel()
         await m.run(mode: mode)
         if case .failed(let msg) = m.phase {
             toasts.error(msg)
         }
+        refreshLockState()
     }
 }
 
@@ -147,6 +223,7 @@ struct DeadManScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.lockPowerClient) private var client
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.secretMailboxClient) private var mailbox
 
     let serverDomain: String
     let serverName: String
@@ -178,7 +255,10 @@ struct DeadManScreen: View {
         .onReceive(ticker) { nowTick = $0 }
         .onAppear {
             if vm == nil {
-                vm = DeadManViewModel(client: client, serverDomain: serverDomain, serverName: serverName)
+                vm = DeadManViewModel(
+                    client: client, serverDomain: serverDomain, serverName: serverName,
+                    bootLock: DiskEncryptionStore().isLuks(for: serverDomain) ? BootLock(client: mailbox) : nil
+                )
             }
         }
     }

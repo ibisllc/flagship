@@ -121,6 +121,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.PendingLeaseStore
+import com.flagshipserver.app.api.ServerDetailResponse
+import com.flagshipserver.app.core.BootLock
+import com.flagshipserver.app.core.BootLockOutcome
+import com.flagshipserver.app.core.BootLockStateStore
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
@@ -367,7 +371,10 @@ fun ServerDetailScreen(
 
         val revoked = pod?.isRevoked == true
         when (val d = detail) {
-            is LoadingState.Loaded -> ServerInfoCard(d.value)
+            is LoadingState.Loaded -> {
+                SyncDeadManFromBox(d.value)
+                ServerInfoCard(d.value)
+            }
             // The revoked card above already says why nothing loads.
             else -> if (!revoked) {
                 ServerDetailPlaceholder(
@@ -572,6 +579,8 @@ private fun BootUnlockApprovalCard(
                                 if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null
                             },
                             pendingLeases = PendingLeaseStore.from(context),
+                            deadManBound = store::deadManBound,
+                            lockedServer = BootLockStateStore.from(context)::lastKnownSuspended,
                         ),
                     )
                     // Keep the lease id the approval returned: it is the kill switch's handle.
@@ -1100,6 +1109,18 @@ private fun LeaderCard(serverDomain: String) {
 // create-time on the InstallBlob, never surfaced on the detail model), so we
 // default to LUKS labeling. Tracked as a gap — when the detail model gains the
 // flag, pass it here to flip to plain "Turn off"/"Restart" for non-LUKS boxes.
+/** The box's word on its dead-man switch beats this phone's memory (SEC-DEADMAN-001). */
+@Composable
+private fun SyncDeadManFromBox(detail: ServerDetailResponse) {
+    val context = LocalContext.current
+    val dm = detail.deadMan ?: return
+    LaunchedEffect(detail.serverFqdn, dm) {
+        ServerSettingsStore.from(context).syncDeadMan(
+            detail.serverFqdn, dm.enabled, dm.windowMs, dm.graceMs, dm.lockoutMode, dm.leaseExpiry,
+        )
+    }
+}
+
 @Composable
 private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
     val app = LocalAppState.current
@@ -1108,6 +1129,8 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
     val scope = rememberCoroutineScope()
     val username by app.currentUser.collectAsState()
 
+    val mailbox = LocalSecretMailboxClient.current
+    val lockStore = remember { BootLockStateStore.from(context) }
     val vm = remember(serverDomain) {
         PowerOffViewModel(
             serverDomain = serverDomain,
@@ -1115,9 +1138,19 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
             // admin master root when this device holds one (else the owner IRK,
             // the key the daemon's /api/power pins on a legacy box). Never silent.
             signer = { reason -> Keystore.adminSigningKey(reason) },
+            // SEC-LOCK-001: the lock itself is recorded at the boot service (account key).
+            bootLock = if (isLuks) BootLock(mailbox) else null,
+            lockStore = lockStore,
         )
     }
     val phase by vm.phase.collectAsState()
+    val summary by vm.summary.collectAsState()
+    var lockedKnown by remember(serverDomain) { mutableStateOf(lockStore.lastKnownSuspended(serverDomain)) }
+    var lockPending by remember(serverDomain) { mutableStateOf(serverDomain.lowercase() in lockStore.pending()) }
+    fun refreshLock() {
+        lockedKnown = lockStore.lastKnownSuspended(serverDomain)
+        lockPending = serverDomain.lowercase() in lockStore.pending()
+    }
     var pending by remember { mutableStateOf<PowerMode?>(null) }
     val busy = phase is PowerOffPhase.Signing || phase is PowerOffPhase.Posting
 
@@ -1137,6 +1170,21 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                         if (c.mode == PowerMode.RESTART) Icons.Outlined.RestartAlt else Icons.Outlined.PowerSettingsNew,
                         "This server is ${if (c.mode == PowerMode.RESTART) "restarting" else "powering off"} — it will go offline.",
                     )
+                    if (summary.isNotEmpty()) {
+                        Text(summary, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.semantics { contentDescription = "sd-lock-summary" })
+                    }
+                }
+                (phase as? PowerOffPhase.LockUnconfirmed)?.let { u ->
+                    // A restart was NOT sent: it could not be locked at the boot service.
+                    Text(u.message, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.semantics { contentDescription = "sd-lock-unconfirmed" })
+                    FSSecondaryButton(
+                        label = "Shut down",
+                        onClick = { scope.launch { vm.shutDownInstead(); refreshLock() } },
+                        block = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-shutdown-instead" },
+                    )
                 }
                 FSSecondaryButton(
                     label = if (busy) "Working…" else offLabel,
@@ -1152,6 +1200,47 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                     block = true,
                     modifier = Modifier.semantics { contentDescription = "sd-power-restart" },
                 )
+                if (isLuks && lockedKnown == true) {
+                    Text(
+                        "Locked: this server can't unlock itself. It will ask you to approve its next start.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.semantics { contentDescription = "sd-lock-state" },
+                    )
+                    FSSecondaryButton(
+                        label = "Resume (allow auto-unlock again)",
+                        onClick = {
+                            scope.launch {
+                                val r = vm.resume()
+                                if (r is BootLockOutcome.Confirmed) toasts.success("Resumed. Turn auto-unlock back on if you want it.")
+                                else toasts.error("Couldn't resume right now. Try again.")
+                                refreshLock()
+                            }
+                        },
+                        enabled = !busy && !LocalServerReadOnly.current,
+                        block = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-lock-resume" },
+                    )
+                }
+                if (isLuks && lockPending) {
+                    Text(
+                        "Remote lock pending: the boot service hasn't confirmed it yet.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+                    )
+                    FSSecondaryButton(
+                        label = "Retry the remote lock",
+                        onClick = {
+                            scope.launch {
+                                val r = vm.retryPendingLock()
+                                if (r is BootLockOutcome.Confirmed) toasts.success("Locked at the boot service.")
+                                else toasts.error("Still couldn't reach the boot service.")
+                                refreshLock()
+                            }
+                        },
+                        enabled = !busy,
+                        block = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-lock-retry" },
+                    )
+                }
             }
         }
     }
@@ -1176,6 +1265,7 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                                 toasts.error(p.message)
                             else -> {}
                         }
+                        refreshLock()
                     }
                 }) { Text(confirmLabel, color = MaterialTheme.colorScheme.error) }
             },
@@ -1281,6 +1371,7 @@ private fun DeadManCard(serverDomain: String) {
     val scope = rememberCoroutineScope()
     val username by app.currentUser.collectAsState()
     val store = remember { ServerSettingsStore.from(context) }
+    val deadManMailbox = LocalSecretMailboxClient.current
 
     val vm = remember(serverDomain) {
         DeadManViewModel(
@@ -1290,6 +1381,8 @@ private fun DeadManCard(serverDomain: String) {
             // master root when this device holds one (else the owner IRK). The
             // biometric gate is never silent.
             signer = { reason -> Keystore.adminSigningKey(reason) },
+            // SEC-DEADMAN-001: turning the switch on first removes every auto-unlock lease.
+            bootLock = BootLock(deadManMailbox),
         )
     }
     val phase by vm.phase.collectAsState()
@@ -1339,6 +1432,11 @@ private fun DeadManCard(serverDomain: String) {
                     DeadManReminderScheduler.cancel(context, serverDomain)
                     toasts.success("Lock-down off.")
                 } else {
+                    // The box set the first deadline when it switched on; leases are bounded by it.
+                    vm.lastPolicyLeaseExpiry?.let {
+                        leaseExpiry = it
+                        store.setDeadManLeaseExpiry(serverDomain, it)
+                    }
                     toasts.success("Lock-down on. Affirm to keep ${serverDomain.substringBefore('.')} unlocked.")
                 }
             } else {

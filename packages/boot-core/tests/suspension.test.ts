@@ -191,3 +191,18 @@ describe("reads", () => {
     expect((await read("owner", stranger))?.status).toBe(403);
   });
 });
+
+describe("revoke every lease", () => {
+  it("the owner can; the box and strangers cannot", async () => {
+    await deposit("a");
+    await deposit("b");
+    const p = `/api/boot/lease/${S}`;
+    expect((await routeBoot(deps, "DELETE", p, auth("box", box, "DELETE", p), undefined))?.status).toBe(403);
+    expect((await routeBoot(deps, "DELETE", p, auth("owner", stranger, "DELETE", p), undefined))?.status).toBe(403);
+    expect((await fetchLease())?.status).toBe(200);
+    const r = await routeBoot(deps, "DELETE", p, auth("owner", owner, "DELETE", p), undefined);
+    expect(r?.status).toBe(200);
+    expect(r?.body).toMatchObject({ ok: true, removed: 2 });
+    expect((await fetchLease())?.status).toBe(404);
+  });
+});

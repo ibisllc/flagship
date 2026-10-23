@@ -14,6 +14,7 @@
  *   POST   /api/boot/request                        box-STK    announce need → notify pipe
  *   GET    /api/boot/response/:serverDomain/:nonce  box-STK    poll for the sealed response
  *   POST   /api/boot/response                       owner-IRK  post the sealed response
+ *   DELETE /api/boot/lease/:serverDomain            owner-IRK  revoke EVERY lease for the server
  *   PUT    /api/boot/suspension                     owner-IRK  lock / resume (new epoch)
  *   POST   /api/boot/suspension/box                 box-STK    set-only lock (dead-man, manual)
  *   GET    /api/boot/suspension/:serverDomain       owner|box  read the lock state
@@ -83,6 +84,7 @@ const ROUTE_RE = {
   LEASE_DEPOSIT: /^\/api\/boot\/lease$/,
   LEASE_GET: /^\/api\/boot\/lease\/([^/]+)$/,
   LEASE_REVOKE: /^\/api\/boot\/lease\/([^/]+)\/([^/]+)$/,
+  LEASE_REVOKE_ALL: /^\/api\/boot\/lease\/([^/]+)$/,
   SUSPENSION_SET: /^\/api\/boot\/suspension$/,
   SUSPENSION_BOX: /^\/api\/boot\/suspension\/box$/,
   SUSPENSION_GET: /^\/api\/boot\/suspension\/([^/]+)$/,
@@ -123,6 +125,9 @@ export async function routeBoot(
       decodeURIComponent(g[2]!),
       body,
     );
+  }
+  if (m === "DELETE" && (g = path.match(ROUTE_RE.LEASE_REVOKE_ALL))) {
+    return handleRevokeAllLeases(deps, path, authHeader, decodeURIComponent(g[1]!));
   }
   if (m === "PUT" && ROUTE_RE.SUSPENSION_SET.test(path)) {
     return handleSetSuspension(deps, path, authHeader, body, "owner");
@@ -411,6 +416,24 @@ async function handleRevokeLease(
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
 
   const removed = await deps.boxSealedLeases.revoke(serverDomain, leaseId);
+  return { status: 200, body: { ok: true, removed } };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// DELETE /api/boot/lease/:serverDomain  — owner-IRK revoke of every lease.
+// Used when the dead-man switch is switched on: no lease deposited before it
+// may outlive the affirmation (SEC-DEADMAN-001).
+// ──────────────────────────────────────────────────────────────────────
+
+async function handleRevokeAllLeases(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  serverDomain: string,
+): Promise<BootResponse> {
+  const auth = await gate(deps.gate, { role: "owner", serverDomain, method: "DELETE", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  const removed = await deps.boxSealedLeases.revokeAll(serverDomain);
   return { status: 200, body: { ok: true, removed } };
 }
 
