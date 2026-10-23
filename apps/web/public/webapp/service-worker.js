@@ -358,8 +358,9 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v157";
+const SHELL_VERSION = "v158";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -502,6 +503,7 @@ const OPTIONAL_SHELL = [
   "/lib/pairingDeposit.js",
   "/lib/pairingRelay.js",
   "/lib/pendingRePairBanner.js",
+  "/lib/recoveryVeto.js",
   "/lib/pinLock.js",
   "/lib/podSwitcher.js",
   "/lib/profiles.js",
