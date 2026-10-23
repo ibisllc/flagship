@@ -78,6 +78,8 @@ export function refusalMessage(e, typed) {
       return tr("Too many changes today");
     case "not-admin":
       return tr("Only an admin device can change this");
+    case "app-not-running":
+      return tr("None of your servers runs this app yet");
     default:
       return tr("Couldn't save. Try again.");
   }

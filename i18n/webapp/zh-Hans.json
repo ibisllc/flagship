@@ -2678,5 +2678,6 @@
   "AI API keys": "AI API 密钥",
   "Browsers you signed in to private apps with a sign-in link. Refresh to\n          check if one's still in, or Stop to sign it out.": "你通过登录链接登录私有应用的浏览器。刷新可查看是否仍在登录状态，或点按“停止”将其登出。",
   "How this works": "工作原理",
-  "Scheduled": "定时"
+  "Scheduled": "定时",
+  "None of your servers runs this app yet": "你的服务器还都没有运行此应用"
 }
