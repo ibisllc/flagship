@@ -145,7 +145,7 @@ public final class RecoveryViewModel {
             // fetchToken/prfSalt hashes, the versions and policy, the record's generation and the
             // digest of the record it replaces. An escrow not re-sent is `keep:<held digest>` (or
             // `none`), never silently inherited.
-            let irk = try await Keystore.deriveIRK(reason: "Back up your Flagship account")
+            let irk = try await Keystore.deriveIRK(reason: String(localized: "Back up your Flagship account"))
             let current = try await client.recoveryRecordState(username: user)
             let adminRootPub = try await client.pinnedAdminRoot(username: user)
             let claim = try RecoveryRecordChain.next(
@@ -231,7 +231,7 @@ public final class RecoveryViewModel {
                     wrappedAdminRoot: fetched.wrappedAdminRoot,
                     wrappedAcmeAccountKey: fetched.wrappedAcmeAccountKey
                 ) {
-                    phase = .failed("The stored recovery record does not match its signed digest (\(bad)); refusing to unwrap it.")
+                    phase = .failed(String(localized: "The stored recovery record does not match its signed digest (\(bad)); refusing to unwrap it."))
                     return nil
                 }
             }
@@ -248,7 +248,7 @@ public final class RecoveryViewModel {
             )
             // …and the signature itself, now that the recovered key can verify it.
             if let signed = fetched.signed, !Self.recoveredKeySigned(seed: seed, signed: signed) {
-                phase = .failed("The stored recovery record was not signed by this account's key; refusing to use it.")
+                phase = .failed(String(localized: "The stored recovery record was not signed by this account's key; refusing to use it."))
                 return nil
             }
             // #28 — if the envelope carries the escrowed ACME account key,

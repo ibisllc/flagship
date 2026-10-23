@@ -124,7 +124,7 @@ public struct AdminRootReEscrow: Sendable {
         guard Data(base64Encoded: fetched.wrappedUmk) != nil else {
             throw ReEscrowError.malformedEnvelope
         }
-        let irk = try await deriveIRK("Update your recovery backup")
+        let irk = try await deriveIRK(String(localized: "Update your recovery backup"))
         let current = try await client.recoveryRecordState(username: username)
         let adminRootPub = try await client.pinnedAdminRoot(username: username)
         let claim = try RecoveryRecordChain.next(

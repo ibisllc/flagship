@@ -111,10 +111,10 @@ public final class DeadManViewModel {
         // the affirmation. Auto-unlock re-arms at your next phone approval, bounded by the deadline.
         if enabled, let bootLock {
             do {
-                let irk = try await irkSigner("Remove auto-unlock for \(serverDomain)")
+                let irk = try await irkSigner(String(localized: "Remove auto-unlock for \(serverDomain)"))
                 try await bootLock.revokeAllLeases(serverDomain: serverDomain, irk: irk)
             } catch {
-                phase = .failed("Couldn't remove this server's auto-unlock lease, so the lock-down was not turned on. \(HumanError.humanize(error))")
+                phase = .failed(String(localized: "Couldn't remove this server's auto-unlock lease, so the lock-down was not turned on. \(HumanError.humanize(error))"))
                 return
             }
         }
