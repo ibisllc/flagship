@@ -32,13 +32,13 @@ describe("cronPlan — who runs when", () => {
     }
   });
 
-  it("each rotated job runs at least every 40 minutes over a day, and the daily/weekly ones once", () => {
+  it("each rotated job runs at least every hour over a day, and the daily/weekly ones once", () => {
     const counts = new Map<CronJobId, number>();
     for (let t = MONDAY; t < MONDAY + 86_400_000; t += 600_000) {
       for (const j of cronPlan(TEN_MINUTE_CRON, t).jobs) counts.set(j, (counts.get(j) ?? 0) + 1);
     }
-    for (const j of ["repair-alerts", "quarantine-alerts", "suggestions", "eviction-gc", "dns-gc", "legacy-dns-sweep"] as const) {
-      expect(counts.get(j), j).toBeGreaterThanOrEqual(35);
+    for (const j of ["repair-alerts", "quarantine-alerts", "suggestions", "eviction-gc", "dns-gc", "legacy-dns-sweep", "voici-names"] as const) {
+      expect(counts.get(j), j).toBeGreaterThanOrEqual(22); // hourly, less the ticks the daily adapter jobs take
     }
     expect(counts.get("adapter-publish")).toBe(1);
     expect(counts.get("adapter-insights")).toBe(1); // 2026-10-19 is a Monday

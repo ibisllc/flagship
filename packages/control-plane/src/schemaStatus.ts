@@ -81,13 +81,11 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0106",
   // Which servers are locked, so no auto-unlock lease is released for them.
   "0107", "0108", "0109",
-<<<<<<< HEAD
   // A server's disk key sealed to the watch's boot-only key, for approving a start-up with the phone locked.
-=======
-  // Custom voi.ci names, their changes and retired codes (named links).
->>>>>>> 2a65f2b4b (Add custom voi.ci names to .com: check, set, clear, redirect, upkeep)
   "0110",
-  // 0111 is feat/UX's (named links); the merge adds it. Recovery passkey key, one-use challenges, server-seen reports.
+  // Custom voi.ci names, their changes and retired codes (named links).
+  "0111",
+  // Recovery passkey key, one-use challenges, server-seen reports.
   "0112",
   // Signed community adapter attestations, the adapter index chain, distinct complaint sources.
   "0113",

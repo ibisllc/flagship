@@ -435,6 +435,7 @@ describe("release.sh parsers against captured tool output", () => {
     expect(r.out).toMatch(/^0108_re_pair_veto\.sql$/m);
     expect(r.out).toMatch(/^0109_recovery_record_v2\.sql$/m);
     expect(r.out).toMatch(/^0110_watch_boot_keys\.sql$/m);
+    expect(r.out).toMatch(/^0111_voici_names\.sql$/m);
     expect(r.out).toMatch(/^0112_recovery_passkey_key\.sql$/m);
     expect(r.out).toMatch(/^0113_adapter_attestations\.sql$/m);
     // Feature branches park their own migrations below the ledger's end (0090-0094, 0099): only the ones after it count here.
