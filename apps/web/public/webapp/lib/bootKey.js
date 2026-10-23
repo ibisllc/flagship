@@ -8,7 +8,7 @@
 // A box installed before boot keys has none: callers then seal to the STK, as
 // before (that box still keeps its STK on /boot).
 
-import { acceptBootKeyBinding, pinnedBootKey, verifyBootKeyBinding } from "./boxKeyPins.js";
+import { acceptBootKeyBinding, acceptStkPqBinding, pinnedBootKey, verifyBootKeyBinding } from "./boxKeyPins.js";
 
 const HEX32 = /^[0-9a-f]{64}$/;
 
@@ -22,7 +22,16 @@ async function fetchBinding(serverDomain, deps) {
   if (!b || typeof b.serverDomain !== "string" || typeof b.issuedAt !== "number" || typeof w.signature !== "string") return null;
   const bootPubHex = String(b.bootPubHex ?? "").toLowerCase();
   if (!HEX32.test(bootPubHex)) return null;
-  return { binding: { serverDomain: b.serverDomain, bootPubHex, issuedAt: b.issuedAt }, signature: w.signature };
+  const hybridSignature = typeof w.hybridSignature === "string" ? w.hybridSignature : undefined;
+  return { binding: { serverDomain: b.serverDomain, bootPubHex, issuedAt: b.issuedAt }, signature: w.signature, hybridSignature };
+}
+
+/** The box's STK→ML-DSA key binding, or null when `.com` has none (architecture v2). */
+async function fetchPqBinding(serverDomain, deps) {
+  const f = deps.fetch || fetch;
+  const r = await f(`${deps.comBase}/api/server/${encodeURIComponent(String(serverDomain).toLowerCase())}/pq-key-binding`, { cache: "no-store" });
+  if (!r.ok) return null;
+  return r.json();
 }
 
 /**
@@ -31,6 +40,15 @@ async function fetchBinding(serverDomain, deps) {
  * ignored (the pinned boot key, if any, still wins).
  */
 export async function bootKeyFor(username, serverDomain, deps = {}) {
+  // Pin the box's ML-DSA key first (only through the pinned STK), so a binding stripped of its
+  // hybrid signature is refused below. A changed ML-DSA key throws BoxKeyChangedError.
+  let pq = null;
+  try {
+    pq = await fetchPqBinding(serverDomain, deps);
+  } catch {
+    pq = null;
+  }
+  if (pq) acceptStkPqBinding(username, serverDomain, pq, deps);
   let w = null;
   try {
     w = await fetchBinding(serverDomain, deps);
@@ -38,7 +56,7 @@ export async function bootKeyFor(username, serverDomain, deps = {}) {
     w = null;
   }
   if (w) {
-    const accepted = await acceptBootKeyBinding(username, serverDomain, w.binding, w.signature, deps);
+    const accepted = await acceptBootKeyBinding(username, serverDomain, w.binding, w.signature, deps, w.hybridSignature);
     if (accepted) return accepted;
   }
   return pinnedBootKey(username, serverDomain, deps);

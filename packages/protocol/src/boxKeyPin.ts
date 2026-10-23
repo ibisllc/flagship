@@ -16,6 +16,7 @@
  */
 import { ed } from "./edSync.js";
 import { legacyFieldGuard, resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
+import { PqTrustError, verifyPqKeyBinding } from "./pqTrust.js";
 import type { Bytes } from "./types.js";
 
 export type BoxKeyPinVerdict = "first" | "match" | "mismatch" | "invalid";
@@ -63,5 +64,37 @@ export function verifyBootKeyBinding(
     return ed.verify(signature, canonicalBootKeyBinding(b), pinnedStkPub);
   } catch {
     return false;
+  }
+}
+
+/**
+ * Architecture v2: a box's STK binds an ML-DSA-65 key (pqTrust.ts, role `box-stk`). A device
+ * accepts that binding only under the STK it PINNED, pins the ML-DSA key the first time, and
+ * treats a binding naming another ML-DSA key as a key change (the owner must re-pin). Once an
+ * ML-DSA key is pinned, the device requires the boot-key binding's v2 hybrid signature too.
+ */
+export type BoxPqKeyPinVerdict =
+  | { verdict: "first" | "match"; mldsaPubHex: string; issuedAt: number }
+  | { verdict: "mismatch" | "invalid"; code: string };
+
+export function decideBoxPqKeyPin(
+  pin: { stkHex: string; mldsaPubHex?: string | null; minIssuedAt?: number },
+  serverDomain: string,
+  wire: unknown,
+  now: number,
+): BoxPqKeyPinVerdict {
+  try {
+    const b = verifyPqKeyBinding(wire, {
+      role: "box-stk",
+      subjectId: serverDomain.toLowerCase(),
+      ed25519PubHex: pin.stkHex,
+      mldsaPubHex: pin.mldsaPubHex ?? null,
+      now,
+      ...(pin.minIssuedAt !== undefined ? { minIssuedAt: pin.minIssuedAt } : {}),
+    });
+    return { verdict: pin.mldsaPubHex ? "match" : "first", mldsaPubHex: b.mldsaPubHex, issuedAt: b.issuedAt };
+  } catch (e) {
+    const code = e instanceof PqTrustError ? e.code : "binding-malformed";
+    return { verdict: code === "binding-pq-key-changed" ? "mismatch" : "invalid", code };
   }
 }
