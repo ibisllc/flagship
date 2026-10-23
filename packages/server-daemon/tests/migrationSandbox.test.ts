@@ -78,7 +78,7 @@ describe("running a migration", () => {
     const killed: string[] = [];
     const err = await runSandboxedSql({ cmd: fake(async () => { throw new Error("command timed out after 600000ms and was killed"); }, killed), target, sql: "select pg_sleep(9999)" }).catch((e) => e);
     expect(err.kind).toBe("timed-out");
-    expect(killed.join(" ")).toMatch(/^kill flagship-migrate-[0-9a-f]{12}$/);
+    expect(killed.some((k) => /^kill flagship-migrate-[0-9a-f]{12}$/.test(k))).toBe(true);
   });
 
   it("a runner that cannot capture is reported unavailable, never run on the host", async () => {

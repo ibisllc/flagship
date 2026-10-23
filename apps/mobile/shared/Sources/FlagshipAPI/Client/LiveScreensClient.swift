@@ -378,6 +378,19 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         try await request("/api/screens/server-order", method: "POST", body: try JSONEncoder().encode(order))
     }
+    public func securitySliver() async throws -> SecuritySliverResponse {
+        try await request("/api/screens/security-sliver")
+    }
+    public func publisherState(serviceId: String) async throws -> WaitingPublisherResponse {
+        try await request("/api/screens/services/\(Self.pathSegment(serviceId))/publisher")
+    }
+    public func trustPublisher(serviceId: String, trust: PublisherTrust, signatureHex: String) async throws {
+        struct Body: Encodable { let trust: PublisherTrust; let signatureHex: String }
+        _ = try await requestData("/api/screens/services/\(Self.pathSegment(serviceId))/publisher/trust", method: "POST", body: try JSONEncoder().encode(Body(trust: trust, signatureHex: signatureHex)))
+    }
+    public func rejectPublisher(serviceId: String) async throws {
+        _ = try await requestData("/api/screens/services/\(Self.pathSegment(serviceId))/publisher/reject", method: "POST", body: Data("{}".utf8))
+    }
     public func debugAccessGrant(body: String) async throws -> DebugAccessChange {
         try await request("/api/screens/debug-access", method: "POST", body: Data(body.utf8))
     }

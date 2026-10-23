@@ -10,7 +10,7 @@
     "offline-secrets": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/offlineSecrets.ts" },
     "keyd-wire": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/keyd/src/wire.ts" },
     "chat-frame": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/server-daemon/src/chat/harness.ts" },
-    "webapp-shell": { "current": 162, "minimumSecurity": 162, "preferred": 162, "unknownVersion": "refuse", "where": "apps/web/public/webapp/lib/buildInfo.js", "note": "the service worker replaces an older shell on the next load" }
+    "webapp-shell": { "current": 163, "minimumSecurity": 163, "preferred": 163, "unknownVersion": "refuse", "where": "apps/web/public/webapp/lib/buildInfo.js", "note": "the service worker replaces an older shell on the next load" }
   },
   "receiverFirst": [
     "boot worker and .com verify the format",

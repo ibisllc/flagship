@@ -13,7 +13,7 @@
  * extensions, roles or databases, and cannot see sibling schemas (dataLayer/provisioner.ts).
  */
 import { randomBytes } from "node:crypto";
-import { assertNoHostPathInDockerArgs, type CommandRunner } from "./serviceRunner.js";
+import { assertNoHostPathInDockerArgs, ensureDockerNetwork, type CommandRunner } from "./serviceRunner.js";
 import { GVISOR_RUNTIME } from "./appSandbox/gvisor.js";
 
 /** The data layer's own Postgres image: already on every box, carries psql. Pinned by digest. */
@@ -163,6 +163,8 @@ export async function runSandboxedSql(o: RunSandboxedSqlOptions): Promise<void> 
   const l = { ...DEFAULT_MIGRATION_LIMITS, ...(o.limits ?? {}) };
   const plan = buildSandboxPlan({ target: o.target, ...(o.appUid !== undefined ? { appUid: o.appUid } : {}), limits: l, ...(o.image ? { image: o.image } : {}) });
   const secrets = [o.target.password, encodeURIComponent(o.target.password)];
+  // The no-internet bridge normally exists from boot; make sure of it (a duplicate create is harmless).
+  await ensureDockerNetwork(o.cmd, MIGRATION_NETWORK);
   try {
     await o.cmd.capture("docker", plan.args, { timeoutMs: l.wallClockMs, input: o.sql, env: plan.env });
   } catch (e) {
