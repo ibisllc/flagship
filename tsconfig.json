@@ -11,6 +11,9 @@
       "path": "./packages/keyd"
     },
     {
+      "path": "./packages/privd"
+    },
+    {
       "path": "./packages/protocol"
     },
     {
