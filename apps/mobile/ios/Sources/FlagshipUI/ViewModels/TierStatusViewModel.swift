@@ -56,8 +56,8 @@ public final class TierStatusViewModel {
             return one.map { "1 app has a separate access list on each server. When Pro ends it will use \($0)'s list." }
                 ?? "1 app has a separate access list on each server. When Pro ends it will use its lead server's list."
         }
-        return one.map { "\(n) apps have a separate access list on each server. When Pro ends they'll all use \($0)'s list." }
-            ?? "\(n) apps have a separate access list on each server. When Pro ends each will use its lead server's list."
+        return one.map { String(localized: "\(n) apps have a separate access list on each server. When Pro ends they'll all use \($0)'s list.") }
+            ?? String(localized: "\(n) apps have a separate access list on each server. When Pro ends each will use its lead server's list.")
     }
 
     /// Dispatcher usage progress, 0...100. Mirrors `pct(used, quota)` in

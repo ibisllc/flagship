@@ -60,7 +60,7 @@ public struct TierStatusScreen: View {
 
     @ViewBuilder
     private func llmSection(_ t: TierStatusResponse, c: FSColors) -> some View {
-        sectionHeader("LLM credits", c: c)
+        sectionHeader(String(localized: "LLM credits"), c: c)
         FSCard {
             VStack(spacing: FS.space.s2) {
                 if let day = t.llmCreditsRemainingDay {
@@ -77,7 +77,7 @@ public struct TierStatusScreen: View {
 
     @ViewBuilder
     private func dispatcherSection(_ t: TierStatusResponse, c: FSColors) -> some View {
-        sectionHeader("Dispatcher relay", c: c)
+        sectionHeader(String(localized: "Dispatcher relay"), c: c)
         FSCard {
             if let used = t.dispatcherUsageGBmonth {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -102,7 +102,7 @@ public struct TierStatusScreen: View {
 
     @ViewBuilder
     private func customDomainsSection(_ t: TierStatusResponse, c: FSColors) -> some View {
-        sectionHeader("Custom domains", c: c)
+        sectionHeader(String(localized: "Custom domains"), c: c)
         if t.customDomains.isEmpty {
             placeholderCard("none — your default subdomain is forever-free", c: c)
         } else {
@@ -114,7 +114,7 @@ public struct TierStatusScreen: View {
 
     @ViewBuilder
     private func reservedNamesSection(_ t: TierStatusResponse, c: FSColors) -> some View {
-        sectionHeader("Reserved names", c: c)
+        sectionHeader(String(localized: "Reserved names"), c: c)
         if t.reservedNames.isEmpty {
             placeholderCard("none — your username is FCFS-free", c: c)
         } else {
@@ -150,7 +150,7 @@ public struct TierStatusScreen: View {
     private func dispatcherValue(used: Double, quota: Double?) -> String {
         let usedStr = String(format: "%.2f GB", used)
         if let quota {
-            return "\(usedStr) / \(String(format: "%.0f", quota)) GB free"
+            return String(localized: "\(usedStr) / \(String(format: "%.0f", quota)) GB free")
         }
         return "\(usedStr) / —"
     }
