@@ -2679,5 +2679,16 @@
   "Browsers you signed in to private apps with a sign-in link. Refresh to\n          check if one's still in, or Stop to sign it out.": "サインインリンクでプライベートアプリにサインインしたブラウザーです。更新してまだサインイン中か確認するか、「停止」でサインアウトできます。",
   "How this works": "仕組み",
   "Scheduled": "スケジュール",
-  "None of your servers runs this app yet": "このアプリを実行しているサーバーはまだありません"
+  "None of your servers runs this app yet": "このアプリを実行しているサーバーはまだありません",
+  "Restored permissions": "復元されたアクセス許可",
+  "This app came back from a backup. Until an admin approves, nobody from the old list can open it.": "このアプリはバックアップから復元されました。管理者が承認するまで、以前のリストの人は誰も開けません。",
+  "Approve this list": "このリストを承認",
+  "Discard it": "破棄する",
+  "Only an admin device can approve restored permissions.": "復元されたアクセス許可を承認できるのは、管理者デバイスだけです。",
+  "{0} person on the old list.": "以前のリストに {0} 人。",
+  "{0} people on the old list.": "以前のリストに {0} 人。",
+  "The app was open to all.": "このアプリは全員に公開されていました。",
+  "Restored permissions approved.": "復元されたアクセス許可を承認しました。",
+  "The restored list changed. Review it and approve again.": "復元されたリストが変更されました。確認して、もう一度承認してください。",
+  "{0} discarded.": "{0} を破棄しました。"
 }

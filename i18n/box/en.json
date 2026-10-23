@@ -85,47 +85,47 @@
   },
   "This is a Flagship server.": {
     "en": "This is a Flagship server.",
-    "ctx": "packages/server-daemon/src/runtime.ts:871"
+    "ctx": "packages/server-daemon/src/runtime.ts:874"
   },
   "online": {
     "en": "online",
-    "ctx": "packages/server-daemon/src/runtime.ts:872"
+    "ctx": "packages/server-daemon/src/runtime.ts:875"
   },
   "It runs on private hardware and answers to its owner's keys — not to a cloud.": {
     "en": "It runs on private hardware and answers to its owner's keys — not to a cloud.",
-    "ctx": "packages/server-daemon/src/runtime.ts:873"
+    "ctx": "packages/server-daemon/src/runtime.ts:876"
   },
   "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.": {
     "en": "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.",
-    "ctx": "packages/server-daemon/src/runtime.ts:874"
+    "ctx": "packages/server-daemon/src/runtime.ts:877"
   },
   "TLS terminates on this server. Flagship relays ciphertext it cannot read.": {
     "en": "TLS terminates on this server. Flagship relays ciphertext it cannot read.",
-    "ctx": "packages/server-daemon/src/runtime.ts:877"
+    "ctx": "packages/server-daemon/src/runtime.ts:880"
   },
   "Get yours at": {
     "en": "Get yours at",
-    "ctx": "packages/server-daemon/src/runtime.ts:878"
+    "ctx": "packages/server-daemon/src/runtime.ts:881"
   },
   "No app here · Flagship": {
     "en": "No app here · Flagship",
-    "ctx": "packages/server-daemon/src/runtime.ts:2438"
+    "ctx": "packages/server-daemon/src/runtime.ts:2441"
   },
   "No app here yet.": {
     "en": "No app here yet.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2451"
+    "ctx": "packages/server-daemon/src/runtime.ts:2454"
   },
   "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.": {
     "en": "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2452"
+    "ctx": "packages/server-daemon/src/runtime.ts:2455"
   },
   "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.": {
     "en": "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2453"
+    "ctx": "packages/server-daemon/src/runtime.ts:2456"
   },
   "More on multiplexing →": {
     "en": "More on multiplexing →",
-    "ctx": "packages/server-daemon/src/runtime.ts:2453"
+    "ctx": "packages/server-daemon/src/runtime.ts:2456"
   },
   "Download a server backup — Flagship": {
     "en": "Download a server backup — Flagship",

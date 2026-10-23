@@ -659,7 +659,6 @@
     <string name="last_device">最后一台设备</string>
     <string name="another_device_is_still">另一台设备仍在</string>
     <string name="account_security">账户安全</string>
-    <string name="manage_recovery_protection_and_account_level">管理恢复保护和账户级安全设置。</string>
     <string name="code_protection_is_on">代码保护已开启</string>
     <string name="single_device_account">单设备账户</string>
     <string name="recovery_needs_your_6_digit_code">恢复需要验证器的 6 位代码（或恢复代码），并等待 24 小时。</string>
@@ -1384,10 +1383,6 @@
     <string name="started_2">· 开始于 %1$s</string>
     <string name="stop">停止</string>
     <string name="tap_refresh_to_check">点按“刷新”进行检查</string>
-    <string name="process_a_link">处理链接</string>
-    <string name="paste_a_flagship_link_a_private">粘贴 Flagship 链接：私有应用的“获取链接”字符串，或别人与你共享的“接管此服务器”转移链接。</string>
-    <string name="link">链接</string>
-    <string name="that_doesnt_look_like_a_flagship">这看起来不像 Flagship 链接。</string>
     <string name="back_up_with_a_passcode">使用密码备份…</string>
     <string name="back_up">备份 %1$s</string>
     <string name="saved">已保存。</string>
@@ -1753,16 +1748,12 @@
     <string name="switch_between_your_clouds">在你的云之间切换</string>
     <string name="trusted_devices">受信任的设备</string>
     <string name="add_replace_or_remove_the_devices">添加、替换或移除持有你密钥的设备</string>
-    <string name="scan_a_pairing_code">扫描配对码</string>
-    <string name="add_this_phone_to_another_account">把这部手机添加到另一个账户</string>
     <string name="browsers_you_opened_through_remote">你通过“远程”打开的浏览器</string>
     <string name="companions">配套设备</string>
     <string name="read_only_browser_session_4h">只读浏览器会话（4 小时）</string>
     <string name="web_access">网页访问</string>
     <string name="open_secured_sessions">打开受保护的会话</string>
     <string name="sites_youve_signed_a_browser_into">你曾在浏览器中登录过的网站</string>
-    <string name="process_url">处理 URL</string>
-    <string name="open_a_sign_in_link_you">打开你复制的登录链接</string>
     <string name="backup_peers">备份与对等</string>
     <string name="shard_health_across_peers">各对等端上的分片状况</string>
     <string name="app_2">应用</string>
