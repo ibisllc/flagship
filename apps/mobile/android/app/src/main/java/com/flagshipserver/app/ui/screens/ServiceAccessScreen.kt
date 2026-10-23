@@ -654,7 +654,7 @@ internal fun ServiceAccessContent(
                     onClick = {
                         confirmScope = null
                         scope.launch {
-                            if (vm.setListScope(on)) toasts.success(if (on) stringResource(R.string.each_server_now_keeps_its_own) else stringResource(R.string.every_server_now_uses_one_list))
+                            if (vm.setListScope(on)) toasts.success(if (on) FSStrings.get(R.string.each_server_now_keeps_its_own) else FSStrings.get(R.string.every_server_now_uses_one_list))
                             else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
                         }
                     },
