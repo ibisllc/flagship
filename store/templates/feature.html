@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Store template: the Google Play feature graphic, 1024 x 500. Play crops and overlays it, so the words stay
+     inside the middle 70 %; only the mark may come close to an edge. docs/store-assets/store-assets-brief.md §7. -->
+<html lang="en"><head><meta charset="utf-8"><title>Flagship store art: feature graphic</title>
+<link rel="stylesheet" href="store.css">
+<style>
+  .wordmark { font-family: "Geist Mono", monospace; font-weight: 500; text-transform: uppercase; letter-spacing: 0.22em; color: var(--muted); font-size: calc(var(--H) * 0.034px); margin-bottom: calc(var(--H) * 0.03px); }
+  body .feature-text .caption { margin-top: 0; text-wrap: balance; }
+</style></head>
+<body class="dark">
+<script src="slide.js"></script>
+<script>
+window.layout = (spec, k) => {
+  const W = spec.w, H = spec.h, b = document.body;
+  const s = H * 0.5;
+  const m = k.el("div", "mark", b, { width: k.px(s), height: k.px(s), left: k.px(W * 0.15), top: k.px(H * 0.46 - s / 2) });
+  for (const c of ["frame", "ring", "core"]) k.el("div", c, m);
+  const t = k.el("div", "feature-text", b, { position: "absolute", left: k.px(W * 0.15 + s + W * 0.06), right: k.px(W * 0.13), top: k.px(H * 0.46), transform: "translateY(-50%)" });
+  k.el("div", "wordmark", t).textContent = "Flagship";
+  k.el("div", "caption", t).textContent = spec.caption;
+  k.el("div", "shelf", b, { top: k.px(H * 0.86) });
+};
+</script>
+</body></html>
