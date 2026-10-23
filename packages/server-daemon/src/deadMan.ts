@@ -152,6 +152,19 @@ export async function executeLockAndPower(args: {
   return { mode, requestedMode: args.mode, suspension };
 }
 
+/** What owner devices may read about the switch (server-detail), so every client bounds its leases the same way. */
+export interface DeadManView {
+  enabled: boolean;
+  /** When the current affirmation lapses; auto-unlock leases must not outlive it. 0 ⇒ never affirmed. */
+  leaseExpiry: number;
+  windowMs: number;
+  graceMs: number;
+  lockoutMode: "off" | "restart";
+}
+
+/** Set once the controller exists (wireOwnerHandlers); server-detail reads through it. */
+export const deadManViewRef: { current: (() => DeadManView) | null } = { current: null };
+
 export interface DeadManPolicyState {
   enabled: boolean;
   windowMs: number;
@@ -271,6 +284,10 @@ export class DeadManController {
 
   leaseExpiry(): number {
     return this.state.leaseExpiry;
+  }
+
+  view(): DeadManView {
+    return { ...this.state.policy, leaseExpiry: this.state.leaseExpiry };
   }
 
   /**

@@ -276,6 +276,8 @@ export interface ScreensHttpDeps {
   currentCommit?: (() => string | null) | null;
   /** The last update order's verdict (updateOutcome.ts), or null. */
   lastUpdate?: (() => UpdateOutcomeRecord | null) | null;
+  /** The dead-man switch's state for server-detail (deadMan.ts), or null when none is wired. */
+  deadMan?: (() => { enabled: boolean; leaseExpiry: number; windowMs: number; graceMs: number; lockoutMode: "off" | "restart" } | null) | null;
   /** Endorsed releases this box could move to (updateReleases.ts). */
   releaseCatalog?: ReleaseCatalogSource | null;
   /** Recent install/uninstall events for server-detail. */
@@ -1499,6 +1501,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     daemonVersion: deps.daemonVersion,
     currentCommit: deps.currentCommit?.() ?? null,
     lastUpdate: deps.lastUpdate?.() ?? null,
+    ...(deps.deadMan?.() ? { deadMan: deps.deadMan()! } : {}),
     ...(deps.debugAccess ? { debugAccess: deps.debugAccess.view() } : {}),
     appSandbox: appSandboxStatus(),
     startedAt: deps.startedAt,

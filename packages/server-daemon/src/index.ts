@@ -70,6 +70,7 @@ import { buildCloneApp } from "./cloneService.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
 import {
   DeadManController,
+  deadManViewRef,
   BootUnlockModeSuppressor,
   SystemctlPowerRunner,
   executeLockAndPower,
@@ -3423,6 +3424,7 @@ async function wireRuntimeSurfaces(deps: {
       );
       return () => store.readSync();
     })(),
+    deadMan: () => deadManViewRef.current?.() ?? null,
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     filesBytes: runtime.dataProvisioner ? (v: string) => runtime.dataProvisioner!.filesBytes(v) : null,
@@ -3688,6 +3690,7 @@ async function wireOwnerHandlers(deps: {
     runner: hostPowerRunner,
   });
   await deadMan.start();
+  deadManViewRef.current = () => deadMan.view();
   runtime.addHandler(buildDeadManHttp(deadMan));
   runtime.addHandler(
     buildPowerHttp({
