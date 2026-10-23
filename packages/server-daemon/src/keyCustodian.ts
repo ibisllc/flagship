@@ -44,7 +44,11 @@ import {
   openGossip as protocolOpenGossip,
   signSecretRequest as protocolSignSecretRequest,
   signInstallService as protocolSignInstallService,
+  signBootSuspension as protocolSignBootSuspension,
+  signBootAuthWith,
   openSealedFromEd25519Recipient,
+  type BootAuthEnvelope,
+  type BootSuspensionOrder,
   type Bytes,
   type Keypair,
   type ServerId,
@@ -54,6 +58,9 @@ import {
   type InstallServiceRequest,
 } from "@flagship/protocol";
 import { hkdfSync } from "node:crypto";
+import { hmac } from "@noble/hashes/hmac";
+import { sha256 } from "@noble/hashes/sha256";
+import { deriveAccessSyncKey } from "./accessSync.js";
 import { deriveTlsKey as protocolDeriveTlsKey } from "./acme.js";
 
 /**
@@ -61,6 +68,8 @@ import { deriveTlsKey as protocolDeriveTlsKey } from "./acme.js";
  * returns it. This is the slice the internet-facing proxy + tunnel client
  * receive — they can sign and read the pubkey, nothing else.
  */
+export type BootAuthArgs = Omit<BootAuthEnvelope, "signatureHex">;
+
 export interface BoxSigner {
   /** The box identity PUBLIC key (safe to publish). */
   boxPublicKey(): Bytes;
@@ -70,6 +79,18 @@ export interface BoxSigner {
   unsealToBox(blob: Bytes): Bytes;
   /** Sign a phone/`.com` SecretRequest as the box (canonical-bytes wrapper). */
   signSecretRequest(req: SecretRequest): Bytes;
+  /**
+   * The boot-worker `Authorization` header for a request AS THE BOX. The
+   * custodian builds the canonical bytes and refuses any role but "box", so
+   * this can never be turned into a signing oracle for an owner request.
+   */
+  signBootAuthHeader(args: BootAuthArgs): string;
+  /**
+   * Sign a set-only boot suspension AS THE BOX (SEC-LOCK-001). Refuses
+   * anything that would clear or lower a lock, or that is not signed by the
+   * box: the box's key can lock a server but never unlock one.
+   */
+  signBootSuspension(order: BootSuspensionOrder): Bytes;
   /**
    * Sign an InstallServiceRequest as the box. A BOX-ORIGINATED build-modes
    * deploy signs with the box identity (the owner IRK private half is phone-
@@ -114,6 +135,10 @@ export interface GossipOps {
    * an app's env on its way between two of the account's servers (appCopy/).
    */
   deriveAppCopyEnvKey(info: Bytes): Bytes;
+  /** HMAC-SHA256 under the CGK of a gossip announcement's canonical bytes (`flagship/gossip/v2|…`), hex. */
+  macGossip(canonical: Bytes): string;
+  /** The one-list access-sync key (accessSync.ts), derived from the CGK. */
+  deriveAccessSyncKey(): Bytes;
 }
 
 export interface KeyCustodianInit {
@@ -160,6 +185,19 @@ export class KeyCustodian implements BoxSigner, SwkOps, GossipOps {
   }
   signSecretRequest(req: SecretRequest): Bytes {
     return protocolSignSecretRequest(req, this.#identity);
+  }
+  signBootAuthHeader(args: BootAuthArgs): string {
+    if (args.role !== "box") throw new Error("the box key signs boot requests as the box only");
+    if (args.pubKeyHex.toLowerCase() !== Buffer.from(this.#identity.publicKey).toString("hex")) {
+      throw new Error("boot request names a different key than the box identity");
+    }
+    return signBootAuthWith(args, (m) => ed.sign(m, this.#identity.privateKey));
+  }
+  signBootSuspension(order: BootSuspensionOrder): Bytes {
+    if (order.signer !== "box" || order.action !== "suspend" || order.seq < 1) {
+      throw new Error("the box key may only sign a suspend, as the box");
+    }
+    return protocolSignBootSuspension(order, this.#identity.privateKey);
   }
   signInstallService(req: InstallServiceRequest): Bytes {
     return protocolSignInstallService(req, this.#identity);
@@ -208,6 +246,15 @@ export class KeyCustodian implements BoxSigner, SwkOps, GossipOps {
   }
   openGossip(blob: Bytes): Bytes {
     return protocolOpenGossip(blob, this.#cgkOrThrow());
+  }
+  macGossip(canonical: Bytes): string {
+    if (!new TextDecoder().decode(canonical).startsWith("flagship/gossip/v2|")) {
+      throw new Error("KeyCustodian: only gossip announcements are MACed");
+    }
+    return Buffer.from(hmac(sha256, this.#cgkOrThrow(), canonical)).toString("hex");
+  }
+  deriveAccessSyncKey(): Bytes {
+    return deriveAccessSyncKey(this.#cgkOrThrow());
   }
   deriveAppCopyEnvKey(info: Bytes): Bytes {
     if (!new TextDecoder().decode(info).startsWith("flagship/app-copy-env/v1|")) {

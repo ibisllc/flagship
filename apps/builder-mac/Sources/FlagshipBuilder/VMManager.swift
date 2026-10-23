@@ -17,6 +17,10 @@ final class VMManager: ObservableObject {
     @Published private(set) var servers: [HostedServer] = []
     @Published private(set) var installObservations: [String: VMInstallObservation] = [:]
     @Published private(set) var healthReports: [String: VMServerHealth] = [:]
+    /// The six-digit code each hosted server showed this boot (first contact).
+    @Published private(set) var serverCodes: [String: String] = [:]
+    private var codeSplitters: [String: ConsoleLineSplitter] = [:]
+    private var codeReported: Set<String> = []
 
     let store: VMInventoryStore
     /// Log sink — the wizard routes this into its log pane.
@@ -122,6 +126,8 @@ final class VMManager: ObservableObject {
         healthPolls[name]?.cancel()
         healthPolls[name] = nil
         healthReports[name] = nil
+        serverCodes[name] = nil
+        codeSplitters[name] = nil
         try? store.delete(name: name)
         servers.removeAll { $0.id == name }
         syncWakeHold()
@@ -243,6 +249,11 @@ final class VMManager: ObservableObject {
         do {
             try VZHost.ensureMainDisk(config: config, layout: store.layout)
             let host = VZHost()
+            codeSplitters[name] = ConsoleLineSplitter()
+            codeReported.remove(name)
+            host.onServerCodeBytes = { [weak self] data in
+                Task { @MainActor in self?.receiveServerCodeBytes(data, config: config) }
+            }
             host.onGuestStopped = { [weak self] error in
                 guard let self else { return }
                 Task { await self.guestStopped(name: name, error: error) }
@@ -442,6 +453,49 @@ final class VMManager: ObservableObject {
                 }
                 self?.reportInstallStallIfNeeded(name: name)
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
+            }
+        }
+    }
+
+    // MARK: - First contact
+
+    /// The server-code port's output: on this server's own line, show the code and, when the phone gave
+    /// this server a confirm key, tell `.com` what was seen so the phone can confirm it without asking.
+    private func receiveServerCodeBytes(_ data: Data, config: VMConfig) {
+        let name = config.name
+        var splitter = codeSplitters[name] ?? ConsoleLineSplitter()
+        let lines = splitter.feed(data)
+        codeSplitters[name] = splitter
+        for line in lines {
+            guard let seen = ServerCodeSeen.parse(line, serverDomain: config.serverDomain) else { continue }
+            if serverCodes[name] != seen.code {
+                serverCodes[name] = seen.code
+                log("VM \(name): this server's code is \(ServerCodeSeen.pretty(seen.code))")
+            }
+            guard !codeReported.contains(name),
+                  let serial = config.provisionStatusSerial,
+                  let key = StudioConfirmKeyFile.read(layout: store.layout, name: name),
+                  let mac = ServerCodeSeen.macHex(studioConfirmKey: key, serverDomain: config.serverDomain, stkPubHex: seen.stkPubHex),
+                  let url = ControlPlane.orderURL(serial: serial, leaf: "server-seen") else { continue }
+            codeReported.insert(name)
+            let body = ServerCodeSeen.body(stkPubHex: seen.stkPubHex, macHex: mac)
+            let layout = store.layout
+            Task { [weak self] in
+                // Best effort: the phone falls back to asking the owner to compare the code.
+                for attempt in 0..<4 {
+                    var req = URLRequest(url: url, timeoutInterval: 10)
+                    req.httpMethod = "POST"
+                    req.setValue("application/json", forHTTPHeaderField: "content-type")
+                    req.httpBody = body
+                    let status = (try? await URLSession.shared.data(for: req))?.1 as? HTTPURLResponse
+                    if status?.statusCode == 200 {
+                        StudioConfirmKeyFile.delete(layout: layout, name: name)
+                        self?.log("VM \(name): told your phone which server this is")
+                        return
+                    }
+                    if let code = status?.statusCode, (400..<500).contains(code), code != 404, code != 429 { return }
+                    try? await Task.sleep(nanoseconds: UInt64(5 + attempt * 10) * 1_000_000_000)
+                }
             }
         }
     }

@@ -1,0 +1,341 @@
+{
+  "about": "Adapter attestations and the adapter index (SEC-ADAPTER-002). Rebuild `canonical` byte for byte from `fields` (`|` joined, tag first; the index sorts and de-duplicates both digest lists, joined with `,`); the pinned signatures verify under `keys.vetPubHex` inside its window. `file.capabilityDigestHex` is capabilityDigest(capabilitiesOf(manifest)) of the adapter file. Each `indexChecks` entry runs verifyAdapterIndex with the given high-water mark and time and must give `expect`. Each `standing` entry runs adapterStanding over the listed attestations at `now`. A revocation is final.",
+  "keys": {
+    "vetSeedHex": "6161616161616161616161616161616161616161616161616161616161616161",
+    "vetPubHex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+    "otherSeedHex": "6262626262626262626262626262626262626262626262626262626262626262",
+    "pinned": [
+      {
+        "pubHex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+        "notBefore": 1761177600000,
+        "notAfter": 1792800000000
+      }
+    ]
+  },
+  "file": {
+    "text": "{\n  \"schema_version\": 1,\n  \"name\": \"notes\",\n  \"version\": \"0.1.0\",\n  \"description\": \"Notes\",\n  \"runtime\": {\n    \"image\": \"x\",\n    \"port\": 8080\n  },\n  \"network\": {\n    \"egress\": [\n      \"api.example.org\"\n    ]\n  },\n  \"adapter\": {\n    \"version\": 1,\n    \"source\": {\n      \"repo\": \"https://github.com/me/notes\",\n      \"base\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n    },\n    \"patch\": [\n      {\n        \"path\": \"index.js\",\n        \"hunks\": [\n          {\n            \"oldStart\": 1,\n            \"newStart\": 1,\n            \"oldLines\": 2,\n            \"newLines\": 2,\n            \"lines\": [\n              \"-const port = 3000;\",\n              \"+const port = process.env.PORT;\",\n              \" \"\n            ]\n          }\n        ]\n      }\n    ]\n  }\n}\n",
+    "sha256Hex": "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+    "capabilityDigestHex": "df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b"
+  },
+  "attestations": {
+    "pass": {
+      "fields": {
+        "adapterDigestHex": "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+        "repo": "https://github.com/me/notes",
+        "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilityDigestHex": "df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b",
+        "validatorVersion": "adapter-rules/1",
+        "policyVersion": "adapter-review/1",
+        "reviewerModel": "claude-haiku-5-5",
+        "modelVersion": "claude-haiku-5-5-20261001",
+        "evidenceSha256Hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "outcome": "pass",
+        "issuedAt": 1761264000000,
+        "expiresAt": 1769040000000
+      },
+      "canonical": "flagship/adapter-attestation/v1|eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88|https://github.com/me/notes|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b|adapter-rules/1|adapter-review/1|claude-haiku-5-5|claude-haiku-5-5-20261001|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|pass|1761264000000|1769040000000",
+      "digestHex": "e74d58897ca1efd96516a426bc3f4c7d8c3eadd28958306653a595dc30eabeac",
+      "signatureHex": "ffe9b1d87ee6bf7512694815ccb16dd60f9f816b2b757545ccd1b4a7e6d32822aff0f02c2adf7ed04802f1ce291e79697b01449a794dc63e34cabaf40bd9ec05"
+    },
+    "revoked": {
+      "fields": {
+        "adapterDigestHex": "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+        "repo": "https://github.com/me/notes",
+        "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilityDigestHex": "df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b",
+        "validatorVersion": "adapter-rules/1",
+        "policyVersion": "adapter-review/1",
+        "reviewerModel": "claude-haiku-5-5",
+        "modelVersion": "claude-haiku-5-5-20261001",
+        "evidenceSha256Hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "outcome": "revoked",
+        "issuedAt": 1761350400000,
+        "expiresAt": 1769299200000
+      },
+      "canonical": "flagship/adapter-attestation/v1|eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88|https://github.com/me/notes|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b|adapter-rules/1|adapter-review/1|claude-haiku-5-5|claude-haiku-5-5-20261001|ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff|revoked|1761350400000|1769299200000",
+      "digestHex": "21922ee68b0f782a2dd5a211cb08710a0e24b38fc9c5be5e999e3b94d54f43b4",
+      "signatureHex": "e43a20584857b95bcd59418487731631aed142efb901ba3661dfbaae3b0cc70e8d2ec194af47ca39372d2ba3a44ab70ff31439ffaa9e49699a4666968ec8cc01"
+    }
+  },
+  "attestationRejects": [
+    {
+      "why": "signature flipped",
+      "signed": {
+        "attestation": {
+          "adapterDigestHex": "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+          "repo": "https://github.com/me/notes",
+          "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilityDigestHex": "df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b",
+          "validatorVersion": "adapter-rules/1",
+          "policyVersion": "adapter-review/1",
+          "reviewerModel": "claude-haiku-5-5",
+          "modelVersion": "claude-haiku-5-5-20261001",
+          "evidenceSha256Hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "outcome": "pass",
+          "issuedAt": 1761264000000,
+          "expiresAt": 1769040000000
+        },
+        "signerPubHex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+        "signatureHex": "0fe9b1d87ee6bf7512694815ccb16dd60f9f816b2b757545ccd1b4a7e6d32822aff0f02c2adf7ed04802f1ce291e79697b01449a794dc63e34cabaf40bd9ec05"
+      }
+    },
+    {
+      "why": "outcome changed after signing",
+      "signed": {
+        "attestation": {
+          "adapterDigestHex": "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+          "repo": "https://github.com/me/notes",
+          "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilityDigestHex": "df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b",
+          "validatorVersion": "adapter-rules/1",
+          "policyVersion": "adapter-review/1",
+          "reviewerModel": "claude-haiku-5-5",
+          "modelVersion": "claude-haiku-5-5-20261001",
+          "evidenceSha256Hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "outcome": "fail",
+          "issuedAt": 1761264000000,
+          "expiresAt": 1769040000000
+        },
+        "signerPubHex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+        "signatureHex": "ffe9b1d87ee6bf7512694815ccb16dd60f9f816b2b757545ccd1b4a7e6d32822aff0f02c2adf7ed04802f1ce291e79697b01449a794dc63e34cabaf40bd9ec05"
+      }
+    },
+    {
+      "why": "expiry extended after signing",
+      "signed": {
+        "attestation": {
+          "adapterDigestHex": "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+          "repo": "https://github.com/me/notes",
+          "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilityDigestHex": "df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b",
+          "validatorVersion": "adapter-rules/1",
+          "policyVersion": "adapter-review/1",
+          "reviewerModel": "claude-haiku-5-5",
+          "modelVersion": "claude-haiku-5-5-20261001",
+          "evidenceSha256Hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "outcome": "pass",
+          "issuedAt": 1761264000000,
+          "expiresAt": 1769126400000
+        },
+        "signerPubHex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+        "signatureHex": "ffe9b1d87ee6bf7512694815ccb16dd60f9f816b2b757545ccd1b4a7e6d32822aff0f02c2adf7ed04802f1ce291e79697b01449a794dc63e34cabaf40bd9ec05"
+      }
+    },
+    {
+      "why": "unpinned key",
+      "signed": {
+        "attestation": {
+          "adapterDigestHex": "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+          "repo": "https://github.com/me/notes",
+          "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilityDigestHex": "df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b",
+          "validatorVersion": "adapter-rules/1",
+          "policyVersion": "adapter-review/1",
+          "reviewerModel": "claude-haiku-5-5",
+          "modelVersion": "claude-haiku-5-5-20261001",
+          "evidenceSha256Hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "outcome": "pass",
+          "issuedAt": 1761264000000,
+          "expiresAt": 1769040000000
+        },
+        "signerPubHex": "2df04125f0015afb47ce853aef8772094ff9498c14cb1b9e12973c2927da0fa6",
+        "signatureHex": "95b8e4d0827ee637ca054a989ca488a7255f06a524d1c4bb220a37e12321c26c4ccd24436e077b80731588a08332fd4be8b86cc458289863d79277ddc1586906"
+      }
+    },
+    {
+      "why": "issued before the key's window",
+      "signed": {
+        "attestation": {
+          "adapterDigestHex": "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+          "repo": "https://github.com/me/notes",
+          "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilityDigestHex": "df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b",
+          "validatorVersion": "adapter-rules/1",
+          "policyVersion": "adapter-review/1",
+          "reviewerModel": "claude-haiku-5-5",
+          "modelVersion": "claude-haiku-5-5-20261001",
+          "evidenceSha256Hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "outcome": "pass",
+          "issuedAt": 1761091200000,
+          "expiresAt": 1761264000000
+        },
+        "signerPubHex": "af06a3e3291714e4f356c19c9b15cd1951ec6e6662aa77be07547f289383341d",
+        "signatureHex": "ff546357d3a64ce899c3eaa6329509aad691d3d69c7f220f0116a6ad6980a60caabb721535bd975ddf5bfa0b4e57afafbbeff9da5ab6c9a1e3dc1536a250850f"
+      }
+    }
+  ],
+  "indexes": {
+    "one": {
+      "fields": {
+        "sequence": 1,
+        "prevDigestHex": "genesis",
+        "issuedAt": 1761264000000,
+        "expiresAt": 1761523200000,
+        "attestationDigests": [
+          "e74d58897ca1efd96516a426bc3f4c7d8c3eadd28958306653a595dc30eabeac"
+        ],
+        "withdrawn": []
+      },
+      "canonical": "flagship/adapter-index/v1|1|genesis|1761264000000|1761523200000|e74d58897ca1efd96516a426bc3f4c7d8c3eadd28958306653a595dc30eabeac|",
+      "digestHex": "bdeb70b7622d9d017a23993f85e4e56f86cb94a641681e4583c1aa7c5a8587cf",
+      "signatureHex": "00e12bdfc0ea7dc2938b5504e3985c6f66b399313bfeec3e00437038215585fa44c56af3caa8bf0f0542abb6c9605bcb39e38f742e8b2e4c44960cdeea9da609"
+    },
+    "two": {
+      "fields": {
+        "sequence": 2,
+        "prevDigestHex": "bdeb70b7622d9d017a23993f85e4e56f86cb94a641681e4583c1aa7c5a8587cf",
+        "issuedAt": 1761350400000,
+        "expiresAt": 1761609600000,
+        "attestationDigests": [
+          "21922ee68b0f782a2dd5a211cb08710a0e24b38fc9c5be5e999e3b94d54f43b4"
+        ],
+        "withdrawn": [
+          "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88"
+        ]
+      },
+      "canonical": "flagship/adapter-index/v1|2|bdeb70b7622d9d017a23993f85e4e56f86cb94a641681e4583c1aa7c5a8587cf|1761350400000|1761609600000|21922ee68b0f782a2dd5a211cb08710a0e24b38fc9c5be5e999e3b94d54f43b4|eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+      "digestHex": "1fe76bf8837e95fd093b002417fb3d3f17f0bdcc20d20ea90014707fbf0fd2e6",
+      "signatureHex": "c6448cdcd84a7a8a934e71b541345ed7747455b5ec440f3ae3b3bb4079cd2d5760d8df8915327fb86bd9101a0b3799d9e8dc5c7da8b0810e6faeda17deacdc0a"
+    }
+  },
+  "indexChecks": [
+    {
+      "why": "first index from scratch",
+      "index": "one",
+      "highWater": null,
+      "now": 1761264001000,
+      "expect": {
+        "ok": true,
+        "digestHex": "bdeb70b7622d9d017a23993f85e4e56f86cb94a641681e4583c1aa7c5a8587cf"
+      }
+    },
+    {
+      "why": "the next index extends it",
+      "index": "two",
+      "highWater": {
+        "sequence": 1,
+        "digestHex": "bdeb70b7622d9d017a23993f85e4e56f86cb94a641681e4583c1aa7c5a8587cf"
+      },
+      "now": 1761350401000,
+      "expect": {
+        "ok": true,
+        "digestHex": "1fe76bf8837e95fd093b002417fb3d3f17f0bdcc20d20ea90014707fbf0fd2e6"
+      }
+    },
+    {
+      "why": "rollback",
+      "index": "one",
+      "highWater": {
+        "sequence": 2,
+        "digestHex": "1fe76bf8837e95fd093b002417fb3d3f17f0bdcc20d20ea90014707fbf0fd2e6"
+      },
+      "now": 1761350401000,
+      "expect": {
+        "ok": false,
+        "reason": "rollback"
+      }
+    },
+    {
+      "why": "fork at the same sequence",
+      "index": "one",
+      "highWater": {
+        "sequence": 1,
+        "digestHex": "9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "now": 1761264001000,
+      "expect": {
+        "ok": false,
+        "reason": "fork"
+      }
+    },
+    {
+      "why": "next sequence not extending",
+      "index": "two",
+      "highWater": {
+        "sequence": 1,
+        "digestHex": "9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "now": 1761350401000,
+      "expect": {
+        "ok": false,
+        "reason": "fork"
+      }
+    },
+    {
+      "why": "expired",
+      "index": "one",
+      "highWater": null,
+      "now": 1761523200000,
+      "expect": {
+        "ok": false,
+        "reason": "expired"
+      }
+    },
+    {
+      "why": "issued in the future",
+      "index": "two",
+      "highWater": null,
+      "now": 1761264000000,
+      "expect": {
+        "ok": false,
+        "reason": "not-yet-valid"
+      }
+    }
+  ],
+  "standing": [
+    {
+      "why": "a current pass",
+      "attestations": [
+        "pass"
+      ],
+      "now": 1761264001000,
+      "expect": "vetted"
+    },
+    {
+      "why": "a pass past its expiry",
+      "attestations": [
+        "pass"
+      ],
+      "now": 1769040000000,
+      "expect": "expired"
+    },
+    {
+      "why": "a revocation beats the pass",
+      "attestations": [
+        "pass",
+        "revoked"
+      ],
+      "now": 1761436800000,
+      "expect": "revoked"
+    },
+    {
+      "why": "a revocation beats a later pass",
+      "attestations": [
+        "revoked",
+        "laterPass"
+      ],
+      "now": 1761523200000,
+      "expect": "revoked"
+    },
+    {
+      "why": "nothing about this digest",
+      "attestations": [],
+      "now": 1761264000000,
+      "expect": "none"
+    }
+  ],
+  "laterPass": {
+    "adapterDigestHex": "eb67c11f7cf27a4fa43f0a1af89860f8513f6272f733e4df51475421bd6ade88",
+    "repo": "https://github.com/me/notes",
+    "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "capabilityDigestHex": "df3bebdc8880e3b7434cc6dd40cdc7b43c4cb6d8ec4869de1a06ec8baede5c4b",
+    "validatorVersion": "adapter-rules/1",
+    "policyVersion": "adapter-review/1",
+    "reviewerModel": "claude-haiku-5-5",
+    "modelVersion": "claude-haiku-5-5-20261001",
+    "evidenceSha256Hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "outcome": "pass",
+    "issuedAt": 1761436800000,
+    "expiresAt": 1769212800000
+  }
+}

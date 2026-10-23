@@ -13,9 +13,11 @@
  *   README.md                                      written only if missing
  */
 
+import { renderDirectory } from "./adapterDirectory.js";
 import { RequestD1, type D1Database } from "@flagship/storage";
 import { splitAdapterFile } from "@flagship/protocol";
 import { aiReview, utcDay, type AdapterBucketLike } from "./adapterIndex.js";
+import { RETIRE_AT_SOURCES } from "./adapterVetting.js";
 
 export interface AdapterPublishEnv {
   DB?: D1Database;
@@ -32,6 +34,16 @@ export interface AdapterPublishEnv {
    */
   ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
 }
+
+/**
+ * SEC-ADAPTER-001: anonymous adapters are untrusted program changes, and the
+ * rule checks plus an optional model review cannot establish that one is
+ * benign. Nothing is published until the signed, reviewed index of
+ * docs/security-hardening (SEC-ADAPTER-002) exists. Submissions still queue,
+ * quarantined, so nothing is lost. This is a code switch on purpose: setting
+ * `ADAPTER_REVIEW_ANTHROPIC_KEY` must never re-open it. Tests flip it.
+ */
+export const communityPublish = { enabled: false };
 
 export type PublishResult =
   | { published: false; reason: string }
@@ -70,8 +82,9 @@ export function repoDir(repo: string): string {
 }
 
 const DAY_MS = 86_400_000;
-// Complaints of any kind (build, start, report) that retire an adapter.
-export const RETIRE_AT_COMPLAINTS = 3;
+// Distinct complaining networks (any stage) that retire an adapter: one network repeating itself,
+// however many addresses it uses, counts once.
+export const RETIRE_AT_COMPLAINTS = RETIRE_AT_SOURCES;
 // A live adapter's complaints expire after this; a retired adapter keeps its
 // own until the adapter itself is pruned, RETIRED_TTL_DAYS after retirement.
 const COMPLAINT_TTL_DAYS = 90;
@@ -97,6 +110,7 @@ async function pruneOld(db: D1Database, bucket: AdapterBucketLike | undefined, n
   await db.batch(
     old.flatMap((sha) => [
       db.prepare("DELETE FROM adapter_complaints WHERE file_sha256 = ?").bind(sha),
+      db.prepare("DELETE FROM adapter_complaint_sources WHERE file_sha256 = ?").bind(sha),
       db.prepare("DELETE FROM repo_adapters WHERE file_sha256 = ?").bind(sha),
     ]),
   );
@@ -117,7 +131,15 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     db
       .prepare(`DELETE FROM adapter_complaints WHERE day < ? AND file_sha256 NOT IN (${RETIRED_FILES})`)
       .bind(complaintCutoff);
-  const pruneComplaints = () => pruneStmt().run();
+  const pruneSourcesStmt = () =>
+    db
+      .prepare(`DELETE FROM adapter_complaint_sources WHERE day < ? AND file_sha256 NOT IN (${RETIRED_FILES})`)
+      .bind(complaintCutoff);
+  const pruneComplaints = () => db.batch([pruneStmt(), pruneSourcesStmt()]);
+  if (!communityPublish.enabled) {
+    await pruneComplaints();
+    return { published: false, reason: "quarantined" };
+  }
   if (!bucket || !token || !repoName) {
     // Nothing goes public, but owners' notes still expire on time.
     await pruneComplaints();
@@ -166,13 +188,12 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
       maxComplaint,
       complaintCutoff,
     ),
-    // Three problems of any kind, from installs or owners, retire an adapter.
+    // Problems of any kind, from installs or owners, on enough distinct networks retire an adapter.
     all<Row>(
       `SELECT * FROM repo_adapters WHERE ${LIVE} AND file_sha256 IN (
-       SELECT file_sha256 FROM adapter_complaints WHERE day >= ? AND id <= ?
+       SELECT file_sha256 FROM adapter_complaint_sources WHERE day >= ?
        GROUP BY file_sha256 HAVING count(*) >= ?)`,
       complaintCutoff,
-      maxComplaint,
       RETIRE_AT_COMPLAINTS,
     ),
     reviewKey
@@ -242,10 +263,10 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
   const deferred = new Set<string>();
   const reviewedNow: string[] = [];
   const rereviewed: string[] = [];
-  const review = async (row: Row, body: string, reports: string[] = []) => {
+  const review = async (row: Row, body: string) => {
     const split = splitAdapterFile(body);
     if (!split.ok || !split.adapter) return { kind: "fail" } as const;
-    return aiReview(reviewKey!, row.repo, split.manifestJson, split.adapter, reports);
+    return aiReview(reviewKey!, row.repo, split.manifestJson, split.adapter);
   };
   const reviewedBodies = new Map<string, string>();
   const publishedBody = async (row: Row): Promise<string | null> => {
@@ -265,16 +286,10 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
       const body = await publishedBody(row);
       if (body == null) continue;
       reviewedBodies.set(row.file_sha256, body);
-      const reports = (
-        await all<{ detail: string | null }>(
-          `SELECT detail FROM adapter_complaints WHERE file_sha256 = ? AND stage = 'report' AND reviewed = 0 AND id <= ?
-           ORDER BY id DESC`,
-          row.file_sha256,
-          maxComplaint,
-        )
-      ).flatMap((r) => (r.detail ? [r.detail] : []));
+      // Owners' notes never reach a model (AGENTS.md: an AI never learns who or where the owner is);
+      // a reported adapter is re-reviewed on its own content.
       reviewBudget--;
-      const v = await review(row, body, reports);
+      const v = await review(row, body);
       if (v.kind === "pass") rereviewed.push(row.file_sha256);
       else if (v.kind === "fail") retire(row, "review");
     }
@@ -395,6 +410,20 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     if (!removedDirs.has(repoDir(repo))) tree.push({ path: `${repoDir(repo)}/index.json`, mode: "100644", type: "blob", sha: null });
   }
   tree.push({ path: "do-not-adapt.txt", mode: "100644", type: "blob", content: doNotAdapt });
+  {
+    // The searchable directory: every live adapter this commit leaves, counts folded into a status.
+    const liveRows = await all<Row>(`SELECT * FROM repo_adapters WHERE ${LIVE}`);
+    const rows = [
+      ...liveRows.filter((r) => !withdrawn.has(r.file_sha256)).map((r) => ({ r, added: r.published_day! })),
+      ...added.map((r) => ({ r, added: day })),
+    ].map(({ r, added: a }) => ({
+      repo: r.repo, license: r.license, base: r.base, file_sha256: r.file_sha256, added: a,
+      confirmations: r.confirmations + r.pending_confirmations, complaints: complaintCounts.get(r.file_sha256) ?? 0,
+    }));
+    const seen = new Set<string>();
+    const unique = rows.filter((r) => (seen.has(r.file_sha256) ? false : (seen.add(r.file_sha256), true)));
+    tree.push({ path: "directory.json", mode: "100644", type: "blob", content: renderDirectory(unique, blocked, day) });
+  }
   if (!hasReadme) tree.push({ path: "README.md", mode: "100644", type: "blob", content: README });
 
   const newTree = (await gh("POST", "/git/trees", { base_tree: headCommit.tree.sha, tree })) as { sha: string };
@@ -436,6 +465,7 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     ),
     ...gone.map((r) => db.prepare("DELETE FROM repo_adapters WHERE file_sha256 = ?").bind(r.file_sha256)),
     ...gone.map((r) => db.prepare("DELETE FROM adapter_complaints WHERE file_sha256 = ?").bind(r.file_sha256)),
+    ...gone.map((r) => db.prepare("DELETE FROM adapter_complaint_sources WHERE file_sha256 = ?").bind(r.file_sha256)),
     ...[...withdrawn.values()].map((r) =>
       db
         .prepare("UPDATE repo_adapters SET retired_day = ?, retired_reason = ?, pending_confirmations = 0 WHERE file_sha256 = ?")
@@ -451,6 +481,7 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     ),
     db.prepare("UPDATE adapter_complaints SET counted = 1 WHERE counted = 0 AND id <= ?").bind(maxComplaint),
     pruneStmt(),
+    pruneSourcesStmt(),
     ...listChanges.map((c) =>
       c.state === "unlisting"
         ? db.prepare("DELETE FROM adapter_blocklist WHERE repo = ? AND state = 'unlisting'").bind(c.repo)
@@ -521,7 +552,12 @@ Flagship servers will apply, and every server gets the same bytes.
 
     adapters/<host>/<repo path>/index.json
     adapters/<host>/<repo path>/<sha256 of the file>.json
+    directory.json
     do-not-adapt.txt
+
+\`directory.json\` is the searchable list of every project here: license, each
+adapter's digest and base commit, and a status (\`published\` or \`disputed\`),
+with no install counts and nothing about who sent or installed one.
 
 \`index.json\` lists a repo's adapters, newest first: the commit each was made
 against (\`base\`), its file, the day it was added, how many servers sent the

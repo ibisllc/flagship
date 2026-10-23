@@ -103,7 +103,7 @@ export type PairEvent =
   /** Debug-access consent resolved (only when `--debug`). */
   | { event: "debug-result"; granted: boolean }
   /** Terminal success: the recipe is written to `recipePath`. */
-  | { event: "done"; recipePath: string; serverDomain: string; debugGranted: boolean }
+  | { event: "done"; recipePath: string; serverDomain: string; debugGranted: boolean; studioConfirmKeyHex?: string }
   /** Terminal failure. */
   | { event: "error"; message: string };
 
@@ -177,6 +177,8 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
   let ownerIrkPub: Bytes | null = null;
   let recipeText: string | null = null;
   let recipeDomain: string | null = null;
+  /** First contact (docs/first-contact.md): sent beside the recipe, never written into it. */
+  let studioConfirmKeyHex: string | null = null;
   let debugCarrier: string | null = null; // the `{grant,signatureHex}` JSON to embed
   let finalized = false;
   let pingTimer: NodeJS.Timeout | undefined;
@@ -223,7 +225,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
         await writeFile(outPath, toWrite, { mode: 0o600 });
         sendUp({ kind: "recipe-accepted" });
         cleanup();
-        emit({ event: "done", recipePath: outPath, serverDomain: recipeDomain, debugGranted: !!debugCarrier });
+        emit({ event: "done", recipePath: outPath, serverDomain: recipeDomain, debugGranted: !!debugCarrier, ...(studioConfirmKeyHex ? { studioConfirmKeyHex } : {}) });
         log("");
         log(`  ✅ Recipe received + verified for:   ${recipeDomain}`);
         if (wantDebug) {
@@ -369,6 +371,18 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
             const loaded = loadBlobFromString(text, { kind: "stdin" });
             recipeText = text;
             recipeDomain = loaded.blob.serverDomain;
+            // The per-server key Studio confirms the server's code with, sealed like the recipe. One that
+            // does not open or is not 32 bytes is dropped; the recipe still arrives.
+            const kc = frame["confirmKeyCiphertext"];
+            const kn = frame["confirmKeyNonce"];
+            if (typeof kc === "string" && typeof kn === "string") {
+              try {
+                const key = openDelivered(kc, kn, aeadKey);
+                if (key.length === 32) studioConfirmKeyHex = Buffer.from(key).toString("hex");
+              } catch {
+                studioConfirmKeyHex = null;
+              }
+            }
             // The box takes debug grants under its pinned admin root (the IRK only without one).
             ownerIrkPub = loaded.blob.authCode.adminRootPubKey ?? loaded.blob.authCode.userPubKey;
             emit({ event: "delivered", serverDomain: recipeDomain });

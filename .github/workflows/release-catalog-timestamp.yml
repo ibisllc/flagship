@@ -1,0 +1,66 @@
+name: Release catalog timestamp
+
+# Re-signs the release catalog's timestamp every day (N13, tools/release-catalog/catalog.ts). A box
+# treats an expired timestamp as a stale catalog and takes no new update, so this keeps updates
+# flowing between releases. Only the timestamp key is online (the repo secret below); the root,
+# targets and snapshot keys stay offline and sign at release time (scripts/release.sh).
+#
+# Owner prerequisites (docs/runbooks/final-deploy.md, "Release catalog keys"):
+#   - repo secret RELEASE_CATALOG_TIMESTAMP_KEY: the timestamp role's key file ({ keyId, seedHex })
+#   - repo secrets CLOUDFLARE_API_TOKEN (Workers R2 Storage Edit) and CLOUDFLARE_ACCOUNT_ID
+# Until a catalog is published the job does nothing.
+
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-catalog-timestamp
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  CATALOG_URL: https://flagshipserver.com/build/iso
+  BUCKET: flagship-iso
+
+jobs:
+  timestamp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Is a catalog published?
+        id: published
+        run: |
+          if curl -fsS "$CATALOG_URL/catalog-snapshot.json" -o snapshot.json && curl -fsS "$CATALOG_URL/catalog-timestamp.json" -o previous.json; then
+            echo "yes=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "No catalog is published yet: nothing to re-sign."
+          fi
+      - name: Install (exact lockfile, no scripts)
+        if: steps.published.outputs.yes == '1'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Sign and upload
+        if: steps.published.outputs.yes == '1'
+        env:
+          TIMESTAMP_KEY: ${{ secrets.RELEASE_CATALOG_TIMESTAMP_KEY }}
+        run: |
+          test -n "$TIMESTAMP_KEY" || { echo "::error::repo secret RELEASE_CATALOG_TIMESTAMP_KEY is not set"; exit 1; }
+          umask 077
+          printf '%s' "$TIMESTAMP_KEY" > "$RUNNER_TEMP/ts.key.json"
+          npx tsx tools/release-catalog/catalog.ts timestamp --snapshot snapshot.json --key "$RUNNER_TEMP/ts.key.json" --previous previous.json --out timestamp.json
+          rm -f "$RUNNER_TEMP/ts.key.json"
+          (cd apps/com && npx wrangler r2 object put "$BUCKET/catalog-timestamp.json" --file ../../timestamp.json --content-type application/json --remote)
+      - name: Read back
+        if: steps.published.outputs.yes == '1'
+        run: |
+          curl -fsS "$CATALOG_URL/catalog-timestamp.json" -o served.json
+          node -e 'const a=require("./timestamp.json"),b=require("./served.json");if(a.signed.version!==b.signed.version){console.error("served timestamp is not the one just signed");process.exit(1)}'

@@ -1,0 +1,258 @@
+{
+  "about": "Durable boot suspension. The owner signs with the account key and always starts a new epoch (current + 1); the box signs with its STK, may only suspend, only inside the current epoch, as seq = current + 1. Steps are applied in order from an empty state; each lists the time the boot worker saw it and the expected outcome. Seeds are 32 repeated bytes (owner 0x07, box 0x0b). Ed25519 signatures are deterministic.",
+  "ownerSeedHex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "ownerPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+  "boxSeedHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+  "boxPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+  "initial": {
+    "serverDomain": "home.alice.flagship.services",
+    "epoch": 0,
+    "seq": 0,
+    "suspended": false,
+    "reason": null,
+    "signer": null,
+    "orderIssuedAt": 0,
+    "updatedAt": 0,
+    "signatureHex": ""
+  },
+  "steps": [
+    {
+      "name": "owner suspends (manual lock) at epoch 1",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 0,
+        "epoch": 1,
+        "action": "suspend",
+        "reason": "manual-lock",
+        "signer": "owner",
+        "issuedAt": 1760000000000
+      },
+      "now": 1760000000000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|1|0|suspend|manual-lock|owner|1760000000000",
+      "signatureHex": "b05f197bc5a9393329a992cbc5d6a0afd96b4b380596d6272bdb38ad6d7f81130266e2f7d7d46d2ef133523e2c76b9b48b60a752fd48cd11c6ce613dc4028c0a",
+      "expect": {
+        "ok": true,
+        "suspended": true,
+        "epoch": 1,
+        "seq": 0
+      }
+    },
+    {
+      "name": "owner resumes at epoch 2",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 0,
+        "epoch": 2,
+        "action": "resume",
+        "reason": "owner-resume",
+        "signer": "owner",
+        "issuedAt": 1760000001000
+      },
+      "now": 1760000001000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|2|0|resume|owner-resume|owner|1760000001000",
+      "signatureHex": "567d820f59a08f97a661716c8ef3e3bc03567d3377c7f125b8c679dc867d8dde30a55b709276383f606271173f9ad7da6a8049e222871483081e7f3880b2b10d",
+      "expect": {
+        "ok": true,
+        "suspended": false,
+        "epoch": 2,
+        "seq": 0
+      }
+    },
+    {
+      "name": "owner replay of the old suspend is stale",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 0,
+        "epoch": 1,
+        "action": "suspend",
+        "reason": "manual-lock",
+        "signer": "owner",
+        "issuedAt": 1760000000000
+      },
+      "now": 1760000002000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|1|0|suspend|manual-lock|owner|1760000000000",
+      "signatureHex": "b05f197bc5a9393329a992cbc5d6a0afd96b4b380596d6272bdb38ad6d7f81130266e2f7d7d46d2ef133523e2c76b9b48b60a752fd48cd11c6ce613dc4028c0a",
+      "expect": {
+        "ok": false,
+        "code": "stale-epoch"
+      }
+    },
+    {
+      "name": "owner cannot skip an epoch",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 0,
+        "epoch": 4,
+        "action": "suspend",
+        "reason": "owner-suspend",
+        "signer": "owner",
+        "issuedAt": 1760000003000
+      },
+      "now": 1760000003000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|4|0|suspend|owner-suspend|owner|1760000003000",
+      "signatureHex": "52183bfdcd3d0d15a93144071bc372c5bae44eae2f7c2106edaf260dd65b5f4af21f0cc49c8144642a0611d5bad069581acdf5d919905fa6e2e4e924da079005",
+      "expect": {
+        "ok": false,
+        "code": "future-epoch"
+      }
+    },
+    {
+      "name": "box suspends (dead-man) in epoch 2 as seq 1",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 1,
+        "epoch": 2,
+        "action": "suspend",
+        "reason": "dead-man",
+        "signer": "box",
+        "issuedAt": 1760000004000
+      },
+      "now": 1760000004000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|2|1|suspend|dead-man|box|1760000004000",
+      "signatureHex": "000aa98756b6e6b92a87964c2bbeba53965103f1992250003d80d9dd2cf52d59acfaa96878a458b899d129a2440dcceac988a705bf96370fa79fb70432088906",
+      "expect": {
+        "ok": true,
+        "suspended": true,
+        "epoch": 2,
+        "seq": 1
+      }
+    },
+    {
+      "name": "box retry of the same seq changes nothing",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 1,
+        "epoch": 2,
+        "action": "suspend",
+        "reason": "dead-man",
+        "signer": "box",
+        "issuedAt": 1760000005000
+      },
+      "now": 1760000005000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|2|1|suspend|dead-man|box|1760000005000",
+      "signatureHex": "4a947c765ed7380dafd51ccbf3c4cac3087e57b41fee5635b9e2c4c1d789fdc1f075c8d8580aa8bd91418858b8419b331379d23d4311ab383d809cfeb51f150a",
+      "expect": {
+        "ok": true,
+        "suspended": true,
+        "epoch": 2,
+        "seq": 1
+      }
+    },
+    {
+      "name": "box cannot resume",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 2,
+        "epoch": 2,
+        "action": "resume",
+        "reason": "dead-man",
+        "signer": "box",
+        "issuedAt": 1760000006000
+      },
+      "now": 1760000006000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|2|2|resume|dead-man|box|1760000006000",
+      "signatureHex": "3f1e3e38d55edd3833c15a8958d36fc5c718cd5950535947a7ee2c8b62d0cb51e431f408316cc0de2226b9d2d5712a45a73dccc54bcad1d0e4d7f3b3ad04e301",
+      "expect": {
+        "ok": false,
+        "code": "box-cannot-resume"
+      }
+    },
+    {
+      "name": "box cannot advance the epoch",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 1,
+        "epoch": 3,
+        "action": "suspend",
+        "reason": "dead-man",
+        "signer": "box",
+        "issuedAt": 1760000007000
+      },
+      "now": 1760000007000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|3|1|suspend|dead-man|box|1760000007000",
+      "signatureHex": "c5c07377194010096db3ea626ffb57ea7139457694f37d93c6fbbbcdd8b7dbda5061709a225d039b5c0acd20675a2386c1bd9739a0d08dc339903ec6427d130e",
+      "expect": {
+        "ok": false,
+        "code": "future-epoch"
+      }
+    },
+    {
+      "name": "box cannot claim an owner reason",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 2,
+        "epoch": 2,
+        "action": "suspend",
+        "reason": "owner-suspend",
+        "signer": "box",
+        "issuedAt": 1760000008000
+      },
+      "now": 1760000008000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|2|2|suspend|owner-suspend|box|1760000008000",
+      "signatureHex": "95801abb2efc07325f1145bd7a2f898aa5f65b4a398770bcc97216727a75a8c4d1c4ba1f6135119aae9e3a151d8edad49aee2ebf12645e9d33ed2603d4967801",
+      "expect": {
+        "ok": false,
+        "code": "box-reason"
+      }
+    },
+    {
+      "name": "owner resumes at epoch 3",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 0,
+        "epoch": 3,
+        "action": "resume",
+        "reason": "owner-resume",
+        "signer": "owner",
+        "issuedAt": 1760000020000
+      },
+      "now": 1760000020000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|3|0|resume|owner-resume|owner|1760000020000",
+      "signatureHex": "8c0de255a3dc267a3360bf1164ec6eb79be71002a2f03635b74e95fb9cae3701c5e56c46755cfa11a0b6f1f239815deb5ba062de42f3966c400a451641fdf10f",
+      "expect": {
+        "ok": true,
+        "suspended": false,
+        "epoch": 3,
+        "seq": 0
+      }
+    },
+    {
+      "name": "box seq cannot jump",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 5,
+        "epoch": 3,
+        "action": "suspend",
+        "reason": "manual-lock",
+        "signer": "box",
+        "issuedAt": 1760000030000
+      },
+      "now": 1760000030000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|3|5|suspend|manual-lock|box|1760000030000",
+      "signatureHex": "91e8ecac3c18c34cb214a7ed5cb914bdf69438ba6384478d5c4ef0ae3cf26cdffc1bbf0c51073344024963225c6279ba4460db77f61f4379a8d19aa760c60e05",
+      "expect": {
+        "ok": false,
+        "code": "seq-jump"
+      }
+    },
+    {
+      "name": "a stale order is refused",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "seq": 0,
+        "epoch": 4,
+        "action": "suspend",
+        "reason": "owner-suspend",
+        "signer": "owner",
+        "issuedAt": 1760000000000
+      },
+      "now": 1760000390000,
+      "canonical": "flagship/boot-suspension/v1|home.alice.flagship.services|4|0|suspend|owner-suspend|owner|1760000000000",
+      "signatureHex": "084a3c0583241021d99d8ddd061006daac88bc8becb349f2ee51fb520b85ddb3116f20b8de5ba98d35f8d4bd4d4e7a1d661323a3de0b7e62e562aaadb7950f0b",
+      "expect": {
+        "ok": false,
+        "code": "stale-order"
+      }
+    }
+  ]
+}

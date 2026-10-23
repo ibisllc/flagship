@@ -1029,8 +1029,14 @@ test.describe("gym webapp members and app pages", () => {
     await expect(btn).toHaveText("Remove app");
     await btn.click();
     await expect(page.locator(".modal-title")).toHaveText("Remove this app?");
-    await expect(page.locator(".modal-message")).toContainText(`This uninstalls notes from ${HOME} and deletes its data there.`);
+    await expect(page.locator(".modal-message")).toContainText(`This uninstalls notes from ${HOME} and deletes its files, database, sign-ins, keys and settings there.`);
     await page.click("[data-modal-cancel]");
+    expect(m.sent(`/api/services/${SERVICE_ID}`, "DELETE")).toHaveLength(0);
+
+    // "Back up first" leaves the removal and points at Back up now.
+    await btn.click();
+    await page.click("[data-modal-extra]");
+    await expect(page.locator(".modal-title")).toHaveCount(0);
     expect(m.sent(`/api/services/${SERVICE_ID}`, "DELETE")).toHaveLength(0);
 
     await btn.click();

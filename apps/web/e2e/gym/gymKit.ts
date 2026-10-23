@@ -272,6 +272,12 @@ export class Mock {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ token: "art1.gym.mac", expiresAt: Date.now() + 86_400_000 }) });
       return;
     }
+    // N06: a stream asks for a single-use upgrade ticket first. Minting one changes nothing, so it
+    // is answered here and never counted as a write.
+    if (url.pathname.endsWith("/api/screens/ws-ticket") && req.method() === "POST") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ticket: "gym-ticket", expiresInMs: 30_000 }) });
+      return;
+    }
     this.calls.push(call);
     for (const rule of this.rules) {
       if (rule.method && rule.method !== call.method) continue;

@@ -1,3 +1,4 @@
+import { hkdfFromSwk } from "./swkDerive.js";
 import { gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
@@ -25,13 +26,7 @@ export const TAG_PB_MANIFEST_DEPOSIT = "flagship/pb-manifest/v1";
 const INFO_PB_MANIFEST_KEY = "flagship.pb-manifest.v1";
 
 export function deriveBackupManifestKey(swk: Bytes): Bytes {
-  return hkdf(
-    sha256,
-    swk,
-    new Uint8Array(0),
-    new TextEncoder().encode(INFO_PB_MANIFEST_KEY),
-    32,
-  );
+  return hkdfFromSwk(swk, new Uint8Array(0), INFO_PB_MANIFEST_KEY);
 }
 
 export interface SealedBackupManifest {

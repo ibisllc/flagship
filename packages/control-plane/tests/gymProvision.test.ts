@@ -119,7 +119,7 @@ function composeRecipe(opts: { issuedAt?: number; expiresAt?: number; adminRootP
     registrationUrl: `https://${CONTROL_APEX}/api/server/register`,
     authCode,
     authCodeUserSignature: authCodeSig,
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: RCK_PUB,
   };
   const blobSig = signInstallBlob(blob, IRK);
@@ -143,7 +143,7 @@ function composeRecipe(opts: { issuedAt?: number; expiresAt?: number; adminRootP
       ...(opts.adminRootPub ? { adminRootPubKey: hex(opts.adminRootPub) } : {}),
     },
     authCodeUserSignature: hex(authCodeSig),
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: hex(RCK_PUB),
   };
   return { blob, blobJson, blobSigHex: hex(blobSig) };

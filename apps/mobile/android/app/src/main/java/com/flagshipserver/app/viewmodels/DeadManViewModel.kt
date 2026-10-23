@@ -16,7 +16,9 @@ import com.flagshipserver.app.api.DeadManAffirmRequest
 import com.flagshipserver.app.api.DeadManPolicyInner
 import com.flagshipserver.app.api.DeadManPolicyRequest
 import com.flagshipserver.app.api.LockPowerClient
+import com.flagshipserver.app.core.BootLock
 import com.flagshipserver.app.core.DeadManAffirmation
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.PowerMode
@@ -60,7 +62,15 @@ class DeadManViewModel(
     private val client: LockPowerClient = LockPowerClient(),
     private val now: () -> Long = { System.currentTimeMillis() },
     private val nonceGen: () -> ByteArray = { ByteArray(16).also(rng::nextBytes) },
+    /** Revokes the server's auto-unlock leases before the switch is enabled, so none outlives it. */
+    private val bootLock: BootLock? = null,
+    private val irkSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    private val irkPubHex: suspend () -> String = { Keystore.irkPubHex() },
 ) : ViewModel() {
+    /** The first affirmation deadline the box set when the switch was last enabled (null from an older box). */
+    var lastPolicyLeaseExpiry: Long? = null
+        private set
+
     private val _phase = MutableStateFlow<DeadManPhase>(DeadManPhase.Idle)
     val phase: StateFlow<DeadManPhase> = _phase.asStateFlow()
 
@@ -78,6 +88,20 @@ class DeadManViewModel(
         if (user.isNullOrEmpty()) {
             _phase.value = DeadManPhase.Failed("No active account on this device.")
             return false
+        }
+        // Turning the switch on: first remove every auto-unlock lease, because none may outlive the
+        // affirmation. Auto-unlock re-arms at your next phone approval, bounded by the deadline.
+        if (enabled && bootLock != null) {
+            try {
+                bootLock.revokeAllLeases(serverDomain, irkSigner("Remove auto-unlock for $serverDomain"), irkPubHex())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                _phase.value = DeadManPhase.Failed(
+                    "Couldn't remove this server's auto-unlock lease, so the lock-down was not turned on. ${UserErrorText.reason(e)}",
+                )
+                return false
+            }
         }
         _phase.value = DeadManPhase.Signing
         val irk: Ed25519Sign
@@ -108,7 +132,7 @@ class DeadManViewModel(
 
         _phase.value = DeadManPhase.Posting
         try {
-            client.setDeadManPolicy(
+            val ack = client.setDeadManPolicy(
                 serverDomain,
                 DeadManPolicyRequest(
                     request = DeadManPolicyInner(
@@ -122,6 +146,7 @@ class DeadManViewModel(
                     signature = HexUtil.encode(signature),
                 ),
             )
+            lastPolicyLeaseExpiry = ack.leaseExpiry?.takeIf { it > 0 }
         } catch (e: HttpException) {
             _phase.value = DeadManPhase.Failed(friendly(e))
             return false

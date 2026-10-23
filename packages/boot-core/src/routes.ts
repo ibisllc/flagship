@@ -14,17 +14,29 @@
  *   POST   /api/boot/request                        box-STK    announce need → notify pipe
  *   GET    /api/boot/response/:serverDomain/:nonce  box-STK    poll for the sealed response
  *   POST   /api/boot/response                       owner-IRK  post the sealed response
+ *   DELETE /api/boot/lease/:serverDomain            owner-IRK  revoke EVERY lease for the server
+ *   PUT    /api/boot/suspension                     owner-IRK  lock / resume (new epoch)
+ *   POST   /api/boot/suspension/box                 box-STK    set-only lock (dead-man, manual)
+ *   GET    /api/boot/suspension/:serverDomain       owner|box  read the lock state
  */
 
 import {
   verifyAutoUnlockLeaseV2,
+  parseWatchBootDeposit,
+  verifyWatchBootDelegate,
+  WATCH_BOOT_MAX_MS,
+  verifyBootSuspension,
+  initialSuspension,
+  type BootSuspensionOrder,
   verifySecretRequest,
   type AutoUnlockLeaseV2,
   type SecretPurpose,
   type SecretRequest,
 } from "@flagship/protocol";
 import type {
+  BootSuspensionStorage,
   BoxSealedLeaseStorage,
+  WatchBootKeyStorage,
   SecretMailboxStorage,
   SecretMailboxPurpose,
 } from "@flagship/storage";
@@ -55,6 +67,13 @@ const PURPOSES: ReadonlySet<SecretMailboxPurpose> = new Set<SecretMailboxPurpose
 
 export interface BootRouteDeps {
   boxSealedLeases: BoxSealedLeaseStorage;
+  /**
+   * The disk key sealed to a watch's boot-only key, so a start-up can be approved from the watch with the
+   * phone locked (option (a) in docs/watch-boot-approval-without-unlock.md). Optional: without it the
+   * routes answer 404 and a delegate's approval is the signature alone, as before.
+   */
+  watchBootKeys?: WatchBootKeyStorage;
+  bootSuspensions: BootSuspensionStorage;
   secretMailbox: SecretMailboxStorage;
   directory: DirectoryClient;
   notify: NotifyPipe;
@@ -75,11 +94,17 @@ const ROUTE_RE = {
   LEASE_DEPOSIT: /^\/api\/boot\/lease$/,
   LEASE_GET: /^\/api\/boot\/lease\/([^/]+)$/,
   LEASE_REVOKE: /^\/api\/boot\/lease\/([^/]+)\/([^/]+)$/,
+  LEASE_REVOKE_ALL: /^\/api\/boot\/lease\/([^/]+)$/,
+  SUSPENSION_SET: /^\/api\/boot\/suspension$/,
+  SUSPENSION_BOX: /^\/api\/boot\/suspension\/box$/,
+  SUSPENSION_GET: /^\/api\/boot\/suspension\/([^/]+)$/,
   REQUEST_POST: /^\/api\/boot\/request$/,
   RESPONSE_GET: /^\/api\/boot\/response\/([^/]+)\/([^/]+)$/,
   RESPONSE_POST: /^\/api\/boot\/response$/,
   SHARE_PENDING: /^\/api\/boot\/share\/pending\/([^/]+)$/,
   SHARE_KEY: /^\/api\/boot\/share\/key\/([^/]+)$/,
+  WATCH_KEY_DEPOSIT: /^\/api\/boot\/watch-key$/,
+  WATCH_KEY: /^\/api\/boot\/watch-key\/([^/]+)$/,
 } as const;
 
 /**
@@ -112,6 +137,27 @@ export async function routeBoot(
       decodeURIComponent(g[2]!),
       body,
     );
+  }
+  if (m === "DELETE" && (g = path.match(ROUTE_RE.LEASE_REVOKE_ALL))) {
+    return handleRevokeAllLeases(deps, path, authHeader, decodeURIComponent(g[1]!));
+  }
+  if (m === "PUT" && ROUTE_RE.WATCH_KEY_DEPOSIT.test(path)) {
+    return handleDepositWatchKey(deps, path, authHeader, body);
+  }
+  if (m === "GET" && (g = path.match(ROUTE_RE.WATCH_KEY))) {
+    return handleGetWatchKey(deps, path, authHeader, decodeURIComponent(g[1]!));
+  }
+  if (m === "DELETE" && (g = path.match(ROUTE_RE.WATCH_KEY))) {
+    return handleRevokeWatchKey(deps, path, authHeader, decodeURIComponent(g[1]!));
+  }
+  if (m === "PUT" && ROUTE_RE.SUSPENSION_SET.test(path)) {
+    return handleSetSuspension(deps, path, authHeader, body, "owner");
+  }
+  if (m === "POST" && ROUTE_RE.SUSPENSION_BOX.test(path)) {
+    return handleSetSuspension(deps, path, authHeader, body, "box");
+  }
+  if (m === "GET" && (g = path.match(ROUTE_RE.SUSPENSION_GET)) && g[1] !== "box") {
+    return handleGetSuspension(deps, path, authHeader, decodeURIComponent(g[1]!));
   }
   if (m === "POST" && ROUTE_RE.REQUEST_POST.test(path)) {
     return handlePostRequest(deps, path, authHeader, body);
@@ -232,6 +278,104 @@ async function handleDepositLease(
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// PUT /api/boot/suspension (owner) and POST /api/boot/suspension/box (STK):
+// set the durable boot suspension (SEC-LOCK-001). The body is an order signed
+// by the same key the Authorization header names; the record keeps that
+// signature so the box and the phones can check it themselves.
+// ──────────────────────────────────────────────────────────────────────
+
+const SUSPENSION_REASONS = new Set(["manual-lock", "dead-man", "box-fail-closed", "owner-suspend", "owner-resume"]);
+
+async function handleSetSuspension(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  body: unknown,
+  signer: "owner" | "box",
+): Promise<BootResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const b = body as { order?: Record<string, unknown>; signature?: unknown };
+  const o = b?.order ?? {};
+  if (
+    typeof o.serverDomain !== "string" || o.serverDomain.length === 0 ||
+    !Number.isSafeInteger(o.epoch) || !Number.isSafeInteger(o.seq) || !Number.isSafeInteger(o.issuedAt) ||
+    (o.action !== "suspend" && o.action !== "resume") ||
+    typeof o.reason !== "string" || !SUSPENSION_REASONS.has(o.reason) ||
+    o.signer !== signer ||
+    typeof b?.signature !== "string" || !HEX128.test(b.signature.toLowerCase())
+  ) {
+    return { status: 400, body: { error: "malformed body" } };
+  }
+  const order = o as unknown as BootSuspensionOrder;
+
+  const auth = await gate(deps.gate, { role: signer, serverDomain: order.serverDomain, method: signer === "owner" ? "PUT" : "POST", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(b.signature);
+  } catch {
+    return { status: 400, body: { error: "invalid hex" } };
+  }
+  if (!verifyBootSuspension(order, sig, hexToBytes(auth.pubKeyHex))) {
+    return { status: 403, body: { error: "invalid suspension signature" } };
+  }
+
+  let outcome;
+  try {
+    outcome = await deps.bootSuspensions.apply(order, b.signature.toLowerCase(), now());
+  } catch {
+    // Could not record it: say so. The caller must not believe it is locked.
+    return { status: 503, body: { error: "could not record the suspension", durable: false } };
+  }
+  if (!outcome.ok) {
+    return { status: 409, body: { error: "suspension refused", code: outcome.code, current: publicSuspension(outcome.current) } };
+  }
+  let leasesRevoked = 0;
+  if (outcome.state.suspended) {
+    // Anything deposited before a lock must not come back on resume: the owner
+    // deposits a fresh, bounded lease after resuming.
+    try {
+      leasesRevoked = await deps.boxSealedLeases.revokeAll(order.serverDomain);
+      await deps.watchBootKeys?.revoke(order.serverDomain);
+    } catch {
+      return { status: 503, body: { error: "suspended, but the leases could not be removed", durable: true, state: publicSuspension(outcome.state) } };
+    }
+  }
+  return { status: 200, body: { ok: true, durable: true, changed: outcome.changed, leasesRevoked, state: publicSuspension(outcome.state) } };
+}
+
+async function handleGetSuspension(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  serverDomain: string,
+): Promise<BootResponse> {
+  const auth = await gate(deps.gate, { role: ["owner", "box"], serverDomain, method: "GET", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  try {
+    const st = (await deps.bootSuspensions.get(serverDomain)) ?? initialSuspension(serverDomain);
+    return { status: 200, body: publicSuspension(st) };
+  } catch {
+    return { status: 503, body: { error: "could not read the suspension" } };
+  }
+}
+
+function publicSuspension(st: ReturnType<typeof initialSuspension>) {
+  return {
+    serverDomain: st.serverDomain,
+    suspended: st.suspended,
+    epoch: st.epoch,
+    seq: st.seq,
+    reason: st.reason,
+    signer: st.signer,
+    orderIssuedAt: st.orderIssuedAt,
+    updatedAt: st.updatedAt,
+    signature: st.signatureHex,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // GET /api/boot/lease/:serverDomain  — box-STK fetch of the sealed lease.
 // ──────────────────────────────────────────────────────────────────────
 
@@ -246,7 +390,20 @@ async function handleGetLease(
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
 
   const row = await deps.boxSealedLeases.release(serverDomain, now());
-  if (!row) return { status: 404, body: { error: "no active lease" } };
+  if (!row) {
+    // release() hands out nothing for a suspended server; say so, so the box
+    // asks the phone instead of retrying. Never reveals more than the lock bit.
+    let suspended = false;
+    try {
+      const st = await deps.bootSuspensions.get(serverDomain);
+      suspended = st?.suspended === true;
+    } catch {
+      suspended = true;
+    }
+    return suspended
+      ? { status: 423, body: { error: "suspended", suspended: true } }
+      : { status: 404, body: { error: "no active lease" } };
+  }
   return {
     status: 200,
     body: {
@@ -281,6 +438,24 @@ async function handleRevokeLease(
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
 
   const removed = await deps.boxSealedLeases.revoke(serverDomain, leaseId);
+  return { status: 200, body: { ok: true, removed } };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// DELETE /api/boot/lease/:serverDomain  — owner-IRK revoke of every lease.
+// Used when the dead-man switch is switched on: no lease deposited before it
+// may outlive the affirmation (SEC-DEADMAN-001).
+// ──────────────────────────────────────────────────────────────────────
+
+async function handleRevokeAllLeases(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  serverDomain: string,
+): Promise<BootResponse> {
+  const auth = await gate(deps.gate, { role: "owner", serverDomain, method: "DELETE", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  const removed = await deps.boxSealedLeases.revokeAll(serverDomain);
   return { status: 200, body: { ok: true, removed } };
 }
 
@@ -515,6 +690,16 @@ async function handlePostResponse(
     authHeader,
   );
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  // A locked server is started from the phone with the account key, never by a delegate (SEC-LOCK-001).
+  if (auth.role === "delegate") {
+    let locked = true;
+    try {
+      locked = (await deps.bootSuspensions.get(resp.serverDomain))?.suspended === true;
+    } catch {
+      locked = true;
+    }
+    if (locked) return { status: 423, body: { error: "this server is locked: approve its start-up from your phone", locked: true } };
+  }
   // A share may approve the disk unlock only; the entitlement is the owner's.
   if (auth.role === "share" && resp.purpose !== "unlock-key") {
     return { status: 403, body: { error: "a share can only approve the disk unlock" } };
@@ -595,4 +780,115 @@ async function handleShareKey(
   const copy = await deps.directory.shareUnlockForMember?.(serverDomain, auth.pubKeyHex);
   if (!copy) return { status: 404, body: { error: "no copy for this share" } };
   return { status: 200, body: { sealedKey: copy.sealedKeyHex } };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Watch boot key (option (a), docs/watch-boot-approval-without-unlock.md).
+// ──────────────────────────────────────────────────────────────────────
+
+/** PUT /api/boot/watch-key: an admin device deposits the disk key sealed to the watch's boot-only key. */
+async function handleDepositWatchKey(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  body: unknown,
+): Promise<BootResponse> {
+  if (!deps.watchBootKeys) return { status: 404, body: { error: "not available" } };
+  const now = deps.now ?? (() => Date.now());
+  const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+  const dep = parseWatchBootDeposit((body as { deposit?: unknown } | null)?.deposit);
+  if (!dep) return { status: 400, body: { error: "malformed body" } };
+  if (dep.expiresAt <= now()) return { status: 400, body: { error: "expiresAt already past" } };
+  if (dep.expiresAt - now() > WATCH_BOOT_MAX_MS) return { status: 400, body: { error: "a watch boot key lasts at most 7 days" } };
+  if (Math.abs(now() - dep.issuedAt) > maxAgeMs) return { status: 400, body: { error: "stale deposit" } };
+
+  const auth = await gate(deps.gate, { role: "owner", serverDomain: dep.serverDomain, method: "PUT", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  if (!(await deps.directory.boxStkForDomain(dep.serverDomain))) return { status: 404, body: { error: "unknown server" } };
+
+  // The signing key must be an active boot-approval delegate of this account, and the copy may not
+  // outlive it.
+  const delegates = await deps.directory.activeBootDelegatesForDomain(dep.serverDomain);
+  const delegate = delegates?.find((d) => equalHex(d.pubKeyHex, dep.delegatePubHex));
+  if (!delegate) return { status: 403, body: { error: "that watch is not an active delegate of this account" } };
+  if (dep.expiresAt > delegate.expiresAt) return { status: 400, body: { error: "a copy cannot outlast its watch delegate" } };
+
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(dep.signatureHex);
+  } catch {
+    return { status: 400, body: { error: "invalid hex" } };
+  }
+  if (!verifyWatchBootDelegate(dep, sig, hexToBytes(auth.pubKeyHex))) return { status: 403, body: { error: "invalid attestation signature" } };
+
+  await deps.watchBootKeys.put({
+    serverDomain: dep.serverDomain.toLowerCase(),
+    delegatePubHex: dep.delegatePubHex,
+    decryptPubHex: dep.decryptPubHex,
+    sealedKeyHex: dep.sealedKeyHex,
+    keySha256Hex: dep.keySha256Hex,
+    issuedAt: dep.issuedAt,
+    expiresAt: dep.expiresAt,
+    signatureHex: dep.signatureHex,
+    depositedAt: now(),
+  });
+  return { status: 200, body: { ok: true, expiresAt: dep.expiresAt } };
+}
+
+/**
+ * GET /api/boot/watch-key/:serverDomain. The delegate gets ITS copy (sealed, with the attestation so it
+ * can check what it opens); the owner gets only who holds a copy and until when. A locked server gives the
+ * delegate nothing.
+ */
+async function handleGetWatchKey(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  serverDomain: string,
+): Promise<BootResponse> {
+  if (!deps.watchBootKeys) return { status: 404, body: { error: "not available" } };
+  const now = deps.now ?? (() => Date.now());
+  const auth = await gate(deps.gate, { role: ["owner", "delegate"], serverDomain, method: "GET", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  if (auth.role === "owner") {
+    const rows = await deps.watchBootKeys.list(serverDomain, now());
+    return { status: 200, body: { copies: rows.map((r) => ({ delegatePubHex: r.delegatePubHex, decryptPubHex: r.decryptPubHex, expiresAt: r.expiresAt, depositedAt: r.depositedAt })) } };
+  }
+  let locked = true;
+  try {
+    locked = (await deps.bootSuspensions.get(serverDomain))?.suspended === true;
+  } catch {
+    locked = true;
+  }
+  if (locked) return { status: 423, body: { error: "this server is locked: approve its start-up from your phone", locked: true } };
+  const row = await deps.watchBootKeys.release(serverDomain, auth.pubKeyHex, now());
+  if (!row) return { status: 404, body: { error: "no copy for this watch" } };
+  return {
+    status: 200,
+    body: {
+      deposit: {
+        serverDomain: row.serverDomain,
+        delegatePubHex: row.delegatePubHex,
+        decryptPubHex: row.decryptPubHex,
+        keySha256Hex: row.keySha256Hex,
+        issuedAt: row.issuedAt,
+        expiresAt: row.expiresAt,
+        sealedKeyHex: row.sealedKeyHex,
+        signatureHex: row.signatureHex,
+      },
+    },
+  };
+}
+
+/** DELETE /api/boot/watch-key/:serverDomain: the owner takes every watch copy for the server away. */
+async function handleRevokeWatchKey(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  serverDomain: string,
+): Promise<BootResponse> {
+  if (!deps.watchBootKeys) return { status: 404, body: { error: "not available" } };
+  const auth = await gate(deps.gate, { role: "owner", serverDomain, method: "DELETE", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  return { status: 200, body: { ok: true, removed: await deps.watchBootKeys.revoke(serverDomain) } };
 }

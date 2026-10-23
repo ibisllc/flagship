@@ -24,9 +24,9 @@ force-pushes and keeps its progress in `~/.flagship-release/state.json` so a fai
 run resumes at the failed step. The commands below stay as the reference it follows.
 
 ```sh
-bash scripts/release.sh --list                # the 27 steps, with phase, commands, gate, rollback
-bash scripts/release.sh --phase A             # deploy the real state (steps 1-16), before the Windows test
-bash scripts/release.sh --phase B             # after the Windows results (steps 17-27)
+bash scripts/release.sh --list                # the 34 steps, with phase, commands, gate, rollback
+bash scripts/release.sh --phase A             # deploy the real state (steps 1-21), before the Windows test
+bash scripts/release.sh --phase B             # after the Windows results (steps 22-34)
 bash scripts/release.sh --dry-run --phase A   # print every command, run nothing
 bash scripts/release.sh --status              # pinned sha, finished steps, next step
 bash scripts/release.sh --from 10             # resume at, or --only 10 to run only, one step
@@ -50,10 +50,29 @@ wildcard starts answering them. Adding the wildcard first is safe for existing
 accounts, whose own records keep answering. `zone-health` ships with the `.com`
 deploy, so the DNS step is checked with `dig` and `zone-health` runs as a post-check
 of the `.com` deploy. The maintenance notice (12.1) is its own step at the start of
-phase B. What it cannot do for you: the gym run (it prints the checklist and you type
-`verified`), the Cloudflare dashboard DNS records, the YubiKey and PIN prompts (the
+phase B. What it cannot do for you: the DNS canary after the gym run (the gym itself runs from the
+script: `scripts/gym-release-run.sh`, gated on its exit code), the Cloudflare dashboard DNS records, the YubiKey and PIN prompts (the
 tools ask on `/dev/tty`), the App Store Connect and Play Console submissions, and
 reading the Windows results (typed `windows-ok` before the scrub).
+
+### What the owner does by hand in a release (0.3 and later)
+
+The script stops and asks at each of these; nothing else needs you.
+
+| When | What you do | Step |
+|---|---|---|
+| once | make the two release catalog keys on an offline stick; the script pins the root and sets `RELEASE_CATALOG_TIMESTAMP_KEY` | 2b |
+| every release | the product version and the store numbers (they must climb) | 0b |
+| every release | YubiKey PIN + touch: the CA lease, the release endorsement, both box artifacts | 2, 3, 3b |
+| every release | the catalog's security version, floor and rollout percent; the root key file from the stick | 3c |
+| once | prod secrets `FLAGSHIP_RECOVERY_PROOF_SECRET` (passkey recovery challenges; `openssl rand -hex 32`) on prod AND the gym Worker | 5 |
+| once | a public test repo with tags `v1` and `v2`, named in `GYM_SYNC_REPO` (the gym's upstream-sync group skips without it) | 6 |
+| every release | accept or refuse gym skips (exit 3); the DNS canary | 6 |
+| once | the adapter attestation key, complaint salt and review key on `.com`; the key's public half in `release/adapter-vetting-keys.json` | 5 |
+| once | the Public Suffix List request for `flagship.services` (`docs/psl-submission-flagship-services.md`) | (outside the script) |
+| every release | read `i18n/REVIEW.md` lines (native readers); the voi.ci canonical switch after the gym's named-links group | 11c |
+| every release | App Store Connect and Play Console submissions (iOS, Android, Wear) | 11 |
+| after 0.3 is live | publish the held hall of fame entry (`hof-jay`) | 11b |
 
 Two things to know before `--phase A`: step 8 (backup prerequisites, runbook step 1b) must be
 done before the `.com` deploy because that deploy removes the Worker's own D1 backup, and the
@@ -97,6 +116,16 @@ Known state at the time of writing (re-check, do not trust):
   `gym` is rebased by `scripts/gym-refresh.sh` (step 6).
 - The arm64 VM appliance failed to build until `35e207cda`; its first green
   `main` run is the one named in step 9.
+
+## 0b. Bump the product version
+
+One product version on every surface (`release/version.json`, the only file to edit). The script asks
+for the new `product` (0.3 for this release), the label, the iOS marketing version and build, the
+Android versionCode (above the highest in Play's App bundle explorer: any upload burns a code) and the
+Studio version, writes the file, runs `node scripts/check-versions.mjs --write` (every surface's copy)
+and `node scripts/check-versions.mjs`, commits "Bump the product version to <v>", pushes to `main` and
+re-pins. A run that keeps the version skips it. Store numbers already uploaded are burned: a revert
+takes the next ones.
 
 ## 1. Cloudflare plan and DNS limits (do this first)
 
@@ -237,6 +266,28 @@ shows a lease whose `notAfter` is the new date after step 7.
 Rollback: a lease is additive (overlapping leases are fine). Nothing to undo;
 a wrong one is superseded by signing another.
 
+## 2b. Release catalog keys (once)
+
+Boxes built from a commit that pins `release/catalog-root.json` follow the signed release catalog
+(SECURITY-HARDENING-PLAN.md 18.13, N13): no update, first-boot move, co-manager update or rollback
+happens unless the catalog lists it, above the security floor, inside its rollout, and fresh. Two keys,
+made once, kept OFFLINE (an encrypted stick, never this repo):
+
+```sh
+npx tsx tools/release-catalog/catalog.ts keygen --id root-1 --out <stick>/catalog-root-1.key.json        # prints the public key
+npx tsx tools/release-catalog/catalog.ts keygen --id timestamp-1 --out <stick>/catalog-timestamp-1.key.json
+npx tsx tools/release-catalog/catalog.ts root --key root-1=<pub> --key timestamp-1=<pub> \
+  --role root=root-1 --role targets=root-1 --role snapshot=root-1 --role timestamp=timestamp-1 \
+  --version 1 --expires-days 730 --out release/catalog-root.json
+gh secret set RELEASE_CATALOG_TIMESTAMP_KEY < <stick>/catalog-timestamp-1.key.json
+```
+
+The timestamp key is the only online one: `.github/workflows/release-catalog-timestamp.yml` re-signs
+`catalog-timestamp.json` daily (a box treats an expired timestamp as a stale catalog and takes no new
+update, never stops what runs). A new root (rotating a key) is signed by the old root and published as
+`catalog-root-<v>.json` beside `catalog-root.json`; boxes walk the chain. Losing the root key means
+re-pinning a root in a release every box must reach by an owner order.
+
 ## 3. Endorse a server release (only if the box code changed)
 
 Boxes only run signed code (`docs/maintainer-ca-endorsement.md`). A new box
@@ -288,6 +339,39 @@ Check: the printed commit is the one you signed; `curl -s https://flagshipserver
 Rollback: an endorsement cannot be un-signed; a bad one is handled by not
 ordering the update and by endorsing a newer fix. A box whose update fails its
 health gate rolls itself back.
+
+## 3b. Build, sign and publish the box artifacts
+
+A box installs only a signed, reproducible artifact of one exact commit (SEC-INSTALL-001):
+
+```sh
+gh workflow run box-artifact.yml --ref main -f commit=<PIN> -f sequence=<N>     # N above release/box-release.json's
+gh run watch <run> --exit-status && gh run download <run> -D <dir>
+npx tsx tools/box-artifact/build.ts sign --manifest <name>.manifest.unsigned.json --out <name>.manifest.json \
+  --signer-cmd "node scripts/yubikey-sign.mjs"                                   # PIN + touch, per arch
+npx tsx tools/box-artifact/build.ts verify --manifest <name>.manifest.json --artifact <name>.tar.gz --commit <PIN> --arch <arch>
+npx tsx tools/box-artifact/release-index.ts <dir>                                # merged with the published releases.json
+wrangler r2 object put flagship-iso/<file> --file <file> --remote                # both arches, manifests, releases.json
+bash scripts/publish-gvisor-mirror.sh --skip-if-at https://flagshipserver.com/build/iso
+node scripts/gen-box-release.mjs --write && node scripts/repin-bootstrap-sha.mjs --write
+```
+
+Then `release/box-release.json` names the commit and sequence, the generated constants follow, and the
+bootstrap byte pin (TS and Swift builders) moves with it; the script commits "Install box release",
+pushes and re-pins. Gate: both manifests verify against `release/box-artifact-trust.json` and
+`https://flagshipserver.com/build/iso/<name>.manifest.json` answers 200. Rollback: point
+`box-release.json` back at the previous commit (its artifact stays in R2); never reuse a sequence.
+
+## 3c. Sign and publish the release catalog
+
+Skipped while no root is pinned. The script adds this release to `release/catalog-releases.json` with
+the security version (raise it above every listed release; it is what "never roll back below" counts),
+the floor (raise it only when an older release must stop being installable, e.g. after a security fix)
+and the rollout percent, then signs targets, snapshot and timestamp with the root key from the stick
+(chaining the timestamp version from the published one), uploads `catalog-{targets,snapshot,timestamp}.json`
+to `flagship-iso` (the pinned root ships inside the release; `catalog-root.json` is only for a signed
+rotation), checks they are served, starts the timestamp workflow once and
+commits the list. Rollback: sign a new targets version without the release (a version never goes down).
 
 ## 4. Pending D1 migrations
 
@@ -347,8 +431,29 @@ recent work: `ACCOUNT_READ_TOKEN_SECRET` (`docs/account-read-token.md`),
 Flagship Inference `FLAGSHIP_INFERENCE_TOKEN_SECRET` + `FLAGSHIP_INFERENCE_ENDPOINT`
 (`infra/inference/README.md`; also the shim's own `UPSTREAM_*` secrets, which the
 owner still has to choose).
+Release 0.3: `FLAGSHIP_RECOVERY_PROOF_SECRET` (keys the one-use passkey recovery challenges,
+`openssl rand -hex 32 | wrangler secret put FLAGSHIP_RECOVERY_PROOF_SECRET`; without it the passkey
+check is off and recovery takes the passphrase-only path) and `FLAGSHIP_TOTP_KEK` if the optional TOTP
+extra is to stay on. Set both on the gym Worker too.
+Community adapters (SEC-ADAPTER-002, `docs/repo-adapters.md`): `ADAPTER_ATTESTATION_SIGNING_KEY` (an Ed25519
+seed, `openssl rand -hex 32`; keep an offline copy), `ADAPTER_COMPLAINT_SALT` (`openssl rand -hex 32`; without
+it complaints never withdraw anything) and `ADAPTER_REVIEW_ANTHROPIC_KEY` (without it nothing is vetted). Boxes
+turn adapter lookup on only once the key's public half is in `release/adapter-vetting-keys.json`
+(`{pubHex, notBefore, notAfter}`) in an endorsed box release; D1 migration 0113 goes before the `.com` deploy.
 
-## 6. Gym refresh and live verification of the root wildcard (GATE: nothing deploys to prod until this passes)
+## 6. Gym refresh and live verification (GATE: nothing deploys to prod until this passes)
+
+Release 0.3 and later: the script runs `bash scripts/gym-release-run.sh` from its worktree. It runs
+`gym-refresh.sh`, takes the gym lock (a file naming its holder; exit 4 while another session holds it),
+runs EVERY live group (`npx tsx tools/live-e2e/shared-run.ts --list`), the 0.3 groups included
+(`tools/live-e2e/groups/release03/`: first contact and the server code, the per-server `*.<user>`
+certificate and app names, cross-owner chat, passkey recovery, origin generations, the release catalog,
+the policed browser, upstream sync, keyd custody), tears the fleet down and exits 0 (go), 3 (nothing
+failed, something skipped: you type `accept-skips` only if every skip is an owner item you accept) or
+non-zero (no-go). `GYM_START_REF=origin/gym-ux` runs a UX branch's gym. The upstream-sync group needs
+`GYM_SYNC_REPO`; the passkey group needs `FLAGSHIP_RECOVERY_PROOF_SECRET` on the gym Worker.
+
+The root-wildcard checks below stay part of the same run.
 
 The root-wildcard change (`docs/wildcard-dns.md`) rewrites how every account's
 names resolve and how every certificate is issued, so it is proven live on the
@@ -575,6 +680,19 @@ server list.
 Rollback: `cd apps/com && npx wrangler deployments list && npx wrangler rollback <version-id>`
 (code only; custom domains and D1 are untouched).
 
+## 7a. Deploy the DNS broker
+
+`apps/dns-broker` is the only holder of the Cloudflare DNS token; `.com` asks it to write challenge
+TXT records under a policy (an account's `_acme-challenge.<user>` record needs the account's admin-signed
+server-wildcard grant). Deploy it before `.com`, whose new code sends the grant:
+
+```sh
+cd apps/dns-broker && npx wrangler deployments list && npm run deploy && npx wrangler deployments list
+```
+
+Rollback: `npx wrangler rollback` in `apps/dns-broker` (the old broker refuses the account-wide record,
+so new servers fall back to their own names only).
+
 ## 8. Deploy `.services` (Fly): needed, one image
 
 The earlier wildcard change adds the relay's uniform drop timing for an
@@ -792,6 +910,23 @@ review login, and unlock an auto-unlock server.
 
 Rollback: a store build cannot be recalled; halt the rollout in the console and
 ship a higher version. The notice mechanism (step 12) can ask people to update.
+
+## 11b. Publish the hall of fame entry
+
+After 0.3 is live (never before: the entry describes what 0.3 fixed), merge the local branch `hof-jay`
+(the held entry crediting the reviewer; `apps/web/public/security/`) into `main` and redeploy `.com`.
+The first commit of `release/0.3` addresses the reported issues alone, so the write-up can point at it.
+The script skips the step when the branch is absent.
+
+## 11c. Translations, store art and voi.ci
+
+From `feat/UX` once it is merged: `npm run i18n` (every user-facing string goes through the
+translation system; the gate fails on a missing key or a stale native output), the native review in
+`i18n/REVIEW.md` (recovery, pairing, unlock and backup wording first; you type `reviewed`),
+`npm run store-assets:release-check` (store screenshots and banners per language), and the voi.ci
+canonical links: `VOICI_CANONICAL = "1"` in `apps/com/wrangler.toml` once the gym's named-links group
+is green, shipped by the phase B `.com` redeploy. The D1 migrations go in number order (0110, 0111,
+0112); the webapp shell number and the compatibility matrix move with the UX merge.
 
 ## 12. The pre-GA scrub, the reap and the maintenance notice
 

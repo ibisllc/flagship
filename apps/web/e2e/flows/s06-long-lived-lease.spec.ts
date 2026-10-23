@@ -69,6 +69,10 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
       body: JSON.stringify({ pods: [{ serverDomain: identity.serverFqdn, identityPubKey: bytesToHex(identity.stk.publicKey), revokedAt: null }] }),
     }),
   );
+  // SEC-LOCK-001: a lease is deposited only after the boot service says the server is not locked.
+  await page.route("**/api/boot/suspension/*", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ suspended: false, epoch: 0, generation: 0 }) }),
+  );
   await page.route("**/api/server/*/unlock-key/leases-v2", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ leases: [] }) }),
   );

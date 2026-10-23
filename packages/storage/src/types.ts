@@ -9,6 +9,7 @@
  */
 
 import type { MeterBatchEntry, MeterBatchResult, MeterCounter, MeterStore } from "@ibisllc/billing-metering";
+import type { BootSuspensionOrder, BootSuspensionState, SuspensionOutcome } from "@flagship/protocol";
 import type { ServerShareStorage } from "./serverShares.js";
 import type { ServerOrderStorage } from "./serverOrders.js";
 
@@ -399,6 +400,18 @@ export interface ProvisionStatusRecord {
   updatedAt: number;
   /** Append-only history of every phase report, oldest first. */
   history: ProvisionStatusHistoryEntry[];
+  /**
+   * What Studio read on the console of a VM it hosts for this order: the server's key and Studio's
+   * MAC over it (`flagship/server-code-seen/v1`), newest last, a few at most. `.com` cannot check the
+   * MAC (it lacks the key); the phone does.
+   */
+  serverSeen?: ServerSeenEntry[];
+}
+
+export interface ServerSeenEntry {
+  stkPubHex: string;
+  macHex: string;
+  at: number;
 }
 
 export interface ProvisionStatusStorage {
@@ -415,6 +428,8 @@ export interface ProvisionStatusStorage {
   ): Promise<void>;
   /** Read the full record (latest fields + history), or null when absent. */
   getProvisionStatus(serial: string): Promise<ProvisionStatusRecord | null>;
+  /** Keep one Studio report beside the order's status (the newest `max`, a repeat replaces itself). False when the order has no status yet. */
+  addServerSeen(serial: string, entry: ServerSeenEntry, max: number): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -474,6 +489,7 @@ export type AuditEventKind =
   // where a recovery they did not start becomes visible to them.
   | "re-pair-initiated"
   | "re-pair-expired"
+  | "re-pair-vetoed"
   // P13 — IRK-signed user-initiated server revocation
   // (POST /api/server-registry/revoke). Reason ∈ {lost, stolen,
   // decommissioned}. Cascades through every active boot-unlock lease
@@ -668,6 +684,23 @@ export interface WebauthnRecoveryRecord {
    * deriving a different PRF output.
    */
   prfSaltHashHex?: string;
+  /**
+   * N03 — the signed v2 envelope this row was written under. Absent on a v1 (legacy) row, whose
+   * escrow fields carry no signature. `signedClaimJson` is the claim exactly as signed.
+   */
+  signed?: {
+    digestHex: string;
+    generation: number;
+    signedClaimJson: string;
+    signatureHex: string;
+  };
+  /**
+   * SEC-REPAIR-001 — the recovery passkey's public key (its COSE_Key, hex) and COSE algorithm,
+   * read from the attestation object at enrolment. Present ⇒ `.com` requires a passkey assertion
+   * before releasing the ciphertext. Absent on rows enrolled before (passphrase-only, "update
+   * your account recovery").
+   */
+  passkey?: { coseHex: string; alg: number };
   createdAt: number;
   updatedAt: number;
 }
@@ -675,10 +708,23 @@ export interface WebauthnRecoveryRecord {
 export interface WebauthnRecoveryStorage {
   /** Insert or replace. Caller has already verified the IRK signature. */
   upsert(rec: WebauthnRecoveryRecord): Promise<void>;
+  /**
+   * Compare-and-swap for signed v2 writes: store `rec` only if the row's chain link is still
+   * `expectedPriorDigest` (`genesis` = no row, `legacy` = a row with no digest). False when
+   * another writer got there first.
+   */
+  replaceIfDigest(rec: WebauthnRecoveryRecord, expectedPriorDigest: string): Promise<boolean>;
+  /** Delete only if the row's chain link is still `expectedDigest` (`legacy` = no digest). */
+  deleteIfDigest(username: string, expectedDigest: string): Promise<boolean>;
   /** Public read by username; ciphertext-only so disclosure is safe. */
   get(username: string): Promise<WebauthnRecoveryRecord | undefined>;
   /** Delete by username (kill switch — also requires sig verification at handler). */
   delete(username: string): Promise<boolean>;
+  /**
+   * Spend a recovery passkey challenge (its nonce, hex) once: true the first time, false ever after,
+   * so a captured assertion cannot be replayed within the challenge's few minutes.
+   */
+  consumeChallenge(nonceHex: string, expiresAt: number, now: number): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -744,6 +790,13 @@ export interface PendingRePairRecord {
    * `oldIrkSignature` exists only for the registered-key routes.
    */
   proof?: { issuedAt: number; newIrkSignature: string; oldIrkSignature?: string };
+  /** Set by the atomic claim that starts the key swap; a veto after this fails. */
+  completingAt?: number;
+  /** Admin key that vetoed the attempt; absent for a self-cancel. */
+  vetoedByHex?: string;
+  vetoSignatureHex?: string;
+  /** Offline-alert threshold frozen at initiation (the wait is at least twice this). */
+  offlineAlertMs?: number;
 }
 
 export interface PendingRePairStorage {
@@ -755,6 +808,16 @@ export interface PendingRePairStorage {
   get(username: string): Promise<PendingRePairRecord | undefined>;
   /** Mark the row as objected; no-op if no row exists. Returns whether the row existed. */
   object(username: string, at: number): Promise<boolean>;
+  /**
+   * An active admin's veto. Succeeds only while the row is neither objected nor
+   * already claimed for completion; returns whether THIS call won.
+   */
+  veto(username: string, at: number, byHex: string, signatureHex: string): Promise<boolean>;
+  /**
+   * The one atomic step before the key swap. Succeeds only if no objection or
+   * veto landed first; returns whether THIS call won.
+   */
+  claimCompletion(username: string, at: number): Promise<boolean>;
   /** Delete the row (called after `complete` succeeds). */
   delete(username: string): Promise<boolean>;
   /**
@@ -1119,6 +1182,53 @@ export interface BoxSealedLeaseStorage {
   revoke(serverDomain: string, leaseId: string): Promise<boolean>;
   /** Snapshot of active (non-expired) leases for a server (UI listing). */
   list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]>;
+  /** Delete every lease for a server (a lock). Returns how many went. */
+  revokeAll(serverDomain: string): Promise<number>;
+}
+
+/**
+ * A server's disk key sealed to a watch delegate's boot-only decryption key, attested by the account
+ * key (packages/protocol/src/watchBootDelegate.ts). One per server and delegate key.
+ */
+export interface WatchBootKeyRecord {
+  serverDomain: string;
+  delegatePubHex: string;
+  decryptPubHex: string;
+  sealedKeyHex: string;
+  keySha256Hex: string;
+  issuedAt: number;
+  expiresAt: number;
+  signatureHex: string;
+  depositedAt: number;
+}
+
+export interface WatchBootKeyStorage {
+  /** Insert or replace the copy for (server, delegate). */
+  put(rec: WatchBootKeyRecord): Promise<void>;
+  /**
+   * The copy for (server, delegate), if it has not expired. A suspended server releases nothing, and a
+   * suspension record that cannot be read counts as suspended, as for BoxSealedLeaseStorage.release.
+   */
+  release(serverDomain: string, delegatePubHex: string, now: number): Promise<WatchBootKeyRecord | undefined>;
+  /** Copies for a server, unexpired (for the owner's list). */
+  list(serverDomain: string, now: number): Promise<WatchBootKeyRecord[]>;
+  /** Delete the copy for one delegate (or all of the server's when omitted). Returns how many went. */
+  revoke(serverDomain: string, delegatePubHex?: string): Promise<number>;
+}
+
+/**
+ * The durable boot-suspension record (SEC-LOCK-001). `release` on
+ * BoxSealedLeaseStorage consults it itself, so no route can hand out a lease
+ * for a suspended server by forgetting a check.
+ */
+export interface BootSuspensionStorage {
+  /** The record, or undefined when this server has never been suspended or resumed. */
+  get(serverDomain: string): Promise<BootSuspensionState | undefined>;
+  /**
+   * Apply an already-verified order atomically (compare-and-swap on the
+   * record's epoch, seq and suspended flag). Concurrent writers retry.
+   */
+  apply(order: BootSuspensionOrder, signatureHex: string, now: number): Promise<SuspensionOutcome>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1662,6 +1772,8 @@ export interface Storage {
   serverMigrations: ServerMigrationStorage;
   adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
+  watchBootKeys: WatchBootKeyStorage;
+  bootSuspensions: BootSuspensionStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   pushTokens: PushTokenStorage;

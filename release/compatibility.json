@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "about": "Which versions of each part may talk to which (SECURITY-HARDENING-PLAN.md 18.13). `minimumSecurity` is the lowest version that is still safe; `preferred` is what a release run ships. They are different numbers on purpose: raising the first locks old parts out, and it is only raised when an upstream security fix or a protocol break needs it. `current` is what this tree builds. `receiverFirst` lists the parts that must be able to VERIFY a new format before any part starts ISSUING it, in the order to deploy. An unknown version of a signed format is refused, never read as the older broad authority.",
+  "components": {
+    "box-artifact-manifest": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/boxArtifact.ts" },
+    "recovery-record": { "current": 2, "minimumSecurity": 2, "preferred": 2, "unknownVersion": "refuse", "where": "packages/protocol/src/recoveryRecord.ts", "note": "v1 rows are read-only legacy until their owner re-enrols" },
+    "app-release": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/appRelease.ts" },
+    "adapter-index": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/adapterAttestation.ts" },
+    "boot-suspension": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/bootSuspension.ts" },
+    "offline-secrets": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/offlineSecrets.ts" },
+    "keyd-wire": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/keyd/src/wire.ts" },
+    "release-metadata": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/releaseMetadata.ts", "note": "TUF-style roles; the box gate is server-daemon/src/releaseCatalogGate.ts and is not yet fed a live catalog" },
+    "chat-wire": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/chatWire.ts", "note": "box-to-box frames, lease votes and the admin approval order" },
+    "chat-frame": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/server-daemon/src/chat/harness.ts" },
+    "webapp-shell": { "current": 169, "minimumSecurity": 169, "preferred": 169, "unknownVersion": "refuse", "where": "apps/web/public/webapp/lib/buildInfo.js", "note": "the service worker replaces an older shell on the next load" }
+  },
+  "receiverFirst": [
+    "boot worker and .com verify the format",
+    "box releases that verify it",
+    "web shell, then iOS and Android store builds that issue it",
+    "only then raise minimumSecurity"
+  ]
+}

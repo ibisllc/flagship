@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   ed,
   signAdminRootRotation,
-  signUploadRecoveryRecord,
+  signRecoveryRecord,
   type Keypair,
+  type RecoveryEscrowChange,
+  type RecoveryRecordV2,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import { handleApplyAdminRootRotation } from "../src/adminRootRotation.js";
@@ -47,7 +49,14 @@ async function setup(irk: Keypair): Promise<InMemoryStorage> {
   return s;
 }
 
-async function upload(opts: {
+const DEFAULT_FETCH_TOKEN_HASH = "ab".repeat(32);
+const DEFAULT_PRF_SALT_HASH = "cd".repeat(32);
+
+/**
+ * A v2 client: reads the stored record to chain onto it (prior digest, next generation) and says
+ * keep / replace / none for each escrow explicitly, as a real client must.
+ */
+async function buildEnvelope(opts: {
   storage: InMemoryStorage;
   irk: Keypair;
   username?: string;
@@ -58,30 +67,56 @@ async function upload(opts: {
   prfSaltHashHex?: string;
   wrappedAcmeAccountKeyB64?: string;
   wrappedAdminRootB64?: string;
+  op?: "put" | "delete";
+  prior?: string;
+  generation?: number;
+  adminRoot?: RecoveryEscrowChange;
+  acmeKey?: RecoveryEscrowChange;
 }) {
   const username = opts.username ?? USERNAME;
-  const credentialId = opts.credentialId ?? "deadbeef".repeat(4);
+  const existing = await opts.storage.webauthnRecovery.get(username);
+  const userRec = await opts.storage.usernames.get(username);
   const wrappedUmk = opts.wrappedUmk ?? new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
-  const issuedAt = opts.issuedAt ?? Date.now();
-  const wrappedB64 = bytesToB64(wrappedUmk);
-  const wrappedUmkHashHex = await sha256Hex(wrappedUmk);
-  const sig = signUploadRecoveryRecord(
-    { username, credentialIdHex: credentialId, wrappedUmkHashHex, issuedAt },
-    opts.irk,
-  );
-  const request: Record<string, unknown> = {
-    username, credentialId, wrappedUmk: wrappedB64, issuedAt,
+  const digestOf = async (b64: string) => sha256Hex(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+  const heldAdmin = existing?.wrappedAdminRootB64;
+  const heldAcme = existing?.wrappedAcmeAccountKeyB64;
+  const escrow = async (given: string | undefined, held: string | undefined): Promise<RecoveryEscrowChange> =>
+    given ? { change: "replace", digestHex: await digestOf(given) }
+      : held ? { change: "keep", digestHex: await digestOf(held) }
+      : { change: "none" };
+  const claim: RecoveryRecordV2 = {
+    op: opts.op ?? "put",
+    username,
+    irkPubHex: bytesToHex(opts.irk.publicKey),
+    adminRootPubHex: userRec?.adminRootPubHex ?? "none",
+    credentialIdHex: opts.credentialId ?? "deadbeef".repeat(4),
+    wrappedUmkDigestHex: await sha256Hex(wrappedUmk),
+    adminRoot: opts.adminRoot ?? (await escrow(opts.wrappedAdminRootB64, heldAdmin)),
+    acmeKey: opts.acmeKey ?? (await escrow(opts.wrappedAcmeAccountKeyB64, heldAcme)),
+    fetchTokenHashHex: opts.fetchTokenHashHex ?? DEFAULT_FETCH_TOKEN_HASH,
+    prfSaltHashHex: opts.prfSaltHashHex ?? DEFAULT_PRF_SALT_HASH,
+    kdfVersion: 1,
+    algVersion: 1,
+    policy: "passkey-and-passphrase",
+    generation: opts.generation ?? (existing ? (existing.signed?.generation ?? 0) + 1 : 1),
+    nonceHex: bytesToHex(crypto.getRandomValues(new Uint8Array(16))),
+    priorDigestHex: opts.prior ?? (existing ? (existing.signed?.digestHex ?? "legacy") : "genesis"),
+    issuedAt: opts.issuedAt ?? Date.now(),
   };
-  if (opts.fetchTokenHashHex) request.fetchTokenHash = opts.fetchTokenHashHex;
-  if (opts.prfSaltHashHex) request.prfSaltHash = opts.prfSaltHashHex;
-  if (opts.wrappedAcmeAccountKeyB64) request.wrappedAcmeAccountKey = opts.wrappedAcmeAccountKeyB64;
-  if (opts.wrappedAdminRootB64) request.wrappedAdminRoot = opts.wrappedAdminRootB64;
+  const signature = bytesToHex(signRecoveryRecord(claim, opts.irk));
+  return {
+    claim,
+    signature,
+    wrappedUmk: bytesToB64(wrappedUmk),
+    ...(opts.wrappedAdminRootB64 ? { wrappedAdminRoot: opts.wrappedAdminRootB64 } : {}),
+    ...(opts.wrappedAcmeAccountKeyB64 ? { wrappedAcmeAccountKey: opts.wrappedAcmeAccountKeyB64 } : {}),
+  };
+}
+
+async function upload(opts: Parameters<typeof buildEnvelope>[0]) {
   return handleUploadWebauthnRecovery(
-    {
-      usernames: opts.storage.usernames,
-      webauthnRecovery: opts.storage.webauthnRecovery,
-    },
-    { request, signature: bytesToHex(sig) },
+    { usernames: opts.storage.usernames, webauthnRecovery: opts.storage.webauthnRecovery },
+    await buildEnvelope(opts),
   );
 }
 
@@ -148,8 +183,8 @@ describe("webauthn recovery — upload", () => {
   it("rejects a credentialId with bad hex shape (400)", async () => {
     const irk = makeKey();
     const storage = await setup(irk);
-    const res = await upload({ storage, irk, credentialId: "zz" });
-    expect(res.status).toBe(400);
+    // The protocol refuses to sign a non-canonical claim at all, so no valid envelope exists.
+    await expect(upload({ storage, irk, credentialId: "zz" })).rejects.toThrow(/credentialIdHex/);
   });
 
   it("rejects when the username doesn't exist (404)", async () => {
@@ -207,8 +242,10 @@ describe("webauthn recovery — metadata fetch (Task #74)", () => {
     expect(body.wrappedUmk).toBeUndefined();
     expect(typeof body.wrappedUmkHash).toBe("string");
     expect(body.wrappedUmkHash.length).toBe(64);
-    // Legacy upload (no fetchTokenHash provided) → gate flag is false.
-    expect(body.hasFetchTokenGate).toBe(false);
+    // A v2 record always carries the fetch-token hash, and says where its signed history stands.
+    expect(body.hasFetchTokenGate).toBe(true);
+    expect((res.body as { legacy: boolean }).legacy).toBe(false);
+    expect((res.body as { generation: number }).generation).toBe(1);
   });
 
   it("surfaces hasFetchTokenGate=true for rows uploaded with the new hashes", async () => {
@@ -237,25 +274,18 @@ describe("webauthn recovery — metadata fetch (Task #74)", () => {
 });
 
 describe("webauthn recovery — delete (kill switch)", () => {
-  it("removes the record when given a valid IRK signature pinning the current bytes", async () => {
+  const del = async (storage: InMemoryStorage, urlUser: string, env: unknown) =>
+    handleDeleteWebauthnRecovery(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      urlUser,
+      env,
+    );
+
+  it("removes the record when given a signed delete naming the current record's digest", async () => {
     const irk = makeKey();
     const storage = await setup(irk);
-    const wrapped = new Uint8Array([1, 2, 3, 4]);
-    await upload({ storage, irk, wrappedUmk: wrapped });
-    const wrappedHash = await sha256Hex(wrapped);
-    const issuedAt = Date.now();
-    const sig = signUploadRecoveryRecord(
-      { username: USERNAME, credentialIdHex: "deadbeef".repeat(4), wrappedUmkHashHex: wrappedHash, issuedAt },
-      irk,
-    );
-    const res = await handleDeleteWebauthnRecovery(
-      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
-      USERNAME,
-      {
-        request: { username: USERNAME, credentialId: "deadbeef".repeat(4), wrappedUmkHash: wrappedHash, issuedAt },
-        signature: bytesToHex(sig),
-      },
-    );
+    await upload({ storage, irk, wrappedUmk: new Uint8Array([1, 2, 3, 4]) });
+    const res = await del(storage, USERNAME, await buildEnvelope({ storage, irk, op: "delete" }));
     expect(res.status).toBe(200);
     expect(await storage.webauthnRecovery.get(USERNAME)).toBeUndefined();
   });
@@ -263,28 +293,11 @@ describe("webauthn recovery — delete (kill switch)", () => {
   it("409s when the record changed since the signature was made (stale-replay defense)", async () => {
     const irk = makeKey();
     const storage = await setup(irk);
-    const old = new Uint8Array([0xaa]);
-    await upload({ storage, irk, wrappedUmk: old });
-    const oldHash = await sha256Hex(old);
-    const issuedAt = Date.now();
-    const sig = signUploadRecoveryRecord(
-      { username: USERNAME, credentialIdHex: "deadbeef".repeat(4), wrappedUmkHashHex: oldHash, issuedAt },
-      irk,
-    );
-    // User uploaded a fresh record AFTER signing the delete. The delete
-    // should refuse — otherwise a leaked old delete-sig could nuke a
-    // fresh record.
-    await new Promise((r) => setTimeout(r, 5));
+    await upload({ storage, irk, wrappedUmk: new Uint8Array([0xaa]) });
+    const staleDelete = await buildEnvelope({ storage, irk, op: "delete" });
+    // The owner wrote a fresh record AFTER signing the delete: a leaked old delete must not nuke it.
     await upload({ storage, irk, wrappedUmk: new Uint8Array([0xbb]) });
-
-    const res = await handleDeleteWebauthnRecovery(
-      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
-      USERNAME,
-      {
-        request: { username: USERNAME, credentialId: "deadbeef".repeat(4), wrappedUmkHash: oldHash, issuedAt },
-        signature: bytesToHex(sig),
-      },
-    );
+    const res = await del(storage, USERNAME, staleDelete);
     expect(res.status).toBe(409);
     expect(await storage.webauthnRecovery.get(USERNAME)).toBeDefined();
   });
@@ -292,46 +305,30 @@ describe("webauthn recovery — delete (kill switch)", () => {
   it("403s when the URL username doesn't match the body", async () => {
     const irk = makeKey();
     const storage = await setup(irk);
-    const wrapped = new Uint8Array([1]);
-    await upload({ storage, irk, wrappedUmk: wrapped });
-    const wrappedHash = await sha256Hex(wrapped);
-    const issuedAt = Date.now();
-    const sig = signUploadRecoveryRecord(
-      { username: USERNAME, credentialIdHex: "deadbeef".repeat(4), wrappedUmkHashHex: wrappedHash, issuedAt },
-      irk,
-    );
-    const res = await handleDeleteWebauthnRecovery(
-      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
-      "different",
-      {
-        request: { username: USERNAME, credentialId: "deadbeef".repeat(4), wrappedUmkHash: wrappedHash, issuedAt },
-        signature: bytesToHex(sig),
-      },
-    );
+    await upload({ storage, irk });
+    const res = await del(storage, "different", await buildEnvelope({ storage, irk, op: "delete" }));
     expect(res.status).toBe(403);
   });
 
   it("403s under a different IRK", async () => {
     const irk = makeKey();
     const storage = await setup(irk);
-    const wrapped = new Uint8Array([1]);
-    await upload({ storage, irk, wrappedUmk: wrapped });
-    const wrappedHash = await sha256Hex(wrapped);
-    const otherIrk = makeKey();
-    const issuedAt = Date.now();
-    const sig = signUploadRecoveryRecord(
-      { username: USERNAME, credentialIdHex: "deadbeef".repeat(4), wrappedUmkHashHex: wrappedHash, issuedAt },
-      otherIrk,
-    );
-    const res = await handleDeleteWebauthnRecovery(
-      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
-      USERNAME,
-      {
-        request: { username: USERNAME, credentialId: "deadbeef".repeat(4), wrappedUmkHash: wrappedHash, issuedAt },
-        signature: bytesToHex(sig),
-      },
-    );
+    await upload({ storage, irk });
+    const res = await del(storage, USERNAME, await buildEnvelope({ storage, irk: makeKey(), op: "delete" }));
     expect(res.status).toBe(403);
+  });
+
+  it("refuses a put envelope on the delete route and a delete envelope on the upload route", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    await upload({ storage, irk });
+    expect((await del(storage, USERNAME, await buildEnvelope({ storage, irk }))).status).toBe(400);
+    const res = await handleUploadWebauthnRecovery(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      await buildEnvelope({ storage, irk, op: "delete" }),
+    );
+    expect(res.status).toBe(400);
+    expect(await storage.webauthnRecovery.get(USERNAME)).toBeDefined();
   });
 });
 
@@ -428,7 +425,15 @@ describe("webauthn recovery — Argon2id-gated fetch (Task #74)", () => {
   it("returns 409 for legacy rows without a fetchTokenHash (re-enrol required)", async () => {
     const irk = makeKey();
     const storage = await setup(irk);
-    await upload({ storage, irk }); // legacy upload — no fetchTokenHash
+    // A v1 row from before the passphrase gate: no fetch-token hash, no signed envelope.
+    await storage.webauthnRecovery.upsert({
+      username: USERNAME,
+      credentialIdHex: "deadbeef".repeat(4),
+      wrappedUmkB64: bytesToB64(new Uint8Array([1, 2, 3])),
+      irkPubHex: bytesToHex(irk.publicKey),
+      createdAt: 1,
+      updatedAt: 1,
+    });
     const fetchToken = new Uint8Array(32).fill(4);
     const res = await handleFetchWrappedUmkWithToken(
       { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
@@ -757,33 +762,10 @@ describe("webauthn recovery — upload accepts the new Argon2 hashes (Task #74)"
     expect(stored?.prfSaltHashHex).toBe(prfSaltHashHex);
   });
 
-  it("rejects a malformed fetchTokenHash on upload (400)", async () => {
+  it("rejects a malformed fetchTokenHash on upload: no valid signature can exist for it", async () => {
     const irk = makeKey();
     const storage = await setup(irk);
-    // Sign over the legitimate canonical-bytes (the new hashes aren't
-    // part of the signed payload — they ride the same upload-record sig).
-    const wrappedUmk = new Uint8Array([1, 2, 3]);
-    const issuedAt = Date.now();
-    const wrappedB64 = bytesToB64(wrappedUmk);
-    const wrappedUmkHashHex = await sha256Hex(wrappedUmk);
-    const sig = signUploadRecoveryRecord(
-      { username: USERNAME, credentialIdHex: "deadbeef".repeat(4), wrappedUmkHashHex, issuedAt },
-      irk,
-    );
-    const res = await handleUploadWebauthnRecovery(
-      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
-      {
-        request: {
-          username: USERNAME,
-          credentialId: "deadbeef".repeat(4),
-          wrappedUmk: wrappedB64,
-          issuedAt,
-          fetchTokenHash: "not-hex",
-        },
-        signature: bytesToHex(sig),
-      },
-    );
-    expect(res.status).toBe(400);
+    await expect(upload({ storage, irk, fetchTokenHashHex: "not-hex" })).rejects.toThrow(/fetchTokenHashHex/);
   });
 });
 

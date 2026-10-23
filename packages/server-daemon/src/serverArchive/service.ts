@@ -1188,6 +1188,14 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           await rm(uploadFile, { force: true }).catch(() => {});
           throw new ArchiveError("the data file isn't the one this server is waiting for (its size or SHA-256 differs): send it again");
         }
+        // Read it once without writing anything: every part present and matching, and how much room it
+        // will take. Nothing is unpacked into a disk that cannot hold it plus the room the apps need to keep working.
+        const inside = await checkArchiveContents(uploadFile, key, w.archiveId);
+        const need = inside.expandedBytes + HEADROOM_BYTES;
+        const have = await free(opts.dir);
+        if (have < need) {
+          throw new ArchiveError(`restoring this backup needs about ${gb(need)} free and this server has ${gb(have)}. Free some space and send it again`);
+        }
         const contents = await unpackArchive({ ...opts.restore, workDir: scratch }, uploadFile, key, w.archiveId, unpackDir);
         await rm(uploadFile, { force: true }).catch(() => {});
         job.apps = contents.metas.map((m) => ({ serviceId: m.serviceId, name: m.name, state: "waiting" as const }));

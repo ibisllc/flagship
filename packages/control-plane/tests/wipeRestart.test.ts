@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   ed,
@@ -506,5 +507,31 @@ describe("handleWipeRestart — UMK rotation clears the now-undecryptable names"
     const res = await handleWipeRestart(deps(s), USERNAME, await makeBody({ oldIrk, newIrk }), undefined);
     expect(res.status).toBe(200);
     expect((await s.usernames.get(USERNAME))?.irkPubHex).toBe(bytesToHex(newIrk.publicKey));
+  });
+});
+
+describe("handleWipeRestart — the new recovery passkey's key", () => {
+  const v = JSON.parse(readFileSync(new URL("../../protocol/test-vectors/recovery-passkey/vectors.json", import.meta.url), "utf8"));
+  const ES = v.entries[0];
+  const att = Buffer.from(ES.attestationObject, "base64url").toString("base64");
+
+  it("keeps the passkey key for the credential the old IRK signed, so .com still checks the passkey", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const s = await setup(oldIrk);
+    const body = { ...(await makeBody({ oldIrk, newIrk, newCredentialId: ES.credentialIdHex })), newPasskeyAttestationObject: att };
+    const res = await handleWipeRestart(deps(s), USERNAME, body);
+    expect(res.status).toBe(200);
+    expect((await s.webauthnRecovery.get(USERNAME))?.passkey).toEqual({ coseHex: ES.coseHex, alg: -7 });
+  });
+
+  it("refuses a passkey that is not the signed credential, and changes nothing", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const s = await setup(oldIrk);
+    const body = { ...(await makeBody({ oldIrk, newIrk })), newPasskeyAttestationObject: att };
+    const res = await handleWipeRestart(deps(s), USERNAME, body);
+    expect(res.status).toBe(403);
+    expect((await s.usernames.get(USERNAME))?.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
   });
 });

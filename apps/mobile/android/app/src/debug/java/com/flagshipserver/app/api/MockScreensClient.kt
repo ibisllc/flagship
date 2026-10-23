@@ -342,6 +342,79 @@ class MockScreensClient(
 
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
 
+    var sliver: com.flagshipserver.app.core.SecuritySliverResponse = com.flagshipserver.app.core.SecuritySliverResponse()
+    val publisherStates: MutableMap<String, com.flagshipserver.app.core.WaitingPublisherResponse> = mutableMapOf()
+    val trustCalls: MutableList<Triple<String, com.flagshipserver.app.core.PublisherTrust, String>> = mutableListOf()
+    val rejectCalls: MutableList<String> = mutableListOf()
+
+    val permissions: MutableMap<String, com.flagshipserver.app.core.ServicePermissions> = mutableMapOf()
+    val permissionRevokes: MutableList<Pair<String, String?>> = mutableListOf()
+
+    override suspend fun servicePermissions(serviceId: String): com.flagshipserver.app.core.ServicePermissions {
+        tick()
+        return permissions[serviceId] ?: com.flagshipserver.app.core.ServicePermissions()
+    }
+
+    override suspend fun revokeServicePermission(serviceId: String, grantId: String?): com.flagshipserver.app.core.PermissionRevokeResult {
+        tick()
+        permissionRevokes += serviceId to grantId
+        val cur = permissions[serviceId] ?: com.flagshipserver.app.core.ServicePermissions()
+        val left = cur.grants.filter { grantId != null && it.id != grantId }
+        permissions[serviceId] = cur.copy(grants = left)
+        return com.flagshipserver.app.core.PermissionRevokeResult(revoked = cur.grants.size - left.size)
+    }
+
+    var restoredDrafts: MutableList<com.flagshipserver.app.core.RestoredAccessDraft> = mutableListOf()
+    val restoredApprovals: MutableList<com.flagshipserver.app.core.RestoredAccessApproveBody> = mutableListOf()
+    val restoredDiscards: MutableList<String> = mutableListOf()
+    val updateModes: MutableMap<String, com.flagshipserver.app.core.UpdateModeState> = mutableMapOf()
+    val updateModeSets: MutableList<Pair<String, String>> = mutableListOf()
+    val delegations: MutableMap<String, MutableList<com.flagshipserver.app.core.CompanionDelegationRow>> = mutableMapOf()
+    val delegationGrants: MutableList<com.flagshipserver.app.core.CompanionDelegationBody> = mutableListOf()
+    val delegationEnds: MutableList<Pair<String, String>> = mutableListOf()
+
+    override suspend fun restoredAccessDrafts(): com.flagshipserver.app.core.RestoredAccessList { tick(); return com.flagshipserver.app.core.RestoredAccessList(restoredDrafts.toList()) }
+    override suspend fun approveRestoredAccess(body: com.flagshipserver.app.core.RestoredAccessApproveBody) {
+        tick()
+        restoredApprovals += body
+        restoredDrafts.removeAll { it.serviceRef == body.request.serviceRef }
+    }
+    override suspend fun discardRestoredAccess(serviceRef: String) { tick(); restoredDiscards += serviceRef; restoredDrafts.removeAll { it.serviceRef == serviceRef } }
+    override suspend fun updateMode(serviceId: String): com.flagshipserver.app.core.UpdateModeState {
+        tick()
+        return updateModes[serviceId] ?: throw ScreensError.Http(404, "no publisher")
+    }
+    override suspend fun setUpdateMode(serviceId: String, mode: String) {
+        tick()
+        updateModeSets += serviceId to mode
+        updateModes[serviceId]?.let { updateModes[serviceId] = it.copy(mode = mode) }
+    }
+    override suspend fun companionDelegations(sessionId: String): com.flagshipserver.app.core.CompanionDelegationList {
+        tick()
+        return com.flagshipserver.app.core.CompanionDelegationList(delegations[sessionId]?.toList() ?: emptyList())
+    }
+    override suspend fun allowCompanionBuild(body: com.flagshipserver.app.core.CompanionDelegationBody) {
+        tick()
+        delegationGrants += body
+        delegations.getOrPut(body.delegation.sessionId) { mutableListOf() } += com.flagshipserver.app.core.CompanionDelegationRow(body.delegation.serviceRef, body.delegation.ops, body.delegation.expiresAt)
+    }
+    override suspend fun endCompanionDelegation(sessionId: String, serviceRef: String) {
+        tick()
+        delegationEnds += sessionId to serviceRef
+        delegations[sessionId]?.removeAll { it.serviceRef == serviceRef }
+    }
+
+    override suspend fun securitySliver(): com.flagshipserver.app.core.SecuritySliverResponse { tick(); return sliver }
+    override suspend fun publisherState(serviceId: String): com.flagshipserver.app.core.WaitingPublisherResponse {
+        tick()
+        return publisherStates[serviceId] ?: com.flagshipserver.app.core.WaitingPublisherResponse()
+    }
+    override suspend fun trustPublisher(serviceId: String, trust: com.flagshipserver.app.core.PublisherTrust, signatureHex: String) {
+        tick()
+        trustCalls += Triple(serviceId, trust, signatureHex)
+    }
+    override suspend fun rejectPublisher(serviceId: String) { tick(); rejectCalls += serviceId }
+
     /** Debug access as a box would hold it: a grant turns it on until its end, a revoke turns it off. */
     var debugAccessState: DebugAccessView = DebugAccessView(on = false)
     val debugAccessBodies: MutableList<String> = mutableListOf()

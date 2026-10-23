@@ -51,9 +51,12 @@ The box and flagshipserver.com both use it.
    - With one that no longer fits: the AI gets it as a guide.
    - Either way, the repo is its author's: the box never looks it up in the
      public store and never sends an adaptation of it.
-2. **Otherwise, look in the public store** (below), but only for repos on github.com,
-   gitlab.com or codeberg.org that cloned without credentials. The box runs
-   the same checks on what comes back and applies the first one that fits.
+2. **Otherwise, look for a vetted adapter** (below, "Vetting and the signed
+   index"), but only for repos on github.com, gitlab.com or codeberg.org that
+   cloned without credentials, and only while the box's release pins a
+   vetting key. The box takes only digests with a current, signed attestation,
+   runs the same checks on what comes back and applies the first one that
+   fits.
 3. **Otherwise, the AI adapts it.** It is asked to change as little as
    possible, beside the author's code. Once it deploys:
    - the box derives the adapter from the clone and the deployed tree;
@@ -96,11 +99,11 @@ adapter and nobody would know. In the public store:
 `{base, file, added, confirmations}`, newest first. Each adapter sits beside
 it as `<sha256 of its text>.json`. `do-not-adapt.txt` lists blocked repos.
 
-**Reading:** boxes read the store directly over raw.githubusercontent.com,
-with no API of ours involved. They:
-- try an exact `base` match first, then the newest others, at most 3;
-- check each file against the hash in its name;
-- skip blocked repos.
+**Reading:** boxes no longer read the public repo (SEC-ADAPTER-001/002). A
+mutable branch and hash-named files prove only that bytes match their names,
+not that anyone vetted them; boxes read the signed index instead (next
+section). The daily publish to the public repo is quarantined in code
+(`communityPublish.enabled`).
 
 **Writing:** `POST /api/adapters/submit {repo, base, licensePath, file}` on
 flagshipserver.com.
@@ -126,6 +129,48 @@ admin secret. Adding a repo drops its queue, removes its folder at the next
 publish and lists it in `do-not-adapt.txt`. Git history keeps old commits;
 removal stops future use. The public copy is `apps/web/public/adapters.html`
 and the privacy policy.
+
+## Vetting and the signed index
+
+SEC-ADAPTER-002 (`apps/com/src/adapterVetting.ts`,
+`packages/protocol/src/adapterAttestation.ts`, vectors in
+`packages/protocol/test-vectors/adapter-attestation/`).
+
+1. **Deterministic checks first.** Every check above runs; a file that fails
+   one never reaches a model.
+2. **Model review** (`adapterReview.ts`). The model reads exactly the
+   submitted file, the bytes its digest names: no repo metadata beyond what
+   the file holds, nothing about who sent it or where it runs. A file longer
+   than the review limit may be kept but is never attested.
+3. **Attestation.** On a pass the pipeline, not the model, signs
+   `flagship/adapter-attestation/v1` for that exact digest: repo, base
+   commit, capability digest of its manifest, validator version, review
+   policy version, reviewer model and the version that answered, evidence
+   hash, `issuedAt`, `expiresAt` (90 days). The key is the Worker secret
+   `ADAPTER_ATTESTATION_SIGNING_KEY`; boxes pin its public half in
+   `release/adapter-vetting-keys.json`, with a validity window per key so it
+   can rotate. The evidence (checks run, license, policy digest, verdict) is
+   kept in D1 `adapter_attestations`.
+4. **Index.** `GET /api/adapters/index` serves the latest signed
+   `flagship/adapter-index/v1`: sequence, previous digest, expiry (3 days,
+   re-signed daily by the cron's publish slot or on any change), every
+   current attestation and every revocation, and the withdrawn digests.
+   `GET /api/adapters/file/<sha256>` serves an attested file while a pass
+   covers it and nothing revoked it.
+5. **On the box** (`buildmodes/adapterIndex.ts`, `adapterTrust.ts`): verify
+   the index and each attestation against the pinned keys, refuse a rollback
+   or fork (the highest sequence seen is kept in
+   `<dataDir>/data/adapter-index-highwater.json`), accept only an exact digest
+   whose bytes hash to it, whose repo, base and capability digest match the
+   attestation, that has not expired and that nothing withdrew. A revocation
+   is final. With no pinned key, lookup is off.
+6. **Revocation** is a signed `revoked` attestation. Complaints from 3
+   distinct networks, a later failed review, or the repo owner's opt-out make
+   one at once; the next index lists it.
+
+The model's verdict never authorizes an adapter by itself: the owner's import
+of a repo into a new service is the choice to use a vetted adapter there. A
+per-service manual choice of an unvetted digest is not stored yet.
 
 ## Feedback, crashes and retirement
 
@@ -158,14 +203,19 @@ The loop is designed to run with nobody watching it.
   problem with this adaptation" on its page. A short note goes with the
   adapter's hash, and only that. The note is never published, and is
   deleted after 90 days (180 days for a retired adapter).
-- **Retirement:** at 3 reports of any kind, crash or owner note, the next
-  publish retires the adapter, removing it from the public store. A review
-  failure retires one too. Retired adapters stay in D1 with their reports,
+- **Retirement:** reports of any kind, crash or owner note, from 3 distinct
+  networks (an IPv4 /24 or IPv6 /48 counts once however many addresses it
+  uses) revoke an attested adapter at once, and retire it at the next publish
+  of the public repo. A review failure retires one too. Retired adapters stay in D1 with their reports,
   and an identical file can't come back. The next box's AI makes a new one.
-- **Budgets:** one address counts once per adapter a day, one adapter takes
-  at most 10 reports an hour, and an address sends at most 10 reports and 20
+- **Budgets:** one network counts once per adapter a day, one adapter takes
+  at most 10 reports an hour, and a network sends at most 10 reports and 20
   submits an hour (`apps/com/src/rateLimit.ts`). The counters hold hit times
-  under a hashed id; nothing about the sender is stored with a report.
+  under a hashed id. A report keeps only a keyed hash
+  (`ADAPTER_COMPLAINT_SALT`) of its network for that one adapter, so distinct
+  sources can be counted but neither the network nor the same sender across
+  two adapters can be recovered. Without the salt reports count toward
+  nothing.
 - **Learning:** once a week, with the review key set, the Worker asks a cheap
   model what went wrong across new retirements and how the harness (adapt
   prompt, build tools, manifest contract) could prevent it. Answers are kept
@@ -174,8 +224,10 @@ The loop is designed to run with nobody watching it.
 
 ## Not yet
 
-- **No signature:** there is none on adapters. The repo's own file carries
-  its author's authority, and the public store is the same for everyone.
+- **No sandbox evidence:** an attestation records the deterministic checks
+  and the model review, not an isolated build and test run.
+- **No per-service manual acceptance:** a box applies only vetted adapters;
+  choosing an unvetted digest by hand (with its diff shown) is not built.
 - **No upstream pull request:** the app doesn't offer one yet. The author
   commits the exported file themselves.
 - **Restarts:** git and IDE builds are saved under `<dataDir>/data/builds/`

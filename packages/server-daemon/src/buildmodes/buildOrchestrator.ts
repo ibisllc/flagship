@@ -22,6 +22,8 @@
  * Flagship-ready repo the owner installs) still installs directly.
  */
 
+import type { ImportProvenanceStore } from "./appProvenance.js";
+import { proposeSync, type FileTree, type SyncProposal } from "./syncProposal.js";
 import { randomBytes } from "node:crypto";
 import type { ModelRedactor } from "../llm/modelPrivacy.js";
 import { BuildWorkspace } from "./buildWorkspace.js";
@@ -61,6 +63,7 @@ import {
 } from "@flagship/protocol";
 import { indexableRepo, licensePathOf, type AdapterIndex, type StoreReason } from "./adapterIndex.js";
 import type { BuildSnapshot, BuildStore } from "./buildStore.js";
+import type { AdaptConsentGate, AiCostEstimate, ConsentInput, ConsentVerdict } from "./adaptConsent.js";
 
 /** What a build that was mid-run when the daemon stopped says afterwards. */
 export const INTERRUPTED_AI_REASON =
@@ -244,6 +247,8 @@ export interface BuildOrchestratorDeps {
    * owner can report a problem with it later.
    */
   recordAdapterOrigin?: (serviceId: string, origin: { repo: string; file: string } | null) => Promise<void>;
+  /** Where an imported app came from, kept once it goes live so it can later sync with upstream. */
+  provenance?: ImportProvenanceStore;
   /**
    * An installed service's current code, if it can be edited here (built on
    * this box, still installed). Unset ⇒ edits aren't offered.
@@ -303,6 +308,11 @@ export interface BuildOrchestratorDeps {
    * (back-compat: tests inject an `adaptRunner` directly).
    */
   adaptCredentialAvailable?: (buildId: string) => boolean;
+  /**
+   * Per-operation consent for a run that spends the owner's key or credits (adaptConsent.ts). Absent ⇒ no
+   * consent step (tests, and boxes that have not wired it).
+   */
+  adaptConsent?: AdaptConsentGate;
   /** Keeps builds across a daemon restart (`restore` reads it back). Unset ⇒ memory only. */
   store?: BuildStore;
   /** Coalesce saves this long (default 300 ms). */
@@ -659,6 +669,53 @@ export class BuildOrchestrator {
     };
   }
 
+  /**
+   * Sync an imported app with ONE chosen upstream version (SECURITY-HARDENING-PLAN.md 18.12). Clones
+   * that version into isolated staging like an import, compares the tree the app was imported at, what
+   * runs now and the candidate (proposeSync), and opens a new build holding the merge: files only
+   * upstream changed take the candidate's, files only the owner changed keep theirs, and a conflict keeps
+   * the owner's version and is listed. Nothing goes live: the owner reviews the proposal (new capabilities
+   * are named on their own), then deploys that build or lets a consented AI repair resolve the conflicts.
+   */
+  async proposeUpstreamSync(serviceId: string, ref?: string): Promise<{ ok: true; buildId: string; proposal: Omit<SyncProposal, "merged">; candidateCommit?: string; upToDate: boolean } | { ok: false; status: number; reason: string }> {
+    const prov = await this.deps.provenance?.load(serviceId);
+    if (!prov) return { ok: false, status: 404, reason: "this app was not imported from a repo on this server, or its import is too large to sync" };
+    const buildId = this.newBuildId();
+    await this.deps.journal.append(buildId, { mode: "git", kind: "session-started", actor: "owner", summary: `sync ${prov.repoUrl}${ref ? ` at ${ref}` : ""}` });
+    const candidate = await this.deps.gitImporter.inspect({ gitUrl: prov.repoUrl, ...(ref ?? prov.ref ? { ref: (ref ?? prov.ref)! } : {}), buildId });
+    if (!candidate.fit && candidate.unreadable) return { ok: false, status: 422, reason: candidate.reason };
+    const upstream = candidate.original ?? candidate.files;
+    const proposal = proposeSync({ base: prov.base, local: prov.local, upstream });
+    const tree: FileTree = { ...proposal.merged };
+    for (const path of proposal.conflicts) if (prov.local[path] !== undefined) tree[path] = prov.local[path]!;
+    this.states.set(buildId, { buildId, mode: "git", serverFqdn: this.deps.serverFqdn, createdAt: this.now(), gitFit: true, editsServiceId: serviceId });
+    this.setWorkspace(buildId, new BuildWorkspace(tree));
+    this.gitSources.set(buildId, {
+      repo: null,
+      repoUrl: prov.repoUrl,
+      ...(candidate.commit ? { commit: candidate.commit } : {}),
+      ...(ref ?? prov.ref ? { ref: (ref ?? prov.ref)! } : {}),
+      original: upstream,
+      origin: "repo",
+      share: false,
+      rounds: 0,
+    });
+    await this.deps.journal.append(buildId, {
+      mode: "git",
+      kind: "fitness-check",
+      actor: "system",
+      summary: `sync proposal: ${proposal.takeUpstream.length} from upstream, ${proposal.conflicts.length} conflicts, ${proposal.capabilityChanges.length} capability changes`,
+    });
+    const { merged: _merged, ...summary } = proposal;
+    return {
+      ok: true,
+      buildId,
+      proposal: summary,
+      ...(candidate.commit ? { candidateCommit: candidate.commit } : {}),
+      upToDate: candidate.commit !== undefined && candidate.commit === prov.commit,
+    };
+  }
+
   /** The open build holding a name, if any: a git import not yet deployed. */
   holderOf(name: string, exceptId?: string): { sessionId: string } | undefined {
     const wanted = name.toLowerCase();
@@ -729,15 +786,28 @@ export class BuildOrchestrator {
    * build's state (`adapt`), which the phone polls. The pass can run for
    * many minutes, longer than a phone keeps one request open.
    */
-  startAdaptGit(buildId: string, opts: { instructions?: string } = {}): { ok: true } | { ok: false; status: number; reason: string } {
+  /** The owner's consent for one AI adapt run: ok, or the estimate to show and why it is not enough. */
+  checkAdaptConsent(buildId: string, consent: ConsentInput | undefined): ConsentVerdict {
+    return this.deps.adaptConsent ? this.deps.adaptConsent.check(buildId, "adapt", consent) : { ok: true };
+  }
+
+  startAdaptGit(
+    buildId: string,
+    opts: { instructions?: string; consent?: ConsentInput } = {},
+  ): { ok: true } | { ok: false; status: number; reason: string; estimate?: AiCostEstimate } {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, status: 404, reason: "not a git build" };
     if (st.adapt?.status === "running") return { ok: false, status: 409, reason: "the AI is already adapting this repo" };
     if (this.sealedBuilds.has(buildId)) return { ok: false, status: 409, reason: CLOSED_TO_AI };
     if (!this.adaptConfigured(buildId)) return { ok: false, status: 503, reason: "AI adapt not configured" };
+    const verdict = this.checkAdaptConsent(buildId, opts.consent);
+    if (!verdict.ok) return { ok: false, status: verdict.status, reason: verdict.reason, estimate: verdict.estimate };
     st.adapt = { status: "running", startedAt: this.now(), phase: "staging" };
     this.touch(buildId);
-    void this.adaptGit(buildId, opts)
+    void this.adaptGit(buildId, {
+      ...(opts.instructions !== undefined ? { instructions: opts.instructions } : {}),
+      ...(verdict.tokenBudget !== undefined ? { tokenBudget: verdict.tokenBudget } : {}),
+    })
       .catch((e: unknown): AdaptResult => ({ ok: false, reason: (e as Error).message }))
       .then((r) => {
         const cur = this.states.get(buildId);
@@ -778,7 +848,8 @@ export class BuildOrchestrator {
    * a build with no loaded workspace, no `adaptRunner` configured, or a
    * model output that produced no manifest.
    */
-  async adaptGit(buildId: string, opts: { instructions?: string } = {}): Promise<AdaptResult> {
+  /** `tokenBudget`: the amount the owner signed for this run (`checkAdaptConsent`); the run stops there. */
+  async adaptGit(buildId: string, opts: { instructions?: string; tokenBudget?: number } = {}): Promise<AdaptResult> {
     try {
       return await this.adaptGitNow(buildId, opts);
     } finally {
@@ -786,7 +857,7 @@ export class BuildOrchestrator {
     }
   }
 
-  private async adaptGitNow(buildId: string, opts: { instructions?: string }): Promise<AdaptResult> {
+  private async adaptGitNow(buildId: string, opts: { instructions?: string; tokenBudget?: number }): Promise<AdaptResult> {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
     if (this.sealedBuilds.has(buildId)) return { ok: false, reason: CLOSED_TO_AI };
@@ -905,7 +976,7 @@ export class BuildOrchestrator {
   private async adaptGitAgentic(
     buildId: string,
     ws: BuildWorkspace,
-    opts: { instructions?: string },
+    opts: { instructions?: string; tokenBudget?: number },
   ): Promise<AdaptResult> {
     const repoFiles = ws.list();
     this.aiTouched.add(buildId);
@@ -948,7 +1019,14 @@ export class BuildOrchestrator {
         contextTokens: await agentRunner.contextTokens?.(buildId).catch(() => undefined),
         ...(this.deps.modelRedactor ? { redact: this.deps.modelRedactor } : {}),
         ...(opts.instructions != null ? { instructions: opts.instructions } : {}),
-        ...(this.deps.agentMaxTurns != null ? { options: { maxTurns: this.deps.agentMaxTurns } } : {}),
+        ...(this.deps.agentMaxTurns != null || opts.tokenBudget != null
+          ? {
+              options: {
+                ...(this.deps.agentMaxTurns != null ? { maxTurns: this.deps.agentMaxTurns } : {}),
+                ...(opts.tokenBudget != null ? { tokenBudget: opts.tokenBudget } : {}),
+              },
+            }
+          : {}),
       });
     } catch (e) {
       // runBuildAgent never throws, but defend the boundary anyway.
@@ -1234,6 +1312,19 @@ export class BuildOrchestrator {
     this.touch(buildId);
     const src = this.gitSources.get(buildId);
     if (!src) return;
+    const live = this.workspaces.get(buildId)?.snapshot();
+    if (this.deps.provenance && src.repoUrl && live) {
+      void this.deps.provenance
+        .save(r.serviceId, {
+          repoUrl: src.repoUrl,
+          ...(src.commit ? { commit: src.commit } : {}),
+          ...(src.ref ? { ref: src.ref } : {}),
+          base: src.original,
+          local: live,
+          at: this.now(),
+        })
+        .catch(() => {});
+    }
     const origin =
       src.origin === "index" && src.indexFile && src.repo
         ? { repo: src.repo, file: src.indexFile }

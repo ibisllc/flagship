@@ -140,7 +140,13 @@ function writeBuffered(socket: Duplex, resp: HttpResponse, method: string): void
   for (const [k, v] of Object.entries(hdrs)) {
     const kl = k.toLowerCase();
     if (kl === "content-length" || kl === "connection" || kl === "transfer-encoding") continue;
-    lines.push(`${k}: ${v}`);
+    // Several cookies travel as one value split by newlines (one Set-Cookie line each); no other
+    // header may carry a line break into the response.
+    if (kl === "set-cookie") {
+      for (const c of v.split("\n")) if (c.trim()) lines.push(`${k}: ${c.replace(/[\r\n]/g, "")}`);
+      continue;
+    }
+    lines.push(`${k}: ${v.replace(/[\r\n]/g, "")}`);
   }
   socket.write(`${lines.join("\r\n")}\r\n\r\n`);
   if (method.toUpperCase() !== "HEAD") socket.write(body);

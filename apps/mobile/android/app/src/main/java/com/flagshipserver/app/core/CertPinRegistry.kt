@@ -36,6 +36,51 @@ class CertPinRegistry {
     /** box FQDN (lowercase) → leaf-cert DER SHA-256 (lowercase hex). */
     private val pins = mutableMapOf<String, String>()
 
+    /** Every box in the directory the last time it was read: the hosts a request may not reach on ordinary web trust. */
+    private val known = mutableSetOf<String>()
+
+    /** host → epoch ms until which one named box may be reached before its first signed status (enrollment). */
+    private val enrollment = mutableMapOf<String, Long>()
+
+    /** Where pins and the known-box list survive a restart; null in tests. */
+    interface Persistence {
+        fun load(): Pair<Map<String, String>, Set<String>>
+        fun save(pins: Map<String, String>, known: Set<String>)
+    }
+
+    private var persistence: Persistence? = null
+
+    /** Load what the last run learned, so a cold start does not begin with no pins at all. */
+    fun attach(store: Persistence) {
+        synchronized(pins) {
+            persistence = store
+            val (p, k) = try { store.load() } catch (_: Throwable) { emptyMap<String, String>() to emptySet<String>() }
+            for ((d, pin) in p) if (HEX64.matches(pin)) pins.putIfAbsent(d.lowercase(), pin.lowercase())
+            known.addAll(k.map { it.lowercase() })
+        }
+    }
+
+    private fun persistLocked() {
+        try { persistence?.save(pins.toMap(), known.toSet()) } catch (_: Throwable) { /* best effort */ }
+    }
+
+    /** True when [host] is a box this phone knows (the box itself or any name under its wildcard). */
+    fun isKnownBox(host: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        val h = host.trim().trimEnd('.').lowercase()
+        if (h.isEmpty()) return false
+        synchronized(pins) {
+            if (nowMs < (enrollment[h] ?: 0L)) return false
+            return known.any { h == it || h.endsWith(".$it") }
+        }
+    }
+
+    /** The one narrow window for reaching a freshly created box before it has a signed status (SECURITY-HARDENING-PLAN.md 7.1). */
+    fun allowUnpinnedEnrollment(host: String, forSeconds: Long = 120, nowMs: Long = System.currentTimeMillis()) {
+        val h = host.trim().trimEnd('.').lowercase()
+        if (h.isEmpty()) return
+        synchronized(pins) { enrollment[h] = nowMs + minOf(forSeconds, 300L) * 1000 }
+    }
+
     /**
      * Reconcile the registry against a fresh `/pods` response — the user's
      * FULL registered-server directory. Per pod, the outcome is one of three
@@ -91,6 +136,9 @@ class CertPinRegistry {
             // (decommissioned) or revoked — both genuinely drop.
             pins.clear()
             pins.putAll(next)
+            known.clear()
+            known.addAll(listed - pods.filter { it.revokedAt != null }.map { it.serverDomain.trim().lowercase() }.toSet())
+            persistLocked()
         }
     }
 
@@ -140,7 +188,7 @@ class CertPinRegistry {
     fun anyPin(): Pair<String, String>? = synchronized(pins) { pins.entries.firstOrNull()?.let { it.key to it.value } }
 
     fun clear() {
-        synchronized(pins) { pins.clear() }
+        synchronized(pins) { pins.clear(); known.clear(); enrollment.clear(); persistLocked() }
     }
 }
 
@@ -149,12 +197,17 @@ class CertPinRegistry {
  *  unless the served leaf cert's DER SHA-256 equals the pin; a host with no
  *  pin keeps default validation. */
 object CertPinDecision {
+    /**
+     * [isKnownBox] says the host is one of this phone's boxes. Such a host with no verified pin is
+     * refused, never let through on ordinary web trust (SECURITY-HARDENING-PLAN.md 7.1).
+     */
     fun accept(
         leafDerSha256Hex: String?,
         host: String,
         pinFor: (String) -> String?,
+        isKnownBox: (String) -> Boolean = { false },
     ): Boolean {
-        val pin = pinFor(host) ?: return true
+        val pin = pinFor(host) ?: return !isKnownBox(host)
         val leaf = leafDerSha256Hex ?: return false
         return leaf.equals(pin, ignoreCase = true)
     }

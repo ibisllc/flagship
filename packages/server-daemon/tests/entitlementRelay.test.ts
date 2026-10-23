@@ -256,9 +256,11 @@ describe("entitlementRelay — full handshake", () => {
       sleep: async () => {},
       now: () => 1_700_000_000_000,
       randomNonce: () => new Uint8Array(32).fill(0xab),
+      deviceInfo: { enrollmentProof: "cd".repeat(32) },
     });
     expect(result).not.toBeNull();
     expect(result!.rootEntitlement.podCanonical).toBe(DOMAIN);
+    expect((posts[0]!.body as { deviceInfo?: unknown }).deviceInfo).toEqual({ enrollmentProof: "cd".repeat(32) });
 
     // The POST carried the right purpose + nonce + STK.
     expect(posts).toHaveLength(1);

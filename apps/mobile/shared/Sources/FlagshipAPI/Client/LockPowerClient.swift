@@ -26,6 +26,12 @@ public protocol LockPowerClient: Sendable {
     /// POST a signed `power-off` PhoneOrder to the box. Throws on non-2xx.
     func sendPowerOff(serverDomain: String, request: [String: Any], signatureHex: String) async throws
 
+    /// Like `sendPowerOff`, but returns what the box actually did. A restart the
+    /// box could not lock at the boot service becomes a shutdown; the result
+    /// says so, and the screen must report it. Older boxes answer only
+    /// `{ ok, mode }`.
+    func sendPower(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> PowerOffResult
+
     /// POST a signed `add-paired-session` PhoneOrder to `/api/orders-from-user`
     /// to mint the box's paired-session token. Throws on non-2xx — the caller
     /// only persists the token after this returns.
@@ -44,6 +50,25 @@ public protocol LockPowerClient: Sendable {
     func readJournal(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> JournalResult
 }
 
+/// What a power order came to on the box (`POST /api/power`).
+public struct PowerOffResult: Equatable, Sendable {
+    /// What the host was told to do: "off" or "restart".
+    public let mode: String
+    /// "confirmed", "unconfirmed" or "unavailable"; nil from a box that predates the lock.
+    public let suspension: String?
+    public init(mode: String, suspension: String? = nil) {
+        self.mode = mode
+        self.suspension = suspension
+    }
+}
+
+public extension LockPowerClient {
+    func sendPower(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> PowerOffResult {
+        try await sendPowerOff(serverDomain: serverDomain, request: request, signatureHex: signatureHex)
+        return PowerOffResult(mode: (request["mode"] as? String) ?? "off")
+    }
+}
+
 public struct JournalResult: Equatable, Sendable {
     public let ok: Bool
     public let unit: String
@@ -58,7 +83,9 @@ public struct JournalResult: Equatable, Sendable {
 public struct DeadManPolicyResult: Equatable, Sendable {
     public let ok: Bool
     public let enabled: Bool
-    public init(ok: Bool, enabled: Bool) { self.ok = ok; self.enabled = enabled }
+    /// The first affirmation deadline the box set when the switch was enabled (0 from an older box).
+    public var leaseExpiry: Int64 = 0
+    public init(ok: Bool, enabled: Bool, leaseExpiry: Int64 = 0) { self.ok = ok; self.enabled = enabled; self.leaseExpiry = leaseExpiry }
 }
 
 public struct DeadManAffirmResult: Equatable, Sendable {
@@ -126,6 +153,15 @@ public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
         _ = try await post(serverDomain: serverDomain, path: "/api/power", request: request, signatureHex: signatureHex)
     }
 
+    public func sendPower(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> PowerOffResult {
+        let data = try await post(serverDomain: serverDomain, path: "/api/power", request: request, signatureHex: signatureHex)
+        let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        return PowerOffResult(
+            mode: (obj?["mode"] as? String) ?? (request["mode"] as? String) ?? "off",
+            suspension: obj?["suspension"] as? String
+        )
+    }
+
     public func pairSession(serverDomain: String, request: [String: Any], signatureHex: String) async throws {
         _ = try await post(serverDomain: serverDomain, path: "/api/orders-from-user", request: request, signatureHex: signatureHex)
     }
@@ -135,7 +171,7 @@ public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
         let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         let ok = (obj?["ok"] as? Bool) ?? false
         let enabled = (obj?["enabled"] as? Bool) ?? false
-        return DeadManPolicyResult(ok: ok, enabled: enabled)
+        return DeadManPolicyResult(ok: ok, enabled: enabled, leaseExpiry: numberToInt64(obj?["leaseExpiry"]))
     }
 
     public func affirmDeadMan(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManAffirmResult {

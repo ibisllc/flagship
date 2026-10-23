@@ -597,3 +597,51 @@ describe("malformed", () => {
     expect(JSON.stringify(Object.keys(src))).not.toMatch(/CLOUDFLARE_DNS_API_TOKEN/);
   });
 });
+
+describe("server-wildcard: the account-name challenge under the admin's once-per-server grant", () => {
+  const SERVER = `home.alice.${APEX}`;
+  const NAME = `_acme-challenge.alice.${APEX}`;
+  const pod = kp(31);
+  const admin = kp(32);
+  const env = (over: Partial<PolicyEnv> = {}) => {
+    const st = freshState();
+    st.pods[SERVER] = pod.publicKey;
+    return makeEnv(st, { resolveUserSensitiveKey: async (u) => (u === "alice" ? admin.publicKey : null), ...over });
+  };
+  const grant = async (signer = admin, serverDomain = SERVER, stk = pod.publicKey) => {
+    const { signServerWildcardGrant } = await import("@flagship/protocol");
+    return { issuedAt: 1, signatureHex: toHex(signServerWildcardGrant({ username: "alice", serverDomain, stkPubHex: toHex(stk), issuedAt: 1 }, (m) => ed.sign(m, signer.privateKey))) };
+  };
+  const publish = async (g: unknown, recordName = NAME, serverId = SERVER) => {
+    const value = "token";
+    const recordValueHash = sha256(new TextEncoder().encode(value));
+    const claim: Dns01PublishRequest = { serverId, recordName, recordValueHash, issuedAt: NOW };
+    return {
+      kind: "publishTxtChallenge",
+      recordName,
+      recordValue: value,
+      authority: { type: "server-wildcard", serverId, recordValueHashHex: toHex(recordValueHash), issuedAt: NOW, signatureHex: toHex(signDns01Publish(claim, pod)), grant: g },
+    } as unknown as PublishTxtChallengeBody;
+  };
+
+  it("publishes with the pod's signature and the admin's grant, and deletes only that name", async () => {
+    const g = await grant();
+    expect(await verifyRpc(await publish(g), env())).toMatchObject({ ok: true, effect: { kind: "createTxt", recordName: NAME } });
+    const del: DeleteRecordBody = {
+      kind: "deleteRecord",
+      recordId: "r1",
+      recordKind: "acme",
+      authority: { type: "server-wildcard-acme", serverId: SERVER, issuedAt: NOW, signatureHex: toHex(signDns01Delete({ serverId: SERVER, recordId: "r1", issuedAt: NOW } as Dns01DeleteRequest, pod)), grant: g },
+    };
+    expect(await verifyRpc(del, env())).toMatchObject({ ok: true, effect: { kind: "deleteById", expectedNameOneOf: [NAME] } });
+  });
+
+  it("refuses no grant, a grant from another key or for another server or key, another account's name, and a broker without the resolver", async () => {
+    expect((await verifyRpc(await publish(undefined), env())).ok).toBe(false);
+    expect((await verifyRpc(await publish(await grant(kp(33))), env())).ok).toBe(false);
+    expect((await verifyRpc(await publish(await grant(admin, `home2.alice.${APEX}`)), env())).ok).toBe(false);
+    expect((await verifyRpc(await publish(await grant(admin, SERVER, kp(34).publicKey)), env())).ok).toBe(false);
+    expect((await verifyRpc(await publish(await grant(), `_acme-challenge.bob.${APEX}`), env())).ok).toBe(false);
+    expect((await verifyRpc(await publish(await grant()), env({ resolveUserSensitiveKey: undefined }))).ok).toBe(false);
+  });
+});

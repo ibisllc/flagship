@@ -1,0 +1,41 @@
+{
+  "about": "An admin's approval of the permissions a restore held back: flagship/restored-access-approve/v1|serviceRef|draftSha256|issuedAt, Ed25519, seed 0x44 repeated. The signature covers one app and one draft digest; every other pair must fail.",
+  "adminSeedHex": "4444444444444444444444444444444444444444444444444444444444444444",
+  "adminPubHex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+  "order": {
+    "serviceRef": "alice--chess",
+    "draftSha256": "abababababababababababababababababababababababababababababababab",
+    "issuedAt": 1760000000000
+  },
+  "canonical": "flagship/restored-access-approve/v1|alice--chess|abababababababababababababababababababababababababababababababab|1760000000000",
+  "signatureHex": "59a7e4f2ef561432009ac7e6df51ae307be7c28aeae35bf729de42bd7a47549a023969fd57281849fffb4290eef9edba1344e0568beabdcad86d8672710cc20c",
+  "invalid": [
+    {
+      "name": "another app",
+      "order": {
+        "serviceRef": "alice--other",
+        "draftSha256": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/restored-access-approve/v1|alice--other|abababababababababababababababababababababababababababababababab|1760000000000"
+    },
+    {
+      "name": "another draft",
+      "order": {
+        "serviceRef": "alice--chess",
+        "draftSha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/restored-access-approve/v1|alice--chess|cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd|1760000000000"
+    },
+    {
+      "name": "another issue time",
+      "order": {
+        "serviceRef": "alice--chess",
+        "draftSha256": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000001
+      },
+      "canonical": "flagship/restored-access-approve/v1|alice--chess|abababababababababababababababababababababababababababababababab|1760000000001"
+    }
+  ]
+}

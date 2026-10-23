@@ -77,6 +77,26 @@ data class ServerRestoreStartResponse(val received: Long = 0)
 @Serializable
 data class ServerRestoreCommitRequest(val key: String)
 
+/**
+ * What a restored app still needs from the owner (N09): permissions held for an admin, settings and keys
+ * to set up again, and anything in its database that runs code. Nothing was silently trusted.
+ */
+@Serializable
+data class ServerRestoreSummary(
+    val code: String = "",
+    val awaitingApproval: List<String> = emptyList(),
+    val reconnect: List<String> = emptyList(),
+    val notes: List<String> = emptyList(),
+) {
+    /** The lines to show under a restored app, empty when there is nothing to say. */
+    val needs: List<String>
+        get() = buildList {
+            if (awaitingApproval.isNotEmpty()) add("Waiting for an admin: ${awaitingApproval.joinToString("; ")}.")
+            if (reconnect.isNotEmpty()) add("Set up again: ${reconnect.joinToString("; ")}.")
+            if (notes.isNotEmpty()) add("Note: ${notes.joinToString("; ")}.")
+        }
+}
+
 /** `waiting` | `restoring` | `done` | `skipped` | `failed` */
 @Serializable
 data class ServerRestoreApp(
@@ -84,6 +104,7 @@ data class ServerRestoreApp(
     val name: String,
     val state: String,
     val reason: String? = null,
+    val summary: ServerRestoreSummary? = null,
 )
 
 /** `uploading` | `ready` | `checking` | `restoring` | `done` | `failed` */

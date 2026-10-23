@@ -46,6 +46,7 @@ import {
   verifyDns01Delete,
   verifyDns01Publish,
   verifyServiceCertAuthority,
+  verifyServerWildcardGrant,
   type ServiceCertAuthority,
   type ServiceGrant,
   type ServiceGrantRoute,
@@ -111,8 +112,29 @@ export interface PublishTxtChallengeBody {
   authority:
     | PodAuthority
     | ServiceCertPodAuthority
+    | ServerWildcardAuthority
     | UserZoneIrkAuthority
     | UserZoneGrantAuthority;
+}
+
+/** The admin's once-per-server grant as the box forwards it (`flagship/server-wildcard-grant/v1`). */
+export interface ServerWildcardGrantWire {
+  issuedAt: number;
+  signatureHex: string;
+}
+
+/**
+ * A box answering the challenge of `*.<user>.<apex>`, the name every one of the account's app names
+ * sits under: the pod's own signature over the publish request, plus the admin's grant naming this
+ * server and the key it registered. The challenge host must be `<user>.<apex>` of the box's own account.
+ */
+export interface ServerWildcardAuthority {
+  type: "server-wildcard";
+  serverId: string;
+  recordValueHashHex: string;
+  issuedAt: number;
+  signatureHex: string;
+  grant: ServerWildcardGrantWire;
 }
 
 export interface PodAuthority {
@@ -198,6 +220,7 @@ export interface DeleteRecordBody {
   authority:
     | PodDns01DeleteAuthority
     | ServiceCertDeleteAuthority
+    | ServerWildcardDeleteAuthority
     | PodADeleteAuthority
     | UserZoneIrkDeleteAuthority;
 }
@@ -217,6 +240,15 @@ export interface ServiceCertDeleteAuthority {
   signatureHex: string;
   authority: ServiceCertAuthorityWire;
   authoritySignatureHex: string;
+}
+
+/** Cleanup leg of {@link ServerWildcardAuthority}. */
+export interface ServerWildcardDeleteAuthority {
+  type: "server-wildcard-acme";
+  serverId: string;
+  issuedAt: number;
+  signatureHex: string;
+  grant: ServerWildcardGrantWire;
 }
 
 export interface PodADeleteAuthority {
@@ -275,6 +307,11 @@ export interface PolicyEnv {
    * `/api/users/<username>/pubkey-cert` endpoint in production.
    */
   resolveUserIrk: (username: string) => Promise<Uint8Array | null>;
+  /**
+   * The account's sensitive-order key: its admin root where it pins one, else its IRK. Hits the
+   * public `/api/username/<username>` in production. Absent: the server-wildcard grant is refused.
+   */
+  resolveUserSensitiveKey?: (username: string) => Promise<Uint8Array | null>;
 }
 
 export type VerifyOutcome =
@@ -351,7 +388,57 @@ async function verifyPublishTxt(b: PublishTxtChallengeBody, env: PolicyEnv): Pro
   if (auth.type === "service-cert") {
     return verifyServiceCertPublish(b, host, auth, env);
   }
+  if (auth.type === "server-wildcard") {
+    return verifyServerWildcardPublish(b, host, auth, env);
+  }
   return deny("malformed");
+}
+
+/** `<server>.<user>.<apex>` → `<user>`, or null for any other shape. */
+function accountOfServer(serverId: string, apex: string): string | null {
+  const parsed = parseTier2ServiceFqdn(serverId, apex);
+  return parsed ? parsed.username.toLowerCase() : null;
+}
+
+/** Leg (b) of the server-wildcard gate: the admin's grant for THIS server and the key it registered. */
+async function serverWildcardGrantOk(grant: ServerWildcardGrantWire | undefined, serverId: string, user: string, podPub: Uint8Array, env: PolicyEnv): Promise<boolean> {
+  if (!isObj(grant) || typeof grant.issuedAt !== "number" || typeof grant.signatureHex !== "string" || !env.resolveUserSensitiveKey) return false;
+  const signer = await env.resolveUserSensitiveKey(user);
+  const sig = decodeHex(grant.signatureHex);
+  if (!signer || !sig) return false;
+  return verifyServerWildcardGrant(
+    { username: user, serverDomain: serverId.toLowerCase(), stkPubHex: Array.from(podPub, (x) => x.toString(16).padStart(2, "0")).join(""), issuedAt: grant.issuedAt },
+    sig,
+    signer,
+  );
+}
+
+async function verifyServerWildcardPublish(
+  b: PublishTxtChallengeBody,
+  host: string,
+  auth: ServerWildcardAuthority,
+  env: PolicyEnv,
+): Promise<VerifyOutcome> {
+  if (
+    typeof auth.serverId !== "string" ||
+    typeof auth.recordValueHashHex !== "string" ||
+    typeof auth.issuedAt !== "number" ||
+    typeof auth.signatureHex !== "string"
+  ) return deny("malformed");
+  if (!ageOk(env.now, auth.issuedAt, env.replayWindowMs)) return deny("stale");
+  const user = accountOfServer(auth.serverId, env.apex);
+  if (!user) return deny("serverId is not a server name");
+  if (host !== `${user}.${env.apex}`) return deny("recordName is not the account's own name");
+  const valueHash = decodeHex(auth.recordValueHashHex);
+  const sig = decodeHex(auth.signatureHex);
+  if (!valueHash || !sig) return deny("invalid hex");
+  if (!equalBytes(sha256(new TextEncoder().encode(b.recordValue)), valueHash)) return deny("value hash mismatch");
+  const podPub = await env.resolvePodIdentity(auth.serverId);
+  if (!podPub) return deny("unknown pod");
+  const claim: Dns01PublishRequest = { serverId: auth.serverId, recordName: b.recordName, recordValueHash: valueHash, issuedAt: auth.issuedAt };
+  if (!verifyDns01Publish(claim, sig, podPub)) return deny("bad signature");
+  if (!(await serverWildcardGrantOk(auth.grant, auth.serverId, user, podPub, env))) return deny("no admin grant for this server");
+  return ok({ kind: "createTxt", recordName: b.recordName, recordValue: b.recordValue });
 }
 
 /**
@@ -683,6 +770,19 @@ async function verifyDelete(b: DeleteRecordBody, env: PolicyEnv): Promise<Verify
       expectedType: "TXT",
       expectedNameOneOf: [`_acme-challenge.${auth.serverId}`],
     });
+  }
+
+  if (auth.type === "server-wildcard-acme" && b.recordKind === "acme") {
+    if (!ageOk(env.now, auth.issuedAt, env.replayWindowMs)) return deny("stale");
+    const user = accountOfServer(auth.serverId, env.apex);
+    if (!user) return deny("serverId is not a server name");
+    const sig = decodeHex(auth.signatureHex);
+    if (!sig) return deny("invalid hex");
+    const podPub = await env.resolvePodIdentity(auth.serverId);
+    if (!podPub) return deny("unknown pod");
+    if (!verifyDns01Delete({ serverId: auth.serverId, recordId: b.recordId, issuedAt: auth.issuedAt }, sig, podPub)) return deny("bad signature");
+    if (!(await serverWildcardGrantOk(auth.grant, auth.serverId, user, podPub, env))) return deny("no admin grant for this server");
+    return ok({ kind: "deleteById", recordId: b.recordId, expectedType: "TXT", expectedNameOneOf: [`_acme-challenge.${user}.${env.apex}`] });
   }
 
   if (auth.type === "pod-a" && b.recordKind === "a") {

@@ -181,3 +181,29 @@ public struct ServiceAllowRemoveOrder: Equatable, Sendable {
 
     public var request: [String: Any] { ["serviceRef": serviceRef, "aid": aid, "issuedAt": issuedAt] }
 }
+
+/// `flagship/restored-access-approve/v1`: an admin's approval of the permissions a restore held back
+/// (SECURITY-HARDENING-PLAN.md 18.9). Names the app and the SHA-256 of the exact draft the admin was
+/// shown, so it cannot approve another draft, a replaced one or another app.
+public struct RestoredAccessApproveOrder: Equatable, Sendable {
+    public static let canonicalTag = "flagship/restored-access-approve/v1"
+
+    public let serviceRef: String
+    public let draftSha256: String
+    public let issuedAt: Int64
+
+    public init(serviceRef: String, draftSha256: String, issuedAt: Int64) {
+        self.serviceRef = serviceRef
+        self.draftSha256 = draftSha256
+        self.issuedAt = issuedAt
+    }
+
+    public func canonicalBytes() throws -> Data {
+        try AppAccessOrderCheck.serviceRef(serviceRef)
+        guard AppAccessOrderCheck.lowerHex(draftSha256, count: 64) else { throw AppAccessOrderInvalid(reason: "draftSha256") }
+        try AppAccessOrderCheck.issuedAt(issuedAt)
+        return AppAccessOrderCheck.join([Self.canonicalTag, serviceRef, draftSha256, String(issuedAt)])
+    }
+
+    public var request: [String: Any] { ["serviceRef": serviceRef, "draftSha256": draftSha256, "issuedAt": issuedAt] }
+}

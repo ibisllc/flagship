@@ -25,6 +25,13 @@ import {
 } from "../keystore.js";
 import { renderPendingBanner, shouldRenderBanner } from "../lib/pendingRePairBanner.js";
 import {
+  VETO_CONFIRM_MESSAGE,
+  VETO_CONFIRM_TITLE,
+  renderRecoveryReview,
+  shouldRenderRecoveryReview,
+  submitRecoveryVeto,
+} from "../lib/recoveryVeto.js";
+import {
   fetchDecryptedDirectory,
   removeManagedDeviceDisplayName,
   setManagedDeviceDisplayName,
@@ -241,7 +248,8 @@ async function renderTrustedDevices() {
   try {
     await fetchDevices();
     await fetchPendingRePairSnapshot();
-    const bannerHtml = renderPendingBanner(state.pendingRePair);
+    state.ownReplace = await isOwnReplacement(state.pendingRePair);
+    const bannerHtml = (!state.ownReplace && renderRecoveryReview(state.pendingRePair, isAdminDevice(getSession()))) || renderPendingBanner(state.pendingRePair);
     if (state.devices.length === 0) {
       root.innerHTML = `
         ${bannerHtml}
@@ -346,7 +354,42 @@ function bindPrivateNameActions(root) {
   }));
 }
 
+/**
+ * Is the waiting recovery THIS device's own replacement (the key it would install next)? Then it
+ * finalizes it; anyone else's is something an admin reviews and may reject. A snapshot that does
+ * not name the new key is treated as this device's own, as before.
+ */
+async function isOwnReplacement(snapshot) {
+  const named = snapshot?.pending?.newIrkPub;
+  if (typeof named !== "string") return true;
+  const umk = getSession()?.umk;
+  if (!umk) return true;
+  try {
+    const { deriveIrkVersioned, bytesToHex } = await import("../keystore.js");
+    const next = await deriveIrkVersioned(umk, currentIrkVersion() + 1);
+    return bytesToHex(next.publicKey) === named.toLowerCase();
+  } catch {
+    return true;
+  }
+}
+
 function bindPendingBanner() {
+  if (!state.ownReplace && shouldRenderRecoveryReview(state.pendingRePair, isAdminDevice(getSession()))) {
+    document.getElementById("reject-recovery-btn")?.addEventListener("click", async () => {
+      const { inlineConfirm } = await import("../lib/modal.js");
+      const ok = await inlineConfirm({ title: VETO_CONFIRM_TITLE, message: VETO_CONFIRM_MESSAGE, okLabel: "Reject recovery", danger: true });
+      if (!ok) return;
+      try {
+        const session = getSession();
+        await submitRecoveryVeto({ username: state.username, pending: state.pendingRePair.pending, adminRootSeed: session.adminRootSeed });
+        toast("Recovery rejected");
+        await renderTrustedDevices();
+      } catch (e) {
+        toast(e?.message ?? "Couldn't reject the recovery", "err");
+      }
+    });
+    return;
+  }
   if (!shouldRenderBanner(state.pendingRePair)) return;
   document.getElementById("finalize-replace-btn")?.addEventListener("click", () => {
     finalizePendingReplace().catch((e) => toast(e?.message ?? "Finalize failed", "err"));

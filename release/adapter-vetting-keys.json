@@ -1,0 +1,5 @@
+{
+  "schema": 1,
+  "about": "Who may sign community adapter attestations and the adapter index (flagship/adapter-attestation/v1, flagship/adapter-index/v1; SEC-ADAPTER-002). The private half is the .com Worker secret ADAPTER_ATTESTATION_SIGNING_KEY. A box reads this file from its own release and looks up community adapters only while at least one key is in its window; empty means lookup stays off. To rotate, add the new key with a notBefore, release boxes, switch the Worker secret, then end the old key's notAfter in a later release.",
+  "keys": []
+}

@@ -1,0 +1,74 @@
+{
+  "about": "A phone-signed delegation to a Remote session to build and/or deploy ONE app: flagship/companion-delegation/v1|sessionId|serviceRef|ops (sorted, comma-separated)|issuedAt|expiresAt, Ed25519, seed 0x55 repeated. The ops are sorted whatever order they are given in. Every other session, app, operation set or window must fail the signature.",
+  "adminSeedHex": "5555555555555555555555555555555555555555555555555555555555555555",
+  "adminPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+  "delegation": {
+    "sessionId": "0123456789abcdef",
+    "serviceRef": "alice--chess",
+    "ops": [
+      "deploy",
+      "build"
+    ],
+    "issuedAt": 1760000000000,
+    "expiresAt": 1760001800000
+  },
+  "canonical": "flagship/companion-delegation/v1|0123456789abcdef|alice--chess|build,deploy|1760000000000|1760001800000",
+  "signatureHex": "dfc041055058c37855848707d24918e0638705be76b8d0f1c9ca53cf3de935b9ea6a34c7c6e2c944b241f4e20e6e06e5421cfbb6fdf99f80a3825f401dee700f",
+  "invalid": [
+    {
+      "name": "another session",
+      "delegation": {
+        "sessionId": "fedcba9876543210",
+        "serviceRef": "alice--chess",
+        "ops": [
+          "deploy",
+          "build"
+        ],
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760001800000
+      },
+      "canonical": "flagship/companion-delegation/v1|fedcba9876543210|alice--chess|build,deploy|1760000000000|1760001800000"
+    },
+    {
+      "name": "another app",
+      "delegation": {
+        "sessionId": "0123456789abcdef",
+        "serviceRef": "alice--other",
+        "ops": [
+          "deploy",
+          "build"
+        ],
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760001800000
+      },
+      "canonical": "flagship/companion-delegation/v1|0123456789abcdef|alice--other|build,deploy|1760000000000|1760001800000"
+    },
+    {
+      "name": "fewer operations",
+      "delegation": {
+        "sessionId": "0123456789abcdef",
+        "serviceRef": "alice--chess",
+        "ops": [
+          "build"
+        ],
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760001800000
+      },
+      "canonical": "flagship/companion-delegation/v1|0123456789abcdef|alice--chess|build|1760000000000|1760001800000"
+    },
+    {
+      "name": "a later end",
+      "delegation": {
+        "sessionId": "0123456789abcdef",
+        "serviceRef": "alice--chess",
+        "ops": [
+          "deploy",
+          "build"
+        ],
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760001800001
+      },
+      "canonical": "flagship/companion-delegation/v1|0123456789abcdef|alice--chess|build,deploy|1760000000000|1760001800001"
+    }
+  ]
+}

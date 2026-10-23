@@ -45,6 +45,8 @@ import type {
 import { hexToBytes } from "./hex.js";
 import { recordAuditEvent } from "./auditEvents.js";
 import { computeDevicesEtag } from "./deviceDirectoryEtag.js";
+import { recoveryPasskeyPolicy, type PasskeyPolicy } from "./passkeyAssertion.js";
+import { passkeyFromAttestation } from "./webauthnRecovery.js";
 import {
   conflict,
   forbidden,
@@ -89,6 +91,8 @@ export interface WipeRestartDeps {
   deviceSelfProfiles?: DeviceSelfProfileStorage;
   deviceManagedProfiles?: DeviceManagedProfileStorage;
   accountDirectoryKeyGrants?: AccountDirectoryKeyGrantStorage;
+  /** Which rpIds a recovery passkey may belong to (`recoveryPasskeyPolicy(apex)`). */
+  passkeyPolicy?: PasskeyPolicy;
   maxAgeMs?: number;
   rateLimitMs?: number;
   idempotencyWindowMs?: number;
@@ -264,6 +268,15 @@ export async function handleWipeRestart(
   if (!verifyWipeRestart(claim, sig, oldIrkPub)) {
     return forbidden("invalid signature");
   }
+  // SEC-REPAIR-001: the new passkey's public key rides beside the signed request, bound to it by the
+  // credential id the old IRK signed, so the new record keeps `.com`'s passkey check.
+  let passkey: { coseHex: string; alg: number } | undefined;
+  const att = (b as { newPasskeyAttestationObject?: unknown }).newPasskeyAttestationObject;
+  if (att !== undefined) {
+    const read = await passkeyFromAttestation(att, r.newCredentialId, deps.passkeyPolicy ?? recoveryPasskeyPolicy());
+    if ("response" in read) return read.response;
+    passkey = read.passkey;
+  }
 
   // Mutation sequence. We do these as four ordered writes rather than
   // a true single transaction because D1's transaction primitive
@@ -287,6 +300,7 @@ export async function handleWipeRestart(
     credentialIdHex: r.newCredentialId,
     wrappedUmkB64: r.newWrappedUmk,
     irkPubHex: r.newIrkPub,
+    ...(passkey ? { passkey } : {}),
     createdAt: t,
     updatedAt: t,
   });

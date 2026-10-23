@@ -12,8 +12,9 @@ run inline.
 """
 from __future__ import annotations
 
-import platform
 import json
+import os
+import platform
 import re
 import threading
 import time
@@ -22,7 +23,7 @@ import urllib.request
 from dataclasses import replace
 from typing import Callable, Dict, List, Optional
 
-from . import host_arch, kvm_probe, qemu_failure, resource_plan
+from . import host_arch, kvm_probe, qemu_failure, resource_plan, server_code_seen
 from .config import VMConfig
 from .control_plane import order_url
 from .host_resources import HostResources
@@ -222,6 +223,18 @@ class HostedServer:
         return self.record.config.serial_console_enabled
 
 
+def _default_seen_post(url: str, payload: bytes) -> int:
+    """POST Studio's report; the HTTP status, or 0 when it could not be sent."""
+    req = urllib.request.Request(url, data=payload, method="POST", headers={"content-type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return int(response.status)
+    except urllib.error.HTTPError as e:
+        return int(e.code)
+    except (urllib.error.URLError, OSError, ValueError):
+        return 0
+
+
 def _default_health_fetch(url: str) -> Optional[bytes]:
     try:
         with urllib.request.urlopen(url, timeout=15) as response:
@@ -265,8 +278,17 @@ class VMManager:
         health_fetch: Callable[[str], Optional[bytes]] = _default_health_fetch,
         health_interval: float = 60.0,
         available_memory: Optional[Callable[[], Optional[int]]] = None,
+        seen_post: Optional[Callable[[str, bytes], int]] = None,
+        code_watch_interval: float = 2.0,
     ) -> None:
         self.store = store
+        # First contact: the phone's key for confirming the next hosted server's code (kept with that
+        # server's bundle once it is created), the code each server showed this boot, and who reports it.
+        self.pending_studio_confirm_key: Optional[bytes] = None
+        self.server_codes: Dict[str, str] = {}
+        self._code_watches: Dict[str, threading.Event] = {}
+        self._seen_post = seen_post or _default_seen_post
+        self._code_watch_interval = code_watch_interval
         self.toolchain = toolchain
         # The arch this machine can host (None = unsupported CPU). A config
         # whose arch differs is refused — cross-arch TCG would be dishonestly
@@ -432,6 +454,12 @@ class VMManager:
             state_changed_at=now,
         )
         self.store.create(record)
+        key, self.pending_studio_confirm_key = self.pending_studio_confirm_key, None
+        if key is not None:
+            try:
+                server_code_seen.write_key(key, self.store.layout, config.name)
+            except OSError:
+                pass
         self._insert_sorted(HostedServer(record))
         self._lifecycles[config.name] = VMLifecycle(
             config.awaits_phone_unlock_at_boot, VMState.created(), self._clock
@@ -449,6 +477,8 @@ class VMManager:
             except Exception:
                 pass
         self._lifecycles.pop(name, None)
+        self._cancel_code_watch(name)
+        self.server_codes.pop(name, None)
         self._cancel_unlock_poll(name)
         self._cancel_install_poll(name)
         self._cancel_health_poll(name)
@@ -678,6 +708,7 @@ class VMManager:
                 f"VM {name}: started ({config.cpu_count} vCPU, "
                 f"{config.memory_bytes // resource_plan.GIB} GiB, {self.accel})"
             )
+            self._watch_server_code(config)
         except (QemuHostError, OSError) as e:
             self._hosts.pop(name, None)
             self.log(f"VM {name}: failed to start — {e}")
@@ -701,6 +732,7 @@ class VMManager:
         (success-poweroff / completed-install reboot / never-booted all look
         identical), so it goes through the duration-gated verdict."""
         self._hosts.pop(name, None)
+        self._cancel_code_watch(name)
         kind = self._current_state_kind(name)
         if kind == VMStateKind.INSTALLING:
             if exit_code != 0:
@@ -787,6 +819,76 @@ class VMManager:
                 stop.wait(self._unlock_interval)
 
         threading.Thread(target=poll, daemon=True).start()
+
+    # ---- first contact: the code the guest shows on its server-code port ----
+
+    def _watch_server_code(self, config: VMConfig) -> None:
+        """Read what the guest writes to its server-code port. On this server's own line, note the code
+        and, when the phone gave this server a confirm key, tell `.com` what was seen so the phone can
+        confirm it without asking. Best effort: the phone falls back to asking the owner to compare."""
+        name = config.name
+        self._cancel_code_watch(name)
+        stop = threading.Event()
+        self._code_watches[name] = stop
+        layout = self.store.layout
+        path = server_code_seen.port_log_path(layout, name)
+
+        def watch() -> None:
+            splitter = server_code_seen.ConsoleLineSplitter()
+            offset = 0
+            while not stop.is_set():
+                try:
+                    with open(path, "rb") as f:
+                        f.seek(0, os.SEEK_END)
+                        if f.tell() < offset:
+                            offset = 0
+                        f.seek(offset)
+                        data = f.read()
+                        offset += len(data)
+                except OSError:
+                    data = b""
+                for line in splitter.feed(data):
+                    seen = server_code_seen.parse(line, config.server_domain)
+                    if seen is None:
+                        continue
+                    if self.server_codes.get(name) != seen.code:
+                        self.server_codes[name] = seen.code
+                        self.log(f"VM {name}: this server's code is {server_code_seen.pretty(seen.code)}")
+                        self.on_change()
+                    self._report_server_seen(config, seen)
+                    return
+                stop.wait(self._code_watch_interval)
+
+        threading.Thread(target=watch, daemon=True).start()
+
+    def _report_server_seen(self, config: VMConfig, seen: "server_code_seen.Sighting") -> None:
+        name = config.name
+        layout = self.store.layout
+        key = server_code_seen.read_key(layout, name)
+        serial = config.provision_status_serial
+        if key is None or not serial or not _SERIAL_RE.fullmatch(serial):
+            return
+        mac = server_code_seen.mac_hex(key, config.server_domain, seen.stk_pub_hex)
+        if mac is None:
+            return
+        url = order_url(serial, "server-seen")
+        payload = server_code_seen.body(seen.stk_pub_hex, mac)
+        for attempt in range(4):
+            status = self._seen_post(url, payload)
+            if status == 200:
+                server_code_seen.delete_key(layout, name)
+                self.log(f"VM {name}: told your phone which server this is")
+                return
+            if 400 <= status < 500 and status not in (404, 429):
+                return
+            stop = self._code_watches.get(name)
+            if stop is None or stop.wait(5 + attempt * 10):
+                return
+
+    def _cancel_code_watch(self, name: str) -> None:
+        stop = self._code_watches.pop(name, None)
+        if stop is not None:
+            stop.set()
 
     def _cancel_unlock_poll(self, name: str) -> None:
         stop = self._unlock_polls.pop(name, None)

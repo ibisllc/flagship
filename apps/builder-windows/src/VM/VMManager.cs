@@ -203,6 +203,11 @@ public sealed class VMManager
     private readonly Dictionary<string, CancellationTokenSource> _unlockPolls = new();
     private readonly Dictionary<string, CancellationTokenSource> _installPolls = new();
     private readonly Dictionary<string, CancellationTokenSource> _healthPolls = new();
+    private readonly Dictionary<string, CancellationTokenSource> _codeWatches = new();
+    private static readonly HttpClient SeenReport = new() { Timeout = TimeSpan.FromSeconds(10) };
+
+    /// <summary>The six-digit code each hosted server showed this boot (first contact).</summary>
+    public Dictionary<string, string> ServerCodes { get; } = new();
     private readonly Func<string, CancellationToken, Task<string?>> _healthFetch;
     private readonly TimeSpan _healthInterval;
     private readonly Func<string, CancellationToken, Task<bool>> _unlockProbe;
@@ -308,6 +313,12 @@ public sealed class VMManager
     /// then remasters the installer ISO into InstallerIsoPath(name) and
     /// calls BeginInstallAsync.
     /// </summary>
+    /// <summary>
+    /// The phone's key for confirming the next hosted server's code (first contact): kept with that
+    /// server's bundle once it is created, until Studio has reported the code it saw.
+    /// </summary>
+    public byte[]? PendingStudioConfirmKey { get; set; }
+
     public void CreateServer(VMConfig config)
     {
         var now = _clock();
@@ -320,6 +331,11 @@ public sealed class VMManager
             Tier = ServerTier.HostedVM,
         };
         Store.Create(record);
+        if (PendingStudioConfirmKey is { Length: 32 } key)
+        {
+            try { StudioConfirmKeyFile.Write(key, Store.Layout, config.Name); } catch (IOException) { }
+        }
+        PendingStudioConfirmKey = null;
         InsertSorted(new HostedServer(record));
         _lifecycles[config.Name] = new VMLifecycle(config.AwaitsPhoneUnlockAtBoot, VMState.Created);
     }
@@ -328,6 +344,8 @@ public sealed class VMManager
     /// Stops it first if live.</summary>
     public async Task DeleteServerAsync(string name)
     {
+        if (_codeWatches.Remove(name, out var codeWatch)) codeWatch.Cancel();
+        ServerCodes.Remove(name);
         if (_hosts.TryGetValue(name, out var host))
         {
             host.OnGuestStopped = null;
@@ -558,6 +576,7 @@ public sealed class VMManager
             _hosts[name] = host;
             await host.StartAsync(config, Store.Layout, _attachIso.TryGetValue(name, out var a) && a);
             Log($"VM {name}: started ({config.CpuCount} vCPU, {config.MemoryBytes / VMResourcePlan.GiB} GiB)");
+            WatchServerCode(config);
         }
         catch (Exception e)
         {
@@ -590,6 +609,7 @@ public sealed class VMManager
     /// </summary>
     private async Task GuestStoppedAsync(string name, QemuHost host, int exitCode, string stderrTail)
     {
+        if (_codeWatches.Remove(name, out var codeWatch)) codeWatch.Cancel();
         // A newer run of this server owns it now; this exit is old news.
         if (_hosts.TryGetValue(name, out var live) && !ReferenceEquals(live, host)) return;
         _hosts.Remove(name);
@@ -675,6 +695,93 @@ public sealed class VMManager
     {
         using var response = await UnlockProbe.GetAsync(url, ct);
         return true;
+    }
+
+    // ---- First contact: the code the guest shows on its server-code port ----
+
+    /// <summary>
+    /// Read what the guest writes to its server-code port. On this server's own line, note the code and,
+    /// when the phone gave this server a confirm key, tell `.com` what was seen so the phone can confirm
+    /// it without asking. Best effort: the phone falls back to asking the owner to compare the code.
+    /// </summary>
+    private void WatchServerCode(VMConfig config)
+    {
+        var name = config.Name;
+        if (_codeWatches.Remove(name, out var old)) old.Cancel();
+        var cts = new CancellationTokenSource();
+        _codeWatches[name] = cts;
+        var path = ServerCodeSeen.PortLogPath(Store.Layout, name);
+        var layout = Store.Layout;
+        var host = Environment.GetEnvironmentVariable("FLAGSHIP_CONTROL_HOST") ?? "flagshipserver.com";
+        _ = Task.Run(async () =>
+        {
+            var splitter = new ConsoleLineSplitter();
+            long offset = 0;
+            var reported = false;
+            while (!cts.IsCancellationRequested && !reported)
+            {
+                try
+                {
+                    if (File.Exists(path))
+                    {
+                        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                        if (fs.Length < offset) offset = 0;
+                        fs.Seek(offset, SeekOrigin.Begin);
+                        var buf = new byte[fs.Length - offset];
+                        var n = await fs.ReadAsync(buf, cts.Token);
+                        offset += n;
+                        foreach (var line in splitter.Feed(buf.AsSpan(0, n)))
+                        {
+                            if (ServerCodeSeen.Parse(line, config.ServerDomain) is not { } seen) continue;
+                            OnUi(() =>
+                            {
+                                if (!ServerCodes.TryGetValue(name, out var c) || c != seen.Code)
+                                {
+                                    ServerCodes[name] = seen.Code;
+                                    Log($"VM {name}: this server's code is {ServerCodeSeen.Pretty(seen.Code)}");
+                                }
+                            });
+                            var key = StudioConfirmKeyFile.Read(layout, name);
+                            var serial = config.ProvisionStatusSerial;
+                            if (key is null || string.IsNullOrEmpty(serial) || !ProvisionSerial.IsMatch(serial)) { reported = true; break; }
+                            var mac = ServerCodeSeen.MacHex(key, config.ServerDomain, seen.StkPubHex);
+                            if (mac is null) { reported = true; break; }
+                            reported = await ReportServerSeenAsync($"https://{host}/api/order/{serial}/server-seen",
+                                ServerCodeSeen.Body(seen.StkPubHex, mac), cts.Token);
+                            if (reported)
+                            {
+                                StudioConfirmKeyFile.Delete(layout, name);
+                                OnUi(() => Log($"VM {name}: told your phone which server this is"));
+                            }
+                            reported = true;
+                            break;
+                        }
+                    }
+                    await Task.Delay(TimeSpan.FromSeconds(2), cts.Token);
+                }
+                catch (OperationCanceledException) { return; }
+                catch (IOException) { }
+            }
+        });
+    }
+
+    private static async Task<bool> ReportServerSeenAsync(string url, string body, CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            try
+            {
+                using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                using var response = await SeenReport.PostAsync(url, content, ct);
+                if (response.IsSuccessStatusCode) return true;
+                var code = (int)response.StatusCode;
+                if (code >= 400 && code < 500 && code != 404 && code != 429) return false;
+            }
+            catch (HttpRequestException) { }
+            catch (TaskCanceledException) when (!ct.IsCancellationRequested) { }
+            await Task.Delay(TimeSpan.FromSeconds(5 + attempt * 10), ct);
+        }
+        return false;
     }
 
     // ---- Privacy-safe install checkpoints ----

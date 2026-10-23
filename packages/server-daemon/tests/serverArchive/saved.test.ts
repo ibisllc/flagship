@@ -90,6 +90,7 @@ function fakeOps() {
     imageExists: async (i) => images.has(i),
     removeImage: async (i) => void images.delete(i),
     dumpDatabase: async (s, out) => writeFile(out, `rows-of-${s.database}`),
+    listDump: async () => "; Archive created\n",
     restoreDatabase: async (_s, p) => void restoredDbs.push(await readFile(p, "utf8")),
     archiveFiles: async (v, _c, out) => writeFile(out, `files-of-${v}`),
     restoreFiles: async () => {},

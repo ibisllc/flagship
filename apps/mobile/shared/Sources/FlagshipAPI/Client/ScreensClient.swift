@@ -137,7 +137,22 @@ public protocol ScreensClient: Sendable {
     /// `POST /api/screens/debug-access {grant, signatureHex}`: turn debug
     /// access on or renew it. `body` is `DebugAccess.envelopeJSON`. A refusal
     /// is `.http` with the box's `{error}` sentence.
+    func servicePermissions(serviceId: String) async throws -> ServicePermissions
+    func restoredAccessDrafts() async throws -> RestoredAccessList
+    func approveRestoredAccess(request: [String: Any], signatureHex: String) async throws
+    func discardRestoredAccess(serviceRef: String) async throws
+    func updateMode(serviceId: String) async throws -> UpdateModeState
+    func setUpdateMode(serviceId: String, mode: String) async throws
+    func companionDelegations(sessionId: String) async throws -> CompanionDelegationList
+    func allowCompanionBuild(request: [String: Any], signatureHex: String) async throws
+    func endCompanionDelegation(sessionId: String, serviceRef: String) async throws
+    func revokeServicePermission(serviceId: String, grantId: String?) async throws -> PermissionRevokeResult
     func debugAccessGrant(body: String) async throws -> DebugAccessChange
+    /// N14: the security sliver's lines, and the owner's answer to a waiting publisher key (N11).
+    func securitySliver() async throws -> SecuritySliverResponse
+    func publisherState(serviceId: String) async throws -> WaitingPublisherResponse
+    func trustPublisher(serviceId: String, trust: PublisherTrust, signatureHex: String) async throws
+    func rejectPublisher(serviceId: String) async throws
     /// `POST /api/screens/debug-access/revoke {revoke, signatureHex}`.
     func debugAccessRevoke(body: String) async throws -> DebugAccessChange
     /// `GET /api/screens/settings/access-alerts`. An older box answers 404.
@@ -405,6 +420,30 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
 }
 
 public extension ScreensClient {
+    func securitySliver() async throws -> SecuritySliverResponse { SecuritySliverResponse(lines: []) }
+    func publisherState(serviceId: String) async throws -> WaitingPublisherResponse {
+        throw ScreensClientError.notImplemented("publisher keys")
+    }
+    func trustPublisher(serviceId: String, trust: PublisherTrust, signatureHex: String) async throws {
+        throw ScreensClientError.notImplemented("publisher keys")
+    }
+    func rejectPublisher(serviceId: String) async throws {
+        throw ScreensClientError.notImplemented("publisher keys")
+    }
+    func servicePermissions(serviceId: String) async throws -> ServicePermissions {
+        throw ScreensClientError.notImplemented("permissions")
+    }
+    func restoredAccessDrafts() async throws -> RestoredAccessList { throw ScreensClientError.notImplemented("restored permissions") }
+    func approveRestoredAccess(request: [String: Any], signatureHex: String) async throws { throw ScreensClientError.notImplemented("restored permissions") }
+    func discardRestoredAccess(serviceRef: String) async throws { throw ScreensClientError.notImplemented("restored permissions") }
+    func updateMode(serviceId: String) async throws -> UpdateModeState { throw ScreensClientError.notImplemented("update modes") }
+    func setUpdateMode(serviceId: String, mode: String) async throws { throw ScreensClientError.notImplemented("update modes") }
+    func companionDelegations(sessionId: String) async throws -> CompanionDelegationList { throw ScreensClientError.notImplemented("delegations") }
+    func allowCompanionBuild(request: [String: Any], signatureHex: String) async throws { throw ScreensClientError.notImplemented("delegations") }
+    func endCompanionDelegation(sessionId: String, serviceRef: String) async throws { throw ScreensClientError.notImplemented("delegations") }
+    func revokeServicePermission(serviceId: String, grantId: String?) async throws -> PermissionRevokeResult {
+        throw ScreensClientError.notImplemented("permissions")
+    }
     func debugAccessGrant(body: String) async throws -> DebugAccessChange {
         throw ScreensClientError.notImplemented("debug access")
     }

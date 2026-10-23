@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import FlagshipAPI
+import Flagship
 import FlagshipCore
 
 /// Settings tab, organised into the spec S1 six-group taxonomy:
@@ -68,6 +69,11 @@ public struct SettingsScreen: View {
     /// into the existing finalize screen via `onFinalizeReplace`. Mirrors
     /// the webapp banner. nil → no banner.
     var pendingRePair: PendingRePairSnapshot? = nil
+    /// An admin device sees a pending recovery and may reject it (N04).
+    var canRejectRecovery: Bool = false
+    var onRejectRecovery: () async -> SettingsViewModel.RecoveryVetoOutcome = { .alreadyOver }
+    @State private var confirmReject = false
+    @State private var rejectMessage: String? = nil
     var onDisconnectTrustedDevice: (SettingsViewModel.DirectoryDevice) async -> Bool = { _ in false }
     var canManageNames: Bool = false
     var onRenameAccount: (String) async -> Bool = { _ in false }
@@ -186,6 +192,8 @@ public struct SettingsScreen: View {
         controlDevices: LoadingState<[PairedSessionSummary]>,
         trustedDevices: LoadingState<[SettingsViewModel.DirectoryDevice]> = .loaded([]),
         pendingRePair: PendingRePairSnapshot? = nil,
+        canRejectRecovery: Bool = false,
+        onRejectRecovery: @escaping () async -> SettingsViewModel.RecoveryVetoOutcome = { .alreadyOver },
         accountType: String? = nil,
         canAddDevice: Bool = true,
         onAddDevice: @escaping () -> Void = {},
@@ -232,6 +240,8 @@ public struct SettingsScreen: View {
         self.controlDevices = controlDevices
         self.trustedDevices = trustedDevices
         self.pendingRePair = pendingRePair
+        self.canRejectRecovery = canRejectRecovery
+        self.onRejectRecovery = onRejectRecovery
         self.onDisconnectTrustedDevice = onDisconnectTrustedDevice
         self.canManageNames = canManageNames
         self.onRenameAccount = onRenameAccount
@@ -516,6 +526,7 @@ public struct SettingsScreen: View {
                 // M4 — pending re-pair banner. A replace started on THIS or
                 // ANY other device surfaces here with a grace countdown and
                 // a "Finalize now" entry into the finalize screen.
+                recoveryReviewCard(c: c)
                 pendingRePairBanner(c: c)
                 Text("Phones and tablets that hold your account keys.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -595,6 +606,50 @@ public struct SettingsScreen: View {
     /// webapp's `shouldRenderBanner`). The countdown ticks live via a
     /// TimelineView; "Finalize now" is gated on the grace having elapsed
     /// and routes into the existing finalize screen via onFinalizeReplace.
+    /// N04: a recovery of this account is waiting. An admin device can reject it; the new
+    /// device has no admin authority until the wait ends.
+    @ViewBuilder
+    private func recoveryReviewCard(c: FSColors) -> some View {
+        if canRejectRecovery, let pending = pendingRePair?.pending, pending.objectedAt == nil {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(c.danger)
+                        Text("A recovery of this account is waiting")
+                            .font(FS.font.h4()).foregroundColor(c.text)
+                        Spacer()
+                    }
+                    Text("A new device asked to take over this account. It becomes active on \(absolute(ms: pending.completesAt)) unless an admin rejects it. It has no admin authority until then.")
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("recovery-review-body")
+                    Text(RecoveryReviewCopy.unusualNote)
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    if let m = rejectMessage {
+                        Text(m).font(FS.font.caption()).foregroundColor(c.danger)
+                    }
+                    FSPrimaryButton("Reject recovery", enabled: true, block: true) { confirmReject = true }
+                        .accessibilityIdentifier("recovery-review-reject-btn")
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("recovery-review-card")
+            .confirmationDialog(RecoveryReviewCopy.confirmTitle, isPresented: $confirmReject, titleVisibility: .visible) {
+                Button("Reject recovery", role: .destructive) {
+                    Task {
+                        switch await onRejectRecovery() {
+                        case .rejected: rejectMessage = nil
+                        case .alreadyOver: rejectMessage = "This recovery was already cancelled or finished."
+                        case .failed(let m): rejectMessage = m
+                        }
+                    }
+                }
+                Button("Keep waiting", role: .cancel) {}
+            } message: {
+                Text(RecoveryReviewCopy.confirmMessage)
+            }
+        }
+    }
+
     @ViewBuilder
     private func pendingRePairBanner(c: FSColors) -> some View {
         if ReplaceDeviceViewModel.shouldRenderPendingBanner(pendingRePair),
@@ -805,6 +860,7 @@ public struct SettingsScreen: View {
                         .accessibilityIdentifier("settings-revoke-browser-\(s.tokenPrefix)")
                 }
             }
+            if !s.current { CompanionDelegationView(sessionId: s.tokenPrefix, canSign: Keystore.hasAdminRoot) }
         }
     }
 

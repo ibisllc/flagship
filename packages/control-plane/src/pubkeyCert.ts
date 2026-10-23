@@ -2,6 +2,8 @@ import {
   ACCOUNT_KEY_ATTESTATION_TTL_MS,
   ed,
   signAccountKeyAttestation,
+  signAuthTime,
+  verifyAuthTime,
   signUserPubKeyBinding,
   verifyCaSignedAccountKeyAttestation,
   verifyCaSignedUserPubKeyBinding,
@@ -12,6 +14,7 @@ import {
 import type { UsernameStorage } from "@flagship/storage";
 import { hexToBytes, bytesToHex } from "./hex.js";
 import {
+  malformed,
   forbidden,
   notFound, ok,
   type HandlerResponseWithHeaders,
@@ -181,6 +184,25 @@ export async function handleAccountKeyAttestation(
   );
   if (gateResp) return gateResp;
   return ok({ attestation }, { "cache-control": "private, no-store" });
+}
+
+/**
+ * `GET /api/auth-time?nonce=<32 hex>` — the CA's word on what time it is, for one caller's nonce
+ * (SECURITY-HARDENING-PLAN.md 18.5, N07). A box anchors its privileged deadlines to this instead of
+ * its own clock. Names nobody, learns nothing about the caller, and is never cached.
+ */
+export async function handleAuthTime(
+  deps: Pick<PubkeyCertDeps, "ca" | "caGate" | "now">,
+  nonceHex: string | null,
+): Promise<HandlerResponseWithHeaders> {
+  if (!nonceHex || !/^[0-9a-f]{32}$/.test(nonceHex)) return malformed("nonce must be 32 lowercase hex");
+  const now = (deps.now ?? (() => Date.now()))();
+  const stamp = signAuthTime(nonceHex, now, deps.ca.keypair);
+  const gateResp = evaluateCaGate(deps.caGate, "AuthTime", "-", now, () =>
+    verifyAuthTime(stamp, nonceHex, deps.caGate!.caTrustChain),
+  );
+  if (gateResp) return gateResp;
+  return ok({ stamp }, { "cache-control": "no-store" });
 }
 
 /**

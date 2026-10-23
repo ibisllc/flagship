@@ -283,3 +283,53 @@ describe("handleDns01Delete", () => {
     expect(r.status).toBe(404);
   });
 });
+
+describe("the account-name challenge (*.<user>), under the admin's server grant", () => {
+  const ACCOUNT_NAME = `_acme-challenge.alice.${APEX}`;
+  async function world(opts: { adminRoot?: Keypair } = {}) {
+    const storage = new InMemoryStorage();
+    const identity = makeKey();
+    const irk = makeKey();
+    await registerServer(storage, identity);
+    await storage.usernames.put({ username: "alice", irkPubHex: bytesToHex(irk.publicKey), claimedAt: 1, ...(opts.adminRoot ? { adminRootPubHex: bytesToHex(opts.adminRoot.publicKey) } : {}) });
+    const dns = new FakeCfClient();
+    return { storage, identity, irk, dns, deps: { servers: storage.servers, usernames: storage.usernames, dns } };
+  }
+  const grantBy = async (signer: Keypair, identity: Keypair, serverDomain = SERVER_FQDN) => {
+    const { signServerWildcardGrant } = await import("@flagship/protocol");
+    const issuedAt = 1_760_000_000_000;
+    const sig = signServerWildcardGrant({ username: "alice", serverDomain, stkPubHex: bytesToHex(identity.publicKey), issuedAt }, (m) => ed.sign(m, signer.privateKey));
+    return { issuedAt, signature: bytesToHex(sig) };
+  };
+
+  it("publishes and cleans up with the grant signed by the account's admin root, and refuses it without", async () => {
+    const admin = makeKey();
+    const w = await world({ adminRoot: admin });
+    const grant = await grantBy(admin, w.identity);
+    expect((await handleDns01Publish(w.deps, publishBody({ identity: w.identity, recordValue: "v", recordName: ACCOUNT_NAME }))).status).toBe(403);
+    const r = await handleDns01Publish(w.deps, { ...publishBody({ identity: w.identity, recordValue: "v", recordName: ACCOUNT_NAME }), serverWildcardGrant: grant });
+    expect(r.status).toBe(200);
+    const recordId = (r.body as { recordId: string }).recordId;
+    expect(w.dns.records.get(recordId)?.name).toBe(ACCOUNT_NAME);
+    const issuedAt = Date.now();
+    const del = (extra: object) => handleDns01Delete(w.deps, { request: { serverId: SERVER_FQDN, recordId, issuedAt }, signature: bytesToHex(signDns01Delete({ serverId: SERVER_FQDN, recordId, issuedAt }, w.identity)), ...extra });
+    expect((await del({})).status).toBe(403);
+    expect((await del({ serverWildcardGrant: grant })).status).toBe(200);
+  });
+
+  it("refuses a grant from the IRK when the account pins an admin root, for another server, or for another key", async () => {
+    const admin = makeKey();
+    const w = await world({ adminRoot: admin });
+    const send = (g: object) => handleDns01Publish(w.deps, { ...publishBody({ identity: w.identity, recordValue: "v", recordName: ACCOUNT_NAME }), serverWildcardGrant: g });
+    expect((await send(await grantBy(w.irk, w.identity))).status).toBe(403);
+    expect((await send(await grantBy(admin, w.identity, `home2.alice.${APEX}`))).status).toBe(403);
+    expect((await send(await grantBy(admin, makeKey()))).status).toBe(403);
+  });
+
+  it("takes the IRK's grant on an account without an admin root, and never another account's name", async () => {
+    const w = await world();
+    const grant = await grantBy(w.irk, w.identity);
+    expect((await handleDns01Publish(w.deps, { ...publishBody({ identity: w.identity, recordValue: "v", recordName: ACCOUNT_NAME }), serverWildcardGrant: grant })).status).toBe(200);
+    expect((await handleDns01Publish(w.deps, { ...publishBody({ identity: w.identity, recordValue: "v", recordName: `_acme-challenge.bob.${APEX}` }), serverWildcardGrant: grant })).status).toBe(403);
+  });
+});

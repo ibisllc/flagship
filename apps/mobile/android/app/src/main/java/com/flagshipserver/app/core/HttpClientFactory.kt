@@ -38,8 +38,10 @@ object HttpClientFactory {
             // every TLS handshake (WebSocket upgrades included — OkHttp skips
             // network interceptors for those); the network interceptor
             // re-checks per request on pooled connections.
-            .hostnameVerifier(CertPinHostnameVerifier(CertPinRegistry.shared::pinFor))
-            .addNetworkInterceptor(CertPinInterceptor(CertPinRegistry.shared::pinFor))
+            // A box this phone knows but holds no verified pin for is refused, not trusted on
+            // ordinary web trust (SECURITY-HARDENING-PLAN.md 7.1).
+            .hostnameVerifier(CertPinHostnameVerifier(CertPinRegistry.shared::pinFor, isKnownBox = { CertPinRegistry.shared.isKnownBox(it) }))
+            .addNetworkInterceptor(CertPinInterceptor(CertPinRegistry.shared::pinFor, isKnownBox = { CertPinRegistry.shared.isKnownBox(it) }))
             // LAN-direct: a box host resolves to its pin-verified LAN address
             // first when the phone is next to it (docs/lan-direct.md).
             // A box name the phone's resolver can't find (cached "no such name")

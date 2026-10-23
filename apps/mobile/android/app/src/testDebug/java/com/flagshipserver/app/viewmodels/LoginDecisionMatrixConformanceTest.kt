@@ -100,14 +100,8 @@ class LoginDecisionMatrixConformanceTest {
         val prfSecret = webauthn.prfAssert(credentialId)
         val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
         server.registerRecoveryEnvelope(
-            RecoveryEnvelopeRequest(
-                request = RecoveryEnvelopeRequest.Inner(
-                    username = "demo",
-                    credentialId = credentialId,
-                    wrappedUmk = wrapped,
-                    issuedAt = 0L,
-                ),
-                signature = "00",
+            com.flagshipserver.app.keystore.makeRecoveryUpload(
+                username = "demo", credentialIdHex = credentialId, wrappedUmk = wrapped, umkSeed = recoveredSeed,
             ),
         )
     }
@@ -127,16 +121,11 @@ class LoginDecisionMatrixConformanceTest {
         val prfSecret = webauthn.prfAssertWithSalt(credentialId, secrets.prfSalt)
         val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
         server.registerRecoveryEnvelope(
-            RecoveryEnvelopeRequest(
-                request = RecoveryEnvelopeRequest.Inner(
-                    username = username,
-                    credentialId = credentialId,
-                    wrappedUmk = wrapped,
-                    issuedAt = 0L,
-                    fetchTokenHash = RecoveryDerivation.sha256Hex(secrets.fetchToken),
-                    prfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt),
-                ),
-                signature = "00",
+            com.flagshipserver.app.keystore.makeRecoveryUpload(
+                username = username, credentialIdHex = credentialId, wrappedUmk = wrapped,
+                fetchTokenHashHex = RecoveryDerivation.sha256Hex(secrets.fetchToken),
+                prfSaltHashHex = RecoveryDerivation.sha256Hex(secrets.prfSalt),
+                umkSeed = recoveredSeed,
             ),
         )
     }

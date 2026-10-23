@@ -100,8 +100,12 @@ export interface AccessSync {
   reconcileOnce(): Promise<void>;
   /** Retry failed pushes once. */
   flushOnce(): Promise<void>;
+  /** Hand-overs still waiting for a peer, and since when (the security sliver's offline-replica lines). */
+  pending(): Array<{ peer: string; serviceRef: string; entries: number; since: number }>;
   /** Whether `peer` runs the app and answers (an authenticated pull with this box's digest). */
   probe(peer: string, serviceRef: string): Promise<boolean>;
+  /** What a freshness checkpoint needs to know about this app's list (N07). */
+  freshnessState(serviceRef: string): { shared: boolean; catchingUp: boolean; hasPeers: boolean; lastSyncAt: number | null };
   /** Drop an uninstalled app's journal and pending hand-overs. */
   forget(serviceRef: string): Promise<void>;
   /**
@@ -124,6 +128,8 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
   const aloneAfterMs = opts.aloneAfterMs ?? 120_000;
   /** peer → serviceRef → entries still to hand over */
   const outbox = new Map<string, Map<string, Map<string, AccessEntry>>>();
+  /** `peer\nref` → when its oldest waiting entry was queued */
+  const queuedSince = new Map<string, number>();
   const timers: ReturnType<typeof setInterval>[] = [];
   const inFlight = new Set<Promise<void>>();
 
@@ -134,6 +140,8 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
   }
 
   const shared = (ref: string) => opts.key !== null && scope(ref) === "account";
+  /** When this box last compared its list with another server and agreed (N07). */
+  const lastSyncAt = new Map<string, number>();
 
   function queue(peer: string, ref: string, entries: AccessEntry[]): void {
     const byRef = outbox.get(peer) ?? new Map<string, Map<string, AccessEntry>>();
@@ -141,6 +149,7 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
     const m = byRef.get(ref) ?? new Map<string, AccessEntry>();
     byRef.set(ref, m);
     for (const e of entries) m.set(entryKey(e), e);
+    if (!queuedSince.has(`${peer}\n${ref}`)) queuedSince.set(`${peer}\n${ref}`, now());
   }
 
   async function post(op: "push" | "pull", to: string, ref: string, payload: Record<string, unknown>): Promise<Response | null> {
@@ -294,6 +303,7 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
     } catch {
       return false;
     }
+    lastSyncAt.set(ref, now());
     if (body.same === true) return true;
     const theirs = Array.isArray(body.entries) ? body.entries : [];
     await take(ref, theirs);
@@ -360,15 +370,27 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
         // A queued push to a leader that has since lost the role goes to the new one.
         const leader = opts.peers()?.leaderFor(ref)?.toLowerCase() ?? null;
         const to = leader && leader !== self && !(opts.peers()?.runners(ref) ?? []).includes(peer) ? leader : peer;
-        if (await push(to, ref, entries)) byRef.delete(ref);
+        if (await push(to, ref, entries)) {
+          byRef.delete(ref);
+          queuedSince.delete(`${peer}\n${ref}`);
+        }
       }
       if (byRef.size === 0) outbox.delete(peer);
     }
   }
 
+  function pending(): Array<{ peer: string; serviceRef: string; entries: number; since: number }> {
+    const out: Array<{ peer: string; serviceRef: string; entries: number; since: number }> = [];
+    for (const [peer, byRef] of outbox) {
+      for (const [ref, m] of byRef) if (m.size > 0) out.push({ peer, serviceRef: ref, entries: m.size, since: queuedSince.get(`${peer}\n${ref}`) ?? now() });
+    }
+    return out;
+  }
+
   return {
     record,
     handle,
+    pending,
     catchUp: async (ref) => {
       if (shared(ref) && sources(ref).length > 0) opts.store.setCatchingUp(ref, true);
       return catchUp(ref);
@@ -376,6 +398,14 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
     reconcileOnce,
     flushOnce,
     catchUpAll: tickCatchUp,
+    freshnessState(ref) {
+      return {
+        shared: shared(ref),
+        catchingUp: opts.store.isCatchingUp(ref),
+        hasPeers: sources(ref).length > 0,
+        lastSyncAt: lastSyncAt.get(ref) ?? null,
+      };
+    },
     async probe(peer, ref) {
       if (!shared(ref)) return false;
       const r = await post("pull", peer.toLowerCase(), ref, { digest: opts.journal.digest(ref) });
@@ -387,8 +417,10 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
       return true;
     },
     async forget(ref) {
+      lastSyncAt.delete(ref);
       opts.store.setCatchingUp(ref, false);
       for (const byRef of outbox.values()) byRef.delete(ref);
+      for (const k of [...queuedSince.keys()]) if (k.endsWith(`\n${ref}`)) queuedSince.delete(k);
       await opts.journal.forget(ref);
     },
     start() {

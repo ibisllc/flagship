@@ -1,0 +1,93 @@
+{
+  "about": "The owner's answer to a held app-chat request: flagship/chat-approval/v1|serverDomain (lowercase)|requestId|kind|decision|issuedAt, Ed25519, seed 0x55 repeated. kind is incoming or outgoing; decision is allow, always or deny; always is only valid for incoming. Each refused order must fail to produce canonical bytes.",
+  "seedHex": "5555555555555555555555555555555555555555555555555555555555555555",
+  "pubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+  "orders": [
+    {
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "requestId": "3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61",
+        "kind": "incoming",
+        "decision": "allow",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/chat-approval/v1|kitchen.alice.flagship.services|3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61|incoming|allow|1760000000000",
+      "signatureHex": "3b3d0a24bb50592b52f343069bbd74ae935d2a8242b97196ab3520fe98d0957b7bd8cacdbe988ceab061d37d0be6aa420c401b5083c3acecde0b2b0ed25e4200"
+    },
+    {
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "requestId": "3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61",
+        "kind": "incoming",
+        "decision": "always",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/chat-approval/v1|kitchen.alice.flagship.services|3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61|incoming|always|1760000000000",
+      "signatureHex": "c51ea2058ed982a8d2098eafbe0e0627b23d937d857666525e275d7fd654cee383fe67f3c3c11da871d6c72d8efe30697f095424818832226d8e15091d8d5d0b"
+    },
+    {
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "requestId": "3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61",
+        "kind": "incoming",
+        "decision": "deny",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/chat-approval/v1|kitchen.alice.flagship.services|3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61|incoming|deny|1760000000000",
+      "signatureHex": "3ac1c467e0938c87e2db66c026213ecb67cbdca76bd0a97ef4ea3912278a4b0e447f6195334db1b344e29c89634ab68c3d203135c1cee6422fc13a2675282e01"
+    },
+    {
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "requestId": "3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61",
+        "kind": "outgoing",
+        "decision": "allow",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/chat-approval/v1|kitchen.alice.flagship.services|3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61|outgoing|allow|1760000000000",
+      "signatureHex": "d257d9886d07a6ee78b09426b63c3143146c7b0879453c93e3215ff763f7c654a6ad41e7179a083eb485592811da80a3df0afb0e3183b077d07fd0f19e51e900"
+    }
+  ],
+  "refused": [
+    {
+      "name": "always allow on an outgoing request",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "requestId": "3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61",
+        "kind": "outgoing",
+        "decision": "always",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "a separator in the request id",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "requestId": "a|b",
+        "kind": "incoming",
+        "decision": "allow",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "an unknown decision",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "requestId": "3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61",
+        "kind": "incoming",
+        "decision": "maybe",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "an unknown kind",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "requestId": "3f2b9c1e-7a54-4d0e-9b1a-0c5d8e2f4a61",
+        "kind": "sideways",
+        "decision": "allow",
+        "issuedAt": 1760000000000
+      }
+    }
+  ]
+}

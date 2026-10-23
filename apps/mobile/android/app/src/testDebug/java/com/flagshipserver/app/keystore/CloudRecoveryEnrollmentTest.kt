@@ -22,6 +22,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -78,7 +79,8 @@ class CloudRecoveryEnrollmentTest {
         CloudRecoveryEnrollment.enroll(
             server = server,
             passkeys = FakeCeremony(),
-            irk = irk(0x03),
+            irk = irkForUmk(umkSeed),
+            irkPubHex = irkPubHexForUmk(umkSeed),
             username = username,
             umkSeed = umkSeed,
             passphrase = passphrase,
@@ -109,7 +111,8 @@ class CloudRecoveryEnrollmentTest {
         CloudRecoveryEnrollment.enroll(
             server = server,
             passkeys = PasskeyCeremonyAdapter(manager, activity) { secondPrompts++ },
-            irk = irk(0x03),
+            irk = irkForUmk(umkSeed),
+            irkPubHex = irkPubHexForUmk(umkSeed),
             username = username,
             umkSeed = umkSeed,
             passphrase = passphrase,
@@ -135,7 +138,8 @@ class CloudRecoveryEnrollmentTest {
         CloudRecoveryEnrollment.enroll(
             server = server,
             passkeys = FakeCeremony(),
-            irk = irk(0x03),
+            irk = irkForUmk(umkSeed),
+            irkPubHex = irkPubHexForUmk(umkSeed),
             username = username,
             umkSeed = umkSeed,
             passphrase = passphrase,
@@ -175,7 +179,8 @@ class CloudRecoveryEnrollmentTest {
         CloudRecoveryEnrollment.enroll(
             server = capturing,
             passkeys = FakeCeremony(),
-            irk = irk(0x03),
+            irk = irkForUmk(umkSeed),
+            irkPubHex = irkPubHexForUmk(umkSeed),
             username = username,
             umkSeed = umkSeed,
             passphrase = passphrase,
@@ -183,24 +188,27 @@ class CloudRecoveryEnrollmentTest {
             acmeScalar = null,
             now = 1_700_000_000_000L,
         )
-        val inner = capturing.captured!!.request
-        assertEquals(credentialIdHex, inner.credentialId)
+        val claim = capturing.captured!!.claim
+        assertEquals(credentialIdHex, claim.credentialIdHex)
         assertTrue(
             "credentialId must be 16-512 hex chars",
-            Regex("^[0-9a-fA-F]{16,512}$").matches(inner.credentialId),
+            Regex("^[0-9a-fA-F]{16,512}$").matches(claim.credentialIdHex),
         )
         assertTrue(
             "fetchTokenHash must be 64 lowercase hex",
-            Regex("^[0-9a-f]{64}$").matches(inner.fetchTokenHash ?: ""),
+            Regex("^[0-9a-f]{64}$").matches(claim.fetchTokenHashHex),
         )
         assertTrue(
             "prfSaltHash must be 64 lowercase hex",
-            Regex("^[0-9a-f]{64}$").matches(inner.prfSaltHash ?: ""),
+            Regex("^[0-9a-f]{64}$").matches(claim.prfSaltHashHex),
         )
-        // The stored gate hashes equal sha256 of the locally-derived tokens.
+        // The signed gate hashes equal sha256 of the locally-derived tokens.
         val secrets = RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
-        assertEquals(RecoveryDerivation.sha256Hex(secrets.fetchToken), inner.fetchTokenHash)
-        assertEquals(RecoveryDerivation.sha256Hex(secrets.prfSalt), inner.prfSaltHash)
+        assertEquals(RecoveryDerivation.sha256Hex(secrets.fetchToken), claim.fetchTokenHashHex)
+        assertEquals(RecoveryDerivation.sha256Hex(secrets.prfSalt), claim.prfSaltHashHex)
+        // A first record: generation 1, chained onto nothing, no escrow it did not send.
+        assertEquals("genesis", claim.priorDigestHex)
+        assertEquals(1, claim.generation)
     }
 
     @Test
@@ -211,7 +219,8 @@ class CloudRecoveryEnrollmentTest {
         CloudRecoveryEnrollment.enroll(
             server = capturing,
             passkeys = FakeCeremony(),
-            irk = irk(0x03),
+            irk = irkForUmk(umkSeed),
+            irkPubHex = irkPubHexForUmk(umkSeed),
             username = username,
             umkSeed = umkSeed,
             passphrase = passphrase,
@@ -221,10 +230,14 @@ class CloudRecoveryEnrollmentTest {
         )
         val json = Json { encodeDefaults = true; explicitNulls = false }
             .encodeToString(RecoveryEnvelopeRequest.serializer(), capturing.captured!!)
-        val inner = Json.parseToJsonElement(json).jsonObject["request"]!!.jsonObject
-        assertEquals(credentialIdHex, inner["credentialId"]!!.jsonPrimitive.content)
-        assertTrue(inner.containsKey("fetchTokenHash"))
-        assertTrue(inner.containsKey("prfSaltHash"))
+        val body = Json.parseToJsonElement(json).jsonObject
+        assertFalse("the v1 nested request is gone", body.containsKey("request"))
+        val claim = body["claim"]!!.jsonObject
+        assertEquals(credentialIdHex, claim["credentialIdHex"]!!.jsonPrimitive.content)
+        assertTrue(claim.containsKey("fetchTokenHashHex"))
+        assertTrue(claim.containsKey("prfSaltHashHex"))
+        // An escrow that is "none" carries no digest key at all, whatever the Json config.
+        assertEquals(setOf("change"), claim["adminRoot"]!!.jsonObject.keys)
     }
 
     @Test
@@ -233,7 +246,8 @@ class CloudRecoveryEnrollmentTest {
         CloudRecoveryEnrollment.enroll(
             server = server,
             passkeys = FakeCeremony(),
-            irk = irk(0x03),
+            irk = irkForUmk(umkSeed),
+            irkPubHex = irkPubHexForUmk(umkSeed),
             username = username,
             umkSeed = umkSeed,
             passphrase = passphrase,
@@ -267,7 +281,8 @@ class CloudRecoveryEnrollmentTest {
         CloudRecoveryEnrollment.enroll(
             server = server,
             passkeys = FakeCeremony(),
-            irk = irk(0x03),
+            irk = irkForUmk(umkSeed),
+            irkPubHex = irkPubHexForUmk(umkSeed),
             username = username,
             umkSeed = umkSeed,
             passphrase = passphrase,
@@ -308,7 +323,8 @@ class CloudRecoveryEnrollmentTest {
             CloudRecoveryEnrollment.enroll(
                 server = server,
                 passkeys = FakeCeremony(),
-                irk = irk(0x03),
+                irk = irkForUmk(umkSeed),
+                irkPubHex = irkPubHexForUmk(umkSeed),
                 username = username,
                 umkSeed = umkSeed,
                 passphrase = "short",
@@ -333,7 +349,8 @@ class CloudRecoveryEnrollmentTest {
         CloudRecoveryEnrollment.enroll(
             server = capturing,
             passkeys = FakeCeremony(),
-            irk = irk(0x03),
+            irk = irkForUmk(umkSeed),
+            irkPubHex = irkPubHexForUmk(umkSeed),
             username = username,
             umkSeed = umkSeed,
             passphrase = passphrase,
@@ -350,26 +367,37 @@ class CloudRecoveryEnrollmentTest {
         val oldSeed = ByteArray(32) { 0x11 }
         val newSeed = ByteArray(32) { 0x42 }
         enrollWithAdminRoot(capturing, oldSeed)
-        val enrolled = capturing.captured!!.request
+        val enrolled = capturing.captured!!
 
         CloudRecoveryEnrollment.reEscrowAdminRoot(
             server = capturing,
             passkeys = FakeCeremony(),
-            irk = irk(0x03),
+            irk = irkForUmk(umkSeed),
+            irkPubHex = irkPubHexForUmk(umkSeed),
             username = username,
             passphrase = passphrase,
             newAdminRootSeed = newSeed,
             now = 1_700_000_000_001L,
         )
-        val reposted = capturing.captured!!.request
+        val reposted = capturing.captured!!
 
         // SAME credential (assert, never create) + byte-identical pass-through
         // of the UMK / ACME ciphertexts and the gate hashes.
-        assertEquals(enrolled.credentialId, reposted.credentialId)
+        assertEquals(enrolled.claim.credentialIdHex, reposted.claim.credentialIdHex)
         assertEquals(enrolled.wrappedUmk, reposted.wrappedUmk)
-        assertEquals(enrolled.wrappedAcmeAccountKey, reposted.wrappedAcmeAccountKey)
-        assertEquals(enrolled.fetchTokenHash, reposted.fetchTokenHash)
-        assertEquals(enrolled.prfSaltHash, reposted.prfSaltHash)
+        // The ACME escrow is not re-sent: the new record keeps exactly the digest that was stored.
+        assertNull(reposted.wrappedAcmeAccountKey)
+        assertEquals(
+            com.flagshipserver.app.core.RecoveryEscrowChange.keep(
+                com.flagshipserver.app.core.RecoveryRecordV2.sha256HexOfBase64(enrolled.wrappedAcmeAccountKey!!)!!,
+            ),
+            reposted.claim.acmeKey,
+        )
+        assertEquals(enrolled.claim.fetchTokenHashHex, reposted.claim.fetchTokenHashHex)
+        assertEquals(enrolled.claim.prfSaltHashHex, reposted.claim.prfSaltHashHex)
+        // …and chains onto the record it replaces.
+        assertEquals(2, reposted.claim.generation)
+        assertEquals(enrolled.claim.digestHex(), reposted.claim.priorDigestHex)
 
         // The NEW wrappedAdminRoot round-trips to the NEW seed under the SAME
         // PRF secret the credential emits.
@@ -410,7 +438,7 @@ class CloudRecoveryEnrollmentTest {
         val root1 = ByteArray(32) { 0x11 }
         enrollWithAdminRoot(server, root0)
         CloudRecoveryEnrollment.reEscrowAdminRoot(
-            server = server, passkeys = FakeCeremony(), irk = irk(0x03),
+            server = server, passkeys = FakeCeremony(), irk = irkForUmk(umkSeed), irkPubHex = irkPubHexForUmk(umkSeed),
             username = username, passphrase = passphrase,
             newAdminRootSeed = root1, now = 1_700_000_000_001L,
         )
@@ -454,7 +482,8 @@ class CloudRecoveryEnrollmentTest {
             CloudRecoveryEnrollment.reEscrowAdminRoot(
                 server = capturing,
                 passkeys = FakeCeremony(),
-                irk = irk(0x03),
+                irk = irkForUmk(umkSeed),
+                irkPubHex = irkPubHexForUmk(umkSeed),
                 username = username,
                 passphrase = "the wrong passphrase entirely",
                 newAdminRootSeed = ByteArray(32) { 0x42 },
@@ -489,7 +518,8 @@ class CloudRecoveryEnrollmentTest {
             CloudRecoveryEnrollment.reEscrowAdminRoot(
                 server = poisoned,
                 passkeys = FakeCeremony(),
-                irk = irk(0x03),
+                irk = irkForUmk(umkSeed),
+                irkPubHex = irkPubHexForUmk(umkSeed),
                 username = username,
                 passphrase = passphrase,
                 newAdminRootSeed = ByteArray(32) { 0x42 },
@@ -521,7 +551,8 @@ class CloudRecoveryEnrollmentTest {
             CloudRecoveryEnrollment.reEscrowAdminRoot(
                 server = capturing,
                 passkeys = wrongSecretCeremony,
-                irk = irk(0x03),
+                irk = irkForUmk(umkSeed),
+                irkPubHex = irkPubHexForUmk(umkSeed),
                 username = username,
                 passphrase = passphrase,
                 newAdminRootSeed = ByteArray(32) { 0x42 },
@@ -541,7 +572,8 @@ class CloudRecoveryEnrollmentTest {
             CloudRecoveryEnrollment.enroll(
                 server = server,
                 passkeys = FakeCeremony(),
-                irk = irk(0x03),
+                irk = irkForUmk(umkSeed),
+                irkPubHex = irkPubHexForUmk(umkSeed),
                 username = username,
                 umkSeed = umkSeed,
                 passphrase = "passphrase-one",

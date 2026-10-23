@@ -1,0 +1,80 @@
+{
+  "about": "The account key's attestation of a disk-key copy sealed to a watch's boot-only X25519 key: flagship/watch-boot-delegate/v1|serverDomain (lowercase)|delegatePubHex|decryptPubHex|keySha256Hex|issuedAt|expiresAt, Ed25519, account seed 0x66 repeated. The sealed copy opens with decryptPriv (X25519 seed 0x88 repeated) to the 32-byte key 0x99 repeated, whose SHA-256 is keySha256Hex. Every other server, watch, decryption key, key digest or window fails the same signature.",
+  "accountSeedHex": "6666666666666666666666666666666666666666666666666666666666666666",
+  "accountPubHex": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746",
+  "decryptPrivHex": "8888888888888888888888888888888888888888888888888888888888888888",
+  "diskKeyHex": "9999999999999999999999999999999999999999999999999999999999999999",
+  "deposit": {
+    "serverDomain": "kitchen.alice.flagship.services",
+    "delegatePubHex": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+    "decryptPubHex": "30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a",
+    "keySha256Hex": "af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435",
+    "issuedAt": 1760000000000,
+    "expiresAt": 1760086400000,
+    "sealedKeyHex": "884009f3e7e90069df81b6917e28c52e3bb3b2533f0759d5c91531048481c512a42e8cacd2c518ea802c9215648e92239e96596a31f00be4c6afa1f7a8975fd45c66fb90c570b84cdc76f44e2bacd502ca0296fde3bc60e8e1c0b37d",
+    "signatureHex": "1f50b38cffe9259869f4bdfd4d8ce7ac150f0935609196af2cd802f7cd3b9387b92f05508de0424cd2e6de6bc1b7d3de2d9c45aa13d1c474c919e942039e870e"
+  },
+  "canonical": "flagship/watch-boot-delegate/v1|kitchen.alice.flagship.services|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a|af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435|1760000000000|1760086400000",
+  "invalid": [
+    {
+      "name": "another server",
+      "delegate": {
+        "serverDomain": "attic.alice.flagship.services",
+        "delegatePubHex": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "decryptPubHex": "30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a",
+        "keySha256Hex": "af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435",
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760086400000
+      },
+      "canonical": "flagship/watch-boot-delegate/v1|attic.alice.flagship.services|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a|af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435|1760000000000|1760086400000"
+    },
+    {
+      "name": "another watch",
+      "delegate": {
+        "serverDomain": "kitchen.alice.flagship.services",
+        "delegatePubHex": "ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c",
+        "decryptPubHex": "30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a",
+        "keySha256Hex": "af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435",
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760086400000
+      },
+      "canonical": "flagship/watch-boot-delegate/v1|kitchen.alice.flagship.services|ee31f83c88a71219a6fcf9bee0da9bc22620588f5a15a6145553504df9649e5c|30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a|af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435|1760000000000|1760086400000"
+    },
+    {
+      "name": "another decryption key",
+      "delegate": {
+        "serverDomain": "kitchen.alice.flagship.services",
+        "delegatePubHex": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "decryptPubHex": "e01e2df4f6c166cbbc2ba185bee6ab3b51d206f34fb81c5c5d1ff4668581205d",
+        "keySha256Hex": "af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435",
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760086400000
+      },
+      "canonical": "flagship/watch-boot-delegate/v1|kitchen.alice.flagship.services|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|e01e2df4f6c166cbbc2ba185bee6ab3b51d206f34fb81c5c5d1ff4668581205d|af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435|1760000000000|1760086400000"
+    },
+    {
+      "name": "another disk key",
+      "delegate": {
+        "serverDomain": "kitchen.alice.flagship.services",
+        "delegatePubHex": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "decryptPubHex": "30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a",
+        "keySha256Hex": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760086400000
+      },
+      "canonical": "flagship/watch-boot-delegate/v1|kitchen.alice.flagship.services|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a|abababababababababababababababababababababababababababababababab|1760000000000|1760086400000"
+    },
+    {
+      "name": "a later end",
+      "delegate": {
+        "serverDomain": "kitchen.alice.flagship.services",
+        "delegatePubHex": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+        "decryptPubHex": "30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a",
+        "keySha256Hex": "af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435",
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760086400001
+      },
+      "canonical": "flagship/watch-boot-delegate/v1|kitchen.alice.flagship.services|c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7|30d3c865a48fceb3d6118577cf2e5f228d6ff69866264757785b253cb7a4806a|af834b2357bae6ad7eccd35c0a050538af38b19023275f58d1f3b39e4d1a0435|1760000000000|1760086400001"
+    }
+  ]
+}

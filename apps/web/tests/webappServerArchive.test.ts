@@ -408,3 +408,19 @@ describe("backup and restore errors keep their reason", () => {
     expect(archive.archiveErrorText({ status: 503 })).toMatch(/briefly unavailable/);
   });
 });
+
+describe("what a restored app still needs (N09)", () => {
+  const summary = { code: "rebuilt here", awaitingApproval: ["who can use it (2 people), until an admin approves"], reconnect: ["1 API key (create them again)"], notes: ["main: its database holds 1 function that run inside the app's own database"] };
+  it("says what waits for an admin, what to set up again and what runs code, after 'restored'", () => {
+    const line = (archive as unknown as { describeRestoreApp(a: unknown): string }).describeRestoreApp({ name: "Chess", state: "done", summary });
+    expect(line).toBe(
+      "Chess: restored. Waiting for an admin: who can use it (2 people), until an admin approves. Set up again: 1 API key (create them again). Note: main: its database holds 1 function that run inside the app's own database.",
+    );
+  });
+  it("an app with nothing to say reads exactly as before", () => {
+    const f = (archive as unknown as { describeRestoreApp(a: unknown): string }).describeRestoreApp;
+    expect(f({ name: "Chess", state: "done" })).toBe("Chess: restored");
+    expect(f({ name: "Chess", state: "done", summary: { code: "x", awaitingApproval: [], reconnect: [], notes: [] } })).toBe("Chess: restored");
+    expect(f({ name: "Chess", state: "failed", reason: "no image", summary })).toContain("Couldn't restore Chess");
+  });
+});

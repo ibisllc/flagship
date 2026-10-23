@@ -195,7 +195,13 @@ bucket_name = "flagship-iso-temp"
 # Repo adapter queue (src/adapterIndex.ts): anonymous submitted
 # flagship.app.json files waiting for the daily publish to the public repo
 # ADAPTERS_REPO (src/adapterPublish.ts), keyed pending/<sha256>.json and deleted
-# once published. Private (no public dev-url). Provision once:
+# once published. Also the vetting pipeline (src/adapterVetting.ts): attested
+# files at attested/<sha256>.json and the signed index chain at index/<n>.json,
+# served through the Worker. Vetting needs the secrets
+# ADAPTER_REVIEW_ANTHROPIC_KEY and ADAPTER_ATTESTATION_SIGNING_KEY (64-hex
+# Ed25519 seed; its public half in release/adapter-vetting-keys.json), and
+# ADAPTER_COMPLAINT_SALT for complaints to count toward a withdrawal.
+# Private (no public dev-url). Provision once:
 #   npx wrangler r2 bucket create flagship-adapters
 [[r2_buckets]]
 binding = "ADAPTERS_BUCKET"

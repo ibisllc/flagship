@@ -3,6 +3,7 @@ package com.flagshipserver.app.api
 import com.flagshipserver.app.core.AccountReadTokens
 import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.RecoveryRecordV2
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
 import com.flagshipserver.app.core.RateLimitedException
@@ -52,6 +53,8 @@ class MockFlagshipServerClient(
         val wrappedAdminRoot: String?,
         val fetchTokenHashHex: String?,
         val prfSaltHashHex: String?,
+        /** N03 — null = a legacy (v1) row. */
+        val signed: com.flagshipserver.app.core.SignedRecoveryRecord? = null,
         val updatedAt: Long,
     )
     private val recoveryByUsername = mutableMapOf<String, MockRecoveryRecord>()
@@ -270,35 +273,77 @@ class MockFlagshipServerClient(
 
     override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse {
         tick()
-        val r = req.request
-        // Preserve a previously-escrowed account key when a re-upload
-        // omits it, mirroring the control-plane upsert (#28).
-        val priorAcme = recoveryStore[r.credentialId]?.wrappedAcmeAccountKey
-        val resolvedAcme = r.wrappedAcmeAccountKey ?: priorAcme
-        val priorAdminRoot = recoveryStore[r.credentialId]?.wrappedAdminRoot
-        val resolvedAdminRoot = r.wrappedAdminRoot ?: priorAdminRoot
-        recoveryStore[r.credentialId] = RecoveryEnvelope(
-            credentialId = r.credentialId,
-            wrappedUmk = r.wrappedUmk,
-            wrappedAcmeAccountKey = resolvedAcme,
-            wrappedAdminRoot = resolvedAdminRoot,
-        )
-        // Also mirror the by-username row the gated /fetch endpoint reads,
-        // carrying the passphrase-gate hashes (Task #74). Preserve a prior
-        // ACME / admin-root escrow / hashes the same way the Worker's upsert does.
-        val key = r.username.lowercase()
+        val claim = req.claim
+        val key = claim.username.lowercase()
         val prior = recoveryByUsername[key]
+        // Mirror the Worker's chain rule: the record names the stored digest and the next
+        // generation; each escrow is keep (must match what is held) / replace / remove / none.
+        val held = if (prior == null) "genesis" else prior.signed?.digestHex ?: "legacy"
+        if (claim.priorDigestHex != held) throw HttpException(409, "the stored recovery record changed since this was signed; refresh and retry")
+        if (claim.generation != (prior?.signed?.generation ?: 0) + 1) throw HttpException(409, "the record generation is not the next one")
+        if (RecoveryRecordV2.sha256HexOfBase64(req.wrappedUmk) != claim.wrappedUmkDigestHex) {
+            throw HttpException(403, "the wrapped UMK is not the one that was signed")
+        }
+        fun resolve(c: com.flagshipserver.app.core.RecoveryEscrowChange, sent: String?, heldB64: String?): String? = when (c.change) {
+            "replace" -> {
+                if (sent == null || RecoveryRecordV2.sha256HexOfBase64(sent) != c.digestHex) throw HttpException(403, "an escrow is not the one that was signed")
+                sent
+            }
+            "keep" -> {
+                if (heldB64 == null || RecoveryRecordV2.sha256HexOfBase64(heldB64) != c.digestHex || sent != null) {
+                    throw HttpException(409, "the signed escrow state does not match what is stored")
+                }
+                heldB64
+            }
+            "remove" -> {
+                if (heldB64 == null || sent != null) throw HttpException(409, "there is no such escrow to remove")
+                null
+            }
+            "none" -> {
+                if (heldB64 != null || sent != null) throw HttpException(409, "the signed escrow state does not match what is stored")
+                null
+            }
+            else -> throw HttpException(400, "unknown escrow change")
+        }
+        val adminRoot = resolve(claim.adminRoot, req.wrappedAdminRoot, prior?.wrappedAdminRoot)
+        val acme = resolve(claim.acmeKey, req.wrappedAcmeAccountKey, prior?.wrappedAcmeAccountKey)
+        recoveryStore[claim.credentialIdHex] = RecoveryEnvelope(
+            credentialId = claim.credentialIdHex,
+            wrappedUmk = req.wrappedUmk,
+            wrappedAcmeAccountKey = acme,
+            wrappedAdminRoot = adminRoot,
+        )
         recoveryByUsername[key] = MockRecoveryRecord(
-            credentialId = r.credentialId,
-            wrappedUmk = r.wrappedUmk,
-            wrappedAcmeAccountKey = resolvedAcme ?: prior?.wrappedAcmeAccountKey,
-            wrappedAdminRoot = resolvedAdminRoot ?: prior?.wrappedAdminRoot,
-            fetchTokenHashHex = r.fetchTokenHash?.lowercase() ?: prior?.fetchTokenHashHex,
-            prfSaltHashHex = r.prfSaltHash?.lowercase() ?: prior?.prfSaltHashHex,
+            credentialId = claim.credentialIdHex,
+            wrappedUmk = req.wrappedUmk,
+            wrappedAcmeAccountKey = acme,
+            wrappedAdminRoot = adminRoot,
+            fetchTokenHashHex = claim.fetchTokenHashHex,
+            prfSaltHashHex = claim.prfSaltHashHex,
+            signed = com.flagshipserver.app.core.SignedRecoveryRecord(claim, req.signature, claim.digestHex(), claim.generation),
             updatedAt = nowMs(),
         )
         return RecoveryEnvelopeResponse(ok = true)
     }
+
+    override suspend fun recoveryRecordState(username: String): com.flagshipserver.app.core.RecoveryRecordState? {
+        tick()
+        val row = recoveryByUsername[username.lowercase()] ?: return null
+        return com.flagshipserver.app.core.RecoveryRecordState(
+            credentialId = row.credentialId,
+            wrappedUmkHash = RecoveryRecordV2.sha256HexOfBase64(row.wrappedUmk) ?: "",
+            legacy = row.signed == null,
+            generation = row.signed?.generation,
+            digestHex = row.signed?.digestHex,
+            adminRootDigestHex = row.wrappedAdminRoot?.let { RecoveryRecordV2.sha256HexOfBase64(it) },
+            acmeKeyDigestHex = row.wrappedAcmeAccountKey?.let { RecoveryRecordV2.sha256HexOfBase64(it) },
+        )
+    }
+
+    /** Test hook — the admin root `.com` would report as pinned, per account. */
+    val pinnedAdminRoots = mutableMapOf<String, String>()
+
+    override suspend fun pinnedAdminRoot(username: String): String? = pinnedAdminRoots[username.lowercase()]
 
     override suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope {
         tick()
@@ -334,6 +379,8 @@ class MockFlagshipServerClient(
             prfSaltHash = rec.prfSaltHashHex,
             updatedAt = rec.updatedAt,
             recoveryProof = RecoveryProofToken(token = proofToken),
+            signed = rec.signed,
+            legacy = if (rec.signed == null) true else null,
         )
     }
 
@@ -517,6 +564,18 @@ class MockFlagshipServerClient(
      *  to model an older Worker (404). */
     var pendingRePairByUser: Map<String, PendingRePair> = emptyMap()
     var pendingRePairUnavailable: Boolean = false
+
+    var lastRePairVeto: Pair<String, RePairVetoRequest>? = null
+    var rePairVetoError: Throwable? = null
+
+    override suspend fun vetoRePair(username: String, body: RePairVetoRequest) {
+        tick()
+        lastRePairVeto = username to body
+        rePairVetoError?.let { throw it }
+        pendingRePairByUser[username.lowercase()]?.let { p ->
+            pendingRePairByUser = pendingRePairByUser + (username.lowercase() to p.copy(objectedAt = body.request.issuedAt, vetoedBy = body.request.vetoerPub))
+        }
+    }
 
     override suspend fun fetchPendingRePair(username: String): PendingRePairSnapshot {
         tick()

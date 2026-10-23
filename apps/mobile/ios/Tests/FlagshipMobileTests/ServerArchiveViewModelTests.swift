@@ -476,3 +476,27 @@ final class BackupDownloadApprovalViewModelTests: XCTestCase {
         if case .failed = vm.phase {} else { XCTFail("expected failed, got \(vm.phase)") }
     }
 }
+
+@MainActor
+final class RestoredAppNeedsTests: XCTestCase {
+    func testARestoredAppSaysWhatItStillNeeds() {
+        let summary = ServerRestoreSummary(
+            awaitingApproval: ["who can use it (2 people), until an admin approves"],
+            reconnect: ["1 API key (create them again)"],
+            notes: ["main: its database holds 1 function"]
+        )
+        XCTAssertEqual(
+            ImportBackupViewModel.describe(ServerRestoreApp(serviceId: "a", name: "Wiki", state: "done", summary: summary)),
+            "Wiki: restored. Waiting for an admin: who can use it (2 people), until an admin approves. Set up again: 1 API key (create them again). Note: main: its database holds 1 function."
+        )
+        XCTAssertEqual(ImportBackupViewModel.describe(ServerRestoreApp(serviceId: "a", name: "Wiki", state: "done", summary: ServerRestoreSummary())), "Wiki: restored")
+        XCTAssertEqual(ImportBackupViewModel.describe(ServerRestoreApp(serviceId: "a", name: "Wiki", state: "done")), "Wiki: restored")
+    }
+
+    func testTheBoxsRestoreJsonDecodesWithAndWithoutASummary() throws {
+        let with = #"{"serviceId":"a","name":"Wiki","state":"done","summary":{"code":"x","awaitingApproval":["p"],"reconnect":[],"notes":[]}}"#
+        let without = #"{"serviceId":"a","name":"Wiki","state":"done"}"#
+        XCTAssertEqual(try JSONDecoder().decode(ServerRestoreApp.self, from: Data(with.utf8)).summary?.awaitingApproval, ["p"])
+        XCTAssertNil(try JSONDecoder().decode(ServerRestoreApp.self, from: Data(without.utf8)).summary)
+    }
+}

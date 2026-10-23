@@ -32,7 +32,7 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 class LiveScreensClient(
-    private val client: OkHttpClient = OkHttpClient(),
+    private val client: OkHttpClient,
     private val store: SessionStoring,
     private val json: Json = Json {
         ignoreUnknownKeys = true
@@ -349,6 +349,58 @@ class LiveScreensClient(
     override suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         request("/api/screens/debug-access", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
 
+    override suspend fun servicePermissions(serviceId: String): com.flagshipserver.app.core.ServicePermissions =
+        request("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/permissions", com.flagshipserver.app.core.ServicePermissions.serializer())
+
+    override suspend fun revokeServicePermission(serviceId: String, grantId: String?): com.flagshipserver.app.core.PermissionRevokeResult {
+        val body = json.encodeToString(com.flagshipserver.app.core.PermissionRevokeBody.serializer(), com.flagshipserver.app.core.PermissionRevokeBody(grantId)).toByteArray()
+        return request("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/permissions/revoke", com.flagshipserver.app.core.PermissionRevokeResult.serializer(), "POST", body)
+    }
+
+    override suspend fun restoredAccessDrafts(): com.flagshipserver.app.core.RestoredAccessList =
+        request("/api/screens/restored-access", com.flagshipserver.app.core.RestoredAccessList.serializer())
+
+    override suspend fun approveRestoredAccess(body: com.flagshipserver.app.core.RestoredAccessApproveBody) {
+        request<Unit>("/api/service-access/restored", null, "POST", json.encodeToString(com.flagshipserver.app.core.RestoredAccessApproveBody.serializer(), body).toByteArray())
+    }
+
+    override suspend fun discardRestoredAccess(serviceRef: String) {
+        request<Unit>("/api/screens/restored-access/discard", null, "POST", json.encodeToString(com.flagshipserver.app.core.RestoredDiscardBody.serializer(), com.flagshipserver.app.core.RestoredDiscardBody(serviceRef)).toByteArray())
+    }
+
+    override suspend fun updateMode(serviceId: String): com.flagshipserver.app.core.UpdateModeState =
+        request("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/update-mode", com.flagshipserver.app.core.UpdateModeState.serializer())
+
+    override suspend fun setUpdateMode(serviceId: String, mode: String) {
+        request<Unit>("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/update-mode", null, "POST", json.encodeToString(com.flagshipserver.app.core.UpdateModeBody.serializer(), com.flagshipserver.app.core.UpdateModeBody(mode)).toByteArray())
+    }
+
+    override suspend fun companionDelegations(sessionId: String): com.flagshipserver.app.core.CompanionDelegationList =
+        request("/api/screens/companion-delegation?sessionId=${java.net.URLEncoder.encode(sessionId, "UTF-8")}", com.flagshipserver.app.core.CompanionDelegationList.serializer())
+
+    override suspend fun allowCompanionBuild(body: com.flagshipserver.app.core.CompanionDelegationBody) {
+        request<Unit>("/api/screens/companion-delegation", null, "POST", json.encodeToString(com.flagshipserver.app.core.CompanionDelegationBody.serializer(), body).toByteArray())
+    }
+
+    override suspend fun endCompanionDelegation(sessionId: String, serviceRef: String) {
+        request<Unit>("/api/screens/companion-delegation", null, "DELETE", json.encodeToString(com.flagshipserver.app.core.CompanionDelegationEnd.serializer(), com.flagshipserver.app.core.CompanionDelegationEnd(sessionId, serviceRef)).toByteArray())
+    }
+
+    override suspend fun securitySliver(): com.flagshipserver.app.core.SecuritySliverResponse =
+        request("/api/screens/security-sliver", com.flagshipserver.app.core.SecuritySliverResponse.serializer())
+
+    override suspend fun publisherState(serviceId: String): com.flagshipserver.app.core.WaitingPublisherResponse =
+        request("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/publisher", com.flagshipserver.app.core.WaitingPublisherResponse.serializer())
+
+    override suspend fun trustPublisher(serviceId: String, trust: com.flagshipserver.app.core.PublisherTrust, signatureHex: String) {
+        val body = json.encodeToString(com.flagshipserver.app.core.PublisherTrustBody.serializer(), com.flagshipserver.app.core.PublisherTrustBody(trust, signatureHex)).toByteArray()
+        request<Unit>("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/publisher/trust", null, "POST", body)
+    }
+
+    override suspend fun rejectPublisher(serviceId: String) {
+        request<Unit>("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/publisher/reject", null, "POST", "{}".toByteArray())
+    }
+
     override suspend fun debugAccessRevoke(bodyJson: String): DebugAccessChangeResponse =
         request("/api/screens/debug-access/revoke", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
 
@@ -597,15 +649,14 @@ class LiveScreensClient(
         }
     }
 
-    /** The box's event socket. The token rides the query (the box's contract)
-     *  and the header (what the paired-session gate reads first). */
+    /** The box's event socket. The session rides in a header only: the box refuses a token in the URL. */
     override fun screensEvents(): Flow<ScreensEvent> = channelFlow {
         val base = base()
         val token = token()
         val wsUrl = base
             .replaceFirst("https://", "wss://")
             .replaceFirst("http://", "ws://") +
-            "/api/screens/events?sessionToken=" + java.net.URLEncoder.encode(token, "UTF-8")
+            "/api/screens/events"
         val req = Request.Builder()
             .url(wsUrl)
             .header("x-flagship-session", token)

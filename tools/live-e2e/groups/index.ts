@@ -23,6 +23,7 @@ import { serverOrder } from "./serverOrder.js";
 import { share } from "./share.js";
 import type { Group } from "./types.js";
 import { update } from "./update.js";
+import { RELEASE_03_GROUPS } from "./release03/index.js";
 
 export type { Group, GroupCtx, Slot } from "./types.js";
 
@@ -51,4 +52,5 @@ export const GROUPS: Group[] = [
   oneList,
   update,
   lifecycle,
+  ...RELEASE_03_GROUPS,
 ];

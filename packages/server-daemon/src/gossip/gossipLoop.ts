@@ -16,12 +16,8 @@
  * once immediately on start) so a freshly-learned dead/alive sibling is reflected
  * promptly.
  */
-import {
-  type GossipAnnouncement,
-  type SignedServerOrder,
-  macGossip,
-  sealGossip,
-} from "@flagship/protocol";
+import type { GossipAnnouncement, SignedServerOrder } from "@flagship/protocol";
+import { gossipCryptoFromKey, type GossipCrypto } from "./gossipCrypto.js";
 import {
   accountLeader,
   leadsSnapshot as computeLeadsSnapshot,
@@ -55,7 +51,9 @@ export interface SelfAnnounceState {
 }
 
 export interface GossipLoopDeps {
-  cgk: Uint8Array;
+  /** The gossip key's operations (keyd); `cgk` is the in-process form for tests. */
+  crypto?: GossipCrypto;
+  cgk?: Uint8Array;
   view: SiblingView;
   claimer: RouteClaimer;
   /**
@@ -106,6 +104,7 @@ export interface GossipLoop {
 }
 
 export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
+  const crypto = deps.crypto ?? gossipCryptoFromKey(deps.cgk ?? new Uint8Array(0));
   const intervalMs = deps.intervalMs ?? ANNOUNCE_INTERVAL_MS;
   const fetchImpl = deps.fetchImpl ?? fetch;
   const now = deps.now ?? (() => Date.now());
@@ -130,13 +129,13 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
 
   async function announce(s: SelfAnnounceState): Promise<void> {
     const a = buildAnnouncement(s);
-    const mac = macGossip(a, deps.cgk);
+    const mac = crypto.mac(a);
     // The signed order rides beside the MAC'd announcement (it carries its own
     // signature) so a sibling that missed it learns it from us.
     const plaintext = new TextEncoder().encode(
       JSON.stringify({ announcement: a, mac, ...(s.order ? { serverOrder: s.order } : {}) }),
     );
-    const sealed = sealGossip(plaintext, deps.cgk);
+    const sealed = crypto.seal(plaintext);
     try {
       await fetchImpl(deps.broadcastUrl, {
         method: "POST",

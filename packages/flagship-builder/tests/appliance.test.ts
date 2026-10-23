@@ -15,6 +15,9 @@ import {
   encodeApplianceSeed,
 } from "../src/appliance.js";
 
+const code = (s: string): string =>
+  s.replace(/<<'FLAGSHIP_[A-Z_]+_EOF'[\s\S]*?\nFLAGSHIP_[A-Z_]+_EOF/g, "").split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+
 describe("generalized VM appliance", () => {
   it("encodes a fixed-size, independently hashed raw seed", () => {
     const recipe = Buffer.from('{"serverDomain":"home.alice.flagship.services"}');
@@ -90,8 +93,9 @@ describe("generalized VM appliance", () => {
   it("installs an exact release commit under the ref recipes name", () => {
     const commit = "57b69edb43bba48e93feef29f18f6e6bd4419652";
     const script = buildAppliancePrepareScript({ gitRef: "main", gitCommit: commit });
-    expect(script).toContain(`git -C /opt/flagship fetch --depth 2 origin '${commit}' && git -C /opt/flagship checkout --detach '${commit}'`);
-    expect(script).not.toContain("--branch 'main'");
+    expect(script).toContain(`COMMIT='${commit}'`);
+    expect(script).toContain("--expect-commit \"$COMMIT\"");
+    expect(code(script)).not.toMatch(/git (clone|fetch|checkout)/);
     // The bootstrap checks the label against the signed recipe's installerGitRef.
     expect(script).toContain("printf '%s\\n' 'main' > /opt/flagship/.flagship-appliance-ref");
     expect(() => buildAppliancePrepareScript({ gitRef: "main", gitCommit: "57b69edb" })).toThrow(/invalid appliance git commit/);
@@ -102,16 +106,13 @@ describe("generalized VM appliance", () => {
     expect(script).toContain(".flagship-appliance-ref");
     expect(script).toContain("KEYFILE_PATTERN=/etc/flagship/appliance-build.key");
     expect(script).toContain("flagship-appliance-specialize.service");
-    expect(script).toContain(
-      "npm install --no-audit --no-fund --include-workspace-root --workspace=packages/server-daemon\n",
-    );
-    expect(script).toContain("timeout -k 15 300 npx tsc -b packages/server-daemon\n");
-    expect(script).not.toContain("--workspaces");
-    expect(script).toContain("workspace link missing");
+    // SEC-INSTALL-001: nothing is resolved from npm, apt-for-node, git or a compiler.
+    expect(script).toContain("install-box-artifact.sh");
+    expect(script).toContain("--trust-keys");
+    expect(code(script)).not.toMatch(/npm install|npx |nodesource|golang|git clone/);
+    expect(script).toContain("release incomplete");
     expect(script).toContain("/usr/local/lib/flagship-appliance/flagship-unseal");
-    expect(script).toContain("GOMODCACHE=/root/go/pkg/mod");
-    expect(script).toContain("git clone --depth 2");
-    expect(script).toContain("rm -rf /root/go /root/.cache/go-build /root/.npm /root/.cache");
+    expect(script).toContain("rm -rf /root/.npm /root/.cache");
     expect(script).toContain("apt-get clean");
     expect(script).toContain("rm -rf /var/lib/apt/lists/*");
     expect(script).toContain("touch /etc/flagship/appliance-ready");
@@ -122,20 +123,10 @@ describe("generalized VM appliance", () => {
     expect(script).not.toContain("home.alice");
   });
 
-  it("purges the Go toolchain, but only after the static unseal helper is built", () => {
+  it("takes the unseal helper from the signed release, with no compiler on the image", () => {
     const script = buildAppliancePrepareScript({ gitRef: "v-test" });
-    expect(script).toContain("apt-get purge -y golang-go golang-*");
-    expect(script).toContain("apt-get autoremove -y --purge");
-    // The one-shot go build MUST run before the compiler is removed, and the
-    // built static binary is guarded before the purge.
-    const buildAt = script.indexOf("GOMODCACHE=/root/go/pkg/mod");
-    const guardAt = script.indexOf("unseal helper missing before Go purge");
-    const purgeAt = script.indexOf("apt-get purge -y golang-go golang-*");
-    expect(buildAt).toBeGreaterThanOrEqual(0);
-    expect(guardAt).toBeGreaterThanOrEqual(0);
-    expect(purgeAt).toBeGreaterThanOrEqual(0);
-    expect(buildAt).toBeLessThan(guardAt);
-    expect(guardAt).toBeLessThan(purgeAt);
+    expect(script).toContain("install -m 755 /opt/flagship/installer/flagship-unseal /usr/local/lib/flagship-appliance/flagship-unseal");
+    expect(script).not.toContain("go build");
   });
 
   it("strips docs, manuals, and surplus locales while preserving C.UTF-8", () => {

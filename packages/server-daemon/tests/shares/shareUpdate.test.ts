@@ -4,6 +4,7 @@
  * grant stands, signed with the share's own key, and only through the same
  * replay, base and endorsement gates as the owner's update order.
  */
+import { ArtifactRefusedError, type ReleaseSwapper } from "../../src/artifactUpdate.js";
 import { describe, expect, it } from "vitest";
 import {
   deriveIRK,
@@ -29,7 +30,6 @@ import {
   applyEndorsedUpdate,
   type PendingVerifyMarker,
   type PendingVerifyStore,
-  type UpdateCommandRunner,
   type UpdateConsumeOutcome,
   type UsedNonceStore,
 } from "../../src/updateConsumer.js";
@@ -91,29 +91,27 @@ function setup(opts: { pending?: PendingVerifyMarker | null; endorsed?: string[]
   const pendingStore = memoryPending(opts.pending ?? null);
   const outcomes: UpdateOutcomeRecord[] = [];
   const commands: string[] = [];
-  const runner: UpdateCommandRunner = async (cmd, args) => {
-    commands.push([cmd, ...args].join(" "));
-    if (cmd === "git" && args.includes("HEAD")) return { stdout: `${CURRENT}\n` };
-    if (cmd === "git" && args.includes("--is-shallow-repository")) return { stdout: "false\n" };
-    return { stdout: "" };
-  };
   const endorsed = new Set(opts.endorsed ?? [TARGET]);
+  const swapper: ReleaseSwapper = {
+    async install(commit) {
+      commands.push(`install ${commit}`);
+      if (!endorsed.has(commit)) throw new ArtifactRefusedError(`${commit} is not signed`);
+    },
+    async restore(commit) {
+      commands.push(`restore ${commit}`);
+    },
+  };
+  const currentCommit = () => CURRENT;
   let exited = 0;
   const answers: ShareUpdateAnswer[] = [];
   const order = buildShareUpdate({
-    gate: { serverDomain: BOX, repoPath: "/opt/flagship", runner, usedNonceStore: memoryNonces(), now },
+    gate: { serverDomain: BOX, currentCommit, usedNonceStore: memoryNonces(), now },
     pendingStore,
     verifyOwnerGrant,
     apply: (from, target, why) =>
       applyEndorsedUpdate(
         {
-          repoPath: "/opt/flagship",
-          releaseGate: {
-            assertCommitEndorsed: (c) => {
-              if (!endorsed.has(c)) throw new Error(`${c} is not endorsed`);
-            },
-          },
-          runner,
+          swapper,
           pendingStore,
           requestExit: () => void exited++,
         },
@@ -204,7 +202,7 @@ describe("a co-manager's update order", () => {
     expect(r.status).toBe(202);
     expect(r.body).toMatchObject({ ok: true, accepted: true, targetCommit: TARGET });
     expect(await x.lastApply()).toEqual({ applied: true, previousCommit: CURRENT, targetCommit: TARGET });
-    expect(x.commands).toContain(`git -C /opt/flagship checkout ${TARGET}`);
+    expect(x.commands).toContain(`install ${TARGET}`);
     expect(x.pendingStore.marker).toMatchObject({ previousCommit: CURRENT, targetCommit: TARGET, stage: "staged" });
     expect(x.exited()).toBe(1);
     expect(x.activity.recent(5)[0]).toMatchObject({
@@ -241,7 +239,7 @@ describe("a co-manager's update order", () => {
 
     // A grant the owner never signed (or one replaced by a forgery) never chains.
     const direct = buildShareUpdate({
-      gate: { serverDomain: BOX, repoPath: "/opt/flagship", runner: async () => ({ stdout: CURRENT }), usedNonceStore: memoryNonces(), now },
+      gate: { serverDomain: BOX, currentCommit: () => CURRENT, usedNonceStore: memoryNonces(), now },
       pendingStore: memoryPending(),
       verifyOwnerGrant: () => false,
       apply: async () => {

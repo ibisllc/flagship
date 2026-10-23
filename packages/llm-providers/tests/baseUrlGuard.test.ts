@@ -329,3 +329,23 @@ describe("assertResolvedHostSafe — bare host (git-clone path)", () => {
     expect(h).toBe("forgejo.lan");
   });
 });
+
+describe("alternative spellings of internal addresses (SEC N02)", () => {
+  it.each([
+    "https://[0:0:0:0:0:0:0:1]/v1",
+    "https://[0000:0000:0000:0000:0000:0000:0000:0001]/v1",
+    "https://[::ffff:7f00:1]/v1",
+    "https://[::ffff:a00:1]/v1",
+    "https://[::ffff:a9fe:a9fe]/v1",
+    "https://[fd00:ec2::254]/v1",
+    "https://[64:ff9b::7f00:1]/v1",
+    "https://[2002:7f00:1::]/v1",
+    "https://0.0.0.0/v1",
+  ])("refuses %s", (url) => {
+    expect(() => assertSafeProviderBaseUrl(url)).toThrow(UnsafeBaseUrlError);
+  });
+
+  it("still allows a public IPv6 literal", () => {
+    expect(() => assertSafeProviderBaseUrl("https://[2606:4700:4700::1111]/v1")).not.toThrow();
+  });
+});

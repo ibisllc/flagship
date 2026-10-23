@@ -90,11 +90,29 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public var lastUpdate: LastUpdate? = nil
     /// The sandbox every app runs in (gVisor plus the egress firewall). Absent from older daemons.
     public var appSandbox: AppSandbox? = nil
+    /// The dead-man switch as the box holds it, so every device bounds auto-unlock
+    /// leases by the same deadline. Absent from older daemons.
+    public var deadMan: DeadManView? = nil
     /// Owner debug access: an SSH key let in as `debug` until it ends.
     /// Absent from older daemons.
     public var debugAccess: DebugAccessView? = nil
     /// Each app's disk use against its limits and the disk brake (docs/app-runtimes.md 5.3). Absent from older daemons.
     public var storage: ServerStorage? = nil
+}
+
+/// The box's own account of its dead-man switch (server-detail `deadMan`).
+public struct DeadManView: Codable, Equatable, Sendable {
+    public let enabled: Bool
+    /// When the current affirmation lapses (ms); 0 when it has never been affirmed.
+    public let leaseExpiry: Int64
+    public let windowMs: Int64
+    public let graceMs: Int64
+    /// "off" or "restart".
+    public let lockoutMode: String
+    public init(enabled: Bool, leaseExpiry: Int64, windowMs: Int64, graceMs: Int64, lockoutMode: String) {
+        self.enabled = enabled; self.leaseExpiry = leaseExpiry; self.windowMs = windowMs
+        self.graceMs = graceMs; self.lockoutMode = lockoutMode
+    }
 }
 
 /// Owner debug access as the box reports it (docs/recipe-delivery-and-remote-install.md

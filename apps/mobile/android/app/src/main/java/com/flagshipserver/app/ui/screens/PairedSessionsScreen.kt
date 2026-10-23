@@ -115,6 +115,7 @@ fun PairedSessionsScreen(nav: NavController) {
                                 }
                             },
                         )
+                        if (!session.current) CompanionDelegationRowSection(sessionId = session.tokenPrefix, canSign = com.flagshipserver.app.keystore.Keystore.hasAdminRoot())
                         if (idx < sessions.size - 1) FSDivider()
                     }
                 }

@@ -481,7 +481,7 @@ describe("/api/admin/adapter-blocklist", () => {
     expect(fx.bucket.objects.size).toBe(2);
     const res = await block("https://github.com/Me/Notes");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ repo: "https://github.com/Me/Notes", blocked: true, droppedPending: 2 });
+    expect(await res.json()).toEqual({ repo: "https://github.com/Me/Notes", blocked: true, droppedPending: 2, revoked: 0 });
     expect(await rows()).toHaveLength(0);
     expect(fx.bucket.objects.size).toBe(0);
     await submit(submission());
@@ -859,7 +859,7 @@ describe("POST /api/adapters/complain", () => {
     expect(await complaints()).toEqual([]);
   });
 
-  it("counts one address once per adapter a day, and caps one adapter's reports an hour", async () => {
+  it("counts one network once per adapter a day, and caps one adapter's reports an hour", async () => {
     const { ns } = memoryRateLimits();
     const f = makeFixture({ RATE_LIMITS: ns });
     try {
@@ -870,12 +870,16 @@ describe("POST /api/adapters/complain", () => {
       const again = await from("198.51.100.1", file);
       expect(again.status).toBe(429);
       expect(((await again.json()) as { message: string }).message).toMatch(/^Too many tries from your network/);
+      // Another address on the same /24 is the same network.
+      expect((await from("198.51.100.77", file)).status).toBe(429);
+      expect((await from("2001:db8:1:1::1", file)).status).toBe(202);
+      expect((await from("2001:db8:1:ffff::2", file)).status).toBe(429);
       // The same address may still report a different adapter.
       expect((await from("198.51.100.1", "d".repeat(64))).status).toBe(202);
-      // Every try counts toward the adapter's hour (the refused one too):
-      // eight more addresses fill it, the next is refused.
-      for (let i = 2; i <= 9; i++) expect((await from(`198.51.100.${i}`, file)).status).toBe(202);
-      expect((await from("198.51.100.10", file)).status).toBe(429);
+      // Every try counts toward the adapter's hour (the refused ones too):
+      // five more networks fill it, the next is refused.
+      for (let i = 2; i <= 6; i++) expect((await from(`198.51.${i}.1`, file)).status).toBe(202);
+      expect((await from("198.51.10.1", file)).status).toBe(429);
     } finally {
       f.close();
     }

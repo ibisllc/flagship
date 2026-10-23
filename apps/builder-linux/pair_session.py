@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import threading
 import uuid
@@ -49,6 +50,9 @@ class PairEvent:
     debug_granted: bool = False
     # error
     message: Optional[str] = None
+    # done: the phone's per-server key for confirming the code a hosted VM shows (first contact),
+    # delivered beside the recipe and never written into the recipe file.
+    studio_confirm_key_hex: Optional[str] = None
 
 
 def parse_pair_event(line: str) -> Optional[PairEvent]:
@@ -89,6 +93,11 @@ def parse_pair_event(line: str) -> Optional[PairEvent]:
         recipe_path=s("recipePath"),
         debug_granted=b("debugGranted"),
         message=s("message"),
+        studio_confirm_key_hex=(
+            s("studioConfirmKeyHex")
+            if re.fullmatch(r"[0-9a-f]{64}", s("studioConfirmKeyHex") or "")
+            else None
+        ),
     )
 
 

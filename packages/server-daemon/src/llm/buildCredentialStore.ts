@@ -48,6 +48,8 @@ export interface BuildCredentialStore {
    * journal may record. Null when no credential is set.
    */
   providerName(id: string): string | null;
+  /** Who pays for this credential's calls: the owner's own key (`byok`) or Flagship Inference credits (`promo`). Non-secret. */
+  costSource(id: string): "byok" | "promo" | null;
   /** Drop the credential for `id` (session end / cancel). Idempotent. */
   forget(id: string): Promise<void>;
 }
@@ -115,6 +117,11 @@ export class InMemoryBuildCredentialStore implements BuildCredentialStore {
     return this.byId.get(id)?.provider ?? null;
   }
 
+  costSource(id: string): "byok" | "promo" | null {
+    const c = this.byId.get(id);
+    return c ? (c.source === "promo" ? "promo" : "byok") : null;
+  }
+
   async forget(id: string): Promise<void> {
     this.byId.delete(id);
   }
@@ -174,6 +181,11 @@ export class FileBuildCredentialStore implements BuildCredentialStore {
 
   providerName(id: string): string | null {
     return this.cache.get(id)?.provider ?? null;
+  }
+
+  costSource(id: string): "byok" | "promo" | null {
+    const c = this.cache.get(id);
+    return c ? (c.source === "promo" ? "promo" : "byok") : null;
   }
 
   async forget(id: string): Promise<void> {

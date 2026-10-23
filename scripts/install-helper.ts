@@ -7,6 +7,7 @@
  *
  * Subcommands:
  *   gen-identity --out-priv <p> --out-pub <p> --out-pem <p>
+ *   mint-wildcard-grant --priv <hex> --pod-pub <hex> --username <u> --server-domain <d> --out <p>
  *       Generate a fresh server identity Ed25519 keypair. Writes:
  *         out-priv  — 32-byte hex (FLAGSHIP_IDENTITY_PRIV_HEX form)
  *         out-pub   — 32-byte hex
@@ -27,15 +28,41 @@ import { writeFileSync, chmodSync, readFileSync } from "node:fs";
 import {
   ed,
   mintDevEntitlements,
+  opaqueKey,
   sealForEd25519Recipient,
   sealForRecipient,
   signPutSealedLuksKey,
   signServerRegister,
+  signServerWildcardGrant,
   type AuthCode,
   type Keypair,
   type PutSealedLuksKey,
   type ServerRegisterRequest,
 } from "@flagship/protocol";
+
+function optArg(argv: string[], name: string): string | undefined {
+  const i = argv.indexOf(name);
+  return i >= 0 ? argv[i + 1] : undefined;
+}
+
+/** The box identity: the raw key when given one (install time), else keyd's opaque stand-in. */
+async function identityFor(argv: string[], privHex: string | undefined): Promise<Keypair> {
+  if (privHex) {
+    const priv = hexToBytes(privHex);
+    return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+  }
+  const socketPath = optArg(argv, "--keyd-socket");
+  if (!socketPath) throw new Error("give --priv-hex or --keyd-socket");
+  const { KeydSyncClient } = await import("@flagship/keyd");
+  const client = new KeydSyncClient({ socketPath, component: "install-helper" });
+  const hello = client.connect();
+  const publicKey = hexToBytes(hello.publicKey);
+  const call = (op: "sign" | "unseal", key: string, value: Uint8Array) => hexToBytes(String(client.call(op, { [key]: bytesToHex(value) })[op === "sign" ? "sig" : "plain"]));
+  return {
+    publicKey,
+    privateKey: opaqueKey({ publicKey, sign: (m) => call("sign", "msg", m), unseal: (b) => call("unseal", "blob", b) }),
+  };
+}
 
 function bytesToHex(b: Uint8Array): string {
   let s = "";
@@ -107,8 +134,8 @@ function pkcs8FromHex(argv: string[]): void {
   process.stdout.write(pkcs8PemFromRaw(hexToBytes(privHex)));
 }
 
-function signRegister(argv: string[]): void {
-  const privHex = arg(argv, "--priv-hex");
+async function signRegister(argv: string[]): Promise<void> {
+  const privHex = optArg(argv, "--priv-hex");
   const blobPath = arg(argv, "--auth-code-blob");
   const blob = JSON.parse(readFileSync(blobPath, "utf8")) as {
     authCode: {
@@ -141,8 +168,8 @@ function signRegister(argv: string[]): void {
   };
   const userSig = hexToBytes(blob.authCodeUserSignature);
 
-  const priv = hexToBytes(privHex);
-  const identity: Keypair = { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+  // After the first boot the identity key lives in flagship-keyd; this signs through it.
+  const identity = await identityFor(argv, privHex);
   const issuedAt = Date.now();
   const nonce = new Uint8Array(16);
   crypto.getRandomValues(nonce);
@@ -181,14 +208,13 @@ function signRegister(argv: string[]): void {
   );
 }
 
-function signSealedKey(argv: string[]): void {
-  const privHex = arg(argv, "--priv");
+async function signSealedKey(argv: string[]): Promise<void> {
+  const privHex = optArg(argv, "--priv");
   const serverId = arg(argv, "--server-id");
   const sealedHex = arg(argv, "--sealed-hex");
   const issuedAt = parseInt(arg(argv, "--issued-at"), 10);
   if (!Number.isFinite(issuedAt)) throw new Error("--issued-at must be a number");
-  const priv = hexToBytes(privHex);
-  const identity: Keypair = { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+  const identity = await identityFor(argv, privHex);
   const sealedKey = hexToBytes(sealedHex);
   const claim: PutSealedLuksKey = { serverId, sealedKey, issuedAt };
   const sig = signPutSealedLuksKey(claim, identity);
@@ -257,6 +283,21 @@ function sealForBak(argv: string[]): void {
  * deterministic-from-KEK demo IRK priv is shipped in the cloud-init
  * write_files and shredded after this step.
  */
+/**
+ * Demo and gym boxes only: the account's own key (held for the demo by the bootstrap) signs the
+ * admin's once-per-server grant for `*.<user>`, the step an admin device does for a real account.
+ */
+function mintWildcardGrant(argv: string[]): void {
+  const priv = hexToBytes(arg(argv, "--priv"));
+  const issuedAt = Date.now();
+  const sig = signServerWildcardGrant(
+    { username: arg(argv, "--username"), serverDomain: arg(argv, "--server-domain"), stkPubHex: arg(argv, "--pod-pub").toLowerCase(), issuedAt },
+    (m) => ed.sign(m, priv),
+  );
+  writeFileSync(arg(argv, "--out"), JSON.stringify({ issuedAt, signatureHex: bytesToHex(sig) }));
+  chmodSync(arg(argv, "--out"), 0o600);
+}
+
 function mintEntitlements(argv: string[]): void {
   const irkPrivHex = arg(argv, "--irk-priv");
   const podPubHex = arg(argv, "--pod-pub");
@@ -310,17 +351,19 @@ function mintEntitlements(argv: string[]): void {
   console.error(`[install-helper] wrote entitlement bundle to ${outPath}`);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const [, , cmd, ...rest] = process.argv;
   switch (cmd) {
+    case "mint-wildcard-grant":
+      return mintWildcardGrant(rest);
     case "gen-identity":
       return genIdentity(rest);
     case "pkcs8-from-hex":
       return pkcs8FromHex(rest);
     case "sign-server-register":
-      return signRegister(rest);
+      return void (await signRegister(rest));
     case "sign-sealed-key":
-      return signSealedKey(rest);
+      return void (await signSealedKey(rest));
     case "seal-for-bak":
       return sealForBak(rest);
     case "mint-entitlements":
@@ -333,4 +376,7 @@ function main(): void {
   }
 }
 
-main();
+main().catch((e) => {
+  console.error((e as Error).message);
+  process.exit(1);
+});

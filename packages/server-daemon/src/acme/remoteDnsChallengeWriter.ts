@@ -52,6 +52,12 @@ export interface RemoteDnsChallengeWriterOptions {
    * {@link RemoteDnsChallengeWriter.withServiceCertAuthority}.
    */
   serviceCertAuthority?: { authority: ServiceCertAuthority; signature: Bytes };
+  /**
+   * The admin's once-per-server grant (`flagship/server-wildcard-grant/v1`), sent only with the
+   * challenge for the account's own name (`_acme-challenge.<user>.<apex>`, the `*.<user>.<apex>`
+   * SAN); the box's own names never need it.
+   */
+  serverWildcardGrant?: { issuedAt: number; signatureHex: string };
 }
 
 function bytesToHex(b: Bytes): string {
@@ -86,6 +92,14 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
     };
   }
 
+  /** The grant, for the account-name challenge only. */
+  private grantWire(host: string): { serverWildcardGrant: { issuedAt: number; signature: string } } | Record<string, never> {
+    const g = this.opts.serverWildcardGrant;
+    const account = this.opts.serverId.toLowerCase().split(".").slice(1).join(".");
+    if (!g || host.toLowerCase() !== `_acme-challenge.${account}`) return {};
+    return { serverWildcardGrant: { issuedAt: g.issuedAt, signature: g.signatureHex } };
+  }
+
   async publishTxt(host: string, value: string): Promise<() => Promise<void>> {
     const f = this.opts.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
     const baseUrl = this.opts.controlPlaneBaseUrl ?? "https://flagshipserver.com";
@@ -112,6 +126,7 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
         signature: bytesToHex(sig),
         recordValue: value,
         ...this.authorityWire(),
+        ...this.grantWire(host),
       }),
     });
     if (!res.ok) {
@@ -138,6 +153,7 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
           },
           signature: bytesToHex(dSig),
           ...this.authorityWire(),
+          ...this.grantWire(host),
         }),
       }).catch(() => {
         // best-effort cleanup; the control plane has its own GC for stale records

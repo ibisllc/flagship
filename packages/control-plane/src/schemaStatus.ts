@@ -77,6 +77,14 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0105",
   // The hub's list of hosts boxes' AI calls may leave through, and per-host totals.
   "0106",
+  // Which servers are locked, so no auto-unlock lease is released for them.
+  "0107", "0108", "0109",
+  // A server's disk key sealed to the watch's boot-only key, for approving a start-up with the phone locked.
+  "0110",
+  // 0111 is feat/UX's (named links); the merge adds it. Recovery passkey key, one-use challenges, server-seen reports.
+  "0112",
+  // Signed community adapter attestations, the adapter index chain, distinct complaint sources.
+  "0113",
 ];
 
 export interface SchemaStatusDeps {

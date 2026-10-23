@@ -278,6 +278,7 @@ public sealed class Wizard : INotifyPropertyChanged
                 _pair = null;
                 PairSas = null;
                 PairStatus = null;
+                Vm.PendingStudioConfirmKey = ev.StudioConfirmKey;
                 if (ev.RecipePath is string p && File.Exists(p))
                 {
                     // Identical to a dropped-in recipe file: verify locally +

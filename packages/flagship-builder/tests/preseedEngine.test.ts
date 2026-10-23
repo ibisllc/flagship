@@ -24,10 +24,13 @@ import vm from "node:vm";
 import {
   signInstallBlob,
   ed,
+  signOfflineSecrets,
+  swkCommitment,
   type InstallBlob,
   type AuthCode,
 } from "@flagship/protocol";
 import { buildDebianPreseed } from "../src/index.js";
+import { hexToBytes } from "../src/installBlobParse.js";
 import { optionsFromRecipeJson } from "../src/preseedEngine.js";
 import { loadBlobFromString } from "../src/loadBlob.js";
 
@@ -49,6 +52,7 @@ interface RecipeOpts {
   swkHex?: string;
   pairingOrder?: string;
   debugGrant?: string;
+  enrollmentKeyHex?: string;
   adminRoot?: boolean;
 }
 
@@ -79,7 +83,7 @@ function buildSignedRecipe(o: RecipeOpts = {}): string {
     registrationUrl: "https://flagship.services/api/server/register",
     authCode,
     authCodeUserSignature: new Uint8Array(64),
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: rck.publicKey,
     ...(o.bootUnlockMode ? { bootUnlockMode: o.bootUnlockMode } : {}),
     ...(o.diskEncryption ? { diskEncryption: o.diskEncryption } : {}),
@@ -112,9 +116,23 @@ function buildSignedRecipe(o: RecipeOpts = {}): string {
     ...(o.bootUnlockMode ? { bootUnlockMode: o.bootUnlockMode } : {}),
     ...(o.diskEncryption ? { diskEncryption: o.diskEncryption } : {}),
     blobSignatureHex: hex(sig),
-    ...(o.swkHex ? { swkHex: o.swkHex } : {}),
+    ...(o.swkHex
+      ? {
+          swkHex: o.swkHex,
+          offlineSecrets: signOfflineSecrets(
+            {
+              serverDomain: authCode.serverDomain,
+              serial: authCode.serial,
+              swkSha256Hex: swkCommitment(hexToBytes(o.swkHex)),
+              issuedAt: authCode.issuedAt + 1000,
+            },
+            irk,
+          ),
+        }
+      : {}),
     ...(o.pairingOrder ? { pairingOrder: o.pairingOrder } : {}),
     ...(o.debugGrant ? { debugGrant: o.debugGrant } : {}),
+    ...(o.enrollmentKeyHex ? { enrollmentKeyHex: o.enrollmentKeyHex } : {}),
   });
 }
 
@@ -182,6 +200,7 @@ describe("preseed engine bundle", () => {
       pairingOrder: loaded.pairingOrder,
       swkHex: loaded.swkHex,
       debugGrant: loaded.debugGrant,
+      offlineSecrets: loaded.offlineSecrets,
     });
     expect(engine.buildPreseed(recipe, "{}")).toBe(viaCli);
   });
@@ -231,6 +250,16 @@ describe("preseed engine bundle", () => {
     expect(read("apps/builder-mac/Tests/FlagshipBuilderTests/Resources/preseed-vectors.json")).toBe(
       read("packages/flagship-builder/engine/golden/preseed-vectors.json"),
     );
+  });
+
+  it("the one-time enrollment secret reaches install-blob.json, and a malformed one does not", () => {
+    const blobOf = (extra: Record<string, unknown>) => {
+      const preseed = engine.buildPreseed(buildSignedRecipe(extra), "{}");
+      const m = preseed.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/);
+      return JSON.parse(Buffer.from(m![1]!, "base64").toString("utf8")) as { enrollmentKeyHex?: string };
+    };
+    expect(blobOf({ enrollmentKeyHex: "AB".repeat(32) }).enrollmentKeyHex).toBe("ab".repeat(32));
+    expect(blobOf({ enrollmentKeyHex: "zz" }).enrollmentKeyHex).toBeUndefined();
   });
 
   it("the debug-access grant reaches install-blob.json (consent is load-bearing)", () => {

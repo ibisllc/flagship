@@ -48,6 +48,10 @@ final class VZHost: NSObject {
     /// completion (the preseed powers the guest off) or a crash. The pure
     /// lifecycle decides what it means.
     var onGuestStopped: ((Error?) -> Void)?
+    /// Bytes the guest writes to its server-code port (first contact). Output only: nothing is ever
+    /// written back, so this is no console and needs no debug grant.
+    var onServerCodeBytes: ((Data) -> Void)?
+    private var serverCodePipe: Pipe?
 
     // MARK: - Configuration (pure VMConfig → VZ objects)
 
@@ -57,6 +61,7 @@ final class VZHost: NSObject {
                                   layout: VMBundleLayout,
                                   attachInstallerISO: Bool,
                                   consolePipes: (input: Pipe, output: Pipe)?,
+                                  serverCodePipe: Pipe? = nil,
                                   additionalWritableDisk: URL? = nil) throws -> VZVirtualMachineConfiguration {
         let name = config.name
         let vz = VZVirtualMachineConfiguration()
@@ -143,6 +148,20 @@ final class VZHost: NSObject {
             vz.serialPorts = [serial]
         }
 
+        // The server-code port, on every VM: the guest writes one line with its code and key, the host
+        // reads it. No input path to the guest exists, so it is not a console.
+        if let serverCodePipe {
+            let device = VZVirtioConsoleDeviceConfiguration()
+            let port = VZVirtioConsolePortConfiguration()
+            port.name = ServerCodeSeen.portName
+            port.isConsole = false
+            port.attachment = VZFileHandleSerialPortAttachment(
+                fileHandleForReading: nil,
+                fileHandleForWriting: serverCodePipe.fileHandleForWriting)
+            device.ports[0] = port
+            vz.consoleDevices = [device]
+        }
+
         try vz.validate()
         return vz
     }
@@ -163,10 +182,18 @@ final class VZHost: NSObject {
             consoleInput = nil
             consoleOutput = nil
         }
+        let codePipe = Pipe()
+        serverCodePipe = codePipe
+        codePipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { handle.readabilityHandler = nil; return }
+            Task { @MainActor in self?.onServerCodeBytes?(data) }
+        }
         let vzConfig = try Self.makeConfiguration(config: config,
                                                   layout: layout,
                                                   attachInstallerISO: attachInstallerISO,
                                                   consolePipes: pipes,
+                                                  serverCodePipe: codePipe,
                                                   additionalWritableDisk: additionalWritableDisk)
         let vm = VZVirtualMachine(configuration: vzConfig)
         vm.delegate = self

@@ -378,6 +378,51 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         try await request("/api/screens/server-order", method: "POST", body: try JSONEncoder().encode(order))
     }
+    public func securitySliver() async throws -> SecuritySliverResponse {
+        try await request("/api/screens/security-sliver")
+    }
+    public func publisherState(serviceId: String) async throws -> WaitingPublisherResponse {
+        try await request("/api/screens/services/\(Self.pathSegment(serviceId))/publisher")
+    }
+    public func trustPublisher(serviceId: String, trust: PublisherTrust, signatureHex: String) async throws {
+        struct Body: Encodable { let trust: PublisherTrust; let signatureHex: String }
+        _ = try await requestData("/api/screens/services/\(Self.pathSegment(serviceId))/publisher/trust", method: "POST", body: try JSONEncoder().encode(Body(trust: trust, signatureHex: signatureHex)))
+    }
+    public func rejectPublisher(serviceId: String) async throws {
+        _ = try await requestData("/api/screens/services/\(Self.pathSegment(serviceId))/publisher/reject", method: "POST", body: Data("{}".utf8))
+    }
+    public func restoredAccessDrafts() async throws -> RestoredAccessList {
+        try await request("/api/screens/restored-access")
+    }
+    public func approveRestoredAccess(request: [String: Any], signatureHex: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["request": request, "signature": signatureHex])
+        _ = try await requestData("/api/service-access/restored", method: "POST", body: body)
+    }
+    public func discardRestoredAccess(serviceRef: String) async throws {
+        _ = try await requestData("/api/screens/restored-access/discard", method: "POST", body: try JSONSerialization.data(withJSONObject: ["serviceRef": serviceRef]))
+    }
+    public func updateMode(serviceId: String) async throws -> UpdateModeState {
+        try await request("/api/screens/services/\(Self.pathSegment(serviceId))/update-mode")
+    }
+    public func setUpdateMode(serviceId: String, mode: String) async throws {
+        _ = try await requestData("/api/screens/services/\(Self.pathSegment(serviceId))/update-mode", method: "POST", body: try JSONSerialization.data(withJSONObject: ["mode": mode]))
+    }
+    public func companionDelegations(sessionId: String) async throws -> CompanionDelegationList {
+        try await request("/api/screens/companion-delegation?sessionId=\(sessionId)")
+    }
+    public func allowCompanionBuild(request: [String: Any], signatureHex: String) async throws {
+        _ = try await requestData("/api/screens/companion-delegation", method: "POST", body: try JSONSerialization.data(withJSONObject: ["delegation": request, "signature": signatureHex]))
+    }
+    public func endCompanionDelegation(sessionId: String, serviceRef: String) async throws {
+        _ = try await requestData("/api/screens/companion-delegation", method: "DELETE", body: try JSONSerialization.data(withJSONObject: ["sessionId": sessionId, "serviceRef": serviceRef]))
+    }
+    public func servicePermissions(serviceId: String) async throws -> ServicePermissions {
+        try await request("/api/screens/services/\(Self.pathSegment(serviceId))/permissions")
+    }
+    public func revokeServicePermission(serviceId: String, grantId: String?) async throws -> PermissionRevokeResult {
+        struct Body: Encodable { let grantId: String? }
+        return try await request("/api/screens/services/\(Self.pathSegment(serviceId))/permissions/revoke", method: "POST", body: try JSONEncoder().encode(Body(grantId: grantId)))
+    }
     public func debugAccessGrant(body: String) async throws -> DebugAccessChange {
         try await request("/api/screens/debug-access", method: "POST", body: Data(body.utf8))
     }
@@ -772,11 +817,12 @@ public final class LiveBrowserStream: BrowserStream, @unchecked Sendable {
             .replacingOccurrences(of: "https://", with: "wss://")
             .replacingOccurrences(of: "http://", with: "ws://")
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let encodedToken = token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? token
         let encodedTabId = tabId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? tabId
-        let urlStr = "\(wsBase)/api/screens/browser-tabs/\(encodedTabId)/stream?sessionToken=\(encodedToken)"
-        guard let url = URL(string: urlStr) else { return true }
-        guard let ws = try? urlSession.gatedWebSocketTask(with: url) else { return true }
+        // The session rides in a header, never in the URL (N06): URLs end up in proxies and logs.
+        guard let url = URL(string: "\(wsBase)/api/screens/browser-tabs/\(encodedTabId)/stream") else { return true }
+        var req = URLRequest(url: url)
+        req.setValue(token, forHTTPHeaderField: "x-flagship-session")
+        guard let ws = try? urlSession.gatedWebSocketTask(with: req) else { return true }
         lock.withLock { self.task = ws }
         ws.resume()
         var sawAnyFrame = false

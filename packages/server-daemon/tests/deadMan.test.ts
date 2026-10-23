@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ed,
   signSetDeadManPolicy,
@@ -14,6 +14,7 @@ import {
   executeLockAndPower,
   BootUnlockModeSuppressor,
   type AutoUnlockSuppressor,
+  type BootSuspender,
   type HostPowerRunner,
 } from "../src/deadMan.js";
 import { buildOrdersHandler } from "../src/orders.js";
@@ -67,12 +68,55 @@ describe("executeLockAndPower", () => {
     expect(events).toEqual(["suppress", "power:off"]);
   });
 
-  it("honors restart mode", async () => {
+  it("honors restart mode once the lock is confirmed", async () => {
     const { events, suppressor, runner } = recorder();
-    await executeLockAndPower({ mode: "restart", suppressor, runner });
-    expect(events).toEqual(["suppress", "power:restart"]);
+    const suspender = confirming(events);
+    const r = await executeLockAndPower({ mode: "restart", suppressor, runner, suspender, reason: "manual-lock" });
+    expect(events).toEqual(["suppress", "suspend:manual-lock", "power:restart"]);
+    expect(r).toEqual({ mode: "restart", requestedMode: "restart", suspension: "confirmed" });
+  });
+
+  it("turns a restart into a shutdown when the lock cannot be confirmed (SEC-LOCK-001)", async () => {
+    const { events, suppressor, runner } = recorder();
+    const r = await executeLockAndPower({ mode: "restart", suppressor, runner, suspender: failing(events), reason: "manual-lock" });
+    expect(events).toEqual(["suppress", "suspend:manual-lock", "power:off"]);
+    expect(r).toEqual({ mode: "off", requestedMode: "restart", suspension: "unconfirmed" });
+  });
+
+  it("never restarts when there is no way to lock the boot worker", async () => {
+    const { events, suppressor, runner } = recorder();
+    const r = await executeLockAndPower({ mode: "restart", suppressor, runner });
+    expect(events).toEqual(["suppress", "power:off"]);
+    expect(r.suspension).toBe("unavailable");
+  });
+
+  it("locks before it powers off, and gives up waiting on a stuck boot worker within seconds", async () => {
+    vi.useFakeTimers();
+    const { events, suppressor, runner } = recorder();
+    const stuck: BootSuspender = { suspend: () => new Promise(() => {}) };
+    const done = executeLockAndPower({ mode: "off", suppressor, runner, suspender: stuck, reason: "dead-man" });
+    await vi.advanceTimersByTimeAsync(3_001);
+    const r = await done;
+    expect(events).toEqual(["suppress", "power:off"]);
+    expect(r.suspension).toBe("unconfirmed");
+  });
+
+  it("a suspender that throws still lets the box shut down", async () => {
+    const { events, suppressor, runner } = recorder();
+    const r = await executeLockAndPower({ mode: "off", suppressor, runner, suspender: { suspend: async () => { throw new Error("boom"); } } });
+    expect(events).toEqual(["suppress", "power:off"]);
+    expect(r.suspension).toBe("unconfirmed");
   });
 });
+
+afterEach(() => vi.useRealTimers());
+
+function confirming(events: string[]): BootSuspender {
+  return { suspend: async (reason) => (events.push(`suspend:${reason}`), { confirmed: true as const }) };
+}
+function failing(events: string[]): BootSuspender {
+  return { suspend: async (reason) => (events.push(`suspend:${reason}`), { confirmed: false as const, why: "unreachable" }) };
+}
 
 describe("power-off no longer rides the PSK orders path", () => {
   function envelope(order: PhoneOrder, psk: Keypair) {
@@ -127,7 +171,7 @@ describe("DeadManController", () => {
     return { affirm, sig: signDeadManAffirmation(affirm, IRK) };
   }
 
-  function mkController(opts?: { now?: () => number; statePath?: string }) {
+  function mkController(opts?: { now?: () => number; statePath?: string; suspender?: (events: string[]) => BootSuspender }) {
     const { events, suppressor, runner } = recorder();
     const intv = fakeInterval();
     const tmp = opts?.statePath ?? `/tmp/flagship-deadman-test-${Math.random().toString(36).slice(2)}.json`;
@@ -138,6 +182,7 @@ describe("DeadManController", () => {
       runner,
       statePath: tmp,
       now: opts?.now,
+      suspender: opts?.suspender ? opts.suspender(events) : null,
       setIntervalImpl: intv.setIntervalImpl,
       clearIntervalImpl: intv.clearIntervalImpl,
     });
@@ -247,15 +292,26 @@ describe("DeadManController", () => {
     expect(events).toEqual(["suppress", "power:off"]);
   });
 
-  it("expired past grace honors restart mode", async () => {
+  it("a lapse suspends the boot worker, then honors restart mode", async () => {
     let now = 1_000_000;
-    const { ctl, events } = mkController({ now: () => now });
+    const { ctl, events } = mkController({ now: () => now, suspender: confirming });
     await ctl.start();
     const { policy, sig } = policyEnvelope({ windowMs: 1000, graceMs: 0, lockoutMode: "restart" }, now);
     await ctl.applyPolicy(policy, sig);
     now += 1001;
     await ctl.checkOnce();
-    expect(events).toEqual(["suppress", "power:restart"]);
+    expect(events).toEqual(["suppress", "suspend:dead-man", "power:restart"]);
+  });
+
+  it("a lapse whose lock cannot be confirmed shuts down instead of restarting", async () => {
+    let now = 1_000_000;
+    const { ctl, events } = mkController({ now: () => now, suspender: failing });
+    await ctl.start();
+    const { policy, sig } = policyEnvelope({ windowMs: 1000, graceMs: 0, lockoutMode: "restart" }, now);
+    await ctl.applyPolicy(policy, sig);
+    now += 1001;
+    await ctl.checkOnce();
+    expect(events).toEqual(["suppress", "suspend:dead-man", "power:off"]);
   });
 
   it("does not re-fire while/after powering off", async () => {

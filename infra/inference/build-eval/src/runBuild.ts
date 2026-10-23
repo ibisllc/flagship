@@ -138,6 +138,10 @@ class MemoryCredentials implements BuildCredentialStore {
   providerName(id: string): string | null {
     return this.m.get(id)?.provider ?? null;
   }
+  costSource(id: string): "byok" | "promo" | null {
+    const c = this.m.get(id);
+    return c ? (c.source === "promo" ? "promo" : "byok") : null;
+  }
   async forget(id: string): Promise<void> {
     this.m.delete(id);
   }

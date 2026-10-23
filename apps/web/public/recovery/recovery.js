@@ -52,9 +52,15 @@ import {
   HKDF_UMK_SALT,
   HKDF_ADMIN_ROOT_SALT,
 } from "./recoveryWrap.js";
+import { ciphertextMismatch } from "./recoveryRecordCheck.js";
 
-const APEX = "https://flagshipserver.com";
-const RP_ID = "recovery.flagshipserver.com";
+// The page serves only at recovery.<apex> (prod recovery.flagshipserver.com, the gym
+// recovery.gym.flagshipserver.com), so its own host names the apex, the rpId and the webapp.
+const PROD_APEX_HOST = "flagshipserver.com";
+const OWN_HOST = typeof location !== "undefined" && location.hostname.startsWith("recovery.") ? location.hostname : `recovery.${PROD_APEX_HOST}`;
+const APEX_HOST = OWN_HOST.slice("recovery.".length);
+const APEX = `https://${APEX_HOST}`;
+const RP_ID = OWN_HOST;
 const RP_NAME = "Flagship recovery";
 
 // Argon2id parameters (RFC 9106). Picked to satisfy:
@@ -94,7 +100,7 @@ const PRF_SALT_INFO = new TextEncoder().encode("flagship.recovery.salt.v1");
 // is keyless by construction and has no business enrolling or unwrapping
 // a recovery credential (the whole recovery surface is disabled there —
 // see companionGuard's UNAVAILABLE_IDS). One origin in, one origin out.
-const PARENT_ORIGIN = "https://webapp.flagshipserver.com";
+const PARENT_ORIGIN = `https://webapp.${APEX_HOST}`;
 
 const state = {
   mode: null, // "enroll" | "recover" | null
@@ -262,11 +268,21 @@ $("recover-go")?.addEventListener("click", async () => {
     setStatus("recover-status", "Hardening your passphrase (Argon2id, ~1.5s)…", null);
     const { fetchToken, prfSalt } = await derivePassphraseSecrets(pp, username);
 
-    setStatus("recover-status", "Asking flagshipserver.com for the wrapped key…", null);
+    setStatus("recover-status", `Asking ${APEX_HOST} for the wrapped key…`, null);
     const fetched = await fetchWrappedUmk(username, fetchToken);
     if (!fetched) throw new Error("no cloud recovery for that username");
-    const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, prfSaltHash, recoveryProof } =
+    const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, prfSaltHash, recoveryProof, signed } =
       fetched;
+
+    // N03: a signed record names the digest of every ciphertext it covers. Refuse before any
+    // unwrap if `.com` returned a different one (a swapped, dropped or added escrow). A legacy
+    // record has no such signature; it is passed on labelled, never as verified.
+    if (signed) {
+      const bad = await ciphertextMismatch(signed.claim, {
+        wrappedUmkB64, wrappedAdminRootB64, wrappedAcmeAccountKeyB64: fetched.wrappedAcmeAccountKeyB64,
+      });
+      if (bad) throw new Error(`the stored recovery record does not match its signed digest (${bad}); refusing to unwrap it`);
+    }
 
     // Defense-in-depth: verify the server returned the same prfSalt we
     // derived locally (otherwise a tampered .com could feed us a
@@ -298,6 +314,7 @@ $("recover-go")?.addEventListener("click", async () => {
       umk: Array.from(umk), // serialize for structured-clone safety
       ...(adminRootSeed ? { adminRootSeed: Array.from(adminRootSeed) } : {}),
       ...(recoveryProof ? { recoveryProof } : {}),
+      ...(signed ? { signedRecord: { claim: signed.claim, signatureHex: signed.signatureHex } } : { recordLegacy: true }),
     });
     setStatus("recover-status", "Done — return to the webapp to finish.", "ok");
   } catch (e) {
@@ -429,6 +446,8 @@ async function fetchWrappedUmk(username, fetchToken) {
     // Slice D (D-3): the admin master root rides as a SEPARATE escrow blob
     // (`.com` releases it alongside the UMK on the gated fetch when present).
     wrappedAdminRootB64: typeof b.wrappedAdminRoot === "string" ? b.wrappedAdminRoot : null,
+    wrappedAcmeAccountKeyB64: typeof b.wrappedAcmeAccountKey === "string" ? b.wrappedAcmeAccountKey : null,
+    signed: b.signed && typeof b.signed === "object" && b.signed.claim && typeof b.signed.signatureHex === "string" ? b.signed : null,
     prfSaltHash: b.prfSaltHash,
   };
 }

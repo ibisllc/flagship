@@ -88,6 +88,7 @@ export async function proxyDns01PublishToBroker(args: {
     signature?: unknown;
     recordValue?: unknown;
     serviceCertAuthority?: ServiceCertAuthorityEnvelope;
+    serverWildcardGrant?: { issuedAt?: unknown; signature?: unknown };
   };
   fetcher?: typeof fetch;
 }): Promise<{ status: number; body: unknown }> {
@@ -103,11 +104,21 @@ export async function proxyDns01PublishToBroker(args: {
     return malformed("malformed body");
   }
   const svc = serviceCertWire(args.body.serviceCertAuthority);
+  const grant = serverWildcardGrantWire(args.body.serverWildcardGrant);
   const rpc = {
     kind: "publishTxtChallenge" as const,
     recordName: r.recordName,
     recordValue: args.body.recordValue,
-    authority: svc
+    authority: grant
+      ? {
+          type: "server-wildcard" as const,
+          serverId: r.serverId,
+          recordValueHashHex: r.recordValueHash,
+          issuedAt: r.issuedAt,
+          signatureHex: args.body.signature,
+          grant,
+        }
+      : svc
       ? {
           type: "service-cert" as const,
           serverId: r.serverId,
@@ -152,6 +163,7 @@ export async function proxyDns01DeleteToBroker(args: {
     };
     signature?: unknown;
     serviceCertAuthority?: ServiceCertAuthorityEnvelope;
+    serverWildcardGrant?: { issuedAt?: unknown; signature?: unknown };
   };
   fetcher?: typeof fetch;
 }): Promise<{ status: number; body: unknown }> {
@@ -165,11 +177,20 @@ export async function proxyDns01DeleteToBroker(args: {
     return malformed("malformed body");
   }
   const svc = serviceCertWire(args.body.serviceCertAuthority);
+  const grant = serverWildcardGrantWire(args.body.serverWildcardGrant);
   const rpc = {
     kind: "deleteRecord" as const,
     recordId: r.recordId,
     recordKind: "acme" as const,
-    authority: svc
+    authority: grant
+      ? {
+          type: "server-wildcard-acme" as const,
+          serverId: r.serverId,
+          issuedAt: r.issuedAt,
+          signatureHex: args.body.signature,
+          grant,
+        }
+      : svc
       ? {
           type: "service-cert-acme" as const,
           serverId: r.serverId,
@@ -200,4 +221,10 @@ export async function proxyDns01DeleteToBroker(args: {
     return { status: resp.status, body: { error: "delete failed" } };
   }
   return { status: 200, body: { ok: true } };
+}
+
+/** The admin's server-wildcard grant as the box sent it, in the broker's wire form; only for the account-name challenge. */
+function serverWildcardGrantWire(g: { issuedAt?: unknown; signature?: unknown } | undefined): { issuedAt: number; signatureHex: string } | null {
+  if (!g || typeof g.issuedAt !== "number" || typeof g.signature !== "string") return null;
+  return { issuedAt: g.issuedAt, signatureHex: g.signature };
 }

@@ -41,6 +41,7 @@ enum class AppMemberRole(val wire: String) {
  *   flagship/app-rank/v1|<serviceRef>|<target>|<rank>|<issuedAt>
  *   flagship/service-access-mode/v2|<serviceRef>|<open|restricted>|<issuedAt>
  *   flagship/service-allow-remove/v2|<serviceRef>|<aid hex>|<issuedAt>
+ *   flagship/restored-access-approve/v1|<serviceRef>|<draftSha256 hex>|<issuedAt>
  *
  * packages/protocol/test-vectors/app-access-orders/vectors.json is the
  * reference; AppAccessOrdersVectorsTest runs every case and every refusal.
@@ -49,11 +50,15 @@ object AppAccessOrders {
     const val TAG_RANK = "flagship/app-rank/v1"
     const val TAG_MODE = "flagship/service-access-mode/v2"
     const val TAG_REMOVE = "flagship/service-allow-remove/v2"
+    const val TAG_RESTORED_APPROVE = "flagship/restored-access-approve/v1"
     const val REFUSED = "refused"
 
     data class Rank(val serviceRef: String, val target: String, val rank: String, val issuedAt: Long)
     data class Mode(val serviceRef: String, val mode: String, val issuedAt: Long)
     data class Remove(val serviceRef: String, val aid: String, val issuedAt: Long)
+
+    /** An admin's approval of the permissions a restore held back: names the app and the exact draft's SHA-256. */
+    data class RestoredApprove(val serviceRef: String, val draftSha256: String, val issuedAt: Long)
 
     private val SERVICE_REF = Regex("^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$")
     private val HEX64 = Regex("^[0-9a-f]{64}$")
@@ -72,6 +77,13 @@ object AppAccessOrders {
     private fun checkRef(ref: String) = require(SERVICE_REF.matches(ref)) { "bad serviceRef" }
     private fun checkAt(at: Long) = require(at >= 0) { "bad issuedAt" }
     private fun join(vararg parts: String) = parts.joinToString("|").toByteArray(Charsets.UTF_8)
+
+    fun canonicalBytes(o: RestoredApprove): ByteArray {
+        checkRef(o.serviceRef)
+        require(HEX64.matches(o.draftSha256)) { "bad draftSha256" }
+        checkAt(o.issuedAt)
+        return join(TAG_RESTORED_APPROVE, o.serviceRef, o.draftSha256, o.issuedAt.toString())
+    }
 
     /** Throws for an order the box would refuse (never sign one). */
     fun canonicalBytes(o: Rank): ByteArray {

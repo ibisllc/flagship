@@ -25,6 +25,7 @@ export * from "./notifyOwner.js";
 export * from "./rePair.js";
 export * from "./wipeRestart.js";
 export * from "./webauthnRecovery.js";
+export * from "./passkeyAssertion.js";
 export * from "./voici.js";
 export * from "./serviceRename.js";
 export * from "./customDomain.js";

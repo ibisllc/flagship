@@ -6,7 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { D1Database } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
 import { handleAdapterIndex, type AdapterBucketLike } from "../src/adapterIndex.js";
-import { MAX_NEW_PER_PUBLISH, README, repoDir, runAdapterPublish, type AdapterPublishEnv } from "../src/adapterPublish.js";
+import {
+  MAX_NEW_PER_PUBLISH,
+  README,
+  communityPublish,
+  repoDir,
+  runAdapterPublish,
+  type AdapterPublishEnv,
+} from "../src/adapterPublish.js";
 import { scheduled } from "../src/scheduled.js";
 import { runAdapterInsights } from "../src/adapterInsights.js";
 
@@ -142,6 +149,7 @@ let env: AdapterPublishEnv;
 const realFetch = globalThis.fetch;
 
 beforeEach(() => {
+  communityPublish.enabled = true;
   gh = new FakeGitHub({ "README.md": "# flagship-adapters\n" });
   sqlite = createSqliteD1();
   db = sqlite as unknown as D1Database;
@@ -155,8 +163,24 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  communityPublish.enabled = false;
   globalThis.fetch = realFetch;
   sqlite.close();
+});
+
+describe("community adapters are quarantined by default (SEC-ADAPTER-001)", () => {
+  it("publishes nothing, whatever the token, repo or review key, and never touches GitHub", async () => {
+    communityPublish.enabled = false;
+    const r = await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, NOW);
+    expect(r).toEqual({ published: false, reason: "quarantined" });
+    expect(gh.calls).toEqual([]);
+  });
+
+  it("ships with the switch off", async () => {
+    vi.resetModules();
+    const fresh = await import("../src/adapterPublish.js");
+    expect(fresh.communityPublish.enabled).toBe(false);
+  });
 });
 
 const sha = (n: number) => n.toString(16).padStart(64, "0");
@@ -466,7 +490,8 @@ describe("review once a key exists", () => {
     await queueFile(2, adapterFile("evil"));
     await queueFile(3, adapterFile("also fine"));
     await runAdapterPublish(env, NOW);
-    expect(Object.keys(gh.files()).filter((p) => p.endsWith(".json"))).toHaveLength(4);
+    expect(Object.keys(gh.files()).filter((p) => p.startsWith("adapters/") && p.endsWith(".json"))).toHaveLength(4);
+    expect(JSON.parse(gh.files()["directory.json"]!).projects[0].adapters).toHaveLength(3);
 
     const later = new Date(Date.UTC(2026, 9, 13, 0, 0, 1));
     const r = await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, later);
@@ -567,10 +592,16 @@ describe("complaints, retirement and insights", () => {
     await runAdapterPublish(env, new Date(Date.UTC(2026, 9, 11, 0, 0, 0)));
   }
 
-  async function complaint(n: number, stage: string, detail: string | null = null, day = "2026-10-11") {
+  let sources = 0;
+  // Each complaint comes from its own network unless `source` says otherwise.
+  async function complaint(n: number, stage: string, detail: string | null = null, day = "2026-10-11", source = `src-${++sources}`) {
     await db
       .prepare("INSERT INTO adapter_complaints (file_sha256, stage, detail, day) VALUES (?, ?, ?, ?)")
       .bind(sha(n), stage, detail, day)
+      .run();
+    await db
+      .prepare("INSERT OR IGNORE INTO adapter_complaint_sources (file_sha256, source, day) VALUES (?, ?, ?)")
+      .bind(sha(n), source, day)
       .run();
   }
 
@@ -616,6 +647,14 @@ describe("complaints, retirement and insights", () => {
     expect(bucket.objects.get(`retired/${sha(1)}.json`)).toBe(fileText("one"));
   });
 
+  it("three complaints from one network retire nothing", async () => {
+    await publishFiles("one");
+    for (const s of ["build", "start", "report"]) await complaint(1, s, s === "report" ? "broken" : null, "2026-10-11", "same-network");
+    const r = await runAdapterPublish(env, NOW);
+    expect(r).toMatchObject({ withdrawn: 0 });
+    expect(await all(`SELECT retired_day FROM repo_adapters WHERE file_sha256 = '${sha(1)}'`)).toEqual([{ retired_day: null }]);
+  });
+
   it("retiring a repo's last adapter removes its index", async () => {
     await publishFiles("one");
     for (const s of ["build", "build", "start"]) await complaint(1, s);
@@ -631,14 +670,13 @@ describe("complaints, retirement and insights", () => {
     expect(await all("SELECT reviewed FROM adapter_complaints")).toEqual([{ reviewed: 0 }]);
   });
 
-  it("with a key, a reported adapter is reviewed again once, with the reports as untrusted text", async () => {
+  it("with a key, a reported adapter is reviewed again once, on its own content: owners' notes never reach the model", async () => {
     await publishFiles("one");
     await complaint(1, "report", "it sends my files somewhere");
     await runAdapterPublish({ ...env, ...KEY }, NOW);
     expect(prompts).toHaveLength(1);
-    expect(prompts[0]).toContain("<user_reports>");
-    expect(prompts[0]).toContain("it sends my files somewhere");
-    expect(prompts[0]).toMatch(/untrusted/);
+    expect(prompts[0]).not.toContain("<user_reports>");
+    expect(prompts[0]).not.toContain("it sends my files somewhere");
     expect(await all("SELECT reviewed FROM adapter_complaints")).toEqual([{ reviewed: 1 }]);
     prompts.length = 0;
     await runAdapterPublish({ ...env, ...KEY }, NOW);
@@ -647,8 +685,7 @@ describe("complaints, retirement and insights", () => {
     await complaint(1, "report", "still odd");
     await runAdapterPublish({ ...env, ...KEY }, NOW);
     expect(prompts).toHaveLength(1);
-    expect(prompts[0]).toContain("still odd");
-    expect(prompts[0]).not.toContain("it sends my files somewhere");
+    expect(prompts[0]).not.toContain("still odd");
   });
 
   it("a re-review that fails retires the adapter for review; one that can't run changes nothing", async () => {
@@ -749,10 +786,10 @@ describe("complaints, retirement and insights", () => {
       expect(prompts).toHaveLength(1);
       const sent = JSON.parse(prompts[0]!);
       expect(sent.model).toBe("claude-haiku-5-5");
-      expect(sent.system).toMatch(/Never quote or paraphrase anything from the user reports that could identify/);
       expect(sent.output_config.format.schema.required).toEqual(["patterns", "harness_suggestions"]);
       const content = sent.messages[0].content as string;
-      expect(content).toContain("<user_reports>");
+      expect(content).not.toContain("<user_reports>");
+      expect(content).not.toContain("me@example.com");
       expect(content).toContain("Retired because of: problem reports");
       expect(content).toContain("Retired because of: a failed review");
       expect(content).toMatch(/Complaints: build 1, report 1/);

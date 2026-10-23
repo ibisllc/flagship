@@ -212,6 +212,37 @@ describe("screensWs — vibe-code/:id/stream", () => {
     expect(deployFrame.url).toContain("home.alice.flagship.services");
   });
 
+  it("a stream is registered against its session's grant and closes when that session ends", async () => {
+    const { mkdtemp } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { AuthorityHub, GrantIndex, OperationLedger } = await import("../../src/authority/index.js");
+    const { buildTrackWork, sessionGrantId } = await import("../../src/authority/sessionWork.js");
+    const dir = await mkdtemp(join(tmpdir(), "ws-work-"));
+    const idx = new GrantIndex(join(dir, "g.json"));
+    await idx.load();
+    await idx.issue({ id: sessionGrantId("good-tok", false), kind: "owner-session", issuer: "account", subject: "s", accountGeneration: 1, audience: "box", capability: "owner", policyRevision: 1, issuedAt: Date.now() });
+    const ledger = new OperationLedger(join(dir, "o.json"), { grantsLive: () => true, currentRevision: () => 0, verifyApproval: () => false });
+    await ledger.load();
+    const hub = new AuthorityHub(idx, ledger);
+    const registry = new VibeCodeSessionRegistry();
+    const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
+    const server = await startTcpServer(
+      buildScreensUpgradeHandler({
+        gate: new FakeGate(new Set(["good-tok"])),
+        vibeCodeRegistry: registry,
+        trackWork: buildTrackWork(hub, () => false),
+      }),
+    );
+    const ws = connect(server.port, `/api/screens/vibe-code/${session.meta.sessionId}/stream?sessionToken=good-tok`);
+    await new Promise<void>((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
+    expect(hub.openWorkFor(sessionGrantId("good-tok", false))).toEqual([`build stream ${session.meta.sessionId}`]);
+    const closed = new Promise<number>((resolve) => ws.once("close", (code) => resolve(code)));
+    await hub.revoke(sessionGrantId("good-tok", false), "session removed");
+    expect(await closed).toBe(1008);
+    expect(hub.openWorkFor(sessionGrantId("good-tok", false))).toEqual([]);
+  });
+
   it("non-stream paths return false (let the chain fall through)", async () => {
     const handler = buildScreensUpgradeHandler({
       gate: new FakeGate(new Set(["good-tok"])),
@@ -419,5 +450,50 @@ describe("screensWs — /api/screens/events", () => {
     ws.close();
     await new Promise((r) => setTimeout(r, 50));
     expect(bus.subscriberCount).toBe(0);
+  });
+});
+
+// ---------- N06: single-use upgrade tickets ----------
+
+import { UpgradeTicketStore, TICKET_TTL_MS } from "../../src/screens/upgradeTickets.js";
+
+describe("upgrade tickets", () => {
+  it("a ticket works once, for its route and its Origin only", () => {
+    let t = 1_000;
+    const s = new UpgradeTicketStore(() => t);
+    const a = s.issue({ token: "tok", route: "/api/screens/events", origin: "https://webapp.example" });
+    expect(s.consume(a, "/api/screens/events", "https://evil.example")).toBeNull(); // wrong Origin, and now spent
+    expect(s.consume(a, "/api/screens/events", "https://webapp.example")).toBeNull();
+    const b = s.issue({ token: "tok", route: "/api/screens/events", origin: "https://webapp.example" });
+    expect(s.consume(b, "/api/screens/browser-tabs/1/stream", "https://webapp.example")).toBeNull(); // wrong route
+    const c = s.issue({ token: "tok", route: "/api/screens/events", origin: "https://webapp.example" });
+    expect(s.consume(c, "/api/screens/events", "https://webapp.example")).toBe("tok");
+    expect(s.consume(c, "/api/screens/events", "https://webapp.example")).toBeNull(); // replay
+    const d = s.issue({ token: "tok", route: "/api/screens/events", origin: null });
+    t += TICKET_TTL_MS + 1;
+    expect(s.consume(d, "/api/screens/events", null)).toBeNull(); // expired
+  });
+
+  it("the stream upgrade refuses the session token in the URL and accepts a ticket once", async () => {
+    const tickets = new UpgradeTicketStore();
+    const events = new ScreensEventBus();
+    const handler = buildScreensUpgradeHandler({ gate: new FakeGate(new Set(["good-tok"])), events, tickets });
+    const server = await startTcpServer(handler);
+    const statusOf = (ws: WebSocket) =>
+      new Promise<number>((resolve) => {
+        ws.once("open", () => resolve(101));
+        ws.once("unexpected-response", (_r, res) => { resolve(res.statusCode ?? -1); res.resume(); });
+        ws.once("error", () => resolve(-2));
+      });
+    expect(await statusOf(connect(server.port, "/api/screens/events?sessionToken=good-tok"))).toBe(400);
+    const ticket = tickets.issue({ token: "good-tok", route: "/api/screens/events", origin: null });
+    const ok = connect(server.port, `/api/screens/events?ticket=${ticket}`);
+    expect(await statusOf(ok)).toBe(101);
+    ok.close();
+    expect(await statusOf(connect(server.port, `/api/screens/events?ticket=${ticket}`))).toBe(401); // replayed
+    expect(await statusOf(connect(server.port, "/api/screens/events"))).toBe(401); // none at all
+    const viaHeader = new WebSocket(`ws://127.0.0.1:${server.port}/api/screens/events`, { headers: { "x-flagship-session": "good-tok" } });
+    expect(await statusOf(viaHeader)).toBe(101); // a native client's header still works
+    viaHeader.close();
   });
 });

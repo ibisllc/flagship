@@ -15,7 +15,8 @@
  * No flagship-specific value is hardcoded.
  */
 
-import { D1BoxSealedLeaseStorage, D1SecretMailboxStorage, type D1Database } from "@flagship/storage";
+import { D1BoxSealedLeaseStorage,
+  D1WatchBootKeyStorage, D1BootSuspensionStorage, D1SecretMailboxStorage, type D1Database } from "@flagship/storage";
 import {
   HttpDirectoryClient,
   HttpNotifyPipe,
@@ -96,6 +97,8 @@ export default {
 
     const deps: BootRouteDeps = {
       boxSealedLeases: new D1BoxSealedLeaseStorage(env.DB),
+      watchBootKeys: new D1WatchBootKeyStorage(env.DB),
+      bootSuspensions: new D1BootSuspensionStorage(env.DB),
       secretMailbox: new D1SecretMailboxStorage(env.DB),
       directory,
       notify,

@@ -88,4 +88,55 @@ enum HelperClient {
         c.resume()
         return c
     }
+
+    // MARK: - calls (every one answers once, whatever the connection does)
+
+    private static func call<T>(_ conn: NSXPCConnection, fallback: T,
+                                _ body: @escaping (FlagshipHelperProtocol, @escaping (T) -> Void) -> Void) async -> T {
+        await withCheckedContinuation { cont in
+            let once = OnceBox()
+            func finish(_ v: T) { if once.take() { cont.resume(returning: v) } }
+            guard let proxy = conn.remoteObjectProxyWithErrorHandler({ _ in finish(fallback) }) as? FlagshipHelperProtocol else {
+                finish(fallback); return
+            }
+            body(proxy, finish)
+        }
+    }
+
+    static func stageImage(_ conn: NSXPCConnection, imageURL: URL) async -> (imageID: String, sha256: String, size: Int64, message: String) {
+        guard let fh = try? FileHandle(forReadingFrom: imageURL) else { return ("", "", 0, "could not open the prepared image") }
+        defer { try? fh.close() }
+        return await call(conn, fallback: ("", "", 0, "helper connection error")) { proxy, finish in
+            proxy.stageImage(fh) { id, sha, size, msg in finish((id, sha, size, msg)) }
+        }
+    }
+
+    static func registerMedia(_ conn: NSXPCConnection, bsdName: String) async -> (mediaID: String, message: String) {
+        await call(conn, fallback: ("", "helper connection error")) { proxy, finish in
+            proxy.registerMedia(bsdName: bsdName) { id, msg in finish((id, msg)) }
+        }
+    }
+
+    static func write(_ conn: NSXPCConnection, imageID: String, mediaID: String) async -> (code: Int, message: String) {
+        await call(conn, fallback: (-1, "helper connection error")) { proxy, finish in
+            proxy.writeImage(imageID: imageID, mediaID: mediaID) { code, msg in finish((code, msg)) }
+        }
+    }
+
+    static func readProgress(_ conn: NSXPCConnection, imageID: String, from: Int) async -> (next: Int, lines: [String]) {
+        await call(conn, fallback: (from, [])) { proxy, finish in
+            proxy.readProgress(imageID: imageID, from: from) { next, lines in finish((next, lines)) }
+        }
+    }
+}
+
+private final class OnceBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    func take() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if done { return false }
+        done = true
+        return true
+    }
 }

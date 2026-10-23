@@ -1,40 +1,205 @@
 {
   "about": "Derived-check findings that are intentional. Each entry names its check id and finding key exactly as scripts/parity-check.mjs prints them, and says why. An entry that no longer matches anything is reported as stale: delete it.",
   "entries": [
-    { "check": "test-vectors", "key": "mac:vm-core-vectors.applianceSeed", "reason": "By the section's own notes the Mac's JSONEncoder writes an equivalent seed body, not the same bytes, so it doesn't assert this vector." },
-    { "check": "test-vectors", "key": "mac:vm-core-vectors.qemuFailure", "reason": "The Mac hosts on Virtualization.framework and never runs QEMU, so there is no QEMU stderr or WHPX memory failure to describe; its VZ errors are already plain. Only the Windows and Linux ports implement QemuFailure/qemu_failure." },
-    { "check": "test-vectors", "key": "linux:vm-core-vectors.applianceSeed", "reason": "Linux writes the seed through the Node CLI's appliance-provision, which packages/flagship-builder/tests/appliance.test.ts checks against this section." },
-    { "check": "deep-links", "key": "ios-lacks-host:deadman", "reason": "Android's own dead-man reminder notification opens app/deadman/<server>; iOS's local reminder carries category deadman-affirm and serverDomain in userInfo instead of a link." },
-    { "check": "signed-tags", "key": "android:flagship/umk-wrap/v1", "reason": "iOS Secure Enclave keystore wrapping, local storage only and never on the wire; Android wraps in the Android Keystore." },
-    { "check": "signed-tags", "key": "web:flagship/umk-wrap/v1", "reason": "iOS Secure Enclave keystore wrapping, local storage only; the webapp wraps with its PIN (pin-wrap/v1)." },
-    { "check": "signed-tags", "key": "android:flagship/wrap-salt/v1", "reason": "iOS keystore wrap salt, local storage only." },
-    { "check": "signed-tags", "key": "web:flagship/wrap-salt/v1", "reason": "iOS keystore wrap salt, local storage only." },
-    { "check": "signed-tags", "key": "android:flagship/adminroot-wrap/v1", "reason": "iOS keystore wrapping of the admin root, local storage only." },
-    { "check": "signed-tags", "key": "web:flagship/adminroot-wrap/v1", "reason": "iOS keystore wrapping of the admin root, local storage only." },
-    { "check": "signed-tags", "key": "android:flagship/platform-prf/v1", "reason": "Salt for iOS's own platform passkey provider; Android uses Credential Manager PRF." },
-    { "check": "signed-tags", "key": "web:flagship/platform-prf/v1", "reason": "Salt for iOS's own platform passkey provider; the webapp uses WebAuthn PRF directly." },
-    { "check": "signed-tags", "key": "web:flagship/mock-prf/v1", "reason": "Dev stand-in passkey in the native apps' developer mode; the webapp has none." },
-    { "check": "signed-tags", "key": "ios:flagship/pin-pepper/v1", "reason": "The webapp's PIN lock; the native apps use biometrics." },
-    { "check": "signed-tags", "key": "android:flagship/pin-pepper/v1", "reason": "The webapp's PIN lock; the native apps use biometrics." },
-    { "check": "signed-tags", "key": "ios:flagship/pin-wrap/v1", "reason": "The webapp's PIN lock; the native apps use biometrics." },
-    { "check": "signed-tags", "key": "android:flagship/pin-wrap/v1", "reason": "The webapp's PIN lock; the native apps use biometrics." },
-    { "check": "signed-tags", "key": "web:flagship/lan-hint/v1", "reason": "LAN-direct is native only (docs/lan-direct.md): a browser can't choose a LAN route." },
-    { "check": "signed-tags", "key": "web:flagship/watch-delegate-key/v1", "reason": "A watch delegate is minted by a phone paired with a watch; the webapp has no watch." },
-    { "check": "signed-tags", "key": "web:flagship/revoke-watch-delegate/v1", "reason": "A watch delegate is minted by a phone paired with a watch; the webapp has no watch." },
-    { "check": "signed-tags", "key": "android:flagship/account-key-attestation/v1", "reason": "No client builds these bytes: .com's CA-signed attestation is carried unchanged to the shared box, which checks the CA chain; iOS only names the tag in a doc comment." },
-    { "check": "signed-tags", "key": "web:flagship/account-key-attestation/v1", "reason": "No client builds these bytes: .com's CA-signed attestation is carried unchanged to the shared box, which checks the CA chain; iOS only names the tag in a doc comment." },
-    { "check": "signed-tags", "key": "android:flagship/bak/v1", "reason": "iOS's slash-form BAK (Keystore.deriveBAK) is its legacy boot-approval seed; the protocol, the webapp and Android use the dotted flagship.bak.v1 (keys.ts)." },
-    { "check": "signed-tags", "key": "web:flagship/bak/v1", "reason": "iOS's slash-form BAK (Keystore.deriveBAK) is its legacy boot-approval seed; the protocol and the webapp use the dotted flagship.bak.v1 (keys.ts)." },
-    { "check": "signed-tags", "key": "web:flagship/boot/v1", "reason": "flagship/boot/v1 is the phones' BAK challenge signature in BootAuthorization, which no server code verifies; the webapp's boot approval signs flagship/boot-auth/v1 (bootApproval.js)." },
-    { "check": "signed-tags", "key": "ios:flagship/build-relay/v1", "reason": "Only the webapp's unused deriveMatchCode names it (the old build relay, whose server module is gone); the phones' match code is QrRelayProtocol's SAS." },
-    { "check": "signed-tags", "key": "android:flagship/build-relay/v1", "reason": "Only the webapp's unused deriveMatchCode names it (the old build relay, whose server module is gone); the phones' match code is QrRelayProtocol's SAS." },
-    { "check": "signed-tags", "key": "web:flagship/builder-sid/v1", "reason": "Pairing a phone with Studio (desktop installer) is phone-only; the webapp never pairs Studio." },
-    { "check": "signed-tags", "key": "web:flagship/daemon-status/v1", "reason": "Phones re-verify the box's STK-signed report to pin its certificate fingerprint; a browser has no API to pin a certificate." },
-    { "check": "signed-tags", "key": "android:flagship/outstanding-orders/v1", "reason": "iOS's IRK-signed reconcile read; Android and the webapp reconcile pending servers from the unauthenticated /pods pending[] list (PendingServerReconciler.kt)." },
-    { "check": "signed-tags", "key": "web:flagship/outstanding-orders/v1", "reason": "iOS's IRK-signed reconcile read; the webapp reconciles pending servers from the unauthenticated /pods pending[] list." },
-    { "check": "signed-tags", "key": "web:flagship/recovery/v1", "reason": "The native default PRF salt; the webapp's passkey recovery derives its PRF salt from the user's passphrase (Argon2id in the recovery sub-origin)." },
-    { "check": "signed-tags", "key": "android:flagship/swk/v1", "reason": "iOS's slash-form app-backup SWK (Keystore.deriveSWK) is not used by any other client; Android and the webapp derive the dotted protocol SWK (ServerKeys.deriveSwk)." },
-    { "check": "signed-tags", "key": "web:flagship/acme-account-key-grant/v1", "reason": "Only the canonical-bytes primitive exists on iOS and Android, pinned by their unit tests; no client issues, seals or unseals an ACME account-key grant yet (AGENTS.md open item 5). A webapp port would be dead code; port all three together with the sealing flow." },
-    { "check": "signed-tags", "key": "web:flagship/voici-shorten/v1", "reason": "No client offers one-off voi.ci short links: iOS and Android carry only the unused canonical-bytes primitive, and the webapp has no such screen." }
+    {
+      "check": "test-vectors",
+      "key": "mac:vm-core-vectors.applianceSeed",
+      "reason": "By the section's own notes the Mac's JSONEncoder writes an equivalent seed body, not the same bytes, so it doesn't assert this vector."
+    },
+    {
+      "check": "test-vectors",
+      "key": "mac:vm-core-vectors.qemuFailure",
+      "reason": "The Mac hosts on Virtualization.framework and never runs QEMU, so there is no QEMU stderr or WHPX memory failure to describe; its VZ errors are already plain. Only the Windows and Linux ports implement QemuFailure/qemu_failure."
+    },
+    {
+      "check": "test-vectors",
+      "key": "linux:vm-core-vectors.applianceSeed",
+      "reason": "Linux writes the seed through the Node CLI's appliance-provision, which packages/flagship-builder/tests/appliance.test.ts checks against this section."
+    },
+    {
+      "check": "deep-links",
+      "key": "ios-lacks-host:deadman",
+      "reason": "Android's own dead-man reminder notification opens app/deadman/<server>; iOS's local reminder carries category deadman-affirm and serverDomain in userInfo instead of a link."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/umk-wrap/v1",
+      "reason": "iOS Secure Enclave keystore wrapping, local storage only and never on the wire; Android wraps in the Android Keystore."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/umk-wrap/v1",
+      "reason": "iOS Secure Enclave keystore wrapping, local storage only; the webapp wraps with its PIN (pin-wrap/v1)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/wrap-salt/v1",
+      "reason": "iOS keystore wrap salt, local storage only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/wrap-salt/v1",
+      "reason": "iOS keystore wrap salt, local storage only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/adminroot-wrap/v1",
+      "reason": "iOS keystore wrapping of the admin root, local storage only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/adminroot-wrap/v1",
+      "reason": "iOS keystore wrapping of the admin root, local storage only."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/platform-prf/v1",
+      "reason": "Salt for iOS's own platform passkey provider; Android uses Credential Manager PRF."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/platform-prf/v1",
+      "reason": "Salt for iOS's own platform passkey provider; the webapp uses WebAuthn PRF directly."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/mock-prf/v1",
+      "reason": "Dev stand-in passkey in the native apps' developer mode; the webapp has none."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/pin-pepper/v1",
+      "reason": "The webapp's PIN lock; the native apps use biometrics."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/pin-pepper/v1",
+      "reason": "The webapp's PIN lock; the native apps use biometrics."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/pin-wrap/v1",
+      "reason": "The webapp's PIN lock; the native apps use biometrics."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/pin-wrap/v1",
+      "reason": "The webapp's PIN lock; the native apps use biometrics."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/lan-hint/v1",
+      "reason": "LAN-direct is native only (docs/lan-direct.md): a browser can't choose a LAN route."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/watch-delegate-key/v1",
+      "reason": "A watch delegate is minted by a phone paired with a watch; the webapp has no watch."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/revoke-watch-delegate/v1",
+      "reason": "A watch delegate is minted by a phone paired with a watch; the webapp has no watch."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/account-key-attestation/v1",
+      "reason": "No client builds these bytes: .com's CA-signed attestation is carried unchanged to the shared box, which checks the CA chain; iOS only names the tag in a doc comment."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/account-key-attestation/v1",
+      "reason": "No client builds these bytes: .com's CA-signed attestation is carried unchanged to the shared box, which checks the CA chain; iOS only names the tag in a doc comment."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/bak/v1",
+      "reason": "iOS's slash-form BAK (Keystore.deriveBAK) is its legacy boot-approval seed; the protocol, the webapp and Android use the dotted flagship.bak.v1 (keys.ts)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/bak/v1",
+      "reason": "iOS's slash-form BAK (Keystore.deriveBAK) is its legacy boot-approval seed; the protocol and the webapp use the dotted flagship.bak.v1 (keys.ts)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/boot/v1",
+      "reason": "flagship/boot/v1 is the phones' BAK challenge signature in BootAuthorization, which no server code verifies; the webapp's boot approval signs flagship/boot-auth/v1 (bootApproval.js)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/build-relay/v1",
+      "reason": "Only the webapp's unused deriveMatchCode names it (the old build relay, whose server module is gone); the phones' match code is QrRelayProtocol's SAS."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/build-relay/v1",
+      "reason": "Only the webapp's unused deriveMatchCode names it (the old build relay, whose server module is gone); the phones' match code is QrRelayProtocol's SAS."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/builder-sid/v1",
+      "reason": "Pairing a phone with Studio (desktop installer) is phone-only; the webapp never pairs Studio."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/daemon-status/v1",
+      "reason": "Phones re-verify the box's STK-signed report to pin its certificate fingerprint; a browser has no API to pin a certificate."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/outstanding-orders/v1",
+      "reason": "iOS's IRK-signed reconcile read; Android and the webapp reconcile pending servers from the unauthenticated /pods pending[] list (PendingServerReconciler.kt)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/outstanding-orders/v1",
+      "reason": "iOS's IRK-signed reconcile read; the webapp reconciles pending servers from the unauthenticated /pods pending[] list."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/recovery/v1",
+      "reason": "The native default PRF salt; the webapp's passkey recovery derives its PRF salt from the user's passphrase (Argon2id in the recovery sub-origin)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/swk/v1",
+      "reason": "iOS's slash-form app-backup SWK (Keystore.deriveSWK) is not used by any other client; Android and the webapp derive the dotted protocol SWK (ServerKeys.deriveSwk)."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/acme-account-key-grant/v1",
+      "reason": "Only the canonical-bytes primitive exists on iOS and Android, pinned by their unit tests; no client issues, seals or unseals an ACME account-key grant yet (AGENTS.md open item 5). A webapp port would be dead code; port all three together with the sealing flow."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/voici-shorten/v1",
+      "reason": "No client offers one-off voi.ci short links: iOS and Android carry only the unused canonical-bytes primitive, and the webapp has no such screen."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/box-artifact/v1",
+      "reason": "The box artifact is verified by the install scripts on the box and by Studio's burn path; the iOS app never installs a box. Android carries the tag only inside the embedded preseed engine it shares with the builder."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-artifact/v1",
+      "reason": "The webapp never builds or installs a box; the tag appears in Android only inside the embedded preseed engine."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:box-artifact",
+      "reason": "Checked by installer/verify-box-artifact.sh and scripts/verify-box-artifact.test.ts: only the box installer and the builder read it, no phone verifies an artifact."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:box-artifact",
+      "reason": "Checked by installer/verify-box-artifact.sh and scripts/verify-box-artifact.test.ts: only the box installer and the builder read it, no phone verifies an artifact."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:box-artifact",
+      "reason": "Checked by installer/verify-box-artifact.sh and scripts/verify-box-artifact.test.ts: only the box installer and the builder read it, no phone verifies an artifact."
+    }
   ]
 }

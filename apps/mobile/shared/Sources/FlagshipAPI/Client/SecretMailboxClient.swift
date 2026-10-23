@@ -111,11 +111,81 @@ public protocol SecretMailboxClient: Sendable {
     /// old to serve `/api/screens/updates` themselves. Only a listing: the box
     /// still verifies the endorsement before applying any order.
     func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse
+
+    /// GET {boot}/api/boot/suspension/:domain — the durable lock record
+    /// (owner-IRK via `bootAuth`). SEC-LOCK-001.
+    func readBootSuspension(serverDomain: String, bootAuth: String) async throws -> BootSuspensionStateWire
+
+    /// PUT {boot}/api/boot/suspension — an owner-signed lock or resume (a new
+    /// epoch). The result says whether the boot worker durably recorded it.
+    func putBootSuspension(order: BootSuspensionOrderWire, signatureHex: String, bootAuth: String) async throws -> BootSuspensionPutResult
+
+    /// DELETE {boot}/api/boot/lease/:domain — revoke EVERY lease for the
+    /// server (owner-IRK). Used when the dead-man switch is switched on.
+    func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws
 }
 
 public extension SecretMailboxClient {
     func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse {
         throw ScreensClientError.notImplemented("release list")
+    }
+    func readBootSuspension(serverDomain: String, bootAuth: String) async throws -> BootSuspensionStateWire {
+        throw ScreensClientError.notImplemented("boot suspension")
+    }
+    func putBootSuspension(order: BootSuspensionOrderWire, signatureHex: String, bootAuth: String) async throws -> BootSuspensionPutResult {
+        throw ScreensClientError.notImplemented("boot suspension")
+    }
+    func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws {
+        throw ScreensClientError.notImplemented("revoke all leases")
+    }
+}
+
+/// The boot worker's lock record for a server (`GET /api/boot/suspension/:domain`).
+public struct BootSuspensionStateWire: Codable, Equatable, Sendable {
+    public let serverDomain: String
+    public let suspended: Bool
+    public let epoch: Int64
+    public let seq: Int64
+    public let reason: String?
+    public let signer: String?
+    public let orderIssuedAt: Int64?
+    public let updatedAt: Int64?
+    public let signature: String?
+    public init(serverDomain: String, suspended: Bool, epoch: Int64, seq: Int64, reason: String? = nil,
+                signer: String? = nil, orderIssuedAt: Int64? = nil, updatedAt: Int64? = nil, signature: String? = nil) {
+        self.serverDomain = serverDomain; self.suspended = suspended; self.epoch = epoch; self.seq = seq
+        self.reason = reason; self.signer = signer; self.orderIssuedAt = orderIssuedAt
+        self.updatedAt = updatedAt; self.signature = signature
+    }
+}
+
+/// The `order` object of a suspension PUT. Field names match the worker.
+public struct BootSuspensionOrderWire: Codable, Equatable, Sendable {
+    public let serverDomain: String
+    public let epoch: Int64
+    public let seq: Int64
+    public let action: String
+    public let reason: String
+    public let signer: String
+    public let issuedAt: Int64
+    public init(serverDomain: String, epoch: Int64, seq: Int64, action: String, reason: String, signer: String, issuedAt: Int64) {
+        self.serverDomain = serverDomain; self.epoch = epoch; self.seq = seq; self.action = action
+        self.reason = reason; self.signer = signer; self.issuedAt = issuedAt
+    }
+}
+
+/// What a suspension PUT came to. `durable` is true only when the worker says
+/// it wrote the record; any other answer must be shown as "not locked".
+public struct BootSuspensionPutResult: Equatable, Sendable {
+    public let durable: Bool
+    public let leasesRevoked: Int
+    public let state: BootSuspensionStateWire?
+    /// The worker's refusal code (e.g. `stale-epoch`) or `not-durable`.
+    public let refusal: String?
+    public let status: Int
+    public init(durable: Bool, leasesRevoked: Int = 0, state: BootSuspensionStateWire? = nil, refusal: String? = nil, status: Int = 200) {
+        self.durable = durable; self.leasesRevoked = leasesRevoked; self.state = state
+        self.refusal = refusal; self.status = status
     }
 }
 
@@ -889,6 +959,38 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         try await sendBoot("DELETE", path, body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
     }
 
+    public func readBootSuspension(serverDomain: String, bootAuth: String) async throws -> BootSuspensionStateWire {
+        let (data, status) = try await bootExchange("GET", "/api/boot/suspension/\(serverDomain)", body: Data(), bootAuth: bootAuth)
+        guard status == 200 else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(BootSuspensionStateWire.self, from: data)
+    }
+
+    public func putBootSuspension(order: BootSuspensionOrderWire, signatureHex: String, bootAuth: String) async throws -> BootSuspensionPutResult {
+        struct Body: Encodable { let order: BootSuspensionOrderWire; let signature: String }
+        struct Reply: Decodable {
+            let durable: Bool?
+            let leasesRevoked: Int?
+            let state: BootSuspensionStateWire?
+            let code: String?
+            let error: String?
+            let current: BootSuspensionStateWire?
+        }
+        let body = try JSONEncoder().encode(Body(order: order, signature: signatureHex))
+        let (data, status) = try await bootExchange("PUT", "/api/boot/suspension", body: body, bootAuth: bootAuth)
+        let reply = try? JSONDecoder().decode(Reply.self, from: data)
+        if status == 200, reply?.durable == true {
+            return BootSuspensionPutResult(durable: true, leasesRevoked: reply?.leasesRevoked ?? 0, state: reply?.state, status: status)
+        }
+        if status == 503 { return BootSuspensionPutResult(durable: false, refusal: "not-durable", status: status) }
+        return BootSuspensionPutResult(durable: false, state: reply?.current, refusal: reply?.code ?? reply?.error ?? "refused", status: status)
+    }
+
+    public func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws {
+        try await sendBoot("DELETE", "/api/boot/lease/\(serverDomain)", body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
+    }
+
     public func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         // String-concat the URL (not appendingPathComponent) so the multi-segment
@@ -1024,6 +1126,21 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     /// `Authorization: Flagship-Boot-v1 …` header. The URL is built by
     /// string concat (not appendingPathComponent) so the path matches the
     /// one the header signature commits to, byte-for-byte.
+    /// Like `sendBoot`, but hands back the status and body for routes whose answer matters.
+    private func bootExchange(_ method: String, _ path: String, body: Data, bootAuth: String) async throws -> (Data, Int) {
+        guard let url = URL(string: bootBaseUrl.absoluteString + path) else {
+            throw ScreensClientError.http(status: 0, message: "bad boot URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.timeoutInterval = 20
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.setValue(bootAuth, forHTTPHeaderField: "Authorization")
+        if !body.isEmpty { req.httpBody = body }
+        let (data, resp) = try await urlSession.gatedData(for: req)
+        return (data, (resp as? HTTPURLResponse)?.statusCode ?? 0)
+    }
+
     private func sendBoot(_ method: String, _ path: String, body: Data, bootAuth: String, acceptStatuses: Set<Int>) async throws {
         guard let url = URL(string: bootBaseUrl.absoluteString + path) else {
             throw ScreensClientError.http(status: 0, message: "bad boot URL")

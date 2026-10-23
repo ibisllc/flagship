@@ -18,7 +18,7 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
-import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
+import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken, wsTicketUrl } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 
@@ -70,16 +70,15 @@ async function renderTabs() {
   }
 }
 
-function openStream(tabId) {
+async function openStream(tabId) {
   closeSocket();
   activeTabId = tabId;
-  const baseUrl = getPodBaseUrl();
-  const tok = getSessionToken();
-  if (!baseUrl || !tok) return toast("Not paired", "err");
-  const wsBase = baseUrl.replace(/^http/, "ws").replace(/\/+$/, "");
-  const url = `${wsBase}/api/screens/browser-tabs/${encodeURIComponent(tabId)}/stream?sessionToken=${encodeURIComponent(tok)}`;
+  if (!getPodBaseUrl() || !getSessionToken()) return toast("Not paired", "err");
   let s;
   try {
+    // A single-use ticket, not the session token: the bearer never rides in a URL.
+    const url = await wsTicketUrl(`/api/screens/browser-tabs/${encodeURIComponent(tabId)}/stream`);
+    if (!url) return toast("Not paired", "err");
     s = new WebSocket(url);
   } catch (e) {
     return toast(`Could not open stream: ${e.message}`, "err");

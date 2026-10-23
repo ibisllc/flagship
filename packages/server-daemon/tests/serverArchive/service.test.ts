@@ -9,7 +9,7 @@ import { mkdtempSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   archiveDownloadCode,
   ed,
@@ -38,7 +38,7 @@ import { AppRunner, type CommandRunner } from "../../src/serviceRunner.js";
 import { InMemoryAppEnvStore } from "../../src/serviceEnvStore.js";
 import { buildServerArchiveService, parseRange, ARCHIVE_PATH, DOWNLOAD_PATH, RESTORE_PATH } from "../../src/serverArchive/service.js";
 import { _handleHttpConnectionForTest, type HttpResponse } from "../../src/runtime.js";
-import { Duplex } from "node:stream";
+import { Duplex, PassThrough } from "node:stream";
 import type { HttpRequest } from "../../src/runtime.js";
 import { swkOps, testCustodian } from "../helpers/keyCustody.js";
 import { writeSourceTree } from "../../src/llm/serviceSource.js";
@@ -123,6 +123,7 @@ function fakeOps() {
     imageExists: async (i) => images.has(i),
     removeImage: async (i) => void images.delete(i),
     dumpDatabase: async (s, out) => writeFile(out, `rows-of-${s.database}`),
+    listDump: async () => "; Archive created\n",
     restoreDatabase: async (_s, p) => void restoredDbs.push(await readFile(p, "utf8")),
     archiveFiles: async (v, _c, out) => writeFile(out, `files-of-${v}`),
     restoreFiles: async (_v, p) => void restoredFiles.push(await readFile(p, "utf8")),
@@ -144,7 +145,7 @@ function platformFor(box: typeof srcBox, nameKey: string) {
   return { platform, provisioner };
 }
 
-async function world() {
+async function world(o: { dstFree?: () => number } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "server-archive-"));
   const src = platformFor(srcBox, "s".repeat(40));
   const request = { serverId: SRC, creator: "harry", slug: "notes", manifestJson: JSON.stringify(MANIFEST), addOwnerToMembership: true, issuedAt: Date.now() };
@@ -226,7 +227,7 @@ async function world() {
       ...rebuilder(tOps),
     },
     note: (k) => void events.push(k),
-    freeBytes: async () => 1e12,
+    freeBytes: async () => o.dstFree?.() ?? 1e12,
   });
   return { dir, src, dst, srcEnv, dstEnv, sOps, tOps, sourceService, targetService, targetWait, sourceWait, events, builds, pulls, srcClones, dstClones };
 }
@@ -404,7 +405,40 @@ describe("Backup/clone server", () => {
     expect(w.builds).toEqual([]);
   });
 
-  it("carries the app's API keys and the front page onto the new server", async () => {
+  async function pullRestore(opsPatch: Record<string, unknown>, image: string) {
+    const w = await world();
+    const app = w.src.platform.byServiceId(SERVICE)!;
+    const pulled = { ...app, manifest: { ...app.manifest, runtime: { ...app.manifest.runtime, image } } } as typeof app;
+    const svc = buildServerArchiveService({
+      dir: join(w.dir, "pin"),
+      build: { serverFqdn: SRC, apps: () => [pulled], containerName: () => "c", ops: { ...w.sOps.ops, ...opsPatch } as never, envStore: null, access: null, accessList: null },
+      restore: { serverFqdn: SRC, platform: w.src.platform, dataProvisioner: null, ops: w.sOps.ops, signInstall: (r) => srcBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
+      freeBytes: async () => 1e12,
+    });
+    await call(svc, "POST", `${ARCHIVE_PATH}/start`, startBody());
+    await svc.settle();
+    const file = await download(svc);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    await upload(w.targetService, file);
+    await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() });
+    await w.targetService.settle();
+    return { w, app: asJson(await call(w.targetService, "GET", RESTORE_PATH)).restore.apps[0] };
+  }
+
+  it("a tag is pulled by the digest the backup recorded, never by whatever the tag is now", async () => {
+    const { w, app } = await pullRestore({ imageDigest: async () => "sha256:" + "b".repeat(64) }, "ghcr.io/acme/notes:latest");
+    expect(app).toMatchObject({ state: "done" });
+    expect(w.pulls).toEqual(["ghcr.io/acme/notes@sha256:" + "b".repeat(64)]);
+  });
+
+  it("an app whose image is only a tag, with no recorded digest, is not restored", async () => {
+    const { w, app } = await pullRestore({}, "ghcr.io/acme/notes:latest");
+    expect(app.state).toBe("failed");
+    expect(app.reason).toContain("tag");
+    expect(w.pulls).toEqual([]);
+  });
+
+  it("brings the front page but never a working API key", async () => {
     const w = await world();
     const exported = [{ grant: { serverDomain: SRC, serviceId: SERVICE, keyId: "0123456789abcdef", scope: "read", expiresAt: 0, issuedAt: 1 }, signature: "ab".repeat(64), secretSha256: "cd".repeat(32), label: "cron", createdAt: 1 }];
     const imported: Array<{ id: string; keys: unknown }> = [];
@@ -436,7 +470,6 @@ describe("Backup/clone server", () => {
           return { ok: true as const };
         },
         pullImage: async () => {},
-        apiKeys: { importService: async (id, keys) => (imported.push({ id, keys }), { imported: 1, dropped: 0 }) },
         frontPage: { get: () => front, set: async (l) => void (front = l), installed: (l) => l === "notes" },
       },
       freeBytes: async () => 1e12,
@@ -444,9 +477,51 @@ describe("Backup/clone server", () => {
     await upload(target, file);
     await call(target, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() });
     await target.settle();
-    expect(asJson(await call(target, "GET", RESTORE_PATH)).restore.apps[0]).toMatchObject({ state: "done" });
-    expect(imported).toEqual([{ id: SERVICE, keys: exported }]);
+    const app = asJson(await call(target, "GET", RESTORE_PATH)).restore.apps[0];
+    expect(app).toMatchObject({ state: "done" });
+    expect(imported).toEqual([]);
+    expect(app.summary.reconnect.join(" ")).toContain("1 API key");
     expect(front).toBe("notes");
+  });
+
+  it("a disk too small for the unpacked backup is refused before anything is written or installed", async () => {
+    let low = false;
+    const w = await world({ dstFree: () => (low ? 1_000 : 1e12) });
+    const file = await backUp(w);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    await upload(w.targetService, file);
+    low = true; // room was there to receive the file; by the time it is unpacked it is not
+    await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() });
+    await w.targetService.settle();
+    const r = asJson(await call(w.targetService, "GET", RESTORE_PATH)).restore;
+    expect(r.state).toBe("failed");
+    expect(r.reason).toMatch(/needs about .* free and this server has/);
+    expect(w.dst.platform.byServiceId(SERVICE)).toBeUndefined();
+    expect(w.tOps.restoredDbs).toEqual([]);
+  });
+
+  it("an app with a database and files is read while paused, so the two are one moment", async () => {
+    const w = await world();
+    const order: string[] = [];
+    const ops = w.sOps.ops;
+    const dump = ops.dumpDatabase.bind(ops);
+    const files = ops.archiveFiles.bind(ops);
+    ops.quiesce = async (c) => {
+      order.push(`pause ${c}`);
+      return async () => void order.push("resume");
+    };
+    ops.dumpDatabase = async (s, out) => {
+      order.push("dump");
+      return dump(s, out);
+    };
+    ops.archiveFiles = async (v, c, out) => {
+      order.push("files");
+      return files(v, c, out);
+    };
+    await backUp(w);
+    const i = order.findIndex((x) => x.startsWith("pause"));
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(order.slice(i)).toEqual([order[i], "dump", "files", "resume"]);
   });
 
   it("the data file holds none of the plain content", async () => {
@@ -922,8 +997,40 @@ describe("the daemon's HTTP writer", () => {
     const sep = raw.indexOf("\r\n\r\n");
     const head = raw.subarray(0, sep).toString();
     expect(head).toContain("HTTP/1.1 206 Partial Content");
-    expect(head).toContain(`Content-Length: ${payload.length}`);
+    expect(head.toLowerCase()).toContain(`content-length: ${payload.length}`);
     expect(raw.subarray(sep + 4)).toEqual(payload);
+  });
+
+  it("registers a streamed download as stoppable work, and stopping it ends the transfer", async () => {
+    const { sock, out } = fakeSocket();
+    let cancel: ((reason: string) => void) | null = null;
+    let untracked = 0;
+    const src = new PassThrough();
+    _handleHttpConnectionForTest(
+      sock,
+      async () => ({ status: 200, body: "", stream: { length: 1_000_000, open: () => src } }),
+      { onDownload: (_req, c) => { cancel = c; return () => { untracked++; }; } },
+    );
+    sock.push(Buffer.from("GET /api/backups/x HTTP/1.1\r\nHost: a\r\nx-flagship-session: tok\r\n\r\n"));
+    await vi.waitFor(() => expect(cancel).not.toBeNull());
+    src.write(Buffer.alloc(1000, 1));
+    cancel!("session ended");
+    await vi.waitFor(() => expect(untracked).toBe(1));
+    expect(src.destroyed).toBe(true);
+    expect(Buffer.concat(out).length).toBeLessThan(1_000_000);
+  });
+
+  it("a download that finishes deregisters itself", async () => {
+    const { sock, done } = fakeSocket();
+    let untracked = 0;
+    _handleHttpConnectionForTest(
+      sock,
+      async () => ({ status: 200, body: "", stream: { length: 5, open: () => Duplex.from(Buffer.from("hello")) } }),
+      { onDownload: () => () => { untracked++; } },
+    );
+    sock.push(Buffer.from("GET /x HTTP/1.1\r\nHost: a\r\n\r\n"));
+    await done;
+    await vi.waitFor(() => expect(untracked).toBe(1));
   });
 
   it("sends no body for HEAD", async () => {
@@ -933,10 +1040,10 @@ describe("the daemon's HTTP writer", () => {
       body: "",
       stream: { length: 5, open: () => Duplex.from(Buffer.from("hello")) },
     }));
-    sock.push(Buffer.from("HEAD /x HTTP/1.1\r\n\r\n"));
+    sock.push(Buffer.from("HEAD /x HTTP/1.1\r\nHost: a\r\n\r\n"));
     await done;
     const raw = Buffer.concat(out).toString();
-    expect(raw).toContain("Content-Length: 5");
+    expect(raw.toLowerCase()).toContain("content-length: 5");
     expect(raw.endsWith("\r\n\r\n")).toBe(true);
   });
 });
@@ -1073,7 +1180,8 @@ describe("If we are ever forced to cut you off: a backup moves to a brand-new ac
     // The data came over, under the new id.
     expect(b.ops.restoredDbs.length).toBe(1);
     expect(b.ops.restoredFiles.length).toBe(1);
-    expect(await b.env.get("sam--notes")).toEqual({ OPENAI_KEY: "sk-secret", MODE: "prod" });
+    // A different account's settings and keys are not carried over: they are set up again.
+    expect(await b.env.get("sam--notes")).toBeNull();
     expect(await b.env.get(SERVICE)).toBeNull();
   });
 

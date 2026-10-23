@@ -8,6 +8,8 @@ import { buildBuildModesHttpHandlers } from "../src/buildmodes/buildModesHttp.js
 import { GitImporter } from "../src/buildmodes/gitImport.js";
 import { InMemoryBuildJournal } from "../src/buildmodes/buildJournal.js";
 import { InMemoryMcpKeyStore } from "../src/buildmodes/mcpKeyStore.js";
+import { AdaptConsentGate } from "../src/buildmodes/adaptConsent.js";
+import { ed, signAiRepairConsent } from "@flagship/protocol";
 import { InMemoryBuildCredentialStore } from "../src/llm/buildCredentialStore.js";
 import {
   checkServiceName,
@@ -272,5 +274,61 @@ describe("git import over HTTP", () => {
     const created = await call(handle, "POST", "/api/build/git", { gitUrl: "https://github.com/me/x" });
     const r = await call(handle, "POST", `/api/build/sessions/${created.json.buildId}/adapt`, { background: true });
     expect(r.status).toBe(503);
+  });
+
+  it("no AI run that spends the owner's key starts until the owner has seen the estimate and signed", async () => {
+    const credentials = new InMemoryBuildCredentialStore();
+    const owner = new Uint8Array(32).fill(3);
+    const gateC = new AdaptConsentGate({
+      serverDomain: FQDN,
+      authority: () => ({ username: "harry", ownerIrkPub: ed.getPublicKey(owner) }),
+      costOf: (id) => (credentials.has(id) ? { provider: credentials.providerName(id)!, source: credentials.costSource(id)! } : null),
+      workspaceBytes: () => 12_000,
+    });
+    let ran = 0;
+    const o = new BuildOrchestrator({
+      journal: new InMemoryBuildJournal(),
+      gitImporter: new GitImporter({ cmd: { run: async () => {} }, workingDir: mkdtempSync(join(tmpdir(), "git-consent-")), cloneInto: fixtureClone(NOT_FIT) }),
+      mcpKeys: new InMemoryMcpKeyStore(),
+      serverFqdn: FQDN,
+      names: () => ({ registry: { holderOf: (n, e) => o.holderOf(n, e) }, hostUsername: "harry", installed: null }),
+      staging: new FakeStaging(),
+      deployArtifact: async (a): Promise<DeployResult> => ({ ok: true, serviceId: `harry--${a.name}`, url: `https://${a.name}.${FQDN}`, image: "i" }),
+      forgetCredential: (id) => credentials.forget(id),
+      agentRunner: async () => {
+        ran++;
+        return { content: "", model: "m", toolUses: [{ id: "1", name: "finish", input: {} }] };
+      },
+      adaptCredentialAvailable: (id) => credentials.has(id),
+      adaptConsent: gateC,
+    });
+    const handle = buildBuildModesHttpHandlers({ orchestrator: o, gate, credentials });
+    const created = await call(handle, "POST", "/api/build/git", { gitUrl: "https://github.com/me/helloworld", credential: { provider: "openai", apiKey: "sk-test" } });
+    const id = created.json.buildId as string;
+
+    const asked = await call(handle, "POST", `/api/build/sessions/${id}/adapt`, { background: true });
+    expect(asked.status).toBe(428);
+    expect(asked.json).toMatchObject({ code: "ai-consent", estimate: { provider: "openai", source: "byok", unit: "tokens" } });
+    expect(ran).toBe(0);
+
+    const est = asked.json.estimate as { provider: string; source: "byok" | "promo"; highTokens: number };
+    const issuedAt = Date.now();
+    const sign = (key: Uint8Array) => Buffer.from(signAiRepairConsent({ serverDomain: FQDN, buildId: id, operation: "adapt", provider: est.provider, source: est.source, highTokens: est.highTokens, issuedAt }, (m) => ed.sign(m, key))).toString("hex");
+    const stranger = await call(handle, "POST", `/api/build/sessions/${id}/adapt`, { background: true, consent: { issuedAt, provider: est.provider, source: est.source, highTokens: est.highTokens, signature: sign(new Uint8Array(32).fill(4)) } });
+    expect(stranger.status).toBe(403);
+    expect(ran).toBe(0);
+
+    // A key sent with a request whose consent is refused does not stay: the one before it is back.
+    const swapped = await call(handle, "POST", `/api/build/sessions/${id}/adapt`, { background: true, credential: { provider: "anthropic", apiKey: "sk-other" } });
+    expect(swapped.status).toBe(428);
+    expect(swapped.json).toMatchObject({ estimate: { provider: "anthropic" } });
+    expect(credentials.providerName(id)).toBe("openai");
+    const bare = (await call(handle, "POST", "/api/build/git", { gitUrl: "https://github.com/me/helloworld" })).json.buildId as string;
+    expect((await call(handle, "POST", `/api/build/sessions/${bare}/adapt`, { credential: { provider: "openai", apiKey: "sk-test" } })).status).toBe(428);
+    expect(credentials.has(bare)).toBe(false);
+    expect(ran).toBe(0);
+
+    const ok = await call(handle, "POST", `/api/build/sessions/${id}/adapt`, { background: true, consent: { issuedAt, provider: est.provider, source: est.source, highTokens: est.highTokens, signature: sign(owner) } });
+    expect(ok.status).toBe(202);
   });
 });

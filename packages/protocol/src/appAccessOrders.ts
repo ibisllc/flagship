@@ -22,6 +22,7 @@ import type { Bytes } from "./types.js";
 export const TAG_APP_RANK = "flagship/app-rank/v1";
 export const TAG_SERVICE_ACCESS_MODE_V2 = "flagship/service-access-mode/v2";
 export const TAG_SERVICE_ALLOW_REMOVE_V2 = "flagship/service-allow-remove/v2";
+export const TAG_RESTORED_ACCESS_APPROVE = "flagship/restored-access-approve/v1";
 
 /** Ranks an order can set, lowest first, then `refused` (device and share targets only). */
 export const APP_RANK_VALUES = ["member", "manager", "master", "refused"] as const;
@@ -195,6 +196,54 @@ export function parseServiceAllowRemoveV2(v: unknown): ServiceAllowRemoveOrder |
   const o: ServiceAllowRemoveOrder = { serviceRef: r.serviceRef, aid: r.aid, issuedAt: r.issuedAt };
   try {
     serviceAllowRemoveV2CanonicalBytes(o);
+  } catch {
+    return null;
+  }
+  return o;
+}
+
+// ── restored-access-approve/v1 ───────────────────────────────────────
+
+/**
+ * An admin's approval of the permissions a restore held back (SECURITY-HARDENING-PLAN.md 18.9). It
+ * names the app and the SHA-256 of the exact draft shown to the admin, so approving applies that
+ * draft and no other, and a draft replaced since cannot be approved with an old signature.
+ *
+ *   flagship/restored-access-approve/v1|<serviceRef>|<draftSha256 hex>|<issuedAt>
+ */
+export interface RestoredAccessApproval {
+  serviceRef: string;
+  draftSha256: string;
+  issuedAt: number;
+}
+
+export function restoredAccessApproveCanonicalBytes(o: RestoredAccessApproval): Bytes {
+  checkServiceRef(TAG_RESTORED_ACCESS_APPROVE, o.serviceRef);
+  if (!HEX64_RE.test(o.draftSha256)) throw new Error(`${TAG_RESTORED_ACCESS_APPROVE}: draftSha256 must be 64 lowercase hex`);
+  checkIssuedAt(TAG_RESTORED_ACCESS_APPROVE, o.issuedAt);
+  return new TextEncoder().encode([TAG_RESTORED_ACCESS_APPROVE, o.serviceRef, o.draftSha256, String(o.issuedAt)].join("|"));
+}
+
+export function signRestoredAccessApprove(o: RestoredAccessApproval, signer: MsgSigner): Bytes {
+  return resolveMsgSigner(signer)(restoredAccessApproveCanonicalBytes(o));
+}
+
+export function verifyRestoredAccessApprove(o: RestoredAccessApproval, sig: Bytes, pub: Bytes): boolean {
+  try {
+    return ed.verify(sig, restoredAccessApproveCanonicalBytes(o), pub);
+  } catch {
+    return false;
+  }
+}
+
+export function parseRestoredAccessApprove(v: unknown): RestoredAccessApproval | null {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const r = v as Record<string, unknown>;
+  if (typeof r.serviceRef !== "string" || typeof r.draftSha256 !== "string" || typeof r.issuedAt !== "number") return null;
+  if ("serverId" in r) return null;
+  const o: RestoredAccessApproval = { serviceRef: r.serviceRef, draftSha256: r.draftSha256, issuedAt: r.issuedAt };
+  try {
+    restoredAccessApproveCanonicalBytes(o);
   } catch {
     return null;
   }

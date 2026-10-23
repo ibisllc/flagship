@@ -156,6 +156,95 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return "SHA256:" + Data(SHA256.hash(data: blob)).base64EncodedString().replacingOccurrences(of: "=", with: "")
     }
 
+    // N14 / N11 — scripted sliver and publisher-key state, with the calls recorded.
+    public var sliver = SecuritySliverResponse(lines: [])
+    public var publisherStates: [String: WaitingPublisherResponse] = [:]
+    public private(set) var trustCalls: [(serviceId: String, trust: PublisherTrust, signatureHex: String)] = []
+    public private(set) var rejectCalls: [String] = []
+
+    public func securitySliver() async throws -> SecuritySliverResponse {
+        try await tick()
+        return sliver
+    }
+    public func publisherState(serviceId: String) async throws -> WaitingPublisherResponse {
+        try await tick()
+        return publisherStates[serviceId] ?? WaitingPublisherResponse(pinned: nil, waiting: nil)
+    }
+    public func trustPublisher(serviceId: String, trust: PublisherTrust, signatureHex: String) async throws {
+        try await tick()
+        trustCalls.append((serviceId, trust, signatureHex))
+    }
+    public func rejectPublisher(serviceId: String) async throws {
+        try await tick()
+        rejectCalls.append(serviceId)
+    }
+
+    public var restoredDrafts: [RestoredAccessDraft] = []
+    public private(set) var restoredApprovals: [(request: [String: Any], signatureHex: String)] = []
+    public private(set) var restoredDiscards: [String] = []
+    public var updateModes: [String: UpdateModeState] = [:]
+    public private(set) var updateModeSets: [(serviceId: String, mode: String)] = []
+    public var delegations: [String: [CompanionDelegationRow]] = [:]
+    public private(set) var delegationGrants: [(request: [String: Any], signatureHex: String)] = []
+    public private(set) var delegationEnds: [(sessionId: String, serviceRef: String)] = []
+
+    public func restoredAccessDrafts() async throws -> RestoredAccessList {
+        try await tick()
+        return RestoredAccessList(drafts: restoredDrafts)
+    }
+    public func approveRestoredAccess(request: [String: Any], signatureHex: String) async throws {
+        try await tick()
+        restoredApprovals.append((request, signatureHex))
+        if let ref = request["serviceRef"] as? String { restoredDrafts.removeAll { $0.serviceRef == ref } }
+    }
+    public func discardRestoredAccess(serviceRef: String) async throws {
+        try await tick()
+        restoredDiscards.append(serviceRef)
+        restoredDrafts.removeAll { $0.serviceRef == serviceRef }
+    }
+    public func updateMode(serviceId: String) async throws -> UpdateModeState {
+        try await tick()
+        guard let s = updateModes[serviceId] else { throw ScreensClientError.http(status: 404, message: "no publisher") }
+        return s
+    }
+    public func setUpdateMode(serviceId: String, mode: String) async throws {
+        try await tick()
+        updateModeSets.append((serviceId, mode))
+        if let s = updateModes[serviceId] { updateModes[serviceId] = UpdateModeState(mode: mode, modes: s.modes, stagedHoldDays: s.stagedHoldDays) }
+    }
+    public func companionDelegations(sessionId: String) async throws -> CompanionDelegationList {
+        try await tick()
+        return CompanionDelegationList(delegations: delegations[sessionId] ?? [])
+    }
+    public func allowCompanionBuild(request: [String: Any], signatureHex: String) async throws {
+        try await tick()
+        delegationGrants.append((request, signatureHex))
+        if let sid = request["sessionId"] as? String, let ref = request["serviceRef"] as? String, let ops = request["ops"] as? [String] {
+            delegations[sid, default: []].append(CompanionDelegationRow(serviceRef: ref, ops: ops, expiresAt: request["expiresAt"] as? Int64))
+        }
+    }
+    public func endCompanionDelegation(sessionId: String, serviceRef: String) async throws {
+        try await tick()
+        delegationEnds.append((sessionId, serviceRef))
+        delegations[sessionId]?.removeAll { $0.serviceRef == serviceRef }
+    }
+
+    public var permissions: [String: ServicePermissions] = [:]
+    public private(set) var permissionRevokes: [(serviceId: String, grantId: String?)] = []
+
+    public func servicePermissions(serviceId: String) async throws -> ServicePermissions {
+        try await tick()
+        return permissions[serviceId] ?? ServicePermissions(grants: [])
+    }
+    public func revokeServicePermission(serviceId: String, grantId: String?) async throws -> PermissionRevokeResult {
+        try await tick()
+        permissionRevokes.append((serviceId, grantId))
+        let cur = permissions[serviceId] ?? ServicePermissions(grants: [])
+        let left = cur.grants.filter { grantId != nil && $0.id != grantId }
+        permissions[serviceId] = ServicePermissions(grants: left, pendingOperations: cur.pendingOperations)
+        return PermissionRevokeResult(revoked: cur.grants.count - left.count)
+    }
+
     public func debugAccessGrant(body: String) async throws -> DebugAccessChange {
         try await tick()
         debugAccessBodies.append(body)

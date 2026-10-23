@@ -146,6 +146,31 @@ final class BuilderPairingTests: XCTestCase {
         XCTAssertEqual(actions, [.recipe(plaintext)])
     }
 
+    func test_engineHandsOverTheStudioConfirmKeyDeliveredBesideTheRecipe() throws {
+        let e = engine()
+        _ = e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": phonePubB64u]])
+        let phonePriv = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: hex(phonePrivHex))
+        let mat = try BuilderPairing.deriveMaterial(builderPrivateKey: phonePriv, phonePublicKey: Base64URLBuilder.decode(builderPubB64u)!)
+        func seal(_ d: Data) throws -> (String, String) {
+            let n = Data((0..<12).map { _ in UInt8.random(in: 0...255) })
+            let box = try AES.GCM.seal(d, using: mat.aeadKey, nonce: try AES.GCM.Nonce(data: n))
+            return (Base64URLBuilder.encode(box.ciphertext + box.tag), Base64URLBuilder.encode(n))
+        }
+        let key = Data(repeating: 0x88, count: 32)
+        let (rct, rn) = try seal(Data("RECIPE".utf8))
+        let (kct, kn) = try seal(key)
+        let actions = e.onRelayFrame(["kind": "peer", "frame": [
+            "kind": "deliver", "ciphertext": rct, "nonce": rn, "confirmKeyCiphertext": kct, "confirmKeyNonce": kn,
+        ]])
+        XCTAssertEqual(actions, [.studioConfirmKey(key), .recipe(Data("RECIPE".utf8))])
+        // A key of the wrong size, or one that does not open, is dropped; the recipe still arrives.
+        let e2 = engine()
+        _ = e2.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": phonePubB64u]])
+        let (sct, sn) = try seal(Data(repeating: 1, count: 16))
+        XCTAssertEqual(e2.onRelayFrame(["kind": "peer", "frame": ["kind": "deliver", "ciphertext": rct, "nonce": rn, "confirmKeyCiphertext": sct, "confirmKeyNonce": sn]]),
+                       [.recipe(Data("RECIPE".utf8))])
+    }
+
     func test_enginePeerGoneBeforePairingKeepsQrLive() {
         let e = engine()
         XCTAssertEqual(e.onRelayFrame(["kind": "peer-gone"]), [])

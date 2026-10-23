@@ -64,7 +64,9 @@ export function optionsFromRecipeJson(recipeJson: string, burn: EngineBurnOption
     blobSignatureHex: sigHex,
     ...(siblings.pairingOrder ? { pairingOrder: siblings.pairingOrder } : {}),
     ...(siblings.swkHex ? { swkHex: siblings.swkHex } : {}),
+    ...(siblings.offlineSecrets ? { offlineSecrets: siblings.offlineSecrets } : {}),
     ...(siblings.debugGrant ? { debugGrant: siblings.debugGrant } : {}),
+    ...(siblings.enrollmentKeyHex ? { enrollmentKeyHex: siblings.enrollmentKeyHex } : {}),
     ...(burn.encryptRoot !== undefined ? { encryptRoot: burn.encryptRoot } : {}),
     ...(burn.wifiSSID ? { wifiSSID: burn.wifiSSID } : {}),
     ...(burn.wifiPassword ? { wifiPassword: burn.wifiPassword } : {}),
@@ -74,14 +76,16 @@ export function optionsFromRecipeJson(recipeJson: string, burn: EngineBurnOption
   };
 }
 
-function readSiblings(parsed: Record<string, unknown>): Pick<LoadedBlob, "pairingOrder" | "swkHex" | "debugGrant"> {
+function readSiblings(parsed: Record<string, unknown>): Pick<LoadedBlob, "pairingOrder" | "swkHex" | "offlineSecrets" | "debugGrant" | "enrollmentKeyHex"> {
   const asStr = (v: unknown): string | undefined =>
     typeof v === "string" && v.length > 0 ? v : v && typeof v === "object" ? JSON.stringify(v) : undefined;
   const rawSwk = parsed.swkHex;
   return {
     pairingOrder: asStr(parsed.pairingOrder),
     swkHex: typeof rawSwk === "string" && /^[0-9a-f]{64}$/i.test(rawSwk) ? rawSwk.toLowerCase() : undefined,
+    offlineSecrets: asStr(parsed.offlineSecrets),
     debugGrant: asStr(parsed.debugGrant),
+    enrollmentKeyHex: typeof parsed.enrollmentKeyHex === "string" && /^[0-9a-f]{64}$/i.test(parsed.enrollmentKeyHex) ? parsed.enrollmentKeyHex.toLowerCase() : undefined,
   };
 }
 
@@ -118,7 +122,7 @@ export function buildBootstrapFromRecipe(recipeJson: string, burnOptsJson?: stri
 export function buildInstallBlobJsonFromRecipe(recipeJson: string): string {
   const opts = optionsFromRecipeJson(recipeJson);
   return JSON.stringify(
-    installBlobToJson(opts.blob, opts.blobSignatureHex, opts.pairingOrder, opts.swkHex, opts.debugGrant),
+    installBlobToJson(opts.blob, opts.blobSignatureHex, opts.pairingOrder, opts.swkHex, opts.debugGrant, opts.offlineSecrets, opts.enrollmentKeyHex),
   );
 }
 

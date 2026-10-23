@@ -358,8 +358,20 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
-//  v156: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v156";
+//  v169: Remove app offers Back up first; Lock and restart says restarting; the restored-permissions sentence is split.
+//  v168: a restored app says what it still needs; the Home recovery card finalizes only this device's own replacement.
+//  v167: let one browser session build or deploy one app, on an admin device's signature.
+//  v166: how an app takes updates (ask each time, wait a week, automatic).
+//  v165: restored permissions wait for an admin (approve the exact list or discard it).
+//  v164: Access & permissions for one app (end a key, session or grant and stop its work).
+//  v163: the security sliver and the answer to a waiting publisher key.
+//  v162: the lock says plainly what it cannot take back.
+//  v161: stream sockets open with single-use tickets, not the session token.
+//  v160: the cloud-recovery record is signed whole and chained (recoveryRecord).
+//  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
+//  v158: an admin sees a pending recovery and can reject it (re-pair veto).
+//  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
+const SHELL_VERSION = "v169";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -435,6 +447,10 @@ const OPTIONAL_SHELL = [
   "/lib/modelGroups.js",
   "/lib/vibeTranscript.js",
   "/lib/appDb.js",
+  "/lib/permissions.js",
+  "/lib/restoredAccess.js",
+  "/lib/updateMode.js",
+  "/lib/companionDelegation.js",
   "/lib/knockIdentity.js",
   "/lib/appPlacement.js",
   "/lib/serverMonitoring.js",
@@ -484,6 +500,8 @@ const OPTIONAL_SHELL = [
   "/lib/liveSync.js",
   "/lib/localPassphrase.js",
   "/lib/lockAndPower.js",
+  "/lib/bootSuspension.js",
+  "/lib/boxRelease.js",
   "/lib/loginTakeover.js",
   "/lib/maintainerTrust.js",
   "/lib/modal.js",
@@ -500,6 +518,11 @@ const OPTIONAL_SHELL = [
   "/lib/pairingDeposit.js",
   "/lib/pairingRelay.js",
   "/lib/pendingRePairBanner.js",
+  "/lib/recoveryVeto.js",
+  "/lib/offlineSecrets.js",
+  "/lib/recoveryRecord.js",
+  "/lib/securitySliver.js",
+  "/lib/sliverUi.js",
   "/lib/pinLock.js",
   "/lib/podSwitcher.js",
   "/lib/profiles.js",

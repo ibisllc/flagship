@@ -94,9 +94,9 @@ st_get() { if [ -f "$STATE" ]; then st get "$1"; fi; }
 
 # ---------------------------------------------------------------- the plan
 
-STEP_IDS=(preflight plan lease endorse kickoff secrets gym backup migrations services dns com cpu publish redeployA status
-          notice scrub reap retire studiowl studiomac publisharm redeployB ios android final)
-LAST_A=16   # the last step of phase A (status)
+STEP_IDS=(preflight version plan lease catalogkeys endorse artifacts catalog kickoff secrets gym backup migrations services dnsbroker dns com cpu publish redeployA status
+          notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android hof final)
+LAST_A=21   # the last step of phase A (status)
 
 step_id()    { echo "${STEP_IDS[$(($1 - 1))]}"; }
 step_count() { echo "${#STEP_IDS[@]}"; }
@@ -106,6 +106,107 @@ phase_last()  { if [ "$1" = A ]; then echo "$LAST_A"; else step_count; fi; }
 
 TITLE=""; WHAT=""; RUNBOOK=""; CMDS=""; GATE=""; ROLLBACK=""; REQUIRED=0; OUTWARD=1
 
+meta_version() {
+  TITLE="Bump the product version (one version on every surface)"
+  RUNBOOK="0b. Bump the product version"
+  WHAT="Asks for the new product version (0.3 for this release) and the store numbers, which must climb, writes release/version.json, regenerates every surface's copy with check-versions --write, commits and pushes to main, then re-pins. A run that keeps the version skips it."
+  read -r -d '' CMDS <<'EOF' || true
+cat release/version.json                  (product, label, iosVersion, iosBuild, androidVersionCode, studio)
+(edit release/version.json with your answers)
+node scripts/check-versions.mjs --write
+node scripts/check-versions.mjs
+git add -- <files check-versions wrote> && git commit -m "Bump the product version to <v>"
+git push origin HEAD:main            (then the pin moves to this commit)
+EOF
+  GATE="check-versions passes; the version commit is on origin/main and pinned."
+  ROLLBACK="Revert the commit on main before anything is built from it; store numbers already uploaded are burned (take the next ones)."
+}
+meta_catalogkeys() {
+  TITLE="Release catalog keys and root (once), timestamp secret"
+  RUNBOOK="2b. Release catalog keys (once)"
+  WHAT="Skipped when release/catalog-root.json is already pinned. Otherwise makes two keys in an offline folder you choose (the root key signs root, targets and snapshot; the timestamp key is the only one kept online), writes the root, sets the repo secret RELEASE_CATALOG_TIMESTAMP_KEY from the timestamp key file, commits the pinned root to main and re-pins. Boxes built from this commit on follow the catalog (N13)."
+  read -r -d '' CMDS <<'EOF' || true
+npx tsx tools/release-catalog/catalog.ts keygen --id root-1 --out <offline>/catalog-root-1.key.json
+npx tsx tools/release-catalog/catalog.ts keygen --id timestamp-1 --out <offline>/catalog-timestamp-1.key.json
+npx tsx tools/release-catalog/catalog.ts root --key root-1=<pub> --key timestamp-1=<pub> --role root=root-1 --role targets=root-1 --role snapshot=root-1 --role timestamp=timestamp-1 --version 1 --expires-days 730 --out release/catalog-root.json
+gh secret set RELEASE_CATALOG_TIMESTAMP_KEY < <offline>/catalog-timestamp-1.key.json
+git add -- release/catalog-root.json && git commit -m "Pin the release catalog root" && git push origin HEAD:main
+EOF
+  GATE="release/catalog-root.json is on origin/main and pinned; gh secret list shows RELEASE_CATALOG_TIMESTAMP_KEY; both key files are in the offline folder and nowhere else."
+  ROLLBACK="Before any catalog is published, delete the commit's file and the secret and start again. After, rotate with a root signed by the old one (catalog.ts root --version 2 --sign <old key>)."
+}
+meta_artifacts() {
+  TITLE="Build, sign and publish the box artifacts (+ gVisor mirror, box release, pins)"
+  RUNBOOK="3b. Build, sign and publish the box artifacts"
+  REQUIRED=1
+  WHAT="Every new server installs the signed artifact for one exact commit (SEC-INSTALL-001). Dispatches box-artifact.yml for the pinned commit with a sequence above the last, downloads both architectures, signs each manifest with the YubiKey, verifies it against release/box-artifact-trust.json, uploads artifacts and manifests to R2 flagship-iso with releases.json, makes sure the gVisor mirror is there, points release/box-release.json at the commit, regenerates the compiled constants, re-pins the bootstrap hash the TS and Swift builders share, commits and pushes, then re-pins."
+  read -r -d '' CMDS <<'EOF' || true
+gh workflow run box-artifact.yml --ref main -f commit=<PIN> -f sequence=<N> ; gh run watch <id> --exit-status
+gh run download <id> -D ~/flagship-release-artifacts/box-<pin>
+npx tsx tools/box-artifact/build.ts sign --manifest <m> --out <m> --signer-cmd "node scripts/yubikey-sign.mjs"     (YubiKey PIN + touch, per architecture)
+npx tsx tools/box-artifact/build.ts verify --manifest <m> --artifact <tar.gz> --commit <PIN> --arch <arch>
+npx tsx tools/box-artifact/release-index.ts <dir>
+(cd apps/com && wrangler r2 object put flagship-iso/<file> --file <file> --remote)      (artifacts, manifests, releases.json)
+bash scripts/publish-gvisor-mirror.sh --skip-if-at https://flagshipserver.com/build/iso
+(release/box-release.json: commit <PIN>, sequence <N>) ; node scripts/gen-box-release.mjs --write
+node scripts/repin-bootstrap-sha.mjs --write
+git add -- release packages apps && git commit -m "Install box release <pin> (sequence <N>)" && git push origin HEAD:main
+EOF
+  GATE="Both manifests verify against the trust file; curl -fsSI https://flagshipserver.com/build/iso/flagship-box-<pin12>-amd64.manifest.json answers 200; gen-box-release --check and the bootstrap pin test pass; the box release commit is on origin/main."
+  ROLLBACK="Nothing installs an artifact until the box release commit deploys with .com: revert that commit to keep new servers on the previous release. A published artifact is harmless; never reuse its sequence."
+}
+meta_catalog() {
+  TITLE="Sign and publish the release catalog for this release"
+  RUNBOOK="3c. Sign and publish the release catalog"
+  WHAT="Skipped when no catalog root is pinned. Adds this release to release/catalog-releases.json (security version, rollout share), signs targets and snapshot with the offline root key and the timestamp with the timestamp key, checks it the way a box does, uploads catalog-{targets,snapshot,timestamp}.json to R2, commits the list and re-pins. The daily workflow keeps the timestamp fresh from then on."
+  read -r -d '' CMDS <<'EOF' || true
+curl -fsS https://flagshipserver.com/build/iso/catalog-timestamp.json -o <tmp>/previous.json        (absent on the first release)
+npx tsx tools/release-catalog/catalog.ts sign --root release/catalog-root.json --releases <list> --version <V> --floor <F> --key <offline>/catalog-root-1.key.json --timestamp-key <offline>/catalog-timestamp-1.key.json [--previous-timestamp <tmp>/previous.json] --out-dir <out>
+(cd apps/com && wrangler r2 object put flagship-iso/catalog-<name>.json --file <out>/<name>.json --remote)    (targets, snapshot, timestamp)
+gh workflow run release-catalog-timestamp.yml --ref main ; gh run watch <id> --exit-status
+git add -- release/catalog-releases.json && git commit -m "Release catalog v<V>" && git push origin HEAD:main
+EOF
+  GATE="The tool's own check passed; the timestamp workflow is green; the served catalog-targets.json names this release."
+  ROLLBACK="Publish a newer targets version without the release (or with rolloutPercent 0); versions only go up. A floor raised by mistake cannot be lowered: boxes refuse rollbacks below it until a newer release ships."
+}
+meta_dnsbroker() {
+  TITLE="Deploy the DNS broker (before .com)"
+  RUNBOOK="7a. Deploy the DNS broker"
+  WHAT="The broker re-checks every challenge record .com asks for. 0.3 adds the server-wildcard authority (a box's own certificate for *.<user>), which must be live before boxes on 0.3 renew. Deploys apps/dns-broker and checks it answers."
+  read -r -d '' CMDS <<'EOF' || true
+(cd apps/dns-broker && npx wrangler deployments list)
+(cd apps/dns-broker && npm run deploy)
+(cd apps/dns-broker && npx wrangler deployments list)
+EOF
+  GATE="The new deployment is listed; .com's next dns-01 publish for a box with a grant succeeds (the gym's app-names group covers it)."
+  ROLLBACK="npx wrangler rollback in apps/dns-broker (the previous deployment refuses only the new authority)."
+}
+meta_uxchecks() {
+  TITLE="Translations, store art and voi.ci (from feat/UX)"
+  RUNBOOK="11c. Translations, store art and voi.ci"
+  WHAT="Runs the translation gate, asks you to confirm the native review of the recovery, pairing, unlock and backup wording (i18n/REVIEW.md), runs the store-art release check, and turns on canonical voi.ci links after the gym's named-links group is green. Each part is skipped when the branch carrying it is not merged yet."
+  read -r -d '' CMDS <<'EOF' || true
+npm run i18n                              (every ga language complete, placeholders and terms intact)
+(open i18n/REVIEW.md: the reviewed lines, then type: reviewed)
+npm run store-assets:release-check        (after the native captures, docs/store-assets/capture-plan.md)
+(apps/com/wrangler.toml: VOICI_CANONICAL = "1", then the .com redeploy step)
+EOF
+  GATE="npm run i18n and the store-assets check pass; you typed reviewed."
+  ROLLBACK="Nothing ships from this step; a failing gate blocks the store builds."
+}
+meta_hof() {
+  TITLE="Publish the hall of fame entry (after 0.3 is live)"
+  RUNBOOK="11b. Publish the hall of fame entry"
+  WHAT="The security page credits the reviewers whose reports 0.3 fixes, only once the fixes are deployed. Merges the local branch hof-jay into main (it changes only the security page), pushes, and redeploys .com."
+  read -r -d '' CMDS <<'EOF' || true
+git log --oneline main..hof-jay ; git diff --stat main...hof-jay
+git merge --no-ff hof-jay -m "Hall of fame: credit the 0.3 reviewers"
+git push origin HEAD:main
+(cd apps/com && npm run deploy)
+EOF
+  GATE="https://flagshipserver.com/security/ shows the new entry."
+  ROLLBACK="Revert the merge on main and redeploy .com."
+}
 meta_preflight() {
   TITLE="Preflight: tools, logins, disk, build, checks"
   RUNBOOK="0. What \"ready\" means before you start"
@@ -192,19 +293,17 @@ EOF
   ROLLBACK="Read-only."
 }
 meta_gym() {
-  TITLE="Gym gate: the root wildcard proven live (you verify)"
-  RUNBOOK="6. Gym refresh and live verification of the root wildcard (GATE: nothing deploys to prod until this passes)"
+  TITLE="Gym gate: every live group green on this commit (the 0.3 groups included)"
+  RUNBOOK="6. Gym refresh and live verification (GATE: nothing deploys to prod until this passes)"
   REQUIRED=1
-  OUTWARD=0
-  WHAT="Prints the gym go/no-go checklist; this script cannot verify it, so you type 'verified' once the gym run is green on the commit you will deploy. The static-only webapp Worker is NOT exercised by the gym: the .com post-checks are its first real test."
+  OUTWARD=1
+  WHAT="Runs scripts/gym-release-run.sh: refreshes the gym onto this commit, takes the gym lock, runs every live group (core, sharing, invites ... and release03: first contact, app-name certificates, cross-owner chat, passkey recovery, origin generations, release catalog, policed browser, upstream sync, keyd), tears the fleet down. Exit 0 = go, 3 = skips you must accept, anything else = no-go. Then the DNS canary and the two health URLs."
   read -r -d '' CMDS <<'EOF' || true
-(you run, in another terminal, from the shared checkout, when no other live run is in progress:)
-  bash scripts/gym-refresh.sh
-  npx tsx tools/live-e2e/shared-run.ts
-  npx tsx tools/live-e2e/dns-ent-experiment.ts --canary
+bash scripts/gym-release-run.sh          (GYM_START_REF=origin/gym-ux to run a UX branch's gym)
+npx tsx tools/live-e2e/dns-ent-experiment.ts --canary
 EOF
-  GATE="You typed: verified"
-  ROLLBACK="No-go blocks the prod deploys: fix on main, rerun gym-refresh, run again."
+  GATE="gym-release-run.sh exits 0 (or 3 and you type accept-skips), then you type verified"
+  ROLLBACK="No-go blocks the prod deploys: fix on main, run this step again."
 }
 meta_backup() {
   TITLE="D1 backup prerequisites: bucket, secrets, age key, first backup (BEFORE .com)"
@@ -1000,6 +1099,175 @@ run_endorse() {
   if [ "$now" = "$endorsed" ]; then ok "latest-endorsed-release prints $(short "$now")"; else warn "latest-endorsed-release prints '${now:-nothing}', expected $(short "$endorsed")"; fi
 }
 
+run_version() {
+  ensure_wt
+  local f="$WT/release/version.json" cur
+  cur=$(json_field product < "$f")
+  say "  now: product $cur ($(json_field label < "$f")), iOS $(json_field iosVersion < "$f") build $(json_field iosBuild < "$f"), Android code $(json_field androidVersionCode < "$f"), Studio $(json_field studio < "$f")"
+  local v; v=$(ask_word "New product version (e.g. 0.3), or  keep")
+  if [ -z "$v" ] || [ "$v" = keep ] || [ "$v" = "$cur" ]; then ok "version unchanged ($cur)"; return 0; fi
+  local label ios build code studio
+  label=$(ask_word "Label (now $(json_field label < "$f"); Enter keeps it)"); [ -n "$label" ] || label=$(json_field label < "$f")
+  ios=$(ask_word "iOS marketing version (now $(json_field iosVersion < "$f"); must climb)")
+  build=$(ask_word "iOS build number (now $(json_field iosBuild < "$f"))")
+  code=$(ask_word "Android versionCode (above the highest in Play's App bundle explorer; now $(json_field androidVersionCode < "$f"))")
+  studio=$(ask_word "Studio version (now $(json_field studio < "$f"), e.g. ${v}.0)")
+  num_ge "$build" "$(( $(json_field iosBuild < "$f") + 1 ))" || fail "the iOS build number must climb"
+  num_ge "$code" "$(( $(json_field androidVersionCode < "$f") + 1 ))" || fail "the Android versionCode must climb"
+  if [ "$DRY" = 1 ]; then return 0; fi
+  node -e 'const fs=require("fs");const [f,v,l,i,b,c,s]=process.argv.slice(1);const j=JSON.parse(fs.readFileSync(f,"utf8"));Object.assign(j,{product:v,label:l,iosVersion:i,iosBuild:Number(b),androidVersionCode:Number(c),studio:s});fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")' "$f" "$v" "$label" "$ios" "$build" "$code" "$studio"
+  WX node scripts/check-versions.mjs --write
+  WX node scripts/check-versions.mjs
+  local changed; changed=$(wt_git status --porcelain --untracked-files=no | awk '{print $2}')
+  # shellcheck disable=SC2086
+  commit_paths "Bump the product version to $v" $changed
+  land_commits || return $?
+  st_w set productVersion "$v"
+}
+
+CATALOG_ROOT_FILE=release/catalog-root.json
+run_catalogkeys() {
+  ensure_wt
+  if [ -f "$WT/$CATALOG_ROOT_FILE" ]; then ok "$CATALOG_ROOT_FILE is pinned (version $(json_field version < "$WT/$CATALOG_ROOT_FILE"))"; return 0; fi
+  say "  The catalog keys live OFFLINE (an encrypted stick), never in this repo or this script's state."
+  local dir; dir=$(ask_word "Offline folder for the catalog keys (absolute path)")
+  [ -d "$dir" ] || fail "no such folder: $dir"
+  case "$dir" in "$REPO"*|"$WT"*) fail "the key folder must be outside the repository";; esac
+  confirm "Create the root key and the timestamp key in $dir now?" || return 10
+  local rootpub tspub
+  rootpub=$(cd "$WT" && npx tsx tools/release-catalog/catalog.ts keygen --id root-1 --out "$dir/catalog-root-1.key.json")
+  tspub=$(cd "$WT" && npx tsx tools/release-catalog/catalog.ts keygen --id timestamp-1 --out "$dir/catalog-timestamp-1.key.json")
+  chmod 600 "$dir"/catalog-*.key.json
+  WX npx tsx tools/release-catalog/catalog.ts root --key "root-1=$rootpub" --key "timestamp-1=$tspub" \
+    --role root=root-1 --role targets=root-1 --role snapshot=root-1 --role timestamp=timestamp-1 \
+    --version 1 --expires-days 730 --out "$CATALOG_ROOT_FILE"
+  if confirm "Set the repo secret RELEASE_CATALOG_TIMESTAMP_KEY from $dir/catalog-timestamp-1.key.json (gh reads the file; nothing is shown)?"; then
+    ( cd "$REPO" && gh secret set RELEASE_CATALOG_TIMESTAMP_KEY < "$dir/catalog-timestamp-1.key.json" ) || fail "gh secret set failed"
+    ( cd "$REPO" && gh secret list ) | gh_secret_names | grep -qx RELEASE_CATALOG_TIMESTAMP_KEY && ok "RELEASE_CATALOG_TIMESTAMP_KEY is set"
+  else
+    warn "set it before the catalog step: gh secret set RELEASE_CATALOG_TIMESTAMP_KEY < $dir/catalog-timestamp-1.key.json"
+  fi
+  commit_paths "Pin the release catalog root" "$CATALOG_ROOT_FILE"
+  land_commits || return $?
+  st_w set catalogKeyDir "$dir"
+}
+
+run_artifacts() {
+  ensure_wt
+  local last seq; last=$(json_field sequence < "$WT/release/box-release.json")
+  say "  box release now: $(json_field commit < "$WT/release/box-release.json" | cut -c1-12), sequence $last"
+  seq=$(ask_word "Sequence for $(short "$PIN") (must be above $last)")
+  num_ge "$seq" "$((last + 1))" || fail "the sequence must be above $last"
+  confirm "Build the box artifacts for $(short "$PIN") (amd64 and arm64) in GitHub Actions now?" || return 10
+  XA "$REPO" gh workflow run box-artifact.yml --ref main -f commit="$PIN" -f sequence="$seq"
+  [ "$DRY" = 1 ] && return 0
+  sleep 8
+  local run; run=$(gh run list --workflow box-artifact.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+  XA "$REPO" gh run watch "$run" --exit-status
+  local out="$ARTIFACTS/box-$(short "$PIN")" dl; rm -rf "$out"; mkdir -p "$out"; dl=$(mktemp -d)
+  XA "$REPO" gh run download "$run" -D "$dl"
+  find "$dl" -type f -name 'flagship-box-*' -exec mv {} "$out"/ \;
+  rm -rf "$dl"
+  local arch name
+  for arch in amd64 arm64; do
+    name="flagship-box-${PIN:0:12}-$arch"
+    [ -f "$out/$name.manifest.unsigned.json" ] && [ -f "$out/$name.tar.gz" ] || fail "the run has no $name artifact"
+    say "  sign $name (YubiKey PIN + touch):"
+    with_maintainers XA "$WT" npx tsx tools/box-artifact/build.ts sign --manifest "$out/$name.manifest.unsigned.json" --out "$out/$name.manifest.json" --signer-cmd "node $WT/scripts/yubikey-sign.mjs"
+    XA "$WT" npx tsx tools/box-artifact/build.ts verify --manifest "$out/$name.manifest.json" --artifact "$out/$name.tar.gz" --commit "$PIN" --arch "$arch"
+    rm -f "$out/$name.manifest.unsigned.json"
+  done
+  XA "$WT" npx tsx tools/box-artifact/release-index.ts "$out"
+  if curl -fsS -m 25 "$COM_URL/build/iso/releases.json" -o "$out/published-releases.json" 2>/dev/null; then
+    node -e 'const fs=require("fs");const [n,o]=process.argv.slice(1);const a=JSON.parse(fs.readFileSync(n,"utf8")).releases,b=JSON.parse(fs.readFileSync(o,"utf8")).releases??[];const by=new Map(b.map(r=>[r.commit,r]));for(const r of a)by.set(r.commit,r);fs.writeFileSync(n,JSON.stringify({releases:[...by.values()].sort((x,y)=>y.sequence-x.sequence)},null,2)+"\n")' "$out/releases.json" "$out/published-releases.json"
+    rm -f "$out/published-releases.json"
+  fi
+  confirm "Upload both artifacts, their manifests and releases.json to R2 flagship-iso?" || return 10
+  local f
+  for f in "$out"/*; do WRX r2 object put "flagship-iso/$(basename "$f")" --file "$f" --remote; done
+  probe_code "amd64 manifest served" "$COM_URL/build/iso/flagship-box-${PIN:0:12}-amd64.manifest.json" 200
+  XA "$WT" bash scripts/publish-gvisor-mirror.sh --skip-if-at "$COM_URL/build/iso"
+  node -e 'const fs=require("fs");const [f,c,s]=process.argv.slice(1);const j=JSON.parse(fs.readFileSync(f,"utf8"));j.commit=c;j.sequence=Number(s);fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")' "$WT/release/box-release.json" "$PIN" "$seq"
+  WX node scripts/gen-box-release.mjs --write
+  WX node scripts/repin-bootstrap-sha.mjs --write
+  WX node scripts/gen-box-release.mjs --check
+  local changed; changed=$(wt_git status --porcelain --untracked-files=no | awk '{print $2}')
+  # shellcheck disable=SC2086
+  commit_paths "Install box release $(short "$PIN") (sequence $seq)" $changed
+  st_w set artifactCommit "$PIN"; st_w set artifactSequence "$seq"
+  st_w set artifactSha_amd64 "$(json_field manifest.artifactSha256 < "$out/flagship-box-${PIN:0:12}-amd64.manifest.json")"
+  land_commits || return $?
+  probe_end
+}
+
+run_catalog() {
+  ensure_wt
+  [ -f "$WT/$CATALOG_ROOT_FILE" ] || { ok "no catalog root is pinned: boxes run without the catalog"; return 0; }
+  local commit; commit=$(st_get artifactCommit); [ -n "$commit" ] || commit=$(json_field commit < "$WT/release/box-release.json")
+  local dir; dir=$(st_get catalogKeyDir); [ -n "$dir" ] || dir=$(ask_word "Offline folder holding catalog-root-1.key.json and catalog-timestamp-1.key.json")
+  [ -f "$dir/catalog-root-1.key.json" ] || fail "no root key in $dir"
+  local list="$WT/release/catalog-releases.json"
+  [ -f "$list" ] || printf '{ "version": 0, "floor": 0, "releases": [] }\n' > "$list"
+  local v floor sv pct label
+  v=$(( $(json_field version < "$list") + 1 ))
+  label=$(json_field product < "$WT/release/version.json")
+  sv=$(ask_word "Security version of $(short "$commit") ($label): raise it above every listed release (now highest $(node -e 'const j=require(process.argv[1]);console.log(Math.max(0,...j.releases.map(r=>r.securityVersion)))' "$list"))")
+  floor=$(ask_word "Security floor (boxes never roll back below it; now $(json_field floor < "$list"); usually unchanged)")
+  pct=$(ask_word "Rollout percent for this release (100 = every box now)")
+  node -e 'const fs=require("fs");const [f,v,fl,c,l,sv,p,sha]=process.argv.slice(1);const j=JSON.parse(fs.readFileSync(f,"utf8"));j.version=Number(v);j.floor=Number(fl);j.releases=j.releases.filter(r=>r.commit!==c);j.releases.push({commit:c,label:l,securityVersion:Number(sv),artifactSha256:sha,rolloutPercent:Number(p)});fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")' \
+    "$list" "$v" "$floor" "$commit" "$label" "$sv" "$pct" "$(st_get artifactSha_amd64)"
+  local tmp; tmp=$(mktemp -d); node -e 'const j=require(process.argv[1]);require("fs").writeFileSync(process.argv[2],JSON.stringify(j.releases))' "$list" "$tmp/releases.json"
+  local prev=()
+  if curl -fsS -m 25 "$COM_URL/build/iso/catalog-timestamp.json" -o "$tmp/previous.json" 2>/dev/null; then prev=(--previous-timestamp "$tmp/previous.json"); fi
+  WX npx tsx tools/release-catalog/catalog.ts sign --root "$CATALOG_ROOT_FILE" --releases "$tmp/releases.json" --version "$v" --floor "$floor" \
+    --key "$dir/catalog-root-1.key.json" --timestamp-key "$dir/catalog-timestamp-1.key.json" "${prev[@]}" --out-dir "$tmp/out"
+  confirm "Upload catalog v$v (targets, snapshot, timestamp) to R2 flagship-iso?" || return 10
+  local n
+  for n in targets snapshot timestamp; do WRX r2 object put "flagship-iso/catalog-$n.json" --file "$tmp/out/$n.json" --content-type application/json --remote; done
+  rm -rf "$tmp"
+  probe_code "catalog targets served" "$COM_URL/build/iso/catalog-targets.json" 200
+  XA "$REPO" gh workflow run release-catalog-timestamp.yml --ref main
+  commit_paths "Release catalog v$v: $(short "$commit") at security version $sv" release/catalog-releases.json
+  land_commits || return $?
+  probe_end
+}
+
+run_dnsbroker() {
+  ensure_wt
+  XA "$WT/apps/dns-broker" npx wrangler deployments list
+  confirm "Deploy the DNS broker (apps/dns-broker) from $(short "$PIN") now?" || return 10
+  XA "$WT/apps/dns-broker" npm run deploy
+  XA "$WT/apps/dns-broker" npx wrangler deployments list
+}
+
+run_uxchecks() {
+  ensure_wt
+  local has; has() { node -e 'process.exit(require(process.argv[1]).scripts?.[process.argv[2]]?0:1)' "$WT/package.json" "$1"; }
+  if has i18n; then WX npm run i18n; else warn "no npm run i18n on this commit: the translation work is not merged yet"; fi
+  if [ -f "$WT/i18n/REVIEW.md" ]; then
+    say "  Read i18n/REVIEW.md: recovery, pairing, unlock and backup wording first, by a native reader per language."
+    [ "$(ask_word "Type  reviewed  when every listed line is reviewed (or  later  to stop here)")" = reviewed ] || return 10
+  fi
+  if has store-assets:release-check; then WX npm run store-assets:release-check; else warn "no store-assets:release-check on this commit"; fi
+  if grep -q 'VOICI_CANONICAL' "$WT/apps/com/wrangler.toml" 2>/dev/null; then
+    say "  voi.ci canonical links: set VOICI_CANONICAL = \"1\" in apps/com/wrangler.toml once the gym's named-links group is green; the .com redeploy step ships it."
+  fi
+}
+
+run_hof() {
+  git -C "$MAIN_CHECKOUT" rev-parse --verify -q hof-jay >/dev/null || { warn "no local branch hof-jay in $MAIN_CHECKOUT: nothing to publish"; return 0; }
+  ensure_wt
+  XA "$MAIN_CHECKOUT" git log --oneline "$PIN..hof-jay"
+  XA "$MAIN_CHECKOUT" git diff --stat "$PIN...hof-jay"
+  confirm "0.3 is live. Merge hof-jay into main and redeploy .com now?" || return 10
+  X git -C "$WT" fetch -q "$MAIN_CHECKOUT" hof-jay
+  X git -C "$WT" merge --no-ff FETCH_HEAD -m "Hall of fame: credit the 0.3 reviewers"
+  land_commits || return $?
+  com_deploy || return $?
+  probe_code "security page" "$COM_URL/security/" 200
+  probe_end
+}
+
 run_kickoff() {
   [ -n "$(st_get endorsed)" ] || warn "no endorsement is recorded in this run: the appliances bake the newest endorsed release, so a build started before the endorsement is stale"
   XA "$REPO" gh run list --workflow vm-appliance.yml --limit 4
@@ -1012,7 +1280,7 @@ run_kickoff() {
   say "  amd64 takes about an hour, arm64 (TCG) up to three. Step 14 collects them."
 }
 
-KNOWN_SECRETS=(ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_INFERENCE_ENDPOINT)
+KNOWN_SECRETS=(ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_INFERENCE_ENDPOINT FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT ADAPTER_REVIEW_ANTHROPIC_KEY)
 run_secrets() {
   ensure_wt
   local prod gym
@@ -1031,38 +1299,40 @@ run_secrets() {
 }
 
 run_gym() {
+  ensure_wt
+  say "  The gym proves this commit live before prod: every live group (the 0.3 groups included:"
+  say "  first contact, app-name certificates, cross-owner chat, passkey recovery, origin generations,"
+  say "  the release catalog, the policed browser, upstream sync, keyd custody) on real UpCloud boxes."
+  say "  It takes the gym lock, so no other live run may be in progress (the gym and prod share the"
+  say "  Let's Encrypt budget of 50 a week). About 70 minutes."
+  local base="${GYM_START_REF:-}"
+  [ -n "$base" ] && say "  gym start ref: $base (GYM_START_REF)"
+  if confirm "Run the release gym now (scripts/gym-release-run.sh on $(short "$PIN"))?"; then
+    local rc=0
+    if [ "$DRY" = 1 ]; then XA "$WT" bash scripts/gym-release-run.sh --dry-run; return 0; fi
+    printf '%s+ (cd %s && bash scripts/gym-release-run.sh)%s\n' "$C_D" "$WT" "$C_0"
+    ( cd "$WT" && GYM_BASE_REF="${GYM_BASE_REF:-origin/main}" bash scripts/gym-release-run.sh ) || rc=$?
+    case "$rc" in
+      0) ok "every live group is green on $(short "$PIN")" ;;
+      3) warn "nothing failed, but some groups were skipped (see the summary above)"
+         [ "$(ask_word "Type  accept-skips  if every skip is an owner item you accept for this release")" = accept-skips ] || fail "gym inconclusive" ;;
+      4) fail "the gym lock is held by another session: wait for it, then run this step again" ;;
+      *) fail "the gym run failed (exit $rc): fix on main, run this step again" ;;
+    esac
+  else
+    say "  Run it yourself, in another terminal:  (cd $WT && bash scripts/gym-release-run.sh)"
+    [ "$(ask_word "Type  verified  once that run exits 0 on $(short "$PIN")")" = verified ] || fail "gate not passed"
+  fi
   cat <<'EOF'
-  The root-wildcard change rewrites how every account's names resolve and how every
-  certificate is issued, so it is proven live on the GYM before prod. This script
-  cannot check that. In ANOTHER terminal, from the shared checkout, with no other live
-  run in progress (the gym and prod share the Let's Encrypt budget of 50 a week):
-
-      bash scripts/gym-refresh.sh
-      npx tsx tools/live-e2e/shared-run.ts
-      npx tsx tools/live-e2e/dns-ent-experiment.ts --canary
-
-  GO needs ALL of:
-    [ ] the core group is all green: zero records for the account, an unregistered name
-        closes after the fixed wait, the box gets its Let's Encrypt certificate and
-        serves HTTPS 200
-    [ ] the recorded DNS shows no gap: the box name and a label under it never answered
-        NODATA or NXDOMAIN during issuance
-    [ ] the canary exits 0 today (Cloudflare still keeps the wildcard under a TXT)
-    [ ] the run was on the commit you are about to deploy (or only .maintainers differs)
+  Also check, outside the runner:
+    [ ] npx tsx tools/live-e2e/dns-ent-experiment.ts --canary exits 0 today (Cloudflare still
+        keeps the root wildcard under a TXT)
     [ ] https://gym.flagshipserver.com/api/health and
         https://flagship-services-gym.fly.dev:8443/api/health answer 200
-  NO-GO (any red, a missing certificate, a dark name): do not deploy; fix on main,
-  gym-refresh, run again.
-
-  NOT COVERED BY THE GYM: the static-only webapp Worker (flagship-webapp, apps/webapp-static)
-  that now serves webapp. and remote.flagshipserver.com. The gym Worker still serves the
-  webapp itself, so the .com deploy's post-checks (step 12) are the FIRST real test of that
-  path: the custom-domain move, the strict CSP from _headers, the 404 for unknown files.
-  Stay at the terminal for that deploy.
+  NOT COVERED BY THE GYM: the static-only webapp Worker (flagship-webapp) that serves webapp. and
+  remote.flagshipserver.com; the .com deploy's post-checks are its first real test.
 EOF
-  say "  pinned commit: $(short "$PIN")"
-  local a; a=$(ask_word "Type the word  verified  once every box above is true")
-  [ "$a" = verified ] || fail "gate not passed (you typed '$a')"
+  [ "$(ask_word "Type  verified  once both boxes are true")" = verified ] || fail "gate not passed"
   st_w set gymVerifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   st_w set gymVerifiedSha "$PIN"
 }
