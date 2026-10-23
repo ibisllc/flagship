@@ -2624,5 +2624,17 @@
   "give_a_separate_list_on_each": "e72bef3afbca",
   "use_one_list_for_on_every": "a22fe9a489df",
   "this_phone_isnt_set_up_on": "18fcb39b9914",
-  "couldnt_change_the_list_try_again": "e4d91d1d5f0d"
+  "couldnt_change_the_list_try_again": "e4d91d1d5f0d",
+  "custom_domain": "7b2a783822b9",
+  "set_custom_domain": "df103dfbb831",
+  "add": "b071c943d8da",
+  "custom_domains_come_with_pro_one": "61fc15e49183",
+  "subdomains_only": "4a1df2eb0c53",
+  "this_only_supports_subdomains_an_apex": "367e9a0f62a8",
+  "use": "70dcb2d06630",
+  "replace_custom_domain": "8a22faf7862c",
+  "this_will_permanently_replace_the_current": "03498c6e8be4",
+  "couldnt_request_custom_domain": "6ba319b5bcd9",
+  "attach_custom_domain": "f5602827786b",
+  "couldnt_request_custom_domain_2": "8091e5ada436"
 }
