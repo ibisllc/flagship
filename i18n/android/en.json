@@ -10805,5 +10805,251 @@
   "confirm_its_you": {
     "en": "Confirm it's you",
     "ctx": "ui/shell/DestructiveAuth.kt:22 (subtitle=)"
+  },
+  "the_server_is_powering_off": {
+    "en": "The server is powering off",
+    "ctx": "core/BootSuspension.kt:163 (prose)"
+  },
+  "the_server_is_restarting": {
+    "en": "The server is restarting",
+    "ctx": "core/BootSuspension.kt:163 (prose)"
+  },
+  "the_power_command_didnt_reach_the": {
+    "en": "The power command didn't reach the server",
+    "ctx": "core/BootSuspension.kt:167 (prose)"
+  },
+  "no_verified_certificate_fingerprint_for_yet": {
+    "en": "No verified certificate fingerprint for %1$s yet — refusing connection until the server's signed status arrives",
+    "ctx": "core/CertPinInterceptor.kt:55 (prose)",
+    "args": 1
+  },
+  "certificate_for_does_not_match_the": {
+    "en": "Certificate for %1$s does not match the server's STK-signed fingerprint — refusing connection",
+    "ctx": "core/CertPinInterceptor.kt:58 (prose)",
+    "args": 1
+  },
+  "reject_this_recovery": {
+    "en": "Reject this recovery?",
+    "ctx": "core/RePairVeto.kt:47 (prose)"
+  },
+  "this_cancels_the_recovery_attempt_if": {
+    "en": "This cancels the recovery attempt. If the real owner is trying to get back in, they will have to start again and wait the full time. Only reject it if you do not expect it.",
+    "ctx": "core/RePairVeto.kt:49 (prose)"
+  },
+  "if_this_is_unusual_please_check": {
+    "en": "If this is unusual, please check on the physical safety of your device and server.",
+    "ctx": "core/RePairVeto.kt:50 (prose)"
+  },
+  "trust_this_new_key_for_this": {
+    "en": "Trust this new key for this service",
+    "ctx": "core/SecuritySliver.kt:81 (prose)"
+  },
+  "reject_and_pause_updates": {
+    "en": "Reject and pause updates",
+    "ctx": "core/SecuritySliver.kt:82 (prose)"
+  },
+  "the_old_key_vouched_for_the": {
+    "en": "The old key vouched for the new one.",
+    "ctx": "core/SecuritySliver.kt:83 (prose)"
+  },
+  "the_old_key_did_not_vouch": {
+    "en": "The old key did not vouch for the new one. Treat this as a different publisher using the same name.",
+    "ctx": "core/SecuritySliver.kt:84 (prose)"
+  },
+  "if_this_is_unusual_do_not": {
+    "en": "If this is unusual, do not trust the new key. Updates from this publisher stay paused until you decide.",
+    "ctx": "core/SecuritySliver.kt:85 (prose)"
+  },
+  "this_server_lost_its_list_of": {
+    "en": "This server lost its list of security notices and started over. Check each service and your recovery settings.",
+    "ctx": "core/SecuritySliver.kt:86 (prose)"
+  },
+  "day_hours": {
+    "en": "%1$s day%2$s %3$s hours",
+    "ctx": "core/SecuritySliver.kt:103 (prose)",
+    "args": 3
+  },
+  "hour_minutes": {
+    "en": "%1$s hour%2$s %3$s minutes",
+    "ctx": "core/SecuritySliver.kt:104 (prose)",
+    "args": 3
+  },
+  "minute": {
+    "en": "%1$s minute%2$s",
+    "ctx": "core/SecuritySliver.kt:105 (prose)",
+    "args": 2
+  },
+  "left": {
+    "en": "%1$s left",
+    "ctx": "core/SecuritySliver.kt:107 (prose)",
+    "args": 1
+  },
+  "access_permissions": {
+    "en": "Access & permissions",
+    "ctx": "core/ServicePermissions.kt:39 (prose)"
+  },
+  "nothing_can_act_for_this_app": {
+    "en": "Nothing can act for this app right now.",
+    "ctx": "core/ServicePermissions.kt:40 (prose)"
+  },
+  "end_this_access": {
+    "en": "End this access",
+    "ctx": "core/ServicePermissions.kt:41 (prose)"
+  },
+  "end_all_access": {
+    "en": "End all access",
+    "ctx": "core/ServicePermissions.kt:42 (prose)"
+  },
+  "some_work_did_not_stop_yet": {
+    "en": "Some work did not stop yet:",
+    "ctx": "core/ServicePermissions.kt:43 (prose)"
+  },
+  "owner_session": {
+    "en": "Owner session",
+    "ctx": "core/ServicePermissions.kt:46 (prose)"
+  },
+  "browser_or_companion_session": {
+    "en": "Browser or companion session",
+    "ctx": "core/ServicePermissions.kt:47 (prose)"
+  },
+  "app_api_key": {
+    "en": "App API key",
+    "ctx": "core/ServicePermissions.kt:48 (prose)"
+  },
+  "ide_key": {
+    "en": "IDE key",
+    "ctx": "core/ServicePermissions.kt:49 (prose)"
+  },
+  "browser_access": {
+    "en": "Browser access",
+    "ctx": "core/ServicePermissions.kt:53 (prose)"
+  },
+  "background_job": {
+    "en": "Background job",
+    "ctx": "core/ServicePermissions.kt:56 (prose)"
+  },
+  "access_ended": {
+    "en": "Access ended.",
+    "ctx": "core/ServicePermissions.kt:61 (prose)"
+  },
+  "accesses_ended": {
+    "en": "%1$s accesses ended.",
+    "ctx": "core/ServicePermissions.kt:61 (prose)",
+    "args": 1
+  },
+  "the_stored_recovery_record_was_not": {
+    "en": "The stored recovery record was not signed by this account's key; refusing to use it.",
+    "ctx": "keystore/CloudRecoveryEnrollment.kt:205 (prose)"
+  },
+  "shut_down": {
+    "en": "Shut down",
+    "ctx": "ui/screens/ServerDetailScreen.kt:1187 (label=)"
+  },
+  "locked_this_server_cant_unlock_itself": {
+    "en": "Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.",
+    "ctx": "ui/screens/ServerDetailScreen.kt:1209 (arg of Text)"
+  },
+  "resume_allow_auto_unlock_again": {
+    "en": "Resume (allow auto-unlock again)",
+    "ctx": "ui/screens/ServerDetailScreen.kt:1214 (label=)"
+  },
+  "resumed_turn_auto_unlock_back_on": {
+    "en": "Resumed. Turn auto-unlock back on if you want it.",
+    "ctx": "ui/screens/ServerDetailScreen.kt:1218 (prose)"
+  },
+  "couldnt_resume_right_now_try_again": {
+    "en": "Couldn't resume right now. Try again.",
+    "ctx": "ui/screens/ServerDetailScreen.kt:1219 (prose)"
+  },
+  "remote_lock_pending_the_boot_service": {
+    "en": "Remote lock pending: the boot service hasn't confirmed it yet.",
+    "ctx": "ui/screens/ServerDetailScreen.kt:1230 (arg of Text)"
+  },
+  "retry_the_remote_lock": {
+    "en": "Retry the remote lock",
+    "ctx": "ui/screens/ServerDetailScreen.kt:1234 (label=)"
+  },
+  "locked_at_the_boot_service": {
+    "en": "Locked at the boot service.",
+    "ctx": "ui/screens/ServerDetailScreen.kt:1238 (prose)"
+  },
+  "still_couldnt_reach_the_boot_service": {
+    "en": "Still couldn't reach the boot service.",
+    "ctx": "ui/screens/ServerDetailScreen.kt:1239 (prose)"
+  },
+  "can_read_secrets": {
+    "en": "Can read secrets",
+    "ctx": "ui/screens/ServicePermissionsSection.kt:54 (arg of Text)"
+  },
+  "running_4": {
+    "en": "Running: %1$s",
+    "ctx": "ui/screens/ServicePermissionsSection.kt:56 (arg of Text)",
+    "args": 1
+  },
+  "waiting_2": {
+    "en": "Waiting: %1$s (%2$s)",
+    "ctx": "ui/screens/ServicePermissionsSection.kt:68 (arg of Text)",
+    "args": 2
+  },
+  "this_recovery_was_already_cancelled_or": {
+    "en": "This recovery was already cancelled or finished.",
+    "ctx": "ui/screens/TrustedDevicesScreen.kt:395 (prose)"
+  },
+  "reject_recovery": {
+    "en": "Reject recovery",
+    "ctx": "ui/screens/TrustedDevicesScreen.kt:399 (arg of Text)"
+  },
+  "keep_waiting": {
+    "en": "Keep waiting",
+    "ctx": "ui/screens/TrustedDevicesScreen.kt:401 (arg of Text)"
+  },
+  "a_recovery_of_this_account_is": {
+    "en": "A recovery of this account is waiting",
+    "ctx": "ui/screens/TrustedDevicesScreen.kt:601 (arg of Text)"
+  },
+  "a_new_device_asked_to_take": {
+    "en": "A new device asked to take over this account. It becomes active on %1$s unless an admin rejects it. It has no admin authority until then.",
+    "ctx": "ui/screens/TrustedDevicesScreen.kt:606 (arg of Text)",
+    "args": 1
+  },
+  "recovery_rejected_by_an_admin": {
+    "en": "Recovery rejected by an admin",
+    "ctx": "viewmodels/AuditLogViewModel.kt:66 (prose)"
+  },
+  "remove_auto_unlock_for": {
+    "en": "Remove auto-unlock for %1$s",
+    "ctx": "viewmodels/DeadManViewModel.kt:98 (prose)",
+    "args": 1
+  },
+  "couldnt_remove_this_servers_auto_unlock": {
+    "en": "Couldn't remove this server's auto-unlock lease, so the lock-down was not turned on. %1$s",
+    "ctx": "viewmodels/DeadManViewModel.kt:103 (prose)",
+    "args": 1
+  },
+  "couldnt_lock_this_server_at_the": {
+    "en": "Couldn't lock this server at the boot service, so it was not restarted. Shut it down instead? It will lock as soon as the service answers.",
+    "ctx": "viewmodels/PowerOffViewModel.kt:104 (prose)"
+  },
+  "lock": {
+    "en": "Lock %1$s",
+    "ctx": "viewmodels/PowerOffViewModel.kt:123 (prose)",
+    "args": 1
+  },
+  "resume": {
+    "en": "Resume %1$s",
+    "ctx": "viewmodels/PowerOffViewModel.kt:133 (prose)",
+    "args": 1
+  },
+  "reject_the_account_recovery": {
+    "en": "Reject the account recovery",
+    "ctx": "viewmodels/TrustedDevicesViewModel.kt:195 (prose)"
+  },
+  "this_device_has_no_admin_key": {
+    "en": "This device has no admin key.",
+    "ctx": "viewmodels/TrustedDevicesViewModel.kt:196 (prose)"
+  },
+  "couldnt_reject_the_recovery_try_again": {
+    "en": "Couldn't reject the recovery. Try again.",
+    "ctx": "viewmodels/TrustedDevicesViewModel.kt:212 (prose)"
   }
 }

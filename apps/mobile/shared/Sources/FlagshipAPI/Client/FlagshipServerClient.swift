@@ -2614,32 +2614,32 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // generation, and each escrow is keep (must match what is held) / replace / remove / none.
         let heldDigest = existing.map { $0.signed?.digestHex ?? "legacy" } ?? "genesis"
         guard claim.priorDigestHex == heldDigest else {
-            throw ScreensClientError.http(status: 409, message: "the stored recovery record changed since this was signed; refresh and retry")
+            throw ScreensClientError.http(status: 409, message: String(localized: "the stored recovery record changed since this was signed; refresh and retry"))
         }
         let expectedGeneration = (existing?.signed?.generation ?? 0) + 1
         guard claim.generation == expectedGeneration else {
-            throw ScreensClientError.http(status: 409, message: "the record generation is not the next one")
+            throw ScreensClientError.http(status: 409, message: String(localized: "the record generation is not the next one"))
         }
         guard RecoveryRecordV2.sha256Hex(ofBase64: req.wrappedUmk) == claim.wrappedUmkDigestHex else {
-            throw ScreensClientError.http(status: 403, message: "the wrapped UMK is not the one that was signed")
+            throw ScreensClientError.http(status: 403, message: String(localized: "the wrapped UMK is not the one that was signed"))
         }
         func resolve(_ change: RecoveryEscrowChange, sent: String?, held: String?) throws -> String? {
             switch change {
             case .replace(let d):
                 guard let sent, RecoveryRecordV2.sha256Hex(ofBase64: sent) == d else {
-                    throw ScreensClientError.http(status: 403, message: "an escrow is not the one that was signed")
+                    throw ScreensClientError.http(status: 403, message: String(localized: "an escrow is not the one that was signed"))
                 }
                 return sent
             case .keep(let d):
                 guard let held, RecoveryRecordV2.sha256Hex(ofBase64: held) == d, sent == nil else {
-                    throw ScreensClientError.http(status: 409, message: "the signed escrow state does not match what is stored")
+                    throw ScreensClientError.http(status: 409, message: String(localized: "the signed escrow state does not match what is stored"))
                 }
                 return held
             case .remove:
-                guard held != nil, sent == nil else { throw ScreensClientError.http(status: 409, message: "there is no such escrow to remove") }
+                guard held != nil, sent == nil else { throw ScreensClientError.http(status: 409, message: String(localized: "there is no such escrow to remove")) }
                 return nil
             case .none:
-                guard held == nil, sent == nil else { throw ScreensClientError.http(status: 409, message: "the signed escrow state does not match what is stored") }
+                guard held == nil, sent == nil else { throw ScreensClientError.http(status: 409, message: String(localized: "the signed escrow state does not match what is stored")) }
                 return nil
             }
         }

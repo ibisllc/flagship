@@ -353,9 +353,9 @@ public struct HomeScreen: View {
         } else if let closesAt = dibsNoticeClosesAt {
             FSAnnouncementCard(
                 icon: "flag.fill",
-                title: "Own a .com? Claim the matching name",
-                message: "Until \(NameDibsScreen.date(closesAt)), a name that matches a registered .com is held for whoever controls that domain.",
-                ctaLabel: "Claim your .com name",
+                title: String(localized: "Own a .com? Claim the matching name"),
+                message: String(localized: "Until \(NameDibsScreen.date(closesAt)), a name that matches a registered .com is held for whoever controls that domain."),
+                ctaLabel: String(localized: "Claim your .com name"),
                 onCta: onClaimDibs,
                 onDismiss: onDismissDibs
             )

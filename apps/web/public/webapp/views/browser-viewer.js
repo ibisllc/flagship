@@ -74,12 +74,12 @@ async function renderTabs() {
 async function openStream(tabId) {
   closeSocket();
   activeTabId = tabId;
-  if (!getPodBaseUrl() || !getSessionToken()) return toast("Not paired", "err");
+  if (!getPodBaseUrl() || !getSessionToken()) return toast(tr("Not paired"), "err");
   let s;
   try {
     // A single-use ticket, not the session token: the bearer never rides in a URL.
     const url = await wsTicketUrl(`/api/screens/browser-tabs/${encodeURIComponent(tabId)}/stream`);
-    if (!url) return toast("Not paired", "err");
+    if (!url) return toast(tr("Not paired"), "err");
     s = new WebSocket(url);
   } catch (e) {
     return toast(tr("Could not open stream: {0}", e.message), "err");

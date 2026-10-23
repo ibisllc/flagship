@@ -192,8 +192,8 @@ class TrustedDevicesViewModel(
         val pending = _pendingRePair.value?.pending
         if (user.isNullOrEmpty() || pending == null || pending.objectedAt != null) return RecoveryVetoOutcome.AlreadyOver
         return try {
-            val key = adminKey("Reject the account recovery")
-            val pub = adminPubHex() ?: return RecoveryVetoOutcome.Failed("This device has no admin key.")
+            val key = adminKey(FSStrings.get(R.string.reject_the_account_recovery))
+            val pub = adminPubHex() ?: return RecoveryVetoOutcome.Failed(FSStrings.get(R.string.this_device_has_no_admin_key))
             val veto = com.flagshipserver.app.core.RePairVeto(user, pending.newIrkPub, pending.initiatedAt, pending.completesAt, pub, now())
             server.vetoRePair(
                 user,
@@ -209,10 +209,10 @@ class TrustedDevicesViewModel(
                 loadPendingRePair()
                 RecoveryVetoOutcome.AlreadyOver
             } else {
-                RecoveryVetoOutcome.Failed(UserErrorText.of(t, "Couldn't reject the recovery. Try again."))
+                RecoveryVetoOutcome.Failed(UserErrorText.of(t, FSStrings.get(R.string.couldnt_reject_the_recovery_try_again)))
             }
         } catch (t: Throwable) {
-            RecoveryVetoOutcome.Failed(UserErrorText.of(t, "Couldn't reject the recovery. Try again."))
+            RecoveryVetoOutcome.Failed(UserErrorText.of(t, FSStrings.get(R.string.couldnt_reject_the_recovery_try_again)))
         }
     }
 

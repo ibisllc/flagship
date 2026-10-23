@@ -48,9 +48,9 @@ public final class SecuritySliverViewModel {
 
     public func trust(serviceId: String) async {
         do {
-            guard var statement = waiting[serviceId]?.trust else { error = "No new key is waiting for this service."; return }
+            guard var statement = waiting[serviceId]?.trust else { error = String(localized: "No new key is waiting for this service."); return }
             statement.issuedAt = Int64(now().timeIntervalSince1970 * 1000)
-            let key = try await signer("Trust a new publisher key for \(serviceId)")
+            let key = try await signer(String(localized: "Trust a new publisher key for \(serviceId)"))
             try await client.trustPublisher(serviceId: serviceId, trust: statement, signatureHex: try statement.sign(with: key))
             error = nil
             await refresh()
