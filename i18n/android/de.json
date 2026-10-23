@@ -2665,5 +2665,8 @@
   "key_settings": "Schlüsseleinstellungen",
   "hide_key_settings": "Schlüsseleinstellungen ausblenden",
   "options_for": "Optionen für %1$s",
-  "none_of_your_servers_runs_this_app_yet": "Noch keiner deiner Server führt diese App aus"
+  "none_of_your_servers_runs_this_app_yet": "Noch keiner deiner Server führt diese App aus",
+  "locked_it_cant_unlock_itself_until": "gesperrt: Er kann sich erst wieder selbst entsperren, wenn du ihn fortsetzt",
+  "remote_lock_pending_it_will_be": "Fernsperre ausstehend: Sie wird erneut versucht",
+  "it_shut_down_instead_of_restarting": "(er wurde ausgeschaltet statt neu gestartet, weil die Sperre nicht bestätigt werden konnte)"
 }

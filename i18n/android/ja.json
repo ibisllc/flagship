@@ -2665,5 +2665,8 @@
   "key_settings": "キーの設定",
   "hide_key_settings": "キーの設定を隠す",
   "options_for": "%1$s のオプション",
-  "none_of_your_servers_runs_this_app_yet": "このアプリを実行しているサーバーはまだありません"
+  "none_of_your_servers_runs_this_app_yet": "このアプリを実行しているサーバーはまだありません",
+  "locked_it_cant_unlock_itself_until": "ロック済み: 再開するまで自分でロックを解除できません",
+  "remote_lock_pending_it_will_be": "リモートロック保留中: 再試行されます",
+  "it_shut_down_instead_of_restarting": "（ロックを確認できなかったため、再起動せずに電源を切りました）"
 }
