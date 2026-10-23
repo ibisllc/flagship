@@ -30,6 +30,8 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/boot-suspension/v1",
     "flagship/boot-auth/v1",
     "flagship/boot-key-binding/v1",
+    "flagship/pq-key-binding/v1",
+    "flagship/boot-key-binding/v2",
     "flagship/inject/v1",
     "flagship/sibling-hello/v1",
     "flagship/sibling-sync/v1",
@@ -112,6 +114,21 @@ pub fn purpose_of(msg: &[u8]) -> KeydResult<String> {
 
 /// `checkSign`. Returns the purpose to record in the audit log.
 pub fn check_sign(msg: &[u8], public_key_hex: &str, allowed: &[&str]) -> KeydResult<String> {
+    check_sign_with(msg, public_key_hex, allowed, None)
+}
+
+/// `HYBRID_ONLY_PURPOSES`: signed with both keys only (`sign.hybrid`).
+pub const HYBRID_ONLY_PURPOSES: &[&str] =
+    &["flagship/pq-key-binding/v1", "flagship/boot-key-binding/v2"];
+
+/// `checkSign` with its `hybrid` argument: the STK's ML-DSA public key when the request is
+/// `sign.hybrid`, `None` for `sign`.
+pub fn check_sign_with(
+    msg: &[u8],
+    public_key_hex: &str,
+    allowed: &[&str],
+    mldsa_pub_hex: Option<&str>,
+) -> KeydResult<String> {
     if msg.is_empty() || msg.len() > MAX_SIGN_BYTES {
         return Err(KeydError::bad_request("message size out of range"));
     }
@@ -121,6 +138,26 @@ pub fn check_sign(msg: &[u8], public_key_hex: &str, allowed: &[&str]) -> KeydRes
             "the box does not sign {}",
             js_slice(&purpose, 64)
         )));
+    }
+    if HYBRID_ONLY_PURPOSES.contains(&purpose.as_str()) && mldsa_pub_hex.is_none() {
+        return Err(KeydError::forbidden(
+            "the box signs that with both of its keys only",
+        ));
+    }
+    if purpose == "flagship/pq-key-binding/v1" {
+        // tag|role|subjectId|ed25519PubHex|mldsaPubHex|issuedAt
+        let text = String::from_utf8_lossy(msg);
+        let parts: Vec<&str> = text.split('|').collect();
+        let part = |i: usize| parts.get(i).copied();
+        if parts.len() != 6
+            || part(1) != Some("box-stk")
+            || part(3) != Some(public_key_hex)
+            || part(4) != mldsa_pub_hex
+        {
+            return Err(KeydError::forbidden(
+                "the box binds only its own two keys, as the box",
+            ));
+        }
     }
     if purpose == "flagship/boot-suspension/v1" || purpose == "flagship/boot-auth/v1" {
         let text = String::from_utf8_lossy(msg);
@@ -240,6 +277,13 @@ pub const DEFAULT_RATE_LIMITS: &[(&str, Limit)] = &[
         Limit {
             per_second: 2000.0,
             burst: 4000.0,
+        },
+    ),
+    (
+        "sign.hybrid",
+        Limit {
+            per_second: 200.0,
+            burst: 400.0,
         },
     ),
     (

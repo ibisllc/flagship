@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { describe, expect, it } from "vitest";
-import { deriveBackupManifestKey, deriveServiceSecret, ed, openSealedFromEd25519Recipient, sealForEd25519Recipient, sealLlmPayload } from "@flagship/protocol";
+import { deriveBackupManifestKey, deriveServiceSecret, ed, hybridSigKeygen, hybridVerify, openSealedFromEd25519Recipient, sealForEd25519Recipient, sealLlmPayload } from "@flagship/protocol";
 import { BOX_SIGN_PURPOSES, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydError, MAX_FRAME_BYTES, RateLimiter, checkSign, encodeFrame } from "../src/index.js";
 const unhex = (v: unknown) => Uint8Array.from(Buffer.from(String(v), "hex"));
-import { CGK, PAIRING_ORDER, SEED, SWK, startInProcess } from "./helpers.js";
+import { CGK, PAIRING_ORDER, PQ_SEED, SEED, SWK, startInProcess } from "./helpers.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -295,3 +295,51 @@ describe("the server", () => {
 });
 
 void CGK;
+
+describe("hybrid signing (architecture v2)", () => {
+  const enc = (s: string) => new TextEncoder().encode(s);
+  const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
+  const pk = hybridSigKeygen(SEED, PQ_SEED).publicKey;
+  const ml = hex(pk.subarray(32));
+  const pub = hex(ed.getPublicKey(SEED));
+
+  it("signs the box's purposes with both keys and nothing else", async () => {
+    const k = await startInProcess({ pqSeed: PQ_SEED });
+    try {
+      const c = new KeydClient({ socketPath: k.sock, component: "t" });
+      await c.connect();
+      expect(await c.call("pq.status")).toEqual({ publicKey: pub, mldsaPublicKey: ml });
+      const msg = enc("flagship/daemon-status/v1|a|b");
+      const sig = Uint8Array.from(Buffer.from(String((await c.call("sign.hybrid", { msg: hex(msg) })).sig), "hex"));
+      expect(() => hybridVerify(pk, "flagship/daemon-status/v1", msg, sig)).not.toThrow();
+      await expect(c.call("sign.hybrid", { msg: hex(enc("flagship/root-entitlement/v1|x")) })).rejects.toMatchObject({ code: "forbidden" });
+      await expect(c.call("sign.hybrid", { msg: hex(enc("pb-put|x")) })).rejects.toMatchObject({ code: "forbidden", message: "that purpose has no hybrid form" });
+      c.close();
+    } finally {
+      await k.stop();
+    }
+  });
+
+  it("binds only its own two keys, as the box, and never classically", () => {
+    const b = (role: string, e: string, m: string) => enc(`flagship/pq-key-binding/v1|${role}|home|${e}|${m}|1`);
+    expect(checkSign(b("box-stk", pub, ml), pub, BOX_SIGN_PURPOSES, { mldsaPubHex: ml })).toBe("flagship/pq-key-binding/v1");
+    for (const m of [b("admin-root", pub, ml), b("box-stk", "00".repeat(32), ml), b("box-stk", pub, "00".repeat(1952))]) {
+      expect(() => checkSign(m, pub, BOX_SIGN_PURPOSES, { mldsaPubHex: ml })).toThrow(KeydError);
+    }
+    expect(() => checkSign(b("box-stk", pub, ml), pub)).toThrow(/both of its keys/);
+    expect(() => checkSign(enc("flagship/boot-key-binding/v2|home|x|1"), pub)).toThrow(/both of its keys/);
+  });
+
+  it("answers not-provisioned without an ML-DSA seed", async () => {
+    const k = await startInProcess();
+    try {
+      const c = new KeydClient({ socketPath: k.sock, component: "t" });
+      await c.connect();
+      await expect(c.call("pq.status")).rejects.toMatchObject({ code: "not-provisioned" });
+      await expect(c.call("sign.hybrid", { msg: hex(enc("flagship/daemon-status/v1|a")) })).rejects.toMatchObject({ code: "not-provisioned" });
+      c.close();
+    } finally {
+      await k.stop();
+    }
+  });
+});

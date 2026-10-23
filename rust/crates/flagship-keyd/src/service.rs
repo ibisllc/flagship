@@ -13,8 +13,8 @@ use crate::crypto::{Key32, gcm_open, gcm_seal, hkdf32, hmac_sha256, open_sealed,
 use crate::files::save_key_file;
 use crate::obj;
 use crate::policy::{
-    BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, check_sign, is_pairing_order,
-    is_service_id,
+    BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, check_sign, check_sign_with,
+    is_pairing_order, is_service_id,
 };
 use crate::tls::{
     TlsKeys, is_ecdhe_params, tls12_server_signed_message, tls13_server_signed_message,
@@ -23,6 +23,8 @@ use crate::wire::{
     Args, ErrorCode, HexBounds, KEYD_PROTOCOL_VERSION, KeydError, KeydResult, PEM_MAX, hex_arg,
     no_extra_args, pem_arg, str_arg, string_list, to_hex,
 };
+use flagship_crypto::HybridSigningKey;
+use flagship_protocol::parse::{TagNamespace, validate_purpose_tag};
 
 const GOSSIP_TAG: &str = "flagship/gossip/v2|";
 const ACCESS_SYNC_TAG: &str = "flagship/access-sync/v1|";
@@ -37,6 +39,9 @@ pub type KeyStoreDir = Option<PathBuf>;
 pub struct KeydService {
     signing: Option<ed25519_dalek::SigningKey>,
     pub_hex: String,
+    /// The STK AND its ML-DSA-65 key (`identity-mldsa.key`), for `sign.hybrid`.
+    hybrid: Option<HybridSigningKey>,
+    mldsa_pub_hex: Option<String>,
     swk: Option<Key32>,
     cgk: Option<Key32>,
     store: KeyStoreDir,
@@ -100,6 +105,8 @@ impl KeydService {
         Self {
             signing: Some(signing),
             pub_hex,
+            hybrid: None,
+            mldsa_pub_hex: None,
             swk,
             cgk,
             store,
@@ -112,9 +119,28 @@ impl KeydService {
         &self.pub_hex
     }
 
+    /// Adds the STK's ML-DSA-65 seed (TS `pqSeed`), so `pq.status` and `sign.hybrid` answer.
+    ///
+    /// # Errors
+    /// A message when the seeds do not make a valid hybrid key.
+    pub fn with_pq_seed(mut self, pq_seed: &[u8; 32]) -> Result<Self, String> {
+        let stk = Zeroizing::new(self.stk().map_err(|e| e.message)?.to_bytes());
+        let key = HybridSigningKey::from_seeds(&stk, pq_seed).map_err(|e| e.to_string())?;
+        let ml = key
+            .verifying_key()
+            .as_bytes()
+            .get(32..)
+            .map(to_hex)
+            .ok_or("bad hybrid key")?;
+        self.mldsa_pub_hex = Some(ml);
+        self.hybrid = Some(key);
+        Ok(self)
+    }
+
     /// Drop every key (each type zeroizes itself on drop).
     pub fn destroy(&mut self) {
         self.signing = None;
+        self.hybrid = None;
         self.swk = None;
         self.cgk = None;
         if let Some(t) = &mut self.tls {
@@ -129,6 +155,11 @@ impl KeydService {
         self.signing
             .as_ref()
             .ok_or_else(|| KeydError::failed("internal error"))
+    }
+    fn mldsa_pub_hex(&self) -> KeydResult<&str> {
+        self.mldsa_pub_hex
+            .as_deref()
+            .ok_or_else(|| KeydError::not_provisioned("no ML-DSA key provisioned"))
     }
     fn swk(&self) -> KeydResult<&[u8; 32]> {
         self.swk
@@ -197,6 +228,33 @@ impl KeydService {
                 let sig = self.stk()?.sign(&msg);
                 Ok(Handled {
                     result: obj! { "sig" => to_hex(&sig.to_bytes()) },
+                    purpose: Some(purpose),
+                })
+            }
+            "pq.status" => {
+                no_extra_args(a, &[])?;
+                let ml = self.mldsa_pub_hex()?.to_owned();
+                done(obj! { "publicKey" => self.pub_hex.clone(), "mldsaPublicKey" => ml })
+            }
+            "sign.hybrid" => {
+                // The same purpose list as `sign`, signed with the STK AND its ML-DSA-65 key
+                // (flagship/hybrid-sig/ed25519-mldsa65/v1, purpose = the message's own tag).
+                no_extra_args(a, &["msg"])?;
+                let msg = hex_arg(a, "msg", HexBounds::min(1))?;
+                let ml = self.mldsa_pub_hex()?;
+                let purpose = check_sign_with(&msg, &self.pub_hex, BOX_SIGN_PURPOSES, Some(ml))?;
+                if validate_purpose_tag(&purpose, TagNamespace::Flagship).is_err() {
+                    return Err(KeydError::forbidden("that purpose has no hybrid form"));
+                }
+                let key = self
+                    .hybrid
+                    .as_ref()
+                    .ok_or_else(|| KeydError::failed("internal error"))?;
+                let sig = key
+                    .sign(&purpose, &msg)
+                    .map_err(|_| KeydError::failed("could not sign"))?;
+                Ok(Handled {
+                    result: obj! { "sig" => to_hex(&sig) },
                     purpose: Some(purpose),
                 })
             }

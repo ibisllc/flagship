@@ -32,12 +32,16 @@ import {
   sealForEd25519Recipient,
   sealGossip,
   sealLlmPayload,
+  hybridSigKeygen,
+  hybridVerify,
+  canonicalPqKeyBinding,
+  verifyPqKeyBinding,
 } from "@flagship/protocol";
 import { AcmeAccount, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydServer, KeydService, KeydSyncClient, LETS_ENCRYPT_HOSTS, TlsKeys, encodeFrame, readKeyFile, tls12ServerSignedMessage, tls13ServerSignedMessage } from "../src/index.js";
 import { KeydAcmeIssuer } from "../../server-daemon/src/acme/keydAcme.js";
 import { keydAcmeApi } from "../../server-daemon/src/keydAsync.js";
 import { MockAcme } from "../../server-daemon/tests/helpers/mockAcme.js";
-import { CGK, PAIRING_ORDER, SEED, SWK } from "./helpers.js";
+import { CGK, PAIRING_ORDER, PQ_SEED, SEED, SWK } from "./helpers.js";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const BIN = process.env.FLAGSHIP_KEYD_RUST_BIN ?? join(ROOT, "rust/target/debug/flagship-keyd");
@@ -51,6 +55,8 @@ const enc = (s: string) => new TextEncoder().encode(s);
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const unhex = (s: unknown) => Uint8Array.from(Buffer.from(String(s), "hex"));
 const PUB = ed.getPublicKey(SEED);
+const HYBRID_PUB = hybridSigKeygen(SEED, PQ_SEED).publicKey;
+const MLDSA_PUB_HEX = hex(HYBRID_PUB.subarray(32));
 const P256_PARAMS = Uint8Array.of(3, 0x00, 0x17, 65, 4, ...new Uint8Array(64).fill(5));
 const t13 = (th: Uint8Array) => ({ tls: "1.3", transcriptHash: hex(th) });
 const t12 = (over: Record<string, string> = {}) => ({ tls: "1.2", clientRandom: hex(new Uint8Array(32).fill(1)), serverRandom: hex(new Uint8Array(32).fill(2)), params: hex(P256_PARAMS), ...over });
@@ -67,9 +73,10 @@ function writeKey(dir: string, name: string, key: Uint8Array): void {
   writeFileSync(join(dir, `${name}.key`), hex(key) + "\n", { mode: 0o400 });
 }
 
-function stateDir(opts: { swk?: boolean; cgk?: boolean; fqdn?: string | null } = {}): string {
+function stateDir(opts: { swk?: boolean; cgk?: boolean; pq?: boolean; fqdn?: string | null } = {}): string {
   const dir = mkdtempSync(join(tmpdir(), "rkeyd-"));
   writeKey(dir, "identity", SEED);
+  if (opts.pq !== false) writeKey(dir, "identity-mldsa", PQ_SEED);
   if (opts.swk !== false) writeKey(dir, "swk", SWK);
   if (opts.cgk !== false) writeKey(dir, "cgk", CGK);
   if (opts.fqdn !== null) writeFileSync(join(dir, "policy.json"), JSON.stringify({ serverFqdn: opts.fqdn ?? FQDN }), { mode: 0o400 });
@@ -162,7 +169,7 @@ async function startTs(dir: string | null = null) {
   const t = mkdtempSync(join(tmpdir(), "tkeyd-"));
   const tls = new TlsKeys(ALLOWED, dir ? join(dir, "tls") : null);
   const acme = new AcmeAccount(tls, undefined, dir ? join(dir, "acme-account.key") : null);
-  const service = new KeydService({ identitySeed: SEED, swk: SWK, cgk: CGK, tls, acme });
+  const service = new KeydService({ identitySeed: SEED, pqSeed: PQ_SEED, swk: SWK, cgk: CGK, tls, acme });
   const server = new KeydServer({ socketPath: join(t, "k.sock"), service, rateLimits: OPEN_LIMITS });
   await server.start();
   return { sock: join(t, "k.sock"), tls, stop: async () => (await server.stop(), rmSync(t, { recursive: true, force: true })) };
@@ -309,6 +316,45 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
     }
   });
 
+  it("makes the ML-DSA seed once, next to the STK, and signs hybrid under the same purpose list", async () => {
+    const k = await startRust({ pq: false });
+    try {
+      const file = join(k.dir, "identity-mldsa.key");
+      expect(statSync(file).mode & 0o777).toBe(0o400);
+      const seed = readKeyFile(file)!;
+      expect(seed).toHaveLength(32);
+      expect(seed).not.toEqual(SEED);
+      const pk = hybridSigKeygen(SEED, seed).publicKey;
+      const c = await client(k.sock);
+      expect(await c.call("pq.status")).toEqual({ publicKey: hex(PUB), mldsaPublicKey: hex(pk.subarray(32)) });
+      // The TS backend reading the same file answers the same key.
+      const ts = new KeydService({ identitySeed: SEED, pqSeed: seed });
+      expect(ts.handle({ op: "pq.status", args: {} } as never).result).toEqual({ publicKey: hex(PUB), mldsaPublicKey: hex(pk.subarray(32)) });
+      const msg = enc("flagship/daemon-status/v1|home|x");
+      for (const sig of [unhex((await c.call("sign.hybrid", { msg: hex(msg) })).sig), unhex(ts.handle({ op: "sign.hybrid", args: { msg: hex(msg) } } as never).result.sig)]) {
+        expect(sig).toHaveLength(3373);
+        expect(() => hybridVerify(pk, "flagship/daemon-status/v1", msg, sig)).not.toThrow();
+      }
+      // The box's own binding, signed by the Rust backend, verifies as a box-stk binding.
+      const st = { role: "box-stk" as const, subjectId: FQDN, ed25519PubHex: hex(PUB), mldsaPubHex: hex(pk.subarray(32)), issuedAt: 1 };
+      const sig = (await c.call("sign.hybrid", { msg: hex(canonicalPqKeyBinding(st)) })).sig as string;
+      expect(verifyPqKeyBinding({ v: 1, ...st, signature: sig }, { role: "box-stk", subjectId: FQDN, ed25519PubHex: hex(PUB), now: 2 }).mldsaPubHex).toBe(st.mldsaPubHex);
+      c.close();
+      // A restart keeps the seed.
+      await k.stop();
+      const again = await spawnRust(k.dir);
+      try {
+        const c2 = await client(again.sock);
+        expect((await c2.call("pq.status")).mldsaPublicKey).toBe(hex(pk.subarray(32)));
+        c2.close();
+      } finally {
+        await again.stop();
+      }
+    } finally {
+      rmSync(k.dir, { recursive: true, force: true });
+    }
+  });
+
   it("applies the default rate limits like the TS service", async () => {
     const k = await startRust({ cgk: false }, { FLAGSHIP_KEYD_RATE_LIMITS: JSON.stringify({ "provision.cgk": { perSecond: 0.1, burst: 3 }, "*": { perSecond: 5000, burst: 10000 } }) });
     try {
@@ -408,6 +454,7 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
       const boot = (role: string, key: string) => hex(enc(`flagship/boot-auth/v1|${role}|${FQDN}|GET|/x|${key}|aabb|1`));
       const susp = (seq: string, action = "suspend", signer = "box") => hex(enc(`flagship/boot-suspension/v1|${FQDN}|2|${seq}|${action}|r|${signer}|1`));
       const blob = (n: number) => "00".repeat(n);
+      const bind = (role: string, ed: string, ml: string) => hex(enc(`flagship/pq-key-binding/v1|${role}|${FQDN}|${ed}|${ml}|1`));
       // [op, args, compare the whole result?]
       const cases: Array<[string, Record<string, unknown>, boolean]> = [
         ["status", {}, true], ["status", { extra: 1 }, true], ["status", { "2": 1, b: 1, "10": 1 }, true],
@@ -419,6 +466,15 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["sign", { msg: boot("box", hex(PUB)) }, true], ["sign", { msg: boot("box", "00") }, true], ["sign", { msg: boot("owner", hex(PUB)) }, true],
         ["sign", { msg: hex(enc("flagship/app-release/v1|a|1")) }, true], ["sign", { msg: hex(enc("flagship/pb-checkin/v1|a|1")) }, true],
         ["sign", { msg: hex(enc("flagship/pb-root-deposit/v1|a|1")) }, true], ["sign", { msg: hex(enc("flagship/membership/v1|a")) }, true], ["sign", { msg: hex(enc("flagship/service-grant/v1|a")) }, true],
+        ["pq.status", {}, true], ["pq.status", { x: 1 }, true],
+        ["sign.hybrid", { msg: hex(enc("flagship/daemon-status/v1|a|b")) }, false], ["sign.hybrid", { msg: boot("box", hex(PUB)) }, false],
+        ["sign.hybrid", { msg: boot("owner", hex(PUB)) }, true], ["sign.hybrid", { msg: hex(enc("pb-put|x")) }, true], ["sign.hybrid", { msg: hex(enc("pb/request-peers/v1|x")) }, true],
+        ["sign.hybrid", { msg: hex(enc("flagship/root-entitlement/v1|x")) }, true], ["sign.hybrid", {}, true], ["sign.hybrid", { msg: "zz" }, true], ["sign.hybrid", { msg: big }, true],
+        ["sign.hybrid", { msg: bind("box-stk", hex(PUB), MLDSA_PUB_HEX) }, false], ["sign.hybrid", { msg: bind("admin-root", hex(PUB), MLDSA_PUB_HEX) }, true],
+        ["sign.hybrid", { msg: bind("box-stk", "00".repeat(32), MLDSA_PUB_HEX) }, true], ["sign.hybrid", { msg: bind("box-stk", hex(PUB), "00".repeat(1952)) }, true],
+        ["sign.hybrid", { msg: bind("box-stk", hex(PUB), MLDSA_PUB_HEX) + hex(enc("|x")) }, true],
+        ["sign", { msg: bind("box-stk", hex(PUB), MLDSA_PUB_HEX) }, true], ["sign", { msg: hex(enc(`flagship/boot-key-binding/v2|${FQDN}|${hex(PUB)}|1`)) }, true],
+        ["sign.hybrid", { msg: hex(enc(`flagship/boot-key-binding/v2|${FQDN}|${hex(PUB)}|1`)) }, false],
         ["unseal", { blob: blob(43), purpose: "pairing-order" }, true], ["unseal", { blob: blob(44), purpose: "pairing-order" }, true], ["unseal", { blob: blob(100), purpose: "pairing-order" }, true],
         ["unseal", { blob: blob(10), x: 1 }, true], ["unseal", { blob: blob(44) }, true], ["unseal", { blob: blob(44), purpose: "swk" }, true],
         ["unseal", { blob: hex(sealForEd25519Recipient(PAIRING_ORDER, PUB)), purpose: "pairing-order" }, true], ["unseal", { blob: hex(sealForEd25519Recipient(SWK, PUB)), purpose: "pairing-order" }, true],

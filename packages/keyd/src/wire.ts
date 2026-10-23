@@ -16,6 +16,8 @@ export const OPS = [
   "hello",
   "status",
   "sign",
+  "sign.hybrid",
+  "pq.status",
   "unseal",
   "swk.hkdf",
   "swk.seal",

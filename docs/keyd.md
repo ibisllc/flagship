@@ -7,6 +7,7 @@ The box's long-lived secret keys live in their own process, not in the Node daem
 |---|---|---|
 | Box identity (STK) | `/var/lib/flagship-keyd/identity.key`, 0400, user `flagship-keyd` | sign messages whose purpose is on the box's list (`packages/keyd/src/policy.ts`); open a pairing order sealed to the box (`unseal`, purpose `pairing-order`, checked by shape) |
 | Workload key (SWK) | `swk.key` beside it | seal/open, chunk, service-secret (for a `<creator>--<slug>` id) and TLS-at-rest operations; `swk.hkdf` hands out only the peer-backup and backup-manifest keys, unsalted |
+| STK's ML-DSA-65 seed | `identity-mldsa.key` beside it (made once from the OS RNG at the first `serve`, never derived from the STK) | `sign.hybrid`: the STK AND this key over the same purpose list as `sign` (`flagship/hybrid-sig/ed25519-mldsa65/v1`, purpose = the message's tag; `pb-put`-style tags have no hybrid form); `pq.status` returns the public key. `flagship/pq-key-binding/v1` (only role `box-stk`, only its own two keys) and `flagship/boot-key-binding/v2` are signed with both keys only (architecture-v2 `pq-suites.md` §9-§10) |
 | Gossip key (CGK) | `cgk.key` beside it | seal/open gossip; MAC a gossip frame (`cgk.gossipMac`) or an access-sync message (`cgk.accessSyncMac`), each its own tag only; derive the app-copy env key |
 
 ## How it is wired
