@@ -5,12 +5,13 @@
 
 import { escapeHtml } from "./util.js";
 
+import { tr } from "./i18n.js";
 export const UPDATE_MODE_COPY = Object.freeze({
-  title: "Updates",
-  manual: { label: "Ask me each time", note: "You approve every update." },
-  staged: { label: "Wait a week, then update", note: "A verified update from the same publisher is held for a week, then goes in. Anything that asks for more access still waits for you." },
-  auto: { label: "Update automatically", note: "A verified update from the same publisher goes in at once. Anything that asks for more access still waits for you." },
-  frozen: { label: "Never update", note: "This app stays on the version it is on." },
+  title: tr("Updates"),
+  manual: { label: tr("Ask me each time"), note: tr("You approve every update.") },
+  staged: { label: tr("Wait a week, then update"), note: tr("A verified update from the same publisher is held for a week, then goes in. Anything that asks for more access still waits for you.") },
+  auto: { label: tr("Update automatically"), note: tr("A verified update from the same publisher goes in at once. Anything that asks for more access still waits for you.") },
+  frozen: { label: tr("Never update"), note: tr("This app stays on the version it is on.") },
 });
 
 const path = (serviceId) => `/api/screens/services/${encodeURIComponent(serviceId)}/update-mode`;
