@@ -11065,5 +11065,137 @@
   "The server is restarting": {
     "en": "The server is restarting",
     "ctx": "webapp/lib/bootSuspension.js:248"
+  },
+  " from {0}": {
+    "en": " from {0}",
+    "ctx": "webapp/lib/appPlacement.js:352"
+  },
+  "other server keeps its copy": {
+    "en": "other server keeps its copy",
+    "ctx": "webapp/lib/appPlacement.js:354"
+  },
+  "other {0} servers keep their copies": {
+    "en": "other {0} servers keep their copies",
+    "ctx": "webapp/lib/appPlacement.js:354"
+  },
+  "This uninstalls {0}{1} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.{2}": {
+    "en": "This uninstalls {0}{1} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.{2}",
+    "ctx": "webapp/lib/appPlacement.js:356"
+  },
+  "Let it build…": {
+    "en": "Let it build…",
+    "ctx": "webapp/lib/companionDelegation.js:14"
+  },
+  "Let this browser build an app": {
+    "en": "Let this browser build an app",
+    "ctx": "webapp/lib/companionDelegation.js:15"
+  },
+  "A browser docked through Remote can only look. This lets it change one app you pick, for a short time. It ends on its own, or when you end it, or when the session ends.": {
+    "en": "A browser docked through Remote can only look. This lets it change one app you pick, for a short time. It ends on its own, or when you end it, or when the session ends.",
+    "ctx": "webapp/lib/companionDelegation.js:16"
+  },
+  "Change the app (build)": {
+    "en": "Change the app (build)",
+    "ctx": "webapp/lib/companionDelegation.js:17"
+  },
+  "Put changes live (deploy)": {
+    "en": "Put changes live (deploy)",
+    "ctx": "webapp/lib/companionDelegation.js:18"
+  },
+  "End it": {
+    "en": "End it",
+    "ctx": "webapp/lib/companionDelegation.js:20"
+  },
+  "Only an admin device can let a browser build.": {
+    "en": "Only an admin device can let a browser build.",
+    "ctx": "webapp/lib/companionDelegation.js:21"
+  },
+  "{0}: restored. {1}": {
+    "en": "{0}: restored. {1}",
+    "ctx": "webapp/lib/serverArchive.js:291"
+  },
+  "Updates": {
+    "en": "Updates",
+    "ctx": "webapp/lib/updateMode.js:10"
+  },
+  "Ask me each time": {
+    "en": "Ask me each time",
+    "ctx": "webapp/lib/updateMode.js:11"
+  },
+  "You approve every update.": {
+    "en": "You approve every update.",
+    "ctx": "webapp/lib/updateMode.js:11"
+  },
+  "Wait a week, then update": {
+    "en": "Wait a week, then update",
+    "ctx": "webapp/lib/updateMode.js:12"
+  },
+  "A verified update from the same publisher is held for a week, then goes in. Anything that asks for more access still waits for you.": {
+    "en": "A verified update from the same publisher is held for a week, then goes in. Anything that asks for more access still waits for you.",
+    "ctx": "webapp/lib/updateMode.js:12"
+  },
+  "Update automatically": {
+    "en": "Update automatically",
+    "ctx": "webapp/lib/updateMode.js:13"
+  },
+  "A verified update from the same publisher goes in at once. Anything that asks for more access still waits for you.": {
+    "en": "A verified update from the same publisher goes in at once. Anything that asks for more access still waits for you.",
+    "ctx": "webapp/lib/updateMode.js:13"
+  },
+  "Never update": {
+    "en": "Never update",
+    "ctx": "webapp/lib/updateMode.js:14"
+  },
+  "This app stays on the version it is on.": {
+    "en": "This app stays on the version it is on.",
+    "ctx": "webapp/lib/updateMode.js:14"
+  },
+  " until {0}": {
+    "en": " until {0}",
+    "ctx": "webapp/views/paired-sessions.js:40"
+  },
+  "May {0} {1}{2}": {
+    "en": "May {0} {1}{2}",
+    "ctx": "webapp/views/paired-sessions.js:40"
+  },
+  "App": {
+    "en": "App",
+    "ctx": "webapp/views/paired-sessions.js:68"
+  },
+  "30 minutes": {
+    "en": "30 minutes",
+    "ctx": "webapp/views/paired-sessions.js:73"
+  },
+  "1 hour": {
+    "en": "1 hour",
+    "ctx": "webapp/views/paired-sessions.js:73"
+  },
+  "4 hours": {
+    "en": "4 hours",
+    "ctx": "webapp/views/paired-sessions.js:73"
+  },
+  "24 hours": {
+    "en": "24 hours",
+    "ctx": "webapp/views/paired-sessions.js:73"
+  },
+  "That browser can now change the app.": {
+    "en": "That browser can now change the app.",
+    "ctx": "webapp/views/paired-sessions.js:86"
+  },
+  "Update setting saved.": {
+    "en": "Update setting saved.",
+    "ctx": "webapp/views/service-detail.js:599"
+  },
+  "Back up first": {
+    "en": "Back up first",
+    "ctx": "webapp/views/service-detail.js:1055"
+  },
+  "Back up the app, save the file, then remove it.": {
+    "en": "Back up the app, save the file, then remove it.",
+    "ctx": "webapp/views/service-detail.js:1062"
+  },
+  " Your {0}.": {
+    "en": " Your {0}.",
+    "ctx": "webapp/lib/appPlacement.js:354"
   }
 }

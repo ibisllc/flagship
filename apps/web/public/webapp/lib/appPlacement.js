@@ -349,11 +349,11 @@ export const REMOVE_APP_TITLE = tr("Remove this app?");
 
 /** The confirmation's words: what goes, where, and what stays. */
 export function removeAppMessage({ slug, server, otherCopies = 0 }) {
-  const where = server ? ` from ${server}` : "";
+  const where = server ? tr(" from {0}", server) : "";
   const rest = otherCopies > 0
-    ? tr(" Your {0}.", otherCopies === 1 ? "other server keeps its copy" : `other ${otherCopies} servers keep their copies`)
+    ? tr(" Your {0}.", otherCopies === 1 ? tr("other server keeps its copy") : tr("other {0} servers keep their copies", otherCopies))
     : "";
-  return `This uninstalls ${slug}${where} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.${rest}`;
+  return tr("This uninstalls {0}{1} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.{2}", slug, where, rest);
 }
 
 /** The owner-facing words for a refused uninstall. */

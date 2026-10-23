@@ -288,10 +288,10 @@ export function restoreNeeds(a) {
 export function describeRestoreApp(a) {
   if (a.state === "done") {
     const needs = restoreNeeds(a);
-    return needs.length ? `${a.name}: restored. ${needs.join(" ")}` : `${a.name}: restored`;
+    return needs.length ? tr("{0}: restored. {1}", a.name, needs.join(" ")) : tr("{0}: restored", a.name);
   }
-  if (a.state === "skipped") return `${a.name}: skipped (${a.reason || "already here"})`;
-  if (a.state === "failed") return tr("Couldn't restore {0}: {1}.", a.name, trimStop(a.reason) || "it couldn't be restored");
-  if (a.state === "restoring") return `${a.name}: restoring…`;
-  return `${a.name}: waiting`;
+  if (a.state === "skipped") return tr("{0}: skipped ({1})", a.name, a.reason || "already here");
+  if (a.state === "failed") return tr("Couldn't restore {0}: {1}.", a.name, trimStop(a.reason) || tr("it couldn't be restored"));
+  if (a.state === "restoring") return tr("{0}: restoring…", a.name);
+  return tr("{0}: waiting", a.name);
 }
