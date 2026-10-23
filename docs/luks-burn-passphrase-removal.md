@@ -53,6 +53,19 @@ Now, per install:
    key file. An already published appliance keeps working with the new bootstrap
    (its old specializer still removes the key itself); republish the appliances to
    get the verified removal (`vm-appliance.yml`).
+   **Per-box volume key (2026-10-23).** Slot changes never change the LUKS
+   volume key, so every box made from one image shared it. The factory now
+   records the image key's fingerprints in `/etc/flagship/appliance-factory-luks.json`,
+   and the specializer (`applianceDiskKey.ts`), before the disk grows and before
+   the bootstrap adds the owner's key, backs the header up to `/boot`, runs an
+   online `cryptsetup reencrypt --resilience journal` with the factory key, and
+   proves the volume key and header digest both differ from the record, with one
+   slot left (it checks the digest again before the box is marked specialized). A
+   power cut resumes (`--resume-only`) on the next boot; any failure is FATAL and
+   the install stops. Boxes already made from an older image keep the shared key
+   (a live box holds no keyslot passphrase to re-encrypt with): their daemon
+   writes one `server.disk.shared-key` Activity warning telling the owner to
+   Migrate to a new server. Republish both appliances.
 6. `scripts/release-guard.sh` fails EVERY build (dev too) if a constant
    passphrase or a `flagship-(build|burn)-time-luks` string returns, if
    `if false; then` appears in the builder sources, or if userdata.ts adds a LUKS
