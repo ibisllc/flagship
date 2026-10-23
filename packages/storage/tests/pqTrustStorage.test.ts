@@ -63,5 +63,33 @@ for (const [name, make] of backends) {
       await s.putBootHybrid({ ...b, issuedAt: 4 });
       expect(await s.getBootHybrid(D)).toEqual({ ...b, issuedAt: 4 });
     });
+    it("lists an account's identity and device bindings in one read", async () => {
+      const s = make().pqTrust;
+      await s.putBinding(rec({ role: "account-irk", subjectId: "alice" }));
+      await s.putBinding(rec({ role: "admin-root", subjectId: "alice" }));
+      await s.putBinding(rec({ role: "device", subjectId: "d1".repeat(16) }));
+      await s.putBinding(rec({ role: "device", subjectId: "d2".repeat(16) }));
+      await s.putBinding(rec({ role: "account-irk", subjectId: "bob" }));
+      const got = await s.listAccountBindings("Alice", ["d1".repeat(16)]);
+      expect(got.map((b) => `${b.role}:${b.subjectId}`).sort()).toEqual(["account-irk:alice", "admin-root:alice", `device:${"d1".repeat(16)}`]);
+      expect((await s.listAccountBindings("alice", [])).length).toBe(2);
+    });
+
+    it("appends policy changes only at the head, once per generation", async () => {
+      const s = make().pqTrust;
+      const ch = (generation: number, digest: string, prevDigest: string) => ({
+        scopeKind: "installation", scopeId: D, generation, account: "alice", changeJson: "{}", suite: "hybrid-ed25519-mldsa65/v1", signatureHex: "aa", digest, prevDigest, storedAt: 1,
+      });
+      const zero = "0".repeat(64);
+      const d1 = "11".repeat(32);
+      const d2 = "22".repeat(32);
+      expect(await s.appendPolicyChange(ch(1, d1, zero), pol({ generation: 1, headDigest: d1 }), { generation: 0, headDigest: zero })).toEqual({ ok: true });
+      expect(await s.appendPolicyChange(ch(1, d2, zero), pol({ generation: 1, headDigest: d2 }), { generation: 0, headDigest: zero })).toEqual({ ok: false, reason: "conflict" });
+      expect(await s.appendPolicyChange(ch(2, d2, d1), pol({ generation: 2, headDigest: d2 }), { generation: 1, headDigest: zero })).toEqual({ ok: false, reason: "conflict" });
+      expect(await s.appendPolicyChange(ch(2, d2, d1), pol({ generation: 2, headDigest: d2 }), { generation: 1, headDigest: d1 })).toEqual({ ok: true });
+      expect((await s.listPolicyChanges("installation", D)).map((c) => c.digest)).toEqual([d1, d2]);
+      expect(await s.getPolicy("installation", D)).toMatchObject({ generation: 2, headDigest: d2 });
+      expect(await s.listPolicyChanges("installation", "other")).toEqual([]);
+    });
   });
 }

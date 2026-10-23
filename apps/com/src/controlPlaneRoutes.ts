@@ -126,6 +126,10 @@ import {
   handlePutBootKey,
   handleGetPqKeyBinding,
   handlePutPqKeyBinding,
+  handleGetAccountPqKeyBindings,
+  handlePutAccountPqKeyBinding,
+  handleGetAssurancePolicy,
+  handlePostAssurancePolicyChange,
   handlePutSealedLuksKey,
   handlePostInstallEvent,
   handlePostProvisionStatus,
@@ -606,6 +610,11 @@ const ROUTE_RE = {
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
   BOOT_KEY: /^\/api\/server\/([^/]+)\/boot-key$/,
   PQ_KEY_BINDING: /^\/api\/server\/([^/]+)\/pq-key-binding$/,
+  // Architecture v2 milestone 2: the account's phone-held identities' key bindings and its
+  // owner-signed assurance policy chain per scope (docs/architecture-v2/pq-suites.md §11).
+  ACCOUNT_PQ_KEY_BINDINGS: /^\/api\/accounts\/([^/]+)\/pq-key-bindings$/,
+  ASSURANCE_POLICY: /^\/api\/accounts\/([^/]+)\/assurance-policy$/,
+  ASSURANCE_POLICY_SCOPE: /^\/api\/accounts\/([^/]+)\/assurance-policy\/([a-z]+)\/([^/]+)$/,
   // Phone-as-unlock-endpoint RELAY (docs/security-phone-as-unlock-
   // endpoint.md). The box POSTs an STK-signed SecretRequest to its
   // mailbox; the phone GETs pending + POSTs the sealed reply; the box
@@ -844,6 +853,9 @@ const ACCOUNT_GONE_ROUTES: { re: RegExp; methods?: readonly string[] }[] = [
   { re: ROUTE_RE.APP_RENAME },
   { re: ROUTE_RE.DEVICE_GRANTS_LIST },
   { re: ROUTE_RE.DEVICE_GRANTS_REVOKE },
+  { re: ROUTE_RE.ACCOUNT_PQ_KEY_BINDINGS },
+  { re: ROUTE_RE.ASSURANCE_POLICY },
+  { re: ROUTE_RE.ASSURANCE_POLICY_SCOPE, methods: ["GET"] },
   { re: ROUTE_RE.ACCOUNT_READ_TOKEN },
   { re: ROUTE_RE.SERVER_ORDER },
   { re: ROUTE_RE.ACCOUNT_PROFILE },
@@ -1693,6 +1705,34 @@ export async function tryControlPlane(
         ? await handlePutBootKey(bootKeyDeps, host, await readJson(request))
         : await handleGetBootKey(bootKeyDeps, host),
     );
+  }
+  {
+    const accountPqDeps = () => ({
+      usernames: storage.usernames,
+      identities: storage.deviceIdentities,
+      grants: storage.deviceCapabilityGrants,
+      servers: storage.servers,
+      pqTrust: storage.pqTrust,
+      recovery: storage.webauthnRecovery,
+    });
+    if (method === "PUT" && (m = path.match(ROUTE_RE.ACCOUNT_PQ_KEY_BINDINGS))) {
+      return finishPlain(await handlePutAccountPqKeyBinding(accountPqDeps(), decodeURIComponent(m[1]!), await readJson(request)));
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.ACCOUNT_PQ_KEY_BINDINGS))) {
+      const username = decodeURIComponent(m[1]!).toLowerCase();
+      const refused = await gateAccountRead(storage, env, request, username);
+      if (refused) return refused;
+      return finishPlain(await handleGetAccountPqKeyBindings(accountPqDeps(), username));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.ASSURANCE_POLICY))) {
+      return finishPlain(await handlePostAssurancePolicyChange(accountPqDeps(), decodeURIComponent(m[1]!), await readJson(request)));
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.ASSURANCE_POLICY_SCOPE))) {
+      const username = decodeURIComponent(m[1]!).toLowerCase();
+      const refused = await gateAccountRead(storage, env, request, username);
+      if (refused) return refused;
+      return finishPlain(await handleGetAssurancePolicy(accountPqDeps(), username, m[2]!, decodeURIComponent(m[3]!)));
+    }
   }
   if ((method === "PUT" || method === "GET") && (m = path.match(ROUTE_RE.PQ_KEY_BINDING))) {
     const deps = { servers: storage.servers, pqTrust: storage.pqTrust };
@@ -2592,6 +2632,7 @@ export async function tryControlPlane(
           storage: storage.deviceCapabilityGrants,
           identities: storage.deviceIdentities,
           usernames: storage.usernames,
+          pqTrust: storage.pqTrust,
         },
         username,
       ),
