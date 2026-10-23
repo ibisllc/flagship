@@ -1,6 +1,6 @@
 //! An in-memory engine for tests, with fault injection at every effect boundary. Not built into
 //! production: it exists behind the `fake` feature.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use crate::engine::{EngineCapabilities, ObservedWorkload, Runtime, RuntimeEvent, WorkloadState};
 use crate::error::RuntimeError;
@@ -11,7 +11,8 @@ use crate::workload::{FilesVolumeName, ResolvedWorkload};
 use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard};
 
-/// Where an injected crash lands relative to the effect.
+/// Where an injected crash lands relative to the effect. The crash is a panic: the caller's
+/// process "dies" there and gets no chance to record anything afterwards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum When {
     /// The process dies before the engine saw the request: nothing happened.
@@ -92,13 +93,15 @@ impl FakeRuntime {
         let crash = s.crash_at.filter(|(at, _)| *at == n).map(|(_, w)| w);
         if crash == Some(When::Before) {
             s.crash_at = None;
-            return Err(RuntimeError::Spawn(CRASH.to_owned()));
+            drop(s);
+            panic!("{CRASH}");
         }
         s.mutations.push(what);
         let r = apply(&mut s);
         if crash == Some(When::After) {
             s.crash_at = None;
-            return Err(RuntimeError::Spawn(CRASH.to_owned()));
+            drop(s);
+            panic!("{CRASH}");
         }
         r
     }
