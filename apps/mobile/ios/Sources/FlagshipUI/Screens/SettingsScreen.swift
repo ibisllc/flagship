@@ -530,12 +530,12 @@ public struct SettingsScreen: View {
             switch t.tier {
             case "byok":  return "Bring-your-own-key • credits, usage, domains"
             case "promo": return "Free credits • credits, usage, domains"
-            default:      return "Free • credits, usage, domains"
+            default:      return String(localized: "Free • credits, usage, domains")
             }
         case .failed:
-            return "Credits, usage, custom domains, reserved names"
+            return String(localized: "Credits, usage, custom domains, reserved names")
         default:
-            return "Loading…"
+            return String(localized: "Loading…")
         }
     }
 

@@ -208,13 +208,13 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let encodedCreator = creator.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? creator
         let encodedSlug = slug.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? slug
         guard let url = URL(string: "https://flagshipserver.com/api/marketplace/\(encodedCreator)/\(encodedSlug)") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         let (data, resp) = try await urlSession.data(for: req)
         guard let http = resp as? HTTPURLResponse else {
-            throw ScreensClientError.http(status: 0, message: "no response")
+            throw ScreensClientError.http(status: 0, message: String(localized: "no response"))
         }
         if !(200..<300).contains(http.statusCode) {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -248,7 +248,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
         let baseTrimmed = base.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: baseTrimmed + "/api/services") else {
-            throw ScreensClientError.http(status: 0, message: "bad URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -258,7 +258,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
 
         let (data, resp) = try await urlSession.data(for: req)
         guard let http = resp as? HTTPURLResponse else {
-            throw ScreensClientError.http(status: 0, message: "no response")
+            throw ScreensClientError.http(status: 0, message: String(localized: "no response"))
         }
         if !(200..<300).contains(http.statusCode) {
             let text = String(data: data, encoding: .utf8) ?? ""

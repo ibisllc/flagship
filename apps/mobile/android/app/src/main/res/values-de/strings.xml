@@ -2757,12 +2757,6 @@
     <string name="chat_request_now_always_sender">%1$s/%2$s kann jetzt ohne Nachfrage einen Chat mit %3$s beginnen</string>
     <string name="ai_consent_cap">Dieser Lauf kann bis zu etwa %1$s Tokens verbrauchen. Dort stoppt er.</string>
     <string name="watch_boot_key_mismatch">Der Schlüssel dieses Servers stimmt nicht überein. Genehmige seinen Start auf deinem Telefon.</string>
-    <string name="manage_recovery_protection_and_account_level">Verwalte den Wiederherstellungsschutz und die Sicherheit auf Kontoebene.</string>
-    <string name="process_a_link">Link verarbeiten</string>
-    <string name="paste_a_flagship_link_a_private">Füge einen Flagship-Link ein: den „Link abrufen“-Text einer privaten App oder einen „Diesen Server übernehmen“-Übertragungslink, den dir jemand geteilt hat.</string>
-    <string name="link">Link</string>
-    <string name="that_doesnt_look_like_a_flagship">Das sieht nicht nach einem Flagship-Link aus.</string>
-    <string name="lock_and">Sperren und\u0020</string>
     <string name="server_key_changed">Der Schlüssel dieses Servers hat sich geändert. Wenn du ihn nicht neu aufgebaut hast, genehmige nichts für ihn.</string>
     <string name="server_not_from_your_recipe">Dieser Server wurde nicht aus deinem Rezept erstellt. Genehmige ihn nicht.</string>
     <string name="server_code_on_monitor">Wenn deine Maschine einen Bildschirm hat, zeigt sie diesen Code: %1$s</string>
@@ -2898,12 +2892,6 @@
     <string name="only_the_flagship_app">Nur die Flagship-App</string>
     <string name="also_browsers">Auch Browser</string>
     <string name="turn_off_2">Ausschalten…</string>
-    <string name="powering_off">wird ausgeschaltet</string>
-    <string name="this_server_is_it_will_go">Dieser Server wird gerade %1$s – er geht offline.</string>
-    <string name="scan_a_pairing_code">Kopplungscode scannen</string>
-    <string name="add_this_phone_to_another_account">Dieses Telefon zu einem anderen Konto hinzufügen</string>
-    <string name="process_url">URL verarbeiten</string>
-    <string name="open_a_sign_in_link_you">Öffne einen Anmelde-Link, den du kopiert hast</string>
     <string name="separate_list_on_each_server">Eine eigene Liste auf jedem Server</string>
     <string name="each_server_keeps_its_own_members">Jeder Server führt seine eigenen Mitglieder und Einladungen.</string>
     <string name="comes_with_pro">Gehört zu Pro.</string>

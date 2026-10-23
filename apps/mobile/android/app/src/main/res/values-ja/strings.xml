@@ -2757,12 +2757,6 @@
     <string name="chat_request_now_always_sender">%1$s/%2$s は確認なしで %3$s とのチャットを始められるようになりました</string>
     <string name="ai_consent_cap">この実行で使えるのは最大約 %1$s トークンです。そこで実行は止まります。</string>
     <string name="watch_boot_key_mismatch">このサーバーの鍵が一致しません。起動はスマートフォンから承認してください。</string>
-    <string name="manage_recovery_protection_and_account_level">リカバリー保護とアカウント全体のセキュリティを管理します。</string>
-    <string name="process_a_link">リンクを処理</string>
-    <string name="paste_a_flagship_link_a_private">Flagship のリンクを貼り付けてください。プライベートアプリの「リンクを取得」の文字列、または誰かが共有した「このサーバーを引き継ぐ」移管リンクです。</string>
-    <string name="link">リンク</string>
-    <string name="that_doesnt_look_like_a_flagship">Flagship のリンクではないようです。</string>
-    <string name="lock_and">ロックして</string>
     <string name="server_key_changed">このサーバーの鍵が変わりました。再構築していない場合は、このサーバーへの承認を一切しないでください。</string>
     <string name="server_not_from_your_recipe">このサーバーはあなたのレシピから作られたものではありません。承認しないでください。</string>
     <string name="server_code_on_monitor">マシンにモニターがあれば、このコードが表示されています：%1$s</string>
@@ -2898,12 +2892,6 @@
     <string name="only_the_flagship_app">Flagship アプリのみ</string>
     <string name="also_browsers">ブラウザーも</string>
     <string name="turn_off_2">オフにする…</string>
-    <string name="powering_off">電源を切っています</string>
-    <string name="this_server_is_it_will_go">このサーバーは%1$sため、オフラインになります。</string>
-    <string name="scan_a_pairing_code">ペアリングコードをスキャン</string>
-    <string name="add_this_phone_to_another_account">このスマートフォンを別のアカウントに追加</string>
-    <string name="process_url">URL を処理</string>
-    <string name="open_a_sign_in_link_you">コピーしたサインインリンクを開く</string>
     <string name="separate_list_on_each_server">サーバーごとに別のリスト</string>
     <string name="each_server_keeps_its_own_members">各サーバーが自分のメンバーと招待を管理します。</string>
     <string name="comes_with_pro">Pro に含まれます。</string>

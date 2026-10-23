@@ -726,7 +726,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func appListScope(serviceId: String) async throws -> AppListScopeState {
         try await tick()
         guard let s = mockListScope[serviceId] else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"not found"}"#))
         }
         return s
     }
@@ -737,15 +737,15 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         setAppListScopeCalls.append((serviceId, req))
         if let status = mockListScopeStatus {
             mockListScopeStatus = nil
-            throw ScreensClientError.http(status: status, message: #"{"error":"refused"}"#)
+            throw ScreensClientError.http(status: status, message: String(localized: #"{"error":"refused"}"#))
         }
         guard let cur = mockListScope[serviceId] else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"not found"}"#))
         }
         if req.order.scope == "server", !cur.isPro {
             throw ScreensClientError.http(
                 status: 402,
-                message: #"{"error":"A separate list on each server comes with Pro.","code":"pro-required"}"#)
+                message: String(localized: #"{"error":"A separate list on each server comes with Pro.","code":"pro-required"}"#))
         }
         let next = AppListScopeState(serviceRef: cur.serviceRef, scope: req.order.scope, pending: false, plan: cur.plan,
                                      selfFqdn: cur.selfFqdn, leader: cur.leader, servers: cur.servers)
@@ -756,7 +756,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func accessListsSummary() async throws -> AccessListsSummary {
         try await tick()
         guard let s = mockAccessListsSummary else {
-            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+            throw ScreensClientError.http(status: 404, message: String(localized: #"{"error":"not found"}"#))
         }
         return s
     }
@@ -1264,8 +1264,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             MarketplaceListing(
                 creator: "trent",
                 slug: "scratchpad",
-                title: "Scratchpad",
-                summary: "A markdown notes app with offline-first sync.",
+                title: String(localized: "Scratchpad"),
+                summary: String(localized: "A markdown notes app with offline-first sync."),
                 screenshots: [],
                 installCount: 412,
                 requiresLlmKey: false,
@@ -1275,8 +1275,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             MarketplaceListing(
                 creator: "wendy",
                 slug: "wishlist",
-                title: "Family Wishlist",
-                summary: "Shared birthday + holiday lists for the household.",
+                title: String(localized: "Family Wishlist"),
+                summary: String(localized: "Shared birthday + holiday lists for the household."),
                 screenshots: [],
                 installCount: 188,
                 requiresLlmKey: false,
@@ -1286,8 +1286,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             MarketplaceListing(
                 creator: "peggy",
                 slug: "feed-reader",
-                title: "Tiny Feed Reader",
-                summary: "Atom + RSS in a clean reader. Optional AI summaries.",
+                title: String(localized: "Tiny Feed Reader"),
+                summary: String(localized: "Atom + RSS in a clean reader. Optional AI summaries."),
                 screenshots: [],
                 installCount: 974,
                 requiresLlmKey: true,
@@ -1311,7 +1311,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             creator: creator,
             slug: slug,
             title: slug.capitalized,
-            summary: "Marketplace stub for \(creator)/\(slug)",
+            summary: String(localized: "Marketplace stub for \(creator)/\(slug)"),
             manifestJson: manifestJson,
             manifestHash: tamperListingManifest
                 ? String(repeating: "00", count: 32)

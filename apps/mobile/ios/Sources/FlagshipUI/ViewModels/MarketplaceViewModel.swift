@@ -79,7 +79,7 @@ public final class MarketplaceViewModel {
         do {
             detail = try await client.marketplaceFetchListing(creator: creator, slug: slug)
         } catch {
-            installState = .failed(installErrorText(error, fallback: "Couldn't fetch the listing."))
+            installState = .failed(installErrorText(error, fallback: String(localized: "Couldn't fetch the listing.")))
             return
         }
 
@@ -87,7 +87,7 @@ public final class MarketplaceViewModel {
         // bytes; bind it by re-checking it hashes to the committed manifestHash.
         if !detail.manifestHash.isEmpty,
            detail.manifestHash.lowercased() != manifestSha256Hex(detail.manifestJson) {
-            installState = .failed("Manifest hash mismatch — refusing to install a tampered listing.")
+            installState = .failed(String(localized: "Manifest hash mismatch — refusing to install a tampered listing."))
             return
         }
 
@@ -102,9 +102,9 @@ public final class MarketplaceViewModel {
 
         let key: Curve25519.Signing.PrivateKey
         do {
-            key = try await signer("Install \(creator)/\(slug)")
+            key = try await signer(String(localized: "Install \(creator)/\(slug)"))
         } catch {
-            installState = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            installState = .failed(String(localized: "Couldn't access your account key: \(error.localizedDescription)"))
             return
         }
 
@@ -112,7 +112,7 @@ public final class MarketplaceViewModel {
         do {
             signature = try key.signature(for: installServiceCanonicalBytes(request))
         } catch {
-            installState = .failed("Couldn't sign the install order: \(error.localizedDescription)")
+            installState = .failed(String(localized: "Couldn't sign the install order: \(error.localizedDescription)"))
             return
         }
 
@@ -128,9 +128,9 @@ public final class MarketplaceViewModel {
                 installState = .paymentRequired(priceUsdCents: parsePriceUsdCents(message))
                 return
             }
-            installState = .failed(e.errorDescription ?? "That install didn't take. Try again in a moment.")
+            installState = .failed(e.errorDescription ?? String(localized: "That install didn't take. Try again in a moment."))
         } catch {
-            installState = .failed(installErrorText(error, fallback: "Couldn't reach the box."))
+            installState = .failed(installErrorText(error, fallback: String(localized: "Couldn't reach the box.")))
         }
     }
 

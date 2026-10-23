@@ -2757,12 +2757,6 @@
     <string name="chat_request_now_always_sender">%1$s/%2$s peut désormais démarrer une discussion avec %3$s sans demander</string>
     <string name="ai_consent_cap">Cette exécution peut utiliser jusqu’à environ %1$s jetons. Elle s’arrête là.</string>
     <string name="watch_boot_key_mismatch">La clé de ce serveur ne correspond pas. Approuvez son démarrage depuis votre téléphone.</string>
-    <string name="manage_recovery_protection_and_account_level">Gérez la protection de récupération et la sécurité du compte.</string>
-    <string name="process_a_link">Traiter un lien</string>
-    <string name="paste_a_flagship_link_a_private">Collez un lien Flagship : la chaîne « Obtenir le lien » d’une app privée, ou un lien de transfert « prendre le contrôle de ce serveur » que quelqu’un vous a partagé.</string>
-    <string name="link">Lien</string>
-    <string name="that_doesnt_look_like_a_flagship">Cela ne ressemble pas à un lien Flagship.</string>
-    <string name="lock_and">Verrouiller et\u0020</string>
     <string name="server_key_changed">La clé de ce serveur a changé. Si vous ne l’avez pas reconstruit, n’approuvez rien pour lui.</string>
     <string name="server_not_from_your_recipe">Ce serveur n’a pas été créé à partir de votre recette. Ne l’approuvez pas.</string>
     <string name="server_code_on_monitor">Si votre machine a un écran, elle affiche ce code : %1$s</string>
@@ -2898,12 +2892,6 @@
     <string name="only_the_flagship_app">Seulement l’app Flagship</string>
     <string name="also_browsers">Les navigateurs aussi</string>
     <string name="turn_off_2">Désactiver…</string>
-    <string name="powering_off">en cours d’extinction</string>
-    <string name="this_server_is_it_will_go">Ce serveur est %1$s — il va se mettre hors ligne.</string>
-    <string name="scan_a_pairing_code">Scanner un code d’association</string>
-    <string name="add_this_phone_to_another_account">Ajouter ce téléphone à un autre compte</string>
-    <string name="process_url">Traiter une URL</string>
-    <string name="open_a_sign_in_link_you">Ouvrez un lien de connexion que vous avez copié</string>
     <string name="separate_list_on_each_server">Une liste distincte sur chaque serveur</string>
     <string name="each_server_keeps_its_own_members">Chaque serveur garde ses propres membres et invitations.</string>
     <string name="comes_with_pro">Inclus avec Pro.</string>
