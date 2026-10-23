@@ -223,6 +223,7 @@ export class UsageMeter {
       const body = (await resp.json().catch(() => null)) as { results?: unknown } | null;
       const leases = new Map<string, EdgeLease>();
       for (const r of Array.isArray(body?.results) ? body.results : []) {
+        if (typeof r !== "object" || r === null) continue;
         const rec = r as Record<string, unknown>;
         if (typeof rec.username !== "string") continue;
         const lease = leaseFrom(rec, this.flushIntervalMs);

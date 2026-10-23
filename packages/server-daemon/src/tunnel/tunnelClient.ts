@@ -16,8 +16,11 @@ import {
   FRAME_OPEN,
   FRAME_OUTBOUND_CREDIT,
   FRAME_OUTBOUND_RESULT,
+  CAPABILITY_DRAIN_V1,
   CAPABILITY_OUTBOUND_V1,
   CAPABILITY_PB_MAIL_V1,
+  FRAME_DRAIN_NOTICE,
+  parseDrainNotice,
   FRAME_PB_MAIL_REQ,
   MailAssembler,
   mailboxAnnounceFrame,
@@ -154,6 +157,12 @@ export interface TunnelClientOptions {
    * reconnect. Single-shot.
    */
   onClose?: () => void;
+  /**
+   * `drain-v1`: when set, the HELLO offers the capability and a hub that is shutting down
+   * calls this with how long it will keep this tunnel up. The supervisor dials a new tunnel
+   * at once and lets this one's streams finish.
+   */
+  onDrain?: (graceMs: number) => void;
   /**
    * If set (>0), send a WS ping every `keepAlive.intervalMs`. If
    * `keepAlive.maxMissedPongs` ticks pass without a pong, the socket
@@ -369,6 +378,7 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       nonce: bytesToHex(nonce),
       issuedAt,
       signature: bytesToHex(signature),
+      ...(opts.onDrain ? { capabilities: [CAPABILITY_DRAIN_V1] } : {}),
     });
     send({
       streamId: 0,
@@ -421,7 +431,7 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     const incoming = toUint8(raw);
     buffered = concat(buffered, incoming);
     while (true) {
-      const r = decodeFrame(buffered);
+      const r = decodeFrame(buffered, { drainNotice: hubCapabilities.includes(CAPABILITY_DRAIN_V1) });
       if (r.kind === "incomplete") return;
       if (r.kind === "error") {
         rejectReady(new Error(r.reason));
@@ -503,6 +513,16 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     }
     if (f.type === FRAME_PB_MAIL_REQ) {
       handleMailFrame(f);
+      return;
+    }
+    if (f.type === FRAME_DRAIN_NOTICE) {
+      const graceMs = parseDrainNotice(f.payload);
+      if (graceMs === null || !opts.onDrain) return;
+      try {
+        opts.onDrain(graceMs);
+      } catch {
+        /* the hub closes the tunnel at the end of the grace anyway */
+      }
       return;
     }
     if (isOutboundStreamId(f.streamId)) {
@@ -786,6 +806,8 @@ export function superviseTunnelClient(
   let totalDials = 0;
   let reconnectCount = 0;
   let live: TunnelClient | null = null;
+  // Clients whose hub sent DRAIN_NOTICE: still serving their streams, no longer `live`.
+  const retiring = new Set<TunnelClient>();
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
   let resolveReady!: () => void;
   let rejectReady!: (e: Error) => void;
@@ -808,6 +830,8 @@ export function superviseTunnelClient(
     if (totalDials > 1) reconnectCount += 1;
     opts.onReconnectAttempt?.(attempt);
     let client: TunnelClient;
+    let self: TunnelClient | null = null;
+    let closedDuringStart = false;
     try {
       client = startClient({
         hubUrl: opts.hubUrl,
@@ -822,6 +846,10 @@ export function superviseTunnelClient(
         setIntervalImpl: opts.setIntervalImpl,
         clearIntervalImpl: opts.clearIntervalImpl,
         onClose: () => {
+          if (self === null) closedDuringStart = true;
+          else if (retiring.delete(self)) return;
+          // A replaced client's late close must not forget its successor.
+          else if (self !== live) return;
           // Forget the live ref + schedule the next reconnect. We don't
           // distinguish "graceful close" from "network drop" here —
           // either way the supervisor reconnects until close() is called.
@@ -829,6 +857,22 @@ export function superviseTunnelClient(
           opts.onDisconnect?.();
           if (stopped) return;
           scheduleReconnect();
+        },
+        onDrain: (graceMs) => {
+          if (stopped || self === null || self !== live) return;
+          const old = self;
+          retiring.add(old);
+          live = null;
+          if (pendingTimer !== null) {
+            clearTimeoutFn(pendingTimer);
+            pendingTimer = null;
+          }
+          attempt = 0;
+          startOne();
+          const t = setTimeoutFn(() => {
+            if (retiring.delete(old)) void old.close();
+          }, graceMs);
+          (t as { unref?: () => void }).unref?.();
         },
       });
     } catch (e) {
@@ -845,6 +889,8 @@ export function superviseTunnelClient(
       scheduleReconnect();
       return;
     }
+    self = client;
+    if (closedDuringStart) return;
     live = client;
     client.ready().then(
       () => {
@@ -915,7 +961,9 @@ export function superviseTunnelClient(
       }
       const c = live;
       live = null;
-      if (c) await c.close();
+      const old = [...retiring];
+      retiring.clear();
+      await Promise.all([...(c ? [c] : []), ...old].map((x) => x.close()));
     },
   };
 }

@@ -71,7 +71,11 @@ function encodeJson(payload: unknown): Uint8Array {
 }
 
 function decodeJson<T>(payload: Uint8Array): T {
-  return JSON.parse(new TextDecoder().decode(payload)) as T;
+  const v: unknown = JSON.parse(new TextDecoder().decode(payload));
+  // Callers read fields straight off the result; `null` or a number would throw a TypeError
+  // instead of the decoder's own "malformed" error.
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("payload is not a JSON object");
+  return v as T;
 }
 
 function nonNeg(n: unknown): n is number {

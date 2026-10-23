@@ -82,6 +82,7 @@ export class RevocationCache {
         };
         if (!body || typeof body.username !== "string") return;
         const certIds = body.certIds ?? [];
+        if (!Array.isArray(certIds) || !certIds.every((c) => typeof c === "string")) return;
         // Empty + signature=null is the legitimate "no list ever posted" case.
         // Skip signature verification — there's nothing to verify.
         if (certIds.length === 0 && !body.signature) {
@@ -112,6 +113,9 @@ export class RevocationCache {
           fetchedAt: this.opts.now(),
           issuedAt: body.issuedAt,
         });
+      } catch {
+        // `.com` unreachable or an unreadable body: keep the cache as it is, so lookup()
+        // answers null (fail-open) instead of rejecting into the HELLO handler.
       } finally {
         this.inflight.delete(username);
       }

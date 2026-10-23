@@ -19,9 +19,13 @@ kill_timeout = "30s"
 # Previous setting (strategy=immediate, min=1) killed the only machine
 # before the new one was healthy — every tunnel WS dropped, and the
 # reconnect supervisor (#7) only re-establishes after a backoff window.
-# With min=2 + rolling + the DrainNotice frame the daemon receives
-# from the old hub, pods migrate to the new machine atomically with
-# at most a sub-second SNI-registration gap.
+# On kill_signal the hub drains (apps/web/src/tunnel/drainOnSignal.ts): it
+# refuses new tunnels with 503, sends DRAIN_NOTICE to boxes that offered
+# drain-v1 (they dial a new tunnel at once, which lands on another machine,
+# and let the old one's streams finish), keeps serving for
+# FLAGSHIP_DRAIN_GRACE_MS (default 20 s, inside kill_timeout), then closes
+# what is left with 1012. Older boxes reconnect after that close. Streams are
+# not migrated.
 [deploy]
   strategy = "rolling"
   wait_timeout = "60s"
