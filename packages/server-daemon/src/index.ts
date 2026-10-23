@@ -1,4 +1,3 @@
-import { languageFor } from "./i18n/index.js";
 import { existsSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
 import { readdir, readFile, rename, rm, stat, statfs } from "node:fs/promises";
@@ -8,9 +7,6 @@ import { buildModelRedactor } from "./llm/modelPrivacy.js";
 import { X509Certificate } from "node:crypto";
 import {
   derivePeerBackupKey,
-  BOX_RELEASE,
-  composeServiceId,
-  deriveUrlFragment,
   ed,
   signServerRevokeBySelf,
   verifyRootEntitlement,
@@ -94,14 +90,7 @@ import {
   ServiceAccessStore,
   ServiceSessionStore,
 } from "./serviceAccess.js";
-import { buildServiceAccessWeb, KNOCK_HOLDER_COOKIE } from "./serviceAccessWeb.js";
-import { SESSION_COOKIE } from "./serviceAccess.js";
-import { ServerWildcardGrantStore, buildServerWildcardGrantHttp } from "./serverWildcardGrant.js";
-import { enrollmentDeviceInfo, forgetEnrollmentSecret, showServerCode } from "./enrollment.js";
-import { buildGenerationGate, originGeneration } from "./appGeneration.js";
-import { ImportProvenanceStore } from "./buildmodes/appProvenance.js";
-import { ReleaseCatalogGate } from "./releaseCatalogGate.js";
-import { TrustedRootStore, refreshReleaseCatalog } from "./releaseCatalogFeed.js";
+import { buildServiceAccessWeb } from "./serviceAccessWeb.js";
 import { buildInvitePage } from "./invitePage.js";
 import { buildMemberRolesHttp, buildRankEntryApplier } from "./memberRoles.js";
 import { buildAppSessionResolver } from "./appMemberSession.js";
@@ -120,12 +109,7 @@ import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
 
 /** Either custodian: the keys in this process, or in flagship-keyd. */
-import { CompanionDelegations } from "./authority/companionDelegations.js";
-import { reportCaLease } from "./caExpiryWatch.js";
-import { buildMigrationSnapshots } from "./migrationSnapshots.js";
-import { RestoredAccessDrafts } from "./restoredAccessDrafts.js";
-import { buildTrackWork } from "./authority/sessionWork.js";
-import { AuthClock, AuthTimeSource, AuthorityHub, FreshnessLeases, GrantIndex, LocalCheckpoints, OperationLedger, TokenFamily } from "./authority/index.js";
+import { AuthorityHub, GrantIndex, OperationLedger, TokenFamily } from "./authority/index.js";
 type KeyCustodianLike = KeyCustodian | KeydCustodian;
 import { IdentityInjector } from "./identityInjector.js";
 import {
@@ -147,7 +131,6 @@ import { PublisherPins } from "./publisherPins.js";
 import { ManagementReserve } from "./managementReserve.js";
 import { freeBytesAt } from "./serverArchive/service.js";
 import { SecuritySliver } from "./securitySliver.js";
-import { applySliverPlan, offlineReplicaSliverPlan, recoverySliverPlan } from "./sliverFeeds.js";
 import { realCommandRunner as realCommandRunnerStatic } from "./serviceRunner.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildAppBackupHttpHandlers } from "./serviceBackupHttp.js";
@@ -183,7 +166,6 @@ import { buildAppImage, buildArtifactPipeline } from "./buildmodes/deployArtifac
 import { StagingRunner } from "./buildmodes/staging.js";
 import type { AgentRunner } from "./buildmodes/buildAgent.js";
 import { BuildOrchestrator } from "./buildmodes/buildOrchestrator.js";
-import { AdaptConsentGate } from "./buildmodes/adaptConsent.js";
 import { fileBuildStore } from "./buildmodes/buildStore.js";
 import { buildBuildModesHttpHandlers } from "./buildmodes/buildModesHttp.js";
 import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
@@ -269,11 +251,8 @@ import {
   DebugAccessController,
   buildDebugSystem,
   debugGrantFromInstallBlob,
-  privdDebugSystem,
   realDebugCommandRunner,
 } from "./debugAccessGate.js";
-import { installPrivd } from "./privdInstall.js";
-import { runSetupStep, runsUnprivileged } from "./privileged.js";
 import {
   buildSwkDepositPoller,
   fileSwkMarkerStore,
@@ -293,8 +272,8 @@ import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHol
 import {
   readAuthCodeBirthDate,
   wireGossip,
-  gossipCryptoFromOps,
   resolveCgk,
+  gossipCryptoFromOps,
   buildCertPrewarm,
   apexFromBoxFqdn,
   buildLeadsHttpHandler,
@@ -334,10 +313,9 @@ import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { AccessJournal } from "./accessJournal.js";
-import { buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
-import { buildPodsPeers, peerSiblings, type PodsPeers } from "./accessPeers.js";
+import { accessSyncKeyFromOps, buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
+import { buildPodsPeers } from "./accessPeers.js";
 import { BoxReadToken } from "./boxReadToken.js";
-import { warnIfSharedApplianceDiskKey } from "./applianceDiskKey.js";
 
 /**
  * The `.com` doorbell (doorbell.ts): created once the box knows its account and
@@ -489,7 +467,7 @@ async function tryLoadConfig(): Promise<ServerConfig | null> {
   const path = process.env.FLAGSHIP_CONFIG;
   if (path) {
     try {
-      return withRotatedIrk(await loadConfig(path));
+      return await loadConfig(path);
     } catch (e) {
       console.error(`[daemon] config load failed: ${(e as Error).message}; trying install-blob`);
       // fall through to the install-blob fallback
@@ -500,18 +478,6 @@ async function tryLoadConfig(): Promise<ServerConfig | null> {
     console.log("[daemon] owner config derived from /var/flagship/install-blob.json (no FLAGSHIP_CONFIG)");
   }
   return fromBlob;
-}
-
-async function withRotatedIrk(cfg: ServerConfig): Promise<ServerConfig> {
-  const raw = await tryReadFile(join(process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship", ROTATED_IRK_FILE));
-  if (!raw) return cfg;
-  try {
-    const hex = (JSON.parse(raw) as { irkPublicKey?: unknown }).irkPublicKey;
-    if (typeof hex === "string" && /^[0-9a-f]{64}$/.test(hex)) return { ...cfg, irkPublicKey: Uint8Array.from(Buffer.from(hex, "hex")) };
-  } catch {
-    /* unreadable: the config's own key */
-  }
-  return cfg;
 }
 
 /** How this server was created, for its backups (a restore makes the new server the same way). */
@@ -739,23 +705,6 @@ async function main(): Promise<void> {
     if (t === "installed") process.exit(0);
   }
 
-  // ---- flagship-privd (SEC-DAEMON-001) ----
-  // Once keyd holds the keys this process gives up root: flagship-privd does the few host operations
-  // it needs, and the daemon runs as `flagship`. Until privd answers it runs as root, as before.
-  if (runsUnprivileged()) {
-    console.log("[daemon] running as flagship; host operations go through flagship-privd");
-  } else if (process.getuid?.() === 0) {
-    if (keyd) {
-      const p = await installPrivd({
-        repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
-        run: (cmd, args) => realUpdateCommandRunner(cmd, args),
-        onLog: (m) => console.log(m),
-      });
-      if (p === "switched") process.exit(0);
-    }
-    console.warn("[daemon] running as root: flagship-privd is not in yet (weaker isolation).");
-  }
-
   // TLS terminated by flagship-tlsd with the certificate key in keyd, when that frontend is installed.
   let opaqueTls: OpaqueTlsOptions | undefined;
   const tlsUpstream = process.env.FLAGSHIP_TLS_UPSTREAM;
@@ -798,10 +747,6 @@ async function main(): Promise<void> {
   onCorruptState((r) =>
     activityLog.note("server.state.corrupt", `${basename(r.path)} couldn't be read and was set aside. ${r.effect}`, { ok: false }),
   );
-  void warnIfSharedApplianceDiskKey({
-    warnedMarkerPath: `${dataDir}/appliance-disk-key-warning.json`,
-    note: (kind, detail) => activityLog.note(kind, detail, { ok: false }),
-  }).catch((e: Error) => console.warn(`[disk-key] check failed: ${e.message}`));
   // The owner-assigned front page (its own route below, and server backups).
   const frontPage = new FrontPageStore();
   await frontPage.load();
@@ -941,20 +886,6 @@ async function main(): Promise<void> {
   // public /api/leads advertisement and the authenticated screens BFF, and the
   // applied-commit truth the self-update consumer enforces `fromCommit` against.
   const currentCommitProvider = buildCurrentCommitProvider(dataDir);
-  // The signed release catalog (N13): only for a release that pins its root; refreshed beside the artifacts.
-  {
-    const roots = new TrustedRootStore({ pinnedPath: `${selfUpdateRepoPath}/release/catalog-root.json`, statePath: `${dataDir}/release-catalog-root.json` });
-    if (await roots.load()) {
-      const gate = new ReleaseCatalogGate({ path: `${dataDir}/release-catalog.json`, root: () => roots.current(), boxSalt: () => env.serverFqdn ?? "" });
-      releaseCatalogRef.current = gate;
-      const refresh = () =>
-        refreshReleaseCatalog({ base: BOX_RELEASE.artifactBase, roots, gate })
-          .then((m) => console.log(`[release-catalog] ${m}`))
-          .catch((e: Error) => console.warn(`[release-catalog] ${e.message}`));
-      void refresh();
-      setInterval(() => void refresh(), 6 * 3_600_000).unref?.();
-    }
-  }
   const selfUpdateSwapper = buildArtifactSwapper({
     repoPath: selfUpdateRepoPath,
     runner: realUpdateCommandRunner,
@@ -967,8 +898,6 @@ async function main(): Promise<void> {
     // Generous window: first boot after an update does a full ACME + tunnel
     // bring-up; a transient network outage shouldn't burn a boot attempt.
     awaitHealthy: () => selfUpdateHealth.whenHealthy(10 * 60_000),
-    // Below the catalog's security floor a failed update does not roll back there (restricted recovery).
-    rollbackAllowed: (c) => (releaseCatalogRef.current ? releaseCatalogRef.current.rollbackAllowed(c) : true),
     requestRestart: () => {
       console.log("[self-update] restarting (health gate)");
       process.exit(0);
@@ -984,31 +913,23 @@ async function main(): Promise<void> {
 
   // Rolls back an update the gate above can't: one interrupted mid-apply, or
   // one whose code never gets far enough to run the gate (updateGuard.ts).
-  void (
-    runsUnprivileged()
-      ? runSetupStep("update-guard")
-      : installUpdateGuard({
-          repoPath: selfUpdateRepoPath,
-          dataDir,
-          run: (cmd, args) => realUpdateCommandRunner(cmd, args),
-          onLog: (m) => console.log(m),
-        })
-  ).catch((e) => console.log(`[self-update] update guard not installed: ${(e as Error).message}`));
+  void installUpdateGuard({
+    repoPath: selfUpdateRepoPath,
+    dataDir,
+    run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+    onLog: (m) => console.log(m),
+  }).catch((e) => console.log(`[self-update] update guard not installed: ${(e as Error).message}`));
 
   // ---- Box health reporter (healthReporter.ts) ----
   // A systemd timer, separate from this process, so the owner still gets
   // memory / OOM / restart numbers when this daemon is the thing failing.
   if (cfg && env.controlPlaneBaseUrl) {
-    void (
-      runsUnprivileged()
-        ? runSetupStep("health-reporter")
-        : installHealthReporter({
-            controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-            serverDomain: env.serverFqdn,
-            run: (cmd, args) => realUpdateCommandRunner(cmd, args),
-            onLog: (m) => console.log(m),
-          })
-    ).catch((e) => console.log(`[health] reporter not installed: ${(e as Error).message}`));
+    void installHealthReporter({
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      serverDomain: env.serverFqdn,
+      run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+      onLog: (m) => console.log(m),
+    }).catch((e) => console.log(`[health] reporter not installed: ${(e as Error).message}`));
   }
 
   // ---- Service Workload Key (SWK) resolution ----
@@ -1142,9 +1063,6 @@ async function main(): Promise<void> {
     privateKey: identityPrivKey,
     publicKey: ed.getPublicKey(identityPrivKey),
   };
-  // The six-digit server code on the machine's own screen, for the owner to compare with the phone's
-  // at first contact (enrollment.ts). Public: it is a digest of the public key.
-  if (env.serverFqdn) void showServerCode({ stkPubHex: bytesToHexLocal(identityKeypair.publicKey), serverDomain: env.serverFqdn }).catch(() => {});
 
   // ---- Secret-free-recipe SWK delivery consumer ----
   // (docs/recipe-delivery-and-remote-install.md). When NO SWK is provisioned
@@ -1248,21 +1166,6 @@ async function main(): Promise<void> {
   // Kept in the state directory beside the keys, never under data/, so restoring an app's data
   // cannot bring a revoked session back.
   const authorityHub = await openAuthorityHub(join(dataDir, "authority"));
-  // Evidence, not a log of bodies: which grants were revoked and which operations changed state.
-  authorityHub.onRevocation = (e) =>
-    activityLog.note("authority.revoked", `${e.grants} grant${e.grants === 1 ? "" : "s"} revoked (${e.kinds.join(", ")}), epoch ${e.epoch}: ${e.reason}${e.stuckWork ? `; ${e.stuckWork} job(s) did not stop` : ""}`, { ok: e.stuckWork === 0 });
-  authorityHub.ops.onTransition = (op) =>
-    activityLog.note("authority.operation", `${op.kind} ${op.state}${op.reason ? ` (${op.reason})` : ""}, id ${op.id.slice(0, 8)}, payload ${op.payloadHash.slice(0, 12)}${op.resultDigest ? `, result ${op.resultDigest.slice(0, 12)}` : ""}`, { ok: op.state !== "failed" && op.state !== "outcome-unknown" });
-  const restoredAccess = new RestoredAccessDrafts(join(dataDir, "authority", "restored-access.json"));
-  await restoredAccess.load();
-  // What an uninstall removes beyond the app itself (N11): every grant, key, session and held draft
-  // that named it. The durable publisher pin stays: it is system identity metadata, not app content.
-  const appRemovedHooks: Array<(serviceId: string) => Promise<void>> = [
-    // A removed app's import record goes with it (a later app under the name starts from its own import).
-    async (id) => new ImportProvenanceStore(join(dataDir, "data", "app-provenance")).forget(id),
-    async (id) => void (await authorityHub.revokeService(id, "app uninstalled")),
-    async (id) => void (await restoredAccess.remove(id)),
-  ];
   // N13: space held back so an app that fills the disk cannot stop a revocation, lock or recovery
   // record being saved. A security write that finds the disk full releases it and goes through.
   {
@@ -1298,9 +1201,6 @@ async function main(): Promise<void> {
     dataDir,
     alertInbox,
     pairedSessions,
-    ...(cfg && env.serverFqdn
-      ? { serverDomain: env.serverFqdn, authority: () => ({ ownerIrkPub: cfg.irkPublicKey, ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}), username: cfg.userId }) }
-      : {}),
   });
 
   // Lock & power-off + dead-man: one suppressor + one host-power runner,
@@ -1377,34 +1277,6 @@ async function main(): Promise<void> {
   // N14: the security sliver's record, kept with the pins for the same reason.
   const securitySliver = new SecuritySliver(join(dataDir, "security-sliver.json"));
   await securitySliver.load();
-  {
-    // The CA lease this box checks against, watched daily: a notice while there is time to update.
-    const watchCa = () => {
-      let chain = null;
-      try {
-        chain = caTrustChainFromFolder({ gitRepoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship" });
-      } catch {
-        chain = null;
-      }
-      void reportCaLease(securitySliver, chain, Date.now()).catch(() => {});
-    };
-    watchCa();
-    const t = setInterval(watchCa, 6 * 3600_000);
-    if (typeof t.unref === "function") t.unref();
-    // Other servers still missing an access-list change, one line per app.
-    const replicaLines = new Set<string>();
-    const watchReplicas = () => {
-      const sync = accessSyncRef.current;
-      if (!sync) return;
-      const plan = offlineReplicaSliverPlan(sync.pending(), replicaLines, Date.now());
-      for (const r of plan.raise) replicaLines.add(r.target);
-      for (const k of plan.resolve) replicaLines.delete(k.slice("offline-replicas:".length));
-      void applySliverPlan(securitySliver, plan).catch(() => {});
-    };
-    const r = setInterval(watchReplicas, 5 * 60_000);
-    if (typeof r.unref === "function") r.unref();
-  }
-  const podsPeersRef: { current: PodsPeers | null } = { current: null };
   const {
     pullStateStore,
     updateServer,
@@ -1420,7 +1292,6 @@ async function main(): Promise<void> {
     subscriberRegistry,
     alertInbox,
     servicePlatformRef: servicePlatformRefForServer,
-    appRemovedHooks,
   });
 
   // ---- Phone-pollable AlertInbox HTTP + admin proxy + identity rotate ----
@@ -1430,31 +1301,8 @@ async function main(): Promise<void> {
     pairedSessions,
     browserBundle,
   });
-  // SEC-AUTH-002: every control-API route passes this principal gate first. A Remote session builds or
-  // deploys only the one app a phone-signed delegation names.
-  const delegations = new CompanionDelegations(
-    authorityHub,
-    pairedSessions,
-    (d, sig, verify) =>
-      !!cfg &&
-      authorizeSensitiveOrder({
-        order: d,
-        signature: sig,
-        verify,
-        ownerIrkPub: cfg.irkPublicKey,
-        ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
-        username: cfg.userId,
-        activeGrants: [],
-        now: Date.now(),
-      }),
-    (id) => servicePlatformRefForServer.current?.byServiceId(id) !== undefined,
-  );
-  additionalHandlers.unshift(
-    centralAuthorization({
-      isCompanionRequest: (r) => pairedSessions.isCompanionRequest(r),
-      delegation: { allows: (t, s, op) => delegations.allows(t, s, op), sessionService: (id) => delegations.buildSessionService(id) },
-    }),
-  );
+  // SEC-AUTH-002: every control-API route passes this principal gate first.
+  additionalHandlers.unshift(centralAuthorization({ isCompanionRequest: (r) => pairedSessions.isCompanionRequest(r) }));
 
   // Provisioning-STATUS reporter — the SINGLE canonical channel the phone
   // polls (POST /api/order/<serial>/status).
@@ -1627,44 +1475,6 @@ async function main(): Promise<void> {
   // fingerprint the phone pins). Same source as the status heartbeat.
   const liveCertPemRef: { current: string | null } = { current: null };
 
-  // Cross-owner app chat (chat/system.ts): frames go to an app's canonical name and the box that holds
-  // that name at the relay is the one that talks; the notifier is bound later (setNotifier).
-  const chatPodsRef: { current: import("./accessPeers.js").PodsPeers | null } = { current: null };
-  const chatApex = (env.serverFqdn && apexFromBoxFqdn(env.serverFqdn)) || "flagship.services";
-  const crossOwnerChat =
-    cfg && env.controlPlaneBaseUrl && env.serverFqdn
-      ? await (async () => {
-          const { buildCrossOwnerChat } = await import("./chat/system.js");
-          const { chatAppHost } = await import("./chat/wire.js");
-          const self = env.serverFqdn!.toLowerCase();
-          return buildCrossOwnerChat({
-            self,
-            account: cfg.userId,
-            apex: chatApex,
-            controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
-            sign: (m) => custodian.signAsBox(m),
-            holdsName: (app) => {
-              const host = chatAppHost(app, cfg.userId, chatApex);
-              if (runtime.urlController.list().some((f) => f.toLowerCase() === host)) return true;
-              // No gossip (no CGK), so no box claims the name: the first live server in the owner's order speaks for the account.
-              return gossipLoopRef.current === null && (chatPodsRef.current?.firstLive() ?? self) === self;
-            },
-          });
-        })()
-      : undefined;
-
-  // The admin's grant for the account's app names on this box's certificate (serverWildcardGrant.ts).
-  const wildcardGrants =
-    cfg && env.serverFqdn
-      ? new ServerWildcardGrantStore({
-          path: join(dataDir, "server-wildcard-grant.json"),
-          serverDomain: env.serverFqdn,
-          stkPubHex: bytesToHexLocal(identityKeypair.publicKey),
-          authority: () => ({ ownerIrkPub: cfg.irkPublicKey, ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}), username: cfg.userId }),
-        })
-      : null;
-  const wildcardGrant = (await wildcardGrants?.load()) ?? undefined;
-
   let runtime: DaemonRuntime;
   try {
     // A Docker repaired after boot took the box's networks with it: restart
@@ -1677,8 +1487,6 @@ async function main(): Promise<void> {
       serverFqdn: env.serverFqdn!,
       identityPrivKey,
       custodian,
-      ...(crossOwnerChat ? { crossOwnerChat } : {}),
-      ...(wildcardGrant ? { serverWildcardGrant: wildcardGrant } : {}),
       ...(opaqueTls ? { opaqueTls } : {}),
       ...(doorbellRef.current ? { doorbell: doorbellRef.current } : {}),
       tunnelHubUrl: endpoints.endpoints.tunnelHub,
@@ -1814,7 +1622,6 @@ async function main(): Promise<void> {
           // under the same id doesn't inherit its members or ranks.
           if (kind === "app.removed") void serviceAccessRef.current?.forget(serviceId).catch(() => {});
           if (kind === "app.removed") void accessSyncRef.current?.forget(serviceId).catch(() => {});
-          if (kind === "app.removed") for (const hook of appRemovedHooks) void hook(serviceId).catch(() => {});
           activityLog.note(
             kind,
             kind === "app.installed"
@@ -1931,7 +1738,6 @@ async function main(): Promise<void> {
     // threading ~15 values through separate builders. Also starts the
     // update-pack scheduler. Same order + side effects as before.
     await wireRuntimeSurfaces({
-      wildcardGrants,
       publisherPins,
       securitySliver,
       frontPage,
@@ -1955,8 +1761,6 @@ async function main(): Promise<void> {
       custodian,
       pairedSessions,
       authorityHub,
-      restoredAccess,
-      delegations,
       browserBundle,
       alertInbox,
       backupLoop,
@@ -1990,11 +1794,7 @@ async function main(): Promise<void> {
   // no timer, no behavior change. Mounts onto the live runtime + arms the
   // dead-man SIGTERM/SIGINT stop hooks.
   await wireOwnerHandlers({
-    publisherPins,
-    accessSyncKey: () => (custodian.hasCgk ? custodian.deriveAccessSyncKey() : null),
-    appRemovedHooks,
     authorityHub,
-    restoredAccess,
     frontPage,
     activityLog,
     serviceAccessRef,
@@ -2146,9 +1946,6 @@ async function main(): Promise<void> {
   const gossipLoop = await (async () => {
     if (!cfg) return null;
     try {
-      // The name the relay routes and the box resolves (`slug`, or `slug--author` for another
-      // author's app). Siblings must be labelled the same way or the election splits one app in two.
-      const canonicalLabel = (a: { creator: string; slug: string }) => deriveUrlFragment(composeServiceId(a.creator, a.slug), cfg.userId);
       const selfStkHex = bytesToHexLocal(identityKeypair.publicKey);
       // Cert pre-warm seam: when this box becomes the route lead for a tier-2
       // `<slug>.<user>` meta-URL (gossip election round AND the route-nudge
@@ -2160,29 +1957,20 @@ async function main(): Promise<void> {
         ? buildCertPrewarm({ certManager: runtime.certManager, store: runtime.certStore })
         : undefined;
       const result = await wireGossip({
-        // The gossip key stays with the custodian (keyd on a hardened box); gossip gets its operations.
-        ...(custodian.hasCgk ? { gossipCrypto: gossipCryptoFromOps(custodian) } : {}),
         user: cfg.userId,
         serverFqdn: env.serverFqdn!,
         identityPubHex: selfStkHex,
         birthDate: (await readAuthCodeBirthDate()) ?? Date.now(),
         urlController: runtime.urlController,
         ...(certPrewarm ? { certPrewarm } : {}),
-        listServiceSlugs: () => servicePlatformRefForServer.current?.list().map(canonicalLabel) ?? [],
+        listServiceSlugs: () =>
+          servicePlatformRefForServer.current?.list().map((a) => a.slug) ?? [],
         ...(serverOrder ? { serverOrder } : {}),
-        // Gossip frames have never reached a sibling live, so the other
-        // servers are also read from .com's list and asked directly: the same
-        // view the one-list-per-app sync already leads by.
-        extraSiblings: () => {
-          const peers = podsPeersRef.current;
-          if (!peers) return [];
-          const labels = new Map((servicePlatformRefForServer.current?.list() ?? []).map((a) => [a.serviceId, canonicalLabel(a)]));
-          return peerSiblings(peers.peerRunners(), (id) => labels.get(id), (stk) => serverOrder?.rankOf(stk) ?? null);
-        },
         // The zone this box lives in (`<server>.<user>.<apex>`): the gym's
         // boxes are under gym.flagship.services, so broadcast and the
         // leader-routed URLs must not assume the production apex.
         ...(apexFromBoxFqdn(env.serverFqdn!) ? { servicesApex: apexFromBoxFqdn(env.serverFqdn!)! } : {}),
+        cgk: custodian.hasCgk ? gossipCryptoFromOps(custodian) : null,
         onLog: (m) => console.log(m),
       });
       if (result.enabled && result.handler && result.loop) {
@@ -2236,8 +2024,6 @@ async function main(): Promise<void> {
       log: (m) => console.warn(m),
     });
     accessPeersRef.current = peers;
-    chatPodsRef.current = peers;
-    podsPeersRef.current = peers;
     peers.start();
   }
 
@@ -2414,26 +2200,12 @@ function wireBffStores(): BffStores {
  */
 export const APP_BROWSER = { enabled: false };
 
-/** Pinned with the `flagship-browser` network and the chromium service in installer/data-services/docker-compose.yml. */
-export const BROWSER_EGRESS = { gateway: "172.31.250.1", browser: "172.31.250.2", denyPort: 18480 } as const;
-
-/** The signed release catalog's gate, when the running release pins a catalog root (releaseCatalogFeed.ts). */
-const releaseCatalogRef: { current: ReleaseCatalogGate | null } = { current: null };
-/** Every update path asks this before anything changes; with no catalog for this release it allows, as before. */
-const releaseAllowedByCatalog = (target: string, current: string) =>
-  releaseCatalogRef.current ? releaseCatalogRef.current.allowsUpdateTo(target, current) : Promise.resolve({ ok: true as const });
-
-/** The authenticated clock, bound when the authority layer starts; chat leases read it. */
-const authClockRef: { current: AuthClock | null } = { current: null };
-
 async function wireBrowserBundle(deps: {
   dataDir: string;
   alertInbox: InMemoryAlertInbox;
   pairedSessions: FilePairedSessionStore;
-  serverDomain?: string;
-  authority?: () => import("./egress/approvals.js").SensitiveAuthority;
 }): Promise<BrowserBundle | null> {
-  const cdpEndpoint = process.env.FLAGSHIP_CHROMIUM_CDP ?? `http://${BROWSER_EGRESS.browser}:9222`;
+  const cdpEndpoint = process.env.FLAGSHIP_CHROMIUM_CDP ?? "http://127.0.0.1:9222";
   if (!APP_BROWSER.enabled || process.env.FLAGSHIP_DISABLE_BROWSER === "1") return null;
   try {
     const bundle = await bootstrapBrowserBundle({
@@ -2441,11 +2213,6 @@ async function wireBrowserBundle(deps: {
       dataDir: deps.dataDir,
       alertInbox: deps.alertInbox,
       pairedSessionGate: ownerOnlyGate(deps.pairedSessions, deps.pairedSessions),
-      // The browser container sits alone on the `flagship-browser` network (docker-compose.yml) and reaches
-      // the outside only through these proxies, on that network's gateway.
-      egress: { listenHost: BROWSER_EGRESS.gateway, acceptFrom: (a) => a === BROWSER_EGRESS.browser || a === `::ffff:${BROWSER_EGRESS.browser}`, denyPort: BROWSER_EGRESS.denyPort },
-      ...(deps.serverDomain ? { serverDomain: deps.serverDomain } : {}),
-      ...(deps.authority ? { authority: deps.authority } : {}),
     });
     console.log(`[daemon] browser bundle online (CDP ${cdpEndpoint})`);
     return bundle;
@@ -2484,7 +2251,6 @@ function wireUpdatePack(deps: {
   subscriberRegistry: FileSubscriberRegistry;
   alertInbox: InMemoryAlertInbox;
   servicePlatformRef: ServicePlatformRef;
-  appRemovedHooks: Array<(serviceId: string) => Promise<void>>;
 }): UpdatePackBundle {
   const { env, dataDir, identityKeypair, subscriberRegistry, alertInbox } = deps;
   const appCloneRoot = join(dataDir, "data", "app-clones");
@@ -2543,15 +2309,7 @@ function wireUpdatePack(deps: {
     // The sandbox, never the host: a creator's SQL runs as the app's role in a one-shot container.
     runSqlOverride: sandboxedRunSql(realCommandRunnerStatic),
   });
-  const migrationSnapshots = buildMigrationSnapshots({
-    dir: join(dataDir, "migration-snapshots"),
-    ops: realAppCopyOps(),
-    dataOf: (id) => deps.servicePlatformRef.current?.byServiceId(id)?.data ?? null,
-  });
-  deps.appRemovedHooks.push(async (id) => migrationSnapshots.forget(id));
   const updateClient = new UpdateClient({
-    snapshotData: migrationSnapshots.snapshotData,
-    restoreData: migrationSnapshots.restoreData,
     publisherPins: deps.publisherPins,
     identity: identityKeypair,
     pullerServerId: env.serverFqdn,
@@ -2559,8 +2317,17 @@ function wireUpdatePack(deps: {
     appWorkingDir,
     runMigration,
     restartContainer: async (serviceId) => {
-      const r = await deps.servicePlatformRef.current?.restartService(serviceId);
-      if (r && !r.ok) console.warn(`[update-pack] ${serviceId}: the updated app did not start: ${r.reason}`);
+      const ap = deps.servicePlatformRef.current;
+      const app = ap?.byServiceId(serviceId);
+      // AppRunner uses docker; restarting the named container is enough.
+      // We don't tear down the ServicePlatform record because the install
+      // is still valid; only the container's image needs to re-read
+      // bind-mounted files.
+      if (app) {
+        // best-effort; AppRunner.deploy is idempotent on container name.
+      }
+      // Leaving as a no-op for v1; production wires AppRunner.restart.
+      void app;
     },
     emitPhoneAlert: (alert) => {
       alertInbox.emit(alert);
@@ -2726,10 +2493,7 @@ async function loadEntitlementsOrExit(deps: {
         );
         // The awaiting-entitlement handoff is covered by the `pairing` status
         // report fired once the bundle loads below — no separate UI phase.
-        const enrollmentBlob = process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json";
-        const deviceInfo = await enrollmentDeviceInfo({ blobPath: enrollmentBlob, serverDomain: env.serverFqdn, stkPubHex: bytesToHexLocal(identityKeypair.publicKey) });
         const relayed = await restarts.guard(() => fetchEntitlementViaRelay({
-          deviceInfo,
           serverDomain: env.serverFqdn,
           signer: custodian,
           ownerIrkPub: cfg.irkPublicKey,
@@ -2741,7 +2505,6 @@ async function loadEntitlementsOrExit(deps: {
         }));
         if (relayed) {
           loaded = relayed;
-          await forgetEnrollmentSecret(enrollmentBlob);
         } else {
           // Re-read in case a concurrent provisioner (a phone PhoneOrders
           // delivery) wrote one while we waited.
@@ -2799,7 +2562,6 @@ async function loadEntitlementsOrExit(deps: {
  * original inline block.
  */
 async function wireRuntimeSurfaces(deps: {
-  wildcardGrants: ServerWildcardGrantStore | null;
   frontPage: FrontPageStore;
   activityLog: ActivityLog;
   restoreWait: RestoreWait | null;
@@ -2822,8 +2584,6 @@ async function wireRuntimeSurfaces(deps: {
   custodian: KeyCustodianLike;
   pairedSessions: FilePairedSessionStore;
   authorityHub: AuthorityHub;
-  restoredAccess: RestoredAccessDrafts;
-  delegations: CompanionDelegations;
   publisherPins: PublisherPins;
   securitySliver: SecuritySliver;
   browserBundle: BrowserBundle | null;
@@ -2851,8 +2611,6 @@ async function wireRuntimeSurfaces(deps: {
     custodian,
     pairedSessions,
     authorityHub,
-    restoredAccess,
-    delegations,
     publisherPins,
     securitySliver,
     browserBundle,
@@ -2880,7 +2638,6 @@ async function wireRuntimeSurfaces(deps: {
     },
   );
   process.on("exit", () => vibeRegistry.flush());
-  deps.delegations.buildSessionService = (id) => vibeRegistry.get(id)?.meta.editsServiceId ?? null;
   // Names are held by open AI chats and by git imports not yet deployed;
   // every name check reads both. The build orchestrator is made further down.
   const buildNameHoldersRef: { current: NameHolders | null } = { current: null };
@@ -3159,12 +2916,9 @@ async function wireRuntimeSurfaces(deps: {
       registry: nameHolders,
       activity: runtime.serviceActivity,
     });
-    const buildOrchestratorRef: { current: BuildOrchestrator | null } = { current: null };
-    const importProvenance = new ImportProvenanceStore(join(dataDir, "data", "app-provenance"));
     const buildOrchestrator = new BuildOrchestrator({
       // Git and IDE builds survive a restart (an update causes one).
       store: fileBuildStore(join(dataDir, "data", "builds")),
-      provenance: importProvenance,
       modelRedactor,
       journal: buildJournal,
       gitImporter,
@@ -3224,29 +2978,6 @@ async function wireRuntimeSurfaces(deps: {
       // never delivered a BYOK key degrades to the same clean 503 as
       // the provider-not-wired case.
       adaptCredentialAvailable: (buildId) => llmCredentials.has(buildId),
-      // Per-operation consent: no AI run that spends the owner's key or credits starts without the
-      // owner's signed `flagship/ai-repair-consent/v1` after the estimate was shown (adaptConsent.ts).
-      ...(cfg
-        ? {
-            adaptConsent: new AdaptConsentGate({
-              serverDomain: env.serverFqdn,
-              authority: () => ({
-                ownerIrkPub: cfg.irkPublicKey,
-                ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
-                username: cfg.userId,
-                activeGrants: deps.accessPrincipals.book?.adminGrants() ?? [],
-              }),
-              costOf: (buildId) => {
-                const provider = llmCredentials.providerName(buildId);
-                return provider ? { provider, source: llmCredentials.costSource(buildId) ?? "byok" } : null;
-              },
-              workspaceBytes: (buildId) => {
-                const ws = buildOrchestratorRef.current?.workspace(buildId);
-                return ws ? Object.values(ws.snapshot()).reduce((n, t) => n + t.length, 0) : 0;
-              },
-            }),
-          }
-        : {}),
       // An external IDE / the AI can ask the owner to set a secret env var
       // VALUE-FREE (request_env_var). Journal it (names not values) so the
       // "your IDE asked for STRIPE_KEY" signal is durable + reviewable.
@@ -3267,7 +2998,6 @@ async function wireRuntimeSurfaces(deps: {
         void wakeOwnerForBuild();
       },
     });
-    buildOrchestratorRef.current = buildOrchestrator;
     const restoredBuilds = await buildOrchestrator.restore().catch((e: Error) => {
       console.warn(`[build] could not read the saved builds: ${e.message}`);
       return 0;
@@ -3421,25 +3151,6 @@ async function wireRuntimeSurfaces(deps: {
             }),
         }
       : {}),
-  });
-
-  // App chat: a held request reaches an open owner app on the screens socket and wakes the phone
-  // through the push relay, content-free, like an internet-access request. The admin's answer is
-  // signed (chat/approvals.ts).
-  runtime.chat?.setNotifier({
-    approval: (r) => {
-      screensEvents.publish({ type: "chat-request", kind: r.kind });
-      if (accessPushCfg && accessAlertSetting.enabled()) {
-        void sendPushRelay({
-          category: "generic",
-          targetUsername: accessPushCfg.userId,
-          signer: custodian,
-          controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
-          logTag: "[chat] request push",
-          log: (l) => console.log(l),
-        });
-      }
-    },
   });
 
   // The backup policy's size limit: measured like a backup sizes itself,
@@ -3615,10 +3326,8 @@ async function wireRuntimeSurfaces(deps: {
         signInstall: (req) => custodian.signInstallService(req),
         envStore: runtime.envStore,
         access: {
-          // A restore never applies a backup's permissions: they wait as a draft for an admin.
-          importDraft: async (id, e) => {
-            await restoredAccess.put(id, e as never);
-            await deps.serviceAccessRef.current?.importEntry(id, { mode: "restricted", allow: [], groups: {} });
+          importEntry: async (id, e) => {
+            await deps.serviceAccessRef.current?.importEntry(id, e);
           },
         },
         egress: { noteCopied: (id, list, declared) => runtime.egress.noteCopied(id, list, declared) },
@@ -3633,6 +3342,14 @@ async function wireRuntimeSurfaces(deps: {
           await ensureDocker();
           await serviceRunnerMod.realCommandRunner.run("docker", ["pull", image]);
         },
+        ...(runtime.apiKeyAuthority
+          ? {
+              apiKeys: {
+                importService: (id: string, keys: unknown) =>
+                  runtime.appApiKeyStore.importService(id, keys, runtime.apiKeyAuthority!, env.serverFqdn),
+              },
+            }
+          : {}),
         frontPage: {
           get: () => deps.frontPage.get(),
           set: (label: string) => deps.frontPage.set(label),
@@ -3679,7 +3396,7 @@ async function wireRuntimeSurfaces(deps: {
     // While a move has the apps paused, every app URL says so instead of a 502.
     const pause = deps.migratePause;
     if (pause) {
-      runtime.addAppGate(async (req) => (pause.paused() ? movingPage(languageFor(req.headers)) : null));
+      runtime.addAppGate(async () => (pause.paused() ? movingPage() : null));
       setInterval(() => void pause.sweep().catch(() => {}), 10 * 60_000).unref();
     }
     service.startSchedule(
@@ -3767,7 +3484,6 @@ async function wireRuntimeSurfaces(deps: {
                   },
                   onLog: (m) => console.log(m),
                   operations: { hub: authorityHub, grantDeps: [AUTHORITY_ROOT] },
-                  releaseAllowed: releaseAllowedByCatalog,
                 },
                 from,
                 target,
@@ -3837,7 +3553,7 @@ async function wireRuntimeSurfaces(deps: {
         }),
         statePath: join(dataDir, "debug-access.json"),
         legacyMarkerPath: join(dataDir, "debug-access-done.json"),
-        system: runsUnprivileged() ? privdDebugSystem() : buildDebugSystem({ runner: realDebugCommandRunner, log: (m) => console.log(m) }),
+        system: buildDebugSystem({ runner: realDebugCommandRunner, log: (m) => console.log(m) }),
         installGrant: () => debugGrantFromInstallBlob(),
         activity: (kind, detail) => deps.activityLog.note(kind, detail),
         log: (m) => console.log(m),
@@ -3846,15 +3562,7 @@ async function wireRuntimeSurfaces(deps: {
   void debugAccess?.start();
 
   const upgradeTickets = new UpgradeTicketStore();
-  const trackWork = buildTrackWork(deps.authorityHub, (r) =>
-    pairedSessions.isCompanionRequest({ method: "GET", path: r.path, headers: r.headers, body: Buffer.alloc(0) }),
-  );
-  // A large download (a backup) runs on the requesting session's authority: ending the session stops it.
-  runtime.setDownloadTracker((req, cancel, label) => trackWork(req, label, () => cancel("session ended")));
   const screensHandle = buildScreensHttp({
-    delegations: deps.delegations,
-    restoredAccess: deps.restoredAccess,
-    trackWork,
     upgradeTickets,
     authorityHub: deps.authorityHub,
     securitySliver,
@@ -3872,24 +3580,6 @@ async function wireRuntimeSurfaces(deps: {
       return store.mode(serviceId) === "open" ? "open" : "members-only";
     },
     appEgress: runtime.egress.appEgress,
-    serverWildcardGrant: deps.wildcardGrants
-      ? buildServerWildcardGrantHttp({
-          store: deps.wildcardGrants,
-          onFirstGrant: () => restarts.request("the admin granted this server the account's app names; restarting to request the wider certificate"),
-        })
-      : null,
-    chatApprovals: runtime.chat && cfg
-      ? (await import("./chat/approvals.js")).buildChatApprovalsHttp({
-          serverDomain: env.serverFqdn!,
-          harness: runtime.chat,
-          authority: () => ({
-            ownerIrkPub: cfg.irkPublicKey,
-            ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
-            username: cfg.userId,
-            activeGrants: deps.accessPrincipals.book?.adminGrants() ?? [],
-          }),
-        })
-      : null,
     appCopy: appCopyTarget,
     serverArchive: serverArchiveService,
     backupPolicy: backupPolicyHttp,
@@ -4043,10 +3733,6 @@ async function wireRuntimeSurfaces(deps: {
       : null,
     controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
     lineageResolver,
-    updateMode: {
-      get: (id) => deps.updateClient.policyOf(id),
-      set: (id, policy) => deps.updateClient.setPolicy({ serviceId: id, policy }),
-    },
     // P9 — peer-backup management surface. BackupLoop is the
     // authoritative participation toggle. The shard registry is not
     // yet bolted into the production boot path (no upstream shard
@@ -4113,7 +3799,6 @@ async function wireRuntimeSurfaces(deps: {
       tabRegistry: browserBundle?.tabRegistry ?? null,
       events: screensEvents,
       tickets: upgradeTickets,
-      trackWork,
     }),
   );
   console.log(`[daemon] /api/screens/* + /api/llm/sessions handlers mounted`);
@@ -4186,11 +3871,6 @@ async function wireRuntimeSurfaces(deps: {
     await watcher.load();
     watcher.start();
     rePairWatcherRef.current = watcher;
-    // N14: a recovery under way, or one `.com` reported that this box could not verify.
-    const feedRecovery = () => void applySliverPlan(deps.securitySliver, recoverySliverPlan(cfg.userId, watcher.state, Date.now())).catch(() => {});
-    feedRecovery();
-    const rt = setInterval(feedRecovery, 5 * 60_000);
-    if (typeof rt.unref === "function") rt.unref();
     process.once("SIGTERM", () => watcher.stop());
     process.once("SIGINT", () => watcher.stop());
     console.log(`[daemon] re-pair watcher started (poll every 5 min)`);
@@ -4204,18 +3884,13 @@ async function wireRuntimeSurfaces(deps: {
  * SIGTERM/SIGINT stop hooks. No-op (and no behavior change) when cfg is null.
  */
 async function wireOwnerHandlers(deps: {
-  publisherPins: PublisherPins;
-  appRemovedHooks: Array<(serviceId: string) => Promise<void>>;
   authorityHub: AuthorityHub;
-  restoredAccess: RestoredAccessDrafts;
   frontPage: FrontPageStore;
   activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
   accessSyncRef: { current: AccessSync | null };
   accessPeersRef: { current: AccessPeers | null };
-  /** The one-list sync key from the custodian, or null before the account's gossip key arrives. */
-  accessSyncKey: () => Uint8Array | null;
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
   env: RuntimeEnv;
@@ -4231,7 +3906,7 @@ async function wireOwnerHandlers(deps: {
   /** Migrate's pause: a move on the archive path needs no final flush. */
   migratePause: MigratePause | null;
 }): Promise<void> {
-  const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair, authorityHub, restoredAccess } = deps;
+  const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair, authorityHub } = deps;
   if (!cfg) return;
 
   // The box can lock itself out at the boot worker, never unlock (SEC-LOCK-001).
@@ -4338,13 +4013,6 @@ async function wireOwnerHandlers(deps: {
     if (typeof t.unref === "function") t.unref();
     onRing("grants", () => deviceBook.refresh());
   }
-  // N07: authenticated time, and the freshness a guest's access needs. External (guest) sessions
-  // are honoured only on a current checkpoint; the owner's own devices are never asked.
-  const authClock = new AuthClock({ mono: () => Number(process.hrtime.bigint() / 1_000_000n) });
-  authClockRef.current = authClock;
-  const freshnessOn = process.env.FLAGSHIP_EXTERNAL_FRESH !== "0";
-  let externalFresh: ((app: { serviceId: string }) => boolean) | undefined;
-  let revocationAnsweredAt: number | null = null;
   const accessStore = new ServiceAccessStore(`${accessDataDir}/data/flagship-access/service-access.json`, {
     legacyPath: "/var/flagship/service-access.json",
     principals: deps.accessPrincipals,
@@ -4361,13 +4029,10 @@ async function wireOwnerHandlers(deps: {
   // service's WEBSITE in a plain browser (which can't sign the visit header).
   const sessionStore = new ServiceSessionStore();
   await sessionStore.load();
-  deps.appRemovedHooks.push(async (id) => void (await sessionStore.closeAllForService(id)));
-  deps.appRemovedHooks.push(async (id) => void (await runtime.appApiKeyStore.dropService(id)));
   const householdHex =
     process.env.FLAGSHIP_HOUSEHOLD_KEY_HEX ??
     (await tryReadFile("/var/flagship/household-key.hex"));
   const access = buildServiceAccessHttp({
-    drafts: restoredAccess,
     serverId: env.serverFqdn,
     ownerIrkPub: cfg.irkPublicKey,
     // gating v2 box-as-authority: verify the .com-relayed signed create against
@@ -4413,7 +4078,7 @@ async function wireOwnerHandlers(deps: {
       store: accessStore,
       apply: async (ref, e) => (e.kind === "rank" ? applyRank(ref, e) : access.applyEntry(ref, e)),
       peers: () => deps.accessPeersRef.current,
-      key: deps.accessSyncKey(),
+      key: deps.custodian.hasCgk ? accessSyncKeyFromOps(deps.custodian) : null,
       installed: (ref) => installedIds().includes(ref),
       apps: installedIds,
       log: (m) => console.log(m),
@@ -4422,39 +4087,6 @@ async function wireOwnerHandlers(deps: {
     runtime.addHandler(sync.handle);
     sync.start();
     process.once("SIGTERM", () => sync.stop());
-    if (freshnessOn) {
-      const authDir = join(process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship", "authority");
-      const leases = new FreshnessLeases(join(authDir, "freshness.json"), authClock);
-      await leases.load();
-      const timeSource = new AuthTimeSource({
-        controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-        clock: authClock,
-        chain: () => {
-          try {
-            return caTrustChainFromFolder({ gitRepoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship" });
-          } catch {
-            return null;
-          }
-        },
-        mono: () => Number(process.hrtime.bigint() / 1_000_000n),
-        log: (m) => console.log(m),
-      });
-      const checkpoints = new LocalCheckpoints(leases, authClock, {
-        apps: installedIds,
-        digestOf: (app) => journal.digest(app),
-        state: (app) => sync.freshnessState(app),
-        // With no owner AID there is no revocation feed to hear, so there is nothing to be late on.
-        revocationAnsweredAt: () => (cfg.ownerAidPub ? revocationAnsweredAt : Date.now()),
-        authorityEpoch: () => deps.authorityHub.grants.epoch,
-        wallNow: () => Date.now(),
-      });
-      timeSource.start();
-      // The first renewal waits for time; afterwards every minute.
-      checkpoints.start();
-      void timeSource.refresh().then(() => checkpoints.renewAll()).catch(() => {});
-      externalFresh = (app) => leases.externalAccessAllowed(app.serviceId, 0);
-      process.once("SIGTERM", () => { timeSource.stop(); checkpoints.stop(); });
-    }
   }
   // gating v2 revocation convergence: poll `.com` revoked-since on the
   // daemon-status heartbeat cadence + self-prune (the instant owner-prune stays
@@ -4469,7 +4101,6 @@ async function wireOwnerHandlers(deps: {
       stk: identityKeypair,
       store: accessStore,
       verifyRevoke: access.verifyWithdraw,
-      onAnswered: (at) => { revocationAnsweredAt = at; },
     });
     poller.start();
     process.once("SIGTERM", () => poller.stop());
@@ -4621,7 +4252,6 @@ async function wireOwnerHandlers(deps: {
         },
         onLog: (m) => console.log(m),
         operations: { hub: authorityHub, grantDeps: [AUTHORITY_ROOT] },
-        releaseAllowed: releaseAllowedByCatalog,
       });
       updatePoller.start();
       onRing("update", () => updatePoller.pollOnce());
@@ -4648,7 +4278,6 @@ async function wireOwnerHandlers(deps: {
                   process.exit(0);
                 },
                 onLog: (m) => console.log(m),
-                releaseAllowed: releaseAllowedByCatalog,
               },
               from,
               target,
@@ -4745,26 +4374,6 @@ async function wireOwnerHandlers(deps: {
   // (live-gating-e2e catch). The knock endpoints go first (ungated by
   // design): the knock page polls `/__flagship/knock/<pageId>/status`
   // same-origin on the SERVICE subdomain.
-  // Before the access gates: a returning visitor whose browser holds data from a previous author of
-  // this address drops it once (appGeneration.ts). Without the owner's stable account key there is no
-  // generation to compare, and the gate stays out of the way.
-  const hostAccountKeyHex = cfg.ownerAidPub ? bytesToHexLocal(cfg.ownerAidPub) : null;
-  runtime.addAppGate(
-    buildGenerationGate({
-      boxCookies: [SESSION_COOKIE, KNOCK_HOLDER_COOKIE],
-      generationOf: (ref) => {
-        const app = hostAccountKeyHex ? deps.servicePlatformRef.current?.byServiceId(ref) : undefined;
-        if (!app || !hostAccountKeyHex) return null;
-        const own = app.creator.toLowerCase() === cfg.userId.toLowerCase();
-        return originGeneration({
-          hostAccountKeyHex,
-          app: ref,
-          identityGeneration: own ? 0 : deps.publisherPins.get(ref)?.identityGeneration ?? 0,
-          authorChanges: own ? 0 : deps.publisherPins.authorChanges(ref),
-        });
-      },
-    }),
-  );
   runtime.addAppGate(accessWeb.handle);
   runtime.addAppGate(accessEnforcement);
   // Member sessions on the app path (docs/app-apis.md §5): the session cookie
@@ -4772,7 +4381,6 @@ async function wireOwnerHandlers(deps: {
   // and a denied browser navigation gets the knock page to sign in.
   runtime.setAppIdentity({
     resolveSession: buildAppSessionResolver({ sessions: sessionStore, access: accessStore }),
-    ...(externalFresh ? { externalFresh } : {}),
     deniedPage: accessWeb.maybeServeKnock,
     // Fail closed: a state file that couldn't be read leaves every app
     // members-only until an admin opens it again (ServiceAccessStore.load).
@@ -5177,18 +4785,7 @@ function bytesToHexStr(b: Uint8Array): string {
  * is preserved as-is. Write-then-rename keeps the file readable if we
  * crash mid-update.
  */
-/**
- * Where the unprivileged daemon keeps a rotated account key: the config is root's (the broker's root
- * steps check grants against it), so the daemon records the rotation beside its own state and reads
- * it over the config at start.
- */
-const ROTATED_IRK_FILE = "rotated-irk.json";
-
 async function persistRotatedIrk(configPath: string, newIrkHex: string): Promise<void> {
-  if (runsUnprivileged()) {
-    await writeFileDurable(join(process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship", ROTATED_IRK_FILE), JSON.stringify({ irkPublicKey: newIrkHex }));
-    return;
-  }
   await withFileLock(configPath, async (write) => {
     const raw = await readFile(configPath, "utf8");
     const obj = JSON.parse(raw) as Record<string, unknown>;

@@ -26,6 +26,12 @@ pub fn hkdf32(ikm: &[u8], salt: &[u8], info: &[u8]) -> Key32 {
     out
 }
 
+/// HMAC-SHA256: HKDF-Extract is HMAC(salt, ikm), so the key goes in as the salt.
+pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
+    let (prk, _) = Hkdf::<Sha256>::extract(Some(key), msg);
+    prk.into()
+}
+
 pub fn random<const N: usize>() -> Result<[u8; N], CryptoError> {
     let mut b = [0u8; N];
     getrandom::fill(&mut b).map_err(|_| CryptoError)?;

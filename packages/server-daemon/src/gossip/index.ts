@@ -14,7 +14,7 @@ import { readFile } from "node:fs/promises";
 import { birthDateFromAuthCode, type SignedServerOrder } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { resolveCgk } from "./cgk.js";
-import { gossipCryptoFromKey, type GossipCrypto } from "./gossipCrypto.js";
+import type { GossipCrypto } from "./gossipCrypto.js";
 import { buildGossipIngestHandler } from "./gossipHttp.js";
 import {
   ANNOUNCE_INTERVAL_MS,
@@ -29,7 +29,7 @@ import {
   urlControllerRouteClaimer,
 } from "./routeClaimer.js";
 import { buildRouteNudgeHandler, type CertPrewarm } from "./routeNudge.js";
-import { mergeSiblings, SiblingView, type ViewMember } from "./siblingView.js";
+import { SiblingView } from "./siblingView.js";
 
 /** The FULL leadership map a `/api/leads` reader serves. */
 export interface LeadsSnapshot {
@@ -111,15 +111,12 @@ export interface WireGossipDeps {
    * Optional; omitted on certless paths.
    */
   certPrewarm?: CertPrewarm;
-  /** The gossip key's operations from the key custodian (keyd holds the key; the daemon never sees it). */
-  gossipCrypto?: GossipCrypto;
   /**
-   * Servers learned from `.com`'s server list and a direct ask (see
-   * GossipLoopDeps.extraSiblings). Re-read each round.
+   * The gossip key's operations (the custodian's, so under keyd the CGK stays there); null
+   * means no CGK, gossip off. Left out, the key is read from env/disk (tests, developer runs).
    */
-  extraSiblings?: () => ViewMember[];
+  cgk?: Uint8Array | GossipCrypto | null;
   /** Test seams. */
-  cgk?: Uint8Array;
   intervalMs?: number;
   livenessWindowMs?: number;
   fetchImpl?: typeof fetch;
@@ -159,9 +156,8 @@ export async function readAuthCodeBirthDate(): Promise<number | null> {
 
 export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult> {
   const log = deps.onLog ?? ((m: string) => console.log(m));
-  const fileCgk = deps.gossipCrypto || deps.cgk ? null : await resolveCgk();
-  const crypto = deps.gossipCrypto ?? (deps.cgk ? gossipCryptoFromKey(deps.cgk) : fileCgk ? gossipCryptoFromKey(fileCgk) : null);
-  if (!crypto) {
+  const cgk = deps.cgk === undefined ? await resolveCgk() : deps.cgk;
+  if (!cgk) {
     log(
       "[gossip] no CGK provisioned — per-service leadership gossip DISABLED. " +
         "(The phone embeds cgkHex into the recipe in a later provisioning step.)",
@@ -180,7 +176,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
   const view = new SiblingView(deps.livenessWindowMs ?? LIVENESS_WINDOW_MS);
 
   const handler = buildGossipIngestHandler({
-    crypto,
+    cgk,
     view,
     user: deps.user,
     selfId: deps.serverFqdn,
@@ -212,14 +208,13 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
   });
 
   const loop = buildGossipLoop({
-    crypto,
+    cgk,
     view,
     claimer,
     fqdnForService,
     ...(deps.certPrewarm ? { certPrewarm: deps.certPrewarm } : {}),
     readSelf,
     rankOf,
-    ...(deps.extraSiblings ? { extraSiblings: deps.extraSiblings } : {}),
     broadcastUrl,
     intervalMs: deps.intervalMs ?? ANNOUNCE_INTERVAL_MS,
     livenessWindowMs: deps.livenessWindowMs ?? LIVENESS_WINDOW_MS,
@@ -234,12 +229,9 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
   const routeNudgeHandler = buildRouteNudgeHandler({
     user: deps.user,
     serverFqdn: deps.serverFqdn,
-    birthDate: deps.extraSiblings ? 0 : deps.birthDate,
+    birthDate: deps.birthDate,
     listServiceSlugs: deps.listServiceSlugs,
-    liveSiblings: () => {
-      const gossiped = view.liveMembers((deps.now ?? (() => Date.now()))(), rankOf);
-      return deps.extraSiblings ? mergeSiblings(gossiped, deps.extraSiblings()) : gossiped;
-    },
+    liveSiblings: () => view.liveMembers((deps.now ?? (() => Date.now()))(), rankOf),
     selfOrderRank: () => rankOf(deps.identityPubHex),
     claimer,
     fqdnForService,
@@ -305,5 +297,5 @@ export {
   type RouteNudgeDeps,
 } from "./routeNudge.js";
 export { resolveCgk } from "./cgk.js";
+export { gossipCryptoFromCgk, gossipCryptoFromOps, type GossipCrypto } from "./gossipCrypto.js";
 export { buildLeadsHttpHandler, type LeadsHttpDeps } from "./leadsHttp.js";
-export { gossipCryptoFromOps, type GossipCrypto } from "./gossipCrypto.js";

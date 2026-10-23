@@ -51,18 +51,30 @@ export interface AccessPeers {
   runners(serviceRef: string): string[];
 }
 
-/** The box-to-box key, from the account's cloud gossip key. */
-export function deriveAccessSyncKey(cgk: Uint8Array): Uint8Array {
-  return hkdf(sha256, cgk, new Uint8Array(0), new TextEncoder().encode(KEY_INFO), 32);
+/** The box-to-box MAC (HMAC-SHA256 under a key derived from the account's cloud gossip key). */
+export interface AccessSyncKey {
+  /** The MAC of `canonical` (which starts with ACCESS_SYNC_TAG), lowercase hex. */
+  mac(canonical: Uint8Array): string;
+}
+
+/** The raw-key form, for a box without flagship-keyd and for tests. */
+export function deriveAccessSyncKey(cgk: Uint8Array): AccessSyncKey {
+  const key = hkdf(sha256, cgk, new Uint8Array(0), new TextEncoder().encode(KEY_INFO), 32);
+  return { mac: (canonical) => createHmac("sha256", key).update(canonical).digest("hex") };
+}
+
+/** Through the custodian, so under keyd the gossip key never enters this process. */
+export function accessSyncKeyFromOps(ops: { accessSyncMac(canonical: Uint8Array): string }): AccessSyncKey {
+  return { mac: (canonical) => ops.accessSyncMac(canonical) };
 }
 
 export function accessSyncMac(
-  key: Uint8Array,
+  key: AccessSyncKey,
   f: { op: "push" | "pull"; from: string; to: string; serviceRef: string; issuedAt: number; body: string },
 ): string {
   const bodyHash = createHash("sha256").update(f.body).digest("hex");
   const canonical = [ACCESS_SYNC_TAG, f.op, f.from.toLowerCase(), f.to.toLowerCase(), f.serviceRef, String(f.issuedAt), bodyHash].join("|");
-  return createHmac("sha256", key).update(canonical).digest("hex");
+  return key.mac(new TextEncoder().encode(canonical));
 }
 
 export interface AccessSyncOptions {
@@ -74,7 +86,7 @@ export interface AccessSyncOptions {
   /** Late-bound: null until gossip is up (then nothing is handed over). */
   peers: () => AccessPeers | null;
   /** The box-to-box key; null disables handing over (a box with no cloud gossip key). */
-  key: Uint8Array | null;
+  key: AccessSyncKey | null;
   installed: (serviceRef: string) => boolean;
   /** Apps installed here (catch-up and the periodic compare walk them). */
   apps: () => string[];

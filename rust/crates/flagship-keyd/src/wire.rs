@@ -25,6 +25,8 @@ pub const OPS: &[&str] = &[
     "cgk.seal",
     "cgk.open",
     "cgk.deriveAppCopyEnvKey",
+    "cgk.gossipMac",
+    "cgk.accessSyncMac",
     "tls.createKey",
     "tls.csr",
     "tls.install",

@@ -30,6 +30,8 @@ export const OPS = [
   "cgk.deriveAppCopyEnvKey",
   "cgk.mac",
   "cgk.deriveAccessSyncKey",
+  "cgk.gossipMac",
+  "cgk.accessSyncMac",
   "tls.createKey",
   "tls.csr",
   "tls.install",
