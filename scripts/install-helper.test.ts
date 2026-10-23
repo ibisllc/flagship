@@ -11,6 +11,7 @@ import {
   verifyRootEntitlement,
   verifyServerRegister,
   verifyServiceEntitlement,
+  verifiedBootKey,
   type AuthCode,
   type ServerRegisterRequest,
 } from "@flagship/protocol";
@@ -39,6 +40,24 @@ function hexToBytes(hex: string): Uint8Array {
   for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
   return out;
 }
+
+describe("install-helper boot key", () => {
+  it("gen-boot-key writes a PEM whose key matches the pub file, and the STK binds it", () => {
+    const pem = join(dir, "boot.pem");
+    const pubPath = join(dir, "boot.pub");
+    run(["gen-boot-key", "--out-pem", pem, "--out-pub", pubPath]);
+    const pubHex = readFileSync(pubPath, "utf8").trim();
+    const der = Buffer.from(readFileSync(pem, "utf8").replace(/-----[^-]+-----|\s/g, ""), "base64");
+    expect(der.length).toBe(48);
+    expect(Buffer.from(ed.getPublicKey(der.subarray(16))).toString("hex")).toBe(pubHex);
+
+    const stk = "0b".repeat(32);
+    const out = JSON.parse(
+      run(["sign-boot-key-binding", "--priv-hex", stk, "--server-domain", "home.alice.flagship.services", "--boot-key-pub", pubHex, "--issued-at", "1760000000000"]).stdout,
+    );
+    expect(verifiedBootKey(out, { serverDomain: "home.alice.flagship.services", stkPubHex: Buffer.from(ed.getPublicKey(hexToBytes(stk))).toString("hex") })).toBe(pubHex);
+  });
+});
 
 describe("install-helper", () => {
   it("gen-identity: writes a priv+pub pair where pub == ed25519.getPublicKey(priv)", () => {

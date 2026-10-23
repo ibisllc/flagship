@@ -22,6 +22,8 @@
  * the configurable apex.
  */
 
+import { verifiedBootKey } from "@flagship/protocol";
+
 export interface DirectoryClient {
   /**
    * Returns the directory-bound box STK pubkey (hex) for `serverDomain`,
@@ -70,6 +72,14 @@ export interface DirectoryClient {
    * Optional: a directory without shares never authorizes role "share".
    */
   shareUnlockForMember?(serverDomain: string, memberPubHex: string): Promise<{ sealedKeyHex: string } | null>;
+  /**
+   * The boot key (hex) bound to `serverDomain` by a binding that verifies under
+   * the server's CURRENT STK (packages/protocol/src/bootKey.ts), or null. The
+   * key a box keeps on /boot signs the pre-unlock requests and receives the
+   * replies; the STK itself stays inside the encrypted root. Optional: a
+   * directory without it accepts only STK signatures from boxes.
+   */
+  boxBootKeyForDomain?(serverDomain: string): Promise<string | null>;
 }
 
 export interface HttpDirectoryClientOpts {
@@ -228,5 +238,23 @@ export class HttpDirectoryClient implements DirectoryClient {
 
   async usernameForDomain(serverDomain: string): Promise<string | null> {
     return usernameFromServerDomain(serverDomain, this.apex);
+  }
+
+  async boxBootKeyForDomain(serverDomain: string): Promise<string | null> {
+    const stk = await this.boxStkForDomain(serverDomain);
+    if (stk === null) return null;
+    const res = await this.fetchImpl(
+      `${this.base}/api/server/${encodeURIComponent(serverDomain.toLowerCase())}/boot-key`,
+      NO_STORE_INIT,
+    );
+    if (!res.ok) return null;
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      return null;
+    }
+    // Checked here against the STK we just resolved, not taken on the identity plane's word.
+    return verifiedBootKey(body, { serverDomain, stkPubHex: stk });
   }
 }

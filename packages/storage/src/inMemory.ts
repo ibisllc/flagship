@@ -1,5 +1,6 @@
 import { InMemoryServerShareStorage } from "./serverShares.js";
 import { InMemoryServerOrderStorage } from "./serverOrders.js";
+import { InMemoryServerBootKeyStorage } from "./serverBootKeys.js";
 import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
 import type {
   SchemaVersionRecord,
@@ -2281,6 +2282,7 @@ export class InMemoryStorage implements Storage {
   peerBackupManifests = new InMemoryPeerBackupManifestStorage();
   serverShares = new InMemoryServerShareStorage();
   serverOrders = new InMemoryServerOrderStorage();
+  serverBootKeys = new InMemoryServerBootKeyStorage();
   demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
     this.usernames,
     this.deviceIdentities,
