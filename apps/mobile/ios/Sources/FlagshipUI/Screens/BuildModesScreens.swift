@@ -113,8 +113,8 @@ public struct BuildSourceChooserScreen: View {
 
                     BuildSourceTile(
                         icon: "bag",
-                        title: "Get from the marketplace",
-                        subtitle: "Install something already built and reviewed.",
+                        title: String(localized: "Get from the marketplace"),
+                        subtitle: String(localized: "Install something already built and reviewed."),
                         action: onMarketplace
                     )
                     .accessibilityIdentifier("build-src-market")

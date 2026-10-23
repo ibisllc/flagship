@@ -782,7 +782,7 @@ struct MarketplaceContainer: View {
                     }
                 } else if let vm {
                     @Bindable var bindable = vm
-                    FSField(value: $bindable.searchQuery, label: "", placeholder: "Search marketplace")
+                    FSField(value: $bindable.searchQuery, label: "", placeholder: String(localized: "Search marketplace"))
                     switch vm.state {
                     case .idle, .loading:
                         VStack { ForEach(0..<3) { _ in ServerCardSkeleton() } }
@@ -818,10 +818,10 @@ struct MarketplaceContainer: View {
                 Text("by \(listing.creator)").font(FS.font.caption()).foregroundColor(c.textMuted)
                 Text(listing.summary).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 HStack(spacing: FS.space.s2) {
-                    FSPill("\(listing.installCount) deploys", kind: listing.installCount > 0 ? .online : .idle)
+                    FSPill(String(localized: "\(listing.installCount) deploys"), kind: listing.installCount > 0 ? .online : .idle)
                     ScanGradePill(grade: listing.scanGrade)
-                    if listing.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
-                    if listing.alreadyInstalled { FSPill("Deployed", kind: .idle) }
+                    if listing.requiresLlmKey { FSPill(String(localized: "Needs LLM key"), kind: .provisioning) }
+                    if listing.alreadyInstalled { FSPill(String(localized: "Deployed"), kind: .idle) }
                 }
             }
         }
@@ -871,12 +871,12 @@ struct MarketplaceDetailContainer: View {
                     Text("by \(l.creator)").foregroundColor(c.textMuted)
                     FSCard { Text(l.summary).foregroundColor(c.text) }
                     HStack {
-                        FSPill("\(l.installCount) deploys", kind: .online)
+                        FSPill(String(localized: "\(l.installCount) deploys"), kind: .online)
                         ScanGradePill(grade: l.scanGrade)
-                        if l.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
+                        if l.requiresLlmKey { FSPill(String(localized: "Needs LLM key"), kind: .provisioning) }
                     }
                     installControls(listing: l, c: c)
-                    FSGhostButton("View source", block: true) {}
+                    FSGhostButton(String(localized: "View source"), block: true) {}
                 } else {
                     ServerCardSkeleton()
                 }
@@ -919,7 +919,7 @@ struct MarketplaceDetailContainer: View {
         if listing?.scanGateBucket.blocksInstall == true {
             return "⚠️ Security warning — \(creator)/\(slug)"
         }
-        return "Install \(creator)/\(slug)?"
+        return String(localized: "Install \(creator)/\(slug)?")
     }
 
     /// Confirm-dialog body — escalates for a failed scan, cautions for an
@@ -927,11 +927,11 @@ struct MarketplaceDetailContainer: View {
     private var confirmMessage: String {
         switch listing?.scanGateBucket {
         case .some(let b) where b.blocksInstall:
-            return "This app FAILED the marketplace security scan (grade F). Installing it could put your box at risk. Only continue if you fully trust this creator."
+            return String(localized: "This app FAILED the marketplace security scan (grade F). Installing it could put your box at risk. Only continue if you fully trust this creator.")
         case .some(let b) where b.installCaution:
-            return "This app hasn't been security-scanned yet. The signed envelope is still verified against your IRK, but its code hasn't been graded — install with caution."
+            return String(localized: "This app hasn't been security-scanned yet. The signed envelope is still verified against your IRK, but its code hasn't been graded — install with caution.")
         default:
-            return "The signed app envelope is verified against your IRK before the daemon starts the container."
+            return String(localized: "The signed app envelope is verified against your IRK before the daemon starts the container.")
         }
     }
 
@@ -951,7 +951,7 @@ struct MarketplaceDetailContainer: View {
         case .idle:
             scanGateNotice(for: l, c: c)
             FSPrimaryButton(
-                l.alreadyInstalled ? "Already installed" : "Deploy",
+                l.alreadyInstalled ? String(localized: "Already installed") : String(localized: "Deploy"),
                 enabled: !l.alreadyInstalled,
                 block: true,
                 large: true
@@ -960,7 +960,7 @@ struct MarketplaceDetailContainer: View {
             }
             .accessibilityIdentifier("marketplace-deploy-button")
         case .installing:
-            FSPrimaryButton("Installing…", enabled: false, block: true, large: true) {}
+            FSPrimaryButton(String(localized: "Installing…"), enabled: false, block: true, large: true) {}
                 .accessibilityIdentifier("marketplace-deploy-installing")
             ProgressView().padding(.top, FS.space.s2)
         case .succeeded(let serviceId):
@@ -980,7 +980,7 @@ struct MarketplaceDetailContainer: View {
                         Text("This app needs an AI key (\(MarketplaceLlmKey.envVar(for: l))) to work. Add it on your server now.")
                             .font(FS.font.bodySm())
                             .foregroundColor(c.textMuted)
-                        FSPrimaryButton("Add AI key", block: true) {
+                        FSPrimaryButton(String(localized: "Add AI key"), block: true) {
                             path.append(.serviceEnv(
                                 appId: serviceId,
                                 creator: l.creator,
@@ -997,7 +997,7 @@ struct MarketplaceDetailContainer: View {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     Text(priceUsdCents > 0
-                        ? "This is a paid app (\(formatUsd(priceUsdCents)))."
+                        ? String(localized: "This is a paid app (\(formatUsd(priceUsdCents))).")
                         : "This is a paid app.")
                         .font(FS.font.bodySm())
                         .foregroundColor(c.text)
@@ -1007,11 +1007,11 @@ struct MarketplaceDetailContainer: View {
                 }
             }
             .accessibilityIdentifier("marketplace-payment-required")
-            FSGhostButton("Try again", block: true) { vm?.resetInstall() }
+            FSGhostButton(String(localized: "Try again"), block: true) { vm?.resetInstall() }
         case .failed(let message):
-            ErrorCard(message: "Install failed: \(message)")
+            ErrorCard(message: String(localized: "Install failed: \(message)"))
                 .accessibilityIdentifier("marketplace-deploy-error")
-            FSGhostButton("Try again", block: true) { vm?.resetInstall() }
+            FSGhostButton(String(localized: "Try again"), block: true) { vm?.resetInstall() }
         }
     }
 
