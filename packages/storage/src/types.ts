@@ -13,6 +13,7 @@ import type { BootSuspensionOrder, BootSuspensionState, SuspensionOutcome } from
 import type { ServerShareStorage } from "./serverShares.js";
 import type { ServerOrderStorage } from "./serverOrders.js";
 import type { ServerBootKeyStorage } from "./serverBootKeys.js";
+import type { PqTrustStorage } from "./pqTrust.js";
 
 /**
  * v1.2 security cascade — account-type discriminator. See
@@ -1907,6 +1908,8 @@ export interface Storage {
   /** The owner's server order (docs/server-order.md). */
   serverOrders: ServerOrderStorage;
   serverBootKeys: ServerBootKeyStorage;
+  /** Architecture v2: hybrid key bindings and assurance policy (migration 0111). */
+  pqTrust: PqTrustStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────

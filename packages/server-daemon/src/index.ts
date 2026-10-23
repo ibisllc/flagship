@@ -307,6 +307,7 @@ import { buildReleaseCatalog } from "./updateReleases.js";
 import { runFirstBootUpdate } from "./firstBootUpdate.js";
 import { installHealthReporter } from "./healthReporter.js";
 import { ensureBootKeyBinding, hasBootKey, rebindBootKey, syncOwnerKeyFile } from "./bootKeyFiles.js";
+import { ensureStkPqBinding } from "./pqKeyBinding.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
@@ -1073,15 +1074,42 @@ async function main(): Promise<void> {
     publicKey: ed.getPublicKey(identityPrivKey),
   };
 
-  if (env.controlPlaneBaseUrl && hasBootKey()) {
-    void ensureBootKeyBinding({
-      serverDomain: env.serverFqdn,
-      stkPub: identityKeypair.publicKey,
-      signer: identityKeypair,
-      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-    })
-      .then((r) => r === "bound" && console.log("[boot-key] the boot key binding was signed again for this STK"))
-      .catch((e) => console.warn(`[boot-key] boot key binding not checked: ${(e as Error).message}`));
+  // Architecture v2 (docs/architecture-v2/pq-suites.md §9-§10): keyd holds an ML-DSA-65 key next
+  // to the STK. Once `.com` holds the STK's key binding, the boot-key binding and the status
+  // report also carry the STK's hybrid signature.
+  const stkHybridRef: { current: ((msg: Uint8Array) => Uint8Array) | null } = { current: null };
+  if (env.controlPlaneBaseUrl) {
+    const base = env.controlPlaneBaseUrl;
+    const serverDomain = env.serverFqdn;
+    const mldsaPubHex = keyd?.pqPublicKeyHex() ?? null;
+    void (async () => {
+      if (keyd && mldsaPubHex) {
+        const stkHybrid = (m: Uint8Array) => keyd.signHybridAsBox(m);
+        try {
+          const r = await ensureStkPqBinding({
+            serverDomain,
+            stkPubHex: Buffer.from(identityKeypair.publicKey).toString("hex"),
+            mldsaPubHex,
+            stkHybrid,
+            controlPlaneBaseUrl: base,
+          });
+          if (r === "bound") console.log("[pq] the STK's ML-DSA key binding was sent to .com");
+          stkHybridRef.current = stkHybrid;
+        } catch (e) {
+          console.warn(`[pq] STK key binding not checked: ${(e as Error).message}`);
+        }
+      }
+      if (!hasBootKey()) return;
+      await ensureBootKeyBinding({
+        serverDomain,
+        stkPub: identityKeypair.publicKey,
+        signer: identityKeypair,
+        ...(stkHybridRef.current ? { stkHybrid: stkHybridRef.current } : {}),
+        controlPlaneBaseUrl: base,
+      })
+        .then((r) => r === "bound" && console.log("[boot-key] the boot key binding was signed again for this STK"))
+        .catch((e) => console.warn(`[boot-key] boot key binding not checked: ${(e as Error).message}`));
+    })();
   }
 
   // ---- Secret-free-recipe SWK delivery consumer ----
@@ -1471,6 +1499,7 @@ async function main(): Promise<void> {
   const statusHeartbeat = startDaemonStatusHeartbeat({
     serverDomain: env.serverFqdn!,
     sign: (msg) => custodian.signAsBox(msg),
+    readStkHybrid: () => stkHybridRef.current,
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
     onDoorbell: (raw: unknown) => doorbellRef.current?.update(raw),
     ...(serverOrder

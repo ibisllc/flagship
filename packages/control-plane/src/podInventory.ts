@@ -23,6 +23,8 @@
  */
 
 import {
+  canonicalDaemonStatusReport,
+  strictInForce,
   verifyDaemonStatusReportFast,
   verifyBoxTrustStatusReportFast,
   type BoxTrustStatusReport,
@@ -41,10 +43,12 @@ import type {
   SecretMailboxPurpose,
   ServerOrderStorage,
   UsernameStorage,
+  PqTrustStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
 import { healthForPods, type BoxHealthReport } from "./serverHealth.js";
 import { readServerOrder } from "./serverOrder.js";
+import { gateBoxMessage, installationPolicy, verifiedStoredStkBinding } from "./pqKeyBindings.js";
 import {
   forbidden,
   malformed,
@@ -90,6 +94,9 @@ export interface PodInventoryDeps {
    *  failure to compute it leaves it out of the reply and the box polls as it
    *  always did. */
   doorbell?: (server: { serverDomain: string; username: string; identityPubKeyHex: string }) => Promise<unknown>;
+  /** Architecture v2: the installation policy and the STK's hybrid binding, so the report goes
+   *  through the critical-signature gate (pqKeyBindings.ts). Absent: classical check only. */
+  pqTrust?: PqTrustStorage;
   now?: () => number;
 }
 
@@ -544,6 +551,9 @@ interface DaemonStatusBody {
     issuedAt?: number;
   };
   signature?: string;
+  /** Architecture v2: `{ suite: "hybrid-ed25519-mldsa65/v1", signature }`, the STK's hybrid
+   *  signature over the same canonical bytes. Present means it must verify. */
+  pqSignature?: unknown;
   /**
    * UNSIGNED advisory field (Phase 6 Part 3) — the service slugs this box currently
    * LEADS. NOT part of the canonical daemon-status bytes (the pinned vector + native
@@ -626,7 +636,11 @@ export async function handlePostDaemonStatus(
       ? body.orderIssuedAt
       : undefined;
   const awaitingBackup = parseAwaitingBackup(body.awaitingBackup);
-  const server = await deps.servers.get(r.serverDomain);
+  // Read together so they leave as one D1 batch.
+  const [server, pq] = await Promise.all([
+    deps.servers.get(r.serverDomain),
+    deps.pqTrust ? deps.pqTrust.forServer(r.serverDomain) : Promise.resolve(null),
+  ]);
   if (!server) return forbidden("unknown serverDomain");
   if (server.revokedAt) return forbidden("server revoked");
 
@@ -650,6 +664,23 @@ export async function handlePostDaemonStatus(
   const stkPub = hexToBytes(server.identityPubKeyHex);
   if (!(await verifyDaemonStatusReportFast(report, sig, stkPub))) {
     return forbidden("invalid signature");
+  }
+  // The critical-signature gate: a hybrid signature the box sent must verify under its bound
+  // ML-DSA key, and a strict installation refuses a report without one.
+  if (pq) {
+    const policy = installationPolicy(pq.policy, r.serverDomain);
+    if (body.pqSignature !== undefined || strictInForce(policy)) {
+      const refused = gateBoxMessage({
+        message: canonicalDaemonStatusReport(report),
+        purpose: "flagship/daemon-status/v1",
+        classicalSignatureHex: body.signature,
+        pqSignature: body.pqSignature,
+        stkPubHex: server.identityPubKeyHex,
+        binding: verifiedStoredStkBinding(pq.stkBinding, r.serverDomain, server.identityPubKeyHex, (deps.now ?? Date.now)()),
+        policy,
+      });
+      if (refused) return forbidden(`signature refused: ${refused}`);
+    }
   }
 
   // SIBLING box-trust-status envelope — verify its OWN signature against the

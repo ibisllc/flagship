@@ -128,6 +128,8 @@ import {
   handleGetSealedLuksKey,
   handleGetBootKey,
   handlePutBootKey,
+  handleGetPqKeyBinding,
+  handlePutPqKeyBinding,
   handlePutSealedLuksKey,
   handlePostInstallEvent,
   handlePostProvisionStatus,
@@ -630,6 +632,7 @@ const ROUTE_RE = {
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
   BOOT_KEY: /^\/api\/server\/([^/]+)\/boot-key$/,
+  PQ_KEY_BINDING: /^\/api\/server\/([^/]+)\/pq-key-binding$/,
   // Phone-as-unlock-endpoint RELAY (docs/security-phone-as-unlock-
   // endpoint.md). The box POSTs an STK-signed SecretRequest to its
   // mailbox; the phone GETs pending + POSTs the sealed reply; the box
@@ -1741,12 +1744,19 @@ export async function tryControlPlane(
     );
   }
   if ((method === "PUT" || method === "GET") && (m = path.match(ROUTE_RE.BOOT_KEY))) {
-    const bootKeyDeps = { servers: storage.servers, serverBootKeys: storage.serverBootKeys };
+    const bootKeyDeps = { servers: storage.servers, serverBootKeys: storage.serverBootKeys, pqTrust: storage.pqTrust };
     const host = decodeURIComponent(m[1]!);
     return finishPlain(
       method === "PUT"
         ? await handlePutBootKey(bootKeyDeps, host, await readJson(request))
         : await handleGetBootKey(bootKeyDeps, host),
+    );
+  }
+  if ((method === "PUT" || method === "GET") && (m = path.match(ROUTE_RE.PQ_KEY_BINDING))) {
+    const deps = { servers: storage.servers, pqTrust: storage.pqTrust };
+    const host = decodeURIComponent(m[1]!);
+    return finishPlain(
+      method === "PUT" ? await handlePutPqKeyBinding(deps, host, await readJson(request)) : await handleGetPqKeyBinding(deps, host),
     );
   }
   // ── Phone-as-unlock-endpoint RELAY (sealed mailbox + box-sealed lease) ──
@@ -2836,6 +2846,7 @@ export async function tryControlPlane(
           // 0058 — coarse "account in use" bump for the username-reclaim tool.
           usernames: storage.usernames,
           serverOrders: storage.serverOrders,
+          pqTrust: storage.pqTrust,
           doorbell: (server) =>
             buildBoxDoorbell(
               {
