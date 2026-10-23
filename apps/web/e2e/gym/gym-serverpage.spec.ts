@@ -99,6 +99,27 @@ function serverPage(m: Mock, fqdn: string, pods: unknown[]): Mock {
   return m;
 }
 
+const SUSPENSION = ["/lib/bootSuspension.js", "canonicalBootSuspensionBytes"] as [string, string];
+
+/** The boot worker's durable lock for `fqdn` (release 0.3, SEC-LOCK-001;
+ *  boot-core routes.ts): GET reads the record, PUT takes an IRK-signed
+ *  owner order for the next epoch and answers `durable: true`. */
+function bootLock(m: Mock, page: Page, keys: Keys, fqdn: string) {
+  const state = { serverDomain: fqdn, suspended: false, epoch: 0, seq: 0, reason: "", signer: "owner", orderIssuedAt: 0, updatedAt: 0, signature: "" };
+  const authed = (c: { headers: Record<string, string> }) => /^Flagship-Boot-v1 [A-Za-z0-9_-]+$/.test(c.headers["authorization"] ?? "");
+  m.get((u) => u.pathname === `/api/boot/suspension/${fqdn}`, (c) => (authed(c) ? { json: { ...state } } : { status: 401, json: { error: "missing boot auth" } }));
+  m.on("PUT", (u) => u.pathname === "/api/boot/suspension", async (c) => {
+    if (!authed(c)) return { status: 401, json: { error: "missing boot auth" } };
+    const o = c.body?.order;
+    if (!o || o.serverDomain !== fqdn || o.signer !== "owner") return { status: 400, json: { error: "malformed body" } };
+    if (!(await verifies(page, SUSPENSION, o, c.body.signature, keys.irkPubHex))) return { status: 403, json: { error: "invalid suspension signature" } };
+    if (o.epoch !== state.epoch + 1) return { status: 409, json: { error: "suspension refused", code: "stale-epoch", current: { ...state } } };
+    Object.assign(state, { suspended: o.action === "suspend", epoch: o.epoch, seq: o.seq, reason: o.reason, orderIssuedAt: o.issuedAt, updatedAt: Date.now(), signature: c.body.signature });
+    return { json: { ok: true, durable: true, changed: true, leasesRevoked: 0, state: { ...state } } };
+  });
+  return state;
+}
+
 /** Open `fqdn`'s page from its Home card. */
 async function fromHomeCard(page: Page, fqdn: string): Promise<void> {
   await renderHome(page);
@@ -573,7 +594,9 @@ test.describe("gym webapp server page and Home leftovers", () => {
     const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = serverPage(await mock(page), HOME, [livePod(HOME)]);
     m.post(`${HOME}/api/power`, sensitive(page, keys, POWER, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })));
+    const lock = bootLock(m, page, keys, HOME);
     await fromHomeCard(page, HOME);
+    await expect(page.locator("#lock-state")).toHaveText("Not locked.", { timeout: 10_000 });
     const btn = page.locator("#power-restart-btn");
     await expect(btn).toHaveText("Lock and restart");
     await btn.click();
@@ -583,13 +606,18 @@ test.describe("gym webapp server page and Home leftovers", () => {
     await dlg.locator("[data-power-cancel]").click();
     await expect(dlg).toHaveCount(0);
     expect(m.sent("/api/power")).toHaveLength(0);
+    expect(m.sent("/api/boot/suspension", "PUT")).toHaveLength(0);
 
     await btn.click();
     await shot(page, testInfo, "power-restart-confirm");
     await page.locator('dialog[aria-label="Lock and restart"] [data-power-go]').click();
     // A three-second countdown on the button, then the order.
     await expect(btn).toHaveText(/Lock and restart in \d…/);
+    // 0.3: a restart is locked at the boot service first (IRK-signed, durable), then ordered.
+    const put = await m.waitFor("/api/boot/suspension", "PUT");
+    expect(put.body.order).toMatchObject({ serverDomain: HOME, epoch: 1, seq: 0, action: "suspend", reason: "manual-lock", signer: "owner" });
     const post = await m.waitFor(`${HOME}/api/power`);
+    expect(m.calls.indexOf(put)).toBeLessThan(m.calls.indexOf(post));
     expect(post.body.request).toMatchObject({ type: "power-off", serverId: HOME, mode: "restart" });
     expect(await signer(page, keys, POWER, post.body.request, post.body.signature)).toBe("admin");
     // The lock lands at the boot service first, then the signed order goes to the box.
@@ -721,6 +749,8 @@ test.describe("gym webapp server page and Home leftovers", () => {
       leases = [c.body.lease];
       return { json: { ok: true } };
     });
+    // 0.3: a lease is deposited only after the boot service says the server isn't locked.
+    bootLock(m, page, keys, HOME);
     await fromHomeCard(page, HOME);
     await scrollTo(page, "#auto-unlock-card");
     await expect(page.locator("#auto-unlock-pill")).toHaveText("off", { timeout: 10_000 });
@@ -820,7 +850,9 @@ test.describe("gym webapp server page and Home leftovers", () => {
   });
 
   test("gym serverpage Trusted devices finalizes a replacement once its grace is over", async ({ page }, testInfo) => {
-    await reachHome(page, { kind: "admin", servers: [HOME] });
+    // The recovering device: no admin authority until the replacement finishes
+    // (0.3: an admin device sees the Reject recovery card here instead).
+    await reachHome(page, { kind: "non-admin", servers: [HOME] });
     let completesAt = Date.now() + 2 * 86_400_000;
     const m = await mock(page);
     m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
@@ -837,6 +869,7 @@ test.describe("gym webapp server page and Home leftovers", () => {
     const fin = page.locator("#finalize-replace-btn");
     await expect(fin).toBeDisabled({ timeout: 10_000 });
     await expect(page.locator("[data-pending-re-pair]")).toContainText("finalize when the 3-day grace elapses");
+    await expect(page.locator("[data-recovery-review]")).toHaveCount(0);
     await shot(page, testInfo, "finalize-waiting");
 
     // After it: Finalize signs with the next key and installs it.

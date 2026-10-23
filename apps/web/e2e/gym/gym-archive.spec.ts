@@ -633,7 +633,7 @@ test.describe("gym webapp archive", () => {
     await page.locator('dialog[aria-label="Restore from backup"] [data-restore-peers]').click();
     const dlg = page.locator('dialog[aria-label="Restore from other servers"]');
     await dlg.locator("[data-pr-find]").click();
-    await expect(dlg.locator("[data-pr-summary]")).toContainText("1 server hold its pieces", { timeout: 15_000 });
+    await expect(dlg.locator("[data-pr-summary]")).toContainText("1 server holds its pieces; 1 bring it back.", { timeout: 15_000 });
     await expect(dlg.locator("[data-pr-name]")).toBeVisible();
     await shot(page, testInfo, "peers-from-com");
   });
