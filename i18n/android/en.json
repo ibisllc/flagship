@@ -2134,7 +2134,7 @@
     "args": 1
   },
   "turn_on_quick_approve_from_watch": {
-    "en": "Turn on Quick approve from watch in Flagship on your phone first.",
+    "en": "Turn on Approve from watch in Flagship on your phone first.",
     "ctx": "core/WatchApprovalResponder.kt:47 (prose)"
   },
   "unlock_flagship_on_your_phone_once": {
@@ -8352,7 +8352,7 @@
     "ctx": "ui/screens/VibeCodeScreens.kt:740 (arg of FSSecondaryButton)"
   },
   "quick_approve_from_watch": {
-    "en": "Quick approve from watch",
+    "en": "Approve from watch",
     "ctx": "ui/screens/WatchQuickApproveCard.kt:63 (title=)"
   },
   "approve_a_server_boot_from_your": {
@@ -8453,7 +8453,7 @@
     "ctx": "ui/shell/WatchWaitingDialog.kt:53 (prose)"
   },
   "unlock_flagship_once_so_quick_approve": {
-    "en": "Unlock Flagship once so Quick approve can sign",
+    "en": "Unlock Flagship once so Approve from watch can sign",
     "ctx": "ui/shell/WatchWaitingDialog.kt:54 (prose)"
   },
   "show_your_servers": {

@@ -29,7 +29,7 @@ extension SecretRequestCoordinator: WatchApprovalSource {}
 /// the watch is waiting.
 @MainActor
 public struct WatchApprovalResponder {
-    public static let notEnrolled = String(localized: "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.")
+    public static let notEnrolled = String(localized: "Turn on Approve from watch in Flagship on your iPhone first.")
     /// The app is in front on the iPhone but hasn't used Face ID this session.
     public static let unlockOnce = String(localized: "Unlock Flagship on your iPhone once, then approve again.")
     /// The app is closed or in the background.

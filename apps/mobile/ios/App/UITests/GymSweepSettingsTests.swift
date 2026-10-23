@@ -551,7 +551,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         XCTAssertTrue(app.buttons["account-security-enable-btn"].waitForExistence(timeout: 5))
     }
 
-    /// Quick approve from Apple Watch: on registers an admin-signed delegate
+    /// Approve from watch: on registers an admin-signed delegate
     /// grant on `.com`, off revokes it.
     func test_watchQuickApproveOnAndOff() throws {
         let app = launch(tab: "settings")
@@ -579,7 +579,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         XCTAssertTrue(reveal(app, toggle))
         XCTAssertFalse(toggle.isEnabled, "A non-admin device can't sign the delegate grant.")
         XCTAssertEqual(app.staticTexts["watch-delegate-admin-only"].label,
-                       "Only an admin device can turn on quick approve from Apple Watch.")
+                       "Only an admin device can turn on Approve from watch.")
         XCTAssertFalse(app.buttons["rotate-admin-btn"].exists, "Only an admin device rotates the admin key.")
     }
 
