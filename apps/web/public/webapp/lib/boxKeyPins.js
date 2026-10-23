@@ -11,6 +11,13 @@
 // device asks its owner first ("Trust its new key").
 //
 // Pins are public keys, kept in localStorage per account.
+//
+// Architecture v2: a box's STK also binds an ML-DSA-65 key (lib/pqBinding.js). The browser
+// accepts that binding only under the pinned STK, pins the ML-DSA key the first time
+// (`mldsa`), refuses a different one later, and from then on requires the boot-key binding's
+// hybrid signature too, so stripping it cannot downgrade this server back to classical.
+
+import { verifyBootKeyBindingV2, verifyPqKeyBinding } from "./pqBinding.js";
 
 const TAG_BOOT_KEY_BINDING = "flagship/boot-key-binding/v1";
 const HEX32 = /^[0-9a-f]{64}$/;
@@ -145,16 +152,53 @@ export async function verifyBootKeyBinding(binding, signature, pinnedStkPub, ser
  * Adopt a box's boot-only key: only through a binding the PINNED STK signed,
  * never because `.com` lists it. Returns the boot key, or null when refused.
  */
-export async function acceptBootKeyBinding(username, serverDomain, binding, signatureHex, deps = {}) {
+export async function acceptBootKeyBinding(username, serverDomain, binding, signatureHex, deps = {}, hybridSignatureHex = undefined) {
   const domain = String(serverDomain).toLowerCase();
   const pins = load(username, deps);
   const pin = pins[domain];
   if (!pin) return null;
   const ok = await verifyBootKeyBinding(binding, hexBytes(signatureHex), hexBytes(pin.stk), domain);
   if (!ok || (pin.bootIssuedAt ?? -1) > binding.issuedAt) return null;
+  // Once this server's ML-DSA key is pinned, the boot key needs the STK's hybrid signature too.
+  if (pin.mldsa && !verifyBootKeyBindingV2(binding, hybridSignatureHex, pin.stk, pin.mldsa)) return null;
   pins[domain] = { ...pin, boot: binding.bootPubHex, bootIssuedAt: binding.issuedAt };
   save(username, pins, deps);
   return binding.bootPubHex;
+}
+
+/**
+ * Pin the ML-DSA key a box's STK bound, through a binding the PINNED STK and that key both
+ * signed. Returns the ML-DSA key, or null when there is no STK pin or the binding is refused.
+ * A binding naming another ML-DSA key than the pinned one throws BoxKeyChangedError.
+ */
+export function acceptStkPqBinding(username, serverDomain, wire, deps = {}) {
+  const domain = String(serverDomain).toLowerCase();
+  const pins = load(username, deps);
+  const pin = pins[domain];
+  if (!pin) return null;
+  let b;
+  try {
+    b = verifyPqKeyBinding(wire, {
+      role: "box-stk",
+      subjectId: domain,
+      ed25519PubHex: pin.stk,
+      mldsaPubHex: pin.mldsa ?? null,
+      now: (deps.now || Date.now)(),
+      ...(pin.mldsaIssuedAt !== undefined ? { minIssuedAt: pin.mldsaIssuedAt } : {}),
+    });
+  } catch (e) {
+    if (e?.code === "binding-pq-key-changed") throw new BoxKeyChangedError(domain, pin.mldsa, String(wire?.mldsaPubHex ?? ""));
+    return null;
+  }
+  if (pin.mldsa !== b.mldsaPubHex || pin.mldsaIssuedAt !== b.issuedAt) {
+    pins[domain] = { ...pin, mldsa: b.mldsaPubHex, mldsaIssuedAt: b.issuedAt };
+    save(username, pins, deps);
+  }
+  return b.mldsaPubHex;
+}
+
+export function pinnedBoxPqKey(username, serverDomain, deps = {}) {
+  return load(username, deps)[String(serverDomain).toLowerCase()]?.mldsa ?? null;
 }
 
 export function pinnedBootKey(username, serverDomain, deps = {}) {

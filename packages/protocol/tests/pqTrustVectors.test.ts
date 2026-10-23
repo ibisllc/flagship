@@ -122,3 +122,17 @@ describe("pq key bindings (shared vectors)", () => {
     });
   });
 });
+
+describe("pinning a box's ML-DSA key (decideBoxPqKeyPin)", () => {
+  it("first, match, mismatch on another key, invalid under another STK or older than the pin", async () => {
+    const { decideBoxPqKeyPin } = await import("../src/index.js");
+    const vb = V.bindings.valid.find((x: { name: string }) => x.name === "box-stk");
+    const d = vb.wire.subjectId;
+    const stk = vb.wire.ed25519PubHex;
+    expect(decideBoxPqKeyPin({ stkHex: stk }, d, vb.wire, V.now)).toMatchObject({ verdict: "first", mldsaPubHex: vb.wire.mldsaPubHex });
+    expect(decideBoxPqKeyPin({ stkHex: stk, mldsaPubHex: vb.wire.mldsaPubHex }, d, vb.wire, V.now).verdict).toBe("match");
+    expect(decideBoxPqKeyPin({ stkHex: stk, mldsaPubHex: V.signers[1].mldsaPubHex }, d, vb.wire, V.now)).toEqual({ verdict: "mismatch", code: "binding-pq-key-changed" });
+    expect(decideBoxPqKeyPin({ stkHex: V.signers[1].ed25519PubHex }, d, vb.wire, V.now)).toEqual({ verdict: "invalid", code: "binding-key-mismatch" });
+    expect(decideBoxPqKeyPin({ stkHex: stk, minIssuedAt: vb.wire.issuedAt + 1 }, d, vb.wire, V.now)).toEqual({ verdict: "invalid", code: "binding-stale" });
+  });
+});
