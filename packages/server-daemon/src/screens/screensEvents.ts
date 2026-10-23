@@ -8,10 +8,19 @@
  *     A live app has a new request for a host its access list doesn't
  *     decide (docs/ai-privacy-and-staging.md §3a); fetch the details from
  *     GET /api/screens/access-requests or .../services/:id/access.
+ *
+ *   { type: "chat-request", kind }
+ *     An app chat waits for an admin answer (GET /api/screens/chat/requests).
  */
 import type { AccessRequestEvent } from "../egress/accessAlerts.js";
 
-export type ScreensEvent = AccessRequestEvent;
+/** Another owner's app wants to talk to one of this box's apps, or an app here wants to talk to another owner's (chat/approvals.ts). Details come from GET /api/screens/chat/requests. */
+export interface ChatRequestEvent {
+  type: "chat-request";
+  kind: "incoming" | "outgoing";
+}
+
+export type ScreensEvent = AccessRequestEvent | ChatRequestEvent;
 
 export class ScreensEventBus {
   private readonly subs = new Set<(e: ScreensEvent) => void>();

@@ -5,7 +5,8 @@
  * dedicated sub-origin (recovery.<apex>, lib/recovery.js): the webapp opens it
  * in a popup, hands it the UMK seed over postMessage, and gets back the
  * PRF-wrapped UMK + the passphrase hashes. The webapp then IRK-signs the upload
- * envelope and POSTs it to .com /api/recovery.
+ * record (N03: every value that changes what recovery does, chained onto the stored
+ * record) and POSTs it to .com /api/recovery.
  *
  * The sub-origin is replaced by a stub page (its WebAuthn PRF + Argon2id
  * ceremony needs a real passkey and stays manual QA). What this asserts is the
@@ -15,7 +16,7 @@
  */
 
 import { test, expect, bootstrapToHome, syncWebappPubkey } from "../fixtures/pod-sim.js";
-import { verifyUploadRecoveryRecord } from "@flagship/protocol";
+import { verifyRecoveryRecord, type RecoveryRecordV2 } from "@flagship/protocol";
 import { createHash } from "node:crypto";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
@@ -89,6 +90,10 @@ test("S8 — set up cloud recovery + assert the IRK-signed /api/recovery upload"
     }
     return route.continue();
   });
+  // The record is written under the account's own key and the admin root `.com` pins for it.
+  await page.route("**/api/username/*", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username: identity.username, adminRootPub: null }) }),
+  );
   await page.route("**/api/recovery/by-username/**", (route) =>
     route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "no recovery record" }) }),
   );
@@ -105,32 +110,14 @@ test("S8 — set up cloud recovery + assert the IRK-signed /api/recovery upload"
   expect(popup.url()).toBe(`${recoveryOrigin}/#enroll`);
   expect(popupUrls.length).toBeGreaterThan(0);
 
-  const parsed = JSON.parse(uploadBody!) as {
-    request: {
-      username: string;
-      credentialId: string;
-      wrappedUmk: string;
-      issuedAt: number;
-      fetchTokenHash?: string;
-      prfSaltHash?: string;
-    };
-    signature: string;
-  };
-  expect(parsed.request.username).toBe(identity.username);
-  expect(parsed.request.credentialId).toBe(CREDENTIAL_ID_HEX);
-  expect(parsed.request.wrappedUmk).toBe(WRAPPED_UMK_B64);
-  expect(parsed.request.fetchTokenHash).toBe(FETCH_TOKEN_HASH_HEX);
-  expect(parsed.request.prfSaltHash).toBe(PRF_SALT_HASH_HEX);
-  const wrappedUmkHashHex = createHash("sha256").update(Buffer.from(WRAPPED_UMK_B64, "base64")).digest("hex");
-  const ok = verifyUploadRecoveryRecord(
-    {
-      username: parsed.request.username,
-      credentialIdHex: parsed.request.credentialId,
-      wrappedUmkHashHex,
-      issuedAt: parsed.request.issuedAt,
-    },
-    hexToBytes(parsed.signature),
-    hexToBytes(irkPubHex),
-  );
-  expect(ok).toBe(true);
+  const parsed = JSON.parse(uploadBody!) as { claim: RecoveryRecordV2; signature: string; wrappedUmk: string };
+  expect(parsed.claim.username).toBe(identity.username);
+  expect(parsed.claim.credentialIdHex).toBe(CREDENTIAL_ID_HEX);
+  expect(parsed.wrappedUmk).toBe(WRAPPED_UMK_B64);
+  expect(parsed.claim.fetchTokenHashHex).toBe(FETCH_TOKEN_HASH_HEX);
+  expect(parsed.claim.prfSaltHashHex).toBe(PRF_SALT_HASH_HEX);
+  expect(parsed.claim.wrappedUmkDigestHex).toBe(createHash("sha256").update(Buffer.from(WRAPPED_UMK_B64, "base64")).digest("hex"));
+  // A first record: generation 1, chained onto nothing, with no escrow it did not send.
+  expect(parsed.claim).toMatchObject({ op: "put", generation: 1, priorDigestHex: "genesis", acmeKey: { change: "none" } });
+  expect(verifyRecoveryRecord(parsed.claim, hexToBytes(parsed.signature), hexToBytes(irkPubHex))).toBe(true);
 });

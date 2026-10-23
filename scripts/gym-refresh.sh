@@ -265,6 +265,18 @@ else
   fi
 fi
 
+# ── 4b. box artifact ──────────────────────────────────────────────────────
+# Every bootstrap installs a signed box artifact for one exact commit (SEC-INSTALL-001); the gym signs
+# its own, for its own tip, with its own key.
+phase "4b box artifact for the gym tip (built and signed with the gym key)"
+if [ "$DRY" = "1" ]; then
+  say "DRY-RUN would: bash scripts/gym-box-artifact.sh --worktree $WT (build, sign with the gym key, upload to the gym bucket, commit the gym's box release)"
+elif [ "${GYM_SKIP_BOX_ARTIFACT:-0}" = "1" ]; then
+  say "GYM_SKIP_BOX_ARTIFACT=1: leaving the gym's box release as it is"
+else
+  bash "$REPO/scripts/gym-box-artifact.sh" --worktree "$WT" $([ "$push" = "1" ] || echo --no-push) || die "gym box artifact failed"
+fi
+
 # ── 5. deploy ─────────────────────────────────────────────────────────────
 phase "5/6 deploy the gym Worker (from gym) + the gym Fly app"
 if [ "$deploy" = "0" ]; then

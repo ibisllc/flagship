@@ -1,4 +1,6 @@
+import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import type { InstallBlob } from "@flagship/protocol";
+import { INSTALL_BOX_ARTIFACT_SH, VERIFY_BOX_ARTIFACT_SH } from "./boxInstallerScripts.js";
 import { bytesToHex } from "./hex.js";
 
 function b64Utf8(s: string): string {
@@ -29,7 +31,7 @@ function b64Utf8(s: string): string {
  *                      build-ticket persists; the bootstrap drops it
  *                      verbatim at /var/flagship/install-blob.json so
  *                      install-helper.ts sign-server-register reads it.
- *   - installerGitRef  e.g. "main" — what to git-clone --branch.
+ *   - installerGitRef  the exact 40-hex commit whose signed box artifact is installed.
  */
 export function buildCloudConfigUserData(args: {
   installBlobJson: string;
@@ -120,11 +122,8 @@ export function buildCloudConfigUserData(args: {
   // could only have set this via the Worker's wrangler.toml or
   // env-coded default, but the ref still gets shell-substituted in the
   // bootstrap below). Same allowlist as the builder's preseed validator.
-  if (!/^[A-Za-z0-9._/-]+$/.test(args.installerGitRef)) {
-    throw new Error("buildCloudConfigUserData: installerGitRef has disallowed characters");
-  }
-  if (args.installerGitRef.includes("..")) {
-    throw new Error("buildCloudConfigUserData: installerGitRef contains '..'");
+  if (!/^[0-9a-f]{40}$/.test(args.installerGitRef)) {
+    throw new Error("buildCloudConfigUserData: installerGitRef must be an exact 40-character commit");
   }
   // The bootstrap script is heredoc-quoted ('EOF') so cloud-init does
   // NOT expand its $vars at template time — they expand on the VPS.
@@ -147,7 +146,6 @@ exec >>/var/log/flagship-bootstrap.log 2>&1
 date
 echo "[flagship-bootstrap] starting"
 
-REPO_URL="\${FLAGSHIP_REPO_URL:-https://github.com/ibisllc/flagship.git}"
 GIT_REF="${args.installerGitRef}"
 
 # 1. Install build deps FIRST — debian-12 cloud images do NOT ship
@@ -173,12 +171,9 @@ apt-get install -y --no-install-recommends docker.io docker-compose apparmor \\
 # NO container ever starts. (Surfaced installing a real service on a gym box.)
 systemctl enable --now docker.service 2>/dev/null || echo "[flagship-bootstrap] WARNING: docker enable failed"
 
-# NodeSource Node 20 — official upstream Node.js apt repo. Idempotent
-# even if rerun. Uses the setup script's keyring + sources.list.d entry.
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y --no-install-recommends nodejs \\
-    || echo "[flagship-bootstrap] WARNING: NodeSource nodejs install failed"
-echo "[flagship-bootstrap] node $(node --version) npm $(npm --version)"
+# Node ships inside the signed box release (SEC-NODE-001); no NodeSource repository.
+apt-get install -y --no-install-recommends xxd openssl \\
+    || echo "[flagship-bootstrap] WARNING: xxd/openssl install failed"
 
 # 2. Read the install-blob fields the daemon needs (jq is now installed).
 BLOB_JSON=/var/flagship/install-blob.json
@@ -241,51 +236,50 @@ mkdir -p /run
 head -c 64 /dev/urandom > "$LUKS_KEY"
 chmod 600 "$LUKS_KEY"
 
-# 5. Clone Flagship + build the daemon.
-echo "[flagship-bootstrap] cloning $REPO_URL @ $GIT_REF"
-rm -rf /opt/flagship
-if ! git clone --depth 50 --branch "$GIT_REF" "$REPO_URL" /opt/flagship; then
-    git clone --depth 50 "$REPO_URL" /opt/flagship
-    git -C /opt/flagship fetch --depth 50 origin "$GIT_REF" || true
-    git -C /opt/flagship checkout "$GIT_REF" || true
-fi
+# 5. Install the signed box release (SEC-INSTALL-001): exact commit, k-of-n signed
+# manifest, digest, sequence and Node floor are all checked before anything runs.
+case "$(dpkg --print-architecture)" in
+    amd64) BOX_ARCH=amd64 ;;
+    arm64) BOX_ARCH=arm64 ;;
+    *) echo "[flagship-bootstrap] FATAL: unsupported architecture"; exit 1 ;;
+esac
+BOX_ARTIFACT_NAME="flagship-box-\${GIT_REF:0:12}-$BOX_ARCH"
+BOX_ARTIFACT_BASE="${BOX_RELEASE.artifactBase}"
+mkdir -p /usr/local/lib/flagship-installer /var/flagship
+cat > /usr/local/lib/flagship-installer/verify-box-artifact.sh <<'FLAGSHIP_VERIFY_BOX_ARTIFACT_EOF'
+${VERIFY_BOX_ARTIFACT_SH}
+FLAGSHIP_VERIFY_BOX_ARTIFACT_EOF
+cat > /usr/local/lib/flagship-installer/install-box-artifact.sh <<'FLAGSHIP_INSTALL_BOX_ARTIFACT_EOF'
+${INSTALL_BOX_ARTIFACT_SH}
+FLAGSHIP_INSTALL_BOX_ARTIFACT_EOF
+chmod 755 /usr/local/lib/flagship-installer/*.sh
+report_phase installing
+for _ext in tar.gz manifest.json; do
+    curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --max-time 1800 \\
+        -o "/var/tmp/$BOX_ARTIFACT_NAME.$_ext" "$BOX_ARTIFACT_BASE/$BOX_ARTIFACT_NAME.$_ext" \\
+        || { echo "[flagship-bootstrap] FATAL: could not download $BOX_ARTIFACT_NAME.$_ext"; exit 1; }
+done
+BOX_ARTIFACT_SHA="$(jq -er .manifest.artifactSha256 "/var/tmp/$BOX_ARTIFACT_NAME.manifest.json")" \\
+    || { echo "[flagship-bootstrap] FATAL: the release manifest has no digest"; exit 1; }
+bash /usr/local/lib/flagship-installer/install-box-artifact.sh \\
+    --manifest "/var/tmp/$BOX_ARTIFACT_NAME.manifest.json" \\
+    --artifact "/var/tmp/$BOX_ARTIFACT_NAME.tar.gz" \\
+    --trust-keys "${BOX_RELEASE.trust.keys.join(",")}" \\
+    --threshold ${BOX_RELEASE.trust.threshold} \\
+    --expect-sha256 "$BOX_ARTIFACT_SHA" \\
+    --expect-commit "$GIT_REF" \\
+    --arch "$BOX_ARCH" \\
+    --node-floor ${BOX_RELEASE.nodeFloor} \\
+    --min-sequence ${BOX_RELEASE.minSequence} \\
+    || { echo "[flagship-bootstrap] FATAL: the box release was refused"; exit 1; }
+rm -f "/var/tmp/$BOX_ARTIFACT_NAME".*
 cd /opt/flagship
-report_phase installing
-# Use npm-install instead of npm-ci. Debian's nodejs-18 + npm-9.2
-# combo handles our workspace-heavy package-lock unreliably with ci
-# (silently no-ops on workspaces). install is more forgiving and
-# resolves workspaces correctly. Tee output to a dedicated log so
-# the operator can post-mortem npm errors directly. Scoped to the
-# daemon's dependency closure (+ the root's typescript/tsx), the same
-# scope as the d-i bootstrap and the OTA rebuild.
-echo "[flagship-bootstrap] npm install (daemon workspace closure)"
-npm install --no-audit --no-fund --include-workspace-root --workspace=packages/server-daemon 2>&1 \\
-    | tee /var/log/flagship-npm.log
-NPM_RC=\${PIPESTATUS[0]}
-echo "[flagship-bootstrap] npm install exit=$NPM_RC"
-report_phase installing
-# Verify the critical workspace symlink ended up in place.
-if [ ! -e /opt/flagship/node_modules/@flagship/protocol/package.json ]; then
-    echo "[flagship-bootstrap] WARN: workspace @flagship/protocol not symlinked — retrying with explicit symlinks"
-    mkdir -p /opt/flagship/node_modules/@flagship
-    for pkg in /opt/flagship/packages/*/; do
-        name=$(jq -r .name "$pkg/package.json" 2>/dev/null || echo "")
-        if [ -n "$name" ]; then
-            short=\${name#@flagship/}
-            ln -sfn "$pkg" "/opt/flagship/node_modules/$name"
-            echo "[flagship-bootstrap]   linked $name -> $pkg"
-        fi
-    done
-fi
-echo "[flagship-bootstrap] tsc -b packages/server-daemon"
-npx tsc -b packages/server-daemon 2>&1 | tee /var/log/flagship-tsc.log || \\
-    echo "[flagship-bootstrap] warning: tsc -b reported errors"
 report_phase downloading
 
 # 6. Generate server identity.
 mkdir -p /var/flagship/identity
 chmod 700 /var/flagship/identity
-npx tsx scripts/install-helper.ts gen-identity \\
+flagship-tsx scripts/install-helper.ts gen-identity \\
     --out-priv /var/flagship/identity/identity.priv.hex \\
     --out-pub  /var/flagship/identity/identity.pub.hex \\
     --out-pem  /boot/identity.pem
@@ -320,7 +314,7 @@ elif [ -s "$DEMO_IRK_PRIV_FILE" ]; then
     echo "[flagship-bootstrap] minting entitlement with the owner IRK (un-pinned account)"
 fi
 if [ -n "$MINT_PRIV_HEX" ]; then
-    npx tsx scripts/install-helper.ts mint-entitlements \\
+    flagship-tsx scripts/install-helper.ts mint-entitlements \\
         --irk-priv "$MINT_PRIV_HEX" \\
         --pod-pub "$SERVER_IDENTITY_PUB_HEX" \\
         --username "$USERNAME" \\
@@ -337,7 +331,7 @@ fi
 
 # 7. Seal LUKS key for the phone (sealForRecipient — Ed25519→X25519
 #    birational map, same as the Alpine install.sh path).
-SEALED_LUKS_KEY_HEX="$(npx tsx scripts/install-helper.ts \\
+SEALED_LUKS_KEY_HEX="$(flagship-tsx scripts/install-helper.ts \\
     seal-for-bak \\
     --bak-ed25519-pub "$PHONE_DELEGATED_PUBKEY" \\
     --in "$LUKS_KEY" | tr -d '\\n' || echo '')"
@@ -390,6 +384,12 @@ chmod 600 /etc/flagship/daemon.env
 #      flagship-data-services  — docker-compose'd postgres/forgejo/chromium
 #      flagship-daemon         — the actual server-daemon
 #      flagship-first-boot-register — one-shot, POSTs /api/server/register
+cat > /etc/sysctl.d/90-flagship-hardening.conf <<'SYSCTL'
+# SEC-KEY-003: no core dumps anywhere; a crashed daemon must not leave key material on disk.
+fs.suid_dumpable = 0
+kernel.core_pattern = |/bin/false
+SYSCTL
+sysctl -q -p /etc/sysctl.d/90-flagship-hardening.conf 2>/dev/null || true
 cat > /etc/systemd/system/flagship-daemon.service <<'UNIT'
 [Unit]
 Description=Flagship server daemon
@@ -401,7 +401,11 @@ StartLimitIntervalSec=0
 Type=simple
 WorkingDirectory=/opt/flagship
 EnvironmentFile=/etc/flagship/daemon.env
-ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon
+# SEC-KEY-003: a crash must never write key material to disk, and files the daemon
+# creates are private by default.
+LimitCORE=0
+UMask=0077
+ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning packages/server-daemon/dist/index.js
 # always, NOT on-failure: the daemon exits 0 to request a self-restart after
 # provisioning a post-boot secret (SWK/CGK deposit), rotating the admin root, or
 # committing an update (server-daemon/src/index.ts). on-failure would treat
@@ -442,8 +446,8 @@ echo "[register] starting"
 cd /opt/flagship
 . /etc/flagship-bootstrap.env
 NOW=$(date +%s%3N)
-npx tsx scripts/install-helper.ts sign-server-register \
-    --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \
+if [ -n "\${SERVER_IDENTITY_PRIV_HEX:-}" ]; then ID_ARGS=(--priv-hex "$SERVER_IDENTITY_PRIV_HEX"); else ID_ARGS=(--keyd-socket /run/flagship-keyd/keyd.sock); fi
+flagship-tsx scripts/install-helper.ts sign-server-register "\${ID_ARGS[@]}" \
     --auth-code-blob /var/flagship/install-blob.json \
     > /run/register-payload.json
 echo "[register] POST $REGISTRATION_URL"
@@ -452,8 +456,8 @@ curl -fsS -X POST -H "content-type: application/json" \
     "$REGISTRATION_URL"
 CTRL_BASE=$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')
 if [ -n "\${SEALED_LUKS_KEY_HEX:-}" ]; then
-    npx tsx scripts/install-helper.ts sign-sealed-key \
-        --priv "$SERVER_IDENTITY_PRIV_HEX" \
+    flagship-tsx scripts/install-helper.ts sign-sealed-key \
+        "\${ID_ARGS[@]/--priv-hex/--priv}" \
         --server-id "$SERVER_DOMAIN" \
         --sealed-hex "$SEALED_LUKS_KEY_HEX" \
         --issued-at "$NOW" \

@@ -15,5 +15,8 @@
     "build": "tsc -b",
     "test": "vitest run --dir tests"
   },
+  "dependencies": {
+    "@flagship/protocol": "*"
+  },
   "license": "BUSL-1.1"
 }

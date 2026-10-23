@@ -119,33 +119,33 @@ public struct AdminRootReEscrow: Sendable {
             prfSecret: prfSecret
         )
 
-        // Sign the SAME upload canonical RecoveryViewModel.setup posts — over
-        // the PASSED-THROUGH wrappedUmk bytes, the unchanged credentialId.
-        guard let wrappedUmkBytes = Data(base64Encoded: fetched.wrappedUmk) else {
+        // N03 — chain a new signed record onto the stored one: the UMK and ACME escrows are
+        // `keep:<digest>` (passed through unchanged), the admin root is `replace:<digest>`.
+        guard Data(base64Encoded: fetched.wrappedUmk) != nil else {
             throw ReEscrowError.malformedEnvelope
         }
         let irk = try await deriveIRK("Update your recovery backup")
-        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-        let signature = try RecoveryUpload.sign(
+        let current = try await client.recoveryRecordState(username: username)
+        let adminRootPub = try await client.pinnedAdminRoot(username: username)
+        let claim = try RecoveryRecordChain.next(
             username: username,
+            irkPubHex: HexUtil.encode(irk.publicKey.rawRepresentation),
+            adminRootPubHex: adminRootPub,
+            current: current,
             credentialIdHex: fetched.credentialId,
-            wrappedUmkHashHex: RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes),
-            issuedAt: issuedAt,
-            irk: irk
+            wrappedUmk: fetched.wrappedUmk,
+            wrappedAdminRoot: wrappedAdminRoot,
+            wrappedAcmeAccountKey: nil,
+            fetchTokenHashHex: RecoveryDerivation.sha256Hex(secrets.fetchToken),
+            prfSaltHashHex: RecoveryDerivation.sha256Hex(secrets.prfSalt),
+            issuedAt: Int64(Date().timeIntervalSince1970 * 1000)
         )
-
         _ = try await client.registerRecoveryEnvelope(.init(
-            request: .init(
-                username: username,
-                credentialId: fetched.credentialId,
-                wrappedUmk: fetched.wrappedUmk,
-                issuedAt: issuedAt,
-                wrappedAcmeAccountKey: fetched.wrappedAcmeAccountKey,
-                wrappedAdminRoot: wrappedAdminRoot,
-                fetchTokenHash: RecoveryDerivation.sha256Hex(secrets.fetchToken),
-                prfSaltHash: RecoveryDerivation.sha256Hex(secrets.prfSalt)
-            ),
-            signature: signature
+            claim: claim,
+            signature: try claim.sign(with: irk),
+            wrappedUmk: fetched.wrappedUmk,
+            wrappedAdminRoot: wrappedAdminRoot,
+            wrappedAcmeAccountKey: nil
         ))
     }
 }

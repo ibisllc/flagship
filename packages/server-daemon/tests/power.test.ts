@@ -38,8 +38,14 @@ function recordingFakes() {
 
 const IRK = makeKey(70);
 
-function mkHandler(fakes: { suppressor: AutoUnlockSuppressor; runner: HostPowerRunner }) {
+const confirming = { suspend: async () => ({ confirmed: true as const }) };
+
+function mkHandler(
+  fakes: { suppressor: AutoUnlockSuppressor; runner: HostPowerRunner },
+  suspender: typeof confirming | null = confirming,
+) {
   return buildPowerHttp({
+    suspender,
     serverId: SERVER,
     ownerIrkPub: IRK.publicKey,
     suppressor: fakes.suppressor,
@@ -71,6 +77,17 @@ describe("buildPowerHttp", () => {
       expect(fakes.trace).toEqual(["suppress", `power:${mode}`]);
     });
   }
+
+  it("turns a restart into a power-off when the boot worker cannot be locked", async () => {
+    const fakes = recordingFakes();
+    const handle = mkHandler(fakes, null);
+    const order = powerOrder("restart");
+    const res = await handle(
+      req({ request: { ...order }, signature: bytesToHex(signPhoneOrder(order, IRK)) }),
+    );
+    expect(res!.status).toBe(200);
+    expect(fakes.trace).toEqual(["suppress", "power:off"]);
+  });
 
   it("rejects a wrong-key signature with 403 (no power action)", async () => {
     const fakes = recordingFakes();

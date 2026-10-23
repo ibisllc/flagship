@@ -52,7 +52,7 @@ public struct InstallBlob: Equatable, Sendable {
         registrationUrl: String = Endpoints.registrationUrl,
         authCode: AuthCode,
         authCodeUserSignature: Data,
-        installerGitRef: String = "main",
+        installerGitRef: String = BoxRelease.commit,
         rckPubKey: Data,
         bootUnlockMode: String? = nil,
         diskEncryption: String? = nil

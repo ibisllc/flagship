@@ -57,7 +57,38 @@ export function removeDurable(path: string): Promise<void> {
   });
 }
 
-async function replaceFile(path: string, data: string | Uint8Array, mode: number): Promise<void> {
+let noSpaceHook: (() => Promise<boolean>) | null = null;
+
+/**
+ * What to do when a security write finds the disk full (SECURITY-HARDENING-PLAN.md 18.13): free the
+ * management reserve and let the write try again. An app filling the disk must not be able to stop
+ * a revocation, a lock or a recovery record being saved. The hook answers whether it freed anything.
+ */
+export function onNoSpace(hook: (() => Promise<boolean>) | null): void {
+  noSpaceHook = hook;
+}
+
+/** One write, retried once after the reserve is released when the disk is full. */
+export async function replaceWithReserve(
+  path: string,
+  data: string | Uint8Array,
+  mode: number,
+  once: (path: string, data: string | Uint8Array, mode: number) => Promise<void> = replaceFileOnce,
+): Promise<void> {
+  try {
+    return await once(path, data, mode);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code !== "ENOSPC" || !noSpaceHook) throw e;
+    if (!(await noSpaceHook().catch(() => false))) throw e;
+    return once(path, data, mode);
+  }
+}
+
+function replaceFile(path: string, data: string | Uint8Array, mode: number): Promise<void> {
+  return replaceWithReserve(path, data, mode);
+}
+
+async function replaceFileOnce(path: string, data: string | Uint8Array, mode: number): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const tmp = `${path}.${process.pid}.${++tempSeq}.tmp`;
   try {

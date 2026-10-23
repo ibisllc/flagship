@@ -2854,6 +2854,18 @@ section h2.fs-hero-title::before { content: none; }
 .notice-banner-actions { display: flex; gap: var(--space-2); }
 .notice-banner-actions button { min-height: 36px; padding: 6px 12px; font-size: 14px; }
 
+/* ── Security sliver (N14): every row shows; nothing is merged or cut off. ── */
+.sliver { margin: 8px 24px 0; max-height: 45vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-2); }
+.sliver-row { padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent-graphic); border-radius: 6px; font-size: 14px; line-height: 1.4; }
+.sliver-row.sliver-critical, .sliver-row.sliver-high { background: var(--warn-soft); border-left-color: var(--warn); }
+.sliver-row.sliver-resolved { opacity: 0.7; }
+.sliver-row header { display: flex; gap: var(--space-2); font-weight: 600; flex-wrap: wrap; }
+.sliver-summary, .sliver-meta, .sliver-key p { margin: 4px 0 0; }
+.sliver-meta { color: var(--ink-muted, var(--ink)); font-size: 13px; }
+.sliver-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: 8px; }
+.sliver-actions button { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+.sliver-lost { margin: 0; padding: 8px 12px; background: var(--warn-soft); border-radius: 6px; font-size: 14px; }
+
 .update-lock {
   position: fixed;
   inset: 0;

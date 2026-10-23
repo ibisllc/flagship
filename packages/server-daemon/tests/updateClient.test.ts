@@ -16,7 +16,8 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ed, type Keypair } from "@flagship/protocol";
+import { ed, signAppRelease, signPublisherRotation, signPublisherTrust, type Keypair } from "@flagship/protocol";
+import { PublisherPins } from "../src/publisherPins.js";
 import {
   UpdateClient,
   type AppPullState,
@@ -115,6 +116,9 @@ describe("UpdateClient", () => {
     store: AppPullStateStore;
     fetcher: (url: string, init: RequestInit) => Promise<Response>;
     runMigration?: (a: { serviceId: string; absPath: string; filename: string }) => Promise<void>;
+    snapshotData?: (serviceId: string) => Promise<string>;
+    restoreData?: (serviceId: string, snapshotId: string) => Promise<void>;
+    publisherPins?: PublisherPins;
   }): UpdateClient {
     return new UpdateClient({
       identity,
@@ -131,6 +135,9 @@ describe("UpdateClient", () => {
         restartCount++;
       },
       emitPhoneAlert: (a) => alerts.push(a),
+      ...(args.snapshotData ? { snapshotData: args.snapshotData } : {}),
+      ...(args.restoreData ? { restoreData: args.restoreData } : {}),
+      ...(args.publisherPins ? { publisherPins: args.publisherPins } : {}),
     });
   }
 
@@ -156,44 +163,7 @@ describe("UpdateClient", () => {
     expect(fetched).toBe(false);
   });
 
-  it("auto policy: applies new commits, runs no migrations when none exist, restarts container", async () => {
-    const store = new MemStore();
-    await store.put(APP_ID, {
-      canonicalUrl: "game1.alice.flagship.services",
-      lineageAnchor: firstCommit,
-      currentTip: firstCommit,
-      lastAppliedMigration: "",
-      updatePolicy: "auto",
-    });
-    const bundle = await makeBundle(upstream, `${firstCommit}..main`);
-    const client = makeClient({
-      store,
-      fetcher: async () =>
-        new Response(bundle, {
-          status: 200,
-          headers: { "content-type": "application/x-git-bundle" },
-        }),
-    });
-    const res = await client.pullOne({ serviceId: APP_ID });
-    expect(res).toMatchObject({ kind: "applied", from: firstCommit, to: secondCommit });
-    expect(restartCount).toBe(1);
-    expect(migrationsRun).toEqual([]);
-    const after = await store.get(APP_ID);
-    expect(after?.currentTip).toBe(secondCommit);
-    // Working tree was reset to main; README should now read "v2".
-    const readme = await readFile(join(subscriber, "README.md"), "utf8");
-    expect(readme).toBe("v2\n");
-  });
-
-  it("auto policy: runs new migrations in lex order then restarts", async () => {
-    // Add migrations to upstream and commit them.
-    const m1 = "0001_init.sql";
-    const m2 = "0002_add_levels.sql";
-    await commitFile(upstream, `migrations/${m1}`, "-- init\n", "add migration 1");
-    const tipAfterM1 = await git(upstream, ["rev-parse", "HEAD"]);
-    await commitFile(upstream, `migrations/${m2}`, "-- levels\n", "add migration 2");
-    const tipAfterM2 = await git(upstream, ["rev-parse", "HEAD"]);
-
+  it("auto policy is held as manual: never advances on its own", async () => {
     const store = new MemStore();
     await store.put(APP_ID, {
       canonicalUrl: "game1.alice.flagship.services",
@@ -208,13 +178,70 @@ describe("UpdateClient", () => {
       fetcher: async () => new Response(bundle, { status: 200 }),
     });
     const res = await client.pullOne({ serviceId: APP_ID });
+    expect(res).toMatchObject({ kind: "halted-manual-pending", from: firstCommit, to: secondCommit });
+    expect(restartCount).toBe(0);
+    expect(migrationsRun).toEqual([]);
+    expect(await git(subscriber, ["rev-parse", "main"])).toBe(firstCommit);
+    expect((await store.get(APP_ID))?.currentTip).toBe(firstCommit);
+  });
+
+  it("applyPending: runs SQL migrations in lex order then restarts", async () => {
+    const m1 = "0001_init.sql";
+    const m2 = "0002_add_levels.sql";
+    await commitFile(upstream, `migrations/${m1}`, "-- init\n", "add migration 1");
+    await commitFile(upstream, `migrations/${m2}`, "-- levels\n", "add migration 2");
+    const tipAfterM2 = await git(upstream, ["rev-parse", "HEAD"]);
+
+    const store = new MemStore();
+    await store.put(APP_ID, {
+      canonicalUrl: "game1.alice.flagship.services",
+      lineageAnchor: firstCommit,
+      currentTip: firstCommit,
+      lastAppliedMigration: "",
+      updatePolicy: "manual",
+    });
+    const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+    const client = makeClient({
+      store,
+      fetcher: async () => new Response(bundle, { status: 200 }),
+    });
+    await client.pullOne({ serviceId: APP_ID });
+    const res = await client.applyPending({ serviceId: APP_ID });
     expect(res).toMatchObject({ kind: "applied", to: tipAfterM2, migrationsApplied: [m1, m2] });
     expect(migrationsRun).toEqual([m1, m2]);
     expect(restartCount).toBe(1);
-    const after = await store.get(APP_ID);
-    expect(after?.lastAppliedMigration).toBe(m2);
-    void tipAfterM1;
+    expect((await store.get(APP_ID))?.lastAppliedMigration).toBe(m2);
+    expect(await readFile(join(subscriber, "README.md"), "utf8")).toBe("v2\n");
   });
+
+  it.each(["0001_seed.js", "0001_seed.ts", "0001_seed.mjs"])(
+    "applyPending refuses a %s migration before the tree moves",
+    async (script) => {
+      await commitFile(upstream, `migrations/${script}`, "process.exit(0)\n", "add script migration");
+      const store = new MemStore();
+      await store.put(APP_ID, {
+        canonicalUrl: "game1.alice.flagship.services",
+        lineageAnchor: firstCommit,
+        currentTip: firstCommit,
+        lastAppliedMigration: "",
+        updatePolicy: "manual",
+      });
+      const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+      const client = makeClient({
+        store,
+        fetcher: async () => new Response(bundle, { status: 200 }),
+      });
+      await client.pullOne({ serviceId: APP_ID });
+      const res = await client.applyPending({ serviceId: APP_ID });
+      expect(res).toMatchObject({ kind: "halted-migration-failed", failingFile: script });
+      expect(migrationsRun).toEqual([]);
+      expect(restartCount).toBe(0);
+      expect(await git(subscriber, ["rev-parse", "main"])).toBe(firstCommit);
+      expect(alerts).toContainEqual(
+        expect.objectContaining({ kind: "migration-failed", migrationFile: script }),
+      );
+    },
+  );
 
   it("manual policy: stages incoming-main but doesn't advance — emits manual-pending alert", async () => {
     const store = new MemStore();
@@ -326,7 +353,7 @@ describe("UpdateClient", () => {
       lineageAnchor: firstCommit,
       currentTip: firstCommit,
       lastAppliedMigration: "",
-      updatePolicy: "auto",
+      updatePolicy: "manual",
     });
     const bundle = await makeBundle(upstream, `${firstCommit}..main`);
     const client = makeClient({
@@ -337,7 +364,8 @@ describe("UpdateClient", () => {
         migrationsRun.push(filename);
       },
     });
-    const res = await client.pullOne({ serviceId: APP_ID });
+    await client.pullOne({ serviceId: APP_ID });
+    const res = await client.applyPending({ serviceId: APP_ID });
     expect(res).toMatchObject({
       kind: "halted-migration-failed",
       failingFile: m1,
@@ -345,12 +373,174 @@ describe("UpdateClient", () => {
     });
     expect(restartCount).toBe(0);
     expect(alerts).toEqual([
+      expect.objectContaining({ kind: "manual-pending" }),
       expect.objectContaining({
         kind: "migration-failed",
         serviceId: APP_ID,
         migrationFile: m1,
       }),
     ]);
+  });
+
+  it("the manual-update alert says what new authority the release asks for", async () => {
+    const man = (egress: string[]) => JSON.stringify({ schema_version: 1, name: "g", version: "1.0.0", runtime: { image: "i", port: 8080 }, data: { stores: { postgres: true } }, network: { subdomain: "g", egress }, access: { enabled: true, default_role: "member" }, migration: { verification: "standard" } });
+    const v1 = await commitFile(upstream, "flagship.app.json", man([]), "manifest v1");
+    await git(subscriber, ["fetch", upstream, v1]);
+    await git(subscriber, ["update-ref", "refs/heads/main", v1]);
+    await git(subscriber, ["checkout", "main"]);
+    await commitFile(upstream, "flagship.app.json", man(["new.example.com"]), "asks for a host");
+    const store = new MemStore();
+    await store.put(APP_ID, { canonicalUrl: "game1.alice.flagship.services", lineageAnchor: firstCommit, currentTip: v1, lastAppliedMigration: "", updatePolicy: "manual" });
+    const bundle = await makeBundle(upstream, `${v1}..main`);
+    await makeClient({ store, fetcher: async () => new Response(bundle, { status: 200 }) }).pullOne({ serviceId: APP_ID });
+    const alert = alerts.find((a) => a.kind === "manual-pending") as { capabilityChanges?: { needsApproval: boolean; expanded: Array<{ capability: string; added: string[] }> } };
+    expect(alert.capabilityChanges?.needsApproval).toBe(true);
+    expect(alert.capabilityChanges?.expanded).toEqual([{ capability: "egress", added: ["new.example.com"], removed: [] }]);
+  });
+
+  describe("publisher keys (N11)", () => {
+    const key = (b: number) => {
+      const privateKey = new Uint8Array(32).fill(b);
+      return { privateKey, publicKey: ed.getPublicKey(privateKey) };
+    };
+    const hx = (b: Uint8Array) => Buffer.from(b).toString("hex");
+    const P1 = key(0x61), P2 = key(0x62), OWNER = key(0x77);
+
+    async function rig(opts: { signWith?: { privateKey: Uint8Array; publicKey: Uint8Array } | null; claimKey?: ReturnType<typeof key>; chain?: unknown[]; epoch?: number; generation?: number; digest?: string }) {
+      const pinsPath = join(await mkdtemp(join(tmpdir(), "pins-")), "pins.json");
+      const pins = new PublisherPins(pinsPath);
+      await pins.load();
+      const store = new MemStore();
+      await store.put(APP_ID, { canonicalUrl: "game1.alice.flagship.services", lineageAnchor: firstCommit, currentTip: firstCommit, lastAppliedMigration: "", updatePolicy: "manual" });
+      const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+      const release = (digest: string, o: { epoch?: number; generation?: number }) => ({ appId: APP_ID, identityGeneration: o.generation ?? 1, version: "1.0.0", packageDigestHex: digest, capabilityDigestHex: "c".repeat(64), keyEpoch: o.epoch ?? 0, issuedAt: 1 });
+      const fetcher = (signer: ReturnType<typeof key> | null, o: { epoch?: number; generation?: number; chain?: unknown[]; digest?: string } = {}) => async () => {
+        const headers: Record<string, string> = {};
+        if (signer) {
+          const r = release(o.digest ?? secondCommit, o);
+          headers["x-flagship-release"] = JSON.stringify({ release: r, signatureHex: signAppRelease(r, signer), publisherKeyHex: hx(signer.publicKey), chain: o.chain ?? [] });
+        }
+        return new Response(bundle, { status: 200, headers });
+      };
+      return { pins, store, fetcher, client: (f: ReturnType<typeof fetcher>) => makeClient({ store, fetcher: f, publisherPins: pins }) };
+    }
+
+    it("an unsigned release is refused", async () => {
+      const r = await rig({});
+      const res = await r.client(r.fetcher(null)).pullOne({ serviceId: APP_ID });
+      expect(res).toMatchObject({ kind: "halted-publisher" });
+      expect(alerts.at(-1)).toMatchObject({ kind: "publisher-rejected" });
+      expect((await r.store.get(APP_ID))?.pendingPullCommit).toBeUndefined();
+    });
+
+    it("the first verified key is pinned and the release goes on to the owner", async () => {
+      const r = await rig({});
+      const res = await r.client(r.fetcher(P1)).pullOne({ serviceId: APP_ID });
+      expect(res).toMatchObject({ kind: "halted-manual-pending" });
+      expect(r.pins.get(APP_ID)?.keyHex).toBe(hx(P1.publicKey));
+    });
+
+    it("a release signed for a different commit than the bundle holds is refused", async () => {
+      const r = await rig({});
+      const res = await r.client(r.fetcher(P1, { digest: "f".repeat(40) })).pullOne({ serviceId: APP_ID });
+      expect(res).toMatchObject({ kind: "halted-publisher" });
+    });
+
+    it("the same name under a different key stops the update and tells the owner both fingerprints", async () => {
+      const r = await rig({});
+      await r.client(r.fetcher(P1)).pullOne({ serviceId: APP_ID }); // pins P1, stages
+      await r.store.put(APP_ID, { ...(await r.store.get(APP_ID))!, pendingPullCommit: undefined });
+      alerts.length = 0;
+      const res = await r.client(r.fetcher(P2, { epoch: 1 })).pullOne({ serviceId: APP_ID });
+      expect(res).toMatchObject({ kind: "halted-publisher-key", continuity: "none" });
+      expect(alerts.at(-1)).toMatchObject({ kind: "publisher-key-change", continuity: "none" });
+      expect(r.pins.get(APP_ID)?.keyHex).toBe(hx(P1.publicKey)); // the pin did not move
+      expect((await r.store.get(APP_ID))?.pendingPullCommit).toBeUndefined();
+      // asking again changes nothing (the alert inbox folds repeats of the same key)
+      expect(await r.client(r.fetcher(P2, { epoch: 1 })).pullOne({ serviceId: APP_ID })).toMatchObject({ kind: "halted-publisher-key" });
+      expect(r.pins.get(APP_ID)?.keyHex).toBe(hx(P1.publicKey));
+    });
+
+    it("a valid rotation chain is labelled as one, and still waits for the owner; their signature moves the pin", async () => {
+      const r = await rig({});
+      await r.client(r.fetcher(P1)).pullOne({ serviceId: APP_ID });
+      await r.store.put(APP_ID, { ...(await r.store.get(APP_ID))!, pendingPullCommit: undefined });
+      const rotation = { appId: APP_ID, identityGeneration: 1, oldKeyHex: hx(P1.publicKey), newKeyHex: hx(P2.publicKey), newEpoch: 1, issuedAt: 5 };
+      const chain = [{ rotation, signatureHex: signPublisherRotation(rotation, P1) }];
+      const res = await r.client(r.fetcher(P2, { epoch: 1, chain })).pullOne({ serviceId: APP_ID });
+      expect(res).toMatchObject({ kind: "halted-publisher-key", continuity: "valid-chain" });
+      // approval by something that is not the owner's device does nothing
+      const trust = { serviceId: APP_ID, appId: APP_ID, identityGeneration: 1, oldKeyHex: hx(P1.publicKey), newKeyHex: hx(P2.publicKey), newEpoch: 1, issuedAt: 9 };
+      expect(await r.pins.approve(trust, signPublisherTrust(trust, key(0x99)), OWNER.publicKey)).toMatchObject({ ok: false });
+      expect(await r.pins.approve(trust, signPublisherTrust(trust, OWNER), OWNER.publicKey)).toEqual({ ok: true });
+      const after = await r.client(r.fetcher(P2, { epoch: 1, chain })).pullOne({ serviceId: APP_ID });
+      expect(after).toMatchObject({ kind: "halted-manual-pending" });
+    });
+  });
+
+  describe("a migration batch that fails part-way (SEC-MIG-002)", () => {
+    const setup = async (extra: { snapshot?: boolean; restoreFails?: boolean }) => {
+      await commitFile(upstream, "migrations/0001_ok.sql", "-- ok\n", "add ok");
+      await commitFile(upstream, "migrations/0002_bad.sql", "-- bad\n", "add bad");
+      const store = new MemStore();
+      await store.put(APP_ID, { canonicalUrl: "game1.alice.flagship.services", lineageAnchor: firstCommit, currentTip: firstCommit, lastAppliedMigration: "", updatePolicy: "manual" });
+      const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+      const restored: string[] = [];
+      const client = makeClient({
+        store,
+        fetcher: async () => new Response(bundle, { status: 200 }),
+        runMigration: async ({ filename }) => {
+          if (filename === "0002_bad.sql") throw new Error("column does not exist");
+          migrationsRun.push(filename);
+        },
+        ...(extra.snapshot ? { snapshotData: async () => "snap-1" } : {}),
+        ...(extra.snapshot
+          ? { restoreData: async (_s: string, id: string) => { if (extra.restoreFails) throw new Error("disk full"); restored.push(id); } }
+          : {}),
+      });
+      await client.pullOne({ serviceId: APP_ID });
+      return { store, client, restored };
+    };
+
+    it("rolls the code back and restores the snapshot, and says so", async () => {
+      const { store, client, restored } = await setup({ snapshot: true });
+      const res = await client.applyPending({ serviceId: APP_ID });
+      expect(res).toMatchObject({ kind: "halted-migration-failed", failingFile: "0002_bad.sql" });
+      expect((res as { reason: string }).reason).toMatch(/data was put back/);
+      expect(restored).toEqual(["snap-1"]);
+      expect(await git(subscriber, ["rev-parse", "HEAD"])).toBe(firstCommit);
+      const st = await store.get(APP_ID);
+      expect(st?.currentTip).toBe(firstCommit);
+      expect(st?.schemaAheadThrough).toBeUndefined();
+      expect(alerts.at(-1)).toMatchObject({ kind: "migration-failed", outcome: "restored" });
+    });
+
+    for (const [name, extra] of [["there is no snapshot", {}], ["the snapshot cannot be restored", { snapshot: true, restoreFails: true }]] as const) {
+      it(`when ${name}, it records that the schema is ahead and stops updating`, async () => {
+        const { store, client } = await setup(extra);
+        const res = await client.applyPending({ serviceId: APP_ID });
+        expect((res as { reason: string }).reason).toMatch(/data is newer than its code/);
+        expect(await git(subscriber, ["rev-parse", "HEAD"])).toBe(firstCommit); // code is back on the old version
+        const st = await store.get(APP_ID);
+        expect(st?.schemaAheadThrough).toBe("0001_ok.sql");
+        expect(st?.lastAppliedMigration).toBe("0001_ok.sql");
+        expect(alerts.at(-1)).toMatchObject({ outcome: "schema-ahead" });
+        expect(await client.pullOne({ serviceId: APP_ID })).toMatchObject({ kind: "no-op", reason: "schema-ahead-of-code" });
+      });
+    }
+
+    it("a first-migration failure changes nothing: code back, no schema claim", async () => {
+      await commitFile(upstream, "migrations/0001_bad.sql", "-- bad\n", "add bad");
+      const store = new MemStore();
+      await store.put(APP_ID, { canonicalUrl: "game1.alice.flagship.services", lineageAnchor: firstCommit, currentTip: firstCommit, lastAppliedMigration: "", updatePolicy: "manual" });
+      const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+      const client = makeClient({ store, fetcher: async () => new Response(bundle, { status: 200 }), runMigration: async () => { throw new Error("nope"); } });
+      await client.pullOne({ serviceId: APP_ID });
+      await client.applyPending({ serviceId: APP_ID });
+      expect(await git(subscriber, ["rev-parse", "HEAD"])).toBe(firstCommit);
+      expect((await store.get(APP_ID))?.schemaAheadThrough).toBeUndefined();
+      expect(alerts.at(-1)).toMatchObject({ outcome: "unchanged" });
+    });
   });
 
   it("no-op when home returns empty bundle (rare but possible)", async () => {

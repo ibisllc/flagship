@@ -102,6 +102,8 @@ export interface AccessSync {
   flushOnce(): Promise<void>;
   /** Whether `peer` runs the app and answers (an authenticated pull with this box's digest). */
   probe(peer: string, serviceRef: string): Promise<boolean>;
+  /** What a freshness checkpoint needs to know about this app's list (N07). */
+  freshnessState(serviceRef: string): { shared: boolean; catchingUp: boolean; hasPeers: boolean; lastSyncAt: number | null };
   /** Drop an uninstalled app's journal and pending hand-overs. */
   forget(serviceRef: string): Promise<void>;
   /**
@@ -134,6 +136,8 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
   }
 
   const shared = (ref: string) => opts.key !== null && scope(ref) === "account";
+  /** When this box last compared its list with another server and agreed (N07). */
+  const lastSyncAt = new Map<string, number>();
 
   function queue(peer: string, ref: string, entries: AccessEntry[]): void {
     const byRef = outbox.get(peer) ?? new Map<string, Map<string, AccessEntry>>();
@@ -294,6 +298,7 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
     } catch {
       return false;
     }
+    lastSyncAt.set(ref, now());
     if (body.same === true) return true;
     const theirs = Array.isArray(body.entries) ? body.entries : [];
     await take(ref, theirs);
@@ -376,6 +381,14 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
     reconcileOnce,
     flushOnce,
     catchUpAll: tickCatchUp,
+    freshnessState(ref) {
+      return {
+        shared: shared(ref),
+        catchingUp: opts.store.isCatchingUp(ref),
+        hasPeers: sources(ref).length > 0,
+        lastSyncAt: lastSyncAt.get(ref) ?? null,
+      };
+    },
     async probe(peer, ref) {
       if (!shared(ref)) return false;
       const r = await post("pull", peer.toLowerCase(), ref, { digest: opts.journal.digest(ref) });
@@ -387,6 +400,7 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
       return true;
     },
     async forget(ref) {
+      lastSyncAt.delete(ref);
       opts.store.setCatchingUp(ref, false);
       for (const byRef of outbox.values()) byRef.delete(ref);
       await opts.journal.forget(ref);

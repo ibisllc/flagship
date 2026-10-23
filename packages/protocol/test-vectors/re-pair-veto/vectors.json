@@ -1,0 +1,91 @@
+{
+  "about": "Admin veto of a pending recovery. Canonical bytes: flagship/re-pair-veto/v1|username(lowercase)|newIrkPubHex|initiatedAt|completesAt|vetoerPubHex|issuedAt, signed with Ed25519 by the vetoer. One signature is checked against each request; only the first is valid. Admin seed is 32 bytes of 0x2a.",
+  "adminSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "adminPubHex": "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61",
+  "cases": [
+    {
+      "name": "a veto of the exact attempt",
+      "request": {
+        "username": "alice",
+        "newIrkPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "initiatedAt": 1760000000000,
+        "completesAt": 1760259200000,
+        "vetoerPub": "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61",
+        "issuedAt": 1760001000000
+      },
+      "canonical": "flagship/re-pair-veto/v1|alice|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1760000000000|1760259200000|197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61|1760001000000",
+      "signatureHex": "d4504c5830d84a6eb448a54b468ea12a0ee75f879cd3574554fc3042cee23e0c78f7ae7033f1a0c0fd14d44bfb6ed4b14f3e73bea4f0cce5a3439c82ccbc2501",
+      "valid": true
+    },
+    {
+      "name": "another attempt's start time",
+      "request": {
+        "username": "alice",
+        "newIrkPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "initiatedAt": 1760000000001,
+        "completesAt": 1760259200000,
+        "vetoerPub": "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61",
+        "issuedAt": 1760001000000
+      },
+      "canonical": "flagship/re-pair-veto/v1|alice|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1760000000001|1760259200000|197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61|1760001000000",
+      "signatureHex": "d4504c5830d84a6eb448a54b468ea12a0ee75f879cd3574554fc3042cee23e0c78f7ae7033f1a0c0fd14d44bfb6ed4b14f3e73bea4f0cce5a3439c82ccbc2501",
+      "valid": false
+    },
+    {
+      "name": "another deadline",
+      "request": {
+        "username": "alice",
+        "newIrkPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "initiatedAt": 1760000000000,
+        "completesAt": 1760259200001,
+        "vetoerPub": "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61",
+        "issuedAt": 1760001000000
+      },
+      "canonical": "flagship/re-pair-veto/v1|alice|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1760000000000|1760259200001|197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61|1760001000000",
+      "signatureHex": "d4504c5830d84a6eb448a54b468ea12a0ee75f879cd3574554fc3042cee23e0c78f7ae7033f1a0c0fd14d44bfb6ed4b14f3e73bea4f0cce5a3439c82ccbc2501",
+      "valid": false
+    },
+    {
+      "name": "another pending device",
+      "request": {
+        "username": "alice",
+        "newIrkPub": "eb2cf13bf7ae3a5f614168a1fb09272d39771ec4b8523727815e466caf8ee163",
+        "initiatedAt": 1760000000000,
+        "completesAt": 1760259200000,
+        "vetoerPub": "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61",
+        "issuedAt": 1760001000000
+      },
+      "canonical": "flagship/re-pair-veto/v1|alice|eb2cf13bf7ae3a5f614168a1fb09272d39771ec4b8523727815e466caf8ee163|1760000000000|1760259200000|197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61|1760001000000",
+      "signatureHex": "d4504c5830d84a6eb448a54b468ea12a0ee75f879cd3574554fc3042cee23e0c78f7ae7033f1a0c0fd14d44bfb6ed4b14f3e73bea4f0cce5a3439c82ccbc2501",
+      "valid": false
+    },
+    {
+      "name": "another username",
+      "request": {
+        "username": "bob",
+        "newIrkPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "initiatedAt": 1760000000000,
+        "completesAt": 1760259200000,
+        "vetoerPub": "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61",
+        "issuedAt": 1760001000000
+      },
+      "canonical": "flagship/re-pair-veto/v1|bob|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1760000000000|1760259200000|197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61|1760001000000",
+      "signatureHex": "d4504c5830d84a6eb448a54b468ea12a0ee75f879cd3574554fc3042cee23e0c78f7ae7033f1a0c0fd14d44bfb6ed4b14f3e73bea4f0cce5a3439c82ccbc2501",
+      "valid": false
+    },
+    {
+      "name": "another issue time",
+      "request": {
+        "username": "alice",
+        "newIrkPub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "initiatedAt": 1760000000000,
+        "completesAt": 1760259200000,
+        "vetoerPub": "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61",
+        "issuedAt": 1760001000001
+      },
+      "canonical": "flagship/re-pair-veto/v1|alice|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1760000000000|1760259200000|197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61|1760001000001",
+      "signatureHex": "d4504c5830d84a6eb448a54b468ea12a0ee75f879cd3574554fc3042cee23e0c78f7ae7033f1a0c0fd14d44bfb6ed4b14f3e73bea4f0cce5a3439c82ccbc2501",
+      "valid": false
+    }
+  ]
+}

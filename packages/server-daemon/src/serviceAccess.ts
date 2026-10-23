@@ -53,6 +53,8 @@ import {
   APP_MEMBER_ROLES,
   parseServiceAccessModeV2,
   parseServiceAllowRemoveV2,
+  parseRestoredAccessApprove,
+  verifyRestoredAccessApprove,
   verifyRevokeServiceInvite,
   verifyServiceAccessModeV2,
   verifyServiceAllowRemoveV2,
@@ -72,6 +74,7 @@ import type { Principal, PrincipalResolver } from "./accessPrincipals.js";
 import type { AccessEntry } from "./accessJournal.js";
 import { serialFileWriter } from "./serialFileWriter.js";
 import { keepCorruptAside } from "./durableFile.js";
+import type { RestoredAccessDrafts } from "./restoredAccessDrafts.js";
 
 const H = { "content-type": "application/json" };
 
@@ -1184,6 +1187,19 @@ export class ServiceSessionStore {
     return true;
   }
 
+  /** An uninstalled app's browser sessions end with it (N11). */
+  async closeAllForService(serviceRef: string): Promise<number> {
+    let n = 0;
+    for (const [tok, e] of [...this.byToken]) {
+      if (e.serviceRef === serviceRef) {
+        this.drop(tok);
+        n++;
+      }
+    }
+    if (n > 0) await this.persist();
+    return n;
+  }
+
   private drop(token: string): void {
     const e = this.byToken.get(token);
     this.byToken.delete(token);
@@ -1236,6 +1252,8 @@ export interface ServiceAccessHttpOptions {
    * handed to the app's other servers. Box-internal changes aren't reported.
    */
   onEntry?: (serviceRef: string, entry: AccessEntry) => void;
+  /** Permissions a restore held back (N09): approved here, with an admin's signature over the draft. */
+  drafts?: RestoredAccessDrafts | null;
   store: ServiceAccessStore;
   /** Resolve `serviceRef` (`<creator>-<slug>`) → installed? Guards set-mode (422 if not). */
   serviceInstalled: (serviceRef: string) => boolean;
@@ -1480,6 +1498,9 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (req.path === "/api/service-access/allow-remove" && req.method === "POST") {
       return handleRemoveAllow(req);
     }
+    if (req.path === "/api/service-access/restored" && req.method === "POST") {
+      return handleApproveRestored(req);
+    }
     // Withdraw an invite: an admin's revoke, or the creating device's own
     // while it is still manager-class in that app. Prunes who joined through it.
     if (req.path === "/api/service-access/invite-withdraw" && req.method === "POST") {
@@ -1634,6 +1655,30 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // Idempotent: a no-op prune (AID already absent) still returns ok. The next
     // request from that AID is denied regardless (decide re-checks the list).
     return jsonResponse(200, { ok: true, removed: r === "removed" });
+  }
+
+  async function handleApproveRestored(req: HttpRequest): Promise<HttpResponse> {
+    if (!opts.drafts) return bad(404, "nothing restored is waiting");
+    const env = parseEnvelope(req);
+    if (!env) return bad(400, "malformed body");
+    let sig: Uint8Array;
+    try {
+      sig = hexToBytes(env.signature);
+    } catch {
+      return bad(400, "invalid signature hex");
+    }
+    const order = parseRestoredAccessApprove(env.request);
+    if (!order) return bad(400, "malformed approval");
+    if (Math.abs(now() - order.issuedAt) > ADMIN_ORDER_MAX_SKEW_MS) return bad(403, "stale request");
+    if (!adminSigned(order, sig, verifyRestoredAccessApprove)) return bad(403, "only an admin device can approve restored permissions");
+    const draft = opts.drafts.get(order.serviceRef);
+    if (!draft) return bad(404, "nothing restored is waiting for this app");
+    // The signature is over the digest the admin was shown: a replaced draft needs a new approval.
+    if (draft.info.sha256 !== order.draftSha256) return bad(409, "the restored permissions changed: review them and approve again");
+    if (!opts.serviceInstalled(order.serviceRef)) return bad(422, "unknown service");
+    await opts.store.importEntry(order.serviceRef, draft.entry as Parameters<typeof opts.store.importEntry>[1]);
+    await opts.drafts.remove(order.serviceRef);
+    return jsonResponse(200, { ok: true, serviceRef: order.serviceRef, people: draft.info.people });
   }
 
   async function handleWithdraw(req: HttpRequest): Promise<HttpResponse> {
@@ -2310,6 +2355,8 @@ export interface RevocationPollerOptions {
   now?: () => number;
   /** Poll cadence (ms) — reuses the daemon-status heartbeat cadence. Default 5 min. */
   intervalMs?: number;
+  /** Fired each time `.com` answered a poll (N07: the box has just heard the current revocations). */
+  onAnswered?: (at: number) => void;
 }
 
 export interface RevocationPoller {
@@ -2379,6 +2426,7 @@ export function buildRevocationPoller(opts: RevocationPollerOptions): Revocation
     } catch {
       return 0;
     }
+    opts.onAnswered?.(now());
     let pruned = 0;
     for (const r of body.revoked ?? []) {
       if (typeof r.inviteId !== "string") continue;
@@ -2421,6 +2469,7 @@ export function buildRevocationPoller(opts: RevocationPollerOptions): Revocation
     pollOnce,
     start() {
       if (timer) return;
+      void pollOnce().catch(() => {});
       timer = setInterval(() => {
         void pollOnce().catch(() => {});
       }, intervalMs);

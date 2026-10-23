@@ -95,6 +95,30 @@ describe("guardedFetch — redirect re-validation", () => {
     expect(f).toHaveBeenCalledTimes(1);
   });
 
+  it("a redirect to another host carries no credential and no prompt; the same host keeps them", async () => {
+    const seen: Array<{ url: string; headers: Record<string, string>; body: unknown; method: string }> = [];
+    mockFetch(async (url, init) => {
+      seen.push({ url, headers: (init?.headers ?? {}) as Record<string, string>, body: init?.body, method: String(init?.method) });
+      if (url === "https://api.example.com/v1/a") return redirectTo("https://api.example.com/v1/b");
+      if (url === "https://api.example.com/v1/b") return redirectTo("https://other.example.net/steal");
+      return new Response("done", { status: 200 });
+    });
+    const fetchLike = guardedFetch({ resolve: async () => ["1.2.3.4"] });
+    await fetchLike("https://api.example.com/v1/a", { method: "POST", headers: { authorization: "Bearer sk-secret", "x-api-key": "sk-secret", "content-type": "application/json" }, body: '{"prompt":"private"}' });
+    expect(seen[1]!.headers.authorization).toBe("Bearer sk-secret"); // same origin: unchanged
+    expect(seen[1]!.body).toBe('{"prompt":"private"}');
+    expect(seen[2]!.url).toBe("https://other.example.net/steal");
+    expect(Object.keys(seen[2]!.headers).map((k) => k.toLowerCase())).toEqual(["content-type"]);
+    expect(seen[2]!.body).toBeUndefined();
+    expect(seen[2]!.method).toBe("GET");
+  });
+
+  it("refuses a 307/308 that would replay the request, contents and all, to another host", async () => {
+    mockFetch(async (url) => (url === "https://api.example.com/v1/a" ? new Response(null, { status: 307, headers: { location: "https://other.example.net/x" } }) : new Response("no")));
+    const fetchLike = guardedFetch({ resolve: async () => ["1.2.3.4"] });
+    await expect(fetchLike("https://api.example.com/v1/a", { method: "POST", headers: { authorization: "Bearer k" }, body: "secret prompt" })).rejects.toThrow(/another host/);
+  });
+
   it("FOLLOWS a 302 → another public host (re-validated, allowed)", async () => {
     const f = mockFetch(async (url) => {
       if (url === "https://a.example.com/start") return redirectTo("https://b.example.com/final");

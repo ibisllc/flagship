@@ -90,15 +90,9 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
         server.cloudRecoveryByUser[username] = recovery
         if recovery {
             // A recovery envelope so the resolve's recovery.present is true.
-            _ = try await server.registerRecoveryEnvelope(.init(
-                request: .init(
-                    username: username,
-                    credentialId: "cred-\(username)",
-                    wrappedUmk: "AA==",
-                    issuedAt: 1
-                ),
-                signature: "00"
-            ))
+            _ = try await server.registerRecoveryEnvelope(
+                try makeRecoveryUpload(username: username, wrappedUmk: "AA==")
+            )
         }
     }
 

@@ -59,7 +59,7 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string } {
     registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode,
     authCodeUserSignature,
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: rck.publicKey,
   };
   return { blob, blobSignatureHex: hx(signInstallBlob(blob, irk)) };
@@ -358,11 +358,10 @@ describe("buildDebianPreseed — first-boot bootstrap ", () => {
     expect(b).toContain("FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN");
     expect(b).not.toContain("install-helper.ts mint-entitlements");
     expect(b).toContain("fetch an IRK-signed entitlement from the phone");
-    expect(b).toContain("ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon");
+    expect(b).toContain("ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning packages/server-daemon/dist/index.js");
     expect(b).toContain("systemctl enable flagship-daemon.service flagship-first-boot-register.service");
-    // Node 20 from NodeSource — reused verbatim, the whole reason we don't rely
-    // on Debian's archived nodejs.
-    expect(b).toContain("https://deb.nodesource.com/setup_20.x");
+    // Node ships inside the signed release: no NodeSource repository on the box.
+    expect(b).not.toContain("deb.nodesource.com");
   });
 
   it("the encrypted bootstrap re-keys + seals + adds an LVM-aware initramfs unlock", () => {
@@ -687,7 +686,7 @@ describe("buildDebianPreseed — input validation ", () => {
     const { blob, blobSignatureHex } = signedBlob();
     expect(() =>
       buildDebianPreseed({ blob, blobSignatureHex, installerGitRef: "main; rm -rf /" }),
-    ).toThrow(/unsafe git ref/);
+    ).toThrow(/exact 40-character commit/);
   });
   it("rejects a non-https boot host", () => {
     const { blob, blobSignatureHex } = signedBlob();
