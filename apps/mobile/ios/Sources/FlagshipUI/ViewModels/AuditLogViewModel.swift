@@ -145,6 +145,7 @@ public final class AuditLogViewModel {
         case "totp-failed-rate":    return "Repeated authenticator code failures"
         case "re-pair-initiated":   return "Started device replacement"
         case "re-pair-expired":     return "Device replacement expired"
+        case "re-pair-vetoed":      return "Recovery rejected by an admin"
         case "re-pair-refused-no-credential": return "Refused a device replacement"
         case "re-pair-initiated-no-credential": return "Started device replacement without a credential"
         case "quarantine-blocked-revoke": return "Blocked a quarantined device's action"

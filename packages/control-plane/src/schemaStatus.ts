@@ -78,7 +78,7 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   // The hub's list of hosts boxes' AI calls may leave through, and per-host totals.
   "0106",
   // Which servers are locked, so no auto-unlock lease is released for them.
-  "0107",
+  "0107", "0108",
 ];
 
 export interface SchemaStatusDeps {

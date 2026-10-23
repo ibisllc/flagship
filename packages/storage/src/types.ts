@@ -475,6 +475,7 @@ export type AuditEventKind =
   // where a recovery they did not start becomes visible to them.
   | "re-pair-initiated"
   | "re-pair-expired"
+  | "re-pair-vetoed"
   // P13 — IRK-signed user-initiated server revocation
   // (POST /api/server-registry/revoke). Reason ∈ {lost, stolen,
   // decommissioned}. Cascades through every active boot-unlock lease
@@ -745,6 +746,13 @@ export interface PendingRePairRecord {
    * `oldIrkSignature` exists only for the registered-key routes.
    */
   proof?: { issuedAt: number; newIrkSignature: string; oldIrkSignature?: string };
+  /** Set by the atomic claim that starts the key swap; a veto after this fails. */
+  completingAt?: number;
+  /** Admin key that vetoed the attempt; absent for a self-cancel. */
+  vetoedByHex?: string;
+  vetoSignatureHex?: string;
+  /** Offline-alert threshold frozen at initiation (the wait is at least twice this). */
+  offlineAlertMs?: number;
 }
 
 export interface PendingRePairStorage {
@@ -756,6 +764,16 @@ export interface PendingRePairStorage {
   get(username: string): Promise<PendingRePairRecord | undefined>;
   /** Mark the row as objected; no-op if no row exists. Returns whether the row existed. */
   object(username: string, at: number): Promise<boolean>;
+  /**
+   * An active admin's veto. Succeeds only while the row is neither objected nor
+   * already claimed for completion; returns whether THIS call won.
+   */
+  veto(username: string, at: number, byHex: string, signatureHex: string): Promise<boolean>;
+  /**
+   * The one atomic step before the key swap. Succeeds only if no objection or
+   * veto landed first; returns whether THIS call won.
+   */
+  claimCompletion(username: string, at: number): Promise<boolean>;
   /** Delete the row (called after `complete` succeeds). */
   delete(username: string): Promise<boolean>;
   /**

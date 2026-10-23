@@ -2751,8 +2751,8 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
              (username, new_irk_pub_hex, old_irk_pub_hex,
               initiated_at, completes_at, objected_at,
               grace_seconds, totp_required, totp_proof_consumed,
-              alerts_fired_bitmap, proof_json)
-           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+              alerts_fired_bitmap, proof_json, offline_alert_ms)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           key,
@@ -2765,6 +2765,7 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
           rec.totpProofConsumed ? 1 : 0,
           rec.alertsFiredBitmap ?? 0,
           rec.proof ? JSON.stringify(rec.proof) : null,
+          rec.offlineAlertMs ?? null,
         )
         .run();
       return { ok: true as const };
@@ -2783,13 +2784,36 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
     return rawPendingRePairToRecord(r);
   }
 
-  async object(username: string, at: number): Promise<boolean> {
-    const r = await this.db
-      .prepare("UPDATE pending_re_pairs SET objected_at = ? WHERE username = ? AND objected_at IS NULL")
-      .bind(at, username.toLowerCase())
-      .run();
+  private async changed(stmt: D1PreparedStatement): Promise<boolean> {
+    const r = await stmt.run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+
+  async object(username: string, at: number): Promise<boolean> {
+    return this.changed(
+      this.db
+        .prepare("UPDATE pending_re_pairs SET objected_at = ? WHERE username = ? AND objected_at IS NULL AND completing_at IS NULL")
+        .bind(at, username.toLowerCase()),
+    );
+  }
+
+  async veto(username: string, at: number, byHex: string, signatureHex: string): Promise<boolean> {
+    return this.changed(
+      this.db
+        .prepare(
+          "UPDATE pending_re_pairs SET objected_at = ?, vetoed_by_hex = ?, veto_signature_hex = ? WHERE username = ? AND objected_at IS NULL AND completing_at IS NULL",
+        )
+        .bind(at, byHex, signatureHex, username.toLowerCase()),
+    );
+  }
+
+  async claimCompletion(username: string, at: number): Promise<boolean> {
+    return this.changed(
+      this.db
+        .prepare("UPDATE pending_re_pairs SET completing_at = ? WHERE username = ? AND objected_at IS NULL AND completing_at IS NULL")
+        .bind(at, username.toLowerCase()),
+    );
   }
 
   async delete(username: string): Promise<boolean> {
@@ -2848,6 +2872,10 @@ interface RawPendingRePairRow {
   totp_proof_consumed?: number | null;
   alerts_fired_bitmap?: number | null;
   proof_json?: string | null;
+  completing_at?: number | null;
+  vetoed_by_hex?: string | null;
+  veto_signature_hex?: string | null;
+  offline_alert_ms?: number | null;
 }
 
 function parseRePairProof(raw: string | null | undefined): PendingRePairRecord["proof"] | undefined {
@@ -2878,6 +2906,10 @@ function rawPendingRePairToRecord(r: RawPendingRePairRow): PendingRePairRecord {
     totpProofConsumed: r.totp_proof_consumed === 1,
     alertsFiredBitmap: r.alerts_fired_bitmap ?? 0,
     ...(parseRePairProof(r.proof_json) ? { proof: parseRePairProof(r.proof_json)! } : {}),
+    ...(r.completing_at != null ? { completingAt: r.completing_at } : {}),
+    ...(r.vetoed_by_hex ? { vetoedByHex: r.vetoed_by_hex } : {}),
+    ...(r.veto_signature_hex ? { vetoSignatureHex: r.veto_signature_hex } : {}),
+    ...(r.offline_alert_ms != null ? { offlineAlertMs: r.offline_alert_ms } : {}),
   };
 }
 

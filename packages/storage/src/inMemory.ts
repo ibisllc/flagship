@@ -337,7 +337,22 @@ export class InMemoryPendingRePairStorage implements PendingRePairStorage {
   async object(username: string, at: number) {
     const r = this.rows.get(username.toLowerCase());
     if (!r) return false;
+    if (r.objectedAt !== undefined || r.completingAt !== undefined) return false;
     r.objectedAt = at;
+    return true;
+  }
+  async veto(username: string, at: number, byHex: string, signatureHex: string) {
+    const r = this.rows.get(username.toLowerCase());
+    if (!r || r.objectedAt !== undefined || r.completingAt !== undefined) return false;
+    r.objectedAt = at;
+    r.vetoedByHex = byHex;
+    r.vetoSignatureHex = signatureHex;
+    return true;
+  }
+  async claimCompletion(username: string, at: number) {
+    const r = this.rows.get(username.toLowerCase());
+    if (!r || r.objectedAt !== undefined || r.completingAt !== undefined) return false;
+    r.completingAt = at;
     return true;
   }
   async delete(username: string) {
