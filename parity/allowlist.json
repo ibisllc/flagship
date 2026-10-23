@@ -1,6 +1,8 @@
 {
   "about": "Derived-check findings that are intentional. Each entry names its check id and finding key exactly as scripts/parity-check.mjs prints them, and says why. An entry that no longer matches anything is reported as stale: delete it.",
   "entries": [
+    { "check": "test-vectors", "key": "swift:language-negotiation", "reason": "iOS never picks a language itself: the OS chooses among the app's localisations (Settings > App > Language). The vectors are the rule for the webapp, the box pages and the website, which negotiate Accept-Language / navigator.languages." },
+    { "check": "test-vectors", "key": "kotlin:language-negotiation", "reason": "Android never picks a language itself: the OS chooses among the app's values-<lang> resources (per-app language in system settings). The vectors are the rule for the webapp, the box pages and the website." },
     { "check": "test-vectors", "key": "mac:vm-core-vectors.applianceSeed", "reason": "By the section's own notes the Mac's JSONEncoder writes an equivalent seed body, not the same bytes, so it doesn't assert this vector." },
     { "check": "test-vectors", "key": "mac:vm-core-vectors.qemuFailure", "reason": "The Mac hosts on Virtualization.framework and never runs QEMU, so there is no QEMU stderr or WHPX memory failure to describe; its VZ errors are already plain. Only the Windows and Linux ports implement QemuFailure/qemu_failure." },
     { "check": "test-vectors", "key": "linux:vm-core-vectors.applianceSeed", "reason": "Linux writes the seed through the Node CLI's appliance-provision, which packages/flagship-builder/tests/appliance.test.ts checks against this section." },
