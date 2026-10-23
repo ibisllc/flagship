@@ -14,14 +14,12 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/service-invite-list/v1",
     "flagship/service-invite-create-fetch/v1",
     "flagship/service-invite-co-manager/v1",
-    "flagship/service-grant/v1",
     "flagship/server-revoke-by-self/v1",
     "flagship/server-migration-attach/v1",
     "flagship/server-migration-ack/v1",
     "flagship/pod-binding/v1",
     "flagship/pb-manifest/v1",
     "flagship/mint-reservation/v1",
-    "flagship/membership/v1",
     "flagship/lan-hint/v1",
     "flagship/dns01-publish/v1",
     "flagship/dns01-delete/v1",
@@ -37,6 +35,16 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/push-relay/v1",
     "flagship/app-copy-fetch/v1",
     "flagship/pb-http/v1",
+    "flagship/app-release/v1",
+    "flagship/identity-header/v1",
+    "flagship/custom-domain-cert/v1",
+    "flagship/pb-checkin/v1",
+    "flagship/pb-directory/v1",
+    "flagship/pb-tokens/v1",
+    "flagship/pb-redeem/v1",
+    "flagship/pb-filler-fetch/v1",
+    "flagship/pb-filler-proof/v1",
+    "flagship/pb-root-deposit/v1",
     "pb-put",
     "pb-resp",
     "pb/request-peers/v1",
@@ -381,6 +389,22 @@ mod tests {
         );
         assert_eq!(ok("pb-put|a|1|2|peer"), "pb-put");
         assert_eq!(ok("\u{feff}flagship/inject/v1|x"), "flagship/inject/v1");
+        assert_eq!(
+            ok("flagship/app-release/v1|app|1"),
+            "flagship/app-release/v1"
+        );
+        for t in [
+            "pb-checkin",
+            "pb-directory",
+            "pb-tokens",
+            "pb-redeem",
+            "pb-filler-fetch",
+            "pb-filler-proof",
+            "pb-root-deposit",
+        ] {
+            let tag = format!("flagship/{t}/v1");
+            assert_eq!(ok(&format!("{tag}|home.a.flagship.services|1")), tag);
+        }
     }
 
     #[test]
@@ -390,6 +414,8 @@ mod tests {
             "flagship/server-update/v1|x",
             "flagship/order/power-off/v1|x",
             "flagship/account-self-delete/v1|x",
+            "flagship/membership/v1|x",
+            "flagship/service-grant/v1|x",
             "flagship/app-rank/v1|x",
             "flagship/debug-access/v2|x",
             "flagship/server-share/v1|x",

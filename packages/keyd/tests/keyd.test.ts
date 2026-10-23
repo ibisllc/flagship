@@ -32,12 +32,16 @@ describe("what the box key may sign", () => {
     expect(ok("flagship/secret-request/v1|a|b")).toBe("flagship/secret-request/v1");
     expect(ok("flagship/inject/v1|app|user|role|1")).toBe("flagship/inject/v1");
     expect(ok("pb-put|a|1|2|peer")).toBe("pb-put");
+    expect(ok("flagship/app-release/v1|app|1")).toBe("flagship/app-release/v1");
+    for (const t of ["pb-checkin", "pb-directory", "pb-tokens", "pb-redeem", "pb-filler-fetch", "pb-filler-proof", "pb-root-deposit"]) {
+      expect(ok(`flagship/${t}/v1|home.a.flagship.services|1`)).toBe(`flagship/${t}/v1`);
+    }
   });
 
   it("refuses owner, admin and account purposes, untagged bytes and binary", () => {
     for (const m of [
       "flagship/root-entitlement/v1|x", "flagship/server-update/v1|x", "flagship/order/power-off/v1|x", "flagship/account-self-delete/v1|x",
-      "flagship/app-rank/v1|x", "flagship/debug-access/v2|x", "flagship/server-share/v1|x", "flagship/re-pair-veto/v1|x",
+      "flagship/app-rank/v1|x", "flagship/debug-access/v2|x", "flagship/membership/v1|x", "flagship/service-grant/v1|x", "flagship/server-share/v1|x", "flagship/re-pair-veto/v1|x",
       "no-separator", "|leading", "random bytes", "flagship/inject/v1", "flagship/inject/v1 |x", "FLAGSHIP/inject/v1|x",
     ]) denied(m);
     denied(new Uint8Array([0xff, 0xfe, 0x7c, 1]));

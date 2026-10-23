@@ -410,6 +410,8 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["sign", { msg: susp("1") }, true], ["sign", { msg: susp("0") }, true], ["sign", { msg: susp(" 7 ") }, true], ["sign", { msg: susp("1e1") }, true], ["sign", { msg: susp("Infinity") }, true],
         ["sign", { msg: susp("1", "resume") }, true], ["sign", { msg: susp("1", "suspend", "owner") }, true],
         ["sign", { msg: boot("box", hex(PUB)) }, true], ["sign", { msg: boot("box", "00") }, true], ["sign", { msg: boot("owner", hex(PUB)) }, true],
+        ["sign", { msg: hex(enc("flagship/app-release/v1|a|1")) }, true], ["sign", { msg: hex(enc("flagship/pb-checkin/v1|a|1")) }, true],
+        ["sign", { msg: hex(enc("flagship/pb-root-deposit/v1|a|1")) }, true], ["sign", { msg: hex(enc("flagship/membership/v1|a")) }, true], ["sign", { msg: hex(enc("flagship/service-grant/v1|a")) }, true],
         ["unseal", { blob: blob(43) }, true], ["unseal", { blob: blob(44) }, true], ["unseal", { blob: blob(100) }, true], ["unseal", { blob: blob(10), x: 1 }, true],
         ["swk.hkdf", { salt: "aa", info: "flagship.llm.v1" }, true], ["swk.hkdf", { salt: "aa", info: "nope" }, true], ["swk.hkdf", { salt: "a", info: "flagship.llm.v1" }, true],
         ["swk.hkdf", { info: "flagship.llm.v1" }, true], ["swk.hkdf", { salt: blob(513), info: "flagship.llm.v1" }, true], ["swk.hkdf", { salt: "", info: "x".repeat(129) }, true],
