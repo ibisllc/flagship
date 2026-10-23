@@ -180,11 +180,11 @@ class GymBackupsTest : GymBase() {
         assertEquals(listOf(oldest.archiveId), mock.backupDeletes)
     }
 
-    // 7. The create wizard's backup step: the three choices (no backup first, none
-    // preselected), and the phone's reserve (the signed sibling is pinned in
+    // 7. The create wizard's backup step: No backup and On my phone (none preselected; Peer is off
+    // at GA, bdc9408f5), and the phone's reserve (the signed sibling is pinned in
     // CreateServerBackupPolicyTest: the gym never reaches the box's deposit).
     @Test
-    fun theWizardOffersTheThreePoliciesWithAReserve() {
+    fun theWizardOffersNoBackupAndPhoneWithAReserve() {
         launch(tab = "home", adminRoot = true)
         addNewServer()
         nameServerAndNext()
@@ -194,37 +194,47 @@ class GymBackupsTest : GymBase() {
         // Nothing is preselected, so there is no reserve stepper and Continue waits for a pick.
         assertTrue(!exists("cs-backup-policy-reserve"))
         composeRule.onNodeWithTag("cs-continue-button").performScrollTo().assertIsNotEnabled()
+        waitUntilExists("cs-backup-policy-none")
         waitUntilTextExists(BackupsText.CREATE_NONE_BODY)
         waitUntilTextExists(BackupsText.CREATE_PHONE_BODY)
-        waitUntilTextExists(BackupsText.CREATE_PEER_BODY)
         waitUntilTextExists(BackupsText.CREATE_CHANGE_NOTE)
+        assertTrue("Peer is not offered while peer backup is off", !exists("cs-backup-policy-peer"))
+        assertTrue(composeRule.onAllNodesWithText(BackupsText.CREATE_PEER_BODY).fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithTag("cs-backup-policy-phone").performScrollTo().performClick()
         waitUntilExists("cs-backup-policy-reserve")
         assertTrue(textOf("cs-backup-policy-reserve").endsWith(" GB"))
         waitUntilTextExists("This phone has ")
         composeRule.onNodeWithTag("cs-continue-button").performScrollTo().assertIsEnabled()
         gymShot("wizard-backup-policy")
-        composeRule.onNodeWithTag("cs-backup-policy-peer").performScrollTo().performClick()
+        composeRule.onNodeWithTag("cs-backup-policy-none").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { !exists("cs-backup-policy-reserve") }
-        gymShot("wizard-backup-policy-peer")
+        composeRule.onNodeWithTag("cs-continue-button").performScrollTo().assertIsEnabled()
+        gymShot("wizard-backup-policy-none")
     }
 
-    // 8. The server page's policy: Phone → Peer (signed), a refusal in the
-    // box's words, over the limit in red, the peer status, and Not chosen yet.
+    // 8. The server page's policy: Phone -> No backups (signed), Peer refused by the box while it
+    // is off, a reserve smaller than the apps' data refused in the box's words.
     @Test
     fun thePolicyChangesAndRefusalsAreTheBoxs() {
         openBackups(adminRoot = true)
         assertEquals("Backup policy: Phone-side backups · up to 32 GB", textOf("sd-backups-policy"))
         assertEquals("Apps use 3.2 GB of 32 GB", textOf("sd-backups-usage"))
         composeRule.onNodeWithTag("sd-backups-policy-change").performScrollTo().performClick()
-        waitUntilExists("sd-backups-policy-peer")
-        composeRule.onNodeWithTag("sd-backups-policy-peer").performClick()
+        waitUntilExists("sd-backups-policy-none")
+        assertTrue("Peer is not offered while peer backup is off", !exists("sd-backups-policy-peer"))
+        composeRule.onNodeWithTag("sd-backups-policy-none").performClick()
         composeRule.onNodeWithTag("sd-backups-policy-save").performClick()
-        composeRule.waitUntil(15_000) { textOf("sd-backups-policy") == "Backup policy: Peer-distributed backups" }
-        assertEquals("peer", mock.backupPolicyPosts.single().order.policy)
-        waitUntilExists("sd-backups-peer")
-        assertTrue(composeRule.onAllNodesWithText("12 of 12 pieces safe").fetchSemanticsNodes().isNotEmpty())
-        gymShot("backups-policy-peer")
+        composeRule.waitUntil(15_000) { textOf("sd-backups-policy") == "Backup policy: No backups" }
+        val signed = mock.backupPolicyPosts.single()
+        assertEquals("none", signed.order.policy)
+        assertEquals(0L, signed.order.phoneReserveBytes)
+        gymShot("backups-policy-none")
+
+        // The box itself refuses Peer while it is off, whatever a client sends.
+        val peer = signed.copy(order = signed.order.copy(policy = "peer", issuedAt = signed.order.issuedAt + 1))
+        val refusal = runCatching { kotlinx.coroutines.runBlocking { mock.setBackupPolicy(peer) } }.exceptionOrNull()
+        assertTrue("peer refused: $refusal", refusal is com.flagshipserver.app.api.ScreensError.Http && refusal.status == 409 && refusal.body.contains("peer-backup-not-available"))
+        assertEquals(1, mock.backupPolicyPosts.size)
 
         composeRule.waitUntil(10_000) { composeRule.onAllNodesWithTag("sd-backups-policy-save").fetchSemanticsNodes().isEmpty() }
         // Back to the phone with a reserve smaller than the apps' data: refused.
@@ -258,10 +268,20 @@ class GymBackupsTest : GymBase() {
         assertEquals("Backup policy: Not chosen yet", textOf("sd-backups-policy"))
         composeRule.onNodeWithText("Choose").assertExists()
         composeRule.onNodeWithTag("sd-backups-policy-change").performClick()
-        waitUntilExists("sd-backups-policy-peer")
-        composeRule.onNodeWithTag("sd-backups-policy-peer").performClick()
+        waitUntilExists("sd-backups-policy-phone")
+        assertTrue("Peer is not offered while peer backup is off", !exists("sd-backups-policy-peer"))
+        composeRule.onNodeWithTag("sd-backups-policy-phone").performClick()
+        waitUntilExists("sd-backups-policy-reserve")
+        // The apps hold 3.2 GB: reserve as much as this phone allows so the box accepts it.
+        while (composeRule.onAllNodes(hasTestTag("sd-backups-policy-reserve-up") and isEnabled()).fetchSemanticsNodes().isNotEmpty()) {
+            composeRule.onNodeWithTag("sd-backups-policy-reserve-up").performClick()
+        }
+        val reserveGb = textOf("sd-backups-policy-reserve").removeSuffix(" GB").trim().toLong()
         composeRule.onNodeWithTag("sd-backups-policy-save").performClick()
-        composeRule.waitUntil(15_000) { textOf("sd-backups-policy") == "Backup policy: Peer-distributed backups" }
+        composeRule.waitUntil(15_000) { textOf("sd-backups-policy").startsWith("Backup policy: Phone-side backups") }
+        val signed = mock.backupPolicyPosts.single().order
+        assertEquals("phone", signed.policy)
+        assertEquals(reserveGb * BackupsText.GB, signed.phoneReserveBytes)
         gymShot("backups-policy-chosen")
     }
 
