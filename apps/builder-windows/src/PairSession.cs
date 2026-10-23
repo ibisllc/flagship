@@ -32,6 +32,9 @@ public sealed record PairEvent
     public bool DebugGranted { get; init; }
     // error
     public string? Message { get; init; }
+    // done: the phone's per-server key for confirming the code a hosted VM shows (first contact),
+    // sealed beside the recipe in the same delivery, never written into the recipe file.
+    public byte[]? StudioConfirmKey { get; init; }
 }
 
 /// <summary>
@@ -252,6 +255,17 @@ public sealed class PairSession : IDisposable
                     !frame.TryGetProperty("nonce", out var nonce) || nonce.ValueKind != JsonValueKind.String)
                     throw new CryptographicException("Malformed recipe delivery.");
                 var plaintext = NativePairingCrypto.OpenDelivered(ct.GetString()!, nonce.GetString()!, currentKey);
+                byte[]? confirmKey = null;
+                if (frame.TryGetProperty("confirmKeyCiphertext", out var kct) && kct.ValueKind == JsonValueKind.String &&
+                    frame.TryGetProperty("confirmKeyNonce", out var kn) && kn.ValueKind == JsonValueKind.String)
+                {
+                    try
+                    {
+                        var k = NativePairingCrypto.OpenDelivered(kct.GetString()!, kn.GetString()!, currentKey);
+                        if (k.Length == 32) confirmKey = k;
+                    }
+                    catch (CryptographicException) { }
+                }
                 try
                 {
                     var verified = RecipeLoader.Load(plaintext);
@@ -262,6 +276,7 @@ public sealed class PairSession : IDisposable
                     {
                         Event = "done", RecipePath = RecipeOutPath,
                         ServerDomain = verified.ServerDomain, DebugGranted = false,
+                        StudioConfirmKey = confirmKey,
                     });
                     return (null, true);
                 }

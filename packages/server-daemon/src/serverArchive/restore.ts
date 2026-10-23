@@ -42,6 +42,8 @@ import { writeSourceTree } from "../llm/serviceSource.js";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { openDataFile, ArchiveError } from "./format.js";
+import { ArchiveLimits } from "./limits.js";
+import { auditDumpToc, describeExecutable, ownerChanged, pinnedImageRef } from "./restoreAudit.js";
 import type { ArchiveAppMeta, ArchiveManifest } from "./build.js";
 
 const IMAGE_RE = /^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$/;
@@ -56,6 +58,20 @@ export interface RestoreAppResult {
   reason?: string;
   /** Names of env values that couldn't be carried (none today: the archive is sealed whole). */
   pendingEnv?: string[];
+  /** What came back, what was held for the owner and what must be reconnected (N09 summary). */
+  summary?: RestoreSummary;
+}
+
+/** Said to the owner after a restore, per app: nothing here was silently trusted. */
+export interface RestoreSummary {
+  /** The image the app runs: a source rebuild, or a digest-pinned pull. */
+  code: string;
+  /** Permissions held as a draft until an admin approves them. */
+  awaitingApproval: string[];
+  /** Credentials and sessions that were not brought back and must be set up again. */
+  reconnect: string[];
+  /** Things in the restored database that run code inside the app's own database. */
+  notes: string[];
 }
 
 export interface ArchiveRestoreDeps {
@@ -65,7 +81,8 @@ export interface ArchiveRestoreDeps {
   ops: AppCopyOps;
   signInstall: (req: InstallServiceRequest) => Bytes;
   envStore: AppEnvStore | null;
-  access: { importEntry(serviceId: string, e: CopyAccessEntry): Promise<void> } | null;
+  /** Restored permissions are held as a draft; an admin approves them (N09), they never apply on their own. */
+  access: { importDraft(serviceId: string, e: CopyAccessEntry): Promise<void> } | null;
   egress: { noteCopied(serviceId: string, list: string, declared: ReturnType<typeof egressSuggestions>): Promise<void> } | null;
   sourceDir?: string | null;
   workDir: string;
@@ -74,8 +91,6 @@ export interface ArchiveRestoreDeps {
   buildImage: (a: { contextDir: string; files: Record<string, string>; binaries: Record<string, Buffer>; image: string }) => Promise<{ ok: true } | { ok: false; reason: string }>;
   /** `docker pull` a public image an app was installed from. */
   pullImage: (image: string) => Promise<void>;
-  /** Take an app's API keys onto this server (grants still checked against the owner). */
-  apiKeys?: { importService(serviceId: string, keys: unknown): Promise<{ imported: number; dropped: number }> } | null;
   /** The server's front page: set from the backup when this server has none. */
   frontPage?: { get(): string | null; set(label: string): Promise<void>; installed(label: string): boolean } | null;
   now?: () => number;
@@ -91,19 +106,29 @@ async function sha256File(path: string): Promise<string> {
 }
 
 /** Unpack the sealed data file into `dir`. Refuses any entry that isn't one of the expected files. */
-async function unpack(archivePath: string, key: Buffer, archiveId: string, dir: string): Promise<void> {
+async function unpack(archivePath: string, key: Buffer, archiveId: string, dir: string, limits = new ArchiveLimits()): Promise<void> {
   const extract = tar.extract();
   const done = new Promise<void>((resolve, reject) => {
     extract.on("entry", (header, stream, next) => {
       const name = header.name;
       if (header.type !== "file" || !ENTRY_RE.test(name)) {
+        stream.on("error", () => {});
         stream.resume();
         extract.destroy(new ArchiveError(`the archive holds something unexpected (${name.slice(0, 80)})`));
         return;
       }
+      let budget: number;
+      try {
+        budget = limits.enter(name, name === "manifest.json" || name.endsWith("/meta.json"));
+      } catch (e) {
+        stream.on("error", () => {});
+        stream.resume();
+        extract.destroy(e as Error);
+        return;
+      }
       const target = join(dir, name);
       mkdir(dirname(target), { recursive: true, mode: 0o700 })
-        .then(() => pipeline(stream, createWriteStream(target, { mode: 0o600 })))
+        .then(() => pipeline(stream, limits.meter(budget), createWriteStream(target, { mode: 0o600 })))
         .then(() => next(), (e) => extract.destroy(e as Error));
     });
     extract.on("finish", () => resolve());
@@ -135,6 +160,7 @@ function validMeta(v: unknown, serviceId: string): ArchiveAppMeta {
   if (!parsed.ok) bad(`manifest: ${parsed.errors.join("; ")}`);
   if (!IMAGE_RE.test(String((manifest as { runtime?: { image?: unknown } }).runtime?.image ?? ""))) bad("image name");
   if (m!.rebuild !== "source" && m!.rebuild !== "pull") bad("rebuild");
+  if (m!.imageDigest !== undefined && !/^sha256:[0-9a-f]{64}$/.test(String(m!.imageDigest))) bad("image digest");
   if (!Array.isArray(m!.parts)) bad("parts");
   if (m!.rebuild === "source" && !m!.parts!.some((p) => p?.name === "source")) bad("no source to rebuild from");
   for (const p of m!.parts!) {
@@ -154,14 +180,16 @@ function validMeta(v: unknown, serviceId: string): ArchiveAppMeta {
  * present with the SHA-256 recorded for it when it was made. Needs no disk. A backup whose
  * apps or database dumps are cut or missing fails here instead of at the restore.
  */
-export async function checkArchiveContents(archivePath: string, key: Buffer, archiveId: string): Promise<{ apps: number }> {
+export async function checkArchiveContents(archivePath: string, key: Buffer, archiveId: string, limits = new ArchiveLimits()): Promise<{ apps: number; expandedBytes: number }> {
   const sums = new Map<string, string>();
+  let expandedBytes = 0;
   const texts = new Map<string, string>();
   const extract = tar.extract();
   const done = new Promise<void>((resolve, reject) => {
     extract.on("entry", (header, stream, next) => {
       const name = header.name;
       if (header.type !== "file" || !ENTRY_RE.test(name)) {
+        stream.on("error", () => {});
         stream.resume();
         extract.destroy(new ArchiveError(`the archive holds something unexpected (${name.slice(0, 80)})`));
         return;
@@ -169,7 +197,25 @@ export async function checkArchiveContents(archivePath: string, key: Buffer, arc
       const h = createHash("sha256");
       const keep: Buffer[] = [];
       const small = name === "manifest.json" || name.endsWith("/meta.json");
+      let budget: number;
+      try {
+        budget = limits.enter(name, small);
+      } catch (e) {
+        stream.on("error", () => {});
+        stream.resume();
+        extract.destroy(e as Error);
+        return;
+      }
+      let entryBytes = 0;
       stream.on("data", (d: Buffer) => {
+        entryBytes += d.length;
+        expandedBytes += d.length;
+        try {
+          limits.chunk(d.length, entryBytes, budget);
+        } catch (e) {
+          extract.destroy(e as Error);
+          return;
+        }
         h.update(d);
         if (small) keep.push(d);
       });
@@ -206,7 +252,7 @@ export async function checkArchiveContents(archivePath: string, key: Buffer, arc
     const meta = validMeta(raw, a.serviceId);
     for (const p of meta.parts) if (sums.get(p.file) !== p.sha256) throw new ArchiveError(`${a.serviceId}: ${p.name} is damaged or missing`);
   }
-  return { apps: manifest.apps.length };
+  return { apps: manifest.apps.length, expandedBytes };
 }
 
 export interface ArchiveContents {
@@ -262,6 +308,11 @@ interface Held {
 }
 
 /** The account this server belongs to: `<server>.<account>.<apex>`, the same label the platform checks installs against. */
+function redeemedOf(m: unknown): Record<string, unknown> | null {
+  const r = (m as { redeemed?: unknown } | null)?.redeemed;
+  return r && typeof r === "object" ? (r as Record<string, unknown>) : null;
+}
+
 function hostAccount(serverFqdn: string): string {
   return serverFqdn.split(".")[1] ?? "";
 }
@@ -282,6 +333,8 @@ async function installOne(
   const now = deps.now ?? (() => Date.now());
   const sid = localServiceId(deps.serverFqdn, meta.serviceId);
   const result: RestoreAppResult = { serviceId: sid, name: meta.name, state: "restoring" };
+  const summary: RestoreSummary = { code: "", awaitingApproval: [], reconnect: [], notes: [] };
+  const changed = ownerChanged(meta.serviceId, hostAccount(deps.serverFqdn));
   if (deps.platform.byServiceId(sid)) {
     return { ...result, state: "skipped", reason: "already on this server" };
   }
@@ -302,16 +355,25 @@ async function installOne(
       held.image = image;
       const built = await deps.buildImage({ contextDir: held.tree, files: tree.files, binaries: tree.binaries, image });
       if (!built.ok) throw new Error(`rebuilding it here failed: ${built.reason}`);
-    } else if (!(await deps.ops.imageExists(image))) {
-      held.image = image;
-      await deps.pullImage(image);
+    } else {
+      // Run exactly the code that was backed up: a tag is never allowed to resolve to new code.
+      const pinned = pinnedImageRef(image, meta.imageDigest);
+      if (!pinned.ok) throw new Error(pinned.reason);
+      image = pinned.ref;
+      if (!(await deps.ops.imageExists(image))) {
+        held.image = image;
+        await deps.pullImage(image);
+      }
     }
     if (!(await deps.ops.imageExists(image))) throw new Error(`its image ${image} isn't here after ${meta.rebuild === "source" ? "the build" : "the pull"}`);
+    summary.code = meta.rebuild === "source" ? "rebuilt here from its saved source" : `pinned image ${image.slice(-71)}`;
     const manifestJson = JSON.stringify({ ...(JSON.parse(meta.manifestJson) as object), runtime: { ...manifest.runtime, image } });
 
     if (Object.keys(meta.env).length > 0) {
-      if (!deps.envStore) {
+      if (!deps.envStore || changed) {
+        // A different account's keys and secrets are not carried over: they are set up again.
         result.pendingEnv = Object.keys(meta.env).sort();
+        if (changed) summary.reconnect.push(`${result.pendingEnv.length} saved setting${result.pendingEnv.length === 1 ? "" : "s"} from the other account (${result.pendingEnv.join(", ")})`);
       } else {
         held.env = true;
         const clean = Object.fromEntries(
@@ -335,7 +397,8 @@ async function installOne(
       signature: deps.signInstall(request),
       verify: verifyInstallService,
       appliedMigrations: meta.appliedMigrations,
-      ...(meta.membership ? { membership: meta.membership as never } : {}),
+      // Members come back only through the held draft; what was already redeemed stays redeemed.
+      ...(redeemedOf(meta.membership) ? { membership: { members: [], lastSeen: {}, redeemed: redeemedOf(meta.membership)! } as never } : {}),
       prepareData: async (data) => {
         held.postgres = Object.fromEntries(Object.entries(data?.postgres ?? {}).map(([k, v]) => [k, { database: v.database, role: v.role }]));
         if (data?.files) held.filesVolume = data.files.volume;
@@ -345,7 +408,14 @@ async function installOne(
         }
         for (const [store, cred] of Object.entries(data?.postgres ?? {})) {
           const dump = path(`db:${store}`);
-          if (dump) await deps.ops.restoreDatabase(cred, dump);
+          if (!dump) continue;
+          // The dump is read, not run, until its contents are known to be allowed.
+          if (!deps.ops.listDump) throw new Error("this server can't check a database dump before restoring it");
+          const audit = auditDumpToc(await deps.ops.listDump(cred, dump));
+          if (audit.refused.length > 0) throw new Error(`its database was not restored: ${audit.refused.slice(0, 3).join("; ")}`);
+          const note = describeExecutable(audit);
+          if (note) summary.notes.push(`${store}: ${note}`);
+          await deps.ops.restoreDatabase(cred, dump);
         }
         const files = path("files");
         if (files && data?.files) await deps.ops.restoreFiles(data.files.volume, files);
@@ -357,7 +427,13 @@ async function installOne(
     installed = true;
 
     if (meta.access && deps.access) {
-      await deps.access.importEntry(sid, meta.access).catch((e: Error) => log(`[server-archive] ${sid}: couldn't take the members' access: ${e.message}`));
+      await deps.access
+        .importDraft(sid, meta.access)
+        .then(() => {
+          const n = meta.access?.allow?.length ?? 0;
+          summary.awaitingApproval.push(n > 0 ? `who can use it (${n} ${n === 1 ? "person" : "people"}), until an admin approves` : "who can use it, until an admin approves");
+        })
+        .catch((e: Error) => log(`[server-archive] ${sid}: couldn't hold the members' access: ${e.message}`));
     }
     // A pulled app's tree, when it had one, still comes along so it can be edited here.
     const tree = path("source");
@@ -366,17 +442,14 @@ async function installOne(
         log(`[server-archive] ${sid}: couldn't write its working tree (it runs, but can't be edited here): ${e.message}`),
       );
     }
-    if (deps.apiKeys && Array.isArray(meta.apiKeys) && meta.apiKeys.length > 0) {
-      const r = await deps.apiKeys.importService(sid, meta.apiKeys).catch((e: Error) => {
-        log(`[server-archive] ${sid}: couldn't take its API keys: ${e.message}`);
-        return null;
-      });
-      if (r && r.dropped > 0) log(`[server-archive] ${sid}: ${r.dropped} API key(s) no longer verify; left out`);
+    if (Array.isArray(meta.apiKeys) && meta.apiKeys.length > 0) {
+      const n = meta.apiKeys.length;
+      summary.reconnect.push(`${n} API key${n === 1 ? "" : "s"} (create them again; a restore never brings a working key back)`);
     }
     if (meta.accessList && deps.egress) {
       await deps.egress.noteCopied(sid, meta.accessList, egressSuggestions(manifest.network)).catch(() => {});
     }
-    return { ...result, state: "done" };
+    return { ...result, state: "done", summary };
   } catch (e) {
     if (!installed) await release(deps, sid, held, log);
     return { ...result, state: "failed", reason: (e as Error).message };

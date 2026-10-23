@@ -29,6 +29,12 @@ const luksKey = new Uint8Array(32).map((_, i) => i + 1);
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 const unhex = (h: string) => new Uint8Array(h.match(/../g)!.map((x) => parseInt(x, 16)));
 const signWithIrk = async (_umk: Uint8Array, bytes: Uint8Array) => ed25519.sign(bytes, irk.privateKey);
+const notLocked = async () => ({ suspended: false, epoch: 0, seq: 0 });
+const memStorage = (initial: Record<string, string> = {}) => {
+  const m = new Map(Object.entries(initial));
+  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+};
+const switchOff = (at = NOW) => memStorage({ "flagship.deadManView.v1": JSON.stringify({ [DOMAIN]: { view: { enabled: false, leaseExpiry: 0 }, at } }) });
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -49,6 +55,8 @@ describe("enableLongLived deposits a box-sealed v2 lease", () => {
       signWithIrk,
       now: () => NOW,
       boxStk: async () => hex(stk.publicKey),
+      readSuspension: notLocked,
+      deadMan: null,
     });
     const post = calls.find((c) => c.url === `https://flagshipserver.com/api/server/${DOMAIN}/unlock-key/lease-v2`);
     expect(post?.init?.method).toBe("POST");
@@ -76,6 +84,8 @@ describe("enableLongLived deposits a box-sealed v2 lease", () => {
         fetch: vi.fn(),
         signWithIrk,
         boxStk: async () => null,
+        readSuspension: notLocked,
+        deadMan: null,
       }),
     ).rejects.toThrow(/isn't in your account's server list/);
   });
@@ -117,7 +127,7 @@ describe("the lease orders are IRK-signed", () => {
 describe("renewIfExpiringSoon", () => {
   const deps = (leases: Array<{ leaseId: string; expiresAt: number }>) => {
     const enable = vi.fn(async () => ({ leaseId: "new", expiresAt: NOW + 7 * 86_400_000 }));
-    return { enable, deps: { session: { umk: umkSeed }, now: () => NOW, listLeases: async () => leases, enableLongLived: enable } };
+    return { enable, deps: { session: { umk: umkSeed }, now: () => NOW, listLeases: async () => leases, enableLongLived: enable, storage: switchOff() } };
   };
 
   it("re-deposits when the newest lease has under a day left", async () => {
@@ -158,5 +168,80 @@ describe("the shared auto-unlock lease vector", () => {
     const msg = new TextEncoder().encode(V.canonical);
     expect(ed25519.verify(unhex(V.irkSignatureHex), msg, unhex(V.irkPubHex))).toBe(true);
     expect(ed25519.verify(unhex(V.adminSignatureHex), msg, unhex(V.irkPubHex))).toBe(false);
+  });
+});
+
+describe("a locked server and the dead-man switch bound every lease (SEC-LOCK-001, SEC-DEADMAN-001)", () => {
+  const base = (over: Record<string, unknown> = {}) => ({
+    session: { umk: umkSeed, username: "plucky-avocet" },
+    fetch: vi.fn(async (url: string) => {
+      if (url.endsWith("/sealed-luks-key")) return json(200, { sealedKey: hex(sealForEd25519Recipient(luksKey, irk.publicKey)) });
+      return json(200, { ok: true });
+    }),
+    comBase: "https://flagshipserver.com",
+    signWithIrk,
+    now: () => NOW,
+    boxStk: async () => hex(stk.publicKey),
+    readSuspension: notLocked,
+    deadMan: null,
+    ...over,
+  });
+  const leaseBody = (f: ReturnType<typeof vi.fn>) => {
+    const call = f.mock.calls.find((c) => String(c[0]).endsWith("/unlock-key/lease-v2"));
+    return JSON.parse(String((call![1] as RequestInit).body)).lease;
+  };
+
+  it("deposits nothing for a locked server, or when the lock state can't be read", async () => {
+    const locked = base({ readSuspension: async () => ({ suspended: true, epoch: 1, seq: 0 }) });
+    await expect(enableLongLived(DOMAIN, 1000, locked)).rejects.toThrow(/locked/);
+    expect(locked.fetch).not.toHaveBeenCalled();
+    const unknown = base({ readSuspension: async () => null });
+    await expect(enableLongLived(DOMAIN, 1000, unknown)).rejects.toThrow(/whether this server is locked/);
+  });
+
+  it("shortens a lease to the dead-man deadline, and refuses one when the switch has lapsed", async () => {
+    const d = base({ deadMan: { enabled: true, leaseExpiry: NOW + 3_600_000 } });
+    const out = await enableLongLived(DOMAIN, 7 * 86_400_000, d);
+    expect(out.expiresAt).toBe(NOW + 3_600_000);
+    expect(leaseBody(d.fetch).expiresAt).toBe(NOW + 3_600_000);
+    const lapsed = base({ deadMan: { enabled: true, leaseExpiry: NOW - 1 } });
+    await expect(enableLongLived(DOMAIN, 1000, lapsed)).rejects.toThrow(/lapsed/);
+  });
+
+  it("won't deposit when it can't tell if the switch is on", async () => {
+    const d = base({ deadMan: undefined, storage: memStorage() });
+    await expect(enableLongLived(DOMAIN, 1000, d)).rejects.toThrow(/dead-man/);
+  });
+
+  it("silent renewal leaves a server alone when the switch state is unknown", async () => {
+    const enable = vi.fn();
+    const r = await renewIfExpiringSoon(DOMAIN, 86_400_000, {
+      session: { umk: umkSeed }, now: () => NOW, listLeases: async () => [{ leaseId: "old", expiresAt: NOW + 1000 }],
+      enableLongLived: enable, storage: memStorage(),
+    });
+    expect(r).toEqual([]);
+    expect(enable).not.toHaveBeenCalled();
+    // and a remembered answer older than six hours counts as unknown
+    const stale = await renewIfExpiringSoon(DOMAIN, 86_400_000, {
+      session: { umk: umkSeed }, now: () => NOW, listLeases: async () => [{ leaseId: "old", expiresAt: NOW + 1000 }],
+      enableLongLived: enable, storage: switchOff(NOW - 7 * 3_600_000),
+    });
+    expect(stale).toEqual([]);
+  });
+
+  it("binding to a deadline revokes every lease that would outlive it and deposits one that doesn't", async () => {
+    const { bindLeasesToDeadMan } = await import("../public/webapp/lib/leases.js");
+    const revoked: string[] = [];
+    const deposit = vi.fn(async () => ({ leaseId: "n", expiresAt: NOW + 3_600_000 }));
+    const r = await bindLeasesToDeadMan(DOMAIN, { enabled: true, leaseExpiry: NOW + 3_600_000 }, {
+      now: () => NOW,
+      listLeases: async () => [{ leaseId: "long", expiresAt: NOW + 86_400_000 }, { leaseId: "short", expiresAt: NOW + 1000 }],
+      revokeLease: async (_s: string, id: string) => void revoked.push(id),
+      enableLongLived: deposit,
+    });
+    expect(revoked).toEqual(["long"]);
+    expect(r.deposited).toEqual({ leaseId: "n", expiresAt: NOW + 3_600_000 });
+    // nothing on the server: nothing to do
+    expect(await bindLeasesToDeadMan(DOMAIN, { enabled: true, leaseExpiry: NOW + 1 }, { now: () => NOW, listLeases: async () => [] })).toEqual({ revoked: 0, deposited: null });
   });
 });

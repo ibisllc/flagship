@@ -22,9 +22,9 @@
     "@flagship/protocol": "*",
     "@flagship/server-daemon": "*",
     "@flagship/tunnel-protocol": "*",
-    "acme-client": "^5.4.0",
-    "selfsigned": "^2.4.0",
-    "ws": "^8.18.0"
+    "acme-client": "5.4.0",
+    "selfsigned": "2.4.1",
+    "ws": "8.20.0"
   },
   "devDependencies": {
     "@types/ws": "^8.5.13"

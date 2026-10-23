@@ -26,6 +26,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { CommandRunner } from "../serviceRunner.js";
+import { runSetupStep, runsUnprivileged } from "../privileged.js";
 import { dockerRepaired, wakeDocker } from "../dockerHealth.js";
 
 export const DATA_COMPOSE_FILE = "/opt/flagship/installer/data-services/docker-compose.yml";
@@ -326,8 +327,12 @@ export class DataStack {
     try {
       const [installed, wanted] = await Promise.all([this.fs.read(this.unitFile), this.fs.read(this.unitSource)]);
       if (installed === wanted) return;
-      await this.fs.write(this.unitFile, wanted);
-      await this.cmd.run("systemctl", ["daemon-reload"]).catch(() => {});
+      if (runsUnprivileged() && this.unitFile === DATA_UNIT_FILE) {
+        await runSetupStep("data-unit");
+      } else {
+        await this.fs.write(this.unitFile, wanted);
+        await this.cmd.run("systemctl", ["daemon-reload"]).catch(() => {});
+      }
       this.log(`[data-layer] installed the current ${DATA_UNIT_NAME}`);
     } catch (e) {
       this.log(`[data-layer] couldn't update ${this.unitFile}: ${(e as Error).message}`);

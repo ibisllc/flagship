@@ -1,0 +1,155 @@
+{
+  "about": "The owner's answer to an app's browser grant request: flagship/browser-grant/v1|serverDomain (lowercase)|requestId|serviceId|decision|duration|capabilities sorted, comma-joined|SHA-256 hex of the origins sorted, newline-joined|localNetwork (none, whole-lan or exact:<hosts sorted, comma-joined>)|issuedAt; Ed25519, seed 0x99 repeated. Each refused answer must fail to produce canonical bytes.",
+  "seedHex": "9999999999999999999999999999999999999999999999999999999999999999",
+  "pubHex": "332ebe8d27cb7323b3a401c1c13b5dd64bccc0e10ecda1c2b5d11a03779a85e5",
+  "answers": [
+    {
+      "answer": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "requestId": "7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b",
+        "serviceId": "alice--shop",
+        "decision": "allow",
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        },
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/browser-grant/v1|home.alice.flagship.services|7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b|alice--shop|allow|session|navigate,read-dom|e96b711517dc37d3a33252840dec0eb1455295d1bfe702c095a4fe654fd0b398|exact:192.168.1.20,printer.local|1760000000000",
+      "signatureHex": "90a0c8801d90c2b12c84082c83aabf0be529eecce6b61b3afa1e44e110cda761f4f13700bd1d2c07e3048512d41cc6426df837bdd0114b6c37844782d357700b"
+    },
+    {
+      "answer": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "requestId": "7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b",
+        "serviceId": "alice--shop",
+        "decision": "deny",
+        "duration": "once",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": null,
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/browser-grant/v1|home.alice.flagship.services|7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b|alice--shop|deny|once|navigate,read-dom|e96b711517dc37d3a33252840dec0eb1455295d1bfe702c095a4fe654fd0b398|none|1760000000000",
+      "signatureHex": "613fb2db6dcda03f426f0e6a12fef08521e4431f6b1192eb3060d790fcb1c42943544c1c72ae7426b8bb4ed7de65795774c950239b8f4840854ecf7b6aa72c0b"
+    },
+    {
+      "answer": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "requestId": "7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b",
+        "serviceId": "alice--shop",
+        "decision": "allow",
+        "duration": "service",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [],
+        "localNetwork": {
+          "kind": "whole-lan"
+        },
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/browser-grant/v1|home.alice.flagship.services|7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b|alice--shop|allow|service|navigate,read-dom|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855|whole-lan|1760000000000",
+      "signatureHex": "29c7dbb3c55c97673b9a2bdd8c5a3a0d54bc51d623f41380846c11187de055b1eae2358b60995f1fb6155e7f7685676782c4381de548ddc3299d89498899b905"
+    }
+  ],
+  "refused": [
+    {
+      "name": "an unknown duration",
+      "answer": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "requestId": "7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b",
+        "serviceId": "alice--shop",
+        "decision": "allow",
+        "duration": "forever",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        },
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "a separator in the request id",
+      "answer": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "requestId": "a|b",
+        "serviceId": "alice--shop",
+        "decision": "allow",
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        },
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "an unknown decision",
+      "answer": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "requestId": "7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b",
+        "serviceId": "alice--shop",
+        "decision": "maybe",
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        },
+        "issuedAt": 1760000000000
+      }
+    }
+  ]
+}

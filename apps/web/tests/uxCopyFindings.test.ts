@@ -115,7 +115,8 @@ describe("UX-D — recovery passphrase copy is de-jargoned", () => {
   it("enroll copy drops 'fetch token' / 'PRF salt' for plain language", () => {
     expect(RECOVERY_HTML).not.toMatch(/fetch token/i);
     expect(RECOVERY_HTML).not.toMatch(/PRF salt/i);
-    expect(RECOVERY_HTML).toMatch(/8\+ characters/);
+    expect(RECOVERY_HTML).toMatch(/at least 8 characters/);
+    expect(RECOVERY_HTML).toMatch(/no upper limit/);
     expect(RECOVERY_HTML).toMatch(/write it down somewhere safe/i);
     expect(RECOVERY_HTML).toMatch(/cannot reset it if it's lost/i);
   });

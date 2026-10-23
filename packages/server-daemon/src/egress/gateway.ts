@@ -19,6 +19,7 @@ import { getServers } from "node:dns";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AccessRule } from "@flagship/protocol";
+import { runDir } from "../privileged.js";
 import type { CommandRunner } from "../serviceRunner.js";
 import { systemDnsUpstream, startDnsServer, type DnsServerHandle } from "./dnsFilter.js";
 import { installFirewall, removeFirewall, type FirewallPorts } from "./firewall.js";
@@ -56,7 +57,7 @@ export interface EgressGatewayOptions {
   dataPorts?: number[];
   log?: (m: string) => void;
   dnsServers?: () => string[];
-  /** Where the iptables-restore payloads are staged. Default /run. */
+  /** Where the iptables-restore payloads are staged. Default /run, or the daemon's own runtime folder when it runs unprivileged. */
   rulesDir?: string;
   /** Container name → serviceId on flagship-apps. Default strips `flagship-`. */
   serviceIdOf?: (containerName: string) => string | null;
@@ -164,7 +165,7 @@ export class EgressGateway {
     }
     const resolvConfs = new Map<string, string>();
     for (const [network, gw] of byNetwork) {
-      const path = join(this.opts.rulesDir ?? "/run", `flagship-resolv-${network}.conf`);
+      const path = join(this.opts.rulesDir ?? runDir(), `flagship-resolv-${network}.conf`);
       try {
         await writeFile(path, `nameserver ${gw}\noptions ndots:0\n`, { mode: 0o644 });
         resolvConfs.set(network, path);

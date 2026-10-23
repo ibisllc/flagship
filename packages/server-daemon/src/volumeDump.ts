@@ -3,6 +3,7 @@ import { createWriteStream, createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { isProdFilesVolume } from "./dataLayer/naming.js";
+import { routePrivileged } from "./privileged.js";
 import { assertNoHostPathInDockerArgs, filesMountArgs } from "./serviceRunner.js";
 
 /**
@@ -65,7 +66,8 @@ export interface VolumeDumpRunner {
 const DEFAULT_TIMEOUT_MS = 20 * 60_000; // dumps of a large store can be slow
 
 export const realVolumeDumpRunner: VolumeDumpRunner = {
-  run(cmd, args) {
+  async run(cmd, args) {
+    if (await routePrivileged(cmd, args)) return;
     return new Promise((resolve, reject) => {
       const p = spawn(cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
       const t = armTimeout(p, reject);
@@ -79,7 +81,9 @@ export const realVolumeDumpRunner: VolumeDumpRunner = {
       });
     });
   },
-  capture(cmd, args) {
+  async capture(cmd, args) {
+    const routed = await routePrivileged(cmd, args);
+    if (routed) return { stdout: routed.stdout };
     return new Promise((resolve, reject) => {
       const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
       let stdout = "";
@@ -101,25 +105,29 @@ export const realVolumeDumpRunner: VolumeDumpRunner = {
   async runToFile(cmd, args, outPath) {
     await mkdir(dirname(outPath), { recursive: true, mode: 0o700 });
     const tmp = `${outPath}.partial`;
-    await new Promise<void>((resolve, reject) => {
-      const out = createWriteStream(tmp, { mode: 0o600 });
-      const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
-      let stderr = "";
-      const t = armTimeout(p, reject);
-      p.stderr?.on("data", (d) => (stderr += d.toString()));
-      p.stdout?.pipe(out);
-      p.on("error", (e) => {
-        clearTimeout(t);
-        reject(e);
-      });
-      p.on("exit", (code) => {
-        clearTimeout(t);
-        out.end(() => {
-          if (code === 0) return resolve();
-          reject(new Error(`${cmd} exited with code ${code}: ${stderr.slice(-400)}`));
+    await rm(tmp, { force: true });
+    await (async () => {
+      if (await routePrivileged(cmd, args, { stdoutPath: tmp })) return;
+      await new Promise<void>((resolve, reject) => {
+        const out = createWriteStream(tmp, { mode: 0o600 });
+        const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+        let stderr = "";
+        const t = armTimeout(p, reject);
+        p.stderr?.on("data", (d) => (stderr += d.toString()));
+        p.stdout?.pipe(out);
+        p.on("error", (e) => {
+          clearTimeout(t);
+          reject(e);
+        });
+        p.on("exit", (code) => {
+          clearTimeout(t);
+          out.end(() => {
+            if (code === 0) return resolve();
+            reject(new Error(`${cmd} exited with code ${code}: ${stderr.slice(-400)}`));
+          });
         });
       });
-    }).then(
+    })().then(
       () => rename(tmp, outPath),
       async (e) => {
         await rm(tmp, { force: true });
@@ -127,7 +135,8 @@ export const realVolumeDumpRunner: VolumeDumpRunner = {
       },
     );
   },
-  runFromFile(cmd, args, inPath) {
+  async runFromFile(cmd, args, inPath) {
+    if (await routePrivileged(cmd, args, { stdinPath: inPath })) return;
     return new Promise((resolve, reject) => {
       const p = spawn(cmd, args, { stdio: ["pipe", "inherit", "pipe"] });
       let stderr = "";

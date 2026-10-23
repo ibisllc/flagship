@@ -15,6 +15,7 @@
  * restart, so while the gateway is down the bridges fail closed.
  */
 import { writeFile } from "node:fs/promises";
+import { runDir } from "../privileged.js";
 import type { CommandRunner } from "../serviceRunner.js";
 import type { EgressNetworkKind } from "./policy.js";
 
@@ -133,7 +134,7 @@ export interface InstallFirewallOptions {
  * IPv6 forwarding to fence).
  */
 export async function installFirewall(cmd: CommandRunner, plan: FirewallPlan, opts: InstallFirewallOptions = {}): Promise<void> {
-  const dir = opts.rulesDir ?? "/run";
+  const dir = opts.rulesDir ?? runDir();
   const { v4, v6 } = renderFirewall(plan);
   // DOCKER-USER exists once dockerd has started; create it if we're first
   // (dockerd keeps an existing DOCKER-USER and only adds its FORWARD jump).

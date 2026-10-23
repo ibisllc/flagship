@@ -1,3 +1,4 @@
+import { BOX_RELEASE } from "./boxReleaseConfig.js";
 /**
  * Phase 1 of the gym recipe→cloud pipeline (docs/gym-recipe-to-hetzner.md).
  *
@@ -86,6 +87,8 @@ export interface GymProvisionBody {
   size?: unknown;
   /** The box's SWK (64 hex) instead of a random one: a migration's two boxes share it. */
   swkHex?: unknown;
+  /** False: the key above only proves ownership here; the box asks the phone for its blessing (first contact). */
+  selfMintEntitlements?: unknown;
   /** FLAGSHIP_BACKUP_INTERVAL_MS for the box (≥ 60000). */
   backupIntervalMs?: unknown;
 }
@@ -386,12 +389,13 @@ export async function handleGymProvision(
   }
   const userData = buildCloudConfigUserData({
     installBlobJson: JSON.stringify(body.installBlob),
-    installerGitRef: blob.installerGitRef || "main",
+    installerGitRef: blob.installerGitRef || BOX_RELEASE.commit,
     demoUserIrkPrivHex: body.irkPrivHex,
     ...(ownerAidPubHex ? { ownerAidPubHex } : {}),
     ...(adminRoot ? { adminRootPubHex: adminRoot.pubHex, adminRootPrivHex: adminRoot.privHex } : {}),
     ...(typeof body.swkHex === "string" ? { swkHex: body.swkHex } : {}),
     ...(typeof body.backupIntervalMs === "number" ? { backupIntervalMs: body.backupIntervalMs } : {}),
+    ...(body.selfMintEntitlements === false ? { selfMintEntitlements: false } : {}),
   });
 
   // 7. Provision the box — mirrors the demo create path, INCLUDING the SSH

@@ -537,6 +537,9 @@ struct VMDetailView: View {
                 detailRow("Checkpoint received", observation.updatedAt.formatted(
                     date: .omitted, time: .standard))
             }
+            if let code = vmManager.serverCodes[server.id] {
+                detailRow("This server's code", ServerCodeSeen.pretty(code))
+            }
             detailRow("Network", "NAT + outbound tunnel")
             detailRow("Unlock", server.record.config.bootUnlockMode == "approve"
                       ? "Phone approval" : "Automatic lease")

@@ -26,6 +26,8 @@ final class BuilderSessionClient: NSObject {
 
     var onStage: ((BuilderPairingEngine.Stage) -> Void)?
     var onRecipe: ((Data) -> Void)?
+    /// The phone's per-server key for confirming the code a hosted VM shows (first contact).
+    var onStudioConfirmKey: ((Data) -> Void)?
     var onRecipeReceiptQueued: (() -> Void)?
     var onLog: ((String) -> Void)?
 
@@ -99,6 +101,8 @@ final class BuilderSessionClient: NSObject {
             if case .ended = stage { close() }
         case .recipe(let data):
             onRecipe?(data)
+        case .studioConfirmKey(let key):
+            onStudioConfirmKey?(key)
         case .log(let message):
             onLog?(message)
         }

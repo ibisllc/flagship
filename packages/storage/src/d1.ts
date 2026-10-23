@@ -1,3 +1,10 @@
+import {
+  applyBootSuspension,
+  initialSuspension,
+  type BootSuspensionOrder,
+  type BootSuspensionState,
+  type SuspensionOutcome,
+} from "@flagship/protocol";
 import { D1ServerShareStorage, type ServerShareStorage } from "./serverShares.js";
 import { D1ServerOrderStorage, type ServerOrderStorage } from "./serverOrders.js";
 import type {
@@ -22,6 +29,9 @@ import type {
   AdminRootRotationStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
+  WatchBootKeyRecord,
+  WatchBootKeyStorage,
+  BootSuspensionStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   RecoveryWipePolicy,
@@ -35,6 +45,7 @@ import type {
   InstallEventStorage,
   ProvisionStatusRecord,
   ProvisionStatusHistoryEntry,
+  ServerSeenEntry,
   ProvisionStatusStorage,
   LlmPromoLifetimeRecord,
   LlmPromoStorage,
@@ -824,6 +835,7 @@ interface ProvisionStatusRow {
   detail: string | null;
   updated_at: number;
   history: string;
+  server_seen?: string | null;
 }
 
 export class D1ProvisionStatusStorage implements ProvisionStatusStorage {
@@ -894,6 +906,13 @@ export class D1ProvisionStatusStorage implements ProvisionStatusStorage {
     } catch {
       history = [];
     }
+    let serverSeen: ServerSeenEntry[] | undefined;
+    try {
+      const parsed = r.server_seen ? JSON.parse(r.server_seen) : null;
+      if (Array.isArray(parsed)) serverSeen = parsed as ServerSeenEntry[];
+    } catch {
+      serverSeen = undefined;
+    }
     return {
       serial: r.serial,
       serverDomain: r.server_domain ?? undefined,
@@ -901,7 +920,23 @@ export class D1ProvisionStatusStorage implements ProvisionStatusStorage {
       detail: r.detail ?? undefined,
       updatedAt: r.updated_at,
       history,
+      ...(serverSeen ? { serverSeen } : {}),
     };
+  }
+
+  async addServerSeen(serial: string, entry: ServerSeenEntry, max: number): Promise<boolean> {
+    const row = await this.db.prepare("SELECT server_seen FROM provision_status WHERE serial = ?").bind(serial).first<{ server_seen: string | null }>();
+    if (!row) return false;
+    let list: ServerSeenEntry[] = [];
+    try {
+      const parsed = row.server_seen ? JSON.parse(row.server_seen) : [];
+      if (Array.isArray(parsed)) list = parsed as ServerSeenEntry[];
+    } catch {
+      list = [];
+    }
+    list = [...list.filter((e) => !(e.stkPubHex === entry.stkPubHex && e.macHex === entry.macHex)), entry].slice(-max);
+    await this.db.prepare("UPDATE provision_status SET server_seen = ? WHERE serial = ?").bind(JSON.stringify(list), serial).run();
+    return true;
   }
 }
 
@@ -2536,6 +2571,176 @@ function rowToBoxSealedLease(r: BoxSealedLeaseRow): BoxSealedLeaseRecord {
   };
 }
 
+interface BootSuspensionRow {
+  server_domain: string;
+  epoch: number;
+  seq: number;
+  suspended: number;
+  reason: string | null;
+  signer: string | null;
+  order_issued_at: number;
+  updated_at: number;
+  signature_hex: string;
+}
+
+function rowToBootSuspension(r: BootSuspensionRow): BootSuspensionState {
+  return {
+    serverDomain: r.server_domain,
+    epoch: r.epoch,
+    seq: r.seq,
+    suspended: r.suspended === 1,
+    reason: (r.reason as BootSuspensionState["reason"]) ?? null,
+    signer: (r.signer as BootSuspensionState["signer"]) ?? null,
+    orderIssuedAt: r.order_issued_at,
+    updatedAt: r.updated_at,
+    signatureHex: r.signature_hex,
+  };
+}
+
+export class D1BootSuspensionStorage implements BootSuspensionStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async get(serverDomain: string): Promise<BootSuspensionState | undefined> {
+    const r = await this.db
+      .prepare("SELECT * FROM boot_suspensions WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .first<BootSuspensionRow>();
+    return r ? rowToBootSuspension(r) : undefined;
+  }
+
+  async apply(order: BootSuspensionOrder, signatureHex: string, now: number): Promise<SuspensionOutcome> {
+    // Compare-and-swap on (epoch, seq, suspended): two writers can never both win.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const cur = (await this.get(order.serverDomain)) ?? null;
+      const out = applyBootSuspension(cur, order, signatureHex, now);
+      if (!out.ok || !out.changed) return out;
+      const st = out.state;
+      let changes: number;
+      if (cur === null) {
+        const r = await this.db
+          .prepare(
+            `INSERT OR IGNORE INTO boot_suspensions
+               (server_domain, epoch, seq, suspended, reason, signer, order_issued_at, updated_at, signature_hex)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+          )
+          .bind(st.serverDomain, st.epoch, st.seq, st.suspended ? 1 : 0, st.reason, st.signer, st.orderIssuedAt, st.updatedAt, st.signatureHex)
+          .run();
+        changes = (r as { meta?: { changes?: number } }).meta?.changes ?? 1;
+      } else {
+        const r = await this.db
+          .prepare(
+            `UPDATE boot_suspensions
+                SET epoch = ?2, seq = ?3, suspended = ?4, reason = ?5, signer = ?6,
+                    order_issued_at = ?7, updated_at = ?8, signature_hex = ?9
+              WHERE server_domain = ?1 AND epoch = ?10 AND seq = ?11 AND suspended = ?12`,
+          )
+          .bind(st.serverDomain, st.epoch, st.seq, st.suspended ? 1 : 0, st.reason, st.signer, st.orderIssuedAt, st.updatedAt, st.signatureHex, cur.epoch, cur.seq, cur.suspended ? 1 : 0)
+          .run();
+        changes = (r as { meta?: { changes?: number } }).meta?.changes ?? 1;
+      }
+      if (changes > 0) return out;
+    }
+    // Lost every race: report the freshest record as a stale write so the caller re-reads.
+    const cur = (await this.get(order.serverDomain)) ?? initialSuspension(order.serverDomain);
+    return { ok: false, code: "stale-epoch", current: cur };
+  }
+}
+
+interface WatchBootKeyRow {
+  server_domain: string;
+  delegate_pub_hex: string;
+  decrypt_pub_hex: string;
+  sealed_key_hex: string;
+  key_sha256_hex: string;
+  issued_at: number;
+  expires_at: number;
+  signature_hex: string;
+  deposited_at: number;
+}
+
+function rowToWatchBootKey(r: WatchBootKeyRow): WatchBootKeyRecord {
+  return {
+    serverDomain: r.server_domain,
+    delegatePubHex: r.delegate_pub_hex,
+    decryptPubHex: r.decrypt_pub_hex,
+    sealedKeyHex: r.sealed_key_hex,
+    keySha256Hex: r.key_sha256_hex,
+    issuedAt: r.issued_at,
+    expiresAt: r.expires_at,
+    signatureHex: r.signature_hex,
+    depositedAt: r.deposited_at,
+  };
+}
+
+export class D1WatchBootKeyStorage implements WatchBootKeyStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async put(rec: WatchBootKeyRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO watch_boot_keys
+           (server_domain, delegate_pub_hex, decrypt_pub_hex, sealed_key_hex, key_sha256_hex,
+            issued_at, expires_at, signature_hex, deposited_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT(server_domain, delegate_pub_hex) DO UPDATE SET
+           decrypt_pub_hex = excluded.decrypt_pub_hex,
+           sealed_key_hex = excluded.sealed_key_hex,
+           key_sha256_hex = excluded.key_sha256_hex,
+           issued_at = excluded.issued_at,
+           expires_at = excluded.expires_at,
+           signature_hex = excluded.signature_hex,
+           deposited_at = excluded.deposited_at`,
+      )
+      .bind(
+        rec.serverDomain.toLowerCase(),
+        rec.delegatePubHex.toLowerCase(),
+        rec.decryptPubHex.toLowerCase(),
+        rec.sealedKeyHex,
+        rec.keySha256Hex.toLowerCase(),
+        rec.issuedAt,
+        rec.expiresAt,
+        rec.signatureHex,
+        rec.depositedAt,
+      )
+      .run();
+  }
+
+  async release(serverDomain: string, delegatePubHex: string, now: number): Promise<WatchBootKeyRecord | undefined> {
+    // A suspended server releases nothing, and a record we cannot read counts as suspended.
+    try {
+      const sus = await this.db
+        .prepare("SELECT suspended FROM boot_suspensions WHERE server_domain = ?1")
+        .bind(serverDomain)
+        .first<{ suspended: number }>();
+      if (sus && sus.suspended !== 0) return undefined;
+    } catch {
+      return undefined;
+    }
+    await this.db.prepare("DELETE FROM watch_boot_keys WHERE server_domain = ?1 AND expires_at <= ?2").bind(serverDomain.toLowerCase(), now).run();
+    const r = await this.db
+      .prepare("SELECT * FROM watch_boot_keys WHERE server_domain = ?1 AND delegate_pub_hex = ?2")
+      .bind(serverDomain.toLowerCase(), delegatePubHex.toLowerCase())
+      .first<WatchBootKeyRow>();
+    return r ? rowToWatchBootKey(r) : undefined;
+  }
+
+  async list(serverDomain: string, now: number): Promise<WatchBootKeyRecord[]> {
+    const r = await this.db
+      .prepare("SELECT * FROM watch_boot_keys WHERE server_domain = ?1 AND expires_at > ?2 ORDER BY deposited_at DESC")
+      .bind(serverDomain.toLowerCase(), now)
+      .all<WatchBootKeyRow>();
+    return (r.results ?? []).map(rowToWatchBootKey);
+  }
+
+  async revoke(serverDomain: string, delegatePubHex?: string): Promise<number> {
+    const stmt = delegatePubHex
+      ? this.db.prepare("DELETE FROM watch_boot_keys WHERE server_domain = ?1 AND delegate_pub_hex = ?2").bind(serverDomain.toLowerCase(), delegatePubHex.toLowerCase())
+      : this.db.prepare("DELETE FROM watch_boot_keys WHERE server_domain = ?1").bind(serverDomain.toLowerCase());
+    const res = await stmt.run();
+    return (res as { meta?: { changes?: number } }).meta?.changes ?? 0;
+  }
+}
+
 export class D1BoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   constructor(private readonly db: D1Database) {}
 
@@ -2573,6 +2778,17 @@ export class D1BoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   }
 
   async release(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord | undefined> {
+    // A suspended server releases nothing, and a record we cannot read counts
+    // as suspended (SEC-LOCK-001): check before touching any lease row.
+    try {
+      const sus = await this.db
+        .prepare("SELECT suspended FROM boot_suspensions WHERE server_domain = ?1")
+        .bind(serverDomain)
+        .first<{ suspended: number }>();
+      if (sus && sus.suspended !== 0) return undefined;
+    } catch {
+      return undefined;
+    }
     // GC expired + exhausted rows first so they never win the pick.
     await this.db
       .prepare(
@@ -2615,6 +2831,14 @@ export class D1BoxSealedLeaseStorage implements BoxSealedLeaseStorage {
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
 
+  async revokeAll(serverDomain: string): Promise<number> {
+    const r = await this.db
+      .prepare("DELETE FROM box_sealed_leases WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .run();
+    return (r as { meta?: { changes?: number } }).meta?.changes ?? 0;
+  }
+
   async list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]> {
     const r = await this.db
       .prepare(
@@ -2649,8 +2873,8 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
              (username, new_irk_pub_hex, old_irk_pub_hex,
               initiated_at, completes_at, objected_at,
               grace_seconds, totp_required, totp_proof_consumed,
-              alerts_fired_bitmap, proof_json)
-           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+              alerts_fired_bitmap, proof_json, offline_alert_ms)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           key,
@@ -2663,6 +2887,7 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
           rec.totpProofConsumed ? 1 : 0,
           rec.alertsFiredBitmap ?? 0,
           rec.proof ? JSON.stringify(rec.proof) : null,
+          rec.offlineAlertMs ?? null,
         )
         .run();
       return { ok: true as const };
@@ -2681,13 +2906,36 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
     return rawPendingRePairToRecord(r);
   }
 
-  async object(username: string, at: number): Promise<boolean> {
-    const r = await this.db
-      .prepare("UPDATE pending_re_pairs SET objected_at = ? WHERE username = ? AND objected_at IS NULL")
-      .bind(at, username.toLowerCase())
-      .run();
+  private async changed(stmt: D1PreparedStatement): Promise<boolean> {
+    const r = await stmt.run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+
+  async object(username: string, at: number): Promise<boolean> {
+    return this.changed(
+      this.db
+        .prepare("UPDATE pending_re_pairs SET objected_at = ? WHERE username = ? AND objected_at IS NULL AND completing_at IS NULL")
+        .bind(at, username.toLowerCase()),
+    );
+  }
+
+  async veto(username: string, at: number, byHex: string, signatureHex: string): Promise<boolean> {
+    return this.changed(
+      this.db
+        .prepare(
+          "UPDATE pending_re_pairs SET objected_at = ?, vetoed_by_hex = ?, veto_signature_hex = ? WHERE username = ? AND objected_at IS NULL AND completing_at IS NULL",
+        )
+        .bind(at, byHex, signatureHex, username.toLowerCase()),
+    );
+  }
+
+  async claimCompletion(username: string, at: number): Promise<boolean> {
+    return this.changed(
+      this.db
+        .prepare("UPDATE pending_re_pairs SET completing_at = ? WHERE username = ? AND objected_at IS NULL AND completing_at IS NULL")
+        .bind(at, username.toLowerCase()),
+    );
   }
 
   async delete(username: string): Promise<boolean> {
@@ -2746,6 +2994,10 @@ interface RawPendingRePairRow {
   totp_proof_consumed?: number | null;
   alerts_fired_bitmap?: number | null;
   proof_json?: string | null;
+  completing_at?: number | null;
+  vetoed_by_hex?: string | null;
+  veto_signature_hex?: string | null;
+  offline_alert_ms?: number | null;
 }
 
 function parseRePairProof(raw: string | null | undefined): PendingRePairRecord["proof"] | undefined {
@@ -2776,20 +3028,47 @@ function rawPendingRePairToRecord(r: RawPendingRePairRow): PendingRePairRecord {
     totpProofConsumed: r.totp_proof_consumed === 1,
     alertsFiredBitmap: r.alerts_fired_bitmap ?? 0,
     ...(parseRePairProof(r.proof_json) ? { proof: parseRePairProof(r.proof_json)! } : {}),
+    ...(r.completing_at != null ? { completingAt: r.completing_at } : {}),
+    ...(r.vetoed_by_hex ? { vetoedByHex: r.vetoed_by_hex } : {}),
+    ...(r.veto_signature_hex ? { vetoSignatureHex: r.veto_signature_hex } : {}),
+    ...(r.offline_alert_ms != null ? { offlineAlertMs: r.offline_alert_ms } : {}),
   };
 }
 
 export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
   constructor(private readonly db: D1Database) {}
 
+  private static readonly COLUMNS = `username, credential_id_hex, wrapped_umk_b64, irk_pub_hex,
+            fetch_token_hash, prf_salt_hash, wrapped_acme_account_key_b64,
+            wrapped_admin_root_b64, record_digest_hex, generation, signed_claim_json,
+            signature_hex, passkey_cose_hex, passkey_alg, created_at, updated_at`;
+
+  private bindAll(rec: WebauthnRecoveryRecord): unknown[] {
+    return [
+      rec.username.toLowerCase(),
+      rec.credentialIdHex,
+      rec.wrappedUmkB64,
+      rec.irkPubHex,
+      rec.fetchTokenHashHex ?? null,
+      rec.prfSaltHashHex ?? null,
+      rec.wrappedAcmeAccountKeyB64 ?? null,
+      rec.wrappedAdminRootB64 ?? null,
+      rec.signed?.digestHex ?? null,
+      rec.signed?.generation ?? null,
+      rec.signed?.signedClaimJson ?? null,
+      rec.signed?.signatureHex ?? null,
+      rec.passkey?.coseHex ?? null,
+      rec.passkey?.alg ?? null,
+      rec.createdAt,
+      rec.updatedAt,
+    ];
+  }
+
   async upsert(rec: WebauthnRecoveryRecord): Promise<void> {
     await this.db
       .prepare(
-        `INSERT INTO webauthn_recovery_records
-           (username, credential_id_hex, wrapped_umk_b64, irk_pub_hex,
-            fetch_token_hash, prf_salt_hash, wrapped_acme_account_key_b64,
-            wrapped_admin_root_b64, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?)
+        `INSERT INTO webauthn_recovery_records (${D1WebauthnRecoveryStorage.COLUMNS})
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(username) DO UPDATE SET
            credential_id_hex = excluded.credential_id_hex,
            wrapped_umk_b64 = excluded.wrapped_umk_b64,
@@ -2798,10 +3077,42 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
            prf_salt_hash = excluded.prf_salt_hash,
            wrapped_acme_account_key_b64 = excluded.wrapped_acme_account_key_b64,
            wrapped_admin_root_b64 = excluded.wrapped_admin_root_b64,
+           record_digest_hex = excluded.record_digest_hex,
+           generation = excluded.generation,
+           signed_claim_json = excluded.signed_claim_json,
+           signature_hex = excluded.signature_hex,
+           passkey_cose_hex = excluded.passkey_cose_hex,
+           passkey_alg = excluded.passkey_alg,
            updated_at = excluded.updated_at`,
       )
+      .bind(...this.bindAll(rec))
+      .run();
+  }
+
+  async replaceIfDigest(rec: WebauthnRecoveryRecord, expectedPriorDigest: string): Promise<boolean> {
+    const changes = (r: unknown) => (r as { meta?: { changes?: number } }).meta?.changes ?? 0;
+    if (expectedPriorDigest === "genesis") {
+      const r = await this.db
+        .prepare(
+          `INSERT INTO webauthn_recovery_records (${D1WebauthnRecoveryStorage.COLUMNS})
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(username) DO NOTHING`,
+        )
+        .bind(...this.bindAll(rec))
+        .run();
+      return changes(r) > 0;
+    }
+    const guard = expectedPriorDigest === "legacy" ? "record_digest_hex IS NULL" : "record_digest_hex = ?";
+    const r = await this.db
+      .prepare(
+        `UPDATE webauthn_recovery_records SET
+           credential_id_hex = ?, wrapped_umk_b64 = ?, irk_pub_hex = ?, fetch_token_hash = ?,
+           prf_salt_hash = ?, wrapped_acme_account_key_b64 = ?, wrapped_admin_root_b64 = ?,
+           record_digest_hex = ?, generation = ?, signed_claim_json = ?, signature_hex = ?,
+           passkey_cose_hex = ?, passkey_alg = ?, updated_at = ?
+         WHERE username = ? AND ${guard}`,
+      )
       .bind(
-        rec.username.toLowerCase(),
         rec.credentialIdHex,
         rec.wrappedUmkB64,
         rec.irkPubHex,
@@ -2809,10 +3120,27 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
         rec.prfSaltHashHex ?? null,
         rec.wrappedAcmeAccountKeyB64 ?? null,
         rec.wrappedAdminRootB64 ?? null,
-        rec.createdAt,
+        rec.signed?.digestHex ?? null,
+        rec.signed?.generation ?? null,
+        rec.signed?.signedClaimJson ?? null,
+        rec.signed?.signatureHex ?? null,
+        rec.passkey?.coseHex ?? null,
+        rec.passkey?.alg ?? null,
         rec.updatedAt,
+        rec.username.toLowerCase(),
+        ...(expectedPriorDigest === "legacy" ? [] : [expectedPriorDigest]),
       )
       .run();
+    return changes(r) > 0;
+  }
+
+  async deleteIfDigest(username: string, expectedDigest: string): Promise<boolean> {
+    const guard = expectedDigest === "legacy" ? "record_digest_hex IS NULL" : "record_digest_hex = ?";
+    const r = await this.db
+      .prepare(`DELETE FROM webauthn_recovery_records WHERE username = ? AND ${guard}`)
+      .bind(username.toLowerCase(), ...(expectedDigest === "legacy" ? [] : [expectedDigest]))
+      .run();
+    return ((r as { meta?: { changes?: number } }).meta?.changes ?? 0) > 0;
   }
 
   async get(username: string): Promise<WebauthnRecoveryRecord | undefined> {
@@ -2828,6 +3156,12 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
         prf_salt_hash: string | null;
         wrapped_acme_account_key_b64: string | null;
         wrapped_admin_root_b64: string | null;
+        record_digest_hex: string | null;
+        generation: number | null;
+        signed_claim_json: string | null;
+        signature_hex: string | null;
+        passkey_cose_hex: string | null;
+        passkey_alg: number | null;
         created_at: number;
         updated_at: number;
       }>();
@@ -2845,6 +3179,17 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
       ...(r.wrapped_admin_root_b64
         ? { wrappedAdminRootB64: r.wrapped_admin_root_b64 }
         : {}),
+      ...(r.record_digest_hex && r.signed_claim_json && r.signature_hex
+        ? {
+            signed: {
+              digestHex: r.record_digest_hex,
+              generation: r.generation ?? 1,
+              signedClaimJson: r.signed_claim_json,
+              signatureHex: r.signature_hex,
+            },
+          }
+        : {}),
+      ...(r.passkey_cose_hex && r.passkey_alg !== null ? { passkey: { coseHex: r.passkey_cose_hex, alg: r.passkey_alg } } : {}),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     };
@@ -2857,6 +3202,16 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
       .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+
+  async consumeChallenge(nonceHex: string, expiresAt: number, now: number): Promise<boolean> {
+    await this.db.prepare("DELETE FROM recovery_challenges_used WHERE expires_at < ?").bind(now).run();
+    const r = await this.db
+      .prepare("INSERT OR IGNORE INTO recovery_challenges_used (nonce_hex, expires_at) VALUES (?, ?)")
+      .bind(nonceHex.toLowerCase(), expiresAt)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return (meta?.changes ?? 0) > 0;
   }
 }
 
@@ -4435,6 +4790,8 @@ export class D1Storage implements Storage {
   serverMigrations: ServerMigrationStorage;
   adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
+  watchBootKeys: WatchBootKeyStorage;
+  bootSuspensions: BootSuspensionStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   pushTokens: PushTokenStorage;
@@ -4490,6 +4847,8 @@ export class D1Storage implements Storage {
     this.serverMigrations = new D1ServerMigrationStorage(db);
     this.adminRootRotations = new D1AdminRootRotationStorage(db);
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
+    this.watchBootKeys = new D1WatchBootKeyStorage(db);
+    this.bootSuspensions = new D1BootSuspensionStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);

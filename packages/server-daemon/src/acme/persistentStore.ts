@@ -189,5 +189,15 @@ export function shouldReuseCert(
  * handshake that fails.
  */
 export function shouldServeStaleCert(existing: PersistedCert | null, desiredSans: ReadonlyArray<string>): boolean {
-  return existing !== null && sansEqual(existing.names, desiredSans);
+  if (existing === null) return false;
+  // Also while a wider certificate is requested (the account's app names were just granted): every
+  // name the old one carries is still wanted, so it keeps serving them until the new one is in.
+  const want = desiredSans.map((n) => n.toLowerCase());
+  return existing.names.length > 0 && existing.names.every((n) => want.some((w) => coversName(w, n.toLowerCase())));
+}
+
+/** Whether a certificate name `w` covers `n`: the same name, or a wildcard one label above it. */
+function coversName(w: string, n: string): boolean {
+  if (w === n) return true;
+  return w.startsWith("*.") && !n.startsWith("*.") && n.slice(n.indexOf(".") + 1) === w.slice(2);
 }

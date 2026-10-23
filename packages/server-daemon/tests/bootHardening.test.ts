@@ -34,6 +34,13 @@ describe("the certificate a rebooted box shows when it cannot get a new one", ()
       expect(shouldServeStaleCert(c, sans)).toBe(true);
     }
   });
+  it("keeps serving while a wider one is requested, once the account's app names are granted", () => {
+    expect(shouldReuseCert(cert(now + 80 * day), [...sans, "*.alice.flagship.services"], 30 * day, now)).toBe(false);
+    expect(shouldServeStaleCert(cert(now + 80 * day), [...sans, "*.alice.flagship.services"])).toBe(true);
+    // The wider order drops the box's own name, which `*.alice` covers.
+    expect(shouldServeStaleCert(cert(now + 80 * day), sans.filter((n) => n.startsWith("*.")).concat("*.alice.flagship.services"))).toBe(true);
+    expect(shouldServeStaleCert(cert(now + 80 * day), ["*.alice.flagship.services"])).toBe(false);
+  });
   it("is not served when it names something else (a renamed or re-homed box) or does not exist", () => {
     expect(shouldServeStaleCert(cert(now - day, ["home.bob.flagship.services"]), sans)).toBe(false);
     expect(shouldServeStaleCert(null, sans)).toBe(false);

@@ -102,7 +102,7 @@ public final class RecoveryViewModel {
                 phase = .failed("Local base64 round-trip failed")
                 return
             }
-            let wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes)
+            _ = wrappedUmkBytes
 
             // #28 — also escrow the ACME account key (cert-minting authority)
             // under the SAME PRF secret so a fully device-less recovery can
@@ -141,34 +141,32 @@ public final class RecoveryViewModel {
                 }
             }
 
-            // Sign the UploadRecoveryRecord under the account IRK. The
-            // signature covers the HASH of the ciphertext + the credentialId
-            // + username + issuedAt — exactly what the Worker re-derives and
-            // verifies. The fetchToken/prfSalt hashes ride OUTSIDE the signed
-            // canonical (the Worker accepts-if-present; they're hashes of
-            // passphrase-derived secrets, not forgeable into a different UMK).
+            // N03 — sign the COMPLETE record under the account IRK: every ciphertext digest, the
+            // fetchToken/prfSalt hashes, the versions and policy, the record's generation and the
+            // digest of the record it replaces. An escrow not re-sent is `keep:<held digest>` (or
+            // `none`), never silently inherited.
             let irk = try await Keystore.deriveIRK(reason: "Back up your Flagship account")
-            let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-            let signature = try RecoveryUpload.sign(
+            let current = try await client.recoveryRecordState(username: user)
+            let adminRootPub = try await client.pinnedAdminRoot(username: user)
+            let claim = try RecoveryRecordChain.next(
                 username: user,
+                irkPubHex: HexUtil.encode(irk.publicKey.rawRepresentation),
+                adminRootPubHex: adminRootPub,
+                current: current,
                 credentialIdHex: credentialIdHex,
-                wrappedUmkHashHex: wrappedUmkHashHex,
-                issuedAt: issuedAt,
-                irk: irk
+                wrappedUmk: wrappedUmk,
+                wrappedAdminRoot: wrappedAdminRoot,
+                wrappedAcmeAccountKey: wrappedAcme,
+                fetchTokenHashHex: RecoveryDerivation.sha256Hex(secrets.fetchToken),
+                prfSaltHashHex: RecoveryDerivation.sha256Hex(secrets.prfSalt),
+                issuedAt: Int64(Date().timeIntervalSince1970 * 1000)
             )
-
             _ = try await client.registerRecoveryEnvelope(.init(
-                request: .init(
-                    username: user,
-                    credentialId: credentialIdHex,
-                    wrappedUmk: wrappedUmk,
-                    issuedAt: issuedAt,
-                    wrappedAcmeAccountKey: wrappedAcme,
-                    wrappedAdminRoot: wrappedAdminRoot,
-                    fetchTokenHash: RecoveryDerivation.sha256Hex(secrets.fetchToken),
-                    prfSaltHash: RecoveryDerivation.sha256Hex(secrets.prfSalt)
-                ),
-                signature: signature
+                claim: claim,
+                signature: try claim.sign(with: irk),
+                wrappedUmk: wrappedUmk,
+                wrappedAdminRoot: wrappedAdminRoot,
+                wrappedAcmeAccountKey: wrappedAcme
             ))
             phase = .registered(credentialId: credentialIdHex)
         } catch {
@@ -224,6 +222,21 @@ public final class RecoveryViewModel {
                 }
             }
 
+            // N03 — a signed record names the digest of every ciphertext it covers. Refuse before any
+            // unwrap if `.com` returned a different one (swapped, dropped or added). A legacy record
+            // has no such signature; it is recovered but remembered as carrying unsigned extras.
+            if let signed = fetched.signed {
+                if let bad = signed.claim.ciphertextMismatch(
+                    wrappedUmk: fetched.wrappedUmk,
+                    wrappedAdminRoot: fetched.wrappedAdminRoot,
+                    wrappedAcmeAccountKey: fetched.wrappedAcmeAccountKey
+                ) {
+                    phase = .failed("The stored recovery record does not match its signed digest (\(bad)); refusing to unwrap it.")
+                    return nil
+                }
+            }
+            recoveredRecordWasLegacy = fetched.signed == nil
+
             // PRF get() against the released credential, salt = prfSalt.
             let prfSecret = try await webAuthn.prfAssert(
                 credentialId: fetched.credentialId,
@@ -233,6 +246,11 @@ public final class RecoveryViewModel {
                 wrappedUmkBase64: fetched.wrappedUmk,
                 prfSecret: prfSecret
             )
+            // …and the signature itself, now that the recovered key can verify it.
+            if let signed = fetched.signed, !Self.recoveredKeySigned(seed: seed, signed: signed) {
+                phase = .failed("The stored recovery record was not signed by this account's key; refusing to use it.")
+                return nil
+            }
             // #28 — if the envelope carries the escrowed ACME account key,
             // unwrap it under the same PRF secret and import it so this
             // recovered device regains cert-minting authority. Non-fatal:
@@ -279,6 +297,23 @@ public final class RecoveryViewModel {
             phase = .failed(UserErrorText.of(error))
             return nil
         }
+    }
+
+    /// True when the last recovery came from a v1 record whose escrow extras carry no signature.
+    public private(set) var recoveredRecordWasLegacy = false
+
+    /// Does a key derived from the recovered UMK (any of the first few rotation versions) verify the
+    /// owner's signed record? The record was signed by the key in force when it was written.
+    static func recoveredKeySigned(seed: SymmetricKey, signed: SignedRecoveryRecord) -> Bool {
+        for v in 1...4 {
+            let raw = HKDF<SHA256>.deriveKey(inputKeyMaterial: seed, info: Data("flagship/irk/v\(v)".utf8), outputByteCount: 32)
+                .withUnsafeBytes { Data($0) }
+            guard let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw) else { continue }
+            if HexUtil.encode(key.publicKey.rawRepresentation) == signed.claim.irkPubHex {
+                return signed.claim.verify(signatureHex: signed.signatureHex, publicKey: key.publicKey)
+            }
+        }
+        return false
     }
 
     /// Recovery Phase B — decide the post-recovery path. Given the IRK pubkey

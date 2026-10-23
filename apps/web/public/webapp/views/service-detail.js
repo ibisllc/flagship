@@ -6,7 +6,7 @@
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl, currentPodFqdn, makeCurrentPod, boxClient } from "../lib/api.js";
 import { backUpApp, formatBackupSize } from "../lib/appBackup.js";
-import { inlineConfirm } from "../lib/modal.js";
+import { inlineConfirm, inlineConfirmWithExtra } from "../lib/modal.js";
 import {
   REMOVE_APP_BUSY,
   REMOVE_APP_LABEL,
@@ -93,6 +93,8 @@ import {
   scopeLabel,
 } from "../lib/appApiKeys.js";
 import { formatWhen } from "../lib/dateFormat.js";
+import { fetchUpdateMode, renderUpdateMode, setUpdateMode } from "../lib/updateMode.js";
+import { fetchPermissions, renderPermissions, revokeOutcomeText, revokePermission } from "../lib/permissions.js";
 import { DB_NOTE, DB_OPEN, DB_TITLE, canUseDatabase, dbErrorMessage, fetchDbStores } from "../lib/appDb.js";
 import { appStorageLines } from "../lib/appStorage.js";
 import { getActiveProfile } from "../lib/profiles.js";
@@ -200,6 +202,8 @@ export async function renderServiceDetail(serviceId) {
       <div id="sd-egress">${renderInternetSection(s)}</div>
       <div id="sd-api-keys"></div>
       <div id="sd-database"></div>
+      <div id="sd-update-mode-slot"></div>
+      <div id="sd-permissions"></div>
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <h2 class="mt-4">App config</h2>
@@ -276,6 +280,8 @@ export async function renderServiceDetail(serviceId) {
     else bindEgressHandlers(s);
     void loadApiKeysSection(s);
     void loadDatabaseEntry(s);
+    void loadPermissions(s);
+    void loadUpdateMode(s);
     void loadRunsOn(s);
   } catch (e) {
     if (e instanceof ScreensError) {
@@ -575,6 +581,59 @@ export function renderDatabaseEntry({ stores = null, error = "" } = {}) {
         ${line}
         <button id="sd-db-open" class="full-width mt-2">${escapeHtml(DB_OPEN)}</button>
       </div>`;
+}
+
+async function loadUpdateMode(app) {
+  if (isCompanionProfile()) return;
+  const fetchJson = (path, init) => screensFetch(path, init);
+  let data = null;
+  try {
+    data = await fetchUpdateMode(app.serviceId, fetchJson);
+  } catch {
+    return;
+  }
+  if (currentServiceId !== app.serviceId) return;
+  const slot = $("sd-update-mode-slot");
+  if (!slot || !data) return;
+  slot.innerHTML = renderUpdateMode(data);
+  slot.querySelectorAll('input[name="sd-update-mode"]').forEach((r) =>
+    r.addEventListener("change", async () => {
+      try {
+        await setUpdateMode(app.serviceId, r.value, fetchJson);
+        toast("Update setting saved.");
+      } catch (e) {
+        toast(humanError(e), "err");
+        await loadUpdateMode(app);
+      }
+    }),
+  );
+}
+
+async function loadPermissions(app) {
+  if (isCompanionProfile()) return;
+  const fetchJson = (path, init) => screensFetch(path, init);
+  let data = null;
+  try {
+    data = await fetchPermissions(app.serviceId, fetchJson);
+  } catch {
+    return;
+  }
+  if (currentServiceId !== app.serviceId) return;
+  const slot = $("sd-permissions");
+  if (!slot || !data) return;
+  slot.innerHTML = renderPermissions(data);
+  const act = async (grantId, button) => {
+    button.disabled = true;
+    try {
+      const r = await revokePermission(app.serviceId, grantId, fetchJson);
+      toast(revokeOutcomeText(r), (r?.stuckWork ?? []).length ? "err" : "ok");
+    } catch (e) {
+      toast(humanError(e), "err");
+    }
+    await loadPermissions(app);
+  };
+  slot.querySelectorAll("[data-permission-revoke]").forEach((b) => b.addEventListener("click", () => void act(b.getAttribute("data-permission-revoke"), b)));
+  slot.querySelector("[data-permission-revoke-all]")?.addEventListener("click", (ev) => void act(null, ev.currentTarget));
 }
 
 async function loadDatabaseEntry(app) {
@@ -994,13 +1053,22 @@ async function removeAppHere(app, btn) {
   const fqdn = currentPodFqdn();
   const otherCopies = (runsOn?.app?.serviceId === app.serviceId ? runsOn.rows : [])
     .filter((r) => r.state === "has" && r.fqdn !== fqdn).length;
-  const ok = await inlineConfirm({
+  // The last chance to keep the data: "Back up first" leaves the removal and opens the backup section.
+  const answer = await inlineConfirmWithExtra({
     title: REMOVE_APP_TITLE,
     message: removeAppMessage({ slug: app.slug, server: fqdn, otherCopies }),
     okLabel: REMOVE_APP_LABEL,
+    extraLabel: "Back up first",
     danger: true,
   });
-  if (!ok) return;
+  if (answer === "extra") {
+    const go = $("sd-backup-go");
+    go?.scrollIntoView({ block: "center" });
+    go?.focus({ preventScroll: true });
+    toast("Back up the app, save the file, then remove it.");
+    return;
+  }
+  if (answer !== "ok") return;
   btn.disabled = true;
   btn.textContent = REMOVE_APP_BUSY;
   try {

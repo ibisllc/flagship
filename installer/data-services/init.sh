@@ -15,8 +15,8 @@
 #      Apps' data needs exactly this (their files are per-app Docker
 #      volumes). Failing here exits non-zero, so systemd retries
 #      (Restart=on-failure).
-#   4. Write the ready marker, then bring up the OPTIONAL services (forgejo,
-#      chromium), removing containers of services this compose file no
+#   4. Write the ready marker, then bring up the OPTIONAL service (forgejo),
+#      removing (an older box's chromium among them) containers of services this compose file no
 #      longer has (an older box's minio, redis, adminer, redis-commander).
 #      A failure there is logged and never takes Postgres down or fails the
 #      unit.
@@ -38,7 +38,16 @@ READY_MARKER="$SECRETS_DIR/data-services.ready"
 COMPOSE=${FLAGSHIP_DATA_COMPOSE:-/opt/flagship/installer/data-services/docker-compose.yml}
 CORE="postgres"
 
-mkdir -p "$DATA_DIR/postgres" "$DATA_DIR/forgejo" "$DATA_DIR/chromium/profile"
+# Once flagship-privd is in, the daemon runs as `flagship` and shares these folders (root's, sticky,
+# its group may add entries): never follow or bind a link it could have left where a name was free.
+real_dir() {
+    [ -L "$1" ] && rm -f "$1"
+    mkdir -p "$1"
+    if [ -L "$1" ] || [ ! -d "$1" ]; then echo "flagship: $1 is not a real directory; refusing"; exit 1; fi
+}
+real_dir "$DATA_DIR"
+real_dir "$DATA_DIR/postgres"
+real_dir "$DATA_DIR/forgejo"
 # An older box's object and key-value stores: gone with their services. An
 # empty directory goes too; one that still holds data is left for the owner.
 rmdir "$DATA_DIR/minio" "$DATA_DIR/redis" 2>/dev/null || true
@@ -56,23 +65,23 @@ if [ -f "$DATA_DIR/postgres/PG_VERSION" ]; then
     echo "flagship: moved the old Postgres $(cat "$old/PG_VERSION") cluster to $old"
 fi
 mkdir -p "$SECRETS_DIR"
-chmod 700 "$SECRETS_DIR"
-chmod 700 "$DATA_DIR"
+if getent group flagship >/dev/null 2>&1; then
+    chown root:flagship "$SECRETS_DIR" "$DATA_DIR"
+    chmod 1770 "$SECRETS_DIR" "$DATA_DIR"
+else
+    chmod 700 "$SECRETS_DIR"
+    chmod 700 "$DATA_DIR"
+fi
 
 # Forgejo's `:9-rootless` image runs as UID/GID 1000 inside the container.
 # The volume bind-mount preserves host ownership; without this chown the
 # container can't create /var/lib/gitea/git and crashloops on startup.
 chown -R 1000:1000 "$DATA_DIR/forgejo"
 
-# Chromium runs as UID 1000 (matches our `flagship` user inside the image).
-# It needs to read+write its profile dir; it also needs the dir to NOT
-# contain a stale SingletonLock from a previous unclean shutdown — the
-# container's start.sh removes those, but if we ever pre-seed the profile
-# we want the right perms ready to go.
-chown -R 1000:1000 "$DATA_DIR/chromium"
-rm -f "$DATA_DIR/chromium/profile/SingletonLock" \
-      "$DATA_DIR/chromium/profile/SingletonCookie" \
-      "$DATA_DIR/chromium/profile/SingletonSocket" || true
+# The app browser is off (SEC-BROWSER-001): every app shared one Chromium
+# profile, so its cookies and logins could cross apps. Destroy it; it comes
+# back only with a per-app context design.
+rm -rf "$DATA_DIR/chromium" || true
 
 gen_secret() {
     head -c 32 /dev/urandom | base64 | tr -d '+/=\n' | head -c 40
@@ -94,8 +103,13 @@ ensure_literal() {
     fi
 }
 
-[ -f "$SECRETS_FILE" ] || touch "$SECRETS_FILE"
+for f in "$SECRETS_FILE" "$READY_MARKER"; do [ -L "$f" ] && rm -f "$f"; done
+[ -e "$SECRETS_FILE" ] || ( set -o noclobber; : > "$SECRETS_FILE" )
+[ -f "$SECRETS_FILE" ] && [ ! -L "$SECRETS_FILE" ] || { echo "flagship: $SECRETS_FILE is not a plain file; refusing"; exit 1; }
+chown root:root "$SECRETS_FILE"
 chmod 600 "$SECRETS_FILE"
+# The unprivileged daemon reads the admin credentials; it never writes them.
+if getent group flagship >/dev/null 2>&1; then chgrp flagship "$SECRETS_FILE" && chmod 640 "$SECRETS_FILE"; fi
 
 ensure_literal POSTGRES_ADMIN_USER flagship_admin
 ensure_var POSTGRES_ADMIN_PASSWORD
@@ -148,7 +162,10 @@ while :; do
     sleep 3
 done
 
-date -u +%Y-%m-%dT%H:%M:%SZ > "$READY_MARKER"
+ready_tmp=$(mktemp "$SECRETS_DIR/.data-services.ready.XXXXXX")
+date -u +%Y-%m-%dT%H:%M:%SZ > "$ready_tmp"
+chmod 644 "$ready_tmp"
+mv -f "$ready_tmp" "$READY_MARKER"
 echo "flagship: data layer ready"
 
 # Optional services: Postgres is up and stays up whatever happens here.

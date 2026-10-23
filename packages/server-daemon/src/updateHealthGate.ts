@@ -1,9 +1,5 @@
-import {
-  rebuildWorkspace,
-  restoreCheckout,
-  type PendingVerifyStore,
-  type UpdateCommandRunner,
-} from "./updateConsumer.js";
+import type { PendingVerifyStore } from "./updateConsumer.js";
+import type { ReleaseSwapper } from "./artifactUpdate.js";
 
 /**
  * Boot-time health gate + auto-rollback for the in-place self-update
@@ -42,13 +38,12 @@ import {
 
 export const DEFAULT_MAX_BOOT_ATTEMPTS = 3;
 
-export type UpdateReportEvent = "update-applied" | "update-rolled-back";
+export type UpdateReportEvent = "update-applied" | "update-rolled-back" | "update-rollback-refused";
 
 export interface RunUpdateBootGateOptions {
   pendingStore: PendingVerifyStore;
-  /** The box's own code checkout (production: /opt/flagship). */
-  repoPath: string;
-  runner: UpdateCommandRunner;
+  /** Switches back to the previous release, which is already installed. */
+  swapper: ReleaseSwapper;
   /**
    * Resolves true when THIS boot is healthy (tunnel supervised-up + a signed
    * heartbeat landed), false on timeout. Production wires
@@ -59,6 +54,11 @@ export interface RunUpdateBootGateOptions {
   requestRestart: () => void;
   /** Boots the new code may fail before rollback. Default 3. */
   maxBootAttempts?: number;
+  /**
+   * False when the previous release is below the signed security floor. The box then keeps its data, does
+   * not go back, and waits in restricted recovery for a signed artifact (SECURITY-HARDENING-PLAN.md 18.13).
+   */
+  rollbackAllowed?: (previousCommit: string) => boolean | Promise<boolean>;
   /** Surface the terminal verdict (phone/status channel; best-effort). */
   report?: (
     event: UpdateReportEvent,
@@ -71,7 +71,8 @@ export type UpdateBootGateOutcome =
   | { action: "none" }
   | { action: "committed"; targetCommit: string }
   | { action: "retry-restart"; bootAttempts: number }
-  | { action: "rolled-back"; previousCommit: string; targetCommit: string };
+  | { action: "rolled-back"; previousCommit: string; targetCommit: string }
+  | { action: "restricted-recovery"; previousCommit: string; targetCommit: string };
 
 /** Run the boot gate. Never throws — returns an outcome. */
 export async function runUpdateBootGate(
@@ -105,9 +106,27 @@ export async function runUpdateBootGate(
         : `[self-update] ${marker.targetCommit} failed ${marker.bootAttempts} boot(s); ` +
             `ROLLING BACK to ${marker.previousCommit}`,
     );
+    let allowed = true;
     try {
-      await restoreCheckout(opts.runner, opts.repoPath, marker.previousCommit);
-      await rebuildWorkspace(opts.runner, opts.repoPath, log);
+      allowed = opts.rollbackAllowed ? await opts.rollbackAllowed(marker.previousCommit) : true;
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) {
+      log(`[self-update] ${marker.previousCommit} is below the security floor; NOT rolling back, waiting for a signed artifact`);
+      try {
+        await opts.report?.("update-rollback-refused", {
+          previousCommit: marker.previousCommit,
+          targetCommit: marker.targetCommit,
+          bootAttempts: marker.bootAttempts,
+        });
+      } catch {
+        /* best-effort */
+      }
+      return { action: "restricted-recovery", previousCommit: marker.previousCommit, targetCommit: marker.targetCommit };
+    }
+    try {
+      await opts.swapper.restore(marker.previousCommit);
     } catch (e) {
       // Keep the marker: the next boot retries the rollback rather than
       // silently running unverified code with no way back.

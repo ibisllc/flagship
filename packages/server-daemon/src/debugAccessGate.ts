@@ -16,6 +16,7 @@ import {
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { keepCorruptAside, readStateFile, removeDurable, writeFileDurable } from "./durableFile.js";
+import { runSetupStep } from "./privileged.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 
 /**
@@ -83,6 +84,25 @@ export interface DebugSystemOptions {
   writeFile?: (path: string, content: string, mode: number) => Promise<void>;
   removeFile?: (path: string) => Promise<void>;
   log?: (m: string) => void;
+}
+
+/**
+ * The same system for a daemon without root: the broker's root steps (setup.ts) do it. Opening
+ * re-verifies the grant this controller saved as open (state is written before `open`), so the
+ * daemon alone can never let a key in; closing needs no proof.
+ */
+export function privdDebugSystem(
+  run: (step: "debug-access" | "debug-access-close") => Promise<unknown> = runSetupStep,
+  log: (m: string) => void = (m) => console.log(m),
+): DebugSystem {
+  const step = async (s: "debug-access" | "debug-access-close") => {
+    try {
+      await run(s);
+    } catch (e) {
+      log(`[debug-access] ${s} failed: ${(e as Error).message}`);
+    }
+  };
+  return { open: () => step("debug-access"), close: () => step("debug-access-close") };
 }
 
 /** OpenSSH `expiry-time` (UTC). */

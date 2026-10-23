@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import List
 
-from . import host_arch
+from . import host_arch, server_code_seen
 from .config import VMConfig, VMNetworkMode, VMProvisioningMode
 from .inventory import VMBundleLayout
 
@@ -162,6 +162,15 @@ def build(
         ]
     else:
         args += ["-chardev", "null,id=ser-null", "-serial", "chardev:ser-null"]
+
+    # The server-code port, on every VM (first contact): the guest writes one line with its code and
+    # key to /dev/virtio-ports/org.flagshipserver.server-code and QEMU writes it to a file Studio reads.
+    # A file chardev takes no input, so this is no console and needs no debug grant.
+    args += [
+        "-device", "virtio-serial-pci,id=fsvs",
+        "-chardev", f"file,id=fscode,path={server_code_seen.port_log_path(layout, name)}",
+        "-device", f"virtserialport,bus=fsvs.0,chardev=fscode,name={server_code_seen.PORT_NAME}",
+    ]
 
     # Headless: the appliance has no GUI; all interaction is phone/web.
     args += ["-display", "none"]

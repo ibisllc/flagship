@@ -4,6 +4,7 @@
  * signed message uses. Pure and runtime-agnostic: the box, `.com`, the relay
  * and the apps' ports all derive the same bytes from this module.
  */
+import { hkdfFromSwk } from "./swkDerive.js";
 import { ctr, gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf";
 import { hmac } from "@noble/hashes/hmac";
@@ -83,7 +84,7 @@ const TAG_BRICK_ID = "flagship/pb-brick-id/v1";
 /** PBK = HKDF(SWK, "flagship/peer-backup-key/v1"); SWK = deriveSWK(UMK, serverId). */
 export function derivePeerBackupKey(swk: Bytes): Bytes {
   if (swk.length !== 32) throw new Error("SWK must be 32 bytes");
-  return hkdf(sha256, swk, new Uint8Array(0), te.encode(INFO_PBK), 32);
+  return hkdfFromSwk(swk, new Uint8Array(0), INFO_PBK);
 }
 
 export function derivePbRootKey(pbk: Bytes): Bytes {

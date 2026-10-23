@@ -54,9 +54,17 @@ data class PowerOffOrderRequest(
     val signature: String,
 )
 
-/** Daemon `/api/power` ack — `{ ok, mode }`. */
+/** Daemon `/api/power` ack — `{ ok, mode }`. A box with the durable lock also
+ *  says what it actually did: `mode` is the action taken (a restart it could
+ *  not lock becomes "off"), `requestedMode` what was asked, and `suspension`
+ *  "confirmed" | "unconfirmed" | "unavailable". Older boxes send only `ok, mode`. */
 @Serializable
-data class OrderAck(val ok: Boolean = false, val mode: String? = null)
+data class OrderAck(
+    val ok: Boolean = false,
+    val mode: String? = null,
+    val requestedMode: String? = null,
+    val suspension: String? = null,
+)
 
 // ---------- dead-man policy (IRK-signed) -------------------------------
 
@@ -78,7 +86,12 @@ data class DeadManPolicyRequest(
 )
 
 @Serializable
-data class DeadManPolicyAck(val ok: Boolean = false, val enabled: Boolean = false)
+data class DeadManPolicyAck(
+    val ok: Boolean = false,
+    val enabled: Boolean = false,
+    /** The first affirmation deadline the box set when the switch was enabled (null from an older box). */
+    val leaseExpiry: Long? = null,
+)
 
 // ---------- dead-man affirmation (IRK-signed) --------------------------
 

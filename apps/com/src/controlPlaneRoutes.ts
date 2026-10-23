@@ -52,6 +52,9 @@ import {
   handleInitiateRePair,
   handlePostSecretRequest,
   handleGetSecretRequests,
+  handleRecoveryChallenge,
+  recoveryPasskeyPolicy,
+  handleReadSecretRequests,
   handlePostSecretResponse,
   handleGetSecretResponse,
   handlePostBoxSealedLease,
@@ -101,6 +104,7 @@ import {
   handleRevokeAcmeAccountKeyDelivery,
   handleNotifyOwner,
   handleObjectRePair,
+  handleVetoRePair,
   handleTotpDisable,
   handleTotpEnrollBegin,
   handleTotpEnrollConfirm,
@@ -125,6 +129,7 @@ import {
   handlePostInstallEvent,
   handlePostProvisionStatus,
   handleGetProvisionStatus,
+  handlePostServerSeen,
   handleRegisterRck,
   handleRoutingLookup,
   handleServerLookup,
@@ -166,6 +171,7 @@ import {
   handlePostServerHealth,
   handleUserPubKeyCert,
   handleAccountKeyAttestation,
+  handleAuthTime,
   buildPushForwarder,
   wrapForwarderAsV12Fanout,
   handleGetEntitlementRevocations,
@@ -558,6 +564,7 @@ const ROUTE_RE = {
   SERVER_REGISTRY_UNREVOKE: /^\/api\/server-registry\/unrevoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   ACCOUNT_KEY_ATTESTATION: /^\/api\/users\/([^/]+)\/account-key-attestation$/,
+  AUTH_TIME: /^\/api\/auth-time$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   MAINTAINER_BLESSING: /^\/api\/maintainer-blessing$/,
   // Relay blessing — the `.services` hub asks `.com` to bless its
@@ -595,6 +602,7 @@ const ROUTE_RE = {
   // Provisioning-status channel — per-order install progress keyed by the
   // auth-code serial. The box POSTs a named phase; the phone polls it.
   PROVISION_STATUS: /^\/api\/order\/([^/]+)\/status$/,
+  SERVER_SEEN: /^\/api\/order\/([^/]+)\/server-seen$/,
   ORDER_HEALTH: /^\/api\/order\/([^/]+)\/health$/,
   DNS01_PUBLISH: /^\/api\/dns-01\/publish$/,
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
@@ -708,6 +716,7 @@ const ROUTE_RE = {
   //   DELETE delivery-revoke (IRK-signed)
   ACME_ACCOUNT_KEY_DELIVERY: /^\/api\/server\/([^/]+)\/acme-account-key$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
+  USER_SECRET_REQUESTS: /^\/api\/users\/([^/]+)\/secret-requests$/,
   // Unified live-update channel — a single foreground long-poll that returns
   // the same payload as /pods PLUS a change-detection `cursor`, holding until
   // the user's meaningful state changes (or ~25s). Unauthenticated, like /pods.
@@ -729,6 +738,7 @@ const ROUTE_RE = {
   RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
   RE_PAIR_OBJECT: /^\/api\/users\/([^/]+)\/re-pair\/object$/,
   RE_PAIR_COMPLETE: /^\/api\/users\/([^/]+)\/re-pair\/complete$/,
+  RE_PAIR_VETO: /^\/api\/users\/([^/]+)\/re-pair\/veto$/,
   RE_PAIR_GET: /^\/api\/users\/([^/]+)\/re-pair$/,
   // v1.2 Plan B Phase 3 — TOTP 2FA enrollment + verification.
   TOTP_ENROLL_BEGIN: /^\/api\/users\/([^/]+)\/totp\/enroll-begin$/,
@@ -764,6 +774,7 @@ const ROUTE_RE = {
   REVOCATIONS_LIST: /^\/api\/revocations$/,
   RECOVERY_UPLOAD: /^\/api\/recovery$/,
   RECOVERY_FETCH_GATED: /^\/api\/recovery\/by-username\/([^/]+)\/fetch$/,
+  RECOVERY_CHALLENGE: /^\/api\/recovery\/by-username\/([^/]+)\/challenge$/,
   RECOVERY_BY_USERNAME: /^\/api\/recovery\/by-username\/([^/]+)$/,
   USER_IDENTITY_PUT: /^\/api\/user-identity$/,
   USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
@@ -913,6 +924,8 @@ export async function tryBootHost(
 
   const deps: BootRouteDeps = {
     boxSealedLeases: storage.boxSealedLeases,
+    watchBootKeys: storage.watchBootKeys,
+    bootSuspensions: storage.bootSuspensions,
     secretMailbox: storage.secretMailbox,
     directory,
     notify,
@@ -1353,6 +1366,10 @@ export async function tryControlPlane(
         decodeURIComponent(m[1]!),
       ),
     );
+  }
+  // The CA's signed "now" for one caller's nonce: a box's authenticated clock (N07).
+  if (method === "GET" && ROUTE_RE.AUTH_TIME.test(path)) {
+    return finish(await handleAuthTime({ ca, caGate }, url.searchParams.get("nonce")));
   }
   if (method === "GET" && ROUTE_RE.CA_CERT.test(path)) {
     return finish(handleCaCert({ ca, usernames: storage.usernames }));
@@ -2224,6 +2241,7 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           webauthnRecovery: storage.webauthnRecovery,
+          passkeyPolicy: recoveryPasskeyPolicy(env.CONTROL_APEX),
         },
         await readJson(request),
       ),
@@ -2232,12 +2250,22 @@ export async function tryControlPlane(
   // Task #74 — Argon2id-gated fetch. The more-specific `/fetch` path
   // must precede the `/by-username/<u>` regex below or it would never
   // match (the catch-all regex would short-circuit first).
+  // SEC-REPAIR-001 — the challenge the recovery passkey signs before the fetch below.
+  if (method === "POST" && (m = path.match(ROUTE_RE.RECOVERY_CHALLENGE))) {
+    return finishPlain(
+      await handleRecoveryChallenge(
+        env.FLAGSHIP_RECOVERY_PROOF_SECRET ? { recoveryProofSecret: env.FLAGSHIP_RECOVERY_PROOF_SECRET } : {},
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
   if (method === "POST" && (m = path.match(ROUTE_RE.RECOVERY_FETCH_GATED))) {
     return finishPlain(
       await handleFetchWrappedUmkWithToken(
         {
           usernames: storage.usernames,
           webauthnRecovery: storage.webauthnRecovery,
+          passkeyPolicy: recoveryPasskeyPolicy(env.CONTROL_APEX),
           // Mint the recovery-session proof alongside the ciphertext:
           // this call is where the passphrase gate is actually passed,
           // so it is the only honest place to attest it. The follow-on
@@ -2305,6 +2333,22 @@ export async function tryControlPlane(
       ),
     );
   }
+  if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_VETO))) {
+    const vetoFanout = buildOptionalV12PushFanout(env);
+    return finishPlain(
+      await handleVetoRePair(
+        {
+          usernames: storage.usernames,
+          pendingRePairs: storage.pendingRePairs,
+          pushTokens: storage.pushTokens,
+          auditEvents: storage.auditEvents,
+          ...(vetoFanout ? { pushFanout: vetoFanout } : {}),
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
   if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_COMPLETE))) {
     // /complete is body-OPTIONAL: legacy clients POST with no body and
     // still get a 200; W6 clients POST `{ refreshedGrants }` so the
@@ -2360,6 +2404,12 @@ export async function tryControlPlane(
         decodeURIComponent(m[1]!),
       ),
     );
+  }
+  // The box-signed pending requests for a device without the IRK (a locked phone answering for its watch).
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_SECRET_REQUESTS))) {
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(await handleReadSecretRequests({ secretMailbox: storage.secretMailbox }, decodeURIComponent(m[1]!)));
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.USER_STREAM))) {
     const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
@@ -2854,6 +2904,7 @@ export async function tryControlPlane(
           webauthnRecovery: storage.webauthnRecovery,
           auditEvents: storage.auditEvents,
           pushTokens: storage.pushTokens,
+          passkeyPolicy: recoveryPasskeyPolicy(env.CONTROL_APEX),
           // v2 — wipe also revokes every active DeviceCapabilityGrant
           // on the cloud (their old-IRK signatures are now dead anyway).
           deviceCapabilityGrants: storage.deviceCapabilityGrants,
@@ -3155,6 +3206,9 @@ export async function tryControlPlane(
         await readJson(request),
       ),
     );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SEEN))) {
+    return finish(await handlePostServerSeen({ storage: storage.provisionStatus }, decodeURIComponent(m[1]!), await readJson(request)));
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.ORDER_HEALTH))) {
     return finish(

@@ -1,0 +1,42 @@
+# The app browser's Chromium (SEC-BROWSER-002). NOT part of the data layer and not started by init.sh:
+# the browser is off (`APP_BROWSER.enabled` in packages/server-daemon/src/index.ts) until the owner turns
+# it on, and then this file is added to the stack:
+#
+#   docker compose -f docker-compose.yml -f app-browser.compose.yml --env-file /var/flagship/data-services.env up -d
+#
+# Chromium sits alone on the internal `flagship-browser` network: it has no route out. Every request goes
+# to the daemon's pinning proxies on that network's gateway (packages/server-daemon/src/browser/egress.ts):
+# each app's browser context has its own proxy, fed only with the addresses the policy judge approved for
+# that app, and the default proxy below approves nothing. Chromium resolves no names itself. No port is
+# published (an internal network has none); the daemon reaches CDP at http://172.31.250.2:9222. Its profile
+# is a tmpfs: app contexts never touch it, and nothing survives a restart.
+# The addresses and the deny port are pinned with BROWSER_EGRESS in index.ts, and the flags with
+# chromiumEgressFlags (a test keeps them in step).
+services:
+  chromium:
+    build: ./chromium
+    container_name: flagship-chromium
+    restart: unless-stopped
+    networks:
+      flagship-browser:
+        ipv4_address: 172.31.250.2
+    tmpfs:
+      - /home/flagship/profile:size=512m,mode=0700,uid=1000
+    command:
+      - --proxy-server=http://172.31.250.1:18480
+      - --proxy-bypass-list=<-loopback>
+      - --host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 172.31.250.1
+      - --disable-features=DnsOverHttps,NetworkPrediction
+      - --dns-prefetch-disable
+      - --disable-quic
+      - --force-webrtc-ip-handling-policy=disable_non_proxied_udp
+      - --no-pings
+
+networks:
+  flagship-browser:
+    name: flagship-browser
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+          gateway: 172.31.250.1

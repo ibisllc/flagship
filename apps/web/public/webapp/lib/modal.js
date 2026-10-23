@@ -160,6 +160,48 @@ export function inlineConfirm({
 }
 
 /**
+ * Like {@link inlineConfirm} with one more button between Cancel and OK (for example "Back up first"
+ * before a removal). Resolves to "ok", "extra" or null when cancelled or dismissed.
+ */
+export function inlineConfirmWithExtra({ title, message, okLabel = "Confirm", cancelLabel = "Cancel", extraLabel, danger = false } = {}) {
+  return new Promise((resolve) => {
+    const host = ensureHost();
+    const overlay = buildOverlay();
+    overlay.innerHTML = `
+      <div class="modal-card" role="document">
+        ${title ? `<h3 class="modal-title">${escapeHtml(title)}</h3>` : ""}
+        ${message ? `<p class="modal-message">${escapeHtml(message)}</p>` : ""}
+        <div class="row-2 mt-3">
+          <button class="secondary" data-modal-cancel>${escapeHtml(cancelLabel)}</button>
+          <button class="secondary" data-modal-extra>${escapeHtml(extraLabel)}</button>
+          <button class="${danger ? "danger" : ""}" data-modal-ok>${escapeHtml(okLabel)}</button>
+        </div>
+      </div>
+    `;
+    host.appendChild(overlay);
+    document.body.classList.add("modal-open");
+    const close = (v) => {
+      overlay.remove();
+      document.body.classList.remove("modal-open");
+      document.removeEventListener("keydown", onKey);
+      resolve(v);
+    };
+    // Enter does not confirm a removal: it takes the safe way out.
+    const onKey = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); close(null); }
+    };
+    overlay.querySelector("[data-modal-ok]").addEventListener("click", () => close("ok"));
+    overlay.querySelector("[data-modal-extra]").addEventListener("click", () => close("extra"));
+    overlay.querySelector("[data-modal-cancel]").addEventListener("click", () => close(null));
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) close(null);
+    });
+    document.addEventListener("keydown", onKey);
+    queueMicrotask(() => overlay.querySelector("[data-modal-extra]")?.focus({ preventScroll: true }));
+  });
+}
+
+/**
  * Inline choice: title/message and several named buttons. Resolves to the
  * chosen button's `id`, or `null` when dismissed (Escape, a tap outside), so
  * dismissing never counts as picking one. `choices` run left to right, e.g.

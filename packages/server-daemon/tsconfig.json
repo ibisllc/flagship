@@ -5,10 +5,24 @@
     "outDir": "./dist",
     "composite": true
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*"
+  ],
   "references": [
-    { "path": "../protocol" },
-    { "path": "../tunnel-protocol" },
-    { "path": "../llm-providers" }
+    {
+      "path": "../protocol"
+    },
+    {
+      "path": "../tunnel-protocol"
+    },
+    {
+      "path": "../llm-providers"
+    },
+    {
+      "path": "../keyd"
+    },
+    {
+      "path": "../privd"
+    }
   ]
 }

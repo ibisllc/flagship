@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { routePrivileged } from "./privileged.js";
 import { checkBuildContextDockerfile } from "./buildmodes/dockerfilePolicy.js";
 import { prepareRuntimeContext } from "./runtimes/buildContext.js";
 import { appSandboxRunArgs } from "./appSandbox/state.js";
@@ -54,7 +55,7 @@ export function filesMountArgs(volume: string, opts: { readonly?: boolean } = {}
 const FILES_MOUNT_RE = /^type=volume,src=([^,]+),dst=\/data(,readonly)?$/;
 // The egress gateway's resolver file for a sandbox bridge (egress/gateway.ts):
 // daemon-written, outside /var/flagship, mounted read-only over resolv.conf.
-const RESOLV_MOUNT_RE = /^type=bind,src=\/run\/flagship-resolv-[a-z0-9-]+\.conf,dst=\/etc\/resolv\.conf,readonly$/;
+const RESOLV_MOUNT_RE = /^type=bind,src=\/run\/(?:flagship-daemon\/)?flagship-resolv-[a-z0-9-]+\.conf,dst=\/etc\/resolv\.conf,readonly$/;
 
 export interface CommandRunnerOpts {
   /**
@@ -66,6 +67,12 @@ export interface CommandRunnerOpts {
   input?: Buffer | string;
   /** Kill the child (SIGKILL) when this aborts: a build over its disk limit. */
   signal?: AbortSignal;
+  /**
+   * The child's WHOLE environment. When set, nothing of the daemon's own
+   * environment is inherited, so a child that talks to a hostile server never
+   * holds the daemon's secrets.
+   */
+  env?: Record<string, string>;
 }
 
 export interface CommandRunner {
@@ -254,10 +261,25 @@ function armTimeout(
   return timer;
 }
 
+/** As root, the command runs here; without root, what needs the host goes to the broker (privileged.ts). */
 export const realCommandRunner: CommandRunner = {
+  async run(cmd, args, opts) {
+    const routed = await routePrivileged(cmd, args, { ...(opts?.env ? { env: opts.env } : {}) });
+    if (routed) return;
+    return localCommandRunner.run(cmd, args, opts);
+  },
+  async capture(cmd, args, opts) {
+    const routed = await routePrivileged(cmd, args, { ...(opts?.input !== undefined ? { input: opts.input } : {}), ...(opts?.env ? { env: opts.env } : {}) });
+    if (routed) return routed;
+    return localCommandRunner.capture!(cmd, args, opts);
+  },
+};
+
+/** Spawn here, whatever the daemon's privileges. */
+export const localCommandRunner: CommandRunner = {
   run(cmd, args, opts) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: "inherit" });
+      const p = spawn(cmd, args, { stdio: "inherit", ...(opts?.env ? { env: opts.env } : {}) });
       const timer = armTimeout(p, opts, reject);
       armSignal(p, opts);
       // A spawn failure (e.g. the binary is missing — `docker` ENOENT) emits
@@ -275,7 +297,7 @@ export const realCommandRunner: CommandRunner = {
   },
   capture(cmd, args, opts) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: [opts?.input !== undefined ? "pipe" : "ignore", "pipe", "pipe"] });
+      const p = spawn(cmd, args, { stdio: [opts?.input !== undefined ? "pipe" : "ignore", "pipe", "pipe"], ...(opts?.env ? { env: opts.env } : {}) });
       if (opts?.input !== undefined) {
         p.stdin?.on("error", () => {});
         p.stdin?.end(opts.input);

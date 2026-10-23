@@ -1,0 +1,127 @@
+{
+  "about": "SEC-REPAIR-001 recovery passkey. At enrolment the client sends the platform's attestation object (base64url) as `passkeyAttestationObject` beside the signed record; `.com` keeps the COSE key. At recovery it POSTs /api/recovery/by-username/<u>/challenge, passes the challenge's base64url-decoded bytes as the WebAuthn challenge in the same get() that evaluates the PRF, and sends `passkey: { challenge, assertion: { credentialId, authenticatorData, clientDataJSON, signature } }` (base64url) with the fetch. The challenge was issued for `username` with `secretUtf8` at `now` (nonce 0x5a×16). Every invalid assertion must be refused against the first entry's key.",
+  "secretUtf8": "vector-recovery-secret",
+  "username": "alice",
+  "now": 1760000000000,
+  "challenge": "AAABmcgxU-BaWlpaWlpaWlpaWlpaWlpaoKXmPXb_4fFTWOOjnku-c_5RNx2XJWMaxZZx2F590dY",
+  "challengeExpiresAt": 1760000300000,
+  "rpIds": [
+    "flagshipserver.com",
+    "recovery.flagshipserver.com"
+  ],
+  "origins": [
+    "https://flagshipserver.com",
+    "https://recovery.flagshipserver.com",
+    "android:apk-key-hash:PL-zpnWp4HOR1hwlWNmRDOAdqXwt81WeWAKilO2PfN0",
+    "android:apk-key-hash:rKW2uIIWfAEalsRGMwNl6xGUgFwtlwp8bcoxD8ZpQ5Y",
+    "android:apk-key-hash:ZTtUThpwI_NjZA3PnsPElKELGGvmavsYj7fRLEnLpBk",
+    "android:apk-key-hash:IvAcghxc9PTxfJv9kP49OsNIDIKWaEXtw5oj9H6KbG4",
+    "android:apk-key-hash:ookCdfa7a-5xK8o3bKq0MdsTqmQqzzOgWgvKkqP2GYQ"
+  ],
+  "entries": [
+    {
+      "name": "es256-web",
+      "alg": -7,
+      "rpId": "recovery.flagshipserver.com",
+      "origin": "https://recovery.flagshipserver.com",
+      "credentialIdHex": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+      "coseHex": "a50102032620012158200217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed225820194a7debcb97712d2dda3ca85aa8765a56f45fc758599652f2897c65306e5794",
+      "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YViUUN0vKw7NHY3eum2Ccoiv8InRRPse2Osw7JD1yrhLc7RFAAAAAAAAAAAAAAAAAAAAAAAAAAAAEMHBwcHBwcHBwcHBwcHBwcGlAQIDJiABIVggAhfmF_C2RDkoJ4-WmZ5pojpPLBUr321s32bluAKC1O0iWCAZSn3ry5dxLS3aPKhaqHZaVvRfx1hZllLyiXxlMG5XlA",
+      "assertion": {
+        "credentialId": "wcHBwcHBwcHBwcHBwcHBwQ",
+        "authenticatorData": "UN0vKw7NHY3eum2Ccoiv8InRRPse2Osw7JD1yrhLc7QFAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQUFBQm1jZ3hVLUJhV2xwYVdscGFXbHBhV2xwYVdscGFvS1htUFhiXzRmRlRXT09qbmt1LWNfNVJOeDJYSldNYXhaWngyRjU5MGRZIiwib3JpZ2luIjoiaHR0cHM6Ly9yZWNvdmVyeS5mbGFnc2hpcHNlcnZlci5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+        "signature": "MEUCIHU51YS4xZ1_C_9pck-9ZdQTEleORRzo0iA1C_CZKykvAiEA4WCplL98Pi_JDAgJnDS_FedmEQUdhF7xLFnaDngrj8U"
+      },
+      "fetchPasskeyField": {
+        "challenge": "AAABmcgxU-BaWlpaWlpaWlpaWlpaWlpaoKXmPXb_4fFTWOOjnku-c_5RNx2XJWMaxZZx2F590dY",
+        "assertion": {
+          "credentialId": "wcHBwcHBwcHBwcHBwcHBwQ",
+          "authenticatorData": "UN0vKw7NHY3eum2Ccoiv8InRRPse2Osw7JD1yrhLc7QFAAAABw",
+          "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQUFBQm1jZ3hVLUJhV2xwYVdscGFXbHBhV2xwYVdscGFvS1htUFhiXzRmRlRXT09qbmt1LWNfNVJOeDJYSldNYXhaWngyRjU5MGRZIiwib3JpZ2luIjoiaHR0cHM6Ly9yZWNvdmVyeS5mbGFnc2hpcHNlcnZlci5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+          "signature": "MEUCIHU51YS4xZ1_C_9pck-9ZdQTEleORRzo0iA1C_CZKykvAiEA4WCplL98Pi_JDAgJnDS_FedmEQUdhF7xLFnaDngrj8U"
+        }
+      }
+    },
+    {
+      "name": "eddsa-android",
+      "alg": -8,
+      "rpId": "flagshipserver.com",
+      "origin": "android:apk-key-hash:PL-zpnWp4HOR1hwlWNmRDOAdqXwt81WeWAKilO2PfN0",
+      "credentialIdHex": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+      "coseHex": "a4010103272006215820a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+      "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVh17kx0I4ue3JdEfuIDITNvDaekQ3tatg57rT_2BWOUaqBFAAAAAAAAAAAAAAAAAAAAAAAAAAAAFMLCwsLCwsLCwsLCwsLCwsLCwsLCpAEBAycgBiFYIKCapfR6Z1mAL_lV-NwtKhSlyZ0jvpf4ZBJ_-Tg0VaTw",
+      "assertion": {
+        "credentialId": "wsLCwsLCwsLCwsLCwsLCwsLCwsI",
+        "authenticatorData": "7kx0I4ue3JdEfuIDITNvDaekQ3tatg57rT_2BWOUaqAFAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQUFBQm1jZ3hVLUJhV2xwYVdscGFXbHBhV2xwYVdscGFvS1htUFhiXzRmRlRXT09qbmt1LWNfNVJOeDJYSldNYXhaWngyRjU5MGRZIiwib3JpZ2luIjoiYW5kcm9pZDphcGsta2V5LWhhc2g6UEwtenBuV3A0SE9SMWh3bFdObVJET0FkcVh3dDgxV2VXQUtpbE8yUGZOMCIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+        "signature": "TThbLSLsbg5d-v6qP7FYvx68JhNrQdLMKWfTvYXNt8jAVIQq8QlnbAt32zt3zP9AjvkXvJCfj5rdNM4gpG3DAw"
+      },
+      "fetchPasskeyField": {
+        "challenge": "AAABmcgxU-BaWlpaWlpaWlpaWlpaWlpaoKXmPXb_4fFTWOOjnku-c_5RNx2XJWMaxZZx2F590dY",
+        "assertion": {
+          "credentialId": "wsLCwsLCwsLCwsLCwsLCwsLCwsI",
+          "authenticatorData": "7kx0I4ue3JdEfuIDITNvDaekQ3tatg57rT_2BWOUaqAFAAAABw",
+          "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQUFBQm1jZ3hVLUJhV2xwYVdscGFXbHBhV2xwYVdscGFvS1htUFhiXzRmRlRXT09qbmt1LWNfNVJOeDJYSldNYXhaWngyRjU5MGRZIiwib3JpZ2luIjoiYW5kcm9pZDphcGsta2V5LWhhc2g6UEwtenBuV3A0SE9SMWh3bFdObVJET0FkcVh3dDgxV2VXQUtpbE8yUGZOMCIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+          "signature": "TThbLSLsbg5d-v6qP7FYvx68JhNrQdLMKWfTvYXNt8jAVIQq8QlnbAt32zt3zP9AjvkXvJCfj5rdNM4gpG3DAw"
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "another origin",
+      "assertion": {
+        "credentialId": "wcHBwcHBwcHBwcHBwcHBwQ",
+        "authenticatorData": "UN0vKw7NHY3eum2Ccoiv8InRRPse2Osw7JD1yrhLc7QFAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQUFBQm1jZ3hVLUJhV2xwYVdscGFXbHBhV2xwYVdscGFvS1htUFhiXzRmRlRXT09qbmt1LWNfNVJOeDJYSldNYXhaWngyRjU5MGRZIiwib3JpZ2luIjoiaHR0cHM6Ly9ldmlsLmV4YW1wbGUiLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+        "signature": "MEUCIQCxioRIMiBONw28po2MCWDav1-FrnkyJ8D8j6MCD6UCtwIgEuf6XDNC5dU7QswDH4RVj9bLcmJkqinZJjq1a6BQG68"
+      }
+    },
+    {
+      "name": "another rpId",
+      "assertion": {
+        "credentialId": "wcHBwcHBwcHBwcHBwcHBwQ",
+        "authenticatorData": "nBgN4M1pnueIl8R8_bPn7h11kG4xt3RqR0fepTaQmDcFAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQUFBQm1jZ3hVLUJhV2xwYVdscGFXbHBhV2xwYVdscGFvS1htUFhiXzRmRlRXT09qbmt1LWNfNVJOeDJYSldNYXhaWngyRjU5MGRZIiwib3JpZ2luIjoiaHR0cHM6Ly9yZWNvdmVyeS5mbGFnc2hpcHNlcnZlci5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+        "signature": "MEYCIQCyFcDkt91_YPjkvZai2TsaOOHwYOFdRtB9qTExpWnQLAIhAN3Vs8_p7fxhOFwC7i48mnWbuXx0_zxkB4T3J2VYB8ht"
+      }
+    },
+    {
+      "name": "user not verified",
+      "assertion": {
+        "credentialId": "wcHBwcHBwcHBwcHBwcHBwQ",
+        "authenticatorData": "UN0vKw7NHY3eum2Ccoiv8InRRPse2Osw7JD1yrhLc7QBAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQUFBQm1jZ3hVLUJhV2xwYVdscGFXbHBhV2xwYVdscGFvS1htUFhiXzRmRlRXT09qbmt1LWNfNVJOeDJYSldNYXhaWngyRjU5MGRZIiwib3JpZ2luIjoiaHR0cHM6Ly9yZWNvdmVyeS5mbGFnc2hpcHNlcnZlci5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+        "signature": "MEUCIQDAGlcj31FgpV2dxKqQhntDr8sJRa9iIqFSzGcdeHB5-AIgXVTb_kB5RYT-qNdvadBxX9EwhiTEYjz83EYRl3B3Ly8"
+      }
+    },
+    {
+      "name": "another challenge",
+      "assertion": {
+        "credentialId": "wcHBwcHBwcHBwcHBwcHBwQ",
+        "authenticatorData": "UN0vKw7NHY3eum2Ccoiv8InRRPse2Osw7JD1yrhLc7QFAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwib3JpZ2luIjoiaHR0cHM6Ly9yZWNvdmVyeS5mbGFnc2hpcHNlcnZlci5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+        "signature": "MEUCIBXv7RAjK_m4vT77dn8z4jIw26pOY-pcmrkjZNCbwa_nAiEAvE0pKVYD2ufVZyRXFPB923Q9V_apR1dMcC4kR0RJfbY"
+      }
+    },
+    {
+      "name": "another credential",
+      "assertion": {
+        "credentialId": "7u7u7u7u7u7u7u7u7u7u7g",
+        "authenticatorData": "UN0vKw7NHY3eum2Ccoiv8InRRPse2Osw7JD1yrhLc7QFAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQUFBQm1jZ3hVLUJhV2xwYVdscGFXbHBhV2xwYVdscGFvS1htUFhiXzRmRlRXT09qbmt1LWNfNVJOeDJYSldNYXhaWngyRjU5MGRZIiwib3JpZ2luIjoiaHR0cHM6Ly9yZWNvdmVyeS5mbGFnc2hpcHNlcnZlci5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+        "signature": "MEUCICFd_x2IGlylq1MOAaR0fwS6OHM_vX3Io9A_nPdBGV4MAiEA0taxUtImxU_2lJrznGEV8zjl15uqAX4rw7Tc_XHmgcU"
+      }
+    },
+    {
+      "name": "a signature from another key",
+      "assertion": {
+        "credentialId": "wcHBwcHBwcHBwcHBwcHBwQ",
+        "authenticatorData": "UN0vKw7NHY3eum2Ccoiv8InRRPse2Osw7JD1yrhLc7QFAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiQUFBQm1jZ3hVLUJhV2xwYVdscGFXbHBhV2xwYVdscGFvS1htUFhiXzRmRlRXT09qbmt1LWNfNVJOeDJYSldNYXhaWngyRjU5MGRZIiwib3JpZ2luIjoiaHR0cHM6Ly9yZWNvdmVyeS5mbGFnc2hpcHNlcnZlci5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+        "signature": "TThbLSLsbg5d-v6qP7FYvx68JhNrQdLMKWfTvYXNt8jAVIQq8QlnbAt32zt3zP9AjvkXvJCfj5rdNM4gpG3DAw"
+      }
+    }
+  ]
+}

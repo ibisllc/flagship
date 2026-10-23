@@ -217,17 +217,18 @@ function recoveryHost(env: RouteEnv): string {
  * - `base-uri 'none'`: prevents <base> injection from re-pointing
  *   relative URLs.
  */
-const RECOVERY_CSP =
+const recoveryCsp = (apexOrigin: string) =>
   "default-src 'self'; " +
   "script-src 'self'; " +
   "style-src 'self'; " +
   "img-src 'self' data:; " +
   "font-src 'self'; " +
-  "connect-src 'self' https://flagshipserver.com; " +
+  `connect-src 'self' ${apexOrigin}; ` +
   "frame-ancestors 'none'; " +
   "form-action 'self'; " +
   "base-uri 'none'; " +
   "object-src 'none'";
+const RECOVERY_CSP = recoveryCsp("https://flagshipserver.com");
 
 /**
  * Headers on every response the Worker sends. No page on these hosts is meant
@@ -367,6 +368,10 @@ export interface RouteEnv {
   ADAPTERS_BUCKET?: AdapterBucketLike;
   /** Optional Worker secret: enables the AI review of submitted adapters. */
   ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
+  /** Worker secret, 64 hex: the adapter attestation key boxes pin (adapterVetting.ts). */
+  ADAPTER_ATTESTATION_SIGNING_KEY?: string;
+  /** Worker secret: keys the per-adapter hash of a complaint's network. */
+  ADAPTER_COMPLAINT_SALT?: string;
   /** Shared secret gating /api/admin/* (see ControlPlaneEnv). */
   FLAGSHIP_ADMIN_SECRET?: string;
 }
@@ -1466,7 +1471,7 @@ function isCorsAllowed(origin: string, env: RouteEnv): boolean {
   if (CORS_ALLOWED_ORIGINS.has(origin)) return true;
   if (!env.CONTROL_APEX) return false;
   return (
-    origin === `https://${webappHost(env)}` || origin === `https://${remoteHost(env)}`
+    origin === `https://${webappHost(env)}` || origin === `https://${remoteHost(env)}` || origin === `https://${recoveryHost(env)}`
   );
 }
 
@@ -1686,7 +1691,7 @@ async function serveRecovery(
 ): Promise<Response> {
   const method = request.method.toUpperCase();
   if (method !== "GET" && method !== "HEAD") {
-    return withRecoveryHeaders(
+    return withRecoveryHeaders(env,
       new Response(
         JSON.stringify({ error: "method not allowed", host: RECOVERY_HOST }),
         { status: 405, headers: { "content-type": "application/json", allow: "GET, HEAD" } },
@@ -1703,7 +1708,7 @@ async function serveRecovery(
     headers: request.headers,
   });
   const asset = notFoundForMissingAsset(rewrittenPath, await env.ASSETS.fetch(assetReq));
-  return withRecoveryHeaders(asset);
+  return withRecoveryHeaders(env, asset);
 }
 
 /**
@@ -1711,9 +1716,9 @@ async function serveRecovery(
  * on the recovery sub-origin. Asset-binding responses come back with
  * immutable headers; we copy into a fresh Response to attach ours.
  */
-function withRecoveryHeaders(res: Response): Response {
+function withRecoveryHeaders(env: RouteEnv, res: Response): Response {
   const headers = new Headers(res.headers);
-  headers.set("content-security-policy", RECOVERY_CSP);
+  headers.set("content-security-policy", env.CONTROL_APEX ? recoveryCsp(`https://${env.CONTROL_APEX}`) : RECOVERY_CSP);
   headers.set("x-frame-options", "DENY");
   headers.set("referrer-policy", "no-referrer");
   headers.set("x-content-type-options", "nosniff");

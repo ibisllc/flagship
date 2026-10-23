@@ -20,7 +20,10 @@ import CryptoKit
 /// Phone app frames (inside `peer`):
 ///   {kind:"phone-hello", phonePk}
 ///   {kind:"confirm-pairing"}
-///   {kind:"deliver", ciphertext, nonce}
+///   {kind:"deliver", ciphertext, nonce, confirmKeyCiphertext?, confirmKeyNonce?}
+///     The optional pair is the per-server 32-byte `studioConfirmKey` (first contact,
+///     docs/first-contact.md), sealed under the same session key but BESIDE the recipe,
+///     never inside it, so the recipe file never carries it.
 /// Builder app frames (inside `peer`):
 ///   {kind:"builder-hello", builderPk}
 ///   {kind:"recipe-accepted"}
@@ -45,6 +48,8 @@ public final class BuilderPairingEngine {
         case send(Outbound)
         case stage(Stage)
         case recipe(Data)
+        /// The phone's per-server key for reporting the code a hosted VM shows; arrives just before `.recipe`.
+        case studioConfirmKey(Data)
         case log(String)
     }
 
@@ -166,7 +171,14 @@ public final class BuilderPairingEngine {
             }
             do {
                 let data = try BuilderPairing.open(ciphertextBase64Url: ct, nonceBase64Url: nonce, key: key)
-                return [.recipe(data)]
+                var actions: [Action] = []
+                if let kct = frame["confirmKeyCiphertext"] as? String, let kn = frame["confirmKeyNonce"] as? String,
+                   let confirmKey = try? BuilderPairing.open(ciphertextBase64Url: kct, nonceBase64Url: kn, key: key),
+                   confirmKey.count == 32 {
+                    actions.append(.studioConfirmKey(confirmKey))
+                }
+                actions.append(.recipe(data))
+                return actions
             } catch {
                 return [.log((error as? LocalizedError)?.errorDescription ?? "Couldn't read the recipe.")]
             }

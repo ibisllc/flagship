@@ -25,6 +25,7 @@ import { APP_PG_EXTENSIONS } from "../dataLayer/naming.js";
 import type { PostgresStore } from "../dataLayer/provisioner.js";
 import { filesArchiveDockerArgs, filesSizeDockerArgs } from "../volumeDump.js";
 import { describe, dockerFailure, dockerRepaired, wakeDocker } from "../dockerHealth.js";
+import { routePrivileged } from "../privileged.js";
 import { realCommandRunner, type CommandRunner } from "../serviceRunner.js";
 
 export interface AppCopyOps {
@@ -33,7 +34,18 @@ export interface AppCopyOps {
   imageExists(image: string): Promise<boolean>;
   removeImage(image: string): Promise<void>;
   dumpDatabase(store: PostgresStore, outPath: string): Promise<void>;
-  restoreDatabase(store: PostgresStore, inPath: string): Promise<void>;
+  /** `replace` drops what the dump recreates first (all in one transaction), to put an app's own data back over itself. */
+  restoreDatabase(store: PostgresStore, inPath: string, opts?: { replace?: boolean }): Promise<void>;
+  /** The dump's table of contents (`pg_restore -l`): lists what it holds, restores nothing. */
+  listDump?(store: PostgresStore, inPath: string): Promise<string>;
+  /** The content digest (`sha256:…`) of a local image that was pulled from a registry, else null. */
+  imageDigest?(image: string): Promise<string | null>;
+  /**
+   * Pause a running container so its database and files can be read as one moment (N09). Resolves to
+   * the way back, or undefined when there was nothing to pause. Optional: an ops without it reads
+   * each part separately, as before.
+   */
+  quiesce?(container: string): Promise<(() => Promise<void>) | undefined>;
   /** `container` is paused while the folder is read, when it runs. */
   archiveFiles(volume: string, container: string, outPath: string): Promise<void>;
   restoreFiles(volume: string, inPath: string): Promise<void>;
@@ -58,7 +70,17 @@ interface SpawnOpts {
   stdinFrom?: string;
 }
 
-function exec(cmd: string, args: string[], o: SpawnOpts = {}): Promise<string> {
+async function exec(cmd: string, args: string[], o: SpawnOpts = {}): Promise<string> {
+  const routed = await routePrivileged(cmd, args, {
+    ...(o.stdinFrom ? { stdinPath: o.stdinFrom } : {}),
+    ...(o.stdoutTo ? { stdoutPath: o.stdoutTo } : {}),
+    ...(o.env ? { env: o.env } : {}),
+  });
+  if (routed) return o.stdoutTo ? "" : routed.stdout;
+  return localExec(cmd, args, o);
+}
+
+function localExec(cmd: string, args: string[], o: SpawnOpts): Promise<string> {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, {
       stdio: [o.stdinFrom ? "pipe" : "ignore", "pipe", "pipe"],
@@ -114,6 +136,8 @@ function exec(cmd: string, args: string[], o: SpawnOpts = {}): Promise<string> {
 async function execToFile(cmd: string, args: string[], outPath: string, env?: Record<string, string>): Promise<void> {
   await mkdir(dirname(outPath), { recursive: true, mode: 0o700 });
   const tmp = `${outPath}.partial`;
+  // The broker creates the file itself and refuses one that is already there.
+  await rm(tmp, { force: true });
   try {
     await exec(cmd, args, { stdoutTo: tmp, ...(env ? { env } : {}) });
     await rename(tmp, outPath);
@@ -172,6 +196,22 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
     removeImage: async (image) => {
       await exec("docker", ["image", "rm", image]);
     },
+    listDump: async (store, inPath) => {
+      const { role, password } = credsOf(store);
+      return exec("docker", ["exec", "-i", "-e", "PGPASSWORD", pg, "pg_restore", ...pgArgs(role, store.database), "-l"], {
+        stdinFrom: inPath,
+        env: { PGPASSWORD: password },
+      });
+    },
+    imageDigest: async (image) => {
+      try {
+        const out = await exec("docker", ["image", "inspect", "--format", "{{range .RepoDigests}}{{println .}}{{end}}", image]);
+        const m = /@(sha256:[0-9a-f]{64})/.exec(out);
+        return m ? m[1]! : null;
+      } catch {
+        return null;
+      }
+    },
     dumpDatabase: async (store, outPath) => {
       const { role, password } = credsOf(store);
       await execToFile(
@@ -192,7 +232,7 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
         { PGPASSWORD: password },
       );
     },
-    restoreDatabase: async (store, inPath) => {
+    restoreDatabase: async (store, inPath, opts) => {
       const { role, password } = credsOf(store);
       await exec(
         "docker",
@@ -208,12 +248,22 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
           "--no-privileges",
           "--single-transaction",
           "--exit-on-error",
+          ...(opts?.replace ? ["--clean", "--if-exists"] : []),
         ],
         { stdinFrom: inPath, env: { PGPASSWORD: password } },
       );
     },
+    quiesce: async (container) => {
+      const running = (await exec("docker", ["ps", "-q", "--filter", `name=^${container}$`, "--filter", "status=running"])).trim() !== "";
+      if (!running) return undefined;
+      await exec("docker", ["pause", container]);
+      return async () => {
+        await exec("docker", ["unpause", container]).catch(() => "");
+      };
+    },
     archiveFiles: async (volume, container, outPath) => {
-      const running = (await exec("docker", ["ps", "-q", "--filter", `name=^${container}$`])).trim() !== "";
+      // Only a running container is paused here: one the caller already paused (quiesce) is left to it.
+      const running = (await exec("docker", ["ps", "-q", "--filter", `name=^${container}$`, "--filter", "status=running"])).trim() !== "";
       if (running) await exec("docker", ["pause", container]);
       try {
         await execToFile("docker", filesArchiveDockerArgs(volume, "dump", opts.helperImage), outPath);

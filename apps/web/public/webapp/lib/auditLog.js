@@ -75,6 +75,7 @@ export const AUDIT_KIND_LABELS = Object.freeze({
   "re-pair": "Re-paired a device",
   "re-pair-initiated": "Started device replacement",
   "re-pair-expired": "Device replacement expired",
+  "re-pair-vetoed": "Recovery rejected by an admin",
   "re-pair-refused-no-credential": "Refused a device replacement",
   "re-pair-initiated-no-credential": "Started device replacement without a credential",
   "quarantine-blocked-revoke": "Blocked a quarantined device's action",

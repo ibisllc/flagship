@@ -352,7 +352,7 @@ export function removeAppMessage({ slug, server, otherCopies = 0 }) {
   const rest = otherCopies > 0
     ? ` Your ${otherCopies === 1 ? "other server keeps its copy" : `other ${otherCopies} servers keep their copies`}.`
     : "";
-  return `This uninstalls ${slug}${where} and deletes its data there. This can't be undone.${rest}`;
+  return `This uninstalls ${slug}${where} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.${rest}`;
 }
 
 /** The owner-facing words for a refused uninstall. */

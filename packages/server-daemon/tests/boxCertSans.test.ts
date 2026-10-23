@@ -23,6 +23,14 @@ describe("boxCertSans (per-box wildcard cert, model A′)", () => {
     expect(sans).not.toContain("*.demo1234.flagship.services");
   });
 
+  it("with the account's app-name grant, names the two wildcards only: Let's Encrypt refuses a name its wildcard covers", () => {
+    const a = boxCertSans("home.harry.flagship.services", true, true);
+    const b = boxCertSans("chillout.harry.flagship.services", true, true);
+    expect(a).toEqual(["*.home.harry.flagship.services", "*.harry.flagship.services"]);
+    expect(a).not.toContain("home.harry.flagship.services");
+    expect(a).not.toEqual(b);
+  });
+
   it("wantWildcard=false yields just the apex (e.g. ACME unavailable)", () => {
     expect(boxCertSans("home-box.demo1234.flagship.services", false)).toEqual([
       "home-box.demo1234.flagship.services",

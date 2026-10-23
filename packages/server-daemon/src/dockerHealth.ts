@@ -11,7 +11,8 @@
  */
 import { rename, stat } from "node:fs/promises";
 import type { CommandRunner } from "./serviceRunner.js";
-import { repairSystemPackages, type SystemRepairOptions } from "./systemRepair.js";
+import { runSetupStep, runsUnprivileged } from "./privileged.js";
+import { repairSystemPackages, type SystemRepair, type SystemRepairOptions } from "./systemRepair.js";
 
 export const DOCKER_NETWORK_DB = "/var/lib/docker/network/files/local-kv.db";
 
@@ -57,6 +58,14 @@ export function wakeDocker(o: WakeDockerOptions): Promise<DockerHealth> {
   return inFlight;
 }
 
+async function repairThroughBroker(): Promise<SystemRepair> {
+  try {
+    return (await runSetupStep<SystemRepair>("system-repair")) ?? { ok: false, reason: "the repair gave no answer", packages: [] };
+  } catch (e) {
+    return { ok: false, reason: `the repair couldn't run: ${(e as Error).message}`, packages: [] };
+  }
+}
+
 async function wake(o: WakeDockerOptions): Promise<DockerHealth> {
   const log = o.log ?? (() => {});
   if (await dockerAnswers(o.cmd)) return { ok: true };
@@ -75,7 +84,7 @@ async function wake(o: WakeDockerOptions): Promise<DockerHealth> {
   // dockerd's own load error, or systemctl (which starts it) crashing.
   if (BINARY_BROKEN.test([...failure.errors, failure.docker.error ?? ""].join("\n"))) {
     log("[docker] dockerd can't load; checking the system's files for damage");
-    const r = await (o.repairSystem ?? repairSystemPackages)({ cmd: o.cmd, log });
+    const r = await (o.repairSystem ?? (runsUnprivileged() ? repairThroughBroker : repairSystemPackages))({ cmd: o.cmd, log });
     if (!r.ok) return { ok: false, reason: `${describe(await dockerFailure(o.cmd))}. ${capitalize(r.reason)}` };
     if (r.packages.length > 0) {
       await startUnits(o.cmd);

@@ -10,8 +10,11 @@ import {
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { isFilesVolume } from "./dataLayer/naming.js";
 import { LoopVolumes } from "./appQuota/loopVolumes.js";
+import { routePrivileged } from "./privileged.js";
 
-const execFileP = promisify(execFile);
+const execFileLocal = promisify(execFile);
+const execFileP = async (cmd: string, args: string[], o: { timeout: number }): Promise<{ stdout: string; stderr: string }> =>
+  (await routePrivileged(cmd, args)) ?? (await execFileLocal(cmd, args, o));
 
 /**
  * Box-side execution of the account-death content-wipe order

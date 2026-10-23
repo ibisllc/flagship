@@ -1751,6 +1751,19 @@ describe("recovery.flagshipserver.com — dedicated WebAuthn-PRF origin (Task #7
     );
   });
 
+  it("on the gym the recovery page's CSP and CORS follow CONTROL_APEX", async () => {
+    const env = { ...makeEnv(), CONTROL_APEX: "gym.flagshipserver.com" };
+    const page = await route(new Request("https://recovery.gym.flagshipserver.com/"), env);
+    expect(page.headers.get("content-security-policy")).toContain("connect-src 'self' https://gym.flagshipserver.com;");
+    const pre = await route(
+      new Request("https://gym.flagshipserver.com/api/recovery", { method: "OPTIONS", headers: { origin: "https://recovery.gym.flagshipserver.com" } }),
+      env,
+    );
+    expect(pre.headers.get("access-control-allow-origin")).toBe("https://recovery.gym.flagshipserver.com");
+    const prod = await route(new Request("https://recovery.flagshipserver.com/"), makeEnv());
+    expect(prod.headers.get("content-security-policy")).toContain("connect-src 'self' https://flagshipserver.com;");
+  });
+
   it("HEAD works on recovery host (some browsers preflight static assets)", async () => {
     const r = await route(
       new Request("https://recovery.flagshipserver.com/", { method: "HEAD" }),

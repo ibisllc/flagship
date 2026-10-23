@@ -20,7 +20,7 @@ describe("generalized appliance factory preseed", () => {
 
   it("rejects a shell-active git ref before embedding it", () => {
     expect(() => buildDebianApplianceFactoryPreseed("main'; touch /tmp/pwn #"))
-      .toThrow(/unsafe git ref|invalid appliance git ref/);
+      .toThrow(/unsafe git ref|invalid appliance git ref|exact 40/);
   });
 
   it("converts the disposable cloud disk into a separate encrypted target", () => {

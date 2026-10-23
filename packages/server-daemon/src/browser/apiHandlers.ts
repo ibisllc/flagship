@@ -18,9 +18,13 @@ import type { AppAuthTokens } from "../serviceAuthToken.js";
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { BrowserManager } from "./browserManager.js";
+import type { PolicedBrowser } from "./policedBrowser.js";
+import { PolicyError } from "./policy/contexts.js";
 import type { DomainGate } from "./domainGate.js";
 import type { PhonePipe, InputKind } from "./phonePipe.js";
 import type { TabRegistry } from "./tabRegistry.js";
+import { normalizeAsk, type BrowserGrantRequests } from "./grantRequests.js";
+import { GrantRequestError } from "./policy/grants.js";
 
 const J = { "content-type": "application/json" } as const;
 const PNG = { "content-type": "image/png" } as const;
@@ -30,6 +34,12 @@ export interface BrowserApiDeps {
   tabRegistry: TabRegistry;
   domainGate: DomainGate;
   phonePipe: PhonePipe;
+  /**
+   * When set, every tab operation goes through the policy layer (per-app contexts, request judging,
+   * guarded actions). Absent: the older manifest-domain gate alone (tests, and nothing in production
+   * while the app browser is off).
+   */
+  policed?: PolicedBrowser;
   appAuthTokens: AppAuthTokens;
   /**
    * When set, `/api/browser/screenshot/<ref>` is gated by the paired-
@@ -41,6 +51,8 @@ export interface BrowserApiDeps {
    * issue the request can't guess refs).
    */
   pairedSessionGate?: PairedSessionGate;
+  /** Grants beyond the manifest, asked by the app and answered by the owner (grantRequests.ts). */
+  grantRequests?: BrowserGrantRequests;
 }
 
 export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
@@ -67,6 +79,32 @@ export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
       }
     }
 
+    // The owner's side of grant requests: a paired owner session, and a signature for anything that widens.
+    {
+      const qIdx = req.path.indexOf("?");
+      const p = qIdx >= 0 ? req.path.slice(0, qIdx) : req.path;
+      if (p.startsWith("/api/browser/owner/")) {
+        if (!deps.grantRequests || !deps.pairedSessionGate) return jerr(404, "not found");
+        const denied = deps.pairedSessionGate.check(req);
+        if (denied) return denied;
+        if (p === "/api/browser/owner/grant-requests" && req.method === "GET") {
+          return { status: 200, headers: J, body: JSON.stringify({ requests: deps.grantRequests.pending() }) };
+        }
+        if (p === "/api/browser/owner/grant-requests/answer" && req.method === "POST") {
+          const b = parseJson(req.body) as { requestId?: unknown; decision?: unknown; issuedAt?: unknown; signature?: unknown } | null;
+          if (!b || typeof b.requestId !== "string" || (b.decision !== "allow" && b.decision !== "deny")) return jerr(400, "name the request and allow or deny");
+          const r = deps.grantRequests.answer({
+            requestId: b.requestId,
+            decision: b.decision,
+            ...(typeof b.issuedAt === "number" ? { issuedAt: b.issuedAt } : {}),
+            ...(typeof b.signature === "string" ? { signatureHex: b.signature } : {}),
+          });
+          return r.ok ? { status: 200, headers: J, body: JSON.stringify({ ok: true }) } : jerr(r.status, r.reason);
+        }
+        return jerr(404, "not found");
+      }
+    }
+
     const serviceId = await resolveAppId(req, deps.appAuthTokens);
     if (!serviceId) return jerr(401, "missing or invalid app token");
 
@@ -81,6 +119,28 @@ export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
     const qIdx = req.path.indexOf("?");
     const path = qIdx >= 0 ? req.path.slice(0, qIdx) : req.path;
     const method = req.method;
+
+    // An app asks for more than its manifest: the owner answers on their phone.
+    if (path === "/api/browser/grant-requests" && method === "POST" && deps.grantRequests) {
+      let ask;
+      try {
+        ask = normalizeAsk(serviceId, (parseJson(req.body) ?? {}) as Record<string, unknown>);
+      } catch (e) {
+        if (e instanceof GrantRequestError) return jerr(400, e.message);
+        throw e;
+      }
+      const r = deps.grantRequests.ask(ask);
+      if (r.ok) return { status: 202, headers: J, body: JSON.stringify({ requestId: r.requestId, status: "pending" }) };
+      if (r.status === 429) return { status: 429, headers: { ...J, "retry-after": String(Math.ceil(r.retryAfterMs / 1000)) }, body: JSON.stringify({ error: "the owner said no to this recently; ask again later", retryAfterMs: r.retryAfterMs }) };
+      return jerr(r.status, r.reason);
+    }
+    {
+      const m = /^\/api\/browser\/grant-requests\/([0-9a-f-]{36})$/.exec(path);
+      if (m && method === "GET" && deps.grantRequests) {
+        const st = deps.grantRequests.status(serviceId, m[1]!);
+        return st ? { status: 200, headers: J, body: JSON.stringify({ status: st }) } : jerr(404, "not found");
+      }
+    }
 
     // POST /api/browser/tabs  { url }
     if (path === "/api/browser/tabs" && method === "POST") {
@@ -111,13 +171,13 @@ export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
         return jerr(404, "tab not found");
       }
 
-      if (!verb && method === "DELETE") return closeTab(tabId, deps);
+      if (!verb && method === "DELETE") return closeTab(tabId, serviceId, deps);
       if (!verb && method === "GET") return tabInfo(tabId, deps);
       if (verb === "navigate" && method === "POST") return navigate(req, tabId, serviceId, deps);
-      if (verb === "fill" && method === "POST") return fill(req, tabId, deps);
-      if (verb === "click" && method === "POST") return click(req, tabId, deps);
-      if (verb === "dom" && method === "GET") return readDom(req, tabId, deps);
-      if (verb === "screenshot" && method === "GET") return screenshot(tabId, deps);
+      if (verb === "fill" && method === "POST") return fill(req, tabId, serviceId, deps);
+      if (verb === "click" && method === "POST") return click(req, tabId, serviceId, deps);
+      if (verb === "dom" && method === "GET") return readDom(req, tabId, serviceId, deps);
+      if (verb === "screenshot" && method === "GET") return screenshot(tabId, serviceId, deps);
       if (verb === "request-input" && method === "POST") return requestInput(req, tabId, deps);
       return jerr(405, "method not allowed for this resource");
     }
@@ -142,9 +202,10 @@ async function openTab(
   }
   let tabId: string;
   try {
-    const r = await deps.browser.openTab(url);
+    const r = deps.policed ? await deps.policed.openTab(serviceId, url) : await deps.browser.openTab(url);
     tabId = r.tabId;
   } catch (e) {
+    if (e instanceof PolicyError) return perr(e);
     return jerr(502, `openTab failed: ${(e as Error).message}`);
   }
   deps.tabRegistry.assignTab(tabId, serviceId);
@@ -181,32 +242,38 @@ async function navigate(
     return jerr(403, "domain not in app's browser.domains allowlist");
   }
   try {
-    await deps.browser.navigate(tabId, url);
+    if (deps.policed) await deps.policed.navigate(serviceId, tabId, url);
+    else await deps.browser.navigate(tabId, url);
   } catch (e) {
+    if (e instanceof PolicyError) return perr(e);
     return jerr(502, `navigate failed: ${(e as Error).message}`);
   }
   return { status: 200, headers: J, body: JSON.stringify({ ok: true }) };
 }
 
-async function fill(req: HttpRequest, tabId: string, deps: BrowserApiDeps): Promise<HttpResponse> {
+async function fill(req: HttpRequest, tabId: string, serviceId: string, deps: BrowserApiDeps): Promise<HttpResponse> {
   const body = parseJson(req.body) as { selector?: string; value?: string } | null;
   if (!body || typeof body.selector !== "string" || typeof body.value !== "string") {
     return jerr(400, "selector and value are required");
   }
   try {
-    await deps.browser.fill(tabId, body.selector, body.value);
+    if (deps.policed) await deps.policed.fill(serviceId, tabId, body.selector, body.value);
+    else await deps.browser.fill(tabId, body.selector, body.value);
   } catch (e) {
+    if (e instanceof PolicyError) return perr(e);
     return jerr(502, `fill failed: ${(e as Error).message}`);
   }
   return { status: 200, headers: J, body: JSON.stringify({ ok: true }) };
 }
 
-async function click(req: HttpRequest, tabId: string, deps: BrowserApiDeps): Promise<HttpResponse> {
+async function click(req: HttpRequest, tabId: string, serviceId: string, deps: BrowserApiDeps): Promise<HttpResponse> {
   const body = parseJson(req.body) as { selector?: string } | null;
   if (!body || typeof body.selector !== "string") return jerr(400, "selector is required");
   try {
-    await deps.browser.click(tabId, body.selector);
+    if (deps.policed) await deps.policed.click(serviceId, tabId, body.selector);
+    else await deps.browser.click(tabId, body.selector);
   } catch (e) {
+    if (e instanceof PolicyError) return perr(e);
     return jerr(502, `click failed: ${(e as Error).message}`);
   }
   return { status: 200, headers: J, body: JSON.stringify({ ok: true }) };
@@ -215,35 +282,39 @@ async function click(req: HttpRequest, tabId: string, deps: BrowserApiDeps): Pro
 async function readDom(
   req: HttpRequest,
   tabId: string,
+  serviceId: string,
   deps: BrowserApiDeps,
 ): Promise<HttpResponse> {
   // selector arrives in the query string of req.path.
   const sel = extractQuery(req.path, "selector");
   if (!sel) return jerr(400, "selector query param is required");
   try {
-    const html = await deps.browser.readDOM(tabId, sel);
+    const html = deps.policed ? await deps.policed.readDOM(serviceId, tabId, sel) : await deps.browser.readDOM(tabId, sel);
     return {
       status: 200,
       headers: J,
       body: JSON.stringify({ outerHTML: html }),
     };
   } catch (e) {
+    if (e instanceof PolicyError) return perr(e);
     return jerr(502, `readDOM failed: ${(e as Error).message}`);
   }
 }
 
-async function screenshot(tabId: string, deps: BrowserApiDeps): Promise<HttpResponse> {
+async function screenshot(tabId: string, serviceId: string, deps: BrowserApiDeps): Promise<HttpResponse> {
   try {
-    const png = await deps.browser.screenshot(tabId);
+    const png = deps.policed ? await deps.policed.screenshot(serviceId, tabId) : await deps.browser.screenshot(tabId);
     return { status: 200, headers: PNG, body: png };
   } catch (e) {
+    if (e instanceof PolicyError) return perr(e);
     return jerr(502, `screenshot failed: ${(e as Error).message}`);
   }
 }
 
-async function closeTab(tabId: string, deps: BrowserApiDeps): Promise<HttpResponse> {
+async function closeTab(tabId: string, serviceId: string, deps: BrowserApiDeps): Promise<HttpResponse> {
   try {
-    await deps.browser.closeTab(tabId);
+    if (deps.policed) await deps.policed.closeTab(serviceId, tabId);
+    else await deps.browser.closeTab(tabId);
   } catch {
     // best-effort
   }
@@ -309,6 +380,12 @@ function parseJson(buf: Buffer): unknown {
   } catch {
     return null;
   }
+}
+
+/** A policy refusal: forbidden, with a code the app can tell apart from a bug. Never says what is on the page. */
+function perr(e: PolicyError): HttpResponse {
+  const status = e.code === "not-owner" || e.code === "unowned-target" ? 404 : 403;
+  return { status, headers: J, body: JSON.stringify({ error: e.message, code: e.code }) };
 }
 
 function jerr(status: number, message: string): HttpResponse {

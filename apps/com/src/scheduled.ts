@@ -39,6 +39,7 @@ import { createDemoServerRouter, hasAnyDemoCloudToken } from "./demoCloud.js";
 import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
 import { notifyCaLeaseViaGithubIssue } from "./caLeaseGithubNotifier.js";
 import { runAdapterPublish } from "./adapterPublish.js";
+import { runAdapterVetting } from "./adapterVetting.js";
 import { runAdapterInsights } from "./adapterInsights.js";
 import { cronPlan, SUGGESTION_ATTEMPTS_PER_TICK, type CronJobId, type CronPlan } from "./cronPlan.js";
 import { pruneRateLimitLog } from "./rateLimitLog.js";
@@ -100,6 +101,9 @@ export interface ScheduledEnv {
   ADAPTERS_REPO?: string;
   /** Optional: AI review of adapters, and the weekly private insight on retired ones. */
   ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
+  /** The adapter attestation key (adapterVetting.ts); unset, nothing is vetted or indexed. */
+  ADAPTER_ATTESTATION_SIGNING_KEY?: string;
+  ADAPTER_COMPLAINT_SALT?: string;
   /** Holds leftover installer log tails (legacyLateLogs.ts), pruned to their TTL here. */
   ISO_TEMP_BUCKET?: LateLogBucket;
 }
@@ -153,7 +157,10 @@ async function runJob(id: CronJobId, env: ScheduledEnv, now: Date, plan: CronPla
     case "legacy-dns-sweep":
       return runLegacyDnsSweepCron(env, now);
     case "adapter-publish":
-      return runAdapterPublish(env, now);
+      // Vetting and the signed index first; the public-repo publish after it stays quarantined.
+      return runAdapterVetting(env, now)
+        .catch((e) => console.error("[cron] adapter-vetting failed", (e as Error).message ?? e))
+        .then(() => runAdapterPublish(env, now));
     case "adapter-insights":
       return runAdapterInsights(env, now);
   }

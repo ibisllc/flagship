@@ -33,7 +33,9 @@ describe("recovery sub-origin static surface", () => {
     const r = await app.inject({ method: "GET", url: "/recovery/recovery.js" });
     expect(r.statusCode).toBe(200);
     // The whole point of Task #73 is that the rpId is the sub-origin.
-    expect(r.body).toContain('const RP_ID = "recovery.flagshipserver.com"');
+    expect(r.body).toContain('const RP_ID = OWN_HOST;');
+    expect(r.body).toMatch(/OWN_HOST = typeof location !== "undefined" && location\.hostname\.startsWith\("recovery\."\) \? location\.hostname : `recovery\.\$\{PROD_APEX_HOST\}`/);
+    expect(r.body).toContain('const PROD_APEX_HOST = "flagshipserver.com";');
     // Critically NOT the apex — if this regresses an apex XSS could
     // reach the credential again.
     expect(r.body).not.toContain('const RP_ID = "flagshipserver.com"');
@@ -43,7 +45,7 @@ describe("recovery sub-origin static surface", () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/recovery/recovery.js" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toContain('PARENT_ORIGIN = "https://webapp.flagshipserver.com"');
+    expect(r.body).toContain("PARENT_ORIGIN = `https://webapp.${APEX_HOST}`");
     // origin check on inbound messages
     expect(r.body).toContain("ev.origin !== PARENT_ORIGIN");
   });

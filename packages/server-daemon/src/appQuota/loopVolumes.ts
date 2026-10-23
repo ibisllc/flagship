@@ -27,6 +27,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, open, readdir, readFile, rename, rm, rmdir, stat, statfs, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CommandRunner } from "../serviceRunner.js";
+import { privd, runsUnprivileged } from "../privileged.js";
 import { isFilesVolume } from "../dataLayer/naming.js";
 import { MIN_IMAGE_BYTES, ballastTarget, shouldGrow } from "./limits.js";
 
@@ -115,6 +116,40 @@ export const realLoopHost: LoopHost = {
   writeFile: (p, d) => writeFile(p, d, { mode: 0o600 }),
 };
 
+/**
+ * The same host for a daemon without root: the images' folder is root's (nothing the daemon puts
+ * there could be mounted or bound into a container), so every change in it is the broker's.
+ */
+export const privdLoopHost: LoopHost = {
+  ...realLoopHost,
+  mkdir: async (p, mode) => {
+    await privd().host("mkdir", [mode === 0o777 ? "0777" : "0755", p]);
+  },
+  createSparse: async (p, bytes) => {
+    if (existsSync(p)) throw new Error(`${p} already exists`);
+    await privd().host("truncate", [String(bytes), p]);
+  },
+  growSparse: async (p, bytes) => {
+    await privd().host("truncate", [String(bytes), p]);
+  },
+  chmod: async (p, mode) => {
+    await privd().host("chmod", [mode.toString(8).padStart(4, "0"), p]);
+  },
+  rm: async (p) => {
+    await privd().host("rm", [p]);
+  },
+  rmdir: async (p) => {
+    await privd().host("rmdir", [p]);
+  },
+  rename: async (a, b) => {
+    await privd().host("mv", [a, b]);
+  },
+  // Only the pending marks are written here, and only their presence and age are read.
+  writeFile: async (p) => {
+    await privd().host("touch", [p]);
+  },
+};
+
 /** Where images no volume or app owns are set aside before they're ever deleted. */
 export const ORPHANED_DIR = "orphaned";
 /** An image must be this old, with no volume, app or move under way, before it's set aside. */
@@ -134,7 +169,7 @@ export class LoopVolumes {
     opts: { root?: string; host?: LoopHost; log?: (m: string) => void } = {},
   ) {
     this.root = opts.root ?? FILES_IMAGE_ROOT;
-    this.host = opts.host ?? realLoopHost;
+    this.host = opts.host ?? (runsUnprivileged() ? privdLoopHost : realLoopHost);
     this.log = opts.log ?? ((m) => console.warn(m));
   }
 

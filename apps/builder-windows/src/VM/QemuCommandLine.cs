@@ -154,6 +154,16 @@ public static class QemuCommandLine
             args.AddRange(new[] { "-chardev", "null,id=ser-null", "-serial", "chardev:ser-null" });
         }
 
+        // The server-code port, on every VM (first contact): the guest writes one line with its code and
+        // key to /dev/virtio-ports/org.flagshipserver.server-code and QEMU appends it to a file Studio
+        // reads. A file chardev takes no input, so this is no console and needs no debug grant.
+        args.AddRange(new[]
+        {
+            "-device", "virtio-serial-pci,id=fsvs",
+            "-chardev", $"file,id=fscode,path={ServerCodeSeen.PortLogPath(layout, name)}",
+            "-device", $"virtserialport,bus=fsvs.0,chardev=fscode,name={ServerCodeSeen.PortName}",
+        });
+
         // Headless: the appliance has no GUI; all interaction is phone/web.
         args.AddRange(new[] { "-display", "none" });
 

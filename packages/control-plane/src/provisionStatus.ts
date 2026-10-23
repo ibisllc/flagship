@@ -315,3 +315,25 @@ export async function handleGetProvisionStatus(
   if (!rec) return notFound("no status");
   return ok(rec);
 }
+
+/**
+ * POST /api/order/:serial/server-seen   { stkPubHex, macHex }
+ *
+ * Studio's report of the key a VM it hosts showed on its console (first contact, docs/first-contact.md).
+ * `.com` cannot check the MAC (it is keyed by a secret only the phone and Studio hold) and only keeps it
+ * beside the order's status, where the phone reads it; a forged report is simply one the phone ignores.
+ * A few per order, so a flood cannot push the real one out for long.
+ */
+export async function handlePostServerSeen(
+  deps: { storage: ProvisionStatusStorage; now?: () => number },
+  serial: string,
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
+  if (!SERIAL_RE.test(serial)) return malformed("malformed serial");
+  const b = (body ?? {}) as { stkPubHex?: unknown; macHex?: unknown };
+  if (typeof b.stkPubHex !== "string" || !/^[0-9a-f]{64}$/.test(b.stkPubHex)) return malformed("stkPubHex must be 64 lowercase hex");
+  if (typeof b.macHex !== "string" || !/^[0-9a-f]{64}$/.test(b.macHex)) return malformed("macHex must be 64 lowercase hex");
+  const kept = await deps.storage.addServerSeen(serial, { stkPubHex: b.stkPubHex, macHex: b.macHex, at: (deps.now ?? Date.now)() }, 4);
+  if (!kept) return notFound("no status");
+  return ok({ ok: true });
+}
