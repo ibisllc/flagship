@@ -1,0 +1,9 @@
+{
+    "device_id": 0,
+    "device_name": "Intel(R) Data Center GPU Flex 170",
+    "driver_version": "I915_24.3.23_PSB_240103.21",
+    "kernel_version": "6.12.48+deb13-amd64",
+    "memory_physical_size_byte": "17179869184",
+    "pci_bdf_address": "0000:4d:00.0",
+    "uuid": "01000000-0000-0000-0000-00004d000000"
+}
