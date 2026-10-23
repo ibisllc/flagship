@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -46,36 +47,36 @@ data class CompanionDelegationBody(val delegation: CompanionDelegationRequest, v
 data class CompanionDelegationEnd(val sessionId: String, val serviceRef: String)
 
 object SecurityControlWords {
-    const val RESTORED_TITLE = "Restored permissions"
-    const val RESTORED_INTRO = "This app came back from a backup. Until an admin approves, nobody from the old list can open it."
-    const val RESTORED_APPROVE = "Approve this list"
-    const val RESTORED_DISCARD = "Discard it"
-    const val RESTORED_ADMIN_ONLY = "Only an admin device can approve restored permissions."
+    val RESTORED_TITLE get() = FSStrings.get(R.string.restored_permissions)
+    val RESTORED_INTRO get() = FSStrings.get(R.string.this_app_came_back_from_a)
+    val RESTORED_APPROVE get() = FSStrings.get(R.string.approve_this_list)
+    val RESTORED_DISCARD get() = FSStrings.get(R.string.discard_it)
+    val RESTORED_ADMIN_ONLY get() = FSStrings.get(R.string.only_an_admin_device_can_approve)
 
     const val UPDATES_TITLE = "Updates"
 
     fun updateLabel(mode: String): String? = when (mode) {
-        "manual" -> "Ask me each time"
-        "staged" -> "Wait a week, then update"
-        "auto" -> "Update automatically"
-        "frozen" -> "Never update"
+        "manual" -> FSStrings.get(R.string.ask_me_each_time)
+        "staged" -> FSStrings.get(R.string.wait_a_week_then_update)
+        "auto" -> FSStrings.get(R.string.update_automatically)
+        "frozen" -> FSStrings.get(R.string.never_update)
         else -> null
     }
 
     fun updateNote(mode: String): String? = when (mode) {
-        "manual" -> "You approve every update."
-        "staged" -> "A verified update from the same publisher is held for a week, then goes in. Anything that asks for more access still waits for you."
-        "auto" -> "A verified update from the same publisher goes in at once. Anything that asks for more access still waits for you."
-        "frozen" -> "This app stays on the version it is on."
+        "manual" -> FSStrings.get(R.string.you_approve_every_update)
+        "staged" -> FSStrings.get(R.string.a_verified_update_from_the_same)
+        "auto" -> FSStrings.get(R.string.a_verified_update_from_the_same_2)
+        "frozen" -> FSStrings.get(R.string.this_app_stays_on_the_version)
         else -> null
     }
 
-    const val DELEGATE_OPEN = "Let it build…"
-    const val DELEGATE_TITLE = "Let this browser build an app"
-    const val DELEGATE_INTRO = "A browser docked through Remote can only look. This lets it change one app you pick, for a short time. It ends on its own, or when you end it, or when the session ends."
-    const val DELEGATE_BUILD = "Change the app (build)"
-    const val DELEGATE_DEPLOY = "Put changes live (deploy)"
+    val DELEGATE_OPEN get() = FSStrings.get(R.string.let_it_build)
+    val DELEGATE_TITLE get() = FSStrings.get(R.string.let_this_browser_build_an_app)
+    val DELEGATE_INTRO get() = FSStrings.get(R.string.a_browser_docked_through_remote_can)
+    val DELEGATE_BUILD get() = FSStrings.get(R.string.change_the_app_build)
+    val DELEGATE_DEPLOY get() = FSStrings.get(R.string.put_changes_live_deploy)
     const val DELEGATE_ALLOW = "Allow"
-    const val DELEGATE_END = "End it"
-    const val DELEGATE_ADMIN_ONLY = "Only an admin device can let a browser build."
+    val DELEGATE_END get() = FSStrings.get(R.string.end_it)
+    val DELEGATE_ADMIN_ONLY get() = FSStrings.get(R.string.only_an_admin_device_can_let)
 }

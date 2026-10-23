@@ -37,7 +37,7 @@ async function renderDelegationSlot(slot, sessionId) {
   }
   const admin = canSignAdminOrders();
   slot.innerHTML = `
-    ${list.map((d) => `<div class="muted-sm text-xs">May ${escapeHtml(d.ops.join(" and "))} ${escapeHtml(d.serviceRef)}${d.expiresAt ? ` until ${escapeHtml(formatWhen(d.expiresAt))}` : ""} <button type="button" class="secondary" data-end-delegation="${escapeHtml(d.serviceRef)}">${escapeHtml(DELEGATION_COPY.end)}</button></div>`).join("")}
+    ${list.map((d) => `<div class="muted-sm text-xs">${tr("May {0} {1}{2}", escapeHtml(d.ops.join(" and ")), escapeHtml(d.serviceRef), d.expiresAt ? tr(" until {0}", escapeHtml(formatWhen(d.expiresAt))) : "")} <button type="button" class="secondary" data-end-delegation="${escapeHtml(d.serviceRef)}">${escapeHtml(DELEGATION_COPY.end)}</button></div>`).join("")}
     ${admin
       ? `<button type="button" class="secondary mt-1" data-open-delegation>${escapeHtml(DELEGATION_COPY.open)}</button>`
       : `<p class="note">${escapeHtml(DELEGATION_COPY.adminOnly)}</p>`}
@@ -65,12 +65,12 @@ async function renderDelegationSlot(slot, sessionId) {
     form.innerHTML = `
       <div class="card-title">${escapeHtml(DELEGATION_COPY.title)}</div>
       <p class="note">${escapeHtml(DELEGATION_COPY.intro)}</p>
-      <label>App</label>
+      <label>${tr("App")}</label>
       <select data-d-app>${apps.map((a) => `<option value="${escapeHtml(a.serviceId)}">${escapeHtml(a.slug ?? a.serviceId)}</option>`).join("")}</select>
       <label class="inline-check mt-1"><input type="checkbox" data-d-op value="build" checked /> ${escapeHtml(DELEGATION_COPY.build)}</label>
       <label class="inline-check"><input type="checkbox" data-d-op value="deploy" /> ${escapeHtml(DELEGATION_COPY.deploy)}</label>
-      <label class="mt-1">For</label>
-      <select data-d-for><option value="1800000">30 minutes</option><option value="3600000" selected>1 hour</option><option value="14400000">4 hours</option><option value="86400000">24 hours</option></select>
+      <label class="mt-1">${tr("For")}</label>
+      <select data-d-for><option value="1800000">${tr("30 minutes")}</option><option value="3600000" selected>${tr("1 hour")}</option><option value="14400000">${tr("4 hours")}</option><option value="86400000">${tr("24 hours")}</option></select>
       <button type="button" class="full-width mt-2" data-d-go>${escapeHtml(DELEGATION_COPY.allow)}</button>`;
     form.querySelector("[data-d-go]").addEventListener("click", async (ev) => {
       const ops = [...form.querySelectorAll("[data-d-op]:checked")].map((c) => c.value);
@@ -83,7 +83,7 @@ async function renderDelegationSlot(slot, sessionId) {
           { sessionId, serviceRef, ops, durationMs: Number(form.querySelector("[data-d-for]").value), umk: session.umk, signWithIrk: sensitiveSigner() },
           screensFetch,
         );
-        toast("That browser can now change the app.");
+        toast(tr("That browser can now change the app."));
         await renderDelegationSlot(slot, sessionId);
       } catch (e) {
         ev.currentTarget.disabled = false;
