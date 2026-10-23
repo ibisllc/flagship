@@ -13,15 +13,15 @@
  *                  more thing, rotated:
  *                    even ticks      a window of the CT scan (CT_USERS_PER_TICK
  *                                    users, so every user in turn)
- *                    odd ticks       one of two small groups, each every 40 minutes
+ *                    odd ticks       one of three small groups, each every hour
  *                    00:30 UTC       the daily adapter publish (alone)
  *                    Monday 01:30    the weekly adapter insight (alone)
  *
  * Cadence changes against the single big invocation this replaced: the CT scan
  * visits each user every (users / CT_USERS_PER_TICK) x 20 minutes (about 6 hours
  * at 75 accounts, as before); the re-pair and quarantine ladders, the
- * suggestion queue refill (two candidate names a time), the eviction GC and
- * the stale ACME TXT sweep run every 40 minutes instead of every ten (their thresholds are hours or days; the
+ * suggestion queue refill (two candidate names a time), the eviction GC, the
+ * custom voi.ci name upkeep and the stale ACME TXT sweep run every hour instead of every ten (their thresholds are hours or days; the
  * TXT sweep only removes records older than an hour).
  */
 
@@ -57,14 +57,16 @@ export const TEN_MINUTE_CRON = "*/10 * * * *";
 export const CT_USERS_PER_TICK = 4;
 /** Candidate names the suggestion queue tries per tick (2 subrequests each). */
 export const SUGGESTION_ATTEMPTS_PER_TICK = 2;
-/** Custom voi.ci names the upkeep looks at per run (it runs every 40 minutes). */
+/** Custom voi.ci names the upkeep looks at per run (it runs every hour, alone in its group). */
 export const VOICI_NAMES_PER_RUN = 10;
 
 const TEN_MIN_MS = 10 * 60_000;
 
 const MINOR_GROUPS: CronJobId[][] = [
   ["repair-alerts", "quarantine-alerts", "dns-gc", "legacy-dns-sweep"],
-  ["suggestions", "eviction-gc", "voici-names"],
+  ["suggestions", "eviction-gc"],
+  // Alone: each name reads its account's servers and their heartbeats.
+  ["voici-names"],
 ];
 
 export function cronPlan(cron: string, scheduledTime: number): CronPlan {
@@ -84,7 +86,7 @@ export function cronPlan(cron: string, scheduledTime: number): CronPlan {
     }
     const group = pair % MINOR_GROUPS.length;
     const plan: CronPlan = { jobs: ["demo", ...MINOR_GROUPS[group]!] };
-    // This group runs every 40 minutes; its Nth run takes the Nth window of names.
+    // This group runs every hour; its Nth run takes the Nth window of names.
     if (plan.jobs.includes("voici-names")) {
       plan.voiciWindow = { start: Math.floor(pair / MINOR_GROUPS.length) * VOICI_NAMES_PER_RUN, count: VOICI_NAMES_PER_RUN };
     }

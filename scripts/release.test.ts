@@ -424,8 +424,9 @@ describe("release.sh parsers against captured tool output", () => {
     expect(r.out).toMatch(/^0107_boot_suspensions\.sql$/m);
     expect(r.out).toMatch(/^0108_re_pair_veto\.sql$/m);
     expect(r.out).toMatch(/^0109_recovery_record_v2\.sql$/m);
+    expect(r.out).toMatch(/^0110_voici_names\.sql$/m);
     // Feature branches park their own migrations below the ledger's end (0090-0094, 0099): only the ones after it count here.
-    expect(r.out.split("\n").filter((f) => f >= "0105")).toHaveLength(5);
+    expect(r.out.split("\n").filter((f) => f >= "0105")).toHaveLength(6);
     // a ledger that has everything -> nothing pending
     const all = JSON.stringify([{ results: readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f)).map((f) => ({ version: f.slice(0, 4) })) }]);
     expect(sh(`pending_migrations ${dir}`, all).out).toBe("");

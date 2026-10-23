@@ -1158,9 +1158,8 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
     var pending by remember { mutableStateOf<PowerMode?>(null) }
     val busy = phase is PowerOffPhase.Signing || phase is PowerOffPhase.Posting
 
-    val prefix = if (isLuks) stringResource(R.string.lock_and) else ""
-    val offLabel = fsString(R.string.turn_off_2, prefix).replaceFirstChar { it.uppercase() }
-    val restartLabel = "${prefix}restart".replaceFirstChar { it.uppercase() }
+    val offLabel = stringResource(if (isLuks) R.string.lock_and_turn_off_label else R.string.turn_off)
+    val restartLabel = stringResource(if (isLuks) R.string.lock_and_restart_label else R.string.restart)
 
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
         FSSectionHeader(stringResource(R.string.power))
@@ -1172,7 +1171,7 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                 (phase as? PowerOffPhase.Completed)?.let { c ->
                     IconLine(
                         if (c.mode == PowerMode.RESTART) Icons.Outlined.RestartAlt else Icons.Outlined.PowerSettingsNew,
-                        fsString(R.string.this_server_is_it_will_go, if (c.mode == PowerMode.RESTART) "restarting" else stringResource(R.string.powering_off)),
+                        stringResource(if (c.mode == PowerMode.RESTART) R.string.this_server_is_restarting_offline else R.string.this_server_is_powering_off_offline),
                     )
                     if (summary.isNotEmpty()) {
                         Text(summary, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
@@ -1215,8 +1214,8 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                         onClick = {
                             scope.launch {
                                 val r = vm.resume()
-                                if (r is BootLockOutcome.Confirmed) toasts.success(stringResource(R.string.resumed_turn_auto_unlock_back_on))
-                                else toasts.error(stringResource(R.string.couldnt_resume_right_now_try_again))
+                                if (r is BootLockOutcome.Confirmed) toasts.success(FSStrings.get(R.string.resumed_turn_auto_unlock_back_on))
+                                else toasts.error(FSStrings.get(R.string.couldnt_resume_right_now_try_again))
                                 refreshLock()
                             }
                         },
@@ -1235,8 +1234,8 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                         onClick = {
                             scope.launch {
                                 val r = vm.retryPendingLock()
-                                if (r is BootLockOutcome.Confirmed) toasts.success(stringResource(R.string.locked_at_the_boot_service))
-                                else toasts.error(stringResource(R.string.still_couldnt_reach_the_boot_service))
+                                if (r is BootLockOutcome.Confirmed) toasts.success(FSStrings.get(R.string.locked_at_the_boot_service))
+                                else toasts.error(FSStrings.get(R.string.still_couldnt_reach_the_boot_service))
                                 refreshLock()
                             }
                         },
@@ -1441,7 +1440,7 @@ private fun DeadManCard(serverDomain: String) {
                         leaseExpiry = it
                         store.setDeadManLeaseExpiry(serverDomain, it)
                     }
-                    toasts.success(fsString(R.string.lock_down_on_affirm_to_keep, serverDomain.substringBefore('.')))
+                    toasts.success(FSStrings.get(R.string.lock_down_on_affirm_to_keep, serverDomain.substringBefore('.')))
                 }
             } else {
                 (vm.phase.value as? DeadManPhase.Failed)?.let { toasts.error(it.message) }

@@ -138,6 +138,18 @@ describe("handleVoiciNameSet", () => {
     expect(rows.map((r) => r.eventKind)).toContain("voici-name-set");
   });
 
+  it("refuses a name for an app none of the account's servers runs, and still lets one be cleared", async () => {
+    const { deps, s } = await setup();
+    await set(deps, "halloweenparty");
+    const gone: VoiciNamesDeps = { ...deps, appRunning: async (_u, sid) => sid !== SVC };
+    const r = await set(gone, "springparty");
+    expect(r.status).toBe(409);
+    expect(code(r)).toBe("app-not-running");
+    expect((await s.voiciNames.get("springparty"))).toBeUndefined();
+    expect((await clear(gone)).status).toBe(200);
+    expect((await set(gone, "springparty", SVC2)).status).toBe(200);
+  });
+
   it("replaces a name: the old one enters its wait and the count stays the same", async () => {
     const { deps, s } = await setup();
     await set(deps, "firstname");
@@ -308,10 +320,10 @@ describe("the voi.ci redirect", () => {
     return { ...w, redirect };
   }
 
-  it("sends the code and the name (with or without its hyphens) to the same place", async () => {
+  it("sends the code and the name (with or without its hyphens or capitals) to the same place", async () => {
     const { redirect } = await world();
     const canonical = { resolveCanonical: async (u: string, id: string) => `https://party.${u}.flagship.services/#${id}` };
-    for (const p of ["k3x9qa", "halloween-party", "halloweenparty"]) {
+    for (const p of ["k3x9qa", "halloween-party", "halloweenparty", "HalloweenParty", "Halloween-Party"]) {
       const r = await redirect(p, canonical);
       expect(r.status, p).toBe(302);
       expect(r.headers?.location).toBe("https://party.alice.flagship.services/#alice--party");

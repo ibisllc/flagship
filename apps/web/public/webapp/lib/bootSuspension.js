@@ -246,9 +246,9 @@ export function describeLockResult(r) {
     return tr("Couldn't lock this server at the boot service, so it was not restarted. Shut it down instead? It will lock as soon as the service answers.");
   }
   const power = r.power === "sent" ? tr("The server is powering off") : r.power === "failed" ? tr("The power command didn't reach the server") : "";
-  const lock = r.lock === "confirmed" ? "locked: it can't unlock itself until you resume it" : "remote lock pending: it will be retried";
+  const lock = r.lock === "confirmed" ? tr("locked: it can't unlock itself until you resume it") : tr("remote lock pending: it will be retried");
   if (!power) return tr("Locked at the boot service: {0}.", lock);
-  return `${power}; ${lock}.`;
+  return tr("{0}; {1}.", power, lock);
 }
 
 // ── dead-man: a lease never outlives the affirmation ────────────────────────
