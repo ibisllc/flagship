@@ -25,15 +25,23 @@ public enum BootKey {
     /// The boot key to seal to for `serverDomain` on this account, or nil when
     /// the server has none. A binding that doesn't verify under the pinned STK
     /// is ignored; the boot key pinned earlier, if any, still applies.
+    ///
+    /// Architecture v2: the box's ML-DSA key is pinned first (only through the pinned STK, as
+    /// the webapp's bootKey.js does), so a binding stripped of its hybrid signature is refused
+    /// below. A changed ML-DSA key refuses the boot key outright (nil): the owner must re-pin.
     public static func forServer(username: String, serverDomain: String,
                                  mailbox: any SecretMailboxClient, pins: BoxKeyPins) async -> String? {
+        if let data = try? await mailbox.fetchBoxPqKeyBinding(serverDomain: serverDomain),
+           let json = try? JSONSerialization.jsonObject(with: data) {
+            do { try pins.acceptStkPqBinding(username: username, serverDomain: serverDomain, wire: json) } catch { return nil }
+        }
         if let wire = try? await mailbox.fetchBootKeyBinding(serverDomain: serverDomain),
            let stk = pins.pinned(username: username, serverDomain: serverDomain),
            verified(wire, serverDomain: serverDomain, stkPubHex: stk) != nil,
            let n = normalized(wire),
            let accepted = pins.acceptBootKeyBinding(username: username, serverDomain: serverDomain,
                                                     bootPubHex: n.bootPubHex, issuedAt: n.issuedAt,
-                                                    signatureHex: n.signatureHex) {
+                                                    signatureHex: n.signatureHex, hybridSignatureHex: wire.hybridSignature) {
             return accepted
         }
         return pins.pinnedBootKey(username: username, serverDomain: serverDomain)

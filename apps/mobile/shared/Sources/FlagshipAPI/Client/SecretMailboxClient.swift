@@ -127,10 +127,16 @@ public protocol SecretMailboxClient: Sendable {
     /// GET {com}/api/server/:domain/boot-key — the box's STK-signed boot-key
     /// binding (public), or nil when the box has none (404).
     func fetchBootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire?
+
+    /// GET {com}/api/server/:domain/pq-key-binding — the box's STK→ML-DSA key binding
+    /// (`flagship/pq-key-binding/v1`, role box-stk) as raw JSON, or nil when `.com` has none.
+    /// Verified by the caller under the STK this device pinned (architecture v2).
+    func fetchBoxPqKeyBinding(serverDomain: String) async throws -> Data?
 }
 
 public extension SecretMailboxClient {
     func fetchBootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire? { nil }
+    func fetchBoxPqKeyBinding(serverDomain: String) async throws -> Data? { nil }
     func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse {
         throw ScreensClientError.notImplemented("release list")
     }
@@ -157,7 +163,12 @@ public struct BootKeyBindingWire: Codable, Equatable, Sendable {
     }
     public let binding: Binding
     public let signature: String
-    public init(binding: Binding, signature: String) { self.binding = binding; self.signature = signature }
+    /// The STK's hybrid signature over `flagship/boot-key-binding/v2|…` (architecture v2), when
+    /// the box has an ML-DSA key; required once this device pinned that key.
+    public let hybridSignature: String?
+    public init(binding: Binding, signature: String, hybridSignature: String? = nil) {
+        self.binding = binding; self.signature = signature; self.hybridSignature = hybridSignature
+    }
 }
 
 /// The boot worker's lock record for a server (`GET /api/boot/suspension/:domain`).
@@ -1032,6 +1043,20 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return try JSONDecoder().decode(BootKeyBindingWire.self, from: data)
     }
 
+    public func fetchBoxPqKeyBinding(serverDomain: String) async throws -> Data? {
+        let encoded = serverDomain.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/server/\(encoded)/pq-key-binding"))
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, resp) = try await urlSession.gatedData(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 404 { return nil }
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return data
+    }
+
     public func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws {
         try await sendBoot("DELETE", "/api/boot/lease/\(serverDomain)", body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
     }
@@ -1272,6 +1297,11 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public var bootKeyBindings: [String: BootKeyBindingWire] = [:]
     public func fetchBootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire? {
         bootKeyBindings[serverDomain.lowercased()]
+    }
+    /// What `fetchBoxPqKeyBinding` returns (raw JSON), per lowercased domain.
+    public var boxPqKeyBindings: [String: Data] = [:]
+    public func fetchBoxPqKeyBinding(serverDomain: String) async throws -> Data? {
+        boxPqKeyBindings[serverDomain.lowercased()]
     }
     public private(set) var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String)] = []
     public private(set) var revoked: [(request: LeaseRevokeWire, bootAuth: String)] = []
