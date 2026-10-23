@@ -358,6 +358,10 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v166: feat/UX: Home's "Add / Restore a server"; Services and Activity say "Add a server first"
+//       without a server (lib/noServerCard.js); Settings: "Scan a code or enter a link" takes any
+//       Flagship code or link (lib/flagshipLinkInput.js; Process URL is gone), AI API keys as compact
+//       rows, Cloud recovery's help behind (?), shorter Account security copy, Lock the app not red.
 //  v165: feat/UX: the webapp in six languages (lib/i18n.js tr/trn, lib/i18nLocales.js; each catalog
 //       i18n/<lang>.json?v=<hash> is fetched per language and cached at runtime; Traditional-Chinese and
 //       English-first browsers stay English; swRegister.js loads as a module so the worker registers),
@@ -370,7 +374,7 @@
 //  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
 //  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v165";
+const SHELL_VERSION = "v166";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -419,6 +423,8 @@ const OPTIONAL_SHELL = [
   "/vendor/noble-hashes/crypto.js",
   "/lib/push.js",
   "/lib/icons.js",
+  "/lib/flagshipLinkInput.js",
+  "/lib/noServerCard.js",
   "/lib/auditLog.js",
   "/lib/accountRead.js",
   "/lib/serverOrder.js",

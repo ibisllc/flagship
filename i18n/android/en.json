@@ -2786,11 +2786,11 @@
     "ctx": "ui/screens/AccountSecurityScreen.kt:118 (prose)"
   },
   "recovery_needs_your_6_digit_code": {
-    "en": "Recovery needs your 6-digit code (or a recovery code) and a 24-hour wait.",
+    "en": "Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:124 (prose)"
   },
   "recovery_needs_a_recovery_credential_and": {
-    "en": "Recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.",
+    "en": "Recovery needs a recovery credential, then a 3-day wait. Your other devices are alerted but can't cancel it.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:126 (prose)"
   },
   "currently_enabled": {
@@ -2802,12 +2802,12 @@
     "ctx": "ui/screens/AccountSecurityScreen.kt:135 (prose)"
   },
   "your_totp_secret_was_generated_on": {
-    "en": "Your TOTP secret was generated on this device on %1$s. Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost.",
+    "en": "Set up on this device on %1$s. Keep your recovery codes safe: they're the only way back in if you lose your authenticator app.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:138 (prose)",
     "args": 1
   },
   "a_second_factor_outside_googles_account": {
-    "en": "A second factor outside Google's account recovery. If your Google password is ever compromised, the attacker still needs a live 6-digit code from your authenticator app to take over your account.",
+    "en": "A check outside Google's account recovery: anyone who steals your Google password still needs a live code from your authenticator app to take over your account.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:142 (prose)"
   },
   "turn_off_code_protection": {
@@ -2823,7 +2823,7 @@
     "ctx": "ui/screens/AccountSecurityScreen.kt:199 (arg of Text)"
   },
   "drops_your_totp_secret_recovery_codes": {
-    "en": "Drops your TOTP secret + recovery codes. The account goes back to single-device + 3-day recovery grace. Refused while other trusted devices exist.",
+    "en": "Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:203 (arg of Text)"
   },
   "n_6_digit_code_or_recovery_code": {
@@ -2843,7 +2843,7 @@
     "ctx": "ui/screens/AccountSecurityScreen.kt:293 (arg of Text)"
   },
   "rotating_your_admin_key_mints_a": {
-    "en": "Rotating your admin key mints a new one and cuts off every OTHER admin device that held the old key. Use this if an admin device was lost or you want to revoke another admin. Your other data and devices stay signed in.",
+    "en": "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:299 (arg of Text)"
   },
   "rotating": {
@@ -2859,7 +2859,7 @@
     "ctx": "ui/screens/AccountSecurityScreen.kt:323 (arg of Text)"
   },
   "your_admin_key_changed_enter_your": {
-    "en": "Your admin key changed. Enter your recovery passphrase to update your recovery backup — otherwise recovery would restore the OLD admin key.",
+    "en": "Your admin key changed. Enter your recovery passphrase so recovery restores the new key, not the old one.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:333 (arg of Text)"
   },
   "updating_recovery_backup": {
@@ -2907,11 +2907,11 @@
     "ctx": "ui/screens/AccountSecurityScreen.kt:532 (arg of Text)"
   },
   "youll_need_an_authenticator_app_like": {
-    "en": "You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.",
+    "en": "You need an authenticator app (1Password, Google Authenticator, Authy…). Scan the QR code or paste the key we show.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:537 (arg of Text)"
   },
   "with_code_protection_on_recovery_needs": {
-    "en": "With code protection on, recovery needs your 6-digit code (or a recovery code) and a 24-hour wait instead of the 3-day wait.",
+    "en": "Recovery then needs your 6-digit code (or a recovery code) and a 24-hour wait, not 3 days.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:541 (arg of Text)"
   },
   "step_2_of_4_scan_or": {
@@ -2939,7 +2939,7 @@
     "ctx": "ui/screens/AccountSecurityScreen.kt:614 (arg of Text)"
   },
   "print_these_or_store_them_in": {
-    "en": "Print these or store them in a password manager. Each code works once if you lose your authenticator. They're the ONLY way back in.",
+    "en": "Print them or keep them in a password manager. Each works once. If you lose your authenticator, they're the only way back in.",
     "ctx": "ui/screens/AccountSecurityScreen.kt:618 (arg of Text)"
   },
   "ive_saved_these_somewhere_safe": {
@@ -3211,7 +3211,7 @@
     "ctx": "ui/screens/AiKeyScreens.kt:342 (prose)"
   },
   "ai_keys": {
-    "en": "AI keys",
+    "en": "AI API keys",
     "ctx": "ui/screens/AiKeyScreens.kt:444 (title=)"
   },
   "no_keys_saved_yet": {
@@ -4643,7 +4643,7 @@
     "args": 1
   },
   "add_restore_server": {
-    "en": "Add/Restore server",
+    "en": "Add / Restore a server",
     "ctx": "ui/screens/HomeScreen.kt:411 (arg of Text)"
   },
   "create_a_server": {
@@ -5460,7 +5460,7 @@
     "ctx": "ui/screens/PrivacyScreen.kt:96 (title=)"
   },
   "on_by_default_flagship_asks_for": {
-    "en": "On by default. Flagship asks for biometrics each time the app launches or comes back from the background, so you stay signed in without re-entering your passphrase. Turn it off to open straight in. Either way your servers stay running; this just controls who can see and tap.",
+    "en": "On by default: biometrics each time the app opens or comes back, without retyping your passphrase. Off: it opens straight in. Your servers keep running either way; this only controls who can see and tap.",
     "ctx": "ui/screens/PrivacyScreen.kt:103 (prose)"
   },
   "require_your_passphrase": {
@@ -5472,7 +5472,7 @@
     "ctx": "ui/screens/PrivacyScreen.kt:122 (title=)"
   },
   "off_by_default_when_on_flagship": {
-    "en": "Off by default. When on, Flagship doesn't keep you signed in — each launch needs a full sign-in with your account passphrase, not just biometrics. The strongest option, and the slowest.",
+    "en": "Off by default. On: Flagship never keeps you signed in; every launch needs your account passphrase, not just biometrics. Strongest and slowest.",
     "ctx": "ui/screens/PrivacyScreen.kt:136 (prose)"
   },
   "flagship_build": {
@@ -11039,5 +11039,41 @@
   "this_server_is_powering_off_offline": {
     "en": "This server is powering off — it will go offline.",
     "ctx": "ui/screens/ServerDetailScreen.kt PowerCard (prose)"
+  },
+  "scan_a_code_or_enter_a_link": {
+    "en": "Scan a code or enter a link",
+    "ctx": "Settings row and screen title: scan a QR code or paste any Flagship link"
+  },
+  "pairing_codes_shares_invites_and_sign_in": {
+    "en": "Pairing codes, shares, invites and sign-in links",
+    "ctx": "Settings row subtitle under Scan a code or enter a link"
+  },
+  "scan_a_flagship_qr_code_or_paste": {
+    "en": "Scan a Flagship QR code, or paste its link. To join another account, open Settings → Trusted devices → Add a device on a device of that account.",
+    "ctx": "Scan a code or enter a link: screen intro"
+  },
+  "that_isnt_a_flagship_code_or_link": {
+    "en": "That isn't a Flagship code or link. Copy the whole link and try again.",
+    "ctx": "Scan a code or enter a link: unreadable input"
+  },
+  "paste": {
+    "en": "Paste",
+    "ctx": "button: paste the clipboard into the field"
+  },
+  "default_tag": {
+    "en": "Default",
+    "ctx": "small tag on the AI key used by default for new builds"
+  },
+  "key_settings": {
+    "en": "Key settings",
+    "ctx": "AI key row menu: show the key's relay switch and default model"
+  },
+  "hide_key_settings": {
+    "en": "Hide key settings",
+    "ctx": "AI key row menu: hide the key's relay switch and default model"
+  },
+  "options_for": {
+    "en": "Options for %1$s",
+    "ctx": "accessibility label of an AI key row's menu button; %1$s is the key's name"
   }
 }

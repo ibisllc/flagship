@@ -99,7 +99,7 @@ import { initInviteRedeemView, enterInviteRedeem } from "./views/invite-redeem.j
 import { inviteContextFromLocation } from "./lib/serviceInvite.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
 import { initSecuredSessionsView, enterSecuredSessions } from "./views/secured-sessions.js";
-import { initAccessAuthorizeView, enterAccessAuthorize } from "./views/access-authorize.js";
+import { initAccessAuthorizeView } from "./views/access-authorize.js";
 import { initPeerBackupView, enterPeerBackup } from "./views/peer-backup.js";
 import { initCompanionDockView, enterCompanionDock } from "./views/companion-dock.js";
 import {
@@ -223,7 +223,6 @@ const SETTINGS_ROW_ICONS = {
   sessions: monitorIcon,
   scan: scanIcon,
   secured: shieldIcon,
-  processurl: monitorIcon,
   backup: hardDriveIcon,
   dock: monitorIcon,
   requests: usersIcon,
@@ -323,12 +322,11 @@ function wireSettingsTabEntries() {
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
   wire("settings-tab-account-security", () => show("view-account-security"));
   wire("settings-tab-join-account", async () => {
-    const { openJoinAnotherAccount } = await import("./views/join.js");
-    await openJoinAnotherAccount();
+    const { openScanOrLink } = await import("./views/join.js");
+    await openScanOrLink();
   });
   wire("settings-tab-sessions", enterPairedSessions);
   wire("settings-tab-secured-sessions", enterSecuredSessions);
-  wire("settings-tab-process-url", () => enterAccessAuthorize());
   wire("settings-tab-peer-backup", enterPeerBackup);
   wire("settings-tab-companion-dock", enterCompanionDock);
   wire("settings-tab-companion-requests", enterCompanionRequests);

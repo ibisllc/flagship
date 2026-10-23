@@ -104,7 +104,7 @@ public enum DeepLink: Equatable, Sendable {
     ///     link (the fragment never reaches `.com`; older boxes: `/access?…` or
     ///     `flagship://access?…`), as the same-device "Access
     ///     site" button and the cross-device QR, and
-    ///   - Settings → "Process URL", which pastes either that deeplink OR the
+    ///   - Settings → "Scan a code or enter a link", which pastes either that deeplink OR the
     ///     raw "Get link" string into the same handler.
     case knockAuthorize(serverDomain: String, svc: String, serviceRef: String, pageId: String)
 
@@ -506,7 +506,7 @@ public enum DeepLink: Equatable, Sendable {
         return s.lowercased()
     }
 
-    /// Parse a pasted "Process URL" string into a DeepLink. The knock page's
+    /// Parse a pasted link string ("Scan a code or enter a link") into a DeepLink. The knock page's
     /// "Get link to paste in the app" copies the VERBATIM `access` link
     /// (https, or `flagship://access?…` from older boxes), so a paste is just that URL with possible surrounding
     /// whitespace. Trims, then defers to `parse`. Returns nil for anything we

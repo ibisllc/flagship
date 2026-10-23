@@ -26,6 +26,7 @@ import { accountReadFetch } from "../lib/accountRead.js";
 import { getSession } from "../lib/state.js";
 
 import { tr } from "../lib/i18n.js";
+import { noServerCardHtml } from "../lib/noServerCard.js";
 registerView("view-activity", { tab: "activity" });
 
 // The user's online pods (statusByDomain map values), fetched alongside the
@@ -165,12 +166,24 @@ export async function renderActivity() {
   // fleet (parity with the Services switcher). Best-effort + non-blocking: a
   // failure leaves the switcher hidden, never blocks the feed.
   const switcherUsername = activeUsername();
+  let inventoryOk = false;
   try {
     const { statusByDomain } = await fetchPodInventory(switcherUsername);
     activityPods = [...statusByDomain.values()];
+    inventoryOk = true;
   } catch {
     activityPods = [];
   }
+  // No server yet: the same card Services shows, above the server approvals
+  // (which stay, as a first boot asks there); the feed has nothing to show.
+  const noServer = inventoryOk && activityPods.length === 0;
+  const noServerSlot = $("activity-no-server");
+  if (noServerSlot) {
+    noServerSlot.innerHTML = noServer ? noServerCardHtml() : "";
+    noServerSlot.hidden = !noServer;
+  }
+  $("activity-with-server")?.toggleAttribute("hidden", noServer);
+  if (noServer) return;
   try {
     const { boxes, recovery, audit } = await fanOut();
 

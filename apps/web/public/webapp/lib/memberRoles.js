@@ -262,7 +262,7 @@ export function accountMemberName(row, { deviceNames } = {}) {
 export function accountMemberLine(row, { devicePub } = {}) {
   if (row?.kind === "co-manager") return tr("Co-manages this server");
   const parts = [];
-  if (devicePub && row?.devicePub === devicePub.toLowerCase()) parts.push("This device");
+  if (devicePub && row?.devicePub === devicePub.toLowerCase()) parts.push(tr("This device"));
   parts.push(row?.tier === "admin" ? tr("Admin device") : tr("Device on your account"));
   return parts.join(" · ");
 }

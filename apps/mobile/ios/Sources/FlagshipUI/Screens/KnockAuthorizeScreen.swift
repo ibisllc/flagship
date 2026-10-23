@@ -5,7 +5,7 @@ import FlagshipCore
 
 /// Visitor-side knock-authorize screen (docs/service-access-gating.md,
 /// "Web-experience gating"). Reached from an `https://flagshipserver.com/access#…` link (the
-/// box's knock page / QR) or a pasted "Process URL". Shows "Open <app> on
+/// box's knock page / QR) or a link pasted in "Scan a code or enter a link". Shows "Open <app> on
 /// <server>?" with Open / Cancel; Open signs the authorization behind the
 /// biometric gate (this device's account device key on our own servers, the
 /// share's member key on one shared with us, our id for the app on a

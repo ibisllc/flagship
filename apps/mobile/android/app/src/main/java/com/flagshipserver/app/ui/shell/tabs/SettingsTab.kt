@@ -27,7 +27,6 @@ import com.flagshipserver.app.ui.screens.PairedSessionsScreen
 import com.flagshipserver.app.ui.screens.PeerBackupScreen
 import com.flagshipserver.app.ui.screens.PostRecoveryScreen
 import com.flagshipserver.app.ui.screens.PrivacyScreen
-import com.flagshipserver.app.ui.screens.ProcessUrlScreen
 import com.flagshipserver.app.ui.screens.ProfilesScreen
 import com.flagshipserver.app.ui.screens.SecuredSessionsScreen
 import com.flagshipserver.app.ui.screens.ProvidersScreen
@@ -103,15 +102,9 @@ fun SettingsTab() {
                 onCancel = { nav.popBackStack() },
             )
         }
-        // Phase 3b — incoming join from Settings' scanner while signed in
-        // (no link yet ⇒ the screen opens the camera).
-        composable("join-device-scan") {
-            JoinDeviceScreen(
-                initialLink = null,
-                onJoined = { nav.popBackStack("settings-root", inclusive = false) },
-                onCancel = { nav.popBackStack() },
-            )
-        }
+        // Settings → "Scan a code or enter a link": the camera, or a pasted
+        // link or code. A /join code comes back here as a JoinDevice deep link.
+        composable("join-device-scan") { com.flagshipserver.app.ui.screens.ScanOrLinkScreen(nav) }
         // Phase 3b — incoming join via App-Links deeplink while paired
         // (adds a 2nd profile to this phone).
         composable(
@@ -142,9 +135,7 @@ fun SettingsTab() {
         composable("name-dibs") { com.flagshipserver.app.ui.screens.NameDibsScreen() }
         // Web-experience gating — the browser QR-logins this phone authorized.
         composable("secured-sessions") { SecuredSessionsScreen(nav) }
-        // Web-experience gating — paste an https://flagshipserver.com/access link / "Get link".
-        composable("process-url") { ProcessUrlScreen(nav) }
-        // The authorize target ProcessUrl hands off to (same route shape as the
+        // The authorize target "Scan a code or enter a link" hands off to (same route shape as the
         // ServicesTab deep-link target; svc is an optional query arg).
         composable(
             route = "knock-authorize/{server}/{ref}/{page}?svc={svc}",
