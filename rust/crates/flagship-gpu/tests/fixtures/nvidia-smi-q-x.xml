@@ -1,0 +1,112 @@
+<?xml version="1.0" ?>
+<!DOCTYPE nvidia_smi_log SYSTEM "nvsmi_device_v12.dtd">
+<nvidia_smi_log>
+	<timestamp>Thu Oct 23 10:11:12 2026</timestamp>
+	<driver_version>580.95.05</driver_version>
+	<cuda_version>13.0</cuda_version>
+	<attached_gpus>2</attached_gpus>
+	<gpu id="00000000:01:00.0">
+		<product_name>NVIDIA GeForce RTX 4090</product_name>
+		<product_brand>GeForce</product_brand>
+		<product_architecture>Ada Lovelace</product_architecture>
+		<display_mode>Disabled</display_mode>
+		<display_active>Disabled</display_active>
+		<persistence_mode>Enabled</persistence_mode>
+		<mig_mode>
+			<current_mig>N/A</current_mig>
+			<pending_mig>N/A</pending_mig>
+		</mig_mode>
+		<mig_devices>
+			None
+		</mig_devices>
+		<serial>1324021000000</serial>
+		<uuid>GPU-3b5c1e2a-9f00-4d7e-8b1c-0123456789ab</uuid>
+		<minor_number>0</minor_number>
+		<pci>
+			<pci_bus>01</pci_bus>
+			<pci_device>00</pci_device>
+			<pci_domain>0000</pci_domain>
+			<pci_device_id>268410DE</pci_device_id>
+			<pci_bus_id>00000000:01:00.0</pci_bus_id>
+			<pci_sub_system_id>16F310DE</pci_sub_system_id>
+		</pci>
+		<fb_memory_usage>
+			<total>24564 MiB</total>
+			<reserved>346 MiB</reserved>
+			<used>1203 MiB</used>
+			<free>23015 MiB</free>
+		</fb_memory_usage>
+		<encoder_stats>
+			<session_count>0</session_count>
+			<average_fps>0</average_fps>
+			<average_latency>0</average_latency>
+		</encoder_stats>
+		<processes>
+			<process_info>
+				<gpu_instance_id>N/A</gpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>48211</pid>
+				<type>C</type>
+				<process_name>python3</process_name>
+				<used_memory>1180 MiB</used_memory>
+			</process_info>
+		</processes>
+	</gpu>
+	<gpu id="00000000:41:00.0">
+		<product_name>NVIDIA A100-SXM4-40GB</product_name>
+		<product_brand>NVIDIA</product_brand>
+		<product_architecture>Ampere</product_architecture>
+		<display_mode>Disabled</display_mode>
+		<display_active>Disabled</display_active>
+		<mig_mode>
+			<current_mig>Enabled</current_mig>
+			<pending_mig>Enabled</pending_mig>
+		</mig_mode>
+		<mig_devices>
+			<mig_device>
+				<index>0</index>
+				<gpu_instance_id>1</gpu_instance_id>
+				<compute_instance_id>0</compute_instance_id>
+				<device_attributes>
+					<shared>
+						<multiprocessor_count>42</multiprocessor_count>
+						<copy_engine_count>3</copy_engine_count>
+					</shared>
+				</device_attributes>
+				<fb_memory_usage>
+					<total>19968 MiB</total>
+					<used>13 MiB</used>
+				</fb_memory_usage>
+			</mig_device>
+			<mig_device>
+				<index>1</index>
+				<gpu_instance_id>2</gpu_instance_id>
+				<compute_instance_id>0</compute_instance_id>
+				<fb_memory_usage>
+					<total>9856 MiB</total>
+					<used>7 MiB</used>
+				</fb_memory_usage>
+			</mig_device>
+		</mig_devices>
+		<uuid>GPU-a1a1a1a1-0000-4000-8000-a100a100a100</uuid>
+		<minor_number>1</minor_number>
+		<pci>
+			<pci_device_id>20B010DE</pci_device_id>
+			<pci_bus_id>00000000:41:00.0</pci_bus_id>
+		</pci>
+		<fb_memory_usage>
+			<total>40960 MiB</total>
+			<used>20 MiB</used>
+		</fb_memory_usage>
+		<processes>
+			<process_info>
+				<gpu_instance_id>1</gpu_instance_id>
+				<compute_instance_id>0</compute_instance_id>
+				<pid>51002</pid>
+				<type>C</type>
+				<process_name>infer</process_name>
+				<used_memory>8000 MiB</used_memory>
+			</process_info>
+		</processes>
+	</gpu>
+</nvidia_smi_log>

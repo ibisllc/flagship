@@ -1,0 +1,15 @@
+{
+    "device_list": [
+        {
+            "device_function_type": "physical",
+            "device_id": 0,
+            "device_name": "Intel(R) Data Center GPU Flex 170",
+            "device_type": "GPU",
+            "drm_device": "/dev/dri/card1",
+            "pci_bdf_address": "0000:4d:00.0",
+            "pci_device_id": "0x56c0",
+            "uuid": "01000000-0000-0000-0000-00004d000000",
+            "vendor_name": "Intel(R) Corporation"
+        }
+    ]
+}
