@@ -49,7 +49,7 @@ public enum ServerShareFlowError: Error, Equatable, LocalizedError, Sendable {
 }
 
 extension ServerShareFlowError {
-    public static let notAdminDeviceMessage = String(localized: "Only an admin device of your account can accept a co-manage invitation.")
+    public static let notAdminDeviceMessage = "Only an admin device of your account can accept a co-manage invitation."
 }
 
 /// The joining account's sensitive key for #12 (docs/share-a-server.md §5.1):
@@ -124,11 +124,11 @@ public struct ShareUpdateRefusal: Error, Equatable, LocalizedError, Sendable {
 
     public static func text(code: String?, boxError: String?) -> String {
         switch code {
-        case "busy", "pending-verify": return String(localized: "An update is already underway.")
-        case "from-commit-mismatch": return String(localized: "The server changed version. Refresh and try again.")
-        case "manage-only": return String(localized: "Only someone who can manage this server can update it.")
-        case "stale": return String(localized: "Your device's clock looks off. Check it and try again.")
-        default: return boxError ?? String(localized: "The server didn't take the update.")
+        case "busy", "pending-verify": return "An update is already underway."
+        case "from-commit-mismatch": return "The server changed version. Refresh and try again."
+        case "manage-only": return "Only someone who can manage this server can update it."
+        case "stale": return "Your device's clock looks off. Check it and try again."
+        default: return boxError ?? "The server didn't take the update."
         }
     }
 }
@@ -333,7 +333,7 @@ public struct ServerShareOwnerFlow: Sendable {
             tokenHash: try ServerShare.shareTokenHash(ServerShare.shareTokenFromSecret(secret)),
             offerSha256: ServerShare.shareSha256Hex(offerHex), ownerSha256: ServerShare.shareSha256Hex(ownerHex),
             expiresAt: expiresAt, issuedAt: issuedAt)
-        let key = try await keys.sensitive(String(localized: "Share \(serverName) with \(label)"))
+        let key = try await keys.sensitive("Share \(serverName) with \(label)")
         let sig = HexUtil.encode(try offer.sign(with: key))
         try await client.createOffer(username: username, offer: offer, signature: sig, offerHex: offerHex, ownerHex: ownerHex)
         let link = try ServerShare.buildShareLink(apexOrigin: apexOrigin(), shareId: shareId, secret: secret)
@@ -429,7 +429,7 @@ public struct ServerShareOwnerFlow: Sendable {
         let grant = ServerShareGrant(serverDomain: domain, shareId: row.shareId, memberPubHex: acc.accept.memberPubHex,
                                      level: row.level, unlockAtBoot: row.unlockAtBoot, seeAppData: row.seeAppData,
                                      label: row.label, issuedAt: now())
-        let key = try await keys.sensitive(String(localized: "Give \(row.label) access to \(serverName)"))
+        let key = try await keys.sensitive("Give \(row.label) access to \(serverName)")
         do {
             try await client.boxGrant(serverDomain: domain, ownerToken: ownerToken, grant: grant,
                                       signature: HexUtil.encode(try grant.sign(with: key)),
@@ -458,7 +458,7 @@ public struct ServerShareOwnerFlow: Sendable {
         let grant = ServerShareGrant(serverDomain: domain, shareId: row.shareId, memberPubHex: member, level: level,
                                      unlockAtBoot: unlockAtBoot, seeAppData: seeAppData, label: row.label,
                                      issuedAt: max(now(), (row.grantIssuedAt ?? 0) + 1))
-        let key = try await keys.sensitive(String(localized: "Change \(row.label)'s access to \(serverName)"))
+        let key = try await keys.sensitive("Change \(row.label)'s access to \(serverName)")
         try await client.boxGrant(serverDomain: domain, ownerToken: ownerToken, grant: grant,
                                   signature: HexUtil.encode(try grant.sign(with: key)), accept: nil, acceptSignature: nil)
         guard unlockAtBoot != row.unlockAtBoot else { return true }
@@ -477,7 +477,7 @@ public struct ServerShareOwnerFlow: Sendable {
     /// Retry the start-up copy for an active share that has none on file.
     public func sendStartupKey(_ row: OwnerShareRow, serverDomain: String, serverName: String) async throws {
         guard let member = row.memberPubHex else { throw ServerShareFlowError.notConfirmedYet }
-        let key = try await keys.sensitive(String(localized: "Let \(row.label) approve \(serverName)'s start-up"))
+        let key = try await keys.sensitive("Let \(row.label) approve \(serverName)'s start-up")
         try await depositStartupKey(serverDomain: serverDomain.lowercased(), shareId: row.shareId, memberPubHex: member, key: key)
     }
 
@@ -521,7 +521,7 @@ public struct ServerShareOwnerFlow: Sendable {
     public func end(_ row: OwnerShareRow, serverDomain: String, serverName: String, ownerToken: String?) async throws {
         let domain = serverDomain.lowercased()
         let revoke = ServerShareRevoke(serverDomain: domain, shareId: row.shareId, issuedAt: now())
-        let reason = row.status == .active ? String(localized: "Remove \(row.label) from \(serverName)") : String(localized: "Cancel the invitation for \(row.label)")
+        let reason = row.status == .active ? "Remove \(row.label) from \(serverName)" : "Cancel the invitation for \(row.label)"
         let sig = HexUtil.encode(try revoke.sign(with: try await keys.sensitive(reason)))
         var boxError: Error?
         if row.status == .active {
@@ -731,7 +731,7 @@ public struct ServerShareMemberFlow: Sendable {
     /// §9 "B's Shared with me": every inbox entry that opens, one per share
     /// (the newest when a link was accepted twice).
     public func inbox() async throws -> [SharedServerEntry] {
-        let seed = try await umkSeed(String(localized: "Show the servers shared with you"))
+        let seed = try await umkSeed("Show the servers shared with you")
         let inboxKey = try ServerShare.deriveShareInboxKey(umkSeed: seed)
         let sealKey = try ServerShare.deriveShareInboxSealKey(umkSeed: seed)
         let req = ShareInboxRequest(inboxPubHex: HexUtil.encode(inboxKey.publicKey.rawRepresentation), op: .list,
@@ -752,7 +752,7 @@ public struct ServerShareMemberFlow: Sendable {
     }
 
     public func deleteInboxEntry(_ entryId: String) async throws {
-        let seed = try await umkSeed(String(localized: "Update the servers shared with you"))
+        let seed = try await umkSeed("Update the servers shared with you")
         let inboxKey = try ServerShare.deriveShareInboxKey(umkSeed: seed)
         let req = ShareInboxRequest(inboxPubHex: HexUtil.encode(inboxKey.publicKey.rawRepresentation), op: .delete,
                                     entryId: entryId, ctSha256: "", issuedAt: now())
@@ -765,7 +765,7 @@ public struct ServerShareMemberFlow: Sendable {
 
     /// §9 "B signs in to S": nonce → #5 → a 12-hour share token.
     public func signIn(_ entry: SharedServerEntry) async throws -> ShareSessionResponse {
-        let member = try await memberKey(shareId: entry.shareId, reason: String(localized: "Open \(entry.displayName)"))
+        let member = try await memberKey(shareId: entry.shareId, reason: "Open \(entry.displayName)")
         let domain = entry.serverDomain.lowercased()
         let nonce = try await client.boxNonce(serverDomain: domain)
         let session = ServerShareSession(serverDomain: domain, shareId: entry.shareId,
@@ -785,7 +785,7 @@ public struct ServerShareMemberFlow: Sendable {
     /// Either end alone ends the share, so one unreachable side is fine.
     public func leave(_ entry: SharedServerEntry) async throws {
         guard let secret = HexUtil.decode(entry.secretHex) else { throw ServerShareFlowError.badLink }
-        let member = try await memberKey(shareId: entry.shareId, reason: String(localized: "Leave \(entry.displayName)"))
+        let member = try await memberKey(shareId: entry.shareId, reason: "Leave \(entry.displayName)")
         let domain = entry.serverDomain.lowercased()
         let leave = ServerShareLeave(serverDomain: domain, shareId: entry.shareId,
                                      memberPubHex: HexUtil.encode(member.publicKey.rawRepresentation), issuedAt: now())
@@ -807,7 +807,7 @@ public struct ServerShareMemberFlow: Sendable {
         let reg = SharePushRegistration(platform: platform, tokenSha256: ServerShare.shareSha256Hex(providerToken))
         do {
             try await sendPush(entry, op: .put, reg: reg, providerToken: providerToken,
-                               reason: String(localized: "Get start-up notices for \(entry.displayName)"))
+                               reason: "Get start-up notices for \(entry.displayName)")
         } catch let e as ServerShareHTTPError where e.status == 403 && e.code == "unlock-not-shared" {
             throw ServerShareFlowError.startupNotShared
         } catch let e as ServerShareHTTPError where e.status == 410 {
@@ -823,7 +823,7 @@ public struct ServerShareMemberFlow: Sendable {
     public func unregisterStartupPush(_ entry: SharedServerEntry, _ reg: SharePushRegistration) async throws {
         do {
             try await sendPush(entry, op: .delete, reg: reg, providerToken: nil,
-                               reason: String(localized: "Stop start-up notices for \(entry.displayName)"))
+                               reason: "Stop start-up notices for \(entry.displayName)")
         } catch let e as ServerShareHTTPError where e.status == 404 || e.status == 410 {
         }
     }
@@ -848,7 +848,7 @@ public struct ServerShareMemberFlow: Sendable {
         guard ServerShare.isLowerHex(target, 40), ServerShare.isLowerHex(from, 40) else {
             throw ShareUpdateRefusal(code: "from-commit-mismatch", boxError: nil)
         }
-        let member = try await memberKey(shareId: entry.shareId, reason: String(localized: "Update \(entry.displayName)"))
+        let member = try await memberKey(shareId: entry.shareId, reason: "Update \(entry.displayName)")
         let domain = entry.serverDomain.lowercased()
         let update = ServerShareUpdate(serverDomain: domain, shareId: entry.shareId,
                                        memberPubHex: HexUtil.encode(member.publicKey.rawRepresentation),
@@ -867,43 +867,59 @@ public struct ServerShareMemberFlow: Sendable {
         try await open(shareId: entry.shareId, secretHex: entry.secretHex).offer.stkPubHex
     }
 
+    /// The boot key the STK pinned in the offer vouches for, or nil.
+    public func sharedBootKey(_ entry: SharedServerEntry, stkPubHex: String) async -> String? {
+        await BootKey.forSharedServer(serverDomain: entry.serverDomain, pinnedStkHex: stkPubHex) {
+            try await client.bootKeyBinding(serverDomain: entry.serverDomain)
+        }
+    }
+
     /// §9 "B approves a start-up": pending `unlock-key` requests for this
-    /// server whose STK equals the pinned one and whose signature verifies.
+    /// server signed by the pinned STK (or the boot key it vouches for).
     public func pendingStartups(_ entry: SharedServerEntry, stkPubHex: String) async throws -> [VerifiedShareStartup] {
-        let member = try await memberKey(shareId: entry.shareId, reason: String(localized: "Check whether \(entry.displayName) is starting"))
+        let member = try await memberKey(shareId: entry.shareId, reason: "Check whether \(entry.displayName) is starting")
         let domain = entry.serverDomain.lowercased()
         let path = ServerShareClient.bootPendingPath(domain)
         let auth = try BootAuth.shareHeader(serverDomain: domain, method: "GET", path: path, memberKey: member, now: now())
         let rows = try await client.bootPending(serverDomain: domain, auth: auth)
-        return Self.verifiedStartups(rows, serverDomain: domain, stkPubHex: stkPubHex, now: now())
+        let stk = stkPubHex.lowercased()
+        let boot = rows.contains { $0.request.stkPub.lowercased() != stk } ? await sharedBootKey(entry, stkPubHex: stk) : nil
+        return Self.verifiedStartups(rows, serverDomain: domain, stkPubHex: stk, bootPubHex: boot, now: now())
     }
 
-    public static func verifiedStartups(_ rows: [ShareBootPending], serverDomain: String, stkPubHex: String, now: Int64) -> [VerifiedShareStartup] {
-        guard let stkData = HexUtil.decode(stkPubHex.lowercased()), stkData.count == 32,
-              let stk = try? Curve25519.Signing.PublicKey(rawRepresentation: stkData)
-        else { return [] }
+    /// `bootPubHex` must already be verified under the pinned STK (`sharedBootKey`).
+    public static func verifiedStartups(_ rows: [ShareBootPending], serverDomain: String, stkPubHex: String,
+                                        bootPubHex: String? = nil, now: Int64) -> [VerifiedShareStartup] {
         var out: [VerifiedShareStartup] = []
         for r in rows {
             let q = r.request
+            let signer = q.stkPub.lowercased()
             guard q.purpose == SecretPurpose.unlockKey.rawValue,
                   q.serverDomain.lowercased() == serverDomain.lowercased(),
-                  q.stkPub.lowercased() == stkPubHex.lowercased(),
+                  signer == stkPubHex.lowercased() || (bootPubHex != nil && signer == bootPubHex?.lowercased()),
+                  let signerData = HexUtil.decode(signer), signerData.count == 32,
+                  let key = try? Curve25519.Signing.PublicKey(rawRepresentation: signerData),
                   let nonce = HexUtil.decode(q.nonce), nonce.count == 32,
                   let sig = HexUtil.decode(r.signature)
             else { continue }
             if let exp = r.expiresAt, exp <= now { continue }
-            let request = SecretRequest(serverDomain: q.serverDomain, stkPub: stkData, purpose: .unlockKey, nonce: nonce, issuedAt: q.issuedAt)
-            guard SecretRequest.verify(request, signature: sig, stkPub: stk) else { continue }
+            let request = SecretRequest(serverDomain: q.serverDomain, stkPub: signerData, purpose: .unlockKey, nonce: nonce, issuedAt: q.issuedAt)
+            guard SecretRequest.verify(request, signature: sig, stkPub: key) else { continue }
             out.append(VerifiedShareStartup(request: request, expiresAt: r.expiresAt))
         }
         return out
     }
 
-    /// Open B's sealed copy, re-seal it for the box STK bound to this request,
-    /// and post the answer with role `share`.
+    /// Open B's sealed copy, re-seal it for the key that signed this request
+    /// (the pinned STK, or the boot key it vouches for), and post the answer
+    /// with role `share`.
     public func approveStartup(_ entry: SharedServerEntry, startup: VerifiedShareStartup, stkPubHex: String) async throws {
-        guard startup.request.stkPub == HexUtil.decode(stkPubHex.lowercased()) else { throw ServerShareFlowError.startupNotFromServer }
-        let member = try await memberKey(shareId: entry.shareId, reason: String(localized: "Start \(entry.displayName)"))
+        if startup.request.stkPub != HexUtil.decode(stkPubHex.lowercased()) {
+            guard let boot = await sharedBootKey(entry, stkPubHex: stkPubHex),
+                  startup.request.stkPub == HexUtil.decode(boot)
+            else { throw ServerShareFlowError.startupNotFromServer }
+        }
+        let member = try await memberKey(shareId: entry.shareId, reason: "Start \(entry.displayName)")
         let domain = entry.serverDomain.lowercased()
         let keyPath = ServerShareClient.bootKeyPath(domain)
         let sealedHex: String

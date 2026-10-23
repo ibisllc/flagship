@@ -135,9 +135,13 @@ public protocol SecretMailboxClient: Sendable {
     /// box's own signature, for a device without the IRK (a locked phone answering for its watch). Verify
     /// each under the STK this phone pinned, never the `stkPub` returned here.
     func fetchSignedSecretRequests(username: String) async throws -> [SignedSecretRequestWire]
+    /// GET {com}/api/server/:domain/boot-key — the box's STK-signed boot-key
+    /// binding (public), or nil when the box has none (404).
+    func fetchBootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire?
 }
 
 public extension SecretMailboxClient {
+    func fetchBootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire? { nil }
     func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse {
         throw ScreensClientError.notImplemented("release list")
     }
@@ -162,6 +166,21 @@ public extension SecretMailboxClient {
     func fetchSignedSecretRequests(username: String) async throws -> [SignedSecretRequestWire] {
         throw ScreensClientError.notImplemented("signed secret requests")
     }
+}
+
+/// `PUT/GET /api/server/:host/boot-key` body (packages/protocol/src/bootKey.ts).
+public struct BootKeyBindingWire: Codable, Equatable, Sendable {
+    public struct Binding: Codable, Equatable, Sendable {
+        public let serverDomain: String
+        public let bootPubHex: String
+        public let issuedAt: Int64
+        public init(serverDomain: String, bootPubHex: String, issuedAt: Int64) {
+            self.serverDomain = serverDomain; self.bootPubHex = bootPubHex; self.issuedAt = issuedAt
+        }
+    }
+    public let binding: Binding
+    public let signature: String
+    public init(binding: Binding, signature: String) { self.binding = binding; self.signature = signature }
 }
 
 /// The boot worker's lock record for a server (`GET /api/boot/suspension/:domain`).
@@ -1072,6 +1091,20 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return BootSuspensionPutResult(durable: false, state: reply?.current, refusal: reply?.code ?? reply?.error ?? "refused", status: status)
     }
 
+    public func fetchBootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire? {
+        let encoded = serverDomain.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/server/\(encoded)/boot-key"))
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, resp) = try await urlSession.gatedData(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 404 { return nil }
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(BootKeyBindingWire.self, from: data)
+    }
+
     public func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws {
         try await sendBoot("DELETE", "/api/boot/lease/\(serverDomain)", body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
     }
@@ -1342,6 +1375,11 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     /// The `serverOrder` `fetchPods` returns.
     public var directoryServerOrder: SignedServerOrderWire?
     public var sealedLuksKeyHex: String?
+    /// What `fetchBootKeyBinding` returns, per lowercased domain.
+    public var bootKeyBindings: [String: BootKeyBindingWire] = [:]
+    public func fetchBootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire? {
+        bootKeyBindings[serverDomain.lowercased()]
+    }
     public private(set) var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String)] = []
     public private(set) var revoked: [(request: LeaseRevokeWire, bootAuth: String)] = []
     public private(set) var postedResponses: [(response: SecretResponseBody, bootAuth: String)] = []
