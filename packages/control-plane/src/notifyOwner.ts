@@ -24,12 +24,14 @@
 
 import { verifySecretRequest, type SecretPurpose, type SecretRequest } from "@flagship/protocol";
 import type {
+  ServerBootKeyStorage,
   SecretMailboxPurpose,
   SecretMailboxStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, equalToken, hexToBytes } from "./hex.js";
+import { currentBootKeyBinding } from "./bootKeys.js";
 import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
@@ -47,6 +49,8 @@ const PURPOSES: ReadonlySet<SecretMailboxPurpose> = new Set<SecretMailboxPurpose
 
 export interface NotifyOwnerDeps {
   servers: ServerStorage;
+  /** Boot key bindings: an unlock request may come from the STK-bound boot key. */
+  serverBootKeys?: ServerBootKeyStorage;
   usernames: UsernameStorage;
   secretMailbox: SecretMailboxStorage;
   /** The shared secret the boot worker sends in `x-boot-notify-secret`.
@@ -141,7 +145,12 @@ export async function handleNotifyOwner(
   // trusted. The posting STK must be the directory-bound STK for this
   // domain, and the signature must verify under it.
   if (!equalHex(r.stkPub, reg.identityPubKeyHex)) {
-    return forbidden("stkPub does not match the registered server");
+    const boot = r.purpose === "unlock-key" && deps.serverBootKeys
+      ? await currentBootKeyBinding({ servers: deps.servers, serverBootKeys: deps.serverBootKeys }, b.serverDomain)
+      : null;
+    if (!boot || !equalHex(r.stkPub, boot.bootKeyPubHex)) {
+      return forbidden("stkPub does not match the registered server");
+    }
   }
   let stkPub: Uint8Array;
   let nonce: Uint8Array;

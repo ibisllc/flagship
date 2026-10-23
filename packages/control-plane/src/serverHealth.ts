@@ -1,5 +1,6 @@
 import { ed } from "@flagship/protocol";
-import type { AuthCodeStorage, ServerHealthStorage, ServerStorage } from "@flagship/storage";
+import type { AuthCodeStorage, ServerBootKeyStorage, ServerHealthStorage, ServerStorage } from "@flagship/storage";
+import { currentBootKeyBinding } from "./bootKeys.js";
 import { HEX128, hexToBytes } from "./hex.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 
@@ -81,6 +82,8 @@ export function parseBoxHealthReport(raw: string): BoxHealthReport | null {
 export interface ServerHealthDeps {
   servers: ServerStorage;
   serverHealth: ServerHealthStorage;
+  /** A box with a boot key signs its health with it (the timer runs outside the daemon and keyd). */
+  serverBootKeys?: ServerBootKeyStorage;
   now?: () => number;
 }
 
@@ -99,9 +102,13 @@ export async function handlePostServerHealth(
   if (server.revokedAt) return forbidden("server revoked");
   // The signature covers the exact report bytes; parse only after it checks out.
   const signed = new TextEncoder().encode(body.report);
-  if (!ed.verify(hexToBytes(body.signature), signed, hexToBytes(server.identityPubKeyHex))) {
-    return forbidden("invalid signature");
+  const sig = hexToBytes(body.signature);
+  let sigOk = ed.verify(sig, signed, hexToBytes(server.identityPubKeyHex));
+  if (!sigOk && deps.serverBootKeys) {
+    const boot = await currentBootKeyBinding({ servers: deps.servers, serverBootKeys: deps.serverBootKeys }, domain);
+    sigOk = boot !== null && ed.verify(sig, signed, hexToBytes(boot.bootKeyPubHex));
   }
+  if (!sigOk) return forbidden("invalid signature");
   const report = parseBoxHealthReport(body.report);
   if (!report) return malformed("malformed health report");
   if (report.domain !== domain) return forbidden("report is for another server");

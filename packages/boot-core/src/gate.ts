@@ -102,7 +102,15 @@ export function signBootRequest(
 }
 
 export type GateResult =
-  | { ok: true; role: GateRole; serverDomain: string; pubKeyHex: string; nonceHex: string }
+  | {
+      ok: true;
+      role: GateRole;
+      serverDomain: string;
+      pubKeyHex: string;
+      nonceHex: string;
+      /** For role "box": whether the STK or the STK-bound boot key signed. */
+      boxKey?: "stk" | "boot-key";
+    }
   | { ok: false; status: number; error: string };
 
 export interface GateDeps {
@@ -132,6 +140,8 @@ export async function gate(
     serverDomain: string;
     method: string;
     path: string;
+    /** Box routes a box uses before its disk is open also accept the boot key. */
+    allowBootKey?: boolean;
   },
   authHeader: string | null,
 ): Promise<GateResult> {
@@ -203,10 +213,20 @@ export async function gate(
   // and cross-account access (box A reaching box B's lease) is impossible
   // because the binding is resolved from serverDomain, not from the
   // caller's claim.
+  let boxKey: "stk" | "boot-key" | undefined;
   if (e.role === "box") {
     const dirStk = await deps.directory.boxStkForDomain(e.serverDomain);
     if (dirStk === null) return deny(404, "unknown server");
-    if (!equalHex(e.pubKeyHex, dirStk)) return deny(403, "box STK not bound to this server");
+    if (equalHex(e.pubKeyHex, dirStk)) {
+      boxKey = "stk";
+    } else {
+      const bootKey =
+        required.allowBootKey && deps.directory.boxBootKeyForDomain
+          ? await deps.directory.boxBootKeyForDomain(e.serverDomain)
+          : null;
+      if (bootKey === null || !equalHex(e.pubKeyHex, bootKey)) return deny(403, "box STK not bound to this server");
+      boxKey = "boot-key";
+    }
   } else if (e.role === "owner") {
     const dirIrk = await deps.directory.ownerIrkForDomain(e.serverDomain);
     if (dirIrk === null) return deny(404, "unknown server");
@@ -253,6 +273,7 @@ export async function gate(
     serverDomain: e.serverDomain,
     pubKeyHex: e.pubKeyHex.toLowerCase(),
     nonceHex: e.nonceHex.toLowerCase(),
+    ...(boxKey ? { boxKey } : {}),
   };
 }
 

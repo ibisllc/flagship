@@ -41,6 +41,7 @@ import {
   type UpdateOrder,
 } from "@flagship/protocol";
 import type {
+  ServerBootKeyStorage,
   BoxSealedLeaseStorage,
   DeviceCapabilityGrantStorage,
   SecretMailboxPurpose,
@@ -50,10 +51,13 @@ import type {
 } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
+import { currentBootKeyBinding } from "./bootKeys.js";
 import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 export interface SecretMailboxDeps {
   servers: ServerStorage;
+  /** Boot key bindings: a lease may be sealed to the STK-bound boot key. */
+  serverBootKeys?: ServerBootKeyStorage;
   usernames: UsernameStorage;
   secretMailbox: SecretMailboxStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
@@ -518,10 +522,16 @@ export async function handlePostBoxSealedLease(
   if (!reg) return notFound("unknown server");
   if (reg.revokedAt) return forbidden("server is revoked");
 
-  // I2 — the pinned recipient MUST be the directory-bound STK. `.com`
-  // cannot accept a lease that seals for some other box.
+  // I2 — the pinned recipient MUST be the directory-bound STK, or the boot
+  // key that STK vouches for. `.com` cannot accept a lease that seals for
+  // some other box.
   if (!equalHex(l.stkPub, reg.identityPubKeyHex)) {
-    return forbidden("stkPub does not match the registered server");
+    const boot = deps.serverBootKeys
+      ? await currentBootKeyBinding({ servers: deps.servers, serverBootKeys: deps.serverBootKeys }, host)
+      : null;
+    if (!boot || !equalHex(l.stkPub, boot.bootKeyPubHex)) {
+      return forbidden("stkPub does not match the registered server");
+    }
   }
 
   const userRec = await deps.usernames.get(reg.username);

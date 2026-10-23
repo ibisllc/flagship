@@ -22,6 +22,7 @@ export * from "./brokerDnsClient.js";
 export * from "./accountDns.js";
 export * from "./dns01.js";
 export * from "./luksKeys.js";
+export * from "./bootKeys.js";
 export * from "./secretMailbox.js";
 export * from "./notifyOwner.js";
 export * from "./rePair.js";

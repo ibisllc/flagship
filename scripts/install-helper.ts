@@ -13,6 +13,14 @@
  *         out-pub   — 32-byte hex
  *         out-pem   — PKCS8 PEM the boot stage feeds to openssl pkeyutl
  *
+ *   gen-boot-key --out-pem <p> --out-pub <p>
+ *       Generate the box boot key (packages/protocol/src/bootKey.ts): the only
+ *       key kept on the unencrypted /boot. PKCS8 PEM for the initramfs, pub hex.
+ *
+ *   sign-boot-key-binding --priv-hex <stk hex> --server-domain <fqdn>
+ *                         --boot-key-pub <hex> --issued-at <ms> > body.json
+ *       The STK-signed binding for PUT /api/server/:host/boot-key.
+ *
  *   pkcs8-from-hex --priv-hex <hex> > out.pem
  *       Stand-alone PKCS8 PEM emission from an existing raw priv hex.
  *
@@ -26,7 +34,9 @@
 
 import { writeFileSync, chmodSync, readFileSync } from "node:fs";
 import {
+  bootKeyBindingToWire,
   ed,
+  signBootKeyBinding,
   mintDevEntitlements,
   opaqueKey,
   sealForEd25519Recipient,
@@ -126,6 +136,31 @@ function genIdentity(argv: string[]): void {
   writeFileSync(outPem, pkcs8PemFromRaw(priv));
   chmodSync(outPem, 0o600);
   console.error(`[install-helper] wrote priv=${outPriv} pub=${outPub} pem=${outPem}`);
+}
+
+function genBootKey(argv: string[]): void {
+  const outPem = arg(argv, "--out-pem");
+  const outPub = arg(argv, "--out-pub");
+  const priv = new Uint8Array(32);
+  crypto.getRandomValues(priv);
+  writeFileSync(outPem, pkcs8PemFromRaw(priv), { mode: 0o600 });
+  chmodSync(outPem, 0o600);
+  writeFileSync(outPub, bytesToHex(ed.getPublicKey(priv)) + "\n", { mode: 0o644 });
+  chmodSync(outPub, 0o644);
+  priv.fill(0);
+  console.error(`[install-helper] wrote boot key pem=${outPem} pub=${outPub}`);
+}
+
+async function signBootKeyBindingCmd(argv: string[]): Promise<void> {
+  const serverDomain = arg(argv, "--server-domain");
+  const bootKeyPub = hexToBytes(arg(argv, "--boot-key-pub"));
+  const issuedAt = parseInt(arg(argv, "--issued-at"), 10);
+  if (!Number.isSafeInteger(issuedAt)) throw new Error("--issued-at must be a number");
+  if (bootKeyPub.length !== 32) throw new Error("--boot-key-pub must be 32 bytes hex");
+  const identity = await identityFor(argv, optArg(argv, "--priv-hex"));
+  const binding = { serverDomain, stkPub: identity.publicKey, bootKeyPub, issuedAt };
+  const sig = signBootKeyBinding(binding, identity);
+  process.stdout.write(JSON.stringify(bootKeyBindingToWire(binding, sig)) + "\n");
 }
 
 function pkcs8FromHex(argv: string[]): void {
@@ -357,6 +392,10 @@ async function main(): Promise<void> {
       return mintWildcardGrant(rest);
     case "gen-identity":
       return genIdentity(rest);
+    case "gen-boot-key":
+      return genBootKey(rest);
+    case "sign-boot-key-binding":
+      return void (await signBootKeyBindingCmd(rest));
     case "pkcs8-from-hex":
       return pkcs8FromHex(rest);
     case "sign-server-register":
@@ -369,7 +408,7 @@ async function main(): Promise<void> {
       return mintEntitlements(rest);
     default:
       console.error(
-        "usage: install-helper <gen-identity|pkcs8-from-hex|sign-server-register|sign-sealed-key|seal-for-bak|mint-entitlements> [args]",
+        "usage: install-helper <gen-identity|gen-boot-key|sign-boot-key-binding|pkcs8-from-hex|sign-server-register|sign-sealed-key|seal-for-bak|mint-entitlements> [args]",
       );
       process.exit(2);
   }

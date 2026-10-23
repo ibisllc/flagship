@@ -126,6 +126,8 @@ import {
   handleGetInstallEvents,
   handleIsoManifest,
   handleGetSealedLuksKey,
+  handleGetBootKey,
+  handlePutBootKey,
   handlePutSealedLuksKey,
   handlePostInstallEvent,
   handlePostProvisionStatus,
@@ -627,6 +629,7 @@ const ROUTE_RE = {
   DNS01_PUBLISH: /^\/api\/dns-01\/publish$/,
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
+  BOOT_KEY: /^\/api\/server\/([^/]+)\/boot-key$/,
   // Phone-as-unlock-endpoint RELAY (docs/security-phone-as-unlock-
   // endpoint.md). The box POSTs an STK-signed SecretRequest to its
   // mailbox; the phone GETs pending + POSTs the sealed reply; the box
@@ -937,6 +940,7 @@ export async function tryBootHost(
     usernames: storage.usernames,
     watchDelegates: storage.watchDelegates,
     serverShares: storage.serverShares,
+    serverBootKeys: storage.serverBootKeys,
   });
   const notify = new InProcessNotifyPipe({
     servers: storage.servers,
@@ -1736,6 +1740,15 @@ export async function tryControlPlane(
       ),
     );
   }
+  if ((method === "PUT" || method === "GET") && (m = path.match(ROUTE_RE.BOOT_KEY))) {
+    const bootKeyDeps = { servers: storage.servers, serverBootKeys: storage.serverBootKeys };
+    const host = decodeURIComponent(m[1]!);
+    return finishPlain(
+      method === "PUT"
+        ? await handlePutBootKey(bootKeyDeps, host, await readJson(request))
+        : await handleGetBootKey(bootKeyDeps, host),
+    );
+  }
   // ── Phone-as-unlock-endpoint RELAY (sealed mailbox + box-sealed lease) ──
   {
     const buildSecretMailboxDeps = () => {
@@ -1745,6 +1758,7 @@ export async function tryControlPlane(
         usernames: storage.usernames,
         secretMailbox: storage.secretMailbox,
         boxSealedLeases: storage.boxSealedLeases,
+        serverBootKeys: storage.serverBootKeys,
         grants: storage.deviceCapabilityGrants,
         ...(forwarder
           ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder, env.CONTROL_APEX) }
@@ -2277,6 +2291,7 @@ export async function tryControlPlane(
             servers: storage.servers,
             usernames: storage.usernames,
             secretMailbox: storage.secretMailbox,
+            serverBootKeys: storage.serverBootKeys,
             ...(env.BOOT_NOTIFY_SECRET ? { notifySharedSecret: env.BOOT_NOTIFY_SECRET } : {}),
             ...(forwarder
               ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder, env.CONTROL_APEX) }
@@ -2805,7 +2820,7 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_HEALTH))) {
     return finish(
       await handlePostServerHealth(
-        { servers: storage.servers, serverHealth: storage.serverHealth },
+        { servers: storage.servers, serverHealth: storage.serverHealth, serverBootKeys: storage.serverBootKeys },
         decodeURIComponent(m[1]!),
         (await readJson(request)) as { report?: unknown; signature?: unknown } | undefined,
       ),

@@ -89,6 +89,7 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0112",
   // Signed community adapter attestations, the adapter index chain, distinct complaint sources.
   "0113",
+  // The key each box keeps on /boot for unlocking, vouched for by its STK.
 ];
 
 export interface SchemaStatusDeps {

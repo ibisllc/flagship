@@ -12,6 +12,7 @@ import type { MeterBatchEntry, MeterBatchResult, MeterCounter, MeterStore } from
 import type { BootSuspensionOrder, BootSuspensionState, SuspensionOutcome } from "@flagship/protocol";
 import type { ServerShareStorage } from "./serverShares.js";
 import type { ServerOrderStorage } from "./serverOrders.js";
+import type { ServerBootKeyStorage } from "./serverBootKeys.js";
 
 /**
  * v1.2 security cascade — account-type discriminator. See
@@ -1905,6 +1906,7 @@ export interface Storage {
   serverShares: ServerShareStorage;
   /** The owner's server order (docs/server-order.md). */
   serverOrders: ServerOrderStorage;
+  serverBootKeys: ServerBootKeyStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
