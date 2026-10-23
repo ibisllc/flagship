@@ -201,3 +201,20 @@ describe("RevocationCache", () => {
     expect(second!.size).toBe(2);
   });
 });
+
+describe("RevocationCache when .com is unreachable", () => {
+  it("answers null (fail-open) instead of rejecting into the HELLO handler", async () => {
+    const irk = makeKey();
+    const throwing = (async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    const notJson = (async () =>
+      ({ ok: true, status: 200, json: async () => { throw new SyntaxError("bad json"); } }) as unknown as Response) as unknown as typeof fetch;
+    const weird = (async () =>
+      ({ ok: true, status: 200, json: async () => ({ username: USER, certIds: "nope", issuedAt: 1, signature: "00" }) }) as unknown as Response) as unknown as typeof fetch;
+    for (const fetchImpl of [throwing, notJson, weird]) {
+      const cache = new RevocationCache({ controlPlaneBaseUrl: "https://com.example", irkLookup: async () => irk.publicKey, fetchImpl });
+      await expect(cache.lookup(USER)).resolves.toBeNull();
+    }
+  });
+});

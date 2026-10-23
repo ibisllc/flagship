@@ -2,8 +2,12 @@ import type { IncomingMessage, Server as HttpServer } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import {
+  CAPABILITY_DRAIN_V1,
   CAPABILITY_OUTBOUND_V1,
   decodeFrame,
+  drainNoticeFrame,
+  FRAME_HEADER_BYTES,
+  MAX_FRAME_PAYLOAD,
   domainGrantedFrame,
   encodeFrame,
   FRAME_CLOSE,
@@ -46,9 +50,27 @@ import {
   type TunnelHelloV2,
 } from "@flagship/protocol";
 import type { RegisteredTunnel, StreamCallbacks, TunnelRegistry } from "./registry.js";
-import { SourcePauser } from "./throttle.js";
+import { PauseReasons, SourcePauser } from "./throttle.js";
 
 const TUNNEL_PATH = "/tunnel";
+
+/**
+ * Largest WebSocket message the hub accepts. A box sends one frame per message and a frame
+ * carries at most MAX_FRAME_PAYLOAD (1 MiB), so 2 MiB fits the largest frame plus room for a
+ * peer that coalesces small frames with it; `ws` would otherwise buffer up to 100 MiB.
+ */
+export const HUB_MAX_WS_MESSAGE = 2 * MAX_FRAME_PAYLOAD;
+/** Received bytes waiting to be decoded (a HELLO's `.com` lookups are in flight) before the
+ *  hub stops reading the tunnel. */
+export const MAX_PENDING_DECODE_BYTES = 4 * MAX_FRAME_PAYLOAD;
+/** Bytes queued toward a box above which visitors' uploads are paused, and the level they
+ *  resume at. Above the socket's own buffering so uploads stream at line rate. */
+export const BOX_QUEUE_HIGH_BYTES = MAX_FRAME_PAYLOAD;
+export const BOX_QUEUE_LOW_BYTES = 256 * 1024;
+/** After the drain grace, how long closing tunnels get before they are terminated. */
+const DRAIN_CLOSE_TIMEOUT_MS = 2_000;
+/** Most capability strings read from a HELLO. */
+const MAX_OFFERED_CAPABILITIES = 16;
 
 /**
  * Source of the current relay blessing + nonce-signer
@@ -185,16 +207,40 @@ export interface TunnelHubOptions {
   now?: () => number;
 }
 
+/** The running hub: call it to stop, or `drain` it before a shutdown. */
+export interface TunnelHubHandle {
+  (): Promise<void>;
+  /**
+   * Stop accepting tunnels, send DRAIN_NOTICE to every box that negotiated `drain-v1`, keep
+   * serving for `graceMs` (or until every tunnel has gone), then close what is left.
+   */
+  drain(graceMs: number): Promise<void>;
+  /** Tunnels currently attached (registered or not). */
+  connectionCount(): number;
+}
+
+interface HubConnection {
+  notifyDrain(graceMs: number): void;
+  close(code: number, reason: string): void;
+  terminate(): void;
+  closed: Promise<void>;
+}
+
+interface HubState {
+  connections: Set<HubConnection>;
+  draining: boolean;
+}
+
 /**
  * Mounts the tunnel WebSocket endpoint at /tunnel on the given HTTP server.
- * Returns a close function for graceful shutdown.
+ * Returns a close function for graceful shutdown, which also carries `drain`.
  */
 export function startTunnelHub(
   httpServer: HttpServer,
   registry: TunnelRegistry,
   opts: TunnelHubOptions = {},
-): () => Promise<void> {
-  const wss = new WebSocketServer({ noServer: true });
+): TunnelHubHandle {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: HUB_MAX_WS_MESSAGE });
   if (!opts.irkLookup && opts.surface === "services") {
     // Production data plane MUST verify entitlement-IRK signatures.
     // Without irkLookup the entitlement-cert check is skipped entirely,
@@ -216,58 +262,122 @@ export function startTunnelHub(
     );
   }
 
+  const hub: HubState = { connections: new Set(), draining: false };
   const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
     if (req.url !== TUNNEL_PATH) return;
-    wss.handleUpgrade(req, socket, head, (ws) => attachTunnel(ws, registry, opts));
+    if (hub.draining) {
+      // The box's reconnect should land on another machine, not on one about to exit.
+      socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => attachTunnel(ws, registry, opts, hub));
   };
   httpServer.on("upgrade", onUpgrade);
 
-  return async () => {
+  let drainDone: Promise<void> | null = null;
+  const allClosed = () => Promise.all([...hub.connections].map((c) => c.closed)).then(() => undefined);
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const drain = (graceMs: number): Promise<void> => {
+    if (drainDone) return drainDone;
+    hub.draining = true;
+    drainDone = (async () => {
+      for (const c of hub.connections) c.notifyDrain(graceMs);
+      await Promise.race([allClosed(), sleep(graceMs)]);
+      for (const c of hub.connections) c.close(1012, "relay restarting");
+      await Promise.race([allClosed(), sleep(DRAIN_CLOSE_TIMEOUT_MS)]);
+      for (const c of hub.connections) c.terminate();
+    })();
+    return drainDone;
+  };
+
+  const stop = async () => {
     httpServer.off("upgrade", onUpgrade);
     await new Promise<void>((resolve) => wss.close(() => resolve()));
   };
+  return Object.assign(stop, { drain, connectionCount: () => hub.connections.size });
 }
 
 function attachTunnel(
   ws: WsSocket,
   registry: TunnelRegistry,
   opts: TunnelHubOptions,
+  hub: HubState,
 ): void {
   let registered: RegisteredTunnel | null = null;
   let outbound: OutboundSession | null = null;
-  const caps = [
-    ...(opts.outboundRelay ? [CAPABILITY_OUTBOUND_V1] : []),
-    ...(opts.mailboxes ? [CAPABILITY_PB_MAIL_V1] : []),
-  ];
-  const capabilities = caps.length > 0 ? caps : undefined;
+  let boxOffersDrain = false;
+  const ackCapabilities = (): string[] | undefined => {
+    const caps = [
+      ...(opts.outboundRelay ? [CAPABILITY_OUTBOUND_V1] : []),
+      ...(opts.mailboxes ? [CAPABILITY_PB_MAIL_V1] : []),
+      ...(boxOffersDrain ? [CAPABILITY_DRAIN_V1] : []),
+    ];
+    return caps.length > 0 ? caps : undefined;
+  };
   const mailOwner = {};
   const mailWaiting = new Map<
     number,
     { asm: MailAssembler; resolve: (r: { status: number; body: Uint8Array }) => void; timer: ReturnType<typeof setTimeout> }
   >();
   let lastHelloIssuedAt = 0;
-  // Hub-opened stream ids stay below the box's outbound space.
+  const streams = new Map<number, StreamCallbacks>();
+  // Hub-opened stream ids stay below the box's outbound space, and a wrapped counter skips
+  // ids still in use.
   let nextStream = 1;
   const takeStreamId = (): number => {
-    const id = nextStream;
-    nextStream = nextStream >= OUTBOUND_STREAM_ID_BASE - 1 ? 1 : nextStream + 1;
-    return id;
+    for (;;) {
+      const id = nextStream;
+      nextStream = nextStream >= OUTBOUND_STREAM_ID_BASE - 1 ? 1 : nextStream + 1;
+      if (!streams.has(id) && !mailWaiting.has(id)) return id;
+    }
   };
-  const streams = new Map<number, StreamCallbacks>();
-  let buffered: Uint8Array = new Uint8Array(0);
   const now = opts.now ?? (() => Date.now());
   const maxHelloAgeMs = opts.maxHelloAgeMs ?? 5 * 60_000;
   const idleCloseMs = opts.idleCloseMs ?? 60_000;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let closed = false;
 
+  // Bytes handed to `ws` and not yet written to its socket; visitors waiting for room.
+  let queuedToBox = 0;
+  let writableWaiters: Array<() => void> = [];
   const send = (frame: Frame) => {
-    if (ws.readyState === ws.OPEN) ws.send(encodeFrame(frame), { binary: true });
+    if (ws.readyState !== ws.OPEN) return;
+    const bytes = encodeFrame(frame);
+    queuedToBox += bytes.byteLength;
+    ws.send(bytes, { binary: true }, () => {
+      queuedToBox -= bytes.byteLength;
+      if (queuedToBox <= BOX_QUEUE_LOW_BYTES && writableWaiters.length > 0) {
+        const waiters = writableWaiters;
+        writableWaiters = [];
+        for (const w of waiters) w();
+      }
+    });
+  };
+  const whenBoxWritable = (onWritable: () => void): boolean => {
+    if (queuedToBox <= BOX_QUEUE_HIGH_BYTES) return true;
+    writableWaiters.push(onWritable);
+    return false;
+  };
+
+  // Reading from the box stops for flow control (`holds`: throttle, slow visitors), which
+  // also stops frame processing, or because too many bytes wait to be decoded, which only
+  // stops reading.
+  let backlogPaused = false;
+  const holds = new PauseReasons(
+    () => syncReading(),
+    () => {
+      syncReading();
+      void pump();
+    },
+  );
+  const syncReading = () => {
+    if (closed || ws.readyState !== ws.OPEN) return;
+    if (holds.held || backlogPaused) ws.pause();
+    else ws.resume();
   };
   const inbound = new SourcePauser(
-    () => ws.pause(),
-    () => {
-      if (ws.readyState === ws.OPEN) ws.resume();
-    },
+    () => holds.hold("throttle"),
+    () => holds.release("throttle"),
     now,
   );
 
@@ -304,35 +414,82 @@ function attachTunnel(
     }
   };
 
+  let resolveClosed!: () => void;
+  const connection: HubConnection = {
+    notifyDrain(graceMs) {
+      if (boxOffersDrain && registered) send(drainNoticeFrame(graceMs));
+    },
+    close(code, reason) {
+      if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) ws.close(code, reason);
+    },
+    terminate() {
+      ws.terminate();
+    },
+    closed: new Promise<void>((r) => {
+      resolveClosed = r;
+    }),
+  };
+  hub.connections.add(connection);
+
+  const pending = new ByteQueue();
   ws.on("message", (raw: Buffer) => {
-    const view = new Uint8Array(raw.byteLength);
-    view.set(raw);
-    buffered = concat(buffered, view);
-    void drain();
+    if (closed) return;
+    pending.push(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength));
+    if (pending.length > MAX_PENDING_DECODE_BYTES && !backlogPaused) {
+      backlogPaused = true;
+      syncReading();
+    }
+    void pump();
   });
 
-  let draining = false;
-  async function drain() {
-    if (draining) return;
-    draining = true;
+  /** Next whole frame, "wait" for more bytes, or a decode refusal. */
+  const nextFrame = (): Frame | "wait" | { error: string } => {
+    if (pending.length < FRAME_HEADER_BYTES) return "wait";
+    const head = decodeFrame(pending.peek(FRAME_HEADER_BYTES));
+    if (head.kind === "error") return { error: head.reason };
+    const total = head.kind === "ok" ? head.consumed : head.needAtLeast;
+    if (pending.length < total) return "wait";
+    const r = decodeFrame(pending.peek(total));
+    if (r.kind !== "ok") return { error: r.kind === "error" ? r.reason : "frame decode error" };
+    pending.consume(r.consumed);
+    return r.frame;
+  };
+
+  let pumping = false;
+  async function pump(): Promise<void> {
+    if (pumping) return;
+    pumping = true;
     try {
-      while (true) {
-        const r = decodeFrame(buffered);
-        if (r.kind === "incomplete") return;
-        if (r.kind === "error") {
-          send(helloAckFrame(false, r.reason));
+      while (!closed && !holds.held) {
+        const f = nextFrame();
+        if (f === "wait") break;
+        if ("error" in f) {
+          send(helloAckFrame(false, f.error));
           ws.close(1002, "frame decode error");
           return;
         }
-        buffered = buffered.subarray(r.consumed);
-        await handleFrame(r.frame);
+        await handleFrame(f);
       }
+    } catch (e) {
+      // A bug or a hostile payload in one tunnel's handler closes that tunnel, never the
+      // process every other tunnel lives in.
+      console.warn(
+        `[flagship tunnel hub] frame handler failed, closing tunnel${registered ? ` ${registered.podCanonical}` : ""}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      ws.close(1011, "internal error");
     } finally {
-      draining = false;
+      pumping = false;
+      if (backlogPaused && pending.length <= MAX_PENDING_DECODE_BYTES) {
+        backlogPaused = false;
+        syncReading();
+      }
     }
   }
 
   ws.on("close", () => {
+    closed = true;
+    hub.connections.delete(connection);
+    resolveClosed();
     cancelIdleClose();
     opts.mailboxes?.drop(mailOwner);
     for (const w of mailWaiting.values()) {
@@ -341,14 +498,19 @@ function attachTunnel(
     }
     mailWaiting.clear();
     inbound.dispose();
+    const waiters = writableWaiters;
+    writableWaiters = [];
+    for (const w of waiters) w();
     if (registered) {
-      const result = registry.unregister(registered.podCanonical);
+      // Only this socket's own registration: after a reconnect the box's new tunnel holds
+      // the name, and this late close must leave it alone.
+      const result = registry.unregister(registered.podCanonical, registered);
       // Re-broadcast snapshots to every set affected by the removal.
       for (const key of result.affectedSets) {
         broadcastSnapshot(registry, key);
       }
     }
-    for (const cb of streams.values()) cb.onRemoteClose();
+    for (const cb of [...streams.values()]) cb.onRemoteClose();
     streams.clear();
     outbound?.close();
     outbound = null;
@@ -370,6 +532,7 @@ function attachTunnel(
         return;
       }
       const auth = await authenticateHello(helloOk, opts, now, maxHelloAgeMs);
+      if (closed) return;
       if (!auth.ok) {
         send(helloAckFrame(false, auth.reason));
         ws.close(auth.closeCode, "auth failed");
@@ -380,6 +543,8 @@ function attachTunnel(
       // is rejected by `authenticateHello` first, so this never adjudicates
       // an unverified box. Fail-OPEN on a `.com` outage (see checkEvicted).
       const evicted = await checkEvicted(helloOk, opts);
+      // A socket that closed while `.com` answered must not register a dead tunnel.
+      if (closed) return;
       if (evicted) {
         send(helloAckFrame(false, "replaced"));
         ws.close(1008, "replaced");
@@ -397,6 +562,7 @@ function attachTunnel(
         ws.close(1008, "claim rejected");
         return;
       }
+      boxOffersDrain = helloOk.capabilities.includes(CAPABILITY_DRAIN_V1);
       const canonicals = built.canonicals;
       const tunnel: RegisteredTunnel = {
         podCanonical: helloOk.rootEntitlement.podCanonical.toLowerCase(),
@@ -405,12 +571,16 @@ function attachTunnel(
         detachStream: (id) => streams.delete(id),
         nextStreamId: takeStreamId,
         holdInbound: (ms) => inbound.hold(ms),
+        pauseInbound: (key) => holds.hold(key),
+        resumeInbound: (key) => holds.release(key),
+        whenBoxWritable,
       };
       const reg = registry.register({ tunnel, canonicals });
       registered = tunnel;
       outbound = opts.outboundRelay?.session(tunnel.podCanonical, send) ?? null;
       lastHelloIssuedAt = helloOk.issuedAt;
-      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce), capabilities));
+      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce), ackCapabilities()));
+      if (hub.draining && boxOffersDrain) send(drainNoticeFrame(0));
       // Broadcast a fresh snapshot to every affected set so all
       // currently-connected pods learn about the new arrival.
       for (const key of reg.affectedSets) broadcastSnapshot(registry, key);
@@ -440,6 +610,7 @@ function attachTunnel(
         return;
       }
       const auth = await authenticateHello(helloOk, opts, now, maxHelloAgeMs);
+      if (closed) return;
       if (!auth.ok) {
         send(helloAckFrame(false, auth.reason));
         return;
@@ -448,9 +619,15 @@ function attachTunnel(
       // self-retires on its next HELLO. Same after-verification ordering +
       // fail-open contract as the initial accept path.
       const evicted = await checkEvicted(helloOk, opts);
+      if (closed) return;
       if (evicted) {
         send(helloAckFrame(false, "replaced"));
         ws.close(1008, "replaced");
+        return;
+      }
+      if (!registry.isCurrent(registered)) {
+        // A newer tunnel of this box holds the name; a refresh here must not take it back.
+        send(helloAckFrame(false, "tunnel superseded by a newer connection"));
         return;
       }
       const built = buildClaimedCanonicals(
@@ -467,7 +644,7 @@ function attachTunnel(
       const canonicals = built.canonicals;
       const reg = registry.register({ tunnel: registered, canonicals });
       lastHelloIssuedAt = helloOk.issuedAt;
-      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce), capabilities));
+      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce), ackCapabilities()));
       for (const key of reg.affectedSets) broadcastSnapshot(registry, key);
       if (canonicals.length === 0) armIdleClose();
       else cancelIdleClose();
@@ -475,16 +652,19 @@ function attachTunnel(
     }
 
     if (f.type === FRAME_REQUEST_TRANSFER) {
-      let body: { fqdn?: unknown };
+      let body: unknown;
       try {
         body = JSON.parse(new TextDecoder().decode(f.payload));
       } catch {
         return;
       }
-      if (typeof body.fqdn !== "string") return;
+      // Valid JSON is not an object: `null`, a number or an array would throw on `.fqdn`.
+      if (typeof body !== "object" || body === null || Array.isArray(body)) return;
+      const fqdn = (body as { fqdn?: unknown }).fqdn;
+      if (typeof fqdn !== "string" || fqdn.length === 0 || fqdn.length > 253) return;
       const r = registry.requestTransfer({
         podCanonical: registered.podCanonical,
-        fqdn: body.fqdn,
+        fqdn,
       });
       if (r.ok) {
         broadcastSnapshot(registry, r.affectedSet);
@@ -572,6 +752,9 @@ interface ParsedHelloV2 {
    * SNI allowlist.
    */
   appGrants: ParsedAppGrant[];
+  /** Extensions the box offers (`drain-v1`). Outside the signed envelope: it can only turn
+   *  on features both ends implement. */
+  capabilities: string[];
 }
 
 interface ParsedAppGrant {
@@ -679,6 +862,11 @@ function parseHello(payload: Uint8Array): HelloParse {
     issuedAt: o.issuedAt,
     signature: hexToBytes(o.signature),
     appGrants,
+    capabilities: Array.isArray(o.capabilities)
+      ? o.capabilities
+          .slice(0, MAX_OFFERED_CAPABILITIES)
+          .filter((c): c is string => typeof c === "string" && c.length <= 64)
+      : [],
   };
 }
 
@@ -1148,15 +1336,60 @@ function bytesToHex(b: Uint8Array): string {
   for (let i = 0; i < b.length; i++) s += b[i]!.toString(16).padStart(2, "0");
   return s;
 }
-function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a, 0);
-  out.set(b, a.length);
-  return out;
-}
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= (a[i]! ^ b[i]!);
   return diff === 0;
+}
+
+/**
+ * Received bytes as a list of chunks: a frame split over many WebSocket messages is joined
+ * once when whole, instead of re-copying the whole buffer on every message.
+ */
+class ByteQueue {
+  private chunks: Uint8Array[] = [];
+  length = 0;
+
+  push(b: Uint8Array): void {
+    if (b.byteLength === 0) return;
+    this.chunks.push(b);
+    this.length += b.byteLength;
+  }
+
+  /** The first `n` bytes (n <= length) as one contiguous view. */
+  peek(n: number): Uint8Array {
+    const first = this.chunks[0]!;
+    if (first.byteLength >= n) return first;
+    const out = new Uint8Array(n);
+    let off = 0;
+    let used = 0;
+    while (off < n) {
+      const c = this.chunks[used]!;
+      const take = Math.min(c.byteLength, n - off);
+      out.set(take === c.byteLength ? c : c.subarray(0, take), off);
+      off += take;
+      if (take < c.byteLength) {
+        this.chunks[used] = c.subarray(take);
+        break;
+      }
+      used += 1;
+    }
+    this.chunks.splice(0, used, out);
+    return out;
+  }
+
+  consume(n: number): void {
+    this.length -= n;
+    while (n > 0) {
+      const c = this.chunks[0]!;
+      if (c.byteLength <= n) {
+        n -= c.byteLength;
+        this.chunks.shift();
+      } else {
+        this.chunks[0] = c.subarray(n);
+        n = 0;
+      }
+    }
+  }
 }

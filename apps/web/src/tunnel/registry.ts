@@ -22,6 +22,13 @@ export interface RegisteredTunnel {
    *  without the relay buffering them. Every stream on one tunnel belongs to
    *  the same account. Optional: test doubles may omit it. */
   holdInbound?(ms: number): void;
+  /** Stop reading frames from the box until every `key` that paused it resumes (a slow
+   *  visitor holds the tunnel this way). Optional: test doubles may omit it. */
+  pauseInbound?(key: string): void;
+  resumeInbound?(key: string): void;
+  /** True when the box's socket can take more now. Otherwise false, and `onWritable`
+   *  runs once the bytes queued toward the box fall back to the low-water mark. */
+  whenBoxWritable?(onWritable: () => void): boolean;
 }
 
 /**
@@ -113,8 +120,17 @@ export class TunnelRegistry {
     return this.allocator.requestTransfer(args);
   }
 
-  unregister(podCanonical: string): { affectedSets: AppUserSetKey[]; redistributed: ReturnType<AppUserAllocator["removePod"]>["redistributed"] } {
+  /**
+   * Socket close → redistribute orphans. With `tunnel`, only if that tunnel still holds the
+   * registration: a box that reconnected has already replaced it, and the old socket's late
+   * close must not unroute the new one.
+   */
+  unregister(
+    podCanonical: string,
+    tunnel?: RegisteredTunnel,
+  ): { affectedSets: AppUserSetKey[]; redistributed: ReturnType<AppUserAllocator["removePod"]>["redistributed"] } {
     const pc = podCanonical.toLowerCase();
+    if (tunnel && this.tunnels.get(pc) !== tunnel) return { affectedSets: [], redistributed: [] };
     this.tunnels.delete(pc);
     const r = this.allocator.removePod(pc);
     return { affectedSets: r.affectedSets, redistributed: r.redistributed };
@@ -300,6 +316,11 @@ export class TunnelRegistry {
     if (!user) return false;
     if (this.knownBoxCanonicals.has(lower)) return false;
     return this.hasOnlineTunnelsForUser(user);
+  }
+
+  /** Whether `tunnel` is the one currently registered under its pod canonical. */
+  isCurrent(tunnel: RegisteredTunnel): boolean {
+    return this.tunnels.get(tunnel.podCanonical.toLowerCase()) === tunnel;
   }
 
   size(): number {

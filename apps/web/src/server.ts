@@ -66,7 +66,8 @@ import { routerStats } from "./tunnel/routerStats.js";
 import { startAddressEcho, type RunningAddressEcho } from "./lib/addressEcho.js";
 import { UsageMeter } from "./tunnel/usageMeter.js";
 import { overQuotaBytesPerSec } from "./tunnel/throttle.js";
-import { startTunnelHub } from "./tunnel/tunnelHub.js";
+import { startTunnelHub, type TunnelHubHandle } from "./tunnel/tunnelHub.js";
+import { DEFAULT_DRAIN_GRACE_MS, drainOnSignal } from "./tunnel/drainOnSignal.js";
 import { OutboundRelay } from "./tunnel/outboundRelay.js";
 import { ComHostPolicy, KnownHostsPolicy } from "./tunnel/outboundHostPolicy.js";
 import { MailboxRegistry } from "./tunnel/mailboxRelay.js";
@@ -92,7 +93,9 @@ export interface ServerHandle {
   registry: TunnelRegistry;
   serverRegistry: ServerRegistry;
   router: RunningSniRouter | null;
-  stopHub: () => Promise<void>;
+  stopHub: TunnelHubHandle;
+  /** Tell drain-v1 boxes to move, serve the rest for `graceMs`, then close every tunnel. */
+  drain(graceMs: number): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -546,6 +549,7 @@ export async function start(opts: {
     serverRegistry,
     router,
     stopHub,
+    drain: (graceMs: number) => stopHub.drain(graceMs),
     async close() {
       meter?.stop();
       blessingProvider?.stop();
@@ -563,7 +567,12 @@ if (invokedDirectly) {
     ? Number(process.env.TUNNEL_TCP_PORT)
     : undefined;
   const relayEchoPort = process.env.RELAY_ECHO_PORT ? Number(process.env.RELAY_ECHO_PORT) : undefined;
-  start({ tunnelTcpPort, relayEchoPort }).catch((e) => {
+  const graceEnv = Number(process.env.FLAGSHIP_DRAIN_GRACE_MS);
+  start({ tunnelTcpPort, relayEchoPort }).then((running) => {
+    drainOnSignal(running, {
+      graceMs: Number.isFinite(graceEnv) && graceEnv >= 0 ? graceEnv : DEFAULT_DRAIN_GRACE_MS,
+    });
+  }).catch((e) => {
     console.error(e);
     process.exit(1);
   });
