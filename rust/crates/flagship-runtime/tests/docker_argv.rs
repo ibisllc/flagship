@@ -468,3 +468,14 @@ fn containerd_says_unsupported() {
     let c = flagship_runtime::containerd::Containerd;
     assert!(matches!(c.list(), Err(RuntimeError::Unsupported(_))));
 }
+
+#[test]
+#[ignore = "needs Linux with Docker and gVisor registered"]
+fn linux_docker_reports_gvisor_and_lists_only_platform_workloads() {
+    let cli = OciCli::new(Engine::Docker, flagship_runtime::SystemExecutor);
+    let caps = cli.inspect_capabilities().unwrap();
+    assert!(caps.runsc, "runsc must be registered before any app starts");
+    for w in cli.list().unwrap() {
+        assert!(w.name.as_str().starts_with("flagship-"));
+    }
+}
