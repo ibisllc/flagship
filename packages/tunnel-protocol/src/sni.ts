@@ -1,17 +1,40 @@
 /**
  * Parse the SNI hostname out of a TLS ClientHello buffer.
  *
- * Handles bounds checking everywhere; never reads past `buf.length`.
+ * Handles bounds checking everywhere; never reads past `buf.length`. A ClientHello may be
+ * split across several handshake records (RFC 8446 §5.1); this reassembles it within
+ * `limits`. On a hello that fits one record the result is what the single-record parser
+ * always returned.
  *
  * Returns:
  *   { kind: "ok", sni: string | null }   — sni is null if the client sent no SNI extension
- *   { kind: "incomplete", needAtLeast }  — caller should buffer more bytes and retry
- *   { kind: "error", reason }            — buffer is not a TLS ClientHello
+ *   { kind: "incomplete", needAtLeast }  — buffer at least this many bytes, then retry
+ *   { kind: "error", reason }            — not a ClientHello, or one past the limits
  */
 export type SniParseResult =
   | { kind: "ok"; sni: string | null }
   | { kind: "incomplete"; needAtLeast: number }
   | { kind: "error"; reason: string };
+
+export interface SniLimits {
+  /** Raw bytes, record headers included, the whole hello must arrive within. */
+  maxRawBytes: number;
+  /** Largest ClientHello body (the handshake message's own length field). */
+  maxHelloBytes: number;
+  /** Most TLS records the hello may span. */
+  maxRecords: number;
+}
+
+/**
+ * A post-quantum hello is about 1.5 KB; padded or extension-heavy ones stay well under 20 KB.
+ * 32 KiB raw leaves room for two full 16 KiB records, and 512 records lets a hello arrive in
+ * 32-byte records without letting a one-byte-record sender cost much.
+ */
+export const DEFAULT_SNI_LIMITS: SniLimits = {
+  maxRawBytes: 32 * 1024,
+  maxHelloBytes: 24 * 1024,
+  maxRecords: 512,
+};
 
 const TLS_RECORD_HANDSHAKE = 0x16;
 const TLS_HANDSHAKE_CLIENT_HELLO = 0x01;
@@ -20,43 +43,92 @@ const NAME_TYPE_HOST = 0x00;
 
 const TLS_RECORD_HEADER = 5; // type(1) + version(2) + length(2)
 const HANDSHAKE_HEADER = 4;  // msg_type(1) + length(3)
+/** RFC 8446 caps a record at 2^14 + 256 bytes. */
+const MAX_RECORD_LEN = 16_640;
 
-export function parseClientHelloSni(buf: Uint8Array): SniParseResult {
-  // TLS record layer
-  if (buf.length < TLS_RECORD_HEADER) {
-    return { kind: "incomplete", needAtLeast: TLS_RECORD_HEADER };
-  }
-  if (buf[0] !== TLS_RECORD_HANDSHAKE) {
-    return { kind: "error", reason: "not a TLS handshake record" };
-  }
-  // skip version (buf[1..3])
-  const recordLen = (buf[3]! << 8) | buf[4]!;
-  if (recordLen < HANDSHAKE_HEADER) {
-    return { kind: "error", reason: "record too small for handshake header" };
-  }
-  if (recordLen > 16_640) {
-    // RFC 8446 caps record length at 2^14 + 256 for TLS 1.3.
-    return { kind: "error", reason: "record length exceeds TLS maximum" };
-  }
-  const recordEnd = TLS_RECORD_HEADER + recordLen;
-  if (buf.length < recordEnd) {
-    return { kind: "incomplete", needAtLeast: recordEnd };
-  }
+export function parseClientHelloSni(
+  buf: Uint8Array,
+  limits: SniLimits = DEFAULT_SNI_LIMITS,
+): SniParseResult {
+  const fragments: Uint8Array[] = [];
+  let have = 0;
+  let pos = 0;
+  let records = 0;
+  let helloLen = -1;
+  for (;;) {
+    const recordStart = pos + TLS_RECORD_HEADER;
+    if (buf.length < recordStart) return need(recordStart, limits);
+    if (buf[pos] !== TLS_RECORD_HANDSHAKE) {
+      return { kind: "error", reason: "not a TLS handshake record" };
+    }
+    // skip version (buf[pos+1..pos+3])
+    const recordLen = (buf[pos + 3]! << 8) | buf[pos + 4]!;
+    if (recordLen === 0) {
+      return {
+        kind: "error",
+        reason: records === 0 ? "record too small for handshake header" : "empty handshake record",
+      };
+    }
+    if (recordLen > MAX_RECORD_LEN) {
+      return { kind: "error", reason: "record length exceeds TLS maximum" };
+    }
+    const recordEnd = recordStart + recordLen;
+    if (buf.length < recordEnd) return need(recordEnd, limits);
+    if (records >= limits.maxRecords) {
+      return { kind: "error", reason: "ClientHello spans too many records" };
+    }
+    records += 1;
+    fragments.push(buf.subarray(recordStart, recordEnd));
+    have += recordLen;
+    pos = recordEnd;
 
-  // Handshake message
-  let p = TLS_RECORD_HEADER;
-  if (buf[p] !== TLS_HANDSHAKE_CLIENT_HELLO) {
-    return { kind: "error", reason: "handshake is not ClientHello" };
+    const first = fragments[0]!;
+    if (first[0] !== TLS_HANDSHAKE_CLIENT_HELLO) {
+      return { kind: "error", reason: "handshake is not ClientHello" };
+    }
+    if (helloLen < 0 && have >= HANDSHAKE_HEADER) {
+      const head = joinPrefix(fragments, HANDSHAKE_HEADER);
+      helloLen = (head[1]! << 16) | (head[2]! << 8) | head[3]!;
+      if (helloLen > limits.maxHelloBytes) {
+        return { kind: "error", reason: "ClientHello exceeds the size limit" };
+      }
+    }
+    if (helloLen >= 0 && have >= HANDSHAKE_HEADER + helloLen) {
+      const message = fragments.length === 1 ? first : joinPrefix(fragments, HANDSHAKE_HEADER + helloLen);
+      return parseClientHelloBody(message.subarray(HANDSHAKE_HEADER, HANDSHAKE_HEADER + helloLen));
+    }
+    if (helloLen >= 0) {
+      // The rest needs at least one more record header on top of its own bytes.
+      const missing = HANDSHAKE_HEADER + helloLen - have;
+      if (pos + TLS_RECORD_HEADER + missing > limits.maxRawBytes) {
+        return { kind: "error", reason: "ClientHello exceeds the peek limit" };
+      }
+    }
   }
-  const handshakeLen = (buf[p + 1]! << 16) | (buf[p + 2]! << 8) | buf[p + 3]!;
-  p += HANDSHAKE_HEADER;
-  const handshakeEnd = p + handshakeLen;
-  if (handshakeEnd > recordEnd) {
-    return { kind: "error", reason: "handshake length exceeds record" };
-  }
+}
 
-  // ClientHello body
-  if (handshakeLen < 34) return { kind: "error", reason: "ClientHello too short" };
+function need(n: number, limits: SniLimits): SniParseResult {
+  if (n > limits.maxRawBytes) return { kind: "error", reason: "ClientHello exceeds the peek limit" };
+  return { kind: "incomplete", needAtLeast: n };
+}
+
+function joinPrefix(parts: Uint8Array[], n: number): Uint8Array {
+  const out = new Uint8Array(n);
+  let off = 0;
+  for (const p of parts) {
+    if (off >= n) break;
+    const take = Math.min(p.length, n - off);
+    out.set(p.subarray(0, take), off);
+    off += take;
+  }
+  return out;
+}
+
+/** Walk a ClientHello body (after the 4-byte handshake header). */
+function parseClientHelloBody(buf: Uint8Array): SniParseResult {
+  const handshakeEnd = buf.length;
+  if (handshakeEnd < 34) return { kind: "error", reason: "ClientHello too short" };
+  let p = 0;
   p += 2; // client_version
   p += 32; // random
 
