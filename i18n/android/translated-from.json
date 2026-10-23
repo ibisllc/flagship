@@ -2620,5 +2620,8 @@
   "key_settings": "02e7a0e51723",
   "hide_key_settings": "a3aa78d1e0fb",
   "options_for": "b3254c5756d0",
-  "none_of_your_servers_runs_this_app_yet": "8cce5d1921c1"
+  "none_of_your_servers_runs_this_app_yet": "8cce5d1921c1",
+  "locked_it_cant_unlock_itself_until": "60c1639568a0",
+  "remote_lock_pending_it_will_be": "8abf4c0351a1",
+  "it_shut_down_instead_of_restarting": "669ca2c36001"
 }

@@ -2665,5 +2665,8 @@
   "key_settings": "密钥设置",
   "hide_key_settings": "隐藏密钥设置",
   "options_for": "%1$s 的选项",
-  "none_of_your_servers_runs_this_app_yet": "你的服务器还都没有运行此应用"
+  "none_of_your_servers_runs_this_app_yet": "你的服务器还都没有运行此应用",
+  "locked_it_cant_unlock_itself_until": "已锁定：在你恢复之前，它无法自行解锁",
+  "remote_lock_pending_it_will_be": "远程锁定待处理：将会重试",
+  "it_shut_down_instead_of_restarting": "（由于无法确认锁定，它已关机而不是重启）"
 }
