@@ -25,8 +25,8 @@ public struct NameDibsScreen: View {
                 case .loading, .working:
                     ProgressView().frame(maxWidth: .infinity)
                 case .closed(let opensAt):
-                    Text(opensAt.map { "The dibs window opens on \(Self.date($0))." }
-                         ?? "The dibs window isn't open, so no names are held for .com holders — any free name can be bought as an ordinary name change.")
+                    Text(opensAt.map { String(localized: "The dibs window opens on \(Self.date($0)).") }
+                         ?? String(localized: "The dibs window isn't open, so no names are held for .com holders — any free name can be bought as an ordinary name change."))
                         .font(FS.font.body()).foregroundColor(c.textMuted)
                 case .enterName(let closesAt):
                     enterName(c, closesAt: closesAt)
@@ -73,7 +73,7 @@ public struct NameDibsScreen: View {
                 .accessibilityIdentifier("dibs-name")
             Text(".com").font(FS.font.body()).foregroundColor(c.textMuted)
         }
-        FSPrimaryButton("Get my code", enabled: !name.isEmpty, block: true) {
+        FSPrimaryButton(String(localized: "Get my code"), enabled: !name.isEmpty, block: true) {
             Task { await vm.start(name: name) }
         }
         .accessibilityIdentifier("dibs-start")
@@ -82,11 +82,11 @@ public struct NameDibsScreen: View {
     @ViewBuilder private func publish(_ c: FSColors, _ claim: DibsClaim) -> some View {
         Text("Publish this code in one of these two places, then check. It's tied to your account's key, so nobody else can use it. DNS changes can take a while — you can leave and come back.")
             .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-        place(c, title: "Option 1 — DNS TXT record", lines: [("Name", claim.publishAt.dns.name), ("Value", claim.record)])
-        place(c, title: "Option 2 — a file on your website", lines: [("URL", claim.publishAt.https.url), ("Text", claim.record)])
-        FSPrimaryButton("Check now", block: true) { Task { await vm.check() } }
+        place(c, title: String(localized: "Option 1 — DNS TXT record"), lines: [(String(localized: "Name"), claim.publishAt.dns.name), (String(localized: "Value"), claim.record)])
+        place(c, title: String(localized: "Option 2 — a file on your website"), lines: [("URL", claim.publishAt.https.url), (String(localized: "Text"), claim.record)])
+        FSPrimaryButton(String(localized: "Check now"), block: true) { Task { await vm.check() } }
             .accessibilityIdentifier("dibs-check")
-        FSSecondaryButton("Use a different name", block: true) { vm.restart() }
+        FSSecondaryButton(String(localized: "Use a different name"), block: true) { vm.restart() }
     }
 
     private func place(_ c: FSColors, title: String, lines: [(String, String)]) -> some View {

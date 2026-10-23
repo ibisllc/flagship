@@ -174,10 +174,10 @@ public enum LockWords {
         if let powerSent {
             if powerSent {
                 let did = executed ?? mode
-                parts.append(did == .off ? "The server is powering off" : "The server is restarting")
+                parts.append(did == .off ? String(localized: "The server is powering off") : String(localized: "The server is restarting"))
                 if executed != nil && executed != mode { parts[0] += " (it shut down instead of restarting because the lock could not be confirmed)" }
             } else {
-                parts.append("The power command didn't reach the server")
+                parts.append(String(localized: "The power command didn't reach the server"))
             }
         }
         switch lock {

@@ -358,6 +358,10 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v165: feat/UX: the webapp in six languages (lib/i18n.js tr/trn, lib/i18nLocales.js; each catalog
+//       i18n/<lang>.json?v=<hash> is fetched per language and cached at runtime; Traditional-Chinese and
+//       English-first browsers stay English; swRegister.js loads as a module so the worker registers),
+//       named links (the .com domain proof "Claim your .com name" and custom voi.ci names for services).
 //  v164: Access & permissions for one app (end a key, session or grant and stop its work).
 //  v163: the security sliver and the answer to a waiting publisher key.
 //  v162: the lock says plainly what it cannot take back.
@@ -366,7 +370,7 @@
 //  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
 //  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v164";
+const SHELL_VERSION = "v165";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

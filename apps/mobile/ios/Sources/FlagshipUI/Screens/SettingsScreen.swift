@@ -636,7 +636,7 @@ public struct SettingsScreen: View {
                     if let m = rejectMessage {
                         Text(m).font(FS.font.caption()).foregroundColor(c.danger)
                     }
-                    FSPrimaryButton("Reject recovery", enabled: true, block: true) { confirmReject = true }
+                    FSPrimaryButton(String(localized: "Reject recovery"), enabled: true, block: true) { confirmReject = true }
                         .accessibilityIdentifier("recovery-review-reject-btn")
                 }
             }

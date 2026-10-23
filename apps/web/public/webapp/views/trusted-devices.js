@@ -346,15 +346,15 @@ function bindPendingBanner() {
   if (shouldRenderRecoveryReview(state.pendingRePair, isAdminDevice(getSession()))) {
     document.getElementById("reject-recovery-btn")?.addEventListener("click", async () => {
       const { inlineConfirm } = await import("../lib/modal.js");
-      const ok = await inlineConfirm({ title: VETO_CONFIRM_TITLE, message: VETO_CONFIRM_MESSAGE, okLabel: "Reject recovery", danger: true });
+      const ok = await inlineConfirm({ title: VETO_CONFIRM_TITLE, message: VETO_CONFIRM_MESSAGE, okLabel: tr("Reject recovery"), danger: true });
       if (!ok) return;
       try {
         const session = getSession();
         await submitRecoveryVeto({ username: state.username, pending: state.pendingRePair.pending, adminRootSeed: session.adminRootSeed });
-        toast("Recovery rejected");
+        toast(tr("Recovery rejected"));
         await renderTrustedDevices();
       } catch (e) {
-        toast(e?.message ?? "Couldn't reject the recovery", "err");
+        toast(e?.message ?? tr("Couldn't reject the recovery"), "err");
       }
     });
     return;

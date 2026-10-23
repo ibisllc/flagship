@@ -85,47 +85,47 @@
   },
   "This is a Flagship server.": {
     "en": "This is a Flagship server.",
-    "ctx": "packages/server-daemon/src/runtime.ts:847"
+    "ctx": "packages/server-daemon/src/runtime.ts:871"
   },
   "online": {
     "en": "online",
-    "ctx": "packages/server-daemon/src/runtime.ts:848"
+    "ctx": "packages/server-daemon/src/runtime.ts:872"
   },
   "It runs on private hardware and answers to its owner's keys — not to a cloud.": {
     "en": "It runs on private hardware and answers to its owner's keys — not to a cloud.",
-    "ctx": "packages/server-daemon/src/runtime.ts:849"
+    "ctx": "packages/server-daemon/src/runtime.ts:873"
   },
   "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.": {
     "en": "If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.",
-    "ctx": "packages/server-daemon/src/runtime.ts:850"
+    "ctx": "packages/server-daemon/src/runtime.ts:874"
   },
   "TLS terminates on this server. Flagship relays ciphertext it cannot read.": {
     "en": "TLS terminates on this server. Flagship relays ciphertext it cannot read.",
-    "ctx": "packages/server-daemon/src/runtime.ts:853"
+    "ctx": "packages/server-daemon/src/runtime.ts:877"
   },
   "Get yours at": {
     "en": "Get yours at",
-    "ctx": "packages/server-daemon/src/runtime.ts:854"
+    "ctx": "packages/server-daemon/src/runtime.ts:878"
   },
   "No app here · Flagship": {
     "en": "No app here · Flagship",
-    "ctx": "packages/server-daemon/src/runtime.ts:2452"
+    "ctx": "packages/server-daemon/src/runtime.ts:2438"
   },
   "No app here yet.": {
     "en": "No app here yet.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2465"
+    "ctx": "packages/server-daemon/src/runtime.ts:2451"
   },
   "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.": {
     "en": "The URL <code>{0}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2466"
+    "ctx": "packages/server-daemon/src/runtime.ts:2452"
   },
   "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.": {
     "en": "The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.",
-    "ctx": "packages/server-daemon/src/runtime.ts:2467"
+    "ctx": "packages/server-daemon/src/runtime.ts:2453"
   },
   "More on multiplexing →": {
     "en": "More on multiplexing →",
-    "ctx": "packages/server-daemon/src/runtime.ts:2467"
+    "ctx": "packages/server-daemon/src/runtime.ts:2453"
   },
   "Download a server backup — Flagship": {
     "en": "Download a server backup — Flagship",
@@ -245,18 +245,18 @@
   },
   "Request access · Flagship": {
     "en": "Request access · Flagship",
-    "ctx": "packages/server-daemon/src/serviceProxy.ts:116"
+    "ctx": "packages/server-daemon/src/serviceProxy.ts:127"
   },
   "{0} is private": {
     "en": "{0} is private",
-    "ctx": "packages/server-daemon/src/serviceProxy.ts:125"
+    "ctx": "packages/server-daemon/src/serviceProxy.ts:136"
   },
   "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.": {
     "en": "This Flagship app is gated. Ask the host to invite you, then accept the invite in your Flagship app.",
-    "ctx": "packages/server-daemon/src/serviceProxy.ts:126"
+    "ctx": "packages/server-daemon/src/serviceProxy.ts:137"
   },
   "URL:": {
     "en": "URL:",
-    "ctx": "packages/server-daemon/src/serviceProxy.ts:127"
+    "ctx": "packages/server-daemon/src/serviceProxy.ts:138"
   }
 }

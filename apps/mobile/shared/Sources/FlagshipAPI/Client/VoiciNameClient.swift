@@ -87,7 +87,7 @@ public struct VoiciNameError: Error, Equatable, LocalizedError {
     ) {
         self.status = status
         self.code = code
-        self.message = message ?? "HTTP \(status)"
+        self.message = message ?? String(localized: "HTTP \(status)")
         self.domain = domain
         self.limit = limit
         self.nextChangeAt = nextChangeAt
@@ -162,10 +162,10 @@ public final class LiveVoiciNameClient: VoiciNameClient, @unchecked Sendable {
 
     private func request(path: String, query: [URLQueryItem] = []) throws -> URLRequest {
         guard var comps = URLComponents(string: baseUrl.absoluteString + path) else {
-            throw VoiciNameError(status: 0, message: "bad voi.ci name URL")
+            throw VoiciNameError(status: 0, message: String(localized: "bad voi.ci name URL"))
         }
         if !query.isEmpty { comps.queryItems = query }
-        guard let url = comps.url else { throw VoiciNameError(status: 0, message: "bad voi.ci name URL") }
+        guard let url = comps.url else { throw VoiciNameError(status: 0, message: String(localized: "bad voi.ci name URL")) }
         var req = URLRequest(url: url)
         req.cachePolicy = .reloadIgnoringLocalCacheData
         return req

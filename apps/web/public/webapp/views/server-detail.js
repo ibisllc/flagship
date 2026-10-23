@@ -536,8 +536,8 @@ export async function renderServerDetail() {
             ? "Lock and turn off, or lock and restart. A lock is recorded at the boot service, so this server can't unlock itself again until you resume it: the next start waits for your approval. It can't take back anything already copied from a running server."
             : "Power the box down or restart it.")}
         </p>
-        <p class="note small" id="lock-state">Checking the lock…</p>
-        <button id="lock-resume-btn" class="secondary full-width hidden">Resume (allow auto-unlock again)</button>
+        <p class="note small" id="lock-state">${tr("Checking the lock…")}</p>
+        <button id="lock-resume-btn" class="secondary full-width hidden">${tr("Resume (allow auto-unlock again)")}</button>
         <div class="row-2 mt-2">
           <button id="power-off-btn" class="danger" data-power-mode="off">${escapeHtml(powerLabel("off", body))}</button>
           <button id="power-restart-btn" class="danger" data-power-mode="restart">${escapeHtml(powerLabel("restart", body))}</button>
@@ -1155,7 +1155,7 @@ async function runPowerAction(body, mode, btn, allButtons, status) {
         if (again) {
           const r2 = await lockAndPower({ serverDomain: body.serverFqdn, mode: "off", sendPower: send });
           if (status) status.textContent = describeLockResult(r2);
-          toast(r2.lock === "confirmed" ? "Locked and powering off" : "Powering off; remote lock pending", r2.lock === "confirmed" ? "ok" : "err");
+          toast(r2.lock === "confirmed" ? tr("Locked and powering off") : tr("Powering off; remote lock pending"), r2.lock === "confirmed" ? "ok" : "err");
         }
         return;
       }
@@ -1163,12 +1163,12 @@ async function runPowerAction(body, mode, btn, allButtons, status) {
         status.classList.remove("hidden");
         status.textContent = describeLockResult(result);
       }
-      if (result.power === "failed") toast("The power command didn't reach the server", "err");
-      else if (result.lock === "pending") toast("Sent, but the remote lock is still pending", "err");
-      else toast(`${actionLabel} sent; locked`, "ok");
+      if (result.power === "failed") toast(tr("The power command didn't reach the server"), "err");
+      else if (result.lock === "pending") toast(tr("Sent, but the remote lock is still pending"), "err");
+      else toast(tr("{0} sent; locked", actionLabel), "ok");
       void refreshLockState(body.serverFqdn);
       return;
-      toast(`${actionLabel} sent`, "ok");
+      toast(tr("{0} sent", actionLabel), "ok");
     } finally {
       btn.textContent = origLabel;
       for (const b of allButtons) b.disabled = false;
@@ -1181,13 +1181,13 @@ function askShutdownInstead(message) {
   return new Promise((resolve) => {
     const dlg = document.createElement("dialog");
     dlg.className = "modal-card";
-    dlg.setAttribute("aria-label", "Shut down instead?");
+    dlg.setAttribute("aria-label", tr("Shut down instead?"));
     dlg.innerHTML = `
-      <h3 class="modal-title">Shut down instead?</h3>
+      <h3 class="modal-title">${tr("Shut down instead?")}</h3>
       <p class="modal-message">${escapeHtml(message)}</p>
       <div class="row-2 mt-3">
-        <button class="secondary" data-no>Keep running</button>
-        <button class="danger" data-yes>Shut down</button>
+        <button class="secondary" data-no>${tr("Keep running")}</button>
+        <button class="danger" data-yes>${tr("Shut down")}</button>
       </div>`;
     document.body.appendChild(dlg);
     dlg.showModal();
@@ -1209,22 +1209,22 @@ async function refreshLockState(serverFqdn) {
   const st = await readSuspension(serverFqdn);
   const btn = $("lock-resume-btn");
   if (st === null) {
-    el.textContent = "Couldn't read the lock state right now.";
+    el.textContent = tr("Couldn't read the lock state right now.");
     btn?.classList.add("hidden");
     return;
   }
   if (st.suspended) {
-    el.textContent = "Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.";
+    el.textContent = tr("Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.");
     btn?.classList.remove("hidden");
   } else {
-    el.textContent = "Not locked.";
+    el.textContent = tr("Not locked.");
     btn?.classList.add("hidden");
   }
 }
 
 function wireLockState(body) {
   void retryPendingLocks().then((done) => {
-    if (done.includes(body.serverFqdn)) toast("Remote lock confirmed", "ok");
+    if (done.includes(body.serverFqdn)) toast(tr("Remote lock confirmed"), "ok");
   }).catch(() => {});
   void refreshLockState(body.serverFqdn);
   $("lock-resume-btn")?.addEventListener("click", async () => {
@@ -1232,9 +1232,9 @@ function wireLockState(body) {
     btn.disabled = true;
     try {
       const r = await setOwnerSuspension(body.serverFqdn, "resume");
-      if (!r.durable) throw new Error("Couldn't resume right now. Try again.");
+      if (!r.durable) throw new Error(tr("Couldn't resume right now. Try again."));
       clearLockPending(body.serverFqdn);
-      toast("Resumed. Turn auto-unlock back on below if you want it.", "ok");
+      toast(tr("Resumed. Turn auto-unlock back on below if you want it."), "ok");
     } catch (e) {
       toast(humanError(e), "err");
     } finally {

@@ -46,7 +46,7 @@ struct LockPowerCard: View {
                 case .sent(let mode):
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         Label(
-                            mode == .off ? "Powering off…" : "Restarting…",
+                            mode == .off ? String(localized: "Powering off…") : "Restarting…",
                             systemImage: mode == .off ? "power" : "arrow.clockwise"
                         )
                         .font(FS.font.body())
@@ -61,11 +61,11 @@ struct LockPowerCard: View {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         Text(message).font(FS.font.body()).foregroundColor(c.text)
                             .accessibilityIdentifier("sd-lock-unconfirmed")
-                        FSSecondaryButton("Shut down", block: true) {
+                        FSSecondaryButton(String(localized: "Shut down"), block: true) {
                             Task { await vm?.shutDownInstead(); refreshLockState() }
                         }
                         .accessibilityIdentifier("sd-shutdown-instead")
-                        FSSecondaryButton("Keep running", block: true) { vm = nil }
+                        FSSecondaryButton(String(localized: "Keep running"), block: true) { vm = nil }
                     }
                 default:
                     VStack(spacing: FS.space.s2) {
@@ -106,12 +106,12 @@ struct LockPowerCard: View {
                 Text("Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                     .accessibilityIdentifier("sd-lock-state")
-                FSSecondaryButton("Resume (allow auto-unlock again)", block: true) {
+                FSSecondaryButton(String(localized: "Resume (allow auto-unlock again)"), block: true) {
                     Task {
                         let m = viewModel()
                         let r = await m.resume()
                         if case .confirmed? = r { toasts.success("Resumed. Turn auto-unlock back on if you want it.") }
-                        else { toasts.error("Couldn't resume right now. Try again.") }
+                        else { toasts.error(String(localized: "Couldn't resume right now. Try again.")) }
                         refreshLockState()
                     }
                 }
@@ -122,11 +122,11 @@ struct LockPowerCard: View {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 Text("Remote lock pending: the boot service hasn't confirmed it yet.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
-                FSSecondaryButton("Retry the remote lock", block: true) {
+                FSSecondaryButton(String(localized: "Retry the remote lock"), block: true) {
                     Task {
                         let r = await viewModel().retryPendingLock()
                         if case .confirmed? = r { toasts.success("Locked at the boot service.") }
-                        else { toasts.error("Still couldn't reach the boot service.") }
+                        else { toasts.error(String(localized: "Still couldn't reach the boot service.")) }
                         refreshLockState()
                     }
                 }
