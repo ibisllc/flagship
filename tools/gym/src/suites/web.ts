@@ -425,7 +425,7 @@ const TOTAL: readonly Scenario[] = [
   // D3 — AI-keys manager + recovery screen.
   webTotal(
     "web-total-ai-keys-manager",
-    "D3-C2: the AI-keys manager lists Flagship Inference first as the built-in provider (no remove), then saved keys masked with their own remove.",
+    "D3-C2: the AI-keys manager lists Flagship Inference first as the built-in provider (no remove), then saved keys masked, each with Delete key behind its own ⋯ menu.",
     "gym total webapp settings renders the AI-keys manager",
     {
       steps: [
@@ -435,6 +435,7 @@ const TOTAL: readonly Scenario[] = [
         { kind: "type", describe: "Fill label + key.", handle: "#np-key" },
         { kind: "tap", describe: "Save.", handle: "#np-save" },
         { kind: "assert", describe: "Saved key listed after the built-in, masked.", handle: "#providers-list" },
+        { kind: "tap", describe: "Open the key's ⋯ menu: Delete key shows.", handle: '[data-action="more"]' },
       ],
       assertions: [
         { describe: "Flagship Inference built-in card", handle: "#free-ai-card", expect: "text", text: "Flagship Inference" },
@@ -1166,7 +1167,7 @@ const TOTAL: readonly Scenario[] = [
       ],
       assertions: [
         { describe: "Ceremony title", handle: ".modal-title", expect: "text", text: "Rotate admin key?" },
-        { describe: "Revoke-semantic warning", handle: ".modal-message", expect: "text", text: "REVOKES admin" },
+        { describe: "Revoke-semantic warning", handle: ".modal-message", expect: "text", text: "removes admin from every other device" },
         { describe: "Admin card intact after Cancel", handle: '[data-account-security-rotate="available"]', expect: "present" },
       ],
       screenshots: [shot("rotate-admin-ceremony", "The rotate warning ceremony (not executed).")],
@@ -1199,20 +1200,20 @@ const TOTAL: readonly Scenario[] = [
 
   webTotal(
     "web-total-settings-join-another-account",
-    "Join another account while signed in (iOS settings-scan-pairing-code, Android 'Scan a pairing code'): Settings → Scan a pairing code takes a pasted /join link (or a scan where the browser can), refuses anything else in words, and opens the pairing screen for that link.",
+    "Join another account while signed in (iOS/Android 'Scan a code or enter a link'): Settings → Scan a code or enter a link takes a pasted /join link (or a scan where the browser can), refuses anything that isn't a Flagship link in words, and opens the pairing screen for that link.",
     "gym total webapp settings joins another account from a pasted pairing link",
     {
       steps: [
         { kind: "launch", describe: "Reach Settings signed in." },
-        { kind: "tap", describe: "Scan a pairing code.", handle: "#settings-tab-join-account" },
-        { kind: "type", describe: "Paste a /share link, Continue: refused in words." },
-        { kind: "type", describe: "Paste a /join link, Continue: the pairing screen opens." },
+        { kind: "tap", describe: "Scan a code or enter a link.", handle: "#settings-tab-join-account" },
+        { kind: "type", describe: "Paste a link that isn't a Flagship link, Open: refused in words." },
+        { kind: "type", describe: "Paste a /join link, Open: the pairing screen opens." },
       ],
       assertions: [
-        { describe: "Not a pairing link", handle: "[data-join-error]", expect: "text", text: "That isn't a pairing link." },
+        { describe: "Not a Flagship link", handle: "[data-join-error]", expect: "text", text: "That isn't a Flagship code or link." },
         { describe: "Pairing screen", handle: "#view-join", expect: "present" },
       ],
-      screenshots: [shot("join-another-refused", "A pasted link that isn't a pairing link.")],
+      screenshots: [shot("join-another-refused", "A pasted link that isn't a Flagship link.")],
       dimension: "D6",
     },
   ),
