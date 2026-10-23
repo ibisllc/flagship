@@ -1202,7 +1202,7 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                 )
                 if (isLuks && lockedKnown == true) {
                     Text(
-                        "Locked: this server can't unlock itself. It will ask you to approve its next start.",
+                        "Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { contentDescription = "sd-lock-state" },
                     )

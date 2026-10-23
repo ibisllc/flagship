@@ -103,7 +103,7 @@ struct LockPowerCard: View {
     private func lockStateRow(_ c: FSColors) -> some View {
         if lockedKnown == true {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Locked: this server can't unlock itself. It will ask you to approve its next start.")
+                Text("Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                     .accessibilityIdentifier("sd-lock-state")
                 FSSecondaryButton("Resume (allow auto-unlock again)", block: true) {

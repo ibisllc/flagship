@@ -1225,7 +1225,7 @@ async function refreshLockState(serverFqdn) {
     return;
   }
   if (st.suspended) {
-    el.textContent = "Locked: this server can't unlock itself. It will ask you to approve its next start.";
+    el.textContent = "Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.";
     btn?.classList.remove("hidden");
   } else {
     el.textContent = "Not locked.";
