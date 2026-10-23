@@ -1608,8 +1608,9 @@ export interface VoiciNameStorage {
   countLive(username: string): Promise<number>;
   /** Take a free key. "taken" when any row (live or waiting) holds it. */
   claim(rec: VoiciNameRecord): Promise<{ ok: true } | { ok: false; reason: "taken" }>;
-  /** Live → waiting for the service's name. Undefined when it has none. */
-  release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number): Promise<VoiciNameRecord | undefined>;
+  /** Live → waiting for the service's name. Undefined when it has none. Pass `key` when the
+   *  service briefly holds two live names (a replace claims the new one first). */
+  release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number, key?: string): Promise<VoiciNameRecord | undefined>;
   /** Release every live name of the account (account deleted). */
   releaseAllForUser(username: string, reason: VoiciNameReleaseReason, at: number): Promise<number>;
   /** Delete the waiting names whose wait ended at or before `before`: they are free. */
