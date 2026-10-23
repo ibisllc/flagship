@@ -418,17 +418,17 @@ public final class ServiceAccessViewModel {
 
     // MARK: separate list on each server (Pro)
 
-    public static let scopeTitle = "Separate list on each server"
-    public static let scopeNote = "Each server keeps its own members and invites."
-    public static let scopeProLine = "Comes with Pro."
-    public static let scopePendingLine = "Waiting for this server to confirm Pro."
-    public static let scopeReadOnlyOn = "Each server has its own list."
-    public static let scopeOnTitle = "A separate list on each server?"
-    public static let scopeOnConfirm = "Each server keeps its current list. Changes you make on one server stay on it."
-    public static let scopeOffTitle = "One list on every server?"
+    public static let scopeTitle = String(localized: "Separate list on each server")
+    public static let scopeNote = String(localized: "Each server keeps its own members and invites.")
+    public static let scopeProLine = String(localized: "Comes with Pro.")
+    public static let scopePendingLine = String(localized: "Waiting for this server to confirm Pro.")
+    public static let scopeReadOnlyOn = String(localized: "Each server has its own list.")
+    public static let scopeOnTitle = String(localized: "A separate list on each server?")
+    public static let scopeOnConfirm = String(localized: "Each server keeps its current list. Changes you make on one server stay on it.")
+    public static let scopeOffTitle = String(localized: "One list on every server?")
 
     public static func scopeOffConfirm(leaderName: String) -> String {
-        "Every server will use \(leaderName)'s list. People who joined on other servers since lose access."
+        String(localized: "Every server will use \(leaderName)'s list. People who joined on other servers since lose access.")
     }
 
     /// Read the app's scope from the shown server. A server picked from the
@@ -509,8 +509,8 @@ public final class ServiceAccessViewModel {
         busyScope = true
         defer { busyScope = false }
         do {
-            let key = try await adminSigner(on ? "Give \(serviceRef) a separate list on each server"
-                                               : "Give \(serviceRef) one list on every server")
+            let key = try await adminSigner(on ? String(localized: "Give \(serviceRef) a separate list on each server")
+                                               : String(localized: "Give \(serviceRef) one list on every server"))
             var issuedAt = now()
             for attempt in 0..<2 {
                 let order = AppListScopeOrder(serviceRef: serviceRef, separate: on, issuedAt: issuedAt)
@@ -534,8 +534,8 @@ public final class ServiceAccessViewModel {
             scopeNeedsPro = true
             return false
         } catch {
-            phase = .failed(on ? "Couldn't give each server its own list. Try again in a moment."
-                               : "Couldn't go back to one list. Try again in a moment.")
+            phase = .failed(on ? String(localized: "Couldn't give each server its own list. Try again in a moment.")
+                               : String(localized: "Couldn't go back to one list. Try again in a moment."))
             return false
         }
     }

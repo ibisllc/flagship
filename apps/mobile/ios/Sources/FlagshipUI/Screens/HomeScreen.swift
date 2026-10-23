@@ -475,13 +475,13 @@ public struct HomeScreen: View {
                 c: c
             )
             actionRow(
-                title: "Browse the marketplace",
-                subtitle: "Deploy services your neighbours have published.",
+                title: String(localized: "Browse the marketplace"),
+                subtitle: String(localized: "Deploy services your neighbours have published."),
                 systemImage: "square.grid.2x2",
                 accent: c.success,
                 action: onBrowseMarketplace,
                 enabled: canInstall,
-                disabledReason: "This device cannot install services. Use a primary device.",
+                disabledReason: String(localized: "This device cannot install services. Use a primary device."),
                 accessibilityId: "quick-action-install-service",
                 c: c
             )
