@@ -596,7 +596,7 @@ async function loadUpdateMode(app) {
     r.addEventListener("change", async () => {
       try {
         await setUpdateMode(app.serviceId, r.value, fetchJson);
-        toast("Update setting saved.");
+        toast(tr("Update setting saved."));
       } catch (e) {
         toast(humanError(e), "err");
         await loadUpdateMode(app);
@@ -1052,14 +1052,14 @@ async function removeAppHere(app, btn) {
     title: REMOVE_APP_TITLE,
     message: removeAppMessage({ slug: app.slug, server: fqdn, otherCopies }),
     okLabel: REMOVE_APP_LABEL,
-    extraLabel: "Back up first",
+    extraLabel: tr("Back up first"),
     danger: true,
   });
   if (answer === "extra") {
     const go = $("sd-backup-go");
     go?.scrollIntoView({ block: "center" });
     go?.focus({ preventScroll: true });
-    toast("Back up the app, save the file, then remove it.");
+    toast(tr("Back up the app, save the file, then remove it."));
     return;
   }
   if (answer !== "ok") return;

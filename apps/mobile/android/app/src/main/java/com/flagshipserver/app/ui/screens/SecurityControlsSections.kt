@@ -3,6 +3,8 @@
 
 package com.flagshipserver.app.ui.screens
 
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,7 +54,7 @@ fun RestoredAccessSection(serviceId: String, canApprove: Boolean) {
         FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("service-detail-restored-access")) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Text(SecurityControlWords.RESTORED_INTRO, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                Text("${d.people} ${if (d.people == 1) "person" else "people"} on the old list.${if (d.mode == "open") " The app was open to all." else ""}", style = MaterialTheme.typography.bodyMedium)
+                Text(fsString(R.string.on_the_old_list, d.people, if (d.people == 1) "person" else "people", if (d.mode == "open") " The app was open to all." else ""), style = MaterialTheme.typography.bodyMedium)
                 if (canApprove) {
                     FSPrimaryButton(SecurityControlWords.RESTORED_APPROVE, block = true, modifier = Modifier.testTag("restored-access-approve"), onClick = { scope.launch { vm.approve() } })
                     FSSecondaryButton(SecurityControlWords.RESTORED_DISCARD, block = true, modifier = Modifier.testTag("restored-access-discard"), onClick = { scope.launch { vm.discard() } })
@@ -117,7 +119,7 @@ fun CompanionDelegationRowSection(sessionId: String, canSign: Boolean) {
     Column(Modifier.padding(top = FS.space.s2), verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
         rows.forEach { r ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("May ${r.ops.joinToString(" and ")} ${r.serviceRef}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                Text(fsString(R.string.may, r.ops.joinToString(" and "), r.serviceRef), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                 FSSecondaryButton(SecurityControlWords.DELEGATE_END, modifier = Modifier.testTag("delegation-end-${r.serviceRef}"), onClick = { scope.launch { vm.end(r.serviceRef) } })
             }
         }

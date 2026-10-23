@@ -164,7 +164,7 @@ export function inlineConfirm({
  * Like {@link inlineConfirm} with one more button between Cancel and OK (for example "Back up first"
  * before a removal). Resolves to "ok", "extra" or null when cancelled or dismissed.
  */
-export function inlineConfirmWithExtra({ title, message, okLabel = "Confirm", cancelLabel = "Cancel", extraLabel, danger = false } = {}) {
+export function inlineConfirmWithExtra({ title, message, okLabel = tr("Confirm"), cancelLabel = tr("Cancel"), extraLabel, danger = false } = {}) {
   return new Promise((resolve) => {
     const host = ensureHost();
     const overlay = buildOverlay();

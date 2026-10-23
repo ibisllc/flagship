@@ -358,6 +358,11 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v170: feat/UX: the webapp in six languages (lib/i18n.js tr/trn, lib/i18nLocales.js; each catalog
+//       i18n/<lang>.json?v=<hash> is fetched per language; Traditional-Chinese and English-first browsers
+//       stay English; swRegister.js loads as a module so the worker registers), named links (the .com
+//       domain proof and custom voi.ci names), and the owner UI round (Home, Activity's no-server card,
+//       compact AI API keys, Cloud recovery help, "Scan a code or enter a link" replaces Process URL).
 //  v169: Remove app offers Back up first; Lock and restart says restarting; the restored-permissions sentence is split.
 //  v168: a restored app says what it still needs; the Home recovery card finalizes only this device's own replacement.
 //  v167: let one browser session build or deploy one app, on an admin device's signature.
@@ -371,7 +376,7 @@
 //  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
 //  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v169";
+const SHELL_VERSION = "v170";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

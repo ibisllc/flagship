@@ -158,9 +158,9 @@ public struct ServerRestoreSummary: Codable, Equatable, Sendable {
     /// The lines to show under a restored app, empty when there is nothing to say.
     public var needs: [String] {
         var out: [String] = []
-        if !awaitingApproval.isEmpty { out.append("Waiting for an admin: \(awaitingApproval.joined(separator: "; ")).") }
-        if !reconnect.isEmpty { out.append("Set up again: \(reconnect.joined(separator: "; ")).") }
-        if !notes.isEmpty { out.append("Note: \(notes.joined(separator: "; ")).") }
+        if !awaitingApproval.isEmpty { out.append(String(localized: "Waiting for an admin: \(awaitingApproval.joined(separator: "; ")).")) }
+        if !reconnect.isEmpty { out.append(String(localized: "Set up again: \(reconnect.joined(separator: "; ")).")) }
+        if !notes.isEmpty { out.append(String(localized: "Note: \(notes.joined(separator: "; ")).")) }
         return out
     }
 }
