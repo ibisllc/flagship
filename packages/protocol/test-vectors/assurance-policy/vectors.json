@@ -1,0 +1,81 @@
+{
+  "tag": "flagship/assurance-policy/v1",
+  "note": "Canonical bytes are UTF-8; loss codes are sorted before joining.",
+  "cases": [
+    {
+      "name": "enforce strict",
+      "change": {
+        "account": "plucky-avocet",
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "prior": "compatibility",
+        "next": "strict",
+        "generation": 1,
+        "prevDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "affectedPeersDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "acknowledgedLoss": [],
+        "signerKind": "admin-device",
+        "signerKeyId": "00112233445566778899aabbccddeeff",
+        "suite": "hybrid-ed25519-mldsa65/v1",
+        "issuedAt": 1793000000000
+      },
+      "canonical": "flagship/assurance-policy/v1|plucky-avocet|installation|home.plucky-avocet|compatibility|strict|1|0000000000000000000000000000000000000000000000000000000000000000|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|-|-|admin-device|00112233445566778899aabbccddeeff|hybrid-ed25519-mldsa65/v1|1793000000000",
+      "digest": "77c235b3f9f9b4ae37c17a480e3b92b79520c6b894ea099e05e352c3b57e124f"
+    },
+    {
+      "name": "opt out of a service",
+      "change": {
+        "account": "plucky-avocet",
+        "scope": {
+          "kind": "service",
+          "id": "notes"
+        },
+        "prior": "strict",
+        "next": "compatibility",
+        "generation": 2,
+        "prevDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "affectedPeersDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "acknowledgedLoss": [
+          "legacy-recovery-path",
+          "classical-signatures-accepted"
+        ],
+        "signerKind": "admin-device",
+        "signerKeyId": "00112233445566778899aabbccddeeff",
+        "suite": "hybrid-ed25519-mldsa65/v1",
+        "issuedAt": 1793000000000
+      },
+      "canonical": "flagship/assurance-policy/v1|plucky-avocet|service|notes|strict|compatibility|2|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|classical-signatures-accepted,legacy-recovery-path|-|admin-device|00112233445566778899aabbccddeeff|hybrid-ed25519-mldsa65/v1|1793000000000",
+      "digest": "2a5f1d2995a14f7868385bc2853e4f20b98a291b6d4a7e51ab8abfbbdc943ebb"
+    },
+    {
+      "name": "return to strict",
+      "change": {
+        "account": "plucky-avocet",
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "prior": "compatibility",
+        "next": "strict",
+        "generation": 3,
+        "prevDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "affectedPeersDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "acknowledgedLoss": [],
+        "signerKind": "admin-device",
+        "signerKeyId": "00112233445566778899aabbccddeeff",
+        "suite": "hybrid-ed25519-mldsa65/v1",
+        "issuedAt": 1793000000000,
+        "reentry": {
+          "verifierChecksDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+          "enrollmentDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+          "rekeyReceiptDigest": "3333333333333333333333333333333333333333333333333333333333333333",
+          "recoveryTestDigest": "4444444444444444444444444444444444444444444444444444444444444444"
+        }
+      },
+      "canonical": "flagship/assurance-policy/v1|plucky-avocet|installation|home.plucky-avocet|compatibility|strict|3|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|-|1111111111111111111111111111111111111111111111111111111111111111,2222222222222222222222222222222222222222222222222222222222222222,3333333333333333333333333333333333333333333333333333333333333333,4444444444444444444444444444444444444444444444444444444444444444|admin-device|00112233445566778899aabbccddeeff|hybrid-ed25519-mldsa65/v1|1793000000000",
+      "digest": "31889418e6af8c2f94c7303e681c66dcf15f2e65156f5d58fff8118330e540a4"
+    }
+  ]
+}
