@@ -4,6 +4,9 @@
 
 package com.flagshipserver.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -86,14 +89,14 @@ private fun SliverRow(l: SliverLine, waiting: com.flagshipserver.app.core.Waitin
             Box(Modifier.width(4.dp).fillMaxHeight().background(tint))
             Column(Modifier.weight(1f).padding(FS.space.s3), verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
-                    "${SliverWords.severityLabel(l.severity)} · ${l.target} · ${if (l.isActive) "Active" else "Resolved"}",
+                    "${SliverWords.severityLabel(l.severity)} · ${l.target} · ${if (l.isActive) stringResource(R.string.active_2) else stringResource(R.string.resolved)}",
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(l.summary, style = MaterialTheme.typography.bodyMedium)
                 val extra = listOf(SliverWords.remaining(l.remainingMs), if (l.isActive) (l.action ?: "") else "").filter { it.isNotEmpty() }.joinToString(" · ")
                 if (extra.isNotEmpty()) Text(extra, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 if (waiting != null) {
-                    Text("Old key ${waiting.oldFingerprint} → new key ${waiting.newFingerprint}", style = MaterialTheme.typography.titleSmall)
+                    Text(fsString(R.string.old_key_new_key, waiting.oldFingerprint, waiting.newFingerprint), style = MaterialTheme.typography.titleSmall)
                     Text(if (waiting.continuity == "valid-chain") SliverWords.CHAIN else SliverWords.NO_CHAIN, style = MaterialTheme.typography.bodySmall)
                     Text(SliverWords.WARNING, style = MaterialTheme.typography.bodySmall)
                     FSPrimaryButton(SliverWords.TRUST, onClick = onTrust, modifier = Modifier.fillMaxWidth().testTag("sliver-trust-${l.target}"))
