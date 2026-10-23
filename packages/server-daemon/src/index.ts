@@ -13,6 +13,7 @@ import {
   verifyArchiveDownloadApproval,
   verifyArchiveKeysDeposit,
   verifyBackupPolicy,
+  verifyOfflineSecrets,
   verifyServerShareGrant,
   verifyServerShareRevoke,
   type Keypair,
@@ -523,22 +524,44 @@ async function pairingOrderFromInstallBlob(): Promise<string | null> {
 
 /**
  * Read the recipe's Service Workload Key (`swkHex`) from the on-disk install
- * blob. The phone embeds it as an UNSIGNED recipe sibling (= `deriveSWK(umk,
- * serverId)`, never in the signed InstallBlob's canonical bytes, mirroring
- * `pairingKeyPrivHex`); the builder writes it into /var/flagship/install-blob.json.
- * The daemon consumes it at first boot to turn on the service/build platform.
- * Returns the validated 64-hex string (lowercased) or null when absent/malformed
- * (older recipes, or a recipe minted before SWK provisioning) — the box then
- * stays platform-less, exactly as before.
+ * blob, for the offline (Advanced) mode only. The key is a sibling of the signed
+ * blob, so it is used only when the owner's account key signed a commitment to it
+ * for this server and order (`flagship/offline-secrets/v1`, SEC-RECIPE-001).
+ * Returns the validated 64-hex string (lowercased), or null when it is absent,
+ * malformed or not committed to — the box then waits for the key to arrive sealed
+ * through the control plane, as the default recipe does.
  */
-export async function swkHexFromInstallBlob(): Promise<string | null> {
+export async function swkHexFromInstallBlob(trust: {
+  /** The owner account key this box pins (from its signed config), never the file's own claim. */
+  ownerIrkPub: Uint8Array;
+  /** This box's own name. */
+  serverDomain: string;
+  onRefused?: (why: string) => void;
+}): Promise<string | null> {
   const blobPath = process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json";
   const raw = await tryReadFile(blobPath);
   if (!raw) return null;
   try {
-    const b = JSON.parse(raw) as { swkHex?: unknown };
+    const b = JSON.parse(raw) as {
+      swkHex?: unknown;
+      offlineSecrets?: unknown;
+      authCode?: { serial?: unknown; issuedAt?: unknown; expiresAt?: unknown };
+    };
     const v = b.swkHex;
     if (typeof v !== "string" || !/^[0-9a-f]{64}$/i.test(v)) return null;
+    // SEC-RECIPE-001: the key in the file counts only if the owner's account key committed to it
+    // for this server and this order. An unsigned or mismatched key is ignored, never used.
+    const verdict = verifyOfflineSecrets(b.offlineSecrets, v, {
+      serverDomain: trust.serverDomain,
+      serial: typeof b.authCode?.serial === "string" ? b.authCode.serial : "",
+      userPub: trust.ownerIrkPub,
+      issuedAt: typeof b.authCode?.issuedAt === "number" ? b.authCode.issuedAt : 0,
+      expiresAt: typeof b.authCode?.expiresAt === "number" ? b.authCode.expiresAt : 0,
+    });
+    if (!verdict.ok) {
+      trust.onRefused?.(verdict.reason);
+      return null;
+    }
     return v.toLowerCase();
   } catch {
     return null;
@@ -870,7 +893,13 @@ async function main(): Promise<void> {
   let swkHex: string | null =
     process.env.FLAGSHIP_SWK_HEX ?? (await tryReadFile(swkHexFilePath));
   if (!swkHex) {
-    const fromBlob = await swkHexFromInstallBlob();
+    const fromBlob = cfg
+      ? await swkHexFromInstallBlob({
+          ownerIrkPub: cfg.irkPublicKey,
+          serverDomain: env.serverFqdn!,
+          onRefused: (why) => console.warn(`[daemon] ignoring the workload key in the install blob: the owner did not sign for it (${why})`),
+        })
+      : null;
     if (fromBlob) {
       swkHex = fromBlob;
       console.log("[daemon] SWK provisioned from install blob; service platform enabled");

@@ -30,6 +30,8 @@ data class InstallBlobBundle(
     // no UMK). Omitted from JSON when null (encodeDefaults=false), so a recipe
     // without it is byte-identical. Derived via ServerKeys.deriveSwk (DOTS).
     val swkHex: String? = null,
+    // The owner's signed commitment to swkHex (SEC-RECIPE-001); present exactly when swkHex is.
+    val offlineSecrets: OfflineSecretsCommitment? = null,
     // Debug-friendly server (Advanced): the owner-IRK-signed debug-access grant
     // envelope (`{grant,signatureHex}` JSON). An UNSIGNED recipe sibling
     // (top-level, NOT inside `blob` / never in the signed canonical bytes); the

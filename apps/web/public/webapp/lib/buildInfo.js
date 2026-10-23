@@ -3,12 +3,12 @@
 // app compares them with these.
 //
 // WEB_BUILD is the shell version number in service-worker.js (SHELL_VERSION
-// "v158" is 158); a test fails when they drift, so bump both together.
+// "v159" is 159); a test fails when they drift, so bump both together.
 // PROTOCOL_LEVEL mirrors CLIENT_PROTOCOL_LEVEL in packages/protocol: raise it
 // only when a breaking change to a signed message or wire contract ships.
 
 export const PLATFORM = "web";
-export const WEB_BUILD = 158;
+export const WEB_BUILD = 159;
 export const PROTOCOL_LEVEL = 1;
 
 // The one product version every Flagship surface shows (release/version.json;

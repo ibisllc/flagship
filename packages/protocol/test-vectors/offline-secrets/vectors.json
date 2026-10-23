@@ -1,0 +1,93 @@
+{
+  "about": "Offline secret-bearing recipe commitment. Canonical bytes: flagship/offline-secrets/v1|serverDomain(lowercase)|serial|swkSha256Hex|issuedAt, signed with Ed25519 by the account key the install blob names. A sibling workload key is accepted only when its SHA-256 matches a signed commitment for the same server and order, issued within the order's validity. Seed 0x55 repeated; swk 0x66 repeated.",
+  "userSeedHex": "5555555555555555555555555555555555555555555555555555555555555555",
+  "userPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+  "order": {
+    "serverDomain": "home.alice.flagship.services",
+    "serial": "01HZZTESTSERIAL",
+    "userPub": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+    "issuedAt": 1760000000000,
+    "expiresAt": 1760003600000
+  },
+  "canonicalOfGood": "flagship/offline-secrets/v1|home.alice.flagship.services|01HZZTESTSERIAL|352302489bc2fcf025cf00cda8308033f97ac87712ce90b4d7cd72c58e4c3af9|1760000001000",
+  "cases": [
+    {
+      "name": "a commitment signed for this server, order and key",
+      "sibling": {
+        "serverDomain": "home.alice.flagship.services",
+        "serial": "01HZZTESTSERIAL",
+        "swkSha256Hex": "352302489bc2fcf025cf00cda8308033f97ac87712ce90b4d7cd72c58e4c3af9",
+        "issuedAt": 1760000001000,
+        "signatureHex": "25dcd9f2cc7d79a494db066403baa4e35483964110c4757507de2a908b2bd3b348a307dd905e4ac95fb91dc0b275d15aa148962b36dd5de56b26e50831b3da01"
+      },
+      "swkHex": "6666666666666666666666666666666666666666666666666666666666666666",
+      "expect": "ok"
+    },
+    {
+      "name": "another workload key",
+      "sibling": {
+        "serverDomain": "home.alice.flagship.services",
+        "serial": "01HZZTESTSERIAL",
+        "swkSha256Hex": "352302489bc2fcf025cf00cda8308033f97ac87712ce90b4d7cd72c58e4c3af9",
+        "issuedAt": 1760000001000,
+        "signatureHex": "25dcd9f2cc7d79a494db066403baa4e35483964110c4757507de2a908b2bd3b348a307dd905e4ac95fb91dc0b275d15aa148962b36dd5de56b26e50831b3da01"
+      },
+      "swkHex": "6767676767676767676767676767676767676767676767676767676767676767",
+      "expect": "wrong-secret"
+    },
+    {
+      "name": "another server",
+      "sibling": {
+        "serverDomain": "home.bob.flagship.services",
+        "serial": "01HZZTESTSERIAL",
+        "swkSha256Hex": "352302489bc2fcf025cf00cda8308033f97ac87712ce90b4d7cd72c58e4c3af9",
+        "issuedAt": 1760000001000,
+        "signatureHex": "25dcd9f2cc7d79a494db066403baa4e35483964110c4757507de2a908b2bd3b348a307dd905e4ac95fb91dc0b275d15aa148962b36dd5de56b26e50831b3da01"
+      },
+      "swkHex": "6666666666666666666666666666666666666666666666666666666666666666",
+      "expect": "wrong-server"
+    },
+    {
+      "name": "another order",
+      "sibling": {
+        "serverDomain": "home.alice.flagship.services",
+        "serial": "OTHER",
+        "swkSha256Hex": "352302489bc2fcf025cf00cda8308033f97ac87712ce90b4d7cd72c58e4c3af9",
+        "issuedAt": 1760000001000,
+        "signatureHex": "25dcd9f2cc7d79a494db066403baa4e35483964110c4757507de2a908b2bd3b348a307dd905e4ac95fb91dc0b275d15aa148962b36dd5de56b26e50831b3da01"
+      },
+      "swkHex": "6666666666666666666666666666666666666666666666666666666666666666",
+      "expect": "wrong-order"
+    },
+    {
+      "name": "a changed signature",
+      "sibling": {
+        "serverDomain": "home.alice.flagship.services",
+        "serial": "01HZZTESTSERIAL",
+        "swkSha256Hex": "352302489bc2fcf025cf00cda8308033f97ac87712ce90b4d7cd72c58e4c3af9",
+        "issuedAt": 1760000001000,
+        "signatureHex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "swkHex": "6666666666666666666666666666666666666666666666666666666666666666",
+      "expect": "bad-signature"
+    },
+    {
+      "name": "issued after the order expired",
+      "sibling": {
+        "serverDomain": "home.alice.flagship.services",
+        "serial": "01HZZTESTSERIAL",
+        "swkSha256Hex": "352302489bc2fcf025cf00cda8308033f97ac87712ce90b4d7cd72c58e4c3af9",
+        "issuedAt": 1760003600001,
+        "signatureHex": "25dcd9f2cc7d79a494db066403baa4e35483964110c4757507de2a908b2bd3b348a307dd905e4ac95fb91dc0b275d15aa148962b36dd5de56b26e50831b3da01"
+      },
+      "swkHex": "6666666666666666666666666666666666666666666666666666666666666666",
+      "expect": "outside-order-validity"
+    },
+    {
+      "name": "no commitment",
+      "sibling": null,
+      "swkHex": "6666666666666666666666666666666666666666666666666666666666666666",
+      "expect": "missing"
+    }
+  ]
+}

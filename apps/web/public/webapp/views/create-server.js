@@ -30,6 +30,7 @@ import {
 import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
 import { controlApex, serverFqdn } from "../lib/apex.js";
 import { buildPairingOrder } from "../lib/bootApproval.js";
+import { signOfflineSecrets } from "../lib/offlineSecrets.js";
 import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
 import { clearPendingRck, reuseOrRecordRck } from "../lib/pendingRck.js";
 import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
@@ -470,7 +471,12 @@ export function downloadRecipe(blobBundle) {
   // SWK provisioning: carry the unsigned `swkHex` sibling into the downloaded
   // recipe so the builder writes it to the box's install-blob.json (the daemon
   // persists it at first boot). Absent ⇒ recipe is byte-identical.
-  if (blobBundle.swkHex) recipe.swkHex = blobBundle.swkHex;
+  if (blobBundle.swkHex) {
+    recipe.swkHex = blobBundle.swkHex;
+    // The owner's signed commitment to that key (SEC-RECIPE-001): without it the builder and the
+    // box refuse the key.
+    recipe.offlineSecrets = blobBundle.offlineSecrets;
+  }
   // Debug-friendly server: carry the unsigned `debugGrant` carrier (a JSON
   // string `{grant,signatureHex}`) into the downloaded recipe so the builder
   // writes it to install-blob.json and the box-side gate can verify it. Absent
@@ -865,6 +871,10 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   //     the box registers (one delivery then, not now).
   if (inputs.embedSecrets) {
     bundle.swkHex = await deriveSwkFromSeed(session.umk, blob.serverDomain);
+    bundle.offlineSecrets = await signOfflineSecrets(
+      { serverDomain: blob.serverDomain, serial: onWireBlob.authCode.serial, swkHex: bundle.swkHex, issuedAt: onWireBlob.authCode.issuedAt + 1000, umk: session.umk },
+      signWithIrk,
+    );
     clearSwkDeposit(blob.serverDomain);
     if (pairingOrderJson) bundle.pairingOrder = pairingOrderJson;
     clearPairingDeposit(blob.serverDomain);

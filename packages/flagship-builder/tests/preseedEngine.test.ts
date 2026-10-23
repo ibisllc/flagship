@@ -24,10 +24,13 @@ import vm from "node:vm";
 import {
   signInstallBlob,
   ed,
+  signOfflineSecrets,
+  swkCommitment,
   type InstallBlob,
   type AuthCode,
 } from "@flagship/protocol";
 import { buildDebianPreseed } from "../src/index.js";
+import { hexToBytes } from "../src/installBlobParse.js";
 import { optionsFromRecipeJson } from "../src/preseedEngine.js";
 import { loadBlobFromString } from "../src/loadBlob.js";
 
@@ -112,7 +115,20 @@ function buildSignedRecipe(o: RecipeOpts = {}): string {
     ...(o.bootUnlockMode ? { bootUnlockMode: o.bootUnlockMode } : {}),
     ...(o.diskEncryption ? { diskEncryption: o.diskEncryption } : {}),
     blobSignatureHex: hex(sig),
-    ...(o.swkHex ? { swkHex: o.swkHex } : {}),
+    ...(o.swkHex
+      ? {
+          swkHex: o.swkHex,
+          offlineSecrets: signOfflineSecrets(
+            {
+              serverDomain: authCode.serverDomain,
+              serial: authCode.serial,
+              swkSha256Hex: swkCommitment(hexToBytes(o.swkHex)),
+              issuedAt: authCode.issuedAt + 1000,
+            },
+            irk,
+          ),
+        }
+      : {}),
     ...(o.pairingOrder ? { pairingOrder: o.pairingOrder } : {}),
     ...(o.debugGrant ? { debugGrant: o.debugGrant } : {}),
   });
@@ -182,6 +198,7 @@ describe("preseed engine bundle", () => {
       pairingOrder: loaded.pairingOrder,
       swkHex: loaded.swkHex,
       debugGrant: loaded.debugGrant,
+      offlineSecrets: loaded.offlineSecrets,
     });
     expect(engine.buildPreseed(recipe, "{}")).toBe(viaCli);
   });

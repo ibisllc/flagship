@@ -45,7 +45,7 @@ class InstallBlobWireJsonTest {
         val blob = Json.parseToJsonElement(json).jsonObject["blob"]!!.jsonObject
         assertEquals(2, blob["version"]!!.jsonPrimitive.int)
         assertTrue(blob["registrationUrl"]!!.jsonPrimitive.content.startsWith("https://"))
-        assertEquals("main", blob["installerGitRef"]!!.jsonPrimitive.content)
+        assertTrue(Regex("^[0-9a-f]{40}$").matches(blob["installerGitRef"]!!.jsonPrimitive.content))
         val code = blob["authCode"]!!.jsonObject as JsonObject
         assertEquals(1, code["version"]!!.jsonPrimitive.int)
     }

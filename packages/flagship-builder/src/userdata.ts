@@ -110,6 +110,8 @@ export interface UserDataOptions {
    * before. Carried from the recipe via {@link LoadedBlob.swkHex}.
    */
   swkHex?: string;
+  /** The owner's signed commitment to {@link swkHex} (JSON), carried to the box for it to check again. */
+  offlineSecrets?: string;
   /**
    * Owner debug access (`flagship/debug-access/v2`) as the JSON string
    * `{grant,signatureHex}`: an SSH key and an end time, signed behind Face ID
@@ -192,6 +194,7 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
           opts.pairingOrder,
           opts.swkHex,
           opts.debugGrant,
+          opts.offlineSecrets,
         ),
       ),
     ),
@@ -2084,6 +2087,7 @@ export function installBlobToJson(
   pairingOrder?: string,
   swkHex?: string,
   debugGrant?: string,
+  offlineSecrets?: string,
 ): Record<string, unknown> {
   return {
     version: b.version,
@@ -2131,6 +2135,9 @@ export function installBlobToJson(
     // sha pins unchanged). The daemon reads it from install-blob.json at first
     // boot and persists it to /var/flagship/swk.hex.
     ...(swkHex ? { swkHex } : {}),
+    // The owner's signed commitment to that key (`flagship/offline-secrets/v1`): without it the
+    // box ignores the key (SEC-RECIPE-001).
+    ...(swkHex && offlineSecrets ? { offlineSecrets: JSON.parse(offlineSecrets) } : {}),
     // Owner-authorized debug-access grant (`{grant,signatureHex}` JSON). Like
     // pairingOrder/swkHex, an UNSIGNED recipe sibling (never part of the signed
     // InstallBlob's canonical bytes), appended only when the recipe carries it —

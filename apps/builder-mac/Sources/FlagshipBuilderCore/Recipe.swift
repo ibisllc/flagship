@@ -186,6 +186,11 @@ public enum RecipeLoader {
             if let swk = obj["swkHex"] as? String {
                 blob["swkHex"] = swk
             }
+            // SEC-RECIPE-001: the owner's signed commitment to that key; the engine and the box
+            // refuse a `swkHex` without it.
+            if let offline = obj["offlineSecrets"] as? [String: Any] {
+                blob["offlineSecrets"] = offline
+            }
             return (try? JSONSerialization.data(withJSONObject: blob)) ?? data
         }
         return data

@@ -21,6 +21,7 @@ TPM/measured boot only as far as software can prove).
 - SEC-UPD-001 (artifact update)  self-update downloads the signed release, installs it with the same verifier, flips one symlink; rollback and the update guard only flip back to a release on disk (no git/npm/compiler); release index `releases.json` (advice only); daemon refuses Node below the floor; release-guard fails any return to NodeSource/git/npm/Go or a branch default
 
 - N04 recovery wait/veto: an admin's signed veto of a pending recovery decided against completion by one atomic claim (migration 0108, protocol vectors, `.com`, webapp, iOS, Android)
+- SEC-RECIPE-001 offline recipe workload key: `flagship/offline-secrets/v1` commitment signed by the account key (bound to server name + serial + key hash), required by the builder (`loadBlob`) and re-verified on the box; signed by webapp, iOS and Android; Mac passes it through (vectors `test-vectors/offline-secrets`)
 - N09 archive reads bounded (entries, duplicates, sizes, expanded bytes) with hostile-archive tests
 - SEC-AUTH-002 one default-deny authorization layer in front of every control-API route
 - TLS/ACME with the key in keyd: TLS key + CSR + handshake signing in keyd, ACME account signing by request kind, `KeydAcmeIssuer`, `flagship-tlsd` Go frontend as a crypto.Signer, legacy-key takeover and rotation, tlsd unit + appliance check (end to end against a mock CA and real keyd)
@@ -28,7 +29,6 @@ TPM/measured boot only as far as software can prove).
 
 ## Open, in order
 0. Owner/operator before release: publish the first signed artifacts (run `box-artifact.yml`, sign offline, `release-index.ts`), point `release/box-release.json` at that commit and sequence, run `node scripts/gen-box-release.mjs --write`, re-pin the bootstrap sha in userdata.test.ts. Legacy git-installed boxes cannot update in place (installer refuses a real /opt/flagship); reburn. Gym boxes need an artifact for the gym commit signed by the gym trust key.
-3. SEC-RECIPE-001 raw swkHex sibling (box ignores it; needs signed offline carrier) -- left alone so far: gym + advanced/offline mode use it
 4. N03 signed recovery record; N04 recovery wait/veto; N05 transactions/revocation; N06 keyless web; N07 freshness/lead
 5. SEC-AUTH-002 central capability matrix + delegated companion build/deploy
 6. SEC-MIG-002 migration sandbox; SEC-BROWSER-002 per-app contexts + grants; SEC-ADAPTER-002 attested index
