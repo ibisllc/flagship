@@ -400,6 +400,46 @@
       "check": "test-vectors",
       "key": "web:adapter-attestation",
       "reason": "Adapter attestations are signed by .com and checked by the box before it runs an adapter; no client app handles one."
+    },
+    {
+      "check": "push-categories",
+      "key": "ios:other",
+      "reason": "Not a push: \"other\" is the marketplace listing category the box sets when it publishes an app (screensHttp.ts MarketplaceListRequest.category); the check matches the field name."
+    },
+    {
+      "check": "push-categories",
+      "key": "android:other",
+      "reason": "Not a push: \"other\" is the marketplace listing category the box sets when it publishes an app (screensHttp.ts MarketplaceListRequest.category); the check matches the field name."
+    },
+    {
+      "check": "push-categories",
+      "key": "web:other",
+      "reason": "Not a push: \"other\" is the marketplace listing category the box sets when it publishes an app (screensHttp.ts MarketplaceListRequest.category); the check matches the field name."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/developer-sales-read/v1",
+      "reason": "feat/marketplace: the developer sales view exists only in the webapp (views/developer.js); the phones have no developer screen yet."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/developer-sales-read/v1",
+      "reason": "feat/marketplace: the developer sales view exists only in the webapp (views/developer.js); the phones have no developer screen yet."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:plan-attestation",
+      "reason": "feat/marketplace: only the box verifies a plan attestation (to honour a separate list per server); no client checks one, so only the TS tests read these vectors."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:plan-attestation",
+      "reason": "feat/marketplace: only the box verifies a plan attestation (to honour a separate list per server); no client checks one, so only the TS tests read these vectors."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:plan-attestation",
+      "reason": "feat/marketplace: only the box verifies a plan attestation (to honour a separate list per server); no client checks one, so only the TS tests read these vectors."
     }
   ]
 }
