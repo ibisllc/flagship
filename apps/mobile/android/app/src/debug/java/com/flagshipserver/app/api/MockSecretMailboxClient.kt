@@ -124,6 +124,17 @@ class MockSecretMailboxClient : SecretMailboxClient {
         revoked.add(request to bootAuth)
     }
 
+    /** Servers whose every lease was revoked (`DELETE {boot}/api/boot/lease/:domain`, release 0.3's
+     *  SEC-DEADMAN-001: switching the dead-man lock on first drops every auto-unlock lease). */
+    val revokedAll: MutableList<Pair<String, String>> = mutableListOf()
+
+    /** The worker's handleRevokeAllLeases: an owner header for that server, then every lease goes. */
+    override suspend fun revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) {
+        ownerPubFromHeader(bootAuth) ?: throw HttpException(401, """{"error":"unauthorized"}""")
+        leases.remove(serverDomain)
+        revokedAll.add(serverDomain to bootAuth)
+    }
+
     val pairingDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
     override suspend fun depositPairing(serverDomain: String, body: PairingDepositBody) {
         pairingDeposits.add(serverDomain to body)
