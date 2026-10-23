@@ -5,5 +5,15 @@
   "Done": "Fertig",
   "Failed — %@": "Fehlgeschlagen: %@",
   "Couldn't reach iPhone: %@": "iPhone nicht erreichbar: %@",
-  "Approval failed.": "Genehmigung fehlgeschlagen."
+  "Approval failed.": "Genehmigung fehlgeschlagen.",
+  "Flagship": "Flagship",
+  "Approve": "Genehmigen",
+  "from %@": "von %@",
+  "Approved": "Genehmigt",
+  "Security": "Sicherheit",
+  "Pending approvals": "Ausstehende Genehmigungen",
+  "Servers": "Server",
+  "Recent activity": "Letzte Aktivität",
+  "All quiet": "Alles ruhig",
+  "Boot approvals and account changes show up here.": "Start-Genehmigungen und Kontoänderungen erscheinen hier."
 }
