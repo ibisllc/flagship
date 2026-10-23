@@ -92,6 +92,11 @@ async function stub(page: Page, rules: Rule[]): Promise<Call[]> {
       }
       const call: Call = { method: req.method(), url: new URL(req.url()), body, headers: req.headers() };
       calls.push(call);
+      // A box's single-use WebSocket ticket (release 0.3, N06): stream plumbing, as the box answers it.
+      if (req.method() === "POST" && call.url.pathname === "/api/screens/ws-ticket") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ticket: `gym-ticket-${calls.length}`, expiresInMs: 30_000 }) });
+        return;
+      }
       for (const rule of rules) {
         if (rule.method && rule.method !== call.method) continue;
         if (!rule.match(call.url)) continue;
@@ -1146,7 +1151,8 @@ test.describe("gym webapp apps", () => {
     expect(r).toMatchObject({ serverId: MEDIA, creator: "smoketest", slug: "notes" });
     expect(await signedBy(page, ["flagship/uninstall-service/v1", r.serverId, r.creator, r.slug, r.issuedAt].join("|"), del.body.signature)).toBe(true);
     // No app order went to home or to attic (auto-pair asking attic, a box
-    // this browser has no session for, for one is expected).
+    // this browser has no session for, for one is expected, and so is a
+    // stream's single-use WebSocket ticket, which orders nothing).
     expect(
       calls
         .filter((c) => c.method !== "GET" && c.url.host !== MEDIA && c.url.host.endsWith("flagship.services") && !c.url.pathname.endsWith("/api/orders-from-user") && !c.url.pathname.endsWith("/api/screens/ws-ticket"))
