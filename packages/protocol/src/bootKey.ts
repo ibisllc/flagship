@@ -16,25 +16,92 @@
  * (TPM sealing, plan N10, is what would).
  *
  * This module adds the wire shape `.com` stores and serves:
- *   { binding: { serverDomain, bootPubHex, issuedAt }, signature }
+ *   { binding: { serverDomain, bootPubHex, issuedAt }, signature, hybridSignature? }
+ *
+ * `hybridSignature` (architecture v2, pq-suites.md §10.3) is the STK's hybrid key
+ * (Ed25519 STK AND its bound ML-DSA-65 key) signing the same fields under the
+ * v2 tag: `flagship/boot-key-binding/v2|<serverDomain>|<bootPubHex>|<issuedAt>`.
+ * A v1 reader ignores it; a strict verifier requires it, through the gate.
  */
 
 import { verifyBootKeyBinding, type BootKeyBinding } from "./boxKeyPin.js";
-import { hex } from "./canonicalBase.js";
+import { hex, legacyFieldGuard } from "./canonicalBase.js";
+import type { PolicyState } from "./assurancePolicy.js";
+import { verifyCriticalSignature, type HybridMsgSigner, type VerifiedPqKeyBinding } from "./pqTrust.js";
 import type { Bytes } from "./types.js";
 
 export interface BootKeyBindingWire {
   binding: BootKeyBinding;
   signature: string;
+  hybridSignature?: string;
+}
+
+export const TAG_BOOT_KEY_BINDING_V2 = "flagship/boot-key-binding/v2";
+
+export function canonicalBootKeyBindingV2(b: BootKeyBinding): Bytes {
+  legacyFieldGuard("serverDomain", b.serverDomain);
+  if (!HEX32.test(b.bootPubHex)) throw new Error("bootPubHex must be 32 bytes of lowercase hex");
+  if (!Number.isSafeInteger(b.issuedAt) || b.issuedAt < 0) throw new Error("issuedAt must be a non-negative integer");
+  return new TextEncoder().encode([TAG_BOOT_KEY_BINDING_V2, b.serverDomain.toLowerCase(), b.bootPubHex, String(b.issuedAt)].join("|"));
+}
+
+export function signBootKeyBindingV2(b: BootKeyBinding, stkHybrid: HybridMsgSigner): Bytes {
+  return stkHybrid(canonicalBootKeyBindingV2(b));
+}
+
+const HEX_HYBRID_SIG = /^[0-9a-f]{6746}$/;
+
+/**
+ * The boot key `wire` binds, checked through the critical-signature gate: the v1 STK signature
+ * always, and the v2 hybrid signature under the STK's verified binding whenever it is present
+ * or the scope is strict. Null on any refusal.
+ */
+export function verifiedBootKeyGated(
+  wire: unknown,
+  expect: { serverDomain: string; stkPubHex: string; stkBinding: VerifiedPqKeyBinding | null; policy: PolicyState },
+): { bootPubHex: string; hybrid: boolean } | null {
+  const boot = verifiedBootKey(wire, expect);
+  if (!boot) return null;
+  const parsed = bootKeyBindingFromWire(wire)!;
+  const h = (wire as { hybridSignature?: unknown }).hybridSignature;
+  const stk = expect.stkPubHex.toLowerCase();
+  try {
+    if (h === undefined) {
+      verifyCriticalSignature({
+        message: new TextEncoder().encode(
+          ["flagship/boot-key-binding/v1", parsed.binding.serverDomain.toLowerCase(), parsed.binding.bootPubHex, String(parsed.binding.issuedAt)].join("|"),
+        ),
+        expectedPurpose: "flagship/boot-key-binding/v1",
+        envelope: { suite: "ed25519/v1", signature: hex(parsed.signature) },
+        signerEd25519PubHex: stk,
+        binding: expect.stkBinding,
+        policy: expect.policy,
+      });
+      return { bootPubHex: boot, hybrid: false };
+    }
+    if (typeof h !== "string" || !HEX_HYBRID_SIG.test(h)) return null;
+    verifyCriticalSignature({
+      message: canonicalBootKeyBindingV2(parsed.binding),
+      expectedPurpose: TAG_BOOT_KEY_BINDING_V2,
+      envelope: { suite: "hybrid-ed25519-mldsa65/v1", signature: h },
+      signerEd25519PubHex: stk,
+      binding: expect.stkBinding,
+      policy: expect.policy,
+    });
+    return { bootPubHex: boot, hybrid: true };
+  } catch {
+    return null;
+  }
 }
 
 const HEX32 = /^[0-9a-f]{64}$/;
 const HEX64 = /^[0-9a-f]{128}$/;
 
-export function bootKeyBindingToWire(b: BootKeyBinding, sig: Bytes): BootKeyBindingWire {
+export function bootKeyBindingToWire(b: BootKeyBinding, sig: Bytes, hybridSig?: Bytes): BootKeyBindingWire {
   return {
     binding: { serverDomain: b.serverDomain.toLowerCase(), bootPubHex: b.bootPubHex.toLowerCase(), issuedAt: b.issuedAt },
     signature: hex(sig),
+    ...(hybridSig ? { hybridSignature: hex(hybridSig) } : {}),
   };
 }
 

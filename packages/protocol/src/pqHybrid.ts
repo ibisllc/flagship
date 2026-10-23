@@ -1,7 +1,7 @@
 /**
  * Architecture v2 hybrid suites, the TypeScript twin of the Rust
  * `flagship-protocol` / `flagship-crypto` crates. DRAFT, pending Q01
- * external cryptographic review; nothing calls this yet.
+ * external cryptographic review. The box pilot (pqTrust.ts) is its first caller.
  * Spec: docs/architecture-v2/pq-suites.md. Vectors: test-vectors/pq-hybrid/.
  */
 import { ml_kem768_x25519 } from "@noble/post-quantum/hybrid.js";
@@ -472,6 +472,11 @@ function strictPoint(b: Bytes): boolean {
   } catch {
     return false;
   }
+}
+
+/** Strict-profile Ed25519 (§5.3): the key and R canonical, torsion-free, not the identity. */
+export function ed25519VerifyStrict(sig: Bytes, msg: Bytes, pk: Bytes): boolean {
+  return sig.length === ED_SIG_LEN && pk.length === ED_PK_LEN && strictPoint(pk) && edVerifyStrict(sig, msg, pk);
 }
 
 function edVerifyStrict(sig: Bytes, msg: Bytes, pk: Bytes): boolean {
