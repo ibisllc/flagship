@@ -1666,14 +1666,15 @@ export async function tryControlPlane(
     );
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.LUKS_SEALED))) {
-    return finishPlain(
+    return finish(
       await handleGetSealedLuksKey(
         {
           servers: storage.servers,
-          usernames: storage.usernames,
           luksKeys: storage.luksKeys,
+          readTokens: accountReadTokenDeps(storage, env),
         },
         decodeURIComponent(m[1]!),
+        request.headers.get("authorization"),
       ),
     );
   }
@@ -1745,9 +1746,19 @@ export async function tryControlPlane(
       );
     }
     if (method === "GET" && (m = path.match(ROUTE_RE.LEASE_V2_DEPOSIT))) {
-      return finishPlain(
-        await handleReleaseBoxSealedLease(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      // The disk key sealed to the box: only that box may take it (its own
+      // STK read token). Boxes fetch leases from the boot worker, so this
+      // read has no other caller, and an anonymous one also spent the uses.
+      const host = decodeURIComponent(m[1]!).toLowerCase();
+      const reg = await storage.servers.get(host);
+      const check = await requireAccountRead(
+        accountReadTokenDeps(storage, env),
+        reg?.username ?? "",
+        request.headers.get("authorization"),
+        { allow: (sub) => sub === `s:${host}` },
       );
+      if (!check.ok) return finish(check.response);
+      return finishPlain(await handleReleaseBoxSealedLease(buildSecretMailboxDeps(), host));
     }
     if (method === "DELETE" && (m = path.match(ROUTE_RE.LEASE_V2_REVOKE))) {
       return finishPlain(
