@@ -17,7 +17,7 @@ import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { ServicePlatform, InstalledService } from "../servicePlatform.js";
 import type { AppBackupService } from "../serviceBackup.js";
 import type { AppMembership } from "../membership.js";
-import type { FilePairedSessionStore } from "../pairedSessionStore.js";
+import { pairedSessionId, type FilePairedSessionStore } from "../pairedSessionStore.js";
 import type { TabRegistry } from "../browser/tabRegistry.js";
 import {
   continueRefusal,
@@ -814,9 +814,9 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         // An expired Remote session can no longer sign in; don't list it.
         .filter((s) => !(s.companion && typeof s.expiresAt === "number" && s.expiresAt <= nowMs))
         .map((s) => ({
-          tokenPrefix: s.token.slice(0, 12),
+          tokenPrefix: s.id,
           addedAt: s.addedAt,
-          current: callerToken !== null && s.token === callerToken,
+          current: callerToken !== null && pairedSessionId(callerToken).startsWith(s.id),
           kind: s.companion ? "remote" : "device",
           ...(s.companion && typeof s.expiresAt === "number" ? { expiresAt: s.expiresAt } : {}),
         }));
@@ -835,12 +835,9 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         path.slice("/api/screens/paired-sessions/".length),
       );
       if (prefix.length < 8) return jerr(400, "tokenPrefix must be at least 8 chars");
-      const match = deps.pairedSessions
-        .list()
-        .filter((s) => s.token.startsWith(prefix));
-      if (match.length === 0) return jerr(404, "no session matches that prefix");
-      if (match.length > 1) return jerr(409, "ambiguous prefix; provide more chars");
-      await deps.pairedSessions.remove(match[0]!.token);
+      const outcome = await deps.pairedSessions.removeByIdPrefix(prefix);
+      if (outcome === "none") return jerr(404, "no session matches that prefix");
+      if (outcome === "ambiguous") return jerr(409, "ambiguous prefix; provide more chars");
       return jok({ ok: true });
     }
 

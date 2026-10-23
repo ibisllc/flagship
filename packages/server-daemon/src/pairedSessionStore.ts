@@ -9,18 +9,21 @@
  * the host can list + revoke specific entries from the phone.
  *
  * On-disk layout: a single JSON file at `<dataDir>/paired-sessions.json`
- * holding `{[token]: {addedAt}}`. Atomic write-then-rename keeps
+ * holding `{v: 2, sessions: {[sha256(token)]: {addedAt}}}`: the bearer itself is never
+ * stored (SECURITY-HARDENING-PLAN.md 18.6), only its hash, and lists show an opaque id. A file
+ * from before (`{[token]: …}`) is read once and rewritten hashed. Atomic write-then-rename keeps
  * it crash-safe; concurrent writes from a single phone are serialized
  * by the orders handler so there's no contention.
  */
 
 import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeFileDurable } from "./durableFile.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { PairedSessionGate } from "./alertInboxHttp.js";
-import { tokenFingerprint, type TokenFamily } from "./authority/index.js";
+import { type TokenFamily } from "./authority/index.js";
 
 export interface PairedSession {
   addedAt: number;
@@ -40,8 +43,13 @@ export interface PairedSession {
   companionUserAgent?: string;
 }
 
+/** The opaque id a bearer token is known by: its SHA-256. The token itself is never stored or listed. */
+export function pairedSessionId(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
 export class FilePairedSessionStore implements PairedSessionGate {
-  private byToken = new Map<string, PairedSession>();
+  private byToken = new Map<string, PairedSession>(); // keyed by sha256(token), hex
   /**
    * Test seam — the gate consults this for the "is the companion still
    * within its 4-hour TTL?" question. Production leaves it as Date.now;
@@ -59,11 +67,11 @@ export class FilePairedSessionStore implements PairedSessionGate {
 
   async attachAuthority(a: { owner: TokenFamily; companion: TokenFamily; parentOf: () => string[] }): Promise<void> {
     this.authority = a;
-    for (const [token, row] of this.byToken) await this.issueGrant(token, row);
+    for (const [id, row] of this.byToken) await this.issueGrant(id, row);
     const drop = async (ref: string) => {
-      for (const [token] of [...this.byToken]) {
-        if (tokenFingerprint(token) === ref) {
-          this.byToken.delete(token);
+      for (const [id] of [...this.byToken]) {
+        if (id.slice(0, 32) === ref) {
+          this.byToken.delete(id);
           await this.flush();
         }
       }
@@ -72,12 +80,17 @@ export class FilePairedSessionStore implements PairedSessionGate {
     a.companion.onRevoked(drop);
   }
 
-  private async issueGrant(token: string, row: PairedSession): Promise<void> {
+  /** The opaque id a bearer is known by: its SHA-256. The bearer itself is never kept. */
+  static idOf(token: string): string {
+    return pairedSessionId(token);
+  }
+
+  private async issueGrant(id: string, row: PairedSession): Promise<void> {
     const a = this.authority;
     if (!a) return;
     const fam = row.companion ? a.companion : a.owner;
     await fam.adopt({
-      ref: tokenFingerprint(token),
+      ref: id.slice(0, 32),
       parents: a.parentOf(),
       capability: row.companion ? "read" : "owner",
       expiresAt: row.companion ? row.expiresAt ?? null : null,
@@ -90,9 +103,11 @@ export class FilePairedSessionStore implements PairedSessionGate {
     if (!existsSync(this.path)) return;
     try {
       const raw = await readFile(this.path, "utf8");
-      const parsed = JSON.parse(raw) as Record<string, PairedSession>;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const legacy = parsed.v !== 2;
+      const rows = (legacy ? parsed : parsed.sessions) as Record<string, PairedSession>;
       this.byToken.clear();
-      for (const [tok, info] of Object.entries(parsed)) {
+      for (const [key, info] of Object.entries(rows ?? {})) {
         if (typeof info?.addedAt === "number") {
           const row: PairedSession = { addedAt: info.addedAt };
           if (info.companion === true) row.companion = true;
@@ -100,9 +115,11 @@ export class FilePairedSessionStore implements PairedSessionGate {
           if (typeof info.companionUserAgent === "string") {
             row.companionUserAgent = info.companionUserAgent;
           }
-          this.byToken.set(tok, row);
+          // A file from before kept the bearer itself as the key: hash it now and rewrite.
+          this.byToken.set(legacy ? FilePairedSessionStore.idOf(key) : key, row);
         }
       }
+      if (legacy && this.byToken.size > 0) await this.flush();
     } catch {
       // Treat unreadable / malformed as empty — better than failing boot.
     }
@@ -110,8 +127,9 @@ export class FilePairedSessionStore implements PairedSessionGate {
 
   async add(token: string, addedAt: number = Date.now()): Promise<void> {
     if (!token || token.length < 16) throw new Error("token too short");
-    this.byToken.set(token, { addedAt });
-    await this.issueGrant(token, { addedAt });
+    const id = FilePairedSessionStore.idOf(token);
+    this.byToken.set(id, { addedAt });
+    await this.issueGrant(id, { addedAt });
     await this.flush();
   }
 
@@ -133,14 +151,15 @@ export class FilePairedSessionStore implements PairedSessionGate {
       expiresAt: args.expiresAt,
     };
     if (args.userAgent) row.companionUserAgent = args.userAgent;
-    this.byToken.set(args.token, row);
-    await this.issueGrant(args.token, row);
+    const id = FilePairedSessionStore.idOf(args.token);
+    this.byToken.set(id, row);
+    await this.issueGrant(id, row);
     await this.flush();
   }
 
   /** P14 — fetch the row for a token, including companion fields. */
   get(token: string): PairedSession | null {
-    const r = this.byToken.get(token);
+    const r = this.byToken.get(FilePairedSessionStore.idOf(token));
     return r ? { ...r } : null;
   }
 
@@ -151,28 +170,29 @@ export class FilePairedSessionStore implements PairedSessionGate {
    * revoke. (Revoke still works on stale rows; they're harmless.)
    */
   listCompanions(nowMs: number = this.now()): Array<{
-    token: string;
+    /** Opaque id (hash prefix); revoke with {@link removeByIdPrefix}. */
+    id: string;
     addedAt: number;
     expiresAt: number;
     userAgent?: string;
   }> {
     const out: Array<{
-      token: string;
+      id: string;
       addedAt: number;
       expiresAt: number;
       userAgent?: string;
     }> = [];
-    for (const [token, info] of this.byToken) {
+    for (const [id, info] of this.byToken) {
       if (!info.companion) continue;
       if (typeof info.expiresAt !== "number") continue;
       if (info.expiresAt <= nowMs) continue;
       const row: {
-        token: string;
+        id: string;
         addedAt: number;
         expiresAt: number;
         userAgent?: string;
       } = {
-        token,
+        id: id.slice(0, 16),
         addedAt: info.addedAt,
         expiresAt: info.expiresAt,
       };
@@ -188,17 +208,30 @@ export class FilePairedSessionStore implements PairedSessionGate {
   private async revokeGrants(rows: Array<[string, PairedSession]>, reason: string): Promise<void> {
     const a = this.authority;
     if (!a) return;
-    for (const [token, row] of rows) {
-      await (row.companion ? a.companion : a.owner).revoke(tokenFingerprint(token), reason).catch(() => {});
+    for (const [id, row] of rows) {
+      await (row.companion ? a.companion : a.owner).revoke(id.slice(0, 32), reason).catch(() => {});
     }
   }
 
   async remove(token: string): Promise<void> {
-    const row = this.byToken.get(token);
-    if (this.byToken.delete(token)) {
+    await this.removeId(FilePairedSessionStore.idOf(token));
+  }
+
+  private async removeId(id: string): Promise<void> {
+    const row = this.byToken.get(id);
+    if (this.byToken.delete(id)) {
       await this.flush();
-      if (row) await this.revokeGrants([[token, row]], "session removed");
+      if (row) await this.revokeGrants([[id, row]], "session removed");
     }
+  }
+
+  /** Remove the one session whose opaque id starts with `prefix`; reports how many matched. */
+  async removeByIdPrefix(prefix: string): Promise<"removed" | "none" | "ambiguous"> {
+    const matches = [...this.byToken.keys()].filter((id) => id.startsWith(prefix));
+    if (matches.length === 0) return "none";
+    if (matches.length > 1) return "ambiguous";
+    await this.removeId(matches[0]!);
+    return "removed";
   }
 
   /**
@@ -222,10 +255,10 @@ export class FilePairedSessionStore implements PairedSessionGate {
   async removeCompanions(): Promise<number> {
     let n = 0;
     const gone: Array<[string, PairedSession]> = [];
-    for (const [token, row] of this.byToken) {
+    for (const [id, row] of this.byToken) {
       if (row.companion === true) {
-        this.byToken.delete(token);
-        gone.push([token, row]);
+        this.byToken.delete(id);
+        gone.push([id, row]);
         n++;
       }
     }
@@ -236,9 +269,9 @@ export class FilePairedSessionStore implements PairedSessionGate {
     return n;
   }
 
-  list(): Array<{ token: string; addedAt: number; companion?: true; expiresAt?: number }> {
-    return [...this.byToken.entries()].map(([token, info]) => ({
-      token,
+  list(): Array<{ id: string; addedAt: number; companion?: true; expiresAt?: number }> {
+    return [...this.byToken.entries()].map(([id, info]) => ({
+      id: id.slice(0, 16),
       addedAt: info.addedAt,
       ...(info.companion ? { companion: true as const } : {}),
       ...(typeof info.expiresAt === "number" ? { expiresAt: info.expiresAt } : {}),
@@ -246,18 +279,19 @@ export class FilePairedSessionStore implements PairedSessionGate {
   }
 
   has(token: string): boolean {
-    return this.byToken.has(token);
+    return this.byToken.has(FilePairedSessionStore.idOf(token));
   }
 
   /** PairedSessionGate.check */
   check(req: HttpRequest): HttpResponse | null {
     const token = extractPairedSessionToken(req);
     if (!token) return jerr(401, "missing paired-session token");
-    const row = this.byToken.get(token);
+    const id = FilePairedSessionStore.idOf(token);
+    const row = this.byToken.get(id);
     if (!row) return jerr(401, "invalid paired-session token");
     if (this.authority) {
       const fam = row.companion ? this.authority.companion : this.authority.owner;
-      if (!fam.isLive(tokenFingerprint(token))) return jerr(401, "paired-session token revoked");
+      if (!fam.isLive(id.slice(0, 32))) return jerr(401, "paired-session token revoked");
     }
     // P14 — companion sessions hard-expire at `expiresAt`. The gate
     // surfaces a recognisable 401 reason so the webapp can prompt the
@@ -285,7 +319,7 @@ export class FilePairedSessionStore implements PairedSessionGate {
   isCompanionRequest(req: HttpRequest): boolean {
     const token = extractPairedSessionToken(req);
     if (!token) return false;
-    const row = this.byToken.get(token);
+    const row = this.byToken.get(FilePairedSessionStore.idOf(token));
     return row?.companion === true;
   }
 
@@ -304,9 +338,9 @@ export class FilePairedSessionStore implements PairedSessionGate {
 
   private async flushNow(): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
-    const obj: Record<string, PairedSession> = {};
-    for (const [t, info] of this.byToken) obj[t] = { ...info };
-    await writeFileDurable(this.path, JSON.stringify(obj, null, 2));
+    const sessions: Record<string, PairedSession> = {};
+    for (const [id, info] of this.byToken) sessions[id] = { ...info };
+    await writeFileDurable(this.path, JSON.stringify({ v: 2, sessions }, null, 2));
   }
 }
 

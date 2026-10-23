@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildBuildModesHttpHandlers } from "../src/buildmodes/buildModesHttp.js";
 import { buildVibeCodeHttpHandlers } from "../src/llm/vibeCodeHttp.js";
 import { ownerOnlyGate, COMPANION_DENIED_CODE } from "../src/ownerOnlyGate.js";
-import { FilePairedSessionStore, defaultPairedSessionPath } from "../src/pairedSessionStore.js";
+import { FilePairedSessionStore, pairedSessionId, defaultPairedSessionPath } from "../src/pairedSessionStore.js";
 import type { HttpRequest } from "../src/runtime.js";
 
 const OWNER = "o".repeat(32);
@@ -125,7 +125,7 @@ describe("removeCompanions", () => {
     expect(await sessions.removeCompanions()).toBe(1);
     const again = new FilePairedSessionStore(defaultPairedSessionPath(dir));
     await again.load();
-    expect(again.list().map((r) => r.token)).toEqual([OWNER]);
+    expect(again.list().map((r) => r.id)).toEqual([pairedSessionId(OWNER).slice(0, 16)]);
     expect(await again.removeCompanions()).toBe(0);
   });
 });
