@@ -164,6 +164,7 @@ describe("lock and power", () => {
     const r = await lockAndPower({ serverDomain: S, mode: "restart", sendPower: async (m: string) => void order.push(`power:${m}`) }, w.d());
     expect(order).toEqual(["power:restart"]);
     expect(r).toMatchObject({ lock: "confirmed", power: "sent" });
+    expect(describeLockResult(r)).toMatch(/^The server is restarting; locked/);
     expect((await w.deps.bootSuspensions.get(S))?.suspended).toBe(true);
   });
 
