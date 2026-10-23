@@ -1,0 +1,13 @@
+[package]
+name = "flagship-runtime"
+description = "OCI runtime adapter: builds approved runtime requests from a broker-owned ExecutionPlan."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

@@ -1,0 +1,13 @@
+[package]
+name = "flagship-protocol"
+description = "Pure parsing, canonical bytes and versioned schemas shared with the TypeScript, Swift and Kotlin ports. No IO, no private keys."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

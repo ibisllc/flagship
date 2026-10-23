@@ -1,0 +1,58 @@
+name: Rust (architecture v2 workspace)
+
+# The Rust trusted core (docs/architecture-v2/IMPLEMENTATION-PLAN.md 5.2, A04): format,
+# lint, locked tests and the dependency policy on both box architectures. The toolchain
+# comes from rust/rust-toolchain.toml; Cargo.lock is committed and every build is --locked.
+
+on:
+  pull_request:
+    paths: ["rust/**", "packages/protocol/test-vectors/**", "test-vectors/**", ".github/workflows/rust.yml"]
+  push:
+    branches: [main, "release/**", "feat/architecture"]
+    paths: ["rust/**", "packages/protocol/test-vectors/**", "test-vectors/**", ".github/workflows/rust.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: rust
+
+jobs:
+  check:
+    name: check (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Toolchain from rust-toolchain.toml
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - name: Privileged-boundary tests (Linux only, disposable runner)
+        run: cargo test --workspace --locked -- --ignored linux_
+        env:
+          FLAGSHIP_DISPOSABLE_RUNNER: "1"
+
+  deny:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: rust/Cargo.toml
+          command: check advisories licenses bans sources
