@@ -202,7 +202,7 @@ object CloudRecoveryEnrollment {
         // …and the signature itself, now that the recovered key can verify it.
         fetched.signed?.let { signed ->
             if (!recoveredKeySigned(umkSeed, signed)) {
-                throw ValidationError("The stored recovery record was not signed by this account's key; refusing to use it.")
+                throw ValidationError(FSStrings.get(R.string.the_stored_recovery_record_was_not))
             }
         }
         // #28 — recover the escrowed ACME account key under the same PRF

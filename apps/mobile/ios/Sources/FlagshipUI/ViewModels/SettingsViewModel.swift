@@ -231,7 +231,7 @@ public final class SettingsViewModel {
         guard let username = currentUsername(), !username.isEmpty,
               let pending = pendingRePair?.pending, pending.objectedAt == nil else { return .alreadyOver }
         do {
-            let key = try await adminRootKey("Reject the account recovery")
+            let key = try await adminRootKey(String(localized: "Reject the account recovery"))
             let vetoerPub = key.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
             let veto = RePairVeto(
                 username: username, newIrkPubHex: pending.newIrkPub, initiatedAt: pending.initiatedAt,

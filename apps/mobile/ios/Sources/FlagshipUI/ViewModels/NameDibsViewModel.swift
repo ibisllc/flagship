@@ -94,12 +94,12 @@ public final class NameDibsViewModel {
 
     public func start(name raw: String) async {
         let name = Self.normalize(raw)
-        guard !name.isEmpty else { inlineError = "Enter a name."; return }
+        guard !name.isEmpty else { inlineError = String(localized: "Enter a name."); return }
         inlineError = nil
         let previous = phase
         phase = .working
         do {
-            let key = try await signer("Claim \(name).com")
+            let key = try await signer(String(localized: "Claim \(name).com"))
             let request = DibsInitiateRequest(
                 username: username,
                 name: name,
@@ -123,7 +123,7 @@ public final class NameDibsViewModel {
         inlineError = nil
         phase = .working
         do {
-            let key = try await signer("Check \(c.name).com")
+            let key = try await signer(String(localized: "Check \(c.name).com"))
             let request = DibsVerifyRequest(username: username, name: c.name, nonce: c.nonce, issuedAt: now())
             let sig = try key.signature(for: NameDibsVerify.canonicalBytes(
                 username: request.username, name: request.name, nonce: request.nonce, issuedAt: request.issuedAt

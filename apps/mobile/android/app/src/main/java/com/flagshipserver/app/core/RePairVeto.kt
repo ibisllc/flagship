@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
 
 data class RePairVeto(
@@ -44,8 +45,8 @@ data class RePairVeto(
 
 /** The sentences the recovery screens show; the same words as iOS and the webapp. */
 object RecoveryReviewCopy {
-    const val CONFIRM_TITLE = "Reject this recovery?"
-    const val CONFIRM_MESSAGE =
-        "This cancels the recovery attempt. If the real owner is trying to get back in, they will have to start again and wait the full time. Only reject it if you do not expect it."
-    const val UNUSUAL_NOTE = "If this is unusual, please check on the physical safety of your device and server."
+    val CONFIRM_TITLE get() = FSStrings.get(R.string.reject_this_recovery)
+    val CONFIRM_MESSAGE get() =
+        FSStrings.get(R.string.this_cancels_the_recovery_attempt_if)
+    val UNUSUAL_NOTE get() = FSStrings.get(R.string.if_this_is_unusual_please_check)
 }

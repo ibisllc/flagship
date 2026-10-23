@@ -80,7 +80,7 @@ class PowerOffViewModel(
         _summary.value = ""
         _lockOutcome.value = null
         _phase.value = PowerOffPhase.Signing
-        val reason = if (mode == PowerMode.RESTART) "Lock and restart $serverDomain" else "Lock and turn off $serverDomain"
+        val reason = if (mode == PowerMode.RESTART) FSStrings.get(R.string.lock_and_restart, serverDomain) else FSStrings.get(R.string.lock_and_turn_off, serverDomain)
         var accountKey: Ed25519Sign? = null
         var accountPub: String? = null
         if (bootLock != null) {
@@ -88,7 +88,7 @@ class PowerOffViewModel(
                 accountKey = irkSigner(reason)
                 accountPub = irkPubHex()
             } catch (e: Throwable) {
-                _phase.value = PowerOffPhase.Failed("Couldn't access your account key: ${UserErrorText.reason(e)}")
+                _phase.value = PowerOffPhase.Failed(FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(e)))
                 return
             }
         }
@@ -101,8 +101,7 @@ class PowerOffViewModel(
             _lockOutcome.value = lock
             if (lock !is BootLockOutcome.Confirmed) {
                 lockStore?.markPending(serverDomain)
-                val msg = "Couldn't lock this server at the boot service, so it was not restarted. " +
-                    "Shut it down instead? It will lock as soon as the service answers."
+                val msg = FSStrings.get(R.string.couldnt_lock_this_server_at_the)
                 _summary.value = msg
                 _phase.value = PowerOffPhase.LockUnconfirmed(msg)
                 return
@@ -120,7 +119,7 @@ class PowerOffViewModel(
     /** Retry a lock the boot service did not confirm earlier. */
     suspend fun retryPendingLock(): BootLockOutcome? {
         val b = bootLock ?: return null
-        val (key, pub) = try { irkSigner("Lock $serverDomain") to irkPubHex() } catch (_: Throwable) { return null }
+        val (key, pub) = try { irkSigner(FSStrings.get(R.string.lock, serverDomain)) to irkPubHex() } catch (_: Throwable) { return null }
         val r = b.setOwner(serverDomain, BootSuspensionOrder.Action.SUSPEND, key, pub)
         if (r is BootLockOutcome.Confirmed) { lockStore?.setLastKnown(true, serverDomain); lockStore?.clearPending(serverDomain) }
         _lockOutcome.value = r
@@ -130,7 +129,7 @@ class PowerOffViewModel(
     /** Resume: a signed new epoch. Resume alone deposits no lease; auto-unlock re-arms at the next phone approval. */
     suspend fun resume(): BootLockOutcome? {
         val b = bootLock ?: return null
-        val (key, pub) = try { irkSigner("Resume $serverDomain") to irkPubHex() } catch (_: Throwable) { return null }
+        val (key, pub) = try { irkSigner(FSStrings.get(R.string.resume, serverDomain)) to irkPubHex() } catch (_: Throwable) { return null }
         val r = b.setOwner(serverDomain, BootSuspensionOrder.Action.RESUME, key, pub)
         if (r is BootLockOutcome.Confirmed) { lockStore?.setLastKnown(false, serverDomain); lockStore?.clearPending(serverDomain) }
         return r
@@ -177,9 +176,9 @@ class PowerOffViewModel(
                 executed = ack.mode?.let { PowerMode.fromWire(it) } ?: mode
             } catch (e: HttpException) {
                 failure = when (e.status) {
-                    403 -> "The server rejected the request. Sign in again and retry."
-                    404, 502, 503 -> "The server isn't reachable right now."
-                    else -> "Server error (${e.status}): ${e.body}"
+                    403 -> FSStrings.get(R.string.the_server_rejected_the_request_sign)
+                    404, 502, 503 -> FSStrings.get(R.string.the_server_isnt_reachable_right_now)
+                    else -> FSStrings.get(R.string.server_error, e.status, e.body)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

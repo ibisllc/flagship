@@ -392,13 +392,13 @@ fun TrustedDevicesScreen(nav: NavController) {
                     scope.launch {
                         rejectMessage = when (val out = vm.vetoPendingRecovery()) {
                             is TrustedDevicesViewModel.RecoveryVetoOutcome.Rejected -> null
-                            is TrustedDevicesViewModel.RecoveryVetoOutcome.AlreadyOver -> "This recovery was already cancelled or finished."
+                            is TrustedDevicesViewModel.RecoveryVetoOutcome.AlreadyOver -> stringResource(R.string.this_recovery_was_already_cancelled_or)
                             is TrustedDevicesViewModel.RecoveryVetoOutcome.Failed -> out.reason
                         }
                     }
-                }) { Text("Reject recovery") }
+                }) { Text(stringResource(R.string.reject_recovery)) }
             },
-            dismissButton = { TextButton(onClick = { confirmReject = false }) { Text("Keep waiting") } },
+            dismissButton = { TextButton(onClick = { confirmReject = false }) { Text(stringResource(R.string.keep_waiting)) } },
         )
     }
 
@@ -598,14 +598,12 @@ private fun RecoveryReviewCard(
     FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
-                "A recovery of this account is waiting",
+                stringResource(R.string.a_recovery_of_this_account_is),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.semantics { contentDescription = "recovery-review-card" },
             )
             Text(
-                "A new device asked to take over this account. It becomes active on " +
-                    "${formatCompletesAt(pending.completesAt)} unless an admin rejects it. " +
-                    "It has no admin authority until then.",
+                fsString(R.string.a_new_device_asked_to_take, formatCompletesAt(pending.completesAt)),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -616,7 +614,7 @@ private fun RecoveryReviewCard(
             )
             if (message != null) Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             FSPrimaryButton(
-                label = "Reject recovery",
+                label = stringResource(R.string.reject_recovery),
                 onClick = onReject,
                 block = true,
                 modifier = Modifier.semantics { contentDescription = "recovery-review-reject-btn" },

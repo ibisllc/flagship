@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
@@ -78,12 +79,12 @@ data class PublisherTrustBody(val trust: PublisherTrust, val signatureHex: Strin
 
 object SliverWords {
     const val HEADING = "Security"
-    const val TRUST = "Trust this new key for this service"
-    const val REJECT = "Reject and pause updates"
-    const val CHAIN = "The old key vouched for the new one."
-    const val NO_CHAIN = "The old key did not vouch for the new one. Treat this as a different publisher using the same name."
-    const val WARNING = "If this is unusual, do not trust the new key. Updates from this publisher stay paused until you decide."
-    const val LOST_HISTORY = "This server lost its list of security notices and started over. Check each service and your recovery settings."
+    val TRUST get() = FSStrings.get(R.string.trust_this_new_key_for_this)
+    val REJECT get() = FSStrings.get(R.string.reject_and_pause_updates)
+    val CHAIN get() = FSStrings.get(R.string.the_old_key_vouched_for_the)
+    val NO_CHAIN get() = FSStrings.get(R.string.the_old_key_did_not_vouch)
+    val WARNING get() = FSStrings.get(R.string.if_this_is_unusual_do_not)
+    val LOST_HISTORY get() = FSStrings.get(R.string.this_server_lost_its_list_of)
 
     fun severityLabel(s: String): String = when (s) {
         "critical" -> "Critical"
@@ -100,10 +101,10 @@ object SliverWords {
         val hour = 3_600_000L
         val min = 60_000L
         val body = when {
-            a >= day -> "${a / day} day${if (a / day == 1L) "" else "s"} ${(a % day) / hour} hours"
-            a >= hour -> "${a / hour} hour${if (a / hour == 1L) "" else "s"} ${(a % hour) / min} minutes"
-            else -> { val m = maxOf(1L, a / min); "$m minute${if (m == 1L) "" else "s"}" }
+            a >= day -> FSStrings.get(R.string.day_hours, a / day, if (a / day == 1L) "" else "s", (a % day) / hour)
+            a >= hour -> FSStrings.get(R.string.hour_minutes, a / hour, if (a / hour == 1L) "" else "s", (a % hour) / min)
+            else -> { val m = maxOf(1L, a / min); FSStrings.get(R.string.minute, m, if (m == 1L) "" else "s") }
         }
-        return if (ms >= 0) "$body left" else "overdue by $body"
+        return if (ms >= 0) FSStrings.get(R.string.left, body) else "overdue by $body"
     }
 }

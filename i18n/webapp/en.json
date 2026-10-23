@@ -10673,5 +10673,249 @@
   "Renamed to {0}.": {
     "en": "Renamed to {0}.",
     "ctx": "webapp/views/service-detail.js:1242"
+  },
+  "Recovery rejected by an admin": {
+    "en": "Recovery rejected by an admin",
+    "ctx": "webapp/lib/auditLog.js:83"
+  },
+  "Couldn't lock this server at the boot service, so it was not restarted. Shut it down instead? It will lock as soon as the service answers.": {
+    "en": "Couldn't lock this server at the boot service, so it was not restarted. Shut it down instead? It will lock as soon as the service answers.",
+    "ctx": "webapp/lib/bootSuspension.js:246"
+  },
+  "The server is powering off": {
+    "en": "The server is powering off",
+    "ctx": "webapp/lib/bootSuspension.js:248"
+  },
+  "The power command didn't reach the server": {
+    "en": "The power command didn't reach the server",
+    "ctx": "webapp/lib/bootSuspension.js:248"
+  },
+  "Locked at the boot service: {0}.": {
+    "en": "Locked at the boot service: {0}.",
+    "ctx": "webapp/lib/bootSuspension.js:250"
+  },
+  "Access & permissions": {
+    "en": "Access & permissions",
+    "ctx": "webapp/lib/permissions.js:10"
+  },
+  "Nothing can act for this app right now.": {
+    "en": "Nothing can act for this app right now.",
+    "ctx": "webapp/lib/permissions.js:11"
+  },
+  "End this access": {
+    "en": "End this access",
+    "ctx": "webapp/lib/permissions.js:12"
+  },
+  "End all access": {
+    "en": "End all access",
+    "ctx": "webapp/lib/permissions.js:13"
+  },
+  "Some work did not stop yet:": {
+    "en": "Some work did not stop yet:",
+    "ctx": "webapp/lib/permissions.js:14"
+  },
+  "Access ended.": {
+    "en": "Access ended.",
+    "ctx": "webapp/lib/permissions.js:15"
+  },
+  "{0} accesses ended.": {
+    "en": "{0} accesses ended.",
+    "ctx": "webapp/lib/permissions.js:15"
+  },
+  "Owner session": {
+    "en": "Owner session",
+    "ctx": "webapp/lib/permissions.js:19"
+  },
+  "Browser or companion session": {
+    "en": "Browser or companion session",
+    "ctx": "webapp/lib/permissions.js:20"
+  },
+  "App API key": {
+    "en": "App API key",
+    "ctx": "webapp/lib/permissions.js:21"
+  },
+  "IDE key": {
+    "en": "IDE key",
+    "ctx": "webapp/lib/permissions.js:22"
+  },
+  "Browser access": {
+    "en": "Browser access",
+    "ctx": "webapp/lib/permissions.js:26"
+  },
+  "Background job": {
+    "en": "Background job",
+    "ctx": "webapp/lib/permissions.js:29"
+  },
+  "until {0} UTC": {
+    "en": "until {0} UTC",
+    "ctx": "webapp/lib/permissions.js:55"
+  },
+  "can read secrets": {
+    "en": "can read secrets",
+    "ctx": "webapp/lib/permissions.js:65"
+  },
+  "Running: {0}": {
+    "en": "Running: {0}",
+    "ctx": "webapp/lib/permissions.js:67"
+  },
+  "Waiting: {0} ({1})": {
+    "en": "Waiting: {0} ({1})",
+    "ctx": "webapp/lib/permissions.js:73"
+  },
+  "Reject this recovery?": {
+    "en": "Reject this recovery?",
+    "ctx": "webapp/lib/recoveryVeto.js:17"
+  },
+  "This cancels the recovery attempt. If the real owner is trying to get back in, they will have to start again and wait the full time. Only reject it if you do not expect it.": {
+    "en": "This cancels the recovery attempt. If the real owner is trying to get back in, they will have to start again and wait the full time. Only reject it if you do not expect it.",
+    "ctx": "webapp/lib/recoveryVeto.js:19"
+  },
+  "If this is unusual, please check on the physical safety of your device and server.": {
+    "en": "If this is unusual, please check on the physical safety of your device and server.",
+    "ctx": "webapp/lib/recoveryVeto.js:21"
+  },
+  "on {0}": {
+    "en": "on {0}",
+    "ctx": "webapp/lib/recoveryVeto.js:47"
+  },
+  "A recovery of this account is waiting": {
+    "en": "A recovery of this account is waiting",
+    "ctx": "webapp/lib/recoveryVeto.js:46"
+  },
+  "A new device asked to take over this account. It becomes active {0} unless an admin rejects it. It has no admin authority until then.": {
+    "en": "A new device asked to take over this account. It becomes active {0} unless an admin rejects it. It has no admin authority until then.",
+    "ctx": "webapp/lib/recoveryVeto.js:47"
+  },
+  "Reject recovery": {
+    "en": "Reject recovery",
+    "ctx": "webapp/lib/recoveryVeto.js:49"
+  },
+  "This recovery was already cancelled or finished.": {
+    "en": "This recovery was already cancelled or finished.",
+    "ctx": "webapp/lib/recoveryVeto.js:75"
+  },
+  "Couldn't reject the recovery ({0})": {
+    "en": "Couldn't reject the recovery ({0})",
+    "ctx": "webapp/lib/recoveryVeto.js:76"
+  },
+  "overdue by {0}": {
+    "en": "overdue by {0}",
+    "ctx": "webapp/lib/securitySliver.js:38"
+  },
+  "No new key is waiting for this service.": {
+    "en": "No new key is waiting for this service.",
+    "ctx": "webapp/lib/securitySliver.js:75"
+  },
+  "Security": {
+    "en": "Security",
+    "ctx": "webapp/lib/sliverUi.js:16"
+  },
+  "Trust this new key for this service": {
+    "en": "Trust this new key for this service",
+    "ctx": "webapp/lib/sliverUi.js:17"
+  },
+  "Reject and pause updates": {
+    "en": "Reject and pause updates",
+    "ctx": "webapp/lib/sliverUi.js:18"
+  },
+  "This server lost its list of security notices and started over. Check each service and your recovery settings.": {
+    "en": "This server lost its list of security notices and started over. Check each service and your recovery settings.",
+    "ctx": "webapp/lib/sliverUi.js:19"
+  },
+  "The old key vouched for the new one.": {
+    "en": "The old key vouched for the new one.",
+    "ctx": "webapp/lib/sliverUi.js:20"
+  },
+  "The old key did not vouch for the new one. Treat this as a different publisher using the same name.": {
+    "en": "The old key did not vouch for the new one. Treat this as a different publisher using the same name.",
+    "ctx": "webapp/lib/sliverUi.js:21"
+  },
+  "If this is unusual, do not trust the new key. Updates from this publisher stay paused until you decide.": {
+    "en": "If this is unusual, do not trust the new key. Updates from this publisher stay paused until you decide.",
+    "ctx": "webapp/lib/sliverUi.js:22"
+  },
+  "<strong>Old key</strong> {0} &rarr; <strong>new key</strong> {1}": {
+    "en": "<strong>Old key</strong> {0} &rarr; <strong>new key</strong> {1}",
+    "ctx": "webapp/lib/sliverUi.js:44"
+  },
+  "Updated {0}{1}{2}": {
+    "en": "Updated {0}{1}{2}",
+    "ctx": "webapp/lib/sliverUi.js:56"
+  },
+  "Key trusted for this service": {
+    "en": "Key trusted for this service",
+    "ctx": "webapp/lib/sliverUi.js:84"
+  },
+  "Updates paused for this service": {
+    "en": "Updates paused for this service",
+    "ctx": "webapp/lib/sliverUi.js:95"
+  },
+  "Checking the lock…": {
+    "en": "Checking the lock…",
+    "ctx": "webapp/views/server-detail.js:539"
+  },
+  "Resume (allow auto-unlock again)": {
+    "en": "Resume (allow auto-unlock again)",
+    "ctx": "webapp/views/server-detail.js:540"
+  },
+  "Locked and powering off": {
+    "en": "Locked and powering off",
+    "ctx": "webapp/views/server-detail.js:1158"
+  },
+  "Powering off; remote lock pending": {
+    "en": "Powering off; remote lock pending",
+    "ctx": "webapp/views/server-detail.js:1158"
+  },
+  "Sent, but the remote lock is still pending": {
+    "en": "Sent, but the remote lock is still pending",
+    "ctx": "webapp/views/server-detail.js:1167"
+  },
+  "{0} sent; locked": {
+    "en": "{0} sent; locked",
+    "ctx": "webapp/views/server-detail.js:1168"
+  },
+  "Shut down instead?": {
+    "en": "Shut down instead?",
+    "ctx": "webapp/views/server-detail.js:1184"
+  },
+  "Keep running": {
+    "en": "Keep running",
+    "ctx": "webapp/views/server-detail.js:1189"
+  },
+  "Shut down": {
+    "en": "Shut down",
+    "ctx": "webapp/views/server-detail.js:1190"
+  },
+  "Couldn't read the lock state right now.": {
+    "en": "Couldn't read the lock state right now.",
+    "ctx": "webapp/views/server-detail.js:1212"
+  },
+  "Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.": {
+    "en": "Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.",
+    "ctx": "webapp/views/server-detail.js:1217"
+  },
+  "Not locked.": {
+    "en": "Not locked.",
+    "ctx": "webapp/views/server-detail.js:1220"
+  },
+  "Remote lock confirmed": {
+    "en": "Remote lock confirmed",
+    "ctx": "webapp/views/server-detail.js:1227"
+  },
+  "Couldn't resume right now. Try again.": {
+    "en": "Couldn't resume right now. Try again.",
+    "ctx": "webapp/views/server-detail.js:1235"
+  },
+  "Resumed. Turn auto-unlock back on below if you want it.": {
+    "en": "Resumed. Turn auto-unlock back on below if you want it.",
+    "ctx": "webapp/views/server-detail.js:1237"
+  },
+  "Recovery rejected": {
+    "en": "Recovery rejected",
+    "ctx": "webapp/views/trusted-devices.js:354"
+  },
+  "Couldn't reject the recovery": {
+    "en": "Couldn't reject the recovery",
+    "ctx": "webapp/views/trusted-devices.js:357"
   }
 }

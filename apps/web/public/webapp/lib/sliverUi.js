@@ -8,17 +8,18 @@ import { getSession } from "./state.js";
 import { toast } from "./toast.js";
 import { humanError } from "./humanError.js";
 
+import { tr } from "./i18n.js";
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 export const SLIVER_COPY = Object.freeze({
-  heading: "Security",
-  trust: "Trust this new key for this service",
-  reject: "Reject and pause updates",
-  lostHistory: "This server lost its list of security notices and started over. Check each service and your recovery settings.",
-  chain: "The old key vouched for the new one.",
-  noChain: "The old key did not vouch for the new one. Treat this as a different publisher using the same name.",
-  warning: "If this is unusual, do not trust the new key. Updates from this publisher stay paused until you decide.",
+  heading: tr("Security"),
+  trust: tr("Trust this new key for this service"),
+  reject: tr("Reject and pause updates"),
+  lostHistory: tr("This server lost its list of security notices and started over. Check each service and your recovery settings."),
+  chain: tr("The old key vouched for the new one."),
+  noChain: tr("The old key did not vouch for the new one. Treat this as a different publisher using the same name."),
+  warning: tr("If this is unusual, do not trust the new key. Updates from this publisher stay paused until you decide."),
 });
 
 let el = null;
@@ -40,7 +41,7 @@ function ensure() {
 export function rowHtml(m, waiting) {
   const card = m.publisherKey && waiting
     ? `<div class="sliver-key" data-testid="sliver-key">
-         <p><strong>Old key</strong> ${esc(waiting.oldFingerprint)} &rarr; <strong>new key</strong> ${esc(waiting.newFingerprint)}</p>
+         <p>${tr("<strong>Old key</strong> {0} &rarr; <strong>new key</strong> {1}", esc(waiting.oldFingerprint), esc(waiting.newFingerprint))}</p>
          <p>${esc(waiting.continuity === "valid-chain" ? SLIVER_COPY.chain : SLIVER_COPY.noChain)}</p>
          <p>${esc(SLIVER_COPY.warning)}</p>
          <div class="sliver-actions">
@@ -52,7 +53,7 @@ export function rowHtml(m, waiting) {
   return `<article class="sliver-row sliver-${esc(m.severity)}${m.active ? "" : " sliver-resolved"}" data-testid="sliver-row">
       <header><span class="sliver-sev">${esc(m.severityLabel)}</span> <span class="sliver-target">${esc(m.target)}</span> <span class="sliver-state">${esc(m.stateLabel)}</span></header>
       <p class="sliver-summary">${esc(m.summary)}</p>
-      <p class="sliver-meta">Updated ${esc(m.updated)}${m.deadline ? ` · ${esc(m.deadline)}` : ""}${m.action ? ` · ${esc(m.action)}` : ""}</p>
+      <p class="sliver-meta">${tr("Updated {0}{1}{2}", esc(m.updated), m.deadline ? ` · ${esc(m.deadline)}` : "", m.action ? ` · ${esc(m.action)}` : "")}</p>
       ${card}
     </article>`;
 }
@@ -80,7 +81,7 @@ export async function renderSliver(data, { waitingFor = fetchWaitingPublisher } 
     b.addEventListener("click", async () => {
       try {
         await trustPublisherKey(b.getAttribute("data-sliver-trust"));
-        toast("Key trusted for this service", "ok");
+        toast(tr("Key trusted for this service"), "ok");
         void refresh();
       } catch (e) {
         toast(humanError(e), "err");
@@ -91,7 +92,7 @@ export async function renderSliver(data, { waitingFor = fetchWaitingPublisher } 
     b.addEventListener("click", async () => {
       try {
         await rejectPublisherKey(b.getAttribute("data-sliver-reject"));
-        toast("Updates paused for this service", "ok");
+        toast(tr("Updates paused for this service"), "ok");
         void refresh();
       } catch (e) {
         toast(humanError(e), "err");
