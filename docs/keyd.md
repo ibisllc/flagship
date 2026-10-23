@@ -5,9 +5,9 @@ The box's long-lived secret keys live in their own process, not in the Node daem
 
 | Key | Where | What the daemon can do with it |
 |---|---|---|
-| Box identity (STK) | `/var/lib/flagship-keyd/identity.key`, 0400, user `flagship-keyd` | sign messages whose purpose is on the box's list (`packages/keyd/src/policy.ts`); open blobs sealed to the box |
-| Workload key (SWK) | `swk.key` beside it | derive subkeys with a fixed set of labels; seal/open/chunk operations |
-| Gossip key (CGK) | `cgk.key` beside it | seal/open gossip, MAC a gossip announcement (nothing else); derive the app-copy env key and the one-list access-sync key |
+| Box identity (STK) | `/var/lib/flagship-keyd/identity.key`, 0400, user `flagship-keyd` | sign messages whose purpose is on the box's list (`packages/keyd/src/policy.ts`); open a pairing order sealed to the box (`unseal`, purpose `pairing-order`, checked by shape) |
+| Workload key (SWK) | `swk.key` beside it | seal/open, chunk, service-secret (for a `<creator>--<slug>` id) and TLS-at-rest operations; `swk.hkdf` hands out only the peer-backup and backup-manifest keys, unsalted |
+| Gossip key (CGK) | `cgk.key` beside it | seal/open gossip; MAC a gossip frame (`cgk.gossipMac`) or an access-sync message (`cgk.accessSyncMac`), each its own tag only; derive the app-copy env key |
 
 ## How it is wired
 
@@ -22,6 +22,11 @@ The box's long-lived secret keys live in their own process, not in the Node daem
   stand-in (`packages/protocol/src/opaqueKey.ts`). `ed.sign`, `ed.getPublicKey`,
   `openSealedFromEd25519Recipient` and the SWK HKDF helpers route to keyd; any other use of the
   bytes throws, so a path that tries to read the key fails loudly.
+- The owner's SWK and CGK deliveries go to keyd sealed (`provision.swk` / `provision.cgk` with
+  `sealed`), after the daemon checks the owner's signature; keyd opens and keeps them, so they
+  never pass through the daemon. A key is provisioned once; replacing it is an offline keyd state.
+- `packages/keyd/tests/boxPurposes.test.ts` reads the daemon's signing call sites and fails when
+  a tag the box signs is missing from the list, or the list holds a tag nothing signs.
 - keyd never signs untagged bytes. A message must start with a purpose on the list; the
   boot-suspension and boot-auth purposes also carry their own rules (the box may only
   suspend, only as the box, only with its own key). Authority purposes (owner, admin,
@@ -50,9 +55,13 @@ in-process keys once its files have moved (they are no longer there).
 - Tier-2 shared service certificates (`<service>.<user>` names whose key is sent between the
   account's boxes) are not issued while TLS runs through keyd: a key that never leaves one box
   cannot be replicated. They return with the shared-key design in plan 9.4.
-- The SWK subkeys keyd derives (chunk, LLM, TLS-at-rest, manifest, peer-backup, app-secret
-  labels) are returned to the daemon, as they are needed there today. The root workload key
-  is not.
+- The peer-backup key (PBK) and backup-manifest key are returned to the daemon (the peer-backup
+  code runs there); so are service secrets and the TLS-at-rest key, per id. The root workload
+  key, the CGK and the LLM and chunk subkeys are not.
+- Still open: the first SWK/CGK write wins (keyd does not yet pin the owner key, so it cannot
+  check the delivery's signature itself, and the install blob's CGK is unsigned); `inject/v1`
+  signs any user and role; `swk.deriveTlsKey` takes any server id; no `SO_PEERCRED`, so any
+  client-group process may call `tls.sign`.
 
 ## TLS and Let's Encrypt (plan Phase 3)
 
