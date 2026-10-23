@@ -1,3 +1,4 @@
+import { serveControlHttp, type ControlHttpOptions } from "./controlHttp.js";
 import { SealedInstalledServicesStore, type InstalledServicesStore } from "./installedServicesStore.js";
 import { connect as netConnect, type Socket } from "node:net";
 import { createServer as createTlsServer, type Server as TlsServer, type TLSSocket } from "node:tls";
@@ -2287,102 +2288,7 @@ function handleHttpConnection(
   handler: (req: HttpRequest) => Promise<HttpResponse>,
   upgradeOpts?: HandleHttpOptions,
 ): void {
-  let buf: Buffer = Buffer.alloc(0);
-  let headersDone = false;
-  let method = "";
-  let path = "";
-  let headers: Record<string, string> = {};
-  let bodyExpected = 0;
-  let bodyAccum: Buffer = Buffer.alloc(0);
-  let detached = false;
-
-  const onData = (chunk: Buffer) => {
-    if (detached) return;
-    buf = Buffer.concat([buf, chunk]);
-    if (!headersDone) {
-      const sep = buf.indexOf("\r\n\r\n");
-      if (sep === -1) return;
-      const headerBlock = buf.subarray(0, sep).toString("utf8");
-      buf = buf.subarray(sep + 4);
-      const lines = headerBlock.split(/\r\n/);
-      const requestLine = lines[0]?.split(" ") ?? [];
-      method = requestLine[0] ?? "";
-      path = requestLine[1] ?? "/";
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i]!;
-        const idx = line.indexOf(":");
-        if (idx === -1) continue;
-        const k = line.slice(0, idx).trim().toLowerCase();
-        const v = line.slice(idx + 1).trim();
-        headers[k] = v;
-      }
-      // Detect WebSocket upgrade. If the caller has an upgrade hook
-      // and accepts the request, hand the socket off and stop HTTP
-      // parsing. The hook owns the socket from this point on.
-      const upgradeHdr = headers["upgrade"]?.toLowerCase();
-      const connectionHdr = headers["connection"]?.toLowerCase() ?? "";
-      const isUpgrade = upgradeHdr === "websocket" && connectionHdr.includes("upgrade");
-      if (isUpgrade && upgradeOpts?.onUpgrade) {
-        const accepted = upgradeOpts.onUpgrade({
-          socket,
-          method,
-          path,
-          headers,
-          headBuffer: buf,
-        });
-        if (accepted) {
-          detached = true;
-          socket.off("data", onData);
-          return;
-        }
-      }
-      bodyExpected = parseInt(headers["content-length"] ?? "0", 10) || 0;
-      headersDone = true;
-    }
-    if (headersDone) {
-      bodyAccum = Buffer.concat([bodyAccum, buf]);
-      buf = Buffer.alloc(0);
-      if (bodyAccum.length >= bodyExpected) {
-        respond({ method, path, headers, body: bodyAccum.subarray(0, bodyExpected) }).catch(() => {});
-      }
-    }
-  };
-  socket.on("data", onData);
-  socket.on("error", () => {});
-
-  async function respond(req: HttpRequest): Promise<void> {
-    let resp: HttpResponse;
-    try {
-      resp = await handler(req);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      resp = { status: 500, headers: { "content-type": "text/plain" }, body: `internal error: ${msg}` };
-    }
-    const body = typeof resp.body === "string" ? Buffer.from(resp.body) : resp.body;
-    const hdrs = resp.headers ?? { "content-type": "text/plain" };
-    const head = [
-      `HTTP/1.1 ${resp.status} ${statusText(resp.status)}`,
-      `Content-Length: ${resp.stream ? resp.stream.length : body.length}`,
-      "Connection: close",
-      ...Object.entries(hdrs).map(([k, v]) => `${k}: ${v}`),
-      "",
-      "",
-    ].join("\r\n");
-    socket.write(head);
-    if (resp.stream) {
-      if (req.method.toUpperCase() === "HEAD" || resp.stream.length === 0) {
-        socket.end();
-        return;
-      }
-      const src = resp.stream.open();
-      src.on("error", () => socket.destroy());
-      socket.on("close", () => (src as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.());
-      src.pipe(socket);
-      return;
-    }
-    if (req.method.toUpperCase() !== "HEAD") socket.write(body);
-    socket.end();
-  }
+  serveControlHttp(socket, handler, upgradeOpts as ControlHttpOptions | undefined);
 }
 
 /**
