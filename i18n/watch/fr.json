@@ -5,5 +5,15 @@
   "Done": "Terminé",
   "Failed — %@": "Échec : %@",
   "Couldn't reach iPhone: %@": "Impossible de joindre l’iPhone : %@",
-  "Approval failed.": "Échec de l’approbation."
+  "Approval failed.": "Échec de l’approbation.",
+  "Flagship": "Flagship",
+  "Approve": "Approuver",
+  "from %@": "depuis %@",
+  "Approved": "Approuvé",
+  "Security": "Sécurité",
+  "Pending approvals": "Approbations en attente",
+  "Servers": "Serveurs",
+  "Recent activity": "Activité récente",
+  "All quiet": "Rien à signaler",
+  "Boot approvals and account changes show up here.": "Les approbations de démarrage et les modifications du compte apparaissent ici."
 }
