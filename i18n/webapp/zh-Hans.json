@@ -2679,5 +2679,16 @@
   "Browsers you signed in to private apps with a sign-in link. Refresh to\n          check if one's still in, or Stop to sign it out.": "你通过登录链接登录私有应用的浏览器。刷新可查看是否仍在登录状态，或点按“停止”将其登出。",
   "How this works": "工作原理",
   "Scheduled": "定时",
-  "None of your servers runs this app yet": "你的服务器还都没有运行此应用"
+  "None of your servers runs this app yet": "你的服务器还都没有运行此应用",
+  "Restored permissions": "已恢复的权限",
+  "This app came back from a backup. Until an admin approves, nobody from the old list can open it.": "此应用已从备份恢复。在管理员批准之前，旧名单中的任何人都无法打开它。",
+  "Approve this list": "批准此名单",
+  "Discard it": "丢弃",
+  "Only an admin device can approve restored permissions.": "只有管理员设备才能批准已恢复的权限。",
+  "{0} person on the old list.": "旧名单中有 {0} 人。",
+  "{0} people on the old list.": "旧名单中有 {0} 人。",
+  "The app was open to all.": "此应用曾对所有人开放。",
+  "Restored permissions approved.": "已批准恢复的权限。",
+  "The restored list changed. Review it and approve again.": "恢复的名单已更改。请检查后再次批准。",
+  "{0} discarded.": "已丢弃 {0}。"
 }
