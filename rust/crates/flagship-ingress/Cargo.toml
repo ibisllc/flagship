@@ -10,4 +10,22 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "flagship-ingress"
+path = "src/main.rs"
+
 [dependencies]
+# aws-lc-rs is the provider that offers X25519MLKEM768; it is native C (aws-lc-sys): see README "FFI".
+rustls = { version = "=0.23.45", default-features = false, features = ["aws_lc_rs", "prefer-post-quantum", "std", "tls12"] }
+aws-lc-rs = { version = "=1.18.1", default-features = false, features = ["aws-lc-sys"] }
+rustls-webpki = { version = "=0.103.15", default-features = false, features = ["std"] }
+tokio = { version = "=1.53.2", default-features = false, features = ["rt-multi-thread", "net", "time", "io-util", "sync", "signal", "macros"] }
+tokio-rustls = { version = "=0.26.6", default-features = false, features = ["aws_lc_rs", "tls12"] }
+serde_json = { version = "=1.0.151", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+rcgen = { version = "=0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
+p256 = { version = "=0.13.2", default-features = false, features = ["ecdsa", "pkcs8", "std"] }
