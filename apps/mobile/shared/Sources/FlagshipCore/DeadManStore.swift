@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 
 /// Per-server dead-man heartbeat-lock state the phone remembers locally,
 /// keyed by the server's canonical FQDN. Non-secret (no key material — the
@@ -97,6 +98,15 @@ public struct DeadManStore {
         defaults.set(NSNumber(value: windowMs), forKey: Self.key(Self.windowPrefix, serverDomain))
         defaults.set(NSNumber(value: graceMs), forKey: Self.key(Self.gracePrefix, serverDomain))
         defaults.set(lockoutMode, forKey: Self.key(Self.lockoutPrefix, serverDomain))
+    }
+
+    /// Take the box's own account of its switch (server-detail `deadMan`) as the truth,
+    /// so a lease deposited from this phone is bounded by the real deadline even when
+    /// another device turned the switch on or affirmed it.
+    public func sync(serverDomain: String, from view: DeadManView) {
+        save(serverDomain: serverDomain, enabled: view.enabled, windowMs: view.windowMs,
+             graceMs: view.graceMs, lockoutMode: view.lockoutMode)
+        setLeaseExpiry(view.enabled && view.leaseExpiry > 0 ? view.leaseExpiry : nil, for: serverDomain)
     }
 
     public func setLeaseExpiry(_ expiry: Int64?, for serverDomain: String) {

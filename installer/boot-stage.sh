@@ -227,6 +227,13 @@ unlock_via_box_lease() {
         echo "flagship: no box-sealed lease (HTTP 404) — falling back"
         return 1
     fi
+    if [ "$LEASE_CODE" = "423" ]; then
+        # The owner (or the dead-man switch) locked this server at the boot
+        # worker. That record, not /boot/flagship-lock-once, is the lock: no
+        # lease is released until the owner resumes. Ask the phone instead.
+        echo "flagship: this server is locked at the boot service (HTTP 423) — asking the phone"
+        return 1
+    fi
     if [ "$LEASE_CODE" != "200" ]; then
         echo "flagship: box-lease HTTP $LEASE_CODE; body: $(head -c 200 "$LEASE_RESP" 2>/dev/null)"
         return 1

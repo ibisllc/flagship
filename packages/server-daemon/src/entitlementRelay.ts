@@ -62,6 +62,11 @@ export interface FetchEntitlementViaRelayOptions {
   controlPlaneBaseUrl: string;
   /** Where to persist the fetched bundle once verified. */
   entitlementBundlePath: string;
+  /**
+   * Hints for the phone's "is this your server?" prompt, sent beside the signed request (`.com`
+   * passes them through unread). Carries the first-contact `enrollmentProof` (enrollment.ts).
+   */
+  deviceInfo?: Record<string, unknown>;
   /** Total budget to wait for a phone reply (ms). Default 5 min. */
   windowMs?: number;
   /** Per-poll sleep cap (ms). Backoff is `min(attempt*pollBaseMs, pollMaxMs)`. */
@@ -256,6 +261,7 @@ export async function fetchEntitlementViaRelay(
           issuedAt: request.issuedAt,
         },
         signature: signatureHex,
+        ...(opts.deviceInfo && Object.keys(opts.deviceInfo).length > 0 ? { deviceInfo: opts.deviceInfo } : {}),
       }),
     });
     if (!res.ok) {

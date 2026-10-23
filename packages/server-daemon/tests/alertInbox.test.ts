@@ -183,3 +183,17 @@ describe("InMemoryAlertInbox", () => {
     expect(inbox.size()).toBe(3);
   });
 });
+
+describe("one service cannot fill the inbox (N13)", () => {
+  it("keeps the newest 20 of a noisy service and leaves other services' alerts alone", async () => {
+    const { InMemoryAlertInbox } = await import("../src/alertInbox.js");
+    const inbox = new InMemoryAlertInbox();
+    inbox.emit({ kind: "manual-pending", serviceId: "quiet", fromCommit: "a", toCommit: "b" } as never);
+    for (let i = 0; i < 50; i++) inbox.emit({ kind: "migration-failed", serviceId: "noisy", migrationFile: `m${i}`, reason: "x" } as never);
+    const all = inbox.list();
+    expect(all.filter((e) => (e.alert as { serviceId: string }).serviceId === "noisy")).toHaveLength(20);
+    expect(all.filter((e) => (e.alert as { serviceId: string }).serviceId === "quiet")).toHaveLength(1);
+    const newest = all.filter((e) => (e.alert as { serviceId: string }).serviceId === "noisy").map((e) => (e.alert as { migrationFile: string }).migrationFile);
+    expect(newest[newest.length - 1]).toBe("m49");
+  });
+});

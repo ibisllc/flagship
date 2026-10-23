@@ -309,6 +309,36 @@ export async function handleGetSecretRequests(
   };
 }
 
+/**
+ * GET /api/users/:u/secret-requests (account read token, checked by the caller): the same pending
+ * requests, each with the box's own signature over it, for a device that holds no IRK, such as a
+ * locked phone answering for its watch. Nothing here is secret; the reader must verify
+ * `requestSignature` under the STK it pinned for that server, never the `stkPub` this returns.
+ */
+export async function handleReadSecretRequests(
+  deps: Pick<SecretMailboxDeps, "secretMailbox" | "now">,
+  username: string,
+): Promise<HandlerResponse> {
+  const u = username.toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(u)) return malformed("malformed username");
+  const now = deps.now ?? (() => Date.now());
+  const rows = await deps.secretMailbox.listPendingForUser(u, now());
+  return {
+    status: 200,
+    body: {
+      requests: rows.map((row) => ({
+        serverDomain: row.serverDomain,
+        requestNonceHex: row.requestNonceHex,
+        stkPub: row.stkPubHex,
+        purpose: row.purpose,
+        issuedAt: row.requestIssuedAt,
+        requestSignature: row.requestSignatureHex,
+        expiresAt: row.expiresAt,
+      })),
+    },
+  };
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // 3. POST /api/secret-response  (phone, IRK-signed mailbox-auth)
 //

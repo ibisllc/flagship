@@ -1,0 +1,85 @@
+{
+  "about": "The admin's once-per-server permission for a box to hold a certificate for *.<username>.<apex>: flagship/server-wildcard-grant/v1|username (lowercase)|serverDomain (lowercase)|stkPubHex|issuedAt, Ed25519, seed 0x66 repeated. Each invalid grant must fail the first grant's signature; each refused one must fail to produce canonical bytes.",
+  "seedHex": "6666666666666666666666666666666666666666666666666666666666666666",
+  "pubHex": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746",
+  "grants": [
+    {
+      "grant": {
+        "username": "Alice",
+        "serverDomain": "Home.Alice.flagship.services",
+        "stkPubHex": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/server-wildcard-grant/v1|alice|home.alice.flagship.services|abababababababababababababababababababababababababababababababab|1760000000000",
+      "signatureHex": "83cff35eb1a994a4dd4f2a9753140cc959442a79122e4072a1a4cc05ab523209a32b68dc191654044a80172a8af4b9a603c11563485df202becc7b15ae6c5d08"
+    },
+    {
+      "grant": {
+        "username": "Alice",
+        "serverDomain": "home2.alice.gym.flagship.services",
+        "stkPubHex": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/server-wildcard-grant/v1|alice|home2.alice.gym.flagship.services|abababababababababababababababababababababababababababababababab|1760000000000",
+      "signatureHex": "5219e4f1d32f4676ca68247bc4ffed32e6d27c3beb99f3c2dc35e6add6d5019692da536e864c78073a9e2ed465ba580142a6dca7276c1b87706502d4d95e190e"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "another server",
+      "grant": {
+        "username": "Alice",
+        "serverDomain": "home2.alice.flagship.services",
+        "stkPubHex": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "another identity key",
+      "grant": {
+        "username": "Alice",
+        "serverDomain": "Home.Alice.flagship.services",
+        "stkPubHex": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "another time",
+      "grant": {
+        "username": "Alice",
+        "serverDomain": "Home.Alice.flagship.services",
+        "stkPubHex": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000001
+      }
+    }
+  ],
+  "refused": [
+    {
+      "name": "a server on another account",
+      "grant": {
+        "username": "Alice",
+        "serverDomain": "home.bob.flagship.services",
+        "stkPubHex": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "an uppercase key",
+      "grant": {
+        "username": "Alice",
+        "serverDomain": "Home.Alice.flagship.services",
+        "stkPubHex": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "a separator in the name",
+      "grant": {
+        "username": "al|ice",
+        "serverDomain": "Home.Alice.flagship.services",
+        "stkPubHex": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000
+      }
+    }
+  ]
+}

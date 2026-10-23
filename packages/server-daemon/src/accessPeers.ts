@@ -33,6 +33,8 @@ export interface PodsPeersOptions {
 }
 
 export interface PodsPeers extends AccessPeers {
+  /** The first live server in the owner's order, this one included. */
+  firstLive(): string | null;
   /** Re-read the servers and ask each which of this box's apps it runs. */
   refresh(): Promise<void>;
   start(everyMs?: number): void;
@@ -71,6 +73,10 @@ export function buildPodsPeers(opts: PodsPeersOptions): PodsPeers {
     leaderFor(ref) {
       const list = [self, ...(runners.get(ref) ?? [])].sort(byOrder);
       return list[0] ?? null;
+    },
+    firstLive() {
+      const live = pods.filter((p) => p.serverDomain.toLowerCase() !== self && p.liveness !== "never").map((p) => p.serverDomain.toLowerCase());
+      return [self, ...live].sort(byOrder)[0] ?? null;
     },
     runners(ref) {
       return [...(runners.get(ref) ?? [])];

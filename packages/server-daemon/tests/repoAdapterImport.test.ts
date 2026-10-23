@@ -9,7 +9,7 @@ import { BuildOrchestrator } from "../src/buildmodes/buildOrchestrator.js";
 import { GitImporter } from "../src/buildmodes/gitImport.js";
 import { InMemoryBuildJournal } from "../src/buildmodes/buildJournal.js";
 import { InMemoryMcpKeyStore } from "../src/buildmodes/mcpKeyStore.js";
-import { httpAdapterIndex, indexableRepo, licensePathOf, type AdapterIndex } from "../src/buildmodes/adapterIndex.js";
+import { communityAdapters, httpAdapterIndex, indexableRepo, licensePathOf, type AdapterIndex } from "../src/buildmodes/adapterIndex.js";
 import type { DeployResult } from "../src/buildmodes/deployArtifact.js";
 import { FakeStaging } from "./helpers/fakeStaging.js";
 
@@ -250,6 +250,11 @@ describe("the adapter index", () => {
       return { ok: body != null || init.method === "POST", text: async () => body ?? "" };
     };
     const idx = httpAdapterIndex({ store: "https://store.test/", submitTo: "https://flagshipserver.com/" }, fetcher);
+    // SEC-ADAPTER-001: the store is not read at all while community adapters are off.
+    expect(await idx.lookup(REPO, COMMIT)).toEqual([]);
+    expect(calls).toEqual([]);
+    expect(communityAdapters.lookupEnabled).toBe(false);
+    communityAdapters.lookupEnabled = true;
     const found = await idx.lookup(REPO, COMMIT);
     expect(found).toEqual([
       { base: COMMIT, file: ADAPTER_FILE, sha: sha(ADAPTER_FILE) },
@@ -275,6 +280,7 @@ describe("the adapter index", () => {
       throw new Error("offline");
     });
     expect(await offline.lookup(REPO, COMMIT)).toEqual([]);
+    communityAdapters.lookupEnabled = false;
   });
 
 });

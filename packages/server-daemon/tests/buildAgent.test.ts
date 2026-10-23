@@ -152,6 +152,22 @@ describe("runBuildAgent", () => {
     expect(entries.some((e) => e.kind === "error" && /provider 401/.test(e.summary))).toBe(true);
   });
 
+  it("stops at the token amount the owner signed and caps each reply to what is left", async () => {
+    const ws = new BuildWorkspace();
+    const journal = new InMemoryBuildJournal();
+    const host = makeHost("b9", ws, journal, () => {});
+    const seen: Array<number | undefined> = [];
+    const runner = async (req: ChatRequest): Promise<ChatResponse> => {
+      seen.push(req.maxTokens);
+      return { content: "", model: "m", inputTokens: 600, outputTokens: 100, toolUses: [tu(`t${seen.length}`, "list_files")] };
+    };
+    const r = await runBuildAgent({ buildId: "b9", runner, tools: host, journal, repoFiles: [], options: { tokenBudget: 1_500 } });
+    expect(r.stopReason).toBe("token-cap");
+    expect(seen).toEqual([1_500, 800, 100]);
+    expect(r.turns).toBe(3);
+    expect((await journal.read("b9")).some((e) => /1500 tokens the owner agreed to/.test(e.summary))).toBe(true);
+  });
+
   it("truncates a giant tool result fed back to the model", async () => {
     const big = "x".repeat(50_000);
     const ws = new BuildWorkspace({ "big.txt": big });

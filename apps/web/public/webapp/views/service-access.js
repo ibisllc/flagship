@@ -79,6 +79,7 @@ import {
   rowRole,
   setAppRank,
 } from "../lib/memberRoles.js";
+import { RESTORED_COPY, approveRestoredDraft, discardRestoredDraft, fetchRestoredDraft, restoredCardHtml } from "../lib/restoredAccess.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
@@ -154,6 +155,42 @@ function loadDeviceNames() {
   return deviceNames();
 }
 
+/** Permissions a restore held back for this app (N09): approve the exact list, or discard it. */
+async function loadRestoredCard(serviceRef, admin) {
+  let draft = null;
+  try {
+    draft = await fetchRestoredDraft(serviceRef, screensJson);
+  } catch {
+    return;
+  }
+  const slot = $("sa-restored-slot");
+  if (!slot || currentService?.serviceId !== serviceRef) return;
+  slot.innerHTML = restoredCardHtml(draft, { admin, escape: escapeHtml });
+  if (!draft) return;
+  $("sa-restored-approve")?.addEventListener("click", async (ev) => {
+    const b = ev.currentTarget;
+    b.disabled = true;
+    try {
+      const session = getSession();
+      await approveRestoredDraft({ baseUrl: podBaseUrl(), serviceRef, draftSha256: draft.sha256, umk: session.umk, signWithIrk: sensitiveSigner() });
+      toast("Restored permissions approved.");
+      await renderServiceAccess(currentService);
+    } catch (e) {
+      b.disabled = false;
+      toast(e?.status === 409 ? "The restored list changed. Review it and approve again." : humanError(e), "err");
+    }
+  });
+  $("sa-restored-discard")?.addEventListener("click", async () => {
+    try {
+      await discardRestoredDraft(serviceRef, screensJson);
+      toast(`${RESTORED_COPY.title} discarded.`);
+      await renderServiceAccess(currentService);
+    } catch (e) {
+      toast(humanError(e), "err");
+    }
+  });
+}
+
 export async function enterServiceAccess(service) {
   currentService = service;
   show("view-service-access");
@@ -188,6 +225,8 @@ export async function renderServiceAccess(service) {
       <div id="sa-mode-status" class="mt-2 text-xs muted-sm">${escapeHtml(modeNote(mode))}</div>
       ${admin ? "" : `<p id="sa-mode-locked" class="note mt-1">${escapeHtml(ADMIN_ONLY_MODE_NOTE)}</p>`}
     </div>
+
+    <div id="sa-restored-slot"></div>
 
     <h2 class="mt-4" id="sa-account-title">Account members</h2>
     <div id="sa-account-people"><div class="card placeholder">loading…</div></div>
@@ -253,6 +292,8 @@ export async function renderServiceAccess(service) {
       <div id="sa-accept-status" class="mt-2 text-sm"></div>
     </div>
   `;
+
+  void loadRestoredCard(serviceRef, admin);
 
   for (const b of root.querySelectorAll("#sa-mode [data-mode]")) {
     b.addEventListener("click", () => {

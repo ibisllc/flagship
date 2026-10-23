@@ -5,6 +5,7 @@ import {
   verifyDns01Delete,
   verifyDns01Publish,
   verifyServiceCertAuthority,
+  verifyServerWildcardGrant,
   type Dns01DeleteRequest,
   type Dns01PublishRequest,
   type ServiceCertAuthority,
@@ -65,6 +66,11 @@ interface ServiceCertAuthorityBody {
   signature?: unknown;
 }
 
+interface ServerWildcardGrantBody {
+  issuedAt?: unknown;
+  signature?: unknown;
+}
+
 interface PublishBody {
   request?: {
     serverId?: unknown;
@@ -75,6 +81,7 @@ interface PublishBody {
   signature?: unknown;
   recordValue?: unknown;
   serviceCertAuthority?: ServiceCertAuthorityBody;
+  serverWildcardGrant?: ServerWildcardGrantBody;
 }
 
 interface DeleteBody {
@@ -85,6 +92,29 @@ interface DeleteBody {
   };
   signature?: unknown;
   serviceCertAuthority?: ServiceCertAuthorityBody;
+  serverWildcardGrant?: ServerWildcardGrantBody;
+}
+
+/**
+ * The admin's once-per-server grant (`flagship/server-wildcard-grant/v1`) for a box to answer the
+ * challenge of `*.<user>.<apex>`: it must name this server and the key it registered, and be signed
+ * by the account's admin root where one is pinned, else its IRK. The box sends it with each request.
+ */
+async function checkServerWildcardGrant(args: {
+  body: ServerWildcardGrantBody | undefined;
+  reg: { serverDomain: string; username: string; identityPubKeyHex: string };
+  usernames: UsernameStorage | undefined;
+}): Promise<boolean> {
+  const g = args.body;
+  if (!args.usernames || !g || !Number.isSafeInteger(g.issuedAt) || typeof g.signature !== "string" || !/^[0-9a-f]{128}$/i.test(g.signature)) return false;
+  const owner = await args.usernames.get(args.reg.username);
+  const signer = owner?.adminRootPubHex ?? owner?.irkPubHex;
+  if (!signer) return false;
+  return verifyServerWildcardGrant(
+    { username: args.reg.username, serverDomain: args.reg.serverDomain, stkPubHex: args.reg.identityPubKeyHex.toLowerCase(), issuedAt: g.issuedAt as number },
+    hexToBytes(g.signature),
+    hexToBytes(signer),
+  );
 }
 
 /**
@@ -201,7 +231,12 @@ export async function handleDns01Publish(
     return forbidden("serverId outside managed apex");
   }
   const expectedName = `_acme-challenge.${r.serverId}`;
-  if (r.recordName !== expectedName) {
+  const accountName = `_acme-challenge.${reg.username.toLowerCase()}.${apex}`;
+  if (r.recordName === accountName && r.serverId.endsWith(`.${reg.username.toLowerCase()}.${apex}`)) {
+    if (!(await checkServerWildcardGrant({ body: b.serverWildcardGrant, reg, usernames: deps.usernames }))) {
+      return forbidden("this server has no admin grant for the account's app names");
+    }
+  } else if (r.recordName !== expectedName) {
     const svc = await checkServiceCertAuthority({
       body: b.serviceCertAuthority,
       requestingServerId: r.serverId,
@@ -316,7 +351,12 @@ export async function handleDns01Delete(
   if (rec.type !== "TXT") {
     return forbidden("recordId is not a TXT record");
   }
-  if (rec.name !== `_acme-challenge.${r.serverId}`) {
+  const accountName = `_acme-challenge.${reg.username.toLowerCase()}.${apex}`;
+  if (rec.name === accountName && r.serverId.endsWith(`.${reg.username.toLowerCase()}.${apex}`)) {
+    if (!(await checkServerWildcardGrant({ body: b.serverWildcardGrant, reg, usernames: deps.usernames }))) {
+      return forbidden("recordId not owned by this server");
+    }
+  } else if (rec.name !== `_acme-challenge.${r.serverId}`) {
     // Tier-2 service-cert challenge cleanup: the publishing box may delete
     // the record it created under a phone-issued authority — same fences as
     // publish, including the record name matching the authorized service.

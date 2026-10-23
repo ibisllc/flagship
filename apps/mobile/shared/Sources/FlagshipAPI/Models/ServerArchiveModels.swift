@@ -144,17 +144,40 @@ public struct ServerRestoreCommitRequest: Codable, Equatable, Sendable {
     public init(key: String) { self.key = key }
 }
 
+/// What a restored app still needs from the owner (N09): permissions held for an admin, settings and keys
+/// to set up again, and anything in its database that runs code. Nothing was silently trusted.
+public struct ServerRestoreSummary: Codable, Equatable, Sendable {
+    public let code: String
+    public let awaitingApproval: [String]
+    public let reconnect: [String]
+    public let notes: [String]
+    public init(code: String = "", awaitingApproval: [String] = [], reconnect: [String] = [], notes: [String] = []) {
+        self.code = code; self.awaitingApproval = awaitingApproval; self.reconnect = reconnect; self.notes = notes
+    }
+
+    /// The lines to show under a restored app, empty when there is nothing to say.
+    public var needs: [String] {
+        var out: [String] = []
+        if !awaitingApproval.isEmpty { out.append("Waiting for an admin: \(awaitingApproval.joined(separator: "; ")).") }
+        if !reconnect.isEmpty { out.append("Set up again: \(reconnect.joined(separator: "; ")).") }
+        if !notes.isEmpty { out.append("Note: \(notes.joined(separator: "; ")).") }
+        return out
+    }
+}
+
 public struct ServerRestoreApp: Codable, Equatable, Sendable {
     public let serviceId: String
     public let name: String
     /// `waiting` | `restoring` | `done` | `skipped` | `failed`
     public let state: String
     public let reason: String?
-    public init(serviceId: String, name: String, state: String, reason: String? = nil) {
+    public let summary: ServerRestoreSummary?
+    public init(serviceId: String, name: String, state: String, reason: String? = nil, summary: ServerRestoreSummary? = nil) {
         self.serviceId = serviceId
         self.name = name
         self.state = state
         self.reason = reason
+        self.summary = summary
     }
 }
 

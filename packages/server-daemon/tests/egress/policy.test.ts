@@ -110,4 +110,38 @@ describe("egress policy", () => {
       expect(isPublicAddress(ip), ip).toBe(true);
     }
   });
+
+  // SEC N02 / E01: every textual form of a loopback or private address.
+  it("judges the bytes, not the spelling", () => {
+    const refused = [
+      "::", "::1", "0:0:0:0:0:0:0:1", "0000:0000:0000:0000:0000:0000:0000:0001", "0::1",
+      "::ffff:127.0.0.1", "::ffff:7f00:1", "::FFFF:7F00:1", "0:0:0:0:0:ffff:7f00:1", "::ffff:a00:1",
+      "::ffff:10.1.2.3", "::ffff:c0a8:101", "::ffff:169.254.169.254", "::ffff:a9fe:a9fe",
+      "::127.0.0.1", "::10.0.0.1",
+      "64:ff9b::7f00:1", "64:ff9b::a00:1", "64:ff9b:1::1",
+      "fc00::1", "fd12:3456::1", "fe80::1", "fe80::1%eth0", "febf::1", "fec0::1", "ff02::1", "ff00::",
+      "2001::1", "2001:0:4136:e378:8000:63bf:3fff:fdd2", "2001:db8::1", "2002:7f00:1::1", "2002:a00:1::", "3fff::1",
+      "100::1", "5f00::1", "4000::1", "8000::1",
+      "not an address", "", "1.2.3", "1.2.3.4.5", "256.1.1.1", "010.0.0.1", "1.1.1.1%eth0", "0x7f.0.0.1", "2130706433",
+      "1:2:3:4:5:6:7:8:9", "1::2::3", "::ffff:999.1.1.1",
+      "192.88.99.1", "255.255.255.255", "198.19.0.1",
+    ];
+    for (const ip of refused) expect(isPublicAddress(ip), JSON.stringify(ip)).toBe(false);
+    const allowed = [
+      "1.1.1.1", "8.8.8.8", "140.82.112.3", "172.32.0.1", "11.0.0.1", "100.63.255.255", "100.128.0.1",
+      "2606:4700:4700::1111", "2606:4700::6810:222", "2001:4860:4860::8888", "2a00:1450:4001::200e",
+      "::ffff:8.8.8.8", "::ffff:808:808",
+    ];
+    for (const ip of allowed) expect(isPublicAddress(ip), ip).toBe(true);
+  });
+
+  it("agrees with a brute-force reference across mapped IPv4 space", () => {
+    const sample = (n: number) => `${n >>> 24}.${(n >>> 16) & 255}.${(n >>> 8) & 255}.${n & 255}`;
+    for (let i = 0; i < 4000; i++) {
+      const n = (Math.imul(i, 2654435761) ^ (i << 7)) >>> 0;
+      const v4 = sample(n);
+      const hex = `::ffff:${((n >>> 16) & 0xffff).toString(16)}:${(n & 0xffff).toString(16)}`;
+      expect(isPublicAddress(hex), `${v4} as ${hex}`).toBe(isPublicAddress(v4));
+    }
+  });
 });

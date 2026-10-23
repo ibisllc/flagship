@@ -42,6 +42,8 @@ export interface AlertInbox {
 }
 
 const MAX_INBOX = 100;
+/** No one service may hold more than this many pending alerts, so a noisy app cannot push out the rest (N13). */
+const MAX_PER_SERVICE = 20;
 
 export class InMemoryAlertInbox implements AlertInbox {
   private nextId = 1;
@@ -54,6 +56,11 @@ export class InMemoryAlertInbox implements AlertInbox {
 
   emit(alert: PhoneAlert): number | null {
     if (this.isDuplicate(alert)) return null;
+    const serviceId = (alert as { serviceId?: unknown }).serviceId;
+    if (typeof serviceId === "string") {
+      const mine = this.events.filter((e) => (e.alert as { serviceId?: unknown }).serviceId === serviceId);
+      if (mine.length >= MAX_PER_SERVICE) this.events.splice(this.events.indexOf(mine[0]!), 1);
+    }
     if (this.events.length >= MAX_INBOX) {
       // Drop oldest to make room. Keeps unbounded daemons from leaking.
       this.events.shift();
@@ -99,6 +106,12 @@ function sameIdentity(a: PhoneAlert, b: PhoneAlert): boolean {
   }
   if (a.kind === "manual-pending" && b.kind === "manual-pending") {
     return a.toCommit === b.toCommit;
+  }
+  if (a.kind === "publisher-key-change" && b.kind === "publisher-key-change") {
+    return a.newFingerprint === b.newFingerprint;
+  }
+  if (a.kind === "publisher-rejected" && b.kind === "publisher-rejected") {
+    return a.reason === b.reason;
   }
   if (a.kind === "migration-failed" && b.kind === "migration-failed") {
     return a.migrationFile === b.migrationFile;

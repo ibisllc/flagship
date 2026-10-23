@@ -26,16 +26,20 @@ export type GateDecision = "allow" | "deny";
 
 export class DomainGate {
   private grants = new Map<string, string[]>();
+  /** Told whenever an app's domains change (null = removed), so the policy layer's grants follow the install-time approval. */
+  onChange: ((serviceId: string, domains: string[] | null) => void) | null = null;
 
   /** Install-time grant: replace this app's allowed domains with the manifest's. */
   setGrant(serviceId: string, domains: string[]): void {
     // Defensive copy so callers can't mutate after the fact.
     this.grants.set(serviceId, [...domains]);
+    this.onChange?.(serviceId, [...domains]);
   }
 
   /** Drop the grant entirely (uninstall). After this, every check returns deny. */
   revoke(serviceId: string): void {
     this.grants.delete(serviceId);
+    this.onChange?.(serviceId, null);
   }
 
   /** True if a grant exists for the app (whether or not a specific URL is allowed). */

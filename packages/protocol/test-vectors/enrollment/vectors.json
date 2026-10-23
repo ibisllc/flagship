@@ -1,0 +1,68 @@
+{
+  "about": "First contact. proofHex = HMAC-SHA256(secret, flagship/enrollment-proof/v1|serverDomain (lowercase)|stkPubHex|authCodeSerial), lowercase hex; the secret is 0x77 repeated (32 bytes). Each invalid statement must fail the first proof. code = first 4 bytes of SHA-256(flagship/server-code/v1|stkPubHex), big-endian unsigned, mod 1000000, zero-padded to 6 digits.",
+  "secretHex": "7777777777777777777777777777777777777777777777777777777777777777",
+  "proofs": [
+    {
+      "statement": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "stkPubHex": "abababababababababababababababababababababababababababababababab",
+        "authCodeSerial": "AC-7Q2M-91XZ"
+      },
+      "canonical": "flagship/enrollment-proof/v1|home.alice.flagship.services|abababababababababababababababababababababababababababababababab|AC-7Q2M-91XZ",
+      "proofHex": "bae3b88d4148b3722232fe3f852188c4abbbca270217baab5a7996662a9efb3a"
+    },
+    {
+      "statement": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "stkPubHex": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "authCodeSerial": "AC-7Q2M-91XZ"
+      },
+      "canonical": "flagship/enrollment-proof/v1|home.alice.flagship.services|cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd|AC-7Q2M-91XZ",
+      "proofHex": "dd468f967fc59dc788a480082f1dc5b41e9c8c73b27e14920e7b4527c73513fa"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "another server",
+      "statement": {
+        "serverDomain": "home2.alice.flagship.services",
+        "stkPubHex": "abababababababababababababababababababababababababababababababab",
+        "authCodeSerial": "AC-7Q2M-91XZ"
+      }
+    },
+    {
+      "name": "another key",
+      "statement": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "stkPubHex": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+        "authCodeSerial": "AC-7Q2M-91XZ"
+      }
+    },
+    {
+      "name": "another install code",
+      "statement": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "stkPubHex": "abababababababababababababababababababababababababababababababab",
+        "authCodeSerial": "AC-0000-0000"
+      }
+    }
+  ],
+  "codes": [
+    {
+      "stkPubHex": "abababababababababababababababababababababababababababababababab",
+      "code": "695385"
+    },
+    {
+      "stkPubHex": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "code": "060076"
+    },
+    {
+      "stkPubHex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "code": "383050"
+    },
+    {
+      "stkPubHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "code": "609193"
+    }
+  ]
+}

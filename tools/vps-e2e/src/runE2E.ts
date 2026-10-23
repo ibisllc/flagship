@@ -23,6 +23,7 @@
  * make the run `ok:false`. Only a NON-gated `fail` does.
  */
 
+import { BOX_RELEASE } from "@flagship/protocol";
 import {
   authCodeAdminCanonical,
   authCodeCanonical,
@@ -199,7 +200,7 @@ async function mintBuildCode(
     registrationUrl: `${plan.servicesBase}/api/server/register`,
     authCode: code,
     authCodeUserSignatureHex: bytesToHex(acSig),
-    installerGitRef: "main",
+    installerGitRef: process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit,
     rckPubKeyHex: rckPubHex,
   };
   const blobSig = identity.signWithIrk(installBlobCanonical(blob));

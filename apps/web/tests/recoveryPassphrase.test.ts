@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { sha256 } from "@noble/hashes/sha256";
 import {
   ed,
-  signUploadRecoveryRecord,
+  signRecoveryRecord,
   type Keypair,
+  type RecoveryRecordV2,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import {
@@ -82,31 +83,48 @@ async function enrol(opts: {
 }): Promise<{ fetchToken: Uint8Array; prfSalt: Uint8Array }> {
   const credentialId = "deadbeef".repeat(4);
   const wrappedUmk = opts.wrappedUmk ?? new Uint8Array([0x10, 0x20, 0x30, 0x40]);
-  const wrappedB64 = bytesToB64(wrappedUmk);
-  const wrappedUmkHashHex = sha256Hex(wrappedUmk);
-  const issuedAt = Date.now();
   const fetchToken = new Uint8Array(32);
   crypto.getRandomValues(fetchToken);
   const prfSalt = new Uint8Array(32);
   crypto.getRandomValues(prfSalt);
 
-  const sig = signUploadRecoveryRecord(
-    { username: USERNAME, credentialIdHex: credentialId, wrappedUmkHashHex, issuedAt },
-    opts.irk,
-  );
-  const request: Record<string, unknown> = {
-    username: USERNAME, credentialId, wrappedUmk: wrappedB64, issuedAt,
-  };
-  if (opts.withPassphraseGate !== false) {
-    request.fetchTokenHash = sha256Hex(fetchToken);
-    request.prfSaltHash = sha256Hex(prfSalt);
+  if (opts.withPassphraseGate === false) {
+    // A v1 row from before the passphrase gate: no hashes, no signed envelope.
+    await opts.storage.webauthnRecovery.upsert({
+      username: USERNAME,
+      credentialIdHex: credentialId,
+      wrappedUmkB64: bytesToB64(wrappedUmk),
+      irkPubHex: bytesToHex(opts.irk.publicKey),
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    return { fetchToken, prfSalt };
   }
+  const claim: RecoveryRecordV2 = {
+    op: "put",
+    username: USERNAME,
+    irkPubHex: bytesToHex(opts.irk.publicKey),
+    adminRootPubHex: "none",
+    credentialIdHex: credentialId,
+    wrappedUmkDigestHex: sha256Hex(wrappedUmk),
+    adminRoot: { change: "none" },
+    acmeKey: { change: "none" },
+    fetchTokenHashHex: sha256Hex(fetchToken),
+    prfSaltHashHex: sha256Hex(prfSalt),
+    kdfVersion: 1,
+    algVersion: 1,
+    policy: "passkey-and-passphrase",
+    generation: 1,
+    nonceHex: bytesToHex(crypto.getRandomValues(new Uint8Array(16))),
+    priorDigestHex: "genesis",
+    issuedAt: Date.now(),
+  };
   const res = await handleUploadWebauthnRecovery(
     {
       usernames: opts.storage.usernames,
       webauthnRecovery: opts.storage.webauthnRecovery,
     },
-    { request, signature: bytesToHex(sig) },
+    { claim, signature: bytesToHex(signRecoveryRecord(claim, opts.irk)), wrappedUmk: bytesToB64(wrappedUmk) },
   );
   if (res.status !== 200) {
     throw new Error(`upload failed in test fixture: ${res.status} ${JSON.stringify(res.body)}`);
@@ -248,28 +266,30 @@ describe("Task #74 — delete still works after gate is in place", () => {
     const meta = metaRes.body as { credentialId: string; wrappedUmkHash: string };
     expect(meta.wrappedUmkHash).toBe(sha256Hex(wrappedUmk));
 
-    const issuedAt = Date.now();
-    const sig = signUploadRecoveryRecord(
-      {
-        username: USERNAME,
-        credentialIdHex: meta.credentialId,
-        wrappedUmkHashHex: meta.wrappedUmkHash,
-        issuedAt,
-      },
-      irk,
-    );
+    const meta2 = metaRes.body as { digestHex: string; generation: number };
+    const claim: RecoveryRecordV2 = {
+      op: "delete",
+      username: USERNAME,
+      irkPubHex: bytesToHex(irk.publicKey),
+      adminRootPubHex: "none",
+      credentialIdHex: meta.credentialId,
+      wrappedUmkDigestHex: meta.wrappedUmkHash,
+      adminRoot: { change: "none" },
+      acmeKey: { change: "none" },
+      fetchTokenHashHex: "00".repeat(32),
+      prfSaltHashHex: "00".repeat(32),
+      kdfVersion: 1,
+      algVersion: 1,
+      policy: "passkey-and-passphrase",
+      generation: meta2.generation + 1,
+      nonceHex: bytesToHex(crypto.getRandomValues(new Uint8Array(16))),
+      priorDigestHex: meta2.digestHex,
+      issuedAt: Date.now(),
+    };
     const del = await handleDeleteWebauthnRecovery(
       { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
       USERNAME,
-      {
-        request: {
-          username: USERNAME,
-          credentialId: meta.credentialId,
-          wrappedUmkHash: meta.wrappedUmkHash,
-          issuedAt,
-        },
-        signature: bytesToHex(sig),
-      },
+      { claim, signature: bytesToHex(signRecoveryRecord(claim, irk)) },
     );
     expect(del.status).toBe(200);
     expect(await storage.webauthnRecovery.get(USERNAME)).toBeUndefined();

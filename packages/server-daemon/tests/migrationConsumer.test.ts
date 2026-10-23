@@ -5,7 +5,11 @@
  * state machine production hits (attach → pre-seed → freeze wait → final
  * delta → take-over), including the server-side invariant rejections.
  */
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { AuthorityHub, GrantIndex, OperationLedger } from "../src/authority/index.js";
 import {
   ed,
   signDeviceEndpointClaim,
@@ -301,6 +305,53 @@ describe("migration consumer — fresh-box drive-through", () => {
     // Subsequent polls are done, and onTakeOver does not re-fire.
     expect((await runMigrationConsumer(opts)).status).toBe("done");
     expect(takeOvers).toEqual([HOST]);
+  });
+
+  async function hubFor() {
+    const dir = await mkdtemp(join(tmpdir(), "mig-op-"));
+    const idx = new GrantIndex(join(dir, "grants.json"));
+    await idx.load();
+    await idx.issue({ id: "root", kind: "owner-session", issuer: "account", subject: "account", accountGeneration: 1, audience: "box", capability: "owner", policyRevision: 1, issuedAt: Date.now() });
+    const ledger = new OperationLedger(join(dir, "ops.json"), {
+      grantsLive: (ids, at) => ids.every((i) => idx.isLive(i, at)),
+      currentRevision: () => 0,
+      verifyApproval: () => false,
+    });
+    await ledger.load();
+    return new AuthorityHub(idx, ledger);
+  }
+
+  it("records the take-over as an applied operation", async () => {
+    const w = await setup();
+    const hub = await hubFor();
+    const opts = consumerOpts(w, { operations: { hub, grantDeps: ["root"] } });
+    await phoneInitiate(w);
+    await runMigrationConsumer(opts);
+    await runMigrationConsumer(opts);
+    await phoneConfirmReady(w);
+    await phoneFreeze(w);
+    await oldBoxFlushFinalDelta(w);
+    expect((await runMigrationConsumer(opts)).status).toBe("taken-over");
+    const ops = hub.ops.list({ kind: "server-migration" });
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.state).toBe("applied");
+  });
+
+  it("does not take over once the owner's grant is revoked", async () => {
+    const w = await setup();
+    const hub = await hubFor();
+    const takeOvers: string[] = [];
+    const opts = consumerOpts(w, { operations: { hub, grantDeps: ["root"] }, onTakeOver: ({ serverDomain }) => void takeOvers.push(serverDomain) });
+    await phoneInitiate(w);
+    await runMigrationConsumer(opts);
+    await runMigrationConsumer(opts);
+    await phoneConfirmReady(w);
+    await phoneFreeze(w);
+    await oldBoxFlushFinalDelta(w);
+    await hub.revoke("root", "signed out");
+    expect((await runMigrationConsumer(opts)).status).toBe("error");
+    expect(takeOvers).toEqual([]);
+    expect((await w.storage.servers.get(HOST))?.identityPubKeyHex).not.toBe(hex(w.newStk.publicKey));
   });
 
   it("an incomplete restore reports 'restoring' and never acks pre-seeded", async () => {

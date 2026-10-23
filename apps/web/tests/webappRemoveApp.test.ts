@@ -60,7 +60,7 @@ describe("Remove app — the signed uninstall", () => {
   it("says what goes, where, and what the other servers keep", async () => {
     const { removeAppMessage } = await load();
     expect(removeAppMessage({ slug: "notes", server: "home.alice.flagship.services" })).toBe(
-      "This uninstalls notes from home.alice.flagship.services and deletes its data there. This can't be undone.",
+      "This uninstalls notes from home.alice.flagship.services and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.",
     );
     expect(removeAppMessage({ slug: "notes", server: "h", otherCopies: 1 })).toMatch(/Your other server keeps its copy\.$/);
     expect(removeAppMessage({ slug: "notes", server: "h", otherCopies: 2 })).toMatch(/Your other 2 servers keep their copies\.$/);
@@ -100,8 +100,11 @@ describe("Remove app — the app page", () => {
   it("asks first, then signs with the sensitive-order key", () => {
     const fn = VIEW.slice(VIEW.indexOf("async function removeAppHere"));
     const body = fn.slice(0, fn.indexOf("\n}\n"));
-    expect(body.indexOf("inlineConfirm(")).toBeGreaterThan(-1);
-    expect(body.indexOf("inlineConfirm(")).toBeLessThan(body.indexOf("removeAppFromServer("));
+    expect(body.indexOf("inlineConfirmWithExtra(")).toBeGreaterThan(-1);
+    expect(body.indexOf("inlineConfirmWithExtra(")).toBeLessThan(body.indexOf("removeAppFromServer("));
+    // Only an explicit OK removes; "Back up first" and any dismissal leave the app alone.
+    expect(body).toContain('answer !== "ok"');
+    expect(body).toContain('extraLabel: "Back up first"');
     expect(body).toContain("signWithIrk: sensitiveSigner()");
     expect(body).toContain("danger: true");
   });
