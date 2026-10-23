@@ -15,11 +15,8 @@
  * step failed, and a peer that can't open a frame is indistinguishable from a
  * scanner). Never throws.
  */
-import {
-  type GossipAnnouncement,
-  openGossip,
-  verifyGossipMac,
-} from "@flagship/protocol";
+import type { GossipAnnouncement } from "@flagship/protocol";
+import { asGossipCrypto, verifyFrameMac, type GossipCrypto } from "./gossipCrypto.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { SiblingView } from "./siblingView.js";
 
@@ -34,7 +31,7 @@ interface SealedGossipFrame {
 const EMPTY_204: HttpResponse = { status: 204, body: "" };
 
 export function buildGossipIngestHandler(deps: {
-  cgk: Uint8Array;
+  cgk: Uint8Array | GossipCrypto;
   view: SiblingView;
   /** This box's account (UserId) — reject frames for a different account. */
   user: string;
@@ -46,6 +43,7 @@ export function buildGossipIngestHandler(deps: {
   onLog?: (m: string) => void;
 }) {
   const now = deps.now ?? (() => Date.now());
+  const crypto = asGossipCrypto(deps.cgk);
   const selfId = deps.selfId.toLowerCase();
   const user = deps.user.toLowerCase();
 
@@ -61,7 +59,7 @@ export function buildGossipIngestHandler(deps: {
     try {
       // 1. Open the CGK seal. A blob we can't open (wrong key / not a seal /
       //    truncated) throws → silent 204.
-      const plaintext = openGossip(toUint8(req.body), deps.cgk);
+      const plaintext = crypto.open(toUint8(req.body));
 
       // 2. Parse the announcement + MAC.
       const parsed = JSON.parse(Buffer.from(plaintext).toString("utf8")) as SealedGossipFrame;
@@ -71,7 +69,7 @@ export function buildGossipIngestHandler(deps: {
 
       // 3. Verify the HMAC under the CGK — proves the FRAME's claims weren't
       //    forged by a peer without the cloud key.
-      if (!verifyGossipMac(a, mac, deps.cgk)) return EMPTY_204;
+      if (!verifyFrameMac(crypto, a, mac)) return EMPTY_204;
 
       // 4. Account-scope + self-echo guards.
       if (typeof a.user !== "string" || a.user.toLowerCase() !== user) return EMPTY_204;

@@ -14,6 +14,7 @@ import { readFile } from "node:fs/promises";
 import { birthDateFromAuthCode, type SignedServerOrder } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { resolveCgk } from "./cgk.js";
+import type { GossipCrypto } from "./gossipCrypto.js";
 import { buildGossipIngestHandler } from "./gossipHttp.js";
 import {
   ANNOUNCE_INTERVAL_MS,
@@ -110,8 +111,12 @@ export interface WireGossipDeps {
    * Optional; omitted on certless paths.
    */
   certPrewarm?: CertPrewarm;
+  /**
+   * The gossip key's operations (the custodian's, so under keyd the CGK stays there); null
+   * means no CGK, gossip off. Left out, the key is read from env/disk (tests, developer runs).
+   */
+  cgk?: Uint8Array | GossipCrypto | null;
   /** Test seams. */
-  cgk?: Uint8Array;
   intervalMs?: number;
   livenessWindowMs?: number;
   fetchImpl?: typeof fetch;
@@ -151,7 +156,7 @@ export async function readAuthCodeBirthDate(): Promise<number | null> {
 
 export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult> {
   const log = deps.onLog ?? ((m: string) => console.log(m));
-  const cgk = deps.cgk ?? (await resolveCgk());
+  const cgk = deps.cgk === undefined ? await resolveCgk() : deps.cgk;
   if (!cgk) {
     log(
       "[gossip] no CGK provisioned — per-service leadership gossip DISABLED. " +
@@ -292,4 +297,5 @@ export {
   type RouteNudgeDeps,
 } from "./routeNudge.js";
 export { resolveCgk } from "./cgk.js";
+export { gossipCryptoFromCgk, gossipCryptoFromOps, type GossipCrypto } from "./gossipCrypto.js";
 export { buildLeadsHttpHandler, type LeadsHttpDeps } from "./leadsHttp.js";

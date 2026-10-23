@@ -13,11 +13,17 @@ import {
   SWK_DERIVE_LABELS,
 } from "@flagship/protocol";
 import { hkdf } from "@noble/hashes/hkdf";
+import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
 import { BOX_SIGN_PURPOSES, checkSign } from "./policy.js";
 import { AcmeAccount, type AcmeRequest } from "./acme.js";
 import { TlsKeys } from "./tls.js";
 import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
+
+const GOSSIP_TAG = "flagship/gossip/v2|";
+const ACCESS_SYNC_TAG = "flagship/access-sync/v1|";
+const ACCESS_SYNC_KEY_INFO = "flagship/access-sync/key/v1";
+const MAX_MAC_BYTES = 64 * 1024;
 
 export interface KeyStore {
   /** Persist a provisioned secret (0400, owned by the keyd user). */
@@ -163,6 +169,20 @@ export class KeydService {
           throw new KeydError("forbidden", "app-copy env key info must be purpose-tagged");
         }
         return { result: { key: toHex(new Uint8Array(hkdfSync("sha256", this.#cgkOrThrow(), new Uint8Array(0), info, 32))) } };
+      }
+      case "cgk.gossipMac":
+      case "cgk.accessSyncMac": {
+        // A MAC over the box's own two gossip message kinds only, so the CGK is never a general
+        // MAC oracle and never leaves keyd.
+        noExtraArgs(a, ["msg"]);
+        const msg = hexArg(a, "msg", { min: 1, max: MAX_MAC_BYTES });
+        const gossip = req.op === "cgk.gossipMac";
+        const tag = gossip ? GOSSIP_TAG : ACCESS_SYNC_TAG;
+        if (!Buffer.from(msg.subarray(0, tag.length)).equals(Buffer.from(tag))) {
+          throw new KeydError("forbidden", `the gossip key MACs ${tag.slice(0, -1)} messages only`);
+        }
+        const key = gossip ? this.#cgkOrThrow() : hkdf(sha256, this.#cgkOrThrow(), new Uint8Array(0), new TextEncoder().encode(ACCESS_SYNC_KEY_INFO), 32);
+        return { result: { mac: toHex(hmac(sha256, key, msg)) } };
       }
       case "tls.createKey": {
         noExtraArgs(a, ["names"]);

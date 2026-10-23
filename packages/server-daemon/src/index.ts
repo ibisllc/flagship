@@ -273,6 +273,7 @@ import {
   readAuthCodeBirthDate,
   wireGossip,
   resolveCgk,
+  gossipCryptoFromOps,
   buildCertPrewarm,
   apexFromBoxFqdn,
   buildLeadsHttpHandler,
@@ -312,7 +313,7 @@ import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { AccessJournal } from "./accessJournal.js";
-import { buildAccessSync, deriveAccessSyncKey, type AccessPeers, type AccessSync } from "./accessSync.js";
+import { accessSyncKeyFromOps, buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers } from "./accessPeers.js";
 import { BoxReadToken } from "./boxReadToken.js";
 
@@ -1969,6 +1970,7 @@ async function main(): Promise<void> {
         // boxes are under gym.flagship.services, so broadcast and the
         // leader-routed URLs must not assume the production apex.
         ...(apexFromBoxFqdn(env.serverFqdn!) ? { servicesApex: apexFromBoxFqdn(env.serverFqdn!)! } : {}),
+        cgk: custodian.hasCgk ? gossipCryptoFromOps(custodian) : null,
         onLog: (m) => console.log(m),
       });
       if (result.enabled && result.handler && result.loop) {
@@ -4056,7 +4058,6 @@ async function wireOwnerHandlers(deps: {
   runtime.addHandler(access.handle);
   {
     // One access list per app across the account's servers (box to box only).
-    const cgk = await resolveCgk().catch(() => null);
     const journal = new AccessJournal(`${accessDataDir}/data/flagship-access/access-journal.json`);
     await journal.load();
     const installedIds = () => (deps.servicePlatformRef.current?.list() ?? []).map((a) => a.serviceId);
@@ -4077,7 +4078,7 @@ async function wireOwnerHandlers(deps: {
       store: accessStore,
       apply: async (ref, e) => (e.kind === "rank" ? applyRank(ref, e) : access.applyEntry(ref, e)),
       peers: () => deps.accessPeersRef.current,
-      key: cgk ? deriveAccessSyncKey(cgk) : null,
+      key: deps.custodian.hasCgk ? accessSyncKeyFromOps(deps.custodian) : null,
       installed: (ref) => installedIds().includes(ref),
       apps: installedIds,
       log: (m) => console.log(m),

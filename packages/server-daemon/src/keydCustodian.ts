@@ -150,6 +150,12 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
   deriveAppCopyEnvKey(info: Bytes): Bytes {
     return unhex(this.#client.call("cgk.deriveAppCopyEnvKey", { info: hex(info) }).key);
   }
+  gossipMac(canonical: Bytes): string {
+    return String(this.#client.call("cgk.gossipMac", { msg: hex(canonical) }).mac);
+  }
+  accessSyncMac(canonical: Bytes): string {
+    return String(this.#client.call("cgk.accessSyncMac", { msg: hex(canonical) }).mac);
+  }
 
   // ── Provisioning (once; keyd refuses a different key afterwards) ───────
   provisionSwk(key: Bytes): void {

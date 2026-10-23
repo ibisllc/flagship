@@ -57,8 +57,19 @@ import {
   type SecretRequest,
   type InstallServiceRequest,
 } from "@flagship/protocol";
-import { hkdfSync } from "node:crypto";
+import { createHmac, hkdfSync } from "node:crypto";
 import { deriveTlsKey as protocolDeriveTlsKey } from "./acme.js";
+
+const GOSSIP_MAC_TAG = "flagship/gossip/v2|";
+const ACCESS_SYNC_MAC_TAG = "flagship/access-sync/v1|";
+const ACCESS_SYNC_KEY_INFO = "flagship/access-sync/key/v1";
+
+/** The CGK MACs only its own two message kinds, the same rule keyd applies. */
+function requireTag(msg: Bytes, tag: string): void {
+  if (!Buffer.from(msg.subarray(0, tag.length)).equals(Buffer.from(tag))) {
+    throw new Error(`KeyCustodian: the gossip key MACs ${tag.slice(0, -1)} messages only`);
+  }
+}
 
 /**
  * Box-identity (STK) operations. Holds the 32-byte Ed25519 seed; NEVER
@@ -132,6 +143,13 @@ export interface GossipOps {
    * an app's env on its way between two of the account's servers (appCopy/).
    */
   deriveAppCopyEnvKey(info: Bytes): Bytes;
+  /** HMAC-SHA256 of a gossip frame's canonical bytes (`flagship/gossip/v2|…`) under the CGK, hex. */
+  gossipMac(canonical: Bytes): string;
+  /**
+   * The access-sync MAC of `canonical` (`flagship/access-sync/v1|…`), under the box-to-box key
+   * HKDF(CGK, "flagship/access-sync/key/v1"), hex.
+   */
+  accessSyncMac(canonical: Bytes): string;
 }
 
 export interface KeyCustodianInit {
@@ -245,6 +263,15 @@ export class KeyCustodian implements BoxSigner, SwkOps, GossipOps {
       throw new Error("KeyCustodian: app-copy env key info must be purpose-tagged");
     }
     return new Uint8Array(hkdfSync("sha256", this.#cgkOrThrow(), new Uint8Array(0), info, 32));
+  }
+  gossipMac(canonical: Bytes): string {
+    requireTag(canonical, GOSSIP_MAC_TAG);
+    return createHmac("sha256", this.#cgkOrThrow()).update(canonical).digest("hex");
+  }
+  accessSyncMac(canonical: Bytes): string {
+    requireTag(canonical, ACCESS_SYNC_MAC_TAG);
+    const key = new Uint8Array(hkdfSync("sha256", this.#cgkOrThrow(), new Uint8Array(0), new TextEncoder().encode(ACCESS_SYNC_KEY_INFO), 32));
+    return createHmac("sha256", key).update(canonical).digest("hex");
   }
 
   // ── Narrowing accessors (structural slices for the reference graph) ────

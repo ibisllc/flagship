@@ -9,7 +9,7 @@ use serde_json::Value;
 use zeroize::Zeroizing;
 
 use crate::acme::{AcmeAccount, AcmeRequest};
-use crate::crypto::{Key32, gcm_open, gcm_seal, hkdf32, open_sealed, sha256};
+use crate::crypto::{Key32, gcm_open, gcm_seal, hkdf32, hmac_sha256, open_sealed, sha256};
 use crate::files::save_key_file;
 use crate::obj;
 use crate::policy::{BOX_SIGN_PURPOSES, check_sign};
@@ -29,6 +29,10 @@ pub const SWK_DERIVE_LABELS: &[&str] = &[
     "flagship.app-secret.v1",
 ];
 
+const GOSSIP_TAG: &str = "flagship/gossip/v2|";
+const ACCESS_SYNC_TAG: &str = "flagship/access-sync/v1|";
+const ACCESS_SYNC_KEY_INFO: &[u8] = b"flagship/access-sync/key/v1";
+const MAX_MAC_BYTES: usize = 64 * 1024;
 const APP_COPY_ENV_PREFIX: &[u8] = b"flagship/app-copy-env/v1|";
 const BULK: usize = 3 * 1024 * 1024;
 
@@ -297,6 +301,26 @@ impl KeydService {
                     ));
                 }
                 done(obj! { "key" => to_hex(hkdf32(self.cgk()?, &[], &info).as_ref()) })
+            }
+            "cgk.gossipMac" | "cgk.accessSyncMac" => {
+                // Only the box's own two gossip message kinds, so the CGK is no general MAC oracle.
+                no_extra_args(a, &["msg"])?;
+                let msg = hex_arg(a, "msg", HexBounds::range(1, MAX_MAC_BYTES))?;
+                let gossip = op == "cgk.gossipMac";
+                let tag: &str = if gossip { GOSSIP_TAG } else { ACCESS_SYNC_TAG };
+                if !msg.starts_with(tag.as_bytes()) {
+                    return Err(KeydError::forbidden(format!(
+                        "the gossip key MACs {} messages only",
+                        tag.trim_end_matches('|')
+                    )));
+                }
+                let cgk = self.cgk()?;
+                let mac = if gossip {
+                    hmac_sha256(cgk, &msg)
+                } else {
+                    hmac_sha256(hkdf32(cgk, &[], ACCESS_SYNC_KEY_INFO).as_ref(), &msg)
+                };
+                done(obj! { "mac" => to_hex(&mac) })
             }
             "tls.createKey" => {
                 no_extra_args(a, &["names"])?;
