@@ -127,6 +127,7 @@ import {
 } from "./postRecovery/fileJournalStore.js";
 import { buildRunMigration } from "./runMigration.js";
 import { sandboxedRunSql } from "./migrationSandbox.js";
+import { PublisherPins } from "./publisherPins.js";
 import { realCommandRunner as realCommandRunnerStatic } from "./serviceRunner.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildAppBackupHttpHandlers } from "./serviceBackupHttp.js";
@@ -1236,6 +1237,10 @@ async function main(): Promise<void> {
   // once gossip is up (below).
   const accessSyncRef: { current: AccessSync | null } = { current: null };
   const accessPeersRef: { current: AccessPeers | null } = { current: null };
+  // N11: the first publisher key verified per app, kept beside the box's keys so an uninstall or a
+  // restore of app data cannot touch it.
+  const publisherPins = new PublisherPins(join(dataDir, "publisher-pins.json"));
+  await publisherPins.load();
   const {
     pullStateStore,
     updateServer,
@@ -1246,6 +1251,7 @@ async function main(): Promise<void> {
     env: env as RuntimeEnv,
     dataDir,
     identityKeypair,
+    publisherPins,
     subscriberRegistry,
     alertInbox,
     servicePlatformRef: servicePlatformRefForServer,
@@ -2197,6 +2203,7 @@ function wireUpdatePack(deps: {
   env: RuntimeEnv;
   dataDir: string;
   identityKeypair: Keypair;
+  publisherPins: PublisherPins;
   subscriberRegistry: FileSubscriberRegistry;
   alertInbox: InMemoryAlertInbox;
   servicePlatformRef: ServicePlatformRef;
@@ -2236,6 +2243,15 @@ function wireUpdatePack(deps: {
       }
     },
     cacheDir: join(dataDir, "data", "update-pack-cache"),
+    // Releases are signed with this pod's identity key. A subscriber pins the first key it
+    // verifies; a different one stops its updates for the owner (N11).
+    publisher: {
+      pubHex: bytesToHexStr(identityKeypair.publicKey),
+      sign: (bytes) => bytesToHexStr(ed.sign(bytes, identityKeypair.privateKey)),
+      keyEpoch: () => 0,
+      identityGeneration: () => 1,
+      chain: () => [],
+    },
   });
 
   const cloneService = buildCloneApp({
@@ -2250,6 +2266,7 @@ function wireUpdatePack(deps: {
     runSqlOverride: sandboxedRunSql(realCommandRunnerStatic),
   });
   const updateClient = new UpdateClient({
+    publisherPins: deps.publisherPins,
     identity: identityKeypair,
     pullerServerId: env.serverFqdn,
     state: pullStateStore,

@@ -37,8 +37,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import {
+  canonicalAppRelease,
+  capabilitiesOf,
+  capabilityDigest,
+  parseManifest,
   verifyUpdatePull,
+  type AppRelease,
   type Bytes,
+  type PublisherRotation,
   type UpdatePullRequest,
 } from "@flagship/protocol";
 import type { InstalledService } from "./servicePlatform.js";
@@ -73,6 +79,19 @@ export interface UpdateServerDeps {
    * tests inject a Map.
    */
   resolveServerPubkey: (serverId: string) => Promise<Bytes | null>;
+
+  /**
+   * N11 — the publisher key this pod signs releases with. Every 200 response carries the signed
+   * release, so a subscriber can pin the key and notice a different one.
+   */
+  publisher?: {
+    pubHex: string;
+    sign: (bytes: Uint8Array) => string;
+    keyEpoch: () => number;
+    identityGeneration: (app: InstalledService) => number;
+    /** Rotations from the first key to the current one, oldest first. */
+    chain: () => Array<{ rotation: PublisherRotation; signatureHex: string }>;
+  };
 
   /** Cache root, e.g. `/var/flagship/data/forgejo-pack-cache`. */
   cacheDir: string;
@@ -198,12 +217,37 @@ export class UpdateServer {
       };
     }
 
+    const releaseHeaders: Record<string, string> = {};
+    if (this.deps.publisher && pack.length > 0) {
+      const tip = await this.repoTip(dist.repoPath);
+      const pub = this.deps.publisher;
+      if (tip) {
+        const caps = await this.capabilityDigestAt(dist.repoPath, tip);
+        const release: AppRelease = {
+          appId: app.serviceId,
+          identityGeneration: pub.identityGeneration(app),
+          version: app.manifest?.version ?? "0",
+          packageDigestHex: tip,
+          capabilityDigestHex: caps,
+          keyEpoch: pub.keyEpoch(),
+          issuedAt: this.now(),
+        };
+        releaseHeaders["x-flagship-release"] = JSON.stringify({
+          release,
+          signatureHex: pub.sign(canonicalAppRelease(release)),
+          publisherKeyHex: pub.pubHex,
+          chain: pub.chain(),
+        });
+      }
+    }
+
     return {
       status: 200,
       headers: {
         "content-type": "application/x-git-bundle",
         "x-flagship-pack-since": pull.since,
         "content-length": String(pack.length),
+        ...releaseHeaders,
       },
       body: pack,
     };
@@ -259,6 +303,18 @@ export class UpdateServer {
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
+  }
+
+  /** The digest of the authority the manifest at `commit` asks for. */
+  private async capabilityDigestAt(repoPath: string, commit: string): Promise<string> {
+    try {
+      const { stdout } = await this.git(repoPath, ["show", `${commit}:flagship.app.json`]);
+      const parsed = parseManifest(JSON.parse(stdout));
+      if (parsed.ok) return capabilityDigest(capabilitiesOf(parsed.manifest));
+    } catch {
+      /* no readable manifest: the digest of nothing */
+    }
+    return "0".repeat(64);
   }
 
   private async isAncestor(repoPath: string, ancestor: string, descendant: string): Promise<boolean> {

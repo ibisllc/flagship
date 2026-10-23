@@ -100,6 +100,12 @@ function sameIdentity(a: PhoneAlert, b: PhoneAlert): boolean {
   if (a.kind === "manual-pending" && b.kind === "manual-pending") {
     return a.toCommit === b.toCommit;
   }
+  if (a.kind === "publisher-key-change" && b.kind === "publisher-key-change") {
+    return a.newFingerprint === b.newFingerprint;
+  }
+  if (a.kind === "publisher-rejected" && b.kind === "publisher-rejected") {
+    return a.reason === b.reason;
+  }
   if (a.kind === "migration-failed" && b.kind === "migration-failed") {
     return a.migrationFile === b.migrationFile;
   }

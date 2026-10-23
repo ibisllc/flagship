@@ -28,6 +28,9 @@ import { join } from "node:path";
 import {
   capabilitiesOf,
   diffCapabilities,
+  judgePublisher,
+  type AppRelease,
+  type PublisherRotation,
   parseManifest,
   signUpdatePull,
   type Bytes,
@@ -37,6 +40,7 @@ import {
 } from "@flagship/protocol";
 import { LineageVerifier, type LineageVerdict } from "./updatePack/lineageVerifier.js";
 import { writeFileDurable } from "./durableFile.js";
+import { keyFingerprint, type PublisherPins } from "./publisherPins.js";
 
 const execFileP = promisify(execFile);
 
@@ -158,6 +162,16 @@ export type PhoneUpdateAlert =
       capabilityChanges?: CapabilityDiff;
     }
   | {
+      kind: "publisher-key-change";
+      serviceId: string;
+      /** `valid-chain`: the old key signed the rotation. `none`: a new identity under the same name. */
+      continuity: "valid-chain" | "none";
+      oldFingerprint: string;
+      newFingerprint: string;
+      toCommit: string;
+    }
+  | { kind: "publisher-rejected"; serviceId: string; reason: string }
+  | {
       kind: "migration-failed";
       serviceId: string;
       migrationFile: string;
@@ -209,6 +223,11 @@ export interface UpdateClientDeps {
    * Throws on failure.
    */
   /**
+   * N11 — the first publisher key verified per app, and the owner's approvals. When set, a pulled
+   * release must carry a signed release envelope; a different key stops the update for the owner.
+   */
+  publisherPins?: PublisherPins;
+  /**
    * Snapshot the app's data before a migration batch; resolves to an id `restoreData` accepts.
    * Without it a batch that fails after some migrations applied leaves the schema ahead of the code.
    */
@@ -250,6 +269,10 @@ export type PullResult =
       reason: string;
     }
   | { kind: "halted-manual-pending"; from: string; to: string }
+  /** The release is unsigned, mis-signed, for another app, or older than what is pinned (N11). */
+  | { kind: "halted-publisher"; reason: string }
+  /** A different publisher key is waiting for the owner; nothing from it runs first. */
+  | { kind: "halted-publisher-key"; continuity: "valid-chain" | "none"; fromFingerprint: string; toFingerprint: string }
   | { kind: "halted-migration-failed"; failingFile: string; reason: string }
   | { kind: "halted-unendorsed"; upstreamTip: string; reason: string }
   | { kind: "error"; reason: string };
@@ -356,6 +379,12 @@ export class UpdateClient {
 
       if (upstreamTip === state.currentTip) {
         return { kind: "no-op", reason: "already-current" };
+      }
+
+      const publisher = await this.checkPublisher(args.serviceId, res.headers, upstreamTip);
+      if (publisher) {
+        await this.git(workDir, ["update-ref", "-d", "refs/heads/incoming-main"]).catch(() => {});
+        return publisher;
       }
 
       // Release gate: if a maintainers-protocol gate is configured, the
@@ -640,6 +669,67 @@ export class UpdateClient {
       to: toCommit,
       migrationsApplied: applied,
     };
+  }
+
+  /**
+   * N11: is this release from the publisher this box pinned? Null means go on. A key that differs
+   * from the pin is parked for the owner and nothing it signed is applied.
+   */
+  private async checkPublisher(serviceId: string, headers: Headers, upstreamTip: string): Promise<PullResult | null> {
+    const pins = this.deps.publisherPins;
+    if (!pins) return null;
+    if (pins.unavailable) return { kind: "halted-publisher", reason: "the publisher records are unreadable; confirm this publisher again" };
+    const raw = headers.get("x-flagship-release");
+    if (!raw) return this.refuse(serviceId, "this release is not signed by its publisher");
+    let env: { release: AppRelease; signatureHex: string; publisherKeyHex: string; chain?: Array<{ rotation: PublisherRotation; signatureHex: string }> };
+    try {
+      env = JSON.parse(raw);
+    } catch {
+      return this.refuse(serviceId, "the release signature could not be read");
+    }
+    const verdict = judgePublisher(pins.get(serviceId), env.release, env.signatureHex, env.publisherKeyHex, env.chain ?? [], this.now(), upstreamTip);
+    switch (verdict.kind) {
+      case "reject":
+        return this.refuse(serviceId, `the publisher check failed (${verdict.reason})`);
+      case "same-key":
+        return null;
+      case "first-use":
+        await pins.pin(serviceId, verdict.pin);
+        return null;
+      case "rotated":
+      case "new-identity": {
+        const pending = pins.pendingFor(serviceId);
+        if (pending && pending.toKeyHex === verdict.toKeyHex && pins.get(serviceId)?.keyHex === verdict.toKeyHex) return null;
+        await pins.setPending({
+          serviceId,
+          continuity: verdict.kind === "rotated" ? "valid-chain" : "none",
+          from: verdict.from,
+          toKeyHex: verdict.toKeyHex,
+          toEpoch: env.release.keyEpoch,
+          release: env.release,
+          seenAt: this.now(),
+        });
+        this.deps.emitPhoneAlert({
+          kind: "publisher-key-change",
+          serviceId,
+          continuity: verdict.kind === "rotated" ? "valid-chain" : "none",
+          oldFingerprint: keyFingerprint(verdict.from.keyHex),
+          newFingerprint: keyFingerprint(verdict.toKeyHex),
+          toCommit: upstreamTip,
+        });
+        return {
+          kind: "halted-publisher-key",
+          continuity: verdict.kind === "rotated" ? "valid-chain" : "none",
+          fromFingerprint: keyFingerprint(verdict.from.keyHex),
+          toFingerprint: keyFingerprint(verdict.toKeyHex),
+        };
+      }
+    }
+  }
+
+  private refuse(serviceId: string, reason: string): PullResult {
+    this.deps.emitPhoneAlert({ kind: "publisher-rejected", serviceId, reason });
+    return { kind: "halted-publisher", reason };
   }
 
   /** The authority an update adds or drops, read from the manifest at each commit. Best effort. */
