@@ -1,0 +1,122 @@
+TODO: custom voi.ci names (feat/named-links) and the branches stacked on it
+===========================================================================
+
+For the review engineer. This file lists everything that is unproven or still
+needs a person, for the work built in this session. Read it first, work down
+it, and DELETE THIS FILE when every item is done or moved (last line).
+
+What was built
+--------------
+Branch order (each branch sits on the one before; all pushed, all current with
+feat/multilingual @ 9624e1c36 as of 2026-10-23):
+
+  main -> feat/multilingual -> feat/named-links -> feat/marketplace
+       -> feat/custom-domains / feat/custom-names / feat/outbound-proxy
+
+Webapp shell versions: named-links v159, marketplace v160, custom-domains v161,
+custom-names v162, outbound-proxy v163. The plan and rules are in
+docs/named-links.md; the status entry is in AGENTS.md ("Custom voi.ci names").
+
+How to work through this
+------------------------
+- Work in a worktree with its own node_modules (npm ci), never a symlinked one.
+- Per branch, the gate is: npx tsc -b; npm run i18n; npm run parity (expect the
+  9 old "anchor broke" reds, no new ones); then vitest on apps/web/tests,
+  apps/com, packages/control-plane, packages/storage, packages/server-daemon.
+  Do NOT run the whole tools/ or scripts/ test trees unscoped in the cloud
+  container: one run of them deleted the checkout (cause not found).
+- Rebase order matters (bottom up). A rebase onto a moved parent conflicts in
+  generated i18n files and in the shell-version pins; settle the source
+  catalogs (i18n/<surface>/*.json) by union, take upstream for generated
+  output, then rebuild with scripts/i18n-<surface>.mjs build.
+
+A. Unproven: nothing below has run on a device or a live system
+---------------------------------------------------------------
+A1. iOS code (feat/named-links): nothing was compiled. Build the app from
+    apps/mobile/ios/App/FlagshipApp.xcodeproj. Likely fixes: confirmationDialog
+    with presenting:, onChange closures, @Observable with nonisolated static
+    members, Keystore / BiometricGate use in VoiciLinkViewModel.swift and
+    VoiciLinkField.swift. Run the new tests: VoiciLinkViewModelTests,
+    VoiciNameVectorTests (shared vectors: packages/protocol/test-vectors/voici-name).
+A2. iOS strings: run `node scripts/i18n-ios.mjs harvest` on a Mac (new
+    String(localized:) keys; removed short-link strings), then build/check.
+    The marketplace, custom-domains and outbound-proxy Swift text was never
+    harvested at all.
+A3. Android code: nothing was compiled or unit-tested (no SDK in the cloud).
+    Build and run the tests: LinkFieldViewModelTest, VoiciNameVectorsTest,
+    NameDibsViewModelTest, AuditLogViewModelTest, and the tests of the
+    outbound-proxy and marketplace screens (some may compare old English
+    strings now served from resources). Check the new nav route
+    name-dibs-link/{name} and that the field's state survives the trip to the
+    dibs screen (view model key link-field-<serviceId>). Run
+    scripts/release-clean-sources.test.ts and
+    apps/mobile/android/scripts/check-release-clean.sh on a built APK.
+A4. Gym group `named-links` (tools/live-e2e/groups/namedLinks.ts) is written
+    but has never run. Run it after bash scripts/gym-refresh.sh:
+      npx tsx tools/live-e2e/shared-run.ts --only named-links   (check --list)
+    It may fail on a missing certificate for <app>.<user>.<gym apex> (tier-2
+    cert); decide whether that is a gym gap or a real one. voi.ci is a fixed
+    host, so redirects are not covered live; they are covered by
+    packages/control-plane/tests/voiciNames.test.ts.
+A5. Canonical address (decision 3): the box change (packages/server-daemon
+    gossip/gossipLoop.ts extraSiblings, accessPeers.ts peerRunners, wired in
+    index.ts) feeds .com's server list plus a direct ask of each server into
+    the election, because gossip frames have never reached a sibling live.
+    Unit tests pass; nothing ran on two real boxes. Prove: two boxes run an
+    app, the first in the server order serves <app>.<user>.<apex>, and it moves
+    when that box stops running the app (gym group above). Only then set
+    VOICI_CANONICAL = "1" (apps/com/wrangler*.toml, commented note there).
+    While it is off, voi.ci redirects use the stored/app URL as before.
+A6. Gossip needs a CGK; without one no box claims a canonical route at all.
+    Decide whether the canonical address must work without a CGK.
+A7. Redirect, 410 and waiting-period behaviour are tested in control-plane
+    tests only. Do one live pass on voi.ci after the .com deploy: custom name
+    redirects, random code still redirects, a released name answers 410 for 30
+    days, a retired code answers 410.
+A8. Timing-sensitive tests: apps/com/test/cpuBudget.test.ts and cronBudget.test.ts
+    fail intermittently in the cloud container (values swing, "Infinity x
+    calibration"), and pass on re-run or on a quiet machine. Run them on a quiet
+    machine; if cronBudget still fails for the plan "demo+suggestions+eviction-gc
+    +voici-names", the voici-names job needs a smaller window (VOICI_NAMES_PER_RUN
+    in apps/com/src/cronPlan.ts).
+A9. Translations are machine drafts; no native reviewer has seen any of them
+    (webapp, site, Android, iOS server sentences) for: Your link / Free one up /
+    I own it / dibs text, the marketplace and Pro text, custom domains, outbound
+    proxy. See i18n/REVIEW.md. The dibs text was generalised (no more "$20 name
+    change"), check the English once more.
+A10. Android accepted the freshness of ~40 keys with `accept` after the rebase
+    onto multilingual (they were translated together with their English on
+    this branch). Spot check a few in all six languages.
+
+B. Left for the owner / release (deploy and config)
+---------------------------------------------------
+B1. D1 migrations before the .com deploy: 0107 (voici_names, voici_name_changes,
+    voici_links.retired_at) on named-links. On the marketplace branch family:
+    0090-0091 (marketplace), 0092-0094 (custom-names), 0099 (outbound-proxy).
+    `main` skips those numbers on purpose; apply in order against the live DB.
+B2. Dibs window: set DIBS_WINDOW_START and DIBS_WINDOW_END in apps/com/wrangler
+    config (six months from this release; the example in wrangler.toml says
+    2026-10-15 to 2027-04-15 and must be changed to the real dates). Unset means
+    dibs is off and every free name is open to everyone.
+B3. Endorsed box release: needed for the canonical-address election change
+    (A5) and for the other box-side changes already waiting on main.
+B4. iOS and Android store builds (the link field and everything above ships in
+    the apps). iOS needs the harvest (A2) first.
+B5. Not in this build, decide: .com has no per-service delete signal, so a
+    deleted app's random code only retires with its account. A box-side signal
+    would fix it. Push notifications for the 30/7-day release warnings are
+    Activity events only; a content-free push needs a localized sentence.
+B6. Plan limits are code constants (VOICI_NAME_LIMITS 5/25/100, 3 changes per
+    30 days, 10 per day, 30-day wait, 60-day inactivity) in
+    packages/control-plane/src/voiciNames.ts; confirm them before launch.
+B7. The marketplace branch family still holds unlaunched features. Merge order
+    when they launch: named-links first (after multilingual), then
+    marketplace, then the three children. Rebase, do not merge, as above.
+B8. Parity: after merging, the `named-links` row in parity/features.json has
+    web/ios/android all "present"; if any port is cut, set it back to missing
+    with a reason.
+
+Reminder
+--------
+DELETE THIS FILE (`todo` in the repo root) when every item above is done,
+moved to AGENTS.md "Current status & open work", or consciously dropped.
