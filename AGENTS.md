@@ -345,12 +345,20 @@ of the last check here: **not yet checked**.
   codec/SNI/core, GPU allocator + CDI validator, WASI worker, draft hybrid PQ suites
   (`pq-suites.md`, TS + Rust, unreviewed), manifest schema 2 (`manifestV2.ts`; v1 now refuses
   host-access fields), strict/compatibility policy (`assurancePolicy.ts`). Nothing is switched on,
-  nothing ran on Linux or real hardware, no external review, no native UX. Live-code findings to
-  fix on their own: the relay crashes on a `null` REQUEST_TRANSFER payload
-  (`apps/web/src/tunnel/tunnelHub.ts:479`); the STK seed sits in plaintext on `/boot`; VM appliance
-  boxes share one LUKS volume key; `sni.ts` drops hellos split across TLS records (details in
-  `evidence-map.md`, `boot-rust.md`, `relay-transport.md`). `rust/deny.toml` lacks aws-lc's OpenSSL
-  licence (ingress dependency), so the CI deny job fails until that is decided.
+  nothing ran on Linux or real hardware, no external review, no native UX. Live-code defects the
+  work found are FIXED on this branch (not on `main`, not deployed): the relay crash on a `null`
+  REQUEST_TRANSFER and other frame-handler crashes, the reconnect race, undelivered DRAIN_NOTICE,
+  unbounded relay buffering, `sni.ts` dropping hellos split across records; a boot-only key replaces
+  the STK on `/boot` (binding `flagship/boot-key-binding/v1`, D1 migration **0110**), the premount
+  no longer puts the seed on argv or the disk key in `/run`, fails closed on a bad mode file, checks
+  the boot host and the lease; appliances re-encrypt to a per-box LUKS volume key at first boot
+  (old boxes get a `server.disk.shared-key` warning); all clients pin each server's box key (TOFU)
+  and `.com` needs a read token for `sealed-luks-key`; keyd signs the box purposes it refused,
+  keeps the CGK and root SWK inside, and `tls.sign` signs only TLS handshake input (Go tlsd now
+  needs Go 1.25); the re-pair journal key derives through keyd; 23 Rust advisories (rustls PQ
+  downgrade, wasmtime-wasi escape, …) patched. Shipping order: D1 0110 → `.com` (shell v166) →
+  endorsed box release → iOS/Android store builds (old store builds lose the disk-key read for
+  real accounts) → republish both VM appliances. None of it has run on a real box, VM or phone.
 
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on

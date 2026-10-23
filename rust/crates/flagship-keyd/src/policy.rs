@@ -29,6 +29,7 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/put-sealed-luks-key/v1",
     "flagship/boot-suspension/v1",
     "flagship/boot-auth/v1",
+    "flagship/boot-key-binding/v1",
     "flagship/inject/v1",
     "flagship/sibling-hello/v1",
     "flagship/sibling-sync/v1",
