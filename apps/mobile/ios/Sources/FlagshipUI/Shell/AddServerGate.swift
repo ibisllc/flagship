@@ -64,7 +64,7 @@ public enum AdminOrderGate {
     public static let accessList = String(localized: "Only an admin device can change this app's internet access.")
     public static let apiKeys = String(localized: "Only an admin device can create or revoke API keys.")
     public static let dataWrite = String(localized: "Only an admin device can change this app's data.")
-    public static let watchQuickApprove = String(localized: "Only an admin device can turn on quick approve from Apple Watch.")
+    public static let watchQuickApprove = String(localized: "Only an admin device can turn on Approve from watch.")
     public static let deleteAccount = String(localized: "Only an admin device can delete this account.")
     /// Sharing a server and changing who it is shared with (.com and the box
     /// take the grant, revoke and offer only under the admin root).

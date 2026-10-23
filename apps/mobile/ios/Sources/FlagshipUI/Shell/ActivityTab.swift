@@ -168,7 +168,7 @@ extension ActivityTab {
                     ? try await Keystore.adminRootKey(reason: String(localized: "Authorize your server to serve"))
                     : nil
             },
-            // "Quick approve from Apple Watch": a plain unlock approval signs the
+            // "Approve from watch": a plain unlock approval signs the
             // boot-response with the delegate key (role="delegate"), no biometric.
             watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
         )

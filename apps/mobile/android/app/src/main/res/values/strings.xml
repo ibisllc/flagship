@@ -507,7 +507,7 @@
     <string name="your_watch_is_waiting_to_approve">Your watch is waiting to approve a server\'s start-up. Unlock, then tap Approve on the watch again.</string>
     <string name="s_start_up">%1$s\'s start-up</string>
     <string name="your_watch_asked_to_approve_unlock">Your watch asked to approve %1$s. Unlock Flagship once so it can, then tap Approve on the watch again.</string>
-    <string name="turn_on_quick_approve_from_watch">Turn on Quick approve from watch in Flagship on your phone first.</string>
+    <string name="turn_on_quick_approve_from_watch">Turn on Approve from watch in Flagship on your phone first.</string>
     <string name="unlock_flagship_on_your_phone_once">Unlock Flagship on your phone once, then approve again.</string>
     <string name="open_flagship_on_your_phone_and">Open Flagship on your phone and unlock it once, then approve again.</string>
     <string name="sign_in_to_flagship_on_your">Sign in to Flagship on your phone first.</string>
@@ -2009,7 +2009,7 @@
     <string name="assistant">Assistant</string>
     <string name="build_logs">Build logs</string>
     <string name="interrupt_with_a_follow_up">Interrupt with a follow-up</string>
-    <string name="quick_approve_from_watch">Quick approve from watch</string>
+    <string name="quick_approve_from_watch">Approve from watch</string>
     <string name="approve_a_server_boot_from_your">Approve a server boot from your Wear OS watch while Flagship is unlocked on this phone. Other actions (revoke server, wipe &amp; restart, replace device) always need your phone. Off by default.</string>
     <string name="active_renews_by">Active — renews by %1$s</string>
     <string name="your_stuff_on">Your stuff,\non\u0020</string>
@@ -2034,7 +2034,7 @@
     <string name="tap_below_to_unlock">Tap below to unlock.</string>
     <string name="this_erases_this_devices_account_key_3">This erases this device\'s account key and data so nothing sensitive is left at rest. Your account and your servers are untouched; sign back in with your recovery passkey and the same key is restored, no re-pair.</string>
     <string name="let_your_watch_approve">Let your watch approve</string>
-    <string name="unlock_flagship_once_so_quick_approve">Unlock Flagship once so Quick approve can sign</string>
+    <string name="unlock_flagship_once_so_quick_approve">Unlock Flagship once so Approve from watch can sign</string>
     <string name="show_your_servers">Show your servers</string>
     <string name="confirm_its_you_to_load_your">Confirm it\'s you to load your servers</string>
     <string name="web_browser">Web browser</string>
