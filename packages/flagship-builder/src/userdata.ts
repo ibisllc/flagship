@@ -23,6 +23,7 @@ import { INSTALL_BOX_ARTIFACT_SH, VERIFY_BOX_ARTIFACT_SH } from "./boxInstallerS
 import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import type { InstallBlob } from "@flagship/protocol";
 import { utf8ToBase64 } from "./base64.js";
+import { APPROVED_BOOT_HOSTS, approvedBootHostName, buildUnlockPremountScript } from "./unlockPremount.js";
 
 /**
  * Options for the install config generators. The InstallBlob is embedded
@@ -47,7 +48,7 @@ export interface UserDataOptions {
    * preseed gets a partman-crypto LVM-on-LUKS root, the bootstrap re-keys it to
    * a random key (install.sh's pattern), seals that
    * key for the phone + uploads it to `.com`, builds the `/boot/flagship-unseal`
-   * helper, and installs an initramfs hook that lifts boot-stage.sh's
+   * helper, and installs an initramfs hook and the generated premount
    * unlock_via_relay() (POST SecretRequest → poll → unseal → cryptsetup
    * luksOpen), falling back to the legacy plaintext consume path on timeout.
    *
@@ -67,7 +68,7 @@ export interface UserDataOptions {
    */
   debugSshAuthorizedKey?: string;
   /**
-   * The dedicated boot worker the box's boot-stage talks to for its LUKS
+   * The dedicated boot worker the box's premount talks to for its LUKS
    * unlock (lease GET / approval request POST / response poll), baked to
    * /boot/flagship-boot-host so the initramfs unlock hook reads it on every
    * boot. Defaults to {@link DEFAULT_BOOT_HOST} (boot.flagshipserver.com).
@@ -76,8 +77,13 @@ export interface UserDataOptions {
    * touching code. The InstallBlob does not yet carry a boot-host field; a
    * follow-up can add one and thread it here. Until then this is the bake-time
    * default constant (or an explicit caller override).
+   *
+   * Its host must be on {@link APPROVED_BOOT_HOSTS} or `extraApprovedBootHosts`:
+   * the premount refuses any other boot worker at boot time.
    */
   bootHost?: string;
+  /** More boot worker hosts the box may use (an enterprise clone's own). */
+  extraApprovedBootHosts?: string[];
   /**
    * Optional Wi-Fi for a box with no Ethernet. A burn-time local input — NEVER
    * part of the signed InstallBlob. When an SSID is given, d-i joins the AP for
@@ -133,7 +139,7 @@ export interface UserDataOptions {
 }
 
 /**
- * The dedicated boot worker (boot.flagshipserver.com). The box's boot-stage
+ * The dedicated boot worker (boot.flagshipserver.com). The box's premount
  * hits its identity-gated /api/boot/* contract for the LUKS unlock. Baked to
  * /boot/flagship-boot-host; enterprise clones override via UserDataOptions.bootHost.
  */
@@ -171,6 +177,7 @@ export interface ResolvedBootstrapInputs {
   ref: string;
   repo: string;
   bootHost: string;
+  approvedBootHosts: string[];
   encryptRoot: boolean;
   bootUnlockMode: BootUnlockMode;
 }
@@ -192,6 +199,10 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
   if (!bootHost.startsWith("https://")) {
     throw new Error("bootHost must be https://");
   }
+  const approvedBootHosts = [...APPROVED_BOOT_HOSTS, ...(opts.extraApprovedBootHosts ?? []).map((h) => h.toLowerCase())];
+  if (!approvedBootHostName(bootHost, approvedBootHosts)) {
+    throw new Error(`bootHost ${JSON.stringify(bootHost)} is not on the approved boot hosts`);
+  }
   return {
     blobB64: utf8ToBase64(
       JSON.stringify(
@@ -209,6 +220,7 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
     ref,
     repo,
     bootHost,
+    approvedBootHosts,
     // Disk encryption is phone-signed in the blob (InstallBlob.diskEncryption);
     // an explicit "none" opts out of LUKS (the Wi-Fi-only fallback), otherwise
     // (present "luks" OR absent) the box encrypts. The builder-local
@@ -434,6 +446,8 @@ export interface BootstrapTemplateArgs {
   bootUnlockMode: BootUnlockMode;
   /** Boot worker host baked to /boot/flagship-boot-host (default boot.flagshipserver.com). */
   bootHost: string;
+  /** Hosts the premount accepts (default {@link APPROVED_BOOT_HOSTS}). */
+  approvedBootHosts?: readonly string[];
   /**
    * Burn-time Wi-Fi (never in the signed blob). When an SSID is given, the
    * bootstrap bakes a first-boot Wi-Fi SAFETY-NET unit + adds wpasupplicant to
@@ -710,8 +724,10 @@ chmod 700 /var/flagship/identity
 flagship-tsx scripts/install-helper.ts gen-identity \\
     --out-priv /var/flagship/identity/identity.priv.hex \\
     --out-pub  /var/flagship/identity/identity.pub.hex \\
-    --out-pem  /boot/identity.pem
-chmod 600 /var/flagship/identity/identity.priv.hex /boot/identity.pem
+    --out-pem  /run/flagship-identity.pem
+# The STK never goes on /boot (the boot key does, packages/protocol/src/bootKey.ts).
+rm -f /run/flagship-identity.pem /boot/identity.pem
+chmod 600 /var/flagship/identity/identity.priv.hex
 SERVER_IDENTITY_PRIV_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.priv.hex)"
 SERVER_IDENTITY_PUB_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.pub.hex)"
 
@@ -1405,7 +1421,7 @@ echo "[flagship-bootstrap] initramfs Wi-Fi hook + premount installed (runs befor
  *   C. BAKE HELPER + INITRAMFS HOOK: build /opt/flagship/installer/unseal-helper
  *      with the cloned source's golang toolchain, install it to
  *      /boot/flagship-unseal, and drop an initramfs hook + premount script that
- *      lifts boot-stage.sh's unlock_via_relay() verbatim (with the legacy
+ *      runs the generated premount (unlockPremount.ts; with the legacy
  *      plaintext-consume fallback) so the root is unlocked pre-pivot on every
  *      boot. The initramfs needs openssl/curl/xxd/sed/cryptsetup pre-unlock.
  *
@@ -1430,6 +1446,7 @@ echo "[flagship-bootstrap] done"
     args.bootHost,
     args.wifiSSID ?? "",
     args.wifiPassword ?? "",
+    args.approvedBootHosts ?? APPROVED_BOOT_HOSTS,
   );
   if (!plain.endsWith(tail)) {
     throw new Error("plain bootstrap tail drifted; encrypted splice would be wrong");
@@ -1455,7 +1472,11 @@ function buildLuksBootstrapBlock(
   bootHost: string,
   wifiSSID: string = "",
   wifiPassword: string = "",
+  approvedHosts: readonly string[] = APPROVED_BOOT_HOSTS,
 ): string {
+  if (!approvedBootHostName(bootHost, approvedHosts)) {
+    throw new Error(`the boot host ${JSON.stringify(bootHost)} is not https on an approved host`);
+  }
   // INITRAMFS Wi-Fi: only on the Wi-Fi path (creds present). Emitted just before
   // update-initramfs so the hook + premount land in the rebuilt initrd. Empty on
   // a wired encrypted burn ⇒ the LUKS block is byte-identical to before.
@@ -1469,17 +1490,6 @@ copy_exec /sbin/lvm /sbin/lvm 2>/dev/null || copy_exec /usr/sbin/lvm /sbin/lvm`;
   // LV's FLAGSHIP_ROOT label is INSIDE the container, invisible pre-open), then
   // `vgchange -ay` surfaces /dev/disk/by-label/FLAGSHIP_ROOT for the normal
   // mount that follows.
-  const terminalUnlock = `ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
-# Open under the CRYPTTAB target name (the installer named it e.g. sda4_crypt).
-# Debian's local-top/cryptroot runs after us (its prereqs() lists every other
-# local-top script) and skips an already-active target — but only under ITS
-# name. Opening as flagship_root left cryptroot prompting for a passphrase
-# against an in-use device: boot hung forever (proven on metal 2026-06-12).
-CRYPT_NAME="$(sed -n 's/^[[:space:]]*\\([^#][^[:space:]]*\\)[[:space:]].*/\\1/p' /cryptroot/crypttab 2>/dev/null | head -n1)"
-[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root
-xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"
-lvm vgchange -ay 2>/dev/null || vgchange -ay 2>/dev/null || true
-shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"`;
   return `
 # ── EXPERIMENTAL: LUKS-on-root, phone-gated unlock (encryptRoot) ─────────
 # Needs live validation; brick risk. This whole block is absent on the
@@ -1579,29 +1589,47 @@ if ! curl -fsS -X POST -H 'content-type: application/json' \\
     exit 1
 fi
 
-${buildLuksBurnSlotRemovalBlock()}
+# D. The boot key: the only key kept on the unencrypted /boot. It signs the
+#    boot worker requests and receives unlock replies and leases; the STK stays
+#    inside the encrypted root. The STK vouches for it once and .com keeps that
+#    binding (a failure aborts here, while the install-time key still opens the
+#    disk). Anyone holding the powered-off disk can still read this key: it
+#    limits what a copy of /boot can do, it does not hide it.
+report_phase sealing
+flagship-tsx scripts/install-helper.ts gen-boot-key \\
+    --out-pem /boot/flagship-boot-key.pem \\
+    --out-pub /boot/flagship-boot-key.pub
+BOOT_KEY_PUB_HEX="$(tr -d '\\n' < /boot/flagship-boot-key.pub)"
+flagship-tsx scripts/install-helper.ts sign-boot-key-binding \\
+    --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
+    --server-domain "$SERVER_DOMAIN" \\
+    --boot-key-pub "$BOOT_KEY_PUB_HEX" \\
+    --issued-at "$(date +%s%3N)" \\
+    > /run/boot-key-binding.json
+if ! curl -fsS -X PUT -H 'content-type: application/json' \\
+    --data @/run/boot-key-binding.json \\
+    "\${CONTROL_PLANE_BASE}/api/server/\${SERVER_DOMAIN}/boot-key"; then
+    echo "[flagship-bootstrap] FATAL: the boot key binding upload failed — keeping the install-time key (recoverable), aborting"
+    exit 1
+fi
+rm -f /run/boot-key-binding.json
 
-# /boot facts the initramfs unlock hook reads on every boot (mirrors the
-# files boot-stage.sh expects: server-domain, identity.pem, boot host).
+# /boot facts the initramfs unlock reads on every boot.
 echo "$SERVER_DOMAIN" > /boot/server-domain
 echo "$CONTROL_PLANE_BASE" > /boot/control-plane-url
-# The dedicated boot worker the unlock hook talks to (lease GET / approval
-# request POST / response poll). Baked so an enterprise clone can override it
-# without touching code — mirrors /boot/flagship-boot-unlock-mode. Default is
-# boot.flagshipserver.com.
+# The boot worker (lease GET / approval request POST / response poll). The
+# premount only accepts an https host on the list baked into it.
 echo "${bootHost}" > /boot/flagship-boot-host
-# The identity PKCS8 PEM is already at /boot/identity.pem (gen-identity --out-pem).
-
-# Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1). Baked
-# from the phone-signed InstallBlob.bootUnlockMode (absent ⇒ "auto"). The
-# initramfs premount script reads this on every boot (defaults to "auto" if the
-# file is absent) and branches: "auto" self-unlocks via a box-sealed lease then
-# falls back to the phone-gated relay; "approve" uses the relay EVERY boot and
-# never touches a lease. The box NEVER deposits a lease itself.
+# The owner key (account IRK) an auto-unlock lease must be signed by. The
+# daemon rewrites it when the account key changes; the premount reads the live
+# partition's copy first.
+echo "$USER_PUB_HEX" > /boot/flagship-owner-key.pub
+# Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1), from the
+# phone-signed InstallBlob.bootUnlockMode. Anything but exactly "auto" makes
+# the premount ask the phone.
 echo "${mode}" > /boot/flagship-boot-unlock-mode
 
-# C1. BAKE the unseal helper to /boot/flagship-unseal. Build-at-install from
-#     the signed release artifact, which carries the static helper built in CI.
+# E. The unseal helper, from the signed release.
 echo "[flagship-bootstrap] installing flagship-unseal from the signed release"
 if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ] && [ -x /usr/local/lib/flagship-appliance/flagship-unseal ]; then
     install -m 755 /usr/local/lib/flagship-appliance/flagship-unseal /boot/flagship-unseal
@@ -1610,481 +1638,75 @@ else
     install -m 755 /opt/flagship/installer/flagship-unseal /boot/flagship-unseal
 fi
 chmod 755 /boot/flagship-unseal
-echo "[flagship-bootstrap] /boot/flagship-unseal baked ($(ls -l /boot/flagship-unseal))"
 
-# C2. INITRAMFS HOOK. The hook copies the tools + helper into the initramfs;
-#     the premount script runs unlock_via_relay() (lifted verbatim from
-#     boot-stage.sh) before the root is mounted, then luksOpen's it.
+# F. The initramfs hook (stages the helper, the tools and the boot facts) and
+#    the premount (packages/flagship-builder/src/unlockPremount.ts).
 mkdir -p /etc/initramfs-tools/hooks /etc/initramfs-tools/scripts/local-top
 cat > /etc/initramfs-tools/hooks/flagship-unlock <<'HOOK'
 #!/bin/sh
-# Flagship initramfs hook: stage the unseal helper + identity + the crypto
-# tools unlock_via_relay() needs (openssl curl xxd sed cryptsetup) into the
-# initramfs, so the root can be unlocked pre-pivot with no encrypted-root deps.
+# Flagship initramfs hook: stage the unseal helper, the boot key and the tools
+# the premount needs (openssl curl xxd sed cryptsetup lvm ip). Fails the
+# initramfs build if anything the unlock needs is missing.
 set -e
 PREREQ=""
 prereqs() { echo "$PREREQ"; }
 case "$1" in prereqs) prereqs; exit 0;; esac
 . /usr/share/initramfs-tools/hook-functions
+fail() { echo "flagship-unlock hook: $*" >&2; exit 1; }
 copy_exec /boot/flagship-unseal /bin/flagship-unseal
 copy_exec /usr/bin/openssl /bin/openssl
 copy_exec /usr/bin/curl /bin/curl
 copy_exec /usr/bin/xxd /bin/xxd
 copy_exec /bin/sed /bin/sed 2>/dev/null || copy_exec /usr/bin/sed /bin/sed
-# ip powers the premount's net-ensure (route check / link up / carrier read);
-# a wired initrd does not stage it otherwise.
 copy_exec /sbin/ip /sbin/ip 2>/dev/null || copy_exec /bin/ip /sbin/ip
-# Network DRIVER modules for the pre-mount unlock. The installed system's initrd
-# is built with MODULES=most|dep and does NOT guarantee the virtio NIC drivers,
-# yet a virtio-backed guest (Apple Virtualization / QEMU-KVM) needs virtio_net
-# (over PCI or MMIO transport) to have ANY interface at premount. Without it,
-# net-ensure below sees only lo, gets no carrier, no DHCP, no route — so the
-# unlock-key request never leaves the box and the disk stays sealed FOREVER
-# (registered-at-install, then silent — the exact fingerprint of a stuck VM
-# guest). The d-i INSTALLER kernel has these built in, which is why install-time
-# registration succeeds even when the installed initrd lacks them. Stage them
-# explicitly; harmless on metal (real NIC drivers still load from MODULES=most).
-# modinfo pulls each module's deps; missing-on-this-arch is a no-op under || true.
+# A virtio guest needs virtio_net at premount to have any interface; MODULES=most
+# does not guarantee it. Missing on this arch is a no-op.
 for _netmod in virtio_net virtio_pci virtio_mmio e1000 e1000e; do
   manual_add_modules "$_netmod" 2>/dev/null || true
 done
-# Resolver plumbing for the glibc-linked curl: copy_exec's ldd walk never
-# sees the dlopen'd NSS modules, and the initrd ships no nsswitch.conf —
-# proven on metal: route + /etc/resolv.conf up yet curl(6) could-not-resolve.
-# On glibc >= 2.34 dns/files are built into libc and the .so files are
-# absent; the guards make that a no-op.
+# copy_exec never sees curl's dlopen'd NSS modules, and the initrd has no
+# nsswitch.conf. On glibc >= 2.34 they are built in and the .so files absent.
 mkdir -p "\${DESTDIR}/etc"
 echo "hosts: files dns" > "\${DESTDIR}/etc/nsswitch.conf"
 for _nss in /lib/*-linux-gnu*/libnss_dns.so.2 /lib/*-linux-gnu*/libnss_files.so.2 /lib/*-linux-gnu*/libresolv.so.2; do
   [ -e "$_nss" ] && copy_exec "$_nss" || true
 done
-# CA bundle for the HTTPS unlock curls — copy_exec stages the curl binary but
-# never the trust store data file; proven on metal once DNS resolved (curl(77)
-# error setting certificate file /etc/ssl/certs/ca-certificates.crt).
 mkdir -p "\${DESTDIR}/etc/ssl/certs"
-cp /etc/ssl/certs/ca-certificates.crt "\${DESTDIR}/etc/ssl/certs/ca-certificates.crt" 2>/dev/null || true
+[ -s /etc/ssl/certs/ca-certificates.crt ] || fail "no CA bundle at /etc/ssl/certs/ca-certificates.crt"
+cp /etc/ssl/certs/ca-certificates.crt "\${DESTDIR}/etc/ssl/certs/ca-certificates.crt"
 ${lvmCopyExec}
-# Identity + boot facts the premount script signs/reads with.
 mkdir -p "\${DESTDIR}/boot"
-cp /boot/identity.pem "\${DESTDIR}/boot/identity.pem"
-cp /boot/server-domain "\${DESTDIR}/boot/server-domain"
+for _f in flagship-boot-key.pem server-domain flagship-boot-host flagship-boot-unlock-mode flagship-owner-key.pub; do
+  [ -s "/boot/$_f" ] || fail "missing /boot/$_f"
+  cp "/boot/$_f" "\${DESTDIR}/boot/$_f"
+done
+chmod 600 "\${DESTDIR}/boot/flagship-boot-key.pem"
 cp /boot/control-plane-url "\${DESTDIR}/boot/control-plane-url" 2>/dev/null || true
-cp /boot/flagship-boot-host "\${DESTDIR}/boot/flagship-boot-host" 2>/dev/null || true
-cp /boot/flagship-boot-unlock-mode "\${DESTDIR}/boot/flagship-boot-unlock-mode" 2>/dev/null || true
+[ ! -f /boot/flagship-debug-mode ] || cp /boot/flagship-debug-mode "\${DESTDIR}/boot/flagship-debug-mode"
+for _f in bin/flagship-unseal bin/openssl bin/curl bin/xxd etc/ssl/certs/ca-certificates.crt boot/flagship-boot-key.pem; do
+  [ -s "\${DESTDIR}/$_f" ] || fail "the initramfs lacks /$_f"
+done
 HOOK
 chmod +x /etc/initramfs-tools/hooks/flagship-unlock
 
-# The premount script. unlock_via_relay() below is LIFTED VERBATIM from
-# installer/boot-stage.sh (wave 3b owns its logic); only the surrounding
-# scaffolding (paths, the luksOpen target, the fallback poll) is adapted to
-# the initramfs. Keep the function body in sync with boot-stage.sh.
 cat > /etc/initramfs-tools/scripts/local-top/flagship-unlock <<'PREMOUNT'
-#!/bin/sh
-PREREQ=""
-prereqs() { echo "$PREREQ"; }
-case "$1" in prereqs) prereqs; exit 0;; esac
-
-set -eu
-SERVER_DOMAIN="$(cat /boot/server-domain)"
-# The dedicated boot worker (boot.flagshipserver.com), baked by the bootstrap.
-# Configurable so an enterprise clone can repoint it without touching code.
-BOOT_HOST="$(cat /boot/flagship-boot-host 2>/dev/null || echo https://boot.flagshipserver.com)"
-BOOT_HOST="\${BOOT_HOST%/}"
-IDENTITY_KEY=/boot/identity.pem
-UNSEAL_HELPER=/bin/flagship-unseal
-RELAY_WINDOW_SECS="\${FLAGSHIP_RELAY_WINDOW_SECS:-31536000}"
-OUT_UNLOCK=/run/unlock-key
-# Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
-# Baked by the bootstrap; default "auto" if the file is absent.
-BOOT_UNLOCK_MODE="$(cat /boot/flagship-boot-unlock-mode 2>/dev/null || echo auto)"
-
-# One-shot lock marker (packages/server-daemon BootUnlockModeSuppressor). The
-# daemon writes /boot/flagship-lock-once at RUNTIME (manual "Lock and restart"
-# or a dead-man lapse), so it lives on the LIVE FLAGSHIP_BOOT partition, NOT in
-# the frozen initrd copy the hook staged — mount that partition here to see it.
-# Present ⇒ force the approve relay for THIS boot, consumed only after a
-# successful luksOpen below so a failed unlock keeps it armed for the retry.
-# This is the SAME decision point boot-stage.sh makes for the unencrypted path;
-# on an encrypted box only THIS premount runs, so the marker is never
-# double-consumed. Best-effort throughout — it can never fail or hang the boot.
-LOCK_ONCE_MOUNT=/run/flagship-lockmnt
-LOCK_ONCE_FILE="$LOCK_ONCE_MOUNT/flagship-lock-once"
-LOCK_ONCE="no"
-mkdir -p "$LOCK_ONCE_MOUNT" 2>/dev/null || true
-if mount /dev/disk/by-label/FLAGSHIP_BOOT "$LOCK_ONCE_MOUNT" 2>/dev/null; then
-    if [ -f "$LOCK_ONCE_FILE" ]; then LOCK_ONCE="yes"; fi
-else
-    LOCK_ONCE_MOUNT=""
-fi
-
-# Persistent unlock log on the (already-mounted) FLAGSHIP_BOOT partition, so a
-# box stuck at the LUKS unlock is diagnosable after a recovery-passphrase
-# hand-unlock. The WIRED path otherwise only echoes to a console the host may
-# not capture (a VZ/KVM guest has none) — which is exactly why a stuck box was a
-# black box. Truncated per boot (only the current boot matters); best-effort;
-# the console echo always happens, and we sync after each line so it survives
-# even if the box then hangs in the relay wait forever. Mirrors the Wi-Fi path's
-# /boot/flagship-wifi.log, reusing the mount the lock-once check already took.
-UNLOCK_LOG=""
-if [ -n "$LOCK_ONCE_MOUNT" ]; then
-    UNLOCK_LOG="$LOCK_ONCE_MOUNT/flagship-unlock.log"
-    : > "$UNLOCK_LOG" 2>/dev/null || true
-fi
-log_line() {
-    _ts="$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
-    _msg="flagship [up=\${_ts}s] $*"
-    echo "$_msg"
-    if [ -n "$UNLOCK_LOG" ]; then
-        echo "$_msg" >> "$UNLOCK_LOG" 2>/dev/null || true
-        sync 2>/dev/null || true
-    fi
-}
-log_line "premount start (domain=$SERVER_DOMAIN mode=$BOOT_UNLOCK_MODE lock-once=$LOCK_ONCE)"
-
-[ -f "$IDENTITY_KEY" ] || { echo "flagship: missing $IDENTITY_KEY"; exit 0; }
-
-sign_canonical() {
-    canonical="$1"
-    msgfile="/run/flagship-sign-msg.bin"
-    printf '%s' "$canonical" > "$msgfile"
-    openssl pkeyutl -sign -rawin -inkey "$IDENTITY_KEY" -in "$msgfile" 2>/dev/null \\
-        | xxd -p -c 256 | tr -d '\\n'
-    rm -f "$msgfile"
-}
-identity_seed_hex() {
-    openssl pkey -in "$IDENTITY_KEY" -outform DER 2>/dev/null \\
-        | xxd -p -c 256 | tr -d '\\n' | tail -c 64
-}
-identity_pub_hex() {
-    openssl pkey -in "$IDENTITY_KEY" -pubout -outform DER 2>/dev/null \\
-        | xxd -p -c 256 | tr -d '\\n' | tail -c 64
-}
-
-# base64url-encode stdin (base64 then +→-, /→_, strip trailing '=') — the
-# encoding apps/boot/src/gate.ts parses the Authorization payload as.
-b64url() {
-    openssl base64 -A | tr '+/' '-_' | tr -d '='
-}
-
-# Epoch milliseconds, PORTABLE. The full OS has GNU date (\`%3N\` = millis), but
-# the initramfs has busybox date, which prints \`%N\` LITERALLY — that injected a
-# non-numeric issuedAt into the signed envelope + body JSON, so the boot worker
-# rejected BOTH as malformed (proven on metal). Use %3N only when it yields pure
-# digits; otherwise fall back to whole seconds × 1000.
-now_ms() {
-    _ms=$(date +%s%3N 2>/dev/null)
-    case "$_ms" in
-        ''|*[!0-9]*) _ms=$(( $(date +%s) * 1000 ));;
-    esac
-    echo "$_ms"
-}
-
-# Build the box-STK \`Authorization: Flagship-Boot-v1 <b64url(json)>\` header
-# value. Bound to (method, path, serverDomain); Ed25519 over the canonical bytes
-#   flagship/boot-auth/v1|box|<serverDomain>|<METHOD>|<path>|<pub>|<nonce>|<issuedAt>
-# Kept in sync with installer/boot-stage.sh + apps/boot/src/gate.ts.
-# Args: \$1 = HTTP method (uppercase), \$2 = request path (no query).
-# Uses PUB_HEX (the box STK pub) from the calling scope.
-sign_box_auth_header() {
-    _bm="$1"
-    _bp="$2"
-    _bnonce=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
-    _bnow=$(now_ms)
-    _bcanon="flagship/boot-auth/v1|box|\${SERVER_DOMAIN}|\${_bm}|\${_bp}|\${PUB_HEX}|\${_bnonce}|\${_bnow}"
-    _bsig="$(sign_canonical "$_bcanon")"
-    _bjson="$(printf '{"role":"box","serverDomain":"%s","method":"%s","path":"%s","pubKeyHex":"%s","nonceHex":"%s","issuedAt":%s,"signatureHex":"%s"}' \\
-        "$SERVER_DOMAIN" "$_bm" "$_bp" "$PUB_HEX" "$_bnonce" "$_bnow" "$_bsig")"
-    printf 'Flagship-Boot-v1 %s' "$(printf '%s' "$_bjson" | b64url)"
-}
-
-# ── unlock_via_box_lease() — LIFTED VERBATIM from installer/boot-stage.sh ──
-# Self-unlock on the "auto" path: GET the box-sealed lease from the boot worker
-# and unseal it LOCALLY with the STK key on /boot. The worker holds ciphertext
-# only (I1). No phone, no human. Returns 0 only if it actually unsealed; 404/empty
-# (first boot, or a revoked lease) ⇒ non-zero so the caller falls back to the relay.
-unlock_via_box_lease() {
-    if [ ! -x "$UNSEAL_HELPER" ]; then
-        echo "flagship: box-lease unavailable — $UNSEAL_HELPER missing/not executable"
-        return 1
-    fi
-    SEED_HEX="$(identity_seed_hex)"
-    PUB_HEX="$(identity_pub_hex)"
-    if [ "\${#SEED_HEX}" != 64 ] || [ "\${#PUB_HEX}" != 64 ]; then
-        echo "flagship: box-lease aborted — could not derive 32-byte seed/pub from $IDENTITY_KEY"
-        return 1
-    fi
-
-    # GET /api/boot/lease/:serverDomain — box-STK gated.
-    LEASE_PATH="/api/boot/lease/\${SERVER_DOMAIN}"
-    LEASE_URL="\${BOOT_HOST}\${LEASE_PATH}"
-    LEASE_AUTH="$(sign_box_auth_header GET "$LEASE_PATH")"
-    LEASE_RESP=/run/flagship-lease-v2.json
-    LEASE_CODE=$(curl -sS -o "$LEASE_RESP" -w "%{http_code}" \\
-        -H "Authorization: $LEASE_AUTH" \\
-        --max-time 30 "$LEASE_URL" || echo "000")
-    if [ "$LEASE_CODE" = "404" ]; then
-        echo "flagship: no box-sealed lease (HTTP 404) — falling back"
-        return 1
-    fi
-    if [ "$LEASE_CODE" != "200" ]; then
-        echo "flagship: box-lease HTTP $LEASE_CODE; body: $(head -c 200 "$LEASE_RESP" 2>/dev/null)"
-        return 1
-    fi
-
-    # The boot worker returns {serverDomain,leaseId,stkPub,sealedKey,...};
-    # sealedKey is the box-sealed LUKS key (hex). Extract it the same way
-    # unlock_via_relay() extracts "sealed". The box unseals it locally.
-    SEALED_KEY=$(sed -n 's/.*"sealedKey":"\\([0-9a-fA-F]*\\)".*/\\1/p' "$LEASE_RESP")
-    if [ -z "$SEALED_KEY" ]; then
-        echo "flagship: box-lease 200 but no sealedKey: $(head -c 200 "$LEASE_RESP")"
-        return 1
-    fi
-
-    if "$UNSEAL_HELPER" --identity-priv-hex "$SEED_HEX" --sealed-hex "$SEALED_KEY" \\
-        > "$OUT_UNLOCK.hex" 2>/run/flagship-unseal.err; then
-        tr -d '\\n' < "$OUT_UNLOCK.hex" > "$OUT_UNLOCK"
-        chmod 600 "$OUT_UNLOCK"
-        rm -f "$OUT_UNLOCK.hex"
-        echo "flagship: self-unlocked from the box-sealed lease"
-        return 0
-    fi
-    echo "flagship: $UNSEAL_HELPER failed on box-lease: $(head -c 200 /run/flagship-unseal.err 2>/dev/null)"
-    rm -f "$OUT_UNLOCK.hex"
-    return 1
-}
-
-# ── unlock_via_relay() — LIFTED VERBATIM from installer/boot-stage.sh ──────
-unlock_via_relay() {
-    if [ ! -x "$UNSEAL_HELPER" ]; then
-        echo "flagship: relay unavailable — $UNSEAL_HELPER missing/not executable"
-        return 1
-    fi
-
-    SEED_HEX="$(identity_seed_hex)"
-    PUB_HEX="$(identity_pub_hex)"
-    if [ "\${#SEED_HEX}" != 64 ] || [ "\${#PUB_HEX}" != 64 ]; then
-        echo "flagship: relay aborted — could not derive 32-byte seed/pub from $IDENTITY_KEY"
-        return 1
-    fi
-
-    NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
-    NOW_MS=$(now_ms)
-    # The SecretRequest body keeps its OWN STK signature (unchanged).
-    # NONCE/NOW_MS/CANONICAL/SIG/REQ_BODY are built ONCE here and reused for every
-    # (re-)announce — a heartbeat re-POST replays the SAME signed envelope.
-    CANONICAL="flagship/secret-request/v1|\${SERVER_DOMAIN}|\${PUB_HEX}|unlock-key|\${NONCE}|\${NOW_MS}"
-    SIG="$(sign_canonical "$CANONICAL")"
-
-    # POST /api/boot/request — box-STK gated. Body carries the box's STK-signed
-    # SecretRequest (its own signature, separate from the box-auth header).
-    REQ_PATH="/api/boot/request"
-    REQ_URL="\${BOOT_HOST}\${REQ_PATH}"
-    REQ_BODY=$(printf '{"request":{"serverDomain":"%s","stkPub":"%s","purpose":"unlock-key","nonce":"%s","issuedAt":%s},"signature":"%s"}' \\
-        "$SERVER_DOMAIN" "$PUB_HEX" "$NONCE" "$NOW_MS" "$SIG")
-
-    # post_request: (re-)announce the SAME signed REQ_BODY with a FRESH box-auth
-    # header. Idempotent on the worker (same nonce) — the first call parks the
-    # request + pushes the phone; later calls only refresh the parked row's TTL.
-    post_request() {
-        POST_RESP=/run/flagship-secret-request-resp.json
-        REQ_AUTH="$(sign_box_auth_header POST "$REQ_PATH")"
-        POST_CODE=$(curl -sS -o "$POST_RESP" -w "%{http_code}" \\
-            -X POST -H 'content-type: application/json' \\
-            -H "Authorization: $REQ_AUTH" \\
-            --max-time 30 -d "$REQ_BODY" "$REQ_URL" || echo "000")
-        [ "$POST_CODE" = "200" ]
-    }
-
-    # Initial announce. A failed FIRST announce is fatal (fall through to manual);
-    # later heartbeat re-announce failures are non-fatal — we keep polling.
-    if ! post_request; then
-        echo "flagship: relay boot-request HTTP $POST_CODE; body: $(head -c 200 "$POST_RESP" 2>/dev/null)"
-        return 1
-    fi
-    echo "flagship: posted unlock-key boot-request; waiting for phone approval (type 'manual' then Enter to unlock by passphrase)"
-
-    # GET /api/boot/response/:serverDomain/:nonce — box-STK gated, polled. The
-    # nonce is a PATH segment now (bound into the signed Authorization envelope),
-    # so a fresh header is signed per poll.
-    POLL_PATH="/api/boot/response/\${SERVER_DOMAIN}/\${NONCE}"
-    POLL_URL="\${BOOT_HOST}\${POLL_PATH}"
-    # Effectively wait forever for the phone (default ~1 year); the DEADLINE is a
-    # backstop so an env override (FLAGSHIP_RELAY_WINDOW_SECS) can still bound it.
-    DEADLINE=$(( $(date +%s) + RELAY_WINDOW_SECS ))
-    # Re-announce the parked request every HEARTBEAT_SECS so a short worker TTL
-    # stays alive while we wait; when the box powers off the TTL lapses and the
-    # phone honestly sees "box stopped".
-    HEARTBEAT_SECS="\${FLAGSHIP_RELAY_HEARTBEAT_SECS:-120}"
-    LAST_ANNOUNCE=$(date +%s)
-    ATTEMPT=0
-    while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-        ATTEMPT=$((ATTEMPT + 1))
-        RESP=/run/flagship-secret-response.json
-        POLL_AUTH="$(sign_box_auth_header GET "$POLL_PATH")"
-        CODE=$(curl -sS -o "$RESP" -w "%{http_code}" \\
-            -H "Authorization: $POLL_AUTH" \\
-            --max-time 30 "$POLL_URL" || echo "000")
-
-        if [ "$CODE" = "200" ]; then
-            SEALED=$(sed -n 's/.*"sealed":"\\([0-9a-fA-F]*\\)".*/\\1/p' "$RESP")
-            if [ -z "$SEALED" ]; then
-                echo "flagship: relay 200 but no sealed payload: $(head -c 200 "$RESP")"
-                return 1
-            fi
-            HELPER_JSON=/run/flagship-unseal-input.json
-            printf '{"serverDomain":"%s","requestNonceHex":"%s","purpose":"unlock-key","sealedHex":"%s","issuedAt":0}' \\
-                "$SERVER_DOMAIN" "$NONCE" "$SEALED" > "$HELPER_JSON"
-
-            if "$UNSEAL_HELPER" --identity-priv-hex "$SEED_HEX" --response-json "$HELPER_JSON" \\
-                > "$OUT_UNLOCK.hex" 2>/run/flagship-unseal.err; then
-                tr -d '\\n' < "$OUT_UNLOCK.hex" > "$OUT_UNLOCK"
-                chmod 600 "$OUT_UNLOCK"
-                rm -f "$OUT_UNLOCK.hex" "$HELPER_JSON"
-                echo "flagship: relay unsealed the unlock key (attempt $ATTEMPT)"
-                return 0
-            fi
-            echo "flagship: $UNSEAL_HELPER failed: $(head -c 200 /run/flagship-unseal.err 2>/dev/null)"
-            rm -f "$OUT_UNLOCK.hex" "$HELPER_JSON"
-            return 1
-        elif [ "$CODE" = "404" ]; then
-            : # no reply yet — expected; keep polling
-        else
-            # Transient non-200 — we wait forever now, so log and keep polling.
-            echo "flagship: relay boot-response HTTP $CODE; body: $(head -c 200 "$RESP" 2>/dev/null)"
-        fi
-
-        # Heartbeat: re-announce the parked request to refresh its TTL. A failed
-        # re-post is non-fatal — keep polling.
-        if [ $(( $(date +%s) - LAST_ANNOUNCE )) -ge "$HEARTBEAT_SECS" ]; then
-            if post_request; then
-                echo "flagship: heartbeat re-announced boot-request (TTL refreshed)"
-            else
-                echo "flagship: heartbeat re-announce failed (HTTP $POST_CODE); continuing"
-            fi
-            LAST_ANNOUNCE=$(date +%s)
-        fi
-
-        BACKOFF=$((ATTEMPT < 6 ? ATTEMPT * 3 : 15))
-        echo "flagship: no phone reply yet (attempt $ATTEMPT); waiting $BACKOFF (type 'manual' then Enter to unlock by passphrase)"
-        # Interruptible wait: any line typed on the console (e.g. Enter) drops to
-        # the manual disk passphrase prompt. On a headless box read -t blocks for
-        # BACKOFF and times out (acts as the sleep) — so it waits forever.
-        if read -t "$BACKOFF" -r _key < /dev/console 2>/dev/null && [ "$_key" = "manual" ]; then
-            echo "flagship: manual unlock selected — falling through to the disk passphrase prompt"
-            return 1
-        fi
-    done
-
-    echo "flagship: relay backstop window (\${RELAY_WINDOW_SECS}s) elapsed with no phone reply"
-    return 1
-}
-
-# ── net-ensure (the wired path) ─────────────────────────────────────────────
-# The initramfs brings up NO network for this script by itself (no ip=dhcp
-# kernel param, no configure_networking) — the relay curls below would fail on
-# every wired LUKS box. Bring up each non-lo interface and DHCP the first one
-# with carrier. On Wi-Fi the init-premount already routed: the route check
-# skips this instantly. Fully best-effort + wall-clock bounded (~45s worst
-# case) — it can never fail or hang the boot.
-if ! ip route 2>/dev/null | grep -q '^default'; then
-    echo "flagship: no default route — bringing up interfaces for DHCP"
-    for IFW in /sys/class/net/*; do
-        IFW="\${IFW##*/}"
-        if [ "$IFW" = "lo" ]; then continue; fi
-        ip link set "$IFW" up 2>/dev/null || true
-    done
-    sleep 3
-    for IFW in /sys/class/net/*; do
-        IFW="\${IFW##*/}"
-        if [ "$IFW" = "lo" ]; then continue; fi
-        if [ "$(cat "/sys/class/net/$IFW/carrier" 2>/dev/null || echo 0)" != "1" ]; then continue; fi
-        echo "flagship: carrier on $IFW — requesting DHCP"
-        if command -v ipconfig >/dev/null 2>&1; then
-            ipconfig -t 20 "$IFW" 2>/dev/null || true
-        else
-            udhcpc -i "$IFW" -n -q -t 5 2>/dev/null || true
-        fi
-        if ip route 2>/dev/null | grep -q '^default'; then
-            echo "flagship: default route up via $IFW"
-        else
-            echo "flagship: DHCP on $IFW finished without a default route"
-        fi
-        break
-    done
-fi
-
-# ── resolv-ensure (BOTH paths) ──────────────────────────────────────────────
-# klibc ipconfig records DNS in /run/net-<if>.conf but NOTHING writes
-# /etc/resolv.conf in the initramfs — the relay curls fail with "could not
-# resolve host" even with the route up. Source every recorded lease; fall back
-# to public resolvers.
-if [ ! -s /etc/resolv.conf ]; then
-    _rdns=""
-    for _nc in /run/net-*.conf; do
-        if [ ! -f "$_nc" ]; then continue; fi
-        IPV4DNS0=""
-        IPV4DNS1=""
-        . "$_nc" 2>/dev/null || true
-        for _d in "$IPV4DNS0" "$IPV4DNS1"; do
-            if [ -n "$_d" ] && [ "$_d" != "0.0.0.0" ]; then _rdns="$_rdns $_d"; fi
-        done
-    done
-    : > /etc/resolv.conf 2>/dev/null || true
-    for _d in $_rdns; do
-        echo "nameserver $_d" >> /etc/resolv.conf 2>/dev/null || true
-    done
-    if [ -s /etc/resolv.conf ]; then
-        echo "flagship: dns configured:$_rdns"
-    else
-        printf 'nameserver 1.1.1.1\\nnameserver 8.8.8.8\\n' > /etc/resolv.conf 2>/dev/null || true
-        echo "flagship: dns fallback: public resolvers"
-    fi
-fi
-
-# ── Two-tier dispatch (docs/security-phone-as-unlock-endpoint.md §7a.1) ────
-# The legacy plaintext-consume path is RETIRED — never a fallback here.
-#   auto:    box-sealed lease (self-unlock); fall back to the phone relay.
-#   approve: phone relay EVERY boot; the box NEVER reads a box-sealed lease.
-# EFFECTIVE mode = baseline OR a one-shot lock. The marker forces the approve
-# relay for THIS boot on top of the baseline.
-EFFECTIVE_MODE="$BOOT_UNLOCK_MODE"
-if [ "$LOCK_ONCE" = "yes" ]; then
-    echo "flagship: one-shot lock marker present — forcing approve relay for THIS boot"
-    EFFECTIVE_MODE="approve"
-fi
-echo "flagship: boot-unlock mode = $EFFECTIVE_MODE (baseline=$BOOT_UNLOCK_MODE, lock-once=$LOCK_ONCE)"
-# Net-state summary — the single most useful diagnostic for a box that never
-# unlocks: a virtio guest whose initrd lacks the NIC driver shows ifaces=[lo]
-# route=none here and then hangs in the relay wait forever. Logged just before
-# the (possibly-forever) dispatch so it is always on disk for a hand-unlock.
-_ifaces="$(echo $(ls /sys/class/net 2>/dev/null))"
-if ip route 2>/dev/null | grep -q '^default'; then _route=up; else _route=none; fi
-log_line "net state before unlock: ifaces=[$_ifaces] route=$_route mode=$EFFECTIVE_MODE"
-if [ "$EFFECTIVE_MODE" = "approve" ]; then
-    unlock_via_relay
-else
-    if ! unlock_via_box_lease; then
-        unlock_via_relay
-    fi
-fi
-log_line "unlock succeeded — luksOpen done, proceeding to mount root"
-
-${terminalUnlock}
-# CONSUME the one-shot lock marker only now — AFTER a successful luksOpen (set -e
-# aborts the premount before here if the unlock failed, so the lock stays armed
-# for the retry). The next boot then reverts to the baseline BOOT_UNLOCK_MODE.
-if [ "$LOCK_ONCE" = "yes" ]; then
-    rm -f "$LOCK_ONCE_FILE"
-    echo "flagship: consumed one-shot lock marker; next boot reverts to baseline ($BOOT_UNLOCK_MODE)"
-fi
-[ -n "$LOCK_ONCE_MOUNT" ] && umount "$LOCK_ONCE_MOUNT" 2>/dev/null || true
+${buildUnlockPremountScript(approvedHosts)}
 PREMOUNT
 chmod +x /etc/initramfs-tools/scripts/local-top/flagship-unlock
 ${initramfsWifi}
-# Rebuild the initramfs so the hook + premount script land in /boot's initrd.
-update-initramfs -u 2>&1 | tee /var/log/flagship-initramfs.log || \\
-    echo "[flagship-bootstrap] WARNING: update-initramfs failed; unlock hook not embedded"
+# Build the initramfs BEFORE the install-time key goes: a box whose initrd
+# cannot unlock it must fail the install while it is still recoverable.
+if ! update-initramfs -u 2>&1 | tee /var/log/flagship-initramfs.log; then
+    echo "[flagship-bootstrap] FATAL: update-initramfs failed; see /var/log/flagship-initramfs.log"
+    exit 1
+fi
+if grep -q 'flagship-unlock hook:' /var/log/flagship-initramfs.log; then
+    echo "[flagship-bootstrap] FATAL: $(grep 'flagship-unlock hook:' /var/log/flagship-initramfs.log | head -n1)"
+    exit 1
+fi
 echo "[flagship-bootstrap] LUKS unlock hook installed; initramfs rebuilt"
+
+${buildLuksBurnSlotRemovalBlock()}
 
 `;
 }

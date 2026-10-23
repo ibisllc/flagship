@@ -25,7 +25,7 @@ import { keepCorruptAside, readStateFile, writeFileDurable } from "./durableFile
  * `.com` auto-unlock lease itself).
  *
  * Suppression is ONE-SHOT, NOT a permanent mode flip. It drops a one-shot
- * marker file (`/boot/flagship-lock-once`) that boot-stage.sh honours for
+ * marker file (`/boot/flagship-lock-once`) that the initramfs premount honours for
  * exactly the NEXT boot — it forces the phone-approval relay for that one
  * power cycle, then CONSUMES (deletes) the marker after a successful
  * unlock, so the box returns to its BASELINE `bootUnlockMode` (the
@@ -59,7 +59,7 @@ export interface AutoUnlockSuppressor {
  * Default suppressor: drop a ONE-SHOT lock marker at
  * `/boot/flagship-lock-once` (atomic write-then-rename). This does NOT
  * touch the box's baseline `/boot/flagship-boot-unlock-mode` — it is a
- * separate, transient file. boot-stage.sh forces the phone-approval relay
+ * separate, transient file. The premount forces the phone-approval relay
  * for the NEXT boot when the marker is present, then deletes it after a
  * successful unlock, so the box reverts to its baseline mode afterwards.
  * A manual "Lock and restart" or a dead-man lapse therefore locks for

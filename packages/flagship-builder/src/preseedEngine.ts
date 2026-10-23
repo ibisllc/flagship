@@ -101,13 +101,14 @@ export function buildPreseedFromRecipe(recipeJson: string, burnOptsJson?: string
  * installer path. */
 export function buildBootstrapFromRecipe(recipeJson: string, burnOptsJson?: string): string {
   const opts = optionsFromRecipeJson(recipeJson, parseBurn(burnOptsJson));
-  const { ref, repo, bootHost, encryptRoot, bootUnlockMode } = resolveBootstrapInputs(opts);
+  const { ref, repo, bootHost, approvedBootHosts, encryptRoot, bootUnlockMode } = resolveBootstrapInputs(opts);
   return buildBootstrapScript({
     ref,
     repoUrl: repo,
     encryptRoot,
     bootUnlockMode,
     bootHost,
+    approvedBootHosts,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
     debugSshAuthorizedKey: opts.debugSshAuthorizedKey,

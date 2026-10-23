@@ -399,7 +399,7 @@ describe("buildDebianPreseed — first-boot bootstrap ", () => {
       buildDebianPreseed({ blob: { ...blob, bootUnlockMode: "approve" }, blobSignatureHex }),
     );
     expect(b).toContain('echo "approve" > /boot/flagship-boot-unlock-mode');
-    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "approve" ]; then');
+    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "auto" ] && unlock_via_box_lease; then');
   });
 });
 
