@@ -1,9 +1,12 @@
 # Architecture v2: hybrid post-quantum suites
 
-> **Status: draft — pending Q01 external cryptographic review; not enforced anywhere.**
-> Nothing in a live flow seals, signs or verifies with these suites. The
-> encodings below may still change. A deployed v1 byte string never changes
-> because of this document (`IMPLEMENTATION-PLAN.md` §6.4).
+> **Status: draft — pending Q01 external cryptographic review.** Milestone 1
+> (§9-§10) pilots the hybrid signature on the box: keyd signs with it, `.com`
+> verifies it through the critical-signature gate, and the webapp pins the
+> box's ML-DSA key. Strict is enforced only where an installation's stored
+> policy says so; no deployed installation has such a row. The encodings may
+> still change. A deployed v1 byte string never changes because of this
+> document (`IMPLEMENTATION-PLAN.md` §6.4).
 
 Implements plan packages Q02 (crypto implementation and cross-language
 verification) and the protocol half of A04. Code:
@@ -13,6 +16,8 @@ verification) and the protocol half of A04. Code:
 | Strict parsing, v1 canonical bytes, v2 envelope header, suite registry | `rust/crates/flagship-protocol` | `packages/protocol/src/pqHybrid.ts` (header, purpose grammar); v1 encoders already in `packages/protocol/src/*.ts` |
 | `flagship/hybrid-seal/v1`, `flagship/hybrid-sig/ed25519-mldsa65/v1`, key ids | `rust/crates/flagship-crypto` | `packages/protocol/src/pqHybrid.ts` |
 | Shared vectors | `packages/protocol/test-vectors/pq-hybrid/` | same files |
+| Key bindings, critical-signature gate (§9-§10) | `rust/crates/flagship-crypto/src/trust.rs` | `packages/protocol/src/pqTrust.ts`; webapp `lib/pqBinding.js` (verify only) |
+| Binding and gate vectors | `packages/protocol/test-vectors/pq-binding/` | same file (`npx tsx tools/pq-binding-vectors.ts [--check]`) |
 
 ## 1. Notation
 
@@ -394,3 +399,165 @@ All pinned exactly and at least two weeks old on 2026-10-23.
     enforced → retired` state machine (§6.5). Suite ids are bound into every
     transcript so stripping is detectable, but anti-downgrade enforcement lives
     with Q03/Q04.
+
+## 9. Key bindings: `flagship/pq-key-binding/v1`
+
+Every identity that signs critical messages gets an ML-DSA-65 key bound to its
+existing Ed25519 key. The binding is a mutual proof of possession: the two
+keys sign one statement together with the hybrid suite (§5) under the public
+key `ed25519_pk || mldsa65_pk`, so neither key can be paired with a key whose
+holder did not sign.
+
+### 9.1 Statement and wire
+
+```
+statement = "flagship/pq-key-binding/v1|<role>|<subjectId>|<ed25519PubHex>|<mldsa65PubHex>|<issuedAt>"
+signature = hybrid-sig(sk = ed25519 seed || ML-DSA seed,
+                       purpose = "flagship/pq-key-binding/v1", payload = statement)
+wire      = { v: 1, role, subjectId, ed25519PubHex, mldsaPubHex, issuedAt, signature }
+```
+
+- `role` is one of `account-irk`, `admin-root`, `device`, `box-stk`,
+  `boot-key`. The subject is the account name (IRK, admin root), the device id,
+  or the server domain (STK, boot key).
+- `subjectId` matches `^[a-z0-9][a-z0-9._:@-]{0,252}$` (so it is already
+  canonical: lower case, no `|`).
+- Hex is lowercase; `ed25519PubHex` 64 characters, `mldsaPubHex` 3904,
+  `signature` 6746 (3373 bytes). `issuedAt` is milliseconds, `0..=2^53-1`.
+- The wire object has exactly those seven keys and `v: 1`; anything else is
+  `binding-malformed`.
+- The ML-DSA seed is 32 fresh bytes from the OS RNG, never derived from the
+  Ed25519 seed or any other key (§5.1, open question 8).
+
+### 9.2 Verification, in order (TS, Rust and webapp agree on every code)
+
+The verifier supplies what it already trusts: `role`, `subjectId`, the
+trusted Ed25519 key (pinned or registered), optionally the ML-DSA key it has
+already pinned, `now`, and optionally `minIssuedAt`.
+
+1. Wire shape, then the signature, Ed25519 and ML-DSA hex, then `issuedAt`:
+   `binding-malformed`. An unknown role is `binding-role`; a subject outside
+   the grammar is `binding-subject`.
+2. Role and subject differ from the expected ones: `binding-role`,
+   `binding-subject`.
+3. `ed25519PubHex` is not the trusted key: `binding-key-mismatch`.
+4. A pinned ML-DSA key exists and differs: `binding-pq-key-changed`.
+5. `issuedAt > now + 300000`: `binding-future`. `issuedAt < minIssuedAt`:
+   `binding-stale` (a binding older than the one already pinned).
+6. The hybrid public key fails §5.3 step 1: `bad-public-key`.
+7. The hybrid signature fails over the statement: `bad-signature`. A
+   classical-only signature, either half alone, a half zeroed, a half lifted
+   from another binding (substituted Ed25519 or ML-DSA key), or a relabelled
+   role, subject or time all end here.
+
+A binding is never re-used under another role or subject; a verified binding
+is an in-memory value the gate accepts only from the verifier (TS: a
+module-private registry; Rust: a type with private fields).
+
+### 9.3 Where bindings live (milestone 1)
+
+- **Box STK.** keyd generates `identity-mldsa.key` (hex, 0400) next to the
+  STK on its first `serve`, in both backends, and signs with both keys through
+  `sign.hybrid` under the same purpose list as `sign` (`docs/keyd.md`). keyd
+  signs `flagship/pq-key-binding/v1` only as `box-stk`, only naming its own two
+  keys, and never with `sign` alone.
+- **`.com`** stores bindings in D1 `pq_key_bindings` (migration 0111) only
+  when they verify under the key it already trusts (for `box-stk`, the
+  registered STK), keeps the first ML-DSA key per Ed25519 key (a different one
+  is `409 pq-key-changed`: whoever can forge the classical half must not be able
+  to rebind it), and serves one only while its Ed25519 key is the identity's
+  current key: `PUT`/`GET /api/server/:host/pq-key-binding`. `.com` is a relay,
+  not a trust root.
+- **Clients** verify under the STK they pinned and pin the ML-DSA key
+  (`decideBoxPqKeyPin` in `boxKeyPin.ts`; webapp `acceptStkPqBinding`). A
+  different ML-DSA key is a key change the owner must confirm, as for the STK.
+- **Account IRK, admin root, device, boot key**: the format and vectors cover
+  them; issuing them needs the phones (account and device keys) and the boot
+  client (the boot key's private half lives on `/boot`, outside the daemon).
+  Milestone 2.
+
+## 10. The critical-signature gate: `verifyCriticalSignature`
+
+### 10.1 Inputs
+
+| Input | Meaning |
+|---|---|
+| `message` | v1-style canonical bytes, `<purpose>|...` |
+| `expectedPurpose` | the purpose the verifier expects; §2.2 grammar with ns `flagship` |
+| `envelope` | `{ suite, signature }`; `suite` is `ed25519/v1` (64-byte signature) or `hybrid-ed25519-mldsa65/v1` (3373 bytes), lowercase hex |
+| signer | the Ed25519 key the verifier trusts for this signer |
+| `binding` | the signer's verified binding (§9), or none |
+| `policy` | the scope's `PolicyState` (`assurancePolicy.ts`); strict is in force when `profile = strict` and `rollout` is `enforced` or `retired` |
+
+For a hybrid envelope the purpose passed to §5 is the message's own tag, so
+the hybrid transcript binds it.
+
+### 10.2 Rules, in order
+
+1. `expectedPurpose` fails the grammar: `bad-purpose`. The message's tag
+   (bytes before the first `|`, strict UTF-8) differs: `purpose-mismatch`.
+2. Any other suite: `unknown-suite`. Signature not lowercase even-length hex:
+   `bad-signature`. Signer key not 32 bytes of hex: `bad-public-key`.
+3. A binding for another Ed25519 key: `binding-key-mismatch`.
+4. **Strict in force**: a classical envelope is `strict-requires-hybrid`; no
+   binding is `strict-requires-binding`.
+5. Hybrid envelope: no binding is `no-binding`; otherwise both components must
+   verify (§5.3) under the binding's key, else `bad-signature`.
+6. Classical envelope (only outside strict): strict-profile Ed25519 over the
+   message, else `bad-signature`.
+
+The verdict names the suite accepted and whether strict was in force.
+
+**No downgrade by stripping.** Which suite is required comes from the policy,
+never from the envelope: removing the hybrid signature, relabelling it
+`ed25519/v1`, or presenting its Ed25519 half as a classical signature is
+refused under strict (step 4) and fails verification otherwise (the Ed25519
+half signs `M'`, not the message; §5.3). A signature whose length does not
+match its claimed suite fails. A hybrid signature that is offered must verify
+even outside strict: a verifier never falls back to the classical signature
+beside it.
+
+### 10.3 Where the gate runs (milestone 1)
+
+- `POST /api/daemon-status`: the box sends its classical `signature` (still
+  verified, for clients that read it) and `pqSignature: { suite:
+  "hybrid-ed25519-mldsa65/v1", signature }` once `.com` holds its STK binding.
+  `.com` runs the gate whenever `pqSignature` is present or the installation
+  is strict; a refusal is `403 signature refused: <code>`.
+- `PUT /api/server/:host/boot-key`: beside the v1 signature the box sends
+  `hybridSignature`, the STK's hybrid key over
+  `flagship/boot-key-binding/v2|<serverDomain>|<bootPubHex>|<issuedAt>` (the
+  same fields as v1, which stays readable). `.com` gates it (D1
+  `server_boot_key_hybrid`) and serves it with the v1 wire. A client that has
+  pinned the box's ML-DSA key refuses a boot-key binding without it.
+- Policy state comes from D1 `assurance_policy_states` (scope `installation`,
+  the server domain). No row is legacy; a row with a profile or rollout this
+  code does not know is read as strict and enforced, so a corrupt or newer row
+  never weakens a scope. Writing these rows through owner-signed policy
+  changes (`applyPolicyChange`) is milestone 2; today none exists.
+
+### 10.4 Vectors
+
+`test-vectors/pq-binding/vectors.json`: three signers with fixed seeds; five
+valid bindings (one per role) with their statements; 31 refusals (substituted
+Ed25519 or ML-DSA key, swapped fields, either signature half missing or zeroed,
+classical-only, wrong or relabelled role, subject, key, stale, future, every
+malformed shape, an identity Ed25519 key); 27 gate cases (classical and hybrid
+under compatibility, strict and the not-yet-in-force states, a stripped or
+relabelled suite, no binding, another signer's binding, tampered messages,
+wrong purpose, unknown suite, the boot-key binding v2). TS, Rust and the
+webapp check every case; Rust re-signs every binding byte for byte.
+
+### 10.5 Open questions for the Q01 reviewer (additions)
+
+12. The binding statement repeats both keys that `M'` already binds; is the
+    redundancy useful (explicit association in the signed text) or noise?
+13. Freshness: bindings carry `issuedAt` but no expiry; anti-rollback is the
+    verifier's `minIssuedAt` (its pin). Is a lifetime needed for long-lived
+    identity keys?
+14. First-ML-DSA-key-wins on `.com` and on clients means a lost keyd state
+    needs an STK change to rebind. Is that the right recovery boundary?
+15. A box reports `pqSignature` only after its binding is confirmed on `.com`,
+    and `.com` refuses a hybrid signature it cannot check. Confirm that a
+    failure to verify an offered hybrid signature must never fall back to the
+    classical one.
