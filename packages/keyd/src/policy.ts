@@ -33,6 +33,8 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/put-sealed-luks-key/v1",
   "flagship/boot-suspension/v1",
   "flagship/boot-auth/v1",
+  // The STK vouching for the box's boot key (packages/protocol/src/bootKey.ts).
+  "flagship/boot-key-binding/v1",
   "flagship/inject/v1",
   "flagship/sibling-hello/v1",
   "flagship/sibling-sync/v1",

@@ -305,6 +305,7 @@ import { fileUpdateOutcomeStore, onUpdateOutcome } from "./updateOutcome.js";
 import { buildReleaseCatalog } from "./updateReleases.js";
 import { runFirstBootUpdate } from "./firstBootUpdate.js";
 import { installHealthReporter } from "./healthReporter.js";
+import { ensureBootKeyBinding, hasBootKey, rebindBootKey, syncOwnerKeyFile } from "./bootKeyFiles.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
@@ -924,6 +925,14 @@ async function main(): Promise<void> {
     onLog: (m) => console.log(m),
   }).catch((e) => console.log(`[self-update] update guard not installed: ${(e as Error).message}`));
 
+  // ---- Boot key files (bootKeyFiles.ts) ----
+  // The premount checks a lease against this key before opening it.
+  if (cfg) {
+    void syncOwnerKeyFile(bytesToHexLocal(cfg.irkPublicKey))
+      .then((changed) => changed && console.log("[boot-key] owner key on /boot updated"))
+      .catch((e) => console.log(`[boot-key] owner key not updated: ${(e as Error).message}`));
+  }
+
   // ---- Box health reporter (healthReporter.ts) ----
   // A systemd timer, separate from this process, so the owner still gets
   // memory / OOM / restart numbers when this daemon is the thing failing.
@@ -1067,6 +1076,17 @@ async function main(): Promise<void> {
     privateKey: identityPrivKey,
     publicKey: ed.getPublicKey(identityPrivKey),
   };
+
+  if (env.controlPlaneBaseUrl && hasBootKey()) {
+    void ensureBootKeyBinding({
+      serverDomain: env.serverFqdn,
+      stkPub: identityKeypair.publicKey,
+      signer: identityKeypair,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+    })
+      .then((r) => r === "bound" && console.log("[boot-key] the boot key binding was signed again for this STK"))
+      .catch((e) => console.warn(`[boot-key] boot key binding not checked: ${(e as Error).message}`));
+  }
 
   // ---- Secret-free-recipe SWK delivery consumer ----
   // (docs/recipe-delivery-and-remote-install.md). When NO SWK is provisioned
@@ -3854,6 +3874,9 @@ async function wireRuntimeSurfaces(deps: {
         : null,
       alertInbox,
       onIrkSwapped: async (event) => {
+        await syncOwnerKeyFile(event.newIrkPubHex).catch((e) =>
+          console.warn(`[daemon] owner key on /boot not updated: ${(e as Error).message}`),
+        );
         const configPath = process.env.FLAGSHIP_CONFIG;
         if (configPath) {
           try {
@@ -4637,8 +4660,21 @@ async function rotateIdentity(
   await writeFileDurable(activePrivPath, pendingHex + "\n");
   const newPubHex = bytesToHexLocal(newIdentityPubKey);
   await writeFileDurable(activePubPath, newPubHex + "\n", 0o644);
-  // Boot PEM gets the new priv as PKCS8 so boot-stage.sh can sign with it.
-  await writeFileDurable(bootPemPath, pkcs8PemFromRaw(pendingPriv));
+  if (hasBootKey()) {
+    // The STK never goes on /boot; the new STK vouches for the same boot key.
+    try {
+      await rebindBootKey({
+        serverDomain: deps.serverFqdn,
+        stk: { publicKey: derivedPub, privateKey: pendingPriv },
+        controlPlaneBaseUrl: deps.controlPlaneBaseUrl,
+      });
+    } catch (e) {
+      console.warn(`[daemon] rotate: boot key binding not updated (the next unlock needs it): ${(e as Error).message}`);
+    }
+  } else {
+    // A box without a boot key (demo, unencrypted) still signs health with this PEM.
+    await writeFileDurable(bootPemPath, pkcs8PemFromRaw(pendingPriv));
+  }
 
   // 3. Drop the pending file so the next rotate has to start fresh.
   try {

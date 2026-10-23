@@ -8,6 +8,7 @@ import {
   HEALTH_SCRIPT_PATH,
   HEALTH_TIMER_PATH,
   buildHealthReportScript,
+  healthKeyPath,
   installHealthReporter,
 } from "../src/healthReporter.js";
 
@@ -16,7 +17,7 @@ const ARGS = { controlPlaneBaseUrl: "https://flagshipserver.com", serverDomain: 
 
 describe("box health reporter", () => {
   it("generates a script bash accepts, posting to this box's health route", () => {
-    const script = buildHealthReportScript(ARGS);
+    const script = buildHealthReportScript({ ...ARGS, keyPath: "/boot/identity.pem" });
     const dir = mkdtempSync(join(tmpdir(), "health-"));
     try {
       writeFileSync(join(dir, "r.sh"), script);
@@ -28,6 +29,13 @@ describe("box health reporter", () => {
     expect(script).toContain("openssl pkeyutl -sign -inkey /boot/identity.pem -rawin");
     // Only fixed fields and enums leave the box: no journal, no logs.
     expect(script).not.toMatch(/journalctl|\/var\/log/);
+  });
+
+  it("signs with the boot key when the box has one (no STK on /boot), else the STK PEM", () => {
+    expect(healthKeyPath((p) => p === "/boot/flagship-boot-key.pem")).toBe("/boot/flagship-boot-key.pem");
+    expect(healthKeyPath(() => false)).toBe("/boot/identity.pem");
+    expect(buildHealthReportScript({ ...ARGS, keyPath: "/boot/flagship-boot-key.pem" })).toContain("-inkey /boot/flagship-boot-key.pem -rawin");
+    expect(() => buildHealthReportScript({ ...ARGS, keyPath: "/boot/x;reboot" })).toThrow();
   });
 
   it("refuses URLs or domains that could break out of the script", () => {
