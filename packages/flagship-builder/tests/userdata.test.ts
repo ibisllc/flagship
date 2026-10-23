@@ -34,6 +34,9 @@ import {
 import { buildDebianPreseed } from "../src/preseed.js";
 import { parseInstallBlob } from "../src/installBlobParse.js";
 
+const code = (s: string): string =>
+  s.replace(/<<'FLAGSHIP_[A-Z_]+_EOF'[\s\S]*?\nFLAGSHIP_[A-Z_]+_EOF/g, "").split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+
 function makeKeypair(seedByte: number) {
   const sk = new Uint8Array(32).fill(seedByte);
   return { privateKey: sk, publicKey: ed.getPublicKey(sk) };
@@ -74,7 +77,7 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string; userPub: U
     registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode,
     authCodeUserSignature,
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: rck.publicKey,
   };
   return { blob, blobSignatureHex: hx(signInstallBlob(blob, irk)), userPub: irk.publicKey };
@@ -203,32 +206,25 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
   it("installs and compiles only the daemon's workspace closure, not the whole monorepo", () => {
     for (const encryptRoot of [true, false]) {
       const s = buildBootstrapScript({
-        ref: "main",
+        ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         repoUrl: "https://github.com/ibisllc/flagship.git",
         encryptRoot,
         bootUnlockMode: "auto",
         bootHost: DEFAULT_BOOT_HOST,
       });
-      expect(s).toContain(
-        "npm install --no-audit --no-fund --include-workspace-root --workspace=packages/server-daemon \\\n",
-      );
-      expect(s).toContain("npx tsc -b packages/server-daemon 2>&1 | tee /var/log/flagship-tsc.log || true\n");
-      expect(s).not.toContain("--workspaces");
-      expect(s).not.toMatch(/npx tsc -b(?! packages\/server-daemon)/);
-      expect(s.indexOf("--workspace=packages/server-daemon")).toBeLessThan(
-        s.indexOf("npx tsc -b packages/server-daemon"),
-      );
-      expect(s.indexOf("npx tsc -b packages/server-daemon")).toBeLessThan(
-        s.indexOf("install-helper.ts gen-identity"),
-      );
+      expect(s).toContain("install-box-artifact.sh");
+      expect(s).toContain("--expect-commit \"$GIT_REF\"");
+      expect(s).toContain("--node-floor ");
+      expect(code(s)).not.toMatch(/npm install|npx |nodesource|git clone|apt-get install[^\n]*(nodejs|golang)/);
+      expect(s.indexOf("install-box-artifact.sh")).toBeLessThan(s.indexOf("install-helper.ts gen-identity"));
     }
   });
 
-  it("installs the flagship-daemon unit with the FIXED ExecStart (npm run, not npx)", () => {
+  it("installs the flagship-daemon unit running the release's own Node, not npm", () => {
     const b = bootstrap();
     expect(b).toContain("cat > /etc/systemd/system/flagship-daemon.service");
     expect(b).toContain(
-      "ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon",
+      "ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning packages/server-daemon/dist/index.js",
     );
     expect(b).toContain("EnvironmentFile=/etc/flagship/daemon.env");
     expect(b).toContain("WorkingDirectory=/opt/flagship");
@@ -247,8 +243,7 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(daemonUnit).toContain("RestartSec=5");
     expect(b).toContain("WantedBy=multi-user.target");
     // The pre-fix bug used `npx … run start`; that must be gone.
-    expect(b).not.toContain("npx npm run start");
-    expect(b).not.toMatch(/ExecStart=.*npx .*run start/);
+    expect(b).not.toMatch(/ExecStart=.*(npx|npm)/);
   });
 
   it("defers register + daemon to first-boot units (chroot can't run systemd)", () => {
@@ -648,17 +643,11 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(yaml).toContain("d-i grub-installer/update-nvram boolean false");
   });
 
-  it("bakes flagship-unseal to /boot — build-at-install from cloned source", () => {
+  it("bakes flagship-unseal to /boot — taken from the signed release, never compiled on the box", () => {
     const b = extractBootstrap(luksYaml());
-    expect(b).toContain("apt-get install -y --no-install-recommends golang-go");
-    expect(b).toContain("/opt/flagship/installer/unseal-helper");
-    expect(b).toContain("-o /boot/flagship-unseal");
+    expect(b).toContain("install -m 755 /opt/flagship/installer/flagship-unseal /boot/flagship-unseal");
     expect(b).toContain("chmod 755 /boot/flagship-unseal");
-    // CGO-free static linux/amd64, matching the helper Makefile.
-    // No GOARCH: the helper builds for whatever arch the box runs — amd64 on
-    // real hardware, arm64 inside a VM hosted on Apple-silicon / arm64 KVM.
-    expect(b).toContain("CGO_ENABLED=0 GOOS=linux \\");
-    expect(b).not.toContain("GOARCH=amd64");
+    expect(b).not.toMatch(/golang|go build/);
   });
 
   it("re-keys LUKS to a random key + seals it for the phone + uploads to .com", () => {
@@ -1279,7 +1268,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     // already-active target — recognizes the unlock. Opening as flagship_root
     // hung every phone-approved boot at "Please unlock disk" (metal, 2026-06-12).
     const s = buildBootstrapScript({
-      ref: "main",
+      ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       repoUrl: "https://github.com/ibisllc/flagship.git",
       encryptRoot: true,
       bootUnlockMode: "auto",
@@ -1289,6 +1278,8 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
+      // Re-pinned 2026-10-22: the bootstrap installs the signed box artifact (SEC-INSTALL-001);
+      // it embeds release/box-release.json, so every box release re-pins this.
       // Re-pinned 2026-10-18: comments name d-i, not curtin/Ubuntu (autoinstall
       // path removed; Debian is the only installer family).
       // Re-pinned 2026-10-18: the install-time LUKS key is a per-install file
@@ -1299,13 +1290,13 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "e1af8105301217b26b5c03b947018fbcb1d333ce8f549b60a086237d2144f996",
+      "8a77a319dcf9d52360a3130b24b9e425898bd33ce0729af80b25acafb5764db8",
     );
   });
 
   it("the bootstrap is ALWAYS a PRODUCTION image — no inline console-login backdoor", () => {
     const base = {
-      ref: "main",
+      ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       repoUrl: "https://github.com/ibisllc/flagship.git",
       encryptRoot: true,
       bootUnlockMode: "auto" as const,
@@ -1345,7 +1336,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     // teal "Get yours" line rides a printf'd ANSI escape, which the console
     // does support.
     const s = buildBootstrapScript({
-      ref: "main",
+      ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       repoUrl: "https://github.com/ibisllc/flagship.git",
       encryptRoot: true,
       bootUnlockMode: "auto",

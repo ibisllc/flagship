@@ -19,6 +19,8 @@
  * (which works in a chroot - it just drops the symlink) and defer the daemon to
  * systemd units that fire on the first REAL boot.
  */
+import { INSTALL_BOX_ARTIFACT_SH, VERIFY_BOX_ARTIFACT_SH } from "./boxInstallerScripts.js";
+import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import type { InstallBlob } from "@flagship/protocol";
 import { utf8ToBase64 } from "./base64.js";
 
@@ -33,7 +35,7 @@ export interface UserDataOptions {
   blobSignatureHex: string;
   /** Repo to clone for the daemon source. */
   flagshipRepoUrl?: string;
-  /** Pinned git ref. Falls back to InstallBlob.installerGitRef or "main". */
+  /** Exact 40-hex commit to install. Falls back to InstallBlob.installerGitRef; a branch or tag is refused. */
   installerGitRef?: string;
   /**
    * Encrypt the installed root with LUKS, gated on the phone (the
@@ -165,9 +167,13 @@ export interface ResolvedBootstrapInputs {
 }
 
 export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrapInputs {
-  const ref = opts.installerGitRef ?? (opts.blob.installerGitRef.trim() || "main");
-  if (!/^[A-Za-z0-9._/-]+$/.test(ref)) {
-    throw new Error(`refusing to embed unsafe git ref: ${ref}`);
+  const ref = (opts.installerGitRef ?? opts.blob.installerGitRef).trim();
+  // SEC-INSTALL-001: the recipe names an exact commit, never a branch, a tag or a
+  // shortened hash. The signed artifact manifest for that commit is what installs.
+  if (!/^[0-9a-f]{40}$/.test(ref)) {
+    throw new Error(
+      `the installer must name an exact 40-character commit, not ${JSON.stringify(ref)}: a branch or tag can move after the recipe is signed`,
+    );
   }
   const repo = opts.flagshipRepoUrl ?? "https://github.com/ibisllc/flagship.git";
   if (!repo.startsWith("https://")) {
@@ -451,6 +457,9 @@ export interface BootstrapTemplateArgs {
  * script.
  */
 export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
+  if (!/^[0-9a-f]{40}$/.test(args.ref)) {
+    throw new Error(`the installer must name an exact 40-character commit, not ${JSON.stringify(args.ref)}`);
+  }
   // The sshd remote-access stub is its own dev-only debug mechanism (never
   // CLI/GUI), separate from the runtime owner-grant-gated debug-access path.
   if (args.debugSshAuthorizedKey) return buildBootstrapScriptDebug(args);
@@ -540,9 +549,11 @@ echo "[flagship-bootstrap] starting"
 REPO_URL="\${FLAGSHIP_REPO_URL:-${args.repoUrl}}"
 GIT_REF="${args.ref}"
 
-# Install Node 20 + every tool the bootstrap and initramfs hook need. Do NOT
-# assume the installer's packages: list ran — a missing jq once parsed the
-# recipe into empty values and mis-sealed the LUKS key. NodeSource refreshes apt.
+# Install the host tools the bootstrap and the initramfs hook need. Node is NOT one of
+# them: the box runs the Node that ships inside its verified release artifact
+# (SEC-NODE-001), so nothing here adds NodeSource, another package repository, git,
+# npm or a compiler. Do NOT assume the installer's packages: list ran — a missing jq
+# once parsed the recipe into empty values and mis-sealed the LUKS key.
 #
 # docker.io/docker-cli/docker-compose: the daemon runs every marketplace app as
 # a hardened container and brings up the data-layer (postgres/forgejo/...)
@@ -553,20 +564,10 @@ GIT_REF="${args.ref}"
 # the data-services init.sh calls.
 export DEBIAN_FRONTEND=noninteractive
 if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" != "1" ]; then
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || echo "[flagship-bootstrap] WARN: NodeSource setup failed; falling back to distro nodejs+npm"
-apt-get install -y --no-install-recommends nodejs jq git curl ca-certificates cryptsetup lvm2 xxd openssl gnupg docker.io docker-cli docker-compose${wpaPkg}
-# Debian's 'nodejs' package does NOT bundle npm (separate package); NodeSource's does.
-# On Debian 13 the NodeSource setup_20.x repo may not apply, leaving npm/npx absent —
-# which fails the entire build below (npm install, tsc, gen-identity, seal-for-bak).
-# Install npm explicitly if it is still missing (no-op when NodeSource provided it).
-if ! command -v npm >/dev/null 2>&1; then
-    echo "[flagship-bootstrap] npm missing after node install — installing distro npm"
-    apt-get install -y --no-install-recommends npm
-fi
-command -v npm >/dev/null 2>&1 || { echo "[flagship-bootstrap] FATAL: npm unavailable; cannot build daemon"; exit 1; }
+apt-get install -y --no-install-recommends jq curl ca-certificates cryptsetup lvm2 xxd openssl docker.io docker-cli docker-compose${wpaPkg}
 else
     echo "[flagship-bootstrap] generalized appliance detected — packages already present"
-    for _cmd in node npm jq git curl cryptsetup openssl docker; do
+    for _cmd in jq curl cryptsetup openssl docker xxd; do
         command -v "$_cmd" >/dev/null 2>&1 || { echo "[flagship-bootstrap] FATAL: appliance missing $_cmd"; exit 1; }
     done
 fi
@@ -653,38 +654,62 @@ echo "$PHONE_DELEGATED_PUBKEY" > /var/flagship/phone-delegated.pub
 echo "$AUTH_CODE_SERIAL"       > /var/flagship/auth-code-serial
 cp "$BLOB_JSON" /boot/install-blob.json
 
-# Clone flagship + build daemon.
+# Install the signed box release (SEC-INSTALL-001). GIT_REF is the exact commit the
+# owner's phone signed into the recipe. The installer below checks, before anything
+# of the artifact runs: the file's digest and size, that the commit and architecture
+# are the ones asked for, that enough release keys signed this exact manifest, that
+# the sequence is not older than this installer's, and that the Node inside meets
+# the security floor. It resolves nothing from npm, apt, git or any package repository.
 if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then
-    [ -s /opt/flagship/.flagship-appliance-ref ] || { echo "[flagship-bootstrap] FATAL: appliance ref marker missing"; exit 1; }
-    APPLIANCE_REF="$(cat /opt/flagship/.flagship-appliance-ref)"
-    [ "$APPLIANCE_REF" = "$GIT_REF" ] || { echo "[flagship-bootstrap] FATAL: appliance ref $APPLIANCE_REF does not match signed recipe ref $GIT_REF"; exit 1; }
+    [ -L /opt/flagship ] || { echo "[flagship-bootstrap] FATAL: appliance release link missing"; exit 1; }
+    APPLIANCE_COMMIT="$(jq -r .commit /var/flagship/artifact-current.json 2>/dev/null || true)"
+    [ "$APPLIANCE_COMMIT" = "$GIT_REF" ] || { echo "[flagship-bootstrap] FATAL: appliance release $APPLIANCE_COMMIT does not match signed recipe commit $GIT_REF"; exit 1; }
     cd /opt/flagship
-    [ -e node_modules/@flagship/protocol/package.json ] || { echo "[flagship-bootstrap] FATAL: appliance workspace incomplete"; exit 1; }
-    echo "[flagship-bootstrap] reusing prebuilt Flagship workspace ref=$APPLIANCE_REF"
+    [ -e node_modules/@flagship/protocol/package.json ] || { echo "[flagship-bootstrap] FATAL: appliance release incomplete"; exit 1; }
+    echo "[flagship-bootstrap] reusing the prebuilt release commit=$APPLIANCE_COMMIT"
 else
-rm -rf /opt/flagship
-git clone --depth 50 --branch "$GIT_REF" "$REPO_URL" /opt/flagship || \\
-    (git clone --depth 50 "$REPO_URL" /opt/flagship && \\
-     git -C /opt/flagship fetch --depth 50 origin "$GIT_REF" && \\
-     git -C /opt/flagship checkout "$GIT_REF")
+case "$(dpkg --print-architecture)" in
+    amd64) BOX_ARCH=amd64 ;;
+    arm64) BOX_ARCH=arm64 ;;
+    *) echo "[flagship-bootstrap] FATAL: unsupported architecture $(dpkg --print-architecture)"; exit 1 ;;
+esac
+BOX_ARTIFACT_NAME="flagship-box-\${GIT_REF:0:12}-$BOX_ARCH"
+BOX_ARTIFACT_BASE="${BOX_RELEASE.artifactBase}"
+mkdir -p /usr/local/lib/flagship-installer /var/flagship
+cat > /usr/local/lib/flagship-installer/verify-box-artifact.sh <<'FLAGSHIP_VERIFY_BOX_ARTIFACT_EOF'
+${VERIFY_BOX_ARTIFACT_SH}
+FLAGSHIP_VERIFY_BOX_ARTIFACT_EOF
+cat > /usr/local/lib/flagship-installer/install-box-artifact.sh <<'FLAGSHIP_INSTALL_BOX_ARTIFACT_EOF'
+${INSTALL_BOX_ARTIFACT_SH}
+FLAGSHIP_INSTALL_BOX_ARTIFACT_EOF
+chmod 755 /usr/local/lib/flagship-installer/verify-box-artifact.sh /usr/local/lib/flagship-installer/install-box-artifact.sh
+for _ext in tar.gz manifest.json; do
+    curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 5 --max-time 1800 \\
+        -o "/var/tmp/$BOX_ARTIFACT_NAME.$_ext" "$BOX_ARTIFACT_BASE/$BOX_ARTIFACT_NAME.$_ext" \\
+        || { echo "[flagship-bootstrap] FATAL: could not download $BOX_ARTIFACT_NAME.$_ext"; exit 1; }
+done
+BOX_ARTIFACT_SHA="$(jq -er .manifest.artifactSha256 "/var/tmp/$BOX_ARTIFACT_NAME.manifest.json")" \\
+    || { echo "[flagship-bootstrap] FATAL: the release manifest has no digest"; exit 1; }
+bash /usr/local/lib/flagship-installer/install-box-artifact.sh \\
+    --manifest "/var/tmp/$BOX_ARTIFACT_NAME.manifest.json" \\
+    --artifact "/var/tmp/$BOX_ARTIFACT_NAME.tar.gz" \\
+    --trust-keys "${BOX_RELEASE.trust.keys.join(",")}" \\
+    --threshold ${BOX_RELEASE.trust.threshold} \\
+    --expect-sha256 "$BOX_ARTIFACT_SHA" \\
+    --expect-commit "$GIT_REF" \\
+    --arch "$BOX_ARCH" \\
+    --node-floor ${BOX_RELEASE.nodeFloor} \\
+    --min-sequence ${BOX_RELEASE.minSequence} \\
+    | tee /var/log/flagship-install-artifact.log \\
+    || { echo "[flagship-bootstrap] FATAL: the box release was refused; see /var/log/flagship-install-artifact.log"; exit 1; }
+rm -f "/var/tmp/$BOX_ARTIFACT_NAME.tar.gz" "/var/tmp/$BOX_ARTIFACT_NAME.manifest.json"
 cd /opt/flagship
-npm install --no-audit --no-fund ${BOX_NPM_SCOPE} \\
-    | tee /var/log/flagship-npm.log
-if [ ! -e /opt/flagship/node_modules/@flagship/protocol/package.json ]; then
-    echo "[flagship-bootstrap] WARN: workspace not symlinked; manual linking"
-    mkdir -p /opt/flagship/node_modules/@flagship
-    for pkg in /opt/flagship/packages/*/; do
-        name=$(jq -r .name "$pkg/package.json" 2>/dev/null || echo "")
-        [ -n "$name" ] && ln -sfn "$pkg" "/opt/flagship/node_modules/$name"
-    done
-fi
-${BOX_TSC_BUILD} 2>&1 | tee /var/log/flagship-tsc.log || true
 fi
 
 # Generate server identity.
 mkdir -p /var/flagship/identity
 chmod 700 /var/flagship/identity
-npx tsx scripts/install-helper.ts gen-identity \\
+flagship-tsx scripts/install-helper.ts gen-identity \\
     --out-priv /var/flagship/identity/identity.priv.hex \\
     --out-pub  /var/flagship/identity/identity.pub.hex \\
     --out-pem  /boot/identity.pem
@@ -733,7 +758,7 @@ StartLimitIntervalSec=0
 Type=simple
 WorkingDirectory=/opt/flagship
 EnvironmentFile=/etc/flagship/daemon.env
-ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon
+ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning packages/server-daemon/dist/index.js
 # MUST be always, NOT on-failure. The daemon deliberately exits 0 to ask the
 # supervisor to restart it once it has provisioned a post-boot secret or staged
 # an update: the SWK-deposit + CGK-deposit consumers, the admin-root rotation
@@ -814,7 +839,7 @@ wait_for_registration_network() {
 }
 wait_for_registration_network
 report_phase registering
-npx tsx scripts/install-helper.ts sign-server-register \\
+flagship-tsx scripts/install-helper.ts sign-server-register \\
     --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
     --auth-code-blob /var/flagship/install-blob.json \\
     > /run/register-payload.json
@@ -1472,7 +1497,7 @@ fi
 # in-target too, before it. Keeping register+seal together is the invariant.
 report_phase registering
 echo "[flagship-bootstrap] registering server with .com (prereq for sealed-key upload)"
-npx tsx scripts/install-helper.ts sign-server-register \\
+flagship-tsx scripts/install-helper.ts sign-server-register \\
     --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
     --auth-code-blob /var/flagship/install-blob.json \\
     > /run/register-payload.json
@@ -1523,7 +1548,7 @@ cryptsetup luksAddKey "$ROOT_LUKS_PART" "$LUKS_KEY" --key-file "$LUKS_BURN_KEYFI
 #    unlock fail with "couldn't unseal the disk key with this phone's keys").
 report_phase sealing
 USER_PUB_HEX="$(jq -r .authCode.userPubKey "$BLOB_JSON")"
-SEALED_LUKS_KEY_HEX="$(npx tsx scripts/install-helper.ts seal-for-bak \\
+SEALED_LUKS_KEY_HEX="$(flagship-tsx scripts/install-helper.ts seal-for-bak \\
     --bak-ed25519-pub "$USER_PUB_HEX" \\
     --in "$LUKS_KEY" | tr -d '\\n')"
 if [ -z "$SEALED_LUKS_KEY_HEX" ]; then
@@ -1531,7 +1556,7 @@ if [ -z "$SEALED_LUKS_KEY_HEX" ]; then
     exit 1
 fi
 NOW_MS=$(date +%s%3N)
-npx tsx scripts/install-helper.ts sign-sealed-key \\
+flagship-tsx scripts/install-helper.ts sign-sealed-key \\
     --priv "$SERVER_IDENTITY_PRIV_HEX" \\
     --server-id "$SERVER_DOMAIN" \\
     --sealed-hex "$SEALED_LUKS_KEY_HEX" \\
@@ -1567,20 +1592,13 @@ echo "${bootHost}" > /boot/flagship-boot-host
 echo "${mode}" > /boot/flagship-boot-unlock-mode
 
 # C1. BAKE the unseal helper to /boot/flagship-unseal. Build-at-install from
-#     the cloned source (auditable; no committed binary). golang-go from the
-#     Debian archive can build the CGO-free static helper (one dep, pinned).
-echo "[flagship-bootstrap] building flagship-unseal from source"
-if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then
-    [ -x /usr/local/lib/flagship-appliance/flagship-unseal ] || { echo "[flagship-bootstrap] FATAL: prebuilt unseal helper missing"; exit 1; }
+#     the signed release artifact, which carries the static helper built in CI.
+echo "[flagship-bootstrap] installing flagship-unseal from the signed release"
+if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ] && [ -x /usr/local/lib/flagship-appliance/flagship-unseal ]; then
     install -m 755 /usr/local/lib/flagship-appliance/flagship-unseal /boot/flagship-unseal
-    echo "[flagship-bootstrap] reused prebuilt flagship-unseal"
 else
-apt-get install -y --no-install-recommends golang-go
-# No GOARCH: build for the arch we're running on — amd64 on real boxes,
-# arm64 inside a VM hosted on Apple-silicon / arm64 KVM hardware.
-( cd /opt/flagship/installer/unseal-helper && \\
-  CGO_ENABLED=0 GOOS=linux \\
-    go build -trimpath -buildvcs=false -ldflags '-s -w' -o /boot/flagship-unseal . )
+    [ -x /opt/flagship/installer/flagship-unseal ] || { echo "[flagship-bootstrap] FATAL: the release has no unseal helper"; exit 1; }
+    install -m 755 /opt/flagship/installer/flagship-unseal /boot/flagship-unseal
 fi
 chmod 755 /boot/flagship-unseal
 echo "[flagship-bootstrap] /boot/flagship-unseal baked ($(ls -l /boot/flagship-unseal))"

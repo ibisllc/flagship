@@ -20,9 +20,9 @@ set -o pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 releases=/opt/flagship-releases current=/opt/flagship state=/var/flagship bin=/usr/local/bin
-manifest="" artifact="" trust="" threshold="" expect_sha="" expect_commit="" arch="" node_floor=""
+manifest="" artifact="" trust="" threshold="" expect_sha="" expect_commit="" arch="" node_floor="" min_sequence=""
 
-usage() { echo "usage: $0 --manifest F --artifact F --trust-keys K --threshold N --expect-sha256 H --expect-commit C --arch A --node-floor V [--releases D] [--current P] [--state D] [--bin D]" >&2; exit 2; }
+usage() { echo "usage: $0 --manifest F --artifact F --trust-keys K --threshold N --expect-sha256 H --expect-commit C --arch A --node-floor V [--min-sequence N] [--releases D] [--current P] [--state D] [--bin D]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --manifest) manifest="$2"; shift 2 ;;
@@ -33,6 +33,7 @@ while [ $# -gt 0 ]; do
     --expect-commit) expect_commit="$2"; shift 2 ;;
     --arch) arch="$2"; shift 2 ;;
     --node-floor) node_floor="$2"; shift 2 ;;
+    --min-sequence) min_sequence="$2"; shift 2 ;;
     --releases) releases="$2"; shift 2 ;;
     --current) current="$2"; shift 2 ;;
     --state) state="$2"; shift 2 ;;
@@ -45,6 +46,11 @@ done
 
 last_seq=""
 [ -s "$state/artifact-sequence" ] && last_seq=$(tr -d '[:space:]' < "$state/artifact-sequence")
+# A fresh box has no history, but the installer that generated this script knows the lowest
+# release it will accept: --min-sequence N means "sequence N or higher".
+if [ -z "$last_seq" ] && [ -n "$min_sequence" ] && [ "$min_sequence" -gt 0 ] 2>/dev/null; then
+  last_seq=$((min_sequence - 1))
+fi
 
 verify_args=(--manifest "$manifest" --artifact "$artifact" --trust-keys "$trust" --threshold "$threshold"
   --expect-sha256 "$expect_sha" --expect-commit "$expect_commit" --arch "$arch" --node-floor "$node_floor")

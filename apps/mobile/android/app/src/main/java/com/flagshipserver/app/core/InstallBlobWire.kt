@@ -54,7 +54,7 @@ data class WireBlob(
     @EncodeDefault val registrationUrl: String = Endpoints.registrationUrl,
     val authCode: WireAuthCode,
     val authCodeUserSignature: String,   // hex
-    @EncodeDefault val installerGitRef: String = "main",
+    @EncodeDefault val installerGitRef: String = BoxRelease.COMMIT,
     val rckPubKey: String,               // hex
     // Only present for "approve" servers — null (omitted, since the default
     // Json has encodeDefaults=false) for the "auto" default, mirroring the

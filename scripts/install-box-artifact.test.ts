@@ -73,9 +73,11 @@ function sandbox(name: string) {
 
 function install(f: ReturnType<typeof fixtureArtifact>, t: ReturnType<typeof sandbox>, over: Partial<Record<string, string>> = {}) {
   return spawnSync(BASH!, [
+    ...(over["minSequence"] ? [] : []),
     SCRIPT, "--manifest", f.manifestPath, "--artifact", f.artifactPath, "--trust-keys", over["trust"] ?? pub, "--threshold", "1",
     "--expect-sha256", over["sha"] ?? f.sha, "--expect-commit", over["commit"] ?? f.manifest.commit, "--arch", over["arch"] ?? "arm64",
     "--node-floor", over["floor"] ?? "24.22.1", "--releases", t.releases, "--current", t.current, "--state", t.state, "--bin", t.bin,
+    ...(over["minSequence"] ? ["--min-sequence", over["minSequence"]] : []),
   ], { encoding: "utf8" });
 }
 
@@ -127,6 +129,17 @@ run("install-box-artifact.sh", () => {
     writeFileSync(f.artifactPath, Buffer.concat([readFileSync(f.artifactPath), Buffer.from("x")]));
     expect(install(f, t).status).toBe(1);
     expect(existsSync(t.current)).toBe(false);
+  });
+
+  it("a fresh box refuses a release below the sequence its installer was built for", () => {
+    const f = fixtureArtifact("minseq");
+    const low = sandbox("minseq-low");
+    const r = install(f, low, { minSequence: "6" });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("refused: rollback");
+    expect(existsSync(low.current)).toBe(false);
+    const ok = sandbox("minseq-ok");
+    expect(install(f, ok, { minSequence: "5" }).status).toBe(0);
   });
 
   it("refuses to take over a real directory (a legacy git install) rather than delete it", () => {

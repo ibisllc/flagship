@@ -79,7 +79,7 @@ function buildSignedRecipe(o: RecipeOpts = {}): string {
     registrationUrl: "https://flagship.services/api/server/register",
     authCode,
     authCodeUserSignature: new Uint8Array(64),
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: rck.publicKey,
     ...(o.bootUnlockMode ? { bootUnlockMode: o.bootUnlockMode } : {}),
     ...(o.diskEncryption ? { diskEncryption: o.diskEncryption } : {}),

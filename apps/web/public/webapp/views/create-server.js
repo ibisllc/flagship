@@ -1,6 +1,7 @@
 // Client-side draft composer for a new server. The webapp signs the recipe
 // locally, downloads it, and the user opens that file in Flagship Studio.
 
+import { BOX_RELEASE_COMMIT } from "../lib/boxRelease.js";
 import { $, registerView, show } from "../lib/router.js";
 import { boxErrorText, humanError } from "../lib/humanError.js";
 import { getSession, ensureUsername } from "../lib/state.js";
@@ -763,7 +764,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     registrationUrl: `${controlApex()}/api/server/register`,
     authCode: code,
     authCodeUserSignature: acSig,
-    installerGitRef: "main",
+    installerGitRef: BOX_RELEASE_COMMIT,
     rckPubKey: hexToBytes(rckPubHex),
   };
   // §7a.1: carry the field ONLY for "approve". "auto" is the absent-field

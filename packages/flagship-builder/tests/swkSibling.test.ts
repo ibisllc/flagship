@@ -50,7 +50,7 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string } {
     registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode,
     authCodeUserSignature: signAuthCode(authCode, irk),
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: rck.publicKey,
   };
   return { blob, blobSignatureHex: hx(signInstallBlob(blob, irk)) };
