@@ -78,3 +78,41 @@ export function handOverToKeydUser(dir: string, user: string, group: string): vo
     execFileSync("chown", ["-R", `${user}:${group}`, dir]);
   }
 }
+
+/**
+ * The names and ACME state this keyd serves, written once by the migration from the box's own
+ * recipe (root-owned files keyd itself cannot read). keyd never accepts a name from a request.
+ */
+export interface KeydPolicy {
+  serverFqdn: string;
+}
+
+export function writePolicyFromEnv(envFile: string, keydDir: string): KeydPolicy | null {
+  const target = join(keydDir, "policy.json");
+  if (existsSync(target)) return JSON.parse(readFileSync(target, "utf8")) as KeydPolicy;
+  if (!existsSync(envFile)) return null;
+  const line = readFileSync(envFile, "utf8").split("\n").find((l) => l.startsWith("FLAGSHIP_SUBDOMAIN="));
+  const fqdn = line?.slice("FLAGSHIP_SUBDOMAIN=".length).trim().toLowerCase();
+  if (!fqdn || !/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(fqdn)) return null;
+  mkdirSync(keydDir, { recursive: true, mode: 0o700 });
+  writeFileSync(`${target}.tmp`, JSON.stringify({ serverFqdn: fqdn }), { mode: 0o400 });
+  renameSync(`${target}.tmp`, target);
+  return { serverFqdn: fqdn };
+}
+
+export function loadPolicy(keydDir: string): KeydPolicy | null {
+  const target = join(keydDir, "policy.json");
+  if (!existsSync(target)) return null;
+  const p = JSON.parse(readFileSync(target, "utf8")) as Partial<KeydPolicy>;
+  return typeof p.serverFqdn === "string" ? { serverFqdn: p.serverFqdn } : null;
+}
+
+export const namesFor = (fqdn: string): string[] => [fqdn, `*.${fqdn}`];
+
+/** The PEM files an upgraded box already serves with, if any (the daemon's persistent ACME store). */
+export function legacyTlsFiles(legacyDir: string, fqdn: string): { keyPath: string; certPath: string } | null {
+  const base = join(legacyDir, "acme", "cert", fqdn.replace(/[^a-z0-9.-]/g, "_"));
+  const keyPath = `${base}.key`;
+  const certPath = `${base}.pem`;
+  return existsSync(keyPath) && existsSync(certPath) ? { keyPath, certPath } : null;
+}

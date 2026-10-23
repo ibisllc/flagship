@@ -3,13 +3,24 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { KEYD_REQUIRED_PROPERTIES } from "../packages/keyd/src/unit.js";
+import { KEYD_REQUIRED_PROPERTIES, TLSD_REQUIRED_PROPERTIES } from "../packages/keyd/src/unit.js";
 
 const SCRIPT = new URL("../installer/verify-keyd-unit.sh", import.meta.url).pathname;
 
 function shown(over: Record<string, string> = {}): string {
   const props = { ...KEYD_REQUIRED_PROPERTIES, RestrictAddressFamilies: "AF_UNIX", ...over };
   return Object.entries(props).map(([k, v]) => `${k}=${v}`).join("\n") + "\n";
+}
+
+function runTlsd(over: Record<string, string> = {}) {
+  const props = { ...TLSD_REQUIRED_PROPERTIES, RestrictAddressFamilies: "AF_UNIX AF_INET AF_INET6", IPAddressDeny: "any", ...over };
+  const dir = mkdtempSync(join(tmpdir(), "verify-tlsd-"));
+  try {
+    writeFileSync(join(dir, "show"), Object.entries(props).map(([k, v]) => `${k}=${v}`).join("\n") + "\n");
+    return spawnSync("bash", [SCRIPT, "--tlsd", "--from", join(dir, "show")], { encoding: "utf8" });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function run(text: string) {
@@ -38,5 +49,17 @@ describe("verify-keyd-unit.sh", () => {
     const r = run(shown().replace(/^MemoryDenyWriteExecute=yes\n/m, ""));
     expect(r.status).toBe(1);
     expect(r.stdout).toContain("MISMATCH MemoryDenyWriteExecute");
+  });
+});
+
+describe("verify-keyd-unit.sh --tlsd", () => {
+  it("accepts the frontend's properties", () => {
+    const r = runTlsd();
+    expect(r.status, r.stdout).toBe(0);
+  });
+  it("names a weakened frontend", () => {
+    const r = runTlsd({ NoNewPrivileges: "no", IPAddressDeny: "", RestrictAddressFamilies: "AF_UNIX AF_INET AF_PACKET", User: "root" });
+    expect(r.status).toBe(1);
+    for (const k of ["NoNewPrivileges", "IPAddressDeny", "RestrictAddressFamilies", "User"]) expect(r.stdout).toContain(`MISMATCH ${k}`);
   });
 });

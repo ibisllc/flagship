@@ -165,12 +165,22 @@ async function build(argv: string[]): Promise<void> {
       });
     }
 
+    // The TLS frontend (the certificate key stays in keyd), built the same way.
+    const tlsdBinary = arg(argv, "tlsd-binary") ?? join(work, "flagship-tlsd");
+    if (!arg(argv, "tlsd-binary")) {
+      execFileSync("go", ["build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags", "-s -w -buildid=", "-o", tlsdBinary, "."], {
+        cwd: join(src, "installer/tls-frontend"),
+        stdio: "inherit",
+        env: { ...process.env, CGO_ENABLED: "0", GOOS: "linux", GOARCH: arch === "amd64" ? "amd64" : "arm64", GOFLAGS: "-mod=readonly" },
+      });
+    }
+
     const epoch = Number(git(repo, "show", "-s", "--format=%ct", commit));
     const info: BuildInfo = {
       schema: 1, commit, arch, nodeVersion: pins.node.version, nodeSha256: pin.sha256,
       lockSha256: sha256(lockText), sourceDateEpoch: epoch,
     };
-    const art = assembleArtifact({ appDir: src, nodeBinary: join(nodeDir, "bin/node"), nodeLicense: join(nodeDir, "LICENSE"), unsealBinary, info });
+    const art = assembleArtifact({ appDir: src, nodeBinary: join(nodeDir, "bin/node"), nodeLicense: join(nodeDir, "LICENSE"), unsealBinary, tlsdBinary, info });
 
     const sbomText = JSON.stringify(sbom, null, 2) + "\n";
     const provenance = JSON.stringify({
@@ -178,7 +188,7 @@ async function build(argv: string[]): Promise<void> {
       builder: { ci: process.env["GITHUB_ACTIONS"] === "true", runId: process.env["GITHUB_RUN_ID"] ?? null, workflow: process.env["GITHUB_WORKFLOW_REF"] ?? null, runner: process.env["RUNNER_NAME"] ?? null },
       tools: { node: process.version, npm: execFileSync("npm", ["--version"], { encoding: "utf8" }).trim(), go: goVersion },
       inputs: { lockSha256: info.lockSha256, nodeSha256: pin.sha256, nodeVersion: pins.node.version },
-      steps: ["git archive", "verify node archive", "npm ci --ignore-scripts", "tsc -b packages/server-daemon", "go build installer/unseal-helper", "assemble deterministic tar.gz"],
+      steps: ["git archive", "verify node archive", "npm ci --ignore-scripts", "tsc -b packages/server-daemon", "go build installer/unseal-helper", "go build installer/tls-frontend", "assemble deterministic tar.gz"],
     }, null, 2) + "\n";
 
     const name = `flagship-box-${commit.slice(0, 12)}-${arch}`;

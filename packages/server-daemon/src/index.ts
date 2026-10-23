@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
-import { readFile, rename, rm, stat, statfs } from "node:fs/promises";
+import { readdir, readFile, rename, rm, stat, statfs } from "node:fs/promises";
 import { onCorruptState, withFileLock, writeFileDurable } from "./durableFile.js";
 import { basename, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
@@ -102,7 +102,10 @@ import {
 import { AppMembership } from "./membership.js";
 import { KeyCustodian, type SwkOps } from "./keyCustodian.js";
 import { KeydCustodian } from "./keydCustodian.js";
-import { installKeyd } from "./keydInstall.js";
+import { KeydClient } from "@flagship/keyd";
+import { keydTlsKeyd } from "./keydAsync.js";
+import type { OpaqueTlsOptions } from "./runtime.js";
+import { installKeyd, installTlsd } from "./keydInstall.js";
 
 /** Either custodian: the keys in this process, or in flagship-keyd. */
 type KeyCustodianLike = KeyCustodian | KeydCustodian;
@@ -611,6 +614,38 @@ async function main(): Promise<void> {
     console.warn("[daemon] flagship-keyd is not running: the box keys are held in this process (weaker isolation).");
   } else {
     console.log(`[daemon] keys are held by flagship-keyd (box key ${Buffer.from(keyd.boxPublicKey()).toString("hex").slice(0, 16)}…)`);
+  }
+
+  // The TLS frontend goes in once keyd is answering and this release carries it.
+  if (keyd && !process.env.FLAGSHIP_TLS_UPSTREAM) {
+    const t = await installTlsd({
+      repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+      run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+      onLog: (m) => console.log(m),
+    });
+    if (t === "installed") process.exit(0);
+  }
+
+  // TLS terminated by flagship-tlsd with the certificate key in keyd, when that frontend is installed.
+  let opaqueTls: OpaqueTlsOptions | undefined;
+  const tlsUpstream = process.env.FLAGSHIP_TLS_UPSTREAM;
+  if (keyd && keydSocket && tlsUpstream) {
+    const tlsClient = new KeydClient({ socketPath: keydSocket, component: "daemon-tls" });
+    await tlsClient.connect();
+    opaqueTls = {
+      upstreamSocket: tlsUpstream,
+      frontendPort: Number(process.env.FLAGSHIP_TLS_FRONTEND_PORT ?? "18443"),
+      keyd: keydTlsKeyd(tlsClient),
+      socketGroup: process.env.FLAGSHIP_TLS_SOCKET_GROUP ?? "flagship-keyd-clients",
+    };
+    console.log("[daemon] TLS is terminated by flagship-tlsd; the certificate key is held by flagship-keyd");
+    // The PEM files an older process wrote are not needed any more: keyd took the certificate
+    // over, and the account key keyd uses is its own.
+    for (const f of ["/var/flagship/acme/account.pem"]) await rm(f, { force: true }).catch(() => {});
+    const certDir = "/var/flagship/acme/cert";
+    for (const f of await readdir(certDir).catch(() => [] as string[])) if (f.endsWith(".key")) await rm(join(certDir, f), { force: true }).catch(() => {});
+  } else if (keyd && !tlsUpstream) {
+    console.warn("[daemon] the TLS key is still held in this process: flagship-tlsd is not installed");
   }
 
   if (!env.serverFqdn || (!env.identityPrivKeyHex && !keyd)) {
@@ -1341,6 +1376,7 @@ async function main(): Promise<void> {
       serverFqdn: env.serverFqdn!,
       identityPrivKey,
       custodian,
+      ...(opaqueTls ? { opaqueTls } : {}),
       ...(doorbellRef.current ? { doorbell: doorbellRef.current } : {}),
       tunnelHubUrl: endpoints.endpoints.tunnelHub,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl!,

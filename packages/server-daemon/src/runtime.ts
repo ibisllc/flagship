@@ -30,6 +30,8 @@ import { ServiceActivity } from "./serviceActivity.js";
 import { NO_FRAME_HEADERS } from "./pageHeaders.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
+import { listenForFrontend } from "./tlsUpstream.js";
+import { buildOpaqueIssuer, type OpaqueTlsKeyd } from "./acme/opaqueIssuer.js";
 import {
   DataProvisioner,
   DataStack,
@@ -65,6 +67,17 @@ import { bootEgress, type EgressRuntime } from "./egress/boot.js";
 import { ensureUnfencedNetworks } from "./egress/networks.js";
 import { AppQuotaManager, LoopVolumes, RealPgQuota, buildDiskWatcher, hostDiskUse } from "./appQuota/index.js";
 
+export interface OpaqueTlsOptions {
+  /** Unix socket the frontend forwards decrypted connections to. */
+  upstreamSocket: string;
+  /** TCP port the frontend listens on; the tunnel dials it in place of a local TLS server. */
+  frontendPort: number;
+  /** keyd's ACME and TLS operations; the runtime orders and activates certificates through them. */
+  keyd: OpaqueTlsKeyd;
+  /** Unix group allowed to open the upstream socket (the frontend's). */
+  socketGroup?: string;
+}
+
 export interface DaemonRuntimeOptions {
   /** The `.com` doorbell (doorbell.ts): lets the alias poll skip a minute that
    *  would come back unchanged. Absent ⇒ it polls every minute as before. */
@@ -78,6 +91,12 @@ export interface DaemonRuntimeOptions {
    * tunnel client never see this seed.
    */
   identityPrivKey: Uint8Array;
+  /**
+   * TLS terminated by flagship-tlsd with the key in flagship-keyd (SECURITY-HARDENING-PLAN.md
+   * 6.3). The daemon then holds no certificate private key: it listens on `upstreamSocket` for
+   * the frontend's decrypted connections and gets its certificate through `issuer`.
+   */
+  opaqueTls?: OpaqueTlsOptions;
   /**
    * The box's KeyCustodian (BoxSigner slice). The internet-facing app-proxy
    * signs injected identity headers and the tunnel client signs its HELLO
@@ -931,18 +950,20 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
 
   // Local TLS server. The tunnel hub forwards inbound TCP from
   // `<serverFqdn>:443` to this socket; the TLS handshake terminates here.
-  const tls = createTlsServer({
-    ALPNProtocols: ["acme-tls/1", "http/1.1"],
-    SNICallback: (servername, cb) => {
-      const ctx = certManager.contextFor(servername);
-      if (!ctx) {
-        cb(new Error(`no cert for ${servername}`));
-        return;
-      }
-      cb(null, ctx);
-    },
-  });
-  tls.on("secureConnection", (socket: TLSSocket) => {
+  const tls: { close(): unknown; address?(): unknown } = opts.opaqueTls
+    ? { close: () => undefined }
+    : createTlsServer({
+        ALPNProtocols: ["acme-tls/1", "http/1.1"],
+        SNICallback: (servername, cb) => {
+          const ctx = certManager.contextFor(servername);
+          if (!ctx) {
+            cb(new Error(`no cert for ${servername}`));
+            return;
+          }
+          cb(null, ctx);
+        },
+      });
+  const onSecureConnection = (socket: TLSSocket) => {
     if (socket.alpnProtocol === "acme-tls/1") {
       socket.end();
       return;
@@ -1033,11 +1054,21 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         return accepted;
       },
     });
-  });
-  await new Promise<void>((resolve) => tls.listen(0, "127.0.0.1", () => resolve()));
-  const tlsAddr = tls.address();
-  if (!tlsAddr || typeof tlsAddr === "string") throw new Error("could not bind TLS backend");
-  const tlsPort = tlsAddr.port;
+  };
+  let tlsPort: number;
+  if (opts.opaqueTls) {
+    // flagship-tlsd terminates TLS; we take its decrypted connections here.
+    const upstream = await listenForFrontend(opts.opaqueTls.upstreamSocket, onSecureConnection, opts.opaqueTls.socketGroup);
+    tls.close = () => upstream.close();
+    tlsPort = opts.opaqueTls.frontendPort;
+  } else {
+    const real = tls as unknown as TlsServer;
+    real.on("secureConnection", onSecureConnection);
+    await new Promise<void>((resolve) => real.listen(0, "127.0.0.1", () => resolve()));
+    const tlsAddr = real.address();
+    if (!tlsAddr || typeof tlsAddr === "string") throw new Error("could not bind TLS backend");
+    tlsPort = tlsAddr.port;
+  }
   // LAN-direct is an optimisation: if it can't start, the box is relay-only.
   const lan = opts.lanDirect
     ? await (await import("./lanDirect.js"))
@@ -1174,8 +1205,10 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // configured, account key and issued certs are loaded on startup and
   // persisted on issuance. With no store, behavior matches the in-memory
   // demo: a fresh LE account on every restart and no renewal continuity.
-  const store: PersistentAcmeStore | null =
-    opts.persistentStore ?? (opts.dataDir ? new PersistentAcmeStore(opts.dataDir) : null);
+  // With the TLS key in keyd nothing secret is persisted here: keyd keeps the key and the chain.
+  const store: PersistentAcmeStore | null = opts.opaqueTls
+    ? null
+    : opts.persistentStore ?? (opts.dataDir ? new PersistentAcmeStore(opts.dataDir) : null);
   // Every box self-renews its own per-box A′ cert on one system-wide policy:
   // LE issues 90-day certs; we renew when ≤30 days remain (cert ~60 days old),
   // so ~one issuance per 60 days. A pure system constant — no per-box autonomy
@@ -1198,26 +1231,36 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // which mint under the user's ONE shared account; it just no longer gates a
   // box's own cert.) Resolved up front since both initial issuance AND periodic
   // renewal need it.
-  const accountKeyPem = await resolveAccountKey({
-    explicitPem: opts.accountKeyPem,
-    store,
-    createPrivateKey: () => acme.crypto.createPrivateKey().then((b) => b.toString()),
-    onGenerated: opts.onAccountKeyGenerated,
-  });
+  const accountKeyPem = opts.opaqueTls
+    ? ""
+    : await resolveAccountKey({
+        explicitPem: opts.accountKeyPem,
+        store,
+        createPrivateKey: () => acme.crypto.createPrivateKey().then((b) => b.toString()),
+        onGenerated: opts.onAccountKeyGenerated,
+      });
 
   const dns = new RemoteDnsChallengeWriter({
     controlPlaneBaseUrl: opts.controlPlaneBaseUrl,
     serverId: opts.serverFqdn,
     stk: identity,
   });
-  const issuer = new LetsEncryptIssuer({
-    email: opts.acmeEmail,
-    environment: opts.acmeEnvironment,
-    accountKeyPem,
-    alpn: certManager,
-    dns,
-    ...(opts.onAcmePhase ? { onPhase: opts.onAcmePhase } : {}),
-  });
+  const issuer = opts.opaqueTls
+    ? buildOpaqueIssuer({
+        keyd: opts.opaqueTls.keyd,
+        environment: opts.acmeEnvironment,
+        email: opts.acmeEmail,
+        dns,
+        ...(opts.onAcmePhase ? { onPhase: opts.onAcmePhase } : {}),
+      })
+    : new LetsEncryptIssuer({
+        email: opts.acmeEmail,
+        environment: opts.acmeEnvironment,
+        accountKeyPem,
+        alpn: certManager,
+        dns,
+        ...(opts.onAcmePhase ? { onPhase: opts.onAcmePhase } : {}),
+      });
 
   // Initial cert acquisition. CRITICAL: this must NOT block startup nor
   // kill the process on failure. ACME needs the daemon to STAY UP — the
@@ -1230,9 +1273,14 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // retry loop with backoff and return immediately. The daemon serves
   // its API + tunnel throughout; the cert installs into CertManager
   // whenever an attempt finally succeeds.
-  const existing = store ? await store.loadCert(opts.serverFqdn) : null;
+  const existing = opts.opaqueTls
+    ? await opts.opaqueTls.keyd.active().then((a) => (a ? { certPem: a.chainPem, privateKeyPem: "", names: a.names, notAfter: a.notAfter, issuedAt: 0, legacy: a.legacy } : null))
+    : store
+      ? await store.loadCert(opts.serverFqdn)
+      : null;
   let certRetryLoop: { stop: () => void } | null = null;
-  if (existing && shouldReuseCert(existing, sans, renewalWindowMs)) {
+  const legacyKey = !!(existing as { legacy?: boolean } | null)?.legacy;
+  if (existing && !legacyKey && shouldReuseCert(existing, sans, renewalWindowMs)) {
     certManager.install(
       { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
       existing.notAfter,
@@ -1253,7 +1301,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     // one yet: keep serving the one on disk. A phone that knows this box by
     // its key (not by the certificate authority) still reaches it, and the
     // retry loop below replaces it the moment an issuance works.
-    if (existing && shouldServeStaleCert(existing, sans)) {
+    // A key taken over from the old process keeps serving until keyd's own replacement is in.
+    if (existing && (legacyKey ? shouldReuseCert(existing, sans, 0) : shouldServeStaleCert(existing, sans))) {
       certManager.install(
         { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
         existing.notAfter,
@@ -1316,7 +1365,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       console.log(`[runtime] rehydrated tier-2 service cert for ${fqdn}`);
     }
   }
-  if (opts.servicePlatform?.hostUsername && opts.servicePlatform.hostIrkPub) {
+  if (opts.opaqueTls && opts.servicePlatform?.hostUsername) {
+    console.log("[runtime] tier-2 service certificates are not issued while the TLS key is held by flagship-keyd");
+  } else if (opts.servicePlatform?.hostUsername && opts.servicePlatform.hostIrkPub) {
     extras.push(
       buildServiceCertHandlers({
         serverFqdn: opts.serverFqdn,

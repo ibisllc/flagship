@@ -47,7 +47,40 @@ in-process keys once its files have moved (they are no longer there).
   (directory and socket permissions), not by peer credentials. A native helper would add that.
 - Node cannot lock pages out of swap. Mitigations: no core dumps, small key lifetime in
   memory (zeroed on shutdown), and encrypted swap on the appliance.
-- TLS private keys are not in keyd yet (plan Phase 3).
+- Tier-2 shared service certificates (`<service>.<user>` names whose key is sent between the
+  account's boxes) are not issued while TLS runs through keyd: a key that never leaves one box
+  cannot be replicated. They return with the shared-key design in plan 9.4.
 - The SWK subkeys keyd derives (chunk, LLM, TLS-at-rest, manifest, peer-backup, app-secret
   labels) are returned to the daemon, as they are needed there today. The root workload key
   is not.
+
+## TLS and Let's Encrypt (plan Phase 3)
+
+```
+daemon  --(order names)-->  KeydAcmeIssuer  --(sign by request kind)-->  keyd (ACME account key)
+                                  |                                      keyd (TLS leaf key, CSR)
+                                  +--> Let's Encrypt (DNS-01 via .com)
+tunnel --> flagship-tlsd (Go, no key) --tls.sign--> keyd        decrypted --> daemon (Unix socket)
+```
+
+- keyd makes the TLS leaf key (P-256), the CSR for exactly the names the key was made for, and
+  signs TLS handshake digests only once a certificate for that key is installed. The names a box
+  may have (`<server>` and `*.<server>`) come from its own recipe through the migration step,
+  never from a request. `tls.active` is what flagship-tlsd serves; a renewal is `tls.install`
+  then `tls.activate`, picked up within seconds with no dropped connections.
+- keyd holds the per-box ACME account key and builds each signed request itself, by kind
+  (`newAccount`, `newOrder`, `postAsGet`, `challenge`, `finalize`, `revoke`): only to Let's
+  Encrypt hosts over https, only for the box's names, only with a CSR keyd made, only to revoke
+  the box's own certificates. The ACME client in the daemon (`acme/keydAcme.ts`) does the
+  protocol and never sees a key.
+- `flagship-tlsd` (`installer/tls-frontend`, Go standard library only) is a `crypto.Signer`
+  whose signing is a keyd request. TLS 1.2+, `http/1.1`, `acme-tls/1` is not negotiated, and it
+  serves only names the certificate covers. It listens on loopback for the tunnel and hands the
+  daemon decrypted connections on `/run/flagship-tls/upstream.sock` behind one JSON header line.
+- DNS-01 only in this mode (TLS-ALPN-01 would need a second key inside the frontend).
+- Upgrade: keyd's migration takes over the box's existing certificate and key as a *legacy*
+  key so serving never stops, the daemon orders a fresh keyd-made key at once, switches, and
+  keyd removes the legacy key. The PEM key file and the old account key are deleted when the
+  daemon first starts in this mode. Overwriting flash cannot be proven; the LUKS disk and the
+  key rotation are the durable protection (plan 6.4).
+- Units: `installer/verify-keyd-unit.sh` and `--tlsd` check both against `systemctl show`.

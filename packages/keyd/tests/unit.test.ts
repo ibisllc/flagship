@@ -93,3 +93,62 @@ describe("key migration", () => {
     expect(scrubEnvFile(join(dir, "missing.env"), ["X"])).toBe(false);
   });
 });
+
+import { TLSD_REQUIRED_PROPERTIES, TLSD_USER, daemonTlsdDropIn, legacyTlsFiles, loadPolicy, namesFor, tlsdServiceUnit, tlsdSetupScript, writePolicyFromEnv } from "../src/index.js";
+
+describe("the tlsd unit", () => {
+  const unit = tlsdServiceUnit();
+  const directive = (name: string) => unit.split("\n").filter((l) => l.startsWith(`${name}=`)).map((l) => l.slice(name.length + 1));
+
+  it("carries every required property and holds no key", () => {
+    for (const [k, v] of Object.entries(TLSD_REQUIRED_PROPERTIES)) expect(directive(k), k).toContain(v);
+    expect(unit).not.toMatch(/Environment=.*(KEY|SEED|PRIV)/i);
+  });
+
+  it("listens on loopback only, talks to two Unix sockets and has no capabilities", () => {
+    expect(directive("ExecStart")[0]).toContain("--listen 127.0.0.1:18443");
+    expect(directive("IPAddressDeny")).toEqual(["any"]);
+    expect(directive("IPAddressAllow")).toEqual(["localhost"]);
+    expect(directive("CapabilityBoundingSet")).toEqual([""]);
+    expect(directive("User")).toEqual([TLSD_USER]);
+  });
+
+  it("is ordered after keyd and cannot run without it", () => {
+    expect(unit).toContain("Requires=flagship-keyd.service");
+    expect(daemonTlsdDropIn()).toContain("FLAGSHIP_TLS_UPSTREAM=/run/flagship-tls/upstream.sock");
+    expect(tlsdSetupScript()).toContain("--shell /usr/sbin/nologin");
+  });
+});
+
+describe("keyd's policy from the box's own recipe", () => {
+  let dir: string;
+  beforeEach(() => void (dir = mkdtempSync(join(tmpdir(), "keyd-pol-"))));
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("takes the server name once from the environment file and never changes it", () => {
+    const env = join(dir, "daemon.env");
+    writeFileSync(env, "FLAGSHIP_SUBDOMAIN=Home.Alice.Flagship.Services\nOTHER=1\n");
+    expect(writePolicyFromEnv(env, join(dir, "k"))).toEqual({ serverFqdn: "home.alice.flagship.services" });
+    writeFileSync(env, "FLAGSHIP_SUBDOMAIN=evil.example.com\n");
+    expect(writePolicyFromEnv(env, join(dir, "k"))).toEqual({ serverFqdn: "home.alice.flagship.services" });
+    expect(loadPolicy(join(dir, "k"))).toEqual({ serverFqdn: "home.alice.flagship.services" });
+    expect(namesFor("a.b.c")).toEqual(["a.b.c", "*.a.b.c"]);
+  });
+
+  it("refuses a missing file or a name that is not a hostname", () => {
+    expect(writePolicyFromEnv(join(dir, "nope.env"), join(dir, "k"))).toBeNull();
+    writeFileSync(join(dir, "bad.env"), "FLAGSHIP_SUBDOMAIN=not a host\n");
+    expect(writePolicyFromEnv(join(dir, "bad.env"), join(dir, "k"))).toBeNull();
+  });
+
+  it("finds the PEM files an older process wrote", () => {
+    mkdirSync(join(dir, "acme/cert"), { recursive: true });
+    expect(legacyTlsFiles(dir, "home.a.flagship.services")).toBeNull();
+    writeFileSync(join(dir, "acme/cert/home.a.flagship.services.key"), "k");
+    writeFileSync(join(dir, "acme/cert/home.a.flagship.services.pem"), "c");
+    expect(legacyTlsFiles(dir, "home.a.flagship.services")).toEqual({
+      keyPath: join(dir, "acme/cert/home.a.flagship.services.key"),
+      certPath: join(dir, "acme/cert/home.a.flagship.services.pem"),
+    });
+  });
+});

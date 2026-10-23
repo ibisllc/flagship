@@ -1,4 +1,4 @@
-import { X509Certificate, createHash, randomBytes } from "node:crypto";
+import { X509Certificate, createHash, createPrivateKey, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { p256 } from "@noble/curves/nist.js";
@@ -27,6 +27,8 @@ interface StoredKey {
   chainPem?: string;
   notBefore?: number;
   notAfter?: number;
+  /** A key that came from a PEM on disk (an upgraded box), not one keyd made. It is replaced at once. */
+  legacy?: boolean;
 }
 
 export interface TlsKeyInfo {
@@ -36,6 +38,7 @@ export interface TlsKeyInfo {
   createdAt: number;
   notAfter: number | null;
   active: boolean;
+  legacy: boolean;
 }
 
 export class TlsKeys {
@@ -151,6 +154,40 @@ export class TlsKeys {
     return { notBefore, notAfter, names: got };
   }
 
+  /**
+   * Take over a box's existing certificate and key from its PEM files, once, when keyd is
+   * installed on a box that already serves TLS (SECURITY-HARDENING-PLAN.md 6.4). The key is
+   * the one the old process held, so it is marked `legacy` and the daemon replaces it with a
+   * key keyd made as soon as it can; until then serving continues without a gap.
+   */
+  importLegacy(privateKeyPem: string, chainPem: string): { handle: string; notAfter: number; names: string[] } {
+    let jwk: { d?: string; x?: string; y?: string };
+    try {
+      const k = createPrivateKey(privateKeyPem);
+      if (k.asymmetricKeyType !== "ec" || k.asymmetricKeyDetails?.namedCurve !== "prime256v1") throw new Error("not P-256");
+      jwk = k.export({ format: "jwk" }) as typeof jwk;
+    } catch {
+      throw new KeydError("bad-request", "only an EC P-256 key can be taken over");
+    }
+    const priv = Uint8Array.from(Buffer.from(jwk.d ?? "", "base64url"));
+    if (priv.length !== 32) throw new KeydError("bad-request", "bad key");
+    const pub = p256.getPublicKey(priv, false);
+    const spkiHex = Buffer.from(seq(seq(oid("1.2.840.10045.2.1"), oid("1.2.840.10045.3.1.7")), bitString(pub))).toString("hex");
+    const certs = chainPem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g);
+    if (!certs?.length) throw new KeydError("bad-request", "expected a certificate chain");
+    const leaf = new X509Certificate(certs[0]!);
+    const names = (leaf.subjectAltName ?? "").split(",").map((x) => x.trim().replace(/^DNS:/, "").toLowerCase()).filter(Boolean).sort();
+    if (names.length === 0 || names.some((n) => !this.allowedNames.has(n))) throw new KeydError("forbidden", "the certificate names more than this box may have");
+    if (Buffer.from(leaf.publicKey.export({ type: "spki", format: "der" })).toString("hex") !== spkiHex) throw new KeydError("forbidden", "the key is not the certificate's");
+    const notAfter = Date.parse(leaf.validTo);
+    if (!(notAfter > this.now())) throw new KeydError("forbidden", "the certificate has expired");
+    const handle = randomBytes(16).toString("hex");
+    this.keys.set(handle, { names, privHex: Buffer.from(priv).toString("hex"), spkiHex, createdAt: this.now(), chainPem: certs.join("\n") + "\n", notBefore: Date.parse(leaf.validFrom), notAfter, legacy: true });
+    this.persist(handle);
+    this.activate(handle);
+    return { handle, notAfter, names };
+  }
+
   activate(handle: string): void {
     const k = this.get(handle);
     if (!k.chainPem) throw new KeydError("forbidden", "install a certificate before serving with this key");
@@ -162,11 +199,11 @@ export class TlsKeys {
     }
   }
 
-  active(): { handle: string; chainPem: string; notAfter: number; names: string[] } | null {
+  active(): { handle: string; chainPem: string; notAfter: number; names: string[]; legacy: boolean } | null {
     if (!this.activeHandle) return null;
     const k = this.keys.get(this.activeHandle);
     if (!k?.chainPem) return null;
-    return { handle: this.activeHandle, chainPem: k.chainPem, notAfter: k.notAfter ?? 0, names: k.names };
+    return { handle: this.activeHandle, chainPem: k.chainPem, notAfter: k.notAfter ?? 0, names: k.names, legacy: k.legacy === true };
   }
 
   /** A TLS handshake signature over `digest`. Only for a key with a valid, installed certificate. */
@@ -186,6 +223,7 @@ export class TlsKeys {
       createdAt: k.createdAt,
       notAfter: k.notAfter ?? null,
       active: handle === this.activeHandle,
+      legacy: k.legacy === true,
     }));
   }
 

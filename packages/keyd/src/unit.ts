@@ -118,3 +118,103 @@ id ${KEYD_USER} >/dev/null 2>&1 || useradd --system --gid ${KEYD_GROUP} --home-d
 install -d -m 0700 -o ${KEYD_USER} -g ${KEYD_GROUP} ${KEYD_STATE_DIR}
 `;
 }
+
+// ── flagship-tlsd: the TLS frontend (SECURITY-HARDENING-PLAN.md 6.3) ────────────
+
+export const TLSD_USER = "flagship-tlsd";
+export const TLSD_UNIT_PATH = "/etc/systemd/system/flagship-tlsd.service";
+export const TLSD_DAEMON_DROPIN_PATH = "/etc/systemd/system/flagship-daemon.service.d/30-tlsd.conf";
+export const TLS_UPSTREAM_SOCKET = "/run/flagship-tls/upstream.sock";
+export const TLSD_PORT = 18443;
+
+/** What `systemctl show flagship-tlsd` must report on the appliance. */
+export const TLSD_REQUIRED_PROPERTIES: Readonly<Record<string, string>> = {
+  User: TLSD_USER,
+  NoNewPrivileges: "yes",
+  ProtectSystem: "strict",
+  ProtectHome: "yes",
+  PrivateTmp: "yes",
+  PrivateDevices: "yes",
+  ProtectKernelTunables: "yes",
+  ProtectKernelModules: "yes",
+  ProtectControlGroups: "yes",
+  RestrictNamespaces: "yes",
+  LockPersonality: "yes",
+  MemoryDenyWriteExecute: "yes",
+  LimitCORE: "0",
+  CapabilityBoundingSet: "",
+  UMask: "0077",
+};
+
+export function tlsdServiceUnit(opts: { binary?: string; port?: number } = {}): string {
+  const bin = opts.binary ?? "/opt/flagship/installer/flagship-tlsd";
+  const port = opts.port ?? TLSD_PORT;
+  return `[Unit]
+Description=Flagship TLS frontend (the certificate key stays in flagship-keyd)
+After=flagship-keyd.service
+Requires=flagship-keyd.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=${TLSD_USER}
+# The group may open keyd's socket and the daemon's upstream socket; nothing else.
+Group=${KEYD_CLIENT_GROUP}
+ExecStart=${bin} --listen 127.0.0.1:${port} --keyd ${KEYD_SOCKET} --upstream ${TLS_UPSTREAM_SOCKET}
+Restart=always
+RestartSec=1
+# Holds no key: only a handle and a socket. It listens on loopback for the tunnel and talks
+# to two Unix sockets; it has no other network and no capabilities.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount @debug @module @raw-io @reboot @swap @obsolete
+LimitCORE=0
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+
+/** The daemon listens for the frontend's connections and lets the tunnel dial the frontend. */
+export function daemonTlsdDropIn(): string {
+  return `[Unit]
+Wants=flagship-tlsd.service
+Before=flagship-tlsd.service
+
+[Service]
+Environment=FLAGSHIP_TLS_UPSTREAM=${TLS_UPSTREAM_SOCKET}
+Environment=FLAGSHIP_TLS_FRONTEND_PORT=${TLSD_PORT}
+Environment=FLAGSHIP_TLS_SOCKET_GROUP=${KEYD_CLIENT_GROUP}
+# The directory the upstream socket lives in: the daemon creates it, the frontend's group may enter it.
+RuntimeDirectory=flagship-tls
+RuntimeDirectoryMode=0750
+ExecStartPre=+/bin/chgrp ${KEYD_CLIENT_GROUP} /run/flagship-tls
+`;
+}
+
+export function tlsdSetupScript(): string {
+  return `id ${TLSD_USER} >/dev/null 2>&1 || useradd --system --gid ${KEYD_CLIENT_GROUP} --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin ${TLSD_USER}
+`;
+}

@@ -57,6 +57,8 @@ export interface AssembleInput {
   nodeLicense?: string;
   /** The static `flagship-unseal` early-boot helper, built in CI for this architecture. */
   unsealBinary?: string;
+  /** The static `flagship-tlsd` TLS frontend. */
+  tlsdBinary?: string;
   info: BuildInfo;
 }
 
@@ -92,6 +94,10 @@ export function assembleArtifact(input: AssembleInput): AssembledArtifact {
 
   if (input.unsealBinary) {
     entries.push({ kind: "file", path: `${root}/app/installer/flagship-unseal`, data: readFileSync(input.unsealBinary), executable: true });
+  }
+
+  if (input.tlsdBinary) {
+    entries.push({ kind: "file", path: `${root}/app/installer/flagship-tlsd`, data: readFileSync(input.tlsdBinary), executable: true });
   }
 
   entries.push({

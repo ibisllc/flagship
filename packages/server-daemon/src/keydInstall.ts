@@ -2,6 +2,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  TLSD_DAEMON_DROPIN_PATH,
+  TLSD_UNIT_PATH,
+  daemonTlsdDropIn,
+  tlsdServiceUnit,
+  tlsdSetupScript,
   KEYD_DAEMON_DROPIN_PATH,
   KEYD_SOCKET,
   KEYD_UNIT_PATH,
@@ -22,6 +27,50 @@ import { writeFileDurable } from "./durableFile.js";
  * is already answering. Never throws: a box that cannot install keyd keeps running as before
  * and says so.
  */
+export type TlsdInstallOutcome = "installed" | "already-installed" | "skipped-no-binary" | "failed";
+
+/**
+ * Put the TLS frontend on a box that has keyd (and a certificate in it, or will get one):
+ * the user, the hardened unit, and the daemon's drop-in that points it at the frontend. The
+ * daemon restarts afterwards and from then on holds no TLS key. Does nothing without the
+ * frontend binary in this release.
+ */
+export async function installTlsd(opts: KeydInstallOptions & { binaryPath?: string }): Promise<TlsdInstallOutcome> {
+  const log = opts.onLog ?? (() => {});
+  const exists = opts.fileExists ?? existsSync;
+  const binary = opts.binaryPath ?? join(opts.repoPath, "installer/flagship-tlsd");
+  if (!exists(binary)) return "skipped-no-binary";
+  const read = opts.read ?? (async (p) => await readFile(p, "utf8").catch(() => null));
+  const write =
+    opts.write ??
+    (async (p, c, mode) => {
+      await mkdir(dirname(p), { recursive: true });
+      await writeFileDurable(p, c, mode);
+    });
+  try {
+    const files: Array<[string, string, number]> = [
+      [TLSD_UNIT_PATH, tlsdServiceUnit({ binary }), 0o644],
+      [TLSD_DAEMON_DROPIN_PATH, daemonTlsdDropIn(), 0o644],
+    ];
+    let changed = false;
+    for (const line of tlsdSetupScript().trim().split("\n")) await opts.run("sh", ["-c", line]);
+    for (const [path, content, mode] of files) {
+      if ((await read(path)) !== content) {
+        await write(path, content, mode);
+        changed = true;
+      }
+    }
+    if (!changed) return "already-installed";
+    await opts.run("systemctl", ["daemon-reload"]);
+    await opts.run("systemctl", ["enable", "flagship-tlsd.service"]);
+    log("[tlsd] installed; the daemon restarts to hand TLS to it");
+    return "installed";
+  } catch (e) {
+    log(`[tlsd] could not install: ${(e as Error).message}`);
+    return "failed";
+  }
+}
+
 export type KeydInstallOutcome = "already-running" | "installed" | "skipped-no-systemd" | "skipped-no-keyd-build" | "failed";
 
 export interface KeydInstallOptions {

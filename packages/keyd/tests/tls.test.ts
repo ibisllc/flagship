@@ -138,3 +138,43 @@ describe("TLS keys held by keyd", () => {
 });
 
 void SEED;
+
+describe("taking over an upgraded box's certificate", () => {
+  it("imports a P-256 key and certificate, serves it flagged legacy, and refuses what is not this box's", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tls-legacy-"));
+    try {
+      const { generateKeyPairSync } = await import("node:crypto");
+      cryptoProvider.set(globalThis.crypto);
+      const keys = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+      const mk = async (names: string[], k = keys) =>
+        (await X509CertificateGenerator.createSelfSigned({
+          serialNumber: "05", name: `CN=${names[0]}`, notBefore: new Date(Date.now() - 1000), notAfter: new Date(Date.now() + 80 * 86400_000),
+          signingAlgorithm: { name: "ECDSA", hash: "SHA-256" }, keys: k,
+          extensions: [new SubjectAlternativeNameExtension(names.map((value) => ({ type: "dns" as const, value })))],
+        })).toString("pem");
+      const pkcs8 = async (k: CryptoKeyPair) => `-----BEGIN PRIVATE KEY-----\n${Buffer.from(await crypto.subtle.exportKey("pkcs8", k.privateKey)).toString("base64").replace(/(.{64})/g, "$1\n")}\n-----END PRIVATE KEY-----\n`;
+      const tls = new TlsKeys(ALLOWED, dir);
+      const r = tls.importLegacy(await pkcs8(keys), await mk([FQDN, `*.${FQDN}`]));
+      expect(r.names).toEqual([FQDN, `*.${FQDN}`].sort());
+      expect(tls.active()).toMatchObject({ handle: r.handle, legacy: true });
+      expect(tls.sign(r.handle, sha256(new Uint8Array(2)))).toBeInstanceOf(Uint8Array);
+      expect(tls.list()[0]).toMatchObject({ legacy: true, active: true });
+      // Not this box's names, not the certificate's key, not P-256.
+      const other = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+      await expect(async () => new TlsKeys(ALLOWED).importLegacy(await pkcs8(keys), await mk(["evil.example.com"]))).rejects.toThrow(/more than this box/);
+      await expect(async () => new TlsKeys(ALLOWED).importLegacy(await pkcs8(other), await mk([FQDN], keys))).rejects.toThrow(/not the certificate/);
+      const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+      expect(() => new TlsKeys(ALLOWED).importLegacy(rsa, "x")).toThrow(/P-256/);
+      // Survives a restart still flagged, and the key can be removed once it is not in service.
+      const again = new TlsKeys(ALLOWED, dir);
+      expect(again.active()?.legacy).toBe(true);
+      const fresh = again.createKey([FQDN]);
+      again.install(fresh.handle, await issueFor(again.csr(fresh.handle)));
+      again.activate(fresh.handle);
+      again.remove(r.handle);
+      expect(again.list().map((k) => k.legacy)).toEqual([false]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

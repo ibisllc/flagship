@@ -23,6 +23,7 @@ TPM/measured boot only as far as software can prove).
 - N04 recovery wait/veto: an admin's signed veto of a pending recovery decided against completion by one atomic claim (migration 0108, protocol vectors, `.com`, webapp, iOS, Android)
 - N09 archive reads bounded (entries, duplicates, sizes, expanded bytes) with hostile-archive tests
 - SEC-AUTH-002 one default-deny authorization layer in front of every control-API route
+- TLS/ACME with the key in keyd: TLS key + CSR + handshake signing in keyd, ACME account signing by request kind, `KeydAcmeIssuer`, `flagship-tlsd` Go frontend as a crypto.Signer, legacy-key takeover and rotation, tlsd unit + appliance check (end to end against a mock CA and real keyd)
 - keyd: out-of-process custody of the box identity, workload and gossip keys (`docs/keyd.md`), opaque stand-ins, unit + migration + install, appliance unit check
 
 ## Open, in order
