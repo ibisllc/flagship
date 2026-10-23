@@ -10547,5 +10547,110 @@
   "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.": {
     "en": "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in. Back up your account key first.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift:231"
+  },
+  "Add / Restore a server": {
+    "en": "Add / Restore a server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:684"
+  },
+  "Scan a code or enter a link": {
+    "en": "Scan a code or enter a link",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ScanOrLinkScreen.swift (title; Settings → Devices row)"
+  },
+  "Scan a Flagship QR code, or paste its link. To join another account, open Settings → Trusted devices → Add a device on a device of that account.": {
+    "en": "Scan a Flagship QR code, or paste its link. To join another account, open Settings → Trusted devices → Add a device on a device of that account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ScanOrLinkScreen.swift"
+  },
+  "That isn't a Flagship code or link. Copy the whole link and try again.": {
+    "en": "That isn't a Flagship code or link. Copy the whole link and try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ScanOrLinkScreen.swift"
+  },
+  "AI API keys": {
+    "en": "AI API keys",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AiKeysScreen.swift (title; Settings row)"
+  },
+  "Default": {
+    "en": "Default",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AiKeysScreen.swift (tag on the AI key used by default)"
+  },
+  "Key settings": {
+    "en": "Key settings",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AiKeysScreen.swift (AI key row menu)"
+  },
+  "Hide key settings": {
+    "en": "Hide key settings",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AiKeysScreen.swift (AI key row menu)"
+  },
+  "Options for %@": {
+    "en": "Options for %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AiKeysScreen.swift (accessibility label of an AI key's menu; %@ is the key's name)"
+  },
+  "The API key for this provider will be deleted from this device.": {
+    "en": "The API key for this provider will be deleted from this device.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AiKeysScreen.swift"
+  },
+  "Single-device account": {
+    "en": "Single-device account",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.": {
+    "en": "Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "Recovery needs a recovery credential, then a 3-day wait. Your other devices are alerted but can't cancel it.": {
+    "en": "Recovery needs a recovery credential, then a 3-day wait. Your other devices are alerted but can't cancel it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "Set up on this device on %@. Keep your recovery codes safe: they're the only way back in if you lose your authenticator app.": {
+    "en": "Set up on this device on %@. Keep your recovery codes safe: they're the only way back in if you lose your authenticator app.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift (%@ is a date)"
+  },
+  "A check outside iCloud Keychain: anyone who steals your iCloud password still needs a live code from your authenticator app to take over your account.": {
+    "en": "A check outside iCloud Keychain: anyone who steals your iCloud password still needs a live code from your authenticator app to take over your account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist.": {
+    "en": "Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.": {
+    "en": "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.": {
+    "en": "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "Only if a device may be lost or stolen. Every other device loses admin and must recover to get it back. This can't be undone.": {
+    "en": "Only if a device may be lost or stolen. Every other device loses admin and must recover to get it back. This can't be undone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift (Rotate admin key confirmation)"
+  },
+  "Your admin key changed. Enter your recovery passphrase so recovery restores the new key, not the old one.": {
+    "en": "Your admin key changed. Enter your recovery passphrase so recovery restores the new key, not the old one.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "You need an authenticator app (1Password, Google Authenticator, Authy…). Scan the QR code or paste the key we show.": {
+    "en": "You need an authenticator app (1Password, Google Authenticator, Authy…). Scan the QR code or paste the key we show.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "Recovery then needs your 6-digit code (or a recovery code) and a 24-hour wait, not 3 days.": {
+    "en": "Recovery then needs your 6-digit code (or a recovery code) and a 24-hour wait, not 3 days.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "Print them or keep them in a password manager. Each works once. If you lose your authenticator, they're the only way back in.": {
+    "en": "Print them or keep them in a password manager. Each works once. If you lose your authenticator, they're the only way back in.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift"
+  },
+  "On by default: unlock each time the app opens or comes back, without retyping your passphrase. Off: it opens straight in. Your servers keep running either way; this only controls who can see and tap.": {
+    "en": "On by default: unlock each time the app opens or comes back, without retyping your passphrase. Off: it opens straight in. Your servers keep running either way; this only controls who can see and tap.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift (Privacy)"
+  },
+  "Off by default. On: Flagship never keeps you signed in; every launch needs your account passphrase, not just a quick unlock. Strongest and slowest.": {
+    "en": "Off by default. On: Flagship never keeps you signed in; every launch needs your account passphrase, not just a quick unlock. Strongest and slowest.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift (Privacy)"
+  },
+  "https://%@/…": {
+    "en": "https://%@/…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ScanOrLinkScreen.swift (field placeholder)",
+    "translatable": false
   }
 }

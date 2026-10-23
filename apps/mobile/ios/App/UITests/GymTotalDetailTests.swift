@@ -412,7 +412,7 @@ final class GymTotalDetailTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 20), "Settings should render.")
         XCTAssertTrue(revealBySwipe(app, aiKeys), "Settings should offer the AI-keys row.")
         aiKeys.tap()
-        XCTAssertTrue(app.navigationBars["AI keys"].waitForExistence(timeout: 15), "The AI-keys manager should open.")
+        XCTAssertTrue(app.navigationBars["AI API keys"].waitForExistence(timeout: 15), "The AI-keys manager should open.")
         let add = app.buttons["ai-key-add"]
         XCTAssertTrue(add.waitForExistence(timeout: 10), "The manager should offer Add-a-key.")
         add.tap()

@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.gym
 
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.semantics.getOrNull
@@ -234,7 +235,7 @@ class GymSettingsTest : GymBase() {
             "settings-remote" to "Or paste its link",
             "settings-companion-requests" to "Companion requests",
             "settings-secured-sessions" to "secured-sessions-title",
-            "settings-process-url" to "process-url-title",
+            "settings-scan-pairing-code" to "scan-or-link-title",
             "settings-cloud-recovery" to "Cloud recovery",
             "settings-backup-key" to "keyfile-export-create",
         )
@@ -250,13 +251,17 @@ class GymSettingsTest : GymBase() {
     }
 
     @Test
-    fun processUrlSubmitsAPastedLink() {
+    fun scanOrLinkOpensAPastedLink() {
         settings()
-        tap("settings-process-url")
-        type("process-url-input", "https://plants.home.bright-maple.flagship.services/__flagship/knock?p=abc")
-        tap("process-url-submit")
+        tap("settings-scan-pairing-code")
+        type("scan-or-link-input", "not a link")
+        tap("scan-or-link-submit")
+        waitText("That isn't a Flagship code or link. Copy the whole link and try again.", 15_000)
+        composeRule.onNode(androidx.compose.ui.test.hasSetTextAction() and (androidx.compose.ui.test.hasTestTag("scan-or-link-input") or androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("scan-or-link-input"))))
+            .performTextReplacement("https://flagshipserver.com/access?server=plants.home.bright-maple.flagship.services&svc=plants&ref=bright-maple--plants&page=abc")
+        tap("scan-or-link-submit")
         composeRule.waitForIdle()
-        gymShot("process-url")
+        gymShot("scan-or-link")
     }
 
     // ─── Two-factor and `.com`'s rate limit ──────────────────────────────────
@@ -331,13 +336,17 @@ class GymSettingsTest : GymBase() {
         // Whichever is the default, the last "Make default" on the page is a saved key's.
         val keys = com.flagshipserver.app.core.AiKeyStore.list().map { it.id }
         val before = com.flagshipserver.app.core.AiKeyStore.activeId()
-        composeRule.onAllNodes(hasText("Make default") and androidx.compose.ui.test.hasClickAction()).onLast()
-            .scrollIfNeeded().performClick()
+        // A saved key is one compact row; Make default and Delete key sit behind its ⋯ button.
+        val target = keys.first { it != before }
+        tap("ai-key-actions-$target")
+        tap("ai-key-make-default-$target")
         eventually(what = "default moved to a key (active ${com.flagshipserver.app.core.AiKeyStore.activeId()}, was $before, keys $keys)") {
             com.flagshipserver.app.core.AiKeyStore.activeId() in keys && com.flagshipserver.app.core.AiKeyStore.activeId() != before
         }
         gymShot("two-keys")
-        tapText("Delete")
+        tap("ai-key-actions-$target")
+        tap("ai-key-delete-$target")
+        tap("ai-key-delete-confirm")
         eventually(what = "deleted") { com.flagshipserver.app.core.AiKeyStore.list().size == 1 }
     }
 
@@ -349,14 +358,14 @@ class GymSettingsTest : GymBase() {
         tap("ai-key-provider-openai")
         type("ai-key-field", "sk-gym-cccccccccccc")
         saveKey()
-        // Flagship Inference starts as the default; make the new key the default, then Flagship Inference again.
-        waitText("Make default", 15_000)
+        // Flagship Inference starts as the default; make the new key the default (from its row's ⋯ menu), then Flagship Inference again.
+        val keyId = com.flagshipserver.app.core.AiKeyStore.list().first().id
+        if (com.flagshipserver.app.core.AiKeyStore.activeId() != keyId) {
+            tap("ai-key-actions-$keyId", 15_000)
+            tap("ai-key-make-default-$keyId")
+        }
         eventually(what = "the key is the default (active ${com.flagshipserver.app.core.AiKeyStore.activeId()})") {
-            if (com.flagshipserver.app.core.AiKeyStore.activeId() == com.flagshipserver.app.core.AiKeyStore.FLAGSHIP_INFERENCE_ID) {
-                composeRule.onAllNodes(hasText("Make default") and androidx.compose.ui.test.hasClickAction()).onLast()
-                    .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
-            }
-            com.flagshipserver.app.core.AiKeyStore.activeId() != com.flagshipserver.app.core.AiKeyStore.FLAGSHIP_INFERENCE_ID
+            com.flagshipserver.app.core.AiKeyStore.activeId() == keyId
         }
         tap("free-ai-make-default", 15_000)
         eventually(what = "Flagship Inference default") { com.flagshipserver.app.core.AiKeyStore.activeId() == com.flagshipserver.app.core.AiKeyStore.FLAGSHIP_INFERENCE_ID }

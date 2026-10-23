@@ -1,4 +1,4 @@
-// Home → "+ Add/Restore server". Three doors: create a server (the existing
+// Home → "Add / Restore a server". Three doors: create a server (the existing
 // create flow), co-manage a server someone else runs (their share link), or
 // restore from a backup, which opens a chooser of sources: a .flagship file
 // (pick it, pick a name, burn or host the new server as usual, and this page
@@ -42,7 +42,13 @@ import { canAddServers, refuseAddServer } from "../lib/addServerGate.js";
 import { describePeerRoot, startPeerRestore, waitForPeerData, rootLines } from "../lib/peerBackup.js";
 
 import { tr, dateLocale } from "../lib/i18n.js";
-export const ADD_IMPORT_LABEL = tr("+ Add/Restore server");
+import { plusIcon } from "../lib/icons.js";
+export const ADD_IMPORT_LABEL = tr("Add / Restore a server");
+
+/** Home's button: a plus, then the label (iOS and Android lead with a plus too). */
+export function addRestoreButtonHtml(cls) {
+  return `<button class="${cls} btn-with-icon" id="home-add-server"><span class="icon" aria-hidden="true">${plusIcon}</span><span>${escapeHtml(ADD_IMPORT_LABEL)}</span></button>`;
+}
 
 function openDialog(label, html) {
   const dlg = document.createElement("dialog");
@@ -63,7 +69,7 @@ export function openAddOrRestore({ onAdd, onCoManage }) {
   const { dlg, close } = openDialog(
     tr("Add or restore a server"),
     `
-    <h3 class="modal-title">${tr("Add/Restore server")}</h3>
+    <h3 class="modal-title">${tr("Add / Restore a server")}</h3>
     <button class="full-width" data-choice-add>${tr("Create a server")}</button>
     <button class="secondary full-width mt-2" data-choice-co-manage>${tr("Co-manage a running server")}</button>
     <button class="secondary full-width mt-2" data-choice-restore>${tr("Restore from backup")}</button>
@@ -180,7 +186,7 @@ async function loadInventory(username) {
 }
 
 /**
- * Home → Add/Restore server → Restore from backup → From a file, or a waiting server's "Send
+ * Home → Add / Restore a server → Restore from backup → From a file, or a waiting server's "Send
  * the backup" (`targetFqdn`). One dialog that walks the whole restore.
  */
 export async function openImportBackup({ targetFqdn = null } = {}) {
@@ -512,7 +518,7 @@ export function lostServerChoices(pods) {
 }
 
 /**
- * Add/Restore server → Restore from backup → From other servers: the lost server's backup
+ * Add / Restore a server → Restore from backup → From other servers: the lost server's backup
  * comes back from the pieces other accounts' servers keep (docs/peer-backup.md
  * §9). Nothing is read from the lost server.
  */
@@ -742,7 +748,7 @@ export async function openRestoreFromPeers() {
     } catch (e) {
       show(el.bar, false);
       if (e?.code === "cancelled") return;
-      status(tr("The server keeps waiting for its backup. Start again from Add/Restore server, or delete the server on Home."));
+      status(tr("The server keeps waiting for its backup. Start again from Add / Restore a server, or delete the server on Home."));
       fail(e);
     }
   }
