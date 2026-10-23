@@ -419,6 +419,12 @@ name = "find-msvc-tools"
 version = "0.1.14"
 checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
  "syn",
+version = "1.10.0"
+checksum = "86e055fa6e3e40ad6187ba25b6855eeb635d5271f8e0f0e1e9a5826b8d75bea0"
+name = "chacha20"
+checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
+version = "0.1.15"
+checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 name = "flagship-boot"
 version = "0.3.0"
 dependencies = [
@@ -508,6 +514,13 @@ dependencies = [
 [[package]]
 name = "flagship-relay"
 version = "0.3.0"
+dependencies = [
+ "futures-util",
+ "rustls",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+]
 
 [[package]]
 name = "flagship-runtime"
@@ -1501,3 +1514,41 @@ checksum = "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e"
 name = "webpki-roots"
 version = "1.0.9"
 checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+name = "futures-core"
+checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
+name = "futures-sink"
+checksum = "1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d"
+name = "futures-task"
+checksum = "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd"
+name = "futures-util"
+checksum = "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc"
+ "futures-core",
+ "futures-sink",
+ "futures-task",
+ "slab",
+version = "0.2.191"
+checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+name = "rand"
+version = "0.10.3"
+checksum = "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
+ "chacha20",
+version = "0.103.16"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
+name = "sha1"
+checksum = "aacc4cc499359472b4abe1bf11d0b12e688af9a805fa5e3016f9a386dc2d0214"
+name = "slab"
+version = "0.4.12"
+checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+version = "3.0.9"
+checksum = "d78c8dee4c7bf0e14673097256fed6142ce9d3b85a408189d07482442145823b"
+name = "tokio-tungstenite"
+version = "0.30.0"
+checksum = "17a073bfed563fa236697a068031408a93cd9522e08abf9933ead3e73411bd71"
+ "futures-util",
+ "tungstenite",
+name = "tungstenite"
+checksum = "e48ac77174b19c110a50ab2128b24215ac9cb40e0e12e093fb602d175c569d22"
+ "rand",
+ "sha1",
+version = "1.0.27"
+checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
