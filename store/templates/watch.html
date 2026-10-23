@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- Store template: a bare watch screen at the store's exact size (Apple Watch 422 x 514, Wear OS 384 x 384).
+     No caption: it would be unreadable at this size (brief §7). Wear OS keeps content inside the circle. -->
+<html lang="en"><head><meta charset="utf-8"><title>Flagship store art: watch</title>
+<link rel="stylesheet" href="store.css"></head>
+<body class="raw">
+<script src="slide.js"></script>
+<script>
+window.layout = (spec, k) => {
+  document.body.className = "raw " + spec.tone;
+  const b = k.el("div", "bleed", document.body);
+  k.screenContent(spec, b, spec.w, { round: spec.device === "wear-os" });
+};
+</script>
+</body></html>

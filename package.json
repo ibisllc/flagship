@@ -46,7 +46,11 @@
     "inference-settings": "node scripts/inference-settings.mjs",
     "ready": "node scripts/release-readiness.mjs",
     "i18n": "node scripts/i18n-check.mjs",
-    "i18n:status": "node scripts/i18n-check.mjs status"
+    "i18n:status": "node scripts/i18n-check.mjs status",
+    "store-assets": "npm run store-assets:capture && npm run store-assets:render",
+    "store-assets:capture": "playwright test --config scripts/store-assets/capture.config.ts",
+    "store-assets:render": "node scripts/store-assets/render.mjs && node scripts/store-assets/render.mjs check",
+    "store-assets:release-check": "node scripts/store-assets/render.mjs check --release"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

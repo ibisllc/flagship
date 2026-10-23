@@ -1,7 +1,7 @@
 # Flagship store assets: creative brief (v2, for owner review before build)
 
-Status: **proposal**. Nothing here is built. The owner approves or edits this brief, then asks for the build
-(README.md in this folder). Every size below must be re-checked against the stores' own pages on build day
+Status: **approved and built** (2026-10-23): `npm run store-assets` renders everything below from captures; see
+README.md in this folder and the revision notes at the end for what the build changed. Every size below must be re-checked against the stores' own pages on build day
 (they change); the build script should fail rather than guess.
 
 ## 1. What we are making
@@ -181,6 +181,9 @@ and renderer 1 day, checks and contact sheets half a day.
 
 ## 10. Draft caption translations (machine drafts for review)
 
+The captions now live in `i18n/store/<lang>.json`, which is the source of truth (several were shortened to fit, see
+the v3 revision notes); this table is the v2 draft, kept for the reviewer's notes below.
+
 | Key | en | es | fr | de | pt-BR | ja | zh-Hans |
 |---|---|---|---|---|---|---|---|
 | slide1 | Your own cloud, at home. | Tu propia nube, en casa. | Votre propre cloud, chez vous. | Deine eigene Cloud, zu Hause. | Sua própria nuvem, em casa. | 自分だけのクラウドを、自宅に | 你自己的云，就在家里 |
@@ -210,3 +213,42 @@ lines on iPhone.
   - Replaced "confirm sizes" with a size table, file naming, a manifest and a build-failing check; flagged items that
     need re-checking on build day.
   - Answered the draft's questions in §4 and §9 and added draft caption translations (§10) for the reviewer.
+* v3 (Claude, 2026-10-23), the build. What changed from v2 while building it:
+  - **Paths.** Config in `store/store.json` (slides, size classes, capture sizes) rather than in code; templates in
+    `store/templates/` (phone, tablet, watch, closing, feature, icon); renderer and checks in
+    `scripts/store-assets/render.mjs`; captions surface `i18n/store/` with `scripts/i18n-store.mjs` in `npm run i18n`.
+    Store language codes are `appStoreId` / `playStoreId` columns in `i18n/locales.json` (§7 asked for that).
+    Output folders use our language code (`store/out/appstore/ja/…`); the store's own code is in the manifest. The
+    feature graphic is `store/out/playstore/<lang>/feature/feature.png`, the icon `store/out/playstore/icon.png`.
+  - **The shelf.** The teal hairline (§3 "Continuity") sits at 95 % of the height on every slide and every device
+    stands on it, so the strip reads as one shelf of objects; the closing card stands the mark on it instead of a
+    device, with `flagshipserver.com` below the line. Captions always start at the same place, so devices line up.
+  - **Slide 1's mark.** The "large and cropped" mark on slide 1 is the app icon's circle, filled teal, behind the
+    phone and cut by both edges; the full mark (square, ring, core) is large and cropped by the right edge on the
+    closing card, and uncropped in the feature graphic (Play crops banners itself). Light slides use the logo's
+    light form, dark slides its dark form (teal square, white core), as `apps/web/public/logo.svg` does.
+  - **Eyebrow.** A short teal rule, the slide number in ink, the theme word in muted mono (uppercased by the
+    template for Latin scripts, as written for CJK), no "·"; the theme words are their own keys (`slideN_theme`).
+  - **Caption size and length.** Captions start at 5 % of the height and shrink in 2 % steps to a floor of 4.5 %
+    (≈ cap height 3.2 %, the thumbnail rule) before the build fails; the closing card allows three lines (no device
+    under it). At that size an iPhone line holds ~17 Latin or ~9 CJK characters, so several §10 drafts were too long
+    and were shortened (es slide 2 and 5, fr 2, 3 and 5, de 3 and 4 (the short form §10 suggested), pt-BR 4, every ja
+    caption got explicit line breaks and ja 1, 2, 3 and 5 new wording that fits 9 characters a line). They remain
+    machine drafts for native review (`i18n/REVIEW.md`).
+  - **CJK fonts.** Noto Sans JP / SC are cut to the caption characters at weight 500 (`scripts/store-assets/subset-cjk.py`,
+    18 KB and 12 KB instead of 9 MB and 17 MB); the check fails when a caption needs a character the cut lacks.
+    The font stack is Geist first, then Noto, so Latin words in a CJK caption ("Flagship") are always Geist.
+  - **iPad.** The iPad app is landscape-only, so the iPad capture is 2752 × 2064 and the template shows a landscape
+    iPad inside the portrait 2064 × 2752 image (the App Store accepts both orientations; portrait keeps the iPad set
+    matching the iPhone set). The template sizes every device from its capture's own aspect ratio.
+  - **Watch slides.** Apple Watch (422 × 514) and Wear OS (384 × 384) images are the bare screen with no caption, two
+    each: `06` (both servers online) and `06b` (cabin waiting). Play phone and tablets also get slide 6 with the
+    round Wear OS watch drawn on the shelf.
+  - **Captures today.** No native capture test exists yet, so `capture-plan.md` specifies them (paths, sizes,
+    simulators, the `store world` seam, per-slide states). Meanwhile the real webapp, run in each language by the
+    mock gym router on `store/demo-world.json`, gives marked **stand-ins** for slides 1-5 (phone and tablet); they say
+    so under the shelf and `npm run store-assets:release-check` refuses them. Slide 6 has no webapp screen and shows
+    the missing-capture frame. The webapp captures are taken at a fixed moment (2026-10-21 09:00 UTC) so dates match
+    between runs; times on the native captures should use the same.
+  - **Demo world.** One file, `store/demo-world.json`, as §5 asked; Chess Club is the members slide's app.
+
