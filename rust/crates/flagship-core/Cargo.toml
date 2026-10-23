@@ -1,0 +1,13 @@
+[package]
+name = "flagship-core"
+description = "Unprivileged controller: durable operation journal, desired state and single-writer reconciliation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

@@ -1,0 +1,13 @@
+[package]
+name = "flagship-keyd"
+description = "Box key custody: the Rust backend for the flagship-keyd v1 contract (packages/keyd)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
