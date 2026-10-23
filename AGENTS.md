@@ -326,6 +326,22 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
+- **Architecture v2 (2026-10-23, branch `feat/architecture` off `release/0.3`, local, not pushed).**
+  Plan: `docs/architecture-v2/IMPLEMENTATION-PLAN.md`; register: `docs/architecture-v2/REGISTER.md`.
+  Built and tested on macOS only (308 Rust tests, `cd rust && cargo test --workspace --locked`; full
+  vitest green): Rust keyd (wire-compatible with `packages/keyd`, peer-cred checks), TLS ingress
+  (drop-in for `flagship-tlsd`, hybrid X25519MLKEM768), broker/runtime/core (privd port + typed
+  capability ops, ExecutionPlan, SQLite journal), boot client (drop-in for `flagship-unseal`), relay
+  codec/SNI/core, GPU allocator + CDI validator, WASI worker, draft hybrid PQ suites
+  (`pq-suites.md`, TS + Rust, unreviewed), manifest schema 2 (`manifestV2.ts`; v1 now refuses
+  host-access fields), strict/compatibility policy (`assurancePolicy.ts`). Nothing is switched on,
+  nothing ran on Linux or real hardware, no external review, no native UX. Live-code findings to
+  fix on their own: the relay crashes on a `null` REQUEST_TRANSFER payload
+  (`apps/web/src/tunnel/tunnelHub.ts:479`); the STK seed sits in plaintext on `/boot`; VM appliance
+  boxes share one LUKS volume key; `sni.ts` drops hellos split across TLS records (details in
+  `evidence-map.md`, `boot-rust.md`, `relay-transport.md`). `rust/deny.toml` lacks aws-lc's OpenSSL
+  licence (ingress dependency), so the CI deny job fails until that is decided.
+
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
   `device-results/windows-2026-10-17`) found these; the fixes are merged:
