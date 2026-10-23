@@ -29,13 +29,27 @@ let package = Package(
         .library(name: "FlagshipCore", targets: ["FlagshipCore"])
     ],
     targets: [
+        // CFlagshipPQ — software ML-DSA-65 / ML-KEM-768 (vendored mldsa-native + mlkem-native,
+        // see Sources/CFlagshipPQ/vendor/VENDORED.md), SHA3/SHAKE and the Ed25519 strict-point
+        // check behind the architecture-v2 hybrid suites. CryptoKit's PQ types need iOS 26.
+        .target(
+            name: "CFlagshipPQ",
+            path: "Sources/CFlagshipPQ",
+            exclude: ["vendor"],
+            sources: ["pq_mldsa.c", "pq_mlkem.c", "pq_ed25519.c"],
+            publicHeadersPath: "include",
+            cSettings: [
+                .headerSearchPath("vendor/mldsa"),
+                .headerSearchPath("vendor/mlkem")
+            ]
+        ),
         .target(
             name: "FlagshipAPI",
             path: "Sources/FlagshipAPI"
         ),
         .target(
             name: "FlagshipCore",
-            dependencies: ["FlagshipAPI"],
+            dependencies: ["FlagshipAPI", "CFlagshipPQ"],
             path: "Sources/FlagshipCore"
         ),
         .testTarget(
