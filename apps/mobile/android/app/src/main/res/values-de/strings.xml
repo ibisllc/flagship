@@ -504,7 +504,7 @@
     <string name="your_watch_is_waiting_to_approve">Deine Uhr wartet darauf, den Start eines Servers zu genehmigen. Entsperre und tippe auf der Uhr noch einmal auf „Genehmigen“.</string>
     <string name="s_start_up">Start von %1$s</string>
     <string name="your_watch_asked_to_approve_unlock">Deine Uhr wollte %1$s genehmigen. Entsperre Flagship einmal, damit sie das kann, und tippe auf der Uhr noch einmal auf „Genehmigen“.</string>
-    <string name="turn_on_quick_approve_from_watch">Schalte zuerst „Schnell genehmigen per Uhr“ in Flagship auf deinem Telefon ein.</string>
+    <string name="turn_on_quick_approve_from_watch">Schalte zuerst „Per Uhr genehmigen“ in Flagship auf deinem Telefon ein.</string>
     <string name="unlock_flagship_on_your_phone_once">Entsperre Flagship einmal auf deinem Telefon und genehmige dann erneut.</string>
     <string name="open_flagship_on_your_phone_and">Öffne Flagship auf deinem Telefon, entsperre es einmal und genehmige dann erneut.</string>
     <string name="sign_in_to_flagship_on_your">Melde dich zuerst auf deinem Telefon bei Flagship an.</string>
@@ -2006,7 +2006,7 @@
     <string name="assistant">Assistent</string>
     <string name="build_logs">Build-Protokolle</string>
     <string name="interrupt_with_a_follow_up">Mit einer Nachfrage unterbrechen</string>
-    <string name="quick_approve_from_watch">Schnell genehmigen per Uhr</string>
+    <string name="quick_approve_from_watch">Per Uhr genehmigen</string>
     <string name="approve_a_server_boot_from_your">Genehmige den Start eines Servers von deiner Wear-OS-Uhr, solange Flagship auf diesem Telefon entsperrt ist. Andere Aktionen (Server widerrufen, Löschen und Neustart, Gerät ersetzen) brauchen immer dein Telefon. Standardmäßig aus.</string>
     <string name="active_renews_by">Aktiv – wird bis %1$s erneuert</string>
     <string name="your_stuff_on">Deine Sachen,\nauf\u0020</string>
@@ -2031,7 +2031,7 @@
     <string name="tap_below_to_unlock">Tippe unten zum Entsperren.</string>
     <string name="this_erases_this_devices_account_key_3">Dadurch werden der Kontoschlüssel und die Daten dieses Geräts gelöscht, sodass nichts Sensibles gespeichert bleibt. Dein Konto und deine Server bleiben unberührt; melde dich mit deinem Wiederherstellungs-Passkey wieder an, und derselbe Schlüssel wird ohne erneutes Koppeln wiederhergestellt.</string>
     <string name="let_your_watch_approve">Lass deine Uhr genehmigen</string>
-    <string name="unlock_flagship_once_so_quick_approve">Entsperre Flagship einmal, damit „Schnell genehmigen“ signieren kann</string>
+    <string name="unlock_flagship_once_so_quick_approve">Entsperre Flagship einmal, damit „Per Uhr genehmigen“ signieren kann</string>
     <string name="show_your_servers">Deine Server anzeigen</string>
     <string name="confirm_its_you_to_load_your">Bestätige, dass du es bist, um deine Server zu laden</string>
     <string name="web_browser">Webbrowser</string>
