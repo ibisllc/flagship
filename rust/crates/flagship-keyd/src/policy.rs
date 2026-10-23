@@ -51,7 +51,11 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
 ];
 
 /// `SWK_HKDF_LABELS`: the only workload-key derivations keyd hands out (both unsalted).
-pub const SWK_HKDF_LABELS: &[&str] = &["flagship.pb-manifest.v1", "flagship/peer-backup-key/v1"];
+pub const SWK_HKDF_LABELS: &[&str] = &[
+    "flagship.pb-manifest.v1",
+    "flagship/peer-backup-key/v1",
+    "flagship/reissue-journal-key/v1",
+];
 
 /// `UNSEAL_PURPOSES`: the sealed messages keyd opens and returns.
 pub const UNSEAL_PURPOSES: &[&str] = &["pairing-order"];

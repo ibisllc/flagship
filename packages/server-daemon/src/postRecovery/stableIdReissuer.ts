@@ -31,6 +31,7 @@
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { hkdfFromSwk } from "@flagship/protocol";
 import type { ServicePlatform } from "../servicePlatform.js";
 import type { AppMembership } from "../membership.js";
 
@@ -302,10 +303,12 @@ export async function readJournalDecrypted(
 // Crypto helpers — AES-GCM with a per-recovery salt-derived key.
 // ──────────────────────────────────────────────────────────────────────
 
+// The workload key may be held by keyd (an opaque stand-in that throws when read), so the
+// journal key comes from a keyd-derived subkey rather than from the key bytes.
 function deriveJournalKey(swk: Uint8Array, salt: Uint8Array): Uint8Array {
   const h = createHash("sha256");
   h.update(TAG);
-  h.update(swk);
+  h.update(hkdfFromSwk(swk, new Uint8Array(0), "flagship/reissue-journal-key/v1"));
   h.update(salt);
   return new Uint8Array(h.digest());
 }

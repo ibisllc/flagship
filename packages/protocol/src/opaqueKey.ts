@@ -72,6 +72,7 @@ export function isOpaqueKey(key: unknown): boolean {
 export const SWK_DERIVE_LABELS: ReadonlySet<string> = new Set([
   "flagship.pb-manifest.v1",
   "flagship/peer-backup-key/v1",
+  "flagship/reissue-journal-key/v1",
 ]);
 
 export interface OpaqueSecretOps {
