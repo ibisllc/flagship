@@ -119,7 +119,7 @@ final class ServerTransferOfferVerifyTests: XCTestCase {
     func testParsedPastedTransferLinkResolves() {
         let qr = makeOffer()
         let link = try! ServerTransferFlow.transferUniversalLink(qr)
-        // Settings → Process URL funnels a pasted link through the same parser.
+        // Settings → Scan a code or enter a link funnels a pasted link through the same parser.
         guard case .transferOffer = DeepLink.parsePastedString("  \(link)  ") else {
             return XCTFail("pasted transfer link should resolve to .transferOffer")
         }

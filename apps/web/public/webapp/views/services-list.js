@@ -22,6 +22,7 @@ import { appServerState, appStatusPillHtml, combineAppStatus, leaderOf, mergeApp
 import { accountReadFetch } from "../lib/accountRead.js";
 
 import { tr } from "../lib/i18n.js";
+import { noServerCardHtml } from "../lib/noServerCard.js";
 const COM_BASE = controlApex();
 
 registerView("view-services-list");
@@ -259,11 +260,22 @@ export async function renderServicesList() {
   // current fleet (parity with iOS keeping `vm.availablePods` synced from
   // AppState.pods). Best-effort + non-blocking: a failure leaves the switcher
   // hidden, never blocks the apps list.
+  let inventoryOk = false;
   try {
     const { statusByDomain } = await fetchPodInventory(username);
     podSwitcherPods = [...statusByDomain.values()];
+    inventoryOk = true;
   } catch {
     podSwitcherPods = [];
+  }
+  // No server yet: services run on your own box, so there is nothing to load.
+  if (inventoryOk && podSwitcherPods.length === 0) {
+    appEntries = [];
+    root.innerHTML = `
+      <div class="fs-hero-compact" data-apps-compact aria-hidden="true">${tr("Services")}</div>
+      <div class="fs-hero"><h2 class="fs-hero-title" data-apps-title>${tr("Services")}</h2></div>
+      ${noServerCardHtml()}`;
+    return;
   }
   try {
     // "All servers" (no active-pod scope, getPodBaseUrl() === "") aggregates

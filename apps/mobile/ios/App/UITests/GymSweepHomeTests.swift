@@ -79,7 +79,7 @@ final class GymSweepHomeTests: GymSweepCase {
         let app = launch(admin: true, ["-smoke-import-archive", "-smoke-phone-copies"])
         let add = app.buttons["home-add-server"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
-        XCTAssertEqual(add.label, "Add/Restore server")
+        XCTAssertEqual(add.label, "Add / Restore a server")
         add.tap()
         XCTAssertTrue(app.buttons.matching(identifier: "home-add-new-server").firstMatch.waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons.matching(identifier: "home-add-new-server").firstMatch.label, "Create a server")

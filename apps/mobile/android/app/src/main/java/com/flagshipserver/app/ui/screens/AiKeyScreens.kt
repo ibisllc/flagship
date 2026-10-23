@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
@@ -462,43 +466,14 @@ fun AiKeysManagerScreen(
             FSNote(stringResource(R.string.no_keys_saved_yet))
         } else {
             keys.forEach { row ->
-                val isActive = row.id == activeId
-                FSCard {
-                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(row.maskedSlug, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                                Text(
-                                    AiRelay.caption(row.relay),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                if (isActive) {
-                                    Text(
-                                        stringResource(R.string.default_for_new_builds),
-                                        color = FS.colors.accentText,
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                            }
-                            FSDangerButton(label = stringResource(R.string.delete_2), onClick = { vm.delete(row.id) })
-                        }
-                        RelayToggleRow(
-                            checked = row.relay,
-                            onCheckedChange = { vm.setRelay(row.id, it) },
-                            tag = "ai-key-relay-${row.id}",
-                        )
-                        DefaultModelRow(row.id, remember(row.id) { vm.credentialFor(row.id) })
-                        // "Make default" on every non-active row — mirrors iOS's
-                        // AiKeysScreen + the webapp providers manager.
-                        if (!isActive) {
-                            FSSecondaryButton(
-                                label = stringResource(R.string.make_default),
-                                onClick = { vm.setActive(row.id) },
-                            )
-                        }
-                    }
-                }
+                SavedAiKeyRow(
+                    row = row,
+                    isDefault = row.id == activeId,
+                    onMakeDefault = { vm.setActive(row.id) },
+                    onRelayChange = { vm.setRelay(row.id, it) },
+                    onDelete = { vm.delete(row.id) },
+                    defaultModel = { DefaultModelRow(row.id, remember(row.id) { vm.credentialFor(row.id) }) },
+                )
             }
         }
 
@@ -521,6 +496,121 @@ fun AiKeysManagerScreen(
             )
         }
     }
+}
+
+/**
+ * One saved key as a compact row: a key icon, its name, the masked key, a
+ * "Default" tag and a ⋯ menu (make default, key settings, delete). Key
+ * settings opens the relay switch and the default model under the row.
+ * MIRRORS iOS `SavedAiKeyRow` and the webapp's `key-row`.
+ */
+@Composable
+private fun SavedAiKeyRow(
+    row: SavedKeyRow,
+    isDefault: Boolean,
+    onMakeDefault: () -> Unit,
+    onRelayChange: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+    defaultModel: @Composable () -> Unit,
+) {
+    var menuOpen by remember(row.id) { mutableStateOf(false) }
+    var expanded by remember(row.id) { mutableStateOf(false) }
+    var confirmDelete by remember(row.id) { mutableStateOf(false) }
+    val name = savedKeyName(row)
+    FSCard(
+        modifier = Modifier.testTag("ai-key-row-${row.id}"),
+        padding = androidx.compose.foundation.layout.PaddingValues(start = FS.space.s4, end = FS.space.s1, top = FS.space.s1, bottom = FS.space.s1),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+            modifier = Modifier.heightIn(min = 52.dp),
+        ) {
+            Icon(
+                androidx.compose.material.icons.Icons.Outlined.Key,
+                contentDescription = null,
+                tint = FS.colors.accent,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(
+                    row.maskedKey,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    maxLines = 1,
+                )
+            }
+            if (isDefault) {
+                Text(
+                    stringResource(R.string.default_tag),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .testTag("ai-key-default-tag")
+                        .border(1.dp, FS.colors.accent, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            androidx.compose.foundation.layout.Box {
+                IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("ai-key-actions-${row.id}")) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Outlined.MoreVert,
+                        contentDescription = fsString(R.string.options_for, name),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                com.flagshipserver.app.ui.components.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (!isDefault) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(stringResource(R.string.make_default)) },
+                            onClick = { menuOpen = false; onMakeDefault() },
+                            modifier = Modifier.testTag("ai-key-make-default-${row.id}"),
+                        )
+                    }
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(if (expanded) stringResource(R.string.hide_key_settings) else stringResource(R.string.key_settings)) },
+                        onClick = { menuOpen = false; expanded = !expanded },
+                        modifier = Modifier.testTag("ai-key-settings-${row.id}"),
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(stringResource(R.string.delete_key), color = MaterialTheme.colorScheme.error) },
+                        onClick = { menuOpen = false; confirmDelete = true },
+                        modifier = Modifier.testTag("ai-key-delete-${row.id}"),
+                    )
+                }
+            }
+        }
+        if (expanded) {
+            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Column(
+                Modifier.padding(top = FS.space.s3, bottom = FS.space.s3, end = FS.space.s3),
+                verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+            ) {
+                RelayToggleRow(checked = row.relay, onCheckedChange = onRelayChange, tag = "ai-key-relay-${row.id}")
+                defaultModel()
+            }
+        }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(AiKeyStep.DELETE_TITLE) },
+            text = { Text(AiKeyStep.deleteMessage(name)) },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete() }, modifier = Modifier.testTag("ai-key-delete-confirm")) {
+                    Text(stringResource(R.string.delete_key), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+}
+
+/** A saved key's name in its row: its label, with the provider when the label doesn't already say it. */
+internal fun savedKeyName(row: SavedKeyRow): String {
+    val label = row.label.trim()
+    val provider = row.provider.trim().replaceFirstChar { it.titlecase() }
+    return if (label.isEmpty() || label.equals(row.provider.trim(), ignoreCase = true)) provider else "$label · $provider"
 }
 
 /**

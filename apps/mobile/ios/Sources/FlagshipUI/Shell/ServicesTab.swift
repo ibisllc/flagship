@@ -305,13 +305,7 @@ public struct ServicesTab: View {
             // No server yet — services run on your own box, so there's
             // nothing to load. Guide to add one rather than surfacing a
             // "not paired" error.
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s3) {
-                    Text("Add a server first").font(FS.font.h3()).foregroundColor(c.text)
-                    Text("Services run on your own server. Add one to start building.")
-                        .font(FS.font.body()).foregroundColor(c.textMuted)
-                }
-            }
+            NoServerYetCard()
         } else {
             switch vm.state {
         case .idle, .loading:
@@ -1106,3 +1100,20 @@ struct ServiceAccessContainer: View {
     }
 }
 
+
+/// "Add a server first": Services and Activity while the account has no
+/// server. MIRRORS Android `NoServerYetState` and the webapp `noServerCardHtml`.
+struct NoServerYetCard: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                Text("Add a server first").font(FS.font.h3()).foregroundColor(c.text)
+                Text("Services run on your own server. Add one to start building.")
+                    .font(FS.font.body()).foregroundColor(c.textMuted)
+            }
+        }
+    }
+}

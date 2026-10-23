@@ -97908,6 +97908,1031 @@
           }
         }
       }
+    },
+    "Add / Restore a server": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir / restaurar un servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter / restaurer un serveur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server hinzufügen / wiederherstellen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar / restaurar um servidor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーを追加 / 復元"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加 / 恢复服务器"
+          }
+        }
+      }
+    },
+    "Scan a code or enter a link": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanear un código o introducir un enlace"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanner un code ou saisir un lien"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code scannen oder Link eingeben"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanear um código ou inserir um link"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コードをスキャンまたはリンクを入力"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描代码或输入链接"
+          }
+        }
+      }
+    },
+    "Scan a Flagship QR code, or paste its link. To join another account, open Settings → Trusted devices → Add a device on a device of that account.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanea un código QR de Flagship o pega su enlace. Para unirte a otra cuenta, abre Ajustes → Dispositivos de confianza → Añadir un dispositivo en un dispositivo de esa cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scannez un code QR Flagship ou collez son lien. Pour rejoindre un autre compte, ouvrez Réglages → Appareils de confiance → Ajouter un appareil sur un appareil de ce compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanne einen Flagship-QR-Code oder füge seinen Link ein. Um einem anderen Konto beizutreten, öffne auf einem Gerät dieses Kontos Einstellungen → Vertrauenswürdige Geräte → Gerät hinzufügen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escaneie um código QR do Flagship ou cole o link dele. Para entrar em outra conta, abra Ajustes → Dispositivos confiáveis → Adicionar um dispositivo em um dispositivo dessa conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship の QR コードをスキャンするか、そのリンクを貼り付けてください。別のアカウントに参加するには、そのアカウントのデバイスで 設定 → 信頼済みデバイス → デバイスを追加 を開きます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描 Flagship 二维码，或粘贴它的链接。要加入另一个账户，请在该账户的设备上打开 设置 → 受信任的设备 → 添加设备。"
+          }
+        }
+      }
+    },
+    "That isn't a Flagship code or link. Copy the whole link and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eso no es un código ni un enlace de Flagship. Copia el enlace completo e inténtalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce n’est pas un code ni un lien Flagship. Copiez le lien en entier et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das ist kein Flagship-Code oder -Link. Kopiere den ganzen Link und versuche es noch einmal."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Isso não é um código nem um link do Flagship. Copie o link inteiro e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship のコードまたはリンクではありません。リンク全体をコピーして、もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这不是 Flagship 代码或链接。请复制完整的链接后重试。"
+          }
+        }
+      }
+    },
+    "AI API keys": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claves de API de IA"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clés d’API d’IA"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI-API-Schlüssel"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaves de API de IA"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI API キー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI API 密钥"
+          }
+        }
+      }
+    },
+    "Default": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Par défaut"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Padrão"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デフォルト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认"
+          }
+        }
+      }
+    },
+    "Key settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustes de la clave"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglages de la clé"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schlüsseleinstellungen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustes da chave"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キーの設定"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "密钥设置"
+          }
+        }
+      }
+    },
+    "Hide key settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar ajustes de la clave"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer les réglages de la clé"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schlüsseleinstellungen ausblenden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar ajustes da chave"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キーの設定を隠す"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐藏密钥设置"
+          }
+        }
+      }
+    },
+    "Options for %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opciones de %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options de %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optionen für %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opções de %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ のオプション"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 的选项"
+          }
+        }
+      }
+    },
+    "The API key for this provider will be deleted from this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clave de API de este proveedor se eliminará de este dispositivo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clé d’API de ce fournisseur sera supprimée de cet appareil."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der API-Schlüssel dieses Anbieters wird von diesem Gerät gelöscht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A chave de API deste provedor será excluída deste dispositivo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このプロバイダの API キーは、このデバイスから削除されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此提供商的 API 密钥将从此设备中删除。"
+          }
+        }
+      }
+    },
+    "Single-device account": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuenta de un solo dispositivo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compte à un seul appareil"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto mit einem Gerät"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conta de um único dispositivo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "単一デバイスのアカウント"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "单设备账户"
+          }
+        }
+      }
+    },
+    "Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La recuperación requiere un código de 6 dígitos del autenticador (o un código de recuperación) y una espera de 24 horas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La récupération nécessite un code à 6 chiffres de l’authentificateur (ou un code de récupération) et 24 heures d’attente."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für die Wiederherstellung brauchst du einen 6-stelligen Authenticator-Code (oder einen Wiederherstellungscode) und 24 Stunden Wartezeit."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recuperação exige um código de 6 dígitos do autenticador (ou um código de recuperação) e uma espera de 24 horas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リカバリーには、認証アプリの 6 桁コード（またはリカバリーコード）と 24 時間の待機が必要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复需要验证器的 6 位代码（或恢复代码），并等待 24 小时。"
+          }
+        }
+      }
+    },
+    "Recovery needs a recovery credential, then a 3-day wait. Your other devices are alerted but can't cancel it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La recuperación requiere una credencial de recuperación y luego una espera de 3 días. Tus otros dispositivos reciben un aviso, pero no pueden cancelarla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La récupération nécessite un justificatif de récupération, puis 3 jours d’attente. Vos autres appareils sont alertés, mais ne peuvent pas l’annuler."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für die Wiederherstellung brauchst du einen Wiederherstellungsnachweis, danach 3 Tage Wartezeit. Deine anderen Geräte werden benachrichtigt, können sie aber nicht abbrechen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recuperação exige uma credencial de recuperação e depois uma espera de 3 dias. Seus outros dispositivos são alertados, mas não podem cancelá-la."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リカバリーにはリカバリー用の認証情報と、その後 3 日間の待機が必要です。他のデバイスに通知されますが、キャンセルはできません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复需要恢复凭证，然后等待 3 天。你的其他设备会收到提醒，但无法取消。"
+          }
+        }
+      }
+    },
+    "Set up on this device on %@. Keep your recovery codes safe: they're the only way back in if you lose your authenticator app.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurado en este dispositivo el %@. Guarda bien tus códigos de recuperación: son la única forma de volver a entrar si pierdes tu app de autenticación."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configuré sur cet appareil le %@. Gardez vos codes de récupération en lieu sûr : c’est le seul moyen de revenir si vous perdez votre application d’authentification."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf diesem Gerät eingerichtet am %@. Bewahre deine Wiederherstellungscodes sicher auf: Sie sind der einzige Weg zurück, wenn du deine Authenticator-App verlierst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurado neste dispositivo em %@. Guarde seus códigos de recuperação em local seguro: eles são a única forma de voltar se você perder seu app autenticador."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ にこのデバイスで設定しました。リカバリーコードは安全に保管してください。認証アプリを失ったとき、再びサインインできる唯一の手段です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已于 %@ 在此设备上设置。请妥善保管恢复代码：如果你丢失了验证器应用，它们是重新登录的唯一途径。"
+          }
+        }
+      }
+    },
+    "A check outside iCloud Keychain: anyone who steals your iCloud password still needs a live code from your authenticator app to take over your account.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una comprobación fuera del Llavero de iCloud: quien robe tu contraseña de iCloud aún necesitará un código vigente de tu app de autenticación para hacerse con tu cuenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une vérification en dehors du trousseau iCloud : quiconque vole votre mot de passe iCloud aura encore besoin d’un code valide de votre application d’authentification pour prendre le contrôle de votre compte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Prüfung außerhalb des iCloud-Schlüsselbunds: Wer dein iCloud-Passwort stiehlt, braucht trotzdem einen aktuellen Code aus deiner Authenticator-App, um dein Konto zu übernehmen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma verificação fora das Chaves do iCloud: quem roubar sua senha do iCloud ainda precisará de um código válido do seu app autenticador para tomar sua conta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud キーチェーンの外にある確認です。iCloud のパスワードを盗まれても、アカウントを乗っ取るには認証アプリの有効なコードが必要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一道独立于 iCloud 钥匙串之外的检查：即使有人盗取了你的 iCloud 密码，仍需要验证器应用中的实时代码才能接管你的账户。"
+          }
+        }
+      }
+    },
+    "Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina tu autenticador y tus códigos de recuperación. La cuenta vuelve a ser de un solo dispositivo, con una espera de recuperación de 3 días. Se rechaza mientras haya otros dispositivos de confianza."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprime votre authentificateur et vos codes de récupération. Le compte redevient à un seul appareil, avec 3 jours d’attente pour la récupération. Refusé tant que d’autres appareils de confiance existent."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernt deinen Authenticator und deine Wiederherstellungscodes. Das Konto wird wieder ein Konto mit einem Gerät und 3 Tagen Wartezeit für die Wiederherstellung. Abgelehnt, solange andere vertrauenswürdige Geräte existieren."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove seu autenticador e seus códigos de recuperação. A conta volta a ser de um único dispositivo, com espera de 3 dias para recuperação. Recusado enquanto houver outros dispositivos confiáveis."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "認証アプリとリカバリーコードを削除します。アカウントは単一デバイスに戻り、リカバリーの待機は 3 日になります。他に信頼済みデバイスがある間は拒否されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除你的验证器和恢复代码。账户将恢复为单设备，恢复需等待 3 天。存在其他受信任设备时会被拒绝。"
+          }
+        }
+      }
+    },
+    "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprueba los arranques de servidores en tu Apple Watch mientras Flagship está desbloqueado en este iPhone. Todo lo demás (revocar un servidor, borrar y reiniciar, reemplazar un dispositivo) sigue requiriendo el iPhone. Desactivado de forma predeterminada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuvez les démarrages de serveurs sur votre Apple Watch tant que Flagship est déverrouillé sur cet iPhone. Tout le reste (révoquer un serveur, effacer et redémarrer, remplacer un appareil) nécessite toujours l’iPhone. Désactivé par défaut."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genehmige Serverstarts auf deiner Apple Watch, solange Flagship auf diesem iPhone entsperrt ist. Alles andere (Server widerrufen, löschen und neu starten, Gerät ersetzen) braucht weiterhin das iPhone. Standardmäßig aus."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprove inicializações de servidores no seu Apple Watch enquanto o Flagship está desbloqueado neste iPhone. Todo o resto (revogar um servidor, apagar e reiniciar, substituir um dispositivo) ainda exige o iPhone. Desativado por padrão."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この iPhone で Flagship のロックが解除されている間、Apple Watch でサーバーの起動を承認できます。それ以外（サーバーの取り消し、消去して再起動、デバイスの交換）は引き続き iPhone が必要です。既定ではオフです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当 Flagship 在此 iPhone 上处于解锁状态时，可在 Apple Watch 上批准服务器启动。其他操作（撤销服务器、擦除并重启、更换设备）仍需 iPhone。默认关闭。"
+          }
+        }
+      }
+    },
+    "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea una nueva clave de administrador y quita el rol de administrador a todos los demás dispositivos. Siguen con la sesión iniciada como miembros, pero no pueden borrar, transferir ni retirar tus servidores hasta que se recuperen. Úsalo si pierdes o te roban un dispositivo, o para dejar fuera a otro administrador. Los servidores cambian en su próxima comprobación."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crée une nouvelle clé d’administrateur et retire le rôle d’administrateur à tous les autres appareils. Ils restent connectés en tant que membres, mais ne peuvent ni effacer, ni transférer, ni mettre hors service vos serveurs avant leur récupération. À utiliser si un appareil est perdu ou volé, ou pour écarter un autre administrateur. Les serveurs basculent à leur prochaine vérification."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstellt einen neuen Admin-Schlüssel und entzieht allen anderen Geräten die Administratorrechte. Sie bleiben als Mitglieder angemeldet, können deine Server aber erst nach einer Wiederherstellung wieder löschen, übertragen oder außer Betrieb nehmen. Nutze das, wenn ein Gerät verloren oder gestohlen ist, oder um einen anderen Administrator auszuschließen. Die Server wechseln bei ihrer nächsten Rückmeldung."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cria uma nova chave de administrador e remove o administrador de todos os outros dispositivos. Eles continuam conectados como membros, mas não podem apagar, transferir nem desativar seus servidores até se recuperarem. Use se um dispositivo for perdido ou roubado, ou para excluir outro administrador. Os servidores mudam no próximo contato."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しい管理者キーを作成し、他のすべてのデバイスから管理者権限を外します。それらはメンバーとしてサインインしたままですが、リカバリーするまでサーバーの消去・移管・廃止はできません。デバイスの紛失・盗難時や、他の管理者を外したいときに使います。サーバーは次回のチェックインで切り替わります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生成新的管理员密钥，并移除其他所有设备的管理员权限。它们仍以成员身份保持登录，但在恢复之前无法擦除、转移或停用你的服务器。设备丢失或被盗，或要撤下另一位管理员时使用。服务器会在下次签到时切换。"
+          }
+        }
+      }
+    },
+    "Only if a device may be lost or stolen. Every other device loses admin and must recover to get it back. This can't be undone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo si un dispositivo puede haberse perdido o haber sido robado. Todos los demás dispositivos pierden el rol de administrador y deben recuperarse para volver a tenerlo. No se puede deshacer."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uniquement si un appareil a pu être perdu ou volé. Tous les autres appareils perdent le rôle d’administrateur et doivent passer par la récupération pour le retrouver. Action irréversible."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur wenn ein Gerät verloren oder gestohlen sein könnte. Alle anderen Geräte verlieren die Administratorrechte und müssen sie per Wiederherstellung zurückholen. Das lässt sich nicht rückgängig machen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só se um dispositivo puder ter sido perdido ou roubado. Todos os outros dispositivos perdem o administrador e precisam se recuperar para tê-lo de volta. Não dá para desfazer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デバイスを紛失した、または盗まれたおそれがある場合のみ使用してください。他のすべてのデバイスは管理者権限を失い、取り戻すにはリカバリーが必要です。元に戻せません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅在设备可能丢失或被盗时使用。其他所有设备都会失去管理员权限，需通过恢复才能重新获得。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "Your admin key changed. Enter your recovery passphrase so recovery restores the new key, not the old one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu clave de administrador cambió. Introduce tu frase de contraseña de recuperación para que la recuperación restaure la clave nueva y no la antigua."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre clé d’administrateur a changé. Saisissez votre phrase secrète de récupération pour que la récupération restaure la nouvelle clé, et non l’ancienne."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Admin-Schlüssel hat sich geändert. Gib deine Wiederherstellungs-Passphrase ein, damit die Wiederherstellung den neuen Schlüssel zurückholt, nicht den alten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sua chave de administrador mudou. Digite sua frase secreta de recuperação para que a recuperação restaure a chave nova, não a antiga."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理者キーが変わりました。リカバリーで古いキーではなく新しいキーが復元されるよう、リカバリー用パスフレーズを入力してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的管理员密钥已更改。请输入恢复密码短语，让恢复还原新密钥而非旧密钥。"
+          }
+        }
+      }
+    },
+    "You need an authenticator app (1Password, Google Authenticator, Authy…). Scan the QR code or paste the key we show.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Necesitas una app de autenticación (1Password, Google Authenticator, Authy…). Escanea el código QR o pega la clave que mostramos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il vous faut une application d’authentification (1Password, Google Authenticator, Authy…). Scannez le code QR ou collez la clé affichée."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du brauchst eine Authenticator-App (1Password, Google Authenticator, Authy …). Scanne den QR-Code oder füge den angezeigten Schlüssel ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você precisa de um app autenticador (1Password, Google Authenticator, Authy…). Escaneie o código QR ou cole a chave que mostramos."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "認証アプリ（1Password、Google Authenticator、Authy など）が必要です。表示される QR コードをスキャンするか、キーを貼り付けてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你需要一个验证器应用（1Password、Google Authenticator、Authy 等）。扫描我们显示的二维码，或粘贴密钥。"
+          }
+        }
+      }
+    },
+    "Recovery then needs your 6-digit code (or a recovery code) and a 24-hour wait, not 3 days.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Después, la recuperación requiere tu código de 6 dígitos (o un código de recuperación) y una espera de 24 horas, no de 3 días."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La récupération nécessite alors votre code à 6 chiffres (ou un code de récupération) et 24 heures d’attente, au lieu de 3 jours."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Wiederherstellung braucht dann deinen 6-stelligen Code (oder einen Wiederherstellungscode) und 24 Stunden Wartezeit statt 3 Tagen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depois, a recuperação exige seu código de 6 dígitos (ou um código de recuperação) e uma espera de 24 horas, não de 3 dias."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以後のリカバリーには、6 桁のコード（またはリカバリーコード）と、3 日ではなく 24 時間の待機が必要になります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "之后恢复需要你的 6 位代码（或恢复代码），并等待 24 小时，而不是 3 天。"
+          }
+        }
+      }
+    },
+    "Print them or keep them in a password manager. Each works once. If you lose your authenticator, they're the only way back in.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imprímelos o guárdalos en un gestor de contraseñas. Cada uno sirve una vez. Si pierdes tu autenticador, son la única forma de volver a entrar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imprimez-les ou conservez-les dans un gestionnaire de mots de passe. Chacun ne sert qu’une fois. Si vous perdez votre authentificateur, ce sont le seul moyen de revenir."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drucke sie aus oder speichere sie in einem Passwortmanager. Jeder funktioniert einmal. Wenn du deinen Authenticator verlierst, sind sie der einzige Weg zurück."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imprima-os ou guarde-os em um gerenciador de senhas. Cada um funciona uma vez. Se você perder seu autenticador, eles são a única forma de voltar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "印刷するか、パスワードマネージャーに保管してください。各コードは 1 回だけ使えます。認証アプリを失ったとき、再びサインインできる唯一の手段です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请打印它们，或存放在密码管理器中。每个代码只能使用一次。如果你丢失了验证器，它们是重新登录的唯一途径。"
+          }
+        }
+      }
+    },
+    "On by default: unlock each time the app opens or comes back, without retyping your passphrase. Off: it opens straight in. Your servers keep running either way; this only controls who can see and tap.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activado de forma predeterminada: desbloquea cada vez que la app se abre o vuelve, sin volver a escribir tu frase de contraseña. Desactivado: se abre directamente. Tus servidores siguen funcionando en ambos casos; esto solo controla quién puede ver y tocar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activé par défaut : déverrouillez à chaque ouverture ou retour dans l’app, sans retaper votre phrase secrète. Désactivé : l’app s’ouvre directement. Vos serveurs continuent de tourner dans les deux cas ; ce réglage contrôle seulement qui peut voir et toucher."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardmäßig an: Entsperre jedes Mal, wenn die App geöffnet wird oder zurückkehrt, ohne deine Passphrase erneut einzugeben. Aus: Sie öffnet sich direkt. Deine Server laufen in beiden Fällen weiter; das regelt nur, wer sehen und tippen kann."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ativado por padrão: desbloqueie sempre que o app abrir ou voltar, sem redigitar sua frase secreta. Desativado: ele abre direto. Seus servidores continuam rodando de qualquer forma; isso só controla quem pode ver e tocar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既定でオン：アプリを開くたび、または戻るたびにロック解除します。パスフレーズを入力し直す必要はありません。オフ：そのまま開きます。どちらの場合もサーバーは動き続けます。この設定は、誰が画面を見て操作できるかだけを制御します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认开启：每次打开或返回应用时都需解锁，无需重新输入密码短语。关闭：直接打开。无论哪种方式，你的服务器都会继续运行；这只控制谁能查看和操作。"
+          }
+        }
+      }
+    },
+    "Off by default. On: Flagship never keeps you signed in; every launch needs your account passphrase, not just a quick unlock. Strongest and slowest.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desactivado de forma predeterminada. Activado: Flagship nunca mantiene tu sesión iniciada; cada inicio requiere la frase de contraseña de tu cuenta, no solo un desbloqueo rápido. La opción más segura y la más lenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé par défaut. Activé : Flagship ne vous garde jamais connecté ; chaque lancement demande la phrase secrète de votre compte, pas seulement un déverrouillage rapide. Le plus sûr et le plus lent."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardmäßig aus. An: Flagship hält dich nie angemeldet; jeder Start braucht deine Konto-Passphrase, nicht nur ein schnelles Entsperren. Am sichersten und am langsamsten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desativado por padrão. Ativado: o Flagship nunca mantém você conectado; cada abertura exige a frase secreta da conta, não só um desbloqueio rápido. A opção mais forte e a mais lenta."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既定でオフ。オン：Flagship はサインイン状態を保持しません。起動のたびに、簡単なロック解除ではなくアカウントのパスフレーズが必要です。最も強力ですが、最も手間がかかります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认关闭。开启：Flagship 从不保持登录；每次启动都需要输入账户密码短语，而不只是快速解锁。最安全，也最慢。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

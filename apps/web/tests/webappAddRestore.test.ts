@@ -1,4 +1,4 @@
-// Home's "Add/Restore server" menu (Create a server, Co-manage a running
+// Home's "Add / Restore a server" menu (Create a server, Co-manage a running
 // server, Restore from backup), the restore chooser's sources, and the lock
 // sweep that keeps every menu, dialog and sheet off the lock screen.
 import { describe, expect, it } from "vitest";
@@ -10,13 +10,15 @@ const WEBAPP = resolve(__dirname, "..", "public", "webapp");
 const read = (...p: string[]) => readFileSync(resolve(WEBAPP, ...p), "utf8");
 const IMPORT_SRC = read("views", "import-backup.js");
 
-describe("the Add/Restore server menu", () => {
+describe("the Add / Restore a server menu", () => {
   const menu = IMPORT_SRC.slice(IMPORT_SRC.indexOf("export function openAddOrRestore"), IMPORT_SRC.indexOf("export const RESTORE_SOURCES"));
 
-  it("is titled Add/Restore server and offers exactly three choices in order", () => {
-    expect(IMPORT_SRC).toContain('export const ADD_IMPORT_LABEL = tr("+ Add/Restore server");');
+  it("is titled Add / Restore a server and offers exactly three choices in order", () => {
+    // The owner's exact wording (2026-10-23), led by a plus icon as on iOS and Android.
+    expect(IMPORT_SRC).toContain('export const ADD_IMPORT_LABEL = tr("Add / Restore a server");');
+    expect(IMPORT_SRC).toMatch(/export function addRestoreButtonHtml\(cls\)[\s\S]*?\$\{plusIcon\}<\/span><span>\$\{escapeHtml\(ADD_IMPORT_LABEL\)\}<\/span>/);
     expect(menu).toContain('"Add or restore a server"');
-    expect(menu).toContain('<h3 class="modal-title">${tr("Add/Restore server")}</h3>');
+    expect(menu).toContain('<h3 class="modal-title">${tr("Add / Restore a server")}</h3>');
     const labels = [...menu.matchAll(/data-choice-(add|co-manage|restore)>([^<]+)</g)].map((m) => [m[1], m[2].replace(/^\$\{tr\("|"\)\}$/g, "")]);
     expect(labels).toEqual([
       ["add", "Create a server"],

@@ -76,6 +76,10 @@ public struct ActivityScreen: View {
         }
     }
 
+    /// No server yet: Services' "Add a server first" card instead of the
+    /// account and server logs. Server approvals stay (a first boot asks there).
+    private var noServer: Bool { pods.isEmpty }
+
     private struct SectionInfo: Identifiable {
         let id: Open
         let icon: String
@@ -92,7 +96,7 @@ public struct ActivityScreen: View {
     private var sectionInfos: [SectionInfo] {
         var out = [SectionInfo(id: .approvals, icon: "lock.open", title: String(localized: "Server approvals"),
                                hint: String(localized: "Servers waiting for you to start them"), count: approvals?.pendingCount)]
-        guard case .loaded(let feed) = state else { return out }
+        guard !noServer, case .loaded(let feed) = state else { return out }
         if let snap = feed.postRecovery, snap.lastReissue != nil || snap.state.lastSeen != nil {
             out.append(SectionInfo(id: .recovery, icon: "arrow.triangle.2.circlepath", title: String(localized: "Post-recovery"), hint: postRecoveryHeadline(snap)))
         }
@@ -132,6 +136,7 @@ public struct ActivityScreen: View {
     /// Regular width: the sections on the left, the selected one's log on the right.
     private var selectedSection: Open {
         if let open { return open }
+        if noServer { return .approvals }
         if case .loaded = state { return .account }
         return .approvals
     }
@@ -162,17 +167,20 @@ public struct ActivityScreen: View {
     private func compactBody(c: FSColors) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s3) {
+                if noServer { NoServerYetCard() }
                 ForEach(sectionInfos.prefix(1)) { info in
                     accordion(info, c: c) { sectionContent(info.id, bounded: true, c: c) }
                 }
-                switch state {
-                case .idle, .loading:
-                    skeletons
-                case .failed(let msg):
-                    ErrorCard(message: msg, retry: onRefresh)
-                case .loaded:
-                    ForEach(sectionInfos.dropFirst()) { info in
-                        accordion(info, c: c) { sectionContent(info.id, bounded: true, c: c) }
+                if !noServer {
+                    switch state {
+                    case .idle, .loading:
+                        skeletons
+                    case .failed(let msg):
+                        ErrorCard(message: msg, retry: onRefresh)
+                    case .loaded:
+                        ForEach(sectionInfos.dropFirst()) { info in
+                            accordion(info, c: c) { sectionContent(info.id, bounded: true, c: c) }
+                        }
                     }
                 }
                 Spacer().frame(height: FS.space.s12)
@@ -188,9 +196,12 @@ public struct ActivityScreen: View {
         HStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
+                    if noServer { NoServerYetCard() }
                     ForEach(sectionInfos) { info in sectionRow(info, c: c) }
-                    if case .failed(let msg) = state { ErrorCard(message: msg, retry: onRefresh) }
-                    if case .idle = state { skeletons } else if case .loading = state { skeletons }
+                    if !noServer {
+                        if case .failed(let msg) = state { ErrorCard(message: msg, retry: onRefresh) }
+                        if case .idle = state { skeletons } else if case .loading = state { skeletons }
+                    }
                 }
                 .padding(FS.space.s4)
             }

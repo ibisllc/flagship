@@ -36,6 +36,7 @@ import { screensFetch } from "../lib/api.js";
 import { wrappedUmkRecordKey } from "../keystore.js";
 
 import { tr } from "../lib/i18n.js";
+import { helpCircleIcon } from "../lib/icons.js";
 registerView("view-recovery");
 
 // The active profile's row, as keystore.js keys it (`wrappedUmk` for the
@@ -543,8 +544,34 @@ async function runImportGraceCountdown(takeover, keystore) {
   tickHandle = setInterval(paint, 1000);
 }
 
+/** Cloud recovery's "How this works", in a dialog made on demand (the lock
+ *  sweep removes every dialog in the page, so none can live in the markup). */
+export function openRecoveryHelp() {
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.id = "recovery-help-dialog";
+  dlg.setAttribute("aria-label", tr("How this works"));
+  dlg.innerHTML = `
+    <h3 class="modal-title">${tr("How this works")}</h3>
+    <p class="modal-message">${tr("Recovery requires both your recovery passphrase and access to the passkey stored by your browser or password manager. Together they unlock the encrypted account key; Flagship cannot read it or reset your passphrase.")}</p>
+    <div class="row-2 mt-3"><button id="recovery-help-close">${tr("Close")}</button></div>`;
+  document.body.appendChild(dlg);
+  const close = () => {
+    if (dlg.open) dlg.close();
+    dlg.remove();
+  };
+  dlg.querySelector("#recovery-help-close")?.addEventListener("click", close);
+  dlg.addEventListener("cancel", close);
+  dlg.showModal();
+}
+
 export function initRecoveryView() {
   $("recovery-back")?.addEventListener("click", () => show("view-settings-tab"));
+  // "How this works" sits behind the (?) at the top right, as on iOS and Android.
+  const help = $("recovery-help");
+  const helpIcon = help?.querySelector(".icon");
+  if (helpIcon) helpIcon.innerHTML = helpCircleIcon;
+  help?.addEventListener("click", openRecoveryHelp);
   $("recovery-keyfile-export")?.addEventListener("click", runKeyfileExport);
   $("recovery-keyfile-input")?.addEventListener("change", (ev) => {
     const f = ev.target.files?.[0];

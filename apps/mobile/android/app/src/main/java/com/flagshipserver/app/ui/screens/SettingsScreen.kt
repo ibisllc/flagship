@@ -84,6 +84,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -290,12 +291,14 @@ fun SettingsScreen(nav: NavController) {
                     testTag = "settings-trusted-devices",
                 ),
             )) + listOf(
-                // Phase 3b — this phone joins another account (or a second one
-                // of yours) by scanning the code that account's device shows.
+                // One place for every Flagship code or link: a pairing code
+                // (join another account), a share, invite, transfer, Studio,
+                // Remote or sign-in link. Scanned or pasted, it opens the
+                // screen a tapped link opens.
                 FSSettingsRowData(
                     icon = Icons.Outlined.QrCodeScanner,
-                    title = stringResource(R.string.scan_a_pairing_code),
-                    subtitle = stringResource(R.string.add_this_phone_to_another_account),
+                    title = stringResource(R.string.scan_a_code_or_enter_a_link),
+                    subtitle = stringResource(R.string.pairing_codes_shares_invites_and_sign_in),
                     onClick = { nav.navigate("join-device-scan") },
                     testTag = "settings-scan-pairing-code",
                 ),
@@ -339,13 +342,6 @@ fun SettingsScreen(nav: NavController) {
                     subtitle = stringResource(R.string.sites_youve_signed_a_browser_into),
                     onClick = { nav.navigate("secured-sessions") },
                     testTag = "settings-secured-sessions",
-                ),
-                FSSettingsRowData(
-                    icon = Icons.Outlined.Link,
-                    title = stringResource(R.string.process_url),
-                    subtitle = stringResource(R.string.open_a_sign_in_link_you),
-                    onClick = { nav.navigate("process-url") },
-                    testTag = "settings-process-url",
                 ),
             ),
         )
@@ -462,9 +458,10 @@ fun SettingsScreen(nav: NavController) {
                     large = true,
                     modifier = Modifier.testTag("settings-lock-btn"),
                 )
+                // Red like the Danger zone (owner, 2026-10-23); a recovery-gated
+                // one stays red, dimmed, and a tap says why.
                 FSDangerButton(
                     label = stringResource(R.string.sign_out_2),
-                    muted = sessionGated,
                     onClick = {
                         when {
                             sessionGated -> showRecoveryRequiredToast()
@@ -474,7 +471,7 @@ fun SettingsScreen(nav: NavController) {
                     },
                     block = true,
                     large = true,
-                    modifier = Modifier.testTag("settings-sign-out-btn"),
+                    modifier = Modifier.alpha(if (sessionGated) 0.6f else 1f).testTag("settings-sign-out-btn"),
                 )
             }
         }
@@ -488,7 +485,6 @@ fun SettingsScreen(nav: NavController) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     FSDangerButton(
                         label = stringResource(R.string.remove_this_device_from_account),
-                        muted = sessionGated,
                         onClick = {
                             when {
                                 sessionGated -> showRecoveryRequiredToast()
@@ -497,7 +493,7 @@ fun SettingsScreen(nav: NavController) {
                             }
                         },
                         block = true,
-                        modifier = Modifier.testTag("settings-remove-device-btn"),
+                        modifier = Modifier.alpha(if (sessionGated) 0.6f else 1f).testTag("settings-remove-device-btn"),
                     )
                     FSDangerButton(
                         label = stringResource(R.string.delete_account),

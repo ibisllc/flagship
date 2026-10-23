@@ -26,6 +26,8 @@ data class SavedKeyRow(
     val label: String,
     val maskedSlug: String,
     val relay: Boolean = true,
+    /** The key masked to its first and last characters (never the full key). */
+    val maskedKey: String = "",
 )
 
 /**
@@ -192,5 +194,5 @@ class AiKeysViewModel : ViewModel() {
     }
 
     private fun SavedAiKey.toRow() =
-        SavedKeyRow(id = id, provider = provider, label = label, maskedSlug = AiKeyStore.maskedSlug(this), relay = relay)
+        SavedKeyRow(id = id, provider = provider, label = label, maskedSlug = AiKeyStore.maskedSlug(this), relay = relay, maskedKey = AiKeyStore.maskKey(apiKey))
 }

@@ -1,6 +1,6 @@
 // Nothing of a menu, dialog or sheet may survive the lock. The lock is a view
 // swap, not an overlay, and a native <dialog> (showModal) lives in the browser's
-// top layer, above every view, so without this sweep "Add/Restore server" or a
+// top layer, above every view, so without this sweep "Add / Restore a server" or a
 // backup passcode prompt would stay open and operable over the unlock screen.
 //
 // Called by the router whenever it shows a lock surface (unlock, PIN unlock,
