@@ -117,6 +117,7 @@ describe("dead-man switch", () => {
         irkPub: key(50).publicKey,
         suppressor: { suppress: async () => void events.push("suppress") },
         runner: { power: async (m) => void events.push(`power:${m}`) },
+        suspender: { suspend: async () => ({ confirmed: true as const }) },
         statePath,
         now: () => now,
         setIntervalImpl: () => 0,

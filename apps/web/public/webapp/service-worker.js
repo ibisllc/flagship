@@ -485,6 +485,7 @@ const OPTIONAL_SHELL = [
   "/lib/localPassphrase.js",
   "/lib/lockAndPower.js",
   "/lib/bootSuspension.js",
+  "/lib/boxRelease.js",
   "/lib/loginTakeover.js",
   "/lib/maintainerTrust.js",
   "/lib/modal.js",
