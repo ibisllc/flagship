@@ -1,12 +1,23 @@
 # flagship-unseal
 
 A tiny static Go binary that opens a phone-sealed boot secret using the box's
-Ed25519 identity (STK) seed. It exists for **one** job: the **pre-unlock LUKS
-unseal** in the initramfs.
+Ed25519 boot key (`/boot/flagship-boot-key.pem`, the only key on the unencrypted
+`/boot`; the STK stays inside the encrypted root, see
+`packages/protocol/src/bootKey.ts`). It exists for **one** job: the
+**pre-unlock LUKS unseal** in the initramfs.
+
+The key is read from the PEM file (`--identity-pem`) or as hex on stdin
+(`--identity-stdin`). `--identity-priv-hex` still works for tests but puts the
+seed in `/proc/<pid>/cmdline`; nothing on a box uses it. `--lease-json` checks an
+auto-unlock lease before opening it: this server, this box's key, the owner's
+signature (`--owner-pub-hex`), and expiry by the box's clock (the boot worker
+also enforces expiry, `maxUses` and revocation; the box cannot count uses). With
+`--raw` the premount pipes the key straight into `cryptsetup luksOpen --key-file -`.
 
 ## Why this exists
 
-On the builder / live boot path the disk is LUKS-encrypted. `boot-stage.sh` runs
+On the builder / live boot path the disk is LUKS-encrypted. The initramfs premount
+(`packages/flagship-builder/src/unlockPremount.ts`) runs
 in the **initramfs, before the root is unlocked**, where `/opt/flagship` (node +
 `@flagship/protocol`) sits on the still-encrypted root and is unavailable, and
 plain `openssl` can't do the Ed25519→X25519 private-key birational map or an
@@ -130,8 +141,7 @@ apt-get install -y --no-install-recommends golang-go
 ```
 
 so the helper lands at **`/boot/flagship-unseal`** (mode 755, on the unencrypted
-`/boot`) before the root is sealed — exactly where `boot-stage.sh` and the Ubuntu
-initramfs premount hook expect it. The default (unencrypted) Builder path does not
+`/boot`) before the root is sealed — exactly where the initramfs hook expects it. The default (unencrypted) Builder path does not
 build or ship the helper at all.
 
 ## The gate (wire-compat is the requirement)
