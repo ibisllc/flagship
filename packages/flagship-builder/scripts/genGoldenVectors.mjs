@@ -30,7 +30,7 @@ function buildSignedRecipe(o = {}) {
     version: 2, serverDomain: authCode.serverDomain, username: authCode.username,
     serverName: authCode.serverName, phoneDelegatedPubKey: delegate.publicKey,
     registrationUrl: "https://flagship.services/api/server/register", authCode,
-    authCodeUserSignature: new Uint8Array(64), installerGitRef: "main", rckPubKey: rck.publicKey,
+    authCodeUserSignature: new Uint8Array(64), installerGitRef: "a".repeat(40), rckPubKey: rck.publicKey,
     ...(o.bootUnlockMode ? { bootUnlockMode: o.bootUnlockMode } : {}),
     ...(o.diskEncryption ? { diskEncryption: o.diskEncryption } : {}),
   };

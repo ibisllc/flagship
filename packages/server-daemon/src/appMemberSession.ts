@@ -49,7 +49,10 @@ export function buildAppSessionResolver(opts: AppSessionResolverOptions): Sessio
     const identity = hexToBytes(opts.access.appIdentityKey(sess.aid));
     const role = p ? opts.access.accountRank(app.serviceId, p) : invitedRole(sess.aid, hexToBytes(sess.aid));
     if (!role) return null;
-    return { memberPub: identity, stableId: app.membership.stableIdFor(identity), role };
+    // Someone outside the owner's own devices (an invited person, a co-manager) also needs a current
+    // freshness checkpoint; a device of the owner's account never does.
+    const external = !p || p.kind === "co-manager";
+    return { memberPub: identity, stableId: app.membership.stableIdFor(identity), role, ...(external ? { external: true } : {}) };
 
     function invitedRole(aidHex: string, pub: Bytes): string {
       const d = app.manifest.access.default_role;

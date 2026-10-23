@@ -394,10 +394,20 @@ public final class SecretRequestCoordinator {
         request: SecretRequest,
         luksKey: Data,
         irk: Curve25519.Signing.PrivateKey
-    ) async throws -> String {
+    ) async throws -> String? {
         let issuedAt = now()
+        // A locked server takes no new lease: only an explicit, signed resume re-arms auto-unlock.
+        if BootLockStateStore().lastKnownSuspended(request.serverDomain) == true { return nil }
+        // With the dead-man switch on, a lease may not outlive the affirmation that keeps it alive
+        // (SEC-DEADMAN-001); with no live deadline, no lease at all.
+        let dm = DeadManStore()
+        guard let expiresAt = DeadManLeaseBound.expiry(
+            requested: issuedAt + 365 * 24 * 60 * 60 * 1000,  // ~1 year; renewed on each approve
+            enabled: dm.isEnabled(for: request.serverDomain),
+            deadline: dm.leaseExpiry(for: request.serverDomain),
+            now: issuedAt
+        ) else { return nil }
         let leaseId = AutoUnlockLeaseV2.randomLeaseId()
-        let expiresAt = issuedAt + 365 * 24 * 60 * 60 * 1000  // ~1 year; renewed on each approve
         let lease = try AutoUnlockLeaseV2.build(
             serverDomain: request.serverDomain,
             stkPub: request.stkPub,

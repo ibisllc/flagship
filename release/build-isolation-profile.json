@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "about": "What actually isolates an AI build or an imported app's build on a Flagship server, stated as it is (SECURITY-HARDENING-PLAN.md 18.12). `holds` are things the code does and `scripts/build-isolation-profile.test.ts` checks against the source; `doesNotHold` are things it does not do. Nothing here is a claim about a stronger boundary than the one built. Update this file in the same commit as any change to the boundary.",
+  "holds": [
+    { "id": "build-network-registries-only", "claim": "The RUN steps of an image build reach package registries only, through the box's egress gateway on an internal bridge with no DNS and no default route.", "where": "packages/server-daemon/src/egress/policy.ts", "marker": "BUILD_REGISTRY_HOSTS" },
+    { "id": "staging-no-network", "claim": "The test copy an AI works on is on a bridge that reaches nothing.", "where": "packages/server-daemon/src/egress/policy.ts", "marker": "kind: \"staging\", network: \"flagship-staging\"" },
+    { "id": "no-container-to-container", "claim": "Containers on the build, staging and app bridges cannot reach each other (inter-container communication is off).", "where": "packages/server-daemon/src/egress/policy.ts", "marker": "icc: false" },
+    { "id": "app-containers-gvisor", "claim": "Staging copies and live apps run under gVisor, read-only, with every capability dropped and no-new-privileges.", "where": "packages/server-daemon/src/appSandbox/gvisor.ts", "marker": "--cap-drop=ALL" },
+    { "id": "no-docker-socket-to-containers", "claim": "The box refuses to start a container whose arguments name the Docker socket.", "where": "packages/server-daemon/src/serviceRunner.ts", "marker": "refusing docker invocation: arg references the docker socket" },
+    { "id": "no-live-data-in-staging", "claim": "The AI works on sample data in a separate dev dataspace; the staging files volume is never the live one.", "where": "packages/server-daemon/src/buildmodes/staging.ts", "marker": "isProdFilesVolume" },
+    { "id": "build-disk-limit", "claim": "One image build may add only a bounded amount to the box's disk.", "where": "packages/server-daemon/src/appQuota/buildGuard.ts", "marker": "docker build" }
+  ],
+  "doesNotHold": [
+    { "id": "build-not-rootless", "claim": "Image builds run on the box's own Docker daemon, which runs as root. They are not rootless and not in a microVM. Compiler and dependency scripts in a build run with whatever the build container and that daemon allow." },
+    { "id": "build-not-gvisor", "claim": "RUN steps are not run under gVisor; only the finished staging copy and live apps are." },
+    { "id": "base-images-pulled-by-host", "claim": "Base images are pulled by dockerd on the host network. dockerfilePolicy.ts limits which; the pull itself is not behind the registry-only gateway." },
+    { "id": "shared-docker-cache", "claim": "Layers are cached by one Docker daemon for all builds on a box. A box belongs to one owner, so there is no cross-tenant cache, but two apps of one owner share it." },
+    { "id": "registry-exfiltration", "claim": "A build can still push code out through a registry it is allowed to reach (see AGENTS.md, AI privacy, staging and egress)." }
+  ]
+}

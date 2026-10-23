@@ -19,6 +19,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { openLlmPayload, sealLlmPayload, type Bytes, type SealedBlob } from "@flagship/protocol";
+import type { TokenFamily } from "../authority/index.js";
 import { withFileLock } from "../durableFile.js";
 
 const KEY_PREFIX = "fmcp_";
@@ -47,6 +48,10 @@ export interface McpKeyStore {
 
 function hashKey(key: string): string {
   return createHash("sha256").update(key, "utf8").digest("hex");
+}
+
+function keyRef(r: McpKeyRecord): string {
+  return `${r.buildId}.${hashKey(r.key).slice(0, 12)}`;
 }
 
 function generateKey(rand: () => Uint8Array): string {
@@ -146,12 +151,39 @@ export class FileMcpKeyStore implements McpKeyStore {
       if (prev) this.byHash.delete(hashKey(prev.key));
       this.byBuild.set(buildId, rec);
       this.byHash.set(hashKey(rec.key), buildId);
+      if (this.authority) {
+        // Each key is its own grant, so a replaced key's grant is revoked and the new one starts clean.
+        if (prev) await this.authority.family.revoke(keyRef(prev), "key replaced").catch(() => {});
+        await this.authority.family.issue({
+          ref: keyRef(rec), service: buildId, parents: this.authority.parentOf(buildId), capability: "ide", issuedAt: rec.createdAt,
+        });
+      }
       return rec;
     });
   }
 
+  /**
+   * N05 — IDE keys join the authority index (parent: the build). An unknown or revoked key does
+   * not resolve, and revoking the build's grant removes the key here.
+   */
+  private authority: { family: TokenFamily; parentOf: (buildId: string) => string[] } | null = null;
+
+  async attachAuthority(a: { family: TokenFamily; parentOf: (buildId: string) => string[] }): Promise<void> {
+    this.authority = a;
+    for (const r of this.byBuild.values()) {
+      await a.family.adopt({ ref: keyRef(r), service: r.buildId, parents: a.parentOf(r.buildId), capability: "ide", issuedAt: r.createdAt });
+    }
+    a.family.onRevoked(async (ref) => {
+      const buildId = ref.split(".")[0]!;
+      const cur = this.byBuild.get(buildId);
+      if (cur && keyRef(cur) === ref) await this.dropLocal(buildId);
+    });
+  }
+
   async resolve(key: string): Promise<string | null> {
-    return this.byHash.get(hashKey(key)) ?? null;
+    const buildId = this.byHash.get(hashKey(key)) ?? null;
+    if (buildId && this.authority && !this.authority.family.isLive(`${buildId}.${hashKey(key).slice(0, 12)}`)) return null;
+    return buildId;
   }
 
   async get(buildId: string): Promise<McpKeyRecord | null> {
@@ -159,7 +191,8 @@ export class FileMcpKeyStore implements McpKeyStore {
     return r ? { ...r } : null;
   }
 
-  async revoke(buildId: string): Promise<void> {
+  /** Remove the key from memory and disk without telling the index (it already revoked it). */
+  private async dropLocal(buildId: string): Promise<void> {
     const file = this.file(buildId);
     await withFileLock(file, async () => {
       const prev = this.byBuild.get(buildId);
@@ -167,6 +200,12 @@ export class FileMcpKeyStore implements McpKeyStore {
       this.byBuild.delete(buildId);
       await rm(file, { force: true });
     });
+  }
+
+  async revoke(buildId: string): Promise<void> {
+    const prev = this.byBuild.get(buildId);
+    if (prev && this.authority) await this.authority.family.revoke(keyRef(prev), "key revoked").catch(() => {});
+    await this.dropLocal(buildId);
   }
 
   async list(): Promise<Array<{ buildId: string; createdAt: number; label?: string }>> {

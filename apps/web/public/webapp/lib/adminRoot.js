@@ -57,6 +57,8 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/app-rank/v1", //               a rank in an app, or refuse a device or co-manager
   "flagship/service-access-mode/v2", //    open to all / members only
   "flagship/service-allow-remove/v2", //   remove a person from an app
+  "flagship/restored-access-approve/v1", // approve the permissions a restore held back
+  "flagship/companion-delegation/v1", //   let one Remote session build or deploy one app
   "flagship/uninstall-service/v1", //      uninstall an app
   "flagship/server-restore/v1", //         a new server waits for one backup (adding a server)
   "flagship/debug-access/v2", //           let an SSH key in as `debug` until a set time

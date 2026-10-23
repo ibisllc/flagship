@@ -16,6 +16,7 @@
  * wrong, revoked or expired ⇒ 401; a read key on a write method ⇒ 403; over the
  * per-key rate ⇒ 429.
  */
+import type { TokenFamily } from "./authority/index.js";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -233,9 +234,35 @@ export class AppApiKeyStore implements ApiKeyAuthenticator {
       grant,
       signature: signature.toLowerCase(),
     };
+    if (this.authority) {
+      await this.authority.family.issue({
+        ref: grant.keyId, service: grant.serviceId, parents: this.authority.parentOf(grant.serviceId), capability: grant.scope,
+        expiresAt: grant.expiresAt === 0 ? null : grant.expiresAt, issuedAt: stored.createdAt,
+      });
+    }
     this.keys.set(grant.keyId, stored);
     await this.save();
     return { key: formatAppApiKey(grant.keyId, secret), view: view(stored) };
+  }
+
+  /**
+   * N05 — API keys join the authority index. A key the index does not know or has revoked is
+   * refused, a key's parent is its app (so stopping the app revokes its keys), and revoking a
+   * parent grant removes the keys here. Existing keys are adopted once so an upgrade signs no one out.
+   */
+  private authority: { family: TokenFamily; parentOf: (serviceId: string) => string[] } | null = null;
+
+  async attachAuthority(a: { family: TokenFamily; parentOf: (serviceId: string) => string[] }): Promise<void> {
+    this.authority = a;
+    for (const k of this.keys.values()) {
+      await a.family.adopt({ ref: k.keyId, service: k.serviceId, parents: a.parentOf(k.serviceId), capability: k.scope, expiresAt: k.expiresAt === 0 ? null : k.expiresAt, issuedAt: k.createdAt });
+    }
+    a.family.onRevoked(async (ref) => {
+      if (this.keys.delete(ref)) {
+        this.buckets.delete(ref);
+        await this.save();
+      }
+    });
   }
 
   /** A service's keys for a server backup. */
@@ -300,6 +327,7 @@ export class AppApiKeyStore implements ApiKeyAuthenticator {
     this.keys.delete(keyId);
     this.buckets.delete(keyId);
     await this.save();
+    await this.authority?.family.revoke(keyId, "key revoked").catch(() => {});
     return true;
   }
 
@@ -310,6 +338,7 @@ export class AppApiKeyStore implements ApiKeyAuthenticator {
       if (!installed(k.serviceId)) {
         this.keys.delete(id);
         this.buckets.delete(id);
+        await this.authority?.family.revoke(id, "app uninstalled").catch(() => {});
         n++;
       }
     }
@@ -328,6 +357,7 @@ export class AppApiKeyStore implements ApiKeyAuthenticator {
     const got = createHash("sha256").update(secret, "utf8").digest();
     const same = timingSafeEqual(want, got);
     if (!k || !same || k.serviceId !== serviceId) return null;
+    if (this.authority && !this.authority.family.isLive(k.keyId)) return null;
     if (k.expiresAt !== 0 && this.now() >= k.expiresAt) return null;
     return k;
   }

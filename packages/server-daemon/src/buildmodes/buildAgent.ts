@@ -69,7 +69,7 @@ export interface BuildAgentResult {
    * Why the loop ended: the model finished, stopped, hit the turn cap, or the
    * box itself failed (`environment`), which no change to the app can fix.
    */
-  stopReason: "finished" | "model-stopped" | "turn-cap" | "error" | "environment";
+  stopReason: "finished" | "model-stopped" | "turn-cap" | "token-cap" | "error" | "environment";
   /** Value-free: a human note when the loop ended without finishing. */
   note?: string;
   /** The box's own failure that ended the loop (stopReason "environment"). */
@@ -87,6 +87,12 @@ export interface BuildAgentOptions {
   model?: string;
   /** maxTokens per model turn. Unset: the provider's own default, which is its ceiling. */
   maxTokens?: number;
+  /**
+   * The most tokens (input + output, summaries included) the whole run may use: the `highTokens` the
+   * owner signed. No new call starts once it is reached, and each call's output is capped to what is
+   * left, so only one call's input can carry it past.
+   */
+  tokenBudget?: number;
 }
 
 const DEFAULTS = {
@@ -188,6 +194,16 @@ export async function runBuildAgent(args: {
   redact?: ModelRedactor;
 }): Promise<BuildAgentResult> {
   const opts = { ...DEFAULTS, ...(args.options ?? {}) };
+  let usedTokens = 0;
+  const budget = opts.tokenBudget;
+  const left = (): number => (budget == null ? Infinity : budget - usedTokens);
+  const runner: ChatRunner = async (req) => {
+    const cap = left();
+    const capped = cap === Infinity ? req : { ...req, maxTokens: Math.max(1, Math.min(req.maxTokens ?? cap, cap)) };
+    const r = await args.runner(capped);
+    usedTokens += (r.inputTokens ?? 0) + (r.outputTokens ?? 0);
+    return r;
+  };
   const mode: BuildMode = args.mode ?? "git";
   const specs = toolSpecs();
   const messages: ChatMessage[] = [
@@ -204,6 +220,10 @@ export async function runBuildAgent(args: {
   let turns = 0;
 
   for (let i = 0; i < opts.maxTurns; i++) {
+    if (left() <= 0) {
+      await args.journal.append(args.buildId, { mode, kind: "adapt-step", actor: "system", summary: `stopped at the ${budget} tokens the owner agreed to` });
+      return { finished, staged, manifestPresent: false, validated, turns, stopReason: "token-cap", note: "the AI reached the amount you agreed to" };
+    }
     turns = i + 1;
     const compacted = await compactIfNeeded({
       messages,
@@ -212,7 +232,7 @@ export async function runBuildAgent(args: {
       ...(args.contextTokens ? { contextTokens: args.contextTokens } : {}),
       model: opts.model ?? "",
       ...(args.redact ? { redact: args.redact } : {}),
-      summarise: async (req) => (await args.runner(req)).content,
+      summarise: async (req) => (await runner(req)).content,
     });
     if (compacted.replaced > 0) {
       messages.splice(0, messages.length, ...compacted.messages);
@@ -231,7 +251,7 @@ export async function runBuildAgent(args: {
         tools: specs,
         ...(args.options?.maxTokens != null ? { maxTokens: args.options.maxTokens } : {}),
       };
-      resp = await args.runner(req);
+      resp = await runner(req);
     } catch (e) {
       const note = `adapt model call failed: ${(e as Error).message}`;
       await args.journal.append(args.buildId, { mode, kind: "error", actor: "ai", summary: note });

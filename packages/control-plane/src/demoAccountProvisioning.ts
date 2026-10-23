@@ -1,3 +1,4 @@
+import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import { sha256 } from "@noble/hashes/sha256";
 import {
   deriveAccountProfileKey, deriveDeviceDirectoryKey, encryptAccountProfile, encryptDeviceProfile,
@@ -199,7 +200,7 @@ export async function handleCreateDemoAccount(
     version: 2, serverDomain, username, serverName, phoneDelegatedPubKey: delegated.publicKey,
     registrationUrl: `https://${deps.controlApex ?? "flagshipserver.com"}/api/server/register`,
     authCode: persistedAuth, authCodeUserSignature: persistedSignature,
-    installerGitRef: deps.installerGitRef ?? "main", rckPubKey: rck.publicKey,
+    installerGitRef: deps.installerGitRef ?? BOX_RELEASE.commit, rckPubKey: rck.publicKey,
   };
   const blobSignature = signInstallBlob(blob, irk);
   const userData = buildCloudConfigUserData({

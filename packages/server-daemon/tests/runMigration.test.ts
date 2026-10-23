@@ -1,11 +1,9 @@
 /**
  * Tests for the runMigration dispatcher. We exercise:
  *   - .sql is routed through runSqlOverride with the app's PG URL.
- *   - .ts is routed through runScriptOverride with FLAGSHIP_* env injected.
- *   - .js is routed through runScriptOverride with cmd = "node".
+ *   - .ts/.js (any script extension) are refused and never executed.
  *   - Unknown extensions are skipped (success).
  *   - Missing PG store on a .sql migration throws a clear error.
- *   - FLAGSHIP_* are scrubbed from the parent env before re-injection.
  */
 
 import { mkdtemp, writeFile } from "node:fs/promises";
@@ -98,63 +96,30 @@ describe("buildRunMigration — .sql dispatch", () => {
   });
 });
 
-describe("buildRunMigration — .ts/.js dispatch", () => {
+describe("buildRunMigration — script migrations are refused", () => {
   let tmp: string;
   beforeEach(async () => {
     tmp = await mkdtemp(join(tmpdir(), "flagship-rm-"));
   });
 
-  it("routes .ts through runScriptOverride with cmd=tsx", async () => {
-    const tsPath = join(tmp, "0001_seed.ts");
-    await writeFile(tsPath, "console.log('seeded')");
-
-    const seen: { cmd: string; args: string[]; env: Record<string, string> }[] = [];
-    const run = buildRunMigration({
-      serviceByServiceId: () => fakeApp({ data: PG_CREDS }),
-      runScriptOverride: async (a) => {
-        seen.push(a);
-      },
-    });
-    await run({ serviceId: "alice-x", absPath: tsPath, filename: "0001_seed.ts" });
-    expect(seen[0]?.cmd).toBe("tsx");
-    expect(seen[0]?.args).toEqual([tsPath]);
-    expect(seen[0]?.env.FLAGSHIP_APP_ID).toBe("alice-x");
-    expect(seen[0]?.env.FLAGSHIP_CREATOR).toBe("alice");
-    expect(seen[0]?.env.FLAGSHIP_PG_URL).toBe(PG_CREDS.postgres!.default!.url);
-    expect(seen[0]?.env.FLAGSHIP_MIGRATION_FILE).toBe("0001_seed.ts");
-  });
-
-  it("routes .js through runScriptOverride with cmd=node", async () => {
-    const jsPath = join(tmp, "0001_seed.js");
-    await writeFile(jsPath, "console.log('seeded')");
-
-    const seen: { cmd: string }[] = [];
-    const run = buildRunMigration({
-      serviceByServiceId: () => fakeApp({ data: null }),
-      runScriptOverride: async (a) => {
-        seen.push(a);
-      },
-    });
-    await run({ serviceId: "alice-x", absPath: jsPath, filename: "0001_seed.js" });
-    expect(seen[0]?.cmd).toBe("node");
-  });
-
-  it("scrubs FLAGSHIP_* from parent env before reinjecting the app's", async () => {
-    process.env.FLAGSHIP_LEAKED = "should-not-pass";
-    const tsPath = join(tmp, "0001_seed.ts");
-    await writeFile(tsPath, "");
-
-    const seen: { env: Record<string, string> }[] = [];
-    const run = buildRunMigration({
-      serviceByServiceId: () => fakeApp({ data: null }),
-      runScriptOverride: async (a) => {
-        seen.push(a);
-      },
-    });
-    await run({ serviceId: "alice-x", absPath: tsPath, filename: "0001_seed.ts" });
-    expect(seen[0]?.env.FLAGSHIP_LEAKED).toBeUndefined();
-    delete process.env.FLAGSHIP_LEAKED;
-  });
+  it.each(["0001_seed.ts", "0001_seed.js", "0001_seed.mjs", "0001_seed.cts", "0001_SEED.TSX"])(
+    "refuses %s without running anything",
+    async (filename) => {
+      const path = join(tmp, filename);
+      await writeFile(path, "require('child_process').execSync('id')");
+      let sqlCalled = false;
+      const run = buildRunMigration({
+        serviceByServiceId: () => fakeApp({ data: PG_CREDS }),
+        runSqlOverride: async () => {
+          sqlCalled = true;
+        },
+      });
+      await expect(run({ serviceId: "alice-x", absPath: path, filename })).rejects.toThrow(
+        /script migration/,
+      );
+      expect(sqlCalled).toBe(false);
+    },
+  );
 });
 
 describe("buildRunMigration — unknown extensions", () => {
@@ -167,18 +132,13 @@ describe("buildRunMigration — unknown extensions", () => {
     const readmePath = join(tmp, "0001_README.md");
     await writeFile(readmePath, "# notes");
     let sqlCalled = false;
-    let scriptCalled = false;
     const run = buildRunMigration({
       serviceByServiceId: () => fakeApp({ data: null }),
       runSqlOverride: async () => {
         sqlCalled = true;
       },
-      runScriptOverride: async () => {
-        scriptCalled = true;
-      },
     });
     await run({ serviceId: "alice-x", absPath: readmePath, filename: "0001_README.md" });
     expect(sqlCalled).toBe(false);
-    expect(scriptCalled).toBe(false);
   });
 });

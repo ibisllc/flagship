@@ -130,7 +130,7 @@ final class InstallBlobV2CanonicalTests: XCTestCase {
         XCTAssertEqual(parts[8].count, 64)
         // authCodeUserSignature hex (64 bytes → 128 chars)
         XCTAssertEqual(parts[9].count, 128)
-        XCTAssertEqual(parts[10], "main")
+        XCTAssertEqual(String(parts[10]), BoxRelease.commit)  // the box installs a pinned release, never a branch name
         // rckPubKey hex
         XCTAssertEqual(parts[11].count, 64)
         // NEGATIVE: must NOT contain blob.issuedAt nor blob.expiresAt.

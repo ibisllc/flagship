@@ -26,6 +26,7 @@ import {
   admitUpdateOrder,
   updateApplyInProgress,
   type AdmitUpdateOrderOptions,
+  type ApplyApproval,
   type PendingVerifyStore,
   type UpdateConsumeOutcome,
 } from "../updateConsumer.js";
@@ -48,7 +49,7 @@ export interface ShareUpdateDeps {
   /** The owner's sensitive key signed this grant (re-checked for every order). */
   verifyOwnerGrant: (g: ServerShareGrant, sig: Uint8Array) => boolean;
   /** `applyEndorsedUpdate` bound to this box's checkout and release gate. */
-  apply: (currentCommit: string, targetCommit: string, why: string) => Promise<UpdateConsumeOutcome>;
+  apply: (currentCommit: string, targetCommit: string, why: string, approval: ApplyApproval) => Promise<UpdateConsumeOutcome>;
   outcomeStore?: UpdateOutcomeStore;
   activity?: ActivityLog;
   now?: () => number;
@@ -118,7 +119,11 @@ export function buildShareUpdate(deps: ShareUpdateDeps) {
     });
     log(`[shares] ${caller.shareId.slice(0, 8)} ordered an update to ${u.targetCommit.slice(0, 8)}`);
     const done = deps
-      .apply(admitted.currentCommit, u.targetCommit, "share-ordered, maintainer-endorsed")
+      .apply(admitted.currentCommit, u.targetCommit, "share-ordered, maintainer-endorsed", {
+        requester: `co-manager:${u.shareId}`,
+        by: u.memberPubHex,
+        signatureHex: Buffer.from(sig).toString("hex"),
+      })
       .then(async (out) => {
         const refusal = refusalRecord(out, now());
         if (refusal) await deps.outcomeStore?.write(refusal).catch(() => {});

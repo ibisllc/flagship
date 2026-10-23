@@ -696,46 +696,44 @@ final class WizardModel: ObservableObject {
             return
         }
 
-        let logFile = "/tmp/flagship-builder-\(UUID().uuidString).log"
-        FileManager.default.createFile(atPath: logFile, contents: nil)
+        // The helper is told no path (SEC-MAC-002): the image goes over as an open descriptor, the disk as its
+        // BSD name to be checked, and every later call uses the opaque ids the helper issues.
+        let conn = HelperClient.makeConnection()
+        defer { conn.invalidate() }
+        let bsd = String(disk.deviceNode.dropFirst("/dev/".count))
+        let staged = await HelperClient.stageImage(conn, imageURL: preparedURL)
+        guard !staged.imageID.isEmpty else {
+            reportOperationFailure(staged.message.isEmpty ? "The image could not be handed to the helper." : staged.message)
+            return
+        }
+        appendLog(stream: .stdout, text: "+ staged the image for the helper (sha256 \(staged.sha256.prefix(16))…)")
+        let registered = await HelperClient.registerMedia(conn, bsdName: bsd)
+        guard !registered.mediaID.isEmpty else {
+            reportOperationFailure(registered.message.isEmpty ? "The helper would not accept that disk." : registered.message)
+            return
+        }
+        // The write blocks its connection while it runs, so progress is read on a second one.
         let stopTail = Box(false)
-        Task.detached {
-            var lastSize: Int = 0
+        let progressConn = HelperClient.makeConnection()
+        Task.detached { [imageID = staged.imageID] in
+            var from = 0
             while !stopTail.value {
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                guard let data = try? Data(contentsOf: URL(fileURLWithPath: logFile)),
-                      data.count > lastSize else { continue }
-                let new = data.subdata(in: lastSize..<data.count)
-                lastSize = data.count
-                if let s = String(data: new, encoding: .utf8) {
-                    for line in s.split(separator: "\n", omittingEmptySubsequences: false) {
-                        if line.isEmpty { continue }
-                        let text = String(line)
-                        await MainActor.run { [weak self] in
-                            guard let self = self else { return }
-                            if self.handleControlLine(text) { return }
-                            self.appendLog(stream: .stdout, text: text)
-                        }
+                let r = await HelperClient.readProgress(progressConn, imageID: imageID, from: from)
+                from = r.next
+                for text in r.lines where !text.isEmpty {
+                    await MainActor.run { [weak self] in
+                        guard let self = self else { return }
+                        if self.handleControlLine(text) { return }
+                        self.appendLog(stream: .stdout, text: text)
                     }
                 }
             }
+            progressConn.invalidate()
         }
         appendLog(stream: .stdout, text: "+ helper write-image → \(disk.deviceNode)")
-
-        let conn = HelperClient.makeConnection()
-        let result: (code: Int, message: String) = await withCheckedContinuation { cont in
-            var resumed = false
-            func finish(_ r: (Int, String)) { if !resumed { resumed = true; cont.resume(returning: r) } }
-            let proxy = conn.remoteObjectProxyWithErrorHandler { err in
-                finish((-1, "helper connection error: \(err.localizedDescription)"))
-            } as? FlagshipHelperProtocol
-            guard let proxy = proxy else { finish((-1, "could not reach the helper")); return }
-            proxy.writeImage(imagePath: imagePath,
-                             devicePath: disk.deviceNode,
-                             logPath: logFile) { code, msg in finish((code, msg)) }
-        }
+        let result = await HelperClient.write(conn, imageID: staged.imageID, mediaID: registered.mediaID)
         stopTail.value = true
-        conn.invalidate()
         if result.code == 0 {
             // Shred the single-use recipe file now that the burn succeeded.
             try? FileManager.default.removeItem(at: recipe)

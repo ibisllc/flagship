@@ -54,6 +54,8 @@ import type { AppAuthTokens } from "./serviceAuthToken.js";
 import { whileDeploying, type DeployingTracker } from "./serviceActivity.js";
 import type { DomainGate } from "./browser/domainGate.js";
 import type { TabRegistry } from "./browser/tabRegistry.js";
+import type { AuthorityHub } from "./authority/hub.js";
+import { digestOf, runOrderOperation } from "./authority/orderOperation.js";
 import type { AppPullState, AppPullStateStore, UpdatePolicy } from "./updateClient.js";
 
 export interface InstalledService {
@@ -110,6 +112,8 @@ export interface ServiceRedeployArgs {
 }
 
 export interface ServicePlatformDeps {
+  /** Record an uninstall as a ledger operation, stopped if the grants it depends on are revoked. */
+  operations?: { hub: AuthorityHub; grantDeps: string[] };
   /** Activity-feed hook for an app arriving, changing or leaving. */
   onAppEvent?: (kind: "app.installed" | "app.updated" | "app.removed", serviceId: string) => void;
   /** Called whenever the app set or an app's state may have changed. */
@@ -501,7 +505,7 @@ export class ServicePlatform {
       r.creator !== this.deps.host.username
     ) {
       const canonicalUrl = ServicePlatform.canonicalUrl(r.creator, r.slug);
-      const updatePolicy: UpdatePolicy = "auto";
+      const updatePolicy: UpdatePolicy = "manual";
       let currentTip = "";
       if (this.deps.cloneService) {
         try {
@@ -617,6 +621,21 @@ export class ServicePlatform {
   redeploy(args: ServiceRedeployArgs): Promise<RedeployResult> {
     const id = ServicePlatform.serviceId(args.request.creator, args.request.slug);
     return whileDeploying(this.deps.activity, id, () => this.redeployNow(args));
+  }
+
+  /** Start the app again from what is installed: after its working tree moved (an update). */
+  async restartService(serviceId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const app = this.apps.get(serviceId);
+    if (!app) return { ok: false, reason: "not installed" };
+    const apiToken = this.deps.appAuthTokens ? await this.deps.appAuthTokens.tokenForApp(serviceId).catch(() => null) : null;
+    try {
+      const spec = await this.containerSpec({ serviceId, creator: app.creator, slug: app.slug, manifest: app.manifest, data: app.data, apiToken, hostPort: app.containerPort });
+      await this.deps.appRunner.restart(spec);
+      await this.assertStarted(spec);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: (e as Error).message };
+    }
   }
 
   private async redeployNow(args: ServiceRedeployArgs): Promise<RedeployResult> {
@@ -1016,6 +1035,32 @@ export class ServicePlatform {
       // Idempotent: uninstalling something already gone is success.
       return { ok: true, alreadyGone: true };
     }
+    const ops = this.deps.operations;
+    if (!ops) return this.destroyApp(serviceId, app, r.slug);
+    const ran = await runOrderOperation(
+      ops.hub,
+      {
+        kind: "app-uninstall",
+        requester: "owner",
+        idempotencyKey: digestOf("app-uninstall", serviceId, Buffer.from(signature).toString("hex")),
+        canonicalPayload: ["flagship/operation/app-uninstall/v1", serviceId].join("|"),
+        grantDeps: ops.grantDeps,
+        approvedBy: "admin",
+        orderSignatureHex: Buffer.from(signature).toString("hex"),
+        label: `uninstall ${serviceId}`,
+      },
+      async (ctx) => {
+        // Stopping the container and dropping its data is the point of no return.
+        await ctx.crossPointOfNoReturn();
+        return { value: await this.destroyApp(serviceId, app, r.slug), resultDigest: digestOf("app-uninstall", serviceId) };
+      },
+    );
+    if (ran.ran) return ran.value;
+    if (ran.reason === "already-applied") return { ok: true, alreadyGone: true };
+    return { ok: false, reason: ran.reason === "in-progress" ? "an uninstall of this app is already running" : (ran.detail ?? "uninstall refused") };
+  }
+
+  private async destroyApp(serviceId: string, app: InstalledService, slug: string): Promise<UninstallResult> {
     // Stop container; best-effort.
     try {
       await this.deps.appRunner.stop(serviceId);
@@ -1064,7 +1109,7 @@ export class ServicePlatform {
     // FQDN), so pass the slug. Best-effort — never fail the uninstall.
     if (this.deps.onServiceRemoved) {
       try {
-        await this.deps.onServiceRemoved(r.slug);
+        await this.deps.onServiceRemoved(slug);
       } catch {
         // gossip release/re-announce is advisory; the local removal already succeeded.
       }
