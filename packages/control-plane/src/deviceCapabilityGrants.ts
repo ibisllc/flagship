@@ -23,6 +23,7 @@
  * docs/v2-device-addressing-and-real-ticket.md §3.2 for the chain.
  */
 
+import { currentAccountBindings } from "./accountPqTrust.js";
 import {
   DEVICE_SCOPES,
   isSensitiveScope,
@@ -38,6 +39,7 @@ import type {
   DeviceCapabilityGrantRecord,
   DeviceCapabilityGrantStorage,
   DeviceIdentityStorage,
+  PqTrustStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
@@ -54,6 +56,11 @@ export interface DeviceCapabilityGrantsDeps {
   storage: DeviceCapabilityGrantStorage;
   identities: DeviceIdentityStorage;
   usernames: UsernameStorage;
+  /**
+   * Architecture v2: when present, the list carries each grant's `device` key binding and the
+   * account's `account-irk` / `admin-root` bindings (current keys only; the box verifies them).
+   */
+  pqTrust?: PqTrustStorage;
   now?: () => number;
 }
 
@@ -427,6 +434,7 @@ export async function handleListAccountDeviceGrants(
   const live = new Map(
     devices.filter((d) => d.revokedAt === null).map((d) => [d.deviceId, d.devicePubHex.toLowerCase()] as const),
   );
+  const pq = deps.pqTrust ? await currentAccountBindings(deps.pqTrust, userRec, live) : null;
   const out: Array<Record<string, unknown>> = [];
   for (const g of grants) {
     if (g.revokedAt !== null || live.get(g.deviceId) !== g.devicePubHex.toLowerCase()) continue;
@@ -447,7 +455,9 @@ export async function handleListAccountDeviceGrants(
       expiresAt: g.expiresAt,
       signatureHex: g.signatureHex.toLowerCase(),
       signerRoot: g.signerRoot,
+      ...(pq?.devices.get(g.deviceId) ? { pqKeyBinding: pq.devices.get(g.deviceId) } : {}),
     });
   }
-  return ok({ username: userNorm, grants: out }, { "cache-control": "private, no-store" });
+  const pqBody = pq ? { pqKeyBindings: { accountIrk: pq.accountIrk, adminRoot: pq.adminRoot } } : {};
+  return ok({ username: userNorm, grants: out, ...pqBody }, { "cache-control": "private, no-store" });
 }

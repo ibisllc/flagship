@@ -38,6 +38,25 @@ export interface PolicyStateRecord {
 
 export type PqPutResult = { ok: true } | { ok: false; reason: "stale" | "pq-key-changed" };
 
+/** One owner-signed AssurancePolicyChange as stored (migration 0112). */
+export interface PolicyChangeRecord {
+  scopeKind: string;
+  scopeId: string;
+  generation: number;
+  account: string;
+  /** The change exactly as verified, JSON. */
+  changeJson: string;
+  suite: string;
+  signatureHex: string;
+  digest: string;
+  prevDigest: string;
+  storedAt: number;
+}
+
+export type PolicyAppendResult = { ok: true } | { ok: false; reason: "conflict" };
+
+const GENESIS = "0".repeat(64);
+
 export interface PqTrustStorage {
   getBinding(role: string, subjectId: string): Promise<PqKeyBindingRecord | null>;
   /**
@@ -52,6 +71,20 @@ export interface PqTrustStorage {
   putPolicy(rec: PolicyStateRecord): Promise<void>;
   /** The installation policy and the box-stk binding for a server, in one round trip. */
   forServer(serverDomain: string): Promise<{ policy: PolicyStateRecord | null; stkBinding: PqKeyBindingRecord | null }>;
+  /** An account's `account-irk` and `admin-root` bindings plus its devices' `device` bindings, one query. */
+  listAccountBindings(username: string, deviceIds: readonly string[]): Promise<PqKeyBindingRecord[]>;
+  /** A scope's policy changes, oldest first. */
+  listPolicyChanges(scopeKind: string, scopeId: string): Promise<PolicyChangeRecord[]>;
+  /**
+   * Appends `change` and moves the scope's state to `next`, atomically, only while the state in
+   * force is still `expected` (generation and head digest; no row = generation 0, genesis). Two
+   * writers racing for one generation: exactly one wins, the other gets `conflict`.
+   */
+  appendPolicyChange(
+    change: PolicyChangeRecord,
+    next: PolicyStateRecord,
+    expected: { generation: number; headDigest: string },
+  ): Promise<PolicyAppendResult>;
 }
 
 function decide(cur: PqKeyBindingRecord | null, next: PqKeyBindingRecord): PqPutResult {
@@ -203,12 +236,96 @@ export class D1PqTrustStorage implements PqTrustStorage {
       .first<PolicyRow & BindingRow>();
     return { policy: policyOf(r), stkBinding: bindingOf(r) };
   }
+
+  async listAccountBindings(username: string, deviceIds: readonly string[]) {
+    const u = username.toLowerCase();
+    const ids = deviceIds.map((d) => d.toLowerCase()).slice(0, 90);
+    const place = ids.map((_, i) => `?${i + 2}`).join(", ");
+    const devices = ids.length ? ` OR (role = 'device' AND subject_id IN (${place}))` : "";
+    const r = await this.db
+      .prepare(`SELECT ${BINDING_COLS} FROM pq_key_bindings WHERE (role IN ('account-irk', 'admin-root') AND subject_id = ?1)${devices}`)
+      .bind(u, ...ids)
+      .all<BindingRow>();
+    return (r.results ?? []).map((x) => bindingOf(x)!).filter(Boolean);
+  }
+
+  async listPolicyChanges(scopeKind: string, scopeId: string) {
+    const r = await this.db
+      .prepare("SELECT * FROM assurance_policy_changes WHERE scope_kind = ?1 AND scope_id = ?2 ORDER BY generation ASC")
+      .bind(scopeKind, scopeId)
+      .all<ChangeRow>();
+    return (r.results ?? []).map(changeOf);
+  }
+
+  async appendPolicyChange(change: PolicyChangeRecord, next: PolicyStateRecord, expected: { generation: number; headDigest: string }) {
+    const k = change.scopeKind;
+    const id = change.scopeId;
+    const head = `COALESCE((SELECT generation FROM assurance_policy_states WHERE scope_kind = ?1 AND scope_id = ?2), 0) = ?11
+       AND COALESCE((SELECT head_digest FROM assurance_policy_states WHERE scope_kind = ?1 AND scope_id = ?2), '${GENESIS}') = ?12`;
+    try {
+      await this.db.batch([
+        this.db
+          .prepare(
+            `INSERT INTO assurance_policy_changes (scope_kind, scope_id, generation, account, change_json, suite, signature_hex, digest, prev_digest, stored_at)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 WHERE ${head}`,
+          )
+          .bind(k, id, change.generation, change.account, change.changeJson, change.suite, change.signatureHex, change.digest, change.prevDigest, change.storedAt, expected.generation, expected.headDigest),
+        this.db
+          .prepare(
+            `INSERT INTO assurance_policy_states (scope_kind, scope_id, profile, rollout, generation, head_digest, enforced_ever, updated_at)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+              WHERE EXISTS (SELECT 1 FROM assurance_policy_changes WHERE scope_kind = ?1 AND scope_id = ?2 AND generation = ?5 AND digest = ?6)
+             ON CONFLICT(scope_kind, scope_id) DO UPDATE SET
+               profile = excluded.profile, rollout = excluded.rollout, generation = excluded.generation,
+               head_digest = excluded.head_digest, enforced_ever = excluded.enforced_ever, updated_at = excluded.updated_at
+             WHERE assurance_policy_states.generation = ?9 AND assurance_policy_states.head_digest = ?10`,
+          )
+          .bind(k, id, next.profile, next.rollout, next.generation, next.headDigest, next.enforcedEver ? 1 : 0, next.updatedAt, expected.generation, expected.headDigest),
+      ]);
+    } catch {
+      return { ok: false as const, reason: "conflict" as const };
+    }
+    const got = await this.db
+      .prepare("SELECT s.head_digest AS h FROM assurance_policy_states s WHERE s.scope_kind = ?1 AND s.scope_id = ?2")
+      .bind(k, id)
+      .first<{ h: string }>();
+    return got?.h === change.digest ? { ok: true as const } : { ok: false as const, reason: "conflict" as const };
+  }
+}
+
+interface ChangeRow {
+  scope_kind: string;
+  scope_id: string;
+  generation: number;
+  account: string;
+  change_json: string;
+  suite: string;
+  signature_hex: string;
+  digest: string;
+  prev_digest: string;
+  stored_at: number;
+}
+
+function changeOf(r: ChangeRow): PolicyChangeRecord {
+  return {
+    scopeKind: r.scope_kind,
+    scopeId: r.scope_id,
+    generation: r.generation,
+    account: r.account,
+    changeJson: r.change_json,
+    suite: r.suite,
+    signatureHex: r.signature_hex,
+    digest: r.digest,
+    prevDigest: r.prev_digest,
+    storedAt: r.stored_at,
+  };
 }
 
 export class InMemoryPqTrustStorage implements PqTrustStorage {
   private readonly bindings = new Map<string, PqKeyBindingRecord>();
   private readonly boot = new Map<string, BootKeyHybridRecord>();
   private readonly policies = new Map<string, PolicyStateRecord>();
+  private readonly changes = new Map<string, PolicyChangeRecord[]>();
 
   async getBinding(role: string, subjectId: string) {
     const r = this.bindings.get(`${role}|${subjectId}`);
@@ -253,5 +370,31 @@ export class InMemoryPqTrustStorage implements PqTrustStorage {
   async forServer(serverDomain: string) {
     const d = serverDomain.toLowerCase();
     return { policy: await this.getPolicy("installation", d), stkBinding: await this.getBinding("box-stk", d) };
+  }
+
+  async listAccountBindings(username: string, deviceIds: readonly string[]) {
+    const u = username.toLowerCase();
+    const ids = new Set(deviceIds.map((d) => d.toLowerCase()));
+    return [...this.bindings.values()]
+      .filter((b) => ((b.role === "account-irk" || b.role === "admin-root") && b.subjectId === u) || (b.role === "device" && ids.has(b.subjectId)))
+      .map((b) => ({ ...b }));
+  }
+
+  async listPolicyChanges(scopeKind: string, scopeId: string) {
+    return (this.changes.get(`${scopeKind}|${scopeId}`) ?? []).map((c) => ({ ...c }));
+  }
+
+  async appendPolicyChange(change: PolicyChangeRecord, next: PolicyStateRecord, expected: { generation: number; headDigest: string }) {
+    const key = `${change.scopeKind}|${change.scopeId}`;
+    const cur = this.policies.get(key);
+    const curGen = cur?.generation ?? 0;
+    const curHead = cur?.headDigest ?? GENESIS;
+    const list = this.changes.get(key) ?? [];
+    if (curGen !== expected.generation || curHead !== expected.headDigest || list.some((c) => c.generation === change.generation)) {
+      return { ok: false as const, reason: "conflict" as const };
+    }
+    this.changes.set(key, [...list, { ...change }]);
+    this.policies.set(key, { ...next });
+    return { ok: true as const };
   }
 }
