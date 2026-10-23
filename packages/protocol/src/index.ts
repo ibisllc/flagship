@@ -66,3 +66,4 @@ export * from "./peerBackupMail.js";
 export * from "./securityNotice.js";
 export * from "./recoveryRecord.js";
 export * from "./manifestCapabilities.js";
+export * from "./adapterAttestation.js";
