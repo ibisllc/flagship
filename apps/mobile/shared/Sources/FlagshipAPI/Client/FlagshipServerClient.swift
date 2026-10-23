@@ -64,6 +64,12 @@ public protocol FlagshipServerClient: Sendable {
     /// the demo identity and forwards it to that demo user's box.
     func pairDemoSession(username: String, token: String) async throws -> DemoPairSessionResponse
     func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse
+    /// N03 — where the stored recovery record's signed history stands (nil = none). A new record
+    /// chains onto it.
+    func recoveryRecordState(username: String) async throws -> RecoveryRecordState?
+    /// The admin root `.com` pins for the account, lowercase hex (nil = none). The record is
+    /// written under it and `.com` checks it matches.
+    func pinnedAdminRoot(username: String) async throws -> String?
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
     /// Task #74 — the passphrase-gated wrapped-UMK fetch. POSTs
     /// `{ fetchToken: <hex>, issuedAt: <ms> }` to
@@ -312,6 +318,11 @@ public extension FlagshipServerClient {
     func inferenceModels() async throws -> InferenceCatalogResponse {
         throw ScreensClientError.notImplemented("inference models")
     }
+}
+
+public extension FlagshipServerClient {
+    func recoveryRecordState(username: String) async throws -> RecoveryRecordState? { nil }
+    func pinnedAdminRoot(username: String) async throws -> String? { nil }
 }
 
 public extension FlagshipServerClient {
@@ -2119,74 +2130,25 @@ public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-/// POST /api/recovery — SIGNED cloud-recovery upload. Codable-encodes to
-/// `{ request: { username, credentialId, wrappedUmk, issuedAt,
-/// wrappedAcmeAccountKey? }, signature }`, the exact body
-/// `handleUploadWebauthnRecovery` expects.
+/// POST /api/recovery — SIGNED cloud-recovery upload (N03, record v2). Encodes to
+/// `{ claim, signature, wrappedUmk, wrappedAdminRoot?, wrappedAcmeAccountKey? }`.
 ///
-/// - `wrappedUmk` is a SINGLE self-contained base64 blob (nonce‖ct‖tag from
-///   AES-GCM `.combined`). The Worker base64-decodes it and SHA-256s the
-///   bytes; there is NO separate nonce field.
-/// - `signature` is hex Ed25519 by the account IRK over the canonical
-///   `flagship/upload-recovery-record/v1|<username>|<credentialId>|<wrappedUmkHashHex>|<issuedAt>`
-///   (see Flagship/RecoveryUpload). The IRK signs the HASH of the
-///   ciphertext, not the ciphertext, so the bytes stay small.
+/// - `claim` is the complete signed record (`RecoveryRecordV2`): it names the digest of every
+///   ciphertext, the fetch-token and PRF-salt hashes, the record's generation and the digest of
+///   the record it replaces. `.com` checks each ciphertext against its signed digest and the chain
+///   by compare-and-swap, so no valid signature authorizes a different record.
+/// - `wrappedUmk` is a SINGLE self-contained base64 blob (nonce‖ct‖tag from AES-GCM `.combined`).
+/// - The admin-root and ACME ciphertexts accompany exactly the fields the claim `replace`s.
+/// - `signature` is hex Ed25519 by the account IRK over `claim.canonicalBytes()`.
 public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
-    public struct Inner: Codable, Equatable, Sendable {
-        public let username: String
-        public let credentialId: String      // hex (8..256 bytes)
-        public let wrappedUmk: String        // base64 of nonce‖ct‖tag
-        public let issuedAt: Int64           // ms epoch; 5-min freshness
-        /// #28 — escrow-wrapped ACME account key (base64 of nonce‖ct‖tag),
-        /// shipped INSIDE `request` so the Worker reads `r.wrappedAcmeAccountKey`.
-        /// Optional: absent for accounts that never minted an account key.
-        /// Not in the signed canonical bytes — it's opaque ciphertext, so
-        /// tampering breaks account-key recovery, never forges it.
-        public let wrappedAcmeAccountKey: String?
-        /// Slice D (docs/device-admin-tier-spec.md §5.3, D-3) — the escrow-wrapped
-        /// ADMIN MASTER ROOT seed (base64 of nonce‖ct‖tag), shipped INSIDE
-        /// `request`. Wrapped under the SAME PRF secret as the UMK/ACME escrow
-        /// (distinct HKDF salt, see `AdminRootEscrow`) so credential recovery can
-        /// later re-establish the root. Optional: absent for pre-D accounts /
-        /// devices with no admin root. Not in the signed canonical bytes —
-        /// opaque ciphertext, so tampering breaks recovery, never forges it.
-        public let wrappedAdminRoot: String?
-        /// Task #74 — SHA-256 hex (64 chars) of the passphrase-derived
-        /// `fetchToken`. The Worker stores it and later compares it to
-        /// `SHA-256(presented fetchToken)` to gate the wrapped-UMK fetch.
-        /// Optional on the wire (accept-if-present server-side) so the
-        /// signed canonical-bytes type stays stable — the IRK signs only
-        /// over the wrappedUmk hash — but the native enroll always sends it.
-        public let fetchTokenHash: String?
-        /// Task #74 — SHA-256 hex (64 chars) of the passphrase-derived
-        /// `prfSalt`. Returned on the gated fetch so a recovering device
-        /// can confirm it re-derives the same salt (anti-coercion). Same
-        /// accept-if-present optionality as `fetchTokenHash`.
-        public let prfSaltHash: String?
-        public init(
-            username: String,
-            credentialId: String,
-            wrappedUmk: String,
-            issuedAt: Int64,
-            wrappedAcmeAccountKey: String? = nil,
-            wrappedAdminRoot: String? = nil,
-            fetchTokenHash: String? = nil,
-            prfSaltHash: String? = nil
-        ) {
-            self.username = username
-            self.credentialId = credentialId
-            self.wrappedUmk = wrappedUmk
-            self.issuedAt = issuedAt
-            self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
-            self.wrappedAdminRoot = wrappedAdminRoot
-            self.fetchTokenHash = fetchTokenHash
-            self.prfSaltHash = prfSaltHash
-        }
-    }
-    public let request: Inner
-    public let signature: String             // hex Ed25519 by the account IRK
-    public init(request: Inner, signature: String) {
-        self.request = request; self.signature = signature
+    public let claim: RecoveryRecordV2
+    public let signature: String
+    public let wrappedUmk: String
+    public let wrappedAdminRoot: String?
+    public let wrappedAcmeAccountKey: String?
+    public init(claim: RecoveryRecordV2, signature: String, wrappedUmk: String, wrappedAdminRoot: String? = nil, wrappedAcmeAccountKey: String? = nil) {
+        self.claim = claim; self.signature = signature; self.wrappedUmk = wrappedUmk
+        self.wrappedAdminRoot = wrappedAdminRoot; self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
     }
 }
 
@@ -2275,6 +2237,11 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
     /// `FLAGSHIP_RECOVERY_PROOF_SECRET` (in which case the initiate fails
     /// closed rather than proceeding unauthenticated).
     public let recoveryProof: RecoveryProofToken?
+    /// N03 — the owner's signed record, served exactly as stored. Check every ciphertext above
+    /// against its digests BEFORE unwrapping, and its signature once the key is recovered. Absent
+    /// for a legacy (v1) record, whose escrow extras carry no signature.
+    public let signed: SignedRecoveryRecord?
+    public let legacy: Bool?
     public init(
         username: String,
         credentialId: String,
@@ -2284,8 +2251,12 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
         prfSaltHash: String? = nil,
         updatedAt: Int64? = nil,
         registeredIrkPubHex: String? = nil,
-        recoveryProof: RecoveryProofToken? = nil
+        recoveryProof: RecoveryProofToken? = nil,
+        signed: SignedRecoveryRecord? = nil,
+        legacy: Bool? = nil
     ) {
+        self.signed = signed
+        self.legacy = legacy
         self.username = username
         self.credentialId = credentialId
         self.wrappedUmk = wrappedUmk
@@ -2338,6 +2309,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         var wrappedAdminRoot: String?  // Slice D (D-3) escrow-wrapped admin root
         var fetchTokenHash: String?   // SHA-256 hex of the fetchToken
         var prfSaltHash: String?      // SHA-256 hex of the prfSalt
+        var signed: SignedRecoveryRecord?   // N03 — nil = a legacy (v1) row
         var updatedAt: Int64
     }
     private var recoveryRowsByUser: [String: MockRecoveryRow] = [:]
@@ -2628,42 +2600,87 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse {
         try await tick()
-        let updated = recoveryStore[req.request.credentialId] != nil
-        // Mirror the Worker: preserve an existing escrowed admin root on a
-        // UMK-only re-upload (same as the ACME key).
-        let u = req.request.username.lowercased()
+        let claim = req.claim
+        let u = claim.username.lowercased()
         let existing = recoveryRowsByUser[u]
-        let adminRoot = (req.request.wrappedAdminRoot?.isEmpty == false)
-            ? req.request.wrappedAdminRoot
-            : existing?.wrappedAdminRoot
-        recoveryStore[req.request.credentialId] = RecoveryEnvelope(
-            credentialId: req.request.credentialId,
-            wrappedUmk: req.request.wrappedUmk,
-            wrappedAcmeAccountKey: req.request.wrappedAcmeAccountKey,
+        // Mirror the Worker's chain rule: the record must name the stored digest and the next
+        // generation, and each escrow is keep (must match what is held) / replace / remove / none.
+        let heldDigest = existing.map { $0.signed?.digestHex ?? "legacy" } ?? "genesis"
+        guard claim.priorDigestHex == heldDigest else {
+            throw ScreensClientError.http(status: 409, message: "the stored recovery record changed since this was signed; refresh and retry")
+        }
+        let expectedGeneration = (existing?.signed?.generation ?? 0) + 1
+        guard claim.generation == expectedGeneration else {
+            throw ScreensClientError.http(status: 409, message: "the record generation is not the next one")
+        }
+        guard RecoveryRecordV2.sha256Hex(ofBase64: req.wrappedUmk) == claim.wrappedUmkDigestHex else {
+            throw ScreensClientError.http(status: 403, message: "the wrapped UMK is not the one that was signed")
+        }
+        func resolve(_ change: RecoveryEscrowChange, sent: String?, held: String?) throws -> String? {
+            switch change {
+            case .replace(let d):
+                guard let sent, RecoveryRecordV2.sha256Hex(ofBase64: sent) == d else {
+                    throw ScreensClientError.http(status: 403, message: "an escrow is not the one that was signed")
+                }
+                return sent
+            case .keep(let d):
+                guard let held, RecoveryRecordV2.sha256Hex(ofBase64: held) == d, sent == nil else {
+                    throw ScreensClientError.http(status: 409, message: "the signed escrow state does not match what is stored")
+                }
+                return held
+            case .remove:
+                guard held != nil, sent == nil else { throw ScreensClientError.http(status: 409, message: "there is no such escrow to remove") }
+                return nil
+            case .none:
+                guard held == nil, sent == nil else { throw ScreensClientError.http(status: 409, message: "the signed escrow state does not match what is stored") }
+                return nil
+            }
+        }
+        let adminRoot = try resolve(claim.adminRoot, sent: req.wrappedAdminRoot, held: existing?.wrappedAdminRoot)
+        let acme = try resolve(claim.acmeKey, sent: req.wrappedAcmeAccountKey, held: existing?.wrappedAcmeAccountKey)
+        let updated = existing != nil
+        recoveryStore[claim.credentialIdHex] = RecoveryEnvelope(
+            credentialId: claim.credentialIdHex,
+            wrappedUmk: req.wrappedUmk,
+            wrappedAcmeAccountKey: acme,
             wrappedAdminRoot: adminRoot
         )
-        // Mirror the Worker's username-keyed row + Task #74 gate hashes so
-        // the gated fetch round-trips. Preserve an existing escrowed ACME
-        // key on a UMK-only re-upload, matching handleUploadWebauthnRecovery.
-        let acme = (req.request.wrappedAcmeAccountKey?.isEmpty == false)
-            ? req.request.wrappedAcmeAccountKey
-            : existing?.wrappedAcmeAccountKey
+        let digest = try claim.digestHex()
         recoveryRowsByUser[u] = MockRecoveryRow(
-            credentialId: req.request.credentialId,
-            wrappedUmk: req.request.wrappedUmk,
+            credentialId: claim.credentialIdHex,
+            wrappedUmk: req.wrappedUmk,
             wrappedAcmeAccountKey: acme,
             wrappedAdminRoot: adminRoot,
-            fetchTokenHash: req.request.fetchTokenHash?.lowercased() ?? existing?.fetchTokenHash,
-            prfSaltHash: req.request.prfSaltHash?.lowercased() ?? existing?.prfSaltHash,
+            fetchTokenHash: claim.fetchTokenHashHex,
+            prfSaltHash: claim.prfSaltHashHex,
+            signed: SignedRecoveryRecord(claim: claim, signatureHex: req.signature, digestHex: digest, generation: claim.generation),
             updatedAt: Int64(Date().timeIntervalSince1970 * 1000)
         )
-        // A gated row is an enrolled cloud-recovery credential (what the
-        // Worker's re-pair gate reads as "recovery present").
-        if recoveryRowsByUser[u]?.fetchTokenHash != nil {
-            cloudRecoveryByUser[u] = true
-        }
+        cloudRecoveryByUser[u] = true
         return RecoveryEnvelopeResponse(ok: true, updated: updated)
     }
+
+    public func recoveryRecordState(username: String) async throws -> RecoveryRecordState? {
+        try await tick()
+        guard let row = recoveryRowsByUser[username.lowercased()] else { return nil }
+        func digest(_ b64: String?) -> String? { b64.flatMap { RecoveryRecordV2.sha256Hex(ofBase64: $0) } }
+        return RecoveryRecordState(
+            credentialId: row.credentialId,
+            wrappedUmkHash: RecoveryRecordV2.sha256Hex(ofBase64: row.wrappedUmk) ?? "",
+            legacy: row.signed == nil,
+            generation: row.signed?.generation,
+            digestHex: row.signed?.digestHex,
+            adminRootDigestHex: digest(row.wrappedAdminRoot),
+            acmeKeyDigestHex: digest(row.wrappedAcmeAccountKey)
+        )
+    }
+
+    public func pinnedAdminRoot(username: String) async throws -> String? {
+        pinnedAdminRoots[username.lowercased()]
+    }
+
+    /// Test hook — the admin root `.com` would report as pinned for an account.
+    public var pinnedAdminRoots: [String: String] = [:]
 
     public func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope {
         try await tick()
@@ -2706,7 +2723,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             recoveryProof: mintsRecoveryProofOnFetch ? RecoveryProofToken(
                 token: "mock-recovery-proof-\(username.lowercased())",
                 expiresAt: Int64(Date().timeIntervalSince1970 * 1000) + 5 * 60 * 1000
-            ) : nil
+            ) : nil,
+            signed: row.signed,
+            legacy: row.signed == nil ? true : nil
         )
     }
 
@@ -3944,6 +3963,42 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if status == 404 { return false }
         let text = String(data: data, encoding: .utf8) ?? ""
         throw ScreensClientError.http(status: status, message: text)
+    }
+
+    public func recoveryRecordState(username: String) async throws -> RecoveryRecordState? {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/recovery/by-username/\(encoded)"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 404 { return nil }
+        guard status == 200 else { throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "") }
+        struct Body: Decodable {
+            let credentialId: String
+            let wrappedUmkHash: String
+            let legacy: Bool?
+            let generation: Int?
+            let digestHex: String?
+            let adminRootDigestHex: String?
+            let acmeKeyDigestHex: String?
+        }
+        let b = try JSONDecoder().decode(Body.self, from: data)
+        return RecoveryRecordState(
+            credentialId: b.credentialId, wrappedUmkHash: b.wrappedUmkHash, legacy: b.legacy ?? (b.digestHex == nil),
+            generation: b.generation, digestHex: b.digestHex,
+            adminRootDigestHex: b.adminRootDigestHex, acmeKeyDigestHex: b.acmeKeyDigestHex
+        )
+    }
+
+    public func pinnedAdminRoot(username: String) async throws -> String? {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/username/\(encoded)"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "") }
+        struct Body: Decodable { let adminRootPub: String? }
+        return try JSONDecoder().decode(Body.self, from: data).adminRootPub?.lowercased()
     }
 
     public func initiateRePair(

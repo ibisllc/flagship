@@ -74,6 +74,14 @@ interface FlagshipServerClient {
     suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord?
 
     suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse
+
+    /** N03 — where the stored recovery record's signed history stands (null = none). A new record
+     *  chains onto it. */
+    suspend fun recoveryRecordState(username: String): com.flagshipserver.app.core.RecoveryRecordState? = null
+
+    /** The admin root `.com` pins for the account, lowercase hex (null = none). The record is
+     *  written under it and `.com` checks it matches. */
+    suspend fun pinnedAdminRoot(username: String): String? = null
     suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope
 
     /** Task #74 — passphrase-gated cloud-recovery fetch. POSTs
@@ -1238,49 +1246,23 @@ enum class DeviceScope(val wire: String) {
     }
 }
 
-/** `POST /api/recovery` — IRK-SIGNED cloud-recovery upload. Serializes to
- *  `{ request: { username, credentialId, wrappedUmk, issuedAt,
- *  wrappedAcmeAccountKey? }, signature }`, matching
- *  control-plane/webauthnRecovery.handleUploadWebauthnRecovery byte-for-byte.
- *  The Worker base64-decodes `wrappedUmk`, hashes it to wrappedUmkHashHex,
- *  and verifies `signature` (hex, ed25519 by the account IRK) over the
- *  canonical UploadRecoveryRecord. `wrappedUmk` is a SINGLE self-contained
- *  blob (nonce ‖ ct ‖ tag); there is NO separate nonce field. */
+/** `POST /api/recovery` — the IRK-SIGNED cloud-recovery upload (record v2, N03). Serializes to
+ *  `{ claim, signature, wrappedUmk, wrappedAdminRoot?, wrappedAcmeAccountKey? }`.
+ *
+ *  `claim` is the complete signed record: it names the digest of every ciphertext, the fetch-token
+ *  and PRF-salt hashes, the record's generation and the digest of the record it replaces. `.com`
+ *  checks each ciphertext against its signed digest and the chain by compare-and-swap, so no valid
+ *  signature authorizes a different record. `wrappedUmk` is a SINGLE self-contained blob
+ *  (nonce ‖ ct ‖ tag); the admin-root and ACME ciphertexts accompany exactly the fields the claim
+ *  replaces. `signature` is hex Ed25519 by the account IRK over `claim.canonicalBytes()`. */
 @Serializable
 data class RecoveryEnvelopeRequest(
-    val request: Inner,
+    val claim: com.flagshipserver.app.core.RecoveryRecordV2,
     val signature: String,           // hex, IRK
-) {
-    @Serializable
-    data class Inner(
-        val username: String,
-        val credentialId: String,
-        val wrappedUmk: String,
-        val issuedAt: Long,
-        // #28 — the ACME account key escrowed alongside the UMK. Single
-        // self-contained base64 blob (nonce‖ct‖tag) from
-        // AcmeAccountKey.wrapForEscrow. The JSON key MUST be
-        // `wrappedAcmeAccountKey` (read verbatim by the Worker). Optional +
-        // ciphertext only — never in the signed canonical, so tampering
-        // breaks recovery of the account key but can never forge it.
-        val wrappedAcmeAccountKey: String? = null,
-        // Slice D (D-3) — the ADMIN MASTER ROOT escrowed alongside the UMK.
-        // Single self-contained base64 blob (nonce‖ct‖tag) from
-        // AdminRootEscrow.wrapForEscrow, read verbatim by the Worker. Optional +
-        // ciphertext-only (never in the signed canonical), so tampering can
-        // break admin recovery but never forge the root.
-        val wrappedAdminRoot: String? = null,
-        // Task #74 — passphrase-gate hashes. Both are lowercase SHA-256 hex
-        // of the Argon2id-derived fetchToken / prfSalt (see
-        // RecoveryDerivation). Optional on the wire (NOT in the signed
-        // canonical — the protocol only hashes wrappedUmk), but the modern
-        // enroll flow always sends both. fetchTokenHash gates the
-        // /fetch POST; prfSaltHash lets a recovering device confirm it
-        // re-derived the same salt before trusting the PRF output.
-        val fetchTokenHash: String? = null,
-        val prfSaltHash: String? = null,
-    )
-}
+    val wrappedUmk: String,
+    val wrappedAdminRoot: String? = null,
+    val wrappedAcmeAccountKey: String? = null,
+)
 
 @Serializable
 data class RecoveryEnvelopeResponse(val ok: Boolean)
@@ -1334,6 +1316,11 @@ data class GatedRecoveryEnvelope(
      *  `FLAGSHIP_RECOVERY_PROOF_SECRET` (the initiate then fails closed
      *  rather than proceeding unauthenticated). */
     val recoveryProof: RecoveryProofToken? = null,
+    /** N03 — the owner's signed record, served exactly as stored. Check every ciphertext above
+     *  against its digests BEFORE unwrapping, and its signature once the key is recovered. Absent
+     *  for a legacy (v1) record, whose escrow extras carry no signature. */
+    val signed: com.flagshipserver.app.core.SignedRecoveryRecord? = null,
+    val legacy: Boolean? = null,
 )
 
 /** The gated fetch's recovery-session attestation. Opaque to clients. */
@@ -1696,6 +1683,29 @@ class LiveFlagshipServerClient(
             accept = setOf(200, 404),
         )
         return resp.status == 200
+    }
+
+    override suspend fun recoveryRecordState(username: String): com.flagshipserver.app.core.RecoveryRecordState? {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        val resp = transport.execute(
+            method = "GET",
+            url = "$base/api/recovery/by-username/$encoded",
+            accept = setOf(200, 404),
+        )
+        if (resp.status == 404) return null
+        return transport.json.decodeFromString(
+            com.flagshipserver.app.core.RecoveryRecordState.serializer(),
+            resp.body.decodeToString(),
+        )
+    }
+
+    override suspend fun pinnedAdminRoot(username: String): String? {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        val resp = transport.execute(method = "GET", url = "$base/api/username/$encoded", accept = setOf(200))
+        val pub = transport.json.parseToJsonElement(resp.body.decodeToString())
+            .let { (it as? kotlinx.serialization.json.JsonObject)?.get("adminRootPub") }
+            ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+        return pub?.lowercase()
     }
 
     override suspend fun initiateRePair(

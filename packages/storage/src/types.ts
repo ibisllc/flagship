@@ -670,6 +670,16 @@ export interface WebauthnRecoveryRecord {
    * deriving a different PRF output.
    */
   prfSaltHashHex?: string;
+  /**
+   * N03 — the signed v2 envelope this row was written under. Absent on a v1 (legacy) row, whose
+   * escrow fields carry no signature. `signedClaimJson` is the claim exactly as signed.
+   */
+  signed?: {
+    digestHex: string;
+    generation: number;
+    signedClaimJson: string;
+    signatureHex: string;
+  };
   createdAt: number;
   updatedAt: number;
 }
@@ -677,6 +687,14 @@ export interface WebauthnRecoveryRecord {
 export interface WebauthnRecoveryStorage {
   /** Insert or replace. Caller has already verified the IRK signature. */
   upsert(rec: WebauthnRecoveryRecord): Promise<void>;
+  /**
+   * Compare-and-swap for signed v2 writes: store `rec` only if the row's chain link is still
+   * `expectedPriorDigest` (`genesis` = no row, `legacy` = a row with no digest). False when
+   * another writer got there first.
+   */
+  replaceIfDigest(rec: WebauthnRecoveryRecord, expectedPriorDigest: string): Promise<boolean>;
+  /** Delete only if the row's chain link is still `expectedDigest` (`legacy` = no digest). */
+  deleteIfDigest(username: string, expectedDigest: string): Promise<boolean>;
   /** Public read by username; ciphertext-only so disclosure is safe. */
   get(username: string): Promise<WebauthnRecoveryRecord | undefined>;
   /** Delete by username (kill switch — also requires sig verification at handler). */

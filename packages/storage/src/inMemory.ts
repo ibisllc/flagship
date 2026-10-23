@@ -1713,6 +1713,18 @@ export class InMemoryWebauthnRecoveryStorage implements WebauthnRecoveryStorage 
   async delete(username: string): Promise<boolean> {
     return this.rows.delete(this.k(username));
   }
+  async replaceIfDigest(rec: WebauthnRecoveryRecord, expectedPriorDigest: string): Promise<boolean> {
+    const cur = this.rows.get(this.k(rec.username));
+    const held = cur === undefined ? "genesis" : cur.signed?.digestHex ?? "legacy";
+    if (held !== expectedPriorDigest) return false;
+    this.rows.set(this.k(rec.username), { ...rec });
+    return true;
+  }
+  async deleteIfDigest(username: string, expectedDigest: string): Promise<boolean> {
+    const cur = this.rows.get(this.k(username));
+    if (!cur || (cur.signed?.digestHex ?? "legacy") !== expectedDigest) return false;
+    return this.rows.delete(this.k(username));
+  }
 }
 
 export class InMemoryUserIdentityRecordStorage implements UserIdentityRecordStorage {

@@ -30,7 +30,8 @@ import com.flagshipserver.app.core.AcmeAccountKey
 import com.flagshipserver.app.core.AdminRootEscrow
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
-import com.flagshipserver.app.core.RecoveryUpload
+import com.flagshipserver.app.core.RecoveryRecordChain
+import com.flagshipserver.app.core.SignedRecoveryRecord
 import com.google.crypto.tink.subtle.Ed25519Sign
 
 object CloudRecoveryEnrollment {
@@ -69,6 +70,8 @@ object CloudRecoveryEnrollment {
         server: FlagshipServerClient,
         passkeys: PasskeyCeremony,
         irk: Ed25519Sign,
+        /** The account key's public half, hex: the record names its signer. */
+        irkPubHex: String,
         username: String,
         umkSeed: ByteArray,
         passphrase: String,
@@ -111,30 +114,12 @@ object CloudRecoveryEnrollment {
             }
         }
 
-        val wrappedUmkBytes = java.util.Base64.getDecoder().decode(wrappedUmk)
-        val wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes)
-        val signature = RecoveryUpload.sign(
-            irk = irk,
-            username = username,
-            credentialId = credentialId,
-            wrappedUmkHashHex = wrappedUmkHashHex,
-            issuedAt = now,
-        )
-        server.registerRecoveryEnvelope(
-            RecoveryEnvelopeRequest(
-                request = RecoveryEnvelopeRequest.Inner(
-                    username = username,
-                    credentialId = credentialId,
-                    wrappedUmk = wrappedUmk,
-                    issuedAt = now,
-                    wrappedAcmeAccountKey = wrappedAcme,
-                    wrappedAdminRoot = wrappedAdminRoot,
-                    // Task #74 — the passphrase-gate hashes.
-                    fetchTokenHash = RecoveryDerivation.sha256Hex(secrets.fetchToken),
-                    prfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt),
-                ),
-                signature = HexUtil.encode(signature),
-            ),
+        // N03 — sign the COMPLETE record: every ciphertext digest, the fetchToken/prfSalt hashes,
+        // the versions and policy, the record's generation and the digest of the record it
+        // replaces. An escrow not re-sent is keep:<held digest> (or none), never silently inherited.
+        postRecord(
+            server, irk, irkPubHex, username, credentialId, wrappedUmk, wrappedAdminRoot, wrappedAcme,
+            RecoveryDerivation.sha256Hex(secrets.fetchToken), RecoveryDerivation.sha256Hex(secrets.prfSalt), now,
         )
         return EnrollResult(credentialId = credentialId, wrappedUmk = wrappedUmk)
     }
@@ -153,6 +138,8 @@ object CloudRecoveryEnrollment {
          *  `.com` refuses without a credential. Null on a deployment
          *  that mints none (the re-pair then fails closed). */
         val recoveryProofToken: String? = null,
+        /** True when the record came from a v1 row whose escrow extras carry no signature. */
+        val recordWasLegacy: Boolean = false,
     )
 
     /**
@@ -194,12 +181,28 @@ object CloudRecoveryEnrollment {
             }
         }
 
+        // N03 — a signed record names the digest of every ciphertext it covers. Refuse before any
+        // unwrap if `.com` returned a different one (swapped, dropped or added). A legacy record has
+        // no such signature; it is recovered but reported as carrying unsigned extras.
+        fetched.signed?.let { signed ->
+            val bad = signed.claim.ciphertextMismatch(fetched.wrappedUmk, fetched.wrappedAdminRoot, fetched.wrappedAcmeAccountKey)
+            if (bad != null) {
+                throw ValidationError("The stored recovery record does not match its signed digest ($bad); refusing to unwrap it.")
+            }
+        }
+
         // PRF get() input = prfSalt → unwrap.
         val prfSecret = passkeys.assert(fetched.credentialId, secrets.prfSalt)
         val umkSeed = Recovery.unwrap(
             wrappedUmkBase64 = fetched.wrappedUmk,
             prfSecret = prfSecret,
         )
+        // …and the signature itself, now that the recovered key can verify it.
+        fetched.signed?.let { signed ->
+            if (!recoveredKeySigned(umkSeed, signed)) {
+                throw ValidationError("The stored recovery record was not signed by this account's key; refusing to use it.")
+            }
+        }
         // #28 — recover the escrowed ACME account key under the same PRF
         // secret if present. Non-fatal: a failure here is recoverable via a
         // surviving admin device, so swallow it (caller imports if non-null).
@@ -225,6 +228,60 @@ object CloudRecoveryEnrollment {
             acmeScalar = acmeScalar,
             adminRootSeed = adminRootSeed,
             recoveryProofToken = fetched.recoveryProof?.token,
+            recordWasLegacy = fetched.signed == null,
+        )
+    }
+
+    /** Does a key derived from the recovered UMK (any of the first few rotation versions) verify
+     *  the owner's signed record? It was signed by the key in force when it was written. */
+    internal fun recoveredKeySigned(umkSeed: ByteArray, signed: SignedRecoveryRecord): Boolean {
+        for (v in 1..4) {
+            val seed = com.google.crypto.tink.subtle.Hkdf.computeHkdf(
+                "HMACSHA256", umkSeed, "flagship/irk/v$v".toByteArray(), "ed25519-seed".toByteArray(), 32,
+            )
+            val pub = Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey
+            if (HexUtil.encode(pub) == signed.claim.irkPubHex) {
+                return signed.claim.verify(signed.signatureHex, pub)
+            }
+        }
+        return false
+    }
+
+    private suspend fun postRecord(
+        server: FlagshipServerClient,
+        irk: Ed25519Sign,
+        irkPubHex: String,
+        username: String,
+        credentialId: String,
+        wrappedUmk: String,
+        wrappedAdminRoot: String?,
+        wrappedAcme: String?,
+        fetchTokenHashHex: String,
+        prfSaltHashHex: String,
+        now: Long,
+    ) {
+        val current = server.recoveryRecordState(username)
+        val claim = RecoveryRecordChain.next(
+            username = username,
+            irkPubHex = irkPubHex,
+            adminRootPubHex = server.pinnedAdminRoot(username),
+            current = current,
+            credentialIdHex = credentialId,
+            wrappedUmk = wrappedUmk,
+            wrappedAdminRoot = wrappedAdminRoot,
+            wrappedAcmeAccountKey = wrappedAcme,
+            fetchTokenHashHex = fetchTokenHashHex,
+            prfSaltHashHex = prfSaltHashHex,
+            issuedAt = now,
+        )
+        server.registerRecoveryEnvelope(
+            RecoveryEnvelopeRequest(
+                claim = claim,
+                signature = HexUtil.encode(irk.sign(claim.canonicalBytes())),
+                wrappedUmk = wrappedUmk,
+                wrappedAdminRoot = wrappedAdminRoot,
+                wrappedAcmeAccountKey = wrappedAcme,
+            ),
         )
     }
 
@@ -250,6 +307,7 @@ object CloudRecoveryEnrollment {
         server: FlagshipServerClient,
         passkeys: PasskeyCeremony,
         irk: Ed25519Sign,
+        irkPubHex: String,
         username: String,
         passphrase: String,
         newAdminRootSeed: ByteArray,
@@ -293,30 +351,11 @@ object CloudRecoveryEnrollment {
 
         val wrappedAdminRoot = AdminRootEscrow.wrapForEscrow(newAdminRootSeed, prfSecret)
 
-        // Sign over the PASSED-THROUGH wrappedUmk bytes (the record content
-        // the protocol hashes is unchanged; only the sibling ciphertext moves).
-        val wrappedUmkBytes = java.util.Base64.getDecoder().decode(fetched.wrappedUmk)
-        val signature = RecoveryUpload.sign(
-            irk = irk,
-            username = username,
-            credentialId = fetched.credentialId,
-            wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes),
-            issuedAt = now,
-        )
-        server.registerRecoveryEnvelope(
-            RecoveryEnvelopeRequest(
-                request = RecoveryEnvelopeRequest.Inner(
-                    username = username,
-                    credentialId = fetched.credentialId,
-                    wrappedUmk = fetched.wrappedUmk,
-                    issuedAt = now,
-                    wrappedAcmeAccountKey = fetched.wrappedAcmeAccountKey,
-                    wrappedAdminRoot = wrappedAdminRoot,
-                    fetchTokenHash = RecoveryDerivation.sha256Hex(secrets.fetchToken),
-                    prfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt),
-                ),
-                signature = HexUtil.encode(signature),
-            ),
+        // N03 — chain a new signed record onto the stored one: the UMK is passed through
+        // unchanged, the ACME escrow is keep:<digest>, the admin root is replace:<digest>.
+        postRecord(
+            server, irk, irkPubHex, username, fetched.credentialId, fetched.wrappedUmk, wrappedAdminRoot, null,
+            RecoveryDerivation.sha256Hex(secrets.fetchToken), RecoveryDerivation.sha256Hex(secrets.prfSalt), now,
         )
     }
 }
