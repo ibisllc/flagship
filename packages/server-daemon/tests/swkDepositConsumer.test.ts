@@ -18,11 +18,15 @@ import { unsealerFor } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import {
   buildSwkDelivery,
+  deriveServiceSecret,
   ed,
   swkDeliveryToCarrierHex,
   type Keypair,
 } from "@flagship/protocol";
+import { KeydCustodian } from "../src/keydCustodian.js";
+import { startKeydWorker } from "./helpers/keydWorker.js";
 import {
+  ADOPTED,
   claimSwkDeposit,
   decodeAndVerifySwkCarrier,
   type SwkClaimMarkerStore,
@@ -275,5 +279,34 @@ describe("claimSwkDeposit", () => {
     expect(out).toEqual({ claimed: false, reason: "error" });
     expect(marker.marked).toBe(false);
     expect(restarted).toBe(0);
+  });
+});
+
+describe("claimSwkDeposit under flagship-keyd", () => {
+  it("hands keyd the verified sealed key; the plaintext never reaches the daemon", async () => {
+    const irk = makeKey(1);
+    const boxKey = makeKey(9);
+    const keyd = await startKeydWorker({ seed: boxKey.privateKey });
+    const remote = new KeydCustodian({ socketPath: keyd.sock, component: "test" });
+    try {
+      const h = harness({ fetchImpl: fetchReturning(carrier({ irk: makeKey(2), boxKey, swk: SWK })) });
+      const adopt = (sealed: Uint8Array) => remote.provisionSwkSealed(sealed);
+      const refuse = () => {
+        throw new Error("the daemon must not unseal");
+      };
+      // A delivery the owner did not sign never reaches keyd.
+      expect(await claimSwkDeposit({ ...h.opts(irk, boxKey), unsealToBox: refuse, adoptSealed: adopt })).toEqual({ claimed: false, reason: "rejected" });
+      expect(remote.hasSwk).toBe(false);
+      const good = harness({ fetchImpl: fetchReturning(carrier({ irk, boxKey, swk: SWK })) });
+      expect(await claimSwkDeposit({ ...good.opts(irk, boxKey), unsealToBox: refuse, adoptSealed: adopt })).toEqual({ claimed: true, swkHex: ADOPTED });
+      expect(good.persisted).toEqual([]);
+      expect(good.restarted).toBe(1);
+      expect(remote.deriveServiceSecret("alice--chess")).toEqual(deriveServiceSecret(SWK, "alice--chess"));
+      // keyd will not hand the delivered key back as plaintext.
+      expect(() => remote.unsealToBox(new Uint8Array(64))).toThrow(/opens sealed keys itself/);
+    } finally {
+      remote.close();
+      await keyd.stop();
+    }
   });
 });

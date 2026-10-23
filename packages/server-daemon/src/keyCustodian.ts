@@ -85,6 +85,8 @@ export interface BoxSigner {
   signAsBox(msg: Bytes): Bytes;
   /** Open a blob sealed TO the box identity (X25519 via the birational map). */
   unsealToBox(blob: Bytes): Bytes;
+  /** Open a pairing order sealed to the box; refuses anything else that was sealed to it. */
+  unsealPairingOrder(blob: Bytes): Bytes;
   /** Sign a phone/`.com` SecretRequest as the box (canonical-bytes wrapper). */
   signSecretRequest(req: SecretRequest): Bytes;
   /**
@@ -193,6 +195,9 @@ export class KeyCustodian implements BoxSigner, SwkOps, GossipOps {
   }
   unsealToBox(blob: Bytes): Bytes {
     return openSealedFromEd25519Recipient(blob, this.#identity.privateKey);
+  }
+  unsealPairingOrder(blob: Bytes): Bytes {
+    return this.unsealToBox(blob);
   }
   signSecretRequest(req: SecretRequest): Bytes {
     return protocolSignSecretRequest(req, this.#identity);

@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { describe, expect, it } from "vitest";
-import { ed, openSealedFromEd25519Recipient, sealForEd25519Recipient, sealLlmPayload } from "@flagship/protocol";
+import { deriveBackupManifestKey, deriveServiceSecret, ed, openSealedFromEd25519Recipient, sealForEd25519Recipient, sealLlmPayload } from "@flagship/protocol";
 import { BOX_SIGN_PURPOSES, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydError, MAX_FRAME_BYTES, RateLimiter, checkSign, encodeFrame } from "../src/index.js";
-import { CGK, SEED, SWK, startInProcess } from "./helpers.js";
+const unhex = (v: unknown) => Uint8Array.from(Buffer.from(String(v), "hex"));
+import { CGK, PAIRING_ORDER, SEED, SWK, startInProcess } from "./helpers.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -104,11 +105,17 @@ describe("the server", () => {
     try {
       const c = new KeydClient({ socketPath: k.sock, component: "test" });
       await c.connect();
-      const blob = sealForEd25519Recipient(enc("hello"), PUB);
-      expect(Buffer.from(String((await c.call("unseal", { blob: hex(blob) })).plain), "hex").toString()).toBe("hello");
-      const other = sealForEd25519Recipient(enc("hello"), ed.getPublicKey(new Uint8Array(32).fill(9)));
-      await expect(c.call("unseal", { blob: hex(other) })).rejects.toMatchObject({ code: "failed" });
-      expect(openSealedFromEd25519Recipient(blob, SEED)).toEqual(enc("hello"));
+      const blob = sealForEd25519Recipient(PAIRING_ORDER, PUB);
+      expect(unhex((await c.call("unseal", { blob: hex(blob), purpose: "pairing-order" })).plain)).toEqual(PAIRING_ORDER);
+      const other = sealForEd25519Recipient(PAIRING_ORDER, ed.getPublicKey(new Uint8Array(32).fill(9)));
+      await expect(c.call("unseal", { blob: hex(other), purpose: "pairing-order" })).rejects.toMatchObject({ code: "failed" });
+      // A sealed key, a PEM or any other message never comes back out.
+      for (const pt of [SWK, enc("-----BEGIN PRIVATE KEY-----"), enc('{"request":{"type":"x"},"signature":"aa"}'), enc("\ufeff" + new TextDecoder().decode(PAIRING_ORDER))]) {
+        await expect(c.call("unseal", { blob: hex(sealForEd25519Recipient(pt, PUB)), purpose: "pairing-order" })).rejects.toMatchObject({ code: "forbidden" });
+      }
+      await expect(c.call("unseal", { blob: hex(blob) })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("unseal", { blob: hex(blob), purpose: "swk" })).rejects.toMatchObject({ code: "forbidden" });
+      expect(openSealedFromEd25519Recipient(blob, SEED)).toEqual(PAIRING_ORDER);
       c.close();
     } finally {
       await k.stop();
@@ -166,18 +173,36 @@ describe("the server", () => {
     }
   });
 
-  it("derives only labelled subkeys with swk.hkdf", async () => {
+  it("derives only the two fixed, unsalted subkeys with swk.hkdf", async () => {
     const k = await startInProcess();
     try {
       const c = new KeydClient({ socketPath: k.sock, component: "test" });
       await c.connect();
-      const salt = hex(enc("alice--chess"));
-      const r = await c.call("swk.hkdf", { salt, info: "flagship.app-secret.v1" });
       const { hkdf } = await import("@noble/hashes/hkdf");
       const { sha256 } = await import("@noble/hashes/sha256");
-      expect(r.key).toBe(hex(hkdf(sha256, SWK, enc("alice--chess"), enc("flagship.app-secret.v1"), 32)));
-      await expect(c.call("swk.hkdf", { salt, info: "flagship/root-entitlement/v1" })).rejects.toMatchObject({ code: "forbidden" });
-      await expect(c.call("swk.hkdf", { salt, info: "" })).rejects.toMatchObject({ code: "bad-request" });
+      expect((await c.call("swk.hkdf", { salt: "", info: "flagship/peer-backup-key/v1" })).key).toBe(hex(hkdf(sha256, SWK, new Uint8Array(0), enc("flagship/peer-backup-key/v1"), 32)));
+      expect((await c.call("swk.hkdf", { salt: "", info: "flagship.pb-manifest.v1" })).key).toBe(hex(deriveBackupManifestKey(SWK)));
+      // The chunk, LLM, app-secret and TLS-at-rest subkeys stay in keyd.
+      for (const info of ["flagship.app-secret.v1", "flagship.llm.v1", "flagship.chunk.v1", "flagship.tls.v1", "flagship/root-entitlement/v1"]) {
+        await expect(c.call("swk.hkdf", { salt: "", info })).rejects.toMatchObject({ code: "forbidden" });
+      }
+      await expect(c.call("swk.hkdf", { salt: "aa", info: "flagship/peer-backup-key/v1" })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("swk.hkdf", { salt: "", info: "" })).rejects.toMatchObject({ code: "bad-request" });
+      c.close();
+    } finally {
+      await k.stop();
+    }
+  });
+
+  it("derives service secrets only for well-formed service ids", async () => {
+    const k = await startInProcess();
+    try {
+      const c = new KeydClient({ socketPath: k.sock, component: "test" });
+      await c.connect();
+      for (const id of ["alice--chess", "habit-tracker", "a--b-", "x"]) expect((await c.call("swk.deriveServiceSecret", { serviceId: id })).secret).toBe(hex(deriveServiceSecret(SWK, id)));
+      for (const id of ["Alice--chess", "a--b--c", "a---b", "--b", "a--", "-a", "a b", "a.b", "a/b", "a".repeat(64), "flagship.app-secret.v1"]) {
+        await expect(c.call("swk.deriveServiceSecret", { serviceId: id }), id).rejects.toMatchObject({ code: "bad-request" });
+      }
       c.close();
     } finally {
       await k.stop();
@@ -196,6 +221,16 @@ describe("the server", () => {
       await expect(c.call("provision.swk", { key: hex(new Uint8Array(32).fill(7)) })).rejects.toMatchObject({ code: "forbidden" });
       await expect(c.call("provision.swk", { key: "00" })).rejects.toMatchObject({ code: "bad-request" });
       expect(saved).toEqual(["swk"]);
+      // The owner's sealed delivery: keyd opens it and keeps the key; it never comes back.
+      await expect(c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(enc("short"), PUB)) })).rejects.toMatchObject({ code: "failed" });
+      await expect(c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(CGK, ed.getPublicKey(new Uint8Array(32).fill(9)))) })).rejects.toMatchObject({ code: "failed" });
+      await expect(c.call("provision.cgk", { key: hex(CGK), sealed: hex(sealForEd25519Recipient(CGK, PUB)) })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("provision.cgk", {})).rejects.toMatchObject({ code: "bad-request" });
+      expect(await c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) })).toEqual({ stored: true });
+      expect(await c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) })).toEqual({ stored: false, already: true });
+      await expect(c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(SWK, PUB)) })).rejects.toMatchObject({ code: "forbidden", message: "cgk is already provisioned" });
+      await expect(c.call("unseal", { blob: hex(sealForEd25519Recipient(CGK, PUB)), purpose: "pairing-order" })).rejects.toMatchObject({ code: "forbidden" });
+      expect(saved).toEqual(["swk", "cgk"]);
       c.close();
     } finally {
       await k.stop();

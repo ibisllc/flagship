@@ -8,6 +8,7 @@
  * The EXACT twin of the SWK consumer test — only the payload + lane differ.
  */
 
+import { hkdfSync } from "node:crypto";
 import { unsealerFor } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -16,7 +17,10 @@ import {
   cgkDeliveryToCarrierHex,
   type Keypair,
 } from "@flagship/protocol";
+import { KeydCustodian } from "../src/keydCustodian.js";
+import { startKeydWorker } from "./helpers/keydWorker.js";
 import {
+  ADOPTED,
   claimCgkDeposit,
   decodeAndVerifyCgkCarrier,
   type CgkClaimMarkerStore,
@@ -97,6 +101,7 @@ function harness(overrides?: { fetchImpl?: typeof fetch; markerStore?: CgkClaimM
 }
 
 const CGK = new Uint8Array(32).fill(0xcd);
+const INFO = new TextEncoder().encode("flagship/app-copy-env/v1|alice--chess");
 
 describe("decodeAndVerifyCgkCarrier", () => {
   it("returns the CGK hex for a good carrier", () => {
@@ -228,5 +233,34 @@ describe("claimCgkDeposit", () => {
     expect(out).toEqual({ claimed: false, reason: "error" });
     expect(marker.marked).toBe(false);
     expect(restarted).toBe(0);
+  });
+});
+
+describe("claimCgkDeposit under flagship-keyd", () => {
+  it("hands keyd the verified sealed key; the plaintext never reaches the daemon", async () => {
+    const irk = makeKey(1);
+    const boxKey = makeKey(9);
+    const keyd = await startKeydWorker({ seed: boxKey.privateKey });
+    const remote = new KeydCustodian({ socketPath: keyd.sock, component: "test" });
+    try {
+      const h = harness({ fetchImpl: fetchReturning(carrier({ irk: makeKey(2), boxKey, cgk: CGK })) });
+      const adopt = (sealed: Uint8Array) => remote.provisionCgkSealed(sealed);
+      const refuse = () => {
+        throw new Error("the daemon must not unseal");
+      };
+      // A delivery the owner did not sign never reaches keyd.
+      expect(await claimCgkDeposit({ ...h.opts(irk, boxKey), unsealToBox: refuse, adoptSealed: adopt })).toEqual({ claimed: false, reason: "rejected" });
+      expect(remote.hasCgk).toBe(false);
+      const good = harness({ fetchImpl: fetchReturning(carrier({ irk, boxKey, cgk: CGK })) });
+      expect(await claimCgkDeposit({ ...good.opts(irk, boxKey), unsealToBox: refuse, adoptSealed: adopt })).toEqual({ claimed: true, cgkHex: ADOPTED });
+      expect(good.persisted).toEqual([]);
+      expect(good.restarted).toBe(1);
+      expect(remote.deriveAppCopyEnvKey(INFO)).toEqual(new Uint8Array(hkdfSync("sha256", CGK, new Uint8Array(0), INFO, 32)));
+      // keyd will not hand the delivered key back as plaintext.
+      expect(() => remote.unsealToBox(new Uint8Array(64))).toThrow(/opens sealed keys itself/);
+    } finally {
+      remote.close();
+      await keyd.stop();
+    }
   });
 });

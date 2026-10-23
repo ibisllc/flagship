@@ -50,6 +50,39 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "pb/request-peers/v1",
 ];
 
+/// `SWK_HKDF_LABELS`: the only workload-key derivations keyd hands out (both unsalted).
+pub const SWK_HKDF_LABELS: &[&str] = &["flagship.pb-manifest.v1", "flagship/peer-backup-key/v1"];
+
+/// `UNSEAL_PURPOSES`: the sealed messages keyd opens and returns.
+pub const UNSEAL_PURPOSES: &[&str] = &["pairing-order"];
+
+/// `isPairingOrder`: UTF-8 JSON `{"request": {"type": "add-paired-session", ..}, "signature": "..", ..}`.
+pub fn is_pairing_order(plain: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(plain) else {
+        return false;
+    };
+    let Ok(serde_json::Value::Object(o)) = serde_json::from_str::<serde_json::Value>(text) else {
+        return false;
+    };
+    let Some(serde_json::Value::Object(r)) = o.get("request") else {
+        return false;
+    };
+    r.get("type").and_then(serde_json::Value::as_str) == Some("add-paired-session")
+        && o.get("signature").is_some_and(serde_json::Value::is_string)
+}
+
+fn is_service_label(p: &str) -> bool {
+    let b = p.as_bytes();
+    let ok = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit();
+    b.first().is_some_and(ok) && b.len() <= 63 && b.iter().all(|c| ok(c) || *c == b'-')
+}
+
+/// `isServiceId`: `<creator>--<slug>` or a bare `<slug>`, each half a lowercase DNS label.
+pub fn is_service_id(id: &str) -> bool {
+    let parts: Vec<&str> = id.split("--").collect();
+    parts.len() <= 2 && parts.iter().all(|p| is_service_label(p))
+}
+
 pub const MAX_SIGN_BYTES: usize = 256 * 1024;
 
 fn no_purpose() -> KeydError {
@@ -375,6 +408,40 @@ mod tests {
             "{:?}",
             String::from_utf8_lossy(m)
         );
+    }
+
+    #[test]
+    fn service_ids_and_pairing_orders() {
+        for id in ["alice--chess", "habit-tracker", "a--b-", "x"] {
+            assert!(is_service_id(id), "{id}");
+        }
+        let long = "a".repeat(64);
+        for id in [
+            "Alice--chess",
+            "a--b--c",
+            "a---b",
+            "--b",
+            "a--",
+            "-a",
+            "a b",
+            "a.b",
+            "",
+            long.as_str(),
+        ] {
+            assert!(!is_service_id(id), "{id}");
+        }
+        assert!(is_pairing_order(
+            br#"{"request":{"type":"add-paired-session"},"signature":"aa"}"#
+        ));
+        for bad in [
+            &br#"{"request":{"type":"x"},"signature":"aa"}"#[..],
+            br#"{"request":{"type":"add-paired-session"},"signature":1}"#,
+            br#"[{"request":{"type":"add-paired-session"},"signature":"aa"}]"#,
+            b"\xef\xbb\xbf{}",
+            &[0x11u8; 32],
+        ] {
+            assert!(!is_pairing_order(bad));
+        }
     }
 
     #[test]

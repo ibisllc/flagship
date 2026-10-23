@@ -60,19 +60,18 @@ export function isOpaqueKey(key: unknown): boolean {
 }
 
 // ── Opaque workload secrets (the SWK) ──────────────────────────────────────
-// Everything the box does with its workload key is an HKDF derivation of a purpose-specific
-// subkey. An opaque secret stands in for the 32-byte SWK and answers exactly that: derive
-// (salt, info) -> 32 bytes, where `info` must be one of the labels in SWK_DERIVE_LABELS.
+// An opaque secret stands in for the 32-byte SWK where code takes `swk: Bytes`, and answers
+// one thing: derive (salt, info) -> 32 bytes, where `info` must be one of SWK_DERIVE_LABELS.
 // Any other use of the bytes throws.
 
-/** The only labels a workload-key derivation may use. keyd enforces the same list. */
+/**
+ * The only labels an opaque workload-key derivation may use, as keyd allows (`SWK_HKDF_LABELS`
+ * in packages/keyd/src/policy.ts). The chunk, LLM, app-secret and TLS-at-rest subkeys are used
+ * through keyd's own seal/open/derive operations and are never handed out.
+ */
 export const SWK_DERIVE_LABELS: ReadonlySet<string> = new Set([
-  "flagship.chunk.v1",
-  "flagship.llm.v1",
-  "flagship.tls.v1",
   "flagship.pb-manifest.v1",
   "flagship/peer-backup-key/v1",
-  "flagship.app-secret.v1",
 ]);
 
 export interface OpaqueSecretOps {

@@ -55,10 +55,9 @@ async function identityFor(argv: string[], privHex: string | undefined): Promise
   const client = new KeydSyncClient({ socketPath, component: "install-helper" });
   const hello = client.connect();
   const publicKey = hexToBytes(hello.publicKey);
-  const call = (op: "sign" | "unseal", key: string, value: Uint8Array) => hexToBytes(String(client.call(op, { [key]: bytesToHex(value) })[op === "sign" ? "sig" : "plain"]));
   return {
     publicKey,
-    privateKey: opaqueKey({ publicKey, sign: (m) => call("sign", "msg", m), unseal: (b) => call("unseal", "blob", b) }),
+    privateKey: opaqueKey({ publicKey, sign: (m) => hexToBytes(String(client.call("sign", { msg: bytesToHex(m) }).sig)) }),
   };
 }
 

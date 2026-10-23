@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ed, macGossip, openGossip, sealForEd25519Recipient, sealGossip, signSecretRequest, signBootSuspension, type SecretRequest } from "@flagship/protocol";
+import { ed, macGossip, openGossip, openSealedFromEd25519Recipient, sealForEd25519Recipient, sealGossip, signSecretRequest, signBootSuspension, type SecretRequest } from "@flagship/protocol";
 import { KeyCustodian } from "../src/keyCustodian.js";
 import { KeydCustodian } from "../src/keydCustodian.js";
 import { gossipCryptoFromOps } from "../src/gossip/gossipCrypto.js";
@@ -54,9 +54,14 @@ describe("KeydCustodian behaves like the in-process KeyCustodian", () => {
     expect(ok).toMatch(/^Flagship-Boot-v1 /);
   });
 
-  it("opens what is sealed to the box", () => {
-    const blob = sealForEd25519Recipient(enc("for the box"), local.boxPublicKey());
-    expect(new TextDecoder().decode(remote.unsealToBox(blob))).toBe("for the box");
+  it("opens only pairing orders sealed to the box; sealed keys never come back out", () => {
+    const order = enc(JSON.stringify({ request: { type: "add-paired-session", serverId: "x", token: "t", issuedAt: 1 }, signature: "aa" }));
+    const blob = sealForEd25519Recipient(order, local.boxPublicKey());
+    expect(remote.unsealPairingOrder(blob)).toEqual(order);
+    expect(local.unsealPairingOrder(blob)).toEqual(order);
+    expect(() => remote.unsealPairingOrder(sealForEd25519Recipient(SWK, local.boxPublicKey()))).toThrow(/not a pairing order/);
+    expect(() => remote.unsealToBox(sealForEd25519Recipient(enc("for the box"), local.boxPublicKey()))).toThrow(/opens sealed keys itself/);
+    expect(() => openSealedFromEd25519Recipient(blob, remote.identityKeypair().privateKey)).toThrow();
   });
 
   it("SWK operations interoperate in both directions and derive the same subkeys", () => {

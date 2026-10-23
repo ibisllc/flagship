@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ed, opaqueKey, signBootSuspension, verifyBootSuspension, sealForEd25519Recipient, openSealedFromEd25519Recipient } from "@flagship/protocol";
 import { KeydSyncClient } from "../src/index.js";
-import { SEED, startInWorker } from "./helpers.js";
+import { PAIRING_ORDER, SEED, startInWorker } from "./helpers.js";
 
 const PUB = ed.getPublicKey(SEED);
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -38,12 +38,13 @@ describe("the synchronous client", () => {
     const key = opaqueKey({
       publicKey: PUB,
       sign: (m) => Uint8Array.from(Buffer.from(String(client.call("sign", { msg: hex(m) }).sig), "hex")),
-      unseal: (b) => Uint8Array.from(Buffer.from(String(client.call("unseal", { blob: hex(b) }).plain), "hex")),
+      unseal: (b) => Uint8Array.from(Buffer.from(String(client.call("unseal", { blob: hex(b), purpose: "pairing-order" }).plain), "hex")),
     });
     const order = { serverDomain: "home.a.flagship.services", epoch: 1, seq: 1, action: "suspend" as const, reason: "dead-man", signer: "box" as const, issuedAt: 1760000000000 };
     expect(verifyBootSuspension(order, signBootSuspension(order, key), PUB)).toBe(true);
-    const blob = sealForEd25519Recipient(enc("sealed"), PUB);
-    expect(new TextDecoder().decode(openSealedFromEd25519Recipient(blob, key))).toBe("sealed");
+    const blob = sealForEd25519Recipient(PAIRING_ORDER, PUB);
+    expect(openSealedFromEd25519Recipient(blob, key)).toEqual(PAIRING_ORDER);
+    expect(() => openSealedFromEd25519Recipient(sealForEd25519Recipient(enc("sealed"), PUB), key)).toThrow(/not a pairing order/);
     // keyd still refuses what policy forbids, even through the protocol's signers.
     const bad = { ...order, signer: "owner" as const };
     expect(() => signBootSuspension(bad, key)).toThrow();
