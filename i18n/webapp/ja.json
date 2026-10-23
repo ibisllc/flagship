@@ -2690,5 +2690,6 @@
   "The app was open to all.": "このアプリは全員に公開されていました。",
   "Restored permissions approved.": "復元されたアクセス許可を承認しました。",
   "The restored list changed. Review it and approve again.": "復元されたリストが変更されました。確認して、もう一度承認してください。",
-  "{0} discarded.": "{0} を破棄しました。"
+  "{0} discarded.": "{0} を破棄しました。",
+  "The server is restarting": "サーバーを再起動しています"
 }
