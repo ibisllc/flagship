@@ -19,9 +19,8 @@
 import {
   type GossipAnnouncement,
   type SignedServerOrder,
-  macGossip,
-  sealGossip,
 } from "@flagship/protocol";
+import { asGossipCrypto, type GossipCrypto } from "./gossipCrypto.js";
 import {
   accountLeader,
   leadsSnapshot as computeLeadsSnapshot,
@@ -55,7 +54,7 @@ export interface SelfAnnounceState {
 }
 
 export interface GossipLoopDeps {
-  cgk: Uint8Array;
+  cgk: Uint8Array | GossipCrypto;
   view: SiblingView;
   claimer: RouteClaimer;
   /**
@@ -110,6 +109,7 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const now = deps.now ?? (() => Date.now());
   const log = deps.onLog ?? (() => {});
+  const crypto = asGossipCrypto(deps.cgk);
   const rankOf = deps.rankOf ?? (() => null);
   let timer: ReturnType<typeof setInterval> | null = null;
   // The services this box led on the most recent election round (Phase 6 Part 3).
@@ -130,13 +130,13 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
 
   async function announce(s: SelfAnnounceState): Promise<void> {
     const a = buildAnnouncement(s);
-    const mac = macGossip(a, deps.cgk);
+    const mac = crypto.mac(a);
     // The signed order rides beside the MAC'd announcement (it carries its own
     // signature) so a sibling that missed it learns it from us.
     const plaintext = new TextEncoder().encode(
       JSON.stringify({ announcement: a, mac, ...(s.order ? { serverOrder: s.order } : {}) }),
     );
-    const sealed = sealGossip(plaintext, deps.cgk);
+    const sealed = crypto.seal(plaintext);
     try {
       await fetchImpl(deps.broadcastUrl, {
         method: "POST",

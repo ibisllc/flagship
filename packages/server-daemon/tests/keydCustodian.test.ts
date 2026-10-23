@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ed, openGossip, sealForEd25519Recipient, sealGossip, signSecretRequest, signBootSuspension, type SecretRequest } from "@flagship/protocol";
+import { ed, macGossip, openGossip, openSealedFromEd25519Recipient, sealForEd25519Recipient, sealGossip, signSecretRequest, signBootSuspension, type SecretRequest } from "@flagship/protocol";
 import { KeyCustodian } from "../src/keyCustodian.js";
 import { KeydCustodian } from "../src/keydCustodian.js";
+import { gossipCryptoFromOps } from "../src/gossip/gossipCrypto.js";
+import { accessSyncKeyFromOps, accessSyncMac, deriveAccessSyncKey } from "../src/accessSync.js";
 import { startKeydWorker } from "./helpers/keydWorker.js";
 
 const SEED = new Uint8Array(32).fill(0x33);
@@ -52,9 +54,14 @@ describe("KeydCustodian behaves like the in-process KeyCustodian", () => {
     expect(ok).toMatch(/^Flagship-Boot-v1 /);
   });
 
-  it("opens what is sealed to the box", () => {
-    const blob = sealForEd25519Recipient(enc("for the box"), local.boxPublicKey());
-    expect(new TextDecoder().decode(remote.unsealToBox(blob))).toBe("for the box");
+  it("opens only pairing orders sealed to the box; sealed keys never come back out", () => {
+    const order = enc(JSON.stringify({ request: { type: "add-paired-session", serverId: "x", token: "t", issuedAt: 1 }, signature: "aa" }));
+    const blob = sealForEd25519Recipient(order, local.boxPublicKey());
+    expect(remote.unsealPairingOrder(blob)).toEqual(order);
+    expect(local.unsealPairingOrder(blob)).toEqual(order);
+    expect(() => remote.unsealPairingOrder(sealForEd25519Recipient(SWK, local.boxPublicKey()))).toThrow(/not a pairing order/);
+    expect(() => remote.unsealToBox(sealForEd25519Recipient(enc("for the box"), local.boxPublicKey()))).toThrow(/opens sealed keys itself/);
+    expect(() => openSealedFromEd25519Recipient(blob, remote.identityKeypair().privateKey)).toThrow();
   });
 
   it("SWK operations interoperate in both directions and derive the same subkeys", () => {
@@ -74,6 +81,19 @@ describe("KeydCustodian behaves like the in-process KeyCustodian", () => {
     const info = enc("flagship/app-copy-env/v1|alice--chess");
     expect(remote.deriveAppCopyEnvKey(info)).toEqual(local.deriveAppCopyEnvKey(info));
     expect(() => remote.deriveAppCopyEnvKey(enc("flagship/other/v1|x"))).toThrow();
+  });
+
+  it("gossip and access-sync MACs come from keyd, match the raw-key forms, and are tag-bound", () => {
+    const a = { user: "alice", name: "home.alice.flagship.services", birthAuthHex: "ab", birthDate: 1, orderDate: 0, services: ["chess"], liveness: "live" as const, issuedAt: 2 };
+    expect(gossipCryptoFromOps(remote).mac(a)).toBe(macGossip(a, CGK));
+    expect(gossipCryptoFromOps(local).mac(a)).toBe(macGossip(a, CGK));
+    const f = { op: "push" as const, from: "a.alice.flagship.services", to: "b.alice.flagship.services", serviceRef: "alice--chess", issuedAt: 3, body: "{}" };
+    expect(accessSyncMac(accessSyncKeyFromOps(remote), f)).toBe(accessSyncMac(deriveAccessSyncKey(CGK), f));
+    expect(accessSyncMac(accessSyncKeyFromOps(local), f)).toBe(accessSyncMac(deriveAccessSyncKey(CGK), f));
+    for (const c of [remote, local]) {
+      expect(() => c.gossipMac(enc("flagship/access-sync/v1|x"))).toThrow(/gossip\/v2 messages only/);
+      expect(() => c.accessSyncMac(enc("flagship/gossip/v2|x"))).toThrow(/access-sync\/v1 messages only/);
+    }
   });
 
   it("never lets the private key be read, even through the keypair handed to legacy code", () => {

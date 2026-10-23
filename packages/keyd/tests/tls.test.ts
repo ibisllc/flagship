@@ -7,7 +7,7 @@ import { Pkcs10CertificateRequest, X509CertificateGenerator, X509Certificate as 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { p256 } from "@noble/curves/nist.js";
 import { sha256 } from "@noble/hashes/sha256";
-import { KeydClient, TlsKeys } from "../src/index.js";
+import { KeydClient, TlsKeys, isEcdheParams, tls13ServerSignedMessage } from "../src/index.js";
 import { SEED, startInProcess } from "./helpers.js";
 
 const FQDN = "home.alice.flagship.services";
@@ -56,23 +56,37 @@ describe("TLS keys held by keyd", () => {
     }
   });
 
+  it("builds only TLS server signature inputs", () => {
+    const m = tls13ServerSignedMessage(new Uint8Array(32).fill(7));
+    expect(m.length).toBe(64 + 33 + 1 + 32);
+    expect(Buffer.from(m.subarray(0, 64)).equals(Buffer.alloc(64, 0x20))).toBe(true);
+    expect(Buffer.from(m.subarray(64, 98)).toString("latin1")).toBe("TLS 1.3, server CertificateVerify\0");
+    expect(isEcdheParams(Uint8Array.of(3, 0, 0x17, 65, 4, ...new Uint8Array(64)))).toBe(true);
+    expect(isEcdheParams(Uint8Array.of(3, 0, 0x1d, 32, ...new Uint8Array(32)))).toBe(true);
+    expect(isEcdheParams(Uint8Array.of(3, 0, 0x19, 133, 4, ...new Uint8Array(132)))).toBe(true);
+    expect(isEcdheParams(Uint8Array.of(3, 0, 0x17, 65, 2, ...new Uint8Array(64)))).toBe(false);
+    expect(isEcdheParams(Uint8Array.of(3, 0, 0x1d, 32, ...new Uint8Array(33)))).toBe(false);
+    expect(isEcdheParams(Uint8Array.of(1, 0, 0x1d, 32, ...new Uint8Array(32)))).toBe(false);
+    expect(isEcdheParams(new TextEncoder().encode("flagship/inject/v1|a|b"))).toBe(false);
+  });
+
   it("accepts a certificate for its own key and names, serves it, and signs handshakes only then", async () => {
     const tls = new TlsKeys(ALLOWED, dir);
     const { handle } = tls.createKey([FQDN]);
-    const digest = sha256(new TextEncoder().encode("handshake transcript"));
-    expect(() => tls.sign(handle, digest)).toThrow(/no certificate/);
+    const message = tls13ServerSignedMessage(sha256(new TextEncoder().encode("handshake transcript")));
+    expect(() => tls.signHandshake(handle, message)).toThrow(/no certificate/);
     expect(() => tls.activate(handle)).toThrow(/install a certificate/);
     const chain = await issueFor(tls.csr(handle));
     const info = tls.install(handle, chain);
     expect(info.names).toEqual([FQDN]);
     tls.activate(handle);
     expect(tls.active()).toMatchObject({ handle, names: [FQDN] });
-    const sig = tls.sign(handle, digest);
+    const sig = tls.signHandshake(handle, message);
     const leaf = new X509Certificate(chain);
     const pub = leaf.publicKey;
     // The signature verifies under the certificate's key.
     const raw = pub.export({ type: "spki", format: "der" });
-    expect(p256.verify(sig, digest, Uint8Array.from(Buffer.from(raw.subarray(raw.length - 65))), { prehash: false, format: "der" })).toBe(true);
+    expect(p256.verify(sig, sha256(message), Uint8Array.from(Buffer.from(raw.subarray(raw.length - 65))), { prehash: false, format: "der" })).toBe(true);
     void createSign; void createVerify; void createPublicKey; void generateKeyPairSync; void PecX509;
   });
 
@@ -98,7 +112,7 @@ describe("TLS keys held by keyd", () => {
     t1.activate(handle);
     const t2 = new TlsKeys(ALLOWED, dir);
     expect(t2.active()?.handle).toBe(handle);
-    expect(t2.sign(handle, sha256(new Uint8Array(1)))).toBeInstanceOf(Uint8Array);
+    expect(t2.signHandshake(handle, tls13ServerSignedMessage(sha256(new Uint8Array(1))))).toBeInstanceOf(Uint8Array);
     expect(() => t2.remove(handle)).toThrow(/in service/);
   });
 
@@ -115,8 +129,9 @@ describe("TLS keys held by keyd", () => {
       expect(JSON.stringify(listed)).not.toMatch(/priv/i);
       expect((await c.call("tls.active")).active).toMatchObject({ handle: created.handle });
       await expect(c.call("tls.createKey", { names: ["evil.example.com"] })).rejects.toMatchObject({ code: "forbidden" });
-      await expect(c.call("tls.sign", { handle: created.handle, digest: "00" })).rejects.toMatchObject({ code: "bad-request" });
-      const sig = await c.call("tls.sign", { handle: created.handle, digest: hex(sha256(new Uint8Array(3))) });
+      await expect(c.call("tls.sign", { handle: created.handle, digest: hex(sha256(new Uint8Array(3))) })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("tls.sign", { handle: created.handle, tls: "1.2", clientRandom: "00".repeat(32), serverRandom: "00".repeat(32), params: hex(new TextEncoder().encode("flagship/x/v1|a")) })).rejects.toMatchObject({ code: "bad-request" });
+      const sig = await c.call("tls.sign", { handle: created.handle, tls: "1.3", transcriptHash: hex(sha256(new Uint8Array(3))) });
       expect(String(sig.sig).length).toBeGreaterThan(100);
       c.close();
     } finally {
@@ -157,7 +172,7 @@ describe("taking over an upgraded box's certificate", () => {
       const r = tls.importLegacy(await pkcs8(keys), await mk([FQDN, `*.${FQDN}`]));
       expect(r.names).toEqual([FQDN, `*.${FQDN}`].sort());
       expect(tls.active()).toMatchObject({ handle: r.handle, legacy: true });
-      expect(tls.sign(r.handle, sha256(new Uint8Array(2)))).toBeInstanceOf(Uint8Array);
+      expect(tls.signHandshake(r.handle, tls13ServerSignedMessage(sha256(new Uint8Array(2))))).toBeInstanceOf(Uint8Array);
       expect(tls.list()[0]).toMatchObject({ legacy: true, active: true });
       // Not this box's names, not the certificate's key, not P-256.
       const other = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);

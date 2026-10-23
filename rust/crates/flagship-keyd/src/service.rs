@@ -9,26 +9,25 @@ use serde_json::Value;
 use zeroize::Zeroizing;
 
 use crate::acme::{AcmeAccount, AcmeRequest};
-use crate::crypto::{Key32, gcm_open, gcm_seal, hkdf32, open_sealed, sha256};
+use crate::crypto::{Key32, gcm_open, gcm_seal, hkdf32, hmac_sha256, open_sealed, sha256};
 use crate::files::save_key_file;
 use crate::obj;
-use crate::policy::{BOX_SIGN_PURPOSES, check_sign};
-use crate::tls::TlsKeys;
+use crate::policy::{
+    BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, check_sign, is_pairing_order,
+    is_service_id,
+};
+use crate::tls::{
+    TlsKeys, is_ecdhe_params, tls12_server_signed_message, tls13_server_signed_message,
+};
 use crate::wire::{
     Args, ErrorCode, HexBounds, KEYD_PROTOCOL_VERSION, KeydError, KeydResult, PEM_MAX, hex_arg,
     no_extra_args, pem_arg, str_arg, string_list, to_hex,
 };
 
-/// The only labels a workload-key derivation may use (`SWK_DERIVE_LABELS` in opaqueKey.ts).
-pub const SWK_DERIVE_LABELS: &[&str] = &[
-    "flagship.chunk.v1",
-    "flagship.llm.v1",
-    "flagship.tls.v1",
-    "flagship.pb-manifest.v1",
-    "flagship/peer-backup-key/v1",
-    "flagship.app-secret.v1",
-];
-
+const GOSSIP_TAG: &str = "flagship/gossip/v2|";
+const ACCESS_SYNC_TAG: &str = "flagship/access-sync/v1|";
+const ACCESS_SYNC_KEY_INFO: &[u8] = b"flagship/access-sync/key/v1";
+const MAX_MAC_BYTES: usize = 64 * 1024;
 const APP_COPY_ENV_PREFIX: &[u8] = b"flagship/app-copy-env/v1|";
 const BULK: usize = 3 * 1024 * 1024;
 
@@ -202,20 +201,34 @@ impl KeydService {
                 })
             }
             "unseal" => {
-                no_extra_args(a, &["blob"])?;
+                // Only a sealed message the daemon must read, checked by its shape once opened; a
+                // sealed key never comes back out (provision.* and acme.importGranted keep those).
+                no_extra_args(a, &["blob", "purpose"])?;
                 let blob = hex_arg(a, "blob", HexBounds::range(44, 1024 * 1024))?;
+                let purpose = str_arg(a, "purpose", 32)?;
+                if !UNSEAL_PURPOSES.contains(&purpose) {
+                    return Err(KeydError::forbidden(
+                        "keyd opens no sealed message of that kind",
+                    ));
+                }
                 let plain = open_sealed(&blob, self.stk()?)
                     .map_err(|_| KeydError::failed("could not open the blob"))?;
+                if !is_pairing_order(&plain) {
+                    return Err(KeydError::forbidden(
+                        "the sealed message is not a pairing order",
+                    ));
+                }
                 done(obj! { "plain" => to_hex(&plain) })
             }
             "swk.hkdf" => {
-                // Only the labels the box derives; a compromised daemon cannot choose its own subkey.
+                // Only the two fixed, unsalted subkeys the daemon needs; the chunk, LLM, app-secret
+                // and TLS-at-rest subkeys stay behind their own operations.
                 no_extra_args(a, &["salt", "info"])?;
                 let info = str_arg(a, "info", 128)?;
-                if !SWK_DERIVE_LABELS.contains(&info) {
+                if !SWK_HKDF_LABELS.contains(&info) {
                     return Err(KeydError::forbidden("that derivation label is not allowed"));
                 }
-                let salt = hex_arg(a, "salt", HexBounds::max(512))?;
+                let salt = hex_arg(a, "salt", HexBounds::max(0))?;
                 done(obj! { "key" => to_hex(hkdf32(self.swk()?, &salt, info.as_bytes()).as_ref()) })
             }
             "swk.seal" => {
@@ -256,6 +269,11 @@ impl KeydService {
                 no_extra_args(a, &["serviceId"])?;
                 let swk = self.swk()?;
                 let id = str_arg(a, "serviceId", 200)?;
+                if !is_service_id(id) {
+                    return Err(KeydError::bad_request(
+                        "serviceId must be <creator>--<slug> or <slug>",
+                    ));
+                }
                 done(
                     obj! { "secret" => to_hex(hkdf32(swk, id.as_bytes(), b"flagship.app-secret.v1").as_ref()) },
                 )
@@ -298,6 +316,26 @@ impl KeydService {
                 }
                 done(obj! { "key" => to_hex(hkdf32(self.cgk()?, &[], &info).as_ref()) })
             }
+            "cgk.gossipMac" | "cgk.accessSyncMac" => {
+                // Only the box's own two gossip message kinds, so the CGK is no general MAC oracle.
+                no_extra_args(a, &["msg"])?;
+                let msg = hex_arg(a, "msg", HexBounds::range(1, MAX_MAC_BYTES))?;
+                let gossip = op == "cgk.gossipMac";
+                let tag: &str = if gossip { GOSSIP_TAG } else { ACCESS_SYNC_TAG };
+                if !msg.starts_with(tag.as_bytes()) {
+                    return Err(KeydError::forbidden(format!(
+                        "the gossip key MACs {} messages only",
+                        tag.trim_end_matches('|')
+                    )));
+                }
+                let cgk = self.cgk()?;
+                let mac = if gossip {
+                    hmac_sha256(cgk, &msg)
+                } else {
+                    hmac_sha256(hkdf32(cgk, &[], ACCESS_SYNC_KEY_INFO).as_ref(), &msg)
+                };
+                done(obj! { "mac" => to_hex(&mac) })
+            }
             "tls.createKey" => {
                 no_extra_args(a, &["names"])?;
                 let names = string_list(a.get("names"))?;
@@ -328,10 +366,40 @@ impl KeydService {
                 done(obj! { "active" => self.tls()?.active() })
             }
             "tls.sign" => {
-                no_extra_args(a, &["handle", "digest"])?;
-                let digest = hex_arg(a, "digest", HexBounds::range(32, 48))?;
+                // keyd builds the signed input from the TLS fields: the certificate key signs TLS
+                // 1.3 CertificateVerify and TLS 1.2 ServerKeyExchange inputs and nothing else.
+                let handle = str_arg(a, "handle", 32)?;
+                let version = str_arg(a, "tls", 8)?;
+                let message = match version {
+                    "1.3" => {
+                        no_extra_args(a, &["handle", "tls", "transcriptHash"])?;
+                        let th = hex_arg(a, "transcriptHash", HexBounds::range(32, 48))?;
+                        if th.len() != 32 && th.len() != 48 {
+                            return Err(KeydError::bad_request(
+                                "transcriptHash must be 32 or 48 bytes",
+                            ));
+                        }
+                        tls13_server_signed_message(&th)
+                    }
+                    "1.2" => {
+                        no_extra_args(
+                            a,
+                            &["handle", "tls", "clientRandom", "serverRandom", "params"],
+                        )?;
+                        let cr = hex_arg(a, "clientRandom", HexBounds::exact(32))?;
+                        let sr = hex_arg(a, "serverRandom", HexBounds::exact(32))?;
+                        let params = hex_arg(a, "params", HexBounds::range(4, 4 + 133))?;
+                        if !is_ecdhe_params(&params) {
+                            return Err(KeydError::bad_request(
+                                "params must be named-curve ECDHE parameters",
+                            ));
+                        }
+                        tls12_server_signed_message(&cr, &sr, &params)
+                    }
+                    _ => return Err(KeydError::bad_request("tls must be 1.3 or 1.2")),
+                };
                 let tls = self.tls()?;
-                done(obj! { "sig" => to_hex(&tls.sign(str_arg(a, "handle", 32)?, &digest)?) })
+                done(obj! { "sig" => to_hex(&tls.sign_handshake(handle, &message)?) })
             }
             "tls.list" => {
                 no_extra_args(a, &[])?;
@@ -390,12 +458,27 @@ impl KeydService {
                 done(acct.sign(&req, tls)?)
             }
             "provision.swk" | "provision.cgk" => {
-                no_extra_args(a, &["key"])?;
+                // `sealed`: the owner's delivery sealed to this box, opened and kept here so it never
+                // passes through the daemon. `key`: a key the daemon already holds, moved in.
+                no_extra_args(a, &["key", "sealed"])?;
                 let which = if op == "provision.swk" { "swk" } else { "cgk" };
-                let key = key32(&Zeroizing::new(hex_arg(a, "key", HexBounds::exact(32))?));
+                if a.contains_key("key") == a.contains_key("sealed") {
+                    return Err(KeydError::bad_request("give key or sealed"));
+                }
+                let key = if a.contains_key("sealed") {
+                    let sealed = hex_arg(a, "sealed", HexBounds::range(44, 1024))?;
+                    let plain = open_sealed(&sealed, self.stk()?)
+                        .map_err(|_| KeydError::failed("could not open the sealed key"))?;
+                    if plain.len() != 32 {
+                        return Err(KeydError::failed("the sealed key is not 32 bytes"));
+                    }
+                    key32(&plain)
+                } else {
+                    key32(&Zeroizing::new(hex_arg(a, "key", HexBounds::exact(32))?))
+                };
                 let current = if which == "swk" { &self.swk } else { &self.cgk };
                 // A key is provisioned once. Replacing one is a restore or replacement workflow
-                // (a new keyd state), never a request over the socket.
+                // (a new keyd state, made offline by root), never a request over the socket.
                 if let Some(cur) = current {
                     if cur.as_ref() == key.as_ref() {
                         return done(obj! { "stored" => false, "already" => true });

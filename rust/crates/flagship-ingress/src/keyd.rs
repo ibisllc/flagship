@@ -143,16 +143,16 @@ impl KeydClient {
         }
     }
 
-    /// The DER ECDSA signature over a SHA-256 or SHA-384 digest, by the key `handle` names.
-    pub fn sign(&self, handle: &str, digest: &[u8]) -> Result<Vec<u8>, KeydError> {
-        if digest.len() != 32 && digest.len() != 48 {
-            return Err(KeydError::Invalid("digest must be 32 or 48 bytes"));
-        }
+    /// The DER ECDSA P-256/SHA-256 signature over a TLS server signature input, by the key
+    /// `handle` names. keyd takes the input's TLS fields, never a digest, and rebuilds the input
+    /// itself, so the key signs TLS handshakes and nothing else.
+    pub fn sign_handshake(&self, handle: &str, message: &[u8]) -> Result<Vec<u8>, KeydError> {
         check_handle(handle)?;
-        let res = self.call(
-            "tls.sign",
-            json!({"handle": handle, "digest": wire::to_hex(digest)}),
-        )?;
+        let mut args = tls_sign_args(message)?;
+        if let Some(o) = args.as_object_mut() {
+            o.insert("handle".into(), Value::from(handle));
+        }
+        let res = self.call("tls.sign", args)?;
         let sig = res
             .get("sig")
             .and_then(Value::as_str)
@@ -162,6 +162,29 @@ impl KeydClient {
             return Err(KeydError::Invalid("sig is not a P-256 DER signature"));
         }
         Ok(sig)
+    }
+}
+
+const TLS13_SERVER_CONTEXT: &[u8] = b"TLS 1.3, server CertificateVerify\0";
+
+/// keyd's `tls.sign` fields for a TLS 1.3 CertificateVerify or TLS 1.2 ServerKeyExchange input.
+pub fn tls_sign_args(message: &[u8]) -> Result<Value, KeydError> {
+    if let Some(rest) = message.strip_prefix(&[0x20u8; 64][..])
+        && let Some(th) = rest.strip_prefix(TLS13_SERVER_CONTEXT)
+    {
+        if th.len() != 32 && th.len() != 48 {
+            return Err(KeydError::Invalid("not a TLS 1.3 transcript hash"));
+        }
+        return Ok(json!({"tls": "1.3", "transcriptHash": wire::to_hex(th)}));
+    }
+    match (message.get(..32), message.get(32..64), message.get(64..)) {
+        (Some(cr), Some(sr), Some(params)) if params.len() >= 4 => Ok(json!({
+            "tls": "1.2",
+            "clientRandom": wire::to_hex(cr),
+            "serverRandom": wire::to_hex(sr),
+            "params": wire::to_hex(params),
+        })),
+        _ => Err(KeydError::Invalid("not a TLS server signature input")),
     }
 }
 
@@ -237,5 +260,33 @@ fn round_trip(conn: &mut Conn, op: &str, args: Value) -> Result<Map<String, Valu
                 .collect(),
         }),
         _ => Err(KeydError::Transport("response has no ok".into())),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn splits_tls_inputs_into_keyd_fields() {
+        let mut t13 = vec![0x20u8; 64];
+        t13.extend_from_slice(TLS13_SERVER_CONTEXT);
+        t13.extend_from_slice(&[7u8; 48]);
+        let a = tls_sign_args(&t13).unwrap();
+        assert_eq!(a["tls"], "1.3");
+        assert_eq!(a["transcriptHash"], wire::to_hex(&[7u8; 48]));
+        assert!(tls_sign_args(&t13[..t13.len() - 1]).is_err());
+
+        let mut t12 = vec![1u8; 32];
+        t12.extend_from_slice(&[2u8; 32]);
+        t12.extend_from_slice(&[3, 0x00, 0x1d, 32]);
+        t12.extend_from_slice(&[9u8; 32]);
+        let a = tls_sign_args(&t12).unwrap();
+        assert_eq!(a["tls"], "1.2");
+        assert_eq!(a["clientRandom"], wire::to_hex(&[1u8; 32]));
+        assert_eq!(a["serverRandom"], wire::to_hex(&[2u8; 32]));
+        assert!(a.get("digest").is_none());
+        assert!(tls_sign_args(&[0u8; 32]).is_err());
     }
 }

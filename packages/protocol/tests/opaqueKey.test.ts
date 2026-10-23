@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
-import { decryptChunk, deriveBackupManifestKey, deriveServiceSecret, encryptChunk, hkdfFromSwk, opaqueSecret, openLlmPayload, sealLlmPayload } from "../src/index.js";
+import { decryptChunk, deriveBackupManifestKey, derivePeerBackupKey, deriveServiceSecret, encryptChunk, hkdfFromSwk, opaqueSecret, openLlmPayload, sealLlmPayload } from "../src/index.js";
 import { ed, isOpaqueKey, opaqueKey, openSealedFromEd25519Recipient, sealForEd25519Recipient, signBootSuspension, verifyBootSuspension } from "../src/index.js";
 
 const seed = new Uint8Array(32).fill(5);
@@ -66,14 +66,18 @@ describe("an opaque workload secret", () => {
     derive: (salt, info) => (calls.push(info), hkdf(sha256, swk, salt, new TextEncoder().encode(info), 32)),
   });
 
-  it("produces the same subkeys as the real secret through every protocol consumer", () => {
-    expect(deriveServiceSecret(handle, "alice--chess")).toEqual(deriveServiceSecret(swk, "alice--chess"));
+  it("produces the same subkeys as the real secret for the labels keyd hands out", () => {
     expect(deriveBackupManifestKey(handle)).toEqual(deriveBackupManifestKey(swk));
-    const chunk = encryptChunk(new TextEncoder().encode("data"), handle);
-    expect(new TextDecoder().decode(decryptChunk(chunk, swk))).toBe("data");
+    expect(derivePeerBackupKey(handle)).toEqual(derivePeerBackupKey(swk));
+    expect(new Set(calls)).toEqual(new Set(["flagship.pb-manifest.v1", "flagship/peer-backup-key/v1"]));
+  });
+
+  it("refuses the subkeys that stay in keyd (chunk, LLM, app secret)", () => {
+    expect(() => deriveServiceSecret(handle, "alice--chess")).toThrow(/not allowed/);
+    expect(() => encryptChunk(new TextEncoder().encode("data"), handle)).toThrow(/not allowed/);
     const sealed = sealLlmPayload(new TextEncoder().encode("hi"), swk);
-    expect(new TextDecoder().decode(openLlmPayload(sealed, handle))).toBe("hi");
-    expect(new Set(calls)).toEqual(new Set(["flagship.app-secret.v1", "flagship.pb-manifest.v1", "flagship.chunk.v1", "flagship.llm.v1"]));
+    expect(() => openLlmPayload(sealed, handle)).toThrow(/not allowed/);
+    expect(() => decryptChunk(encryptChunk(new TextEncoder().encode("d"), swk), handle)).toThrow(/not allowed/);
   });
 
   it("refuses a label that is not on the list and every read of its bytes", () => {

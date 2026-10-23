@@ -16,14 +16,12 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/service-invite-list/v1",
   "flagship/service-invite-create-fetch/v1",
   "flagship/service-invite-co-manager/v1",
-  "flagship/service-grant/v1",
   "flagship/server-revoke-by-self/v1",
   "flagship/server-migration-attach/v1",
   "flagship/server-migration-ack/v1",
   "flagship/pod-binding/v1",
   "flagship/pb-manifest/v1",
   "flagship/mint-reservation/v1",
-  "flagship/membership/v1",
   "flagship/lan-hint/v1",
   "flagship/dns01-publish/v1",
   "flagship/dns01-delete/v1",
@@ -39,11 +37,53 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/push-relay/v1",
   "flagship/app-copy-fetch/v1",
   "flagship/pb-http/v1",
+  "flagship/app-release/v1",
+  "flagship/identity-header/v1",
+  "flagship/custom-domain-cert/v1",
+  "flagship/pb-checkin/v1",
+  "flagship/pb-directory/v1",
+  "flagship/pb-tokens/v1",
+  "flagship/pb-redeem/v1",
+  "flagship/pb-filler-fetch/v1",
+  "flagship/pb-filler-proof/v1",
+  "flagship/pb-root-deposit/v1",
   // Older peer-backup messages that predate the tag convention.
   "pb-put",
   "pb-resp",
   "pb/request-peers/v1",
 ]);
+
+/** The only workload-key derivations keyd hands to the daemon (both unsalted). */
+export const SWK_HKDF_LABELS: ReadonlySet<string> = new Set(["flagship.pb-manifest.v1", "flagship/peer-backup-key/v1"]);
+
+/** The sealed messages keyd opens and returns: pairing orders (the daemon must read the order). */
+export const UNSEAL_PURPOSES: ReadonlySet<string> = new Set(["pairing-order"]);
+
+const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+/** `{"request": {"type": "add-paired-session", …}, "signature": "<hex>", …}` as UTF-8 JSON. */
+export function isPairingOrder(plain: Uint8Array): boolean {
+  let v: unknown;
+  try {
+    v = JSON.parse(STRICT_UTF8.decode(plain));
+  } catch {
+    return false;
+  }
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const o = v as { request?: unknown; signature?: unknown };
+  const r = o.request;
+  if (typeof r !== "object" || r === null || Array.isArray(r)) return false;
+  return (r as { type?: unknown }).type === "add-paired-session" && typeof o.signature === "string";
+}
+
+// The manifest's slug rule (and a username fits it too).
+const SERVICE_LABEL = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+/** A service id: `<creator>--<slug>` (or a bare `<slug>`), each half a lowercase label with no `--`. */
+export function isServiceId(id: string): boolean {
+  const parts = id.split("--");
+  return parts.length <= 2 && parts.every((p) => SERVICE_LABEL.test(p));
+}
 
 export const MAX_SIGN_BYTES = 256 * 1024;
 

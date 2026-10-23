@@ -19,9 +19,25 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use flagship_ingress::keyd::{KeydClient, KeydError};
+
+/// What keyd's `tls.sign` builds from its fields (packages/keyd/src/tls.ts); the bare digest
+/// form is gone, so a request carrying one fails.
+fn keyd_signed_input(a: &serde_json::Value) -> Vec<u8> {
+    assert!(a.get("digest").is_none(), "tls.sign has no digest form");
+    let f = |k: &str| hex(a[k].as_str().unwrap());
+    match a["tls"].as_str().unwrap() {
+        "1.3" => {
+            let mut m = vec![0x20u8; 64];
+            m.extend_from_slice(b"TLS 1.3, server CertificateVerify\0");
+            m.extend_from_slice(&f("transcriptHash"));
+            m
+        }
+        "1.2" => [f("clientRandom"), f("serverRandom"), f("params")].concat(),
+        v => panic!("tls {v}"),
+    }
+}
 use flagship_ingress::server::{self, IngressConfig, KxPolicy, Limits};
 use flagship_ingress::source::CertSource;
-use p256::ecdsa::signature::hazmat::PrehashSigner;
 use p256::pkcs8::DecodePrivateKey;
 use rustls::crypto::{CryptoProvider, SupportedKxGroup, aws_lc_rs};
 use rustls::pki_types::{CertificateDer, ServerName};
@@ -175,11 +191,12 @@ fn serve_keyd(mut c: StdUnixStream, st: &Mutex<KeydState>) {
                 "tls.sign" => {
                     s.signs += 1;
                     let handle = req["args"]["handle"].as_str().unwrap();
-                    let digest = hex(req["args"]["digest"].as_str().unwrap());
+                    let message = keyd_signed_input(&req["args"]);
                     match &s.active {
                         Some(a) if a.handle == handle => {
                             let key = s.wrong_key.clone().unwrap_or_else(|| a.key.clone());
-                            let sig: p256::ecdsa::Signature = key.sign_prehash(&digest).unwrap();
+                            let sig: p256::ecdsa::Signature =
+                                p256::ecdsa::signature::Signer::sign(&key, &message);
                             json!({"id": id, "ok": true, "result": {"sig": to_hex(sig.to_der().as_bytes())}})
                         }
                         _ => {
@@ -766,13 +783,17 @@ async fn says_hello_first_and_redials() {
         1,
         "one connection, one hello"
     );
+    let mut t13 = vec![0x20u8; 64];
+    t13.extend_from_slice(b"TLS 1.3, server CertificateVerify\0");
+    t13.extend_from_slice(&[7u8; 32]);
     assert!(matches!(
-        client.sign("nope", &[0u8; 32]),
+        client.sign_handshake("nope", &t13),
         Err(KeydError::Refused { .. })
     ));
+    assert!(client.sign_handshake("h1", &t13).is_ok());
     assert!(
-        client.sign("h1", &[0u8; 20]).is_err(),
-        "only SHA-256/384 digests"
+        client.sign_handshake("h1", &[0u8; 20]).is_err(),
+        "only TLS server signature inputs"
     );
 }
 

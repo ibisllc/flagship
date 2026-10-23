@@ -33,11 +33,11 @@ import {
   sealGossip,
   sealLlmPayload,
 } from "@flagship/protocol";
-import { AcmeAccount, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydServer, KeydService, KeydSyncClient, LETS_ENCRYPT_HOSTS, TlsKeys, encodeFrame, readKeyFile } from "../src/index.js";
+import { AcmeAccount, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydServer, KeydService, KeydSyncClient, LETS_ENCRYPT_HOSTS, TlsKeys, encodeFrame, readKeyFile, tls12ServerSignedMessage, tls13ServerSignedMessage } from "../src/index.js";
 import { KeydAcmeIssuer } from "../../server-daemon/src/acme/keydAcme.js";
 import { keydAcmeApi } from "../../server-daemon/src/keydAsync.js";
 import { MockAcme } from "../../server-daemon/tests/helpers/mockAcme.js";
-import { CGK, SEED, SWK } from "./helpers.js";
+import { CGK, PAIRING_ORDER, SEED, SWK } from "./helpers.js";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const BIN = process.env.FLAGSHIP_KEYD_RUST_BIN ?? join(ROOT, "rust/target/debug/flagship-keyd");
@@ -51,6 +51,9 @@ const enc = (s: string) => new TextEncoder().encode(s);
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const unhex = (s: unknown) => Uint8Array.from(Buffer.from(String(s), "hex"));
 const PUB = ed.getPublicKey(SEED);
+const P256_PARAMS = Uint8Array.of(3, 0x00, 0x17, 65, 4, ...new Uint8Array(64).fill(5));
+const t13 = (th: Uint8Array) => ({ tls: "1.3", transcriptHash: hex(th) });
+const t12 = (over: Record<string, string> = {}) => ({ tls: "1.2", clientRandom: hex(new Uint8Array(32).fill(1)), serverRandom: hex(new Uint8Array(32).fill(2)), params: hex(P256_PARAMS), ...over });
 
 interface RustKeyd {
   dir: string;
@@ -196,12 +199,13 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
       const key = opaqueKey({
         publicKey: PUB,
         sign: (m) => unhex(sync.call("sign", { msg: hex(m) }).sig),
-        unseal: (b) => unhex(sync.call("unseal", { blob: hex(b) }).plain),
+        unseal: (b) => unhex(sync.call("unseal", { blob: hex(b), purpose: "pairing-order" }).plain),
       });
       const order = { serverDomain: "home.a.flagship.services", epoch: 1, seq: 1, action: "suspend" as const, reason: "dead-man", signer: "box" as const, issuedAt: 1760000000000 };
       expect(verifyBootSuspension(order, signBootSuspension(order, key), PUB)).toBe(true);
       expect(() => signBootSuspension({ ...order, signer: "owner" as const }, key)).toThrow();
-      expect(new TextDecoder().decode(openSealedFromEd25519Recipient(sealForEd25519Recipient(enc("sealed"), PUB), key))).toBe("sealed");
+      expect(openSealedFromEd25519Recipient(sealForEd25519Recipient(PAIRING_ORDER, PUB), key)).toEqual(PAIRING_ORDER);
+      expect(() => openSealedFromEd25519Recipient(sealForEd25519Recipient(SWK, PUB), key)).toThrow(/not a pairing order/);
       for (let i = 0; i < 200; i++) expect(String(sync.call("swk.deriveServiceSecret", { serviceId: `alice--app${i}` }).secret)).toBe(hex(deriveServiceSecret(SWK, `alice--app${i}`)));
     } finally {
       sync.close();
@@ -213,10 +217,11 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
     const k = await startRust();
     try {
       const c = await client(k.sock);
-      const blob = sealForEd25519Recipient(enc("hello"), PUB);
-      expect(Buffer.from(unhex((await c.call("unseal", { blob: hex(blob) })).plain)).toString()).toBe("hello");
-      const other = sealForEd25519Recipient(enc("hello"), ed.getPublicKey(new Uint8Array(32).fill(9)));
-      await expect(c.call("unseal", { blob: hex(other) })).rejects.toMatchObject({ code: "failed" });
+      const blob = sealForEd25519Recipient(PAIRING_ORDER, PUB);
+      expect(unhex((await c.call("unseal", { blob: hex(blob), purpose: "pairing-order" })).plain)).toEqual(PAIRING_ORDER);
+      const other = sealForEd25519Recipient(PAIRING_ORDER, ed.getPublicKey(new Uint8Array(32).fill(9)));
+      await expect(c.call("unseal", { blob: hex(other), purpose: "pairing-order" })).rejects.toMatchObject({ code: "failed" });
+      await expect(c.call("unseal", { blob: hex(sealForEd25519Recipient(SWK, PUB)), purpose: "pairing-order" })).rejects.toMatchObject({ code: "forbidden", message: "the sealed message is not a pairing order" });
       c.close();
     } finally {
       await k.cleanup();
@@ -264,10 +269,11 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
       expect((await c.call("swk.deriveServiceSecret", { serviceId: "alice--chess" })).secret).toBe(hex(deriveServiceSecret(SWK, "alice--chess")));
       expect((await c.call("swk.deriveBackupManifestKey")).key).toBe(hex(deriveBackupManifestKey(SWK)));
       expect((await c.call("swk.deriveTlsKey", { serverId: FQDN })).key).toBe(hex(hkdf(sha256, SWK, enc(FQDN), enc("flagship.tls.v1"), 32)));
-      const salt = hex(enc("alice--chess"));
-      expect((await c.call("swk.hkdf", { salt, info: "flagship.app-secret.v1" })).key).toBe(hex(hkdf(sha256, SWK, enc("alice--chess"), enc("flagship.app-secret.v1"), 32)));
-      await expect(c.call("swk.hkdf", { salt, info: "flagship/root-entitlement/v1" })).rejects.toMatchObject({ code: "forbidden" });
-      await expect(c.call("swk.hkdf", { salt, info: "" })).rejects.toMatchObject({ code: "bad-request" });
+      expect((await c.call("swk.hkdf", { salt: "", info: "flagship/peer-backup-key/v1" })).key).toBe(hex(hkdf(sha256, SWK, new Uint8Array(0), enc("flagship/peer-backup-key/v1"), 32)));
+      expect((await c.call("swk.hkdf", { salt: "", info: "flagship.pb-manifest.v1" })).key).toBe(hex(deriveBackupManifestKey(SWK)));
+      await expect(c.call("swk.hkdf", { salt: "", info: "flagship.app-secret.v1" })).rejects.toMatchObject({ code: "forbidden" });
+      await expect(c.call("swk.hkdf", { salt: "aa", info: "flagship.pb-manifest.v1" })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("swk.hkdf", { salt: "", info: "" })).rejects.toMatchObject({ code: "bad-request" });
       const g = await c.call("cgk.seal", { pt: hex(enc("gossip")) });
       expect(Buffer.from(openGossip(unhex(g.blob), CGK)).toString()).toBe("gossip");
       expect(Buffer.from(unhex((await c.call("cgk.open", { blob: hex(sealGossip(enc("back"), CGK)) })).pt)).toString()).toBe("back");
@@ -291,12 +297,13 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
       expect((await c.call("provision.swk", { key: hex(SWK) })).already).toBe(true);
       await expect(c.call("provision.swk", { key: hex(new Uint8Array(32).fill(7)) })).rejects.toMatchObject({ code: "forbidden", message: "swk is already provisioned" });
       await expect(c.call("provision.swk", { key: "00" })).rejects.toMatchObject({ code: "bad-request" });
+      expect(await c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) })).toEqual({ stored: true });
+      expect(readKeyFile(join(k.dir, "cgk.key"))).toEqual(CGK);
       c.close();
       const file = join(k.dir, "swk.key");
       expect(statSync(file).mode & 0o777).toBe(0o400);
       expect(readFileSync(file, "utf8")).toBe(hex(SWK) + "\n");
       expect(readKeyFile(file)).toEqual(SWK);
-      expect(existsSync(join(k.dir, "cgk.key"))).toBe(false);
     } finally {
       await k.cleanup();
     }
@@ -410,7 +417,19 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["sign", { msg: susp("1") }, true], ["sign", { msg: susp("0") }, true], ["sign", { msg: susp(" 7 ") }, true], ["sign", { msg: susp("1e1") }, true], ["sign", { msg: susp("Infinity") }, true],
         ["sign", { msg: susp("1", "resume") }, true], ["sign", { msg: susp("1", "suspend", "owner") }, true],
         ["sign", { msg: boot("box", hex(PUB)) }, true], ["sign", { msg: boot("box", "00") }, true], ["sign", { msg: boot("owner", hex(PUB)) }, true],
-        ["unseal", { blob: blob(43) }, true], ["unseal", { blob: blob(44) }, true], ["unseal", { blob: blob(100) }, true], ["unseal", { blob: blob(10), x: 1 }, true],
+        ["sign", { msg: hex(enc("flagship/app-release/v1|a|1")) }, true], ["sign", { msg: hex(enc("flagship/pb-checkin/v1|a|1")) }, true],
+        ["sign", { msg: hex(enc("flagship/pb-root-deposit/v1|a|1")) }, true], ["sign", { msg: hex(enc("flagship/membership/v1|a")) }, true], ["sign", { msg: hex(enc("flagship/service-grant/v1|a")) }, true],
+        ["unseal", { blob: blob(43), purpose: "pairing-order" }, true], ["unseal", { blob: blob(44), purpose: "pairing-order" }, true], ["unseal", { blob: blob(100), purpose: "pairing-order" }, true],
+        ["unseal", { blob: blob(10), x: 1 }, true], ["unseal", { blob: blob(44) }, true], ["unseal", { blob: blob(44), purpose: "swk" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(PAIRING_ORDER, PUB)), purpose: "pairing-order" }, true], ["unseal", { blob: hex(sealForEd25519Recipient(SWK, PUB)), purpose: "pairing-order" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(enc('{"request":{"type":"add-paired-session"},"signature":1}'), PUB)), purpose: "pairing-order" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(enc('[{"request":{"type":"add-paired-session"},"signature":"a"}]'), PUB)), purpose: "pairing-order" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(enc("\ufeff" + new TextDecoder().decode(PAIRING_ORDER)), PUB)), purpose: "pairing-order" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(Uint8Array.of(0xff, 0x7b), PUB)), purpose: "pairing-order" }, true],
+        ["swk.hkdf", { salt: "", info: "flagship/peer-backup-key/v1" }, true], ["swk.hkdf", { salt: "", info: "flagship.pb-manifest.v1" }, true], ["swk.hkdf", { salt: "aa", info: "flagship.pb-manifest.v1" }, true],
+        ["swk.hkdf", { salt: "", info: "flagship.app-secret.v1" }, true], ["swk.hkdf", { salt: "", info: "flagship.chunk.v1" }, true],
+        ["swk.deriveServiceSecret", { serviceId: "habit-tracker" }, true], ["swk.deriveServiceSecret", { serviceId: "a--b--c" }, true], ["swk.deriveServiceSecret", { serviceId: "a---b" }, true],
+        ["swk.deriveServiceSecret", { serviceId: "Alice--chess" }, true], ["swk.deriveServiceSecret", { serviceId: "a--" }, true], ["swk.deriveServiceSecret", { serviceId: "a--b-" }, true], ["swk.deriveServiceSecret", { serviceId: "a".repeat(64) }, true],
         ["swk.hkdf", { salt: "aa", info: "flagship.llm.v1" }, true], ["swk.hkdf", { salt: "aa", info: "nope" }, true], ["swk.hkdf", { salt: "a", info: "flagship.llm.v1" }, true],
         ["swk.hkdf", { info: "flagship.llm.v1" }, true], ["swk.hkdf", { salt: blob(513), info: "flagship.llm.v1" }, true], ["swk.hkdf", { salt: "", info: "x".repeat(129) }, true],
         ["swk.open", { ciphertext: blob(16), nonce: blob(11) }, true], ["swk.open", { ciphertext: blob(15), nonce: blob(12) }, true], ["swk.open", { ciphertext: blob(16), nonce: blob(12) }, true],
@@ -422,12 +441,23 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["cgk.open", { blob: blob(27) }, true], ["cgk.open", { blob: blob(28) }, true],
         ["cgk.deriveAppCopyEnvKey", { info: hex(enc("flagship/app-copy-env/v1|a")) }, true], ["cgk.deriveAppCopyEnvKey", { info: hex(enc("﻿flagship/app-copy-env/v1|a")) }, true],
         ["cgk.deriveAppCopyEnvKey", { info: "" }, true], ["cgk.deriveAppCopyEnvKey", { info: hex(enc("flagship/app-copy-env/v2|a")) }, true],
+        ["cgk.gossipMac", { msg: hex(enc("flagship/gossip/v2|alice|x")) }, true], ["cgk.gossipMac", { msg: hex(enc("flagship/access-sync/v1|x")) }, true],
+        ["cgk.gossipMac", { msg: "" }, true], ["cgk.gossipMac", { msg: blob(64 * 1024 + 1) }, true], ["cgk.gossipMac", { msg: "aa", x: 1 }, true],
+        ["cgk.accessSyncMac", { msg: hex(enc("flagship/access-sync/v1|push|a|b")) }, true], ["cgk.accessSyncMac", { msg: hex(enc("flagship/gossip/v2|x")) }, true],
         ["tls.createKey", { names: FQDN }, true], ["tls.createKey", { names: [1] }, true], ["tls.createKey", { names: [] }, true], ["tls.createKey", { names: ["evil.example.com"] }, true],
         ["tls.createKey", { names: ["not a name"] }, true], ["tls.createKey", { names: Array(9).fill(FQDN) }, true], ["tls.createKey", { names: [`x.${FQDN}`] }, true],
         ["tls.createKey", { names: [FQDN.toUpperCase()] }, false],
         ["tls.csr", { handle: "nope" }, true], ["tls.csr", { handle: blob(16) }, true], ["tls.csr", {}, true],
         ["tls.install", { handle: blob(16), chain: "not pem!" }, true], ["tls.install", { handle: blob(16), chain: "abc" }, true], ["tls.install", { handle: "x", chain: "abc" }, true],
         ["tls.activate", { handle: blob(16) }, true], ["tls.sign", { handle: blob(16), digest: blob(31) }, true], ["tls.sign", { handle: blob(16), digest: blob(32) }, true],
+        ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(32)) }, true], ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(33)) }, true], ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(49)) }, true],
+        ["tls.sign", { handle: blob(16), tls: "1.1", transcriptHash: blob(32) }, true], ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(32)), clientRandom: blob(32) }, true],
+        ["tls.sign", { handle: blob(16), ...t12() }, true], ["tls.sign", { handle: blob(16), ...t12({ clientRandom: blob(31) }) }, true],
+        ["tls.sign", { handle: blob(16), ...t12({ params: hex(Uint8Array.of(3, 0, 0x17, 65, 2, ...new Uint8Array(64))) }) }, true],
+        ["tls.sign", { handle: blob(16), ...t12({ params: hex(Uint8Array.of(3, 0, 0x1d, 32, ...new Uint8Array(32))) }) }, true],
+        ["tls.sign", { handle: blob(16), ...t12({ params: hex(Uint8Array.of(3, 0, 0x1d, 32, ...new Uint8Array(33))) }) }, true],
+        ["tls.sign", { handle: blob(16), ...t12({ params: hex(enc("flagship/x/v1|a")) }) }, true], ["tls.sign", { handle: blob(16), ...t12({ params: "" }) }, true],
+        ["tls.sign", { handle: blob(16), tls: "1.2", transcriptHash: blob(32) }, true], ["tls.sign", { tls: "1.3", transcriptHash: blob(32) }, true],
         ["tls.remove", { handle: blob(16) }, true], ["tls.active", {}, true], ["tls.list", { x: 1 }, true],
         ["acme.jwk", {}, true], ["acme.sign", { kind: "newOrder" }, true], ["acme.sign", { kind: "x", url: "u", nonce: "n" }, true],
         ["acme.sign", { kind: "newOrder", url: "https://acme-v02.api.letsencrypt.org/acme/new-order", nonce: "abcdefghij", names: [FQDN] }, true],
@@ -435,6 +465,9 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["acme.sign", { kind: "revoke", url: "u", nonce: "n", kid: "k", certificate: "00" }, true], ["acme.sign", { bogus: 1 }, true],
         ["acme.importGranted", { blob: blob(43) }, true], ["acme.importGranted", { blob: blob(60) }, true],
         ["provision.swk", { key: hex(SWK) }, true], ["provision.swk", { key: blob(32) }, true], ["provision.cgk", { key: blob(31) }, true], ["provision.cgk", {}, true],
+        ["provision.swk", { sealed: hex(sealForEd25519Recipient(SWK, PUB)) }, true], ["provision.swk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) }, true],
+        ["provision.cgk", { sealed: hex(sealForEd25519Recipient(enc("x"), PUB)) }, true], ["provision.cgk", { sealed: blob(44) }, true], ["provision.cgk", { sealed: blob(43) }, true],
+        ["provision.cgk", { key: hex(CGK), sealed: blob(44) }, true], ["provision.cgk", { key: null }, true], ["provision.cgk", { sealed: "zz" }, true],
       ];
       const frames = [{ id: 1, op: "hello", args: { v: 1, component: "diff" } }, ...cases.map(([op, args], i) => ({ id: i + 2, op, args }))];
       const strip = (r: Record<string, unknown>, whole: boolean) => (whole || r.ok === false ? r : { id: r.id, ok: r.ok });
@@ -464,7 +497,7 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       const csr = unhex((await c.call("tls.csr", { handle: created.handle })).csr);
       const parsed = new Pkcs10CertificateRequest(Buffer.from(csr));
       expect(parsed.subject).toContain(FQDN);
-      await expect(c.call("tls.sign", { handle: created.handle, digest: hex(sha256(new Uint8Array(3))) })).rejects.toMatchObject({ code: "forbidden", message: "this key has no certificate" });
+      await expect(c.call("tls.sign", { handle: created.handle, ...t13(new Uint8Array(32)) })).rejects.toMatchObject({ code: "forbidden", message: "this key has no certificate" });
       await expect(c.call("tls.activate", { handle: created.handle })).rejects.toMatchObject({ code: "forbidden" });
       const chain = await issueFor(csr);
       const info = await c.call("tls.install", { handle: created.handle, chain });
@@ -475,13 +508,18 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       expect(listed.allowedNames).toEqual([FQDN, `*.${FQDN}`]);
       expect((await c.call("tls.active")).active).toMatchObject({ handle: created.handle, names: [FQDN, `*.${FQDN}`].sort(), legacy: false });
       await expect(c.call("tls.createKey", { names: ["evil.example.com"] })).rejects.toMatchObject({ code: "forbidden" });
-      await expect(c.call("tls.sign", { handle: created.handle, digest: "00" })).rejects.toMatchObject({ code: "bad-request" });
+      // The bare digest form is gone: keyd signs only the TLS inputs it builds itself.
+      await expect(c.call("tls.sign", { handle: created.handle, digest: hex(sha256(new Uint8Array(3))) })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("tls.sign", { handle: created.handle, tls: "1.3", transcriptHash: "00" })).rejects.toMatchObject({ code: "bad-request" });
+      const raw = new X509Certificate(chain).publicKey.export({ type: "spki", format: "der" });
+      const pub = Uint8Array.from(raw.subarray(raw.length - 65));
       for (const len of [32, 48]) {
-        const digest = new Uint8Array(len).fill(3);
-        const sig = unhex((await c.call("tls.sign", { handle: created.handle, digest: hex(digest) })).sig);
-        const raw = new X509Certificate(chain).publicKey.export({ type: "spki", format: "der" });
-        expect(p256.verify(sig, digest, Uint8Array.from(raw.subarray(raw.length - 65)), { prehash: false, format: "der" })).toBe(true);
+        const th = new Uint8Array(len).fill(3);
+        const sig = unhex((await c.call("tls.sign", { handle: created.handle, ...t13(th) })).sig);
+        expect(p256.verify(sig, sha256(tls13ServerSignedMessage(th)), pub, { prehash: false, format: "der" })).toBe(true);
       }
+      const sig12 = unhex((await c.call("tls.sign", { handle: created.handle, ...t12() })).sig);
+      expect(p256.verify(sig12, sha256(tls12ServerSignedMessage(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), P256_PARAMS)), pub, { prehash: false, format: "der" })).toBe(true);
       await expect(c.call("tls.remove", { handle: created.handle })).rejects.toMatchObject({ code: "forbidden", message: "the key in service cannot be removed" });
       // A certificate for another key or for more names is refused.
       const b = await c.call("tls.createKey", { names: [FQDN] });
@@ -507,8 +545,8 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       const k = await spawnRust(dir);
       const c = await client(k.sock);
       expect(((await c.call("tls.active")).active as { handle: string }).handle).toBe(handle);
-      const digest = sha256(enc("transcript"));
-      expect((await c.call("tls.sign", { handle, digest: hex(digest) })).sig).toBe(hex(tsTls.sign(handle, digest)));
+      const th = sha256(enc("transcript"));
+      expect((await c.call("tls.sign", { handle, ...t13(th) })).sig).toBe(hex(tsTls.signHandshake(handle, tls13ServerSignedMessage(th))));
       expect((await c.call("tls.csr", { handle })).csr).toBe(hex(tsTls.csr(handle)));
       // Rust makes and activates a new one; TS loads it.
       const r = await c.call("tls.createKey", { names: [FQDN, `*.${FQDN}`] });
@@ -520,7 +558,8 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       expect(Object.keys(JSON.parse(readFileSync(keyFile, "utf8")))).toEqual(["names", "privHex", "spkiHex", "createdAt", "chainPem", "notBefore", "notAfter"]);
       const again = new TlsKeys(ALLOWED, join(dir, "tls"));
       expect(again.active()?.handle).toBe(rh);
-      expect(hex(again.sign(rh, digest))).toBe((await c.call("tls.sign", { handle: rh, digest: hex(digest) })).sig);
+      expect(hex(again.signHandshake(rh, tls13ServerSignedMessage(th)))).toBe((await c.call("tls.sign", { handle: rh, ...t13(th) })).sig);
+      expect(hex(again.signHandshake(rh, tls12ServerSignedMessage(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), P256_PARAMS)))).toBe((await c.call("tls.sign", { handle: rh, ...t12() })).sig);
       expect(hex(again.csr(rh))).toBe((await c.call("tls.csr", { handle: rh })).csr);
       expect(again.list().find((x) => x.handle === rh)?.spkiHex).toBe(r.spki);
       c.close();

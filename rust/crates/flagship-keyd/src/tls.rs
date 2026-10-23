@@ -530,7 +530,9 @@ impl TlsKeys {
     }
 
     /// A TLS handshake signature over `digest`. Only for a key with a valid, installed certificate.
-    pub fn sign(&self, handle: &str, digest: &[u8]) -> KeydResult<Vec<u8>> {
+    /// `signHandshake`: ECDSA-P256-SHA256 over a TLS handshake input built by `tls13_server_signed_message`
+    /// or `tls12_server_signed_message`, only for a key with a valid, installed certificate.
+    pub fn sign_handshake(&self, handle: &str, message: &[u8]) -> KeydResult<Vec<u8>> {
         let k = self.get(handle)?;
         let not_after = match (&k.chain_pem, k.not_after) {
             (Some(_), Some(na)) if na != 0 => na,
@@ -539,10 +541,7 @@ impl TlsKeys {
         if not_after < (self.now)().saturating_sub(7 * DAY_MS) {
             return Err(KeydError::forbidden("this key's certificate has expired"));
         }
-        if digest.len() != 32 && digest.len() != 48 {
-            return Err(KeydError::bad_request("digest must be 32 or 48 bytes"));
-        }
-        sign_prehash_der(&k.secret, digest)
+        sign_prehash_der(&k.secret, &crate::crypto::sha256(message))
     }
 
     pub fn list(&self) -> Vec<Value> {
@@ -589,6 +588,41 @@ fn io_failed(_: std::io::Error) -> KeydError {
     KeydError::failed("internal error")
 }
 
+const TLS13_SERVER_CONTEXT: &[u8] = b"TLS 1.3, server CertificateVerify";
+
+/// `tls13ServerSignedMessage` (RFC 8446 4.4.3): 64 spaces, the server context, 0, the transcript hash.
+pub fn tls13_server_signed_message(transcript_hash: &[u8]) -> Vec<u8> {
+    let mut out = vec![0x20u8; 64];
+    out.extend_from_slice(TLS13_SERVER_CONTEXT);
+    out.push(0);
+    out.extend_from_slice(transcript_hash);
+    out
+}
+
+/// `isEcdheParams`: ServerECDHParams of a named curve (RFC 8422 5.4) with a well-formed point.
+pub fn is_ecdhe_params(params: &[u8]) -> bool {
+    let [3, hi, lo, len, point @ ..] = params else {
+        return false;
+    };
+    let want: usize = match u16::from_be_bytes([*hi, *lo]) {
+        0x001d => 32,
+        0x0017 => 65,
+        0x0018 => 97,
+        0x0019 => 133,
+        _ => return false,
+    };
+    usize::from(*len) == want && point.len() == want && (want == 32 || point.first() == Some(&0x04))
+}
+
+/// `tls12ServerSignedMessage` (RFC 5246 7.4.3): client_random, server_random, params.
+pub fn tls12_server_signed_message(
+    client_random: &[u8],
+    server_random: &[u8],
+    params: &[u8],
+) -> Vec<u8> {
+    [client_random, server_random, params].concat()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -632,6 +666,37 @@ mod tests {
     }
 
     #[test]
+    fn builds_only_tls_server_inputs() {
+        let m = tls13_server_signed_message(&[7; 32]);
+        assert_eq!(m.len(), 64 + 33 + 1 + 32);
+        assert!(m.starts_with(&[0x20; 64]));
+        assert_eq!(
+            m.get(64..97),
+            Some(&b"TLS 1.3, server CertificateVerify"[..])
+        );
+        assert_eq!(m.get(97), Some(&0));
+        let mut p256 = vec![3, 0x00, 0x17, 65, 4];
+        p256.extend_from_slice(&[1; 64]);
+        assert!(is_ecdhe_params(&p256));
+        let mut x25519 = vec![3, 0x00, 0x1d, 32];
+        x25519.extend_from_slice(&[1; 32]);
+        assert!(is_ecdhe_params(&x25519));
+        let mut compressed = p256.clone();
+        if let Some(b) = compressed.get_mut(4) {
+            *b = 2;
+        }
+        assert!(!is_ecdhe_params(&compressed));
+        x25519.push(0);
+        assert!(!is_ecdhe_params(&x25519));
+        assert!(!is_ecdhe_params(&[3, 0x11, 0x11, 1, 0]));
+        assert!(!is_ecdhe_params(b"flagship/x/v1|sign me"));
+        assert_eq!(
+            tls12_server_signed_message(&[1; 32], &[2; 32], &p256).len(),
+            64 + p256.len()
+        );
+    }
+
+    #[test]
     fn csr_is_signed_and_lists_exactly_the_names() {
         let fqdn = "home.alice.flagship.services";
         let mut t = TlsKeys::new(vec![fqdn.into(), format!("*.{fqdn}")], None, system_clock());
@@ -639,7 +704,10 @@ mod tests {
         assert_eq!(spki.len(), 91 * 2);
         let csr = t.csr(&h).unwrap();
         assert_eq!(csr.first(), Some(&0x30));
-        assert!(t.sign(&h, &[0; 32]).is_err());
+        assert!(
+            t.sign_handshake(&h, &tls13_server_signed_message(&[0; 32]))
+                .is_err()
+        );
         assert!(t.activate(&h).is_err());
         assert_eq!(
             t.create_key(&["evil.example.com".into()]).unwrap_err().code,

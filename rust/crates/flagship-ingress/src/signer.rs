@@ -7,13 +7,12 @@
 //! - **key**: only for the handle keyd says is active (or the one it just replaced, for a
 //!   handshake already in flight), and keyd's answer must verify under the leaf's key.
 //!
-//! keyd's `tls.sign` still takes a bare digest, so a compromised ingress could ask it to
-//! sign anything; closing that needs keyd to take the structured input (README, "Left").
+//! keyd's `tls.sign` takes the TLS fields (transcript hash, or randoms and ECDHE params) and
+//! rebuilds the signed input itself, so even a compromised ingress gets TLS-only signatures.
 
 use std::sync::{Arc, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
-use aws_lc_rs::digest;
 use aws_lc_rs::signature::{self, UnparsedPublicKey};
 use rustls::pki_types::SubjectPublicKeyInfoDer;
 use rustls::sign::{Signer, SigningKey};
@@ -161,8 +160,7 @@ impl Signer for KeydSigner {
                 "the key is no longer in service".into(),
             ));
         }
-        let d = digest::digest(&digest::SHA256, message);
-        let sig = run_blocking(|| k.keyd.sign(&k.handle, d.as_ref()))
+        let sig = run_blocking(|| k.keyd.sign_handshake(&k.handle, message))
             .map_err(|e| rustls::Error::General(format!("keyd could not sign: {e}")))?;
         // A signature by any other key would only fail at the client; refuse it here.
         UnparsedPublicKey::new(&signature::ECDSA_P256_SHA256_ASN1, &k.point)

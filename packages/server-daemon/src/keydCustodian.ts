@@ -5,7 +5,7 @@
  * so no caller changes; the difference is that this process never holds the STK seed, the SWK
  * or the CGK. Each operation is one request to keyd over its Unix socket. Code written for a
  * full `Keypair` is given `identityKeypair()`, whose private half is an opaque stand-in that
- * can sign and open sealed blobs through keyd and nothing else (protocol/opaqueKey.ts).
+ * can sign through keyd and nothing else (protocol/opaqueKey.ts).
  */
 
 import {
@@ -59,7 +59,6 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
       privateKey: opaqueKey({
         publicKey: this.#pub,
         sign: (m) => this.signAsBox(m),
-        unseal: (b) => this.unsealToBox(b),
       }),
     };
   }
@@ -90,8 +89,15 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
   signAsBox(msg: Bytes): Bytes {
     return unhex(this.#client.call("sign", { msg: hex(msg) }).sig);
   }
-  unsealToBox(blob: Bytes): Bytes {
-    return unhex(this.#client.call("unseal", { blob: hex(blob) }).plain);
+  /**
+   * keyd returns no general plaintext of what is sealed to the box: sealed keys go in with
+   * `provisionSwkSealed` / `provisionCgkSealed`, pairing orders come out of `unsealPairingOrder`.
+   */
+  unsealToBox(_blob: Bytes): Bytes {
+    throw new Error("flagship-keyd opens sealed keys itself; it returns only pairing orders");
+  }
+  unsealPairingOrder(blob: Bytes): Bytes {
+    return unhex(this.#client.call("unseal", { blob: hex(blob), purpose: "pairing-order" }).plain);
   }
   signSecretRequest(req: SecretRequest): Bytes {
     return protocolSignSecretRequest(req, this.#keypair);
@@ -150,6 +156,12 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
   deriveAppCopyEnvKey(info: Bytes): Bytes {
     return unhex(this.#client.call("cgk.deriveAppCopyEnvKey", { info: hex(info) }).key);
   }
+  gossipMac(canonical: Bytes): string {
+    return String(this.#client.call("cgk.gossipMac", { msg: hex(canonical) }).mac);
+  }
+  accessSyncMac(canonical: Bytes): string {
+    return String(this.#client.call("cgk.accessSyncMac", { msg: hex(canonical) }).mac);
+  }
 
   // ── Provisioning (once; keyd refuses a different key afterwards) ───────
   provisionSwk(key: Bytes): void {
@@ -158,6 +170,15 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
   }
   provisionCgk(key: Bytes): void {
     this.#client.call("provision.cgk", { key: hex(key) });
+    this.#hasCgk = true;
+  }
+  /** Hand keyd the owner's sealed delivery; keyd opens and keeps the key. */
+  provisionSwkSealed(sealed: Bytes): void {
+    this.#client.call("provision.swk", { sealed: hex(sealed) });
+    this.#hasSwk = true;
+  }
+  provisionCgkSealed(sealed: Bytes): void {
+    this.#client.call("provision.cgk", { sealed: hex(sealed) });
     this.#hasCgk = true;
   }
 

@@ -10,14 +10,19 @@ import {
   openSealedFromEd25519Recipient,
   sealGossip,
   sealLlmPayload,
-  SWK_DERIVE_LABELS,
 } from "@flagship/protocol";
 import { hkdf } from "@noble/hashes/hkdf";
+import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
-import { BOX_SIGN_PURPOSES, checkSign } from "./policy.js";
+import { BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, checkSign, isPairingOrder, isServiceId } from "./policy.js";
 import { AcmeAccount, type AcmeRequest } from "./acme.js";
-import { TlsKeys } from "./tls.js";
+import { TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage } from "./tls.js";
 import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
+
+const GOSSIP_TAG = "flagship/gossip/v2|";
+const ACCESS_SYNC_TAG = "flagship/access-sync/v1|";
+const ACCESS_SYNC_KEY_INFO = "flagship/access-sync/key/v1";
+const MAX_MAC_BYTES = 64 * 1024;
 
 export interface KeyStore {
   /** Persist a provisioned secret (0400, owned by the keyd user). */
@@ -100,22 +105,33 @@ export class KeydService {
         return { result: { sig: toHex(ed.sign(msg, this.#seed)) }, purpose };
       }
       case "unseal": {
-        noExtraArgs(a, ["blob"]);
+        // Only for a sealed message the daemon must read, checked by its shape once opened:
+        // a sealed key (SWK, CGK, ACME account) never comes back out (provision.* and
+        // acme.importGranted open those here and keep them).
+        noExtraArgs(a, ["blob", "purpose"]);
         const blob = hexArg(a, "blob", { min: 44, max: 1024 * 1024 });
+        const purpose = strArg(a, "purpose", 32);
+        if (!UNSEAL_PURPOSES.has(purpose)) throw new KeydError("forbidden", "keyd opens no sealed message of that kind");
+        let plain: Uint8Array;
         try {
-          return { result: { plain: toHex(openSealedFromEd25519Recipient(blob, this.#seed)) } };
+          plain = openSealedFromEd25519Recipient(blob, this.#seed);
         } catch {
           throw new KeydError("failed", "could not open the blob");
         }
+        if (!isPairingOrder(plain)) {
+          plain.fill(0);
+          throw new KeydError("forbidden", "the sealed message is not a pairing order");
+        }
+        return { result: { plain: toHex(plain) } };
       }
       case "swk.hkdf": {
-        // The one derivation primitive the box's workload-key consumers use. The label must be
-        // one the box actually derives; anything else is refused, so a compromised daemon cannot
-        // ask keyd for a subkey of its own choosing.
+        // Only the two fixed, unsalted subkeys the daemon itself needs (peer-backup key, backup
+        // manifest key). The chunk, LLM, app-secret and TLS-at-rest subkeys are used through
+        // their own operations, so they never leave keyd.
         noExtraArgs(a, ["salt", "info"]);
         const info = strArg(a, "info", 128);
-        if (!SWK_DERIVE_LABELS.has(info)) throw new KeydError("forbidden", "that derivation label is not allowed");
-        const salt = hexArg(a, "salt", { max: 512 });
+        if (!SWK_HKDF_LABELS.has(info)) throw new KeydError("forbidden", "that derivation label is not allowed");
+        const salt = hexArg(a, "salt", { max: 0 });
         return { result: { key: toHex(hkdf(sha256, this.#swkOrThrow(), salt, new TextEncoder().encode(info), 32)) } };
       }
       case "swk.seal": {
@@ -142,7 +158,9 @@ export class KeydService {
       }
       case "swk.deriveServiceSecret": {
         noExtraArgs(a, ["serviceId"]);
-        return { result: { secret: toHex(deriveServiceSecret(this.#swkOrThrow(), strArg(a, "serviceId", 200))) } };
+        const serviceId = strArg(a, "serviceId", 200);
+        if (!isServiceId(serviceId)) throw new KeydError("bad-request", "serviceId must be <creator>--<slug> or <slug>");
+        return { result: { secret: toHex(deriveServiceSecret(this.#swkOrThrow(), serviceId)) } };
       }
       case "swk.deriveTlsKey": {
         noExtraArgs(a, ["serverId"]);
@@ -163,6 +181,20 @@ export class KeydService {
           throw new KeydError("forbidden", "app-copy env key info must be purpose-tagged");
         }
         return { result: { key: toHex(new Uint8Array(hkdfSync("sha256", this.#cgkOrThrow(), new Uint8Array(0), info, 32))) } };
+      }
+      case "cgk.gossipMac":
+      case "cgk.accessSyncMac": {
+        // A MAC over the box's own two gossip message kinds only, so the CGK is never a general
+        // MAC oracle and never leaves keyd.
+        noExtraArgs(a, ["msg"]);
+        const msg = hexArg(a, "msg", { min: 1, max: MAX_MAC_BYTES });
+        const gossip = req.op === "cgk.gossipMac";
+        const tag = gossip ? GOSSIP_TAG : ACCESS_SYNC_TAG;
+        if (!Buffer.from(msg.subarray(0, tag.length)).equals(Buffer.from(tag))) {
+          throw new KeydError("forbidden", `the gossip key MACs ${tag.slice(0, -1)} messages only`);
+        }
+        const key = gossip ? this.#cgkOrThrow() : hkdf(sha256, this.#cgkOrThrow(), new Uint8Array(0), new TextEncoder().encode(ACCESS_SYNC_KEY_INFO), 32);
+        return { result: { mac: toHex(hmac(sha256, key, msg)) } };
       }
       case "tls.createKey": {
         noExtraArgs(a, ["names"]);
@@ -190,9 +222,27 @@ export class KeydService {
         return { result: { active: this.#tlsOrThrow().active() } };
       }
       case "tls.sign": {
-        noExtraArgs(a, ["handle", "digest"]);
-        const digest = hexArg(a, "digest", { min: 32, max: 48 });
-        return { result: { sig: toHex(this.#tlsOrThrow().sign(strArg(a, "handle", 32), digest)) } };
+        // keyd builds the signed input itself from the TLS fields, so the certificate key signs
+        // TLS 1.3 CertificateVerify and TLS 1.2 ServerKeyExchange inputs and nothing else.
+        const handle = strArg(a, "handle", 32);
+        const version = strArg(a, "tls", 8);
+        let message: Uint8Array;
+        if (version === "1.3") {
+          noExtraArgs(a, ["handle", "tls", "transcriptHash"]);
+          const th = hexArg(a, "transcriptHash", { min: 32, max: 48 });
+          if (th.length !== 32 && th.length !== 48) throw new KeydError("bad-request", "transcriptHash must be 32 or 48 bytes");
+          message = tls13ServerSignedMessage(th);
+        } else if (version === "1.2") {
+          noExtraArgs(a, ["handle", "tls", "clientRandom", "serverRandom", "params"]);
+          const cr = hexArg(a, "clientRandom", { exact: 32 });
+          const sr = hexArg(a, "serverRandom", { exact: 32 });
+          const params = hexArg(a, "params", { min: 4, max: 4 + 133 });
+          if (!isEcdheParams(params)) throw new KeydError("bad-request", "params must be named-curve ECDHE parameters");
+          message = tls12ServerSignedMessage(cr, sr, params);
+        } else {
+          throw new KeydError("bad-request", "tls must be 1.3 or 1.2");
+        }
+        return { result: { sig: toHex(this.#tlsOrThrow().signHandshake(handle, message)) } };
       }
       case "tls.list":
         noExtraArgs(a, []);
@@ -247,19 +297,40 @@ export class KeydService {
       }
       case "provision.swk":
       case "provision.cgk": {
-        noExtraArgs(a, ["key"]);
+        // `sealed` is the owner's delivery sealed to this box: keyd opens it and keeps the key,
+        // so it never passes through the daemon. `key` is for a key the daemon already holds
+        // (an install-blob or legacy file being moved in).
+        noExtraArgs(a, ["key", "sealed"]);
         const which = req.op === "provision.swk" ? "swk" : "cgk";
+        if ((a.key === undefined) === (a.sealed === undefined)) throw new KeydError("bad-request", "give key or sealed");
+        let key: Uint8Array;
+        if (a.sealed !== undefined) {
+          const sealed = hexArg(a, "sealed", { min: 44, max: 1024 });
+          try {
+            key = openSealedFromEd25519Recipient(sealed, this.#seed);
+          } catch {
+            throw new KeydError("failed", "could not open the sealed key");
+          }
+          if (key.length !== 32) {
+            key.fill(0);
+            throw new KeydError("failed", "the sealed key is not 32 bytes");
+          }
+        } else {
+          key = hexArg(a, "key", { exact: 32 });
+        }
         const current = which === "swk" ? this.#swk : this.#cgk;
-        const key = hexArg(a, "key", { exact: 32 });
-        // A key is provisioned once. Replacing one is a restore or replacement workflow
-        // (a new keyd state), never a request over the socket.
+        // A key is provisioned once. Replacing one is a restore or replacement workflow (a new
+        // keyd state, made offline by root), never a request over the socket.
         if (current) {
-          if (Buffer.from(current).equals(Buffer.from(key))) return { result: { stored: false, already: true } };
+          const same = Buffer.from(current).equals(Buffer.from(key));
+          key.fill(0);
+          if (same) return { result: { stored: false, already: true } };
           throw new KeydError("forbidden", `${which} is already provisioned`);
         }
         this.#store?.save(which, key);
         if (which === "swk") this.#swk = key.slice();
         else this.#cgk = key.slice();
+        key.fill(0);
         return { result: { stored: true } };
       }
       default:

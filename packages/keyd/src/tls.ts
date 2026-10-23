@@ -206,13 +206,15 @@ export class TlsKeys {
     return { handle: this.activeHandle, chainPem: k.chainPem, notAfter: k.notAfter ?? 0, names: k.names, legacy: k.legacy === true };
   }
 
-  /** A TLS handshake signature over `digest`. Only for a key with a valid, installed certificate. */
-  sign(handle: string, digest: Uint8Array): Uint8Array {
+  /**
+   * The ECDSA-P256-SHA256 signature over a TLS handshake input built by `tlsSignedMessage`.
+   * Only for a key with a valid, installed certificate.
+   */
+  signHandshake(handle: string, message: Uint8Array): Uint8Array {
     const k = this.get(handle);
     if (!k.chainPem || !k.notAfter) throw new KeydError("forbidden", "this key has no certificate");
     if (k.notAfter < this.now() - 7 * 24 * 3600_000) throw new KeydError("forbidden", "this key's certificate has expired");
-    if (digest.length !== 32 && digest.length !== 48) throw new KeydError("bad-request", "digest must be 32 or 48 bytes");
-    return p256.sign(digest, Uint8Array.from(Buffer.from(k.privHex, "hex")), { prehash: false, format: "der" });
+    return p256.sign(sha256(message), Uint8Array.from(Buffer.from(k.privHex, "hex")), { prehash: false, format: "der" });
   }
 
   list(): TlsKeyInfo[] {
@@ -242,3 +244,38 @@ export class TlsKeys {
 }
 
 export const sha256Hex = (b: Uint8Array): string => createHash("sha256").update(b).digest("hex");
+
+const TLS13_SERVER_CONTEXT = new TextEncoder().encode("TLS 1.3, server CertificateVerify");
+/** Named groups a TLS 1.2 ServerKeyExchange may carry, and their point length. */
+const ECDHE_GROUPS: ReadonlyMap<number, number> = new Map([
+  [0x001d, 32],
+  [0x0017, 65],
+  [0x0018, 97],
+  [0x0019, 133],
+]);
+
+/** TLS 1.3 CertificateVerify input (RFC 8446 4.4.3): 64 spaces, the server context, 0, the transcript hash. */
+export function tls13ServerSignedMessage(transcriptHash: Uint8Array): Uint8Array {
+  const out = new Uint8Array(64 + TLS13_SERVER_CONTEXT.length + 1 + transcriptHash.length);
+  out.fill(0x20, 0, 64);
+  out.set(TLS13_SERVER_CONTEXT, 64);
+  out.set(transcriptHash, 64 + TLS13_SERVER_CONTEXT.length + 1);
+  return out;
+}
+
+/** Whether `params` is a ServerECDHParams of a named curve (RFC 8422 5.4) with a well-formed point. */
+export function isEcdheParams(params: Uint8Array): boolean {
+  if (params.length < 4 || params[0] !== 3) return false;
+  const want = ECDHE_GROUPS.get((params[1]! << 8) | params[2]!);
+  if (want === undefined || params[3] !== want || params.length !== 4 + want) return false;
+  return want === 32 || params[4] === 0x04;
+}
+
+/** TLS 1.2 ServerKeyExchange input (RFC 5246 7.4.3): client_random, server_random, params. */
+export function tls12ServerSignedMessage(clientRandom: Uint8Array, serverRandom: Uint8Array, params: Uint8Array): Uint8Array {
+  const out = new Uint8Array(64 + params.length);
+  out.set(clientRandom, 0);
+  out.set(serverRandom, 32);
+  out.set(params, 64);
+  return out;
+}

@@ -14,14 +14,12 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/service-invite-list/v1",
     "flagship/service-invite-create-fetch/v1",
     "flagship/service-invite-co-manager/v1",
-    "flagship/service-grant/v1",
     "flagship/server-revoke-by-self/v1",
     "flagship/server-migration-attach/v1",
     "flagship/server-migration-ack/v1",
     "flagship/pod-binding/v1",
     "flagship/pb-manifest/v1",
     "flagship/mint-reservation/v1",
-    "flagship/membership/v1",
     "flagship/lan-hint/v1",
     "flagship/dns01-publish/v1",
     "flagship/dns01-delete/v1",
@@ -37,10 +35,53 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/push-relay/v1",
     "flagship/app-copy-fetch/v1",
     "flagship/pb-http/v1",
+    "flagship/app-release/v1",
+    "flagship/identity-header/v1",
+    "flagship/custom-domain-cert/v1",
+    "flagship/pb-checkin/v1",
+    "flagship/pb-directory/v1",
+    "flagship/pb-tokens/v1",
+    "flagship/pb-redeem/v1",
+    "flagship/pb-filler-fetch/v1",
+    "flagship/pb-filler-proof/v1",
+    "flagship/pb-root-deposit/v1",
     "pb-put",
     "pb-resp",
     "pb/request-peers/v1",
 ];
+
+/// `SWK_HKDF_LABELS`: the only workload-key derivations keyd hands out (both unsalted).
+pub const SWK_HKDF_LABELS: &[&str] = &["flagship.pb-manifest.v1", "flagship/peer-backup-key/v1"];
+
+/// `UNSEAL_PURPOSES`: the sealed messages keyd opens and returns.
+pub const UNSEAL_PURPOSES: &[&str] = &["pairing-order"];
+
+/// `isPairingOrder`: UTF-8 JSON `{"request": {"type": "add-paired-session", ..}, "signature": "..", ..}`.
+pub fn is_pairing_order(plain: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(plain) else {
+        return false;
+    };
+    let Ok(serde_json::Value::Object(o)) = serde_json::from_str::<serde_json::Value>(text) else {
+        return false;
+    };
+    let Some(serde_json::Value::Object(r)) = o.get("request") else {
+        return false;
+    };
+    r.get("type").and_then(serde_json::Value::as_str) == Some("add-paired-session")
+        && o.get("signature").is_some_and(serde_json::Value::is_string)
+}
+
+fn is_service_label(p: &str) -> bool {
+    let b = p.as_bytes();
+    let ok = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit();
+    b.first().is_some_and(ok) && b.len() <= 63 && b.iter().all(|c| ok(c) || *c == b'-')
+}
+
+/// `isServiceId`: `<creator>--<slug>` or a bare `<slug>`, each half a lowercase DNS label.
+pub fn is_service_id(id: &str) -> bool {
+    let parts: Vec<&str> = id.split("--").collect();
+    parts.len() <= 2 && parts.iter().all(|p| is_service_label(p))
+}
 
 pub const MAX_SIGN_BYTES: usize = 256 * 1024;
 
@@ -370,6 +411,40 @@ mod tests {
     }
 
     #[test]
+    fn service_ids_and_pairing_orders() {
+        for id in ["alice--chess", "habit-tracker", "a--b-", "x"] {
+            assert!(is_service_id(id), "{id}");
+        }
+        let long = "a".repeat(64);
+        for id in [
+            "Alice--chess",
+            "a--b--c",
+            "a---b",
+            "--b",
+            "a--",
+            "-a",
+            "a b",
+            "a.b",
+            "",
+            long.as_str(),
+        ] {
+            assert!(!is_service_id(id), "{id}");
+        }
+        assert!(is_pairing_order(
+            br#"{"request":{"type":"add-paired-session"},"signature":"aa"}"#
+        ));
+        for bad in [
+            &br#"{"request":{"type":"x"},"signature":"aa"}"#[..],
+            br#"{"request":{"type":"add-paired-session"},"signature":1}"#,
+            br#"[{"request":{"type":"add-paired-session"},"signature":"aa"}]"#,
+            b"\xef\xbb\xbf{}",
+            &[0x11u8; 32],
+        ] {
+            assert!(!is_pairing_order(bad));
+        }
+    }
+
+    #[test]
     fn signs_the_box_purposes() {
         assert_eq!(
             ok("flagship/secret-request/v1|a|b"),
@@ -381,6 +456,22 @@ mod tests {
         );
         assert_eq!(ok("pb-put|a|1|2|peer"), "pb-put");
         assert_eq!(ok("\u{feff}flagship/inject/v1|x"), "flagship/inject/v1");
+        assert_eq!(
+            ok("flagship/app-release/v1|app|1"),
+            "flagship/app-release/v1"
+        );
+        for t in [
+            "pb-checkin",
+            "pb-directory",
+            "pb-tokens",
+            "pb-redeem",
+            "pb-filler-fetch",
+            "pb-filler-proof",
+            "pb-root-deposit",
+        ] {
+            let tag = format!("flagship/{t}/v1");
+            assert_eq!(ok(&format!("{tag}|home.a.flagship.services|1")), tag);
+        }
     }
 
     #[test]
@@ -390,6 +481,8 @@ mod tests {
             "flagship/server-update/v1|x",
             "flagship/order/power-off/v1|x",
             "flagship/account-self-delete/v1|x",
+            "flagship/membership/v1|x",
+            "flagship/service-grant/v1|x",
             "flagship/app-rank/v1|x",
             "flagship/debug-access/v2|x",
             "flagship/server-share/v1|x",

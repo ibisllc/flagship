@@ -10,8 +10,8 @@
 use std::path::PathBuf;
 
 use flagship_keyd::acme::LETS_ENCRYPT_HOSTS;
+use flagship_keyd::policy::SWK_HKDF_LABELS;
 use flagship_keyd::policy::{BOX_SIGN_PURPOSES, DEFAULT_RATE_LIMITS, MAX_SIGN_BYTES};
-use flagship_keyd::service::SWK_DERIVE_LABELS;
 use flagship_keyd::wire::{KEYD_PROTOCOL_VERSION, MAX_FRAME_BYTES, OPS};
 
 fn ts(path: &str) -> String {
@@ -143,14 +143,14 @@ fn ops_and_frame_limits_match_wire_ts() {
 #[test]
 fn derivation_labels_and_acme_hosts_match() {
     let labels = strings(block(
-        &ts("packages/protocol/src/opaqueKey.ts"),
-        "SWK_DERIVE_LABELS",
+        &ts("packages/keyd/src/policy.ts"),
+        "SWK_HKDF_LABELS",
         "new Set([",
         "]);",
     ));
     assert_eq!(
         labels,
-        SWK_DERIVE_LABELS
+        SWK_HKDF_LABELS
             .iter()
             .map(|s| (*s).to_owned())
             .collect::<Vec<_>>()
