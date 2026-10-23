@@ -27,7 +27,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Show my servers"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Show my servers"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "R\\.string\\.show_my_servers\\b"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/home.js", "Show my servers"], ["apps/web/public/webapp/views/home.js", "home-show-my-servers"]] }
       }
     },
@@ -307,7 +307,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift", "TOTP|[Tt]wo-factor"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AuditLogScreen.swift", "struct "], ["apps/mobile/ios/Sources/FlagshipUI/Screens/PeerBackupScreen.swift", "struct "]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccountSecurityScreen.kt", "TOTP|[Tt]wo-factor"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AuditLogScreen.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/PeerBackupScreen.kt", "fun "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccountSecurityScreen.kt", "R\\.string\\.totp_qr_code\\b"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AuditLogScreen.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/PeerBackupScreen.kt", "fun "]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/totp.js", "export"], ["apps/web/public/webapp/views/audit-log.js", "export"], ["apps/web/public/webapp/views/peer-backup.js", "export"]] }
       }
     },
@@ -490,7 +490,7 @@
       "ref": "mac",
       "surfaces": {
         "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift", "Unlocking"], ["apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift", "lastConnected"]] },
-        "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/VMInventoryStore.cs", "Unlocking"], ["apps/builder-windows/src/VM/VMInventoryStore.cs", "LastConnectedAt"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/VMInventoryStore.cs", "Strings\\.T\\(\"unlocking\"\\)"], ["apps/builder-windows/src/VM/VMInventoryStore.cs", "LastConnectedAt"]] },
         "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/inventory.py", "[Uu]nlocking"], ["apps/builder-linux/vm/inventory.py", "last_connected"]] }
       }
     },
@@ -584,7 +584,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerBackupFormat.swift", "flagship/server-restore/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "Backup/clone server"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "struct ImportBackupScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "isDemoAccount: app.isDemoAccount"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Add/Import a server"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/ServerArchiveModels.swift", "flagship/archive-download/v1"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerArchive.kt", "flagship/server-archive/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "Backup/clone server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Add/Restore server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/ServerArchiveModels.kt", "flagship/archive-download/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerBackupFormat.kt", "flagship/server-restore/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "fun ImportBackupScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Waiting for its backup"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerArchive.kt", "flagship/server-archive/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "Backup/clone server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Add/Restore server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/ServerArchiveModels.kt", "flagship/archive-download/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerBackupFormat.kt", "flagship/server-restore/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "fun ImportBackupScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "R\\.string\\.waiting_for_its_backup\\b"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverBackupFormat.js", "flagship/server-restore/v1"], ["apps/web/public/webapp/views/server-detail.js", "Backup/clone server"], ["apps/web/public/webapp/views/import-backup.js", "createServerForRestore"], ["apps/web/public/webapp/views/home.js", "ADD_IMPORT_LABEL"], ["apps/web/public/webapp/lib/serverArchive.js", "flagship/archive-download/v1"], ["apps/web/public/webapp/lib/serverArchive.js", "export function archiveErrorText"]] }
       }
     },
@@ -604,7 +604,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift", "enum BoxEventLabels"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift", "That's everything"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BoxEventLabels.kt", "server.backup.policy"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ActivityViewModel.kt", "object ActivityDates"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ActivityScreen.kt", "activity-section-"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ActivityScreen.kt", "That's everything"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BoxEventLabels.kt", "server.backup.policy"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ActivityViewModel.kt", "object ActivityDates"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ActivityScreen.kt", "activity-section-"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ActivityScreen.kt", "R\\.string\\.thats_everything\\b"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/activityFeed.js", "BOX_EVENT_LABELS"], ["apps/web/public/webapp/views/activity.js", "mergeFeed"]] }
       }
     },
@@ -614,8 +614,8 @@
       "ref": "web",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift", "Too many tries \\\\\\(who\\)"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/ScreensClient.swift", "RateLimitedRefusal\\.from\\(status: s, body: body\\)"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/FreeAiModels.swift", "case rateLimited\\(RateLimitedRefusal\\)"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RateLimited.kt", "Too many tries \\$w"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpTransport.kt", "RateLimitedException\\.parse\\(status, text, retryAfter\\)"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/NetworkErrorHumanizer.kt", "Kind\\.RATE_LIMITED"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/FreeAiCredits.kt", "data class Limited\\(val message: String\\)"]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/rateLimited.js", "Too many tries \\$\\{who\\}"], ["apps/web/public/webapp/lib/comFetch.js", "throwIfRateLimited"], ["apps/web/public/webapp/lib/humanError.js", "rateLimited"]] }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RateLimited.kt", "R\\.string\\.too_many_tries_try_again, w"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpTransport.kt", "RateLimitedException\\.parse\\(status, text, retryAfter\\)"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/NetworkErrorHumanizer.kt", "Kind\\.RATE_LIMITED"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/FreeAiCredits.kt", "data class Limited\\(val message: String\\)"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/rateLimited.js", "Too many tries from your network\\. Try again \\{0\\}"], ["apps/web/public/webapp/lib/comFetch.js", "throwIfRateLimited"], ["apps/web/public/webapp/lib/humanError.js", "rateLimited"]] }
       }
     },
     {
@@ -655,7 +655,7 @@
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/peerBackup.js", "flagship/peer-backup-key/v1"], ["apps/web/public/webapp/views/peer-backup.js", "peer-backup/status"], ["apps/web/public/webapp/views/import-backup.js", "openRestoreFromPeers"]] },
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PeerBackupKeys.swift", "flagship/peer-backup-key/v1"], ["apps/mobile/shared/Tests/FlagshipSharedTests/PeerBackupVectorTests.swift", "peer-backup/vectors.json"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/PeerBackupScreen.swift", "Servers holding your pieces"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/RestoreSourceScreens.swift", "From other servers"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift", "func findPeerBackup"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/PeerBackup.kt", "flagship/peer-backup-key/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/PeerBackupScreen.kt", "peer-backup-state-"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ServerArchiveViewModels.kt", "findPeerBackup"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/RestoreFromBackupScreens.kt", "From other servers"], ["apps/mobile/android/app/src/test/java/com/flagshipserver/app/core/PeerBackupVectorsTest.kt", "derivePbkHex"]] }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/PeerBackup.kt", "flagship/peer-backup-key/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/PeerBackupScreen.kt", "peer-backup-state-"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ServerArchiveViewModels.kt", "findPeerBackup"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/RestoreFromBackupScreens.kt", "R\\.string\\.from_other_servers\\b"], ["apps/mobile/android/app/src/test/java/com/flagshipserver/app/core/PeerBackupVectorsTest.kt", "derivePbkHex"]] }
       }
     },
     {
@@ -665,7 +665,7 @@
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/securityNotice.js", "flagship/security-notice/v1"], ["apps/web/public/webapp/lib/noticeUi.js", "Update required"], ["apps/web/public/webapp/lib/updateLock.js", "UpdateRequiredError"], ["apps/web/public/webapp/lib/comFetch.js", "isUpdateLocked"]] },
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/SecurityNotice.swift", "flagship/security-notice/v1"], ["apps/mobile/shared/Sources/FlagshipCore/SecurityNoticeCenter.swift", "AnonymousNoticeFetcher"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/UpdateLock.swift", "UpdateRequiredError"], ["apps/mobile/ios/Sources/FlagshipUI/Notices/NoticeViews.swift", "Update required"], ["apps/mobile/ios/App/UITests/GymNoticeTests.swift", "test_verifiedUpdateRequiredNoticeLocksTheAppUntilItIsUpdated"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/SecurityNotice.kt", "flagship/security-notice/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/SecurityNoticeCopy.kt", "Update required"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/UpdateLock.kt", "UpdateRequiredException"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpClientFactory.kt", "UpdateLockInterceptor"]] }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/SecurityNotice.kt", "flagship/security-notice/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/SecurityNoticeCopy.kt", "R\\.string\\.update_required\\b"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/UpdateLock.kt", "UpdateRequiredException"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpClientFactory.kt", "UpdateLockInterceptor"]] }
       }
     },
     {

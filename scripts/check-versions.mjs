@@ -60,7 +60,7 @@ export function surfaces(v) {
   add("ios:pbxproj:version", "apps/mobile/ios/App/FlagshipApp.xcodeproj/project.pbxproj", `(MARKETING_VERSION = )([^;]*)(;)`, v.iosVersion, "iOS store version (project)", { flags: "gm" });
   add("ios:pbxproj:build", "apps/mobile/ios/App/FlagshipApp.xcodeproj/project.pbxproj", `(CURRENT_PROJECT_VERSION = )([^;]*)(;)`, String(v.iosBuild), "iOS store build (project)", { flags: "gm" });
   add("ios:about:product", "apps/mobile/ios/Sources/FlagshipUI/Shell/ProductVersion.swift", `(static let product = ")([^"]*)(")`, v.product, "iOS About product version");
-  add("ios:about:label", "apps/mobile/ios/Sources/FlagshipUI/Shell/ProductVersion.swift", `(static let label = ")([^"]*)(")`, v.label, "iOS About label");
+  add("ios:about:label", "apps/mobile/ios/Sources/FlagshipUI/Shell/ProductVersion.swift", `(static let label = (?:String\\(localized: )?")([^"]*)(")`, v.label, "iOS About label");
 
   add("mac:plist", "apps/builder-mac/Info.plist", `(<key>CFBundleShortVersionString</key>\\s*<string>)([^<]*)(</string>)`, v.studio, "Mac Studio bundle version");
   add("mac:label", "apps/builder-mac/Sources/FlagshipBuilderCore/StudioVersion.swift", `(static let label = ")([^"]*)(")`, v.label, "Mac Studio About label");
