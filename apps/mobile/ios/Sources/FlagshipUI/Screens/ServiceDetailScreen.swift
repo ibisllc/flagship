@@ -417,7 +417,7 @@ public struct ServiceDetailScreen: View {
     /// row treatment (wrap-at-dots + copy) as the other groups.
     private func customDomainGroup(fqdn: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            sectionLabel("CUSTOM DOMAIN", c: c)
+            sectionLabel(String(localized: "CUSTOM DOMAIN"), c: c)
             urlRow(url: "https://\(fqdn)", style: .prominent, c: c)
         }
     }
@@ -439,7 +439,7 @@ public struct ServiceDetailScreen: View {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     HStack {
-                        sectionLabel("SET CUSTOM DOMAIN", c: c)
+                        sectionLabel(String(localized: "SET CUSTOM DOMAIN"), c: c)
                         Spacer()
                         if cooling {
                             // Same treatment as the section label, but
@@ -469,7 +469,7 @@ public struct ServiceDetailScreen: View {
                                     .stroke(c.border, lineWidth: 1)
                             )
                             .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
-                        FSPrimaryButton("Add", enabled: !cooling, block: false) {
+                        FSPrimaryButton(String(localized: "Add"), enabled: !cooling, block: false) {
                             Task { await vm.submitCustomDomain(rootDomain: customDomainRoot) }
                         }
                     }
