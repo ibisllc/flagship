@@ -20,6 +20,7 @@
 import { ed, edVerifyFast } from "./edSync.js";
 import { legacyFieldGuard } from "./auth.js";
 import { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
+import type { HybridMsgSigner } from "./pqTrust.js";
 import type { Bytes } from "./types.js";
 
 export interface DaemonStatusReport {
@@ -64,6 +65,14 @@ export function signDaemonStatusReport(
   // Accepts the STK `Keypair` or a `sign(msg)` closure (custodian-backed);
   // signature bytes are identical either way.
   return resolveMsgSigner(identity)(canonicalDaemonStatusReport(r));
+}
+
+/**
+ * The STK's hybrid signature (Ed25519 AND its bound ML-DSA-65 key) over the same canonical
+ * bytes, sent beside the classical one as `pqSignature` (architecture v2, pq-suites.md §10).
+ */
+export function signDaemonStatusReportHybrid(r: DaemonStatusReport, stkHybrid: HybridMsgSigner): Bytes {
+  return stkHybrid(canonicalDaemonStatusReport(r));
 }
 
 /** `verifyDaemonStatusReport`, with the native Ed25519 check where the runtime has it. */

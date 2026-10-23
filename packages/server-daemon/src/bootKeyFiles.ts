@@ -13,7 +13,7 @@
  */
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { bootKeyBindingToWire, signBootKeyBinding, verifiedBootKey, type MsgSigner } from "@flagship/protocol";
+import { bootKeyBindingToWire, signBootKeyBinding, signBootKeyBindingV2, verifiedBootKey, type HybridMsgSigner, type MsgSigner } from "@flagship/protocol";
 import { writeFileDurable } from "./durableFile.js";
 
 export const BOOT_KEY_PUB_PATH = "/boot/flagship-boot-key.pub";
@@ -58,6 +58,9 @@ export async function readBootKeyPub(deps: BootKeyFileDeps = {}): Promise<string
 export async function rebindBootKey(args: {
   serverDomain: string;
   stk: MsgSigner;
+  /** The STK's hybrid key (keyd `sign.hybrid`); adds the v2 hybrid signature. Use only once
+   *  `.com` holds the STK's key binding, or `.com` refuses the hybrid signature. */
+  stkHybrid?: HybridMsgSigner;
   controlPlaneBaseUrl: string;
   now?: () => number;
   fetch?: typeof fetch;
@@ -66,7 +69,11 @@ export async function rebindBootKey(args: {
   const bootPubHex = await readBootKeyPub(args.files);
   if (!bootPubHex) return "no-boot-key";
   const binding = { serverDomain: args.serverDomain.toLowerCase(), bootPubHex, issuedAt: (args.now ?? Date.now)() };
-  const body = bootKeyBindingToWire(binding, signBootKeyBinding(binding, args.stk));
+  const body = bootKeyBindingToWire(
+    binding,
+    signBootKeyBinding(binding, args.stk),
+    args.stkHybrid ? signBootKeyBindingV2(binding, args.stkHybrid) : undefined,
+  );
   const base = args.controlPlaneBaseUrl.replace(/\/+$/, "");
   const res = await (args.fetch ?? fetch)(`${base}/api/server/${encodeURIComponent(binding.serverDomain)}/boot-key`, {
     method: "PUT",
@@ -86,6 +93,7 @@ export async function ensureBootKeyBinding(args: {
   serverDomain: string;
   stkPub: Uint8Array;
   signer: MsgSigner;
+  stkHybrid?: HybridMsgSigner;
   controlPlaneBaseUrl: string;
   fetch?: typeof fetch;
   files?: BootKeyFileDeps;
@@ -98,10 +106,19 @@ export async function ensureBootKeyBinding(args: {
   const res = await f(`${base}/api/server/${encodeURIComponent(domain)}/boot-key`, { headers: { accept: "application/json" } });
   if (res.ok) {
     const stkHex = Buffer.from(args.stkPub).toString("hex");
-    if (verifiedBootKey(await res.json().catch(() => null), { serverDomain: domain, stkPubHex: stkHex }) === bootPubHex) return "ok";
+    const wire: unknown = await res.json().catch(() => null);
+    const hasHybrid = typeof (wire as { hybridSignature?: unknown } | null)?.hybridSignature === "string";
+    if (verifiedBootKey(wire, { serverDomain: domain, stkPubHex: stkHex }) === bootPubHex && (hasHybrid || !args.stkHybrid)) return "ok";
   } else if (res.status !== 404) {
     throw new Error(`boot key binding check failed: HTTP ${res.status}`);
   }
-  await rebindBootKey({ serverDomain: domain, stk: args.signer, controlPlaneBaseUrl: base, fetch: f, ...(args.files ? { files: args.files } : {}) });
+  await rebindBootKey({
+    serverDomain: domain,
+    stk: args.signer,
+    ...(args.stkHybrid ? { stkHybrid: args.stkHybrid } : {}),
+    controlPlaneBaseUrl: base,
+    fetch: f,
+    ...(args.files ? { files: args.files } : {}),
+  });
   return "bound";
 }

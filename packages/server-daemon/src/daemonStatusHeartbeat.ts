@@ -1,9 +1,11 @@
 import { X509Certificate } from "node:crypto";
 import {
   signDaemonStatusReport,
+  signDaemonStatusReportHybrid,
   signBoxTrustStatusReport,
   type BoxTrustStatusReport,
   type DaemonStatusReport,
+  type HybridMsgSigner,
   type MsgSigner,
 } from "@flagship/protocol";
 import type { CertMaterial } from "./certManager.js";
@@ -76,6 +78,9 @@ export async function postDaemonStatus(args: {
    *  `sign(msg)` closure — the daemon passes the closure so it never holds the
    *  raw STK here. */
   sign: MsgSigner;
+  /** The STK's hybrid signer once `.com` holds its key binding (pqKeyBinding.ts); the report
+   *  then also carries `pqSignature`. Null/absent: classical only. */
+  stkHybrid?: HybridMsgSigner | null;
   controlPlaneBaseUrl: string;
   cert: CertMaterial;
   certValidUntil: number;
@@ -149,6 +154,10 @@ export async function postDaemonStatus(args: {
       issuedAt,
     };
     const sig = signDaemonStatusReport(fields, args.sign);
+    const stkHybrid = args.stkHybrid ?? null;
+    const pqSignature = stkHybrid
+      ? { suite: "hybrid-ed25519-mldsa65/v1", signature: bytesToHex(signDaemonStatusReportHybrid(fields, stkHybrid)) }
+      : undefined;
 
     // SIBLING envelope — the box's own STK-signed relay-trust verdict. Built +
     // signed independently of the daemon-status report (its own canonical
@@ -194,6 +203,7 @@ export async function postDaemonStatus(args: {
           issuedAt: fields.issuedAt,
         },
         signature: bytesToHex(sig),
+        ...(pqSignature ? { pqSignature } : {}),
         // UNSIGNED advisory field (NOT in the canonical bytes) — `.com` relays it
         // on /pods so clients can show which services this box currently leads.
         ...(args.leadsServices ? { leadsServices: args.leadsServices } : {}),
@@ -276,6 +286,8 @@ export function startDaemonStatusHeartbeat(args: {
   serverDomain: string;
   /** Report signer — a `Keypair` or a custodian-backed `sign(msg)` closure. */
   sign: MsgSigner;
+  /** Re-read each beat: the STK's hybrid signer once its key binding is on `.com`. */
+  readStkHybrid?: () => HybridMsgSigner | null;
   controlPlaneBaseUrl: string;
   intervalMs?: number;
   /** Bound for each POST (see postDaemonStatus.requestTimeoutMs). Default 30s. */
@@ -388,6 +400,7 @@ export function startDaemonStatusHeartbeat(args: {
       void Promise.resolve(postDaemonStatus({
         serverDomain: args.serverDomain,
         sign: args.sign,
+        stkHybrid: args.readStkHybrid?.() ?? null,
         controlPlaneBaseUrl: args.controlPlaneBaseUrl,
         cert: snapshot.cert,
         certValidUntil: snapshot.certValidUntil,

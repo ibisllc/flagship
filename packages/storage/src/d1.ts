@@ -8,6 +8,7 @@ import {
 import { D1ServerShareStorage, type ServerShareStorage } from "./serverShares.js";
 import { D1ServerOrderStorage, type ServerOrderStorage } from "./serverOrders.js";
 import { D1ServerBootKeyStorage, type ServerBootKeyStorage } from "./serverBootKeys.js";
+import { D1PqTrustStorage, type PqTrustStorage } from "./pqTrust.js";
 import type {
   AccountType,
   AuditEventRecord,
@@ -4684,6 +4685,7 @@ export class D1Storage implements Storage {
   serverShares: ServerShareStorage;
   serverOrders: ServerOrderStorage;
   serverBootKeys: ServerBootKeyStorage;
+  pqTrust: PqTrustStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.schemaVersion = new D1SchemaVersionStorage(db);
@@ -4741,6 +4743,7 @@ export class D1Storage implements Storage {
     this.serverShares = new D1ServerShareStorage(db);
     this.serverOrders = new D1ServerOrderStorage(db);
     this.serverBootKeys = new D1ServerBootKeyStorage(db);
+    this.pqTrust = new D1PqTrustStorage(db);
   }
 }
 

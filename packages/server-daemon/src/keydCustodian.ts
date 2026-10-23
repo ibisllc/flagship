@@ -43,6 +43,7 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
   #hasSwk: boolean;
   #hasCgk: boolean;
   readonly #keypair: Keypair;
+  #mldsaPubHex: string | null | undefined;
 
   constructor(opts: KeydCustodianOptions) {
     this.#client = new KeydSyncClient({
@@ -88,6 +89,25 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
   }
   signAsBox(msg: Bytes): Bytes {
     return unhex(this.#client.call("sign", { msg: hex(msg) }).sig);
+  }
+  /**
+   * The STK's ML-DSA-65 public key (hex), or null when this keyd holds none (an older keyd, or
+   * one without `identity-mldsa.key`). Asked once.
+   */
+  pqPublicKeyHex(): string | null {
+    if (this.#mldsaPubHex === undefined) {
+      try {
+        const r = this.#client.call("pq.status", {});
+        this.#mldsaPubHex = typeof r.mldsaPublicKey === "string" ? r.mldsaPublicKey : null;
+      } catch {
+        this.#mldsaPubHex = null;
+      }
+    }
+    return this.#mldsaPubHex;
+  }
+  /** Hybrid-sign (STK AND its ML-DSA key) under the same purpose list as `signAsBox`. */
+  signHybridAsBox(msg: Bytes): Bytes {
+    return unhex(this.#client.call("sign.hybrid", { msg: hex(msg) }).sig);
   }
   /**
    * keyd returns no general plaintext of what is sealed to the box: sealed keys go in with
