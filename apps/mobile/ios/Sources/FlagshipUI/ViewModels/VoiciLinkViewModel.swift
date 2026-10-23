@@ -186,6 +186,7 @@ public final class VoiciLinkViewModel {
             return String(localized: "All \(limit) names in use")
         case "rate-limited": return String(localized: "Too many changes today")
         case "not-admin": return String(localized: "Only an admin device can change this")
+        case "app-not-running": return String(localized: "None of your servers runs this app yet")
         default:
             if e.status == 429 { return String(localized: "Too many changes today") }
             return String(localized: "Couldn't save. Try again.")
