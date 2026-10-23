@@ -22,8 +22,12 @@ import { readFile } from "node:fs/promises";
 import { writeFileDurable } from "./durableFile.js";
 import {
   DEVICE_SCOPES,
+  PqTrustError,
   verifyDeviceCapabilityGrant,
+  verifyPqKeyBinding,
   type AdminGrantView,
+  type PqBindingRole,
+  type VerifiedPqKeyBinding,
   type DeviceCapabilityGrant,
   type DeviceScope,
 } from "@flagship/protocol";
@@ -62,6 +66,20 @@ export interface ListedGrant {
   expiresAt: number;
   signatureHex: string;
   signerRoot?: string;
+  /** Architecture v2: the device key's ML-DSA binding as `.com` relays it (verified here). */
+  pqKeyBinding?: unknown;
+}
+
+/** The account-level bindings the book carries beside the grants. */
+interface ListedPqBindings {
+  accountIrk?: unknown;
+  adminRoot?: unknown;
+}
+
+/** The first ML-DSA key this box accepted for an Ed25519 key, and that binding's time. */
+interface PqPin {
+  mldsa: string;
+  issuedAt: number;
 }
 
 interface BookDevice {
@@ -95,6 +113,10 @@ const SCOPES = new Set<string>(DEVICE_SCOPES);
 
 export class AccountDeviceBook {
   private byPub = new Map<string, BookDevice>();
+  /** Verified ML-DSA bindings by Ed25519 key (devices, the IRK, the admin root). */
+  private pqByPub = new Map<string, VerifiedPqKeyBinding>();
+  private pqPins = new Map<string, PqPin>();
+  private listedPq: ListedPqBindings = {};
   private lastRefresh = 0;
   private refreshing: Promise<void> | null = null;
   private refreshingLive = false;
@@ -106,10 +128,12 @@ export class AccountDeviceBook {
 
   async load(): Promise<void> {
     try {
-      const raw = JSON.parse(await readFile(this.opts.path, "utf8")) as { grants?: unknown };
-      this.adopt(raw.grants);
+      const raw = JSON.parse(await readFile(this.opts.path, "utf8")) as { grants?: unknown; pqKeyBindings?: unknown; pqPins?: unknown };
+      this.pqPins = parsePins(raw.pqPins);
+      this.adopt(raw.grants, raw.pqKeyBindings);
     } catch {
       this.byPub.clear();
+      this.pqByPub.clear();
     }
   }
 
@@ -124,9 +148,9 @@ export class AccountDeviceBook {
     this.refreshing ??= (async () => {
       this.lastRefresh = this.now();
       try {
-        const body = (await this.opts.fetchGrants!({ live })) as { grants?: unknown } | null;
+        const body = (await this.opts.fetchGrants!({ live })) as { grants?: unknown; pqKeyBindings?: unknown } | null;
         if (!body || !Array.isArray(body.grants)) return;
-        this.adopt(body.grants);
+        this.adopt(body.grants, body.pqKeyBindings);
         await this.persist();
       } catch (e) {
         this.opts.log?.(`[device-book] refresh failed: ${String((e as Error)?.message ?? e)}`);
@@ -176,12 +200,21 @@ export class AccountDeviceBook {
     return out;
   }
 
+  /**
+   * The verified ML-DSA binding for a signing key this box trusts (a device in the book, the
+   * pinned IRK or admin root), or null. The first ML-DSA key per Ed25519 key wins here too: a
+   * binding naming another one is ignored, so `.com` cannot swap a device's PQ half.
+   */
+  pqBindingFor(pubHex: string): VerifiedPqKeyBinding | null {
+    return this.pqByPub.get(pubHex.toLowerCase()) ?? null;
+  }
+
   private pinned(): boolean {
     const root = this.opts.adminRootPub();
     return !!root && root.length === 32;
   }
 
-  private adopt(raw: unknown): void {
+  private adopt(raw: unknown, pq?: unknown): void {
     const next = new Map<string, BookDevice>();
     if (Array.isArray(raw)) {
       for (const r of raw) {
@@ -195,6 +228,38 @@ export class AccountDeviceBook {
       }
     }
     this.byPub = next;
+    this.adoptPq(pq);
+  }
+
+  private adoptPq(raw: unknown): void {
+    const listed: ListedPqBindings = raw && typeof raw === "object" ? (raw as ListedPqBindings) : {};
+    this.listedPq = { ...(listed.accountIrk ? { accountIrk: listed.accountIrk } : {}), ...(listed.adminRoot ? { adminRoot: listed.adminRoot } : {}) };
+    const next = new Map<string, VerifiedPqKeyBinding>();
+    const take = (wire: unknown, role: PqBindingRole, subjectId: string, ed: string) => {
+      if (!wire) return;
+      const pin = this.pqPins.get(ed);
+      try {
+        const b = verifyPqKeyBinding(wire, {
+          role,
+          subjectId,
+          ed25519PubHex: ed,
+          mldsaPubHex: pin?.mldsa ?? null,
+          now: Math.max(this.now(), pin?.issuedAt ?? 0),
+          ...(pin ? { minIssuedAt: pin.issuedAt } : {}),
+        });
+        next.set(ed, b);
+        if (!pin) this.pqPins.set(ed, { mldsa: b.mldsaPubHex, issuedAt: b.issuedAt });
+      } catch (e) {
+        const code = e instanceof PqTrustError ? e.code : "binding-malformed";
+        if (code === "binding-pq-key-changed") this.opts.log?.(`[device-book] ${role} ${subjectId}: a binding names another ML-DSA key than the pinned one; ignored`);
+      }
+    };
+    const user = this.opts.username.toLowerCase();
+    take(listed.accountIrk, "account-irk", user, toHex(this.opts.ownerIrkPub()));
+    const root = this.opts.adminRootPub();
+    if (root && root.length === 32) take(listed.adminRoot, "admin-root", user, toHex(root));
+    for (const d of this.byPub.values()) take(d.grant.pqKeyBinding, "device", d.deviceId, d.pub);
+    this.pqByPub = next;
   }
 
   private verify(l: ListedGrant): DeviceTier | null {
@@ -212,7 +277,8 @@ export class AccountDeviceBook {
 
   private async persist(): Promise<void> {
     const grants = [...this.byPub.values()].map((d) => d.grant);
-    await writeFileDurable(this.opts.path, JSON.stringify({ grants }));
+    const pqPins = Object.fromEntries(this.pqPins);
+    await writeFileDurable(this.opts.path, JSON.stringify({ grants, pqKeyBindings: this.listedPq, pqPins }));
   }
 }
 
@@ -297,7 +363,24 @@ function parseListed(r: unknown): ListedGrant | null {
     expiresAt: g.expiresAt,
     signatureHex: g.signatureHex.toLowerCase(),
     ...(typeof g.signerRoot === "string" ? { signerRoot: g.signerRoot } : {}),
+    ...(g.pqKeyBinding && typeof g.pqKeyBinding === "object" ? { pqKeyBinding: g.pqKeyBinding } : {}),
   };
+}
+
+function parsePins(raw: unknown): Map<string, PqPin> {
+  const out = new Map<string, PqPin>();
+  if (!raw || typeof raw !== "object") return out;
+  for (const [ed, v] of Object.entries(raw as Record<string, unknown>)) {
+    const p = v as Partial<PqPin> | null;
+    if (HEX64.test(ed) && p && typeof p.mldsa === "string" && /^[0-9a-f]{3904}$/.test(p.mldsa) && Number.isSafeInteger(p.issuedAt)) {
+      out.set(ed, { mldsa: p.mldsa, issuedAt: p.issuedAt! });
+    }
+  }
+  return out;
+}
+
+function toHex(b: Uint8Array): string {
+  return Buffer.from(b).toString("hex");
 }
 
 function toGrant(l: ListedGrant): DeviceCapabilityGrant | null {
