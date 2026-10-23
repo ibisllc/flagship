@@ -471,10 +471,9 @@ module-private registry; Rust: a type with private fields).
 - **Clients** verify under the STK they pinned and pin the ML-DSA key
   (`decideBoxPqKeyPin` in `boxKeyPin.ts`; webapp `acceptStkPqBinding`). A
   different ML-DSA key is a key change the owner must confirm, as for the STK.
-- **Account IRK, admin root, device, boot key**: the format and vectors cover
-  them; issuing them needs the phones (account and device keys) and the boot
+- **Account IRK, admin root, device**: milestone 2, §11.
+- **Boot key**: the format and vectors cover it; issuing it needs the boot
   client (the boot key's private half lives on `/boot`, outside the daemon).
-  Milestone 2.
 
 ## 10. The critical-signature gate: `verifyCriticalSignature`
 
@@ -533,8 +532,7 @@ beside it.
 - Policy state comes from D1 `assurance_policy_states` (scope `installation`,
   the server domain). No row is legacy; a row with a profile or rollout this
   code does not know is read as strict and enforced, so a corrupt or newer row
-  never weakens a scope. Writing these rows through owner-signed policy
-  changes (`applyPolicyChange`) is milestone 2; today none exists.
+  never weakens a scope. Owner-signed changes write these rows (§11.3).
 
 ### 10.4 Vectors
 
@@ -561,3 +559,108 @@ webapp check every case; Rust re-signs every binding byte for byte.
     and `.com` refuses a hybrid signature it cannot check. Confirm that a
     failure to verify an offered hybrid signature must never fall back to the
     classical one.
+
+## 11. Milestone 2: phone-held identities and the owner's policy
+
+### 11.1 Ports
+
+Swift (`apps/mobile/shared`) and Kotlin (`apps/mobile/android`) port §3–§5,
+§9, §10 and `assurancePolicy.ts`, and read the same vector files as TS, Rust
+and the webapp (`pq-hybrid` with the X-Wing KATs, `pq-binding`,
+`assurance-policy`). The webapp ports the gate and the policy, verify-only
+(`lib/pqBinding.js`, `lib/assurancePolicy.js`); it never holds an ML-DSA seed
+(keyless-web rule) and seals nothing hybrid yet.
+
+### 11.2 Keys on user devices
+
+- One ML-DSA-65 key per identity per holding device: 32 fresh bytes from the
+  OS RNG, never derived from the UMK, the admin root or any other key, never
+  exported, escrowed, put in a pairing bundle or a recovery record.
+- Custody, labelled exactly: a software seed wrapped by a hardware key that
+  needs biometric-or-credential authentication is **"PQ, hardware-wrapped"**
+  (Android: an Android Keystore AES-GCM key; iOS 18–25: the Secure Enclave
+  wrap the app already uses for the UMK). A key generated inside the Secure
+  Enclave (`SecureEnclave.MLDSA65`, iOS 26 and later) is **"hardware PQ"**;
+  it is used only for the `device` role, the only one that never leaves the
+  device by design. Android 16's Keystore offers no ML-DSA.
+- Roles: `account-irk` (subject = account name, key = the account IRK),
+  `admin-root` (subject = account name, key = the pinned admin root),
+  `device` (subject = the 32-hex device id, key = that device's grant key).
+  The device that first holds the IRK or admin root binds it; `.com` keeps the
+  first ML-DSA key per Ed25519 key, so the other devices act under strict
+  through their own `device` bindings (policy changes take `admin-device`
+  signers).
+- When: account creation (IRK, device, admin root), device enrollment
+  (device), admin-root setup or rotation (admin root). Existing accounts bind
+  at the next unlock in the background with the keys that unlock already
+  opened; nothing prompts again, and a refusal or a network failure waits for
+  a later unlock.
+- Studio (Mac, Windows, Linux) never signs as an account device (it only
+  agrees an X25519 key for pairing and verifies recipes), so it holds no
+  ML-DSA key.
+
+### 11.3 `.com`
+
+- `PUT /api/accounts/:u/pq-key-bindings` (no other auth: the binding proves
+  possession) stores a binding only under the key `.com` already trusts for
+  the identity: the account's current IRK, its pinned admin root, the live
+  device row's key. `200`; `409 stale` (already stored); `409 pq-key-changed`
+  (another ML-DSA key holds this Ed25519 key); `403 <code>`; `404` unknown
+  device. `GET` (account read token) serves the current ones; the device-grant
+  book (`GET /api/users/:u/device-grants`) carries them too: `pqKeyBinding` on
+  each grant and `pqKeyBindings: { accountIrk, adminRoot }`.
+- **Recovery** cannot install strict authority classically: a re-paired IRK
+  becomes the current IRK only when the re-pair's wait/veto completes
+  (`rePair.ts`), so the new IRK's binding is refused until then
+  (`binding-key-mismatch`); an unrotated recovered root cannot rebind
+  (`pq-key-changed`). Old bindings stop being served once their key is no
+  longer current.
+- **Policy** (D1 `assurance_policy_changes`, migration 0112):
+  `POST /api/accounts/:u/assurance-policy` `{ change, signature: { suite,
+  signature } }`. The scope must be the account's (installation = a server of
+  the account; `service`/`data`/`connector` ids are `<serverDomain>:<name>`;
+  `device` = a live device). The signer is the pinned admin root or a live
+  device with an admin-root-signed `admin` grant; `signerKeyId` is its 64-hex
+  Ed25519 key. The signature runs through the gate (purpose
+  `flagship/assurance-policy/v1`, the signer's binding, the scope's current
+  state), then `applyPolicyChange`; the change is appended by compare-and-swap
+  at head + 1, so a second change for a generation is `409 fork` and an old
+  one `409 stale-generation`.
+- Rollout evidence `.com` can see moves a scope through `capable`
+  (the box's STK binding verifies) and `prepared` (also: the boot-key binding
+  is hybrid, the admin root or an admin device is bound, the account holds a
+  signed N03 recovery record) before a change is applied. `GET
+  /api/accounts/:u/assurance-policy/:kind/:id` (read token) serves the state,
+  the chain and `evidence.recoveryChecked`.
+
+### 11.4 Box and clients
+
+- The device book verifies every binding it syncs under the key the box pins
+  (grant key, config IRK, config admin root) and pins the first ML-DSA key per
+  Ed25519 key on disk; `.com` cannot swap it.
+- The box replays its installation's chain from legacy itself
+  (`assurancePolicySync.ts`): each change through the gate under its own pins,
+  only admin-root or admin-device signers, its own evidence for `prepared`
+  (its STK binding is on `.com`, its boot-key binding is hybrid) plus
+  `.com`'s `recoveryChecked`, which can only let the owner turn strict on. It
+  keeps a verified prefix, refuses a chain older than what it holds
+  (`adoptStoredState`), and reads an unreadable state file as strict until a
+  verified chain arrives.
+- While strict is in force, `authorizeSensitiveOrder` (every sensitive box
+  order) needs the identified signer's hybrid signature by its bound key.
+  Clients do not sign hybrid orders yet, and no client offers the strict
+  opt-in yet (milestone 4), so nothing is strict outside tests.
+- Clients replay a served chain with their port of `assurancePolicy.ts`; a
+  strict server's boot-key binding needs the hybrid signature even before the
+  client has pinned the box's ML-DSA key.
+
+### 11.5 Open questions for the Q01 reviewer (additions)
+
+16. The IRK's and admin root's ML-DSA halves live only on the device that
+    bound them; losing that device leaves those roots classical until a
+    rotation rebinds them. Is per-device strict authority (admin devices)
+    enough, or should the roots' PQ halves travel in a hybrid-sealed
+    device-to-device enrollment?
+17. `recoveryChecked` is `.com`'s claim; it can only enable strict. Should
+    the box require its own evidence of a tested recovery?
+
