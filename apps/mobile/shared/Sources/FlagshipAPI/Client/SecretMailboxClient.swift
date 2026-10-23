@@ -1129,7 +1129,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     /// Like `sendBoot`, but hands back the status and body for routes whose answer matters.
     private func bootExchange(_ method: String, _ path: String, body: Data, bootAuth: String) async throws -> (Data, Int) {
         guard let url = URL(string: bootBaseUrl.absoluteString + path) else {
-            throw ScreensClientError.http(status: 0, message: "bad boot URL")
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad boot URL"))
         }
         var req = URLRequest(url: url)
         req.httpMethod = method

@@ -73,14 +73,14 @@ public final class LockPowerViewModel {
         lockOutcome = nil
         phase = .signing
         let reason = mode == .off
-            ? "Lock and turn off \(serverDomain)"
-            : "Lock and restart \(serverDomain)"
+            ? String(localized: "Lock and turn off \(serverDomain)")
+            : String(localized: "Lock and restart \(serverDomain)")
         let irk: Curve25519.Signing.PrivateKey?
         if bootLock != nil {
             do {
                 irk = try await irkSigner(reason)
             } catch {
-                phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+                phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
                 return
             }
         } else {
@@ -95,7 +95,7 @@ public final class LockPowerViewModel {
             lockOutcome = lock
             guard case .confirmed = lock else {
                 lockStore.markPending(serverDomain)
-                let msg = "Couldn't lock this server at the boot service, so it was not restarted. Shut it down instead? It will lock as soon as the service answers."
+                let msg = String(localized: "Couldn't lock this server at the boot service, so it was not restarted. Shut it down instead? It will lock as soon as the service answers.")
                 summary = msg
                 phase = .lockUnconfirmed(msg)
                 return
@@ -120,7 +120,7 @@ public final class LockPowerViewModel {
     public func retryPendingLock() async -> BootLockOutcome? {
         guard let bootLock else { return nil }
         let irk: Curve25519.Signing.PrivateKey
-        do { irk = try await irkSigner("Lock \(serverDomain)") } catch { return nil }
+        do { irk = try await irkSigner(String(localized: "Lock \(serverDomain)")) } catch { return nil }
         let r = await bootLock.setOwner(serverDomain: serverDomain, action: .suspend, irk: irk)
         if case .confirmed = r {
             lockStore.setLastKnown(true, for: serverDomain)
@@ -135,7 +135,7 @@ public final class LockPowerViewModel {
     public func resume() async -> BootLockOutcome? {
         guard let bootLock else { return nil }
         let irk: Curve25519.Signing.PrivateKey
-        do { irk = try await irkSigner("Resume \(serverDomain)") } catch { return nil }
+        do { irk = try await irkSigner(String(localized: "Resume \(serverDomain)")) } catch { return nil }
         let r = await bootLock.setOwner(serverDomain: serverDomain, action: .resume, irk: irk)
         if case .confirmed = r {
             lockStore.setLastKnown(false, for: serverDomain)
@@ -156,7 +156,7 @@ public final class LockPowerViewModel {
         do {
             key = try await signer(reason)
         } catch {
-            phase = .failed("Couldn't access your account key: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't access your account key: \(UserErrorText.of(error))"))
             return nil
         }
         let order = PowerOffOrder(serverId: serverDomain, mode: mode, issuedAt: now())
@@ -164,7 +164,7 @@ public final class LockPowerViewModel {
         do {
             signature = try order.sign(with: key)
         } catch {
-            phase = .failed("Couldn't sign: \(UserErrorText.of(error))")
+            phase = .failed(String(localized: "Couldn't sign: \(UserErrorText.of(error))"))
             return nil
         }
 
@@ -184,10 +184,10 @@ public final class LockPowerViewModel {
             result = try await client.sendPower(serverDomain: serverDomain, request: request, signatureHex: sig)
         } catch let e as ScreensClientError {
             result = nil
-            failure = e.errorDescription ?? "That didn't work. Try again in a moment."
+            failure = e.errorDescription ?? String(localized: "That didn't work. Try again in a moment.")
         } catch {
             result = nil
-            failure = "Couldn't reach the server. Check your connection and try again."
+            failure = String(localized: "Couldn't reach the server. Check your connection and try again.")
         }
         if let lock = await lockTask {
             lockOutcome = lock
