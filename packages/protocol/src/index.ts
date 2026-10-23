@@ -65,3 +65,4 @@ export * from "./peerBackupNet.js";
 export * from "./peerBackupMail.js";
 export * from "./securityNotice.js";
 export * from "./recoveryRecord.js";
+export * from "./manifestCapabilities.js";

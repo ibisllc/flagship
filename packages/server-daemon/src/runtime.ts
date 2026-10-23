@@ -1,3 +1,4 @@
+import { sandboxedRunSql } from "./migrationSandbox.js";
 import { serveControlHttp, type ControlHttpOptions } from "./controlHttp.js";
 import { SealedInstalledServicesStore, type InstalledServicesStore } from "./installedServicesStore.js";
 import { connect as netConnect, type Socket } from "node:net";
@@ -1586,7 +1587,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
             ? new SealedInstalledServicesStore(`${opts.dataDir}/data/installed-services.sealed`, apOpts.swk)
             : null,
       onLog: (m) => console.warn(m),
-      runSql: dataProvisioner ? runAppSql : null,
+      // Creator SQL runs in a one-shot sandbox, never in this process (SEC-MIG-002).
+      runSql: dataProvisioner ? sandboxedRunSql(realCommandRunner) : null,
       activity: serviceActivity,
     });
     void servicePlatformRef.current.restore().then(({ restored, failed }) => {

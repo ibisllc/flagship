@@ -126,6 +126,8 @@ import {
   startJournalPruner,
 } from "./postRecovery/fileJournalStore.js";
 import { buildRunMigration } from "./runMigration.js";
+import { sandboxedRunSql } from "./migrationSandbox.js";
+import { realCommandRunner as realCommandRunnerStatic } from "./serviceRunner.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildAppBackupHttpHandlers } from "./serviceBackupHttp.js";
 import { ownerOnlyGate } from "./ownerOnlyGate.js";
@@ -2244,6 +2246,8 @@ function wireUpdatePack(deps: {
   const runMigration = buildRunMigration({
     serviceByServiceId: (serviceId) =>
       deps.servicePlatformRef.current?.byServiceId(serviceId) ?? null,
+    // The sandbox, never the host: a creator's SQL runs as the app's role in a one-shot container.
+    runSqlOverride: sandboxedRunSql(realCommandRunnerStatic),
   });
   const updateClient = new UpdateClient({
     identity: identityKeypair,
@@ -2711,7 +2715,7 @@ async function wireRuntimeSurfaces(deps: {
     cmd: serviceRunnerMod.realCommandRunner,
     workingDir: vibeAppDir,
     dataProvisioner: runtime.dataProvisioner,
-    runSql: runtime.dataProvisioner ? runAppSql : null,
+    runSql: runtime.dataProvisioner ? sandboxedRunSql(serviceRunnerMod.realCommandRunner) : null,
     sql: runtime.dataProvisioner ? appSqlRunner() : null,
     startCheck: serviceRunnerMod.buildStartCheck(serviceRunnerMod.realCommandRunner),
     fenced: () => runtime.egress.status().enforced,

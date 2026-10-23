@@ -115,6 +115,8 @@ describe("UpdateClient", () => {
     store: AppPullStateStore;
     fetcher: (url: string, init: RequestInit) => Promise<Response>;
     runMigration?: (a: { serviceId: string; absPath: string; filename: string }) => Promise<void>;
+    snapshotData?: (serviceId: string) => Promise<string>;
+    restoreData?: (serviceId: string, snapshotId: string) => Promise<void>;
   }): UpdateClient {
     return new UpdateClient({
       identity,
@@ -131,6 +133,8 @@ describe("UpdateClient", () => {
         restartCount++;
       },
       emitPhoneAlert: (a) => alerts.push(a),
+      ...(args.snapshotData ? { snapshotData: args.snapshotData } : {}),
+      ...(args.restoreData ? { restoreData: args.restoreData } : {}),
     });
   }
 
@@ -373,6 +377,87 @@ describe("UpdateClient", () => {
         migrationFile: m1,
       }),
     ]);
+  });
+
+  it("the manual-update alert says what new authority the release asks for", async () => {
+    const man = (egress: string[]) => JSON.stringify({ schema_version: 1, name: "g", version: "1.0.0", runtime: { image: "i", port: 8080 }, data: { stores: { postgres: true } }, network: { subdomain: "g", egress }, access: { enabled: true, default_role: "member" }, migration: { verification: "standard" } });
+    const v1 = await commitFile(upstream, "flagship.app.json", man([]), "manifest v1");
+    await git(subscriber, ["fetch", upstream, v1]);
+    await git(subscriber, ["update-ref", "refs/heads/main", v1]);
+    await git(subscriber, ["checkout", "main"]);
+    await commitFile(upstream, "flagship.app.json", man(["new.example.com"]), "asks for a host");
+    const store = new MemStore();
+    await store.put(APP_ID, { canonicalUrl: "game1.alice.flagship.services", lineageAnchor: firstCommit, currentTip: v1, lastAppliedMigration: "", updatePolicy: "manual" });
+    const bundle = await makeBundle(upstream, `${v1}..main`);
+    await makeClient({ store, fetcher: async () => new Response(bundle, { status: 200 }) }).pullOne({ serviceId: APP_ID });
+    const alert = alerts.find((a) => a.kind === "manual-pending") as { capabilityChanges?: { needsApproval: boolean; expanded: Array<{ capability: string; added: string[] }> } };
+    expect(alert.capabilityChanges?.needsApproval).toBe(true);
+    expect(alert.capabilityChanges?.expanded).toEqual([{ capability: "egress", added: ["new.example.com"], removed: [] }]);
+  });
+
+  describe("a migration batch that fails part-way (SEC-MIG-002)", () => {
+    const setup = async (extra: { snapshot?: boolean; restoreFails?: boolean }) => {
+      await commitFile(upstream, "migrations/0001_ok.sql", "-- ok\n", "add ok");
+      await commitFile(upstream, "migrations/0002_bad.sql", "-- bad\n", "add bad");
+      const store = new MemStore();
+      await store.put(APP_ID, { canonicalUrl: "game1.alice.flagship.services", lineageAnchor: firstCommit, currentTip: firstCommit, lastAppliedMigration: "", updatePolicy: "manual" });
+      const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+      const restored: string[] = [];
+      const client = makeClient({
+        store,
+        fetcher: async () => new Response(bundle, { status: 200 }),
+        runMigration: async ({ filename }) => {
+          if (filename === "0002_bad.sql") throw new Error("column does not exist");
+          migrationsRun.push(filename);
+        },
+        ...(extra.snapshot ? { snapshotData: async () => "snap-1" } : {}),
+        ...(extra.snapshot
+          ? { restoreData: async (_s: string, id: string) => { if (extra.restoreFails) throw new Error("disk full"); restored.push(id); } }
+          : {}),
+      });
+      await client.pullOne({ serviceId: APP_ID });
+      return { store, client, restored };
+    };
+
+    it("rolls the code back and restores the snapshot, and says so", async () => {
+      const { store, client, restored } = await setup({ snapshot: true });
+      const res = await client.applyPending({ serviceId: APP_ID });
+      expect(res).toMatchObject({ kind: "halted-migration-failed", failingFile: "0002_bad.sql" });
+      expect((res as { reason: string }).reason).toMatch(/data was put back/);
+      expect(restored).toEqual(["snap-1"]);
+      expect(await git(subscriber, ["rev-parse", "HEAD"])).toBe(firstCommit);
+      const st = await store.get(APP_ID);
+      expect(st?.currentTip).toBe(firstCommit);
+      expect(st?.schemaAheadThrough).toBeUndefined();
+      expect(alerts.at(-1)).toMatchObject({ kind: "migration-failed", outcome: "restored" });
+    });
+
+    for (const [name, extra] of [["there is no snapshot", {}], ["the snapshot cannot be restored", { snapshot: true, restoreFails: true }]] as const) {
+      it(`when ${name}, it records that the schema is ahead and stops updating`, async () => {
+        const { store, client } = await setup(extra);
+        const res = await client.applyPending({ serviceId: APP_ID });
+        expect((res as { reason: string }).reason).toMatch(/data is newer than its code/);
+        expect(await git(subscriber, ["rev-parse", "HEAD"])).toBe(firstCommit); // code is back on the old version
+        const st = await store.get(APP_ID);
+        expect(st?.schemaAheadThrough).toBe("0001_ok.sql");
+        expect(st?.lastAppliedMigration).toBe("0001_ok.sql");
+        expect(alerts.at(-1)).toMatchObject({ outcome: "schema-ahead" });
+        expect(await client.pullOne({ serviceId: APP_ID })).toMatchObject({ kind: "no-op", reason: "schema-ahead-of-code" });
+      });
+    }
+
+    it("a first-migration failure changes nothing: code back, no schema claim", async () => {
+      await commitFile(upstream, "migrations/0001_bad.sql", "-- bad\n", "add bad");
+      const store = new MemStore();
+      await store.put(APP_ID, { canonicalUrl: "game1.alice.flagship.services", lineageAnchor: firstCommit, currentTip: firstCommit, lastAppliedMigration: "", updatePolicy: "manual" });
+      const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+      const client = makeClient({ store, fetcher: async () => new Response(bundle, { status: 200 }), runMigration: async () => { throw new Error("nope"); } });
+      await client.pullOne({ serviceId: APP_ID });
+      await client.applyPending({ serviceId: APP_ID });
+      expect(await git(subscriber, ["rev-parse", "HEAD"])).toBe(firstCommit);
+      expect((await store.get(APP_ID))?.schemaAheadThrough).toBeUndefined();
+      expect(alerts.at(-1)).toMatchObject({ outcome: "unchanged" });
+    });
   });
 
   it("no-op when home returns empty bundle (rare but possible)", async () => {

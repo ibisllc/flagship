@@ -6,7 +6,7 @@
  * current tip and the upstream tip. This module is the canonical
  * production implementation; the dispatch is by file extension:
  *
- *   .sql  → connect to the per-app PG role + run as one transaction.
+ *   .sql  → run as the per-app PG role in a one-shot sandbox container, as one transaction.
  *   .ts/.js → refused. A creator's script would run as the host daemon;
  *           until a one-shot sandbox exists (SEC-MIG-002) it never runs.
  *
@@ -19,19 +19,12 @@
  * the UpdateClient + a phone alert.
  */
 
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { promisify } from "node:util";
 import { extname } from "node:path";
 import type { AppDataCredentials } from "./dataLayer/index.js";
 import { credentialsToEnv } from "./dataLayer/index.js";
 import type { InstalledService } from "./servicePlatform.js";
 import { HOST_SCRIPT_MIGRATION_REFUSAL, isHostScriptMigration } from "./updateClient.js";
-
-const execFileP = promisify(execFile);
-
-/** Lift the app role's session timeouts for a migration's own connection. */
-export const MIGRATION_PGOPTIONS = "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0";
 
 export interface RunMigrationDeps {
   /**
@@ -50,10 +43,6 @@ export interface RunMigrationDeps {
     sql: string;
     pgUrl: string;
   }) => Promise<void>;
-  /** Default 5 min — long enough for big SQL migrations. */
-  timeoutMs?: number;
-  /** psql path. Default `psql`. */
-  psqlBinary?: string;
 }
 
 export function buildRunMigration(deps: RunMigrationDeps): (args: {
@@ -61,9 +50,6 @@ export function buildRunMigration(deps: RunMigrationDeps): (args: {
   absPath: string;
   filename: string;
 }) => Promise<void> {
-  const timeoutMs = deps.timeoutMs ?? 5 * 60_000;
-  const psql = deps.psqlBinary ?? "psql";
-
   return async function runMigration(args: {
     serviceId: string;
     absPath: string;
@@ -83,28 +69,11 @@ export function buildRunMigration(deps: RunMigrationDeps): (args: {
         );
       }
       const sql = await readFile(args.absPath, "utf8");
-      if (deps.runSqlOverride) {
-        await deps.runSqlOverride({ sql, pgUrl });
-        return;
+      // Never on the host: a creator's SQL runs only in the one-shot sandbox (migrationSandbox.ts).
+      if (!deps.runSqlOverride) {
+        throw new Error("this server has no migration sandbox, so the migration was not run");
       }
-      // Run the file as a single transaction. -1 = single-tx, -v
-      // ON_ERROR_STOP=1 = abort on first error, --no-psqlrc = ignore
-      // user dotfiles, -f - = read from stdin.
-      const proc = await execFileP(
-        psql,
-        ["-1", "-v", "ON_ERROR_STOP=1", "--no-psqlrc", pgUrl, "-f", args.absPath],
-        {
-          timeout: timeoutMs,
-          maxBuffer: 32 * 1024 * 1024,
-          // The app role's 30 s statement timeout (appQuota/pgQuota.ts) is
-          // for the app; a migration is bounded by `timeoutMs` instead.
-          env: { ...process.env, PGOPTIONS: MIGRATION_PGOPTIONS },
-        },
-      );
-      // psql may emit NOTICE/WARNING on stderr without nonzero exit; we
-      // treat that as success (psql already non-zero-exited above on real
-      // errors thanks to ON_ERROR_STOP).
-      void proc;
+      await deps.runSqlOverride({ sql, pgUrl });
       return;
     }
 

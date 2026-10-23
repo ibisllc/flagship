@@ -26,8 +26,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  capabilitiesOf,
+  diffCapabilities,
+  parseManifest,
   signUpdatePull,
   type Bytes,
+  type CapabilityDiff,
   type Keypair,
   type UpdatePullRequest,
 } from "@flagship/protocol";
@@ -90,6 +94,12 @@ export interface AppPullState {
    * upstream is trying to take us.
    */
   lineagePauseInfo?: LineagePauseInfo;
+  /**
+   * Set when a migration batch failed part-way and the data could not be put back: the app's schema
+   * is ahead of its code (the last migration that did apply). Code and schema generations
+   * disagree, so no further update is attempted until the owner resolves it (SEC-MIG-002).
+   */
+  schemaAheadThrough?: string;
 }
 
 export interface LineagePauseInfo {
@@ -144,12 +154,16 @@ export type PhoneUpdateAlert =
       serviceId: string;
       fromCommit: string;
       toCommit: string;
+      /** New authority (egress, stores, routes…) the update asks for, when its manifest could be read. */
+      capabilityChanges?: CapabilityDiff;
     }
   | {
       kind: "migration-failed";
       serviceId: string;
       migrationFile: string;
       reason: string;
+      /** What became of the code and the data: the owner is told the truth, not just "failed". */
+      outcome?: "unchanged" | "restored" | "schema-ahead";
     };
 
 /**
@@ -194,6 +208,13 @@ export interface UpdateClientDeps {
    * means — typically: SQL → run via per-app PG role; TS → spawn `tsx`.
    * Throws on failure.
    */
+  /**
+   * Snapshot the app's data before a migration batch; resolves to an id `restoreData` accepts.
+   * Without it a batch that fails after some migrations applied leaves the schema ahead of the code.
+   */
+  snapshotData?: (serviceId: string) => Promise<string>;
+  /** Put the data back exactly as the snapshot had it. */
+  restoreData?: (serviceId: string, snapshotId: string) => Promise<void>;
   runMigration: (args: {
     serviceId: string;
     absPath: string;
@@ -215,6 +236,7 @@ export type PullResult =
       kind: "no-op";
       reason:
         | "frozen-policy"
+        | "schema-ahead-of-code"
         | "no-canonical-state"
         | "already-current"
         | "lineage-paused";
@@ -271,6 +293,9 @@ export class UpdateClient {
     // don't want to re-emit an alert every 6h, and we definitely don't
     // want to advance the working tree. The current installed version
     // keeps running indefinitely.
+    if (state.schemaAheadThrough) {
+      return { kind: "no-op", reason: "schema-ahead-of-code" };
+    }
     if (state.lineagePaused) {
       return { kind: "no-op", reason: "lineage-paused" };
     }
@@ -415,6 +440,9 @@ export class UpdateClient {
           serviceId: args.serviceId,
           fromCommit: state.currentTip,
           toCommit: upstreamTip,
+          // What the new release asks for that the installed one did not: the owner approves new
+          // authority, not just "an update".
+          ...(await this.capabilityChanges(workDir, state.currentTip, upstreamTip)),
         };
         this.deps.emitPhoneAlert(alert);
         return { kind: "halted-manual-pending", from: state.currentTip, to: upstreamTip };
@@ -527,6 +555,17 @@ export class UpdateClient {
       return { kind: "halted-migration-failed", failingFile: scripted, reason };
     }
 
+    // Before anything moves: a snapshot of the data, so a batch that fails part-way can be undone.
+    let snapshotId: string | null = null;
+    if (migrationsToRun.length > 0 && this.deps.snapshotData) {
+      try {
+        snapshotId = await this.deps.snapshotData(serviceId);
+      } catch {
+        snapshotId = null;
+      }
+    }
+    const previousTip = state.currentTip;
+
     // Fast-forward main to toCommit (creates main on first pull).
     const hasMain = await this.refExists(workDir, "main");
     if (hasMain) {
@@ -546,14 +585,42 @@ export class UpdateClient {
         await this.deps.runMigration({ serviceId, absPath, filename: m });
       } catch (e) {
         const reason = (e as Error).message;
+        // Code rolls back on its own; data only through the snapshot. Never leave the two
+        // generations disagreeing without saying so.
+        await this.git(workDir, ["update-ref", "refs/heads/main", previousTip]).catch(() => {});
+        await this.git(workDir, ["checkout", "main"]).catch(() => {});
+        await this.git(workDir, ["reset", "--hard", "main"]).catch(() => {});
+        let outcome: "unchanged" | "restored" | "schema-ahead" = "unchanged";
+        let told = reason;
+        if (applied.length > 0) {
+          let restored = false;
+          if (snapshotId && this.deps.restoreData) {
+            try {
+              await this.deps.restoreData(serviceId, snapshotId);
+              restored = true;
+            } catch {
+              restored = false;
+            }
+          }
+          if (restored) {
+            outcome = "restored";
+            told = `${reason} The app's data was put back as it was and the old version is still running.`;
+          } else {
+            outcome = "schema-ahead";
+            const through = applied[applied.length - 1]!;
+            await this.deps.state.put(serviceId, { ...state, lastAppliedMigration: through, schemaAheadThrough: through, pendingPullCommit: undefined });
+            told = `${reason} ${applied.length} earlier migration(s) had already changed the app's data and it could not be put back, so the app's data is newer than its code. No further update will be tried until you resolve this.`;
+          }
+        }
         // Halt; don't restart container; surface to phone.
         this.deps.emitPhoneAlert({
           kind: "migration-failed",
           serviceId,
           migrationFile: m,
-          reason,
+          reason: told,
+          outcome,
         });
-        return { kind: "halted-migration-failed", failingFile: m, reason };
+        return { kind: "halted-migration-failed", failingFile: m, reason: told };
       }
       applied.push(m);
     }
@@ -573,6 +640,21 @@ export class UpdateClient {
       to: toCommit,
       migrationsApplied: applied,
     };
+  }
+
+  /** The authority an update adds or drops, read from the manifest at each commit. Best effort. */
+  private async capabilityChanges(workDir: string, fromTip: string, toTip: string): Promise<{ capabilityChanges?: CapabilityDiff }> {
+    try {
+      const read = async (commit: string) => {
+        const r = await this.git(workDir, ["show", `${commit}:flagship.app.json`]);
+        const parsed = parseManifest(JSON.parse(r.stdout));
+        return parsed.ok ? capabilitiesOf(parsed.manifest) : null;
+      };
+      const [a, b] = [await read(fromTip), await read(toTip)];
+      return a && b ? { capabilityChanges: diffCapabilities(a, b) } : {};
+    } catch {
+      return {};
+    }
   }
 
   private async listPendingMigrations(args: {
