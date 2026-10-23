@@ -104,6 +104,7 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     encryptRoot,
     bootUnlockMode,
     bootHost,
+    approvedBootHosts: resolved.approvedBootHosts,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
     debugSshAuthorizedKey: opts.debugSshAuthorizedKey,

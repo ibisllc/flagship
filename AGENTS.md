@@ -36,7 +36,6 @@ billing/                   Standalone, reusable repo-in-a-folder (own lockfile, 
 
 installer/                 Public install scripts the apkovl curls at boot
    install.sh              First-boot installer: LUKS + git clone + register
-   boot-stage.sh           Steady-state boot: contact .services for unlock-key
 
 Dockerfile                 Builds the Fly app image
 fly.toml                   :443 raw-TCP (SNI passthrough) + :8443 TLS-term (API + tunnel hub)

@@ -306,7 +306,7 @@ rm -f /etc/machine-id
 : > /etc/machine-id
 rm -f /var/lib/dbus/machine-id /etc/ssh/ssh_host_* /var/lib/systemd/random-seed
 rm -rf /var/flagship/install-blob.json /var/flagship/identity
-rm -rf /var/flagship/* /boot/identity.pem /boot/install-blob.json /etc/flagship/daemon.env /etc/flagship-bootstrap.env
+rm -rf /var/flagship/* /boot/identity.pem /boot/flagship-boot-key.pem /boot/flagship-boot-key.pub /boot/flagship-owner-key.pub /boot/install-blob.json /etc/flagship/daemon.env /etc/flagship-bootstrap.env
 find /var/log -type f -exec truncate -s 0 {} +
 rm -rf /tmp/* /var/tmp/*
 update-initramfs -u
@@ -320,6 +320,7 @@ export const APPLIANCE_FORBIDDEN_PATHS = [
   "/var/flagship/install-blob.json",
   "/var/flagship/identity",
   "/boot/identity.pem",
+  "/boot/flagship-boot-key.pem",
   "/boot/install-blob.json",
   "/etc/flagship/daemon.env",
   "/etc/flagship-bootstrap.env",
