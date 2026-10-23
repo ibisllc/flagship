@@ -81,7 +81,6 @@ final class GymSweepSettingsTests: GymSweepCase {
             ("Remote", "Remote", "companion-dock-scan"),
             ("Companion requests", "Companion requests", "No pending requests"),
             ("Open secured sessions", "Secured sessions", ""),
-            ("Process URL", "Process URL", "process-url-field"),
             ("Peer backup", "Peer backup", ""),
             ("Privacy", "Privacy", "privacy-push-notifications-toggle"),
             ("About Flagship", "About", "BUSL-1.1 → Apache 2.0 (2030)"),
@@ -587,13 +586,29 @@ final class GymSweepSettingsTests: GymSweepCase {
     // MARK: - AI keys
 
     /// Flagship Inference made default, a key added from Flagship
-    /// Inference's card and from Add, made default, and deleted.
+    /// Inference's card and from Add, made default, and deleted. A saved key
+    /// is one compact row; its ⋯ menu holds Make default, Key settings (the
+    /// relay switch and default model) and Delete key.
     func test_aiKeysAddMakeDefaultDelete() throws {
         let app = launch(tab: "settings")
         settings(app)
-        open(app, row: "AI keys", screen: "AI keys")
+        open(app, row: "AI API keys", screen: "AI API keys")
+        let actions = app.buttons["ai-key-actions"]
+        func keyMenu(_ item: String) {
+            XCTAssertTrue(actions.firstMatch.waitForExistence(timeout: 5), "The key row offers its actions.")
+            actions.firstMatch.tap()
+            let entry = app.buttons[item]
+            XCTAssertTrue(entry.waitForExistence(timeout: 5), "The key's menu offers \(item).")
+            entry.tap()
+        }
+        func deleteKey() {
+            keyMenu("Delete key")
+            let confirm = app.buttons["ai-key-delete"]
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Deleting asks first.")
+            confirm.tap()
+        }
         // Leave nothing from an earlier run.
-        while app.buttons["ai-key-delete"].firstMatch.exists { app.buttons["ai-key-delete"].firstMatch.tap() }
+        while actions.firstMatch.exists { deleteKey() }
         XCTAssertTrue(app.otherElements["free-ai-card"].waitForExistence(timeout: 15))
 
         let add = app.buttons["ai-key-add"]
@@ -606,29 +621,31 @@ final class GymSweepSettingsTests: GymSweepCase {
         key.tap()
         key.typeText("sk-gym-0123456789abcdef")
         app.buttons["ai-key-add-save"].tap()
-        let delete = app.buttons["ai-key-delete"]
-        XCTAssertTrue(delete.waitForExistence(timeout: 5), "The saved key is listed.")
-        XCTAssertTrue(app.descendants(matching: .any)["ai-key-default-model"].firstMatch.exists)
+        XCTAssertTrue(actions.firstMatch.waitForExistence(timeout: 5), "The saved key is listed.")
+        XCTAssertFalse(app.descendants(matching: .any)["ai-key-default-model"].firstMatch.exists, "The row is compact.")
+        keyMenu("Key settings")
+        XCTAssertTrue(app.descendants(matching: .any)["ai-key-default-model"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["ai-key-relay"].firstMatch.exists)
 
         // Whichever isn't default offers Make default.
         let freeDefault = app.buttons["free-ai-make-default"]
-        let keyDefault = app.buttons.matching(NSPredicate(format: "label == 'Make default' AND identifier != 'free-ai-make-default'")).firstMatch
+        let keyTag = app.descendants(matching: .any)["ai-key-default-tag"]
         if freeDefault.exists {
             freeDefault.tap()
             waitGone(freeDefault)
-            XCTAssertTrue(keyDefault.waitForExistence(timeout: 5), "The key now offers Make default.")
-            keyDefault.tap()
+            XCTAssertFalse(keyTag.exists, "Flagship Inference is the default now.")
+            keyMenu("Make default")
             XCTAssertTrue(freeDefault.waitForExistence(timeout: 5), "Flagship Inference offers it back.")
+            XCTAssertTrue(keyTag.waitForExistence(timeout: 5), "The key is tagged Default.")
         } else {
-            XCTAssertTrue(keyDefault.exists)
-            keyDefault.tap()
+            keyMenu("Make default")
             XCTAssertTrue(freeDefault.waitForExistence(timeout: 5))
             freeDefault.tap()
             waitGone(freeDefault)
         }
         shot(app, "ai-keys-default")
-        delete.tap()
-        waitGone(delete)
+        deleteKey()
+        waitGone(actions.firstMatch)
         XCTAssertTrue(app.otherElements["free-ai-card"].exists, "Flagship Inference can't be deleted.")
     }
 
@@ -743,24 +760,29 @@ final class GymSweepSettingsTests: GymSweepCase {
         XCTAssertTrue(app.descendants(matching: .any)["secured-sessions-empty"].waitForExistence(timeout: 10))
     }
 
-    /// Process URL: an unreadable link says so; a Flagship app link opens
-    /// the screen it names.
-    func test_processUrlRoutesALink() throws {
+    /// Scan a code or enter a link: an unreadable link says so; a pasted
+    /// Flagship app link opens the screen it names (the camera is a
+    /// placeholder on the Simulator).
+    func test_scanOrLinkRoutesAPastedLink() throws {
         let app = launch(tab: "settings")
         settings(app)
-        open(app, row: "Process URL", screen: "Process URL")
-        let field = app.textFields["process-url-field"]
+        let scan = app.buttons["settings-scan-pairing-code"]
+        XCTAssertTrue(find(app, scan))
+        scan.tap()
+        XCTAssertTrue(app.navigationBars["Scan a code or enter a link"].waitForExistence(timeout: 10))
+        let field = app.textFields["scan-or-link-field"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["scan-or-link-paste"].exists, "It offers Paste.")
         field.tap()
         field.typeText("not a link")
-        app.buttons["process-url-open"].tap()
-        XCTAssertTrue(app.staticTexts["process-url-error"].waitForExistence(timeout: 5))
+        app.buttons["scan-or-link-open"].tap()
+        XCTAssertTrue(app.staticTexts["scan-or-link-error"].waitForExistence(timeout: 5))
         field.tap()
         field.press(forDuration: 1.0)
         if app.menuItems["Select All"].waitForExistence(timeout: 2) { app.menuItems["Select All"].tap() }
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 20))
         field.typeText("https://flagshipserver.com/app/account/security")
-        app.buttons["process-url-open"].tap()
+        app.buttons["scan-or-link-open"].tap()
         XCTAssertTrue(app.navigationBars["Account security"].waitForExistence(timeout: 10),
                       "An app link opens the screen it names.")
     }
@@ -875,16 +897,5 @@ final class GymSweepSettingsTests: GymSweepCase {
         XCTAssertFalse(text(app, containing: "Pairing didn't complete").exists)
         XCTAssertFalse(text(app, containing: "iOS").exists, "It doesn't name another phone.")
         shot(app, "add-device-unavailable")
-    }
-
-    /// Scan a pairing code opens the join flow (the camera is a placeholder
-    /// on the Simulator).
-    func test_scanPairingCodeOpensJoin() throws {
-        let app = launch(tab: "settings")
-        settings(app)
-        let scan = app.buttons["settings-scan-pairing-code"]
-        XCTAssertTrue(find(app, scan))
-        scan.tap()
-        XCTAssertTrue(app.navigationBars["Join an account"].waitForExistence(timeout: 10))
     }
 }

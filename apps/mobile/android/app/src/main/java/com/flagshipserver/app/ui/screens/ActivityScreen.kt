@@ -153,6 +153,14 @@ fun ActivityScreen(
 
         Spacer(Modifier.height(FS.space.s4))
 
+        // No server yet: Services' "Add a server first" instead of the logs.
+        // Server approvals stay below it (a first boot asks there).
+        val noServer = pods.isEmpty()
+        if (noServer) {
+            NoServerYetState(Modifier.testTag("activity-no-server"))
+            Spacer(Modifier.height(FS.space.s3))
+        }
+
         // One section open at a time, so every title stays on screen.
         fun toggle(which: ActivitySection) { open = if (open == which) null else which }
 
@@ -171,7 +179,7 @@ fun ActivityScreen(
 
         val serverTitle = activityServerTitle(pods, effectiveServerFilter)
         val allServers = serverTitle == "All servers"
-        when (val s = state) {
+        if (!noServer) when (val s = state) {
             is LoadingState.Loaded -> {
                 val items = s.value.items
                 val recovery = items.firstOrNull { it is ActivityItem.RecoverySnapshot } as? ActivityItem.RecoverySnapshot

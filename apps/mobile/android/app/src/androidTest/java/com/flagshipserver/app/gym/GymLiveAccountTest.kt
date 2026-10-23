@@ -69,7 +69,7 @@ class GymLiveAccountTest : GymBase() {
     @Test
     fun settingsPagesWorkWithNoServer() {
         val rows = listOf(
-            "Account security", "AI keys", "Cloud recovery", "Profiles",
+            "Account security", "AI API keys", "Cloud recovery", "Profiles",
             "Trusted devices", "Browser sessions", "Remote", "Peer-backup", "Privacy",
         )
         for (row in rows) {

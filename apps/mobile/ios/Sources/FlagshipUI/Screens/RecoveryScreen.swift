@@ -20,6 +20,7 @@ public struct RecoveryScreen: View {
     @State private var enrollPassphrase2 = ""
     @State private var recoverPassphrase = ""
     @State private var localError: String?
+    @State private var showHowItWorks = false
 
     public init(
         vm: RecoveryViewModel,
@@ -109,24 +110,27 @@ public struct RecoveryScreen: View {
                         }
                     }
                 }
-
-                FSCard {
-                    HStack(alignment: .top, spacing: FS.space.s2) {
-                        Image(systemName: "info.circle.fill").foregroundColor(c.accent)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("How this works").font(FS.font.bodySm()).foregroundColor(c.text)
-                            Text("Recovery requires both your recovery passphrase and access to the passkey you saved for Flagship (in iCloud Keychain or your password manager). Together they unlock the encrypted copy of your account key stored on our servers; we cannot read it or reset your passphrase.")
-                                .font(FS.font.caption())
-                                .foregroundColor(c.textMuted)
-                        }
-                    }
-                }
             }
             .padding(FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Cloud recovery")
         .navigationBarTitleDisplayMode(.inline)
+        // "How this works" sits behind the (?) at the top right.
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showHowItWorks = true } label: {
+                    Image(systemName: "questionmark.circle")
+                }
+                .accessibilityLabel(Text("How this works"))
+                .accessibilityIdentifier("recovery-how-it-works")
+            }
+        }
+        .sheet(isPresented: $showHowItWorks) {
+            RecoveryHowItWorksSheet()
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     /// Mirror recovery.js enroll validation: 8+ chars and the two entries
@@ -142,5 +146,33 @@ public struct RecoveryScreen: View {
         }
         localError = nil
         return true
+    }
+}
+
+/// Cloud recovery's "How this works", opened from the (?) at the top right.
+struct RecoveryHowItWorksSheet: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        NavigationStack {
+            ScrollView {
+                Text("Recovery requires both your recovery passphrase and access to the passkey you saved for Flagship (in iCloud Keychain or your password manager). Together they unlock the encrypted copy of your account key stored on our servers; we cannot read it or reset your passphrase.")
+                    .font(FS.font.body())
+                    .foregroundColor(c.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(FS.space.s6)
+            }
+            .background(c.bg.ignoresSafeArea())
+            .navigationTitle("How this works")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
