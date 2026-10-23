@@ -80,3 +80,4 @@ export * from "./adapterAttestation.js";
 export * from "./appRelease.js";
 export * from "./nameDibs.js";
 export * from "./voiciName.js";
+export * from "./assurancePolicy.js";
