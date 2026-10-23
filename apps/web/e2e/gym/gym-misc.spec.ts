@@ -556,6 +556,8 @@ test.describe("gym webapp misc", () => {
     });
     await page.click('[data-tab-target="settings"]');
     await page.click("#settings-tab-providers");
+    // The key's settings sit behind its row's ⋯ button.
+    await page.click(`#providers-list [aria-controls="key-more-${id}"]`);
     const host = page.locator(`[data-default-model-for="${id}"]`);
     await expect(host.locator(".mm-trigger")).toBeVisible({ timeout: 10_000 });
     await host.locator(".mm-trigger").click();
@@ -701,13 +703,15 @@ test.describe("gym webapp misc", () => {
     const PAGE = "pg" + "7".repeat(30);
     const link = `${CONTROL}/access#server=${HOME}&svc=notes&ref=${SERVICE_ID}&page=${PAGE}`;
     await openSettings(page);
-    await page.click("#settings-tab-process-url");
-    // Not an access link: refused in place.
-    await page.fill("#aa-link", "https://example.com/nope");
-    await page.click("#aa-process");
-    await expect(page.locator("#access-authorize-content")).toContainText("That doesn't look like a Flagship access link.");
-    await page.fill("#aa-link", link);
-    await page.click("#aa-process");
+    // Settings → Scan a code or enter a link (Process URL is gone): junk is
+    // refused in the dialog, an access link opens the sign-in screen.
+    await page.click("#settings-tab-join-account");
+    const dlg = page.locator("dialog:has([data-join-input])");
+    await dlg.locator("[data-join-input]").fill("https://example.com/nope");
+    await dlg.locator("[data-join-continue]").click();
+    await expect(dlg.locator("[data-join-error]")).toHaveText("That isn't a Flagship code or link. Copy the whole link and try again.");
+    await dlg.locator("[data-join-input]").fill(link);
+    await dlg.locator("[data-join-continue]").click();
     await expect(page.locator("#access-authorize-content .card-title")).toHaveText("Open notes on home?");
     await shot(page, testInfo, "process-url-confirm");
     await page.click("#aa-authorize");

@@ -2515,5 +2515,6 @@
   "%lld day": "%lld 天",
   "%lld days": "%lld 天",
   "%lld minute": "%lld 分钟",
-  "overdue by %@": "已逾期 %@"
+  "overdue by %@": "已逾期 %@",
+  "None of your servers runs this app yet": "你的服务器还都没有运行此应用"
 }

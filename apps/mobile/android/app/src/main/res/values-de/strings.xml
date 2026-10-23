@@ -2676,4 +2676,5 @@
     <string name="key_settings">Schlüsseleinstellungen</string>
     <string name="hide_key_settings">Schlüsseleinstellungen ausblenden</string>
     <string name="options_for">Optionen für %1$s</string>
+    <string name="none_of_your_servers_runs_this_app_yet">Noch keiner deiner Server führt diese App aus</string>
 </resources>

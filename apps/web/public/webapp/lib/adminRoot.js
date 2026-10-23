@@ -74,6 +74,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/release-server-name/v1", //    release server name
   "flagship/server-unrevoke/v1", //        un-revoke a lost/stolen server
   "flagship/rck-register/v1", //           a new server's routing key (adding a server)
+  "flagship/voici-name/v1", //             an app's custom voi.ci name (set / clear)
   "flagship/service-invite/create/v1", //  service collaborator invite (D-2)
   "flagship/service-invite/revoke/v1", //  service collaborator revoke (D-2)
   // Share this server (docs/share-a-server.md): who the server is shared with
