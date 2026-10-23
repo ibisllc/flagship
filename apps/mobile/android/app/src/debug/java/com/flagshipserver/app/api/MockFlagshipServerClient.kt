@@ -518,6 +518,18 @@ class MockFlagshipServerClient(
     var pendingRePairByUser: Map<String, PendingRePair> = emptyMap()
     var pendingRePairUnavailable: Boolean = false
 
+    var lastRePairVeto: Pair<String, RePairVetoRequest>? = null
+    var rePairVetoError: Throwable? = null
+
+    override suspend fun vetoRePair(username: String, body: RePairVetoRequest) {
+        tick()
+        lastRePairVeto = username to body
+        rePairVetoError?.let { throw it }
+        pendingRePairByUser[username.lowercase()]?.let { p ->
+            pendingRePairByUser = pendingRePairByUser + (username.lowercase() to p.copy(objectedAt = body.request.issuedAt, vetoedBy = body.request.vetoerPub))
+        }
+    }
+
     override suspend fun fetchPendingRePair(username: String): PendingRePairSnapshot {
         tick()
         if (pendingRePairUnavailable) {

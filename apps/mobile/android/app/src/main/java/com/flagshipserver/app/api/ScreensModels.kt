@@ -1027,6 +1027,8 @@ data class PendingRePair(
     val initiatedAt: Long,
     val completesAt: Long,
     val objectedAt: Long? = null,
+    /** The admin key that rejected this attempt, when one did. */
+    val vetoedBy: String? = null,
 )
 
 @Serializable

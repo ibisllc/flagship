@@ -132,6 +132,8 @@ fun TrustedDevicesScreen(nav: NavController) {
     val pendingRePair = vm.pendingRePair.collectAsState().value
     val accountDisplayName = vm.accountDisplayName.collectAsState().value
     val scope = rememberCoroutineScope()
+    var confirmReject by remember { mutableStateOf(false) }
+    var rejectMessage by remember { mutableStateOf<String?>(null) }
     var sheetTarget by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
     var confirmDisconnect by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
     var confirmReplace by remember { mutableStateOf(false) }
@@ -197,6 +199,12 @@ fun TrustedDevicesScreen(nav: NavController) {
         // M4 — pending re-pair banner. A replace started on THIS or ANY
         // other device surfaces here with a grace countdown and a
         // "Finalize now" entry into the finalize screen.
+        RecoveryReviewCard(
+            snapshot = pendingRePair,
+            canReject = canManageNames,
+            message = rejectMessage,
+            onReject = { confirmReject = true },
+        )
         PendingRePairBanner(
             snapshot = pendingRePair,
             onFinalize = { completesAt -> nav.navigate("replace-finalize/$completesAt") },
@@ -367,6 +375,27 @@ fun TrustedDevicesScreen(nav: NavController) {
                 )
             }
         }
+    }
+
+    if (confirmReject) {
+        AlertDialog(
+            onDismissRequest = { confirmReject = false },
+            title = { Text(com.flagshipserver.app.core.RecoveryReviewCopy.CONFIRM_TITLE) },
+            text = { Text(com.flagshipserver.app.core.RecoveryReviewCopy.CONFIRM_MESSAGE) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReject = false
+                    scope.launch {
+                        rejectMessage = when (val out = vm.vetoPendingRecovery()) {
+                            is TrustedDevicesViewModel.RecoveryVetoOutcome.Rejected -> null
+                            is TrustedDevicesViewModel.RecoveryVetoOutcome.AlreadyOver -> "This recovery was already cancelled or finished."
+                            is TrustedDevicesViewModel.RecoveryVetoOutcome.Failed -> out.reason
+                        }
+                    }
+                }) { Text("Reject recovery") }
+            },
+            dismissButton = { TextButton(onClick = { confirmReject = false }) { Text("Keep waiting") } },
+        )
     }
 
     nameEditMode?.let { mode ->
@@ -556,6 +585,47 @@ private fun EmptyRow() {
             subtitle = "Sign in on another phone or tablet to add a trusted device.",
             icon = Icons.Outlined.PhoneAndroid,
         )
+    }
+}
+
+/** N04: a recovery of this account is waiting. An admin device can reject it; the new device
+ *  has no admin authority until the wait ends. */
+@Composable
+private fun RecoveryReviewCard(
+    snapshot: PendingRePairSnapshot?,
+    canReject: Boolean,
+    message: String?,
+    onReject: () -> Unit,
+) {
+    val pending = snapshot?.pending ?: return
+    if (!canReject || pending.objectedAt != null) return
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "A recovery of this account is waiting",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { contentDescription = "recovery-review-card" },
+            )
+            Text(
+                "A new device asked to take over this account. It becomes active on " +
+                    "${formatCompletesAt(pending.completesAt)} unless an admin rejects it. " +
+                    "It has no admin authority until then.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                com.flagshipserver.app.core.RecoveryReviewCopy.UNUSUAL_NOTE,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (message != null) Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            FSPrimaryButton(
+                label = "Reject recovery",
+                onClick = onReject,
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "recovery-review-reject-btn" },
+            )
+        }
     }
 }
 

@@ -151,6 +151,10 @@ interface FlagshipServerClient {
      *  Mirrors the webapp's `fetchPendingRePair` + the iOS client. */
     suspend fun fetchPendingRePair(username: String): PendingRePairSnapshot
 
+    /** An active admin rejects a pending recovery (N04). POST /api/users/:u/re-pair/veto with a
+     *  `RePairVeto` signed by the account's admin root. 409 = already cancelled or completed. */
+    suspend fun vetoRePair(username: String, body: RePairVetoRequest)
+
     /** E4 — atomic Wipe & restart. Rotates IRK + recovery envelope
      *  in one server transaction. Body carries OLD-IRK signature
      *  over canonical flagship/wipe-restart/v1 bytes. */
@@ -534,6 +538,23 @@ data class RePairInitiateRequest(
     @Serializable
     data class RecoveryProof(
         val token: String,
+    )
+}
+
+/** Body for POST /api/users/:u/re-pair/veto. */
+@Serializable
+data class RePairVetoRequest(
+    val request: Inner,
+    val signature: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val newIrkPub: String,
+        val initiatedAt: Long,
+        val completesAt: Long,
+        val vetoerPub: String,
+        val issuedAt: Long,
     )
 }
 
@@ -1702,6 +1723,16 @@ class LiveFlagshipServerClient(
             body = body,
             serializer = RePairCompleteRequest.serializer(),
             responseSerializer = RePairCompleteResponse.serializer(),
+        )
+    }
+
+    override suspend fun vetoRePair(username: String, body: RePairVetoRequest) {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        transport.postJson(
+            url = "$base/api/users/$encoded/re-pair/veto",
+            body = body,
+            serializer = RePairVetoRequest.serializer(),
+            accept = setOf(200),
         )
     }
 
