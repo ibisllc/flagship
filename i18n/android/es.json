@@ -2673,5 +2673,6 @@
   "default_tag": "Predeterminada",
   "key_settings": "Ajustes de la clave",
   "hide_key_settings": "Ocultar ajustes de la clave",
-  "options_for": "Opciones de %1$s"
+  "options_for": "Opciones de %1$s",
+  "none_of_your_servers_runs_this_app_yet": "Ninguno de tus servidores ejecuta esta aplicación todavía"
 }

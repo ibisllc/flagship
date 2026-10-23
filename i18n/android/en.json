@@ -11075,5 +11075,9 @@
   "options_for": {
     "en": "Options for %1$s",
     "ctx": "accessibility label of an AI key row's menu button; %1$s is the key's name"
+  },
+  "none_of_your_servers_runs_this_app_yet": {
+    "en": "None of your servers runs this app yet",
+    "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
   }
 }

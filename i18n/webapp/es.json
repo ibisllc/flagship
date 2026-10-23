@@ -2678,5 +2678,6 @@
   "AI API keys": "Claves de API de IA",
   "Browsers you signed in to private apps with a sign-in link. Refresh to\n          check if one's still in, or Stop to sign it out.": "Navegadores en los que iniciaste sesión en apps privadas con un enlace de inicio de sesión. Actualiza para comprobar si alguno sigue dentro o pulsa Detener para cerrarle la sesión.",
   "How this works": "Cómo funciona",
-  "Scheduled": "Programada"
+  "Scheduled": "Programada",
+  "None of your servers runs this app yet": "Ninguno de tus servidores ejecuta esta aplicación todavía"
 }
