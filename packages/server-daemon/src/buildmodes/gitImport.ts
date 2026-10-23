@@ -28,7 +28,7 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { applyRepoAdapter, parseManifest, splitAdapterFile, type AppManifest } from "@flagship/protocol";
 import {
-  assertResolvedHostSafe,
+  resolveSafeHost,
   UnsafeBaseUrlError,
   type BaseUrlGuardOptions,
   type HostResolver,
@@ -147,6 +147,52 @@ function gitUrlHost(u: string): string | null {
   return null;
 }
 
+/** Everything git needs to clone a public repo and nothing of the daemon's own environment. */
+export const GIT_CLONE_ENV: Record<string, string> = {
+  PATH: process.env["PATH"] ?? "/usr/local/bin:/usr/bin:/bin",
+  HOME: "/nonexistent",
+  LANG: "C",
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_ASKPASS: "/bin/false",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_ALLOW_PROTOCOL: "https:http",
+};
+
+/**
+ * `git -c` settings for a clone of an untrusted address (SEC N02, E04): only
+ * http(s), no redirects (a redirect target would not have been checked), no
+ * hooks, helpers, filters or proxies, and the checked addresses pinned so git
+ * connects to the one that was classified, not to a second DNS answer.
+ */
+export function hardenedGitConfig(gitUrl: string, host: string | null, pinned: readonly string[]): string[] {
+  const c = [
+    "core.askPass=false",
+    "credential.helper=",
+    "core.hooksPath=/dev/null",
+    "core.fsmonitor=false",
+    "protocol.allow=never",
+    "protocol.https.allow=always",
+    "protocol.http.allow=always",
+    "http.followRedirects=false",
+    "http.proxy=",
+    "http.sslVerify=true",
+    "submodule.recurse=false",
+    "transfer.fsckObjects=true",
+  ];
+  if (host && pinned.length > 0) {
+    let port = "";
+    try {
+      const u = new URL(gitUrl);
+      port = u.port || (u.protocol === "http:" ? "80" : "443");
+    } catch {
+      port = "443";
+    }
+    for (const ip of pinned) c.push(`http.curloptResolve=${host}:${port}:${ip.includes(":") ? `[${ip}]` : ip}`);
+  }
+  return c.flatMap((x) => ["-c", x]);
+}
+
 function validRef(r: string): boolean {
   return /^[A-Za-z0-9._\/-]{1,200}$/.test(r) && !r.includes("..");
 }
@@ -191,6 +237,7 @@ export class GitImporter {
     // internal A record. Only on the real-network clone path; an injected
     // `cloneInto` (tests / a future non-network source) supplies bytes
     // itself and never opens a socket to the host.
+    let pinned: string[] = [];
     if (!this.deps.cloneInto) {
       const host = gitUrlHost(gitUrl);
       if (!host) {
@@ -199,7 +246,7 @@ export class GitImporter {
         return { fit: false, gitUrl, ref, files: {}, reason, unreadable: true };
       }
       try {
-        await assertResolvedHostSafe(host, gitUrl, this.hostGuard, this.resolveHost);
+        pinned = (await resolveSafeHost(host, gitUrl, this.hostGuard, this.resolveHost)).addresses;
       } catch (e) {
         const reason =
           e instanceof UnsafeBaseUrlError ? `unsafe clone host (${e.reason})` : "unsafe clone host";
@@ -219,10 +266,11 @@ export class GitImporter {
       } else {
         // Never ask for a password (a private repo fails at once instead of
         // waiting on a prompt nobody sees), and give up on a stalled server.
-        const cloneArgs = ["-c", "core.askPass=false", "clone", "--depth", "1"];
+        const host = gitUrlHost(gitUrl);
+        const cloneArgs = [...hardenedGitConfig(gitUrl, host, pinned), "clone", "--depth", "1", "--no-tags", "--no-recurse-submodules"];
         if (ref) cloneArgs.push("--branch", ref);
         cloneArgs.push("--", gitUrl, dest);
-        await this.deps.cmd.run("git", cloneArgs, { timeoutMs: CLONE_TIMEOUT_MS });
+        await this.deps.cmd.run("git", cloneArgs, { timeoutMs: CLONE_TIMEOUT_MS, env: GIT_CLONE_ENV });
       }
     } catch (e) {
       const why = (e as Error).message;

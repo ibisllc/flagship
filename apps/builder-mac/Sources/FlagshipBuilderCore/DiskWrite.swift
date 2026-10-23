@@ -34,6 +34,24 @@ public enum DiskWrite {
         let fm = FileManager.default
         let size = ((try? fm.attributesOfItem(atPath: imagePath))?[.size] as? Int) ?? 0
         guard size >= 1024 else { throw DiskWriteError.imageTooSmall(size) }
+        guard let inp = FileHandle(forReadingAtPath: imagePath) else {
+            throw DiskWriteError.cannotOpen(imagePath, "no such file")
+        }
+        try write(image: inp, size: size, devicePath: devicePath, beforeOpen: nil, progress: progress)
+    }
+
+    /// Write an already-opened image. `beforeOpen` runs after the disk is
+    /// unmounted and immediately before the raw device is opened, so the
+    /// privileged caller can re-check that the physical disk is still the one
+    /// it approved.
+    public static func write(image inp: FileHandle,
+                             size: Int,
+                             devicePath: String,
+                             beforeOpen: (() throws -> Void)?,
+                             unmount: (String) throws -> Void = DiskWrite.unmount,
+                             progress: (Double) -> Void) throws {
+        defer { try? inp.close() }
+        guard size >= 1024 else { throw DiskWriteError.imageTooSmall(size) }
         guard devicePath.hasPrefix("/dev/disk") else { throw DiskWriteError.badDevice(devicePath) }
 
         // A mounted disk can't be opened for raw write — unmount its volumes.
@@ -46,10 +64,7 @@ public enum DiskWrite {
         // Raw character device: /dev/disk9 → /dev/rdisk9 (far faster).
         let raw = "/dev/r" + devicePath.dropFirst("/dev/".count)
 
-        guard let inp = FileHandle(forReadingAtPath: imagePath) else {
-            throw DiskWriteError.cannotOpen(imagePath, "no such file")
-        }
-        defer { try? inp.close() }
+        try beforeOpen?()
         let fd = raw.withCString { Darwin.open($0, O_WRONLY) }
         guard fd >= 0 else {
             throw DiskWriteError.cannotOpen(raw, openFailureReason(errno))
@@ -135,19 +150,8 @@ public enum DiskWrite {
         return nil
     }
 
-    private static func unmount(_ devicePath: String) throws {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
-        p.arguments = ["unmountDisk", devicePath]
-        let err = Pipe()
-        p.standardError = err
-        p.standardOutput = Pipe()
-        try p.run()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        if p.terminationStatus != 0 {
-            throw DiskWriteError.unmountFailed(
-                String(data: errData, encoding: .utf8) ?? "exit \(p.terminationStatus)")
-        }
+    /// Unmount every volume on the whole disk through Disk Arbitration.
+    public static func unmount(_ devicePath: String) throws {
+        try DiskArbitrationProbe.unmountWhole(bsdName: String(devicePath.dropFirst("/dev/".count)))
     }
 }

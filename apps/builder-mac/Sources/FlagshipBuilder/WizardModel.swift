@@ -182,6 +182,7 @@ final class WizardModel: ObservableObject {
         pairStatus = "Waiting for your phone…"
         client.onStage = { [weak self] stage in Task { @MainActor in self?.applyEngineStage(stage) } }
         client.onRecipe = { [weak self] data in Task { @MainActor in self?.handleSessionRecipe(data) } }
+        client.onStudioConfirmKey = { [weak self] key in Task { @MainActor in self?.pendingStudioConfirmKey = key } }
         client.onRecipeReceiptQueued = { [weak self] in
             Task { @MainActor in
                 self?.pairStatus = "Recipe received — phone session finished."
@@ -227,6 +228,18 @@ final class WizardModel: ObservableObject {
 
     /// A recipe arrived over the live session. Stage it to a 0600 temp file
     /// (same as the paste path) and run the existing verify.
+    /// The phone's key for confirming this recipe's server code (first contact). Kept in memory with the
+    /// recipe and written beside the VM bundle once a hosted server is created from it; never into a file
+    /// the recipe travels in.
+    private var pendingStudioConfirmKey: Data?
+
+    /// Keep the phone's key with the new hosted server, until Studio has reported the code it saw.
+    private func keepStudioConfirmKey(for name: String) {
+        guard let key = pendingStudioConfirmKey else { return }
+        pendingStudioConfirmKey = nil
+        try? StudioConfirmKeyFile.write(key, layout: vmManager.store.layout, name: name)
+    }
+
     private func handleSessionRecipe(_ data: Data) {
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
         let staging = tmpDir.appendingPathComponent("flagship-recipe-\(UUID().uuidString).json")
@@ -294,6 +307,7 @@ final class WizardModel: ObservableObject {
         // the log for diagnostics instead of surfacing a sticky banner.
         if let reason { appendLog(stream: .stderr, text: "Pairing session ended: \(reason)") }
         // Sensitive session/recipe material.
+        pendingStudioConfirmKey = nil
         recipe = nil
         verified = nil
         recipeError = nil
@@ -696,46 +710,44 @@ final class WizardModel: ObservableObject {
             return
         }
 
-        let logFile = "/tmp/flagship-builder-\(UUID().uuidString).log"
-        FileManager.default.createFile(atPath: logFile, contents: nil)
+        // The helper is told no path (SEC-MAC-002): the image goes over as an open descriptor, the disk as its
+        // BSD name to be checked, and every later call uses the opaque ids the helper issues.
+        let conn = HelperClient.makeConnection()
+        defer { conn.invalidate() }
+        let bsd = String(disk.deviceNode.dropFirst("/dev/".count))
+        let staged = await HelperClient.stageImage(conn, imageURL: preparedURL)
+        guard !staged.imageID.isEmpty else {
+            reportOperationFailure(staged.message.isEmpty ? "The image could not be handed to the helper." : staged.message)
+            return
+        }
+        appendLog(stream: .stdout, text: "+ staged the image for the helper (sha256 \(staged.sha256.prefix(16))…)")
+        let registered = await HelperClient.registerMedia(conn, bsdName: bsd)
+        guard !registered.mediaID.isEmpty else {
+            reportOperationFailure(registered.message.isEmpty ? "The helper would not accept that disk." : registered.message)
+            return
+        }
+        // The write blocks its connection while it runs, so progress is read on a second one.
         let stopTail = Box(false)
-        Task.detached {
-            var lastSize: Int = 0
+        let progressConn = HelperClient.makeConnection()
+        Task.detached { [imageID = staged.imageID] in
+            var from = 0
             while !stopTail.value {
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                guard let data = try? Data(contentsOf: URL(fileURLWithPath: logFile)),
-                      data.count > lastSize else { continue }
-                let new = data.subdata(in: lastSize..<data.count)
-                lastSize = data.count
-                if let s = String(data: new, encoding: .utf8) {
-                    for line in s.split(separator: "\n", omittingEmptySubsequences: false) {
-                        if line.isEmpty { continue }
-                        let text = String(line)
-                        await MainActor.run { [weak self] in
-                            guard let self = self else { return }
-                            if self.handleControlLine(text) { return }
-                            self.appendLog(stream: .stdout, text: text)
-                        }
+                let r = await HelperClient.readProgress(progressConn, imageID: imageID, from: from)
+                from = r.next
+                for text in r.lines where !text.isEmpty {
+                    await MainActor.run { [weak self] in
+                        guard let self = self else { return }
+                        if self.handleControlLine(text) { return }
+                        self.appendLog(stream: .stdout, text: text)
                     }
                 }
             }
+            progressConn.invalidate()
         }
         appendLog(stream: .stdout, text: "+ helper write-image → \(disk.deviceNode)")
-
-        let conn = HelperClient.makeConnection()
-        let result: (code: Int, message: String) = await withCheckedContinuation { cont in
-            var resumed = false
-            func finish(_ r: (Int, String)) { if !resumed { resumed = true; cont.resume(returning: r) } }
-            let proxy = conn.remoteObjectProxyWithErrorHandler { err in
-                finish((-1, "helper connection error: \(err.localizedDescription)"))
-            } as? FlagshipHelperProtocol
-            guard let proxy = proxy else { finish((-1, "could not reach the helper")); return }
-            proxy.writeImage(imagePath: imagePath,
-                             devicePath: disk.deviceNode,
-                             logPath: logFile) { code, msg in finish((code, msg)) }
-        }
+        let result = await HelperClient.write(conn, imageID: staged.imageID, mediaID: registered.mediaID)
         stopTail.value = true
-        conn.invalidate()
         if result.code == 0 {
             // Shred the single-use recipe file now that the burn succeeded.
             try? FileManager.default.removeItem(at: recipe)
@@ -808,6 +820,7 @@ final class WizardModel: ObservableObject {
             phase = "verify appliance"
             do {
                 try vmManager.createServer(config: config)
+                keepStudioConfirmKey(for: config.name)
                 let baseURL = URL(fileURLWithPath: appliancePath)
                 let manifestPath = environment["FLAGSHIP_VM_APPLIANCE_MANIFEST"]
                 let expectedArch = HostArch.current()
@@ -877,6 +890,7 @@ final class WizardModel: ObservableObject {
         DockProgress.set(nil)
         do {
             try vmManager.createServer(config: config)
+            keepStudioConfirmKey(for: config.name)
         } catch {
             reportOperationFailure(error)
             return

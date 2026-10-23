@@ -3,13 +3,16 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildCloudConfigUserData } from "../src/demoCloudConfig.js";
 
+const code = (s: string): string =>
+  s.replace(/<<'FLAGSHIP_[A-Z_]+_EOF'[\s\S]*?\nFLAGSHIP_[A-Z_]+_EOF/g, "").split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+
 const DEMO_IRK_PRIV = "11".repeat(32);
 
 describe("buildCloudConfigUserData", () => {
   it("renders #cloud-config with all write_files entries + runcmd", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: JSON.stringify({ serverDomain: "home.alice.flagship.services" }),
-      installerGitRef: "main",
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     expect(yaml.startsWith("#cloud-config\n")).toBe(true);
@@ -25,7 +28,7 @@ describe("buildCloudConfigUserData", () => {
   it("ships the demo IRK priv (the 3rd content block) for on-box entitlement minting", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
-      installerGitRef: "main",
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
@@ -37,7 +40,7 @@ describe("buildCloudConfigUserData", () => {
   it("gym: pins a given SWK and backup interval instead of a random SWK", () => {
     const swk = "ab".repeat(32);
     const bootstrapOf = (extra: Record<string, unknown>) => {
-      const yaml = buildCloudConfigUserData({ installBlobJson: "{}", installerGitRef: "main", demoUserIrkPrivHex: DEMO_IRK_PRIV, ...extra });
+      const yaml = buildCloudConfigUserData({ installBlobJson: "{}", installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", demoUserIrkPrivHex: DEMO_IRK_PRIV, ...extra });
       const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
       return Buffer.from(all[1]![1]!, "base64").toString("utf8");
     };
@@ -56,7 +59,7 @@ describe("buildCloudConfigUserData", () => {
     expect(() =>
       buildCloudConfigUserData({
         installBlobJson: "{}",
-        installerGitRef: "main",
+        installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         demoUserIrkPrivHex: "nothex",
       }),
     ).toThrow(/32-byte hex/);
@@ -66,7 +69,7 @@ describe("buildCloudConfigUserData", () => {
     const aid = "cd".repeat(32);
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
-      installerGitRef: "main",
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
       ownerAidPubHex: aid,
     });
@@ -81,7 +84,7 @@ describe("buildCloudConfigUserData", () => {
   it("omits ownerAidPubHex from config.json when not supplied (IRK fallback)", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
-      installerGitRef: "main",
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
@@ -94,7 +97,7 @@ describe("buildCloudConfigUserData", () => {
     const adminPriv = "12".repeat(32);
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
-      installerGitRef: "main",
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
       adminRootPubHex: adminPub,
       adminRootPrivHex: adminPriv,
@@ -115,7 +118,7 @@ describe("buildCloudConfigUserData", () => {
   it("un-pinned — omits adminRootPubHex + the admin-root file (legacy IRK mint)", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
-      installerGitRef: "main",
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     expect(yaml).not.toContain("adminRootPubHex");
@@ -126,7 +129,7 @@ describe("buildCloudConfigUserData", () => {
     expect(() =>
       buildCloudConfigUserData({
         installBlobJson: "{}",
-        installerGitRef: "main",
+        installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         demoUserIrkPrivHex: DEMO_IRK_PRIV,
         adminRootPubHex: "ab".repeat(32),
       }),
@@ -137,7 +140,7 @@ describe("buildCloudConfigUserData", () => {
     expect(() =>
       buildCloudConfigUserData({
         installBlobJson: "{}",
-        installerGitRef: "main",
+        installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         demoUserIrkPrivHex: DEMO_IRK_PRIV,
         ownerAidPubHex: "nothex",
       }),
@@ -152,7 +155,7 @@ describe("buildCloudConfigUserData", () => {
     });
     const yaml = buildCloudConfigUserData({
       installBlobJson: blobJson,
-      installerGitRef: "main",
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     // Extract the first base64 content under the install-blob.json
@@ -170,7 +173,7 @@ describe("buildCloudConfigUserData", () => {
   it("bootstrap script (decoded) installs deps + clones repo + writes systemd units", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
-      installerGitRef: "main",
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     // The bootstrap is the SECOND base64 content block.
@@ -179,15 +182,10 @@ describe("buildCloudConfigUserData", () => {
     const bootstrap = Buffer.from(all[1]![1]!, "base64").toString("utf8");
     expect(bootstrap.startsWith("#!/bin/bash\n")).toBe(true);
     expect(bootstrap).toContain("apt-get install -y");
-    expect(bootstrap).toContain("git clone");
-    // Only the daemon's workspace closure is installed and compiled, never
-    // the whole monorepo.
-    expect(bootstrap).toContain(
-      "npm install --no-audit --no-fund --include-workspace-root --workspace=packages/server-daemon 2>&1",
-    );
-    expect(bootstrap).toContain("npx tsc -b packages/server-daemon 2>&1");
-    expect(bootstrap).not.toContain("--workspaces");
-    expect(bootstrap).not.toMatch(/npx tsc -b(?! packages\/server-daemon)/);
+    // The signed box release installs; nothing is cloned, npm-installed or compiled.
+    expect(bootstrap).toContain("install-box-artifact.sh");
+    expect(bootstrap).toContain("--expect-commit \"$GIT_REF\"");
+    expect(code(bootstrap)).not.toMatch(/git clone|npm install|npx |nodesource/);
     expect(bootstrap).toContain("install-helper.ts gen-identity");
     // N12b — the box mints the IRK-signed entitlement bundle on-box
     // (after gen-identity) using the shipped demo IRK priv, writes it to
@@ -209,9 +207,8 @@ describe("buildCloudConfigUserData", () => {
     // `run` package, which dies with MODULE_NOT_FOUND and the daemon never
     // boots (observed live 2026-05-22). Must be `npm run start`.
     expect(bootstrap).toContain(
-      "ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon",
+      "ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning packages/server-daemon/dist/index.js",
     );
-    expect(bootstrap).not.toContain("npx --workspace=@flagship/server-daemon run start");
     // The daemon reads FLAGSHIP_SUBDOMAIN + FLAGSHIP_IDENTITY_PRIV_HEX from
     // env only; the unit must load them via EnvironmentFile and the
     // bootstrap must write that file. Regression: without this the daemon
@@ -245,13 +242,13 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap).toContain("/api/server/register");
     expect(bootstrap).toContain("/sealed-luks-key");
     // The git-ref is interpolated into the bootstrap at template time.
-    expect(bootstrap).toContain('GIT_REF="main"');
+    expect(bootstrap).toContain('GIT_REF="' + 'a'.repeat(40) + '"');
   });
 
   it("bootstrap emits provisioning PHASE checkpoints (fail-open)", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
-      installerGitRef: "main",
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
@@ -279,14 +276,14 @@ describe("buildCloudConfigUserData", () => {
         installerGitRef: "main; rm -rf /",
         demoUserIrkPrivHex: DEMO_IRK_PRIV,
       }),
-    ).toThrow(/disallowed/);
+    ).toThrow(/exact 40-character commit/);
     expect(() =>
       buildCloudConfigUserData({
         installBlobJson: "{}",
-        installerGitRef: "../etc/passwd",
+        installerGitRef: "../etc",
         demoUserIrkPrivHex: DEMO_IRK_PRIV,
       }),
-    ).toThrow();
+    ).toThrow(/exact 40-character commit/);
   });
 
   it("interpolates a custom installerGitRef (e.g. a commit SHA)", () => {

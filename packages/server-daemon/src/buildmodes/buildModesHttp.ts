@@ -22,6 +22,7 @@ import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { CLOSED_TO_AI, type BuildOrchestrator } from "./buildOrchestrator.js";
 import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
 import { parseRelayFlag, type LlmCredential } from "../llmHarness.js";
+import type { ConsentInput } from "./adaptConsent.js";
 
 export interface BuildModesHttpDeps {
   orchestrator: BuildOrchestrator;
@@ -47,6 +48,19 @@ export const MISSING_MCP_KEY =
 export const INVALID_MCP_KEY =
   "This key doesn't open a build on this server: it was replaced, or the build has finished. Copy the current key from Connect your IDE in the Flagship app, or start a new connection there.";
 
+/** 428 asks for the owner's signed consent and shows what it would cost; 403 says why the one sent is not enough. */
+function consentRefusal(status: number, reason: string, estimate: unknown): HttpResponse {
+  return { status, headers: J, body: JSON.stringify({ error: reason, code: "ai-consent", estimate }) };
+}
+
+function parseConsent(v: unknown): ConsentInput | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const c = v as Record<string, unknown>;
+  if (typeof c.provider !== "string" || typeof c.source !== "string" || typeof c.signature !== "string") return undefined;
+  if (!Number.isSafeInteger(c.issuedAt) || !Number.isSafeInteger(c.highTokens)) return undefined;
+  return { issuedAt: c.issuedAt as number, provider: c.provider, source: c.source, highTokens: c.highTokens as number, signature: c.signature };
+}
+
 export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
   const o = deps.orchestrator;
 
@@ -63,6 +77,20 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
     // ---- everything else is paired-session gated ----
     const denied = deps.gate.check(req);
     if (denied) return denied;
+
+    // POST /api/build/apps/:serviceId/sync   { ref? }  → a sync proposal with one upstream version, and
+    // the build that holds the merge (nothing goes live until the owner deploys it)
+    const sync = /^\/api\/build\/apps\/([a-z0-9][a-z0-9-]{0,125})\/sync$/.exec(path);
+    if (sync) {
+      if (req.method !== "POST") return jerr(405, "method not allowed");
+      const body = (parseJson(req.body) ?? {}) as { ref?: unknown };
+      if (body.ref !== undefined && (typeof body.ref !== "string" || !/^[A-Za-z0-9._\/-]{1,200}$/.test(body.ref) || body.ref.includes(".."))) {
+        return jerr(400, "ref must be a branch, tag or commit");
+      }
+      const r = await o.proposeUpstreamSync(sync[1]!, typeof body.ref === "string" ? body.ref : undefined);
+      if (!r.ok) return jerr(r.status, r.reason);
+      return jok(r);
+    }
 
     // POST /api/build/git   { gitUrl, ref?, name?, credential? }  → create + inspect
     // A taken name is a 409 carrying who holds it, like the AI chat's
@@ -185,32 +213,55 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       // A sealed build never takes an AI (or its key) again.
       if (o.isSealed(buildId)) return jerr(409, CLOSED_TO_AI);
       const body = parseJson(req.body) as
-        | { instructions?: string; credential?: unknown; background?: boolean; share?: boolean }
+        | { instructions?: string; credential?: unknown; background?: boolean; share?: boolean; consent?: unknown }
         | null;
       // A credential may be delivered here too (e.g. the owner adds an AI
       // key only when the adapt pass is actually needed). Same box-only,
       // never-echoed, never-logged contract.
       const cred = parseCredential(body?.credential);
       if (cred === "invalid") return jerr(400, "malformed credential");
+      // The estimate depends on who pays, so the delivered credential is stored before consent is
+      // checked; a refused request puts back what was there, so a cancelled consent leaves no key behind.
+      let undoCredential = async (): Promise<void> => {};
       if (cred && deps.credentials) {
+        const store = deps.credentials;
+        const previous = await store.get(buildId).catch(() => null);
         try {
-          await deps.credentials.put(buildId, cred);
+          await store.put(buildId, cred);
         } catch {
           return jerr(500, "failed to store credential");
         }
+        undoCredential = async () => {
+          await (previous ? store.put(buildId, previous) : store.forget(buildId)).catch(() => {});
+        };
       }
       // The owner chooses whether to share the adaptation on the not-ready
       // card, so it arrives with the adapt (older apps sent it on create).
       if (typeof body?.share === "boolean") o.setShare(buildId, body.share);
-      const adaptOpts = typeof body?.instructions === "string" ? { instructions: body.instructions } : {};
+      const consent = parseConsent(body?.consent);
+      const adaptOpts = {
+        ...(typeof body?.instructions === "string" ? { instructions: body.instructions } : {}),
+        ...(consent ? { consent } : {}),
+      };
       // `background`: answer at once; the phone polls GET .../:id for
       // `state.adapt`. Older apps wait on this request instead.
       if (body?.background === true) {
         const started = o.startAdaptGit(buildId, adaptOpts);
-        if (!started.ok) return jerr(started.status, started.reason);
+        if (!started.ok) {
+          await undoCredential();
+          return started.estimate ? consentRefusal(started.status, started.reason, started.estimate) : jerr(started.status, started.reason);
+        }
         return { status: 202, headers: J, body: JSON.stringify({ ok: true, started: true }) };
       }
-      const r = await o.adaptGit(buildId, adaptOpts);
+      const verdict = o.checkAdaptConsent(buildId, consent);
+      if (!verdict.ok) {
+        await undoCredential();
+        return consentRefusal(verdict.status, verdict.reason, verdict.estimate);
+      }
+      const r = await o.adaptGit(buildId, {
+        ...(adaptOpts.instructions !== undefined ? { instructions: adaptOpts.instructions } : {}),
+        ...(verdict.tokenBudget !== undefined ? { tokenBudget: verdict.tokenBudget } : {}),
+      });
       if (!r.ok) {
         return jerr(r.reason === "AI adapt not configured" ? 503 : r.reason === CLOSED_TO_AI ? 409 : 502, r.reason);
       }

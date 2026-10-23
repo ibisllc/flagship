@@ -13,6 +13,7 @@
  *   README.md                                      written only if missing
  */
 
+import { renderDirectory } from "./adapterDirectory.js";
 import { RequestD1, type D1Database } from "@flagship/storage";
 import { splitAdapterFile } from "@flagship/protocol";
 import { aiReview, utcDay, type AdapterBucketLike } from "./adapterIndex.js";
@@ -32,6 +33,16 @@ export interface AdapterPublishEnv {
    */
   ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
 }
+
+/**
+ * SEC-ADAPTER-001: anonymous adapters are untrusted program changes, and the
+ * rule checks plus an optional model review cannot establish that one is
+ * benign. Nothing is published until the signed, reviewed index of
+ * docs/security-hardening (SEC-ADAPTER-002) exists. Submissions still queue,
+ * quarantined, so nothing is lost. This is a code switch on purpose: setting
+ * `ADAPTER_REVIEW_ANTHROPIC_KEY` must never re-open it. Tests flip it.
+ */
+export const communityPublish = { enabled: false };
 
 export type PublishResult =
   | { published: false; reason: string }
@@ -118,6 +129,10 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
       .prepare(`DELETE FROM adapter_complaints WHERE day < ? AND file_sha256 NOT IN (${RETIRED_FILES})`)
       .bind(complaintCutoff);
   const pruneComplaints = () => pruneStmt().run();
+  if (!communityPublish.enabled) {
+    await pruneComplaints();
+    return { published: false, reason: "quarantined" };
+  }
   if (!bucket || !token || !repoName) {
     // Nothing goes public, but owners' notes still expire on time.
     await pruneComplaints();
@@ -395,6 +410,20 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     if (!removedDirs.has(repoDir(repo))) tree.push({ path: `${repoDir(repo)}/index.json`, mode: "100644", type: "blob", sha: null });
   }
   tree.push({ path: "do-not-adapt.txt", mode: "100644", type: "blob", content: doNotAdapt });
+  {
+    // The searchable directory: every live adapter this commit leaves, counts folded into a status.
+    const liveRows = await all<Row>(`SELECT * FROM repo_adapters WHERE ${LIVE}`);
+    const rows = [
+      ...liveRows.filter((r) => !withdrawn.has(r.file_sha256)).map((r) => ({ r, added: r.published_day! })),
+      ...added.map((r) => ({ r, added: day })),
+    ].map(({ r, added: a }) => ({
+      repo: r.repo, license: r.license, base: r.base, file_sha256: r.file_sha256, added: a,
+      confirmations: r.confirmations + r.pending_confirmations, complaints: complaintCounts.get(r.file_sha256) ?? 0,
+    }));
+    const seen = new Set<string>();
+    const unique = rows.filter((r) => (seen.has(r.file_sha256) ? false : (seen.add(r.file_sha256), true)));
+    tree.push({ path: "directory.json", mode: "100644", type: "blob", content: renderDirectory(unique, blocked, day) });
+  }
   if (!hasReadme) tree.push({ path: "README.md", mode: "100644", type: "blob", content: README });
 
   const newTree = (await gh("POST", "/git/trees", { base_tree: headCommit.tree.sha, tree })) as { sha: string };
@@ -521,7 +550,12 @@ Flagship servers will apply, and every server gets the same bytes.
 
     adapters/<host>/<repo path>/index.json
     adapters/<host>/<repo path>/<sha256 of the file>.json
+    directory.json
     do-not-adapt.txt
+
+\`directory.json\` is the searchable list of every project here: license, each
+adapter's digest and base commit, and a status (\`published\` or \`disputed\`),
+with no install counts and nothing about who sent or installed one.
 
 \`index.json\` lists a repo's adapters, newest first: the commit each was made
 against (\`base\`), its file, the day it was added, how many servers sent the

@@ -57,6 +57,8 @@ export interface ArchiveAppMeta {
   manifestJson: string;
   /** `source`: rebuild from the `source` part; `pull`: pull runtime.image. */
   rebuild: ArchiveRebuild;
+  /** For `pull`: the exact image (`sha256:…`) this app ran, so a restore cannot be handed a moved tag. */
+  imageDigest?: string;
   appliedMigrations: string[];
   parts: ArchivePartInfo[];
   access: CopyAccessEntry | null;
@@ -290,15 +292,23 @@ export async function buildServerArchive(
           staged.push({ info, path });
         };
         let n = 0;
-        for (const [store, cred] of Object.entries(app.data?.postgres ?? {})) {
-          const out = join(dir, `db-${n++}.dump`);
-          await deps.ops.dumpDatabase(cred, out);
-          await stage(`db:${store}`, `db-${n - 1}.dump`, out);
-        }
-        if (app.data?.files) {
-          const out = join(dir, "files.tar");
-          await deps.ops.archiveFiles(app.data.files.volume, deps.containerName(app.serviceId), out);
-          await stage("files", "files.tar", out);
+        // N09: an app with both a database and files is paused for both, so they are one moment of
+        // the app, not two. An app with only one of them needs no pause beyond what that part takes.
+        const both = Object.keys(app.data?.postgres ?? {}).length > 0 && !!app.data?.files;
+        const resume = both ? await deps.ops.quiesce?.(deps.containerName(app.serviceId)) : undefined;
+        try {
+          for (const [store, cred] of Object.entries(app.data?.postgres ?? {})) {
+            const out = join(dir, `db-${n++}.dump`);
+            await deps.ops.dumpDatabase(cred, out);
+            await stage(`db:${store}`, `db-${n - 1}.dump`, out);
+          }
+          if (app.data?.files) {
+            const out = join(dir, "files.tar");
+            await deps.ops.archiveFiles(app.data.files.volume, deps.containerName(app.serviceId), out);
+            await stage("files", "files.tar", out);
+          }
+        } finally {
+          await resume?.();
         }
         if (deps.sourceDir) {
           const tree = await readServiceSource(deps.sourceDir, app.serviceId);
@@ -314,6 +324,10 @@ export async function buildServerArchive(
           }
         }
         const env = deps.envStore ? ((await deps.envStore.get(app.serviceId).catch(() => null)) ?? {}) : {};
+        const imageDigest =
+          (rebuildOf.get(app.serviceId) ?? "pull") === "pull"
+            ? await deps.ops.imageDigest?.(app.manifest.runtime.image).catch(() => null)
+            : null;
         const meta: ArchiveAppMeta = {
           v: 1,
           serviceId: app.serviceId,
@@ -322,6 +336,7 @@ export async function buildServerArchive(
           name: appName(app),
           manifestJson: JSON.stringify(app.manifest),
           rebuild: rebuildOf.get(app.serviceId) ?? "pull",
+          ...(imageDigest ? { imageDigest } : {}),
           appliedMigrations: [...(app.appliedMigrations ?? [])],
           parts,
           access: deps.access?.exportEntry(app.serviceId) ?? null,

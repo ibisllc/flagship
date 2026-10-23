@@ -1238,6 +1238,9 @@ class WizardModel:
                 else "debug access not granted — production image",
             )
         elif ev.event == "done":
+            self.vm.pending_studio_confirm_key = (
+                bytes.fromhex(ev.studio_confirm_key_hex) if ev.studio_confirm_key_hex else None
+            )
             s.is_pairing = False
             self._pair = None
             s.pair_sas = None

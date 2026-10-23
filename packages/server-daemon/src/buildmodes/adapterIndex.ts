@@ -62,6 +62,15 @@ export function licensePathOf(files: Record<string, string>): string | null {
   return Object.keys(files).filter((p) => !p.includes("/") && LICENSE_FILE.test(p)).sort()[0] ?? null;
 }
 
+/**
+ * SEC-ADAPTER-001: an adapter from the public store is anonymous code that
+ * would change this owner's build, and a content hash proves only that the
+ * bytes match their name. Boxes do not offer or apply one until the signed,
+ * reviewed index (SEC-ADAPTER-002) exists. Sharing and complaints still work.
+ * Tests flip it.
+ */
+export const communityAdapters = { lookupEnabled: false };
+
 export const DEFAULT_ADAPTER_STORE = "https://raw.githubusercontent.com/ibisllc/flagship-adapters/main";
 const CANDIDATES = 3;
 
@@ -97,6 +106,7 @@ export function httpAdapterIndex(
   };
   return {
     async lookup(repo, commit) {
+      if (!communityAdapters.lookupEnabled) return [];
       try {
         const dir = `${store}/adapters/${repo.slice("https://".length)}`;
         const [indexText, blocked] = await Promise.all([get(`${dir}/index.json`), get(`${store}/do-not-adapt.txt`)]);

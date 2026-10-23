@@ -88,6 +88,7 @@ export default {
       now: Date.now(),
       resolvePodIdentity: makePodResolver(mainUrl),
       resolveUserIrk: makeIrkResolver(mainUrl),
+      resolveUserSensitiveKey: makeSensitiveKeyResolver(mainUrl),
     };
     if (env.SERVICES_PASSTHROUGH_IPV6) policyEnv.servicesIpv6 = env.SERVICES_PASSTHROUGH_IPV6;
 
@@ -170,6 +171,21 @@ function makeIrkResolver(mainUrl: string): (username: string) => Promise<Uint8Ar
       const pk = body.binding?.pubKey;
       if (typeof pk !== "string") return null;
       return hexToBytesSafe(pk);
+    } catch {
+      return null;
+    }
+  };
+}
+
+/** The account's admin root where it pins one, else its IRK (public `/api/username/<u>`). */
+function makeSensitiveKeyResolver(mainUrl: string): (username: string) => Promise<Uint8Array | null> {
+  return async (username: string) => {
+    try {
+      const resp = await fetch(`${mainUrl}/api/username/${encodeURIComponent(username)}`, { headers: { accept: "application/json" } });
+      if (!resp.ok) return null;
+      const body = (await resp.json()) as { irkPub?: unknown; adminRootPub?: unknown };
+      const key = typeof body.adminRootPub === "string" ? body.adminRootPub : typeof body.irkPub === "string" ? body.irkPub : null;
+      return key ? hexToBytesSafe(key) : null;
     } catch {
       return null;
     }

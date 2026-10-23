@@ -85,21 +85,85 @@ export class SystemctlPowerRunner implements HostPowerRunner {
   }
 }
 
+/** Posts the set-only boot suspension (bootSuspensionClient.ts); injected so tests never touch a network. */
+export interface BootSuspender {
+  suspend(
+    reason: "dead-man" | "manual-lock",
+    deadlineMs: number,
+  ): Promise<{ confirmed: true } | { confirmed: false; why: string }>;
+}
+
+/** How long a lock may wait on the boot worker before it stops waiting. */
+export const SUSPEND_WAIT_OFF_MS = 3_000;
+export const SUSPEND_WAIT_RESTART_MS = 15_000;
+
+export interface LockResult {
+  /** What the host was actually told to do. */
+  mode: "off" | "restart";
+  requestedMode: "off" | "restart";
+  /**
+   * "confirmed": the boot worker durably recorded the lock before we acted.
+   * "unconfirmed": we could not confirm it (unreachable, refused, not durable)
+   *   and a restart was therefore turned into a shutdown.
+   * "unavailable": no boot-worker client is wired (an older config).
+   */
+  suspension: "confirmed" | "unconfirmed" | "unavailable";
+}
+
 /**
- * The shared lock primitive: suppress the silent auto-unlock, THEN run the
- * host power action. The ordering is load-bearing — if the power action
- * raced ahead of suppression, a LUKS box could re-unlock silently. Callers
- * (the order executor + the dead-man timer) MUST go through this so the
- * ordering is enforced in one place.
+ * The shared lock primitive (SEC-LOCK-001): suppress the silent auto-unlock
+ * locally, set the durable boot suspension, THEN run the host power action.
+ *
+ *  - "off" never waits long for the boot worker: the box shuts down within
+ *    SUSPEND_WAIT_OFF_MS whether or not the worker answered, and the result
+ *    says which. The owner's phone sets and retries its own suspension.
+ *  - "restart" waits for a durable acknowledgement first. If it cannot be
+ *    confirmed the box powers OFF instead: a reboot into a lease that was
+ *    never revoked is exactly the hole this closes.
+ *
+ * The local marker stays only as a redundant signal; it is not the lock.
  */
 export async function executeLockAndPower(args: {
   mode: "off" | "restart";
   suppressor: AutoUnlockSuppressor;
   runner: HostPowerRunner;
-}): Promise<void> {
+  suspender?: BootSuspender | null;
+  reason?: "dead-man" | "manual-lock";
+}): Promise<LockResult> {
   await args.suppressor.suppress();
-  await args.runner.power(args.mode);
+  const reason = args.reason ?? "manual-lock";
+  let suspension: LockResult["suspension"] = "unavailable";
+  let mode = args.mode;
+  if (args.suspender) {
+    const attempt = args.suspender
+      .suspend(reason, args.mode === "restart" ? SUSPEND_WAIT_RESTART_MS : SUSPEND_WAIT_OFF_MS)
+      .catch(() => ({ confirmed: false as const, why: "error" }));
+    const result =
+      args.mode === "off"
+        ? await Promise.race([attempt, new Promise<{ confirmed: false; why: string }>((r) => setTimeout(() => r({ confirmed: false, why: "timeout" }), SUSPEND_WAIT_OFF_MS))])
+        : await attempt;
+    suspension = result.confirmed ? "confirmed" : "unconfirmed";
+    if (!result.confirmed && args.mode === "restart") mode = "off";
+  } else if (args.mode === "restart") {
+    // No way to lock the boot worker: never reboot into an unrevoked lease.
+    mode = "off";
+  }
+  await args.runner.power(mode);
+  return { mode, requestedMode: args.mode, suspension };
 }
+
+/** What owner devices may read about the switch (server-detail), so every client bounds its leases the same way. */
+export interface DeadManView {
+  enabled: boolean;
+  /** When the current affirmation lapses; auto-unlock leases must not outlive it. 0 ⇒ never affirmed. */
+  leaseExpiry: number;
+  windowMs: number;
+  graceMs: number;
+  lockoutMode: "off" | "restart";
+}
+
+/** Set once the controller exists (wireOwnerHandlers); server-detail reads through it. */
+export const deadManViewRef: { current: (() => DeadManView) | null } = { current: null };
 
 export interface DeadManPolicyState {
   enabled: boolean;
@@ -139,6 +203,8 @@ export interface DeadManControllerOptions {
   activeGrants?: readonly AdminGrantView[];
   suppressor: AutoUnlockSuppressor;
   runner: HostPowerRunner;
+  /** Posts the STK-signed boot suspension when the switch fires. */
+  suspender?: BootSuspender | null;
   /** Where the policy + lease state persist. Default `/var/flagship/deadman.json`. */
   statePath?: string;
   now?: () => number;
@@ -164,6 +230,7 @@ export class DeadManController {
   private readonly activeGrants: readonly AdminGrantView[];
   private readonly suppressor: AutoUnlockSuppressor;
   private readonly runner: HostPowerRunner;
+  private readonly suspender: BootSuspender | null;
   private readonly statePath: string;
   private readonly now: () => number;
   private readonly maxAgeMs: number;
@@ -188,6 +255,7 @@ export class DeadManController {
     this.activeGrants = opts.activeGrants ?? [];
     this.suppressor = opts.suppressor;
     this.runner = opts.runner;
+    this.suspender = opts.suspender ?? null;
     this.statePath = opts.statePath ?? "/var/flagship/deadman.json";
     this.now = opts.now ?? (() => Date.now());
     this.maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
@@ -216,6 +284,10 @@ export class DeadManController {
 
   leaseExpiry(): number {
     return this.state.leaseExpiry;
+  }
+
+  view(): DeadManView {
+    return { ...this.state.policy, leaseExpiry: this.state.leaseExpiry };
   }
 
   /**
@@ -314,6 +386,8 @@ export class DeadManController {
         mode: this.state.policy.lockoutMode,
         suppressor: this.suppressor,
         runner: this.runner,
+        suspender: this.suspender,
+        reason: "dead-man",
       });
       this.fired = true;
     } finally {

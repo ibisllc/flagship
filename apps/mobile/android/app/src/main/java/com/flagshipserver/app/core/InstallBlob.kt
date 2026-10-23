@@ -19,7 +19,7 @@ data class InstallBlob(
     var registrationUrl: String = Endpoints.registrationUrl,
     var authCode: AuthCode,
     var authCodeUserSignature: ByteArray,
-    var installerGitRef: String = "main",
+    var installerGitRef: String = BoxRelease.COMMIT,
     var rckPubKey: ByteArray,
     // Boot-unlock policy from server creation: "auto" (box-sealed lease
     // self-unlock, default) or "approve" (phone-gated every boot). Optional +

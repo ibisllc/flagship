@@ -3,6 +3,7 @@
 // gym-only /api/gym/provision, signed with the account's demo keys). Every
 // server is an UpCloud server labelled flagship-env=gym; teardown goes through
 // the Worker, never a cloud API.
+import { BOX_RELEASE } from "@flagship/protocol";
 import { randomBytes } from "node:crypto";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import {
@@ -254,7 +255,7 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
     registrationUrl: `https://${CONTROL}/api/server/register`,
     authCode,
     authCodeUserSignature: signAuthCode(authCode, irk),
-    installerGitRef: opts.installerGitRef ?? (process.env.GYM_INSTALLER_GIT_REF || "gym"),
+    installerGitRef: opts.installerGitRef ?? (process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit),
     rckPubKey: rck.publicKey,
   };
   const blobSignature = signInstallBlob(blob, irk);

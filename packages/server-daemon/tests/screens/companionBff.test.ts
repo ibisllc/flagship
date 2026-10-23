@@ -33,6 +33,7 @@ import {
 } from "../../src/companion/companionTicketStore.js";
 import {
   FilePairedSessionStore,
+  pairedSessionId,
   defaultPairedSessionPath,
 } from "../../src/pairedSessionStore.js";
 import type { HttpRequest } from "../../src/runtime.js";
@@ -336,7 +337,7 @@ describe("GET /api/screens/companion/list", () => {
     expect(body.companions).toHaveLength(1);
     const c = body.companions[0];
     expect(typeof c.tokenPrefix).toBe("string");
-    expect(c.tokenPrefix.length).toBe(12);
+    expect(c.tokenPrefix.length).toBe(16);
     expect(c.userAgent).toContain("iPad");
     expect(typeof c.expiresAt).toBe("number");
     expect(typeof c.redeemedAt).toBe("number");
@@ -381,7 +382,7 @@ describe("POST /api/screens/companion/revoke", () => {
       }),
     );
     const r0 = JSON.parse(redeem!.body as string);
-    const prefix = r0.companionSessionToken.slice(0, 12);
+    const prefix = pairedSessionId(r0.companionSessionToken).slice(0, 16);
 
     const rev1 = await handle(
       withOwnerToken({

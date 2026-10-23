@@ -1,0 +1,108 @@
+{
+  "about": "The owner's consent to one AI run that spends their key or Flagship Inference credits: flagship/ai-repair-consent/v1|serverDomain (lowercase)|buildId (16 hex)|operation (adapt|repair|sync)|provider|source (byok|promo)|highTokens|issuedAt, Ed25519, seed 0x44 repeated. Each refused order must fail to produce canonical bytes.",
+  "seedHex": "4444444444444444444444444444444444444444444444444444444444444444",
+  "pubHex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+  "orders": [
+    {
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "buildId": "0123456789abcdef",
+        "operation": "adapt",
+        "provider": "anthropic",
+        "source": "byok",
+        "highTokens": 312000,
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/ai-repair-consent/v1|kitchen.alice.flagship.services|0123456789abcdef|adapt|anthropic|byok|312000|1760000000000",
+      "signatureHex": "4561c852f4d8367c6bcc72ffd9ce78379d0c6151435dadf191e4e0f6d32b240329e281e5614f8b39542bf6abc6e86c0d250f532d025f5e096024341d1ff7ed08"
+    },
+    {
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "buildId": "0123456789abcdef",
+        "operation": "repair",
+        "provider": "flagship-inference",
+        "source": "promo",
+        "highTokens": 90000,
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/ai-repair-consent/v1|kitchen.alice.flagship.services|0123456789abcdef|repair|flagship-inference|promo|90000|1760000000000",
+      "signatureHex": "65ca539cdbc6f8c40ef92da46c29d385e3274808bd4feab2287f337a02749607046424575bfd2daf83a7001ae24f8d2f64042c2bb9c777eac1f3442e27243505"
+    },
+    {
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "buildId": "0123456789abcdef",
+        "operation": "sync",
+        "provider": "anthropic",
+        "source": "byok",
+        "highTokens": 312000,
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/ai-repair-consent/v1|kitchen.alice.flagship.services|0123456789abcdef|sync|anthropic|byok|312000|1760000000000",
+      "signatureHex": "80a0187e0c3bffa8f962e9f8d31274395a6e9091a71c23cb6bc8d2ffee4a6ce5f16d39ac81135a8ffad6712bab4889412da55254373da9e443ba5adce6695a0b"
+    }
+  ],
+  "refused": [
+    {
+      "name": "a build id that is not 16 hex",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "buildId": "xyz",
+        "operation": "adapt",
+        "provider": "anthropic",
+        "source": "byok",
+        "highTokens": 312000,
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "a separator in the provider",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "buildId": "0123456789abcdef",
+        "operation": "adapt",
+        "provider": "a|b",
+        "source": "byok",
+        "highTokens": 312000,
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "an unknown operation",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "buildId": "0123456789abcdef",
+        "operation": "delete",
+        "provider": "anthropic",
+        "source": "byok",
+        "highTokens": 312000,
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "an unknown cost source",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "buildId": "0123456789abcdef",
+        "operation": "adapt",
+        "provider": "anthropic",
+        "source": "free",
+        "highTokens": 312000,
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "no tokens",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "buildId": "0123456789abcdef",
+        "operation": "adapt",
+        "provider": "anthropic",
+        "source": "byok",
+        "highTokens": 0,
+        "issuedAt": 1760000000000
+      }
+    }
+  ]
+}

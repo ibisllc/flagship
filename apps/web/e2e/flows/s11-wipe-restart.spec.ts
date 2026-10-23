@@ -37,7 +37,8 @@ import {
   signWipeRestart,
   signClaimUsername,
   signDeviceEndpointClaim,
-  signUploadRecoveryRecord,
+  signRecoveryRecord,
+  type RecoveryRecordV2,
   type Keypair,
 } from "@flagship/protocol";
 
@@ -157,24 +158,30 @@ async function seedAccount(apiRequest: ReturnType<typeof playwrightRequest.newCo
   const initialWrappedHashHex = await sha256Hex(initialWrappedUmk);
   const initialCredentialId = bytesToHex(randomBytes(16));
   const issuedAtUpload = Date.now();
-  const uploadSig = signUploadRecoveryRecord(
-    {
-      username,
-      credentialIdHex: initialCredentialId,
-      wrappedUmkHashHex: initialWrappedHashHex,
-      issuedAt: issuedAtUpload,
-    },
-    oldIrk,
-  );
+  const claim: RecoveryRecordV2 = {
+    op: "put",
+    username,
+    irkPubHex: bytesToHex(oldIrk.publicKey),
+    adminRootPubHex: "none",
+    credentialIdHex: initialCredentialId,
+    wrappedUmkDigestHex: initialWrappedHashHex,
+    adminRoot: { change: "none" },
+    acmeKey: { change: "none" },
+    fetchTokenHashHex: bytesToHex(randomBytes(32)),
+    prfSaltHashHex: bytesToHex(randomBytes(32)),
+    kdfVersion: 1,
+    algVersion: 1,
+    policy: "passkey-and-passphrase",
+    generation: 1,
+    nonceHex: bytesToHex(randomBytes(16)),
+    priorDigestHex: "genesis",
+    issuedAt: issuedAtUpload,
+  };
   const uploadResp = await ctx.post(`${APEX}/api/recovery`, {
     data: {
-      request: {
-        username,
-        credentialId: initialCredentialId,
-        wrappedUmk: bytesToB64(initialWrappedUmk),
-        issuedAt: issuedAtUpload,
-      },
-      signature: bytesToHex(uploadSig),
+      claim,
+      signature: bytesToHex(signRecoveryRecord(claim, oldIrk)),
+      wrappedUmk: bytesToB64(initialWrappedUmk),
     },
     failOnStatusCode: false,
   });

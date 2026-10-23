@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "about": "The lowest versions a box may run. packages/protocol/src/boxArtifact.ts holds the same Node number (NODE_SECURITY_FLOOR); a test fails if they differ. Raise it when an upstream security release lands; never lower it.",
+  "node": {
+    "minimum": "24.22.1",
+    "supportedLines": [24],
+    "checkedAgainst": "https://nodejs.org/en/blog/release/v24.22.1/ and https://nodejs.org/en/about/eol on 2026-10-22",
+    "why": "Node 20 is end of life (2026-03-24). 24.22.1 and 22.23.4 update the built-in root certificates and reject chains with blocked public keys."
+  }
+}

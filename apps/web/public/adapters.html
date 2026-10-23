@@ -48,6 +48,36 @@
         <li>When we refuse one for a reason it can fix, the server's own AI may fix it and send it again.</li>
       </ul>
 
+      <h2 id="directory">Search the directory</h2>
+      <p>
+        Every adaptation that is currently published, by project: where it lives, its license, the digest of each adapter, the upstream commit it was made against and an honest status (<em>published</em>, or <em>disputed</em> when more installs failed than were confirmed). It is the file <a href="https://raw.githubusercontent.com/ibisllc/flagship-adapters/main/directory.json"><code>directory.json</code></a> in the public repository. There are no install counts and nothing about who sent or installed one, and a status is a record, not a safety claim. Maintainers can make an adaptation unnecessary by committing their own <code>flagship.app.json</code>.
+      </p>
+      <p><input id="dir-q" type="search" placeholder="Project, host or license" aria-label="Search the adapter directory" autocomplete="off"></p>
+      <ul class="bullets" id="dir-list"><li>Loading the directory…</li></ul>
+      <script>
+        (function () {
+          var list = document.getElementById("dir-list"), q = document.getElementById("dir-q"), all = null;
+          function show() {
+            var term = (q.value || "").toLowerCase().trim();
+            var rows = (all || []).filter(function (p) { return !term || (p.repo + " " + p.host + " " + p.license).toLowerCase().indexOf(term) >= 0; }).slice(0, 200);
+            list.textContent = "";
+            if (!rows.length) { var e = document.createElement("li"); e.textContent = all ? "Nothing matches." : "The directory could not be loaded."; list.appendChild(e); return; }
+            rows.forEach(function (p) {
+              var li = document.createElement("li"), a = document.createElement("a");
+              a.href = p.repo; a.rel = "noopener"; a.textContent = p.repo.replace(/^https:\/\//, "");
+              li.appendChild(a);
+              li.appendChild(document.createTextNode(" — " + p.license + ", " + p.adapters.length + (p.adapters.length === 1 ? " adapter" : " adapters") + (p.adapters.some(function (x) { return x.status === "disputed"; }) ? " (some disputed)" : "")));
+              list.appendChild(li);
+            });
+          }
+          fetch("https://raw.githubusercontent.com/ibisllc/flagship-adapters/main/directory.json", { credentials: "omit", referrerPolicy: "no-referrer" })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) { all = j && Array.isArray(j.projects) ? j.projects : null; show(); })
+            .catch(function () { show(); });
+          q.addEventListener("input", show);
+        })();
+      </script>
+
       <h2 id="problems">When an adaptation breaks</h2>
       <p>
         If an adaptation fails to build or start during an install, the server tells us which adaptation it was and whether it failed to build or to start. Nothing else is sent. A server's owner can also report a problem from the service page, with a short note. We keep notes privately, never publish them, use them only to review the adaptation, and delete them within 90 days, or 180 days after we retire the adaptation so we can learn what went wrong. Please don't put anything in a note that identifies you.

@@ -37,6 +37,9 @@ describe("rateLimit — endpoint detection", () => {
     expect(endpointFor("POST", "/api/server/register")).toBe("server-register");
     expect(endpointFor("GET", "/api/recovery/by-username/abc123")).toBe("recovery-by-username");
     expect(endpointFor("DELETE", "/api/recovery/by-username/abc123")).toBe("recovery-by-username");
+    // SEC-REPAIR-001: the passkey challenge has its own budget, keyed by the same account.
+    expect(endpointFor("POST", "/api/recovery/by-username/abc123/challenge")).toBe("recovery-challenge");
+    expect(extractUsernameHash("/api/recovery/by-username/Alice/challenge")).toBe("alice");
   });
 
   it("maps the #28 seal-to-box ACME delivery endpoints by method", () => {
@@ -244,7 +247,7 @@ describe("rateLimit — checkRateLimit", () => {
     const env: RateLimitEnv = { RATE_LIMITS: ns };
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      for (const endpoint of ["recovery-by-username", "re-pair-initiate", "totp-verify"] as const) {
+      for (const endpoint of ["recovery-by-username", "recovery-challenge", "re-pair-initiate", "totp-verify"] as const) {
         const r = await checkRateLimit(env, { endpoint, ip: "1.2.3.4", usernameHash: "u" });
         expect(r.limited, endpoint).toBe(true);
       }
@@ -581,5 +584,14 @@ describe("re-pair initiate budget", () => {
     const perUser = axes.find((a) => a.axis === "usernameHash");
     expect(perUser).toBeDefined();
     expect(perUser!.limit).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("the box's set-only lock is budgeted (N10)", () => {
+  it("maps POST /api/boot/suspension/box to its own endpoint and nothing else on that path", async () => {
+    const { endpointFor, LIMITS } = await import("../src/rateLimit.js");
+    expect(endpointFor("POST", "/api/boot/suspension/box")).toBe("boot-suspension-box");
+    expect(endpointFor("PUT", "/api/boot/suspension")).toBeNull(); // the owner's lock and resume are not throttled
+    expect(LIMITS["boot-suspension-box"]).toEqual([{ axis: "ip", limit: 30, windowSec: 3600 }]);
   });
 });

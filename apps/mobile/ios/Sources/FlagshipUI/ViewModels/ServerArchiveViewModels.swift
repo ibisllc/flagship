@@ -698,7 +698,9 @@ public final class ImportBackupViewModel {
 
     public static func describe(_ a: ServerRestoreApp) -> String {
         switch a.state {
-        case "done": return "\(a.name): restored"
+        case "done":
+            let needs = a.summary?.needs ?? []
+            return needs.isEmpty ? "\(a.name): restored" : "\(a.name): restored. \(needs.joined(separator: " "))"
         case "skipped": return "\(a.name): skipped (\(a.reason ?? "already here"))"
         case "failed": return "\(a.name): couldn't be restored (\(a.reason ?? "unknown reason"))"
         case "restoring": return "\(a.name): restoring…"

@@ -46,6 +46,11 @@ export interface SessionInfo {
   stableId: string;
   /** The member's rank in this app: member, manager or master (there is no owner rank). */
   role: string;
+  /**
+   * True for someone outside the owner's own devices (an invited guest, a co-manager's invitee).
+   * Their access also needs a current freshness checkpoint (N07); the owner's never does.
+   */
+  external?: boolean;
 }
 
 /**
@@ -66,6 +71,12 @@ export interface AppProxyDeps {
   injector: BoxSigner;
   /** Resolves a request to a paired-session member, or null for anonymous. */
   resolveSession?: SessionResolver;
+  /**
+   * N07 — may external (guest) access to this app be honoured right now? Absent ⇒ not checked.
+   * When it answers false an external session is dropped, so the visitor is anonymous and a
+   * members-only app refuses them; the owner's own sessions are never asked.
+   */
+  externalFresh?: (app: InstalledService) => boolean;
   /**
    * The app's access mode as the owner set it (`ServiceAccessStore`). Absent,
    * or null because it can't be determined, ⇒ members-only (fail closed).
@@ -169,6 +180,7 @@ export async function prepareAppRequest(
 
   let session = !apiKey && deps.resolveSession ? deps.resolveSession(req, app) : null;
   if (session && isCrossOriginUnsafe(req, opts.upgrade === true)) session = null;
+  if (session?.external && deps.externalFresh && !deps.externalFresh(app)) session = null;
 
   const mode = deps.accessMode?.(app.serviceId) ?? null;
   if (decideAccess(app, req, session, apiKey, mode) === "deny") {

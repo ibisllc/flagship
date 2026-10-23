@@ -1,5 +1,6 @@
 import { InMemoryServerShareStorage } from "./serverShares.js";
 import { InMemoryServerOrderStorage } from "./serverOrders.js";
+import { applyBootSuspension, type BootSuspensionOrder, type BootSuspensionState, type SuspensionOutcome } from "@flagship/protocol";
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
@@ -19,6 +20,8 @@ import type {
   ServiceInviteRevokeProof,
   RevokedInviteRecord,
   WatchDelegateRecord,
+  WatchBootKeyRecord,
+  WatchBootKeyStorage,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
   AcmeAccountKeyGrantStorage,
@@ -47,6 +50,7 @@ import type {
   AdminRootRotationStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
+  BootSuspensionStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   WebauthnRecoveryRecord,
@@ -59,6 +63,7 @@ import type {
   InstallEventStorage,
   ProvisionStatusRecord,
   ProvisionStatusHistoryEntry,
+  ServerSeenEntry,
   ProvisionStatusStorage,
   LlmPromoLifetimeRecord,
   LlmPromoStorage,
@@ -335,7 +340,22 @@ export class InMemoryPendingRePairStorage implements PendingRePairStorage {
   async object(username: string, at: number) {
     const r = this.rows.get(username.toLowerCase());
     if (!r) return false;
+    if (r.objectedAt !== undefined || r.completingAt !== undefined) return false;
     r.objectedAt = at;
+    return true;
+  }
+  async veto(username: string, at: number, byHex: string, signatureHex: string) {
+    const r = this.rows.get(username.toLowerCase());
+    if (!r || r.objectedAt !== undefined || r.completingAt !== undefined) return false;
+    r.objectedAt = at;
+    r.vetoedByHex = byHex;
+    r.vetoSignatureHex = signatureHex;
+    return true;
+  }
+  async claimCompletion(username: string, at: number) {
+    const r = this.rows.get(username.toLowerCase());
+    if (!r || r.objectedAt !== undefined || r.completingAt !== undefined) return false;
+    r.completingAt = at;
     return true;
   }
   async delete(username: string) {
@@ -524,12 +544,20 @@ export class InMemoryProvisionStatusStorage implements ProvisionStatusStorage {
       detail: entry.detail,
       updatedAt: entry.ts,
       history: [...(existing?.history ?? []), historyEntry],
+      ...(existing?.serverSeen ? { serverSeen: existing.serverSeen } : {}),
     };
     this.bySerial.set(serial, next);
   }
   async getProvisionStatus(serial: string): Promise<ProvisionStatusRecord | null> {
     const r = this.bySerial.get(serial);
-    return r ? { ...r, history: r.history.map((h) => ({ ...h })) } : null;
+    return r ? { ...r, history: r.history.map((h) => ({ ...h })), ...(r.serverSeen ? { serverSeen: r.serverSeen.map((e) => ({ ...e })) } : {}) } : null;
+  }
+  async addServerSeen(serial: string, entry: ServerSeenEntry, max: number): Promise<boolean> {
+    const r = this.bySerial.get(serial);
+    if (!r) return false;
+    const kept = (r.serverSeen ?? []).filter((e) => !(e.stkPubHex === entry.stkPubHex && e.macHex === entry.macHex));
+    r.serverSeen = [...kept, { ...entry }].slice(-max);
+    return true;
   }
 }
 
@@ -1592,9 +1620,74 @@ export class InMemoryAdminRootRotationStorage implements AdminRootRotationStorag
   }
 }
 
+export class InMemoryBootSuspensionStorage implements BootSuspensionStorage {
+  private rows = new Map<string, BootSuspensionState>();
+
+  async get(serverDomain: string): Promise<BootSuspensionState | undefined> {
+    const r = this.rows.get(serverDomain);
+    return r ? { ...r } : undefined;
+  }
+
+  async apply(order: BootSuspensionOrder, signatureHex: string, now: number): Promise<SuspensionOutcome> {
+    const out = applyBootSuspension(this.rows.get(order.serverDomain) ?? null, order, signatureHex, now);
+    if (out.ok && out.changed) this.rows.set(order.serverDomain, { ...out.state });
+    return out.ok ? { ...out, state: { ...out.state } } : out;
+  }
+}
+
+export class InMemoryWatchBootKeyStorage implements WatchBootKeyStorage {
+  private rows = new Map<string, WatchBootKeyRecord>();
+
+  constructor(private readonly suspensions?: BootSuspensionStorage) {}
+  private k(server: string, delegate: string): string {
+    return `${server.toLowerCase()} ${delegate.toLowerCase()}`;
+  }
+
+  async put(rec: WatchBootKeyRecord): Promise<void> {
+    this.rows.set(this.k(rec.serverDomain, rec.delegatePubHex), { ...rec, serverDomain: rec.serverDomain.toLowerCase(), delegatePubHex: rec.delegatePubHex.toLowerCase() });
+  }
+
+  async release(serverDomain: string, delegatePubHex: string, now: number): Promise<WatchBootKeyRecord | undefined> {
+    if (this.suspensions) {
+      try {
+        const s = await this.suspensions.get(serverDomain);
+        if (s?.suspended) return undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    const key = this.k(serverDomain, delegatePubHex);
+    const r = this.rows.get(key);
+    if (!r) return undefined;
+    if (r.expiresAt <= now) {
+      this.rows.delete(key);
+      return undefined;
+    }
+    return { ...r };
+  }
+
+  async list(serverDomain: string, now: number): Promise<WatchBootKeyRecord[]> {
+    return [...this.rows.values()].filter((r) => r.serverDomain === serverDomain.toLowerCase() && r.expiresAt > now).map((r) => ({ ...r }));
+  }
+
+  async revoke(serverDomain: string, delegatePubHex?: string): Promise<number> {
+    let n = 0;
+    for (const [k, r] of this.rows) {
+      if (r.serverDomain === serverDomain.toLowerCase() && (!delegatePubHex || r.delegatePubHex === delegatePubHex.toLowerCase())) {
+        this.rows.delete(k);
+        n++;
+      }
+    }
+    return n;
+  }
+}
+
 export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   // Composite key: `${serverDomain} ${leaseId}`.
   private rows = new Map<string, BoxSealedLeaseRecord>();
+
+  /** Wired to the same suspension record `release` must honour. Unset only in isolated unit tests. */
+  constructor(private readonly suspensions?: BootSuspensionStorage) {}
   private k(server: string, lease: string): string {
     return `${server} ${lease}`;
   }
@@ -1604,6 +1697,15 @@ export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   }
 
   async release(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord | undefined> {
+    // A suspended server releases nothing; a record we cannot read counts as suspended.
+    if (this.suspensions) {
+      try {
+        const s = await this.suspensions.get(serverDomain);
+        if (s?.suspended) return undefined;
+      } catch {
+        return undefined;
+      }
+    }
     let best: BoxSealedLeaseRecord | undefined;
     const expired: string[] = [];
     for (const [k, r] of this.rows) {
@@ -1633,6 +1735,17 @@ export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
     return this.rows.delete(this.k(serverDomain, leaseId));
   }
 
+  async revokeAll(serverDomain: string): Promise<number> {
+    let n = 0;
+    for (const [k, r] of this.rows) {
+      if (r.serverDomain === serverDomain) {
+        this.rows.delete(k);
+        n++;
+      }
+    }
+    return n;
+  }
+
   async list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]> {
     const out: BoxSealedLeaseRecord[] = [];
     for (const r of this.rows.values()) {
@@ -1657,6 +1770,25 @@ export class InMemoryWebauthnRecoveryStorage implements WebauthnRecoveryStorage 
   }
   async delete(username: string): Promise<boolean> {
     return this.rows.delete(this.k(username));
+  }
+  async replaceIfDigest(rec: WebauthnRecoveryRecord, expectedPriorDigest: string): Promise<boolean> {
+    const cur = this.rows.get(this.k(rec.username));
+    const held = cur === undefined ? "genesis" : cur.signed?.digestHex ?? "legacy";
+    if (held !== expectedPriorDigest) return false;
+    this.rows.set(this.k(rec.username), { ...rec });
+    return true;
+  }
+  async deleteIfDigest(username: string, expectedDigest: string): Promise<boolean> {
+    const cur = this.rows.get(this.k(username));
+    if (!cur || (cur.signed?.digestHex ?? "legacy") !== expectedDigest) return false;
+    return this.rows.delete(this.k(username));
+  }
+  private usedChallenges = new Map<string, number>();
+  async consumeChallenge(nonceHex: string, expiresAt: number, now: number): Promise<boolean> {
+    for (const [n, at] of this.usedChallenges) if (at < now) this.usedChallenges.delete(n);
+    if (this.usedChallenges.has(nonceHex)) return false;
+    this.usedChallenges.set(nonceHex, expiresAt);
+    return true;
   }
 }
 
@@ -2175,7 +2307,9 @@ export class InMemoryStorage implements Storage {
   serverEvictions = new InMemoryServerEvictionStorage();
   serverMigrations = new InMemoryServerMigrationStorage();
   adminRootRotations = new InMemoryAdminRootRotationStorage();
-  boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
+  bootSuspensions = new InMemoryBootSuspensionStorage();
+  boxSealedLeases = new InMemoryBoxSealedLeaseStorage(this.bootSuspensions);
+  watchBootKeys = new InMemoryWatchBootKeyStorage(this.bootSuspensions);
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
   pushTokens = new InMemoryPushTokenStorage();

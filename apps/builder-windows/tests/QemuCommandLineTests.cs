@@ -115,6 +115,20 @@ public class QemuCommandLineTests
         Assert.DoesNotContain("qemu-xhci", s);
     }
 
+    // ---- First contact: the server-code port ----
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EveryVmGetsAnOutputOnlyServerCodePort(bool console)
+    {
+        var s = Joined(QemuCommandLine.Build(Config(console), Layout, Code, false, 4444, 0));
+        Assert.Contains("-device virtio-serial-pci,id=fsvs", s);
+        Assert.Contains("-chardev file,id=fscode,path=", s);
+        Assert.Contains("server-code.log", s);
+        Assert.Contains($"-device virtserialport,bus=fsvs.0,chardev=fscode,name={ServerCodeSeen.PortName}", s);
+    }
+
     // ---- The debug-console hard guardrail ----
 
     [Fact]

@@ -14,6 +14,7 @@ import { readFile } from "node:fs/promises";
 import { birthDateFromAuthCode, type SignedServerOrder } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { resolveCgk } from "./cgk.js";
+import { gossipCryptoFromKey, type GossipCrypto } from "./gossipCrypto.js";
 import { buildGossipIngestHandler } from "./gossipHttp.js";
 import {
   ANNOUNCE_INTERVAL_MS,
@@ -110,6 +111,8 @@ export interface WireGossipDeps {
    * Optional; omitted on certless paths.
    */
   certPrewarm?: CertPrewarm;
+  /** The gossip key's operations from the key custodian (keyd holds the key; the daemon never sees it). */
+  gossipCrypto?: GossipCrypto;
   /** Test seams. */
   cgk?: Uint8Array;
   intervalMs?: number;
@@ -151,8 +154,9 @@ export async function readAuthCodeBirthDate(): Promise<number | null> {
 
 export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult> {
   const log = deps.onLog ?? ((m: string) => console.log(m));
-  const cgk = deps.cgk ?? (await resolveCgk());
-  if (!cgk) {
+  const fileCgk = deps.gossipCrypto || deps.cgk ? null : await resolveCgk();
+  const crypto = deps.gossipCrypto ?? (deps.cgk ? gossipCryptoFromKey(deps.cgk) : fileCgk ? gossipCryptoFromKey(fileCgk) : null);
+  if (!crypto) {
     log(
       "[gossip] no CGK provisioned — per-service leadership gossip DISABLED. " +
         "(The phone embeds cgkHex into the recipe in a later provisioning step.)",
@@ -171,7 +175,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
   const view = new SiblingView(deps.livenessWindowMs ?? LIVENESS_WINDOW_MS);
 
   const handler = buildGossipIngestHandler({
-    cgk,
+    crypto,
     view,
     user: deps.user,
     selfId: deps.serverFqdn,
@@ -203,7 +207,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
   });
 
   const loop = buildGossipLoop({
-    cgk,
+    crypto,
     view,
     claimer,
     fqdnForService,
@@ -293,3 +297,4 @@ export {
 } from "./routeNudge.js";
 export { resolveCgk } from "./cgk.js";
 export { buildLeadsHttpHandler, type LeadsHttpDeps } from "./leadsHttp.js";
+export { gossipCryptoFromOps, type GossipCrypto } from "./gossipCrypto.js";

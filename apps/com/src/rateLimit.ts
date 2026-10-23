@@ -60,6 +60,9 @@ export type RateLimitEndpoint =
   | "auth-code-issue"
   | "server-register"
   | "recovery-by-username"
+  // SEC-REPAIR-001: the challenge a recovery passkey signs. Its own budget, so asking for one never
+  // spends the 3-per-15-minutes passphrase attempts; tight enough that it is no free oracle.
+  | "recovery-challenge"
   // Recovery re-pair INITIATE — the account-key-rotation schedule.
   // Keyed per-target-username (the path carries it) plus per-IP. The
   // handler requires a recovery credential, so a flood can only ever
@@ -73,6 +76,10 @@ export type RateLimitEndpoint =
   // the control-plane's own 5-per-15-min counter lives in one isolate's
   // memory, so this is the cap that holds across Cloudflare's machines.
   | "totp-verify"
+  // A box's set-only lock (dead-man, manual): signed with its STK, so a stolen STK could
+  // otherwise hammer the boot service. The counter inside an epoch moves one step a write and the
+  // owner's resume is a separate epoch, so this only bounds the noise (SECURITY-HARDENING-PLAN 18.10).
+  | "boot-suspension-box"
   | "device-grants-revoke"
   | "device-grants-mint"
   // Watch delegate keys (Phase 2c) — same shape as device grants:
@@ -108,6 +115,9 @@ export type RateLimitEndpoint =
   // minutes; 30/min is generous while fencing a leaked-serial flood (the
   // handler also gates on the serial mapping to a real auth-code).
   | "provision-status"
+  // Studio's report of the key a hosted VM showed (POST /api/order/<serial>/server-seen, first
+  // contact): once per server install, so a few an hour per address is plenty.
+  | "server-seen"
   // #43 — IRK-signed list of the account's in-flight install orders (the
   // authority the phone reconciles its local pending-server cache against).
   // The body identifies the account by `request.username`, not the IRK pub,
@@ -164,6 +174,7 @@ export type RateLimitEndpoint =
  */
 const FAIL_CLOSED: ReadonlySet<RateLimitEndpoint> = new Set<RateLimitEndpoint>([
   "recovery-by-username",
+  "recovery-challenge",
   "re-pair-initiate",
   "totp-verify",
 ]);
@@ -204,6 +215,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 3600 },
     { axis: "usernameHash", limit: 3, windowSec: 900 },
   ],
+  "recovery-challenge": [
+    { axis: "ip", limit: 20, windowSec: 3600 },
+    { axis: "usernameHash", limit: 6, windowSec: 900 },
+  ],
   "re-pair-initiate": [
     { axis: "ip", limit: 10, windowSec: 3600 },
     { axis: "usernameHash", limit: 3, windowSec: 900 },
@@ -216,6 +231,7 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 20, windowSec: 900 },
     { axis: "usernameHash", limit: 5, windowSec: 900 },
   ],
+  "boot-suspension-box": [{ axis: "ip", limit: 30, windowSec: 3600 }],
   "device-grants-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -260,6 +276,7 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   // body); 30/min covers a real install's ~8 phases with headroom while
   // fencing a tight-loop / leaked-serial flood.
   "provision-status": [{ axis: "ip", limit: 30, windowSec: 60 }],
+  "server-seen": [{ axis: "ip", limit: 20, windowSec: 3600 }],
   // #43 — outstanding-orders reconcile read. Per-IP only (the body carries
   // `request.username`, not the IRK pub). 60/min is generous for a phone
   // refreshing Home; the cap fences a tight-loop client.
@@ -553,6 +570,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/re-pair$/.test(pathname)) {
     return "re-pair-initiate";
   }
+  if (m === "POST" && pathname === "/api/boot/suspension/box") return "boot-suspension-box";
   if (m === "POST" && /^\/api\/users\/[^/]+\/totp\/verify$/.test(pathname)) {
     return "totp-verify";
   }
@@ -561,6 +579,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
     /^\/api\/recovery\/by-username\/[^/]+$/.test(pathname)
   ) {
     return "recovery-by-username";
+  }
+  if (m === "POST" && /^\/api\/recovery\/by-username\/[^/]+\/challenge$/.test(pathname)) {
+    return "recovery-challenge";
   }
   // Task #74 — the Argon2id-gated wrappedUmk fetch sits under the same
   // budget as the metadata GET (3-per-15min per usernameHash). Combining
@@ -648,6 +669,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   // limited here — only the mutating POST the box hits.)
   if (m === "POST" && /^\/api\/order\/[^/]+\/status$/.test(pathname)) {
     return "provision-status";
+  }
+  if (m === "POST" && /^\/api\/order\/[^/]+\/server-seen$/.test(pathname)) {
+    return "server-seen";
   }
   // #43 — IRK-signed outstanding-orders reconcile read (POST-with-signed-body).
   if (
@@ -772,6 +796,7 @@ export function extractUsernameHash(pathname: string): string | undefined {
   const m =
     pathname.match(/^\/api\/recovery\/by-username\/([^/]+)$/) ??
     pathname.match(/^\/api\/recovery\/by-username\/([^/]+)\/fetch$/) ??
+    pathname.match(/^\/api\/recovery\/by-username\/([^/]+)\/challenge$/) ??
     pathname.match(/^\/api\/account\/resolve\/([^/]+)$/) ??
     // Re-pair initiate is keyed by its TARGET account, so one handle
     // can't be hammered from a rotating source address.

@@ -64,7 +64,7 @@ function buildSignedRecipe(): { json: string; ownerIrk: { privateKey: Uint8Array
     registrationUrl: "https://flagship.services/api/server/register",
     authCode,
     authCodeUserSignature: new Uint8Array(64),
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: rck.publicKey,
   };
   const sig = signInstallBlob(blob, irk);
@@ -323,6 +323,33 @@ describe("runPair transport glue", () => {
     expect(done?.serverDomain).toBe("home.harry.flagship.services");
     expect(done?.debugGranted).toBe(false);
     expect(done?.recipePath).toBe(out);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("hands Studio the confirm key sent beside the recipe, and never writes it into the recipe", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pair-"));
+    const out = join(dir, "recipe.json");
+    const builderKp = newBuilderKeypair();
+    const phoneKp = newBuilderKeypair();
+    const phoneAead = deriveSessionMaterial(phoneKp.secretKey, builderKp.publicKey).aeadKey;
+    const { json: recipeJson } = buildSignedRecipe();
+    const harness = fakeTransport();
+    const events: Array<Record<string, unknown>> = [];
+    const p = runPair({ out, quiet: true, keypair: builderKp, transport: () => harness.transport, emitEvents: (ev) => events.push(ev as unknown as Record<string, unknown>) });
+    await tick();
+    harness.open();
+    harness.inject({ kind: "peer-joined" });
+    await tick();
+    harness.inject({ kind: "peer", frame: { kind: "phone-hello", phonePk: base64UrlEncode(phoneKp.publicKey) } });
+    harness.inject({ kind: "peer", frame: { kind: "confirm-pairing" } });
+    await tick();
+    const sealed = sealDelivered(new TextEncoder().encode(recipeJson), phoneAead);
+    const key = new Uint8Array(32).fill(0x88);
+    const sealedKey = sealDelivered(key, phoneAead);
+    harness.inject({ kind: "peer", frame: { kind: "deliver", ciphertext: sealed.ciphertextB64u, nonce: sealed.nonceB64u, confirmKeyCiphertext: sealedKey.ciphertextB64u, confirmKeyNonce: sealedKey.nonceB64u } });
+    await p;
+    expect(events.find((e) => e.event === "done")?.studioConfirmKeyHex).toBe("88".repeat(32));
+    expect(await readFile(out, "utf8")).not.toContain("88".repeat(32));
     await rm(dir, { recursive: true, force: true });
   });
 
