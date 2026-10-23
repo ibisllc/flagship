@@ -1,0 +1,21 @@
+<!doctype html>
+<!-- Store template: a phone screen (or the watch, slide 6) under its caption, standing on the shelf.
+     docs/store-assets/store-assets-brief.md; drawn by scripts/store-assets/render.mjs. -->
+<html lang="en"><head><meta charset="utf-8"><title>Flagship store art: phone</title>
+<link rel="stylesheet" href="store.css"></head>
+<body class="light">
+<script src="slide.js"></script>
+<script>
+window.layout = (spec, k) => {
+  k.head(spec, document.body);
+  const st = k.stage(document.body);
+  const box = spec.watch ? k.watch(spec, st) : k.device(spec, st);
+  if (spec.first) {
+    // slide 1 only: the app icon's circle, large and cropped by both edges, behind the device
+    const d = spec.w * 1.16;
+    k.el("div", "sun", document.body, { width: k.px(d), height: k.px(d), left: k.px(box.x + box.w / 2 - d / 2), top: k.px(box.y + box.h * 0.4 - d / 2) });
+  }
+  k.shelf(spec, document.body);
+};
+</script>
+</body></html>

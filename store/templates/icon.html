@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- Store template: the Google Play hi-res icon, 512 x 512, scaled from the iOS app icon (not redrawn). -->
+<html lang="en"><head><meta charset="utf-8"><title>Flagship store art: icon</title>
+<link rel="stylesheet" href="store.css"></head>
+<body class="raw">
+<script src="slide.js"></script>
+<script>
+window.layout = (spec, k) => {
+  document.body.className = "raw";
+  const i = k.el("img", "", document.body, { width: "100%", height: "100%", display: "block" });
+  i.src = spec.iconSrc;
+};
+</script>
+</body></html>
