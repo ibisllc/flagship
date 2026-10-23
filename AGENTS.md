@@ -215,7 +215,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-22**.
+> Last updated **2026-10-23**.
 
 ### Launch
 
@@ -326,28 +326,47 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
-- **Multilingual (2026-10-22, branch `feat/multilingual`, pushed; `docs/i18n.md`).**
-  Six languages (es, fr, de, pt-BR, ja, zh-Hans) are `"status": "ga"` in `i18n/locales.json` with native outputs committed for
-  the website, the webapp PWA (shell **v158**; catalogs fetched by content-hashed URL), the box pages (served after an endorsed
-  release), Android + Wear, iOS + Watch + widgets + Info.plist, the three Studios and the APNs sentences. `npm run i18n` is the
-  gate (placeholders, markup, glossary, plural-argument placement, stale English on name-keyed surfaces via
-  `translated-from.json`, freshness of every generated file). Translations are machine drafts; a 2026-10-22 review pass read every
-  recovery, pairing, unlock, backup, wipe and admin string in all six languages and fixed meaning errors, two placeholder swaps
-  and the glossary (`i18n/REVIEW.md` still wants a native reviewer before store screenshots). Found and fixed on the branch:
-  the service worker never registered (classic `<script>` importing a module), Wear OS shipped no translations, webapp
-  dialogs/subtitles and some iOS errors were English. Exercised: the webapp in Chromium in fr/ja/de. Not yet: box pages on a
-  real box, device builds (iOS fails `ContentView.swift:149` with the newest Xcode, also on the base commit; Android and the
-  WPF app were not compiled here). Store assets: brief v2 in `docs/store-assets/`, awaiting the owner. Handoff notes for
-  packaging: `docs/store-assets/HANDOFF-DELETE-ME.md`.
-- **Custom voi.ci names (2026-10-22, branch `feat/named-links`, plan `docs/named-links.md`).** A service keeps
-  its random code for life and an admin device may add ONE custom name (4-40 of `a-z 0-9 -`, hyphen-less key)
-  signed `flagship/voici-name/v1`. Limits: 3 changes per service per 30 days, names held 5 / 25 / 100 by plan,
-  10 changes a day per account; released after 60 days with no running server (warnings at 30 and 7), then a
-  30-day wait (410, nobody can take it). Dibs: `.com`-registered labels need the domain proof (same flow as account
-  names, `kind: link`). Built: protocol, D1 0107, `.com` routes + cron, webapp field (shell v159, six languages).
-  Box side: the canonical-address election also reads .com's server list (endorsed release needed). Gym group `named-links` written, not run. Open: iOS and Android ports (in progress), native review of the six drafts, proof that the canonical address always reaches
-  a running instance, live gym group, then set `VOICI_CANONICAL=1` (off until proven). `.com` has no per-service
-  delete signal, so a deleted app's code retires only with its account.
+- **`feat/UX`, the UX release on top of 0.3 (2026-10-23; branch `feat/UX` = `release/0.3` + three folded
+  branches; old tips kept as `backup/{multilingual,named-links,lock-screen-sign-out}-pre-ux-2026-10-23`).**
+  Folded: **multilingual** (es, fr, de, pt-BR, ja, zh-Hans on every surface: site, webapp, box pages, Android +
+  Wear, iOS + Watch + widgets, the Studios, APNs; `docs/i18n.md`, gate `npm run i18n`; machine drafts, see
+  `i18n/REVIEW.md` and each surface's `review-notes.md`), **named links** (one custom voi.ci name per service,
+  `.com` name dibs; `docs/named-links.md`; D1 **0110**, renumbered from 0107 because 0.3 took 0107-0109), the
+  **lock-screen sign-out** (Face ID / biometric / device PIN before any key-erasing sign-out above the app lock),
+  and an **owner UI round** (Home "Add / Restore a server"; Activity's no-server card; shorter Account security
+  and Privacy; compact "AI API keys" rows; Cloud recovery help behind (?); "Scan a code or enter a link"
+  replaces Process URL (a pasted link takes the same parser and checks as a scan); red Sign out / Remove this
+  device / Delete account, plain Lock). Also on the branch: the website no longer scroll-snaps on phones; the
+  hall of fame has its own page (`/security/hall-of-fame`); `npm run store-assets` renders every App Store /
+  Play image in seven languages (`docs/store-assets/README.md`; webapp stand-ins are marked not-for-upload until
+  the native captures in `docs/store-assets/capture-plan.md` exist). Webapp shell **v166**. Dibs window
+  2026-10-25 to 2027-04-25 (`apps/com/wrangler.toml`). Verified here: `tsc -b`, the core vitest suites, the web
+  tests, `npm run i18n`, Android compile + unit tests (debug, release, Wear, gym tests compile), the iOS app
+  builds with Xcode 27.1 RC (the old `ContentView.swift:149` failure does not reproduce). The voi.ci upkeep cron
+  moved to its own hourly group (the small cron groups now run hourly, not every 40 minutes).
+  **Owner / release checklist (the one list for this release):**
+  1. D1 migrations before the `.com` deploy: 0.3's 0107-0109, then **0110** (voici names).
+  2. Deploy `.com` (shell v166, dibs window, voi.ci routes) and the webapp; an **endorsed box release** (box
+     pages in the visitor's language, the canonical-address election, 0.3's box changes); iOS and Android store
+     builds.
+  3. Run the live gym on this branch (named-links and languages groups included); only after named-links shows
+     the canonical address reaches a running instance, set `VOICI_CANONICAL = "1"`. Decide whether the canonical
+     address must work on an account without a CGK (today no box claims it then).
+  4. After the deploy, one live pass on voi.ci: a custom name redirects (any capitalisation), a random code still
+     redirects, a released name and a retired code answer 410.
+  5. Native review of the translations (recovery, pairing, unlock and backup first) before store screenshots.
+  6. Store art: write the native capture tests from the plan, then `npm run store-assets:release-check`.
+  7. Decide: `.com` has no per-app delete signal, so a deleted app's custom name stays live until it lapses
+     (60 days with no server running the app); a box-side delete signal would fix it. The 30/7-day release
+     warnings are Activity events only (a push needs a localized sentence). Confirm the name limits in
+     `packages/control-plane/src/voiciNames.ts` (5/25/100 names, 3 changes per 30 days, 10 a day, 30-day wait,
+     60 days idle).
+  8. English wording worth a decision (each makes six translations stale): "restore" means both un-revoke and
+     restore-a-backup; "box" and "server" both name the user's machine; some thrown messages reach the screen
+     through `toast(e.message)` in English; old terms ("Recovery merge-back", "Pair with the builder", "pod").
+  9. Known gaps: the account-leader election from `.com`'s server list only sees peers that share an app with
+     the box (`accessPeers.ts` `peerRunners`); iOS's gone-account "Remove" without a held rescue key erases the
+     key without asking for biometrics (by design so far, review it).
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
   `device-results/windows-2026-10-17`) found these; the fixes are merged:
@@ -995,22 +1014,6 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 ### Built, waiting on deploys or rebuilds
 
-- **Key-erasing sign-outs above the app lock ask the owner first (2026-10-21, branch
-  `fix/lock-screen-sign-out-auth`, not merged; stacked on `feat/multilingual` on purpose (owner, 2026-10-22) so both deploy together, strings localized in all six languages, review notes in `i18n/*/review-notes.md`).** On iOS an app delete leaves the account key in
-  the Keychain, so a lock-screen "Sign out" was the one way a stranger holding the phone could
-  destroy it. Now the lock screen's Sign out (iOS, Android), the security-notice "Update required"
-  Sign out when the account is not open (iOS, Android) and iOS's "Remove it from this device" on a
-  gone account (the warned case) ask Face ID / biometric / device PIN first, then show the
-  existing question; a phone with no screen lock goes straight to the question. Android shows its
-  gone-account screen only after unlock, so it needed nothing. Audited and fine: Settings and
-  Home sign-outs (behind the lock), Siri intents, Wear. Gym seam
-  `-smoke-refuse-biometric` / `refuseBiometrics` (Debug only) dismisses every prompt; new cases
-  `GymSweepHomeTests.test_lockScreenSignOutDoesNothingWithoutTheOwner`,
-  `GymNoticeTests.test_updateLockSignOutAsksTheOwnerFirst…`,
-  `GymAccountGoneTests.test_removingTheKeyAsksTheOwnerFirst…`, `GymAppLockTest` (2) and
-  `GymNoticesTest.theUpdateLockSignOutDoesNothing…`. Not compiled or run: Android's emulator must
-  report no device credential as BiometricPrompt error 14/11/12 for the no-screen-lock case.
-  Needs iOS/Android store builds.
 - **iOS device-pairing transport (2026-10-19, branch `fix/ios-device-pairing`, not
   merged):** Add a device and Join an account on the iPhone/iPad no longer refuse
   in Release builds. `LivePairingRelayClient` speaks the web's two-leg `/qr-pipe`
@@ -1471,14 +1474,10 @@ rebase renumbers them again):
 when `main` passes it, take the next unused number and move the tests' pins.
 Not compiled since the rebase: the iOS and Android code on any branch.
 
-- **Branch order since 2026-10-22 (owner):** `main` → `feat/multilingual` → `feat/named-links`
-  (custom voi.ci names + the `.com` domain proof, plan in `docs/named-links.md`) → `feat/marketplace` →
-  `feat/custom-names` / `feat/custom-domains` / `feat/outbound-proxy`. The dibs domain check moved from
-  custom-names into named-links; custom-names keeps the paid account-name change. `feat/marketplace`
-  and `feat/outbound-proxy` were rebuilt as ONE commit each (their old histories are on
-  `backup/<slug>-pre-named-links-2026-10-21`); webapp shell versions: named-links v159,
-  marketplace v160, custom-domains v161, custom-names v162, outbound-proxy v163. Not compiled: the
-  iOS and Android code on any of these branches (no Xcode or SDK in the cloud session).
+- **Branch order since 2026-10-23 (owner):** `release/0.3` → `feat/UX` (multilingual + named links +
+  lock-screen sign-out + the UI round, folded) → `feat/marketplace` → `feat/custom-names` /
+  `feat/custom-domains` / `feat/outbound-proxy`. When `release/0.3` moves, rebase `feat/UX` onto it, then
+  the children. A child that changes the webapp takes a shell number above `feat/UX`'s v166.
 - **`feat/marketplace`** (+ Pro payments, vouchers). Also a Pro option:
   **a separate access list on each server** per app (2026-10-15,
   `docs/service-access-gating.md` "Separate lists per server (Pro)": an
