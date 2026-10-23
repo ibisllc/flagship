@@ -6227,27 +6227,9 @@
     "ctx": "ui/screens/ServerDetailScreen.kt:1079 (prose)",
     "args": 1
   },
-  "lock_and": {
-    "en": "Lock and ",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1124 (prose)"
-  },
-  "turn_off_2": {
-    "en": "%1$sturn off",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1125 (prose)",
-    "args": 1
-  },
   "power": {
     "en": "Power",
     "ctx": "ui/screens/ServerDetailScreen.kt:1129 (arg of FSSectionHeader)"
-  },
-  "powering_off": {
-    "en": "powering off",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1138 (fragment)"
-  },
-  "this_server_is_it_will_go": {
-    "en": "This server is %1$s — it will go offline.",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1138 (prose)",
-    "args": 1
   },
   "will_go_offline": {
     "en": "%1$s will go offline.",
@@ -10864,21 +10846,6 @@
     "en": "This server lost its list of security notices and started over. Check each service and your recovery settings.",
     "ctx": "core/SecuritySliver.kt:86 (prose)"
   },
-  "day_hours": {
-    "en": "%1$s day%2$s %3$s hours",
-    "ctx": "core/SecuritySliver.kt:103 (prose)",
-    "args": 3
-  },
-  "hour_minutes": {
-    "en": "%1$s hour%2$s %3$s minutes",
-    "ctx": "core/SecuritySliver.kt:104 (prose)",
-    "args": 3
-  },
-  "minute": {
-    "en": "%1$s minute%2$s",
-    "ctx": "core/SecuritySliver.kt:105 (prose)",
-    "args": 2
-  },
   "left": {
     "en": "%1$s left",
     "ctx": "core/SecuritySliver.kt:107 (prose)",
@@ -11051,5 +11018,26 @@
   "couldnt_reject_the_recovery_try_again": {
     "en": "Couldn't reject the recovery. Try again.",
     "ctx": "viewmodels/TrustedDevicesViewModel.kt:212 (prose)"
+  },
+  "overdue_by": {
+    "en": "overdue by %1$s",
+    "ctx": "core/SecuritySliver.kt (prose)",
+    "args": 1
+  },
+  "lock_and_turn_off_label": {
+    "en": "Lock and turn off",
+    "ctx": "ui/screens/ServerDetailScreen.kt PowerCard (prose)"
+  },
+  "lock_and_restart_label": {
+    "en": "Lock and restart",
+    "ctx": "ui/screens/ServerDetailScreen.kt PowerCard (prose)"
+  },
+  "this_server_is_restarting_offline": {
+    "en": "This server is restarting — it will go offline.",
+    "ctx": "ui/screens/ServerDetailScreen.kt PowerCard (prose)"
+  },
+  "this_server_is_powering_off_offline": {
+    "en": "This server is powering off — it will go offline.",
+    "ctx": "ui/screens/ServerDetailScreen.kt PowerCard (prose)"
   }
 }
