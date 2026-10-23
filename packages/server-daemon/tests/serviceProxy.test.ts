@@ -505,4 +505,24 @@ describe("sibling-app guard (docs/app-apis.md §4)", () => {
     expect(seen["x-flagship-visitor"]).toBe("member");
     expect(seen["x-flagship-user"]).toBe("member-1");
   });
+
+  it("a guest's access stops when the box has no current checkpoint; the owner's does not", async () => {
+    const { app } = await makeApp({});
+    const guest: SessionInfo = { memberPub: new Uint8Array(32).fill(2), stableId: "guest-1", role: "member", external: true };
+    const owner: SessionInfo = { memberPub: new Uint8Array(32).fill(3), stableId: "owner-1", role: "master" };
+    let fresh = true;
+    let who: SessionInfo = guest;
+    const deps = {
+      injector: boxSigner(makeKey()),
+      resolveSession: () => who,
+      accessMode: () => "members-only" as const,
+      externalFresh: () => fresh,
+      forward: async () => ({ status: 200, body: "" }),
+    };
+    expect((await handleAppRequest(app, req("GET", {}), deps)).status).toBe(200);
+    fresh = false;
+    expect((await handleAppRequest(app, req("GET", {}), deps)).status).toBe(403);
+    who = owner;
+    expect((await handleAppRequest(app, req("GET", {}), deps)).status).toBe(200);
+  });
 });
