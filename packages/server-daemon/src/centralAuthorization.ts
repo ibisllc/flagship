@@ -76,6 +76,7 @@ export const ROUTE_FAMILIES: Readonly<Record<string, { owner: "session" | "signe
   "/api/url": { owner: "session", note: "url controller" },
   "/api/services": { owner: "mixed", note: "installed services" },
   "/api/live_siblings": { owner: "signed-order", note: "box to box" },
+  "/api/chat": { owner: "session", note: "app-to-app messages; the app's own bearer token, not a paired session" },
   "/api/companion": { owner: "mixed", note: "Remote ticket redeem and write relay" },
   "/api/build": { owner: "session", note: "build modes; owner only" },
   "/api/llm": { owner: "session", note: "AI sessions; owner only" },

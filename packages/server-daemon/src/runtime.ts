@@ -1762,7 +1762,30 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         },
       }),
     );
-    console.log(`[runtime] mounted /api/live_siblings/* + /api/url/* handlers`);
+    // App-to-app messages among the owner's own deployments. Cross-owner contact is off until this
+    // box is joined to the carrier and the app lead's exclusive lease (N07) is wired.
+    const { ChatHarness } = await import("./chat/harness.js");
+    const { buildChatHttpHandlers } = await import("./chat/http.js");
+    const chatHarness = new ChatHarness({
+      self: { account: apOpts?.hostUsername ?? "" },
+      lead: { generation: () => 1, mayAdmit: () => false },
+      admission: null,
+      transport: { sendToLead: async () => { throw new Error("cross-owner chat is not connected"); }, sendOnRoute: async () => {} },
+      notifier: { approval: () => {} },
+      hostsApp: () => false,
+      crossOwner: false,
+    });
+    extras.push(
+      buildChatHttpHandlers({
+        harness: chatHarness,
+        appAuthTokens,
+        identityOf: (serviceId) => {
+          const app = servicePlatformRef.current?.byServiceId(serviceId);
+          return app ? { author: app.creator, slug: app.slug } : null;
+        },
+      }),
+    );
+    console.log(`[runtime] mounted /api/live_siblings/* + /api/url/* + /api/chat/v1/* handlers`);
   }
 
   return {
