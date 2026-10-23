@@ -2668,4 +2668,7 @@
     <string name="hide_key_settings">隐藏密钥设置</string>
     <string name="options_for">%1$s 的选项</string>
     <string name="none_of_your_servers_runs_this_app_yet">你的服务器还都没有运行此应用</string>
+    <string name="locked_it_cant_unlock_itself_until">已锁定：在你恢复之前，它无法自行解锁</string>
+    <string name="remote_lock_pending_it_will_be">远程锁定待处理：将会重试</string>
+    <string name="it_shut_down_instead_of_restarting">（由于无法确认锁定，它已关机而不是重启）</string>
 </resources>
