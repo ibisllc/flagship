@@ -18,6 +18,7 @@ import { signWithIrk as defaultSignWithIrk, deriveIrkFromSeed, bytesToHex } from
 import { getSession } from "./state.js";
 import { bootOrigin } from "./apex.js";
 
+import { tr } from "./i18n.js";
 export const TAG_BOOT_SUSPENSION = "flagship/boot-suspension/v1";
 const TAG_BOOT_AUTH = "flagship/boot-auth/v1";
 const PENDING_KEY = "flagship.pendingLocks.v1";
@@ -86,7 +87,7 @@ export async function ownerBootAuthHeader({ serverDomain, method, path }, sessio
 
 function sessionOrThrow(deps) {
   const session = deps.session || getSession();
-  if (!session?.umk) throw Object.assign(new Error("Unlock the webapp first"), { code: "locked" });
+  if (!session?.umk) throw Object.assign(new Error(tr("Unlock the webapp first")), { code: "locked" });
   return session;
 }
 
@@ -242,11 +243,11 @@ export async function lockAndPower({ serverDomain, mode, sendPower }, deps = {})
 /** The sentence a screen shows for a lockAndPower result: never "locked" for less. */
 export function describeLockResult(r) {
   if (r.needsChoice === "shutdown-instead") {
-    return "Couldn't lock this server at the boot service, so it was not restarted. Shut it down instead? It will lock as soon as the service answers.";
+    return tr("Couldn't lock this server at the boot service, so it was not restarted. Shut it down instead? It will lock as soon as the service answers.");
   }
   const power = r.power === "sent" ? (r.mode === "restart" ? "The server is restarting" : "The server is powering off") : r.power === "failed" ? "The power command didn't reach the server" : "";
   const lock = r.lock === "confirmed" ? "locked: it can't unlock itself until you resume it" : "remote lock pending: it will be retried";
-  if (!power) return `Locked at the boot service: ${lock}.`;
+  if (!power) return tr("Locked at the boot service: {0}.", lock);
   return `${power}; ${lock}.`;
 }
 

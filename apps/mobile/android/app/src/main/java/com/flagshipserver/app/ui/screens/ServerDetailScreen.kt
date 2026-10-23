@@ -1184,7 +1184,7 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                     Text(u.message, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { contentDescription = "sd-lock-unconfirmed" })
                     FSSecondaryButton(
-                        label = "Shut down",
+                        label = stringResource(R.string.shut_down),
                         onClick = { scope.launch { vm.shutDownInstead(); refreshLock() } },
                         block = true,
                         modifier = Modifier.semantics { contentDescription = "sd-shutdown-instead" },
@@ -1206,17 +1206,17 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                 )
                 if (isLuks && lockedKnown == true) {
                     Text(
-                        "Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.",
+                        stringResource(R.string.locked_this_server_cant_unlock_itself),
                         color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { contentDescription = "sd-lock-state" },
                     )
                     FSSecondaryButton(
-                        label = "Resume (allow auto-unlock again)",
+                        label = stringResource(R.string.resume_allow_auto_unlock_again),
                         onClick = {
                             scope.launch {
                                 val r = vm.resume()
-                                if (r is BootLockOutcome.Confirmed) toasts.success("Resumed. Turn auto-unlock back on if you want it.")
-                                else toasts.error("Couldn't resume right now. Try again.")
+                                if (r is BootLockOutcome.Confirmed) toasts.success(stringResource(R.string.resumed_turn_auto_unlock_back_on))
+                                else toasts.error(stringResource(R.string.couldnt_resume_right_now_try_again))
                                 refreshLock()
                             }
                         },
@@ -1227,16 +1227,16 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                 }
                 if (isLuks && lockPending) {
                     Text(
-                        "Remote lock pending: the boot service hasn't confirmed it yet.",
+                        stringResource(R.string.remote_lock_pending_the_boot_service),
                         color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                     )
                     FSSecondaryButton(
-                        label = "Retry the remote lock",
+                        label = stringResource(R.string.retry_the_remote_lock),
                         onClick = {
                             scope.launch {
                                 val r = vm.retryPendingLock()
-                                if (r is BootLockOutcome.Confirmed) toasts.success("Locked at the boot service.")
-                                else toasts.error("Still couldn't reach the boot service.")
+                                if (r is BootLockOutcome.Confirmed) toasts.success(stringResource(R.string.locked_at_the_boot_service))
+                                else toasts.error(stringResource(R.string.still_couldnt_reach_the_boot_service))
                                 refreshLock()
                             }
                         },
@@ -1441,7 +1441,7 @@ private fun DeadManCard(serverDomain: String) {
                         leaseExpiry = it
                         store.setDeadManLeaseExpiry(serverDomain, it)
                     }
-                    toasts.success("Lock-down on. Affirm to keep ${serverDomain.substringBefore('.')} unlocked.")
+                    toasts.success(fsString(R.string.lock_down_on_affirm_to_keep, serverDomain.substringBefore('.')))
                 }
             } else {
                 (vm.phase.value as? DeadManPhase.Failed)?.let { toasts.error(it.message) }

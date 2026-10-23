@@ -121,7 +121,7 @@ public final class LiveNameDibsClient: NameDibsClient, @unchecked Sendable {
 
     private func send<Resp: Decodable>(path: String, body: Data?) async throws -> Resp {
         guard let url = URL(string: baseUrl.absoluteString + path) else {
-            throw DibsClientError(status: 0, message: "bad dibs URL")
+            throw DibsClientError(status: 0, message: String(localized: "bad dibs URL"))
         }
         var req = URLRequest(url: url)
         if let body {
@@ -133,7 +133,7 @@ public final class LiveNameDibsClient: NameDibsClient, @unchecked Sendable {
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let message = (try? JSONDecoder().decode([String: String].self, from: data))?["error"]
-            throw DibsClientError(status: status, message: message ?? "HTTP \(status)")
+            throw DibsClientError(status: status, message: message ?? String(localized: "HTTP \(status)"))
         }
         return try JSONDecoder().decode(Resp.self, from: data)
     }
