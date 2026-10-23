@@ -128,6 +128,7 @@ import {
 import { buildRunMigration } from "./runMigration.js";
 import { sandboxedRunSql } from "./migrationSandbox.js";
 import { PublisherPins } from "./publisherPins.js";
+import { SecuritySliver } from "./securitySliver.js";
 import { realCommandRunner as realCommandRunnerStatic } from "./serviceRunner.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildAppBackupHttpHandlers } from "./serviceBackupHttp.js";
@@ -570,6 +571,27 @@ export async function swkHexFromInstallBlob(trust: {
     return v.toLowerCase();
   } catch {
     return null;
+  }
+}
+
+/** The platform decides how serious an update-time condition is; the app never does (N14). */
+async function feedSliver(sliver: SecuritySliver, alert: { kind: string } & Record<string, unknown>): Promise<void> {
+  try {
+    if (alert.kind === "publisher-key-change") {
+      await sliver.raise({
+        issueKey: `publisher-key:${String(alert.serviceId)}`, kind: "publisher-key", severity: "high", target: String(alert.serviceId),
+        summary: alert.continuity === "valid-chain"
+          ? `A new key (${String(alert.newFingerprint)}) signed an update; the old key (${String(alert.oldFingerprint)}) vouched for it.`
+          : `A different key (${String(alert.newFingerprint)}) signed an update under the same name, with no vouching from the old key (${String(alert.oldFingerprint)}). Treat it as a new publisher.`,
+        action: "Trust this new key for this service, or reject it and pause updates",
+      });
+    } else if (alert.kind === "publisher-rejected") {
+      await sliver.raise({ issueKey: `publisher-rejected:${String(alert.serviceId)}`, kind: "publisher-rejected", severity: "moderate", target: String(alert.serviceId), summary: `An update was refused: ${String(alert.reason)}.`, action: null });
+    } else if (alert.kind === "migration-failed" && alert.outcome === "schema-ahead") {
+      await sliver.raise({ issueKey: `schema-ahead:${String(alert.serviceId)}`, kind: "schema-ahead", severity: "high", target: String(alert.serviceId), summary: "An update changed this app's data and then failed; the data is newer than the app's code, and updates are stopped.", action: "Restore a backup or contact the app's creator" });
+    }
+  } catch {
+    /* the sliver never breaks an update */
   }
 }
 
@@ -1241,6 +1263,9 @@ async function main(): Promise<void> {
   // restore of app data cannot touch it.
   const publisherPins = new PublisherPins(join(dataDir, "publisher-pins.json"));
   await publisherPins.load();
+  // N14: the security sliver's record, kept with the pins for the same reason.
+  const securitySliver = new SecuritySliver(join(dataDir, "security-sliver.json"));
+  await securitySliver.load();
   const {
     pullStateStore,
     updateServer,
@@ -1252,6 +1277,7 @@ async function main(): Promise<void> {
     dataDir,
     identityKeypair,
     publisherPins,
+    securitySliver,
     subscriberRegistry,
     alertInbox,
     servicePlatformRef: servicePlatformRefForServer,
@@ -1700,6 +1726,8 @@ async function main(): Promise<void> {
     // threading ~15 values through separate builders. Also starts the
     // update-pack scheduler. Same order + side effects as before.
     await wireRuntimeSurfaces({
+      publisherPins,
+      securitySliver,
       frontPage,
       activityLog,
       restoreWait,
@@ -2204,6 +2232,7 @@ function wireUpdatePack(deps: {
   dataDir: string;
   identityKeypair: Keypair;
   publisherPins: PublisherPins;
+  securitySliver: SecuritySliver;
   subscriberRegistry: FileSubscriberRegistry;
   alertInbox: InMemoryAlertInbox;
   servicePlatformRef: ServicePlatformRef;
@@ -2287,6 +2316,7 @@ function wireUpdatePack(deps: {
     },
     emitPhoneAlert: (alert) => {
       alertInbox.emit(alert);
+      void feedSliver(deps.securitySliver, alert);
     },
   });
   const updateScheduler = new UpdateScheduler({
@@ -2539,6 +2569,8 @@ async function wireRuntimeSurfaces(deps: {
   custodian: KeyCustodianLike;
   pairedSessions: FilePairedSessionStore;
   authorityHub: AuthorityHub;
+  publisherPins: PublisherPins;
+  securitySliver: SecuritySliver;
   browserBundle: BrowserBundle | null;
   alertInbox: InMemoryAlertInbox;
   backupLoop: BackupLoop | null;
@@ -2564,6 +2596,8 @@ async function wireRuntimeSurfaces(deps: {
     custodian,
     pairedSessions,
     authorityHub,
+    publisherPins,
+    securitySliver,
     browserBundle,
     alertInbox,
     backupLoop,
@@ -3513,6 +3547,11 @@ async function wireRuntimeSurfaces(deps: {
   const upgradeTickets = new UpgradeTicketStore();
   const screensHandle = buildScreensHttp({
     upgradeTickets,
+    securitySliver,
+    publisherPins,
+    // The owner's admin root when the account pins one, else its account key: the same rule as
+    // every other sensitive order.
+    publisherTrustKeys: () => (cfg ? [...(cfg.adminRootPub ? [cfg.adminRootPub] : [cfg.irkPublicKey])] : []),
     debugAccess,
     gate: sharesBundle?.gate ?? pairedSessions,
     shares: sharesBundle?.shares ?? null,

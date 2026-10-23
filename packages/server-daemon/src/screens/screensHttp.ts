@@ -17,6 +17,9 @@ import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { ServicePlatform, InstalledService } from "../servicePlatform.js";
 import type { AppBackupService } from "../serviceBackup.js";
 import type { AppMembership } from "../membership.js";
+import type { SecuritySliver } from "../securitySliver.js";
+import { keyFingerprint, type PublisherPins } from "../publisherPins.js";
+import type { PublisherTrust } from "@flagship/protocol";
 import { isTicketableRoute, TICKET_TTL_MS, type UpgradeTicketStore } from "./upgradeTickets.js";
 import { pairedSessionId, type FilePairedSessionStore } from "../pairedSessionStore.js";
 import type { TabRegistry } from "../browser/tabRegistry.js";
@@ -158,6 +161,12 @@ export interface ScreensHttpDeps {
   gate: PairedSessionGate;
   /** N06 — single-use WebSocket upgrade tickets (screens/upgradeTickets.ts). */
   upgradeTickets?: UpgradeTicketStore | null;
+  /** N14 — the security sliver's record (securitySliver.ts). */
+  securitySliver?: SecuritySliver | null;
+  /** N11 — the first publisher key verified per app, and the owner's approval of a change. */
+  publisherPins?: PublisherPins | null;
+  /** The keys whose signature may approve a new publisher key (the owner's admin root, else account key). */
+  publisherTrustKeys?: (() => Uint8Array[]) | null;
   /** Share this server (shares/sharesHttp.ts). */
   shares?: ScreensSharesLike | null;
   /**
@@ -805,6 +814,55 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (detail.length > 2000) return jerr(400, "Keep it under 2,000 characters.");
       if (!(await deps.adapterReports.report(serviceId, detail.trim()))) return jerr(502, "Couldn't send the report. Try again later.");
       return jok({ ok: true });
+    }
+
+    // ---- N14 GET /api/screens/security-sliver: every active issue and the recently resolved
+    if (path === "/api/screens/security-sliver" && method === "GET") {
+      if (!deps.securitySliver) return jerr(503, "security notices not configured");
+      return jok({ lines: deps.securitySliver.lines(), lostHistory: deps.securitySliver.lostHistory });
+    }
+
+    // ---- N11 /api/screens/services/:id/publisher[...]: the pinned key and a key waiting for the owner
+    const pubMatch = /^\/api\/screens\/services\/([^/]+)\/publisher(?:\/(trust|reject))?$/.exec(path);
+    if (pubMatch) {
+      if (!deps.publisherPins) return jerr(503, "publisher records not configured");
+      const serviceId = decodeURIComponent(pubMatch[1]!);
+      const action = pubMatch[2];
+      if (!action && method === "GET") {
+        const pin = deps.publisherPins.get(serviceId);
+        const p = deps.publisherPins.pendingFor(serviceId);
+        return jok({
+          pinned: pin ? { fingerprint: keyFingerprint(pin.keyHex), epoch: pin.keyEpoch } : null,
+          waiting: p
+            ? {
+                continuity: p.continuity,
+                oldFingerprint: keyFingerprint(p.from.keyHex),
+                newFingerprint: keyFingerprint(p.toKeyHex),
+                newEpoch: p.toEpoch,
+                rejected: p.rejectedAt !== undefined,
+                trust: { serviceId, appId: p.from.appId, identityGeneration: p.from.identityGeneration, oldKeyHex: p.from.keyHex, newKeyHex: p.toKeyHex, newEpoch: p.toEpoch },
+              }
+            : null,
+        });
+      }
+      if (action === "trust" && method === "POST") {
+        const b = parseJson(req.body) as { trust?: PublisherTrust; signatureHex?: unknown } | null;
+        if (!b?.trust || typeof b.signatureHex !== "string" || b.trust.serviceId !== serviceId) return jerr(400, "send the trust statement and its signature");
+        const keys = deps.publisherTrustKeys?.() ?? [];
+        let result: { ok: true } | { ok: false; reason: string } = { ok: false, reason: "the approval was not signed by the owner" };
+        for (const k of keys) {
+          result = await deps.publisherPins.approve(b.trust, b.signatureHex, k);
+          if (result.ok) break;
+        }
+        if (!result.ok) return jerr(403, result.reason);
+        await deps.securitySliver?.resolve(`publisher-key:${serviceId}`);
+        return jok({ ok: true });
+      }
+      if (action === "reject" && method === "POST") {
+        if (!(await deps.publisherPins.reject(serviceId, now()))) return jerr(404, "no key is waiting");
+        return jok({ ok: true, updatesPaused: true });
+      }
+      return jerr(405, "method not allowed");
     }
 
     // ---- N06 POST /api/screens/ws-ticket: a single-use ticket for one stream route

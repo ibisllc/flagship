@@ -61,13 +61,19 @@ async function guardedRequest(
 ): Promise<Response> {
   const f = globalThis.fetch as typeof globalThis.fetch;
   let current = input;
+  // What this hop sends. A provider credential belongs to the base URL it was configured for and
+  // goes nowhere else (SECURITY-HARDENING-PLAN.md 18.12): leaving that origin drops it, and a
+  // redirect that must replay the body to another origin is refused.
+  let method = init?.method;
+  let headers = init?.headers;
+  let body = init?.body;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     // Throws UnsafeBaseUrlError if `current` is internal or resolves internal.
     await assertSafeResolvedUrl(current, opts.guard ?? {}, opts.resolve);
     const res = await f(current, {
-      method: init?.method,
-      headers: init?.headers,
-      body: init?.body,
+      method,
+      headers,
+      body,
       redirect: "manual",
     });
     // `redirect:"manual"` surfaces a 3xx as an opaque-redirect (status 0) or
@@ -76,12 +82,32 @@ async function guardedRequest(
     const location = res.headers.get("location");
     const isRedirect = (res.status >= 300 && res.status < 400) || res.type === "opaqueredirect";
     if (isRedirect && location) {
-      current = new URL(location, current).toString();
+      const next = new URL(location, current);
+      if (next.origin !== new URL(current).origin) {
+        if (res.status === 307 || res.status === 308) {
+          throw new Error("the provider tried to send this request, with its contents, to another host");
+        }
+        headers = stripCredentials(headers);
+        // 301/302/303 turn the request into a plain GET: the prompt does not follow.
+        method = "GET";
+        body = undefined;
+      }
+      current = next.toString();
       continue;
     }
     return res;
   }
   throw new Error(`too many redirects (>${MAX_REDIRECTS})`);
+}
+
+const CREDENTIAL_HEADER = /^(authorization|proxy-authorization|cookie|x-api-key|api-key|x-goog-api-key|openai-organization|openai-project|anthropic-beta)$/i;
+
+/** The request headers with everything that authenticates the caller removed. */
+export function stripCredentials(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!headers) return headers;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) if (!CREDENTIAL_HEADER.test(k)) out[k] = v;
+  return out;
 }
 
 /** Build a non-streaming `FetchLike` bound to an SSRF posture. */

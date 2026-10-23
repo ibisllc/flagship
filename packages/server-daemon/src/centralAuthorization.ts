@@ -50,6 +50,9 @@ const COMPANION_NO_READ: readonly string[] = [
 
 const COMPANION_ALLOW: readonly RouteRule[] = [
   { prefix: "/api/screens", methods: READ },
+  // A single-use upgrade ticket for the event stream; the stream handler itself still refuses a
+  // Remote session on the build and browser routes.
+  { prefix: "/api/screens/ws-ticket", methods: ["POST"] },
   { prefix: "/api/deadman", methods: READ },
   { prefix: "/api/front-page", methods: READ },
   // The one write path: a request the owner approves from their own app.

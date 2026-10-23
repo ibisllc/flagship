@@ -105,3 +105,13 @@ describe("route family inventory", () => {
     expect(missing, `classify these route families in ROUTE_FAMILIES: ${missing.join(", ")}`).toEqual([]);
   });
 });
+
+describe("N06/N11/N14 routes", () => {
+  it("a Remote session may ask for a stream ticket and read the sliver, but cannot approve a publisher key", () => {
+    expect(authorizeRoute("companion", "POST", "/api/screens/ws-ticket")).toEqual({ allow: true });
+    expect(authorizeRoute("companion", "GET", "/api/screens/security-sliver")).toEqual({ allow: true });
+    expect(authorizeRoute("companion", "POST", "/api/screens/services/chess/publisher/trust")).toMatchObject({ allow: false });
+    expect(authorizeRoute("companion", "POST", "/api/screens/services/chess/publisher/reject")).toMatchObject({ allow: false });
+    expect(authorizeRoute("share", "POST", "/api/screens/ws-ticket")).toMatchObject({ allow: false });
+  });
+});
