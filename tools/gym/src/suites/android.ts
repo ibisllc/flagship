@@ -852,8 +852,8 @@ const OCTOBER: readonly Scenario[] = [
   ),
   androidTotal(
     "android-backups-wizard-policy",
-    "D1: the create wizard offers the three policies with a reserve.",
-    `${PKG}.GymBackupsTest#theWizardOffersTheThreePoliciesWithAReserve`,
+    "D1: the create wizard offers No backup and On my phone with a reserve (Peer is off at GA).",
+    `${PKG}.GymBackupsTest#theWizardOffersNoBackupAndPhoneWithAReserve`,
     {
       steps: [
         { kind: "tap", describe: "Next.", handle: "cs-next-button" },
@@ -861,13 +861,13 @@ const OCTOBER: readonly Scenario[] = [
       assertions: [
         { describe: "Phone policy", handle: "cs-backup-policy-phone", expect: "present" },
       ],
-      screenshots: [shot("wizard-backup-policy", "Wizard backup policy."), shot("wizard-backup-policy-peer", "Wizard backup policy peer.")],
+      screenshots: [shot("wizard-backup-policy", "Wizard backup policy."), shot("wizard-backup-policy-none", "Wizard backup policy: No backup picked.")],
       dimension: "D1",
     },
   ),
   androidTotal(
     "android-backups-policy-change",
-    "D5: the policy changes to peer, and a reserve smaller than the apps' data is refused in the box's words.",
+    "D5: the policy changes to No backups (signed), the box refuses Peer while it is off, and a reserve smaller than the apps' data is refused in the box's words.",
     `${PKG}.GymBackupsTest#thePolicyChangesAndRefusalsAreTheBoxs`,
     {
       steps: [
@@ -877,7 +877,7 @@ const OCTOBER: readonly Scenario[] = [
       assertions: [
         { describe: "Refusal sentence", handle: "sd-backups-policy-error", expect: "present" },
       ],
-      screenshots: [shot("backups-policy-peer", "Backups policy peer."), shot("backups-policy-refused", "Backups policy refused.")],
+      screenshots: [shot("backups-policy-none", "Backups policy: No backups."), shot("backups-policy-refused", "Backups policy refused.")],
       dimension: "D5",
     },
   ),
@@ -898,7 +898,7 @@ const OCTOBER: readonly Scenario[] = [
   ),
   androidTotal(
     "android-backups-policy-unset",
-    "D1: an unchosen policy asks to choose.",
+    "D1: an unchosen policy asks to choose; Phone-side with a reserve is signed.",
     `${PKG}.GymBackupsTest#anUnchosenPolicyAsksToChoose`,
     {
       steps: [
@@ -1355,8 +1355,8 @@ const ARCHIVE_SWEEP: readonly Scenario[] = [
     ["pod-card-send-backup", "import-backup-choose", "import-backup-unlock", "import-backup-send-existing", "import-backup-done"], ["import-backup-done"], ["restored"]),
   archive("archive-import-wrong-passcode", "Import: a wrong passcode is refused before anything is sent.", "importRefusesAWrongPasscode",
     ["home-import-backup", "import-backup-choose", "import-backup-unlock"], ["nothing sent"], ["wrong-passcode"]),
-  archive("archive-import-other-file", "Import: one file picked asks for the data file it names.", "importAsksForTheOtherFile",
-    ["home-import-backup", "import-backup-choose"], ["import-backup-files"], ["needs-data-file"]),
+  // archive-import-other-file retired: a backup is one `.flagship` file since fab94b172, so there is
+  // no second file to ask for (a cut or foreign file is GymBackupsTest's one-file import scenarios).
   archive("archive-approve-download", "A backup's browser download page link: the code, Approve signed with the admin root.", "approveABackupDownloadFromTheBrowserLink",
     ["backup-approve"], ["backup-download:admin"], ["approve-download"]),
   archive("archive-dont-approve", "Don't approve sends nothing.", "dontApproveABackupDownload",
@@ -1466,9 +1466,11 @@ const SETTINGS_SWEEP: readonly Scenario[] = [
     ["settings-browser-sessions", "revoke-session-f9e8d7c6", "Cancel", "Revoke"], ["the session revoked on the box"], ["browser-revoked"]),
   settingsSweep("settings-trusted-devices", "Trusted devices: a device's menu; Revoke asks first.", "trustedDevicesMenuAsksFirst",
     ["settings-trusted-devices", "trusted-device-menu-<id>", "trusted-device-disconnect", "Cancel"], ["device-menu"], ["device-menu"]),
-  settingsSweep("settings-rows", "Profiles, Privacy, Peer-backup, Remote, Companion requests, Secured sessions, Process URL, Cloud recovery, Back up account key open their screens.", "rowsOpenTheirScreens",
-    ["settings-profiles", "settings-privacy", "settings-peer-backup", "settings-remote", "settings-companion-requests", "settings-secured-sessions", "settings-process-url", "settings-cloud-recovery", "settings-backup-key"], ["each screen's landmark"], ["settings-profiles"]),
-  settingsSweep("settings-process-url", "Process URL: paste a link and Open.", "processUrlSubmitsAPastedLink", ["process-url-submit"], ["process-url"], ["process-url"]),
+  settingsSweep("settings-rows", "Profiles, Privacy, Peer-backup, Remote, Companion requests, Secured sessions, Scan a code or enter a link, Cloud recovery, Back up account key open their screens.", "rowsOpenTheirScreens",
+    ["settings-profiles", "settings-privacy", "settings-peer-backup", "settings-remote", "settings-companion-requests", "settings-secured-sessions", "settings-scan-pairing-code", "settings-cloud-recovery", "settings-backup-key"], ["each screen's landmark"], ["settings-profiles"]),
+  // Process URL was merged into "Scan a code or enter a link" (ScanOrLinkScreen) in the owner UI round.
+  settingsSweep("settings-scan-or-link", "Scan a code or enter a link: a non-link gets a sentence; a pasted Flagship link opens.", "scanOrLinkOpensAPastedLink",
+    ["settings-scan-pairing-code", "scan-or-link-submit"], ["That isn't a Flagship code or link."], ["scan-or-link"]),
   settingsSweep("settings-2fa", "Two-factor: Continue, the code, Verify, saved, Done.", "twoFactorEnrolment",
     ["account-security-enable-btn", "account-security-step1-continue", "account-security-verify-btn", "account-security-saved-toggle", "account-security-done-btn"], ["account-security-disable-btn"], ["2fa-on"]),
   settingsSweep("settings-2fa-429", "Two-factor refused by .com's rate limiter: its sentence, never a status code.", "twoFactorRateLimitedSaysWhen",
