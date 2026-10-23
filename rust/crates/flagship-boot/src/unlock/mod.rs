@@ -1,32 +1,43 @@
-//! `flagship-boot unlock`: the whole early-boot unlock (the shell's
-//! `unlock_via_box_lease` / `unlock_via_relay` dispatch plus the cryptsetup
-//! hand-off) in one process, so no secret crosses argv, the environment or
-//! a file. It reads the same `/boot` files the shell reads.
+//! `flagship-boot unlock`: the whole early-boot unlock of the initramfs
+//! premount (packages/flagship-builder/src/unlockPremount.ts: the lease, the
+//! relay, the two-tier dispatch, the one-shot lock) plus the cryptsetup
+//! hand-off in one process, so no secret crosses argv, the environment or a
+//! file. It reads the same `/boot` files the premount reads.
 //!
 //! ```text
 //! flagship-boot unlock --handoff cryptsetup --device DEV --name NAME [options]
 //! flagship-boot unlock --handoff stdout [options] | cryptsetup luksOpen --key-file - DEV NAME
 //!
-//!   --boot-dir DIR            /boot (server-domain, identity.pem, flagship-boot-host,
-//!                             flagship-boot-unlock-mode, flagship-boot-allowed-hosts)
+//!   --boot-dir DIR            /boot (server-domain, flagship-boot-key.pem, flagship-boot-host,
+//!                             flagship-boot-unlock-mode, flagship-boot-allowed-hosts,
+//!                             flagship-owner-key.pub, flagship-debug-mode)
 //!   --lock-once-marker PATH   presence forces approve (default DIR/flagship-lock-once);
 //!                             the caller removes it after a successful mount
-//!   --boot-host URL           instead of DIR/flagship-boot-host
-//!   --mode auto|approve       instead of DIR/flagship-boot-unlock-mode
-//!   --policy compat|strict    strict: refuse unapproved hosts, treat an unknown mode
-//!                             as approve, console fallback only on a debug burn
-//!   --allow-host HOST         approve another worker host (repeatable)
+//!   --boot-host URL           instead of DIR/flagship-boot-host; https on an approved host
+//!   --mode auto|approve       instead of DIR/flagship-boot-unlock-mode (anything else
+//!                             in the file, or no file, means approve)
+//!   --allow-host HOST         approve another worker host (repeatable); built in:
+//!                             boot.flagshipserver.com, boot.gym.flagshipserver.com
+//!   --owner-key PATH          owner key file (64 hex); default the marker's directory,
+//!                             then DIR, flagship-owner-key.pub; none means no lease
 //!   --ca-bundle PEM           trust these roots instead of the built-in Mozilla set
 //!   --http-timeout-secs N     per exchange (30, curl --max-time)
-//!   --relay-window-secs N     FLAGSHIP_RELAY_WINDOW_SECS, else 31536000
-//!   --heartbeat-secs N        FLAGSHIP_RELAY_HEARTBEAT_SECS, else 120
-//!   --console PATH            'manual' fallback reads PATH (the premount uses /dev/console)
+//!   --relay-window-secs N     FLAGSHIP_RELAY_WINDOW_SECS, else 604800 (1..604800)
+//!   --heartbeat-secs N        FLAGSHIP_RELAY_HEARTBEAT_SECS, else 120 (10..600)
+//!   --request-lifetime-secs N FLAGSHIP_RELAY_REQUEST_SECS, else 21600 (2..21600)
+//!   --console PATH            'manual' fallback reads PATH, only on a debug burn
+//!                             (DIR/flagship-debug-mode exists)
 //!   --cryptsetup PATH         cryptsetup binary (default: cryptsetup on PATH)
 //!   --allow-loopback-http     tests only
 //! ```
 //!
+//! Overrides outside a range are clamped to it; an environment value that is
+//! not a number is ignored, as in the premount.
+//!
 //! Exit 0 when the volume is open (or the key was written), 1 when no key
-//! could be obtained, cryptsetup's own code when it refuses, 64 on bad usage.
+//! could be obtained, [`EXIT_RESTART`] (75) when the relay window ended with
+//! no reply (the caller restarts the box, which asks again), cryptsetup's own
+//! code when it refuses, 64 on bad usage.
 
 pub mod flow;
 pub mod handoff;
@@ -37,7 +48,7 @@ pub mod transport;
 use crate::identity::BoxIdentity;
 use flow::{Mode, OsRandom, RelayTiming, Unlocker};
 use handoff::Handoff;
-use policy::{Endpoint, EndpointPolicy, Enforcement};
+use policy::{Endpoint, EndpointPolicy};
 use std::ffi::OsStr;
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
@@ -46,6 +57,9 @@ use std::time::Duration;
 
 /// Exit code for a usage error (sysexits `EX_USAGE`; cryptsetup uses 1 to 5).
 pub const EXIT_USAGE: i32 = 64;
+/// Exit code when the relay window ended with no reply (sysexits
+/// `EX_TEMPFAIL`): restart and ask again.
+pub const EXIT_RESTART: i32 = 75;
 
 /// Parsed `unlock` options.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,9 +71,7 @@ pub struct Options {
     /// Worker origin override.
     pub boot_host: Option<String>,
     /// Mode override.
-    pub mode: Option<String>,
-    /// Compat or strict.
-    pub enforcement: Enforcement,
+    pub mode: Option<Mode>,
     /// Extra approved hosts.
     pub allow_hosts: Vec<String>,
     /// PEM roots.
@@ -70,6 +82,10 @@ pub struct Options {
     pub relay_window_secs: Option<u64>,
     /// Heartbeat override.
     pub heartbeat_secs: Option<u64>,
+    /// Request lifetime override.
+    pub request_lifetime_secs: Option<u64>,
+    /// Owner key file override.
+    pub owner_key: Option<PathBuf>,
     /// Console fallback source.
     pub console: Option<PathBuf>,
     /// Where the key goes.
@@ -95,12 +111,13 @@ pub fn parse_options(args: &[Vec<u8>]) -> Result<Options, String> {
         lock_once_marker: None,
         boot_host: None,
         mode: None,
-        enforcement: Enforcement::Compat,
         allow_hosts: Vec::new(),
         ca_bundle: None,
         http_timeout_secs: 30,
         relay_window_secs: None,
         heartbeat_secs: None,
+        request_lifetime_secs: None,
+        owner_key: None,
         console: None,
         handoff: Handoff::Stdout,
         allow_loopback_http: false,
@@ -119,12 +136,8 @@ pub fn parse_options(args: &[Vec<u8>]) -> Result<Options, String> {
             None => (arg.as_slice(), None),
         };
         let flag = String::from_utf8_lossy(flag).into_owned();
-        if flag == "--strict-endpoints" || flag == "--allow-loopback-http" {
-            if flag == "--allow-loopback-http" {
-                o.allow_loopback_http = true;
-            } else {
-                o.enforcement = Enforcement::Strict;
-            }
+        if flag == "--allow-loopback-http" {
+            o.allow_loopback_http = true;
             continue;
         }
         let value: &[u8] = match inline {
@@ -139,14 +152,14 @@ pub fn parse_options(args: &[Vec<u8>]) -> Result<Options, String> {
             "--boot-dir" => boot_dir = path(),
             "--lock-once-marker" => o.lock_once_marker = Some(path()),
             "--boot-host" => o.boot_host = Some(utf8(&flag, value)?),
-            "--mode" => o.mode = Some(utf8(&flag, value)?),
-            "--policy" => {
-                o.enforcement = match utf8(&flag, value)?.as_str() {
-                    "compat" => Enforcement::Compat,
-                    "strict" => Enforcement::Strict,
-                    v => return Err(format!("--policy must be compat or strict, got {v:?}")),
-                }
+            "--mode" => {
+                o.mode = Some(match utf8(&flag, value)?.as_str() {
+                    "auto" => Mode::Auto,
+                    "approve" => Mode::Approve,
+                    v => return Err(format!("--mode must be auto or approve, got {v:?}")),
+                })
             }
+            "--owner-key" => o.owner_key = Some(path()),
             "--allow-host" => o.allow_hosts.push(utf8(&flag, value)?.to_ascii_lowercase()),
             "--ca-bundle" => o.ca_bundle = Some(path()),
             "--http-timeout-secs" => o.http_timeout_secs = number(&flag, &utf8(&flag, value)?)?,
@@ -154,6 +167,9 @@ pub fn parse_options(args: &[Vec<u8>]) -> Result<Options, String> {
                 o.relay_window_secs = Some(number(&flag, &utf8(&flag, value)?)?)
             }
             "--heartbeat-secs" => o.heartbeat_secs = Some(number(&flag, &utf8(&flag, value)?)?),
+            "--request-lifetime-secs" => {
+                o.request_lifetime_secs = Some(number(&flag, &utf8(&flag, value)?)?)
+            }
             "--console" => o.console = Some(path()),
             "--handoff" => handoff = Some(utf8(&flag, value)?),
             "--cryptsetup" => cryptsetup = path(),
@@ -195,14 +211,27 @@ fn cat(path: &Path) -> Option<Vec<u8>> {
     Some(b)
 }
 
-fn env_secs(name: &str) -> Result<Option<u64>, String> {
-    match std::env::var(name) {
-        Ok(v) => number(name, &v).map(Some),
-        Err(std::env::VarError::NotPresent) => Ok(None),
-        Err(std::env::VarError::NotUnicode(_)) => {
-            Err(format!("{name} must be a whole number of seconds"))
-        }
+/// The premount's `bounded`: a value that is not a whole number is ignored.
+fn env_secs(name: &str) -> Option<u64> {
+    let v = std::env::var(name).ok()?;
+    if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
     }
+    Some(v.parse::<u64>().unwrap_or(u64::MAX))
+}
+
+/// The premount's `owner_key_hex`: spaces, CR and LF removed, then exactly 64
+/// lowercase hex digits.
+fn read_owner_key(path: &Path) -> Option<[u8; 32]> {
+    let raw = std::fs::read(path).ok()?;
+    let k: Vec<u8> = raw
+        .into_iter()
+        .filter(|b| !matches!(b, b' ' | b'\n' | b'\r'))
+        .collect();
+    if k.len() != 64 || !k.iter().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return None;
+    }
+    crate::gohex::decode(&k).ok()?.try_into().ok()
 }
 
 /// What the run resolved from the options and `/boot`.
@@ -210,8 +239,12 @@ fn env_secs(name: &str) -> Result<Option<u64>, String> {
 pub struct Plan {
     /// The box FQDN.
     pub server_domain: String,
-    /// The STK.
+    /// The boot key.
     pub identity: BoxIdentity,
+    /// The owner key leases must be signed by.
+    pub owner_pub: Option<[u8; 32]>,
+    /// Whether this is a debug burn (the console fallback is allowed).
+    pub debug_burn: bool,
     /// The worker.
     pub endpoint: Endpoint,
     /// The effective mode.
@@ -222,7 +255,7 @@ pub struct Plan {
     pub notes: Vec<String>,
 }
 
-/// Resolve the boot facts the shell reads, under the chosen policy.
+/// Resolve the boot facts the premount reads.
 pub fn plan(o: &Options) -> Result<Plan, String> {
     let dir = &o.boot_dir;
     let mut notes = Vec::new();
@@ -230,7 +263,7 @@ pub fn plan(o: &Options) -> Result<Plan, String> {
     let server_domain = String::from_utf8(domain).map_err(|_| "server-domain is not UTF-8")?;
     crate::canonical::check_server_domain(&server_domain).map_err(|e| e.to_string())?;
 
-    let pem_path = dir.join("identity.pem");
+    let pem_path = dir.join("flagship-boot-key.pem");
     let pem = zeroize::Zeroizing::new(
         std::fs::read(&pem_path).map_err(|_| format!("missing {}", pem_path.display()))?,
     );
@@ -238,14 +271,12 @@ pub fn plan(o: &Options) -> Result<Plan, String> {
 
     let host = match &o.boot_host {
         Some(h) => h.clone(),
-        None => match cat(&dir.join("flagship-boot-host")) {
-            Some(b) => String::from_utf8(b).map_err(|_| "flagship-boot-host is not UTF-8")?,
-            None => policy::DEFAULT_BOOT_HOST.to_owned(),
-        },
+        None => cat(&dir.join("flagship-boot-host"))
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .unwrap_or_default(),
     };
     let host = host.strip_suffix('/').unwrap_or(&host).to_owned();
     let mut pol = EndpointPolicy {
-        enforcement: o.enforcement,
         allow_loopback_http: o.allow_loopback_http,
         ..EndpointPolicy::default()
     };
@@ -260,48 +291,30 @@ pub fn plan(o: &Options) -> Result<Plan, String> {
         );
     }
     let endpoint = pol.resolve(&host).map_err(|e| e.to_string())?;
-    if !endpoint.approved {
-        notes.push(format!(
-            "boot host {} is not on the approved list; using it (compat policy)",
-            endpoint.host
-        ));
-    }
 
-    let baseline = match &o.mode {
-        Some(m) => m.clone(),
-        None => cat(&dir.join("flagship-boot-unlock-mode")).map_or_else(
-            || "auto".to_owned(),
-            |b| String::from_utf8_lossy(&b).into_owned(),
-        ),
-    };
-    let baseline_mode = match baseline.as_str() {
-        "approve" => Mode::Approve,
-        "auto" => Mode::Auto,
-        other if o.enforcement == Enforcement::Strict => {
-            notes.push(format!(
-                "unknown boot-unlock mode {other:?}; asking the phone (strict policy)"
-            ));
-            Mode::Approve
-        }
-        other => {
-            notes.push(format!(
-                "unknown boot-unlock mode {other:?}; treating it as auto, as the shell does"
-            ));
-            Mode::Auto
-        }
+    // Anything but exactly "auto" asks the phone: a damaged file must never
+    // let an approve-only box unlock itself.
+    let baseline = match o.mode {
+        Some(m) => m,
+        None => match cat(&dir.join("flagship-boot-unlock-mode")).as_deref() {
+            Some(b"auto") => Mode::Auto,
+            Some(b"approve") => Mode::Approve,
+            _ => {
+                notes.push(
+                    "boot-unlock mode file unreadable or unknown; asking the phone".to_owned(),
+                );
+                Mode::Approve
+            }
+        },
     };
     let marker = o
         .lock_once_marker
         .clone()
         .unwrap_or_else(|| dir.join("flagship-lock-once"));
     let lock_once = marker.is_file();
-    let mode = if lock_once {
-        Mode::Approve
-    } else {
-        baseline_mode
-    };
+    let mode = if lock_once { Mode::Approve } else { baseline };
     if lock_once {
-        notes.push("one-shot lock marker present — forcing approve relay for THIS boot".into());
+        notes.push("one-shot lock marker present; asking the phone for THIS boot".into());
     }
     let label = |m: Mode| {
         if m == Mode::Approve {
@@ -311,25 +324,42 @@ pub fn plan(o: &Options) -> Result<Plan, String> {
         }
     };
     notes.push(format!(
-        "boot-unlock mode = {} (baseline={baseline}, lock-once={})",
+        "boot-unlock mode = {} (baseline={}, lock-once={})",
         label(mode),
+        label(baseline),
         if lock_once { "yes" } else { "no" }
     ));
 
+    let owner_pub = match &o.owner_key {
+        Some(p) => read_owner_key(p),
+        None => marker
+            .parent()
+            .map(|d| d.join("flagship-owner-key.pub"))
+            .and_then(|p| read_owner_key(&p))
+            .or_else(|| read_owner_key(&dir.join("flagship-owner-key.pub"))),
+    };
+
     let defaults = RelayTiming::default();
     let timing = RelayTiming {
-        window_secs: match o.relay_window_secs {
-            Some(s) => s,
-            None => env_secs("FLAGSHIP_RELAY_WINDOW_SECS")?.unwrap_or(defaults.window_secs),
-        },
-        heartbeat_secs: match o.heartbeat_secs {
-            Some(s) => s,
-            None => env_secs("FLAGSHIP_RELAY_HEARTBEAT_SECS")?.unwrap_or(defaults.heartbeat_secs),
-        },
-    };
+        window_secs: o
+            .relay_window_secs
+            .or_else(|| env_secs("FLAGSHIP_RELAY_WINDOW_SECS"))
+            .unwrap_or(defaults.window_secs),
+        heartbeat_secs: o
+            .heartbeat_secs
+            .or_else(|| env_secs("FLAGSHIP_RELAY_HEARTBEAT_SECS"))
+            .unwrap_or(defaults.heartbeat_secs),
+        request_lifetime_secs: o
+            .request_lifetime_secs
+            .or_else(|| env_secs("FLAGSHIP_RELAY_REQUEST_SECS"))
+            .unwrap_or(defaults.request_lifetime_secs),
+    }
+    .clamped();
     Ok(Plan {
         server_domain,
         identity,
+        owner_pub,
+        debug_burn: dir.join("flagship-debug-mode").is_file(),
         endpoint,
         mode,
         timing,
@@ -378,13 +408,10 @@ pub fn main(args: &[Vec<u8>], log: &mut dyn Write) -> i32 {
         }
     };
     let console = match &o.console {
-        Some(c)
-            if o.enforcement == Enforcement::Strict
-                && !o.boot_dir.join("flagship-debug-mode").is_file() =>
-        {
+        Some(c) if !p.debug_burn => {
             let _ = writeln!(
                 log,
-                "flagship: ignoring --console {} (strict policy, not a debug burn)",
+                "flagship: ignoring --console {} (not a debug burn)",
                 c.display()
             );
             None
@@ -398,6 +425,7 @@ pub fn main(args: &[Vec<u8>], log: &mut dyn Write) -> i32 {
     let mut unlocker = Unlocker {
         server_domain: &p.server_domain,
         identity: &p.identity,
+        owner_pub: p.owner_pub,
         endpoint: &p.endpoint,
         transport: &transport,
         clock: &clock,
@@ -408,6 +436,7 @@ pub fn main(args: &[Vec<u8>], log: &mut dyn Write) -> i32 {
     };
     let key = match unlocker.unlock(p.mode) {
         Ok(k) => k,
+        Err(flow::UnlockError::WindowElapsed(_)) => return EXIT_RESTART,
         Err(_) => return 1,
     };
     match handoff::hand_off(&key, &o.handoff) {

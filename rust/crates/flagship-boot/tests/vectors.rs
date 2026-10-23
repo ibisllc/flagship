@@ -1,5 +1,7 @@
-//! packages/protocol/test-vectors/boot-unseal (tools/boot-unseal-vectors.mjs):
-//! the same cases the TS protocol, the boot-core gate and the Go helper pass.
+//! packages/protocol/test-vectors/boot-unseal (tools/boot-unseal-vectors.mjs)
+//! and the lease cases of packages/protocol/test-vectors/boot-key
+//! (tools/boot-key-vectors.mjs): the same cases the TS protocol, the
+//! boot-core gate and the Go helper pass.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -11,12 +13,15 @@ use flagship_boot::canonical::{self, RequestRefusal};
 use flagship_boot::compat;
 use flagship_boot::gohex;
 use flagship_boot::identity::BoxIdentity;
+use flagship_boot::lease;
 use flagship_boot::seal;
 use serde_json::Value;
 use std::collections::HashSet;
 
 const VECTORS: &str =
     include_str!("../../../../packages/protocol/test-vectors/boot-unseal/vectors.json");
+const BOOT_KEY_VECTORS: &str =
+    include_str!("../../../../packages/protocol/test-vectors/boot-key/vectors.json");
 
 fn v() -> Value {
     serde_json::from_str(VECTORS).unwrap()
@@ -227,4 +232,81 @@ fn gate_cases_through_the_oracle() {
             assert_eq!(got.unwrap_err(), s(e, "error"), "{name}");
         }
     }
+}
+
+#[test]
+fn boot_key_lease_cases_through_the_library_and_the_v1_cli() {
+    let v: Value = serde_json::from_str(BOOT_KEY_VECTORS).unwrap();
+    let boot_seed = seed(s(&v, "bootKeySeedHex"));
+    assert_eq!(
+        BoxIdentity::from_seed(&boot_seed).pub_hex(),
+        s(&v, "bootKeyPubHex")
+    );
+    let owner = gohex::decode(s(&v, "ownerPubHex").as_bytes()).unwrap();
+    let domain = s(&v, "serverDomain");
+    let now = v["lease"]["now"].as_i64().unwrap();
+    let luks = s(&v["lease"], "luksKeyHex");
+    let cases = v["lease"]["cases"].as_array().unwrap();
+    assert!(cases.len() >= 10);
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("boot-key-vectors");
+    std::fs::create_dir_all(&dir).unwrap();
+    for (i, c) in cases.iter().enumerate() {
+        let name = s(c, "name");
+        let body = c["lease"].to_string();
+        let lib = lease::open_auto_unlock_lease(
+            body.as_bytes(),
+            &boot_seed,
+            domain.as_bytes(),
+            &owner,
+            now,
+        );
+        let file = dir.join(format!("{i}.json"));
+        std::fs::write(&file, &body).unwrap();
+        let now_s = now.to_string();
+        let (code, out, err) = cli(&[
+            "--identity-priv-hex",
+            s(&v, "bootKeySeedHex"),
+            "--lease-json",
+            file.to_str().unwrap(),
+            "--server-domain",
+            domain,
+            "--owner-pub-hex",
+            s(&v, "ownerPubHex"),
+            "--now-ms",
+            &now_s,
+        ]);
+        if c["ok"].as_bool().unwrap() {
+            assert_eq!(gohex::encode(&lib.unwrap()), luks, "{name}");
+            assert_eq!(
+                (code, String::from_utf8(out).unwrap(), err),
+                (0, format!("{luks}\n"), String::new()),
+                "{name}"
+            );
+        } else {
+            let want = s(c, "error");
+            assert_eq!(lib.unwrap_err().to_string(), want, "{name}");
+            assert_eq!(
+                (code, out, err),
+                (1, Vec::new(), format!("flagship-unseal: {want}\n")),
+                "{name}"
+            );
+        }
+    }
+    let valid = cases[0]["lease"].to_string();
+    assert!(
+        lease::open_auto_unlock_lease(valid.as_bytes(), &boot_seed, domain.as_bytes(), &owner, now)
+            .is_ok()
+    );
+    assert_eq!(
+        lease::open_auto_unlock_lease(
+            valid.as_bytes(),
+            &seed(s(&v, "stkSeedHex")),
+            domain.as_bytes(),
+            &owner,
+            now
+        )
+        .unwrap_err(),
+        lease::LeaseError::Recipient,
+        "the STK is not the boot key"
+    );
 }

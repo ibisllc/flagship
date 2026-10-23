@@ -1,6 +1,6 @@
 // Boot-stage RELAY-path wire-compat gate.
 //
-// installer/boot-stage.sh's `unlock_via_relay` does, in pure shell, the
+// the generated initramfs premount (packages/flagship-builder/src/unlockPremount.ts) does, in pure shell, the
 // crypto the daemon does in TS. This test exercises THOSE shell primitives
 // against the REAL @flagship/protocol + the BUILT Go unseal helper, so a
 // drift between the shell path and the protocol is caught before it bricks
@@ -66,7 +66,7 @@ function pkcs8PemFromSeed(seed: Uint8Array): string {
   return `-----BEGIN PRIVATE KEY-----\n${wrapped}\n-----END PRIVATE KEY-----\n`;
 }
 
-/** boot-stage.sh identity_seed_hex(): last 32 bytes of the PKCS8 DER. */
+/** premount (former boot-stage.sh) identity_seed_hex(): last 32 bytes of the PKCS8 DER. */
 function extractSeedHex(pemPath: string): string {
   const der = execFileSync("openssl", ["pkey", "-in", pemPath, "-outform", "DER"]);
   return toHex(new Uint8Array(der)).slice(-64);

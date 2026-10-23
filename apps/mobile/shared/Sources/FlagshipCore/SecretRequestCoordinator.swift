@@ -58,6 +58,10 @@ public final class SecretRequestCoordinator {
         public let pending: PendingSecretRequest
         /// The STK as resolved from the DIRECTORY (not the mailbox echo).
         public let directoryStkPubHex: String
+        /// The key a disk-key reply or lease is sealed to: the STK, or (an
+        /// unlock request from a box whose disk is still shut) the boot key
+        /// the pinned STK vouched for. nil means the STK.
+        public var recipientPubHex: String? = nil
         public var id: String { pending.id }
         public var serverDomain: String { pending.serverDomain }
         public var purpose: SecretPurpose? { SecretPurpose(rawValue: pending.purpose) }
@@ -154,23 +158,39 @@ public final class SecretRequestCoordinator {
                 // No directory entry → `.com` cannot vouch for this box.
                 continue
             }
-            // The mailbox echo MUST equal the directory STK — a relay can't
-            // splice in a different stkPub.
-            guard pending.stkPub.lowercased() == stkHex.lowercased() else { continue }
             guard let purpose = SecretPurpose(rawValue: pending.purpose),
                   let nonce = HexUtil.decode(pending.requestNonceHex),
                   let sig = HexUtil.decode(pending.requestSignature)
             else { continue }
+            // The request comes from the directory STK, or (a disk unlock from
+            // a box whose disk is still shut) from the boot key the pinned STK
+            // vouches for. Anything else is a splice and is dropped.
+            let echo = pending.stkPub.lowercased()
+            var signerData = stkPubData
+            var signer = stkPub
+            var recipient: String?
+            if echo != stkHex.lowercased() {
+                guard purpose == .unlockKey,
+                      let boot = await BootKey.forServer(username: username, serverDomain: pending.serverDomain,
+                                                         mailbox: mailbox, pins: pins),
+                      boot == echo,
+                      let bootData = HexUtil.decode(boot), bootData.count == 32,
+                      let bootKey = try? Curve25519.Signing.PublicKey(rawRepresentation: bootData)
+                else { continue }
+                signerData = bootData
+                signer = bootKey
+                recipient = boot
+            }
             let request = SecretRequest(
                 serverDomain: pending.serverDomain,
-                stkPub: stkPubData,
+                stkPub: signerData,
                 purpose: purpose,
                 nonce: nonce,
                 issuedAt: pending.issuedAt
             )
-            // RE-VERIFY the box's request against the DIRECTORY STK.
-            guard SecretRequest.verify(request, signature: sig, stkPub: stkPub) else { continue }
-            verified.append(VerifiedRequest(pending: pending, directoryStkPubHex: stkHex))
+            // RE-VERIFY the box's request under that key.
+            guard SecretRequest.verify(request, signature: sig, stkPub: signer) else { continue }
+            verified.append(VerifiedRequest(pending: pending, directoryStkPubHex: stkHex, recipientPubHex: recipient))
         }
         return verified
     }
@@ -198,6 +218,15 @@ public final class SecretRequestCoordinator {
         // Before any prompt: a key other than the one this device pinned gets nothing.
         try pins.require(username: username, serverDomain: verified.serverDomain,
                          reportedHex: verified.directoryStkPubHex)
+        // Only a disk unlock goes to the boot key, and only the one the pinned STK bound.
+        var recipientData = stkPubData
+        if let boot = verified.recipientPubHex?.lowercased(), boot != verified.directoryStkPubHex.lowercased() {
+            guard purpose == .unlockKey,
+                  boot == pins.pinnedBootKey(username: username, serverDomain: verified.serverDomain),
+                  let d = HexUtil.decode(boot), d.count == 32
+            else { throw CoordinatorError.directoryMissingServer(verified.serverDomain) }
+            recipientData = d
+        }
         let request = SecretRequest(
             serverDomain: verified.serverDomain,
             stkPub: stkPubData,
@@ -205,6 +234,9 @@ public final class SecretRequestCoordinator {
             nonce: nonce,
             issuedAt: verified.pending.issuedAt
         )
+        // The entitlement names the STK; the disk key is sealed to `recipientData`.
+        var sealRequest = request
+        sealRequest.stkPub = recipientData
         // A watch delegate signs the boot-response header for a plain UNLOCK
         // approval (no auto-lease). That path needs the IRK for NOTHING, so we
         // never call irkProvider() and no biometric prompt fires — the whole
@@ -228,7 +260,7 @@ public final class SecretRequestCoordinator {
         var unlockKey: Data?
         switch purpose {
         case .unlockKey:
-            let reply = try await buildUnlockReply(request: request)
+            let reply = try await buildUnlockReply(request: sealRequest)
             sealedHex = reply.sealedHex
             unlockKey = reply.luksKey
         case .entitlement:
@@ -295,7 +327,7 @@ public final class SecretRequestCoordinator {
         // future reboots (the user's IRK authorizes it here — I2). Only for
         // unlock-key; the key is the one we just recovered, never `.com`-visible.
         if depositAutoLease, purpose == .unlockKey, let key = unlockKey {
-            return try await depositAutoUnlockLease(request: request, luksKey: key, irk: try requireIrk())
+            return try await depositAutoUnlockLease(request: sealRequest, luksKey: key, irk: try requireIrk())
         }
         return nil
     }
@@ -395,8 +427,8 @@ public final class SecretRequestCoordinator {
         )
     }
 
-    /// Deposit a long-lived box-sealed lease (the LUKS key sealed for the box
-    /// STK). Returns the lease id. Private — only reachable right after a
+    /// Deposit a long-lived box-sealed lease (the LUKS key sealed for the box's
+    /// boot key, or its STK when it has none). Returns the lease id. Private — only reachable right after a
     /// user-confirmed unlock approval, when we hold the recovered key.
     private func depositAutoUnlockLease(
         request: SecretRequest,
@@ -453,7 +485,7 @@ public final class SecretRequestCoordinator {
 
     /// Fetch the phone-sealed LUKS key, unseal it with the phone's existing
     /// Ed25519 key material (the installer sealed it against one of these),
-    /// then re-seal it FOR the box's STK bound to (nonce, purpose).
+    /// then re-seal it FOR `request.stkPub` (the boot key, or the STK) bound to (nonce, purpose).
     private func buildUnlockReply(request: SecretRequest) async throws -> (sealedHex: String, luksKey: Data) {
         let sealedLuks: SealedLuksKeyResponse
         do {

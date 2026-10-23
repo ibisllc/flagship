@@ -1,38 +1,23 @@
-//! Which boot worker the box may talk to, and how.
-//!
-//! Today's shell flow trusts whatever `/boot/flagship-boot-host` names (any
-//! scheme, any host) and lets curl follow its defaults. This client:
-//! - only speaks HTTPS (plain HTTP only to a loopback address, and only when
-//!   asked, for tests);
-//! - sends every request to that one origin: no redirects, no proxy
-//!   environment, no other host;
-//! - checks the origin against an approved list. In `compat` mode a host that
-//!   is not on the list is still used, with a warning, because enterprise
-//!   clones repoint the worker through that file today; `strict` refuses it.
+//! Which boot worker the box may talk to, and how (the premount's rule):
+//! - only HTTPS, to a host on the approved list (built in, `--allow-host`,
+//!   `/boot/flagship-boot-allowed-hosts`), with no port, path, query or user
+//!   info; plain HTTP (with a port) only to a loopback address, and only
+//!   when asked, for tests;
+//! - every request goes to that one origin: no redirects, no proxy
+//!   environment, no other host.
 
 use core::fmt;
 
-/// The production boot worker, the shell flow's default.
-pub const DEFAULT_BOOT_HOST: &str = "https://boot.flagshipserver.com";
-/// Hosts approved without configuration.
-pub const BUILTIN_ALLOWED_HOSTS: &[&str] = &["boot.flagshipserver.com"];
-
-/// How an unapproved configured host is treated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Enforcement {
-    /// Use it and warn (today's behaviour).
-    Compat,
-    /// Refuse it.
-    Strict,
-}
+/// Hosts approved without configuration (`APPROVED_BOOT_HOSTS` in
+/// packages/flagship-builder/src/unlockPremount.ts).
+pub const BUILTIN_ALLOWED_HOSTS: &[&str] =
+    &["boot.flagshipserver.com", "boot.gym.flagshipserver.com"];
 
 /// The approved-endpoint policy.
 #[derive(Debug, Clone)]
 pub struct EndpointPolicy {
     /// Approved host names (lowercase, no port).
     pub allowed_hosts: Vec<String>,
-    /// Compat or strict.
-    pub enforcement: Enforcement,
     /// Allow `http://` to 127.0.0.1, ::1 or localhost (tests only).
     pub allow_loopback_http: bool,
 }
@@ -44,7 +29,6 @@ impl Default for EndpointPolicy {
                 .iter()
                 .map(|h| (*h).to_owned())
                 .collect(),
-            enforcement: Enforcement::Compat,
             allow_loopback_http: false,
         }
     }
@@ -57,8 +41,6 @@ pub struct Endpoint {
     pub origin: String,
     /// Lowercase host.
     pub host: String,
-    /// Whether the host was on the approved list.
-    pub approved: bool,
 }
 
 impl Endpoint {
@@ -127,27 +109,35 @@ impl EndpointPolicy {
                 "boot host {base:?} has a bad host name"
             )));
         }
-        let loopback = matches!(host.as_str(), "127.0.0.1" | "[::1]" | "localhost");
-        match scheme.as_str() {
-            "https" => {}
-            "http" if loopback && self.allow_loopback_http => {}
-            _ => return Err(PolicyError(format!("boot host {base:?} must use https"))),
-        }
-        let bare = host.trim_start_matches('[').trim_end_matches(']');
-        let approved = self
-            .allowed_hosts
-            .iter()
-            .any(|h| h.eq_ignore_ascii_case(bare))
-            || (loopback && self.allow_loopback_http);
-        if !approved && self.enforcement == Enforcement::Strict {
-            return Err(PolicyError(format!(
-                "boot host {host} is not an approved endpoint"
-            )));
+        let test_loopback = self.allow_loopback_http
+            && matches!(host.as_str(), "127.0.0.1" | "[::1]" | "localhost");
+        if test_loopback {
+            if scheme != "http" && scheme != "https" {
+                return Err(PolicyError(format!("boot host {base:?} must use https")));
+            }
+        } else {
+            if scheme != "https" {
+                return Err(PolicyError(format!("boot host {base:?} must use https")));
+            }
+            if port.is_some() {
+                return Err(PolicyError(format!(
+                    "boot host {base:?} must not name a port"
+                )));
+            }
+            if !self
+                .allowed_hosts
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case(&host))
+            {
+                return Err(PolicyError(format!(
+                    "boot host {host} is not an approved endpoint ({})",
+                    self.allowed_hosts.join(" ")
+                )));
+            }
         }
         Ok(Endpoint {
             origin: format!("{scheme}://{rest}"),
             host,
-            approved,
         })
     }
 }
@@ -160,27 +150,34 @@ mod tests {
     #[test]
     fn resolves_and_refuses() {
         let p = EndpointPolicy::default();
-        let e = p.resolve(DEFAULT_BOOT_HOST).unwrap();
-        assert!(e.approved);
+        let e = p.resolve("https://boot.flagshipserver.com").unwrap();
         assert_eq!(
             e.url("/api/boot/request"),
             "https://boot.flagshipserver.com/api/boot/request"
         );
-        assert!(!p.resolve("https://boot.example.org:8443").unwrap().approved);
-        assert!(p.resolve("http://boot.flagshipserver.com").is_err());
-        assert!(p.resolve("https://boot.flagshipserver.com/x").is_err());
-        assert!(p.resolve("https://user@boot.flagshipserver.com").is_err());
-        assert!(p.resolve("").is_err());
-        assert!(p.resolve("http://127.0.0.1:9").is_err());
-        let strict = EndpointPolicy {
-            enforcement: Enforcement::Strict,
+        assert!(p.resolve("https://BOOT.gym.flagshipserver.com").is_ok());
+        for bad in [
+            "https://boot.example.org",
+            "https://boot.flagshipserver.com:8443",
+            "http://boot.flagshipserver.com",
+            "https://boot.flagshipserver.com/x",
+            "https://user@boot.flagshipserver.com",
+            "boot.flagshipserver.com",
+            "",
+            "http://127.0.0.1:9",
+        ] {
+            assert!(p.resolve(bad).is_err(), "{bad}");
+        }
+        let extra = EndpointPolicy {
+            allowed_hosts: vec!["boot.example.org".into()],
             ..EndpointPolicy::default()
         };
-        assert!(strict.resolve("https://boot.example.org").is_err());
+        assert!(extra.resolve("https://boot.example.org").is_ok());
         let test = EndpointPolicy {
             allow_loopback_http: true,
-            ..strict
+            ..EndpointPolicy::default()
         };
-        assert!(test.resolve("http://127.0.0.1:9").unwrap().approved);
+        assert!(test.resolve("http://127.0.0.1:9").is_ok());
+        assert!(test.resolve("http://boot.flagshipserver.com").is_err());
     }
 }

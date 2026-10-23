@@ -456,15 +456,14 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     expect(b).not.toContain("/unlock-key/lease-v2");
     expect(b).not.toContain("/api/server/${SERVER_DOMAIN}/secret-request");
     expect(b).not.toContain("/api/server/${SERVER_DOMAIN}/secret-response");
-    // Parses the hex sealedKey + unseals with --sealed-hex.
-    expect(b).toContain('"sealedKey":"');
-    expect(b).toContain('--identity-priv-hex "$SEED_HEX" --sealed-hex "$SEALED_KEY"');
+    // The helper checks the lease against the owner key and opens it into cryptsetup.
+    expect(b).toContain('open_with --lease-json "$LEASE_RESP" --server-domain "$SERVER_DOMAIN" --owner-pub-hex "$OWNER_PUB"');
+    expect(b).not.toContain("--identity-priv-hex");
     // auto dispatch: box-lease first, relay fallback.
-    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "approve" ]; then');
-    expect(b).toContain("if ! unlock_via_box_lease; then");
+    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "auto" ] && unlock_via_box_lease; then');
     expect(b).toContain("unlock_via_relay");
-    // The premount script reads the mode (default auto if the file is absent).
-    expect(b).toContain('BOOT_UNLOCK_MODE="$(cat /boot/flagship-boot-unlock-mode 2>/dev/null || echo auto)"');
+    // Anything but exactly "auto" (absent, damaged, unknown) asks the phone.
+    expect(b).toContain("    *) BOOT_UNLOCK_MODE=approve;");
     // The retired plaintext-consume path is GONE from the dispatch.
     expect(b).not.toContain("unlock_via_plaintext_consume");
     expect(b).not.toContain("flagship/consume-unlock-key/v1|");
@@ -503,7 +502,7 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     expect(b).toContain('echo "approve" > /boot/flagship-boot-unlock-mode');
     expect(b).not.toContain('echo "auto" > /boot/flagship-boot-unlock-mode');
     // The relay is the ONLY dispatch in approve mode — no box-lease, no fallback.
-    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "approve" ]; then');
+    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "auto" ] && unlock_via_box_lease; then');
     expect(b).toContain("unlock_via_relay");
     // Defense in depth: the dispatch never CALLS the box-lease in approve mode
     // (the function may be defined, but `if ! unlock_via_box_lease; then` —
@@ -527,7 +526,7 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     for (const b of [autoB, approveB]) {
       expect(b).toContain("unlock_via_box_lease()");
       expect(b).toContain("unlock_via_relay()");
-      expect(b).toContain('if [ "$EFFECTIVE_MODE" = "approve" ]; then');
+      expect(b).toContain('if [ "$EFFECTIVE_MODE" = "auto" ] && unlock_via_box_lease; then');
     }
     // The only bake difference is the mode literal written to /boot.
     expect(autoB).toContain('echo "auto" > /boot/flagship-boot-unlock-mode');
@@ -548,8 +547,11 @@ describe("boot worker repoint — boot.flagshipserver.com + box-STK Flagship-Boo
     expect(DEFAULT_BOOT_HOST).toBe("https://boot.flagshipserver.com");
   });
 
-  it("an enterprise clone can override the boot host (bootHost option)", () => {
-    const b = bootstrap({ bootHost: "https://boot.acme-enterprise.example" });
+  it("an enterprise clone can override the boot host (bootHost option) once it approves it", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    expect(() => buildDebianPreseed({ blob, blobSignatureHex, bootHost: "https://boot.acme-enterprise.example" })).toThrow(/approved boot hosts/);
+    const b = extractBootstrap(buildDebianPreseed({ blob, blobSignatureHex, bootHost: "https://boot.acme-enterprise.example", extraApprovedBootHosts: ["boot.acme-enterprise.example"] }));
+    expect(b).toContain('APPROVED_BOOT_HOSTS="boot.flagshipserver.com boot.gym.flagshipserver.com boot.acme-enterprise.example"');
     expect(b).toContain('echo "https://boot.acme-enterprise.example" > /boot/flagship-boot-host');
     expect(b).not.toContain('echo "https://boot.flagshipserver.com" > /boot/flagship-boot-host');
   });
@@ -572,13 +574,15 @@ describe("boot worker repoint — boot.flagshipserver.com + box-STK Flagship-Boo
     ).toThrow(/bootHost must be https/);
   });
 
-  it("the premount unlock hook reads the boot host (override-capable; default if absent)", () => {
+  it("the premount accepts only an https boot host on the baked list, and the hook stages it", () => {
     const b = bootstrap();
-    expect(b).toContain(
-      'BOOT_HOST="$(cat /boot/flagship-boot-host 2>/dev/null || echo https://boot.flagshipserver.com)"',
-    );
-    // The hook stages the boot-host fact into the initramfs so it's readable pre-pivot.
-    expect(b).toContain('cp /boot/flagship-boot-host "${DESTDIR}/boot/flagship-boot-host"');
+    expect(b).toContain('APPROVED_BOOT_HOSTS="boot.flagshipserver.com boot.gym.flagshipserver.com"');
+    expect(b).toContain('BOOT_HOST_RAW="$(cat "$R/boot/flagship-boot-host" 2>/dev/null || true)"');
+    expect(b).toContain("is not https on an approved host");
+    expect(b).toContain("for _f in flagship-boot-key.pem server-domain flagship-boot-host flagship-boot-unlock-mode flagship-owner-key.pub; do");
+    // curl: https only, no proxy, the staged CA bundle, no config file.
+    expect(b).toContain("curl -q --proto =https --noproxy '*' --cacert \"$CA_BUNDLE\"");
+    expect(b).toContain("unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy");
   });
 
   it("hits the FIXED /api/boot/* contract with the box-STK Authorization header", () => {
@@ -587,13 +591,10 @@ describe("boot worker repoint — boot.flagshipserver.com + box-STK Flagship-Boo
     expect(b).toContain('LEASE_PATH="/api/boot/lease/${SERVER_DOMAIN}"');
     expect(b).toContain('REQ_PATH="/api/boot/request"');
     expect(b).toContain('POLL_PATH="/api/boot/response/${SERVER_DOMAIN}/${NONCE}"');
-    // Each call carries a fresh box-STK Authorization header.
-    expect(b).toContain('LEASE_AUTH="$(sign_box_auth_header GET "$LEASE_PATH")"');
-    expect(b).toContain('REQ_AUTH="$(sign_box_auth_header POST "$REQ_PATH")"');
-    expect(b).toContain('POLL_AUTH="$(sign_box_auth_header GET "$POLL_PATH")"');
-    expect(b).toContain('Authorization: $LEASE_AUTH');
-    expect(b).toContain('Authorization: $REQ_AUTH');
-    expect(b).toContain('Authorization: $POLL_AUTH');
+    // Each call carries a fresh Authorization header signed by the boot key.
+    expect(b).toContain('-H "Authorization: $(sign_box_auth_header GET "$LEASE_PATH")"');
+    expect(b).toContain('-H "Authorization: $(sign_box_auth_header POST "$REQ_PATH")"');
+    expect(b).toContain('-H "Authorization: $(sign_box_auth_header GET "$POLL_PATH")"');
     // The legacy .com unlock endpoints are gone (the SecretRequest BODY canonical
     // `flagship/secret-request/v1|` legitimately stays — only the URL moved).
     expect(b).not.toContain("/unlock-key/lease-v2");
@@ -606,7 +607,7 @@ describe("boot worker repoint — boot.flagshipserver.com + box-STK Flagship-Boo
     // The canonical string the box signs MUST equal canonicalBootAuth() in
     // gate.ts: tag|role|serverDomain|METHOD|path|pubHex|nonceHex|issuedAt.
     expect(b).toContain(
-      '_bcanon="flagship/boot-auth/v1|box|${SERVER_DOMAIN}|${_bm}|${_bp}|${PUB_HEX}|${_bnonce}|${_bnow}"',
+      '_bsig="$(sign_canonical "flagship/boot-auth/v1|box|${SERVER_DOMAIN}|$1|$2|${PUB_HEX}|${_bnonce}|${_bnow}")"',
     );
     // base64url(JSON envelope) of {role,serverDomain,method,path,pubKeyHex,
     // nonceHex,issuedAt,signatureHex}, signed with the box STK priv via openssl.
@@ -676,7 +677,7 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(b).toContain('shred -u "$LUKS_KEY"');
   });
 
-  it("installs an initramfs hook lifting unlock_via_relay() verbatim", () => {
+  it("installs the initramfs hook and the generated premount", () => {
     const b = extractBootstrap(luksYaml());
     expect(b).toContain("/etc/initramfs-tools/hooks/flagship-unlock");
     expect(b).toContain("/etc/initramfs-tools/scripts/local-top/flagship-unlock");
@@ -686,13 +687,12 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(b).toContain("flagship/secret-request/v1|");
     expect(b).not.toContain("flagship/consume-unlock-key/v1|");
     expect(b).not.toContain("unlock_via_plaintext_consume");
-    expect(b).toContain("if ! unlock_via_box_lease; then");
-    // Repointed to the dedicated boot worker via the box-STK auth header.
+    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "auto" ] && unlock_via_box_lease; then');
+    // Repointed to the dedicated boot worker via the boot-key auth header.
     expect(b).toContain('REQ_PATH="/api/boot/request"');
     expect(b).toContain('POLL_PATH="/api/boot/response/${SERVER_DOMAIN}/${NONCE}"');
     expect(b).toContain('sign_box_auth_header POST "$REQ_PATH"');
     expect(b).toContain('sign_box_auth_header GET "$POLL_PATH"');
-    expect(b).toContain('Authorization: $REQ_AUTH');
     expect(b).toContain("flagship/boot-auth/v1|box|");
     // The hook stages the boot-host fact into the initramfs.
     expect(b).toContain("/boot/flagship-boot-host");
@@ -704,11 +704,19 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(b).toContain("copy_exec /sbin/cryptsetup");
     expect(b).toContain("copy_exec /boot/flagship-unseal /bin/flagship-unseal");
     // luksOpen the raw LUKS container, activate the VG, then pivot.
-    expect(b).toContain('ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"');
-    expect(b).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
+    expect(b).toContain('ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device 2>/dev/null | head -n1)"');
+    expect(b).toContain('| cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(b).toContain("lvm vgchange -ay");
-    // Rebuild the initrd so the hook lands in /boot.
-    expect(b).toContain("update-initramfs -u");
+    // The key never lands in a file and no seed is passed on a command line.
+    expect(b).not.toContain("/run/unlock-key");
+    expect(b).not.toContain("--identity-priv-hex");
+    expect(b).not.toContain("/boot/identity.pem\"");
+    // The STK is not on /boot: only the boot key, and its binding goes to .com.
+    expect(b).toContain("install-helper.ts gen-boot-key");
+    expect(b).toContain('"${CONTROL_PLANE_BASE}/api/server/${SERVER_DOMAIN}/boot-key"');
+    // Rebuild the initrd (fatally) before the install-time key is removed.
+    expect(b).toContain("if ! update-initramfs -u");
+    expect(b.indexOf("if ! update-initramfs -u")).toBeLessThan(b.indexOf("cryptsetup luksRemoveKey"));
   });
 });
 
@@ -1224,18 +1232,17 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     // net-ensure: route-check FIRST (Wi-Fi path skips instantly), then link-up
     // + DHCP the first carrier interface, bounded + best-effort.
     expect(b).toContain("if ! ip route 2>/dev/null | grep -q '^default'; then");
-    expect(b).toContain('echo "flagship: no default route — bringing up interfaces for DHCP"');
+    expect(b).toContain('log_line "no default route; bringing up interfaces for DHCP"');
     expect(b).toContain('if [ "$IFW" = "lo" ]; then continue; fi');
     expect(b).toContain('if [ "$(cat "/sys/class/net/$IFW/carrier" 2>/dev/null || echo 0)" != "1" ]; then continue; fi');
     expect(b).toContain('ipconfig -t 20 "$IFW" 2>/dev/null || true');
     expect(b).toContain('udhcpc -i "$IFW" -n -q -t 5 2>/dev/null || true');
     // resolv-ensure runs on BOTH paths, sourcing every /run/net-*.conf.
-    expect(b).toContain("if [ ! -s /etc/resolv.conf ]; then");
-    expect(b).toContain("for _nc in /run/net-*.conf; do");
-    expect(b).toContain('echo "flagship: dns configured:$_rdns"');
-    expect(b).toContain('echo "flagship: dns fallback: public resolvers"');
+    expect(b).toContain('if [ ! -s "$RESOLV" ]; then');
+    expect(b).toContain('for _nc in "$R"/run/net-*.conf; do');
+    expect(b).toContain("printf 'nameserver 1.1.1.1\\nnameserver 8.8.8.8\\n'");
     // Both run before the unlock dispatch.
-    expect(b.indexOf("net-ensure")).toBeLessThan(b.indexOf('echo "flagship: boot-unlock mode = $EFFECTIVE_MODE'));
+    expect(b.indexOf("net-ensure")).toBeLessThan(b.indexOf('log_line "net state before unlock'));
     // The Wi-Fi-only blocks stay ABSENT on a wired burn.
     expect(b).not.toContain("init-premount/flagship-wifi");
     expect(b).not.toContain("flagship-wifi-safetynet");
@@ -1280,10 +1287,12 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootUnlockMode: "auto",
       bootHost: DEFAULT_BOOT_HOST,
     });
-    expect(s).toContain("/cryptroot/crypttab 2>/dev/null | head -n1");
+    expect(s).toContain('/cryptroot/crypttab" 2>/dev/null | head -n1');
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
+      // Re-pinned 2026-10-23: the boot key replaces the STK on /boot; the premount
+      // pipes the key into cryptsetup, fails closed on its mode and boot host.
       // Re-pinned 2026-10-22: the bootstrap installs the signed box artifact (SEC-INSTALL-001);
       // it embeds release/box-release.json, so every box release re-pins this.
       // Re-pinned 2026-10-18: comments name d-i, not curtin/Ubuntu (autoinstall
@@ -1296,7 +1305,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "75f6d3d26f908c0589738af62c15372e636086b772f269a393149bd88424958d",
+      "1502b2b2a59bba3a185d5af8943df01e574279bf6f74ae1838d06da66f2460d8",
     );
   });
 

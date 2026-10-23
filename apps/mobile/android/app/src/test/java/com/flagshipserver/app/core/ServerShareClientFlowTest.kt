@@ -59,6 +59,8 @@ class ServerShareClientFlowTest {
         var unlockCopy: Pair<String, String>? = null
         var pending: List<JsonObject> = emptyList()
         var bootResponse: JsonObject? = null
+        /** What `.com` serves at /api/server/:host/boot-key; null = 404 (a box without one). */
+        var bootKeyBinding: JsonObject? = null
         val pushRows = HashMap<String, MutableMap<String, String>>()
         var updates = ArrayList<ServerShare.Update>()
         val usedUpdateNonces = HashSet<String>()
@@ -299,6 +301,7 @@ class ServerShareClientFlowTest {
                     val copy = unlockCopy ?: return err(404, "no copy for this share")
                     ok(buildJsonObject { put("sealedKey", copy.second) })
                 }
+                url == "$apex/api/server/$domain/boot-key" -> bootKeyBinding?.let { ok(it) } ?: err(404, "no boot key")
                 url == "$boot/api/boot/response" -> {
                     bootResponse = b!!["response"]!!.jsonObject
                     ok()
@@ -581,6 +584,38 @@ class ServerShareClientFlowTest {
             val env = Json.parseToJsonElement(String(java.util.Base64.getUrlDecoder().decode(auth.removePrefix("Flagship-Boot-v1 ")))).jsonObject
             assertEquals("share", env["role"]!!.jsonPrimitive.content)
             assertEquals(HexUtil.encode(ServerShare.deriveShareMemberPub(memberKeys.umkSeed, entry.shareId)), env["pubKeyHex"]!!.jsonPrimitive.content)
+        }
+    }
+
+    private val bootSeed = ByteArray(32) { 0x1b }
+    private val bootPubHex = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(bootSeed).publicKey)
+
+    private fun bindingBody(signerSeed: ByteArray): JsonObject {
+        val issuedAt = clock - 1000
+        val sig = Ed25519Sign(signerSeed).sign(BoxKeyPins.canonicalBootKeyBinding(domain, bootPubHex, issuedAt)!!)
+        return buildJsonObject {
+            put("binding", buildJsonObject { put("serverDomain", domain); put("bootPubHex", bootPubHex); put("issuedAt", issuedAt) })
+            put("signature", HexUtil.encode(sig))
+        }
+    }
+
+    @Test fun startupFromTheBootKeyTheOffersStkVouchesForIsSealedToTheBootKey() {
+        val world = World()
+        val (_, member, entry) = shareAndConfirm(world, options.copy(unlockAtBoot = true))
+        runBlocking {
+            world.pending = listOf(bootRequest(bootSeed, "ab".repeat(32)))
+            assertTrue("no binding: a boot-key request is not this server's", member.pendingStartups(entry).isEmpty())
+
+            world.bootKeyBinding = bindingBody(ByteArray(32) { 8 })
+            assertTrue("a binding another key signed is ignored", member.pendingStartups(entry).isEmpty())
+
+            world.bootKeyBinding = bindingBody(stkSeed)
+            val real = member.pendingStartups(entry).single()
+            member.approveStartup(entry, real)
+            val sealed = HexUtil.decode(world.bootResponse!!["sealed"]!!.jsonPrimitive.content)!!
+            val opened = SecretSeal.openWithEd25519Seed(sealed, bootSeed)
+            assertTrue(opened.takeLast(32).toByteArray().contentEquals(diskKey))
+            assertTrue("the STK can't open it", runCatching { SecretSeal.openWithEd25519Seed(sealed, stkSeed) }.isFailure)
         }
     }
 

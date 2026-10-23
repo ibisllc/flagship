@@ -867,42 +867,58 @@ public struct ServerShareMemberFlow: Sendable {
         try await open(shareId: entry.shareId, secretHex: entry.secretHex).offer.stkPubHex
     }
 
+    /// The boot key the STK pinned in the offer vouches for, or nil.
+    public func sharedBootKey(_ entry: SharedServerEntry, stkPubHex: String) async -> String? {
+        await BootKey.forSharedServer(serverDomain: entry.serverDomain, pinnedStkHex: stkPubHex) {
+            try await client.bootKeyBinding(serverDomain: entry.serverDomain)
+        }
+    }
+
     /// §9 "B approves a start-up": pending `unlock-key` requests for this
-    /// server whose STK equals the pinned one and whose signature verifies.
+    /// server signed by the pinned STK (or the boot key it vouches for).
     public func pendingStartups(_ entry: SharedServerEntry, stkPubHex: String) async throws -> [VerifiedShareStartup] {
         let member = try await memberKey(shareId: entry.shareId, reason: "Check whether \(entry.displayName) is starting")
         let domain = entry.serverDomain.lowercased()
         let path = ServerShareClient.bootPendingPath(domain)
         let auth = try BootAuth.shareHeader(serverDomain: domain, method: "GET", path: path, memberKey: member, now: now())
         let rows = try await client.bootPending(serverDomain: domain, auth: auth)
-        return Self.verifiedStartups(rows, serverDomain: domain, stkPubHex: stkPubHex, now: now())
+        let stk = stkPubHex.lowercased()
+        let boot = rows.contains { $0.request.stkPub.lowercased() != stk } ? await sharedBootKey(entry, stkPubHex: stk) : nil
+        return Self.verifiedStartups(rows, serverDomain: domain, stkPubHex: stk, bootPubHex: boot, now: now())
     }
 
-    public static func verifiedStartups(_ rows: [ShareBootPending], serverDomain: String, stkPubHex: String, now: Int64) -> [VerifiedShareStartup] {
-        guard let stkData = HexUtil.decode(stkPubHex.lowercased()), stkData.count == 32,
-              let stk = try? Curve25519.Signing.PublicKey(rawRepresentation: stkData)
-        else { return [] }
+    /// `bootPubHex` must already be verified under the pinned STK (`sharedBootKey`).
+    public static func verifiedStartups(_ rows: [ShareBootPending], serverDomain: String, stkPubHex: String,
+                                        bootPubHex: String? = nil, now: Int64) -> [VerifiedShareStartup] {
         var out: [VerifiedShareStartup] = []
         for r in rows {
             let q = r.request
+            let signer = q.stkPub.lowercased()
             guard q.purpose == SecretPurpose.unlockKey.rawValue,
                   q.serverDomain.lowercased() == serverDomain.lowercased(),
-                  q.stkPub.lowercased() == stkPubHex.lowercased(),
+                  signer == stkPubHex.lowercased() || (bootPubHex != nil && signer == bootPubHex?.lowercased()),
+                  let signerData = HexUtil.decode(signer), signerData.count == 32,
+                  let key = try? Curve25519.Signing.PublicKey(rawRepresentation: signerData),
                   let nonce = HexUtil.decode(q.nonce), nonce.count == 32,
                   let sig = HexUtil.decode(r.signature)
             else { continue }
             if let exp = r.expiresAt, exp <= now { continue }
-            let request = SecretRequest(serverDomain: q.serverDomain, stkPub: stkData, purpose: .unlockKey, nonce: nonce, issuedAt: q.issuedAt)
-            guard SecretRequest.verify(request, signature: sig, stkPub: stk) else { continue }
+            let request = SecretRequest(serverDomain: q.serverDomain, stkPub: signerData, purpose: .unlockKey, nonce: nonce, issuedAt: q.issuedAt)
+            guard SecretRequest.verify(request, signature: sig, stkPub: key) else { continue }
             out.append(VerifiedShareStartup(request: request, expiresAt: r.expiresAt))
         }
         return out
     }
 
-    /// Open B's sealed copy, re-seal it for the box STK bound to this request,
-    /// and post the answer with role `share`.
+    /// Open B's sealed copy, re-seal it for the key that signed this request
+    /// (the pinned STK, or the boot key it vouches for), and post the answer
+    /// with role `share`.
     public func approveStartup(_ entry: SharedServerEntry, startup: VerifiedShareStartup, stkPubHex: String) async throws {
-        guard startup.request.stkPub == HexUtil.decode(stkPubHex.lowercased()) else { throw ServerShareFlowError.startupNotFromServer }
+        if startup.request.stkPub != HexUtil.decode(stkPubHex.lowercased()) {
+            guard let boot = await sharedBootKey(entry, stkPubHex: stkPubHex),
+                  startup.request.stkPub == HexUtil.decode(boot)
+            else { throw ServerShareFlowError.startupNotFromServer }
+        }
         let member = try await memberKey(shareId: entry.shareId, reason: "Start \(entry.displayName)")
         let domain = entry.serverDomain.lowercased()
         let keyPath = ServerShareClient.bootKeyPath(domain)

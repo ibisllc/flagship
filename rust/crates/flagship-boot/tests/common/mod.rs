@@ -23,6 +23,35 @@ use std::rc::Rc;
 pub const DOMAIN: &str = "home.alice.flagship.services";
 pub const SEED_A: [u8; 32] = [0x0b; 32];
 pub const SEED_B: [u8; 32] = [0x0c; 32];
+pub const OWNER_SEED: [u8; 32] = [0x07; 32];
+pub const LEASE_EXPIRES: u64 = 4_000_000_000_000;
+
+pub fn owner_pub() -> [u8; 32] {
+    ed25519_dalek::SigningKey::from_bytes(&OWNER_SEED)
+        .verifying_key()
+        .to_bytes()
+}
+
+/// A lease body as GET /api/boot/lease returns it, signed by `signer`.
+pub fn lease_body(
+    domain: &str,
+    stk_hex: &str,
+    sealed: &[u8],
+    expires: u64,
+    signer: &[u8; 32],
+) -> String {
+    use ed25519_dalek::Signer;
+    let lease_id = "00112233445566778899aabbccddeeff";
+    let sealed_hex = gohex::encode(sealed);
+    let canonical = format!(
+        "flagship/auto-unlock-lease/v2|{domain}|{stk_hex}|{lease_id}|{sealed_hex}|1|{expires}|-1"
+    );
+    let sig = ed25519_dalek::SigningKey::from_bytes(signer).sign(canonical.as_bytes());
+    format!(
+        "{{\"serverDomain\":\"{domain}\",\"leaseId\":\"{lease_id}\",\"stkPub\":\"{stk_hex}\",\"sealedKey\":\"{sealed_hex}\",\"issuedAt\":1,\"expiresAt\":{expires},\"maxUses\":null,\"usesConsumed\":0,\"signature\":\"{}\"}}",
+        gohex::encode(&sig.to_bytes())
+    )
+}
 pub const T0: u64 = 1_760_000_000_000;
 
 pub fn luks_key() -> Vec<u8> {
@@ -51,9 +80,16 @@ pub struct Worker {
     pub now: Rc<Cell<u64>>,
     pub stk_hex: String,
     pub lease: Option<Vec<u8>>,
+    pub lease_signer: [u8; 32],
+    pub lease_stk_hex: Option<String>,
+    pub lease_expires: u64,
     pub suspended: bool,
     pub post_status: u16,
+    pub refuse_posts: u32,
+    pub posts: u32,
     pub reply: Reply,
+    pub next_reply: Option<Reply>,
+    pub nonces: Vec<String>,
     pub seen: HashSet<String>,
     pub calls: Vec<(Method, String)>,
     pub bodies: Vec<String>,
@@ -71,9 +107,16 @@ impl Worker {
                 .pub_hex()
                 .to_owned(),
             lease: None,
+            lease_signer: OWNER_SEED,
+            lease_stk_hex: None,
+            lease_expires: LEASE_EXPIRES,
             suspended: false,
             post_status: 200,
+            refuse_posts: 0,
+            posts: 0,
             reply: Reply::Never,
+            next_reply: None,
+            nonces: Vec::new(),
             seen: HashSet::new(),
             calls: Vec::new(),
             bodies: Vec::new(),
@@ -154,14 +197,19 @@ impl Worker {
                 Ok(match &self.lease {
                     Some(l) => HttpResponse {
                         status: 200,
-                        body: format!(
-                            "{{\"serverDomain\":\"{domain}\",\"leaseId\":\"0123456789abcdef\",\"stkPub\":\"{stk}\",\"sealedKey\":\"{}\",\"issuedAt\":1,\"expiresAt\":2,\"maxUses\":null,\"usesConsumed\":0,\"signature\":\"{}\"}}",
-                            gohex::encode(l),
-                            "00".repeat(64)
+                        body: lease_body(
+                            &domain,
+                            self.lease_stk_hex.as_deref().unwrap_or(&stk),
+                            l,
+                            self.lease_expires,
+                            &self.lease_signer,
                         )
                         .into_bytes(),
                     },
-                    None => HttpResponse { status: 404, body: b"{\"error\":\"no active lease\"}".to_vec() },
+                    None => HttpResponse {
+                        status: 404,
+                        body: b"{\"error\":\"no active lease\"}".to_vec(),
+                    },
                 })
             }
             ["api", "boot", "request"] => {
@@ -180,9 +228,18 @@ impl Worker {
                     return Ok(self.deny(403, "invalid request signature"));
                 }
                 self.bodies.push(b.to_owned());
-                self.request_nonce = Some(r["nonce"].as_str().unwrap().to_owned());
+                let n = r["nonce"].as_str().unwrap().to_owned();
+                if self.nonces.last() != Some(&n) {
+                    self.nonces.push(n.clone());
+                }
+                self.request_nonce = Some(n);
+                self.posts += 1;
                 Ok(HttpResponse {
-                    status: self.post_status,
+                    status: if self.posts <= self.refuse_posts {
+                        403
+                    } else {
+                        self.post_status
+                    },
                     body: b"{\"ok\":true}".to_vec(),
                 })
             }
@@ -203,7 +260,8 @@ impl Worker {
                         body: b"{\"serverDomain\":\"x\",\"sealed\":\"\"}".to_vec(),
                     }),
                     Reply::After { after, build } if self.polls > after => {
-                        self.reply = Reply::Never;
+                        self.reply = self.next_reply.take().unwrap_or(Reply::Never);
+                        self.polls = 0;
                         Ok(HttpResponse {
                             status: 200,
                             body: format!(

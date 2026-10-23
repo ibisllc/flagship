@@ -358,6 +358,7 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v166: disk-key replies and leases go to the box's boot key, vouched for by the pinned STK (lib/bootKey.js).
 //  v165: the browser pins each server's box key before sealing to it (boxKeyPins), and reads the sealed disk key with the read token.
 //  v164: Access & permissions for one app (end a key, session or grant and stop its work).
 //  v163: the security sliver and the answer to a waiting publisher key.
@@ -367,7 +368,7 @@
 //  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
 //  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v165";
+const SHELL_VERSION = "v166";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -423,6 +424,7 @@ const OPTIONAL_SHELL = [
   "/lib/edToMont.js",
   "/lib/bootApproval.js",
   "/lib/boxKeyPins.js",
+  "/lib/bootKey.js",
   "/lib/x25519.js",
   "/lib/companionReceiver.js",
   "/lib/companionGuard.js",

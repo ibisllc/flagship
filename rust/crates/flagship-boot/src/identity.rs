@@ -1,6 +1,7 @@
-//! The box identity (STK) as the install path writes it to `/boot/identity.pem`:
-//! an Ed25519 PKCS#8 PEM. The shell flow extracts the 32-byte seed with
-//! `openssl pkey -outform DER | tail -c 64`; this parses the same DER directly.
+//! The box's Ed25519 key as a PKCS#8 PEM: on a box today the boot key,
+//! `/boot/flagship-boot-key.pem` (the STK is no longer on /boot; see
+//! packages/protocol/src/bootKey.ts). The premount reads it with
+//! `openssl pkey`; this parses the same DER directly.
 
 use base64ct::{Base64, Encoding};
 use core::fmt;
@@ -43,7 +44,7 @@ impl fmt::Display for IdentityError {
 
 impl std::error::Error for IdentityError {}
 
-/// The box's STK. The seed is zeroized on drop (with `SigningKey`'s own zeroize).
+/// An Ed25519 box key (the boot key at boot). The seed is zeroized on drop (with `SigningKey`'s own zeroize).
 pub struct BoxIdentity {
     key: SigningKey,
     pub_hex: String,
@@ -65,7 +66,7 @@ impl BoxIdentity {
         Self { key, pub_hex }
     }
 
-    /// From the PKCS#8 PEM text of `/boot/identity.pem`.
+    /// From PKCS#8 PEM text (v1, or v2 with a matching public key).
     pub fn from_pkcs8_pem(pem: &[u8]) -> Result<Self, IdentityError> {
         let der = pem_body(pem)?;
         let seed = seed_from_der(&der)?;
@@ -78,12 +79,12 @@ impl BoxIdentity {
         Ok(id)
     }
 
-    /// Lowercase hex of the STK public key.
+    /// Lowercase hex of the public key.
     pub fn pub_hex(&self) -> &str {
         &self.pub_hex
     }
 
-    /// The STK seed, for opening sealed blobs.
+    /// The seed, for opening sealed blobs.
     pub fn seed(&self) -> Zeroizing<[u8; 32]> {
         Zeroizing::new(self.key.to_bytes())
     }
@@ -91,6 +92,48 @@ impl BoxIdentity {
     /// Ed25519 (RFC 8032) signature, as `openssl pkeyutl -sign -rawin` makes.
     pub fn sign(&self, message: &[u8]) -> [u8; 64] {
         self.key.sign(message).to_bytes()
+    }
+}
+
+fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len()).position(|w| w == needle)
+}
+
+/// The Go helper's `SeedFromPKCS8PEM`, refusal for refusal: the first BEGIN
+/// and the first END marker anywhere, space/tab/CR/LF removed, padded
+/// standard base64, exactly a 48-byte PKCS#8 v1 Ed25519 key.
+pub fn seed_from_pkcs8_pem_go(pem: &[u8]) -> Result<Zeroizing<[u8; 32]>, IdentityError> {
+    const BEGIN: &[u8] = b"-----BEGIN PRIVATE KEY-----";
+    const END: &[u8] = b"-----END PRIVATE KEY-----";
+    let (Some(i), Some(j)) = (find(pem, BEGIN), find(pem, END)) else {
+        return Err(IdentityError::NotPem);
+    };
+    if j < i {
+        return Err(IdentityError::NotPem);
+    }
+    // Go slices s[i+len(begin):j] and panics when the END marker overlaps the
+    // BEGIN marker's dashes; refusing the key is the safe equivalent.
+    let body = pem
+        .get(i.saturating_add(BEGIN.len())..j)
+        .ok_or(IdentityError::NotEd25519Pkcs8)?;
+    let compact: Zeroizing<Vec<u8>> = Zeroizing::new(
+        body.iter()
+            .copied()
+            .filter(|b| !matches!(b, b' ' | b'\n' | b'\r' | b'\t'))
+            .collect(),
+    );
+    let der = core::str::from_utf8(&compact)
+        .ok()
+        .and_then(|t| Base64::decode_vec(t).ok())
+        .map(Zeroizing::new)
+        .ok_or(IdentityError::NotEd25519Pkcs8)?;
+    match der.split_first_chunk::<16>() {
+        Some((prefix, seed)) if *prefix == PKCS8_V1_PREFIX && seed.len() == 32 => {
+            let mut out = Zeroizing::new([0u8; 32]);
+            out.copy_from_slice(seed);
+            Ok(out)
+        }
+        _ => Err(IdentityError::NotEd25519Pkcs8),
     }
 }
 
@@ -179,6 +222,30 @@ mod tests {
         assert_eq!(
             BoxIdentity::from_pkcs8_pem(pem(&der).as_bytes()).unwrap_err(),
             IdentityError::PublicKeyMismatch
+        );
+    }
+
+    #[test]
+    fn reads_a_pem_like_the_go_helper() {
+        let seed = [0x1bu8; 32];
+        let mut der = PKCS8_V1_PREFIX.to_vec();
+        der.extend_from_slice(&seed);
+        let text = pem(&der).replace('\n', "\r\n \t");
+        assert_eq!(*seed_from_pkcs8_pem_go(text.as_bytes()).unwrap(), seed);
+        let mut v2 = PKCS8_V2_PREFIX.to_vec();
+        v2.extend_from_slice(&seed);
+        assert_eq!(
+            seed_from_pkcs8_pem_go(pem(&v2).as_bytes()).unwrap_err(),
+            IdentityError::NotEd25519Pkcs8
+        );
+        assert_eq!(
+            seed_from_pkcs8_pem_go(b"-----END PRIVATE KEY----------BEGIN PRIVATE KEY-----")
+                .unwrap_err(),
+            IdentityError::NotPem
+        );
+        assert_eq!(
+            seed_from_pkcs8_pem_go(b"-----BEGIN PRIVATE KEY-----END PRIVATE KEY-----").unwrap_err(),
+            IdentityError::NotEd25519Pkcs8
         );
     }
 

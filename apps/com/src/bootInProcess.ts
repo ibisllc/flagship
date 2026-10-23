@@ -19,7 +19,9 @@
 
 import type { DirectoryClient, NotifyPipe } from "@flagship/boot-core";
 import { usernameFromServerDomain } from "@flagship/boot-core";
+import { currentBootKeyBinding } from "@flagship/control-plane";
 import type {
+  ServerBootKeyStorage,
   ServerStorage,
   UsernameStorage,
   ServerShareStorage,
@@ -32,6 +34,8 @@ export interface InProcessDirectoryDeps {
   watchDelegates: WatchDelegateStorage;
   /** Shares (docs/share-a-server.md §5.4). Absent ⇒ no share can approve start-up. */
   serverShares?: ServerShareStorage;
+  /** Boot key bindings. Absent ⇒ boxes are accepted only under their STK. */
+  serverBootKeys?: ServerBootKeyStorage;
   /** The apex box FQDNs sit under (`<server>.<user>.<apex>`); used only to
    *  derive the account label from a domain. Defaults to flagship.services. */
   apex?: string;
@@ -56,6 +60,7 @@ export class InProcessDirectoryClient implements DirectoryClient {
   private readonly usernames: UsernameStorage;
   private readonly watchDelegates: WatchDelegateStorage;
   private readonly serverShares: ServerShareStorage | undefined;
+  private readonly serverBootKeys: ServerBootKeyStorage | undefined;
   private readonly apex: string;
 
   constructor(deps: InProcessDirectoryDeps) {
@@ -63,6 +68,7 @@ export class InProcessDirectoryClient implements DirectoryClient {
     this.usernames = deps.usernames;
     this.watchDelegates = deps.watchDelegates;
     this.serverShares = deps.serverShares;
+    this.serverBootKeys = deps.serverBootKeys;
     this.apex = deps.apex ?? "flagship.services";
   }
 
@@ -116,6 +122,12 @@ export class InProcessDirectoryClient implements DirectoryClient {
     if ((await this.boxStkForDomain(serverDomain)) === null) return null;
     const copy = await this.serverShares.unlockForMember(serverDomain.toLowerCase(), memberPubHex.toLowerCase());
     return copy ? { sealedKeyHex: copy.sealedKeyHex } : null;
+  }
+
+  async boxBootKeyForDomain(serverDomain: string): Promise<string | null> {
+    if (!this.serverBootKeys) return null;
+    const cur = await currentBootKeyBinding({ servers: this.servers, serverBootKeys: this.serverBootKeys }, serverDomain);
+    return cur?.bootKeyPubHex ?? null;
   }
 
   async usernameForDomain(serverDomain: string): Promise<string | null> {

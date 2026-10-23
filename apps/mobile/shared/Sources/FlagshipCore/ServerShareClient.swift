@@ -439,6 +439,15 @@ public final class ServerShareClient: Sendable {
                            headers: ["authorization": auth])
     }
 
+    /// The box's STK-signed boot-key binding (public), or nil when it has none.
+    public func bootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire? {
+        do {
+            return try await send(com, apex(), "GET", "/api/server/\(seg(serverDomain.lowercased()))/boot-key", body: nil as String?)
+        } catch let e as ServerShareHTTPError where e.status == 404 {
+            return nil
+        }
+    }
+
     public static func bootPendingPath(_ serverDomain: String) -> String { "/api/boot/share/pending/\(serverDomain)" }
     public static func bootKeyPath(_ serverDomain: String) -> String { "/api/boot/share/key/\(serverDomain)" }
     public static let bootResponsePath = "/api/boot/response"

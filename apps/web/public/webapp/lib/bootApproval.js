@@ -41,6 +41,7 @@ import { controlApex, bootOrigin } from "./apex.js";
 import { importX25519Private } from "./x25519.js";
 import { accountReadFetch } from "./accountRead.js";
 import { observePods, requirePinnedBoxKey } from "./boxKeyPins.js";
+import { bootKeyFor } from "./bootKey.js";
 
 const COM_BASE = controlApex();
 const BOOT_BASE = bootOrigin();
@@ -215,6 +216,7 @@ async function irkPubHex(umk) {
  * @property {string} purpose            "unlock-key" | "entitlement"
  * @property {string} requestNonceHex
  * @property {string} directoryStkPubHex the STK from the DIRECTORY (not the echo)
+ * @property {string} recipientPubHex    the key the reply is sealed to (STK, or its bound boot key)
  * @property {object|null} deviceInfo    unsigned display hint (ip/region/os/hostname)
  */
 
@@ -280,13 +282,22 @@ export async function fetchVerifiedRequests(deps = {}) {
     const domain = String(req.serverDomain ?? "").toLowerCase();
     const stkHex = dirStk.get(domain);
     if (!stkHex) continue; // no directory entry → `.com` can't vouch
-    // The mailbox echo MUST equal the directory STK (relay can't splice).
-    if (String(req.stkPub ?? "").toLowerCase() !== stkHex) continue;
-    // RE-VERIFY the box's request signature under the DIRECTORY STK.
+    // The request comes from the directory STK, or (a disk unlock from a box
+    // whose disk is still shut) from the boot key the pinned STK vouches for.
+    // Anything else is a splice and is dropped.
+    const echo = String(req.stkPub ?? "").toLowerCase();
+    let signerHex = stkHex;
+    if (echo !== stkHex) {
+      if (req.purpose !== "unlock-key") continue;
+      const bootHex = await bootKeyFor(username, domain, { fetch: f, comBase, ...deps });
+      if (!bootHex || bootHex !== echo) continue;
+      signerHex = bootHex;
+    }
+    // RE-VERIFY the box's request signature under that key.
     let stkPub;
     let sig;
     try {
-      stkPub = hexToBytes(stkHex);
+      stkPub = hexToBytes(signerHex);
       sig = hexToBytes(req.requestSignature);
       if (stkPub.length !== 32 || sig.length !== 64) continue;
     } catch {
@@ -294,7 +305,7 @@ export async function fetchVerifiedRequests(deps = {}) {
     }
     const canonical = canonicalSecretRequest({
       serverDomain: req.serverDomain,
-      stkPubHex: stkHex,
+      stkPubHex: signerHex,
       purpose: req.purpose,
       nonceHex: req.requestNonceHex,
       issuedAt: req.issuedAt,
@@ -313,6 +324,8 @@ export async function fetchVerifiedRequests(deps = {}) {
       purpose: req.purpose,
       requestNonceHex: req.requestNonceHex,
       directoryStkPubHex: stkHex,
+      // The key the reply is sealed to: the boot key when the box signed with it.
+      recipientPubHex: signerHex,
       deviceInfo: req.deviceInfo ?? null,
     });
   }
@@ -393,7 +406,10 @@ async function respondUnlock(req, deps = {}) {
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  const stkEdPub = hexToBytes(requirePinnedBoxKey(session.username, req.serverDomain, req.directoryStkPubHex, deps));
+  const pinnedStk = requirePinnedBoxKey(session.username, req.serverDomain, req.directoryStkPubHex, deps);
+  // fetchVerifiedRequests only names a recipient other than the STK after the
+  // pinned STK's binding vouched for it.
+  const stkEdPub = hexToBytes(req.recipientPubHex && req.recipientPubHex !== req.directoryStkPubHex ? req.recipientPubHex : pinnedStk);
 
   // 1. GET the phone-sealed LUKS key (sealed FOR the IRK at install).
   const sealedRes = await fetchSealedDiskKey(req.serverDomain, session.username, { fetch: f, comBase });

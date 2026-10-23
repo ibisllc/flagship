@@ -12,7 +12,7 @@
 //   2. confirmAndRespond — for the verified request the user taps "yes,
 //      this is my box" (the device-info backstop). By purpose:
 //        - unlock-key:  GET the phone-sealed LUKS key, unseal it with the
-//                       phone's IRK seed, re-seal it FOR the box's STK
+//                       phone's IRK seed, re-seal it FOR the box's boot key (STK on an older box)
 //                       (nonce/purpose-bound), POST it.
 //        - entitlement: IRK-sign a root-only RootEntitlement, serialize it
 //                       as the daemon's EntitlementBundle carrier, hex,
@@ -121,6 +121,8 @@ class SecretRequestCoordinator(
         val pending: PendingSecretRequest,
         /** STK as resolved from the DIRECTORY (not the mailbox echo). */
         val directoryStkPubHex: String,
+        /** The key the reply is sealed to: the STK, or the boot key its pinned STK bound. */
+        val recipientPubHex: String = directoryStkPubHex,
     ) {
         val id: String get() = pending.id
         val serverDomain: String get() = pending.serverDomain
@@ -154,23 +156,32 @@ class SecretRequestCoordinator(
             val stkHex = directory.identityPubKey(pending.serverDomain) ?: continue
             val stkPub = HexUtil.decode(stkHex) ?: continue
             if (stkPub.size != 32) continue
-            // The mailbox echo MUST equal the directory STK — a relay can't
-            // splice in a different stkPub.
-            if (!pending.stkPub.equals(stkHex, ignoreCase = true)) continue
             val purpose = SecretPurpose.fromWire(pending.purpose) ?: continue
+            // The request comes from the directory STK, or (a disk unlock from a box whose disk is
+            // still shut) from the boot key the pinned STK vouches for. Anything else is a splice.
+            val echo = pending.stkPub.lowercase()
+            var signerHex = stkHex.lowercase()
+            var signerPub = stkPub
+            if (echo != signerHex) {
+                if (purpose != SecretPurpose.UNLOCK_KEY) continue
+                val boot = BootKey.bootKeyFor(username, pending.serverDomain, mailbox::fetchBootKeyBinding, pins)
+                if (boot == null || boot != echo) continue
+                signerHex = boot
+                signerPub = HexUtil.decode(boot)?.takeIf { it.size == 32 } ?: continue
+            }
             val sig = HexUtil.decode(pending.requestSignature) ?: continue
-            // RE-VERIFY the box's request against the DIRECTORY STK.
+            // RE-VERIFY the box's request under that key.
             val ok = SecretRequest.verify(
                 signature = sig,
-                stkPub = stkPub,
+                stkPub = signerPub,
                 serverDomain = pending.serverDomain,
-                stkPubHex = stkHex,
+                stkPubHex = signerHex,
                 purpose = purpose,
                 nonceHex = pending.requestNonceHex,
                 issuedAt = pending.issuedAt,
             )
             if (!ok) continue
-            verified.add(VerifiedRequest(pending = pending, directoryStkPubHex = stkHex))
+            verified.add(VerifiedRequest(pending = pending, directoryStkPubHex = stkHex, recipientPubHex = signerHex))
         }
         return verified
     }
@@ -197,7 +208,13 @@ class SecretRequestCoordinator(
             ?.takeIf { it.size == 32 }
             ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)
         // Before any prompt: a key other than the one this phone pinned gets nothing.
-        pins.require(username, verified.serverDomain, verified.directoryStkPubHex)
+        val pinnedStk = pins.require(username, verified.serverDomain, verified.directoryStkPubHex)
+        // fetchVerifiedRequests names a recipient other than the STK only after the pinned STK's
+        // binding vouched for it; the disk key and the lease go there, the entitlement to the STK.
+        val diskKeyRecipient = if (verified.recipientPubHex.lowercase() != pinnedStk) {
+            HexUtil.decode(verified.recipientPubHex)?.takeIf { it.size == 32 }
+                ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)
+        } else stkPub
 
         val material = irk.resolve("Approve your server's boot secret")
         val delegate: WatchDelegateSigner? =
@@ -213,7 +230,7 @@ class SecretRequestCoordinator(
         var unlockKey: ByteArray? = null
         val sealedHex = when (purpose) {
             SecretPurpose.UNLOCK_KEY -> {
-                val (hex, key) = buildUnlockReply(verified, stkPub, material)
+                val (hex, key) = buildUnlockReply(verified, diskKeyRecipient, material)
                 unlockKey = key
                 hex
             }
@@ -284,7 +301,7 @@ class SecretRequestCoordinator(
         // it here — I2) using the key we just recovered (never .com-visible).
         val key = unlockKey
         if (depositAutoLease && purpose == SecretPurpose.UNLOCK_KEY && key != null) {
-            return depositAutoUnlockLease(verified.serverDomain, stkPub, key, material)
+            return depositAutoUnlockLease(verified.serverDomain, diskKeyRecipient, key, material)
         }
         return null
     }
@@ -351,7 +368,7 @@ class SecretRequestCoordinator(
         mailbox.revokeBoxSealedLease(LeaseRevokeWire(serverDomain, leaseId, issuedAt), auth)
     }
 
-    /** Deposit a long-lived box-sealed lease (LUKS key sealed for the box
+    /** Deposit a long-lived box-sealed lease (LUKS key sealed for the box's boot key, or the
      *  STK). Returns the lease id, or null when the worker did not take it.
      *
      *  The lease body is signed by the owner IRK, the same key as the
@@ -480,7 +497,7 @@ class SecretRequestCoordinator(
 
     /** Fetch the phone-sealed LUKS key, unseal it with the phone's IRK
      *  seed (the installer sealed it against the phone IRK pub), then
-     *  re-seal it FOR the box's STK bound to (nonce, purpose). */
+     *  re-seal it FOR the request's signer (boot key or STK) bound to (nonce, purpose). */
     private suspend fun buildUnlockReply(
         verified: VerifiedRequest,
         stkPub: ByteArray,
@@ -502,7 +519,7 @@ class SecretRequestCoordinator(
             throw CoordinatorException.LuksUnsealFailed
         }
 
-        // Re-seal FOR the box's STK, nonce/purpose-bound. Hand back the
+        // Re-seal FOR the boot key or STK, nonce/purpose-bound. Hand back the
         // recovered key so an "auto" approval can deposit a box-sealed lease.
         val sealedHex = HexUtil.encode(
             SealedSecretResponse.build(

@@ -18,6 +18,17 @@ export const HEALTH_TIMER_PATH = "/etc/systemd/system/flagship-health.timer";
 const SAFE_URL = /^https:\/\/[A-Za-z0-9.-]+(:[0-9]+)?$/;
 const SAFE_DOMAIN = /^[a-z0-9.-]+$/;
 
+/**
+ * The key the timer signs with. A box with a boot key keeps no STK on /boot
+ * (packages/protocol/src/bootKey.ts), and the timer runs outside keyd on
+ * purpose, so it signs with the boot key; `.com` accepts it through the
+ * stored binding. A box without one (demo, unencrypted) still has the STK PEM.
+ */
+export const BOOT_KEY_PEM_PATH = "/boot/flagship-boot-key.pem";
+export function healthKeyPath(exists: (p: string) => boolean = existsSync): string {
+  return exists(BOOT_KEY_PEM_PATH) ? BOOT_KEY_PEM_PATH : "/boot/identity.pem";
+}
+
 export function buildHealthReportScript(args: {
   controlPlaneBaseUrl: string;
   serverDomain: string;
@@ -27,7 +38,8 @@ export function buildHealthReportScript(args: {
   const domain = args.serverDomain.toLowerCase();
   if (!SAFE_URL.test(base)) throw new Error("unsafe control-plane URL");
   if (!SAFE_DOMAIN.test(domain)) throw new Error("unsafe server domain");
-  const key = args.keyPath ?? "/boot/identity.pem";
+  const key = args.keyPath ?? healthKeyPath();
+  if (!/^\/[A-Za-z0-9._\/-]+$/.test(key)) throw new Error("unsafe key path");
   return `#!/bin/bash
 # Flagship box health report (installed by the daemon; see healthReporter.ts).
 set -u

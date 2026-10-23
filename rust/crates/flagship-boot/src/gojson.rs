@@ -4,6 +4,10 @@
 //! ignored, a top-level `null` is accepted, type errors name the field, and
 //! invalid UTF-8 or lone surrogates inside strings become U+FFFD instead of
 //! failing. Syntax errors are refused like Go (the wording is serde_json's).
+//!
+//! [`unmarshal_lease`] does the same for `--lease-json` and the unlock flow's
+//! lease, into the Go helper's `leaseJSON` (every field a pointer, so a later
+//! `null` unsets it again). Its only error is "malformed".
 
 use serde::de::{self, Deserializer as _, IgnoredAny, MapAccess, Visitor};
 use serde_json::value::RawValue;
@@ -54,12 +58,16 @@ fn fold(s: &str) -> Vec<char> {
         .collect()
 }
 
-fn field_for(key: &str) -> Option<(&'static str, Field)> {
-    if let Some(&f) = FIELDS.iter().find(|(n, _)| *n == key) {
+fn lookup<F: Copy>(fields: &[(&'static str, F)], key: &str) -> Option<(&'static str, F)> {
+    if let Some(&f) = fields.iter().find(|(n, _)| *n == key) {
         return Some(f);
     }
     let k = fold(key);
-    FIELDS.iter().find(|(n, _)| fold(n) == k).copied()
+    fields.iter().find(|(n, _)| fold(n) == k).copied()
+}
+
+fn field_for(key: &str) -> Option<(&'static str, Field)> {
+    lookup(&FIELDS, key)
 }
 
 struct Entries<'a>(Vec<(String, &'a RawValue)>);
@@ -173,6 +181,87 @@ pub fn unmarshal_response(input: &[u8]) -> Result<ResponseJson, String> {
         Some(e) => Err(e),
         None => Ok(out),
     }
+}
+
+/// The fields of the Go helper's `leaseJSON`; `None` is a nil pointer.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct LeaseJson {
+    /// `serverDomain`.
+    pub server_domain: Option<String>,
+    /// `leaseId`.
+    pub lease_id: Option<String>,
+    /// `stkPub`: the recipient's Ed25519 public key, hex.
+    pub stk_pub: Option<String>,
+    /// `sealedKey`: the sealed disk key, hex.
+    pub sealed_key: Option<String>,
+    /// `issuedAt`, epoch ms.
+    pub issued_at: Option<i64>,
+    /// `expiresAt`, epoch ms.
+    pub expires_at: Option<i64>,
+    /// `maxUses`.
+    pub max_uses: Option<i64>,
+    /// `signature`: the owner's Ed25519 signature, hex.
+    pub signature: Option<String>,
+}
+
+#[derive(Clone, Copy)]
+enum LeaseField {
+    Str(fn(&mut LeaseJson) -> &mut Option<String>),
+    Int(fn(&mut LeaseJson) -> &mut Option<i64>),
+}
+
+const LEASE_FIELDS: [(&str, LeaseField); 8] = [
+    ("serverDomain", LeaseField::Str(|l| &mut l.server_domain)),
+    ("leaseId", LeaseField::Str(|l| &mut l.lease_id)),
+    ("stkPub", LeaseField::Str(|l| &mut l.stk_pub)),
+    ("sealedKey", LeaseField::Str(|l| &mut l.sealed_key)),
+    ("issuedAt", LeaseField::Int(|l| &mut l.issued_at)),
+    ("expiresAt", LeaseField::Int(|l| &mut l.expires_at)),
+    ("maxUses", LeaseField::Int(|l| &mut l.max_uses)),
+    ("signature", LeaseField::Str(|l| &mut l.signature)),
+];
+
+/// [`unmarshal_lease`] failed (any error Go's `json.Unmarshal` would return).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Malformed;
+
+/// `json.Unmarshal(body, &leaseJSON{})`; `Err` is any error Go would return.
+pub fn unmarshal_lease(input: &[u8]) -> Result<LeaseJson, Malformed> {
+    let text = sanitize_strings(input);
+    let mut syntax = serde_json::Deserializer::from_slice(&text);
+    syntax
+        .deserialize_ignored_any(IgnoredAny)
+        .map_err(|_| Malformed)?;
+    syntax.end().map_err(|_| Malformed)?;
+    let raw: &RawValue = serde_json::from_slice(&text).map_err(|_| Malformed)?;
+    let mut out = LeaseJson::default();
+    match kind_of(raw.get()) {
+        "null" => return Ok(out),
+        "object" => {}
+        _ => return Err(Malformed),
+    }
+    let entries: Entries<'_> = serde_json::from_str(raw.get()).map_err(|_| Malformed)?;
+    let mut failed = false;
+    for (key, value) in entries.0 {
+        let Some((_, field)) = lookup(&LEASE_FIELDS, &key) else {
+            continue;
+        };
+        let v = value.get();
+        let kind = kind_of(v);
+        match field {
+            LeaseField::Str(slot) if kind == "null" => *slot(&mut out) = None,
+            LeaseField::Int(slot) if kind == "null" => *slot(&mut out) = None,
+            LeaseField::Str(slot) if kind == "string" => {
+                *slot(&mut out) = Some(serde_json::from_str(v).map_err(|_| Malformed)?);
+            }
+            LeaseField::Int(slot) if kind == "number" => match v.parse::<i64>() {
+                Ok(n) => *slot(&mut out) = Some(n),
+                Err(_) => failed = true,
+            },
+            _ => failed = true,
+        }
+    }
+    if failed { Err(Malformed) } else { Ok(out) }
 }
 
 fn hex4(s: &[u8]) -> Option<u32> {
@@ -299,6 +388,26 @@ mod tests {
             "unexpected end of JSON input"
         );
         assert!(unmarshal_response(b"{} x").is_err());
+    }
+
+    #[test]
+    fn decodes_a_lease_like_go() {
+        let l = unmarshal_lease(br#"{"SERVERDOMAIN":"a","serverDomain":"b","maxUses":3,"maxUses":null,"issuedAt":-0,"x":{}}"#).unwrap();
+        assert_eq!(l.server_domain.as_deref(), Some("b"));
+        assert_eq!(l.max_uses, None);
+        assert_eq!(l.issued_at, Some(0));
+        assert_eq!(unmarshal_lease(b"null").unwrap(), LeaseJson::default());
+        for bad in [
+            &br#"{"issuedAt":1.5}"#[..],
+            br#"{"issuedAt":"1"}"#,
+            br#"{"leaseId":1}"#,
+            br#"{"expiresAt":9223372036854775808}"#,
+            b"[]",
+            b"{",
+            b"{} x",
+        ] {
+            assert_eq!(unmarshal_lease(bad), Err(Malformed));
+        }
     }
 
     #[test]

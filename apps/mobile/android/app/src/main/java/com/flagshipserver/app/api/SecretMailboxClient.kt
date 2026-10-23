@@ -30,6 +30,10 @@ interface SecretMailboxClient {
      *  the phone. 404 → no sealed key on file. Stays on the identity plane. */
     suspend fun fetchSealedLuksKey(serverDomain: String, username: String): SealedLuksKeyResponse
 
+    /** GET /api/server/:host/boot-key: the STK-signed binding of the box's boot key, or null when
+     *  the box has none (404). Public; the caller verifies it under the pinned STK. */
+    suspend fun fetchBootKeyBinding(serverDomain: String): com.flagshipserver.app.core.BootKeyBindingWire? = null
+
     /** GET /api/users/:u/pods — the directory. The phone resolves the
      *  box's STK INDEPENDENTLY of the mailbox echo from here. Identity plane. */
     suspend fun fetchPods(username: String): PodsDirectoryResponse
@@ -757,6 +761,13 @@ class LiveSecretMailboxClient(
                 extraHeaders = auth,
             )
         }
+    }
+
+    override suspend fun fetchBootKeyBinding(serverDomain: String): com.flagshipserver.app.core.BootKeyBindingWire? {
+        val encoded = java.net.URLEncoder.encode(serverDomain.lowercase(), "UTF-8")
+        val r = transport.execute("GET", "$base/api/server/$encoded/boot-key", accept = setOf(200, 404))
+        if (r.status != 200) return null
+        return com.flagshipserver.app.core.BootKey.parse(String(r.body, Charsets.UTF_8))
     }
 
     override suspend fun fetchPods(username: String): PodsDirectoryResponse {

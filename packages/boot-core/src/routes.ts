@@ -208,10 +208,15 @@ async function handleDepositLease(
 
   // I2 — the lease's pinned recipient MUST be the directory-bound box
   // STK; the worker never accepts a lease that seals for another box.
+  // The recipient is the box's STK-bound boot key (new boxes keep only that on
+  // /boot) or, for a box without one, the STK itself.
   const dirStk = await deps.directory.boxStkForDomain(l.serverDomain);
   if (dirStk === null) return { status: 404, body: { error: "unknown server" } };
   if (!equalHex(l.stkPub, dirStk)) {
-    return { status: 403, body: { error: "stkPub does not match the registered server" } };
+    const bootKey = deps.directory.boxBootKeyForDomain ? await deps.directory.boxBootKeyForDomain(l.serverDomain) : null;
+    if (bootKey === null || !equalHex(l.stkPub, bootKey)) {
+      return { status: 403, body: { error: "stkPub does not match the registered server" } };
+    }
   }
 
   // The lease body is ALSO IRK-signed (signature_hex is released to the
@@ -364,7 +369,7 @@ async function handleGetLease(
   serverDomain: string,
 ): Promise<BootResponse> {
   const now = deps.now ?? (() => Date.now());
-  const auth = await gate(deps.gate, { role: "box", serverDomain, method: "GET", path }, authHeader);
+  const auth = await gate(deps.gate, { role: "box", serverDomain, method: "GET", path, allowBootKey: true }, authHeader);
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
 
   const row = await deps.boxSealedLeases.release(serverDomain, now());
@@ -482,7 +487,7 @@ async function handlePostRequest(
   if (!HEX128.test(b.signature.toLowerCase())) return { status: 400, body: { error: "signature must be 64 bytes hex" } };
 
   // Rules 2-4 — box-STK gate bound to (POST, this path, serverDomain).
-  const auth = await gate(deps.gate, { role: "box", serverDomain: r.serverDomain, method: "POST", path }, authHeader);
+  const auth = await gate(deps.gate, { role: "box", serverDomain: r.serverDomain, method: "POST", path, allowBootKey: true }, authHeader);
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
 
   // The Authorization signer is the directory-bound box STK (gate rule
@@ -490,6 +495,9 @@ async function handlePostRequest(
   // the same box that announced it.
   if (!equalHex(r.stkPub, auth.pubKeyHex)) {
     return { status: 403, body: { error: "request stkPub does not match the announcing box" } };
+  }
+  if (auth.boxKey === "boot-key" && r.purpose !== "unlock-key") {
+    return { status: 403, body: { error: "the boot key can only ask for the disk unlock" } };
   }
 
   // Re-verify the SecretRequest body signature against the box STK — the
@@ -605,7 +613,7 @@ async function handleGetResponse(
   if (!HEX_NONCE.test(nonceHex.toLowerCase())) {
     return { status: 400, body: { error: "nonce must be 32 bytes hex" } };
   }
-  const auth = await gate(deps.gate, { role: "box", serverDomain, method: "GET", path }, authHeader);
+  const auth = await gate(deps.gate, { role: "box", serverDomain, method: "GET", path, allowBootKey: true }, authHeader);
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
 
   const row = await deps.secretMailbox.consumeResponse(serverDomain, nonceHex.toLowerCase(), now());
