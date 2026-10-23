@@ -243,6 +243,21 @@ export async function assertResolvedHostSafe(
   opts: BaseUrlGuardOptions = {},
   resolve?: HostResolver,
 ): Promise<string> {
+  return (await resolveSafeHost(host, subject, opts, resolve)).host;
+}
+
+/**
+ * Like `assertResolvedHostSafe`, but also returns the addresses that passed so
+ * the caller can connect to exactly those (resolve, classify, then dial the
+ * numeric address) instead of resolving the name a second time. `addresses` is
+ * empty for an IP literal or an allowlisted host, which need no pinning.
+ */
+export async function resolveSafeHost(
+  host: string,
+  subject: string,
+  opts: BaseUrlGuardOptions = {},
+  resolve?: HostResolver,
+): Promise<{ host: string; addresses: string[] }> {
   const h = host.toLowerCase();
   if (h.length === 0) throw new UnsafeBaseUrlError(subject, "empty host");
 
@@ -255,14 +270,14 @@ export async function assertResolvedHostSafe(
 
   const literal = parseIpLiteral(h);
   if (literal) {
-    if (ipEquals(literal, METADATA_IPV4)) {
+    if (ipEquals(literal, METADATA_IPV4) || classifyIp(literal) === "metadata") {
       throw new UnsafeBaseUrlError(subject, "cloud metadata IP");
     }
     if (!allowlisted) assertIpAllowed(subject, literal, opts);
-    return h;
+    return { host: h, addresses: [] };
   }
 
-  if (allowlisted) return h;
+  if (allowlisted) return { host: h, addresses: [] };
 
   const resolver = resolve ?? defaultHostResolver;
   let addrs: string[];
@@ -281,7 +296,7 @@ export async function assertResolvedHostSafe(
     }
     assertIpAllowed(subject, ip, opts);
   }
-  return h;
+  return { host: h, addresses: addrs };
 }
 
 /**
