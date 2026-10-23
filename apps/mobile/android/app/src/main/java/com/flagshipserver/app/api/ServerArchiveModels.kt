@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -91,9 +93,9 @@ data class ServerRestoreSummary(
     /** The lines to show under a restored app, empty when there is nothing to say. */
     val needs: List<String>
         get() = buildList {
-            if (awaitingApproval.isNotEmpty()) add("Waiting for an admin: ${awaitingApproval.joinToString("; ")}.")
-            if (reconnect.isNotEmpty()) add("Set up again: ${reconnect.joinToString("; ")}.")
-            if (notes.isNotEmpty()) add("Note: ${notes.joinToString("; ")}.")
+            if (awaitingApproval.isNotEmpty()) add(FSStrings.get(R.string.waiting_for_an_admin, awaitingApproval.joinToString("; ")))
+            if (reconnect.isNotEmpty()) add(FSStrings.get(R.string.set_up_again, reconnect.joinToString("; ")))
+            if (notes.isNotEmpty()) add(FSStrings.get(R.string.note, notes.joinToString("; ")))
         }
 }
 
