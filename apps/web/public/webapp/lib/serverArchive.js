@@ -270,8 +270,25 @@ export function restoreSummary(apps = []) {
   return `Restored ${ok} app${ok === 1 ? "" : "s"}.` + (failed ? ` ${failed} couldn't be restored; the server works with the rest.` : "");
 }
 
+/**
+ * What a restored app still needs from the owner (N09): permissions held for an admin, settings and
+ * keys to set up again, and anything in its database that runs code. Empty for an app with nothing.
+ */
+export function restoreNeeds(a) {
+  const s = a?.summary;
+  if (!s) return [];
+  const out = [];
+  if (Array.isArray(s.awaitingApproval) && s.awaitingApproval.length) out.push(`Waiting for an admin: ${s.awaitingApproval.join("; ")}.`);
+  if (Array.isArray(s.reconnect) && s.reconnect.length) out.push(`Set up again: ${s.reconnect.join("; ")}.`);
+  if (Array.isArray(s.notes) && s.notes.length) out.push(`Note: ${s.notes.join("; ")}.`);
+  return out;
+}
+
 export function describeRestoreApp(a) {
-  if (a.state === "done") return `${a.name}: restored`;
+  if (a.state === "done") {
+    const needs = restoreNeeds(a);
+    return needs.length ? `${a.name}: restored. ${needs.join(" ")}` : `${a.name}: restored`;
+  }
   if (a.state === "skipped") return `${a.name}: skipped (${a.reason || "already here"})`;
   if (a.state === "failed") return `Couldn't restore ${a.name}: ${trimStop(a.reason) || "it couldn't be restored"}.`;
   if (a.state === "restoring") return `${a.name}: restoring…`;

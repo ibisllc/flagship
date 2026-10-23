@@ -212,6 +212,47 @@ public final class SettingsViewModel {
         }
     }
 
+    /// What a rejection of a pending recovery came to.
+    public enum RecoveryVetoOutcome: Equatable, Sendable {
+        case rejected
+        /// It was already cancelled or finished; nothing to do.
+        case alreadyOver
+        case failed(String)
+    }
+
+    /// N04: an active admin rejects the pending recovery. Asks for the device's biometric
+    /// (the admin root), signs the exact attempt and posts it. The caller shows the
+    /// confirmation first; this is only the signing step.
+    public func vetoPendingRecovery(
+        adminRootKey: (String) async throws -> Curve25519.Signing.PrivateKey = { reason in
+            try await Keystore.adminRootKey(reason: reason)
+        }
+    ) async -> RecoveryVetoOutcome {
+        guard let username = currentUsername(), !username.isEmpty,
+              let pending = pendingRePair?.pending, pending.objectedAt == nil else { return .alreadyOver }
+        do {
+            let key = try await adminRootKey("Reject the account recovery")
+            let vetoerPub = key.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
+            let veto = RePairVeto(
+                username: username, newIrkPubHex: pending.newIrkPub, initiatedAt: pending.initiatedAt,
+                completesAt: pending.completesAt, vetoerPubHex: vetoerPub, issuedAt: now())
+            let sig = try veto.sign(with: key).map { String(format: "%02x", $0) }.joined()
+            try await server.vetoRePair(
+                username: username,
+                body: RePairVetoRequest(
+                    request: .init(username: username, newIrkPub: pending.newIrkPub, initiatedAt: pending.initiatedAt,
+                                   completesAt: pending.completesAt, vetoerPub: vetoerPub, issuedAt: veto.issuedAt),
+                    signature: sig))
+            await loadPendingRePair()
+            return .rejected
+        } catch ScreensClientError.http(let status, _) where status == 409 {
+            await loadPendingRePair()
+            return .alreadyOver
+        } catch {
+            return .failed(UserErrorText.of(error))
+        }
+    }
+
     public func revoke(_ session: PairedSessionSummary) async {
         do {
             try await screens.revokePairedSession(tokenPrefix: session.tokenPrefix)

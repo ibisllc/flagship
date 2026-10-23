@@ -1,3 +1,4 @@
+import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import type { UserDataOptions } from "./userdata.js";
 import { buildDebianPreseed } from "./preseed.js";
 import { APPLIANCE_FACTORY_KEY, buildAppliancePrepareScript } from "./appliance.js";
@@ -7,7 +8,7 @@ import { utf8ToBase64 } from "./base64.js";
  * The synthetic recipe exists only to reuse the proven encrypted partitioning,
  * package, GRUB, and poweroff template; its normal late command is replaced in
  * full, so no recipe/bootstrap artifact enters the installed image. */
-export function buildDebianApplianceFactoryPreseed(gitRef: string): string {
+export function buildDebianApplianceFactoryPreseed(gitRef: string, gitCommit: string = BOX_RELEASE.commit): string {
   const zeros32 = new Uint8Array(32);
   const zeros64Bytes = new Uint8Array(64);
   const zeros64 = "00".repeat(64);
@@ -31,14 +32,14 @@ export function buildDebianApplianceFactoryPreseed(gitRef: string): string {
         expiresAt: 4_102_444_800_000,
       },
       authCodeUserSignature: zeros64Bytes,
-      installerGitRef: gitRef,
+      installerGitRef: gitCommit,
       rckPubKey: zeros32,
     },
     blobSignatureHex: zeros64,
     encryptRoot: true,
   } as unknown as UserDataOptions;
   const base = buildDebianPreseed(factoryOptions);
-  const prepareB64 = utf8ToBase64(buildAppliancePrepareScript({ gitRef }));
+  const prepareB64 = utf8ToBase64(buildAppliancePrepareScript({ gitRef, gitCommit }));
   const lateCommand =
     `touch /tmp/flagship-installer-telemetry.done; ` +
     `echo '${prepareB64}' | base64 -d > /target/usr/local/sbin/flagship-appliance-prepare.sh; ` +

@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import FlagshipAPI
+import FlagshipCore
 
 @Observable
 @MainActor
@@ -37,6 +38,8 @@ public final class HomeViewModel {
             }
             #endif
             let resp = try await client.serverDetail()
+            // The box's word on its dead-man switch beats this phone's memory (SEC-DEADMAN-001).
+            if let view = resp.deadMan { DeadManStore().sync(serverDomain: resp.serverFqdn, from: view) }
             detail = .loaded(resp)
             needsPairing = false
         } catch {

@@ -86,6 +86,16 @@ function serverPage(m: Mock, fqdn: string, pods: unknown[]): Mock {
   m.get(`${fqdn}/api/front-page`, { label: null, active: false });
   m.get(`${fqdn}/api/services`, { apps: [{ urlLabel: "notes", name: "Notes" }] });
   m.get(`/api/server/${fqdn}/unlock-key/leases-v2`, { leases: [] });
+  // SEC-LOCK-001: the boot service's record. A lock lands durably; nothing starts locked.
+  let epoch = 0;
+  let suspended = false;
+  m.get("/api/boot/suspension/", () => ({ json: { suspended, epoch, generation: epoch } }));
+  m.on("PUT", "/api/boot/suspension", (c) => {
+    const order = (c.body as { order: { action: string; epoch: number } }).order;
+    suspended = order.action === "suspend";
+    epoch = order.epoch;
+    return { json: { durable: true, state: { suspended, epoch, generation: epoch }, leasesRevoked: 0 } };
+  });
   return m;
 }
 
@@ -582,8 +592,10 @@ test.describe("gym webapp server page and Home leftovers", () => {
     const post = await m.waitFor(`${HOME}/api/power`);
     expect(post.body.request).toMatchObject({ type: "power-off", serverId: HOME, mode: "restart" });
     expect(await signer(page, keys, POWER, post.body.request, post.body.signature)).toBe("admin");
-    await expect(page.locator("#power-status")).toHaveText("Restarting — the server will go offline briefly.", { timeout: 10_000 });
-    await sawToast(page, "Lock and restart sent");
+    // The lock lands at the boot service first, then the signed order goes to the box.
+    expect(m.sent("/api/boot/suspension", "PUT")).toHaveLength(1);
+    await expect(page.locator("#power-status")).toContainText("locked: it can't unlock itself until you resume it", { timeout: 10_000 });
+    await sawToast(page, "Lock and restart sent; locked");
     await expect(btn).toHaveText("Lock and restart");
   });
 

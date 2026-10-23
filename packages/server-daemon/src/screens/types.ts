@@ -107,6 +107,12 @@ export interface ServerDetailResponse {
    */
   lastUpdate?: UpdateOutcomeRecord | null;
   /**
+   * The dead-man switch as the box holds it. Every client bounds the
+   * auto-unlock leases it deposits by `leaseExpiry` while `enabled`
+   * (SEC-DEADMAN-001), so a lease can never outlive the affirmation.
+   */
+  deadMan?: { enabled: boolean; leaseExpiry: number; windowMs: number; graceMs: number; lockoutMode: "off" | "restart" };
+  /**
    * Owner debug access (docs/recipe-delivery-and-remote-install.md): whether
    * an SSH key is let in as `debug`, until when, which key, and who signed
    * it (`admin` = the admin root or an admin device; `owner-key` = the IRK on

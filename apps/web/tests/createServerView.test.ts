@@ -51,7 +51,10 @@ describe("create-server view — SWK provisioning", () => {
   });
 
   it("carries the swkHex sibling into the downloaded recipe", () => {
-    expect(VIEW_SRC).toMatch(/if \(blobBundle\.swkHex\) recipe\.swkHex = blobBundle\.swkHex/);
+    expect(VIEW_SRC).toMatch(/recipe\.swkHex = blobBundle\.swkHex/);
+    // ...together with the owner's signed commitment to it (SEC-RECIPE-001).
+    expect(VIEW_SRC).toMatch(/recipe\.offlineSecrets = blobBundle\.offlineSecrets/);
+    expect(VIEW_SRC).toMatch(/bundle\.offlineSecrets = await signOfflineSecrets\(/);
   });
 
   it("uses the protocol DOTS info (flagship.swk.v1), never the app-backup slashes form", () => {

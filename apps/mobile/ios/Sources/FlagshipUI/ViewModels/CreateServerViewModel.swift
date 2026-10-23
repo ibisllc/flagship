@@ -592,14 +592,22 @@ public final class CreateServerViewModel {
         //     SWK + the pairing order so the Home reconcile seals + deposits each
         //     once the box registers (one tap then, not now).
         let embeddedSwkHex: String?
+        let embeddedOfflineSecrets: OfflineSecretsCommitment?
         let embeddedPairingOrder: String?
         if embedSecrets {
             embeddedSwkHex = boxSwkHex
+            // The owner's signed commitment to that key: without it the builder and the box
+            // refuse the key (SEC-RECIPE-001).
+            embeddedOfflineSecrets = try OfflineSecretsCommitment.sign(
+                serverDomain: serverDomain, serial: blob.authCode.serial, swkHex: boxSwkHex,
+                issuedAt: blob.authCode.issuedAt + 1000, with: irk
+            )
             swkDepositStore.clear(for: serverDomain)
             embeddedPairingOrder = pairingOrderJson
             pairingDepositStore.clear(for: serverDomain)
         } else {
             embeddedSwkHex = nil
+            embeddedOfflineSecrets = nil
             swkDepositStore.markPending(for: serverDomain)
             embeddedPairingOrder = nil
             if let pairingOrderJson {
@@ -624,6 +632,7 @@ public final class CreateServerViewModel {
             signatureHex: HexUtil.encode(blobSig),
             pairingOrder: embeddedPairingOrder,
             swkHex: embeddedSwkHex,
+            offlineSecrets: embeddedOfflineSecrets,
             debugGrant: debugGrantSibling
         )
     }
@@ -661,6 +670,9 @@ public struct SignedInstallBlob: Sendable {
     /// persists it at first boot to turn on the service/build platform. nil only
     /// for legacy/mock paths that don't provision it.
     public let swkHex: String?
+    /// The owner's signed commitment to {@link swkHex} (SEC-RECIPE-001); present exactly when
+    /// `swkHex` is.
+    public let offlineSecrets: OfflineSecretsCommitment?
     /// Debug-friendly server (Advanced): the owner-IRK-signed debug-access grant
     /// envelope (`{grant,signatureHex}` JSON). An UNSIGNED recipe sibling (never
     /// in the signed blob's canonical bytes); the box-side gate verifies it under
@@ -668,11 +680,12 @@ public struct SignedInstallBlob: Sendable {
     /// console user. nil for the production default (no debug grant).
     public let debugGrant: String?
 
-    public init(blob: InstallBlob, signatureHex: String, pairingOrder: String? = nil, swkHex: String? = nil, debugGrant: String? = nil) {
+    public init(blob: InstallBlob, signatureHex: String, pairingOrder: String? = nil, swkHex: String? = nil, offlineSecrets: OfflineSecretsCommitment? = nil, debugGrant: String? = nil) {
         self.blob = blob
         self.signatureHex = signatureHex
         self.pairingOrder = pairingOrder
         self.swkHex = swkHex
+        self.offlineSecrets = offlineSecrets
         self.debugGrant = debugGrant
     }
 
@@ -687,6 +700,8 @@ public struct SignedInstallBlob: Sendable {
         /// preserves it into the on-disk install-blob.json. Omitted from JSON
         /// when nil so a recipe without it is byte-identical to before.
         public let swkHex: String?
+        /// Top-level recipe sibling: the owner's signed commitment to `swkHex`.
+        public let offlineSecrets: OfflineSecretsCommitment?
         /// Top-level recipe sibling carrying the owner-IRK-signed debug-access
         /// grant envelope; the builder preserves it into the on-disk
         /// install-blob.json as the `debugGrant` sibling. Omitted from JSON when
@@ -763,6 +778,7 @@ public struct SignedInstallBlob: Sendable {
             // when nil, so a non-pairing recipe serializes byte-identically.
             pairingOrder: pairingOrder,
             swkHex: swkHex,
+            offlineSecrets: offlineSecrets,
             debugGrant: debugGrant
         )
     }

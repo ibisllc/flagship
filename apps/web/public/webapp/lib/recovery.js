@@ -35,11 +35,15 @@ import {
   bytesToHex,
   hexToBytes,
   signWithIrk,
+  deriveIrkFromSeed,
+  deriveIrkVersioned,
+  verifyWithEd25519Pub,
   loadAdminRootSeed,
   persistAdminRootSeed,
   profileIdFromCloudName,
 } from "../keystore.js";
 import { getSession } from "./state.js";
+import { buildRecoveryEnvelope, ciphertextMismatch, verifySignedRecord } from "./recoveryRecord.js";
 import { controlApex, recoveryOrigin } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 
@@ -115,6 +119,23 @@ export async function setupCloudRecovery(username) {
  */
 let lastRecoveryProof = null;
 
+/** True when the last cloud unwrap came from a v1 record whose escrow extras carry no signature. */
+let lastRecordLegacy = false;
+export function recoveredRecordWasLegacy() {
+  return lastRecordLegacy;
+}
+
+async function recoveredKeySignedRecord(seed, { claim, signatureHex }) {
+  // The record was signed by the account key in force when it was written; the same UMK derives
+  // every rotation version, so accept any of the first few that matches the claim's signer.
+  for (let v = 1; v <= 4; v++) {
+    const irk = await deriveIrkVersioned(seed, v);
+    if (bytesToHex(irk.publicKey) !== claim.irkPubHex) continue;
+    return verifySignedRecord(claim, signatureHex, irk.publicKey, verifyWithEd25519Pub);
+  }
+  return false;
+}
+
 /**
  * Consume the recovery proof from the most recent cloud unwrap. Returns
  * `{ token, expiresAt }` or null; clears it either way.
@@ -146,6 +167,15 @@ export async function recoverFromCloud(username) {
     throw new Error("recover: malformed UMK payload");
   }
   const seed = new Uint8Array(result.umk);
+  // N03: the recovered key must verify the owner's signed record. The sub-origin already matched
+  // every ciphertext to its signed digest; this checks the signature itself. A legacy record has
+  // no signature (its escrow extras are unsigned) and is let through labelled.
+  if (result.signedRecord) {
+    if (!(await recoveredKeySignedRecord(seed, result.signedRecord))) {
+      throw new Error("the stored recovery record was not signed by this account's key; refusing to use it");
+    }
+  }
+  lastRecordLegacy = !result.signedRecord;
   lastRecoveryProof =
     result.recoveryProof && typeof result.recoveryProof.token === "string"
       ? result.recoveryProof
@@ -203,42 +233,34 @@ export async function persistRecoveredAdminRoot({
 export async function deleteCloudRecovery(username) {
   const session = getSession();
   if (!session.umk) throw new Error("unlock first");
-  // After Task #74 the metadata GET returns wrappedUmkHash directly —
-  // no ciphertext, no Argon2 round-trip required. The IRK signature is
-  // the only auth needed to delete.
+  // N03: a delete is a signed v2 record naming the digest of the record it deletes, so a leaked
+  // old signature cannot remove a record written since.
   const r = await fetch(`${APEX}/api/recovery/by-username/${encodeURIComponent(username)}`);
   if (r.status === 404) return { deleted: false };
   if (!r.ok) {
     await throwIfRateLimited(r);
     throw new Error(`fetch recovery failed: ${r.status}`);
   }
-  const body = await r.json();
-  const wrappedHash = body.wrappedUmkHash;
-  if (typeof wrappedHash !== "string") {
-    throw new Error("metadata missing wrappedUmkHash");
-  }
-  const issuedAt = Date.now();
-  const canonical = canonicalUpload({
+  const current = await r.json();
+  const envelope = await buildRecoveryEnvelope({
+    op: "delete",
     username,
-    credentialIdHex: body.credentialId,
-    wrappedUmkHashHex: wrappedHash,
-    issuedAt,
+    authority: await accountAuthority(session, username),
+    current,
+    credentialIdHex: current.credentialId,
+    // A delete carries no ciphertext; the server checks only the chain and the signer. The fields
+    // the claim must still name are the stored record's UMK digest and fixed zero hashes.
+    wrappedUmkDigestHex: current.wrappedUmkHash,
+    fetchTokenHashHex: "00".repeat(32),
+    prfSaltHashHex: "00".repeat(32),
+    sign: (bytes) => signWithIrk(session.umk, bytes),
   });
-  const sig = await signWithIrk(session.umk, canonical);
   const del = await fetch(
     `${APEX}/api/recovery/by-username/${encodeURIComponent(username)}`,
     {
       method: "DELETE",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        request: {
-          username,
-          credentialId: body.credentialId,
-          wrappedUmkHash: wrappedHash,
-          issuedAt,
-        },
-        signature: bytesToHex(sig),
-      }),
+      body: JSON.stringify({ claim: envelope.claim, signature: envelope.signature }),
     },
   );
   if (!del.ok) {
@@ -365,66 +387,51 @@ async function runSubOriginFlow(mode, payload) {
   });
 }
 
+/**
+ * The keys a record is written under: this account's key, and the admin root `.com` holds for it
+ * (`none` when it pins none). The server checks both, so a wrong answer only fails the write.
+ */
+async function accountAuthority(session, username) {
+  const irkPubHex = bytesToHex((await deriveIrkFromSeed(session.umk)).publicKey);
+  const r = await fetch(`${APEX}/api/username/${encodeURIComponent(username)}`);
+  if (!r.ok) throw new Error(`account lookup failed: ${r.status}`);
+  const body = await r.json();
+  const admin = typeof body.adminRootPub === "string" ? body.adminRootPub.toLowerCase() : "none";
+  return { irkPubHex, adminRootPubHex: admin };
+}
+
 async function uploadRecord({
   session, username, credentialIdHex, wrappedUmkB64, wrappedAdminRootB64,
   fetchTokenHashHex, prfSaltHashHex,
 }) {
-  const wrappedBytes = base64ToBytes(wrappedUmkB64);
-  const wrappedUmkHashHex = await sha256Hex(wrappedBytes);
-  const issuedAt = Date.now();
-  // canonical-bytes still cover only the original signed fields; the
-  // new hashes ride the upload-envelope body, are validated server-side
-  // for shape, and are stored alongside the row. We don't extend the
-  // signed payload because the upload-record canonical shape is part
-  // of @flagship/protocol; bumping its version would force a protocol
-  // migration across every device. The IRK signature still guarantees
-  // .com isn't fed attacker-substituted ciphertext under a victim's
-  // passkey; the extra hashes are *additional* gates the IRK signer
-  // controls (since they come from a passphrase only the user knows).
-  const canonical = canonicalUpload({
+  // N03: the signature covers every value that changes what recovery does, and chains onto the
+  // record it replaces. A stored v1 record is replaced once ("legacy"); any other stored record
+  // is named by its digest, and the escrows we do not re-send are `keep:<digest>`.
+  const meta = await fetch(`${APEX}/api/recovery/by-username/${encodeURIComponent(username)}`);
+  if (meta.status !== 404 && !meta.ok) throw new Error(`recovery lookup failed: ${meta.status}`);
+  const current = meta.status === 404 ? null : await meta.json();
+  const envelope = await buildRecoveryEnvelope({
+    op: "put",
     username,
+    authority: await accountAuthority(session, username),
+    current,
     credentialIdHex,
-    wrappedUmkHashHex,
-    issuedAt,
+    wrappedUmkB64,
+    wrappedAdminRootB64,
+    fetchTokenHashHex,
+    prfSaltHashHex,
+    sign: (bytes) => signWithIrk(session.umk, bytes),
   });
-  const sig = await signWithIrk(session.umk, canonical);
   const r = await fetch(`${APEX}/api/recovery`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      request: {
-        username,
-        credentialId: credentialIdHex,
-        wrappedUmk: wrappedUmkB64,
-        issuedAt,
-        // Slice D (D-3): the admin master root's SEPARATE escrow blob →
-        // `.com`'s wrapped_admin_root_b64 column (control-plane already accepts
-        // + preserves it). Absent for a UMK-only / legacy account.
-        ...(wrappedAdminRootB64 ? { wrappedAdminRoot: wrappedAdminRootB64 } : {}),
-        ...(fetchTokenHashHex ? { fetchTokenHash: fetchTokenHashHex } : {}),
-        ...(prfSaltHashHex ? { prfSaltHash: prfSaltHashHex } : {}),
-      },
-      signature: bytesToHex(sig),
-    }),
+    body: JSON.stringify(envelope),
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`upload recovery failed: ${r.status} ${txt}`.trim());
   }
   return r.json();
-}
-
-// Pinned to packages/protocol/src/auth.ts canonicalUploadRecoveryRecord.
-function canonicalUpload({ username, credentialIdHex, wrappedUmkHashHex, issuedAt }) {
-  return new TextEncoder().encode(
-    [
-      "flagship/upload-recovery-record/v1",
-      username,
-      credentialIdHex,
-      wrappedUmkHashHex,
-      issuedAt,
-    ].join("|"),
-  );
 }
 
 function base64ToBytes(s) {

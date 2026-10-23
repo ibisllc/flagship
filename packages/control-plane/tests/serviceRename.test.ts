@@ -446,4 +446,16 @@ describe("an app's links follow the boxes that run it", () => {
     const { deps } = await twoBoxes({ [HOME]: { runs: [] }, [WORK]: { runs: ["family"] } });
     expect((await appHome(deps, USER, FAMILY, "family")).canonicalUrl).toBe(`https://family.${WORK}`);
   });
+
+  it("chat lead: names the box that leads the app and its registered key; unknown app or malformed name is refused", async () => {
+    const { handleChatLead } = await import("../src/serviceRename.js");
+    const { deps } = await twoBoxes({ [HOME]: { runs: ["family"], at: 20 }, [WORK]: { runs: ["family"], leads: ["family"], at: 10 } });
+    const r = await handleChatLead(deps, USER, FAMILY);
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ serverDomain: WORK });
+    expect(r.body).toHaveProperty("identityPubKey");
+    expect((await handleChatLead(deps, "Bad Name!", FAMILY)).status).toBe(400);
+    const none = await handleChatLead({ ...deps, servers: { ...deps.servers, listForUser: async () => [] } as never }, USER, FAMILY);
+    expect(none.status).toBe(404);
+  });
 });

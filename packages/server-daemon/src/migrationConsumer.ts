@@ -12,6 +12,8 @@ import {
   type ServerMigrationOrder,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import type { AuthorityHub } from "./authority/hub.js";
+import { digestOf, runOrderOperation, type OrderOperationContext } from "./authority/orderOperation.js";
 
 /**
  * Box-side server-migration consumer (docs/server-migration.md) — the NEW
@@ -225,6 +227,8 @@ export interface RunMigrationConsumerOptions {
    */
   onTakeOver?: (args: { serverDomain: string }) => void | Promise<void>;
   markerStore: MigrationMarkerStore;
+  /** Record the final restore and take-over as a ledger operation (production wires it). */
+  operations?: { hub: AuthorityHub; grantDeps: string[] };
   fetchImpl?: typeof fetch;
   now?: () => number;
   onLog?: (m: string) => void;
@@ -400,16 +404,51 @@ export async function runMigrationConsumer(
         // window is open; keep the poll tight (the poller's active cadence).
         return { status: "waiting", phase: "freezing" };
       }
-      const out = await safeRestore(opts, domain, log);
-      if (!out.complete) {
-        return { status: "restoring", ...(out.detail !== undefined ? { detail: out.detail } : {}) };
-      }
-      const posted = await postAck(opts, fetchImpl, base, domain, "take-over", now(), log);
-      if (!posted.ok) return { status: "error", reason: posted.reason };
-      await saveMarker(opts, { serverDomain: domain, stage: "taken-over", updatedAt: now() }, log);
-      await fireTakeOver(opts, domain, log);
-      log(`[migration] TAKE-OVER acked for ${domain} — re-homing`);
-      return { status: "taken-over" };
+      const finish = async (ctx?: OrderOperationContext): Promise<MigrationConsumerOutcome> => {
+        const out = await safeRestore(opts, domain, log);
+        if (!out.complete) {
+          return { status: "restoring", ...(out.detail !== undefined ? { detail: out.detail } : {}) };
+        }
+        // The take-over ack hands the name to this box: the point of no return.
+        await ctx?.crossPointOfNoReturn();
+        const posted = await postAck(opts, fetchImpl, base, domain, "take-over", now(), log);
+        if (!posted.ok) return { status: "error", reason: posted.reason };
+        await saveMarker(opts, { serverDomain: domain, stage: "taken-over", updatedAt: now() }, log);
+        await fireTakeOver(opts, domain, log);
+        log(`[migration] TAKE-OVER acked for ${domain} — re-homing`);
+        return { status: "taken-over" };
+      };
+      if (!opts.operations) return finish();
+      let outcome: MigrationConsumerOutcome = { status: "error", reason: "not run" };
+      const ran = await runOrderOperation(
+        opts.operations.hub,
+        {
+          kind: "server-migration",
+          requester: "owner",
+          idempotencyKey: digestOf("server-migration", domain, me, s.orderSignatureHex),
+          canonicalPayload: ["flagship/operation/server-migration/v1", domain, me, s.orderJson].join("|"),
+          grantDeps: opts.operations.grantDeps,
+          approvedBy: "admin",
+          orderSignatureHex: s.orderSignatureHex,
+          label: `migration of ${domain}`,
+          retryInterruptedAttempt: true,
+        },
+        async (ctx) => {
+          outcome = await finish(ctx);
+          // A restore still running or a refused ack is not an applied migration: try again next poll.
+          if (outcome.status !== "taken-over") throw new MigrationNotFinished();
+          return { value: outcome, resultDigest: digestOf("server-migration", domain) };
+        },
+      ).catch((e: unknown) => {
+        if (e instanceof MigrationNotFinished) return null;
+        throw e;
+      });
+      if (ran === null) return outcome;
+      if (ran.ran) return ran.value;
+      if (ran.reason === "already-applied") return { status: "done" };
+      if (ran.reason === "in-progress") return { status: "waiting", phase: "freezing" };
+      log(`[migration] take-over not started: ${ran.detail ?? ran.reason}`);
+      return { status: "error", reason: ran.detail ?? "take-over refused" };
     }
 
     case "taken-over": {
@@ -425,6 +464,8 @@ export async function runMigrationConsumer(
       return { status: "error", reason: `unknown phase ${s.phase}` };
   }
 }
+
+class MigrationNotFinished extends Error {}
 
 async function safeRestore(
   opts: RunMigrationConsumerOptions,

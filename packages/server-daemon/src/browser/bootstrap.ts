@@ -38,7 +38,10 @@ import { FileAppAuthTokens, type AppAuthTokens } from "../serviceAuthToken.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { buildBrowserApiHandlers } from "./apiHandlers.js";
 import { BrowserManager } from "./browserManager.js";
+import { lookup } from "node:dns/promises";
 import { DomainGate } from "./domainGate.js";
+import { PolicedBrowser } from "./policedBrowser.js";
+import { BrowserGrants, BrowserJudge, ContextRegistry } from "./policy/index.js";
 import { PhonePipe } from "./phonePipe.js";
 import { TabRegistry } from "./tabRegistry.js";
 
@@ -78,6 +81,14 @@ export interface BootstrapBrowserOptions {
    * the bytes the alert references.
    */
   pairedSessionGate?: PairedSessionGate;
+  /** This server's own names and addresses: never reachable from an app browser (the judge refuses them). */
+  protectedHosts?: () => { names: string[]; addresses: string[] };
+  /** Test seam: resolve a name to every address it has. Default: the system resolver. */
+  resolve?: (host: string) => Promise<string[]>;
+  /** Told of every address the judge approved for a host, so a pinning proxy connects only to those. */
+  onApproved?: (host: string, addresses: string[]) => void;
+  /** Told of every refusal, for the owner's activity view. */
+  onDenied?: ConstructorParameters<typeof PolicedBrowser>[0]["onDenied"];
 }
 
 export interface BrowserBundle {
@@ -86,6 +97,10 @@ export interface BrowserBundle {
   domainGate: DomainGate;
   phonePipe: PhonePipe;
   appAuthTokens: AppAuthTokens;
+  /** The policy layer every tab operation goes through. */
+  policed: PolicedBrowser;
+  /** The grants the judge reads; they follow each app's install-time `browser.domains`. */
+  grants: BrowserGrants;
   /**
    * The /api/browser/* request handler. Returns null when the path
    * doesn't belong to the browser API (so the caller can fall through
@@ -124,6 +139,43 @@ export async function bootstrapBrowserBundle(
 
   const domainGate = new DomainGate();
 
+  // The policy layer. An app's `browser.domains`, which the owner approved with the manifest, is its one
+  // standing grant; the judge, the contexts and the guard enforce it on what the browser really does.
+  const grants = new BrowserGrants();
+  const judge = new BrowserJudge({
+    grants,
+    resolve: opts.resolve ?? (async (host) => (await lookup(host, { all: true })).map((a) => a.address)),
+    ...(opts.protectedHosts ? { protectedHosts: opts.protectedHosts } : {}),
+  });
+  const policed = new PolicedBrowser({
+    cdp: browser,
+    contexts: new ContextRegistry(),
+    judge,
+    ...(opts.onApproved ? { onApproved: opts.onApproved } : {}),
+    ...(opts.onDenied ? { onDenied: opts.onDenied } : {}),
+  });
+  domainGate.onChange = (serviceId, domains) => {
+    grants.revokeService(serviceId);
+    if (domains === null) {
+      void policed.revokeService(serviceId).catch(() => {});
+      return;
+    }
+    if (domains.length === 0) return;
+    try {
+      grants.approve({
+        serviceId,
+        capabilities: ["navigate", "read-dom", "screenshot", "input"],
+        origins: domains,
+        schemes: ["https"],
+        duration: "service",
+        explanation: "the sites this app declared in its manifest and you approved when you installed it",
+      });
+    } catch {
+      // a domain the grant rules refuse (an address, a bare TLD) leaves the app with no grant: it can open nothing
+    }
+  };
+  await policed.start();
+
   const phonePipe = new PhonePipe({
     browser,
     tabRegistry,
@@ -145,6 +197,7 @@ export async function bootstrapBrowserBundle(
     tabRegistry,
     domainGate,
     phonePipe,
+    policed,
     appAuthTokens,
     pairedSessionGate: opts.pairedSessionGate,
   });
@@ -156,6 +209,8 @@ export async function bootstrapBrowserBundle(
     domainGate,
     phonePipe,
     appAuthTokens,
+    policed,
+    grants,
     apiHandle,
     overlayHandleHttp(next) {
       return async (req) => {
@@ -167,6 +222,7 @@ export async function bootstrapBrowserBundle(
     async close() {
       if (closed) return;
       closed = true;
+      await policed.stop();
       phonePipe.stop();
       tabRegistry.stop();
       // Only stop the manager if we built it. If the caller passed one

@@ -73,6 +73,10 @@ export type RateLimitEndpoint =
   // the control-plane's own 5-per-15-min counter lives in one isolate's
   // memory, so this is the cap that holds across Cloudflare's machines.
   | "totp-verify"
+  // A box's set-only lock (dead-man, manual): signed with its STK, so a stolen STK could
+  // otherwise hammer the boot service. The counter inside an epoch moves one step a write and the
+  // owner's resume is a separate epoch, so this only bounds the noise (SECURITY-HARDENING-PLAN 18.10).
+  | "boot-suspension-box"
   | "device-grants-revoke"
   | "device-grants-mint"
   // Watch delegate keys (Phase 2c) — same shape as device grants:
@@ -121,6 +125,9 @@ export type RateLimitEndpoint =
   | "mint-reservation-release"
   | "account-resolve"
   | "account-read-token"
+  // Where another owner's chat start goes (GET /api/chat/lead/<user>/<app>). Public and a hint only;
+  // per source so it cannot be used to walk accounts.
+  | "chat-lead"
   // Phase 3b — vouched cross-device admit. The body carries the admit
   // (admit.username + newDevicePubHex), not the account IRK pub, so we
   // throttle per-IP only; the handler does the full DeviceAdmit
@@ -216,6 +223,7 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 20, windowSec: 900 },
     { axis: "usernameHash", limit: 5, windowSec: 900 },
   ],
+  "boot-suspension-box": [{ axis: "ip", limit: 30, windowSec: 3600 }],
   "device-grants-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -279,6 +287,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   // (the main concern for a 200-always existence oracle); the per-
   // usernameHash axis blunts hammering a single name. Generous enough
   // for a real user retrying their own login.
+  "chat-lead": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 300, windowSec: 3600 },
+  ],
   "account-resolve": [
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "usernameHash", limit: 10, windowSec: 900 },
@@ -553,6 +565,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/re-pair$/.test(pathname)) {
     return "re-pair-initiate";
   }
+  if (m === "POST" && pathname === "/api/boot/suspension/box") return "boot-suspension-box";
   if (m === "POST" && /^\/api\/users\/[^/]+\/totp\/verify$/.test(pathname)) {
     return "totp-verify";
   }
@@ -632,6 +645,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   if (m === "GET" && /^\/api\/account\/resolve\/[^/]+$/.test(pathname)) {
     return "account-resolve";
+  }
+  if (m === "GET" && /^\/api\/chat\/lead\/[^/]+\/[^/]+$/.test(pathname)) {
+    return "chat-lead";
   }
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/read-token$/.test(pathname)) {
     return "account-read-token";

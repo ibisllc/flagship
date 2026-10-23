@@ -145,6 +145,7 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     // ⇒ byte-identical.
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
+    offlineSecrets: loaded.offlineSecrets,
     // The box lets the grant's SSH key in itself, with an expiry, once it has
     // verified the grant; nothing here bakes that key into the image.
     debugGrant: loaded.debugGrant,

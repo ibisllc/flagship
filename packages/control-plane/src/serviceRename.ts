@@ -252,12 +252,11 @@ export interface AppHome {
  * leader, so an app that runs only on a second box is never sent to the
  * first. A box too old to report what it runs is taken to run everything.
  */
-export async function appHome(
+export async function appHomeServers(
   deps: Pick<ServiceRenameDeps, "servers" | "daemonStatus">,
   username: string,
   serviceId: string,
-  label: string,
-): Promise<AppHome> {
+): Promise<{ home: ServerRecord | undefined; pool: Array<{ server: ServerRecord }> }> {
   const live = (await deps.servers.listForUser(username)).filter((s) => !s.revokedAt);
   const slug = parseServiceId(serviceId)?.slug ?? serviceId;
   const reports = await Promise.all(live.map(async (server) => {
@@ -275,9 +274,19 @@ export async function appHome(
   }));
   const runners = reports.filter((r) => r.leads || r.runs !== false);
   const pool = runners.length > 0 ? runners : reports;
-  const home: ServerRecord | undefined = (
+  const home = (
     [...pool].sort((a, b) => Number(b.leads) - Number(a.leads) || Number(b.runs === true) - Number(a.runs === true) || b.at - a.at)[0]
   )?.server;
+  return { home, pool };
+}
+
+export async function appHome(
+  deps: Pick<ServiceRenameDeps, "servers" | "daemonStatus">,
+  username: string,
+  serviceId: string,
+  label: string,
+): Promise<AppHome> {
+  const { home, pool } = await appHomeServers(deps, username, serviceId);
   const url = (domain: string) => `https://${label}.${domain}`;
   return {
     canonicalUrl: url(home?.serverDomain ?? `${username}.flagship.services`),
@@ -386,3 +395,21 @@ export async function handleListAppAliases(
   });
 }
 
+
+/**
+ * GET /api/chat/lead/:user/:serviceId — where another owner's chat start should go: the server that
+ * leads (else runs) that app for that account, with the key it registered. Public, like the server
+ * registry it reads, and only a hint: the box that answers must itself hold the exclusive lead term
+ * before it admits anything, and the sender's app never sees this answer.
+ */
+export async function handleChatLead(
+  deps: Pick<ServiceRenameDeps, "servers" | "daemonStatus">,
+  username: string,
+  serviceId: string,
+): Promise<HandlerResponseWithHeaders> {
+  const u = username.toLowerCase();
+  if (!USERNAME_RE.test(u) || !/^[a-z0-9][a-z0-9-]{0,125}$/.test(serviceId)) return malformed("malformed name");
+  const { home } = await appHomeServers(deps, u, serviceId);
+  if (!home) return notFound("no such app");
+  return ok({ serverDomain: home.serverDomain, identityPubKey: home.identityPubKeyHex });
+}

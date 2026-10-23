@@ -39,6 +39,7 @@ import com.flagshipserver.app.api.DeviceInfoHint
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.BootLockStateStore
 import com.flagshipserver.app.core.PendingLeaseStore
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
@@ -76,6 +77,8 @@ internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.Verifi
                 irk = KeystoreIrkAccess(),
                 adminSigner = { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
                 pendingLeases = PendingLeaseStore.from(context),
+                deadManBound = store::deadManBound,
+                lockedServer = BootLockStateStore.from(context)::lastKnownSuspended,
             )
         }
         ApprovalsModel(

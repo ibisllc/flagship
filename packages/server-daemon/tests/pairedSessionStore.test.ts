@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   FilePairedSessionStore,
   defaultPairedSessionPath,
+  pairedSessionId,
 } from "../src/pairedSessionStore.js";
 
 let dir: string;
@@ -64,7 +65,7 @@ describe("FilePairedSessionStore", () => {
     await s.remove(tok);
     expect(s.has(tok)).toBe(false);
     const buf = await readFile(path, "utf8");
-    expect(JSON.parse(buf)).toEqual({});
+    expect(JSON.parse(buf)).toEqual({ v: 2, sessions: {} });
   });
 
   it("check() returns 401 without auth", async () => {
@@ -107,9 +108,12 @@ describe("FilePairedSessionStore", () => {
     await s.add("d".repeat(32), 10);
     await s.addCompanion({ token: "r".repeat(32), addedAt: 20, expiresAt: 99 });
     expect(s.list()).toEqual([
-      { token: "d".repeat(32), addedAt: 10 },
-      { token: "r".repeat(32), addedAt: 20, companion: true, expiresAt: 99 },
+      { id: pairedSessionId("d".repeat(32)).slice(0, 16), addedAt: 10 },
+      { id: pairedSessionId("r".repeat(32)).slice(0, 16), addedAt: 20, companion: true, expiresAt: 99 },
     ]);
+    // The bearer itself is on neither the list nor the disk.
+    expect(JSON.stringify(s.list())).not.toContain("d".repeat(32));
+    expect(await readFile(defaultPairedSessionPath(dir), "utf8")).not.toContain("d".repeat(32));
   });
 
   it("malformed JSON on disk is treated as empty (boot doesn't fail)", async () => {
