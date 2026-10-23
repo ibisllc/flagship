@@ -1689,6 +1689,10 @@ class MockScreensClient(
     override suspend fun setBackupPolicy(req: BackupPolicyRequest): BackupPolicyView {
         tick()
         val o = req.order
+        // The box's FLAGSHIP_PEER_BACKUP gate (off at GA): a server not already on Peer can't choose it.
+        if (backupPolicyState.policy != "peer" && o.policy == "peer" && !com.flagshipserver.app.core.BackupFeatures.PEER_BACKUP) {
+            throw boxRefusal(409, "Backups on other servers aren't available yet. Choose another policy.", "peer-backup-not-available")
+        }
         val used = backupUsedBytes
         if (o.isValid && used != null) {
             val limit = backupLimit(BackupPolicyState(o.policy, o.phoneReserveBytes, o.issuedAt))

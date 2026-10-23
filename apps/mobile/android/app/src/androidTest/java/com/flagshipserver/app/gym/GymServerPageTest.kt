@@ -224,6 +224,8 @@ class GymServerPageTest : GymBase() {
             it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription)?.any { d -> d.startsWith("deadman-window-") } == true
         }).fetchSemanticsNodes()
         assertTrue(windows.size >= 2)
+        // Release 0.3 (SEC-DEADMAN-001): switching the lock on first revoked every auto-unlock lease on the boot worker.
+        assertTrue(mailboxMock.revokedAll.any { it.first.startsWith("home.") })
         val before = boxDirect.calls.count { it.path == "/api/deadman/policy" }
         composeRule.onNodeWithContentDescription("deadman-lockout-restart").scrollIfNeeded().performClick()
         eventually(what = "re-signed") { boxDirect.calls.count { it.path == "/api/deadman/policy" } > before }
