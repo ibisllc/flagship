@@ -300,7 +300,14 @@ test.describe("gym webapp total", () => {
     await expect(saved).toHaveCount(1, { timeout: 10_000 });
     await expect(saved).toContainText("My OpenAI");
     await expect(saved).not.toContainText("sk-gymfixture-0123456789abcdef");
+    // Delete key sits behind the row's ⋯ menu (owner UI round), closed at first.
+    await expect(saved.locator('[data-action="remove"]')).toBeHidden();
+    const more = saved.locator('[data-action="more"]');
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await more.click();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
     await expect(saved.locator('[data-action="remove"]')).toBeVisible();
+    await expect(saved.locator('[data-action="remove"]')).toHaveText("Delete key");
     const order = await page.evaluate(() => {
       const a = document.getElementById("free-ai-card");
       const b = document.getElementById("providers-list");

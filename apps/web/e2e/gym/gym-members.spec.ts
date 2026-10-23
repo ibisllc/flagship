@@ -1219,16 +1219,20 @@ test.describe("gym webapp members and app pages", () => {
   test("gym members web domains copy their links and Replace renames the stem", async ({ page }, testInfo) => {
     await recordClipboardAndShare(page);
     const keys = await reachHome(page, { kind: "admin" });
-    let links = { serviceId: SERVICE_ID, displayLabel: "notes", shortUrl: "https://voi.ci/n0tes", canonicalUrl: "https://notes.smoketest.flagship.services", instances: [] as unknown[] };
+    // `.com`'s links answer since named links: the short link is the "Your link" field (docs/named-links.md).
+    const link = { name: null, held: 0, limit: 5, changesLeft: 3, nextChangeAt: null, releasesAt: null };
+    let links = { serviceId: SERVICE_ID, displayLabel: "notes", shortUrl: "https://voi.ci/n0tes", shortCode: "n0tes", link, canonicalUrl: "https://notes.smoketest.flagship.services", instances: [] as unknown[] };
     const m = base(await mock(page));
     m.get(`/api/users/smoketest/apps/${SERVICE_ID}/links`, () => ({ json: links }));
     m.post(`/api/users/smoketest/apps/${SERVICE_ID}/rename`, async (c) => {
       if ((await signer(page, keys, CANON.rename, c.body.request, c.body.signature)) !== "irk") return { status: 403, json: { error: "invalid signature" } };
-      links = { ...links, displayLabel: c.body.request.newDisplayLabel, shortUrl: "https://voi.ci/j0ts", canonicalUrl: "https://jots.smoketest.flagship.services" };
-      return { json: { displayLabel: links.displayLabel, shortUrl: links.shortUrl, canonicalUrl: links.canonicalUrl } };
+      // A rename keeps the service's short code (serviceRename.ts: nothing re-minted).
+      links = { ...links, displayLabel: c.body.request.newDisplayLabel, canonicalUrl: "https://jots.smoketest.flagship.services" };
+      return { json: { ok: true, displayLabel: links.displayLabel, shortUrl: links.shortUrl, shortCode: links.shortCode, canonicalUrl: links.canonicalUrl, deletedShortLinks: 0 } };
     });
     await openApp(page);
-    await page.locator('[data-section="short"] [data-copy]').click({ timeout: 10_000 });
+    await expect(page.locator('[data-lf="input"]')).toHaveValue("n0tes", { timeout: 10_000 });
+    await page.locator('[data-lf="root"] [data-copy]').click();
     await page.locator('[data-section="canonical"] [data-copy]').click();
     await expect.poll(() => clipboard(page)).toEqual(["https://voi.ci/n0tes", "https://notes.smoketest.flagship.services"]);
 
@@ -1254,8 +1258,9 @@ test.describe("gym webapp members and app pages", () => {
     answers.push("jots");
     await page.click("#sd-replace-stem");
     await page.click("[data-modal-ok]");
-    await sawToast(page, "Renamed to jots. New short link minted.");
-    await expect(page.locator('[data-section="short"] a')).toContainText("voi.ci/j0ts", { timeout: 10_000 });
+    await sawToast(page, "Renamed to jots.");
+    await expect(page.locator('[data-section="canonical"] a')).toContainText("jots.", { timeout: 10_000 });
+    await expect(page.locator('[data-lf="input"]')).toHaveValue("n0tes");
     expect(m.last("/rename")!.body.request).toMatchObject({ username: "smoketest", serviceId: SERVICE_ID, newDisplayLabel: "jots" });
     await shot(page, testInfo, "domains-renamed");
   });
