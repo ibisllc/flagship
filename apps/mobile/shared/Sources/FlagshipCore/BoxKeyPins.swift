@@ -38,6 +38,10 @@ public final class BoxKeyPins: @unchecked Sendable {
         var pinnedAt: Int64
         var boot: String?
         var bootIssuedAt: Int64?
+        /// Architecture v2: the ML-DSA-65 key the pinned STK bound (`box-stk` binding), and that
+        /// binding's issuedAt. Once set, a boot-key binding needs the STK's hybrid signature too.
+        var mldsa: String?
+        var mldsaIssuedAt: Int64?
     }
 
     private let defaults: UserDefaults?
@@ -138,7 +142,7 @@ public final class BoxKeyPins: @unchecked Sendable {
     /// signed, never because `.com` lists it. Returns the key, or nil.
     @discardableResult
     public func acceptBootKeyBinding(username: String, serverDomain: String, bootPubHex: String,
-                                     issuedAt: Int64, signatureHex: String) -> String? {
+                                     issuedAt: Int64, signatureHex: String, hybridSignatureHex: String? = nil) -> String? {
         let domain = serverDomain.lowercased()
         return withPins(username) { pins -> String? in
             guard var pin = pins[domain],
@@ -147,11 +151,89 @@ public final class BoxKeyPins: @unchecked Sendable {
                                             signature: sig, pinnedStkPub: stk, forServer: domain),
                   (pin.bootIssuedAt ?? -1) <= issuedAt
             else { return nil }
+            // Once this server's ML-DSA key is pinned, the boot key needs the STK's hybrid
+            // signature too, so stripping it cannot downgrade the server back to classical.
+            if let mldsa = pin.mldsa,
+               !Self.verifyBootKeyBindingV2(serverDomain: domain, bootPubHex: bootPubHex, issuedAt: issuedAt,
+                                            hybridSignatureHex: hybridSignatureHex, stkHex: pin.stk, mldsaPubHex: mldsa) {
+                return nil
+            }
             pin.boot = bootPubHex
             pin.bootIssuedAt = issuedAt
             pins[domain] = pin
             return bootPubHex
         }
+    }
+
+    // MARK: Architecture v2: the box's ML-DSA key
+
+    public static let bootKeyBindingV2Tag = "flagship/boot-key-binding/v2"
+
+    /// What a device does with a box's `box-stk` binding (packages/protocol/src/boxKeyPin.ts
+    /// `decideBoxPqKeyPin`): accepted only under the PINNED STK; a different ML-DSA key than the
+    /// pinned one is a key change (`mismatch`), anything else that fails is `invalid`.
+    public enum BoxPqKeyPinVerdict: Equatable, Sendable {
+        case first(mldsaPubHex: String, issuedAt: Int64)
+        case match(mldsaPubHex: String, issuedAt: Int64)
+        case mismatch(code: String)
+        case invalid(code: String)
+    }
+
+    public static func decideBoxPqKeyPin(stkHex: String, mldsaPubHex: String?, minIssuedAt: Int64?,
+                                         serverDomain: String, wire: Any?, now: Int64) -> BoxPqKeyPinVerdict {
+        do {
+            let b = try PqTrust.verifyPqKeyBinding(wire, PqBindingExpectation(
+                role: PqBindingRole.boxStk.rawValue, subjectId: serverDomain.lowercased(), ed25519PubHex: stkHex,
+                mldsaPubHex: mldsaPubHex, now: now, minIssuedAt: minIssuedAt))
+            return mldsaPubHex == nil ? .first(mldsaPubHex: b.mldsaPubHex, issuedAt: b.issuedAt)
+                                      : .match(mldsaPubHex: b.mldsaPubHex, issuedAt: b.issuedAt)
+        } catch let e as PqTrustError {
+            return e.code == "binding-pq-key-changed" ? .mismatch(code: e.code) : .invalid(code: e.code)
+        } catch {
+            return .invalid(code: "binding-malformed")
+        }
+    }
+
+    /// Pin the ML-DSA key a box's STK bound, through a binding the PINNED STK and that key both
+    /// signed (webapp `acceptStkPqBinding`). Returns the ML-DSA key, or nil when there is no STK
+    /// pin or the binding is refused. A different ML-DSA key than the pinned one throws
+    /// `BoxKeyChangedError`.
+    @discardableResult
+    public func acceptStkPqBinding(username: String, serverDomain: String, wire: Any?) throws -> String? {
+        let domain = serverDomain.lowercased()
+        return try withPins(username) { pins -> String? in
+            guard var pin = pins[domain] else { return nil }
+            switch Self.decideBoxPqKeyPin(stkHex: pin.stk, mldsaPubHex: pin.mldsa, minIssuedAt: pin.mldsaIssuedAt,
+                                          serverDomain: domain, wire: wire, now: now()) {
+            case .first(let k, let at), .match(let k, let at):
+                if pin.mldsa != k || pin.mldsaIssuedAt != at {
+                    pin.mldsa = k
+                    pin.mldsaIssuedAt = at
+                    pins[domain] = pin
+                }
+                return k
+            case .mismatch:
+                let reported = ((wire as? [String: Any])?["mldsaPubHex"] as? String) ?? ""
+                throw BoxKeyChangedError(username: username.lowercased(), serverDomain: domain, pinnedHex: pin.mldsa ?? "", reportedHex: reported)
+            case .invalid:
+                return nil
+            }
+        }
+    }
+
+    public func pinnedBoxPqKey(username: String, serverDomain: String) -> String? {
+        withPins(username) { $0[serverDomain.lowercased()]?.mldsa }
+    }
+
+    /// The STK's v2 hybrid signature over a boot-key binding, under the pinned STK + ML-DSA keys.
+    public static func verifyBootKeyBindingV2(serverDomain: String, bootPubHex: String, issuedAt: Int64,
+                                              hybridSignatureHex: String?, stkHex: String, mldsaPubHex: String) -> Bool {
+        guard let sigHex = hybridSignatureHex?.lowercased(), sigHex.utf8.count == PqHybrid.sigLen * 2,
+              let sig = PqBin.unhex(sigHex), isHex32(stkHex), isHex32(bootPubHex), issuedAt >= 0,
+              mldsaPubHex.utf8.count == 3904, let pk = PqBin.unhex(stkHex + mldsaPubHex)
+        else { return false }
+        let msg = Array([bootKeyBindingV2Tag, serverDomain.lowercased(), bootPubHex, String(issuedAt)].joined(separator: "|").utf8)
+        return (try? PqHybrid.hybridVerify(publicKey: pk, purpose: bootKeyBindingV2Tag, payload: msg, signature: sig)) != nil
     }
 
     // MARK: Storage
