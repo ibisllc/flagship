@@ -158,7 +158,7 @@ async function signBootKeyBindingCmd(argv: string[]): Promise<void> {
   if (!Number.isSafeInteger(issuedAt)) throw new Error("--issued-at must be a number");
   if (bootKeyPub.length !== 32) throw new Error("--boot-key-pub must be 32 bytes hex");
   const identity = await identityFor(argv, optArg(argv, "--priv-hex"));
-  const binding = { serverDomain, stkPub: identity.publicKey, bootKeyPub, issuedAt };
+  const binding = { serverDomain, bootPubHex: bytesToHex(bootKeyPub), issuedAt };
   const sig = signBootKeyBinding(binding, identity);
   process.stdout.write(JSON.stringify(bootKeyBindingToWire(binding, sig)) + "\n");
 }
