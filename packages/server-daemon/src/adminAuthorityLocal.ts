@@ -1,4 +1,5 @@
 import { requireMasterAdmin, type AdminGrantView } from "@flagship/protocol";
+import { gateSigner, pqAuthority, type HybridOrderSignature, type PqAuthorityContext } from "./pqAuthority.js";
 
 /**
  * Slice D — box-local sensitive-order authorization gate
@@ -56,6 +57,13 @@ export interface AuthorizeSensitiveOrderArgs<TOrder> {
   activeGrants?: readonly AdminGrantView[];
   /** ms clock (defaults to Date.now()); used for grant expiry. */
   now?: number;
+  /**
+   * Architecture v2: the order's hybrid signature by the same signer, when the client sent one.
+   * Required while the installation's strict profile is in force; verified whenever present.
+   */
+  hybrid?: HybridOrderSignature;
+  /** The policy and bindings to apply; defaults to the box's (pqAuthority.ts). */
+  pq?: PqAuthorityContext | null;
 }
 
 /**
@@ -65,11 +73,18 @@ export interface AuthorizeSensitiveOrderArgs<TOrder> {
 export function authorizeSensitiveOrder<TOrder>(
   args: AuthorizeSensitiveOrderArgs<TOrder>,
 ): boolean {
+  const signer = classicalSigner(args);
+  if (!signer) return false;
+  return gateSigner(args.pq === undefined ? pqAuthority() : args.pq, signer, args.hybrid) === null;
+}
+
+/** The authority key the order's classical signature verifies under, or null. */
+function classicalSigner<TOrder>(args: AuthorizeSensitiveOrderArgs<TOrder>): string | null {
   // Transition gate: no pinned admin anchor ⇒ legacy owner-IRK verification,
   // byte-for-byte unchanged. (A malformed/short value is treated as absent —
   // config.ts already drops a malformed adminRootPub, this is belt-and-braces.)
   if (!args.adminRootPub || args.adminRootPub.length !== 32) {
-    return args.verify(args.order, args.signature, args.ownerIrkPub);
+    return args.verify(args.order, args.signature, args.ownerIrkPub) ? bytesToHex(args.ownerIrkPub) : null;
   }
 
   const adminRootHex = bytesToHex(args.adminRootPub);
@@ -77,7 +92,7 @@ export function authorizeSensitiveOrder<TOrder>(
 
   // 1. The bare admin master root signs directly (the box-side owner-admin path).
   if (args.verify(args.order, args.signature, args.adminRootPub)) {
-    return requireMasterAdmin(adminRootHex, args.username, adminRootHex, grants, args.now).ok;
+    return requireMasterAdmin(adminRootHex, args.username, adminRootHex, grants, args.now).ok ? adminRootHex : null;
   }
 
   // 2. A delegated admin device: the order is signed by a device key that holds a
@@ -88,11 +103,11 @@ export function authorizeSensitiveOrder<TOrder>(
     if (devicePub.length !== 32) continue;
     if (!args.verify(args.order, args.signature, devicePub)) continue;
     if (requireMasterAdmin(bytesToHex(devicePub), args.username, adminRootHex, grants, args.now).ok) {
-      return true;
+      return bytesToHex(devicePub);
     }
   }
 
-  return false;
+  return null;
 }
 
 function bytesToHex(b: Uint8Array): string {

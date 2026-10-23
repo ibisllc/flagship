@@ -314,6 +314,8 @@ import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
+import { AssurancePolicySync } from "./assurancePolicySync.js";
+import { setPqAuthority } from "./pqAuthority.js";
 import { AccessJournal } from "./accessJournal.js";
 import { accessSyncKeyFromOps, buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers } from "./accessPeers.js";
@@ -1845,6 +1847,7 @@ async function main(): Promise<void> {
   // no timer, no behavior change. Mounts onto the live runtime + arms the
   // dead-man SIGTERM/SIGINT stop hooks.
   await wireOwnerHandlers({
+    readStkHybrid: () => stkHybridRef.current,
     authorityHub,
     frontPage,
     activityLog,
@@ -3938,6 +3941,8 @@ async function wireRuntimeSurfaces(deps: {
  * SIGTERM/SIGINT stop hooks. No-op (and no behavior change) when cfg is null.
  */
 async function wireOwnerHandlers(deps: {
+  /** The STK's hybrid signer once `.com` holds its binding (architecture v2), else null. */
+  readStkHybrid: () => ((msg: Uint8Array) => Uint8Array) | null;
   authorityHub: AuthorityHub;
   frontPage: FrontPageStore;
   activityLog: ActivityLog;
@@ -4061,6 +4066,32 @@ async function wireOwnerHandlers(deps: {
   });
   await deviceBook.load();
   deps.accessPrincipals.book = deviceBook;
+  // Architecture v2 (docs/architecture-v2/pq-suites.md §11): replay the owner's assurance
+  // policy chain for this installation and apply it to every sensitive order.
+  const assurance = new AssurancePolicySync({
+    path: `${accessDataDir}/assurance-policy.json`,
+    account: cfg.userId,
+    serverDomain: env.serverFqdn,
+    fetchChain: async () => {
+      const base = env.controlPlaneBaseUrl.replace(/\/+$/, "");
+      const r = await deviceBookReader.fetch(
+        `${base}/api/accounts/${encodeURIComponent(cfg.userId)}/assurance-policy/installation/${encodeURIComponent(env.serverFqdn.toLowerCase())}`,
+      );
+      return r.ok ? await r.json() : null;
+    },
+    adminRootHex: () => (cfg.adminRootPub && cfg.adminRootPub.length === 32 ? bytesToHexStr(cfg.adminRootPub) : null),
+    isAdminDevice: (pub) => deviceBook.classify(pub)?.tier === "admin" && !!cfg.adminRootPub,
+    bindingFor: (pub) => deviceBook.pqBindingFor(pub),
+    ownEvidence: () => ({ stkBound: deps.readStkHybrid() !== null, bootKeyHybrid: deps.readStkHybrid() !== null && hasBootKey() }),
+    log: (m) => console.warn(m),
+  });
+  await assurance.load();
+  setPqAuthority({ policy: () => assurance.policy(), bindingFor: (pub) => deviceBook.pqBindingFor(pub) });
+  void deviceBook.refresh().then(() => assurance.refresh());
+  {
+    const t = setInterval(() => void assurance.refresh(), 15 * 60_000);
+    if (typeof t.unref === "function") t.unref();
+  }
   void deviceBook.refresh();
   {
     const t = setInterval(() => void deviceBook.refresh(), 5 * 60_000);
