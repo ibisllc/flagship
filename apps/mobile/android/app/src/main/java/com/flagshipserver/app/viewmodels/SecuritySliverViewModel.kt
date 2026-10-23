@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.core.SliverLine
@@ -53,11 +55,11 @@ class SecuritySliverViewModel(
         try {
             val statement = _waiting.value[serviceId]?.trust
             if (statement == null) {
-                _error.value = "No new key is waiting for this service."
+                _error.value = FSStrings.get(R.string.no_new_key_is_waiting_for)
                 return
             }
             val stamped = statement.copy(issuedAt = now())
-            val key = signer("Trust a new publisher key for $serviceId")
+            val key = signer(FSStrings.get(R.string.trust_a_new_publisher_key_for, serviceId))
             client.trustPublisher(serviceId, stamped, stamped.sign { key.sign(it) })
             _error.value = null
             refresh()

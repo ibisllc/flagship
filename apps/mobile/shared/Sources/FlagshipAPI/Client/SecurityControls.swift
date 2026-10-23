@@ -44,38 +44,38 @@ public struct CompanionDelegationList: Codable, Equatable, Sendable {
 }
 
 public enum SecurityControlWords {
-    public static let restoredTitle = "Restored permissions"
-    public static let restoredIntro = "This app came back from a backup. Until an admin approves, nobody from the old list can open it."
-    public static let restoredApprove = "Approve this list"
-    public static let restoredDiscard = "Discard it"
-    public static let restoredAdminOnly = "Only an admin device can approve restored permissions."
+    public static let restoredTitle = String(localized: "Restored permissions")
+    public static let restoredIntro = String(localized: "This app came back from a backup. Until an admin approves, nobody from the old list can open it.")
+    public static let restoredApprove = String(localized: "Approve this list")
+    public static let restoredDiscard = String(localized: "Discard it")
+    public static let restoredAdminOnly = String(localized: "Only an admin device can approve restored permissions.")
 
     public static let updatesTitle = "Updates"
     public static func updateLabel(_ mode: String) -> String? {
         switch mode {
-        case "manual": return "Ask me each time"
-        case "staged": return "Wait a week, then update"
-        case "auto": return "Update automatically"
-        case "frozen": return "Never update"
+        case "manual": return String(localized: "Ask me each time")
+        case "staged": return String(localized: "Wait a week, then update")
+        case "auto": return String(localized: "Update automatically")
+        case "frozen": return String(localized: "Never update")
         default: return nil
         }
     }
     public static func updateNote(_ mode: String) -> String? {
         switch mode {
-        case "manual": return "You approve every update."
-        case "staged": return "A verified update from the same publisher is held for a week, then goes in. Anything that asks for more access still waits for you."
-        case "auto": return "A verified update from the same publisher goes in at once. Anything that asks for more access still waits for you."
-        case "frozen": return "This app stays on the version it is on."
+        case "manual": return String(localized: "You approve every update.")
+        case "staged": return String(localized: "A verified update from the same publisher is held for a week, then goes in. Anything that asks for more access still waits for you.")
+        case "auto": return String(localized: "A verified update from the same publisher goes in at once. Anything that asks for more access still waits for you.")
+        case "frozen": return String(localized: "This app stays on the version it is on.")
         default: return nil
         }
     }
 
-    public static let delegateOpen = "Let it build…"
-    public static let delegateTitle = "Let this browser build an app"
-    public static let delegateIntro = "A browser docked through Remote can only look. This lets it change one app you pick, for a short time. It ends on its own, or when you end it, or when the session ends."
-    public static let delegateBuild = "Change the app (build)"
-    public static let delegateDeploy = "Put changes live (deploy)"
+    public static let delegateOpen = String(localized: "Let it build…")
+    public static let delegateTitle = String(localized: "Let this browser build an app")
+    public static let delegateIntro = String(localized: "A browser docked through Remote can only look. This lets it change one app you pick, for a short time. It ends on its own, or when you end it, or when the session ends.")
+    public static let delegateBuild = String(localized: "Change the app (build)")
+    public static let delegateDeploy = String(localized: "Put changes live (deploy)")
     public static let delegateAllow = "Allow"
-    public static let delegateEnd = "End it"
-    public static let delegateAdminOnly = "Only an admin device can let a browser build."
+    public static let delegateEnd = String(localized: "End it")
+    public static let delegateAdminOnly = String(localized: "Only an admin device can let a browser build.")
 }

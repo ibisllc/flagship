@@ -204,7 +204,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     }
     public func updateMode(serviceId: String) async throws -> UpdateModeState {
         try await tick()
-        guard let s = updateModes[serviceId] else { throw ScreensClientError.http(status: 404, message: "no publisher") }
+        guard let s = updateModes[serviceId] else { throw ScreensClientError.http(status: 404, message: String(localized: "no publisher")) }
         return s
     }
     public func setUpdateMode(serviceId: String, mode: String) async throws {

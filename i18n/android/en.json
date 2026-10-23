@@ -11055,5 +11055,143 @@
   "it_shut_down_instead_of_restarting": {
     "en": "(it shut down instead of restarting because the lock could not be confirmed)",
     "ctx": "core/BootSuspension.kt LockWords (prose)"
+  },
+  "waiting_for_an_admin": {
+    "en": "Waiting for an admin: %1$s.",
+    "ctx": "api/ServerArchiveModels.kt:94 (prose)",
+    "args": 1
+  },
+  "set_up_again": {
+    "en": "Set up again: %1$s.",
+    "ctx": "api/ServerArchiveModels.kt:95 (prose)",
+    "args": 1
+  },
+  "note": {
+    "en": "Note: %1$s.",
+    "ctx": "api/ServerArchiveModels.kt:96 (prose)",
+    "args": 1
+  },
+  "restored_permissions": {
+    "en": "Restored permissions",
+    "ctx": "core/SecurityControls.kt:49 (prose)"
+  },
+  "this_app_came_back_from_a": {
+    "en": "This app came back from a backup. Until an admin approves, nobody from the old list can open it.",
+    "ctx": "core/SecurityControls.kt:50 (prose)"
+  },
+  "approve_this_list": {
+    "en": "Approve this list",
+    "ctx": "core/SecurityControls.kt:51 (prose)"
+  },
+  "discard_it": {
+    "en": "Discard it",
+    "ctx": "core/SecurityControls.kt:52 (prose)"
+  },
+  "only_an_admin_device_can_approve": {
+    "en": "Only an admin device can approve restored permissions.",
+    "ctx": "core/SecurityControls.kt:53 (prose)"
+  },
+  "ask_me_each_time": {
+    "en": "Ask me each time",
+    "ctx": "core/SecurityControls.kt:58 (prose)"
+  },
+  "wait_a_week_then_update": {
+    "en": "Wait a week, then update",
+    "ctx": "core/SecurityControls.kt:59 (prose)"
+  },
+  "update_automatically": {
+    "en": "Update automatically",
+    "ctx": "core/SecurityControls.kt:60 (prose)"
+  },
+  "never_update": {
+    "en": "Never update",
+    "ctx": "core/SecurityControls.kt:61 (prose)"
+  },
+  "you_approve_every_update": {
+    "en": "You approve every update.",
+    "ctx": "core/SecurityControls.kt:66 (prose)"
+  },
+  "a_verified_update_from_the_same": {
+    "en": "A verified update from the same publisher is held for a week, then goes in. Anything that asks for more access still waits for you.",
+    "ctx": "core/SecurityControls.kt:67 (prose)"
+  },
+  "a_verified_update_from_the_same_2": {
+    "en": "A verified update from the same publisher goes in at once. Anything that asks for more access still waits for you.",
+    "ctx": "core/SecurityControls.kt:68 (prose)"
+  },
+  "this_app_stays_on_the_version": {
+    "en": "This app stays on the version it is on.",
+    "ctx": "core/SecurityControls.kt:69 (prose)"
+  },
+  "let_it_build": {
+    "en": "Let it build…",
+    "ctx": "core/SecurityControls.kt:73 (prose)"
+  },
+  "let_this_browser_build_an_app": {
+    "en": "Let this browser build an app",
+    "ctx": "core/SecurityControls.kt:74 (prose)"
+  },
+  "a_browser_docked_through_remote_can": {
+    "en": "A browser docked through Remote can only look. This lets it change one app you pick, for a short time. It ends on its own, or when you end it, or when the session ends.",
+    "ctx": "core/SecurityControls.kt:75 (prose)"
+  },
+  "change_the_app_build": {
+    "en": "Change the app (build)",
+    "ctx": "core/SecurityControls.kt:76 (prose)"
+  },
+  "put_changes_live_deploy": {
+    "en": "Put changes live (deploy)",
+    "ctx": "core/SecurityControls.kt:77 (prose)"
+  },
+  "end_it": {
+    "en": "End it",
+    "ctx": "core/SecurityControls.kt:79 (prose)"
+  },
+  "only_an_admin_device_can_let": {
+    "en": "Only an admin device can let a browser build.",
+    "ctx": "core/SecurityControls.kt:80 (prose)"
+  },
+  "resolved": {
+    "en": "Resolved",
+    "ctx": "ui/components/SecuritySliverBar.kt:89 (ui label)"
+  },
+  "old_key_new_key": {
+    "en": "Old key %1$s → new key %2$s",
+    "ctx": "ui/components/SecuritySliverBar.kt:96 (arg of Text)",
+    "args": 2
+  },
+  "on_the_old_list": {
+    "en": "%1$s %2$s on the old list.%3$s",
+    "ctx": "ui/screens/SecurityControlsSections.kt:55 (arg of Text)",
+    "args": 3
+  },
+  "may": {
+    "en": "May %1$s %2$s",
+    "ctx": "ui/screens/SecurityControlsSections.kt:120 (arg of Text)",
+    "args": 2
+  },
+  "approve_the_permissions_restored_for": {
+    "en": "Approve the permissions restored for %1$s",
+    "ctx": "viewmodels/SecurityControlsViewModels.kt:52 (prose)",
+    "args": 1
+  },
+  "let_a_browser_change": {
+    "en": "Let a browser change %1$s",
+    "ctx": "viewmodels/SecurityControlsViewModels.kt:136 (prose)",
+    "args": 1
+  },
+  "no_new_key_is_waiting_for": {
+    "en": "No new key is waiting for this service.",
+    "ctx": "viewmodels/SecuritySliverViewModel.kt:56 (prose)"
+  },
+  "trust_a_new_publisher_key_for": {
+    "en": "Trust a new publisher key for %1$s",
+    "ctx": "viewmodels/SecuritySliverViewModel.kt:60 (prose)",
+    "args": 1
+  },
+  "restored_2": {
+    "en": "%1$s: restored. %2$s",
+    "ctx": "viewmodels/ServerArchiveViewModels.kt:894 (prose)",
+    "args": 2
   }
 }

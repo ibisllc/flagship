@@ -339,14 +339,14 @@ of the last check here: **not yet checked**.
   device / Delete account, plain Lock). Also on the branch: the website no longer scroll-snaps on phones; the
   hall of fame has its own page (`/security/hall-of-fame`); `npm run store-assets` renders every App Store /
   Play image in seven languages (`docs/store-assets/README.md`; webapp stand-ins are marked not-for-upload until
-  the native captures in `docs/store-assets/capture-plan.md` exist). Webapp shell **v166**. Dibs window
+  the native captures in `docs/store-assets/capture-plan.md` exist). Webapp shell **v170**. Dibs window
   2026-10-25 to 2027-04-25 (`apps/com/wrangler.toml`). Verified here: `tsc -b`, the core vitest suites, the web
   tests, `npm run i18n`, Android compile + unit tests (debug, release, Wear, gym tests compile), the iOS app
   builds with Xcode 27.1 RC (the old `ContentView.swift:149` failure does not reproduce). The voi.ci upkeep cron
   moved to its own hourly group (the small cron groups now run hourly, not every 40 minutes).
   **Owner / release checklist (the one list for this release):**
   1. D1 migrations before the `.com` deploy: 0.3's 0107-0109, then **0110** (voici names).
-  2. Deploy `.com` (shell v166, dibs window, voi.ci routes) and the webapp; an **endorsed box release** (box
+  2. Deploy `.com` (shell v170, dibs window, voi.ci routes) and the webapp; an **endorsed box release** (box
      pages in the visitor's language, the canonical-address election, 0.3's box changes); iOS and Android store
      builds.
   3. Run the live gym on this branch (named-links and languages groups included); only after named-links shows
@@ -1477,7 +1477,7 @@ Not compiled since the rebase: the iOS and Android code on any branch.
 - **Branch order since 2026-10-23 (owner):** `release/0.3` → `feat/UX` (multilingual + named links +
   lock-screen sign-out + the UI round, folded) → `feat/marketplace` → `feat/custom-names` /
   `feat/custom-domains` / `feat/outbound-proxy`. When `release/0.3` moves, rebase `feat/UX` onto it, then
-  the children. A child that changes the webapp takes a shell number above `feat/UX`'s v166.
+  the children. A child that changes the webapp takes a shell number above `feat/UX`'s v170.
 - **`feat/marketplace`** (+ Pro payments, vouchers). Also a Pro option:
   **a separate access list on each server** per app (2026-10-15,
   `docs/service-access-gating.md` "Separate lists per server (Pro)": an

@@ -700,11 +700,11 @@ public final class ImportBackupViewModel {
         switch a.state {
         case "done":
             let needs = a.summary?.needs ?? []
-            return needs.isEmpty ? "\(a.name): restored" : "\(a.name): restored. \(needs.joined(separator: " "))"
-        case "skipped": return "\(a.name): skipped (\(a.reason ?? "already here"))"
-        case "failed": return "\(a.name): couldn't be restored (\(a.reason ?? "unknown reason"))"
-        case "restoring": return "\(a.name): restoring…"
-        default: return "\(a.name): waiting"
+            return needs.isEmpty ? String(localized: "\(a.name): restored") : String(localized: "\(a.name): restored. \(needs.joined(separator: " "))")
+        case "skipped": return String(localized: "\(a.name): skipped (\(a.reason ?? "already here"))")
+        case "failed": return String(localized: "\(a.name): couldn't be restored (\(a.reason ?? "unknown reason"))")
+        case "restoring": return String(localized: "\(a.name): restoring…")
+        default: return String(localized: "\(a.name): waiting")
         }
     }
 
