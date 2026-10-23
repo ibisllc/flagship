@@ -15,6 +15,9 @@ pub mod oci_cli;
 pub mod plan;
 pub mod workload;
 
+#[cfg(any(test, feature = "fake"))]
+pub mod fake;
+
 pub use engine::{EngineCapabilities, ObservedWorkload, Runtime, RuntimeEvent, WorkloadState};
 pub use error::{PlanError, RuntimeError};
 pub use exec::{Exec, ExecOutput, Executor, SystemExecutor};
