@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.Icon
@@ -116,9 +117,32 @@ fun RecoveryScreen(nav: NavController) {
         }
     }
 
+    var showHowItWorks by remember { mutableStateOf(false) }
+    if (showHowItWorks) {
+        com.flagshipserver.app.ui.components.AlertDialog(
+            onDismissRequest = { showHowItWorks = false },
+            title = { Text(stringResource(R.string.how_this_works)) },
+            text = { Text(RECOVERY_HOW_IT_WORKS) },
+            confirmButton = {
+                com.flagshipserver.app.ui.components.TextButton(onClick = { showHowItWorks = false }) { Text(stringResource(R.string.close)) }
+            },
+        )
+    }
     FSScreen(
         title = stringResource(R.string.cloud_recovery),
         onBack = { nav.popBackStack() },
+        // "How this works" sits behind the (?) at the top right, as on iOS.
+        actions = {
+            androidx.compose.material3.IconButton(
+                onClick = { showHowItWorks = true },
+                modifier = Modifier.semantics { testTag = "recovery-how-it-works" },
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.HelpOutline,
+                    contentDescription = stringResource(R.string.how_this_works),
+                )
+            }
+        },
     ) {
         if (showReattachProgress) {
             FSGroup {
@@ -229,7 +253,6 @@ fun RecoveryScreen(nav: NavController) {
                 },
             )
         }
-        HowRecoveryWorksCard()
     }
 }
 
@@ -331,23 +354,6 @@ private fun SetupCard(
                 block = true,
             )
             FSSecondaryButton(label = stringResource(R.string.cancel), onClick = onCancel, enabled = !working, block = true)
-        }
-    }
-}
-
-@Composable
-private fun HowRecoveryWorksCard() {
-    FSCard {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.accent, modifier = Modifier.size(24.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.how_this_works), style = MaterialTheme.typography.titleSmall)
-                Text(
-                    RECOVERY_HOW_IT_WORKS,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
         }
     }
 }

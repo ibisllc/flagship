@@ -24,17 +24,17 @@ import org.robolectric.annotation.Config
 class SettingsScanPairingComposeTest {
     @get:Rule val composeRule = createComposeRule()
 
-    @Test fun scanAPairingCodeOpensTheJoinScanner() {
+    @Test fun scanACodeOrEnterALinkOpensTheScanner() {
         composeRule.setContent {
             FlagshipTheme {
                 val nav = rememberNavController()
                 NavHost(nav, startDestination = "settings-root") {
                     composable("settings-root") { SettingsScreen(nav) }
-                    composable("join-device-scan") { Text("join scanner") }
+                    composable("join-device-scan") { Text("scan or link") }
                 }
             }
         }
-        composeRule.onNodeWithText("Scan a pairing code").performScrollTo().performClick()
-        composeRule.onNodeWithText("join scanner").assertIsDisplayed()
+        composeRule.onNodeWithText("Scan a code or enter a link").performScrollTo().performClick()
+        composeRule.onNodeWithText("scan or link").assertIsDisplayed()
     }
 }

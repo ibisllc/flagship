@@ -87,6 +87,8 @@ describe("Tier-1 'Lock the app' locks with a PIN on the webapp", () => {
     const html = readFileSync(join(WEBAPP, "index.html"), "utf8");
     expect(html).toContain('id="settings-pin-lock"');
     expect(html).toContain('id="settings-pin-lock">Lock the app</button>');
+    // Locking removes nothing, so it is not red (owner, 2026-10-23).
+    expect(html).toContain('<button class="secondary full-width" id="settings-pin-lock">');
     // Change PIN ships hidden — settings.js reveals it once a PIN is set.
     expect(html).toMatch(/class="[^"]*hidden[^"]*"\s+id="settings-pin-change"/);
     // The PIN unlock + set views exist, with the passphrase fallback.
