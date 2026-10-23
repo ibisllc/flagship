@@ -15,3 +15,7 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.11.0"
 thiserror = "=2.0.20"
+
+[features]
+# An in-memory engine with fault injection, for the broker's and core's tests only.
+fake = []

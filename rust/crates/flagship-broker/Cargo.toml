@@ -11,3 +11,15 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+flagship-runtime = { path = "../flagship-runtime" }
+ed25519-dalek = { version = "=3.0.0", default-features = false, features = ["fast", "zeroize"] }
+regex = { version = "=1.13.0", default-features = false, features = ["std", "unicode-perl"] }
+rusqlite = { version = "=0.40.2", features = ["bundled"] }
+rustix = { version = "=1.1.5", features = ["fs", "net", "process"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+sha2 = "=0.11.0"
+thiserror = "=2.0.20"
+
+[dev-dependencies]
+flagship-runtime = { path = "../flagship-runtime", features = ["fake"] }
