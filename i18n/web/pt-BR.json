@@ -795,5 +795,11 @@
   "scb4b920494": "HTTP <1/> em <2/> ms",
   "sacfe4d0f0d": "Fora do ar: <1/>",
   "s5bd38c4859": "inacessível",
-  "s9e7aa5e543": "(erro neste navegador)"
+  "s9e7aa5e543": "(erro neste navegador)",
+  "sb032726b26": "Notas de revisão: uma referência de instalação mutável, adulteração da inicialização e o navegador dos apps",
+  "sce683cfd1b": "Revisão de design · outubro de 2026 · resolvido na versão 0.3 · crédito: Jay",
+  "s1ab359336c": "Jay nos enviou três observações a partir da leitura do código. Nenhuma veio com um exploit funcional, mas cada uma apontava uma falha real, e duas delas mudaram o que a versão 0.3 entrega.",
+  "s1351f88fb0": "<1>A receita de instalação assinada nomeava um branch, não um commit.</1> O telefone assina a receita a partir da qual um novo servidor é instalado, mas a revisão que ela nomeava era <2>main</2> por padrão, que pode mudar: a assinatura fixava um nome, não o código por trás dele. Novos servidores agora instalam uma versão assinada para um commit exato (um SHA de 40 caracteres hexadecimais), verificada antes de qualquer coisa ser executada.",
+  "sea46b19340": "<1>A permissão de navegador de um app ia além da sua lista de sites.</1> A lista era verificada ao abrir uma aba ou navegar, não em cliques, preenchimentos ou leituras posteriores, e todos os apps compartilhavam um mesmo perfil de navegador. A versão 0.3 substitui isso: cada app tem seu próprio contexto de navegador, cada requisição é verificada contra a lista do app como o navegador a vê, e o endereço atual é verificado antes e depois de cada ação; caso contrário, a aba é fechada e nada é retornado.",
+  "sa2f00500df": "<1>Acesso físico a um servidor desligado.</1> A partição de inicialização não é criptografada e nada a mede, então alguém com alguns minutos sozinho com a máquina poderia alterar o código de inicialização e capturar a chave do disco no próximo desbloqueio, inclusive com aprovação pelo telefone. Isso é verdade hoje. Não descrevemos mais a aprovação pelo telefone nem o bloqueio remoto como proteção contra isso, e a inicialização medida (TPM) está planejada."
 }

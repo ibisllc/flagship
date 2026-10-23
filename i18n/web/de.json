@@ -795,5 +795,11 @@
   "scb4b920494": "HTTP <1/> in <2/> ms",
   "sacfe4d0f0d": "Ausgefallen: <1/>",
   "s5bd38c4859": "nicht erreichbar",
-  "s9e7aa5e543": "(Fehler in diesem Browser)"
+  "s9e7aa5e543": "(Fehler in diesem Browser)",
+  "sb032726b26": "Review-Notizen: eine veränderliche Installationsreferenz, Manipulation beim Start und der App-Browser",
+  "sce683cfd1b": "Design-Review · Oktober 2026 · behoben in Version 0.3 · Dank an: Jay",
+  "s1ab359336c": "Jay hat uns drei Beobachtungen aus dem Lesen des Codes geschickt. Keine kam mit einem funktionierenden Exploit, aber jede zeigte auf eine echte Lücke, und zwei davon haben verändert, was Version 0.3 ausliefert.",
+  "s1351f88fb0": "<1>Das signierte Installationsrezept nannte einen Branch, keinen Commit.</1> Das Telefon signiert das Rezept, von dem ein neuer Server installiert, aber die darin genannte Revision war standardmäßig <2>main</2>, und das kann sich ändern: Die Signatur legte einen Namen fest, nicht den Code dahinter. Neue Server installieren jetzt ein signiertes Release für genau einen Commit (einen 40-stelligen Hex-SHA), geprüft, bevor irgendetwas läuft.",
+  "sea46b19340": "<1>Die Browser-Freigabe einer App reichte über ihre Website-Liste hinaus.</1> Die Liste wurde beim Öffnen eines Tabs oder beim Navigieren geprüft, nicht bei späteren Klicks, Eingaben oder Lesezugriffen, und alle Apps teilten sich ein Browserprofil. Version 0.3 ersetzt das: Jede App bekommt ihren eigenen Browser-Kontext, jede Anfrage wird so, wie der Browser sie sieht, gegen die Liste der App geprüft, und die aktuelle Adresse wird vor und nach jeder Aktion geprüft, sonst wird der Tab geschlossen und nichts zurückgegeben.",
+  "sa2f00500df": "<1>Physischer Zugriff auf einen ausgeschalteten Server.</1> Die Boot-Partition ist nicht verschlüsselt und wird nicht gemessen, sodass jemand mit ein paar Minuten allein an der Maschine den frühen Startcode ändern und den Festplattenschlüssel beim nächsten Entsperren abgreifen könnte, auch bei Freigabe per Telefon. Das gilt heute. Wir beschreiben die Freigabe per Telefon und die Fernsperre nicht mehr als Schutz dagegen, und Measured Boot (TPM) ist geplant."
 }

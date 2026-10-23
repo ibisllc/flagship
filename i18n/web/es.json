@@ -795,5 +795,11 @@
   "scb4b920494": "HTTP <1/> en <2/> ms",
   "sacfe4d0f0d": "Caído: <1/>",
   "s5bd38c4859": "inaccesible",
-  "s9e7aa5e543": "(error en este navegador)"
+  "s9e7aa5e543": "(error en este navegador)",
+  "sb032726b26": "Notas de revisión: una referencia de instalación modificable, la manipulación del arranque y el navegador de las apps",
+  "sce683cfd1b": "Revisión de diseño · octubre de 2026 · resuelto en la versión 0.3 · crédito: Jay",
+  "s1ab359336c": "Jay nos envió tres observaciones tras leer el código. Ninguna venía con un exploit funcional, pero cada una señalaba un fallo real, y dos de ellas cambiaron lo que incluye la versión 0.3.",
+  "s1351f88fb0": "<1>La receta de instalación firmada nombraba una rama, no un commit.</1> El teléfono firma la receta desde la que se instala un servidor nuevo, pero la revisión que nombraba era <2>main</2> por defecto, que puede cambiar: la firma fijaba un nombre, no el código detrás. Los servidores nuevos instalan ahora una versión firmada para un commit exacto (un SHA de 40 caracteres hexadecimales), comprobada antes de que se ejecute nada.",
+  "sea46b19340": "<1>El permiso de navegador de una app iba más allá de su lista de sitios.</1> La lista se comprobaba al abrir una pestaña o navegar, no en los clics, rellenados o lecturas posteriores, y todas las apps compartían un mismo perfil de navegador. La versión 0.3 lo sustituye: cada app tiene su propio contexto de navegador, cada solicitud se comprueba con la lista de la app tal como la ve el navegador, y la dirección actual se comprueba antes y después de cada acción; si no, la pestaña se cierra y no se devuelve nada.",
+  "sa2f00500df": "<1>Acceso físico a un servidor apagado.</1> La partición de arranque no está cifrada y nada la mide, así que alguien con unos minutos a solas con la máquina podría cambiar el código de arranque y capturar la clave del disco en el siguiente desbloqueo, incluida la aprobación desde el teléfono. Esto es así hoy. Ya no presentamos la aprobación desde el teléfono ni el bloqueo remoto como protección contra ello, y el arranque medido (TPM) está planificado."
 }

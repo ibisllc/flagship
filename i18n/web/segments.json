@@ -6153,6 +6153,57 @@
       "security/hall-of-fame.html"
     ]
   },
+  "sb032726b26": {
+    "en": "Review notes: a mutable install ref, boot tampering, and the app browser",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sce683cfd1b": {
+    "en": "Design review · October 2026 · addressed in release 0.3 · credit: Jay",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s1ab359336c": {
+    "en": "Jay sent us three observations from reading the code. None came with a working exploit, but each pointed at a real gap, and two of them changed what release 0.3 ships.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "s1351f88fb0": {
+    "en": "<1>The signed install recipe named a branch, not a commit.</1> The phone signs the recipe a new server installs from, but the revision it named defaulted to <2>main</2>, which is mutable: the signature fixed a name, not the code behind it. New servers now install a signed box release for one exact commit (a 40-hex SHA), checked before anything runs.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "main"
+    ],
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sea46b19340": {
+    "en": "<1>An app's browser grant reached past its site list.</1> The list was checked when a tab opened or navigated, not on later clicks, form fills or reads, and every app shared one browser profile. Release 0.3 replaces it: each app gets its own browser context, every request is checked against the app's list as the browser sees it, and the current address is checked before and after every action, or the tab is closed and nothing is returned.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
+  "sa2f00500df": {
+    "en": "<1>Physical access to a powered-off server.</1> The boot partition is not encrypted and nothing measures it, so someone with a few minutes alone with the machine could change the early-boot code and capture the disk key at the next unlock, phone approval included. This is true today. We no longer describe phone approval or the remote lock as protection against it, and measured boot (TPM) is planned work.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security/hall-of-fame.html"
+    ]
+  },
   "sceed40c99c": {
     "en": "Unauthenticated identity-key swap on an account with no second factor",
     "kind": "text",
