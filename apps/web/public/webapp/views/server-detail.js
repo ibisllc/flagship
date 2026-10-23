@@ -868,17 +868,17 @@ async function refreshLeases(serverFqdn) {
   try {
     leases = await listLeases(serverFqdn);
   } catch (_e) {
-    pill.textContent = "unreachable";
+    pill.textContent = tr("unreachable");
     list.innerHTML = "";
     return;
   }
   const longLived = leases;
   if (longLived.length === 0) {
-    pill.textContent = "off";
+    pill.textContent = tr("off");
     list.innerHTML = "";
     return;
   }
-  pill.textContent = "on";
+  pill.textContent = tr("on");
   list.innerHTML = longLived.map((l) => `
     <div class="row mt-1">
       <span class="value text-xs">
@@ -1320,7 +1320,10 @@ function setDeadManEnabledUi(enabled, leaseExpiry) {
   const disableBtn = $("deadman-disable-btn");
   const enableBtn = $("deadman-enable-btn");
   const affirmBlock = $("deadman-affirm-block");
-  if (pill) pill.textContent = enabled ? "on" : "off";
+  if (pill) {
+    pill.textContent = enabled ? tr("on") : tr("off");
+    pill.dataset.on = enabled ? "1" : "";
+  }
   if (enableBtn) enableBtn.textContent = enabled ? tr("Update window") : tr("Enable");
   disableBtn?.classList.toggle("hidden", !enabled);
   affirmBlock?.classList.toggle("hidden", !enabled);
@@ -1404,7 +1407,7 @@ function wireDeadMan(body) {
       toast(humanError(e), "err");
     } finally {
       enableBtn.disabled = false;
-      if ($("deadman-pill")?.textContent !== "on") enableBtn.textContent = tr("Enable");
+      if (!$("deadman-pill")?.dataset.on) enableBtn.textContent = tr("Enable");
     }
   });
 

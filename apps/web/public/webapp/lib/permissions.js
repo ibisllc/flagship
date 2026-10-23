@@ -52,7 +52,7 @@ export async function revokePermission(serviceId, grantId, fetchJson) {
 }
 
 function whenText(ms) {
-  return ms ? tr("until {0} UTC", new Date(ms).toISOString().slice(0, 16).replace("T", " ")) : "until you end it";
+  return ms ? tr("until {0} UTC", new Date(ms).toISOString().slice(0, 16).replace("T", " ")) : tr("until you end it");
 }
 
 export function renderPermissions(data) {

@@ -8,7 +8,7 @@ import {
 } from "../src/index.js";
 import type { VoiciLinkStorage, VoiciNameRecord, VoiciNameStorage } from "../src/index.js";
 
-// Parity: the same assertions against the D1 adapter (sqlite + migration 0110)
+// Parity: the same assertions against the D1 adapter (sqlite + migration 0111)
 // and the in-memory store (docs/named-links.md).
 
 const DAY = 86_400_000;
@@ -36,6 +36,16 @@ function names(label: string, make: () => VoiciNameStorage, teardown?: () => voi
       expect(r).toMatchObject({ key: "halloweenparty", state: "waiting", releasedAt: 5000, releaseReason: "replaced" });
       expect(await s.getLiveByService("fresh-poppy", "fresh-poppy--party")).toBeUndefined();
       expect(await s.release("fresh-poppy", "fresh-poppy--party", "cleared", 6000)).toBeUndefined();
+    });
+
+    it("release() with a key frees that name only, while a replace briefly holds two", async () => {
+      const s = make();
+      await s.claim(rec("halloweenparty"));
+      await s.claim(rec("springparty", "fresh-poppy", "fresh-poppy--party", 2000));
+      const r = await s.release("fresh-poppy", "fresh-poppy--party", "replaced", 3000, "halloweenparty");
+      expect(r).toMatchObject({ key: "halloweenparty", state: "waiting" });
+      expect((await s.getLiveByService("fresh-poppy", "fresh-poppy--party"))?.key).toBe("springparty");
+      expect(await s.release("fresh-poppy", "fresh-poppy--other", "replaced", 3000, "springparty")).toBeUndefined();
     });
 
     it("deleteWaitingReleasedBefore() frees a name only once its wait is over", async () => {
