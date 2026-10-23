@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
 import { readdir, readFile, rename, rm, stat, statfs } from "node:fs/promises";
-import { onCorruptState, withFileLock, writeFileDurable } from "./durableFile.js";
+import { onCorruptState, onNoSpace, withFileLock, writeFileDurable } from "./durableFile.js";
 import { basename, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
 import { X509Certificate } from "node:crypto";
@@ -128,6 +128,8 @@ import {
 import { buildRunMigration } from "./runMigration.js";
 import { sandboxedRunSql } from "./migrationSandbox.js";
 import { PublisherPins } from "./publisherPins.js";
+import { ManagementReserve } from "./managementReserve.js";
+import { freeBytesAt } from "./serverArchive/service.js";
 import { SecuritySliver } from "./securitySliver.js";
 import { realCommandRunner as realCommandRunnerStatic } from "./serviceRunner.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
@@ -1163,6 +1165,14 @@ async function main(): Promise<void> {
   // Kept in the state directory beside the keys, never under data/, so restoring an app's data
   // cannot bring a revoked session back.
   const authorityHub = await openAuthorityHub(join(dataDir, "authority"));
+  // N13: space held back so an app that fills the disk cannot stop a revocation, lock or recovery
+  // record being saved. A security write that finds the disk full releases it and goes through.
+  {
+    const reserve = new ManagementReserve(dataDir, 8 * 1024 * 1024, freeBytesAt);
+    await reserve.ensure().catch(() => false);
+    onNoSpace(() => reserve.release());
+    setInterval(() => void reserve.ensure().catch(() => false), 60_000).unref();
+  }
   {
     const owner = new TokenFamily(authorityHub, "owner-session", "account");
     const companion = new TokenFamily(authorityHub, "companion-session", "account");
