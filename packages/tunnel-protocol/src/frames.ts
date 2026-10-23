@@ -40,20 +40,12 @@ export const FRAME_CLOSE_REMOTE = 0x04;
 /**
  * Hub → tunnel: "I'm about to go away. Reconnect now."
  *
- * Sent by the SNI router when its Fly machine receives a shutdown
- * signal (rolling deploy, scale-down). Payload is JSON
- * `{ graceMs: number }`. Daemons handle by:
- *   1. Opening a second tunnel to wss://flagship-services… (DNS
- *      round-robin lands on a different machine).
- *   2. Re-sending HELLO with the same identity + AppGrants on the
- *      new connection.
- *   3. Migrating in-flight streams via FRAME_DATA on the new tunnel
- *      (best-effort; long-lived streams that can't migrate get
- *      FRAME_CLOSE_REMOTE through the old tunnel).
- *   4. Closing the old WS once migration is acknowledged.
- *
- * Combined with min_machines_running = 2 in fly.toml and the reconnect
- * supervisor (#7), rolling deploys are invisible to traffic.
+ * Sent when the hub's machine is shutting down (rolling deploy, scale-down), and only to a
+ * box that offered `drain-v1` in its HELLO and saw it in the HELLO_ACK: it is not a v1 type,
+ * so a box without the capability would treat it as a decode error. Payload is JSON
+ * `{ "graceMs": number }`: the hub keeps serving the old tunnel that long, then closes it.
+ * The box dials a new tunnel at once (the load balancer lands it on another machine) and
+ * lets the old one's streams finish; streams are not migrated.
  */
 export const FRAME_DRAIN_NOTICE = 0x05;
 
@@ -113,6 +105,12 @@ export interface Frame {
 export const FRAME_HEADER_BYTES = 9;
 export const MAX_FRAME_PAYLOAD = 1 << 20; // 1 MiB
 
+/** Frame types beyond v1 a decoder accepts because the capability was negotiated. */
+export interface DecodeOptions {
+  /** `drain-v1`: accept FRAME_DRAIN_NOTICE. */
+  drainNotice?: boolean;
+}
+
 export function encodeFrame(frame: Frame): Uint8Array {
   const len = frame.payload.length;
   if (len > MAX_FRAME_PAYLOAD) throw new Error(`frame payload exceeds ${MAX_FRAME_PAYLOAD} bytes`);
@@ -129,13 +127,13 @@ export type DecodeResult =
   | { kind: "incomplete"; needAtLeast: number }
   | { kind: "error"; reason: string };
 
-export function decodeFrame(buf: Uint8Array): DecodeResult {
+export function decodeFrame(buf: Uint8Array, opts: DecodeOptions = {}): DecodeResult {
   if (buf.length < FRAME_HEADER_BYTES) {
     return { kind: "incomplete", needAtLeast: FRAME_HEADER_BYTES };
   }
   const streamId = readU32BE(buf, 0);
   const type = buf[4]!;
-  if (!isFrameType(type)) {
+  if (!isFrameType(type) && !(opts.drainNotice === true && type === FRAME_DRAIN_NOTICE)) {
     return { kind: "error", reason: `unknown frame type 0x${type.toString(16)}` };
   }
   const payloadLen = readU32BE(buf, 5);
@@ -150,7 +148,7 @@ export function decodeFrame(buf: Uint8Array): DecodeResult {
     kind: "ok",
     frame: {
       streamId,
-      type,
+      type: type as FrameType,
       payload: buf.subarray(FRAME_HEADER_BYTES, total),
     },
     consumed: total,
@@ -248,6 +246,36 @@ export interface HelloAckTrust {
  */
 export const CAPABILITY_OUTBOUND_V1 = "outbound-v1";
 export const CAPABILITY_PB_MAIL_V1 = "pb-mail-v1";
+/**
+ * Offered by the box in its HELLO `capabilities`; the hub echoes it in the HELLO_ACK only
+ * when the box offered it, and only then sends FRAME_DRAIN_NOTICE.
+ */
+export const CAPABILITY_DRAIN_V1 = "drain-v1";
+
+/** Longest grace a box honours; a larger `graceMs` is clamped to it. */
+export const MAX_DRAIN_GRACE_MS = 5 * 60_000;
+
+export function drainNoticeFrame(graceMs: number): Frame {
+  return {
+    streamId: 0,
+    type: FRAME_DRAIN_NOTICE,
+    payload: new TextEncoder().encode(JSON.stringify({ graceMs: Math.max(0, Math.floor(graceMs)) })),
+  };
+}
+
+/** The notice's grace in ms, clamped to [0, MAX_DRAIN_GRACE_MS]; null when malformed. */
+export function parseDrainNotice(payload: Uint8Array): number | null {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(new TextDecoder().decode(payload));
+  } catch {
+    return null;
+  }
+  if (typeof obj !== "object" || obj === null || Array.isArray(obj)) return null;
+  const g = (obj as Record<string, unknown>).graceMs;
+  if (typeof g !== "number" || !Number.isFinite(g)) return null;
+  return Math.min(MAX_DRAIN_GRACE_MS, Math.max(0, Math.floor(g)));
+}
 
 export function helloAckFrame(
   ok: boolean,

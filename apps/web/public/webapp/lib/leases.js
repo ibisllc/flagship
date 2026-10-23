@@ -20,6 +20,8 @@ import { controlApex } from "./apex.js";
 import { importX25519Private } from "./x25519.js";
 import { ed25519PubToX25519 } from "./edToMont.js";
 import { accountReadFetch } from "./accountRead.js";
+import { requirePinnedBoxKey } from "./boxKeyPins.js";
+import { fetchSealedDiskKey } from "./bootApproval.js";
 import { boundedLeaseTtl, cachedDeadManView, readSuspension, retryPendingLocks } from "./bootSuspension.js";
 
 export const TAG_AUTO_UNLOCK_LEASE_V2 = "flagship/auto-unlock-lease/v2";
@@ -97,11 +99,12 @@ export async function enableLongLived(serverFqdn, ttlMs = DEFAULT_LONG_TTL_MS, d
   if (ttlMs <= 0) throw new Error("the dead-man switch has lapsed: keep this server unlocked first, then turn auto-unlock on");
 
   // 1. The box's STK, from the directory: the only key the lease may seal for.
-  const stkPubHex = await (deps.boxStk || directoryStk)(serverFqdn, session, { fetch: f, comBase });
-  if (!stkPubHex) throw new Error(`${serverFqdn} isn't in your account's server list`);
+  const listedStk = await (deps.boxStk || directoryStk)(serverFqdn, session, { fetch: f, comBase });
+  if (!listedStk) throw new Error(`${serverFqdn} isn't in your account's server list`);
+  const stkPubHex = requirePinnedBoxKey(session.username, serverFqdn, listedStk, deps);
 
   // 2. The disk key `.com` holds sealed for this account's IRK.
-  const sealedRes = await f(`${comBase}/api/server/${encodeURIComponent(serverFqdn)}/sealed-luks-key`);
+  const sealedRes = await fetchSealedDiskKey(serverFqdn, session.username, { fetch: f, comBase });
   if (!sealedRes.ok) throw new Error(`no sealed key on file for ${serverFqdn}: ${sealedRes.status}`);
   const luksKey = await openSealedWithIrk(session.umk, hexToBytes((await sealedRes.json()).sealedKey));
 

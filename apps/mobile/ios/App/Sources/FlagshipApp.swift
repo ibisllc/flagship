@@ -86,6 +86,7 @@ struct FlagshipApp: App {
             }
         )
         self.readTokens = readTokens
+        ServerShareServices.readTokens.set(readTokens)
         // Every LIVE /pods response feeds the cert-pin registry (verify the
         // STK-signed daemon-status per pod → install/clear that box's
         // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -94,6 +95,7 @@ struct FlagshipApp: App {
             readTokens: readTokens,
             onPods: { response in
                 CertPinRegistry.shared.update(pods: response.pods)
+                BoxKeyPins.shared.observe(username: response.username, pods: response.pods)
                 LanDirectRegistry.shared.refreshActive()
             }
         )

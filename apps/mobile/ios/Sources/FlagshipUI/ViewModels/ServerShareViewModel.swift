@@ -227,9 +227,13 @@ public enum ServerShareServices {
         pinFor: { CertPinRegistry.shared.pinFor(host: $0) }
     )
 
+    /// The app hands its read-token provider here once it exists.
+    public static let readTokens = AccountReadTokenRelay()
+
     public static let client = ServerShareClient(
         com: GymRoutedShareTransport(live: URLSessionShareTransport()),
-        box: GymRoutedShareTransport(live: URLSessionShareTransport(session: pinnedSession))
+        box: GymRoutedShareTransport(live: URLSessionShareTransport(session: pinnedSession)),
+        readTokens: readTokens
     )
 
     public static func ownerKeys() -> ShareOwnerKeys {

@@ -1,13 +1,19 @@
 import { verifyPutSealedLuksKey, type PutSealedLuksKey } from "@flagship/protocol";
 import type { LuksKeyStorage, ServerStorage, UsernameStorage } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
-import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
+import {
+  ACCOUNT_KEY_HOLDERS_ONLY,
+  ACCOUNT_READ_HEADERS,
+  requireAccountRead,
+  type AccountReadTokenDeps,
+} from "./accountReadToken.js";
+import { forbidden, malformed, notFound, type HandlerResponse, type HandlerResponseWithHeaders } from "./types.js";
 
 /**
  * The disk key `.com` holds sealed for the account (never readable here).
  *
  * `POST   /api/server/:host/sealed-luks-key`   server identity-signed
- * `GET    /api/server/:host/sealed-luks-key`   public (sealed against the account key)
+ * `GET    /api/server/:host/sealed-luks-key`   the account's read token (devices / IRK only)
  *
  * The :host parameter must equal the `serverId` field inside the signed
  * request — defense in depth against a bug that mis-routes between hosts.
@@ -23,6 +29,12 @@ export interface LuksKeyDeps {
   luksKeys: LuksKeyStorage;
   maxAgeMs?: number;
   now?: () => number;
+}
+
+export interface LuksKeyReadDeps {
+  servers: ServerStorage;
+  luksKeys: LuksKeyStorage;
+  readTokens: AccountReadTokenDeps;
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
@@ -81,42 +93,33 @@ export async function handlePutSealedLuksKey(
 }
 
 /**
- * #48 — public-read decision (M4).
- *
- * This endpoint is intentionally UNAUTHENTICATED. The audit raised
- * the concern that returning the sealed LUKS key ciphertext to any
- * caller enables an attacker to enumerate which serverDomains have
- * a deposit on file. After deliberation in the Thread-G design pass:
- *
- * DECISION: accept the metadata leak. Reasoning:
- *   - The CONTENT is sealed against BAK, which lives only on the
- *     user's phone (or webapp peer device). Without BAK, the
- *     ciphertext is unusable — no offline attack works against
- *     well-chosen BAK material.
- *   - The bootstrap flow needs to fetch this WITHOUT authentication,
- *     because at boot the daemon has only the disk's pubkey material,
- *     not an IRK-bound session.
- *   - Per-IP rate limit (apps/com /rateLimit binding, #9) bounds the
- *     enumeration cost.
- *
- * PATH TO CLOSURE if we ever decide to gate further:
- *   - Require an IRK-signed fetch envelope, which would mean the boot
- *     stage needs to carry the IRK pubkey + a fresh signature from
- *     the phone via the LUKS unlock approval flow.
- *   - That couples boot-time unlock with phone reachability more
- *     tightly than the current design wants.
- *   - DO NOT add the gate without revisiting the boot-stage protocol.
- *
- * In short: this endpoint is public-by-design and reviewed.
+ * The deposit is sealed to the account IRK with classical X25519, so a copy
+ * taken today opens once that falls: only the account's own devices (or its
+ * IRK) may download it, with the account read token
+ * (docs/account-read-token.md). Every legitimate reader is a device of the
+ * owning account opening it with the UMK; no box reads it (boxes unlock from
+ * their STK-sealed lease or the phone relay). Demo accounts read without a
+ * token, as for `/pods`. An unknown server and a missing deposit both answer
+ * 401 to a caller without a token, so names can't be probed for deposits.
  */
 export async function handleGetSealedLuksKey(
-  deps: LuksKeyDeps,
+  deps: LuksKeyReadDeps,
   host: string,
-): Promise<HandlerResponse> {
-  const rec = await deps.luksKeys.getSealed(host);
-  if (!rec) return notFound("no sealed key on file");
+  authorization: string | null | undefined,
+): Promise<HandlerResponseWithHeaders> {
+  const reg = await deps.servers.get(host);
+  const check = await requireAccountRead(
+    deps.readTokens,
+    reg?.username ?? "",
+    authorization,
+    ACCOUNT_KEY_HOLDERS_ONLY,
+  );
+  if (!check.ok) return check.response;
+  const rec = reg ? await deps.luksKeys.getSealed(host) : undefined;
+  if (!rec) return { ...notFound("no sealed key on file"), headers: { ...ACCOUNT_READ_HEADERS } };
   return {
     status: 200,
+    headers: { ...ACCOUNT_READ_HEADERS },
     body: {
       serverDomain: rec.serverDomain,
       sealedKey: rec.sealedKeyHex,

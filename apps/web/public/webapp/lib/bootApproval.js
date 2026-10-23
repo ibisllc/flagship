@@ -40,6 +40,7 @@ import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex, bootOrigin } from "./apex.js";
 import { importX25519Private } from "./x25519.js";
 import { accountReadFetch } from "./accountRead.js";
+import { observePods, requirePinnedBoxKey } from "./boxKeyPins.js";
 
 const COM_BASE = controlApex();
 const BOOT_BASE = bootOrigin();
@@ -265,6 +266,7 @@ export async function fetchVerifiedRequests(deps = {}) {
       .then((r) => (r.ok ? r.json() : { pods: [] })),
   ]);
 
+  observePods(username, dirResp.pods, deps);
   // Directory STK map (non-revoked entries only).
   const dirStk = new Map();
   for (const p of dirResp.pods ?? []) {
@@ -371,6 +373,18 @@ async function postBootResponse(req, sealedHex, deps) {
  * @param {VerifiedBootRequest} req
  * @param {{ fetch?: typeof fetch, comBase?: string, bootBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
  */
+/**
+ * GET the disk key `.com` holds sealed to this account's IRK. `.com` answers
+ * only the account's own devices, so the read carries its read token.
+ */
+export function fetchSealedDiskKey(serverDomain, username, { fetch: f = fetch, comBase = COM_BASE } = {}) {
+  return accountReadFetch(
+    `${comBase}/api/server/${encodeURIComponent(serverDomain)}/sealed-luks-key`,
+    { cache: "no-store" },
+    { fetch: f, baseUrl: comBase, username },
+  );
+}
+
 async function respondUnlock(req, deps = {}) {
   const session = getSession();
   if (!session.umk) throw new Error("unlock the webapp first");
@@ -379,12 +393,10 @@ async function respondUnlock(req, deps = {}) {
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  const stkEdPub = hexToBytes(req.directoryStkPubHex);
+  const stkEdPub = hexToBytes(requirePinnedBoxKey(session.username, req.serverDomain, req.directoryStkPubHex, deps));
 
   // 1. GET the phone-sealed LUKS key (sealed FOR the IRK at install).
-  const sealedRes = await f(
-    `${comBase}/api/server/${encodeURIComponent(req.serverDomain)}/sealed-luks-key`,
-  );
+  const sealedRes = await fetchSealedDiskKey(req.serverDomain, session.username, { fetch: f, comBase });
   if (sealedRes.status === 404) throw new Error("no sealed disk key is on file for this box yet");
   if (!sealedRes.ok) throw new Error(`sealed-luks-key: HTTP ${sealedRes.status}`);
   const sealedJson = await sealedRes.json();
@@ -647,7 +659,7 @@ export async function depositSwk(args, deps = {}) {
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  const stkPubHex = String(args.stkPubHex).toLowerCase();
+  const stkPubHex = requirePinnedBoxKey(username, args.serverDomain, args.stkPubHex, deps);
   const carrierHex = await buildSwkDeliveryCarrier({
     serverDomain: args.serverDomain,
     swk: hexToBytes(args.swkHex),
@@ -753,7 +765,7 @@ export async function depositCgk(args, deps = {}) {
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  const stkPubHex = String(args.stkPubHex).toLowerCase();
+  const stkPubHex = requirePinnedBoxKey(username, args.serverDomain, args.stkPubHex, deps);
   const carrierHex = await buildCgkDeliveryCarrier({
     serverDomain: args.serverDomain,
     cgk: hexToBytes(args.cgkHex),
@@ -890,7 +902,7 @@ export async function depositPairingOrder(args, deps = {}) {
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  const boxIdentityPub = hexToBytes(String(identityPubKeyHex).toLowerCase());
+  const boxIdentityPub = hexToBytes(requirePinnedBoxKey(username, serverDomain, identityPubKeyHex, deps));
   // Seal the plaintext order JSON DIRECTLY to the box identity -- the daemon's
   // pairing-deposit consumer unseals `deposit.sealed` and decodes it as the
   // `{request, signature}` JSON (no carrier wrapper, unlike the SWK lane).

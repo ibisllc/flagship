@@ -6,6 +6,7 @@ import {
   APPLIANCE_BUILD_KEYFILE,
   LUKS_ASSERT_SINGLE_SLOT_FN,
 } from "./userdata.js";
+import { APPLIANCE_REKEY_BLOCK, buildApplianceFactoryLuksRecordBlock } from "./applianceDiskKey.js";
 
 /**
  * The factory key of a generalized VM appliance. It is published on purpose: the
@@ -61,7 +62,8 @@ export function encodeApplianceSeed(recipe: Uint8Array, bootstrap: string): Uint
 }
 
 /** Installed in every generalized base. It accepts only the fixed raw seed
- * format, verifies the payload hash before decoding anything, then invokes the
+ * format, verifies the payload hash before decoding anything, re-encrypts the
+ * root under a volume key of its own (applianceDiskKey.ts), then invokes the
  * canonical bootstrap in its preinstalled mode. The public build key remains
  * available after failure so the same seed can retry; it is removed from disk,
  * crypttab, and the rebuilt initramfs only after registration + LUKS re-key
@@ -128,6 +130,10 @@ ROOT_LUKS_PART="$(cryptsetup status "$ROOT_MAPPER" | sed -n 's/^[[:space:]]*devi
 ROOT_PARENT="$(lsblk -no PKNAME "$ROOT_LUKS_PART" | head -n1)"
 ROOT_PARTITION="$(cat "/sys/class/block/$(basename "$ROOT_LUKS_PART")/partition")"
 [ -n "$ROOT_PARENT" ] && [ -n "$ROOT_PARTITION" ] || { echo "[appliance] root partition topology unavailable"; exit 1; }
+
+FLAGSHIP_LUKS_BUILD_KEY=${APPLIANCE_BUILD_KEYFILE}
+${APPLIANCE_REKEY_BLOCK}
+
 DISK_BYTES="$(blockdev --getsize64 "/dev/$ROOT_PARENT")"
 PART_BYTES="$(blockdev --getsize64 "$ROOT_LUKS_PART")"
 if [ $((DISK_BYTES - PART_BYTES)) -gt 1073741824 ]; then
@@ -169,6 +175,10 @@ ${LUKS_ASSERT_SINGLE_SLOT_FN}
 cryptsetup open --test-passphrase --key-file "$LUKS_NEW_KEY" "$ROOT_LUKS_PART" >/dev/null 2>&1 || { echo "[appliance] the new disk key does not open the disk; refusing to remove the factory key"; exit 1; }
 cryptsetup luksRemoveKey "$ROOT_LUKS_PART" ${APPLIANCE_BUILD_KEYFILE}
 flagship_assert_single_luks_slot "$ROOT_LUKS_PART" ${APPLIANCE_BUILD_KEYFILE} "$LUKS_NEW_KEY"
+# Never seal a box that still has the image's volume key, whatever happened above.
+[ -s "$REKEY_MARKER" ] || rekey_fatal "the disk was never given its own encryption key"
+SEALED_DIGEST_FP="$(flagship_luks_digest_fp "$ROOT_LUKS_PART")" || rekey_fatal "cannot read the disk's LUKS header"
+[ "$SEALED_DIGEST_FP" != "$FACTORY_DIGEST_FP" ] || rekey_fatal "the disk still has the shared factory encryption key"
 shred -u "$LUKS_NEW_KEY" 2>/dev/null || rm -f "$LUKS_NEW_KEY"
 rm -f ${APPLIANCE_BUILD_KEYFILE}
 sed -i -E 's|^(flagship_root[[:space:]]+[^[:space:]]+)[[:space:]]+[^[:space:]]+|\\1 none|' /etc/crypttab
@@ -281,6 +291,7 @@ ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
 ROOT_LUKS_UUID="$(blkid -s UUID -o value "$ROOT_LUKS_PART")"
 printf 'flagship_root UUID=%s /etc/flagship/appliance-build.key luks,initramfs\\n' "$ROOT_LUKS_UUID" > /etc/crypttab
 printf 'KEYFILE_PATTERN=/etc/flagship/appliance-build.key\\n' > /etc/cryptsetup-initramfs/conf-hook
+${buildApplianceFactoryLuksRecordBlock(APPLIANCE_BUILD_KEYFILE)}
 
 echo '${specializerB64}' | base64 -d > /usr/local/sbin/flagship-appliance-specialize.sh
 chmod 700 /usr/local/sbin/flagship-appliance-specialize.sh

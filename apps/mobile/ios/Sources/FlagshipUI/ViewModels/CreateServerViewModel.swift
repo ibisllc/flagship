@@ -447,6 +447,8 @@ public final class CreateServerViewModel {
         let irk = mint.irk
         let boxSwkHex = mint.boxSwkHex
         CertPinRegistry.shared.registerBoxStk(domain: serverDomain, stkPub: mint.boxStkPub)
+        // A server this device (re)creates gets a new box key: pin whichever key it registers with next.
+        BoxKeyPins.shared.forget(username: username, serverDomain: serverDomain)
 
         let delegated = Curve25519.Signing.PrivateKey()
         let acIssuedAt = Int64(Date().timeIntervalSince1970 * 1000)

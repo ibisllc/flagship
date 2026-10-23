@@ -1179,7 +1179,7 @@
         "name": "null",
         "payloadHex": "6e756c6c",
         "result": {
-          "threw": "Cannot read properties of null (reading 'encChunkId')"
+          "threw": "payload is not a JSON object"
         }
       },
       {

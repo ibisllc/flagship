@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Flagship
 import FlagshipCore
 
 /// The narrow capability `BootUnlockApprovalViewModel` needs from the
@@ -67,6 +68,9 @@ public final class BootUnlockApprovalViewModel {
         case approved
         /// The approve failed (incl. the box already gave up). Retry re-arms.
         case failed(String)
+        /// `.com` lists a box key other than the one this device pinned:
+        /// nothing was sent. The owner may trust the new key (a reinstall).
+        case keyChanged(BoxKeyChangedError)
     }
 
     public private(set) var state: State = .idle
@@ -85,14 +89,23 @@ public final class BootUnlockApprovalViewModel {
     /// Latches when the owner taps Deny, so the card doesn't immediately
     /// reappear while the directory flag is still set this session.
     private var denied = false
+    /// Re-pins after the owner confirms with Face ID. Injectable for tests.
+    private let confirmNewKey: (BoxKeyChangedError) async throws -> Void
+
+    public static let liveConfirmNewKey: (BoxKeyChangedError) async throws -> Void = { e in
+        _ = try await Keystore.deriveIRK(reason: "Trust the new key of \(e.serverDomain)")
+        BoxKeyPins.shared.repin(username: e.username, serverDomain: e.serverDomain, stkHex: e.reportedHex)
+    }
 
     public init(
         serverDomain: String,
         purpose: SecretPurpose = .unlockKey,
         makeCoordinator: @escaping () -> ApprovalSource?,
         store: BootUnlockStore = BootUnlockStore(),
-        initialAwaiting: Bool = false
+        initialAwaiting: Bool = false,
+        confirmNewKey: @escaping (BoxKeyChangedError) async throws -> Void = BootUnlockApprovalViewModel.liveConfirmNewKey
     ) {
+        self.confirmNewKey = confirmNewKey
         self.serverDomain = serverDomain
         self.purpose = purpose
         self.makeCoordinator = makeCoordinator
@@ -114,7 +127,7 @@ public final class BootUnlockApprovalViewModel {
         switch state {
         case .approving, .approved:
             return
-        case .failed:
+        case .failed, .keyChanged:
             // Keep a failure visible until the user acts; but if the box is no
             // longer waiting, the failure is moot — clear it.
             if !awaiting { state = .idle; denied = false }
@@ -153,6 +166,7 @@ public final class BootUnlockApprovalViewModel {
             // `.com` answers 409 when the request was already answered (a second
             // tap, another device): the approval stands, so there is no error to show.
             if SecretRequestsModel.isAlreadyAnswered(error) { state = .approved; return }
+            if let changed = error as? BoxKeyChangedError { state = .keyChanged(changed); return }
             state = .failed(HumanError.humanize(error))
         }
     }
@@ -162,6 +176,19 @@ public final class BootUnlockApprovalViewModel {
     public func deny() {
         denied = true
         state = .idle
+    }
+
+    /// The owner says the key change is theirs (a reinstall, a replacement):
+    /// re-pin after Face ID, then back to the pending prompt to approve again.
+    public func trustNewKey() async {
+        guard case .keyChanged(let changed) = state else { return }
+        do {
+            try await confirmNewKey(changed)
+            denied = false
+            state = .requestPending
+        } catch {
+            state = .failed(HumanError.humanize(error))
+        }
     }
 
     /// Re-arm after a failure (the card's Retry) — back to the pending prompt.

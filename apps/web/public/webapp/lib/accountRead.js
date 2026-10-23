@@ -70,8 +70,9 @@ export function clearAccountReadTokens() {
 
 /**
  * Fetch a gated account read. Same contract as `fetch`; `deps` injects
- * `fetch`, `getSession`, `getProfile`, `now`, `baseUrl` (the mint origin) and
- * the signing seams for tests.
+ * `fetch`, `getSession`, `getProfile`, `now`, `baseUrl` (the mint origin),
+ * `username` (the account, for a URL that doesn't name one) and the signing
+ * seams for tests.
  */
 export async function accountReadFetch(url, init = {}, deps = {}) {
   const f = deps.fetch ?? globalThis.fetch;
@@ -82,7 +83,8 @@ export async function accountReadFetch(url, init = {}, deps = {}) {
       headers: { "content-type": "application/json" },
     });
   }
-  const username = accountReadUsername(url);
+  // A read keyed by a server, not an account (the sealed disk key), names its account in `deps.username`.
+  const username = deps.username ? String(deps.username).toLowerCase() : accountReadUsername(url);
   const goneAnswer = username ? answerIfAccountGone(url) : null;
   if (goneAnswer) return goneAnswer;
   if (!username || isDemoProfile(profile)) return noted(url, await f(url, init));

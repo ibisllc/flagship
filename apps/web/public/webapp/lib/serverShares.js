@@ -14,7 +14,8 @@ import { controlApex, bootOrigin } from "./apex.js";
 import { getSession } from "./state.js";
 import { boxClient, ScreensError } from "./api.js";
 import { sensitiveSigner } from "./adminRoot.js";
-import { _internal as bootSeal } from "./bootApproval.js";
+import { _internal as bootSeal, fetchSealedDiskKey } from "./bootApproval.js";
+import { requirePinnedBoxKey } from "./boxKeyPins.js";
 import { humanError } from "./humanError.js";
 import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes, adminRootPubHex } from "../keystore.js";
 import { confirmFreshUnlock } from "./freshUnlock.js";
@@ -129,9 +130,11 @@ export async function createShareOffer(args, deps = {}) {
   const label = ss.normalizeShareLabel(args.label);
   if (!label) throw new ShareError("Give them a name of up to 64 characters, without |.", "bad-label");
   if (args.level !== "view" && args.level !== "manage") throw new ShareError("Pick what they can do.", "bad-level");
-  const stkPubHex = lower(args.stkPubHex);
-  if (!/^[0-9a-f]{64}$/.test(stkPubHex)) throw new ShareError("This server hasn't published its key yet. Try again once it's online.", "no-stk");
+  const listedStk = lower(args.stkPubHex);
+  if (!/^[0-9a-f]{64}$/.test(listedStk)) throw new ShareError("This server hasn't published its key yet. Try again once it's online.", "no-stk");
   const serverDomain = lower(args.serverDomain);
+  // The offer pins this key for the person it's shared with, so it must be the one this device pinned.
+  const stkPubHex = requirePinnedBoxKey(d.username, serverDomain, listedStk, deps);
   const unlockAtBoot = !!args.unlockAtBoot;
   const seeAppData = !!args.seeAppData;
   const now = d.now();
@@ -414,7 +417,11 @@ export async function cancelShareOffer(serverDomain, shareId, deps = {}) {
 }
 
 async function defaultOpenDiskKey(d, serverDomain) {
-  const res = await call(d, `${d.apex}/api/server/${encodeURIComponent(serverDomain)}/sealed-luks-key`);
+  const r = await fetchSealedDiskKey(serverDomain, d.username, { fetch: d.fetch, comBase: d.apex });
+  const text = await r.text();
+  let parsed = null;
+  try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
+  const res = { status: r.status, ok: r.ok, body: parsed };
   if (res.status === 404) throw new ShareError("This server has no disk key on file, so there's no start-up to approve.", "no-disk-key", 404);
   if (!res.ok || typeof res.body?.sealedKey !== "string") throw new ShareError("Couldn't read this server's disk key.", "disk-key", res.status);
   try {

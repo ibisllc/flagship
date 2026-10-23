@@ -291,10 +291,13 @@ public struct ServerShareOwnerFlow: Sendable {
     public let keys: ShareOwnerKeys
     private let now: @Sendable () -> Int64
     private let apexOrigin: @Sendable () -> String
+    private let pins: BoxKeyPins
 
     public init(client: ServerShareClient, username: String, keys: ShareOwnerKeys,
                 now: @escaping @Sendable () -> Int64 = { ServerShareClock.nowMs() },
-                apexOrigin: @escaping @Sendable () -> String = { Endpoints.controlBaseUrl.absoluteString }) {
+                apexOrigin: @escaping @Sendable () -> String = { Endpoints.controlBaseUrl.absoluteString },
+                pins: BoxKeyPins = .shared) {
+        self.pins = pins
         self.client = client
         self.username = username
         self.keys = keys
@@ -308,6 +311,8 @@ public struct ServerShareOwnerFlow: Sendable {
         let stk = stkPubHex.lowercased()
         guard ServerShare.isLowerHex(stk, 64) else { throw ServerShareFlowError.unknownServerIdentity }
         let domain = serverDomain.lowercased()
+        // The offer pins this key for the person it's shared with: it must be the one this device pinned.
+        try pins.require(username: username, serverDomain: domain, reportedHex: stk)
         let shareId = ServerShare.randomShareId()
         let secret = ServerShare.randomBytes(32)
         let issuedAt = now()
@@ -483,7 +488,7 @@ public struct ServerShareOwnerFlow: Sendable {
         guard let memberPub = HexUtil.decode(memberPubHex), memberPub.count == 32 else { throw ServerShareFlowError.badLink }
         let sealedForOwner: String
         do {
-            sealedForOwner = try await client.sealedDiskKey(serverDomain: serverDomain)
+            sealedForOwner = try await client.sealedDiskKey(serverDomain: serverDomain, username: username)
         } catch let e as ServerShareHTTPError where e.status == 404 {
             throw ServerShareFlowError.noDiskKey
         }

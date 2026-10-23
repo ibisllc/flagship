@@ -2,13 +2,14 @@ import { createServer, type Server, type Socket } from "node:net";
 import {
   closeFrame,
   dataFrame,
+  DEFAULT_SNI_LIMITS,
   openFrame,
   parseClientHelloSni,
 } from "@flagship/tunnel-protocol";
 import type { RegisteredTunnel, TunnelRegistry } from "./registry.js";
 import { fanOutNudge } from "./gossipFanout.js";
 import { accountFromCanonical, type UsageMeter } from "./usageMeter.js";
-import { SourcePauser } from "./throttle.js";
+import { PauseReasons, SourcePauser } from "./throttle.js";
 import { routerStats } from "./routerStats.js";
 
 /**
@@ -29,6 +30,28 @@ export const HOLD_POLL_INTERVAL_MS = 100;
  */
 export const MAX_DELAYED_DROPS = 2_048;
 
+/** ClientHellos being read at once. Past it new connections are dropped at once. */
+export const MAX_PENDING_HELLOS = 4_096;
+
+/**
+ * Bytes a parked visitor may send before the router stops reading it (TCP backpressure).
+ * A TLS client sends nothing after its hello until the server answers, so this only has to
+ * hold early data.
+ */
+export const MAX_PARKED_BYTES = 64 * 1024;
+
+/**
+ * Box → visitor: once this much sits unwritten in a visitor's socket, the router stops
+ * reading the box's tunnel until the visitor has taken {@link VISITOR_RESUME_ROOM} back.
+ * v1 tunnels have no per-stream credit, so the pause holds every stream on that tunnel;
+ * a visitor that frees no room for {@link SLOW_VISITOR_GRACE_MS} is cut so it can't
+ * hold the others for long.
+ */
+export const VISITOR_QUEUE_BYTES = 256 * 1024;
+export const VISITOR_RESUME_ROOM = 64 * 1024;
+export const SLOW_VISITOR_GRACE_MS = 5_000;
+const SLOW_VISITOR_POLL_MS = 50;
+
 export interface SniRouterOptions {
   port: number;
   host?: string;
@@ -42,6 +65,10 @@ export interface SniRouterOptions {
   holdPollIntervalMs?: number;
   /** Override the delayed-drop cap (tests). Defaults to {@link MAX_DELAYED_DROPS}. */
   maxDelayedDrops?: number;
+  /** Override the pending-hello cap (tests). Defaults to {@link MAX_PENDING_HELLOS}. */
+  maxPendingHellos?: number;
+  /** Override the slow-visitor cut (tests). Defaults to {@link SLOW_VISITOR_GRACE_MS}. */
+  slowVisitorGraceMs?: number;
 }
 
 /**
@@ -52,6 +79,7 @@ interface Waiter {
   initialBytes: Uint8Array;
   /** Post-ClientHello bytes that arrived while parked (replayed after pipe). */
   buffered: Uint8Array[];
+  bufferedBytes: number;
   /** Detach the park-phase socket listeners (set once parked). */
   detach?: () => void;
 }
@@ -75,7 +103,7 @@ export interface RunningSniRouter {
   close(): Promise<void>;
 }
 
-const DEFAULT_MAX_PEEK_BYTES = 16 * 1024; // covers any plausible ClientHello
+const DEFAULT_MAX_PEEK_BYTES = DEFAULT_SNI_LIMITS.maxRawBytes;
 const DEFAULT_PEEK_TIMEOUT_MS = 10_000;
 
 export function startSniRouter(
@@ -92,7 +120,18 @@ export function startSniRouter(
   const holdPollIntervalMs = opts.holdPollIntervalMs ?? HOLD_POLL_INTERVAL_MS;
   // Single-flight park state, shared across every connection of THIS router.
   const parkLot: ParkLot = new Map();
-  const hold: HoldConfig = { registry, meter, holdTimeoutMs, holdPollIntervalMs, parkLot, delayed: { count: 0 }, maxDelayed: opts.maxDelayedDrops ?? MAX_DELAYED_DROPS };
+  const hold: HoldConfig = {
+    registry,
+    meter,
+    holdTimeoutMs,
+    holdPollIntervalMs,
+    parkLot,
+    delayed: { count: 0 },
+    maxDelayed: opts.maxDelayedDrops ?? MAX_DELAYED_DROPS,
+    pendingHellos: { count: 0 },
+    maxPendingHellos: opts.maxPendingHellos ?? MAX_PENDING_HELLOS,
+    slowVisitorGraceMs: opts.slowVisitorGraceMs ?? SLOW_VISITOR_GRACE_MS,
+  };
 
   const server: Server = createServer((client) =>
     handleConnection(client, registry, maxPeek, peekTimeoutMs, meter, hold),
@@ -129,6 +168,10 @@ interface HoldConfig {
   /** Streams currently waiting out a delayed drop (shared by this router's connections). */
   delayed: { count: number };
   maxDelayed: number;
+  /** Connections still reading their ClientHello. */
+  pendingHellos: { count: number };
+  maxPendingHellos: number;
+  slowVisitorGraceMs: number;
 }
 
 function handleConnection(
@@ -139,54 +182,65 @@ function handleConnection(
   meter: UsageMeter | undefined,
   hold: HoldConfig,
 ): void {
-  let peeked: Uint8Array = new Uint8Array(0);
+  if (hold.pendingHellos.count >= hold.maxPendingHellos) {
+    client.destroy();
+    return;
+  }
+  hold.pendingHellos.count += 1;
+  const limits = { ...DEFAULT_SNI_LIMITS, maxRawBytes: maxPeek };
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  // Re-parse only once the bytes the last parse asked for are here, so a sender that
+  // dribbles single bytes costs one parse per record, not one per byte.
+  let needAtLeast = 0;
   let resolved = false;
 
+  const finishPeek = (): boolean => {
+    if (resolved) return false;
+    resolved = true;
+    hold.pendingHellos.count -= 1;
+    clearTimeout(peekTimer);
+    client.off("data", onData);
+    return true;
+  };
+
   const peekTimer = setTimeout(() => {
-    if (!resolved) {
-      client.destroy(new Error("ClientHello peek timeout"));
-    }
+    if (finishPeek()) client.destroy(new Error("ClientHello peek timeout"));
   }, peekTimeoutMs);
 
   const onData = (chunk: Buffer) => {
     if (resolved) return;
-    peeked = concat(peeked, bufferToBytes(chunk));
-    if (peeked.length > maxPeek) {
-      bail("peek buffer exceeded");
+    chunks.push(bufferToBytes(chunk));
+    total += chunk.byteLength;
+    if (total < needAtLeast) return;
+    const peeked = chunks.length === 1 ? chunks[0]! : concatAll(chunks);
+    chunks.length = 0;
+    chunks.push(peeked);
+    const r = parseClientHelloSni(peeked, limits);
+    if (r.kind === "incomplete") {
+      needAtLeast = r.needAtLeast;
       return;
     }
-    const r = parseClientHelloSni(peeked);
-    if (r.kind === "incomplete") return; // keep buffering
-    resolved = true;
-    clearTimeout(peekTimer);
-    client.off("data", onData);
+    finishPeek();
     if (r.kind === "error") {
       routerStats.bad += 1;
-      bail(`ClientHello error: ${r.reason}`);
+      client.destroy(new Error(`ClientHello error: ${r.reason}`));
       return;
     }
     if (r.sni === null) {
       routerStats.bad += 1;
-      bail("no SNI — refusing to route");
+      client.destroy(new Error("no SNI — refusing to route"));
       return;
     }
     routeToTunnel(client, r.sni, peeked, hold);
   };
 
-  function bail(reason: string): void {
-    if (!resolved) {
-      resolved = true;
-      clearTimeout(peekTimer);
-    }
-    client.destroy(new Error(reason));
-  }
-
   client.on("data", onData);
   client.once("error", () => {
-    if (!resolved) {
-      resolved = true;
-      clearTimeout(peekTimer);
-    }
+    finishPeek();
+  });
+  client.once("close", () => {
+    finishPeek();
   });
 }
 
@@ -199,7 +253,7 @@ function routeToTunnel(
   const tunnel = hold.registry.findBySni(sni);
   if (tunnel) {
     routerStats.routed += 1;
-    pipeToTunnel(client, tunnel, sni, initialBytes, hold.meter);
+    pipeToTunnel(client, tunnel, sni, initialBytes, hold.meter, hold.slowVisitorGraceMs);
     return;
   }
   // MISS. Either park-on-miss (a leader-routed meta-URL whose user has online
@@ -266,8 +320,12 @@ function parkAndNudge(
   // Pause reads (TCP backpressure) but still capture any early post-hello
   // bytes so we can replay them in-order once we pipe.
   routerStats.parked += 1;
-  const waiter: Waiter = { client, initialBytes, buffered: [] };
-  const onParkData = (chunk: Buffer) => waiter.buffered.push(bufferToBytes(chunk));
+  const waiter: Waiter = { client, initialBytes, buffered: [], bufferedBytes: 0 };
+  const onParkData = (chunk: Buffer) => {
+    waiter.buffered.push(bufferToBytes(chunk));
+    waiter.bufferedBytes += chunk.byteLength;
+    if (waiter.bufferedBytes >= MAX_PARKED_BYTES) client.pause();
+  };
   client.on("data", onParkData);
 
   // If the parked client itself goes away before a claim lands, drop it from
@@ -298,7 +356,7 @@ function parkAndNudge(
     poll: setInterval(() => {
       const tunnel = registry.findBySni(domain);
       if (!tunnel) return; // still no claim — keep waiting
-      releaseGroup(parkLot, domain, group, tunnel, meter);
+      releaseGroup(parkLot, domain, group, tunnel, meter, hold.slowVisitorGraceMs);
     }, hold.holdPollIntervalMs),
     deadlineTimer: setTimeout(() => {
       dropGroup(parkLot, domain, group);
@@ -329,6 +387,7 @@ function releaseGroup(
   group: ParkGroup,
   tunnel: RegisteredTunnel,
   meter: UsageMeter | undefined,
+  slowVisitorGraceMs: number,
 ): void {
   if (parkLot.get(domain) !== group) return; // already released/dropped
   clearInterval(group.poll);
@@ -341,7 +400,10 @@ function releaseGroup(
     const replay = w.buffered.length
       ? concatAll([w.initialBytes, ...w.buffered])
       : w.initialBytes;
-    pipeToTunnel(w.client, tunnel, domain, replay, meter);
+    // Undo a parked-bytes pause; data events start on a later tick, after pipeToTunnel
+    // has attached its listener.
+    w.client.resume();
+    pipeToTunnel(w.client, tunnel, domain, replay, meter, slowVisitorGraceMs);
   }
 }
 
@@ -373,11 +435,20 @@ function pipeToTunnel(
   tunnel: RegisteredTunnel,
   sni: string,
   initialBytes: Uint8Array,
-  meter?: UsageMeter,
+  meter: UsageMeter | undefined,
+  slowVisitorGraceMs: number = SLOW_VISITOR_GRACE_MS,
 ): void {
   // Per-account metering: attribute this stream to the box's owner. Custom
   // domains resolve to a tunnel whose podCanonical carries the username too.
   const account = meter ? accountFromCanonical(tunnel.podCanonical) : null;
+  // The visitor's socket is paused for two independent reasons (the throttle and a
+  // backed-up tunnel); it reads again only when neither holds it.
+  const visitorGate = new PauseReasons(
+    () => client.pause(),
+    () => {
+      if (!client.destroyed) client.resume();
+    },
+  );
   // An over-quota free account is slowed, never refused (throttle.ts): each
   // direction charges the account's shared bucket and, when it overdraws,
   // pauses its own source — the visitor's socket for uploads, the box's tunnel
@@ -385,17 +456,24 @@ function pipeToTunnel(
   // visitor hanging up when it resumes, so a throttled stream can outlive its
   // visitor by the current hold (one chunk of debt, ~2 s at 256 kbit/s).
   const visitorSide = new SourcePauser(
-    () => client.pause(),
-    () => {
-      if (!client.destroyed) client.resume();
-    },
+    () => visitorGate.hold("throttle"),
+    () => visitorGate.release("throttle"),
   );
   const streamId = tunnel.nextStreamId();
+  const slowKey = `visitor:${streamId}`;
   let closed = false;
+  let slowPoll: ReturnType<typeof setInterval> | null = null;
+
+  const stopSlowWatch = () => {
+    if (slowPoll) clearInterval(slowPoll);
+    slowPoll = null;
+    tunnel.resumeInbound?.(slowKey);
+  };
   const closeStream = () => {
     if (closed) return;
     closed = true;
     visitorSide.dispose();
+    stopSlowWatch();
     tunnel.detachStream(streamId);
     try {
       tunnel.send(closeFrame(streamId, false));
@@ -403,33 +481,71 @@ function pipeToTunnel(
       /* tunnel may be down */
     }
   };
+  // The visitor's socket holds VISITOR_QUEUE_BYTES unwritten: stop reading the tunnel until
+  // it frees VISITOR_RESUME_ROOM, or cut this visitor if it frees none in time.
+  const watchSlowVisitor = () => {
+    if (slowPoll || !tunnel.pauseInbound) return;
+    tunnel.pauseInbound(slowKey);
+    let lastLength = client.writableLength;
+    let lastProgress = Date.now();
+    slowPoll = setInterval(() => {
+      const queued = client.writableLength;
+      if (queued <= VISITOR_QUEUE_BYTES - VISITOR_RESUME_ROOM) {
+        stopSlowWatch();
+        return;
+      }
+      if (queued < lastLength) {
+        lastLength = queued;
+        lastProgress = Date.now();
+        return;
+      }
+      if (Date.now() - lastProgress >= slowVisitorGraceMs) {
+        closeStream();
+        client.destroy(new Error("visitor too slow"));
+      }
+    }, SLOW_VISITOR_POLL_MS);
+  };
+  const resumeVisitor = () => visitorGate.release("tunnel");
 
   tunnel.attachStream(streamId, {
     onData(data) {
       // box → visitor (the dominant egress leg).
+      if (closed) return;
       meter?.add(account, data.byteLength);
       client.write(Buffer.from(data));
+      if (client.writableLength >= VISITOR_QUEUE_BYTES) watchSlowVisitor();
       const wait = meter?.throttleDelayMs(account, data.byteLength) ?? 0;
       if (wait > 0) tunnel.holdInbound?.(wait);
     },
     onRemoteClose() {
       closed = true;
       visitorSide.dispose();
+      stopSlowWatch();
       tunnel.detachStream(streamId);
       client.end();
     },
   });
 
+  // visitor → box: stop reading the visitor while the tunnel's socket is backed up.
+  const sendToBox = (bytes: Uint8Array) => {
+    tunnel.send(dataFrame(streamId, bytes));
+    if (tunnel.whenBoxWritable && !visitorGate.has("tunnel")) {
+      const ready = tunnel.whenBoxWritable(resumeVisitor);
+      if (!ready) visitorGate.hold("tunnel");
+    }
+  };
+
   // Hand off the ClientHello bytes we already buffered.
   tunnel.send(openFrame(streamId, sni));
   meter?.add(account, initialBytes.byteLength);
-  tunnel.send(dataFrame(streamId, initialBytes));
+  sendToBox(initialBytes);
   visitorSide.hold(meter?.throttleDelayMs(account, initialBytes.byteLength) ?? 0);
 
   client.on("data", (chunk: Buffer) => {
     // visitor → box (request leg; small, but still relay egress).
+    if (closed) return;
     meter?.add(account, chunk.byteLength);
-    tunnel.send(dataFrame(streamId, bufferToBytes(chunk)));
+    sendToBox(bufferToBytes(chunk));
     visitorSide.hold(meter?.throttleDelayMs(account, chunk.byteLength) ?? 0);
   });
   client.on("end", closeStream);

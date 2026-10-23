@@ -147,3 +147,13 @@ describe("canonical bytes (used for STK signatures)", () => {
     expect(Array.from(base)).not.toEqual(Array.from(changed));
   });
 });
+
+describe("peer-backup decoders on JSON that is not an object", () => {
+  it("throw their own error, not a TypeError", () => {
+    for (const bad of ["null", "5", "[]", '"s"']) {
+      const payload = new TextEncoder().encode(bad);
+      expect(() => decodePbPut(payload)).toThrow("payload is not a JSON object");
+      expect(() => decodePbPutAck(payload)).toThrow("payload is not a JSON object");
+    }
+  });
+});
