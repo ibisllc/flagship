@@ -358,6 +358,8 @@ export function parseManifest(input: unknown): ManifestParseResult {
   if (m.schema_version !== MANIFEST_SCHEMA_VERSION) {
     e(`schema_version must be ${MANIFEST_SCHEMA_VERSION} (got ${JSON.stringify(m.schema_version)})`);
   }
+  refuseSecurityFields(m, "", e);
+  if (typeof m.runtime === "object" && m.runtime !== null) refuseSecurityFields(m.runtime as Record<string, unknown>, "runtime.", e);
 
   const name = stringField(m, "name", e);
   if (name && !NAME_RE.test(name)) {
@@ -828,6 +830,24 @@ function parseMigration(v: unknown, e: (m: string) => void): AppMigration | unde
     return undefined;
   }
   return { verification: mg.verification };
+}
+
+/**
+ * Fields that ask for host authority. A v1 parser used to ignore unknown fields, so a manifest
+ * asking for a GPU or host networking was deployed without it and without telling anyone
+ * (IMPLEMENTATION-PLAN.md 8.1: refuse, never silently strip).
+ */
+export const NEVER_ALLOWED_MANIFEST_FIELDS: readonly string[] = [
+  "privileged", "cap_add", "capabilities", "devices", "device_requests", "host_network", "network_mode",
+  "pid", "ipc", "security_opt", "user", "userns_mode", "volumes", "mounts", "binds", "cdi", "hooks", "sysctls",
+];
+export const V2_ONLY_MANIFEST_FIELDS: readonly string[] = ["accelerator", "gpu", "isolation", "resources", "health", "restart", "components"];
+
+function refuseSecurityFields(o: Record<string, unknown>, prefix: string, e: (m: string) => void): void {
+  for (const k of Object.keys(o)) {
+    if (NEVER_ALLOWED_MANIFEST_FIELDS.includes(k)) e(`${prefix}${k} is not allowed: the box decides host access, an app manifest cannot ask for it`);
+    else if (prefix === "" && V2_ONLY_MANIFEST_FIELDS.includes(k)) e(`${k} needs schema_version 2`);
+  }
 }
 
 function stringField(
