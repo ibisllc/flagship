@@ -54,7 +54,7 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
 ]);
 
 /** The only workload-key derivations keyd hands to the daemon (both unsalted). */
-export const SWK_HKDF_LABELS: ReadonlySet<string> = new Set(["flagship.pb-manifest.v1", "flagship/peer-backup-key/v1"]);
+export const SWK_HKDF_LABELS: ReadonlySet<string> = new Set(["flagship.pb-manifest.v1", "flagship/peer-backup-key/v1", "flagship/reissue-journal-key/v1"]);
 
 /** The sealed messages keyd opens and returns: pairing orders (the daemon must read the order). */
 export const UNSEAL_PURPOSES: ReadonlySet<string> = new Set(["pairing-order"]);

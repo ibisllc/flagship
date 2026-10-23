@@ -1,3 +1,6 @@
+import { hkdf } from "@noble/hashes/hkdf";
+import { sha256 } from "@noble/hashes/sha256";
+import { opaqueSecret } from "@flagship/protocol";
 import { swkOps } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { ed, type Keypair } from "@flagship/protocol";
@@ -110,6 +113,27 @@ describe("J.4 stable-id re-issuer", () => {
       expect(members).toContain(bytesToHex(newIrk.publicKey));
       expect(members).toContain(bytesToHex(friend.publicKey));
     }
+  });
+
+  it("works when the workload key is held by keyd (an opaque stand-in)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const platform = await buildPlatformWith([oldIrk]);
+    const raw = fakeSwk(7);
+    const derived: string[] = [];
+    const swk = opaqueSecret({
+      derive: (salt, info) => {
+        derived.push(info);
+        return hkdf(sha256, raw, salt, new TextEncoder().encode(info), 32);
+      },
+    });
+    const report = await reissueStableIds({
+      deps: { servicePlatform: platform, swk, journal: new InMemoryJournalStore() },
+      oldIrkPubHex: bytesToHex(oldIrk.publicKey),
+      newIrkPubHex: bytesToHex(newIrk.publicKey),
+    });
+    expect(report.status).toBe("complete");
+    expect(derived).toEqual(["flagship/reissue-journal-key/v1"]);
   });
 
   it("leaves apps unchanged when the OLD IRK isn't a member", async () => {
