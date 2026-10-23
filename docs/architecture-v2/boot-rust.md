@@ -1,9 +1,8 @@
 # Rust early boot (BO01): v1 parity, swap plan, v2 hook
 
 Status: **candidate, not shipped.** `rust/crates/flagship-boot` reproduces the
-v1 early-boot unlock exactly. Nothing that ships to a box calls it yet;
-`installer/boot-stage.sh`, the Go helper and the initramfs generator are
-unchanged. This is step one of IMPLEMENTATION-PLAN.md §7.
+early-boot unlock. Nothing that ships to a box calls it yet; the Go helper and
+the generated premount are what run (§5 lists the fixes they took). This is step one of IMPLEMENTATION-PLAN.md §7.
 
 ## 1. What the crate is
 
@@ -200,55 +199,65 @@ premount (today's last resort). Prove on both arches: first boot, reboot,
 lease, relay, lock-once, a corrupt binary, a removed binary, Wi-Fi, and a
 Studio-hosted VM.
 
-## 5. Findings: today's flow against §7
+## 5. Findings: today's flow against §7, and what was fixed (branch fix/boot-fix)
 
-These are recorded, not fixed in the shipping path. Where `flagship-boot
-unlock` behaves differently, it says so.
+The shipping flow is now one generated premount
+(`packages/flagship-builder/src/unlockPremount.ts`); `installer/boot-stage.sh`,
+which nothing ran, is deleted. `tools/unseal-crosscheck/tests/premount.test.ts`
+runs the generated script with the real curl, openssl, Go helper and boot
+worker router.
 
-1. **Secrets on argv.** The premount passes the STK seed as
-   `--identity-priv-hex` (readable in `/proc/<pid>/cmdline`). The v1 CLI
-   contract requires it, so compat mode accepts it; `unlock` reads the PEM
-   itself.
-2. **Secrets in files.** The key's hex is written to `/run/unlock-key` and
-   `/run/unlock-key.hex`; `shred` on tmpfs means nothing. With `set -e`, a
-   failed `luksOpen` leaves `/run/unlock-key` in place, and initramfs `/run`
-   is moved into the booted system if someone then unlocks by hand. `unlock`
-   pipes raw bytes to cryptsetup.
-3. **No endpoint policy.** `/boot/flagship-boot-host` is used unvalidated (any
-   scheme including `http://`, any host, a path that breaks the signed path);
-   curl honours proxy variables; the hook's CA-bundle copy fails silently
-   (`|| true`), which would end in a TLS failure and a box that never unlocks.
-   `unlock` enforces HTTPS, one origin, no redirects or proxies, an approved
-   list (warn in compat, refuse in strict) and baked roots.
-4. **No authenticated time.** `issuedAt` comes from the initramfs clock (whole
-   seconds under busybox). A clock more than 5 minutes off makes every request
-   stale and the box never unlocks (`tests/flow.rs` reproduces it). Neither
-   flow corrects from an authenticated source; the TLS-authenticated `Date`
-   of a worker reply is a candidate, but needs review before use.
-5. **The box checks nothing about the lease or the reply beyond the seal.** It
-   ignores the lease's IRK `signature`, `expiresAt` and `maxUses`, and the
-   reply's `issuedAt`. A worker that kept a revoked lease can still unlock the
-   box: lease freshness and revocation are entirely the worker's (N10). The
-   reply is bound to this boot's nonce, so replay across boots fails.
-6. **Effectively unbounded relay.** The window is a year with no cap on the
-   override. In the premount, `read -t … < /dev/console` returns at once when
-   the console is unreadable or at EOF, so the loop polls with no backoff at
-   all. `unlock` falls back to sleeping.
-7. **Drift between the premount and `boot-stage.sh`.** The premount offers the
-   `manual` console fallback in production (boot-stage gates it on
-   `/boot/flagship-debug-mode`), exits 0 when `identity.pem` is missing, and
-   has no 423 branch (harmless: same fallback). `strict` honours `--console`
-   only on a debug burn.
-8. **Mode fails open.** Anything in `flagship-boot-unlock-mode` other than
-   exactly `approve` (blank, corrupt, `Approve`) selects `auto`, so a damaged
-   file downgrades an approve-only box to self-unlock. Compat keeps this with
-   a warning; strict asks the phone.
-9. **The heartbeat re-sends one `SecretRequest` for up to a year.** The worker
-   checks freshness only on the header, not on the body's `issuedAt`.
-10. **A lost 200 loses the reply.** The poll consumes the reply; if the answer
-    is lost in transit the box polls 404 until the phone approves again.
-11. **Parsing by `sed`.** `sealedKey`/`sealed` are pulled with a greedy regex
-    over the whole body. `unlock` parses JSON.
+1. **Secrets on argv: fixed.** The helper reads the key from the PEM file
+   (`--identity-pem`) or stdin (`--identity-stdin`); the premount passes no
+   seed anywhere. `--identity-priv-hex` stays for tests only.
+2. **Secrets in files: fixed.** The helper writes the raw key into a pipe to
+   `cryptsetup luksOpen --key-file -`; there is no `/run/unlock-key`.
+3. **No endpoint policy: fixed.** https only, a host on the list baked into the
+   premount (`boot.flagshipserver.com`, `boot.gym.flagshipserver.com`, plus
+   `extraApprovedBootHosts` at generation), no port or path, proxy variables
+   cleared and `--noproxy '*'`, `-q`, `--proto =https`, the staged CA bundle
+   required (the hook fails, and the install fails before the install key is
+   removed, when it is missing).
+4. **No authenticated time: not fixed.** Lease expiry is now also checked by
+   the box clock; a clock that is behind accepts a lease the worker should
+   already have refused, one that is ahead falls back to the phone.
+5. **The box checks nothing about the lease: fixed for what exists.** Before
+   opening a lease the helper checks: this server, sealed to this box's boot
+   key, the owner signature (the account IRK, from
+   `/boot/flagship-owner-key.pub`, which the daemon keeps current across
+   re-pairs) over `auto-unlock-lease/v2`, and `expiresAt`. It cannot check
+   `maxUses` or revocation (no state before the disk opens); those stay the
+   worker's. The reply's `issuedAt` is not signed by anyone, so it is not
+   checked; the reply is bound to this boot's nonce inside the seal.
+6. **Unbounded relay: fixed.** Each request is re-signed with a fresh nonce at
+   least every 6 hours; after 7 days (any override is clamped) the premount
+   restarts the box, which asks again. Waits always take their time: the
+   console is read only on a debug burn, and an unreadable console falls back
+   to sleeping for the remainder.
+7. **Drift: fixed** by deleting `boot-stage.sh`. The `manual` fallback is offered
+   only when `/boot/flagship-debug-mode` exists (nothing writes it on `main`). A
+   missing key or server domain is now a loud failure (exit 1), not exit 0.
+8. **Mode fails open: fixed.** Only exactly `auto` self-unlocks; anything else
+   asks the phone.
+9. **One request re-sent for a year: fixed** by item 6.
+10. **A lost 200 loses the reply: not fixed** (the next request asks the phone again).
+11. **Parsing by `sed`: partly.** Leases are parsed as JSON by the helper; the
+    relay reply's `sealed` hex is still extracted with `sed`.
+
+**The STK on `/boot`: replaced by a boot key.** The install generates
+`/boot/flagship-boot-key.pem`, the only key on `/boot`, and uploads the binding
+`flagship/boot-key-binding/v1|<domain>|<bootPub>|<issuedAt>` signed by the STK
+(`packages/protocol/src/boxKeyPin.ts`; `.com` `PUT/GET
+/api/server/:host/boot-key`, migration 0110). The boot worker accepts the boot
+key only on the lease fetch, unlock request and reply poll, and only through a
+binding that verifies under the current STK; never for an entitlement or the
+box's own lock. Phones and the webapp seal unlock replies and leases to the
+boot key only after verifying the binding under the STK they pinned. The STK
+stays inside the encrypted root (keyd). The boot key is still readable by
+whoever holds the powered-off disk, so a copy of `/boot` plus a stored lease
+still unlocks that disk; what it no longer yields is the STK, which authorizes
+everything the box does after boot (SWK/CGK deposits, tunnel, orders). Real
+protection of the boot key needs TPM sealing (plan N10).
 
 ## 6. Where v2 plugs in (design sketch only)
 
