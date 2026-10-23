@@ -32,7 +32,7 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 class LiveScreensClient(
-    private val client: OkHttpClient = OkHttpClient(),
+    private val client: OkHttpClient,
     private val store: SessionStoring,
     private val json: Json = Json {
         ignoreUnknownKeys = true
