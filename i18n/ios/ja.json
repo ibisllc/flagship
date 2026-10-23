@@ -2515,5 +2515,6 @@
   "%lld day": "%lld日",
   "%lld days": "%lld日",
   "%lld minute": "%lld分",
-  "overdue by %@": "%@超過"
+  "overdue by %@": "%@超過",
+  "None of your servers runs this app yet": "このアプリを実行しているサーバーはまだありません"
 }

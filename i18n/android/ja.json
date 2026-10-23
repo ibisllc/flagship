@@ -2673,5 +2673,6 @@
   "default_tag": "デフォルト",
   "key_settings": "キーの設定",
   "hide_key_settings": "キーの設定を隠す",
-  "options_for": "%1$s のオプション"
+  "options_for": "%1$s のオプション",
+  "none_of_your_servers_runs_this_app_yet": "このアプリを実行しているサーバーはまだありません"
 }
