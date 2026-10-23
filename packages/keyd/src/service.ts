@@ -5,11 +5,14 @@ import {
   deriveServiceSecret,
   ed,
   encryptChunk,
+  hybridSign,
+  hybridSigKeygen,
   openLlmPayload,
   openGossip,
   openSealedFromEd25519Recipient,
   sealGossip,
   sealLlmPayload,
+  validatePurposeTag,
 } from "@flagship/protocol";
 import { hkdf } from "@noble/hashes/hkdf";
 import { hmac } from "@noble/hashes/hmac";
@@ -27,11 +30,13 @@ const ACCESS_SYNC_TAG = "flagship/access-sync/v1|";
 const MAX_MAC_BYTES = 64 * 1024;
 export interface KeyStore {
   /** Persist a provisioned secret (0400, owned by the keyd user). */
-  save(name: "swk" | "cgk", bytes: Uint8Array): void;
+  save(name: "swk" | "cgk" | "identity-mldsa", bytes: Uint8Array): void;
 }
 
 export interface KeydServiceInit {
   identitySeed: Uint8Array;
+  /** The STK's ML-DSA-65 seed (`identity-mldsa.key`); absent means no hybrid signing. */
+  pqSeed?: Uint8Array | undefined;
   swk?: Uint8Array | undefined;
   cgk?: Uint8Array | undefined;
   store?: KeyStore;
@@ -51,6 +56,8 @@ export class KeydService {
   readonly #seed: Uint8Array;
   readonly #pub: Uint8Array;
   readonly #pubHex: string;
+  readonly #pqSeed: Uint8Array | null;
+  readonly #mldsaPubHex: string | null;
   #swk: Uint8Array | null;
   #cgk: Uint8Array | null;
   readonly #store: KeyStore | undefined;
@@ -63,6 +70,9 @@ export class KeydService {
     this.#seed = init.identitySeed.slice();
     this.#pub = ed.getPublicKey(this.#seed);
     this.#pubHex = toHex(this.#pub);
+    if (init.pqSeed !== undefined && init.pqSeed.length !== 32) throw new Error("keyd: ML-DSA seed must be 32 bytes");
+    this.#pqSeed = init.pqSeed ? init.pqSeed.slice() : null;
+    this.#mldsaPubHex = this.#pqSeed ? toHex(hybridSigKeygen(this.#seed, this.#pqSeed).publicKey.subarray(32)) : null;
     this.#swk = init.swk ? init.swk.slice() : null;
     this.#cgk = init.cgk ? init.cgk.slice() : null;
     this.#store = init.store;
@@ -78,6 +88,7 @@ export class KeydService {
   /** Zero the key material (shutdown). */
   destroy(): void {
     this.#seed.fill(0);
+    this.#pqSeed?.fill(0);
     this.#swk?.fill(0);
     this.#cgk?.fill(0);
     this.#swk = null;
@@ -104,6 +115,26 @@ export class KeydService {
         const msg = hexArg(a, "msg", { min: 1 });
         const purpose = checkSign(msg, this.#pubHex, this.#purposes);
         return { result: { sig: toHex(ed.sign(msg, this.#seed)) }, purpose };
+      }
+      case "pq.status":
+        noExtraArgs(a, []);
+        return { result: { publicKey: this.#pubHex, mldsaPublicKey: this.#mldsaPubHexOrThrow() } };
+      case "sign.hybrid": {
+        // The same purpose list as `sign`, signed with the STK AND its ML-DSA-65 key
+        // (flagship/hybrid-sig/ed25519-mldsa65/v1, purpose = the message's own tag).
+        noExtraArgs(a, ["msg"]);
+        const msg = hexArg(a, "msg", { min: 1 });
+        const mldsaPubHex = this.#mldsaPubHexOrThrow();
+        const purpose = checkSign(msg, this.#pubHex, this.#purposes, { mldsaPubHex });
+        if (!validatePurposeTag(purpose)) throw new KeydError("forbidden", "that purpose has no hybrid form");
+        const sk = new Uint8Array(64);
+        sk.set(this.#seed, 0);
+        sk.set(this.#pqSeed!, 32);
+        try {
+          return { result: { sig: toHex(hybridSign(sk, purpose, msg)) }, purpose };
+        } finally {
+          sk.fill(0);
+        }
       }
       case "unseal": {
         // Only for a sealed message the daemon must read, checked by its shape once opened:
@@ -360,6 +391,11 @@ export class KeydService {
       if (e instanceof KeydError) throw e;
       throw new KeydError("failed", "authentication failed");
     }
+  }
+
+  #mldsaPubHexOrThrow(): string {
+    if (!this.#mldsaPubHex) throw new KeydError("not-provisioned", "no ML-DSA key provisioned");
+    return this.#mldsaPubHex;
   }
 
   #acmeOrThrow(): AcmeAccount {

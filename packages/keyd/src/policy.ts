@@ -33,6 +33,10 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/boot-auth/v1",
   // The STK vouching for the box's boot key (packages/protocol/src/bootKey.ts).
   "flagship/boot-key-binding/v1",
+  // Architecture v2: the STK binding its ML-DSA-65 key, and the hybrid boot-key binding.
+  // Signed with both keys only (`sign.hybrid`; HYBRID_ONLY_PURPOSES).
+  "flagship/pq-key-binding/v1",
+  "flagship/boot-key-binding/v2",
   "flagship/inject/v1",
   "flagship/sibling-hello/v1",
   "flagship/sibling-sync/v1",
@@ -54,6 +58,9 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "pb-resp",
   "pb/request-peers/v1",
 ]);
+
+/** Purposes keyd signs only with both keys (`sign.hybrid`): a classical-only form means nothing. */
+export const HYBRID_ONLY_PURPOSES: ReadonlySet<string> = new Set(["flagship/pq-key-binding/v1", "flagship/boot-key-binding/v2"]);
 
 /** The only workload-key derivations keyd hands to the daemon (both unsalted). */
 export const SWK_HKDF_LABELS: ReadonlySet<string> = new Set(["flagship.pb-manifest.v1", "flagship/peer-backup-key/v1", "flagship/reissue-journal-key/v1"]);
@@ -108,10 +115,23 @@ export function purposeOf(msg: Uint8Array): string {
  * Decide whether the box key may sign `msg`. `publicKeyHex` is keyd's own public key, used by
  * purposes that name the signer. Throws KeydError("forbidden") with a short, non-secret reason.
  */
-export function checkSign(msg: Uint8Array, publicKeyHex: string, allowed: ReadonlySet<string> = BOX_SIGN_PURPOSES): string {
+export function checkSign(
+  msg: Uint8Array,
+  publicKeyHex: string,
+  allowed: ReadonlySet<string> = BOX_SIGN_PURPOSES,
+  hybrid?: { mldsaPubHex: string },
+): string {
   if (msg.length === 0 || msg.length > MAX_SIGN_BYTES) throw new KeydError("bad-request", "message size out of range");
   const purpose = purposeOf(msg);
   if (!allowed.has(purpose)) throw new KeydError("forbidden", `the box does not sign ${purpose.slice(0, 64)}`);
+  if (HYBRID_ONLY_PURPOSES.has(purpose) && !hybrid) throw new KeydError("forbidden", "the box signs that with both of its keys only");
+  if (purpose === "flagship/pq-key-binding/v1") {
+    // tag|role|subjectId|ed25519PubHex|mldsaPubHex|issuedAt
+    const parts = new TextDecoder().decode(msg).split("|");
+    if (parts.length !== 6 || parts[1] !== "box-stk" || parts[3] !== publicKeyHex || parts[4] !== hybrid?.mldsaPubHex) {
+      throw new KeydError("forbidden", "the box binds only its own two keys, as the box");
+    }
+  }
   if (purpose === "flagship/boot-suspension/v1" || purpose === "flagship/boot-auth/v1") {
     const parts = new TextDecoder().decode(msg).split("|");
     if (purpose === "flagship/boot-suspension/v1") {
@@ -157,6 +177,7 @@ export class RateLimiter {
 
 export const DEFAULT_RATE_LIMITS: Record<string, { perSecond: number; burst: number }> = {
   sign: { perSecond: 2000, burst: 4000 },
+  "sign.hybrid": { perSecond: 200, burst: 400 },
   unseal: { perSecond: 50, burst: 100 },
   "tls.sign": { perSecond: 500, burst: 1000 },
   "tls.createKey": { perSecond: 5 / 3600, burst: 5 },

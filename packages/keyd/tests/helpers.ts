@@ -7,6 +7,8 @@ import { KeydServer, KeydService, type KeydServiceInit } from "../src/index.js";
 export const SEED = new Uint8Array(32).fill(0x42);
 export const SWK = new Uint8Array(32).fill(0x11);
 export const CGK = new Uint8Array(32).fill(0x22);
+/** The STK's ML-DSA-65 seed (`identity-mldsa.key`). */
+export const PQ_SEED = new Uint8Array(32).fill(0x33);
 /** A pairing order as the owner's phone seals it: the one kind of message `unseal` returns. */
 export const PAIRING_ORDER = new TextEncoder().encode(
   JSON.stringify({ request: { type: "add-paired-session", serverId: "home.alice.flagship.services", token: "t", issuedAt: 1 }, signature: "aa" }),

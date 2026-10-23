@@ -5,13 +5,14 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use flagship_keyd::acme::{AcmeAccount, LETS_ENCRYPT_HOSTS};
-use flagship_keyd::files::{load_policy, names_for, read_key_file};
+use flagship_keyd::files::{load_policy, names_for, read_key_file, save_key_file};
 use flagship_keyd::hardening::harden_process;
 use flagship_keyd::policy::parse_rate_limits;
 use flagship_keyd::server::{PeerPolicy, Server, ServerOptions};
 use flagship_keyd::service::KeydService;
 use flagship_keyd::tls::{TlsKeys, system_clock};
 use nix::sys::signal::{SigSet, Signal};
+use zeroize::Zeroizing;
 
 fn env_path(name: &str, default: &str) -> PathBuf {
     std::env::var_os(name).map_or_else(|| PathBuf::from(default), PathBuf::from)
@@ -70,6 +71,19 @@ fn run() -> Result<(), String> {
     let identity = read_key_file(&state.join("identity.key"))
         .map_err(|e| e.to_string())?
         .ok_or("no identity key: run `flagship-keyd migrate` or provision one first")?;
+    // The STK's ML-DSA-65 seed lives next to it; a keyd that has none makes one (once) from the
+    // OS RNG, never derived from the STK. Same file and format as the TS backend.
+    let pq_seed =
+        match read_key_file(&state.join("identity-mldsa.key")).map_err(|e| e.to_string())? {
+            Some(k) => k,
+            None => {
+                let mut k = Zeroizing::new([0u8; 32]);
+                getrandom::fill(k.as_mut()).map_err(|e| format!("random: {e}"))?;
+                save_key_file(&state, "identity-mldsa", &k)
+                    .map_err(|e| format!("identity-mldsa.key: {e}"))?;
+                k
+            }
+        };
     let swk = read_key_file(&state.join("swk.key")).map_err(|e| e.to_string())?;
     let cgk = read_key_file(&state.join("cgk.key")).map_err(|e| e.to_string())?;
     let fqdn = load_policy(&state).map_err(|e| format!("policy.json: {e}"))?;
@@ -81,8 +95,10 @@ fn run() -> Result<(), String> {
         )?),
         None => None,
     };
-    let service = KeydService::new(&identity, swk, cgk, Some(state.clone()), tls, acme);
+    let service = KeydService::new(&identity, swk, cgk, Some(state.clone()), tls, acme)
+        .with_pq_seed(&pq_seed)?;
     drop(identity);
+    drop(pq_seed);
 
     let mut opts = ServerOptions::new(socket.clone(), peers);
     opts.audit_path = Some(state.join("audit.log"));
