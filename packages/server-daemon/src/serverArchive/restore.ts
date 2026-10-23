@@ -42,6 +42,7 @@ import { writeSourceTree } from "../llm/serviceSource.js";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { openDataFile, ArchiveError } from "./format.js";
+import { ArchiveLimits } from "./limits.js";
 import type { ArchiveAppMeta, ArchiveManifest } from "./build.js";
 
 const IMAGE_RE = /^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$/;
@@ -91,19 +92,29 @@ async function sha256File(path: string): Promise<string> {
 }
 
 /** Unpack the sealed data file into `dir`. Refuses any entry that isn't one of the expected files. */
-async function unpack(archivePath: string, key: Buffer, archiveId: string, dir: string): Promise<void> {
+async function unpack(archivePath: string, key: Buffer, archiveId: string, dir: string, limits = new ArchiveLimits()): Promise<void> {
   const extract = tar.extract();
   const done = new Promise<void>((resolve, reject) => {
     extract.on("entry", (header, stream, next) => {
       const name = header.name;
       if (header.type !== "file" || !ENTRY_RE.test(name)) {
+        stream.on("error", () => {});
         stream.resume();
         extract.destroy(new ArchiveError(`the archive holds something unexpected (${name.slice(0, 80)})`));
         return;
       }
+      let budget: number;
+      try {
+        budget = limits.enter(name, name === "manifest.json" || name.endsWith("/meta.json"));
+      } catch (e) {
+        stream.on("error", () => {});
+        stream.resume();
+        extract.destroy(e as Error);
+        return;
+      }
       const target = join(dir, name);
       mkdir(dirname(target), { recursive: true, mode: 0o700 })
-        .then(() => pipeline(stream, createWriteStream(target, { mode: 0o600 })))
+        .then(() => pipeline(stream, limits.meter(budget), createWriteStream(target, { mode: 0o600 })))
         .then(() => next(), (e) => extract.destroy(e as Error));
     });
     extract.on("finish", () => resolve());
@@ -154,7 +165,7 @@ function validMeta(v: unknown, serviceId: string): ArchiveAppMeta {
  * present with the SHA-256 recorded for it when it was made. Needs no disk. A backup whose
  * apps or database dumps are cut or missing fails here instead of at the restore.
  */
-export async function checkArchiveContents(archivePath: string, key: Buffer, archiveId: string): Promise<{ apps: number }> {
+export async function checkArchiveContents(archivePath: string, key: Buffer, archiveId: string, limits = new ArchiveLimits()): Promise<{ apps: number }> {
   const sums = new Map<string, string>();
   const texts = new Map<string, string>();
   const extract = tar.extract();
@@ -162,6 +173,7 @@ export async function checkArchiveContents(archivePath: string, key: Buffer, arc
     extract.on("entry", (header, stream, next) => {
       const name = header.name;
       if (header.type !== "file" || !ENTRY_RE.test(name)) {
+        stream.on("error", () => {});
         stream.resume();
         extract.destroy(new ArchiveError(`the archive holds something unexpected (${name.slice(0, 80)})`));
         return;
@@ -169,7 +181,24 @@ export async function checkArchiveContents(archivePath: string, key: Buffer, arc
       const h = createHash("sha256");
       const keep: Buffer[] = [];
       const small = name === "manifest.json" || name.endsWith("/meta.json");
+      let budget: number;
+      try {
+        budget = limits.enter(name, small);
+      } catch (e) {
+        stream.on("error", () => {});
+        stream.resume();
+        extract.destroy(e as Error);
+        return;
+      }
+      let entryBytes = 0;
       stream.on("data", (d: Buffer) => {
+        entryBytes += d.length;
+        try {
+          limits.chunk(d.length, entryBytes, budget);
+        } catch (e) {
+          extract.destroy(e as Error);
+          return;
+        }
         h.update(d);
         if (small) keep.push(d);
       });
