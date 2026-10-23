@@ -306,14 +306,14 @@ export const WEB_APPS: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-members-domains-replace",
-    "Web domains: both copy buttons copy their links; Replace's prompt cancelled, a bad stem refused, the confirm cancelled send nothing; a confirmed Replace posts an IRK-signed rename to .com and the page shows the new short link.",
+    "Web domains: Your link's copy button and the canonical one copy their links; Replace's prompt cancelled, a bad stem refused, the confirm cancelled send nothing; a confirmed Replace posts an IRK-signed rename to .com and the page shows the new canonical address while the short link keeps its code.",
     "gym members web domains copy their links and Replace renames the stem",
     {
       steps: [
-        { kind: "tap", describe: "Copy short, copy canonical.", handle: "[data-copy]" },
+        { kind: "tap", describe: "Copy Your link, copy canonical.", handle: "[data-copy]" },
         { kind: "tap", describe: "Replace ×4.", handle: "#sd-replace-stem" },
       ],
-      assertions: [{ describe: "New short link", handle: '[data-section="short"] a', expect: "text", text: "voi.ci/j0ts" }],
+      assertions: [{ describe: "New canonical address", handle: '[data-section="canonical"] a', expect: "text", text: "jots." }],
       screenshots: [shot("domains-renamed", "Renamed.")],
       dimension: "D3",
     },
