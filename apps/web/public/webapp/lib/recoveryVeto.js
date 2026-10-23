@@ -44,7 +44,7 @@ export function renderRecoveryReview(snapshot, isAdmin, nowMs = Date.now()) {
   return `
     <div class="card" data-recovery-review role="alert">
       <div class="weight-600"><span aria-hidden="true">⚠️</span> ${tr("A recovery of this account is waiting")}</div>
-      <p class="note small">${tr("A new device asked to take over this account. It becomes active {0} unless an admin rejects it. It has no admin authority until then.", done ? "as soon as it finishes" : tr("on {0}", escapeHtml(formatWhen(p.completesAt, nowMs))))}</p>
+      <p class="note small">${tr("A new device asked to take over this account. It becomes active {0} unless an admin rejects it. It has no admin authority until then.", done ? tr("as soon as it finishes") : tr("on {0}", escapeHtml(formatWhen(p.completesAt, nowMs))))}</p>
       <p class="note small">${escapeHtml(UNUSUAL_RECOVERY_NOTE)}</p>
       <button class="danger" id="reject-recovery-btn">${tr("Reject recovery")}</button>
     </div>`;

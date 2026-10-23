@@ -8,6 +8,7 @@
  * @flagship/control-plane and are runtime-agnostic.
  */
 
+import { appRunningCheck } from "./voiciNamesCron.js";
 import {
   authorizeAdmin,
   handleSchemaStatus,
@@ -3920,6 +3921,7 @@ function voiciNamesDeps(storage: D1Storage, env: ControlPlaneEnv) {
       window: parseDibsWindow(env.DIBS_WINDOW_START, env.DIBS_WINDOW_END),
       fetch: (url: string, init?: Parameters<DibsFetch>[1]) => fetch(url, init),
     },
+    appRunning: appRunningCheck(storage, Date.now()),
   };
 }
 

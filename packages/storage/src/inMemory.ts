@@ -1991,10 +1991,10 @@ export class InMemoryVoiciNameStorage implements VoiciNameStorage {
     this.rows.set(rec.key, { ...rec, username: rec.username.toLowerCase(), state: "live", warned: 0 });
     return { ok: true as const };
   }
-  async release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number) {
+  async release(username: string, serviceId: string, reason: VoiciNameReleaseReason, at: number, key?: string) {
     const u = username.toLowerCase();
     for (const r of this.rows.values()) {
-      if (r.username === u && r.serviceId === serviceId && r.state === "live") {
+      if (r.username === u && r.serviceId === serviceId && r.state === "live" && (key === undefined || r.key === key)) {
         r.state = "waiting";
         r.releasedAt = at;
         r.releaseReason = reason;

@@ -18,6 +18,36 @@ export interface VoiciNamesCronEnv {
   DB?: ConstructorParameters<typeof D1Storage>[0];
 }
 
+/** "Does a server of the account run this app right now", from the boxes' own heartbeats.
+ *  Each account's servers are read once per instance, so a tick over many names stays cheap. */
+export function appRunningCheck(storage: D1Storage, nowMs: number): (username: string, serviceId: string) => Promise<boolean> {
+  // null: some fresh box is too old to say what it runs, so it counts as running everything (appHome).
+  const byUser = new Map<string, Promise<Set<string> | null>>();
+  const slugsOf = async (username: string): Promise<Set<string> | null> => {
+    const slugs = new Set<string>();
+    for (const server of await storage.servers.listForUser(username)) {
+      if (server.revokedAt) continue;
+      const row = await storage.daemonStatus.get(server.serverDomain).catch(() => undefined);
+      if (!row || nowMs - (row.lastReported ?? 0) > REPORT_FRESH_MS) continue;
+      try {
+        const report = row.reportJson ? (JSON.parse(row.reportJson) as { runsServices?: unknown }) : {};
+        if (!Array.isArray(report.runsServices)) return null;
+        for (const s of report.runsServices) if (typeof s === "string") slugs.add(s);
+      } catch {
+        /* a corrupt row says nothing */
+      }
+    }
+    return slugs;
+  };
+  return async (username, serviceId) => {
+    const u = username.toLowerCase();
+    let p = byUser.get(u);
+    if (!p) byUser.set(u, (p = slugsOf(u)));
+    const slugs = await p;
+    return slugs === null || slugs.has(parseServiceId(serviceId)?.slug ?? serviceId);
+  };
+}
+
 export async function runVoiciNamesCron(
   env: VoiciNamesCronEnv,
   now: Date,
@@ -28,24 +58,8 @@ export async function runVoiciNamesCron(
   const nowMs = now.getTime();
 
   // The heartbeat is a snapshot, so "idle for 60 days" is built up by this job
-  // seeing the app NOT running day after day. A box too old to say what it runs
-  // counts as running everything, as everywhere else (appHome).
-  const running = async (username: string, serviceId: string): Promise<boolean> => {
-    const slug = parseServiceId(serviceId)?.slug ?? serviceId;
-    for (const server of await storage.servers.listForUser(username)) {
-      if (server.revokedAt) continue;
-      const row = await storage.daemonStatus.get(server.serverDomain).catch(() => undefined);
-      if (!row || nowMs - (row.lastReported ?? 0) > REPORT_FRESH_MS) continue;
-      try {
-        const report = row.reportJson ? (JSON.parse(row.reportJson) as { runsServices?: unknown }) : {};
-        if (!Array.isArray(report.runsServices)) return true;
-        if (report.runsServices.includes(slug)) return true;
-      } catch {
-        /* a corrupt row says nothing */
-      }
-    }
-    return false;
-  };
+  // seeing the app NOT running day after day.
+  const running = appRunningCheck(storage, nowMs);
 
   await runVoiciNamesMaintenance(
     { voiciNames: storage.voiciNames, now: () => nowMs },
