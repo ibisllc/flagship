@@ -1,9 +1,8 @@
 //! The real clock, and the optional console fallback.
 //!
-//! The shell waits with `read -t <backoff> < /dev/console`: any line ends the
-//! wait and `manual` drops to the passphrase prompt. When the console cannot
-//! be read, `read` returns at once, so today's loop polls with no delay at
-//! all. Here an unreadable or closed console falls back to sleeping.
+//! As the premount's `wait_for` on a debug burn: `manual` typed on the
+//! console ends the wait (and the unlock) at once; any other line, or an
+//! unreadable or closed console, still waits the full time.
 
 use super::flow::{Clock, Wake};
 use std::io::BufRead;
@@ -18,7 +17,7 @@ pub struct SystemClock {
 }
 
 impl SystemClock {
-    /// No console fallback (production `boot-stage.sh` behaviour).
+    /// No console fallback (every box that is not a debug burn).
     pub fn new() -> Self {
         Self { console: None }
     }
@@ -71,10 +70,13 @@ impl Clock for SystemClock {
         let total = Duration::from_secs(secs);
         let start = Instant::now();
         if let Some(rx) = &self.console {
-            match rx.recv_timeout(total) {
-                Ok(line) if line.trim() == "manual" => return Wake::Manual,
-                Ok(_) | Err(RecvTimeoutError::Timeout) => return Wake::Elapsed,
-                Err(RecvTimeoutError::Disconnected) => {}
+            loop {
+                match rx.recv_timeout(total.saturating_sub(start.elapsed())) {
+                    Ok(line) if line.trim() == "manual" => return Wake::Manual,
+                    Ok(_) => {}
+                    Err(RecvTimeoutError::Timeout) => return Wake::Elapsed,
+                    Err(RecvTimeoutError::Disconnected) => break,
+                }
             }
         }
         std::thread::sleep(total.saturating_sub(start.elapsed()));

@@ -1,6 +1,6 @@
-//! Signed boot-worker requests, byte for byte with the shell flow
-//! (`installer/boot-stage.sh` and the Debian initramfs premount in
-//! `packages/flagship-builder/src/userdata.ts`) and the TS protocol
+//! Signed boot-worker requests, byte for byte with the Debian initramfs
+//! premount (`packages/flagship-builder/src/unlockPremount.ts`, which signs
+//! with the boot key in the `stkPub` slot) and the TS protocol
 //! (`bootAuth.ts`, `phoneEndpoint.ts`), which the worker verifies
 //! (`packages/boot-core/src/gate.ts`, `routes.ts`).
 //!
