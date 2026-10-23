@@ -71,6 +71,42 @@
       </p>
   
       <div lang="en">
+      <h2>Review notes: a mutable install ref, boot tampering, and the app browser</h2>
+      <p class="hof-meta">
+        Design review &middot; October 2026 &middot; addressed in release 0.3
+        &middot; credit: Jay
+      </p>
+      <p>
+        Jay sent us three observations from reading the code. None came with a
+        working exploit, but each pointed at a real gap, and two of them changed
+        what release 0.3 ships.
+      </p>
+      <p>
+        <strong>The signed install recipe named a branch, not a commit.</strong>
+        The phone signs the recipe a new server installs from, but the revision
+        it named defaulted to <code>main</code>, which is mutable: the signature
+        fixed a name, not the code behind it. New servers now install a signed
+        box release for one exact commit (a 40-hex SHA), checked before anything
+        runs.
+      </p>
+      <p>
+        <strong>An app's browser grant reached past its site list.</strong> The
+        list was checked when a tab opened or navigated, not on later clicks,
+        form fills or reads, and every app shared one browser profile. The app
+        browser is switched off and its shared profile deleted at boot. What
+        replaces it gives each app its own browser context and checks the
+        current address before and after every action; it stays off until that
+        is wired in.
+      </p>
+      <p>
+        <strong>Physical access to a powered-off server.</strong> The boot
+        partition is not encrypted and nothing measures it, so someone with a
+        few minutes alone with the machine could change the early-boot code and
+        capture the disk key at the next unlock, phone approval included. This
+        is true today. We no longer describe phone approval or the remote lock
+        as protection against it, and measured boot (TPM) is planned work.
+      </p>
+
       <h2>Unauthenticated identity-key swap on an account with no second factor</h2>
       <p class="hof-meta">
         Critical &middot; reported and fixed October 2026 &middot; fix
