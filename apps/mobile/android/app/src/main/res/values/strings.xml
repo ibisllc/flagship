@@ -1499,11 +1499,7 @@
     <string name="waiting_for_it_to_confirm_the">Waiting for it to confirm the new order.</string>
     <string name="another_device_changed_the_order_showing">Another device changed the order. Showing the newest one.</string>
     <string name="is_now_first_in_your_server">%1$s is now first in your server list.</string>
-    <string name="lock_and">Lock and\u0020</string>
-    <string name="turn_off_2">%1$sturn off</string>
     <string name="power">Power</string>
-    <string name="powering_off">powering off</string>
-    <string name="this_server_is_it_will_go">This server is %1$s — it will go offline.</string>
     <string name="will_go_offline">%1$s will go offline.</string>
     <string name="command_sent_to_the_server">Command sent to the server.</string>
     <string name="diagnostics">Diagnostics</string>
@@ -2629,9 +2625,6 @@
     <string name="the_old_key_did_not_vouch">The old key did not vouch for the new one. Treat this as a different publisher using the same name.</string>
     <string name="if_this_is_unusual_do_not">If this is unusual, do not trust the new key. Updates from this publisher stay paused until you decide.</string>
     <string name="this_server_lost_its_list_of">This server lost its list of security notices and started over. Check each service and your recovery settings.</string>
-    <string name="day_hours">%1$s day%2$s %3$s hours</string>
-    <string name="hour_minutes">%1$s hour%2$s %3$s minutes</string>
-    <string name="minute">%1$s minute%2$s</string>
     <string name="left">%1$s left</string>
     <string name="access_permissions">Access &amp; permissions</string>
     <string name="nothing_can_act_for_this_app">Nothing can act for this app right now.</string>
@@ -2673,4 +2666,9 @@
     <string name="reject_the_account_recovery">Reject the account recovery</string>
     <string name="this_device_has_no_admin_key">This device has no admin key.</string>
     <string name="couldnt_reject_the_recovery_try_again">Couldn\'t reject the recovery. Try again.</string>
+    <string name="overdue_by">overdue by %1$s</string>
+    <string name="lock_and_turn_off_label">Lock and turn off</string>
+    <string name="lock_and_restart_label">Lock and restart</string>
+    <string name="this_server_is_restarting_offline">This server is restarting — it will go offline.</string>
+    <string name="this_server_is_powering_off_offline">This server is powering off — it will go offline.</string>
 </resources>
