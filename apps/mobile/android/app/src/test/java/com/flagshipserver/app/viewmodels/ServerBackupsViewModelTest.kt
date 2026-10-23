@@ -184,21 +184,24 @@ class ServerBackupsViewModelTest {
         val c = MockScreensClient(simulatedLatencyMs = 0)
         val vm = vm(c)
         vm.load()
-        assertTrue(vm.changePolicy("peer", 99))
+        assertTrue(vm.changePolicy("none", 99))
         val post = c.backupPolicyPosts.single()
-        assertEquals("peer", post.order.policy)
+        assertEquals("none", post.order.policy)
         assertEquals(0L, post.order.phoneReserveBytes)
         assertEquals(fqdn, post.order.serverDomain)
         Ed25519Verify(kp.publicKey).verify(HexUtil.decode(post.signatureHex)!!, post.order.canonicalBytes())
-        assertEquals("peer", vm.policy!!.policy.policy)
-        assertNotNull("the peer engine's status shows", vm.policy!!.peer)
+        assertEquals("none", vm.policy!!.policy.policy)
+
+        // Peer backup is off for GA: the box refuses it and nothing changes.
+        assertFalse(vm.changePolicy("peer", 0))
+        assertEquals("none", vm.policy!!.policy.policy)
 
         assertFalse(vm.changePolicy("phone", 2 * BackupsText.GB))
         assertEquals(
             "This server holds 3.2 GB of app data, more than the 2.0 GB your device would keep. Reserve at least 3.2 GB on that device, or remove apps or data first.",
             vm.policyError,
         )
-        assertEquals("peer", vm.policy!!.policy.policy)
+        assertEquals("none", vm.policy!!.policy.policy)
     }
 
     @Test fun overTheLimitShowsTheBoxsReason() = runBlocking {

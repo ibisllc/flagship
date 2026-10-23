@@ -11043,5 +11043,17 @@
   "none_of_your_servers_runs_this_app_yet": {
     "en": "None of your servers runs this app yet",
     "ctx": "viewmodels/LinkFieldViewModel.kt (prose)"
+  },
+  "locked_it_cant_unlock_itself_until": {
+    "en": "locked: it can't unlock itself until you resume it",
+    "ctx": "core/BootSuspension.kt LockWords (prose)"
+  },
+  "remote_lock_pending_it_will_be": {
+    "en": "remote lock pending: it will be retried",
+    "ctx": "core/BootSuspension.kt LockWords (prose)"
+  },
+  "it_shut_down_instead_of_restarting": {
+    "en": "(it shut down instead of restarting because the lock could not be confirmed)",
+    "ctx": "core/BootSuspension.kt LockWords (prose)"
   }
 }

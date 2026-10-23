@@ -2668,4 +2668,7 @@
     <string name="hide_key_settings">キーの設定を隠す</string>
     <string name="options_for">%1$s のオプション</string>
     <string name="none_of_your_servers_runs_this_app_yet">このアプリを実行しているサーバーはまだありません</string>
+    <string name="locked_it_cant_unlock_itself_until">ロック済み: 再開するまで自分でロックを解除できません</string>
+    <string name="remote_lock_pending_it_will_be">リモートロック保留中: 再試行されます</string>
+    <string name="it_shut_down_instead_of_restarting">（ロックを確認できなかったため、再起動せずに電源を切りました）</string>
 </resources>
