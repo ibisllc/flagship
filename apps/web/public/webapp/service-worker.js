@@ -358,6 +358,7 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v168: the browser checks the owner-signed assurance policy and the critical-signature gate (lib/assurancePolicy.js, lib/pqBinding.js); a strict server needs the boot key's hybrid signature.
 //  v167: the box's STK binds an ML-DSA-65 key; the browser pins it under the pinned STK and then needs the boot-key binding's hybrid signature (lib/pqBinding.js, vendor/noble-post-quantum).
 //  v166: disk-key replies and leases go to the box's boot key, vouched for by the pinned STK (lib/bootKey.js).
 //  v165: the browser pins each server's box key before sealing to it (boxKeyPins), and reads the sealed disk key with the read token.
@@ -369,7 +370,7 @@
 //  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
 //  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v167";
+const SHELL_VERSION = "v168";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -427,6 +428,7 @@ const OPTIONAL_SHELL = [
   "/lib/boxKeyPins.js",
   "/lib/bootKey.js",
   "/lib/pqBinding.js",
+  "/lib/assurancePolicy.js",
   "/vendor/noble-post-quantum/pq-verify.js",
   "/lib/x25519.js",
   "/lib/companionReceiver.js",

@@ -8,6 +8,7 @@
 // keyless-web rule keeps private keys out of website JavaScript.
 
 import { ed25519, ml_dsa65 } from "../vendor/noble-post-quantum/pq-verify.js";
+import { strictInForce } from "./assurancePolicy.js";
 
 export const TAG_PQ_KEY_BINDING = "flagship/pq-key-binding/v1";
 export const TAG_BOOT_KEY_BINDING_V2 = "flagship/boot-key-binding/v2";
@@ -113,7 +114,62 @@ export function verifyPqKeyBinding(w, expect) {
   const pk = bytes(w.ed25519PubHex + w.mldsaPubHex);
   if (!strictPoint(pk.subarray(0, 32))) fail("bad-public-key");
   if (!hybridVerify(pk, TAG_PQ_KEY_BINDING, canonicalPqKeyBinding(w), bytes(w.signature))) fail("bad-signature");
-  return { mldsaPubHex: w.mldsaPubHex, issuedAt: w.issuedAt, hybridPublicKey: pk };
+  const out = Object.freeze({ role: w.role, subjectId: w.subjectId, ed25519PubHex: w.ed25519PubHex, mldsaPubHex: w.mldsaPubHex, issuedAt: w.issuedAt, hybridPublicKey: pk });
+  verified.add(out);
+  return out;
+}
+
+// Only verifyPqKeyBinding makes a binding the gate accepts.
+const verified = new WeakSet();
+
+/** Everything before the first `|`, or "" when there is none. */
+export function messagePurpose(msg) {
+  const bar = msg.indexOf(0x7c);
+  if (bar <= 0) return "";
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(msg.subarray(0, bar));
+  } catch {
+    return "";
+  }
+}
+
+const PURPOSE = /^flagship(\/[a-z0-9][a-z0-9-]{0,47}){1,6}\/v[1-9][0-9]{0,3}$/;
+
+/**
+ * The critical-signature gate (pqTrust.ts verifyCriticalSignature): same checks, order and
+ * codes. The scope's policy, never the envelope, decides whether the hybrid signature over a
+ * bound key is required. Returns { suite, strict } or throws PqBindingError.
+ */
+export function verifyCriticalSignature({ message, expectedPurpose, envelope, signerEd25519PubHex, binding, policy }) {
+  if (typeof expectedPurpose !== "string" || expectedPurpose.length > 128 || !PURPOSE.test(expectedPurpose)) fail("bad-purpose");
+  if (messagePurpose(message) !== expectedPurpose) fail("purpose-mismatch");
+  const suite = envelope?.suite;
+  if (suite !== "ed25519/v1" && suite !== "hybrid-ed25519-mldsa65/v1") fail("unknown-suite");
+  if (typeof envelope.signature !== "string" || !HEX.test(envelope.signature)) fail("bad-signature");
+  const signer = String(signerEd25519PubHex ?? "").toLowerCase();
+  if (!HEX32.test(signer)) fail("bad-public-key");
+  if (binding !== null) {
+    if (!verified.has(binding)) fail("no-binding");
+    if (binding.ed25519PubHex !== signer) fail("binding-key-mismatch");
+  }
+  const strict = strictInForce(policy);
+  if (strict && suite !== "hybrid-ed25519-mldsa65/v1") fail("strict-requires-hybrid");
+  if (strict && binding === null) fail("strict-requires-binding");
+  const sig = bytes(envelope.signature);
+  if (suite === "hybrid-ed25519-mldsa65/v1") {
+    if (binding === null) fail("no-binding");
+    if (!hybridVerify(binding.hybridPublicKey, expectedPurpose, message, sig)) fail("bad-signature");
+  } else {
+    const pk = bytes(signer);
+    let okSig = false;
+    try {
+      okSig = sig.length === 64 && strictPoint(pk) && strictPoint(sig.subarray(0, 32)) && ed25519.verify(sig, message, pk, { zip215: false });
+    } catch {
+      okSig = false;
+    }
+    if (!okSig) fail("bad-signature");
+  }
+  return { suite, strict };
 }
 
 /** The STK's v2 hybrid signature over a boot-key binding, under the pinned STK + ML-DSA keys. */
