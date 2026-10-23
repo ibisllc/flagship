@@ -103,3 +103,36 @@ export class SourcePauser {
     this.timer = null;
   }
 }
+
+/**
+ * One source paused for several independent reasons (throttle debt, a full queue on
+ * the other side): it is paused while any reason holds it and resumed when the last
+ * one lets go, so one reason ending never resumes a source another still needs paused.
+ */
+export class PauseReasons {
+  private readonly reasons = new Set<string>();
+
+  constructor(
+    private readonly pause: () => void,
+    private readonly resume: () => void,
+  ) {}
+
+  hold(reason: string): void {
+    if (this.reasons.has(reason)) return;
+    this.reasons.add(reason);
+    if (this.reasons.size === 1) this.pause();
+  }
+
+  release(reason: string): void {
+    if (!this.reasons.delete(reason)) return;
+    if (this.reasons.size === 0) this.resume();
+  }
+
+  has(reason: string): boolean {
+    return this.reasons.has(reason);
+  }
+
+  get held(): boolean {
+    return this.reasons.size > 0;
+  }
+}

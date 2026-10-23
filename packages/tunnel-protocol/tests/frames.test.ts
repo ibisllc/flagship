@@ -152,3 +152,25 @@ describe("decode multiple frames concatenated", () => {
     expect(second.frame.streamId).toBe(2);
   });
 });
+
+describe("drain-v1", () => {
+  it("decodes DRAIN_NOTICE only when the capability was negotiated", async () => {
+    const { decodeFrame, drainNoticeFrame, encodeFrame, FRAME_DRAIN_NOTICE } = await import("../src/frames.js");
+    const bytes = encodeFrame(drainNoticeFrame(15_000));
+    expect(decodeFrame(bytes)).toEqual({ kind: "error", reason: "unknown frame type 0x5" });
+    const r = decodeFrame(bytes, { drainNotice: true });
+    expect(r.kind).toBe("ok");
+    if (r.kind === "ok") expect(r.frame.type).toBe(FRAME_DRAIN_NOTICE);
+  });
+
+  it("parses the grace, clamps it and refuses non-objects", async () => {
+    const { parseDrainNotice, MAX_DRAIN_GRACE_MS } = await import("../src/frames.js");
+    const enc = (s: string) => new TextEncoder().encode(s);
+    expect(parseDrainNotice(enc('{"graceMs":2500}'))).toBe(2500);
+    expect(parseDrainNotice(enc('{"graceMs":-4}'))).toBe(0);
+    expect(parseDrainNotice(enc('{"graceMs":1e12}'))).toBe(MAX_DRAIN_GRACE_MS);
+    for (const bad of ["null", "[]", "7", '"x"', '{"graceMs":"9"}', "{", ""]) {
+      expect(parseDrainNotice(enc(bad))).toBeNull();
+    }
+  });
+});
