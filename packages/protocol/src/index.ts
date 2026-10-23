@@ -59,6 +59,7 @@ export * from "./accountReadToken.js";
 export * from "./addressPolicy.js";
 export * from "./bootSuspension.js";
 export * from "./bootAuth.js";
+export * from "./bootKey.js";
 export * from "./boxArtifact.js";
 export * from "./boxReleaseConfig.js";
 export * from "./serverOrder.js";

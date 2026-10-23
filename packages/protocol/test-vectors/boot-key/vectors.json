@@ -1,0 +1,343 @@
+{
+  "about": "The boot key binding (flagship/boot-key-binding/v1, signed by the STK) and the checks a box makes on an auto-unlock lease before opening it. Seeds are 32 repeated bytes: STK 0x0b, boot key 0x1b, owner IRK 0x07, another box's STK 0x0c. Regenerate with node --import tsx tools/boot-key-vectors.mjs.",
+  "serverDomain": "home.alice.flagship.services",
+  "stkSeedHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+  "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+  "bootKeySeedHex": "1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+  "bootKeyPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+  "ownerSeedHex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "ownerPubHex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+  "otherStkPubHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+  "binding": {
+    "canonical": "flagship/boot-key-binding/v1|home.alice.flagship.services|66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a|1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654|1760000000000",
+    "wire": {
+      "binding": {
+        "serverDomain": "home.alice.flagship.services",
+        "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+        "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+        "issuedAt": 1760000000000
+      },
+      "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+    },
+    "cases": [
+      {
+        "name": "valid",
+        "wire": {
+          "binding": {
+            "serverDomain": "home.alice.flagship.services",
+            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "issuedAt": 1760000000000
+          },
+          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+        },
+        "expect": {
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a"
+        },
+        "bootKeyPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654"
+      },
+      {
+        "name": "upper-case hex and domain still bind",
+        "wire": {
+          "binding": {
+            "serverDomain": "home.alice.flagship.services",
+            "stkPub": "66BE7E332C7A453332BD9D0A7F7DB055F5C5EF1A06ADA66D98B39FB6810C473A",
+            "bootKeyPub": "1E2A137C7FE2279F9D7F0644030A0E9C0B45F781DCE71AE4519C0F4384031654",
+            "issuedAt": 1760000000000
+          },
+          "signature": "8FC65E1CB58FD1CC86CE37CB0857584F9F588E7929C51B24EC19BF2769B763C653E088BBB64F39A113C070B768EE7AFD2291F7C1A424B32E2CBEDF846F791B02"
+        },
+        "expect": {
+          "serverDomain": "HOME.ALICE.FLAGSHIP.SERVICES",
+          "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a"
+        },
+        "bootKeyPubHex": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654"
+      },
+      {
+        "name": "another server's STK",
+        "wire": {
+          "binding": {
+            "serverDomain": "home.alice.flagship.services",
+            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "issuedAt": 1760000000000
+          },
+          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+        },
+        "expect": {
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d"
+        },
+        "bootKeyPubHex": null
+      },
+      {
+        "name": "another server",
+        "wire": {
+          "binding": {
+            "serverDomain": "home.alice.flagship.services",
+            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "issuedAt": 1760000000000
+          },
+          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+        },
+        "expect": {
+          "serverDomain": "home.bob.flagship.services",
+          "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a"
+        },
+        "bootKeyPubHex": null
+      },
+      {
+        "name": "boot key swapped after signing",
+        "wire": {
+          "binding": {
+            "serverDomain": "home.alice.flagship.services",
+            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "bootKeyPub": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+            "issuedAt": 1760000000000
+          },
+          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+        },
+        "expect": {
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a"
+        },
+        "bootKeyPubHex": null
+      },
+      {
+        "name": "issuedAt changed after signing",
+        "wire": {
+          "binding": {
+            "serverDomain": "home.alice.flagship.services",
+            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "issuedAt": 1760000000001
+          },
+          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b02"
+        },
+        "expect": {
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a"
+        },
+        "bootKeyPubHex": null
+      },
+      {
+        "name": "signed by the boot key itself",
+        "wire": {
+          "binding": {
+            "serverDomain": "home.alice.flagship.services",
+            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "issuedAt": 1760000000000
+          },
+          "signature": "30cb938bfac39d23dd718a90a694301f488fa6c3719bcb1e4dc4aee7322e1b258f57cf39b789d19db55576b8ce8d696596a266c84bda0a1100fc98a92bb7f403"
+        },
+        "expect": {
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a"
+        },
+        "bootKeyPubHex": null
+      },
+      {
+        "name": "boot key equal to the STK",
+        "wire": {
+          "binding": {
+            "serverDomain": "home.alice.flagship.services",
+            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "bootKeyPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "issuedAt": 1760000000000
+          },
+          "signature": "24ea3f5a93eaf8e598ab0f5874723f33a6407612adaa30bd2433a15663d0de96f2e7b11bc47b1a2b33f25859c32cda9a2b258b4d084989b5116532bc879b1f00"
+        },
+        "expect": {
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a"
+        },
+        "bootKeyPubHex": null
+      },
+      {
+        "name": "short signature",
+        "wire": {
+          "binding": {
+            "serverDomain": "home.alice.flagship.services",
+            "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+            "bootKeyPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+            "issuedAt": 1760000000000
+          },
+          "signature": "8fc65e1cb58fd1cc86ce37cb0857584f9f588e7929c51b24ec19bf2769b763c653e088bbb64f39a113c070b768ee7afd2291f7c1a424b32e2cbedf846f791b"
+        },
+        "expect": {
+          "serverDomain": "home.alice.flagship.services",
+          "stkPubHex": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a"
+        },
+        "bootKeyPubHex": null
+      }
+    ]
+  },
+  "lease": {
+    "about": "GET /api/boot/lease bodies. The box checks: serverDomain is its own, stkPub is its boot key, the signature verifies under ownerPubHex over flagship/auto-unlock-lease/v2 (maxUses null encodes as -1), and expiresAt > now. Only then does it open sealedKey with the boot key.",
+    "now": 1760000060000,
+    "luksKeyHex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bc",
+    "cases": [
+      {
+        "name": "valid",
+        "lease": {
+          "serverDomain": "home.alice.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a323232323232323232323232213f764ad8a009ee41517b090576d4888360a009e71855c2e6194ea9ca004468fe8a261e8fbac4c960895228924bf94f0f78b5f52755c1f527fc3a651a37bdf2a449cf74f16e14b5591d8d5fe8344df1",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760604800000,
+          "maxUses": null,
+          "usesConsumed": 0,
+          "signature": "c1327dee541507214c824a43f219cdf65d755418ce68c431eab7bdc9a5f945cc0ac13546d60d6a9d5e7a2f586440dbff6abde69f55ed1ed62742a9ddfa729a08"
+        },
+        "ok": true
+      },
+      {
+        "name": "valid with maxUses",
+        "lease": {
+          "serverDomain": "home.alice.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a323232323232323232323232213f764ad8a009ee41517b090576d4888360a009e71855c2e6194ea9ca004468fe8a261e8fbac4c960895228924bf94f0f78b5f52755c1f527fc3a651a37bdf2a449cf74f16e14b5591d8d5fe8344df1",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760604800000,
+          "maxUses": 3,
+          "usesConsumed": 0,
+          "signature": "926832cda3f2b3648939056be461834b5a199277016937ed5df6dc55161ed2aa54391eeeae40d243c37cc3a79096f0759f0fee8fba4224e9ea0fbcfd42a79105"
+        },
+        "ok": true
+      },
+      {
+        "name": "signed by a key that is not the owner's",
+        "lease": {
+          "serverDomain": "home.alice.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a323232323232323232323232213f764ad8a009ee41517b090576d4888360a009e71855c2e6194ea9ca004468fe8a261e8fbac4c960895228924bf94f0f78b5f52755c1f527fc3a651a37bdf2a449cf74f16e14b5591d8d5fe8344df1",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760604800000,
+          "maxUses": null,
+          "usesConsumed": 0,
+          "signature": "976e614a0f6ecc30c04039dac2338a094a063a7983e0a3724a38efde3458c35f79620aa1830ada647317335ffc2fcbb1c921953577de76342da73aefb82a5e09"
+        },
+        "ok": false,
+        "error": "lease signature does not verify under the owner key"
+      },
+      {
+        "name": "for another server",
+        "lease": {
+          "serverDomain": "home.bob.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a323232323232323232323232213f764ad8a009ee41517b090576d4888360a009e71855c2e6194ea9ca004468fe8a261e8fbac4c960895228924bf94f0f78b5f52755c1f527fc3a651a37bdf2a449cf74f16e14b5591d8d5fe8344df1",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760604800000,
+          "maxUses": null,
+          "usesConsumed": 0,
+          "signature": "a46ade952f868efeb65b601591b25324269916186a216261d8bc57a5bf80772317de772182709a63e7f1b4477964e9bd082c6bb4d768ef8b6609a3b36f8c100b"
+        },
+        "ok": false,
+        "error": "lease is for another server"
+      },
+      {
+        "name": "sealed to another key",
+        "lease": {
+          "serverDomain": "home.alice.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a3232323232323232323232323bb5d9458f64c8d4be8c2a240fbcaacc83f4837828ece00bd4cbd797d863da9e3f260f39a07e94c5c9bb1a23f2e815411b28c3b054f6b546611e7e6065520440fec43659b35b9d71ee248598419ef354",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760604800000,
+          "maxUses": null,
+          "usesConsumed": 0,
+          "signature": "c8586948c339716320538725c64a4ae5970fd4cd794d02aae4530e3eb9c7f5411d6ff122b82d7e0367092a4ad41a6b79a380c26b27155d5caa4c81a02cb9d00d"
+        },
+        "ok": false,
+        "error": "lease is not sealed to this box's boot key"
+      },
+      {
+        "name": "expired",
+        "lease": {
+          "serverDomain": "home.alice.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a323232323232323232323232213f764ad8a009ee41517b090576d4888360a009e71855c2e6194ea9ca004468fe8a261e8fbac4c960895228924bf94f0f78b5f52755c1f527fc3a651a37bdf2a449cf74f16e14b5591d8d5fe8344df1",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760000059999,
+          "maxUses": null,
+          "usesConsumed": 0,
+          "signature": "15bbf38a1705a9b67d7802b64a8895a8acd495314c1dab06dd68e93e5d10892aee42bee5c074dd1f227b83cdba45337db87bd2ea71366db9111bf38f66d5120b"
+        },
+        "ok": false,
+        "error": "lease has expired"
+      },
+      {
+        "name": "expiry pushed out after signing",
+        "lease": {
+          "serverDomain": "home.alice.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a323232323232323232323232213f764ad8a009ee41517b090576d4888360a009e71855c2e6194ea9ca004468fe8a261e8fbac4c960895228924bf94f0f78b5f52755c1f527fc3a651a37bdf2a449cf74f16e14b5591d8d5fe8344df1",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760691200000,
+          "maxUses": null,
+          "usesConsumed": 0,
+          "signature": "c1327dee541507214c824a43f219cdf65d755418ce68c431eab7bdc9a5f945cc0ac13546d60d6a9d5e7a2f586440dbff6abde69f55ed1ed62742a9ddfa729a08"
+        },
+        "ok": false,
+        "error": "lease signature does not verify under the owner key"
+      },
+      {
+        "name": "maxUses removed after signing",
+        "lease": {
+          "serverDomain": "home.alice.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a323232323232323232323232213f764ad8a009ee41517b090576d4888360a009e71855c2e6194ea9ca004468fe8a261e8fbac4c960895228924bf94f0f78b5f52755c1f527fc3a651a37bdf2a449cf74f16e14b5591d8d5fe8344df1",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760604800000,
+          "maxUses": null,
+          "usesConsumed": 0,
+          "signature": "0c75fd69b7be006b1242b0ebae65298b18012c02128fdc9daff4c005b080ff21feec4936e18647e22741c16cb37aa024e5cec85db7b9b01d64c5bb5b3326a50e"
+        },
+        "ok": false,
+        "error": "lease signature does not verify under the owner key"
+      },
+      {
+        "name": "sealed key swapped after signing",
+        "lease": {
+          "serverDomain": "home.alice.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a323232323232323232323232213f764ad8a009ee41517b090576d4888360a009e71855c2e6194ea9ca004468fe8a261e8fbac4c960895228924bf94f0f78b5f52755c1f527fc3a651a37bdf2a449cf74f16e14b5591d8d5fe8344d00",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760604800000,
+          "maxUses": null,
+          "usesConsumed": 0,
+          "signature": "c1327dee541507214c824a43f219cdf65d755418ce68c431eab7bdc9a5f945cc0ac13546d60d6a9d5e7a2f586440dbff6abde69f55ed1ed62742a9ddfa729a08"
+        },
+        "ok": false,
+        "error": "lease signature does not verify under the owner key"
+      },
+      {
+        "name": "missing signature",
+        "lease": {
+          "serverDomain": "home.alice.flagship.services",
+          "leaseId": "00112233445566778899aabbccddeeff",
+          "stkPub": "1e2a137c7fe2279f9d7f0644030a0e9c0b45f781dce71ae4519c0f4384031654",
+          "sealedKey": "04f5f29162c31a8defa18e6e742224ee806fc1718a278be859ba5620402b8f3a323232323232323232323232213f764ad8a009ee41517b090576d4888360a009e71855c2e6194ea9ca004468fe8a261e8fbac4c960895228924bf94f0f78b5f52755c1f527fc3a651a37bdf2a449cf74f16e14b5591d8d5fe8344df1",
+          "issuedAt": 1760000000000,
+          "expiresAt": 1760604800000,
+          "maxUses": null,
+          "usesConsumed": 0,
+          "signature": ""
+        },
+        "ok": false,
+        "error": "lease is malformed"
+      }
+    ]
+  }
+}
