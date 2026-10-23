@@ -109,6 +109,7 @@ object LinkField {
             "name-limit" -> FSStrings.get(R.string.all_names_in_use, e.int("limit") ?: 0)
             "rate-limited" -> FSStrings.get(R.string.too_many_changes_today)
             "not-admin" -> FSStrings.get(R.string.only_an_admin_device_can_change_this)
+            "app-not-running" -> FSStrings.get(R.string.none_of_your_servers_runs_this_app_yet)
             else -> FSStrings.get(R.string.couldnt_save_try_again)
         }
 }

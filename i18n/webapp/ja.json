@@ -2678,5 +2678,6 @@
   "AI API keys": "AI API キー",
   "Browsers you signed in to private apps with a sign-in link. Refresh to\n          check if one's still in, or Stop to sign it out.": "サインインリンクでプライベートアプリにサインインしたブラウザーです。更新してまだサインイン中か確認するか、「停止」でサインアウトできます。",
   "How this works": "仕組み",
-  "Scheduled": "スケジュール"
+  "Scheduled": "スケジュール",
+  "None of your servers runs this app yet": "このアプリを実行しているサーバーはまだありません"
 }

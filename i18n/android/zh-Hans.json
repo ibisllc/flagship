@@ -2673,5 +2673,6 @@
   "default_tag": "默认",
   "key_settings": "密钥设置",
   "hide_key_settings": "隐藏密钥设置",
-  "options_for": "%1$s 的选项"
+  "options_for": "%1$s 的选项",
+  "none_of_your_servers_runs_this_app_yet": "你的服务器还都没有运行此应用"
 }

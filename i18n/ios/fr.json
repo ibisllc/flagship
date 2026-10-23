@@ -2515,5 +2515,6 @@
   "%lld day": "%lld jour",
   "%lld days": "%lld jours",
   "%lld minute": "%lld minute",
-  "overdue by %@": "en retard de %@"
+  "overdue by %@": "en retard de %@",
+  "None of your servers runs this app yet": "Aucun de vos serveurs n’exécute encore cette application"
 }
