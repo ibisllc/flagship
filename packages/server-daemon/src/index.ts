@@ -133,6 +133,7 @@ import { buildAppStatusReader } from "./appStatus.js";
 import { buildActivityResolver } from "./serviceActivity.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
 import { ScreensEventBus } from "./screens/screensEvents.js";
+import { UpgradeTicketStore } from "./screens/upgradeTickets.js";
 import { AccessAlertSetting } from "./egress/accessAlertSetting.js";
 import { readServiceSource } from "./llm/serviceSource.js";
 import type { EditableService } from "./buildmodes/buildOrchestrator.js";
@@ -3488,7 +3489,9 @@ async function wireRuntimeSurfaces(deps: {
     : null;
   void debugAccess?.start();
 
+  const upgradeTickets = new UpgradeTicketStore();
   const screensHandle = buildScreensHttp({
+    upgradeTickets,
     debugAccess,
     gate: sharesBundle?.gate ?? pairedSessions,
     shares: sharesBundle?.shares ?? null,
@@ -3717,6 +3720,7 @@ async function wireRuntimeSurfaces(deps: {
       browser: browserBundle?.browser ?? null,
       tabRegistry: browserBundle?.tabRegistry ?? null,
       events: screensEvents,
+      tickets: upgradeTickets,
     }),
   );
   console.log(`[daemon] /api/screens/* + /api/llm/sessions handlers mounted`);

@@ -17,6 +17,7 @@ import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { ServicePlatform, InstalledService } from "../servicePlatform.js";
 import type { AppBackupService } from "../serviceBackup.js";
 import type { AppMembership } from "../membership.js";
+import { isTicketableRoute, TICKET_TTL_MS, type UpgradeTicketStore } from "./upgradeTickets.js";
 import { pairedSessionId, type FilePairedSessionStore } from "../pairedSessionStore.js";
 import type { TabRegistry } from "../browser/tabRegistry.js";
 import {
@@ -155,6 +156,8 @@ export interface LineageResolverLike {
 
 export interface ScreensHttpDeps {
   gate: PairedSessionGate;
+  /** N06 — single-use WebSocket upgrade tickets (screens/upgradeTickets.ts). */
+  upgradeTickets?: UpgradeTicketStore | null;
   /** Share this server (shares/sharesHttp.ts). */
   shares?: ScreensSharesLike | null;
   /**
@@ -802,6 +805,18 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (detail.length > 2000) return jerr(400, "Keep it under 2,000 characters.");
       if (!(await deps.adapterReports.report(serviceId, detail.trim()))) return jerr(502, "Couldn't send the report. Try again later.");
       return jok({ ok: true });
+    }
+
+    // ---- N06 POST /api/screens/ws-ticket: a single-use ticket for one stream route
+    if (path === "/api/screens/ws-ticket" && method === "POST") {
+      if (!deps.upgradeTickets) return jerr(503, "tickets not configured");
+      const route = (parseJson(req.body) as { route?: unknown } | null)?.route;
+      if (typeof route !== "string" || !isTicketableRoute(route)) return jerr(400, "that route does not take a ticket");
+      const token = (deps.resolveCallerToken ?? defaultResolveCallerToken)(req);
+      if (!token) return jerr(401, "missing paired-session token");
+      const origin = req.headers["origin"];
+      const ticket = deps.upgradeTickets.issue({ token, route, origin: typeof origin === "string" ? origin : null });
+      return jok({ ticket, expiresInMs: TICKET_TTL_MS });
     }
 
     // ---- P1.12 GET /api/screens/paired-sessions/list

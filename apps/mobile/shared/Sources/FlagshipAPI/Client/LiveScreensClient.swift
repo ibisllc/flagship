@@ -772,11 +772,12 @@ public final class LiveBrowserStream: BrowserStream, @unchecked Sendable {
             .replacingOccurrences(of: "https://", with: "wss://")
             .replacingOccurrences(of: "http://", with: "ws://")
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let encodedToken = token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? token
         let encodedTabId = tabId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? tabId
-        let urlStr = "\(wsBase)/api/screens/browser-tabs/\(encodedTabId)/stream?sessionToken=\(encodedToken)"
-        guard let url = URL(string: urlStr) else { return true }
-        guard let ws = try? urlSession.gatedWebSocketTask(with: url) else { return true }
+        // The session rides in a header, never in the URL (N06): URLs end up in proxies and logs.
+        guard let url = URL(string: "\(wsBase)/api/screens/browser-tabs/\(encodedTabId)/stream") else { return true }
+        var req = URLRequest(url: url)
+        req.setValue(token, forHTTPHeaderField: "x-flagship-session")
+        guard let ws = try? urlSession.gatedWebSocketTask(with: req) else { return true }
         lock.withLock { self.task = ws }
         ws.resume()
         var sawAnyFrame = false

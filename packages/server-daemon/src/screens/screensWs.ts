@@ -30,8 +30,14 @@ import type {
 import type { HttpRequest, UpgradeRequest } from "../runtime.js";
 import type { VibeCodeFrame } from "./types.js";
 import type { ScreensEventBus } from "./screensEvents.js";
+import type { UpgradeTicketStore } from "./upgradeTickets.js";
 
 const wss = new WebSocketServer({ noServer: true });
+
+function headerOf(headers: Record<string, string>, name: string): string | null {
+  const v = headers[name] ?? headers[name.toLowerCase()];
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
 
 export interface ScreensWsDeps {
   gate: PairedSessionGate;
@@ -41,6 +47,11 @@ export interface ScreensWsDeps {
   browser?: BrowserManager | null;
   tabRegistry?: TabRegistry | null;
   events?: ScreensEventBus | null;
+  /**
+   * N06 — when set, an upgrade authenticates with a single-use ticket (`?ticket=`), bound to the
+   * route and the Origin that asked. The long-lived session token in the URL is refused.
+   */
+  tickets?: UpgradeTicketStore | null;
 }
 
 const VIBE_CODE_STREAM_RE = /^\/api\/screens\/vibe-code\/([^/]+)\/stream$/;
@@ -55,6 +66,25 @@ export function buildScreensUpgradeHandler(
     const qIdx = args.path.indexOf("?");
     const justPath = qIdx >= 0 ? args.path.slice(0, qIdx) : args.path;
     const query = qIdx >= 0 ? new URLSearchParams(args.path.slice(qIdx + 1)) : new URLSearchParams();
+
+    if (deps.tickets) {
+      // The bearer never rides in a URL. A browser, which cannot set headers on a WebSocket, uses
+      // a single-use ticket; a native client sends its session in a header as for any request.
+      if (query.has("sessionToken")) {
+        rejectUpgrade(args.socket, 400, "the session token does not go in the URL: use a ticket or the header");
+        return true;
+      }
+      const ticket = query.get("ticket");
+      if (ticket) {
+        const token = deps.tickets.consume(ticket, justPath, headerOf(args.headers, "origin"));
+        if (!token) {
+          rejectUpgrade(args.socket, 401, "unauthorized");
+          return true;
+        }
+        // Authenticate exactly as a header-carried session, with the ticket's query removed.
+        args = { ...args, path: justPath, headers: { ...args.headers, "x-flagship-session": token } };
+      }
+    }
 
     const vcMatch = VIBE_CODE_STREAM_RE.exec(justPath);
     if (vcMatch) {

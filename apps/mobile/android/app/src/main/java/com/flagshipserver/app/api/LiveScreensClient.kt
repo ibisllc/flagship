@@ -597,15 +597,14 @@ class LiveScreensClient(
         }
     }
 
-    /** The box's event socket. The token rides the query (the box's contract)
-     *  and the header (what the paired-session gate reads first). */
+    /** The box's event socket. The session rides in a header only: the box refuses a token in the URL. */
     override fun screensEvents(): Flow<ScreensEvent> = channelFlow {
         val base = base()
         val token = token()
         val wsUrl = base
             .replaceFirst("https://", "wss://")
             .replaceFirst("http://", "ws://") +
-            "/api/screens/events?sessionToken=" + java.net.URLEncoder.encode(token, "UTF-8")
+            "/api/screens/events"
         val req = Request.Builder()
             .url(wsUrl)
             .header("x-flagship-session", token)
