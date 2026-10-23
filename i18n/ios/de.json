@@ -2515,5 +2515,6 @@
   "%lld day": "%lld Tag",
   "%lld days": "%lld Tage",
   "%lld minute": "%lld Minute",
-  "overdue by %@": "seit %@ überfällig"
+  "overdue by %@": "seit %@ überfällig",
+  "None of your servers runs this app yet": "Noch keiner deiner Server führt diese App aus"
 }

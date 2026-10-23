@@ -5,7 +5,10 @@
 // server in the order that runs the app, and passes to the other one when that
 // server stops running the app (the election reads .com's server list as well as gossip).
 // voi.ci itself is a fixed host, so redirects are covered by the control-plane
-// tests, not here. Not yet run live.
+// tests, not here. Needs D1 migration 0110 on the gym. `.com` sets a name only
+// for an app a server of the account reports running (`runsServices` in the
+// heartbeat, voiciNamesCron.appRunningCheck), so the first set waits for the
+// boxes' next heartbeat after the install. Not yet run live.
 import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signServerOrder, signUninstallService, signVoiciNameOrder, type ServerOrder, type UninstallServiceRequest, type VoiciNameOrder } from "@flagship/protocol";
@@ -56,20 +59,36 @@ export const namedLinks: Group = {
       return "403";
     });
 
-    const name = `gym-${randomBytes(3).toString("hex")}-link`;
-    await rec.check("a reserved word and a too-short name are refused", async () => {
-      const a = await setName("admin");
-      const b = await setName("abc");
-      assert(a.status >= 400 && b.status >= 400, `reserved ${a.status}, short ${b.status}`);
-      return `${a.json?.code ?? a.status}, ${b.json?.code ?? b.status}`;
+    await rec.check("a name for an app no server runs is refused with app-not-running", async () => {
+      const ghost = `${A.username}--nolinkapp`;
+      const order: VoiciNameOrder = { user: A.username, serviceId: ghost, name: `gym-${randomBytes(3).toString("hex")}-ghost`, op: "set", issuedAt: Date.now(), nonce: randomBytes(32).toString("hex") };
+      const r = await postJson(`${base}/apps/${ghost}/voici-name`, { order, signature: bytesToHex(signVoiciNameOrder(order, A.keys.adminRoot)) });
+      assert(r.status === 409 && r.json?.code === "app-not-running", `expected 409 app-not-running, got ${r.status}: ${short(r.text)}`);
+      return "409 app-not-running";
     });
-    await rec.check("an admin-root-signed order sets the custom name; the random code stays", async () => {
+
+    const name = `gym-${randomBytes(3).toString("hex")}-link`;
+    await rec.check("an admin-root-signed order sets the custom name once a box reports the app running; the random code stays", async () => {
       const before = (await links()).shortCode;
-      const r = await setName(name);
+      // A refusal for app-not-running is made before any change is counted, so retrying is free.
+      let r = await setName(name);
+      for (let i = 0; i < 36 && r.status === 409 && r.json?.code === "app-not-running"; i++) {
+        await sleep(5_000);
+        r = await setName(name);
+      }
       assert(r.status === 200, `set ${r.status}: ${short(r.text)}`);
       const l = await links();
       assert(l.link?.name === name && l.link?.changesLeft === 2 && l.shortCode === before, `link ${short(l)}`);
       return `${name}, 2 changes left`;
+    });
+    await rec.check("a reserved word and a too-short name are refused, and count as no change", async () => {
+      const a = await setName("admin");
+      const b = await setName("abc");
+      assert(a.status === 409 && a.json?.code === "reserved", `reserved ${a.status}: ${short(a.text)}`);
+      assert(b.status === 400 && b.json?.code === "invalid", `short ${b.status}: ${short(b.text)}`);
+      const l = await links();
+      assert(l.link?.changesLeft === 2, `link ${short(l.link)}`);
+      return `${a.json.code}, ${b.json.code}`;
     });
     await rec.check("the name without its hyphens is the same name (current for this app)", async () => {
       const r = await http(`${base}/voici-name-check?name=${encodeURIComponent(name.replace(/-/g, ""))}&service=${serviceId}`);
@@ -80,7 +99,7 @@ export const namedLinks: Group = {
       assert((await setName(`${name}-two`)).status === 200, "replace refused");
       assert((await setName("")).status === 200, "clear refused");
       const r = await setName(`${name}-three`);
-      assert(r.status === 429 || r.status === 403 || r.status === 409, `fourth change got ${r.status}`);
+      assert(r.status === 429, `fourth change got ${r.status}`);
       assert(r.json?.code === "change-limit" && Number(r.json?.nextChangeAt) > Date.now(), `body ${short(r.text)}`);
       return "change-limit";
     });

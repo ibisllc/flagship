@@ -11068,5 +11068,9 @@
   "overdue by %@": {
     "en": "overdue by %@",
     "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Client/SecuritySliver.swift"
+  },
+  "None of your servers runs this app yet": {
+    "en": "None of your servers runs this app yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift"
   }
 }

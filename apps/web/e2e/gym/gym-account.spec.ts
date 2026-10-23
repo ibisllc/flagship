@@ -103,7 +103,6 @@ test.describe("gym webapp account", () => {
       ["#settings-tab-companion-dock", "#view-companion-dock", "#companion-dock-back", "#view-settings-tab"],
       ["#settings-tab-companion-requests", "#view-companion-requests", "#companion-requests-back", "#view-settings-tab"],
       ["#settings-tab-secured-sessions", "#view-secured-sessions", "#secured-sessions-back", "#view-settings-tab"],
-      ["#settings-tab-process-url", "#view-access-authorize", "#access-authorize-back", "#view-settings-tab"],
       ["#settings-tab-peer-backup", "#view-peer-backup", "#peer-backup-back", "#view-settings-tab"],
       ["#settings-tab-appearance", "#view-appearance", "#appearance-back", "#view-settings-tab"],
       ["#settings-tab-privacy", "#view-privacy", "#privacy-back", "#view-settings-tab"],
@@ -121,7 +120,7 @@ test.describe("gym webapp account", () => {
     }
     await shot(page, testInfo, "settings-rows-walked");
 
-    // Scan a pairing code: a link that isn't one is refused in the dialog; Cancel closes it.
+    // Scan a code or enter a link: a link that isn't one is refused in the dialog; Cancel closes it.
     await openSettings(page);
     await page.click("#settings-tab-join-account");
     const join = page.locator("dialog [data-join-input]");
@@ -607,34 +606,36 @@ test.describe("gym webapp account", () => {
     await page.click("#np-save");
     const entry = page.locator("#providers-list .provider-entry");
     await expect(entry).toHaveCount(1, { timeout: 10_000 });
-    await expect(entry).toContainText("work");
-    await expect(entry.locator(".pill")).toHaveText("openai");
+    // One compact row: name with its provider, the masked key, Default (the
+    // first key of your own replaces Flagship Inference as the default).
+    await expect(entry.locator(".key-row-name")).toHaveText("work · openai");
+    await expect(entry.locator(".key-row-tag")).toHaveText("Default");
     await expect(entry).not.toContainText("sk-gym-0123456789abcdef");
-    const relay = entry.locator('[data-action="relay"]');
-    await expect(relay).not.toBeChecked();
     let saved = await stored();
     expect(saved.entries).toEqual([
       expect.objectContaining({ provider: "openai", label: "work", baseUrl: "https://proxy.example", defaultModel: "gpt-gym", relay: false }),
     ]);
+    const id = saved.entries[0]!.id as string;
+    expect(saved.activeId).toBe(id);
     await shot(page, testInfo, "ai-keys-saved");
 
-    // The relay switch on the saved key.
+    // The ⋯ menu holds the key's settings: the relay switch, then Delete key.
+    await entry.locator('[data-action="more"]').click();
+    const relay = entry.locator('[data-action="relay"]');
+    await expect(relay).not.toBeChecked();
     await relay.check();
     await expect.poll(async () => (await stored()).entries[0]?.relay).toBe(true);
     await expect(page.locator('#providers-list [data-action="relay"]')).toBeChecked();
+    // The default key offers no Make default.
+    await expect(entry.locator('[data-action="set-active"]')).toHaveCount(0);
 
-    // Use it: it becomes the active provider.
-    const id = saved.entries[0]!.id as string;
-    await page.click(`#providers-list [data-action="set-active"][data-id="${id}"]`);
-    await sawToast(page, "Active provider updated");
-    await expect(page.locator(`#providers-list [data-action="set-active"][data-id="${id}"]`)).toHaveText("active");
-    expect((await stored()).activeId).toBe(id);
-
-    // Remove asks first; Cancel keeps it, OK deletes it from this device.
+    // Delete key asks first; Cancel keeps it, OK deletes it from this device.
+    if (await entry.locator(".key-row-more").isHidden()) await entry.locator('[data-action="more"]').click();
     await page.click(`#providers-list [data-action="remove"][data-id="${id}"]`);
-    await expect(page.locator(".modal-title")).toHaveText("Remove this provider?");
+    await expect(page.locator(".modal-title")).toHaveText("Delete this key?");
     await page.click("[data-modal-cancel]");
     expect((await stored()).entries).toHaveLength(1);
+    if (await entry.locator(".key-row-more").isHidden()) await entry.locator('[data-action="more"]').click();
     await page.click(`#providers-list [data-action="remove"][data-id="${id}"]`);
     await page.click("[data-modal-ok]");
     await expect(page.locator("#providers-list .provider-entry")).toHaveCount(0, { timeout: 10_000 });

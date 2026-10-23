@@ -2678,5 +2678,6 @@
   "AI API keys": "KI-API-Schlüssel",
   "Browsers you signed in to private apps with a sign-in link. Refresh to\n          check if one's still in, or Stop to sign it out.": "Browser, mit denen du dich über einen Anmeldelink bei privaten Apps angemeldet hast. Aktualisiere, um zu prüfen, ob einer noch angemeldet ist, oder tippe auf Stoppen, um ihn abzumelden.",
   "How this works": "So funktioniert es",
-  "Scheduled": "Geplant"
+  "Scheduled": "Geplant",
+  "None of your servers runs this app yet": "Noch keiner deiner Server führt diese App aus"
 }

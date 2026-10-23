@@ -216,7 +216,7 @@ function matches(m: Matcher, url: URL): boolean {
 
 /** `.com` + every box as one recorded router. Rules match in the order added;
  *  `first()` puts a rule ahead of the others. The account read-token mint
- *  always answers. */
+ *  and a box's WebSocket ticket always answer and are not recorded. */
 export class Mock {
   readonly calls: Call[] = [];
   private rules: Rule[] = [];

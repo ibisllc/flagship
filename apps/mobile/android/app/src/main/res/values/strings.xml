@@ -2680,4 +2680,5 @@
     <string name="key_settings">Key settings</string>
     <string name="hide_key_settings">Hide key settings</string>
     <string name="options_for">Options for %1$s</string>
+    <string name="none_of_your_servers_runs_this_app_yet">None of your servers runs this app yet</string>
 </resources>
