@@ -522,7 +522,7 @@ test.describe("gym webapp features", () => {
     });
     const available = page.locator('[data-account-security-rotate="available"]');
     await expect(available).toBeVisible({ timeout: 10_000 });
-    await expect(available).toContainText(/REVOKES admin/);
+    await expect(available).toContainText(/removes admin from every other device/);
     await expect(page.locator("#account-security-rotate-admin")).toBeVisible();
     await shot(page, testInfo, "admin-root-admin");
   });
@@ -550,7 +550,7 @@ test.describe("gym webapp features", () => {
     // The ceremony first screen: title + the revoke-semantic warning + a
     // danger Continue.
     await expect(page.locator(".modal-title")).toHaveText("Rotate admin key?", { timeout: 5_000 });
-    await expect(page.locator(".modal-message")).toContainText(/REVOKES admin/);
+    await expect(page.locator(".modal-message")).toContainText(/removes admin from every other device/);
     await expect(page.locator("[data-modal-ok]")).toHaveText("Continue");
     await shot(page, testInfo, "rotate-admin-ceremony");
     // Cancel — nothing rotated; the admin card is still "available".
@@ -594,18 +594,19 @@ test.describe("gym webapp features", () => {
   });
 
   test("gym total webapp settings joins another account from a pasted pairing link", async ({ page }, testInfo) => {
-    // As iOS/Android Settings → "Scan a pairing code": a signed-in browser joins
-    // another account from the link that account's device shows.
+    // As iOS/Android Settings → "Scan a code or enter a link": a signed-in
+    // browser joins another account from the link that account's device shows.
     await routeAnyJson(page, "/api/users/smoketest/pods", { pods: [] });
     await reachHome(page);
     await page.click('[data-tab-target="settings"]');
     await expect(page.locator("#view-settings-tab")).toBeVisible();
     await page.click("#settings-tab-join-account");
-    const dlg = page.locator('dialog[aria-label="Scan a pairing code"]');
+    const dlg = page.locator('dialog[aria-label="Scan a code or enter a link"]');
     await expect(dlg).toBeVisible({ timeout: 10_000 });
-    await dlg.locator("[data-join-input]").fill("https://flagshipserver.com/share#s=1");
+    await dlg.locator("[data-join-input]").fill("https://flagshipserver.com/nothing-here?x=1");
     await dlg.locator("[data-join-continue]").click();
-    await expect(dlg.locator("[data-join-error]")).toContainText("That isn't a pairing link.");
+    await expect(dlg.locator("[data-join-error]")).toContainText("That isn't a Flagship code or link.");
+    await expect(dlg).toBeVisible();
     await shot(page, testInfo, "join-another-refused");
     await dlg.locator("[data-join-input]").fill("https://flagshipserver.com/join?sid=gymsid0123456789&pk=AAAA");
     await dlg.locator("[data-join-continue]").click();
