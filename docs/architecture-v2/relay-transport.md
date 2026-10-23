@@ -73,6 +73,12 @@ leaves it out, so a TS box closes its tunnel on receiving it, and no TS code sen
 deploys rely on the box's reconnect. `drain-v1` makes the notice real for boxes that opt in;
 everyone else just sees the close. Active TCP streams are never claimed to migrate.
 
+> **Update (fix/relay-fix, merged into `feat/architecture`):** the TypeScript defects in §§2 and 4 are
+> fixed there: `sni.ts` reassembles hellos across records (32 KiB / 512 records), frame handlers
+> can no longer kill the process, reconnects no longer unregister the new tunnel, DRAIN_NOTICE is
+> sent to `drain-v1` boxes on shutdown, and buffering is bounded with backpressure. §§2–4 describe
+> the relay as it was before those fixes.
+
 ## 2. SNI parsing and post-quantum ClientHellos
 
 Real rustls ClientHellos offering `X25519MLKEM768` (a 1216-byte share plus an X25519 share,
