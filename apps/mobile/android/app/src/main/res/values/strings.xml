@@ -662,7 +662,6 @@
     <string name="last_device">last device</string>
     <string name="another_device_is_still">another device is still</string>
     <string name="account_security">Account security</string>
-    <string name="manage_recovery_protection_and_account_level">Manage recovery protection and account-level security.</string>
     <string name="code_protection_is_on">Code protection is on</string>
     <string name="single_device_account">Single-device account</string>
     <string name="recovery_needs_your_6_digit_code">Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.</string>
@@ -1387,10 +1386,6 @@
     <string name="started_2">· started %1$s</string>
     <string name="stop">Stop</string>
     <string name="tap_refresh_to_check">Tap Refresh to check</string>
-    <string name="process_a_link">Process a link</string>
-    <string name="paste_a_flagship_link_a_private">Paste a Flagship link: a private app\'s \"Get link\" string, or a \"take over this server\" transfer link someone shared with you.</string>
-    <string name="link">Link</string>
-    <string name="that_doesnt_look_like_a_flagship">That doesn\'t look like a Flagship link.</string>
     <string name="back_up_with_a_passcode">Back up with a passcode…</string>
     <string name="back_up">Back up %1$s</string>
     <string name="saved">Saved.</string>
@@ -1756,16 +1751,12 @@
     <string name="switch_between_your_clouds">Switch between your clouds</string>
     <string name="trusted_devices">Trusted devices</string>
     <string name="add_replace_or_remove_the_devices">Add, replace or remove the devices that hold your keys</string>
-    <string name="scan_a_pairing_code">Scan a pairing code</string>
-    <string name="add_this_phone_to_another_account">Add this phone to another account</string>
     <string name="browsers_you_opened_through_remote">Browsers you opened through Remote</string>
     <string name="companions">Companions</string>
     <string name="read_only_browser_session_4h">Read-only browser session (4h)</string>
     <string name="web_access">Web access</string>
     <string name="open_secured_sessions">Open secured sessions</string>
     <string name="sites_youve_signed_a_browser_into">Sites you\'ve signed a browser into</string>
-    <string name="process_url">Process URL</string>
-    <string name="open_a_sign_in_link_you">Open a sign-in link you copied</string>
     <string name="backup_peers">Backup &amp; peers</string>
     <string name="shard_health_across_peers">Shard health across peers</string>
     <string name="app_2">App</string>

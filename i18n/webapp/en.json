@@ -11017,5 +11017,49 @@
   "None of your servers runs this app yet": {
     "en": "None of your servers runs this app yet",
     "ctx": "apps/web/public/webapp/lib/linkField.js"
+  },
+  "Restored permissions": {
+    "en": "Restored permissions",
+    "ctx": "webapp/lib/restoredAccess.js:12"
+  },
+  "This app came back from a backup. Until an admin approves, nobody from the old list can open it.": {
+    "en": "This app came back from a backup. Until an admin approves, nobody from the old list can open it.",
+    "ctx": "webapp/lib/restoredAccess.js:13"
+  },
+  "Approve this list": {
+    "en": "Approve this list",
+    "ctx": "webapp/lib/restoredAccess.js:14"
+  },
+  "Discard it": {
+    "en": "Discard it",
+    "ctx": "webapp/lib/restoredAccess.js:15"
+  },
+  "Only an admin device can approve restored permissions.": {
+    "en": "Only an admin device can approve restored permissions.",
+    "ctx": "webapp/lib/restoredAccess.js:16"
+  },
+  "Restored permissions approved.": {
+    "en": "Restored permissions approved.",
+    "ctx": "webapp/views/service-access.js:177"
+  },
+  "The restored list changed. Review it and approve again.": {
+    "en": "The restored list changed. Review it and approve again.",
+    "ctx": "webapp/views/service-access.js:181"
+  },
+  "{0} discarded.": {
+    "en": "{0} discarded.",
+    "ctx": "webapp/views/service-access.js:187"
+  },
+  "{0} person on the old list.": {
+    "en": "{0} person on the old list.",
+    "ctx": "webapp/lib/restoredAccess.js:70"
+  },
+  "{0} people on the old list.": {
+    "en": "{0} people on the old list.",
+    "ctx": "webapp/lib/restoredAccess.js:70"
+  },
+  "The app was open to all.": {
+    "en": "The app was open to all.",
+    "ctx": "webapp/lib/restoredAccess.js:70"
   }
 }
