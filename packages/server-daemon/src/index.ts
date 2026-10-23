@@ -268,6 +268,7 @@ import {
   filePairingMarkerStore,
 } from "./pairingDepositConsumer.js";
 import { assertNodeFloor } from "./nodeFloor.js";
+import { centralAuthorization } from "./centralAuthorization.js";
 import { buildArtifactSwapper, readInstalledReleaseSync } from "./artifactUpdate.js";
 import { buildArtifactCatalog } from "./artifactCatalog.js";
 import {
@@ -1094,6 +1095,8 @@ async function main(): Promise<void> {
     pairedSessions,
     browserBundle,
   });
+  // SEC-AUTH-002: every control-API route passes this principal gate first.
+  additionalHandlers.unshift(centralAuthorization({ isCompanionRequest: (r) => pairedSessions.isCompanionRequest(r) }));
 
   // Provisioning-STATUS reporter — the SINGLE canonical channel the phone
   // polls (POST /api/order/<serial>/status).
