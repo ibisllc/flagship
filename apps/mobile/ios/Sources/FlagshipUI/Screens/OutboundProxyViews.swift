@@ -224,7 +224,7 @@ private struct OutboundProxySheet: View {
                     passwordUnchanged: controller.keepsCredentials,
                     offersNone: false
                 )
-                FSPrimaryButton(controller.isSaving ? "Saving…" : OutboundProxyCopy.save,
+                FSPrimaryButton(controller.isSaving ? String(localized: "Saving…") : OutboundProxyCopy.save,
                                 enabled: controller.fieldError == nil && !controller.isSaving, block: true) {
                     Task {
                         if await controller.save() { onSaved() }
