@@ -8,26 +8,26 @@ import FlagshipCore
 /// UI copy for the outbound proxy (docs/outbound-proxy.md). Same words on the
 /// webapp and Android.
 public enum OutboundProxyCopy {
-    public static let title = "Outbound proxy"
-    public static let explainer = "Send this server's internet traffic through a proxy, so Flagship and the sites it reaches see the proxy's address instead of yours."
-    public static let address = "Proxy address"
+    public static let title = String(localized: "Outbound proxy")
+    public static let explainer = String(localized: "Send this server's internet traffic through a proxy, so Flagship and the sites it reaches see the proxy's address instead of yours.")
+    public static let address = String(localized: "Proxy address")
     public static let addressPlaceholder = "proxy.example.net or 192.168.1.20"
-    public static let port = "Port"
-    public static let username = "Username (optional)"
-    public static let password = "Password (optional)"
-    public static let passwordUnchanged = "Unchanged"
-    public static let credentialsInRecipe = "The username and password are saved in the setup file. Only give the file to people you trust."
-    public static let fallback = "If the proxy stops working, connect directly"
-    public static let fallbackNote = "If this is off and the proxy stops working, the server goes offline until the proxy is back or you change it from the same network."
-    public static let off = "Off"
-    public static let change = "Change"
-    public static let turnOff = "Turn off"
-    public static let save = "Save"
-    public static let confirmReason = "Confirm the proxy change"
-    public static let savedOn = "Saved. The server is reconnecting through the proxy."
-    public static let savedOff = "Saved. The server now connects directly."
-    public static let proNote = "An outbound proxy is part of Pro."
-    public static let seePro = "See Pro"
+    public static let port = String(localized: "Port")
+    public static let username = String(localized: "Username (optional)")
+    public static let password = String(localized: "Password (optional)")
+    public static let passwordUnchanged = String(localized: "Unchanged")
+    public static let credentialsInRecipe = String(localized: "The username and password are saved in the setup file. Only give the file to people you trust.")
+    public static let fallback = String(localized: "If the proxy stops working, connect directly")
+    public static let fallbackNote = String(localized: "If this is off and the proxy stops working, the server goes offline until the proxy is back or you change it from the same network.")
+    public static let off = String(localized: "Off")
+    public static let change = String(localized: "Change")
+    public static let turnOff = String(localized: "Turn off")
+    public static let save = String(localized: "Save")
+    public static let confirmReason = String(localized: "Confirm the proxy change")
+    public static let savedOn = String(localized: "Saved. The server is reconnecting through the proxy.")
+    public static let savedOff = String(localized: "Saved. The server now connects directly.")
+    public static let proNote = String(localized: "An outbound proxy is part of Pro.")
+    public static let seePro = String(localized: "See Pro")
     public static let proUrl = URL(string: "https://flagshipserver.com/pro")!
 
     /// Free accounts can't set a proxy; an unknown plan doesn't block (the box
@@ -44,9 +44,9 @@ public enum OutboundProxyCopy {
     /// The status line, or nil when the box connects directly.
     public static func statusLine(_ s: OutboundProxySummary.Status) -> String? {
         switch s.state {
-        case "ok": return "Working"
-        case "failing": return "Not working: \(s.lastError ?? "the proxy isn't answering")"
-        case "fallback": return "Using a direct connection: the proxy isn't answering"
+        case "ok": return String(localized: "Working")
+        case "failing": return String(localized: "Not working: \(s.lastError ?? "the proxy isn't answering")")
+        case "fallback": return String(localized: "Using a direct connection: the proxy isn't answering")
         default: return nil
         }
     }
@@ -67,10 +67,10 @@ public enum OutboundProxyForm {
         guard kind != .none else { return nil }
         if let why = BoxProxy.hostError(BoxProxy.normalizeHost(host)) { return why }
         guard let p = Int(port.trimmingCharacters(in: .whitespaces)), (1...65535).contains(p) else {
-            return "Enter a port from 1 to 65535."
+            return String(localized: "Enter a port from 1 to 65535.")
         }
         if username.isEmpty && password.isEmpty { return nil }
-        if username.isEmpty || password.isEmpty { return "Enter both the username and the password, or neither." }
+        if username.isEmpty || password.isEmpty { return String(localized: "Enter both the username and the password, or neither.") }
         return BoxProxy.credentialsError(username: username, password: password)
     }
 }
@@ -184,8 +184,8 @@ public final class OutboundProxyController {
             signature = try order.sign(with: try await signer(OutboundProxyCopy.confirmReason))
         } catch {
             errorMessage = BiometricGate.GateError.from(error) == .userCancelled
-                ? "The proxy wasn't changed."
-                : "Couldn't sign the change: \(error.localizedDescription)"
+                ? String(localized: "The proxy wasn't changed.")
+                : String(localized: "Couldn't sign the change: \(error.localizedDescription)")
             return false
         }
         do {
