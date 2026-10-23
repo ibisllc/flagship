@@ -80,29 +80,23 @@
     html {
       scroll-behavior: smooth;
       scroll-padding-top: var(--nav-h);
-      /* Proximity is the safe default — sections taller than the viewport
-         (common on mobile where the bento + apps grid stack vertically)
-         scroll freely; snap kicks in only near a boundary. */
-      scroll-snap-type: y proximity;
     }
-    /* Desktop with a precise pointer: snap aggressively. Section content
-       is shorter than the viewport here (we control its width), so
-       mandatory snap is comfortable. */
-    @media (min-width: 881px) and (hover: hover) {
+    /* Snap only where a whole section fits the screen: a wide window with a
+       precise pointer. On phones and small windows a section is taller than
+       the viewport, and even proximity snapping (with snap-stop) pulls the
+       page back to a boundary, so scrolling there is free. */
+    @media (min-width: 881px) and (min-height: 700px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
       html { scroll-snap-type: y mandatory; }
+      /* Every section is a snap target; snap-stop:always keeps a wheel or key
+         scroll from flying through several at once. No scroll-margin-top:
+         scroll-padding-top on <html> already offsets for the sticky nav. */
+      .hero, section.band, .finale {
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+      }
     }
     @media (prefers-reduced-motion: reduce) {
-      html { scroll-snap-type: none; scroll-behavior: auto; }
-    }
-
-    /* Every section is a snap target. scroll-snap-stop:always means
-       wheel/key scrolls don't fly through multiple sections at once.
-       We DON'T set scroll-margin-top here — scroll-padding-top on the
-       <html> scroller already offsets snap and anchor positions for
-       the sticky nav. Setting both stacks them, leaving a visible gap. */
-    .hero, section.band, .finale {
-      scroll-snap-align: start;
-      scroll-snap-stop: always;
+      html { scroll-behavior: auto; }
     }
 
     /* Hero fills the first viewport on every device. */
