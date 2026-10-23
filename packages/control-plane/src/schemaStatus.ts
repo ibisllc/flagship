@@ -81,6 +81,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0107", "0108", "0109",
   // The key each box keeps on /boot for unlocking, vouched for by its STK.
   "0110",
+  // Hybrid key bindings, the boot-key binding's hybrid signature, assurance policy per scope.
+  "0111",
 ];
 
 export interface SchemaStatusDeps {
