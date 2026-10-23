@@ -46,10 +46,10 @@ public struct VoiciLinkField: View {
             FSSectionLabel(String(localized: "Your link"))
             HStack(spacing: FS.space.s2) {
                 Text("voi.ci/")
-                    .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                    .font(FS.font.scaled(16, weight: .semibold, design: .monospaced))
                     .foregroundColor(c.textMuted)
                 TextField("", text: $text)
-                    .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                    .font(FS.font.scaled(16, weight: .semibold, design: .monospaced))
                     .foregroundColor(c.text)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
