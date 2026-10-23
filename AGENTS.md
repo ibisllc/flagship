@@ -325,6 +325,17 @@ of the last check here: **not yet checked**.
 
 ### In flight
 
+- **Boot key replaces the STK on /boot (2026-10-23, branch `fix/boot-fix`, not merged).** The
+  install writes only `/boot/flagship-boot-key.pem`; the STK signs a
+  `flagship/boot-key-binding/v1` (boxKeyPin.ts) that `.com` keeps (migration **0110**,
+  `/api/server/:host/boot-key`). The boot worker takes the boot key only on lease fetch,
+  unlock request and reply poll; phones and the webapp seal replies and leases to it after
+  checking the binding under their pinned STK. The one generated premount
+  (`unlockPremount.ts`; `boot-stage.sh` deleted) pipes the key to cryptsetup, checks leases
+  (owner signature, server, recipient, expiry), fails closed on mode and boot host, bounds the
+  relay (fresh request every 6 h, restart after 7 days). `docs/architecture-v2/boot-rust.md` §5.
+  Needs: D1 0110, a `.com` deploy, an endorsed box release (install-helper `gen-boot-key`), store
+  builds, republished appliances; not run on a real box yet.
 - **Architecture v2 (2026-10-23, branch `feat/architecture` off `release/0.3`, local, not pushed).**
   Plan: `docs/architecture-v2/IMPLEMENTATION-PLAN.md`; register: `docs/architecture-v2/REGISTER.md`.
   Built and tested on macOS only (308 Rust tests, `cd rust && cargo test --workspace --locked`; full
