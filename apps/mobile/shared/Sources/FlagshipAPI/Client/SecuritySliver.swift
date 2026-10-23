@@ -82,12 +82,12 @@ public struct WaitingPublisherResponse: Codable, Equatable, Sendable {
 
 public enum SliverWords {
     public static let heading = "Security"
-    public static let trust = "Trust this new key for this service"
-    public static let reject = "Reject and pause updates"
-    public static let chain = "The old key vouched for the new one."
-    public static let noChain = "The old key did not vouch for the new one. Treat this as a different publisher using the same name."
-    public static let warning = "If this is unusual, do not trust the new key. Updates from this publisher stay paused until you decide."
-    public static let lostHistory = "This server lost its list of security notices and started over. Check each service and your recovery settings."
+    public static let trust = String(localized: "Trust this new key for this service")
+    public static let reject = String(localized: "Reject and pause updates")
+    public static let chain = String(localized: "The old key vouched for the new one.")
+    public static let noChain = String(localized: "The old key did not vouch for the new one. Treat this as a different publisher using the same name.")
+    public static let warning = String(localized: "If this is unusual, do not trust the new key. Updates from this publisher stay paused until you decide.")
+    public static let lostHistory = String(localized: "This server lost its list of security notices and started over. Check each service and your recovery settings.")
 
     public static func severityLabel(_ s: String) -> String {
         switch s { case "critical": return "Critical"; case "high": return "High"; case "moderate": return "Moderate"; case "low": return "Low"; default: return s }
@@ -98,9 +98,9 @@ public enum SliverWords {
         guard let ms else { return "" }
         let a = abs(ms), day: Int64 = 86_400_000, hour: Int64 = 3_600_000, min: Int64 = 60_000
         let body: String
-        if a >= day { body = "\(a / day) day\(a / day == 1 ? "" : "s") \((a % day) / hour) hours" }
-        else if a >= hour { body = "\(a / hour) hour\(a / hour == 1 ? "" : "s") \((a % hour) / min) minutes" }
-        else { let m = Swift.max(1, a / min); body = "\(m) minute\(m == 1 ? "" : "s")" }
-        return ms >= 0 ? "\(body) left" : "overdue by \(body)"
+        if a >= day { body = String(localized: "\(a / day) day\(a / day == 1 ? "" : "s") \((a % day) / hour) hours") }
+        else if a >= hour { body = String(localized: "\(a / hour) hour\(a / hour == 1 ? "" : "s") \((a % hour) / min) minutes") }
+        else { let m = Swift.max(1, a / min); body = String(localized: "\(m) minute\(m == 1 ? "" : "s")") }
+        return ms >= 0 ? String(localized: "\(body) left") : "overdue by \(body)"
     }
 }

@@ -41,31 +41,31 @@ public struct PermissionRevokeResult: Codable, Equatable, Sendable {
 }
 
 public enum PermissionWords {
-    public static let title = "Access & permissions"
-    public static let none = "Nothing can act for this app right now."
-    public static let revoke = "End this access"
-    public static let revokeAll = "End all access"
-    public static let stuck = "Some work did not stop yet:"
+    public static let title = String(localized: "Access & permissions")
+    public static let none = String(localized: "Nothing can act for this app right now.")
+    public static let revoke = String(localized: "End this access")
+    public static let revokeAll = String(localized: "End all access")
+    public static let stuck = String(localized: "Some work did not stop yet:")
 
     public static func kindLabel(_ kind: String) -> String {
         switch kind {
-        case "owner-session": return "Owner session"
-        case "companion-session": return "Browser or companion session"
-        case "app-api-key": return "App API key"
-        case "mcp-key": return "IDE key"
+        case "owner-session": return String(localized: "Owner session")
+        case "companion-session": return String(localized: "Browser or companion session")
+        case "app-api-key": return String(localized: "App API key")
+        case "mcp-key": return String(localized: "IDE key")
         case "build-token": return "Build"
-        case "share": return "Shared server"
+        case "share": return String(localized: "Shared server")
         case "member-invite": return "Invitation"
-        case "browser-grant": return "Browser access"
+        case "browser-grant": return String(localized: "Browser access")
         case "secret-handle": return "Secret"
         case "stream-ticket": return "Stream"
-        case "job": return "Background job"
+        case "job": return String(localized: "Background job")
         default: return kind
         }
     }
 
     public static func outcome(_ r: PermissionRevokeResult) -> String {
-        let base = r.revoked == 1 ? "Access ended." : "\(r.revoked) accesses ended."
+        let base = r.revoked == 1 ? String(localized: "Access ended.") : String(localized: "\(r.revoked) accesses ended.")
         return r.stuckWork.isEmpty ? base : "\(base) \(stuck) \(r.stuckWork.joined(separator: ", "))"
     }
 }

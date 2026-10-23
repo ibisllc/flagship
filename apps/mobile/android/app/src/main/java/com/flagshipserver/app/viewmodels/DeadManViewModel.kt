@@ -95,12 +95,12 @@ class DeadManViewModel(
         // affirmation. Auto-unlock re-arms at your next phone approval, bounded by the deadline.
         if (enabled && bootLock != null) {
             try {
-                bootLock.revokeAllLeases(serverDomain, irkSigner("Remove auto-unlock for $serverDomain"), irkPubHex())
+                bootLock.revokeAllLeases(serverDomain, irkSigner(FSStrings.get(R.string.remove_auto_unlock_for, serverDomain)), irkPubHex())
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Throwable) {
                 _phase.value = DeadManPhase.Failed(
-                    "Couldn't remove this server's auto-unlock lease, so the lock-down was not turned on. ${UserErrorText.reason(e)}",
+                    FSStrings.get(R.string.couldnt_remove_this_servers_auto_unlock, UserErrorText.reason(e)),
                 )
                 return false
             }

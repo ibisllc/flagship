@@ -3,6 +3,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -51,9 +54,9 @@ fun ServicePermissionsSection(serviceId: String, restricted: Boolean) {
                     if (idx > 0) FSCardDivider()
                     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                         Text("${PermissionWords.kindLabel(g.kind)} · ${g.capability}", style = MaterialTheme.typography.titleSmall)
-                        if (g.secretAccess) Text("Can read secrets", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        if (g.secretAccess) Text(stringResource(R.string.can_read_secrets), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         g.openWork.forEach {
-                            Text("Running: $it", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                            Text(fsString(R.string.running_4, it), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         }
                         FSSecondaryButton(
                             label = PermissionWords.REVOKE,
@@ -65,7 +68,7 @@ fun ServicePermissionsSection(serviceId: String, restricted: Boolean) {
                     }
                 }
                 p.pendingOperations.forEach {
-                    Text("Waiting: ${it.kind} (${it.state})", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text(fsString(R.string.waiting_2, it.kind, it.state), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
                 if (p.grants.size > 1) {
                     FSSecondaryButton(

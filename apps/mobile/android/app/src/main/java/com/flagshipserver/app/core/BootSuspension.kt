@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import android.content.SharedPreferences
 import com.flagshipserver.app.api.BootSuspensionOrderWire
 import com.flagshipserver.app.api.BootSuspensionStateWire
@@ -160,11 +161,11 @@ object LockWords {
         if (powerSent != null) {
             if (powerSent) {
                 val did = executed ?: mode
-                var s = if (did == PowerMode.OFF) "The server is powering off" else "The server is restarting"
+                var s = if (did == PowerMode.OFF) FSStrings.get(R.string.the_server_is_powering_off) else FSStrings.get(R.string.the_server_is_restarting)
                 if (executed != null && executed != mode) s += " (it shut down instead of restarting because the lock could not be confirmed)"
                 parts += s
             } else {
-                parts += "The power command didn't reach the server"
+                parts += FSStrings.get(R.string.the_power_command_didnt_reach_the)
             }
         }
         when (lock) {

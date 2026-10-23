@@ -11,6 +11,7 @@ import { bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { getSession } from "./state.js";
 
+import { tr } from "./i18n.js";
 export const TAG_PUBLISHER_TRUST = "flagship/publisher-trust/v1";
 
 export const SEVERITY_ORDER = Object.freeze({ critical: 4, high: 3, moderate: 2, low: 1 });
@@ -34,7 +35,7 @@ export function remainingText(remainingMs) {
   if (abs >= day) body = `${Math.floor(abs / day)} day${Math.floor(abs / day) === 1 ? "" : "s"} ${Math.floor((abs % day) / hour)} hours`;
   else if (abs >= hour) body = `${Math.floor(abs / hour)} hour${Math.floor(abs / hour) === 1 ? "" : "s"} ${Math.floor((abs % hour) / min)} minutes`;
   else body = `${Math.max(1, Math.floor(abs / min))} minute${Math.floor(abs / min) <= 1 ? "" : "s"}`;
-  return remainingMs >= 0 ? `${body} left` : `overdue by ${body}`;
+  return remainingMs >= 0 ? tr("{0} left", body) : tr("overdue by {0}", body);
 }
 
 /** What each line shows. One model per line, in the order the box sent (worst first). Pure. */
@@ -71,7 +72,7 @@ export async function fetchWaitingPublisher(serviceId, podFqdn = "") {
  */
 export async function trustPublisherKey(serviceId, deps = {}) {
   const info = await (deps.fetchWaiting ?? fetchWaitingPublisher)(serviceId);
-  if (!info?.waiting) throw new Error("No new key is waiting for this service.");
+  if (!info?.waiting) throw new Error(tr("No new key is waiting for this service."));
   const trust = { ...info.waiting.trust, issuedAt: (deps.now ?? Date.now)() };
   const sign = deps.signer ?? sensitiveSigner();
   const session = deps.session ?? getSession();

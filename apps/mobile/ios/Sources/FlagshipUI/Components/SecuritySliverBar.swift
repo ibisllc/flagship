@@ -56,7 +56,7 @@ public struct SecuritySliverBar: View {
                 HStack(spacing: FS.space.s2) {
                     Text(SliverWords.severityLabel(l.severity)).font(FS.font.bodySm().weight(.semibold))
                     Text(l.target).font(FS.font.bodySm().weight(.semibold))
-                    Text(l.isActive ? "Active" : "Resolved").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    Text(l.isActive ? String(localized: "Active") : "Resolved").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 }
                 Text(l.summary).font(FS.font.body()).fixedSize(horizontal: false, vertical: true)
                 let deadline = SliverWords.remaining(l.remainingMs)
