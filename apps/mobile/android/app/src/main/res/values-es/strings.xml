@@ -2668,4 +2668,7 @@
     <string name="hide_key_settings">Ocultar ajustes de la clave</string>
     <string name="options_for">Opciones de %1$s</string>
     <string name="none_of_your_servers_runs_this_app_yet">Ninguno de tus servidores ejecuta esta aplicación todavía</string>
+    <string name="locked_it_cant_unlock_itself_until">bloqueado: no puede desbloquearse solo hasta que lo reanudes</string>
+    <string name="remote_lock_pending_it_will_be">bloqueo remoto pendiente: se volverá a intentar</string>
+    <string name="it_shut_down_instead_of_restarting">(se apagó en lugar de reiniciarse porque no se pudo confirmar el bloqueo)</string>
 </resources>

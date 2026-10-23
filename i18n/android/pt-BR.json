@@ -2665,5 +2665,8 @@
   "key_settings": "Ajustes da chave",
   "hide_key_settings": "Ocultar ajustes da chave",
   "options_for": "Opções de %1$s",
-  "none_of_your_servers_runs_this_app_yet": "Nenhum dos seus servidores executa este app ainda"
+  "none_of_your_servers_runs_this_app_yet": "Nenhum dos seus servidores executa este app ainda",
+  "locked_it_cant_unlock_itself_until": "bloqueado: ele não pode se desbloquear sozinho até você retomá-lo",
+  "remote_lock_pending_it_will_be": "bloqueio remoto pendente: será tentado de novo",
+  "it_shut_down_instead_of_restarting": "(ele desligou em vez de reiniciar porque o bloqueio não pôde ser confirmado)"
 }
