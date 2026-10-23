@@ -1,0 +1,27 @@
+{
+  "source": "AppRunner.deploy (packages/server-daemon/src/serviceRunner.ts at 152ab3d87) with gVisor ready (appSandboxRunArgs), the egress gateway up on flagship-apps (sandboxRunArgs: gateway 10.89.0.1, resolv file written by egress/gateway.ts) and default ContainerLimits",
+  "spec": {
+    "serviceId": "alice--notes",
+    "image": "ghcr.io/flagship/notes@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "env": { "DATABASE_URL": "postgres://u:p@host.flagship.internal:5432/x", "PORT": "8080" },
+    "port": 40000,
+    "containerPort": 8080,
+    "filesVolume": "flagship-files-alice--notes"
+  },
+  "argv": [
+    "run", "-d", "--name", "flagship-alice--notes",
+    "--runtime=runsc",
+    "--cap-drop=ALL", "--security-opt=no-new-privileges",
+    "--network", "flagship-apps",
+    "--dns", "10.89.0.1",
+    "--add-host", "host.flagship.internal:10.89.0.1",
+    "--mount", "type=bind,src=/run/flagship-resolv-flagship-apps.conf,dst=/etc/resolv.conf,readonly",
+    "--memory", "512m", "--cpus", "1.0", "--pids-limit", "256",
+    "--read-only", "--tmpfs", "/tmp:rw,size=64m",
+    "-e", "DATABASE_URL=postgres://u:p@host.flagship.internal:5432/x",
+    "-e", "PORT=8080",
+    "-p", "127.0.0.1:40000:8080",
+    "--mount", "type=volume,src=flagship-files-alice--notes,dst=/data",
+    "ghcr.io/flagship/notes@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ]
+}
