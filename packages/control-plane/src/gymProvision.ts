@@ -1,3 +1,4 @@
+import { BOX_RELEASE } from "./boxReleaseConfig.js";
 /**
  * Phase 1 of the gym recipe→cloud pipeline (docs/gym-recipe-to-hetzner.md).
  *
@@ -386,7 +387,7 @@ export async function handleGymProvision(
   }
   const userData = buildCloudConfigUserData({
     installBlobJson: JSON.stringify(body.installBlob),
-    installerGitRef: blob.installerGitRef || "main",
+    installerGitRef: blob.installerGitRef || BOX_RELEASE.commit,
     demoUserIrkPrivHex: body.irkPrivHex,
     ...(ownerAidPubHex ? { ownerAidPubHex } : {}),
     ...(adminRoot ? { adminRootPubHex: adminRoot.pubHex, adminRootPrivHex: adminRoot.privHex } : {}),

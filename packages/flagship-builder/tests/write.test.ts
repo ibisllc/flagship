@@ -48,7 +48,7 @@ async function makeFakeRecipe(): Promise<string> {
     registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode,
     authCodeUserSignature: signAuthCode(authCode, irk),
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: delegatedPub,
   };
   const sigBytes = signInstallBlob(blob, irk);

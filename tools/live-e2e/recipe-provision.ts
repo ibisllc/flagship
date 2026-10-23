@@ -34,6 +34,7 @@
  * Exit 0 = the POST 200'd and every observed check passed; 1 = a check failed
  * (the box is still torn down); 2 = the harness crashed before teardown.
  */
+import { BOX_RELEASE } from "@flagship/protocol";
 import { spawnSync } from "node:child_process";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -316,7 +317,7 @@ async function main(): Promise<void> {
       registrationUrl: `https://${CONTROL}/api/server/register`,
       authCode,
       authCodeUserSignature: authCodeSig,
-      installerGitRef: "main",
+      installerGitRef: process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit,
       rckPubKey: rck.publicKey,
     };
     const blobSig = signInstallBlob(blob, irk);

@@ -156,6 +156,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
     blobSignatureHex: loaded.blobSignatureHex,
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
+    offlineSecrets: loaded.offlineSecrets,
     debugGrant: loaded.debugGrant,
     // Dev / e2e diagnosis only (--debug-ssh-key[-file]). The owner's debug
     // grant never feeds this: its key is let in by the box itself, with an
@@ -212,6 +213,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     blobSignatureHex: loaded.blobSignatureHex,
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
+    offlineSecrets: loaded.offlineSecrets,
     debugGrant: loaded.debugGrant,
     // Dev / e2e diagnosis only (--debug-ssh-key[-file]). The owner's debug
     // grant never feeds this: its key is let in by the box itself, with an

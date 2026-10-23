@@ -17,7 +17,13 @@ import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { ServicePlatform, InstalledService } from "../servicePlatform.js";
 import type { AppBackupService } from "../serviceBackup.js";
 import type { AppMembership } from "../membership.js";
-import type { FilePairedSessionStore } from "../pairedSessionStore.js";
+import type { AuthorityHub } from "../authority/hub.js";
+import type { TrackWork } from "../authority/sessionWork.js";
+import type { SecuritySliver } from "../securitySliver.js";
+import { keyFingerprint, type PublisherPins } from "../publisherPins.js";
+import type { PublisherTrust } from "@flagship/protocol";
+import { isTicketableRoute, TICKET_TTL_MS, type UpgradeTicketStore } from "./upgradeTickets.js";
+import { pairedSessionId, type FilePairedSessionStore } from "../pairedSessionStore.js";
 import type { TabRegistry } from "../browser/tabRegistry.js";
 import {
   continueRefusal,
@@ -155,6 +161,18 @@ export interface LineageResolverLike {
 
 export interface ScreensHttpDeps {
   gate: PairedSessionGate;
+  /** N06 — single-use WebSocket upgrade tickets (screens/upgradeTickets.ts). */
+  upgradeTickets?: UpgradeTicketStore | null;
+  /** N05 — register a running build against the starting session's grant. */
+  trackWork?: TrackWork;
+  /** N05 — grants, operations and live work, for the per-service Access and permissions page. */
+  authorityHub?: AuthorityHub | null;
+  /** N14 — the security sliver's record (securitySliver.ts). */
+  securitySliver?: SecuritySliver | null;
+  /** N11 — the first publisher key verified per app, and the owner's approval of a change. */
+  publisherPins?: PublisherPins | null;
+  /** The keys whose signature may approve a new publisher key (the owner's admin root, else account key). */
+  publisherTrustKeys?: (() => Uint8Array[]) | null;
   /** Share this server (shares/sharesHttp.ts). */
   shares?: ScreensSharesLike | null;
   /**
@@ -276,6 +294,8 @@ export interface ScreensHttpDeps {
   currentCommit?: (() => string | null) | null;
   /** The last update order's verdict (updateOutcome.ts), or null. */
   lastUpdate?: (() => UpdateOutcomeRecord | null) | null;
+  /** The dead-man switch's state for server-detail (deadMan.ts), or null when none is wired. */
+  deadMan?: (() => { enabled: boolean; leaseExpiry: number; windowMs: number; graceMs: number; lockoutMode: "off" | "restart" } | null) | null;
   /** Endorsed releases this box could move to (updateReleases.ts). */
   releaseCatalog?: ReleaseCatalogSource | null;
   /** Recent install/uninstall events for server-detail. */
@@ -802,6 +822,107 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       return jok({ ok: true });
     }
 
+    // ---- N05 /api/screens/services/:id/permissions[/revoke]: what holds authority over this app, and the way to end it
+    const permMatch = /^\/api\/screens\/services\/([^/]+)\/permissions(\/revoke)?$/.exec(path);
+    if (permMatch) {
+      const hub = deps.authorityHub;
+      if (!hub) return jerr(503, "permissions not configured");
+      const serviceId = decodeURIComponent(permMatch[1]!);
+      const live = hub.grants.forService(serviceId, now());
+      if (!permMatch[2] && method === "GET") {
+        return jok({
+          grants: live.map((g) => ({
+            id: g.id,
+            kind: g.kind,
+            capability: g.capability,
+            issuedAt: g.issuedAt,
+            expiresAt: g.expiresAt,
+            secretAccess: g.secretAccess,
+            openWork: hub.openWorkFor(g.id),
+          })),
+          pendingOperations: hub.ops
+            .list({ states: ["requested", "awaiting-approval", "authorized", "executing"] })
+            .filter((o) => o.grantDeps.some((d) => live.some((g) => g.id === d)))
+            .map((o) => ({ id: o.id, kind: o.kind, state: o.state })),
+        });
+      }
+      if (permMatch[2] && method === "POST") {
+        const b = parseJson(req.body) as { grantId?: unknown } | null;
+        const targets = typeof b?.grantId === "string" ? live.filter((g) => g.id === b.grantId) : live;
+        if (targets.length === 0) return jerr(404, typeof b?.grantId === "string" ? "that permission is not active for this app" : "nothing is active for this app");
+        const reports = [];
+        for (const g of targets) reports.push(await hub.revoke(g.id, "revoked by the owner"));
+        return jok({
+          ok: true,
+          revoked: reports.reduce((n, r) => n + r.revoked.length, 0),
+          stoppedWork: reports.flatMap((r) => r.stoppedWork),
+          stuckWork: reports.flatMap((r) => r.stuckWork),
+        });
+      }
+      return jerr(405, "method not allowed");
+    }
+
+    // ---- N14 GET /api/screens/security-sliver: every active issue and the recently resolved
+    if (path === "/api/screens/security-sliver" && method === "GET") {
+      if (!deps.securitySliver) return jerr(503, "security notices not configured");
+      return jok({ lines: deps.securitySliver.lines(), lostHistory: deps.securitySliver.lostHistory });
+    }
+
+    // ---- N11 /api/screens/services/:id/publisher[...]: the pinned key and a key waiting for the owner
+    const pubMatch = /^\/api\/screens\/services\/([^/]+)\/publisher(?:\/(trust|reject))?$/.exec(path);
+    if (pubMatch) {
+      if (!deps.publisherPins) return jerr(503, "publisher records not configured");
+      const serviceId = decodeURIComponent(pubMatch[1]!);
+      const action = pubMatch[2];
+      if (!action && method === "GET") {
+        const pin = deps.publisherPins.get(serviceId);
+        const p = deps.publisherPins.pendingFor(serviceId);
+        return jok({
+          pinned: pin ? { fingerprint: keyFingerprint(pin.keyHex), epoch: pin.keyEpoch } : null,
+          waiting: p
+            ? {
+                continuity: p.continuity,
+                oldFingerprint: keyFingerprint(p.from.keyHex),
+                newFingerprint: keyFingerprint(p.toKeyHex),
+                newEpoch: p.toEpoch,
+                rejected: p.rejectedAt !== undefined,
+                trust: { serviceId, appId: p.from.appId, identityGeneration: p.from.identityGeneration, oldKeyHex: p.from.keyHex, newKeyHex: p.toKeyHex, newEpoch: p.toEpoch },
+              }
+            : null,
+        });
+      }
+      if (action === "trust" && method === "POST") {
+        const b = parseJson(req.body) as { trust?: PublisherTrust; signatureHex?: unknown } | null;
+        if (!b?.trust || typeof b.signatureHex !== "string" || b.trust.serviceId !== serviceId) return jerr(400, "send the trust statement and its signature");
+        const keys = deps.publisherTrustKeys?.() ?? [];
+        let result: { ok: true } | { ok: false; reason: string } = { ok: false, reason: "the approval was not signed by the owner" };
+        for (const k of keys) {
+          result = await deps.publisherPins.approve(b.trust, b.signatureHex, k);
+          if (result.ok) break;
+        }
+        if (!result.ok) return jerr(403, result.reason);
+        await deps.securitySliver?.resolve(`publisher-key:${serviceId}`);
+        return jok({ ok: true });
+      }
+      if (action === "reject" && method === "POST") {
+        if (!(await deps.publisherPins.reject(serviceId, now()))) return jerr(404, "no key is waiting");
+        return jok({ ok: true, updatesPaused: true });
+      }
+      return jerr(405, "method not allowed");
+    }
+
+    // ---- N06 POST /api/screens/ws-ticket: a single-use ticket for one stream route
+    if (path === "/api/screens/ws-ticket" && method === "POST") {
+      if (!deps.upgradeTickets) return jerr(503, "tickets not configured");
+      const route = (parseJson(req.body) as { route?: unknown } | null)?.route;
+      if (typeof route !== "string" || !isTicketableRoute(route)) return jerr(400, "that route does not take a ticket");
+      const token = (deps.resolveCallerToken ?? defaultResolveCallerToken)(req);
+      if (!token) return jerr(401, "missing paired-session token");
+      const origin = req.headers["origin"];
+      const ticket = deps.upgradeTickets.issue({ token, route, origin: typeof origin === "string" ? origin : null });
+      return jok({ ticket, expiresInMs: TICKET_TTL_MS });
+    }
+
     // ---- P1.12 GET /api/screens/paired-sessions/list
     if (path === "/api/screens/paired-sessions/list" && method === "GET") {
       if (!deps.pairedSessions) return jerr(503, "paired-sessions not configured");
@@ -812,9 +933,9 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         // An expired Remote session can no longer sign in; don't list it.
         .filter((s) => !(s.companion && typeof s.expiresAt === "number" && s.expiresAt <= nowMs))
         .map((s) => ({
-          tokenPrefix: s.token.slice(0, 12),
+          tokenPrefix: s.id,
           addedAt: s.addedAt,
-          current: callerToken !== null && s.token === callerToken,
+          current: callerToken !== null && pairedSessionId(callerToken).startsWith(s.id),
           kind: s.companion ? "remote" : "device",
           ...(s.companion && typeof s.expiresAt === "number" ? { expiresAt: s.expiresAt } : {}),
         }));
@@ -833,12 +954,9 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         path.slice("/api/screens/paired-sessions/".length),
       );
       if (prefix.length < 8) return jerr(400, "tokenPrefix must be at least 8 chars");
-      const match = deps.pairedSessions
-        .list()
-        .filter((s) => s.token.startsWith(prefix));
-      if (match.length === 0) return jerr(404, "no session matches that prefix");
-      if (match.length > 1) return jerr(409, "ambiguous prefix; provide more chars");
-      await deps.pairedSessions.remove(match[0]!.token);
+      const outcome = await deps.pairedSessions.removeByIdPrefix(prefix);
+      if (outcome === "none") return jerr(404, "no session matches that prefix");
+      if (outcome === "ambiguous") return jerr(409, "ambiguous prefix; provide more chars");
       return jok({ ok: true });
     }
 
@@ -970,6 +1088,18 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
               ...(visibility ? { visibility } : {}),
             }),
       });
+      // A build runs on the authority of the session that started it: ending that session stops it.
+      const endTrack = deps.trackWork?.(req, `build ${session.meta.sessionId}`, () => session.cancel());
+      if (endTrack) {
+        const done = new Set(["ready-to-deploy", "deployed", "failed", "cancelled"]);
+        const check = () => {
+          if (done.has(session.meta.status)) {
+            endTrack();
+            session.off("persist", check);
+          }
+        };
+        session.on("persist", check);
+      }
       session.pushUserMessage(body.prompt, attach.attachments);
       session.addSamples(attach.samples);
       // Value-free journal: a short text preview + per-attachment
@@ -1499,6 +1629,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     daemonVersion: deps.daemonVersion,
     currentCommit: deps.currentCommit?.() ?? null,
     lastUpdate: deps.lastUpdate?.() ?? null,
+    ...(deps.deadMan?.() ? { deadMan: deps.deadMan()! } : {}),
     ...(deps.debugAccess ? { debugAccess: deps.debugAccess.view() } : {}),
     appSandbox: appSandboxStatus(),
     startedAt: deps.startedAt,

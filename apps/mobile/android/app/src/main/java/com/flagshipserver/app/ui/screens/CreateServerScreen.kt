@@ -71,6 +71,7 @@ import com.flagshipserver.app.api.RckRegisterRequest
 import com.flagshipserver.app.core.AuthCode as AuthCodeBytes
 import com.flagshipserver.app.core.Base64URL
 import com.flagshipserver.app.core.BuilderPairController
+import com.flagshipserver.app.core.OfflineSecretsCommitment
 import com.flagshipserver.app.core.DebugAccess
 import com.flagshipserver.app.core.LiveBuilderPairClient
 import com.flagshipserver.app.core.CreateServerDraftStore
@@ -1524,6 +1525,9 @@ internal suspend fun mintRecipeBundle(
         blobSignature = blobSigHex,
         pairingOrder = embeddedPairingOrder,
         swkHex = embeddedSwkHex,
+        offlineSecrets = embeddedSwkHex?.let {
+            OfflineSecretsCommitment.sign(serverDomain, serial, it, now + 1000) { m -> irk.sign(m) }
+        },
         debugGrant = debugGrantSibling,
     )
 

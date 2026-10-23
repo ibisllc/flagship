@@ -3,6 +3,8 @@ import {
   verifyRePairComplete,
   verifyRePairInitiate,
   verifyRePairObject,
+  verifyRePairVeto,
+  type RePairVeto,
   type DeviceCapabilityGrant,
   type DeviceScope,
   type RePairComplete,
@@ -130,6 +132,16 @@ export const RE_PAIR_COMPLETE_WINDOW_MS = 7 * 24 * 60 * 60_000;
  *  has elapsed. See docs/v1.2-security-cascade.md §"14-day quarantine
  *  on revoke-others power". */
 export const RE_PAIR_QUARANTINE_MS = 14 * 24 * 60 * 60_000;
+
+/**
+ * The offline-alert threshold an attempt freezes when it begins. The wait is at least
+ * twice this, so an admin whose device went quiet at the start of an attempt has been
+ * flagged offline long before the deadline (SECURITY-HARDENING-PLAN.md N04).
+ */
+export const RE_PAIR_OFFLINE_ALERT_MS = 12 * 60 * 60_000;
+if (RE_PAIR_GRACE_MS < 2 * RE_PAIR_OFFLINE_ALERT_MS) {
+  throw new Error("the shortest recovery wait must be at least twice the offline-alert threshold");
+}
 
 export interface RePairDeps {
   usernames: UsernameStorage;
@@ -797,6 +809,7 @@ export async function handleInitiateRePair(
     graceSeconds: Math.floor(graceMs / 1000),
     totpRequired,
     totpProofConsumed,
+    offlineAlertMs: RE_PAIR_OFFLINE_ALERT_MS,
     // v1.2 Phase 5 — we fire T+0 synchronously below; stamp the bit
     // so the cron's next sweep doesn't double-fire it. (The cron's
     // own catch-up still fires T+0 if push fan-out wasn't wired
@@ -899,6 +912,104 @@ export async function handleInitiateRePair(
       credentialUsed: recoveryMethodUsed,
     },
   };
+}
+
+/**
+ * POST /api/users/:u/re-pair/veto — an active admin rejects a pending recovery
+ * (SECURITY-HARDENING-PLAN.md 10.6 / N04). Signed by the account's pinned admin root; the
+ * phone asks for a biometric before signing and shows the attempt first. The veto cancels
+ * this attempt only: a retry starts a fresh full wait, and recovery is never disabled.
+ * The pending device cannot veto its own attempt this way, cannot shorten the wait and
+ * gets no authority from it: the veto is accepted only from the pinned admin key.
+ */
+export async function handleVetoRePair(
+  deps: RePairDeps,
+  username: string,
+  body: unknown,
+): Promise<HandlerResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
+  const b = body as { request?: Record<string, unknown>; signature?: unknown };
+  const r = b?.request ?? {};
+  if (
+    typeof r.username !== "string" || typeof r.newIrkPub !== "string" || typeof r.vetoerPub !== "string" ||
+    typeof r.initiatedAt !== "number" || typeof r.completesAt !== "number" || typeof r.issuedAt !== "number" ||
+    typeof b?.signature !== "string"
+  ) {
+    return malformed("malformed body");
+  }
+  if (r.username.toLowerCase() !== username.toLowerCase()) return forbidden("username / url mismatch");
+  if (Math.abs(now() - r.issuedAt) > maxAgeMs) return forbidden("stale request");
+
+  const pending = await deps.pendingRePairs.get(username);
+  if (!pending) return notFound("no pending re-pair");
+  if (
+    pending.newIrkPubHex.toLowerCase() !== r.newIrkPub.toLowerCase() ||
+    pending.initiatedAt !== r.initiatedAt ||
+    pending.completesAt !== r.completesAt
+  ) {
+    return conflict("the veto names a different recovery attempt");
+  }
+  const userRec = await deps.usernames.get(username);
+  const adminPin = userRec?.adminRootPubHex?.toLowerCase();
+  if (!adminPin) return forbidden("this account has no pinned admin key to veto with");
+  if (r.vetoerPub.toLowerCase() !== adminPin) return forbidden("only an active admin can veto a recovery");
+
+  let claim: RePairVeto;
+  let sig: Uint8Array;
+  try {
+    claim = {
+      username: r.username,
+      newIrkPub: hexToBytes(r.newIrkPub),
+      initiatedAt: r.initiatedAt,
+      completesAt: r.completesAt,
+      vetoerPub: hexToBytes(r.vetoerPub),
+      issuedAt: r.issuedAt,
+    };
+    sig = hexToBytes(b.signature);
+  } catch {
+    return malformed("invalid hex");
+  }
+  if (!verifyRePairVeto(claim, sig)) return forbidden("invalid signature");
+
+  // A veto that arrives after the deadline but before completion still wins; the
+  // ledger decides by the atomic claim, not by the clock.
+  if (!(await deps.pendingRePairs.veto(username, now(), r.vetoerPub.toLowerCase(), b.signature))) {
+    return conflict("this recovery was already cancelled or completed");
+  }
+  if (deps.auditEvents) {
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: username.toLowerCase(),
+        eventKind: "re-pair-vetoed",
+        detail: "An admin rejected the recovery attempt; it will not complete",
+        devicePrefix: pending.newIrkPubHex.slice(0, 8),
+        postedAt: now(),
+      },
+    );
+  }
+  if (deps.pushFanout && deps.pushTokens) {
+    try {
+      const targets = await deps.pushTokens.listByUser(username);
+      if (targets.length > 0) {
+        await deps.pushFanout({
+          username: username.toLowerCase(),
+          targets: targets.map((p) => ({ tokenId: p.tokenId, platform: p.platform, providerToken: p.providerToken })),
+          payload: {
+            category: "re-pair-initiated",
+            title: "Account recovery rejected",
+            body: "An admin rejected the recovery attempt. It will not complete.",
+            deepLink: appRouteLink("account/re-pair", { u: username.toLowerCase() }),
+            meta: { eventKind: "re-pair-vetoed" },
+          },
+        });
+      }
+    } catch {
+      /* the veto is recorded; push is a wake-up hint only */
+    }
+  }
+  return { status: 200, body: { ok: true, vetoed: true } };
 }
 
 export async function handleObjectRePair(
@@ -1224,7 +1335,8 @@ export async function handleCompleteRePair(
     return {
       status: 409,
       body: {
-        error: "re-pair was objected by the old IRK",
+        error: pending.vetoedByHex ? "re-pair was vetoed by an admin" : "re-pair was objected (cancelled by the recoverer)",
+        reason: pending.vetoedByHex ? "vetoed" : "objected",
         objectedAt: pending.objectedAt,
       },
     };
@@ -1309,6 +1421,19 @@ export async function handleCompleteRePair(
     validatedPairs = verdict.pairs;
   }
 
+  // The atomic point of no return. A veto accepted before this claim wins and the
+  // swap never happens; once the claim succeeds a veto can no longer land.
+  if (!(await deps.pendingRePairs.claimCompletion(username, now()))) {
+    const after = await deps.pendingRePairs.get(username);
+    return {
+      status: 409,
+      body: {
+        error: after?.vetoedByHex ? "re-pair was vetoed by an admin" : "re-pair is no longer completable",
+        reason: after?.vetoedByHex ? "vetoed" : "not-completable",
+        ...(after?.objectedAt ? { objectedAt: after.objectedAt } : {}),
+      },
+    };
+  }
   const swapped = await deps.usernames.swapIrkPub(
     username,
     pending.oldIrkPubHex,
@@ -1476,6 +1601,8 @@ export async function handleGetRePair(
         initiatedAt: pending.initiatedAt,
         completesAt: pending.completesAt,
         objectedAt: pending.objectedAt ?? null,
+        vetoedBy: pending.vetoedByHex ?? null,
+        offlineAlertMs: pending.offlineAlertMs ?? null,
         ...(pending.proof ? { proof: pending.proof } : {}),
       },
     },

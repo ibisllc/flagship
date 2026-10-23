@@ -223,6 +223,30 @@ interface ScreensClient {
     suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         throw ScreensError.NotImplemented("debug access")
 
+    /** `GET /api/screens/services/:id/permissions`: what can act for this app and the work under it. */
+    suspend fun servicePermissions(serviceId: String): com.flagshipserver.app.core.ServicePermissions =
+        throw ScreensError.NotImplemented("permissions")
+
+    /** `POST …/permissions/revoke`: end one grant, or all of the app's when [grantId] is null. */
+    suspend fun revokeServicePermission(serviceId: String, grantId: String?): com.flagshipserver.app.core.PermissionRevokeResult =
+        throw ScreensError.NotImplemented("permissions")
+
+    /** `GET /api/screens/security-sliver`: the box's security notices, each line with its own severity. */
+    suspend fun securitySliver(): com.flagshipserver.app.core.SecuritySliverResponse =
+        throw ScreensError.NotImplemented("security sliver")
+
+    /** `GET /api/screens/services/:id/publisher`: the pinned publisher key and any key waiting for the owner. */
+    suspend fun publisherState(serviceId: String): com.flagshipserver.app.core.WaitingPublisherResponse =
+        throw ScreensError.NotImplemented("publisher key")
+
+    /** `POST /api/screens/services/:id/publisher/trust` with the owner's signature over exactly that change. */
+    suspend fun trustPublisher(serviceId: String, trust: com.flagshipserver.app.core.PublisherTrust, signatureHex: String): Unit =
+        throw ScreensError.NotImplemented("publisher key")
+
+    /** `POST /api/screens/services/:id/publisher/reject`: keep updates paused. */
+    suspend fun rejectPublisher(serviceId: String): Unit =
+        throw ScreensError.NotImplemented("publisher key")
+
     /** `POST /api/screens/debug-access/revoke` with `{revoke, signatureHex}`. */
     suspend fun debugAccessRevoke(bodyJson: String): DebugAccessChangeResponse =
         throw ScreensError.NotImplemented("debug access")

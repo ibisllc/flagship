@@ -1,3 +1,4 @@
+import { hkdfFromSwk } from "@flagship/protocol";
 import { gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
@@ -12,13 +13,7 @@ import type { SwkOps } from "./keyCustodian.js";
  * blast radius of either is independent.
  */
 export function deriveTlsKey(swk: Bytes, serverId: ServerId): Bytes {
-  return hkdf(
-    sha256,
-    swk,
-    new TextEncoder().encode(serverId),
-    new TextEncoder().encode("flagship.tls.v1"),
-    32,
-  );
+  return hkdfFromSwk(swk, new TextEncoder().encode(serverId), "flagship.tls.v1");
 }
 
 export interface StoredCert {

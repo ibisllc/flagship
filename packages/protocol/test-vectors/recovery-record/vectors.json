@@ -1,0 +1,550 @@
+{
+  "about": "Recovery record v2 (N03). Canonical bytes: flagship/recovery-record/v2|op|username(lowercase)|irkPubHex|adminRootPubHex|credentialIdHex|wrappedUmkDigestHex|adminRoot|acmeKey|fetchTokenHashHex|prfSaltHashHex|kdfVersion|algVersion|policy|generation|nonceHex|priorDigestHex|issuedAt, where adminRoot/acmeKey are keep:<digest>, replace:<digest>, remove or none. Ed25519 by the account key (seed 0x55 repeated). The digest chained into the next record is SHA-256 of the canonical bytes.",
+  "userSeedHex": "5555555555555555555555555555555555555555555555555555555555555555",
+  "userPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+  "record": {
+    "op": "put",
+    "username": "Alice",
+    "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+    "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "credentialIdHex": "c0ffee00c0ffee00",
+    "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "adminRoot": {
+      "change": "replace",
+      "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "acmeKey": {
+      "change": "none"
+    },
+    "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+    "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+    "kdfVersion": 1,
+    "algVersion": 1,
+    "policy": "passkey-and-passphrase",
+    "generation": 1,
+    "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "priorDigestHex": "genesis",
+    "issuedAt": 1760000000000
+  },
+  "canonical": "flagship/recovery-record/v2|put|alice|c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|c0ffee00c0ffee00|1111111111111111111111111111111111111111111111111111111111111111|replace:2222222222222222222222222222222222222222222222222222222222222222|none|3333333333333333333333333333333333333333333333333333333333333333|4444444444444444444444444444444444444444444444444444444444444444|1|1|passkey-and-passphrase|1|0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f|genesis|1760000000000",
+  "signatureHex": "66f2b225658b8a0b9e20017c5326b0633af3cb5b7e32c93fdfff43c14194b02c5c596342c571e46943093534c5a9918a14eaf22d5f2605d5bd67a05e22a18809",
+  "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+  "mutationsThatBreakTheSignature": [
+    {
+      "field": "op",
+      "value": "delete"
+    },
+    {
+      "field": "username",
+      "value": "bob"
+    },
+    {
+      "field": "irkPubHex",
+      "value": "9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    {
+      "field": "adminRootPubHex",
+      "value": "none"
+    },
+    {
+      "field": "credentialIdHex",
+      "value": "c0ffee00c0ffee01"
+    },
+    {
+      "field": "wrappedUmkDigestHex",
+      "value": "5555555555555555555555555555555555555555555555555555555555555555"
+    },
+    {
+      "field": "adminRoot",
+      "value": {
+        "change": "replace",
+        "digestHex": "6666666666666666666666666666666666666666666666666666666666666666"
+      }
+    },
+    {
+      "field": "acmeKey",
+      "value": {
+        "change": "replace",
+        "digestHex": "7777777777777777777777777777777777777777777777777777777777777777"
+      }
+    },
+    {
+      "field": "fetchTokenHashHex",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "field": "prfSaltHashHex",
+      "value": "9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    {
+      "field": "generation",
+      "value": 2
+    },
+    {
+      "field": "nonceHex",
+      "value": "10101010101010101010101010101010"
+    },
+    {
+      "field": "priorDigestHex",
+      "value": "legacy"
+    },
+    {
+      "field": "issuedAt",
+      "value": 1760000000001
+    }
+  ],
+  "evolution": [
+    {
+      "name": "keep what is held",
+      "stored": {
+        "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "generation": 1,
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRootDigestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "keep",
+          "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 2,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "issuedAt": 1760000000000
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "replace the admin root",
+      "stored": {
+        "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "generation": 1,
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRootDigestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "replace",
+          "digestHex": "6666666666666666666666666666666666666666666666666666666666666666"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 2,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "issuedAt": 1760000000000
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "remove the admin root",
+      "stored": {
+        "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "generation": 1,
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRootDigestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "remove"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 2,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "issuedAt": 1760000000000
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "keep names the wrong digest",
+      "stored": {
+        "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "generation": 1,
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRootDigestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "keep",
+          "digestHex": "6666666666666666666666666666666666666666666666666666666666666666"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 2,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "issuedAt": 1760000000000
+      },
+      "expect": "keep-mismatch"
+    },
+    {
+      "name": "none while one is held",
+      "stored": {
+        "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "generation": 1,
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRootDigestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "none"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 2,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "issuedAt": 1760000000000
+      },
+      "expect": "keep-mismatch"
+    },
+    {
+      "name": "remove something never held",
+      "stored": {
+        "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "generation": 1,
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRootDigestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "keep",
+          "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "acmeKey": {
+          "change": "remove"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 2,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "issuedAt": 1760000000000
+      },
+      "expect": "nothing-to-remove"
+    },
+    {
+      "name": "prior digest is not the stored one",
+      "stored": {
+        "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "generation": 1,
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRootDigestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "keep",
+          "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 2,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "issuedAt": 1760000000000
+      },
+      "expect": "stale-prior"
+    },
+    {
+      "name": "generation skips",
+      "stored": {
+        "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "generation": 1,
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRootDigestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "keep",
+          "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 3,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "issuedAt": 1760000000000
+      },
+      "expect": "bad-generation"
+    },
+    {
+      "name": "generation repeats",
+      "stored": {
+        "digestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "generation": 1,
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRootDigestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "keep",
+          "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 1,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "issuedAt": 1760000000000
+      },
+      "expect": "bad-generation"
+    },
+    {
+      "name": "a first record that keeps",
+      "stored": null,
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "keep",
+          "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 1,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "genesis",
+        "issuedAt": 1760000000000
+      },
+      "expect": "keep-without-prior"
+    },
+    {
+      "name": "a first record",
+      "stored": null,
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "replace",
+          "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 1,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "genesis",
+        "issuedAt": 1760000000000
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a first record that is not genesis",
+      "stored": null,
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "replace",
+          "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 1,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "6d885ea3c81f16b0fe90f600a8d57913cce13ff15b49e42037ed45de008b1719",
+        "issuedAt": 1760000000000
+      },
+      "expect": "stale-prior"
+    },
+    {
+      "name": "a delete with nothing stored",
+      "stored": null,
+      "next": {
+        "op": "delete",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "replace",
+          "digestHex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 1,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "genesis",
+        "issuedAt": 1760000000000
+      },
+      "expect": "delete-needs-prior"
+    },
+    {
+      "name": "a v1 row replaced once",
+      "stored": {
+        "digestHex": "legacy",
+        "generation": 0,
+        "wrappedUmkDigestHex": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "next": {
+        "op": "put",
+        "username": "Alice",
+        "irkPubHex": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "adminRootPubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "credentialIdHex": "c0ffee00c0ffee00",
+        "wrappedUmkDigestHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "adminRoot": {
+          "change": "none"
+        },
+        "acmeKey": {
+          "change": "none"
+        },
+        "fetchTokenHashHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "prfSaltHashHex": "4444444444444444444444444444444444444444444444444444444444444444",
+        "kdfVersion": 1,
+        "algVersion": 1,
+        "policy": "passkey-and-passphrase",
+        "generation": 1,
+        "nonceHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "priorDigestHex": "legacy",
+        "issuedAt": 1760000000000
+      },
+      "expect": "ok"
+    }
+  ]
+}

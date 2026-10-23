@@ -107,6 +107,7 @@ public struct RootShell: View {
                 // operation, and both push the shell down from the top.
                 VStack(spacing: 0) {
                     NoticeBannerView()
+                    SecuritySliverBar()
                     GlobalTrustBar()
                     GlobalOperationsBar()
                 }

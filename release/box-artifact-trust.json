@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "about": "Who may sign a box release artifact manifest (flagship/box-artifact/v1). Pre-GA this is the single maintainer holder key that also signs release endorsements (.maintainers/); plan section 8.3 replaces it with a distinct release track and a 2-of-N threshold before general availability. A test fails if a key here is not a current holder in .maintainers/keys. Raising the threshold or rotating a key means changing this file in Studio, the apps and the boxes' installer together.",
+  "threshold": 1,
+  "keys": ["2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7"]
+}

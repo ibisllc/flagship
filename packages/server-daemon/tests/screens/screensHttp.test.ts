@@ -1,3 +1,4 @@
+import { pairedSessionId } from "../../src/pairedSessionStore.js";
 import { swkOps } from "../helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { ed, deriveIRK, deriveSWK } from "@flagship/protocol";
@@ -48,16 +49,24 @@ function fakeGate(allowToken = "tok-good") {
   };
 }
 
-function fakePairedSessions(sessions: Array<{ token: string; addedAt: number; label?: string; companion?: true; expiresAt?: number }>) {
-  const map = new Map(sessions.map((s) => [s.token, s]));
+function fakePairedSessions(sessions: Array<{ token?: string; id?: string; addedAt: number; label?: string; companion?: true; expiresAt?: number }>) {
+  // Like the real store: rows are known by an opaque id (a token's hash), never by the token.
+  const map = new Map(sessions.map((s) => {
+    const id = s.id ?? pairedSessionId(s.token!).slice(0, 16);
+    return [id, { ...s, id }] as const;
+  }));
   return {
     list: () => [...map.values()],
-    has: (t: string) => map.has(t),
-    add: async (t: string, label: string) => {
-      map.set(t, { token: t, label, addedAt: Date.now() });
+    has: (t: string) => [...map.keys()].some((id) => pairedSessionId(t).startsWith(id)),
+    removeByIdPrefix: async (prefix: string) => {
+      const m = [...map.keys()].filter((id) => id.startsWith(prefix));
+      if (m.length === 0) return "none";
+      if (m.length > 1) return "ambiguous";
+      map.delete(m[0]!);
+      return "removed";
     },
     remove: async (t: string) => {
-      map.delete(t);
+      for (const id of [...map.keys()]) if (pairedSessionId(t).startsWith(id)) map.delete(id);
     },
   } as unknown as ScreensHttpDeps["pairedSessions"];
 }
@@ -331,10 +340,10 @@ describe("screens HTTP — P1.12 paired-sessions/list", () => {
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body.sessions).toHaveLength(2);
-    const phone = body.sessions.find((s: { tokenPrefix: string }) => s.tokenPrefix === PHONE_TOKEN.slice(0, 12));
-    expect(phone.tokenPrefix).toBe(PHONE_TOKEN.slice(0, 12));
+    const phone = body.sessions.find((s: { tokenPrefix: string }) => s.tokenPrefix === pairedSessionId(PHONE_TOKEN).slice(0, 16));
+    expect(phone.tokenPrefix).toBe(pairedSessionId(PHONE_TOKEN).slice(0, 16));
     expect(phone.current).toBe(true);
-    const laptop = body.sessions.find((s: { tokenPrefix: string }) => s.tokenPrefix === LAPTOP_TOKEN.slice(0, 12));
+    const laptop = body.sessions.find((s: { tokenPrefix: string }) => s.tokenPrefix === pairedSessionId(LAPTOP_TOKEN).slice(0, 16));
     expect(laptop.current).toBe(false);
     // Full tokens are never returned
     expect(JSON.stringify(body)).not.toContain(PHONE_TOKEN);
@@ -364,8 +373,8 @@ describe("screens HTTP — P1.12 paired-sessions/list", () => {
     }));
     const body = JSON.parse(r!.body as string);
     expect(body.sessions).toEqual([
-      { tokenPrefix: PHONE_TOKEN.slice(0, 12), addedAt: 100, current: true, kind: "device" },
-      { tokenPrefix: REMOTE_TOKEN.slice(0, 12), addedAt: 200, current: false, kind: "remote", expiresAt: future },
+      { tokenPrefix: pairedSessionId(PHONE_TOKEN).slice(0, 16), addedAt: 100, current: true, kind: "device" },
+      { tokenPrefix: pairedSessionId(REMOTE_TOKEN).slice(0, 16), addedAt: 200, current: false, kind: "remote", expiresAt: future },
     ]);
   });
 });
@@ -373,8 +382,8 @@ describe("screens HTTP — P1.12 paired-sessions/list", () => {
 describe("screens HTTP — P1.13 paired-sessions DELETE", () => {
   it("revokes the session matching the prefix", async () => {
     const sessions = fakePairedSessions([
-      { token: "abcdefgh1111", label: "a", addedAt: 1 },
-      { token: "12345678abcd", label: "b", addedAt: 2 },
+      { id: "abcdefgh11111111", label: "a", addedAt: 1 },
+      { id: "12345678abcdabcd", label: "b", addedAt: 2 },
     ]);
     const handle = buildScreensHttp({
       ...COMMON,
@@ -388,14 +397,14 @@ describe("screens HTTP — P1.13 paired-sessions DELETE", () => {
     }));
     expect(r?.status).toBe(200);
     expect(sessions!.list()).toHaveLength(1);
-    expect(sessions!.list()[0]!.token).toBe("12345678abcd");
+    expect(sessions!.list()[0]!.id).toBe("12345678abcdabcd");
   });
 
   it("rejects too-short prefixes", async () => {
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
-      pairedSessions: fakePairedSessions([{ token: "abcdefgh1111", label: "a", addedAt: 1 }]),
+      pairedSessions: fakePairedSessions([{ id: "abcdefgh11111111", label: "a", addedAt: 1 }]),
     });
     const r = await handle(req({
       method: "DELETE",
@@ -410,8 +419,8 @@ describe("screens HTTP — P1.13 paired-sessions DELETE", () => {
       ...COMMON,
       gate: fakeGate(),
       pairedSessions: fakePairedSessions([
-        { token: "abcdefgh1111", label: "a", addedAt: 1 },
-        { token: "abcdefgh2222", label: "b", addedAt: 2 },
+        { id: "abcdefgh11111111", label: "a", addedAt: 1 },
+        { id: "abcdefgh22222222", label: "b", addedAt: 2 },
       ]),
     });
     const r = await handle(req({
@@ -426,7 +435,7 @@ describe("screens HTTP — P1.13 paired-sessions DELETE", () => {
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
-      pairedSessions: fakePairedSessions([{ token: "abcdefgh1111", label: "a", addedAt: 1 }]),
+      pairedSessions: fakePairedSessions([{ id: "abcdefgh11111111", label: "a", addedAt: 1 }]),
     });
     const r = await handle(req({
       method: "DELETE",

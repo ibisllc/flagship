@@ -156,6 +156,45 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return "SHA256:" + Data(SHA256.hash(data: blob)).base64EncodedString().replacingOccurrences(of: "=", with: "")
     }
 
+    // N14 / N11 — scripted sliver and publisher-key state, with the calls recorded.
+    public var sliver = SecuritySliverResponse(lines: [])
+    public var publisherStates: [String: WaitingPublisherResponse] = [:]
+    public private(set) var trustCalls: [(serviceId: String, trust: PublisherTrust, signatureHex: String)] = []
+    public private(set) var rejectCalls: [String] = []
+
+    public func securitySliver() async throws -> SecuritySliverResponse {
+        try await tick()
+        return sliver
+    }
+    public func publisherState(serviceId: String) async throws -> WaitingPublisherResponse {
+        try await tick()
+        return publisherStates[serviceId] ?? WaitingPublisherResponse(pinned: nil, waiting: nil)
+    }
+    public func trustPublisher(serviceId: String, trust: PublisherTrust, signatureHex: String) async throws {
+        try await tick()
+        trustCalls.append((serviceId, trust, signatureHex))
+    }
+    public func rejectPublisher(serviceId: String) async throws {
+        try await tick()
+        rejectCalls.append(serviceId)
+    }
+
+    public var permissions: [String: ServicePermissions] = [:]
+    public private(set) var permissionRevokes: [(serviceId: String, grantId: String?)] = []
+
+    public func servicePermissions(serviceId: String) async throws -> ServicePermissions {
+        try await tick()
+        return permissions[serviceId] ?? ServicePermissions(grants: [])
+    }
+    public func revokeServicePermission(serviceId: String, grantId: String?) async throws -> PermissionRevokeResult {
+        try await tick()
+        permissionRevokes.append((serviceId, grantId))
+        let cur = permissions[serviceId] ?? ServicePermissions(grants: [])
+        let left = cur.grants.filter { grantId != nil && $0.id != grantId }
+        permissions[serviceId] = ServicePermissions(grants: left, pendingOperations: cur.pendingOperations)
+        return PermissionRevokeResult(revoked: cur.grants.count - left.count)
+    }
+
     public func debugAccessGrant(body: String) async throws -> DebugAccessChange {
         try await tick()
         debugAccessBodies.append(body)

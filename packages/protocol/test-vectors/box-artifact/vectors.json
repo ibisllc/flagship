@@ -1,0 +1,510 @@
+{
+  "about": "A box release artifact manifest. Authorities sign the canonical bytes with Ed25519 (seeds are 32 repeated bytes 0x21..0x24; the first three are authorized, threshold 2). The artifact fixture is the 'artifactText' repeated; its SHA-256 and size are in the manifest.",
+  "artifactText": "flagship box artifact fixture\n",
+  "artifactRepeat": 40,
+  "seeds": [
+    "2121212121212121212121212121212121212121212121212121212121212121",
+    "2222222222222222222222222222222222222222222222222222222222222222",
+    "2323232323232323232323232323232323232323232323232323232323232323",
+    "2424242424242424242424242424242424242424242424242424242424242424"
+  ],
+  "publicKeys": [
+    "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+    "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9",
+    "58936604abda112bc94933569c82f8d0cc0ddf92a3f8329f2f448f7f484a594c"
+  ],
+  "manifest": {
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "arch": "amd64",
+    "artifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+    "artifactBytes": 1200,
+    "nodeVersion": "24.22.1",
+    "nodeSha256": "1cd8425cd3be09ed53050e4c8a05dcabf385a5c6c98136614371436ffd632cfd",
+    "lockSha256": "cb1f4255f179a70725643b2037612da5aed5edc2521724bad2f69fd471db6039",
+    "sbomSha256": "f7760572926c22b420a5d2524bf8311bc086684deb7dab30848efd0b24915c98",
+    "provenanceSha256": "86f7a91ca96e25ad6efab0c7f86db8673e1fc1aba297e6eee2cb855c8ef32ce9",
+    "minVerifier": 1,
+    "sequence": 7,
+    "issuedAt": 1760000000000
+  },
+  "canonical": "flagship/box-artifact/v1|0123456789abcdef0123456789abcdef01234567|amd64|f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7|1200|24.22.1|1cd8425cd3be09ed53050e4c8a05dcabf385a5c6c98136614371436ffd632cfd|cb1f4255f179a70725643b2037612da5aed5edc2521724bad2f69fd471db6039|f7760572926c22b420a5d2524bf8311bc086684deb7dab30848efd0b24915c98|86f7a91ca96e25ad6efab0c7f86db8673e1fc1aba297e6eee2cb855c8ef32ce9|1|7|1760000000000",
+  "signatures": [
+    {
+      "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+      "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+    },
+    {
+      "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+      "signatureHex": "6b8e177dab01d7180765c5852139ad30f91e09a0422163cea0bf8707ab8c92448dbd27b2c67e5f4414558f6aa383875c5bb92fc0da251513434c5301ae942502"
+    },
+    {
+      "keyHex": "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9",
+      "signatureHex": "66f86655464e29c150b3e9a6cec3b9129702af3cd6fd31d9cef1a3c190ada15819184e3fb2bb45f70547c863232fc0bc8e86cdfe6d2c78cdab2b8843723a3b0b"
+    },
+    {
+      "keyHex": "58936604abda112bc94933569c82f8d0cc0ddf92a3f8329f2f448f7f484a594c",
+      "signatureHex": "a9c96f92609de0765abe932c3275db9e2689acaffdc6951f636fc5992189699c6ed2b9fe9fa2d56b9f5ffd38eedae662837d91a1575712ddc22188453282a40f"
+    }
+  ],
+  "trust": {
+    "keys": [
+      "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+      "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+      "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+    ],
+    "threshold": 2
+  },
+  "cases": [
+    {
+      "name": "two of three authorized signers",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9",
+          "signatureHex": "66f86655464e29c150b3e9a6cec3b9129702af3cd6fd31d9cef1a3c190ada15819184e3fb2bb45f70547c863232fc0bc8e86cdfe6d2c78cdab2b8843723a3b0b"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "one signer is below the threshold",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "not-enough-signatures"
+      }
+    },
+    {
+      "name": "the same signer twice counts once",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "not-enough-signatures"
+      }
+    },
+    {
+      "name": "an unauthorized key does not count",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "58936604abda112bc94933569c82f8d0cc0ddf92a3f8329f2f448f7f484a594c",
+          "signatureHex": "a9c96f92609de0765abe932c3275db9e2689acaffdc6951f636fc5992189699c6ed2b9fe9fa2d56b9f5ffd38eedae662837d91a1575712ddc22188453282a40f"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "not-enough-signatures"
+      }
+    },
+    {
+      "name": "a signature over another manifest does not count",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+          "signatureHex": "a684ea64d85d60eb6a5db7ea9b37db1b02268ecc749c2f6a2d2f8679a7cdf48e9795547b80697543fdd8733f78c59723ba8a3c2624495c194a9ca7865dd2940e"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "not-enough-signatures"
+      }
+    },
+    {
+      "name": "the downloaded file has another digest",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+          "signatureHex": "6b8e177dab01d7180765c5852139ad30f91e09a0422163cea0bf8707ab8c92448dbd27b2c67e5f4414558f6aa383875c5bb92fc0da251513434c5301ae942502"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "d121be3103007b41edf96f8262925f8c7d61894afe9a041843b631f69445bc57",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "digest-mismatch"
+      }
+    },
+    {
+      "name": "the recipe named another digest",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+          "signatureHex": "6b8e177dab01d7180765c5852139ad30f91e09a0422163cea0bf8707ab8c92448dbd27b2c67e5f4414558f6aa383875c5bb92fc0da251513434c5301ae942502"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "d9298a10d1b0735837dc4bd85dac641b0f3cef27a47e5d53a54f2f3f5b2fcffa",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "digest-mismatch"
+      }
+    },
+    {
+      "name": "the file is a different size",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+          "signatureHex": "6b8e177dab01d7180765c5852139ad30f91e09a0422163cea0bf8707ab8c92448dbd27b2c67e5f4414558f6aa383875c5bb92fc0da251513434c5301ae942502"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1201
+      },
+      "expect": {
+        "ok": false,
+        "code": "size-mismatch"
+      }
+    },
+    {
+      "name": "the recipe named another commit",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+          "signatureHex": "6b8e177dab01d7180765c5852139ad30f91e09a0422163cea0bf8707ab8c92448dbd27b2c67e5f4414558f6aa383875c5bb92fc0da251513434c5301ae942502"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "ffffffffffffffffffffffffffffffffffffffff",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "commit-mismatch"
+      }
+    },
+    {
+      "name": "wrong architecture",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+          "signatureHex": "6b8e177dab01d7180765c5852139ad30f91e09a0422163cea0bf8707ab8c92448dbd27b2c67e5f4414558f6aa383875c5bb92fc0da251513434c5301ae942502"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "arm64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "arch-mismatch"
+      }
+    },
+    {
+      "name": "a rolled-back sequence",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+          "signatureHex": "6b8e177dab01d7180765c5852139ad30f91e09a0422163cea0bf8707ab8c92448dbd27b2c67e5f4414558f6aa383875c5bb92fc0da251513434c5301ae942502"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 7,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "rollback"
+      }
+    },
+    {
+      "name": "the verifier is too old",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+          "signatureHex": "6b8e177dab01d7180765c5852139ad30f91e09a0422163cea0bf8707ab8c92448dbd27b2c67e5f4414558f6aa383875c5bb92fc0da251513434c5301ae942502"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 0,
+        "lastSequence": 6,
+        "nodeFloor": "24.22.1",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "verifier-too-old"
+      }
+    },
+    {
+      "name": "Node below the floor",
+      "signatures": [
+        {
+          "keyHex": "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+          "signatureHex": "d5171e08dc0755512aa5b483eb24eaa0b723fadf33fef731c2c4d8ed3cf7aeeeb0bb23f08bbef4ca0b1349db735cd055e259a5e3567afce3d33d6fc4fbbb8708"
+        },
+        {
+          "keyHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+          "signatureHex": "6b8e177dab01d7180765c5852139ad30f91e09a0422163cea0bf8707ab8c92448dbd27b2c67e5f4414558f6aa383875c5bb92fc0da251513434c5301ae942502"
+        }
+      ],
+      "options": {
+        "trust": {
+          "keys": [
+            "884b8857f4eaa1613c61504db34d4beaf346517a0e31de3cddd4d9b4201d9d0b",
+            "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+            "74f85cda34d1c27c4621484731e91579c3d9c6cfc0d94b281aa11e9162058aa9"
+          ],
+          "threshold": 2
+        },
+        "verifierVersion": 1,
+        "lastSequence": 6,
+        "nodeFloor": "24.99.0",
+        "expectedArtifactSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "expectedCommit": "0123456789abcdef0123456789abcdef01234567",
+        "expectedArch": "amd64",
+        "measuredSha256": "f0a4c976b17258ea4ca673d019df53218476fc8e43b3535f61894edd853716b7",
+        "measuredBytes": 1200
+      },
+      "expect": {
+        "ok": false,
+        "code": "node-below-floor"
+      }
+    }
+  ]
+}

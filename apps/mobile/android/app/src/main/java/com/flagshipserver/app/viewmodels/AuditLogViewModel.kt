@@ -57,6 +57,7 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "totp-failed-rate"    -> "Repeated authenticator code failures"
     "re-pair-initiated"   -> "Started device replacement"
     "re-pair-expired"     -> "Device replacement expired"
+    "re-pair-vetoed"      -> "Recovery rejected by an admin"
     "re-pair-refused-no-credential" -> "Refused a device replacement"
     "account-type-changed-single-to-multi" -> "Turned on code protection"
     "account-type-changed-multi-to-single" -> "Switched to single-device"

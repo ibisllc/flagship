@@ -360,6 +360,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     else com.flagshipserver.app.core.AdminOrderGate.API_KEYS,
                     fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
                 )
+                ServicePermissionsSection(serviceId = serviceId, restricted = appState.isRestrictedDevice() || !adminDevice)
                 // The owner's Database section (docs/app-apis.md §6): owner
                 // only, hidden on a box without it.
                 DatabaseEntrySection(

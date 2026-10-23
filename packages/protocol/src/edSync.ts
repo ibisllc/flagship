@@ -1,5 +1,6 @@
 import * as ed from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha512";
+import { opaqueOps } from "./opaqueKey.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => sha512(ed.etc.concatBytes(...m));
 
@@ -168,9 +169,23 @@ async function verifyFast(
 // A Proxy delegates every other member (sign/getPublicKey/etc/Point/utils)
 // unchanged — the ESM namespace binding itself is read-only, so we can't
 // reassign `ed.verify` in place.
+function opaqueSign(msg: Uint8Array | string, priv: Uint8Array | string): Uint8Array {
+  const ops = opaqueOps(priv);
+  if (!ops) return ed.sign(msg, priv);
+  return ops.sign(asBytes(msg));
+}
+
 const edHardened = new Proxy(ed, {
   get(target, prop, receiver) {
     if (prop === "verify") return safeVerify;
+    if (prop === "sign") return opaqueSign;
+    if (prop === "signAsync") return async (msg: Uint8Array | string, priv: Uint8Array | string) => opaqueSign(msg, priv);
+    if (prop === "getPublicKey") {
+      return (priv: Uint8Array | string) => {
+        const ops = opaqueOps(priv);
+        return ops ? ops.publicKey : ed.getPublicKey(priv);
+      };
+    }
     return Reflect.get(target, prop, receiver);
   },
 });

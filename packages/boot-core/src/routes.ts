@@ -14,16 +14,24 @@
  *   POST   /api/boot/request                        box-STK    announce need → notify pipe
  *   GET    /api/boot/response/:serverDomain/:nonce  box-STK    poll for the sealed response
  *   POST   /api/boot/response                       owner-IRK  post the sealed response
+ *   DELETE /api/boot/lease/:serverDomain            owner-IRK  revoke EVERY lease for the server
+ *   PUT    /api/boot/suspension                     owner-IRK  lock / resume (new epoch)
+ *   POST   /api/boot/suspension/box                 box-STK    set-only lock (dead-man, manual)
+ *   GET    /api/boot/suspension/:serverDomain       owner|box  read the lock state
  */
 
 import {
   verifyAutoUnlockLeaseV2,
+  verifyBootSuspension,
+  initialSuspension,
+  type BootSuspensionOrder,
   verifySecretRequest,
   type AutoUnlockLeaseV2,
   type SecretPurpose,
   type SecretRequest,
 } from "@flagship/protocol";
 import type {
+  BootSuspensionStorage,
   BoxSealedLeaseStorage,
   SecretMailboxStorage,
   SecretMailboxPurpose,
@@ -55,6 +63,7 @@ const PURPOSES: ReadonlySet<SecretMailboxPurpose> = new Set<SecretMailboxPurpose
 
 export interface BootRouteDeps {
   boxSealedLeases: BoxSealedLeaseStorage;
+  bootSuspensions: BootSuspensionStorage;
   secretMailbox: SecretMailboxStorage;
   directory: DirectoryClient;
   notify: NotifyPipe;
@@ -75,6 +84,10 @@ const ROUTE_RE = {
   LEASE_DEPOSIT: /^\/api\/boot\/lease$/,
   LEASE_GET: /^\/api\/boot\/lease\/([^/]+)$/,
   LEASE_REVOKE: /^\/api\/boot\/lease\/([^/]+)\/([^/]+)$/,
+  LEASE_REVOKE_ALL: /^\/api\/boot\/lease\/([^/]+)$/,
+  SUSPENSION_SET: /^\/api\/boot\/suspension$/,
+  SUSPENSION_BOX: /^\/api\/boot\/suspension\/box$/,
+  SUSPENSION_GET: /^\/api\/boot\/suspension\/([^/]+)$/,
   REQUEST_POST: /^\/api\/boot\/request$/,
   RESPONSE_GET: /^\/api\/boot\/response\/([^/]+)\/([^/]+)$/,
   RESPONSE_POST: /^\/api\/boot\/response$/,
@@ -112,6 +125,18 @@ export async function routeBoot(
       decodeURIComponent(g[2]!),
       body,
     );
+  }
+  if (m === "DELETE" && (g = path.match(ROUTE_RE.LEASE_REVOKE_ALL))) {
+    return handleRevokeAllLeases(deps, path, authHeader, decodeURIComponent(g[1]!));
+  }
+  if (m === "PUT" && ROUTE_RE.SUSPENSION_SET.test(path)) {
+    return handleSetSuspension(deps, path, authHeader, body, "owner");
+  }
+  if (m === "POST" && ROUTE_RE.SUSPENSION_BOX.test(path)) {
+    return handleSetSuspension(deps, path, authHeader, body, "box");
+  }
+  if (m === "GET" && (g = path.match(ROUTE_RE.SUSPENSION_GET)) && g[1] !== "box") {
+    return handleGetSuspension(deps, path, authHeader, decodeURIComponent(g[1]!));
   }
   if (m === "POST" && ROUTE_RE.REQUEST_POST.test(path)) {
     return handlePostRequest(deps, path, authHeader, body);
@@ -232,6 +257,103 @@ async function handleDepositLease(
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// PUT /api/boot/suspension (owner) and POST /api/boot/suspension/box (STK):
+// set the durable boot suspension (SEC-LOCK-001). The body is an order signed
+// by the same key the Authorization header names; the record keeps that
+// signature so the box and the phones can check it themselves.
+// ──────────────────────────────────────────────────────────────────────
+
+const SUSPENSION_REASONS = new Set(["manual-lock", "dead-man", "box-fail-closed", "owner-suspend", "owner-resume"]);
+
+async function handleSetSuspension(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  body: unknown,
+  signer: "owner" | "box",
+): Promise<BootResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const b = body as { order?: Record<string, unknown>; signature?: unknown };
+  const o = b?.order ?? {};
+  if (
+    typeof o.serverDomain !== "string" || o.serverDomain.length === 0 ||
+    !Number.isSafeInteger(o.epoch) || !Number.isSafeInteger(o.seq) || !Number.isSafeInteger(o.issuedAt) ||
+    (o.action !== "suspend" && o.action !== "resume") ||
+    typeof o.reason !== "string" || !SUSPENSION_REASONS.has(o.reason) ||
+    o.signer !== signer ||
+    typeof b?.signature !== "string" || !HEX128.test(b.signature.toLowerCase())
+  ) {
+    return { status: 400, body: { error: "malformed body" } };
+  }
+  const order = o as unknown as BootSuspensionOrder;
+
+  const auth = await gate(deps.gate, { role: signer, serverDomain: order.serverDomain, method: signer === "owner" ? "PUT" : "POST", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(b.signature);
+  } catch {
+    return { status: 400, body: { error: "invalid hex" } };
+  }
+  if (!verifyBootSuspension(order, sig, hexToBytes(auth.pubKeyHex))) {
+    return { status: 403, body: { error: "invalid suspension signature" } };
+  }
+
+  let outcome;
+  try {
+    outcome = await deps.bootSuspensions.apply(order, b.signature.toLowerCase(), now());
+  } catch {
+    // Could not record it: say so. The caller must not believe it is locked.
+    return { status: 503, body: { error: "could not record the suspension", durable: false } };
+  }
+  if (!outcome.ok) {
+    return { status: 409, body: { error: "suspension refused", code: outcome.code, current: publicSuspension(outcome.current) } };
+  }
+  let leasesRevoked = 0;
+  if (outcome.state.suspended) {
+    // Anything deposited before a lock must not come back on resume: the owner
+    // deposits a fresh, bounded lease after resuming.
+    try {
+      leasesRevoked = await deps.boxSealedLeases.revokeAll(order.serverDomain);
+    } catch {
+      return { status: 503, body: { error: "suspended, but the leases could not be removed", durable: true, state: publicSuspension(outcome.state) } };
+    }
+  }
+  return { status: 200, body: { ok: true, durable: true, changed: outcome.changed, leasesRevoked, state: publicSuspension(outcome.state) } };
+}
+
+async function handleGetSuspension(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  serverDomain: string,
+): Promise<BootResponse> {
+  const auth = await gate(deps.gate, { role: ["owner", "box"], serverDomain, method: "GET", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  try {
+    const st = (await deps.bootSuspensions.get(serverDomain)) ?? initialSuspension(serverDomain);
+    return { status: 200, body: publicSuspension(st) };
+  } catch {
+    return { status: 503, body: { error: "could not read the suspension" } };
+  }
+}
+
+function publicSuspension(st: ReturnType<typeof initialSuspension>) {
+  return {
+    serverDomain: st.serverDomain,
+    suspended: st.suspended,
+    epoch: st.epoch,
+    seq: st.seq,
+    reason: st.reason,
+    signer: st.signer,
+    orderIssuedAt: st.orderIssuedAt,
+    updatedAt: st.updatedAt,
+    signature: st.signatureHex,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // GET /api/boot/lease/:serverDomain  — box-STK fetch of the sealed lease.
 // ──────────────────────────────────────────────────────────────────────
 
@@ -246,7 +368,20 @@ async function handleGetLease(
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
 
   const row = await deps.boxSealedLeases.release(serverDomain, now());
-  if (!row) return { status: 404, body: { error: "no active lease" } };
+  if (!row) {
+    // release() hands out nothing for a suspended server; say so, so the box
+    // asks the phone instead of retrying. Never reveals more than the lock bit.
+    let suspended = false;
+    try {
+      const st = await deps.bootSuspensions.get(serverDomain);
+      suspended = st?.suspended === true;
+    } catch {
+      suspended = true;
+    }
+    return suspended
+      ? { status: 423, body: { error: "suspended", suspended: true } }
+      : { status: 404, body: { error: "no active lease" } };
+  }
   return {
     status: 200,
     body: {
@@ -281,6 +416,24 @@ async function handleRevokeLease(
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
 
   const removed = await deps.boxSealedLeases.revoke(serverDomain, leaseId);
+  return { status: 200, body: { ok: true, removed } };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// DELETE /api/boot/lease/:serverDomain  — owner-IRK revoke of every lease.
+// Used when the dead-man switch is switched on: no lease deposited before it
+// may outlive the affirmation (SEC-DEADMAN-001).
+// ──────────────────────────────────────────────────────────────────────
+
+async function handleRevokeAllLeases(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  serverDomain: string,
+): Promise<BootResponse> {
+  const auth = await gate(deps.gate, { role: "owner", serverDomain, method: "DELETE", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  const removed = await deps.boxSealedLeases.revokeAll(serverDomain);
   return { status: 200, body: { ok: true, removed } };
 }
 

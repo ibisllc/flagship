@@ -1,0 +1,16 @@
+{
+  "about": "What the owner's device signs to trust a new publisher key for ONE service: flagship/publisher-trust/v1|serviceId|appId|identityGeneration|oldKeyHex|newKeyHex|newEpoch|issuedAt, Ed25519, seed 0x33 repeated.",
+  "ownerSeedHex": "3333333333333333333333333333333333333333333333333333333333333333",
+  "ownerPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+  "trust": {
+    "serviceId": "alice-chess",
+    "appId": "alice--chess",
+    "identityGeneration": 1,
+    "oldKeyHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "newKeyHex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "newEpoch": 1,
+    "issuedAt": 1760000000000
+  },
+  "canonical": "flagship/publisher-trust/v1|alice-chess|alice--chess|1|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|1|1760000000000",
+  "signatureHex": "4185d6fd2b683abb5be41d6198f25c35bde44db2b095b5ed63f1059c535c961813bb390c89533e56431a037371857006dc93bdb0c23551b3216361e933d55c06"
+}

@@ -128,38 +128,7 @@ export function inSubnet(ip: number, s: Ipv4Subnet): boolean {
   return ((ip & s.mask) >>> 0) === s.base;
 }
 
-const NON_PUBLIC_V4 = [
-  "0.0.0.0/8",
-  "10.0.0.0/8",
-  "100.64.0.0/10",
-  "127.0.0.0/8",
-  "169.254.0.0/16",
-  "172.16.0.0/12",
-  "192.0.0.0/24",
-  "192.0.2.0/24",
-  "192.168.0.0/16",
-  "198.18.0.0/15",
-  "198.51.100.0/24",
-  "203.0.113.0/24",
-  "224.0.0.0/4",
-  "240.0.0.0/4",
-].map((c) => parseCidr(c)!);
-
-/**
- * Whether the gateway may connect to this resolved address. A name the owner
- * approved must not be a door into the box itself or the owner's LAN, so
- * loopback, private, link-local, CGNAT and multicast ranges are refused.
- */
-export function isPublicAddress(ip: string): boolean {
-  const v4 = parseIpv4(ip);
-  if (v4 !== null) return !NON_PUBLIC_V4.some((s) => inSubnet(v4, s));
-  if (isIP(ip) !== 6) return false;
-  const l = ip.toLowerCase();
-  if (l === "::" || l === "::1") return false;
-  if (/^f[cd]/.test(l) || /^fe[89ab]/.test(l) || /^ff/.test(l)) return false;
-  if (l.startsWith("64:ff9b:") || l.startsWith("2001:db8") || l.startsWith("100::")) return false;
-  return true;
-}
+export { isPublicAddress } from "@flagship/protocol";
 
 export type EgressSource =
   | { kind: "build" }

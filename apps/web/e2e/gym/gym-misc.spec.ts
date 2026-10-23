@@ -337,7 +337,8 @@ test.describe("gym webapp misc", () => {
     basePods(m);
     let enrolled = true;
     m.get("/api/recovery/by-username/smoketest", () =>
-      enrolled ? { json: { credentialId: "c1".repeat(16), wrappedUmkHash: "ab".repeat(32) } } : { status: 404, json: { error: "not found" } });
+      enrolled ? { json: { credentialId: "c1".repeat(16), wrappedUmkHash: "ab".repeat(32), legacy: false, generation: 1, digestHex: "cd".repeat(32) } } : { status: 404, json: { error: "not found" } });
+    m.get("/api/username/smoketest", () => ({ json: { username: "smoketest", adminRootPub: null } }));
     m.on("DELETE", "/api/recovery/by-username/smoketest", () => {
       enrolled = false;
       return { json: { ok: true } };
@@ -365,10 +366,15 @@ test.describe("gym webapp misc", () => {
     await page.click("[data-modal-ok]");
     await sawToast(page, "Cloud recovery removed");
     const del = m.last("/api/recovery/by-username/smoketest", "DELETE")!;
-    const req = del.body.request;
-    const uploadCanon = (r: { username: string; credentialId: string; wrappedUmkHash: string; issuedAt: number }) =>
-      `flagship/upload-recovery-record/v1|${r.username}|${r.credentialId}|${r.wrappedUmkHash}|${r.issuedAt}`;
-    expect(await verifies(page, uploadCanon, req, del.body.signature, keys.irkPubHex)).toBe(true);
+    // A signed v2 delete that names the digest of the record it removes.
+    const claim = del.body.claim;
+    expect(claim).toMatchObject({ op: "delete", username: "smoketest", generation: 2, priorDigestHex: "cd".repeat(32) });
+    const canon = (c: Record<string, unknown>) => [
+      "flagship/recovery-record/v2", c.op, String(c.username).toLowerCase(), c.irkPubHex, c.adminRootPubHex, c.credentialIdHex,
+      c.wrappedUmkDigestHex, (c.adminRoot as { change: string }).change, (c.acmeKey as { change: string }).change,
+      c.fetchTokenHashHex, c.prfSaltHashHex, c.kdfVersion, c.algVersion, c.policy, c.generation, c.nonceHex, c.priorDigestHex, c.issuedAt,
+    ].join("|");
+    expect(await verifies(page, canon, claim, del.body.signature, keys.irkPubHex)).toBe(true);
     await expect(page.locator("#recovery-cloud-pill")).toHaveText("off", { timeout: 10_000 });
     await expect(page.locator("#recovery-cloud-remove")).toBeHidden();
     await shot(page, testInfo, "recovery-cloud-removed");

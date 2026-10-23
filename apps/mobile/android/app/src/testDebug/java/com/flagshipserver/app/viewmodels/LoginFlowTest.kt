@@ -81,15 +81,7 @@ class LoginFlowTest {
         val prfSecret = webauthn.prfAssert(credentialId)
         val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
         server.registerRecoveryEnvelope(
-            RecoveryEnvelopeRequest(
-                request = RecoveryEnvelopeRequest.Inner(
-                    username = "demo",
-                    credentialId = credentialId,
-                    wrappedUmk = wrapped,
-                    issuedAt = 0L,
-                ),
-                signature = "00",
-            ),
+            com.flagshipserver.app.keystore.makeRecoveryUpload(username = "demo", credentialIdHex = credentialId, wrappedUmk = wrapped, umkSeed = recoveredSeed),
         )
     }
 
@@ -106,16 +98,11 @@ class LoginFlowTest {
         val prfSecret = webauthn.prfAssertWithSalt(credentialId, secrets.prfSalt)
         val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
         server.registerRecoveryEnvelope(
-            RecoveryEnvelopeRequest(
-                request = RecoveryEnvelopeRequest.Inner(
-                    username = "harry",
-                    credentialId = credentialId,
-                    wrappedUmk = wrapped,
-                    issuedAt = 0L,
-                    fetchTokenHash = RecoveryDerivation.sha256Hex(secrets.fetchToken),
-                    prfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt),
-                ),
-                signature = "00",
+            com.flagshipserver.app.keystore.makeRecoveryUpload(
+                username = "harry", credentialIdHex = credentialId, wrappedUmk = wrapped,
+                fetchTokenHashHex = RecoveryDerivation.sha256Hex(secrets.fetchToken),
+                prfSaltHashHex = RecoveryDerivation.sha256Hex(secrets.prfSalt),
+                umkSeed = recoveredSeed,
             ),
         )
     }
@@ -128,15 +115,10 @@ class LoginFlowTest {
         val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
         val acmeScalar = AcmeAccountKey.generateScalar()
         server.registerRecoveryEnvelope(
-            RecoveryEnvelopeRequest(
-                request = RecoveryEnvelopeRequest.Inner(
-                    username = "demo",
-                    credentialId = credentialId,
-                    wrappedUmk = wrapped,
-                    issuedAt = 0L,
-                    wrappedAcmeAccountKey = AcmeAccountKey.wrapForEscrow(acmeScalar, prfSecret),
-                ),
-                signature = "00",
+            com.flagshipserver.app.keystore.makeRecoveryUpload(
+                username = "demo", credentialIdHex = credentialId, wrappedUmk = wrapped,
+                wrappedAcmeAccountKey = AcmeAccountKey.wrapForEscrow(acmeScalar, prfSecret),
+                umkSeed = recoveredSeed,
             ),
         )
         return acmeScalar
@@ -237,7 +219,8 @@ class LoginFlowTest {
         com.flagshipserver.app.keystore.CloudRecoveryEnrollment.enroll(
             server = server,
             passkeys = ceremony,
-            irk = com.google.crypto.tink.subtle.Ed25519Sign(ByteArray(32) { 0x03 }),
+            irk = com.flagshipserver.app.keystore.irkForUmk(recoveredSeed),
+            irkPubHex = com.flagshipserver.app.keystore.irkPubHexForUmk(recoveredSeed),
             username = username,
             umkSeed = recoveredSeed,
             passphrase = GATED_PASSPHRASE,

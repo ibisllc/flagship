@@ -378,6 +378,26 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         try await request("/api/screens/server-order", method: "POST", body: try JSONEncoder().encode(order))
     }
+    public func securitySliver() async throws -> SecuritySliverResponse {
+        try await request("/api/screens/security-sliver")
+    }
+    public func publisherState(serviceId: String) async throws -> WaitingPublisherResponse {
+        try await request("/api/screens/services/\(Self.pathSegment(serviceId))/publisher")
+    }
+    public func trustPublisher(serviceId: String, trust: PublisherTrust, signatureHex: String) async throws {
+        struct Body: Encodable { let trust: PublisherTrust; let signatureHex: String }
+        _ = try await requestData("/api/screens/services/\(Self.pathSegment(serviceId))/publisher/trust", method: "POST", body: try JSONEncoder().encode(Body(trust: trust, signatureHex: signatureHex)))
+    }
+    public func rejectPublisher(serviceId: String) async throws {
+        _ = try await requestData("/api/screens/services/\(Self.pathSegment(serviceId))/publisher/reject", method: "POST", body: Data("{}".utf8))
+    }
+    public func servicePermissions(serviceId: String) async throws -> ServicePermissions {
+        try await request("/api/screens/services/\(Self.pathSegment(serviceId))/permissions")
+    }
+    public func revokeServicePermission(serviceId: String, grantId: String?) async throws -> PermissionRevokeResult {
+        struct Body: Encodable { let grantId: String? }
+        return try await request("/api/screens/services/\(Self.pathSegment(serviceId))/permissions/revoke", method: "POST", body: try JSONEncoder().encode(Body(grantId: grantId)))
+    }
     public func debugAccessGrant(body: String) async throws -> DebugAccessChange {
         try await request("/api/screens/debug-access", method: "POST", body: Data(body.utf8))
     }
@@ -772,11 +792,12 @@ public final class LiveBrowserStream: BrowserStream, @unchecked Sendable {
             .replacingOccurrences(of: "https://", with: "wss://")
             .replacingOccurrences(of: "http://", with: "ws://")
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let encodedToken = token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? token
         let encodedTabId = tabId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? tabId
-        let urlStr = "\(wsBase)/api/screens/browser-tabs/\(encodedTabId)/stream?sessionToken=\(encodedToken)"
-        guard let url = URL(string: urlStr) else { return true }
-        guard let ws = try? urlSession.gatedWebSocketTask(with: url) else { return true }
+        // The session rides in a header, never in the URL (N06): URLs end up in proxies and logs.
+        guard let url = URL(string: "\(wsBase)/api/screens/browser-tabs/\(encodedTabId)/stream") else { return true }
+        var req = URLRequest(url: url)
+        req.setValue(token, forHTTPHeaderField: "x-flagship-session")
+        guard let ws = try? urlSession.gatedWebSocketTask(with: req) else { return true }
         lock.withLock { self.task = ws }
         ws.resume()
         var sawAnyFrame = false

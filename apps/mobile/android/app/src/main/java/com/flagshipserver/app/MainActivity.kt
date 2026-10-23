@@ -135,6 +135,11 @@ class MainActivity : FragmentActivity() {
         // BEFORE the clients below read Endpoints. A release build has none.
         com.flagshipserver.app.core.Variant.applyLaunchOverrides(intent)
         Keystore.attach(applicationContext)
+        // Pins and the list of boxes this phone knows survive a restart, so a cold start is not a
+        // window in which a known box falls back to ordinary web trust.
+        com.flagshipserver.app.core.CertPinRegistry.shared.attach(
+            com.flagshipserver.app.core.CertPinPrefs(applicationContext),
+        )
         FlagshipFcmService.ensureChannel(applicationContext)
         biometric = BiometricAuthority(this)
         BiometricAuthority.set(biometric)

@@ -9,6 +9,7 @@
  */
 
 import type { MeterBatchEntry, MeterBatchResult, MeterCounter, MeterStore } from "@ibisllc/billing-metering";
+import type { BootSuspensionOrder, BootSuspensionState, SuspensionOutcome } from "@flagship/protocol";
 import type { ServerShareStorage } from "./serverShares.js";
 import type { ServerOrderStorage } from "./serverOrders.js";
 
@@ -474,6 +475,7 @@ export type AuditEventKind =
   // where a recovery they did not start becomes visible to them.
   | "re-pair-initiated"
   | "re-pair-expired"
+  | "re-pair-vetoed"
   // P13 — IRK-signed user-initiated server revocation
   // (POST /api/server-registry/revoke). Reason ∈ {lost, stolen,
   // decommissioned}. Cascades through every active boot-unlock lease
@@ -668,6 +670,16 @@ export interface WebauthnRecoveryRecord {
    * deriving a different PRF output.
    */
   prfSaltHashHex?: string;
+  /**
+   * N03 — the signed v2 envelope this row was written under. Absent on a v1 (legacy) row, whose
+   * escrow fields carry no signature. `signedClaimJson` is the claim exactly as signed.
+   */
+  signed?: {
+    digestHex: string;
+    generation: number;
+    signedClaimJson: string;
+    signatureHex: string;
+  };
   createdAt: number;
   updatedAt: number;
 }
@@ -675,6 +687,14 @@ export interface WebauthnRecoveryRecord {
 export interface WebauthnRecoveryStorage {
   /** Insert or replace. Caller has already verified the IRK signature. */
   upsert(rec: WebauthnRecoveryRecord): Promise<void>;
+  /**
+   * Compare-and-swap for signed v2 writes: store `rec` only if the row's chain link is still
+   * `expectedPriorDigest` (`genesis` = no row, `legacy` = a row with no digest). False when
+   * another writer got there first.
+   */
+  replaceIfDigest(rec: WebauthnRecoveryRecord, expectedPriorDigest: string): Promise<boolean>;
+  /** Delete only if the row's chain link is still `expectedDigest` (`legacy` = no digest). */
+  deleteIfDigest(username: string, expectedDigest: string): Promise<boolean>;
   /** Public read by username; ciphertext-only so disclosure is safe. */
   get(username: string): Promise<WebauthnRecoveryRecord | undefined>;
   /** Delete by username (kill switch — also requires sig verification at handler). */
@@ -744,6 +764,13 @@ export interface PendingRePairRecord {
    * `oldIrkSignature` exists only for the registered-key routes.
    */
   proof?: { issuedAt: number; newIrkSignature: string; oldIrkSignature?: string };
+  /** Set by the atomic claim that starts the key swap; a veto after this fails. */
+  completingAt?: number;
+  /** Admin key that vetoed the attempt; absent for a self-cancel. */
+  vetoedByHex?: string;
+  vetoSignatureHex?: string;
+  /** Offline-alert threshold frozen at initiation (the wait is at least twice this). */
+  offlineAlertMs?: number;
 }
 
 export interface PendingRePairStorage {
@@ -755,6 +782,16 @@ export interface PendingRePairStorage {
   get(username: string): Promise<PendingRePairRecord | undefined>;
   /** Mark the row as objected; no-op if no row exists. Returns whether the row existed. */
   object(username: string, at: number): Promise<boolean>;
+  /**
+   * An active admin's veto. Succeeds only while the row is neither objected nor
+   * already claimed for completion; returns whether THIS call won.
+   */
+  veto(username: string, at: number, byHex: string, signatureHex: string): Promise<boolean>;
+  /**
+   * The one atomic step before the key swap. Succeeds only if no objection or
+   * veto landed first; returns whether THIS call won.
+   */
+  claimCompletion(username: string, at: number): Promise<boolean>;
   /** Delete the row (called after `complete` succeeds). */
   delete(username: string): Promise<boolean>;
   /**
@@ -1119,6 +1156,23 @@ export interface BoxSealedLeaseStorage {
   revoke(serverDomain: string, leaseId: string): Promise<boolean>;
   /** Snapshot of active (non-expired) leases for a server (UI listing). */
   list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]>;
+  /** Delete every lease for a server (a lock). Returns how many went. */
+  revokeAll(serverDomain: string): Promise<number>;
+}
+
+/**
+ * The durable boot-suspension record (SEC-LOCK-001). `release` on
+ * BoxSealedLeaseStorage consults it itself, so no route can hand out a lease
+ * for a suspended server by forgetting a check.
+ */
+export interface BootSuspensionStorage {
+  /** The record, or undefined when this server has never been suspended or resumed. */
+  get(serverDomain: string): Promise<BootSuspensionState | undefined>;
+  /**
+   * Apply an already-verified order atomically (compare-and-swap on the
+   * record's epoch, seq and suspended flag). Concurrent writers retry.
+   */
+  apply(order: BootSuspensionOrder, signatureHex: string, now: number): Promise<SuspensionOutcome>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1662,6 +1716,7 @@ export interface Storage {
   serverMigrations: ServerMigrationStorage;
   adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
+  bootSuspensions: BootSuspensionStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   pushTokens: PushTokenStorage;

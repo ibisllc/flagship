@@ -59,7 +59,7 @@ function buildSignedRecipe(opts: {
     registrationUrl: "https://flagship.services/api/server/register",
     authCode,
     authCodeUserSignature: new Uint8Array(64), // not verified by the Builder
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: rck.publicKey,
     ...(opts.bootUnlockMode ? { bootUnlockMode: opts.bootUnlockMode } : {}),
   };

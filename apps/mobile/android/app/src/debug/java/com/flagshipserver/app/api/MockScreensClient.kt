@@ -342,6 +342,39 @@ class MockScreensClient(
 
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
 
+    var sliver: com.flagshipserver.app.core.SecuritySliverResponse = com.flagshipserver.app.core.SecuritySliverResponse()
+    val publisherStates: MutableMap<String, com.flagshipserver.app.core.WaitingPublisherResponse> = mutableMapOf()
+    val trustCalls: MutableList<Triple<String, com.flagshipserver.app.core.PublisherTrust, String>> = mutableListOf()
+    val rejectCalls: MutableList<String> = mutableListOf()
+
+    val permissions: MutableMap<String, com.flagshipserver.app.core.ServicePermissions> = mutableMapOf()
+    val permissionRevokes: MutableList<Pair<String, String?>> = mutableListOf()
+
+    override suspend fun servicePermissions(serviceId: String): com.flagshipserver.app.core.ServicePermissions {
+        tick()
+        return permissions[serviceId] ?: com.flagshipserver.app.core.ServicePermissions()
+    }
+
+    override suspend fun revokeServicePermission(serviceId: String, grantId: String?): com.flagshipserver.app.core.PermissionRevokeResult {
+        tick()
+        permissionRevokes += serviceId to grantId
+        val cur = permissions[serviceId] ?: com.flagshipserver.app.core.ServicePermissions()
+        val left = cur.grants.filter { grantId != null && it.id != grantId }
+        permissions[serviceId] = cur.copy(grants = left)
+        return com.flagshipserver.app.core.PermissionRevokeResult(revoked = cur.grants.size - left.size)
+    }
+
+    override suspend fun securitySliver(): com.flagshipserver.app.core.SecuritySliverResponse { tick(); return sliver }
+    override suspend fun publisherState(serviceId: String): com.flagshipserver.app.core.WaitingPublisherResponse {
+        tick()
+        return publisherStates[serviceId] ?: com.flagshipserver.app.core.WaitingPublisherResponse()
+    }
+    override suspend fun trustPublisher(serviceId: String, trust: com.flagshipserver.app.core.PublisherTrust, signatureHex: String) {
+        tick()
+        trustCalls += Triple(serviceId, trust, signatureHex)
+    }
+    override suspend fun rejectPublisher(serviceId: String) { tick(); rejectCalls += serviceId }
+
     /** Debug access as a box would hold it: a grant turns it on until its end, a revoke turns it off. */
     var debugAccessState: DebugAccessView = DebugAccessView(on = false)
     val debugAccessBodies: MutableList<String> = mutableListOf()

@@ -89,6 +89,7 @@ public struct ServiceDetailScreen: View {
                         ApiKeysSection(controller: keys)
                     }
                     if vm.showsDatabase, let db = vm.database { databaseRow(db, c: c) }
+                    if let perms = vm.permissions { ServicePermissionsSection(controller: perms) }
                     storageSection(d.storage, c: c)
                     logsAndBackup(d: d, c: c)
                     if vm.canUninstall {
