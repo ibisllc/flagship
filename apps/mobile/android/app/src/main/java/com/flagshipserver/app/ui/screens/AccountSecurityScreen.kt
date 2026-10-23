@@ -107,7 +107,6 @@ fun AccountSecurityScreen(nav: NavController) {
     FSScreen(
         title = stringResource(R.string.account_security),
         onBack = { nav.popBackStack() },
-        subtitle = stringResource(R.string.manage_recovery_protection_and_account_level),
     ) {
         FSCard {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {

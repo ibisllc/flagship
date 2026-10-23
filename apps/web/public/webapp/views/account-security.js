@@ -39,7 +39,7 @@ registerView("view-account-security");
 // key" action, and the revoke-semantic warning shown on the sheet.
 const ROTATE_CONFIRM_PHRASE = "ROTATE";
 export const ROTATE_ADMIN_WARNING =
-  tr("Rotating mints a brand-new admin key and REVOKES admin from every OTHER admin device — they keep access as members but can no longer wipe, transfer, or decommission your cloud. Do this if an admin device was lost or you want to cut off the others. Your boxes adopt the change on their next check-in.");
+  tr("Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.");
 
 export const ROTATE_REESCROW_FAILED_MESSAGE =
   tr("Admin key rotated, but your recovery backup wasn't updated — it still holds your OLD admin key. Run recovery setup again from Settings to fix this.");
@@ -95,8 +95,8 @@ function renderBadge() {
   const isMulti = state.accountType === "multi";
   const titleText = isMulti ? tr("Multi-device + 2FA") : tr("Single-device account");
   const explainer = isMulti
-    ? tr("Recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window.")
-    : tr("Recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.");
+    ? tr("Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.")
+    : tr("Recovery needs a recovery credential, then a 3-day wait. Your other devices are alerted but can't cancel it.");
   return `
     <div class="card" data-account-security-badge="${escapeHtml(state.accountType ?? "unknown")}">
       <div class="row">
@@ -115,14 +115,14 @@ function renderExplainer() {
     return `
       <h3 class="mt-3">${tr("Currently enabled")}</h3>
       <p>
-        ${tr("Your TOTP secret was generated on {0}. Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost.", escapeHtml(fmtDate(state.totpEnrolledAt)))}
+        ${tr("Set up on {0}. Keep your recovery codes safe: they're the only way back in if you lose your authenticator app.", escapeHtml(fmtDate(state.totpEnrolledAt)))}
       </p>
     `;
   }
   return `
     <h3 class="mt-3">${tr("Why enable this?")}</h3>
     <p>
-      ${tr("A second factor outside your browser's password manager. If that store is ever compromised, the attacker still needs a live 6-digit code from your authenticator app to take over your account.")}
+      ${tr("A check outside your browser's password manager: anyone who breaks into it still needs a live code from your authenticator app to take over your account.")}
     </p>
   `;
 }
@@ -166,7 +166,7 @@ function renderRecoveryCodes() {
     <div class="card mt-3" data-account-security-codes>
       <h3>${tr("Step 4 of 4 — save your recovery codes")}</h3>
       <p>
-        ${tr("Print these or store them in a password manager. Each code works once if you lose your authenticator. They're the ONLY way back in.")}
+        ${tr("Print them or keep them in a password manager. Each works once. If you lose your authenticator, they're the only way back in.")}
       </p>
       <ol class="recovery-codes" data-account-security-recovery-codes>
         ${items}
@@ -303,7 +303,7 @@ function bindHandlers() {
     const { inlineConfirm } = await import("../lib/modal.js");
     const ok = await inlineConfirm({
       title: tr("Disable multi-device + 2FA?"),
-      message: tr("Drops your TOTP secret + recovery codes. The account goes back to single-device + 3-day recovery grace. Refused while other trusted devices exist."),
+      message: tr("Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist."),
       okLabel: tr("Disable"),
       danger: true,
     });

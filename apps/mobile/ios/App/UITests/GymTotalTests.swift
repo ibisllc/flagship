@@ -227,15 +227,15 @@ final class GymTotalTests: XCTestCase {
 
     // ─── D3 — settings: the AI-keys manager ──────────────────────────────────
 
-    /// Settings → "AI keys" opens the device-local BYOK key manager; its
+    /// Settings → "AI API keys" opens the device-local BYOK key manager; its
     /// Add-a-key affordance renders (the keys list is device-local — no
     /// backend). D3-C2.
     func test_aiKeysManagerRenders() throws {
         let app = launch(tab: "settings")
-        // The "AI keys" row is an FSSettingsRow → a Button whose a11y label
-        // concatenates the title + subtitle ("AI keys, Bring-your-own keys…"),
+        // The "AI API keys" row is an FSSettingsRow → a Button whose a11y label
+        // concatenates the title + subtitle ("AI API keys, Bring-your-own keys…"),
         // so match by label-prefix, and scroll the ScrollView until it's on screen.
-        let aiKeys = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'AI keys'")).firstMatch
+        let aiKeys = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'AI API keys'")).firstMatch
         XCTAssertTrue(
             app.navigationBars["Settings"].waitForExistence(timeout: 15),
             "Settings should render its shell."
@@ -244,7 +244,7 @@ final class GymTotalTests: XCTestCase {
         XCTAssertTrue(aiKeys.waitForExistence(timeout: 10), "Settings should offer the AI-keys row.")
         aiKeys.tap()
         XCTAssertTrue(
-            app.navigationBars["AI keys"].waitForExistence(timeout: 15),
+            app.navigationBars["AI API keys"].waitForExistence(timeout: 15),
             "The AI-keys manager should open."
         )
         XCTAssertTrue(

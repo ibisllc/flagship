@@ -2,7 +2,7 @@ import SwiftUI
 import Flagship
 import FlagshipAPI
 
-/// Settings → AI keys. Views saved keys as masked slugs, adds a new one, and
+/// Settings → AI API keys. Views saved keys as masked slugs, adds a new one, and
 /// deletes. No full key is ever shown. Reuses `AiKeyForm` from the build
 /// AI-key step (sans the "Save on this device" toggle — adding here always
 /// saves).
@@ -50,45 +50,18 @@ public struct AiKeysScreen: View {
 
                     if !vm.entries.isEmpty {
                         ForEach(vm.entries) { e in
-                            FSCard {
-                                HStack(spacing: FS.space.s2) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(vm.slug(for: e))
-                                            .font(FS.font.body()).foregroundColor(c.text)
-                                            .lineLimit(1).truncationMode(.middle)
-                                        if e.id == vm.activeId {
-                                            Text("Default for new builds")
-                                                .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.text)
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    Button(role: .destructive) {
-                                        vm.delete(id: e.id)
-                                    } label: {
-                                        Image(systemName: "trash").foregroundColor(c.danger)
-                                            .frame(width: 44, height: 44)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("Delete key")
-                                    .accessibilityIdentifier("ai-key-delete")
-                                }
-                                AiKeyRelayRowToggle(
-                                    relay: Binding(get: { e.relay }, set: { vm.setRelay(id: e.id, on: $0) }),
-                                    identifier: "ai-key-relay"
-                                )
-                                DefaultModelRow(keyId: e.id) { [client] in
+                            SavedAiKeyRow(
+                                entry: e,
+                                isDefault: e.id == vm.activeId,
+                                relay: Binding(get: { e.relay }, set: { vm.setRelay(id: e.id, on: $0) }),
+                                onMakeDefault: { vm.setActive(id: e.id) },
+                                onDelete: { vm.delete(id: e.id) },
+                                defaultModel: DefaultModelRow(keyId: e.id) { [client] in
                                     let cred = VibeCodeCredentialSelection.compatible(with: e.credential).credential ?? e.credential
                                     let r = await ModelMenuCache.models(for: cred) { try await client.aiModels($0) }
                                     return r.kind == "flagship" ? .flagship(r.catalog) : .own(r)
                                 }
-                                if e.id != vm.activeId {
-                                    Button(action: { vm.setActive(id: e.id) }) {
-                                        Text("Make default").font(FS.font.bodySm()).foregroundColor(c.primary)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
+                            )
                         }
                     }
 
@@ -127,7 +100,7 @@ public struct AiKeysScreen: View {
                 .fsReadingColumn()
             }
         }
-        .navigationTitle("AI keys")
+        .navigationTitle("AI API keys")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { vm.reload() }
         .task { await freeAi.load() }
@@ -202,5 +175,96 @@ struct DefaultModelRow: View {
             Spacer(minLength: 0)
             ModelMenuButton(menu: menu, identifier: "ai-key-default-model")
         }
+    }
+}
+
+/// One saved key as a compact row: a key icon, its name, the masked key tail,
+/// a "Default" tag, and a ⋯ menu (make default, delete). The relay switch and
+/// the default model open under the row from "Key settings". MIRRORS the
+/// webapp's `key-row` and Android's `SavedAiKeyRow`.
+struct SavedAiKeyRow: View {
+    @Environment(\.colorScheme) private var scheme
+    let entry: SavedKeyStore.Entry
+    let isDefault: Bool
+    @Binding var relay: Bool
+    let onMakeDefault: () -> Void
+    let onDelete: () -> Void
+    let defaultModel: DefaultModelRow
+    @State private var expanded = false
+    @State private var confirmDelete = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: FS.space.s3) {
+                Image(systemName: "key.horizontal")
+                    .font(FS.font.scaled(15, weight: .semibold))
+                    .foregroundColor(c.accent)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.name(entry))
+                        .font(FS.font.scaled(16, weight: .semibold)).foregroundColor(c.text)
+                        .lineLimit(1).truncationMode(.middle)
+                    Text(SavedKeyStore.maskKey(entry.apiKey))
+                        .font(FS.font.scaled(12, design: .monospaced)).foregroundColor(c.textMuted)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if isDefault {
+                    Text("Default")
+                        .font(FS.font.scaled(11, weight: .semibold))
+                        .foregroundColor(c.text)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .overlay(RoundedRectangle(cornerRadius: 2).stroke(c.accent, lineWidth: 1))
+                        .accessibilityIdentifier("ai-key-default-tag")
+                }
+                Menu {
+                    if !isDefault {
+                        Button { onMakeDefault() } label: { Label("Make default", systemImage: "checkmark.circle") }
+                    }
+                    Button { withAnimation(.snappy) { expanded.toggle() } } label: {
+                        Label(expanded ? String(localized: "Hide key settings") : String(localized: "Key settings"), systemImage: "slider.horizontal.3")
+                    }
+                    Button(role: .destructive) { confirmDelete = true } label: { Label("Delete key", systemImage: "trash") }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(FS.font.scaled(15, weight: .semibold))
+                        .foregroundColor(c.textMuted)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text("Options for \(Self.name(entry))"))
+                .accessibilityIdentifier("ai-key-actions")
+            }
+            .padding(.leading, FS.space.s4)
+            .padding(.trailing, FS.space.s1)
+            .frame(minHeight: 56)
+            if expanded {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    AiKeyRelayRowToggle(relay: $relay, identifier: "ai-key-relay")
+                    defaultModel
+                }
+                .padding(.horizontal, FS.space.s4)
+                .padding(.vertical, FS.space.s3)
+                .overlay(alignment: .top) { Rectangle().fill(c.border).frame(height: 1) }
+            }
+        }
+        .background(c.surface)
+        .overlay(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous).stroke(c.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md, style: .continuous))
+        .confirmationDialog(String(localized: "Delete this key?"), isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete key", role: .destructive) { onDelete() }
+                .accessibilityIdentifier("ai-key-delete")
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The API key for this provider will be deleted from this device.")
+        }
+    }
+
+    /// The key's label, with the provider when the label doesn't already say it.
+    static func name(_ e: SavedKeyStore.Entry) -> String {
+        let label = e.label.trimmingCharacters(in: .whitespaces)
+        if label.isEmpty || label.lowercased() == e.provider.lowercased() { return e.provider.capitalized }
+        return "\(label) · \(e.provider.capitalized)"
     }
 }
