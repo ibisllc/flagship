@@ -11,6 +11,7 @@
     "test": "vitest run --dir tests"
   },
   "dependencies": {
+    "@flagship/keyd": "*",
     "@flagship/llm-providers": "*",
     "@flagship/protocol": "*",
     "@flagship/tunnel-protocol": "*",

@@ -1,24 +1,65 @@
 {
   "files": [],
   "references": [
-    { "path": "./billing/packages/metering" },
-    { "path": "./billing/packages/store-d1" },
-    { "path": "./packages/protocol" },
-    { "path": "./packages/tunnel-protocol" },
-    { "path": "./packages/llm-providers" },
-    { "path": "./packages/services-zone" },
-    { "path": "./packages/server-daemon" },
-    { "path": "./packages/bootkey-builder" },
-    { "path": "./packages/iso-personalizer" },
-    { "path": "./packages/storage" },
-    { "path": "./packages/boot-core" },
-    { "path": "./packages/control-plane" },
-    { "path": "./packages/hello-daemon" },
-    { "path": "./packages/flagship-builder" },
-    { "path": "./apps/web" },
-    { "path": "./tools/vps-e2e" },
-    { "path": "./tools/unseal-crosscheck" },
-    { "path": "./tools/gym" },
-    { "path": "./infra/inference/build-eval" }
+    {
+      "path": "./billing/packages/metering"
+    },
+    {
+      "path": "./billing/packages/store-d1"
+    },
+    {
+      "path": "./packages/keyd"
+    },
+    {
+      "path": "./packages/protocol"
+    },
+    {
+      "path": "./packages/tunnel-protocol"
+    },
+    {
+      "path": "./packages/llm-providers"
+    },
+    {
+      "path": "./packages/services-zone"
+    },
+    {
+      "path": "./packages/server-daemon"
+    },
+    {
+      "path": "./packages/bootkey-builder"
+    },
+    {
+      "path": "./packages/iso-personalizer"
+    },
+    {
+      "path": "./packages/storage"
+    },
+    {
+      "path": "./packages/boot-core"
+    },
+    {
+      "path": "./packages/control-plane"
+    },
+    {
+      "path": "./packages/hello-daemon"
+    },
+    {
+      "path": "./packages/flagship-builder"
+    },
+    {
+      "path": "./apps/web"
+    },
+    {
+      "path": "./tools/vps-e2e"
+    },
+    {
+      "path": "./tools/unseal-crosscheck"
+    },
+    {
+      "path": "./tools/gym"
+    },
+    {
+      "path": "./infra/inference/build-eval"
+    }
   ]
 }

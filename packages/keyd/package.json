@@ -1,0 +1,26 @@
+{
+  "name": "@flagship/keyd",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "flagship-keyd": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests"
+  },
+  "dependencies": {
+    "@flagship/protocol": "*",
+    "@noble/hashes": "1.8.0"
+  },
+  "license": "BUSL-1.1"
+}

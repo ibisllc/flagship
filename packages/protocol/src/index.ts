@@ -10,6 +10,8 @@ export * from "./comBlessing.js";
 export * from "./serviceBlessing.js";
 export * from "./trustException.js";
 export * from "./encryption.js";
+export * from "./opaqueKey.js";
+export { hkdfFromSwk } from "./swkDerive.js";
 export * from "./erasure.js";
 export * from "./manifest.js";
 export * from "./devEntitlements.js";

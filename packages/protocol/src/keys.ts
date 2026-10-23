@@ -1,3 +1,4 @@
+import { hkdfFromSwk } from "./swkDerive.js";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { ed } from "./edSync.js";
@@ -177,13 +178,7 @@ export function deriveSTK(swk: Bytes): Keypair {
  * without explicit handshake).
  */
 export function deriveServiceSecret(swk: Bytes, serviceId: string): Bytes {
-  return hkdf(
-    sha256,
-    swk,
-    new TextEncoder().encode(serviceId),
-    new TextEncoder().encode(INFO_APP_SECRET),
-    32,
-  );
+  return hkdfFromSwk(swk, new TextEncoder().encode(serviceId), INFO_APP_SECRET);
 }
 
 /**
