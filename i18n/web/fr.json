@@ -286,7 +286,6 @@
   "s9876e64009": "Lancer des scanners automatisés qui génèrent une charge soutenue.",
   "scf5d5d34dc": "Publier des détails avant la livraison du correctif ou avant notre date de divulgation convenue (nous visons 90 jours au maximum, négociable pour les problèmes critiques).",
   "s6113805e30": "Tableau d’honneur",
-  "sefd58307d1": "Chercheurs qui nous ont signalé une vulnérabilité, avec les commits qui l’ont corrigée. Mentionnés sous la forme que chacun demande : nom, pseudonyme ou anonyme, avec un lien s’il le souhaite. Listés sans attribution tant qu’ils ne nous ont pas fait connaître leur préférence ; nous ne publions jamais un nom qui ne nous a pas été donné. (Les fiches techniques restent en anglais.)",
   "s6600e49241": "Signaler une faille",
   "s74c47fae88": "Utilisez le formulaire ci-dessous (à privilégier : il demande les bons champs structurés) ou écrivez à <1>security@flagshipserver.com</1>. Les signalements chiffrés sont encouragés. Utilisez notre clé PGP :",
   "s84f28e32dd": "<1>Téléchargez la clé publique</1>, ou laissez votre client de messagerie la trouver pour <2>security@flagshipserver.com</2> (publiée via Web Key Directory).",
@@ -470,5 +469,6 @@
   "s4bc920353e": "Notes de terrain issues de la construction d’un produit de cloud personnel qui prend l’auto-hébergement au sérieux. Abonnez-vous via le lien RSS ci-dessus ; cette page est limitée en débit (pas de pixels de surveillance, pas de collecte pour newsletter).",
   "sefe57fd6f9": "Les premiers articles arriveront avec le lancement de la bêta 0.2. D’ici là, la source de vérité sur ce que nous construisons, ce sont les <1>docs</1>, le <2>modèle de sécurité</2> et la page <3>open source</3>.",
   "s8f7b9ab588": "Brouillons",
-  "seb2f4750ac": "Nous publions quand nous avons quelque chose de concret à dire. Suivez le flux RSS."
+  "seb2f4750ac": "Nous publions quand nous avons quelque chose de concret à dire. Suivez le flux RSS.",
+  "sba026addff": "Les chercheurs qui nous ont signalé une vulnérabilité, et les commits qui ont corrigé chaque signalement, figurent au <1>tableau d’honneur</1>."
 }
