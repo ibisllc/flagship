@@ -202,8 +202,8 @@ test.describe("gym webapp servers", () => {
     const m = await mock(page);
     m.get("/api/users/smoketest/pods", { pods: [livePod(HOME), livePod(OFFICE)] });
     await renderHome(page);
-    // "Add/Restore server" sits above the list (iOS/Android: home-add-server).
-    await expect(page.locator("#home-add-server")).toHaveText("+ Add/Restore server");
+    // "Add / Restore a server" sits above the list (iOS/Android: home-add-server).
+    await expect(page.locator("#home-add-server")).toHaveText("Add / Restore a server");
     const addAbove = await page.evaluate(() => {
       const add = document.getElementById("home-add-server");
       const cards = document.querySelector("#servers-list [data-server-cards]");
@@ -211,7 +211,7 @@ test.describe("gym webapp servers", () => {
     });
     expect(addAbove).toBe(true);
     await page.click("#home-add-server");
-    await expect(page.locator("dialog[open] .modal-title")).toHaveText("Add/Restore server");
+    await expect(page.locator("dialog[open] .modal-title")).toHaveText("Add / Restore a server");
     await expect(page.locator("dialog[open] button:not([data-choice-cancel])")).toHaveText([
       "Create a server",
       "Co-manage a running server",

@@ -11,6 +11,7 @@ import { enforcement } from "./enforcement.js";
 import { freePlan } from "./freePlan.js";
 import { gating } from "./gating.js";
 import { invites } from "./invites.js";
+import { languages } from "./languages.js";
 import { lifecycle } from "./lifecycle.js";
 import { mcpIde } from "./mcpIde.js";
 import { migrate } from "./migrate.js";
@@ -30,6 +31,7 @@ export type { Group, GroupCtx, Slot } from "./types.js";
 
 export const GROUPS: Group[] = [
   core,
+  languages,
   gating,
   invites,
   enforcement,
