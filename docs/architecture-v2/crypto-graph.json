@@ -1,0 +1,2246 @@
+{
+ "schemaVersion": 1,
+ "baseCommit": "152ab3d87340c445505bb2d1ab11a35412d144aa",
+ "generatedAt": "2026-10-23",
+ "description": "Cryptographic dependency graph (IMPLEMENTATION-PLAN.md \u00a76.6), A01 seed. Edge A -[type]-> B: whoever controls A can <type> B. pq is the node's own exposure to a classical-public-key break. Evidence is path:line at baseCommit; entries marked inferred were not read end to end. Owners are placeholders. Checker: scripts/crypto-graph-check.mjs.",
+ "notInModel": [
+  "Physical access (plaintext /boot/identity.pem, shared VM-appliance volume key, unmeasured initramfs): see evidence-map.md \u00a73; not a classical-crypto break.",
+  "Firmware/Secure Boot/TPM/UKI: no code exists, so no nodes; Q06 must add them.",
+  "Symmetric bearer secrets on .com (admin, read-token, inference HMAC) are PQ-neutral but single points of compromise."
+ ],
+ "nodes": [
+  {
+   "id": "key.umk",
+   "kind": "key",
+   "label": "UMK (account root seed)",
+   "algorithms": [
+    "HKDF-SHA256"
+   ],
+   "location": "phone keystore (iOS keychain, Android Keystore/EncryptedSharedPreferences); browser memory in the webapp",
+   "pq": "symmetric",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "packages/protocol/src/keys.ts:19"
+   ],
+   "notes": "Every account key below derives from it."
+  },
+  {
+   "id": "key.ios-se-wrap",
+   "kind": "key",
+   "label": "iOS Secure Enclave wrap of UMK/admin root",
+   "algorithms": [
+    "P-256 ECDH",
+    "HKDF-SHA256",
+    "AES-GCM"
+   ],
+   "location": "iOS Secure Enclave",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:227",
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:1618"
+   ],
+   "notes": "A local-only wrap: breaking it needs the wrapped blob, which iCloud Keychain sync carries (see store.icloud-keychain)."
+  },
+  {
+   "id": "store.icloud-keychain",
+   "kind": "external-service",
+   "label": "iCloud Keychain sync of wrapped UMK",
+   "algorithms": [
+    "Apple platform E2EE (classical, vendor-defined)"
+   ],
+   "location": "Apple iCloud",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:1192"
+   ],
+   "inferred": true,
+   "notes": "Algorithm is Apple's; marked classical-only because no PQ guarantee is documented by the platform. Inferred."
+  },
+  {
+   "id": "store.android-blockstore",
+   "kind": "external-service",
+   "label": "Google Block Store copy of wrapped UMK",
+   "algorithms": [
+    "Google platform E2EE where available (classical, vendor-defined)"
+   ],
+   "location": "Google Block Store",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/BlockStoreUmkStore.kt:1"
+   ],
+   "inferred": true
+  },
+  {
+   "id": "key.android-keystore",
+   "kind": "key",
+   "label": "Android Keystore AES (StrongBox) for the UMK seed",
+   "algorithms": [
+    "AES-256-GCM"
+   ],
+   "location": "Android Keystore",
+   "pq": "symmetric",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/Keystore.kt:17"
+   ]
+  },
+  {
+   "id": "key.irk",
+   "kind": "key",
+   "label": "IRK (account key)",
+   "algorithms": [
+    "Ed25519",
+    "X25519 (birational map, as seal recipient)"
+   ],
+   "location": "derived from UMK on the phone; pubkey in .com D1",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/keys.ts:39"
+   ],
+   "notes": "Signs most orders; recipient of the install-time LUKS deposit."
+  },
+  {
+   "id": "key.admin-root",
+   "kind": "key",
+   "label": "Admin master root",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "phone (device-local, SE-wrapped); escrowed in the passkey recovery record",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/adminAuthority.ts:86",
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:743"
+   ]
+  },
+  {
+   "id": "key.device-grant",
+   "kind": "key",
+   "label": "Device capability grants / account device key",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "each device",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/deviceCapability.ts:71"
+   ]
+  },
+  {
+   "id": "key.bak",
+   "kind": "key",
+   "label": "BAK (per-server phone-delegated key)",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "derived from UMK on the phone",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/keys.ts:146"
+   ]
+  },
+  {
+   "id": "key.watch-delegate",
+   "kind": "key",
+   "label": "Watch delegate key",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "phone keychain (.userPresence)",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "packages/protocol/src/watchDelegate.ts:67"
+   ]
+  },
+  {
+   "id": "key.app-aid",
+   "kind": "key",
+   "label": "Per-app visitor identity (app-AID)",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "derived from UMK",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/keys.ts:102"
+   ]
+  },
+  {
+   "id": "key.household",
+   "kind": "key",
+   "label": "Household key (invite bundles)",
+   "algorithms": [
+    "AES-256-GCM"
+   ],
+   "location": "derived from UMK",
+   "pq": "symmetric",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/keys.ts:129",
+    "packages/protocol/src/serviceInvite.ts:101"
+   ]
+  },
+  {
+   "id": "key.share-member",
+   "kind": "key",
+   "label": "Share member key (co-manager)",
+   "algorithms": [
+    "Ed25519",
+    "X25519 (as seal recipient)"
+   ],
+   "location": "derived from co-manager's UMK",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/serverShare.ts:69"
+   ]
+  },
+  {
+   "id": "key.rck",
+   "kind": "key",
+   "label": "RCK (routing control key)",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "phone; registered under IRK",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/routing.ts:16",
+    "packages/control-plane/src/routing.ts:138"
+   ]
+  },
+  {
+   "id": "key.recovery-passphrase",
+   "kind": "key",
+   "label": "Recovery passphrase",
+   "algorithms": [
+    "Argon2id",
+    "HKDF-SHA256"
+   ],
+   "location": "owner's memory",
+   "pq": "symmetric",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/RecoveryDerivation.kt:7"
+   ]
+  },
+  {
+   "id": "key.passkey-prf",
+   "kind": "key",
+   "label": "Passkey PRF output",
+   "algorithms": [
+    "WebAuthn PRF (HMAC-SHA256 in authenticator)"
+   ],
+   "location": "platform/roaming authenticator; synced passkeys via vendor cloud",
+   "pq": "symmetric",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AdminRootEscrow.kt:6"
+   ],
+   "notes": "Symmetric, but PRF secrecy depends on authenticator custody and vendor sync (see store.passkey-sync)."
+  },
+  {
+   "id": "store.passkey-sync",
+   "kind": "external-service",
+   "label": "Passkey sync provider (iCloud Keychain / Google Password Manager)",
+   "algorithms": [
+    "vendor E2EE (classical)"
+   ],
+   "location": "Apple / Google",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "packages/control-plane/src/recoveryProof.ts:20"
+   ],
+   "inferred": true,
+   "notes": ".com does not verify the passkey; the PRF secret is as safe as the sync fabric. Inferred."
+  },
+  {
+   "id": "key.keyfile",
+   "kind": "key",
+   "label": ".flagshipkey keyfile",
+   "algorithms": [
+    "Argon2id",
+    "AES-256-GCM"
+   ],
+   "location": "owner file",
+   "pq": "symmetric",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/keyfile.ts:36"
+   ]
+  },
+  {
+   "id": "env.recovery-escrow",
+   "kind": "storage-envelope",
+   "label": "Cloud recovery escrow (wrapped UMK, admin root, ACME key)",
+   "algorithms": [
+    "AES-256-GCM",
+    "HKDF(PRF)",
+    "Argon2id fetch token"
+   ],
+   "location": ".com D1",
+   "pq": "symmetric",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AdminRootEscrow.kt:6",
+    "apps/web/public/recovery/recoveryWrap.js:28"
+   ]
+  },
+  {
+   "id": "env.device-pairing",
+   "kind": "transport",
+   "label": "Device-to-device pairing relay carrying the UMK",
+   "algorithms": [
+    "X25519",
+    "HKDF-SHA256",
+    "AES-256-GCM",
+    "6-digit SAS"
+   ],
+   "location": ".com /qr-pipe WebSocket",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DevicePairing.kt:117",
+    "packages/protocol/src/builderPairing.ts:136"
+   ],
+   "notes": "Harvest-now-decrypt-later: recorded relay traffic reveals the UMK once X25519 falls."
+  },
+  {
+   "id": "env.builder-pairing",
+   "kind": "transport",
+   "label": "Studio/builder QR pairing",
+   "algorithms": [
+    "X25519",
+    "HKDF-SHA256",
+    "AES-256-GCM",
+    "6-digit SAS"
+   ],
+   "location": ".com /builder-pipe",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "packages/protocol/src/builderPairing.ts:136"
+   ]
+  },
+  {
+   "id": "chan.com-webpki",
+   "kind": "transport",
+   "label": "TLS to flagshipserver.com (Cloudflare edge)",
+   "algorithms": [
+    "ECDHE",
+    "ECDSA/RSA WebPKI certificates"
+   ],
+   "location": "Cloudflare",
+   "pq": "classical-only",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "apps/com/src/route.ts:640"
+   ],
+   "inferred": true,
+   "notes": "Edge configuration is outside the repo; key exchange may be hybrid at the edge, but authentication is WebPKI (classical)."
+  },
+  {
+   "id": "svc.com-directory",
+   "kind": "admin-channel",
+   "label": ".com account/server directory (/pods STK binding, IRK lookup)",
+   "algorithms": [
+    "D1 rows served over WebPKI TLS"
+   ],
+   "location": ".com Worker + D1",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:764"
+   ],
+   "notes": "Phones seal unlock replies to the STK this directory returns; no client-side pin on the owner path."
+  },
+  {
+   "id": "svc.boot-worker",
+   "kind": "admin-channel",
+   "label": "Boot service (/api/boot/*), runs inside the .com Worker",
+   "algorithms": [
+    "Ed25519 boot-auth headers"
+   ],
+   "location": ".com Worker (bootInProcess)",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "apps/com/src/route.ts:640",
+    "apps/com/src/bootInProcess.ts:1"
+   ]
+  },
+  {
+   "id": "key.ca-hot",
+   "kind": "key",
+   "label": "Hot operational CA (directory attestations, service blessings)",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": ".com Worker secret FLAGSHIP_CA_PRIV_HEX",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/control-plane/src/pubkeyCert.ts:274"
+   ],
+   "notes": "Falls back to a fixed 0xCA dev key when the secret is unset; the endorsement chain rejects that key."
+  },
+  {
+   "id": "key.maintainer",
+   "kind": "key",
+   "label": "Maintainer / release key (ca-track holder)",
+   "algorithms": [
+    "Ed25519 (YubiKey PIV)"
+   ],
+   "location": "YubiKey slot 9c",
+   "pq": "classical-only",
+   "owner": "unassigned (release/verification)",
+   "evidence": [
+    "scripts/endorse-release.mjs:35",
+    "release/box-artifact-trust.json:4"
+   ],
+   "notes": "Threshold 1. The same key anchors CA endorsement, git endorsements, box artifacts and security notices."
+  },
+  {
+   "id": "chan.admin-secret",
+   "kind": "admin-channel",
+   "label": ".com admin bearer (x-admin-secret) and other shared secrets",
+   "algorithms": [
+    "bearer secret"
+   ],
+   "location": ".com Worker secrets",
+   "pq": "symmetric",
+   "owner": "unassigned (release/verification)",
+   "evidence": [
+    "apps/com/src/prodReap.ts:637"
+   ]
+  },
+  {
+   "id": "key.dns-token",
+   "kind": "external-service",
+   "label": "Cloudflare DNS API token (zone-wide edit)",
+   "algorithms": [
+    "bearer token"
+   ],
+   "location": "dns-broker Worker secret",
+   "pq": "symmetric",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "apps/dns-broker/src/index.ts:12"
+   ]
+  },
+  {
+   "id": "svc.dns-broker",
+   "kind": "verifier",
+   "label": "DNS broker signature check (pubkeys fetched from .com lookups)",
+   "algorithms": [
+    "Ed25519 verify"
+   ],
+   "location": "apps/dns-broker",
+   "pq": "n/a",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "apps/dns-broker/src/policy.ts:31"
+   ]
+  },
+  {
+   "id": "key.account-read-token",
+   "kind": "key",
+   "label": "Account read token HMAC",
+   "algorithms": [
+    "HMAC-SHA256"
+   ],
+   "location": ".com Worker secret",
+   "pq": "symmetric",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/control-plane/src/accountReadToken.ts:12"
+   ]
+  },
+  {
+   "id": "key.push-device",
+   "kind": "key",
+   "label": "Per-device push X25519 key",
+   "algorithms": [
+    "X25519 ECIES"
+   ],
+   "location": "phone",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "packages/protocol/src/push.ts:34"
+   ]
+  },
+  {
+   "id": "svc.apns-fcm",
+   "kind": "external-service",
+   "label": "APNs / FCM / Web Push",
+   "algorithms": [
+    "ES256 JWT",
+    "RS256 JWT",
+    "VAPID ES256",
+    "P-256 ECDH (RFC 8291)"
+   ],
+   "location": "Apple / Google / browser vendors",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "packages/control-plane/src/pushBridge.ts:331",
+    "packages/control-plane/src/pushBridge.ts:396"
+   ],
+   "notes": "Content-free wakeups; metadata exposure only."
+  },
+  {
+   "id": "key.age-backup",
+   "kind": "key",
+   "label": "D1 backup recipient (age)",
+   "algorithms": [
+    "X25519 (age)"
+   ],
+   "location": "owner-held age identity; public half in .maintainers/",
+   "pq": "classical-only",
+   "owner": "unassigned (release/verification)",
+   "evidence": [
+    "scripts/d1-backup.sh:9"
+   ]
+  },
+  {
+   "id": "key.demo-irk-kek",
+   "kind": "key",
+   "label": "DEMO_IRK_KEK (derives demo accounts' UMK)",
+   "algorithms": [
+    "HKDF"
+   ],
+   "location": ".com Worker secret",
+   "pq": "symmetric",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/control-plane/src/demoIdentity.ts:36"
+   ],
+   "notes": "Compatibility-only: demo accounts are held by .com by design."
+  },
+  {
+   "id": "key.hub",
+   "kind": "key",
+   "label": "Relay hub key (.services)",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "Fly volume / memory",
+   "pq": "classical-only",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "apps/web/src/server.ts:465"
+   ]
+  },
+  {
+   "id": "chan.fly-tls",
+   "kind": "transport",
+   "label": "Box\u2194relay tunnel WSS on :8443",
+   "algorithms": [
+    "ECDHE",
+    "WebPKI certificate (Fly)"
+   ],
+   "location": "Fly edge",
+   "pq": "classical-only",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "fly.toml:54"
+   ]
+  },
+  {
+   "id": "ver.relay-trust",
+   "kind": "verifier",
+   "label": "Box-side relay blessing check",
+   "algorithms": [
+    "Ed25519 verify"
+   ],
+   "location": "server-daemon",
+   "pq": "n/a",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "packages/server-daemon/src/relayLockdown.ts:8"
+   ],
+   "notes": "Observe-only by default (FLAGSHIP_RELAY_TRUST_ENFORCE off)."
+  },
+  {
+   "id": "eff.relay-route",
+   "kind": "effect",
+   "label": "Relay accepts a tunnel and routes a box name to it",
+   "algorithms": [],
+   "location": "apps/web/src/tunnel",
+   "pq": "n/a",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "apps/web/src/tunnel/tunnelHub.ts:896"
+   ]
+  },
+  {
+   "id": "key.stk",
+   "kind": "key",
+   "label": "STK (box identity)",
+   "algorithms": [
+    "Ed25519",
+    "X25519 (birational map, as seal recipient)"
+   ],
+   "location": "flagship-keyd (/var/lib/flagship-keyd) AND plaintext /boot/identity.pem",
+   "pq": "classical-only",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/keyd/src/service.ts:102",
+    "packages/flagship-builder/src/userdata.ts:705"
+   ]
+  },
+  {
+   "id": "file.boot-identity-pem",
+   "kind": "storage-envelope",
+   "label": "/boot/identity.pem (plaintext STK seed on unencrypted /boot, copied into initramfs)",
+   "algorithms": [
+    "none (plaintext PKCS8)"
+   ],
+   "location": "box /boot partition",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/flagship-builder/src/userdata.ts:705",
+    "packages/flagship-builder/src/userdata.ts:1661",
+    "packages/server-daemon/src/index.ts:4636"
+   ],
+   "notes": "Not a cryptographic weakness: a physical-access one. Outside the classical-break model, recorded for the evidence map."
+  },
+  {
+   "id": "key.swk",
+   "kind": "key",
+   "label": "SWK (server workload key)",
+   "algorithms": [
+    "HKDF-SHA256",
+    "AES-256-GCM"
+   ],
+   "location": "keyd (also install-blob.json swkHex, re-persisted swk.hex)",
+   "pq": "symmetric",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/protocol/src/keys.ts:150",
+    "packages/server-daemon/src/index.ts:962"
+   ]
+  },
+  {
+   "id": "key.cgk",
+   "kind": "key",
+   "label": "CGK (cloud gossip key)",
+   "algorithms": [
+    "AES-256-GCM",
+    "HKDF-SHA256"
+   ],
+   "location": "keyd; gossip reads it raw",
+   "pq": "symmetric",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/protocol/src/cgkDelivery.ts:66",
+    "packages/server-daemon/src/gossip/index.ts:154"
+   ]
+  },
+  {
+   "id": "env.swk-delivery",
+   "kind": "storage-envelope",
+   "label": "SWK deposit (sealed to STK, IRK-signed carrier)",
+   "algorithms": [
+    "X25519 ECIES",
+    "Ed25519"
+   ],
+   "location": ".com deposit lane",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/swkDelivery.ts:64"
+   ]
+  },
+  {
+   "id": "env.cgk-delivery",
+   "kind": "storage-envelope",
+   "label": "CGK deposit (sealed to STK, IRK-signed carrier)",
+   "algorithms": [
+    "X25519 ECIES",
+    "Ed25519"
+   ],
+   "location": ".com deposit lane",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/cgkDelivery.ts:66"
+   ]
+  },
+  {
+   "id": "svc.keyd",
+   "kind": "executable",
+   "label": "flagship-keyd (TS)",
+   "algorithms": [
+    "Ed25519",
+    "X25519",
+    "P-256",
+    "HKDF",
+    "AES-GCM"
+   ],
+   "location": "box, user flagship-keyd",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/keyd/src/service.ts:102",
+    "packages/keyd/src/service.ts:111"
+   ],
+   "notes": "Generic unseal and unscoped derivations return root material to any client-group process."
+  },
+  {
+   "id": "exe.daemon",
+   "kind": "executable",
+   "label": "Box daemon code (Node, runs as root)",
+   "algorithms": [
+    "n/a"
+   ],
+   "location": "/opt/flagship release",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/server-daemon/src/index.ts:676",
+    "packages/flagship-builder/src/userdata.ts:761"
+   ]
+  },
+  {
+   "id": "art.box-artifact",
+   "kind": "artifact",
+   "label": "Signed box release artifact",
+   "algorithms": [
+    "Ed25519 k-of-n (k=1)",
+    "SHA-256"
+   ],
+   "location": "flagshipserver.com/build/iso",
+   "pq": "n/a",
+   "owner": "unassigned (release/verification)",
+   "evidence": [
+    "packages/protocol/src/boxArtifact.ts:151",
+    "installer/verify-box-artifact.sh:96"
+   ]
+  },
+  {
+   "id": "exe.unseal-helper",
+   "kind": "executable",
+   "label": "/boot/flagship-unseal + boot-stage.sh (initramfs)",
+   "algorithms": [
+    "X25519",
+    "HKDF",
+    "AES-GCM"
+   ],
+   "location": "unencrypted /boot, installed at install time only",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "installer/unseal-helper/internal/unseal/unseal.go:63",
+    "installer/boot-stage.sh:251"
+   ],
+   "notes": "No Secure Boot/UKI measurement covers it; replaceable with physical access."
+  },
+  {
+   "id": "key.tls-leaf",
+   "kind": "key",
+   "label": "Box TLS leaf key",
+   "algorithms": [
+    "ECDSA P-256"
+   ],
+   "location": "keyd",
+   "pq": "classical-only",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/keyd/src/tls.ts:94"
+   ]
+  },
+  {
+   "id": "key.acme-account",
+   "kind": "key",
+   "label": "ACME account key",
+   "algorithms": [
+    "ECDSA P-256 (ES256)"
+   ],
+   "location": "keyd",
+   "pq": "classical-only",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/keyd/src/acme.ts:32"
+   ]
+  },
+  {
+   "id": "svc.letsencrypt",
+   "kind": "external-service",
+   "label": "Let's Encrypt CA",
+   "algorithms": [
+    "RSA/ECDSA WebPKI"
+   ],
+   "location": "external",
+   "pq": "classical-only",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/keyd/src/acme.ts:32"
+   ],
+   "inferred": true
+  },
+  {
+   "id": "chan.box-tls",
+   "kind": "transport",
+   "label": "Native/browser\u2194box TLS (flagship-tlsd)",
+   "algorithms": [
+    "ECDHE X25519/P-256 (Go 1.22 defaults: no ML-KEM)",
+    "ECDSA P-256 certificate"
+   ],
+   "location": "box",
+   "pq": "classical-only",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "installer/tls-frontend/main.go:79",
+    "installer/tls-frontend/go.mod:3"
+   ],
+   "notes": "Go 1.22 language level keeps hybrid ML-KEM off by default (inferred from Go defaults)."
+  },
+  {
+   "id": "ver.native-pin",
+   "kind": "verifier",
+   "label": "Native cert pin (leaf SHA-256 from STK-signed daemon-status)",
+   "algorithms": [
+    "SHA-256",
+    "Ed25519 verify"
+   ],
+   "location": "iOS / Android",
+   "pq": "n/a",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/shared/Sources/FlagshipAPI/Client/BoxCertPinning.swift:201",
+    "packages/protocol/src/daemonStatus.ts:37"
+   ]
+  },
+  {
+   "id": "exe.webapp",
+   "kind": "executable",
+   "label": "Webapp JS served from webapp.flagshipserver.com",
+   "algorithms": [
+    "n/a"
+   ],
+   "location": "Cloudflare static Worker",
+   "pq": "n/a",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/web/public/webapp/lib/bootApproval.js:84"
+   ],
+   "notes": "Holds the UMK in the browser and derives the IRK."
+  },
+  {
+   "id": "exe.mobile-app",
+   "kind": "executable",
+   "label": "iOS / Android app binaries",
+   "algorithms": [
+    "platform code signing (classical)"
+   ],
+   "location": "App Store / Play",
+   "pq": "n/a",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:227"
+   ],
+   "inferred": true
+  },
+  {
+   "id": "svc.app-stores",
+   "kind": "external-service",
+   "label": "Apple / Google app distribution and OS update signing",
+   "algorithms": [
+    "vendor classical signatures"
+   ],
+   "location": "Apple / Google",
+   "pq": "classical-only",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:227"
+   ],
+   "inferred": true
+  },
+  {
+   "id": "key.publisher",
+   "kind": "key",
+   "label": "App publisher key",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "creator's pod (its STK)",
+   "pq": "classical-only",
+   "owner": "unassigned (runtime/build)",
+   "evidence": [
+    "packages/protocol/src/appRelease.ts:18",
+    "packages/server-daemon/src/index.ts:2292"
+   ]
+  },
+  {
+   "id": "key.adapter-pipeline",
+   "kind": "key",
+   "label": "Adapter attestation pipeline key",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "offline / not wired",
+   "pq": "classical-only",
+   "owner": "unassigned (runtime/build)",
+   "evidence": [
+    "packages/protocol/src/adapterAttestation.ts:58"
+   ],
+   "inferred": true
+  },
+  {
+   "id": "art.oci-image",
+   "kind": "artifact",
+   "label": "Runtime base images",
+   "algorithms": [
+    "SHA-256 digest pin"
+   ],
+   "location": "docker.io registries",
+   "pq": "n/a",
+   "owner": "unassigned (runtime/build)",
+   "evidence": [
+    "packages/server-daemon/src/runtimes/catalog.ts:25"
+   ]
+  },
+  {
+   "id": "key.debug-ssh",
+   "kind": "key",
+   "label": "Owner debug SSH key",
+   "algorithms": [
+    "ssh-ed25519",
+    "ecdsa",
+    "ssh-rsa"
+   ],
+   "location": "owner's machine",
+   "pq": "classical-only",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/protocol/src/debugAccess.ts:53"
+   ]
+  },
+  {
+   "id": "key.backup-passcode",
+   "kind": "key",
+   "label": "Backup passcode slot",
+   "algorithms": [
+    "Argon2id",
+    "AES-256-GCM"
+   ],
+   "location": "owner",
+   "pq": "symmetric",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/serverBackup.ts:54"
+   ]
+  },
+  {
+   "id": "key.archive-kek",
+   "kind": "key",
+   "label": "Server archive keys (account slot / KEK pool)",
+   "algorithms": [
+    "HKDF(UMK)",
+    "AES-256-GCM"
+   ],
+   "location": "phone mints; box holds pool plaintext",
+   "pq": "symmetric",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/keys.ts:141",
+    "packages/protocol/src/archiveKeys.ts:57"
+   ]
+  },
+  {
+   "id": "key.pbk",
+   "kind": "key",
+   "label": "Peer-backup key (PBK)",
+   "algorithms": [
+    "HKDF(SWK)",
+    "AES-256-CTR/GCM"
+   ],
+   "location": "daemon memory",
+   "pq": "symmetric",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/peerBackupNet.ts:87"
+   ]
+  },
+  {
+   "id": "env.server-archive-keys",
+   "kind": "storage-envelope",
+   "label": "Archive key batch order (flagship/server-archive-keys/v1)",
+   "algorithms": [
+    "Ed25519"
+   ],
+   "location": "app \u2192 box",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/archiveKeys.ts:57"
+   ],
+   "notes": "Signature authorizes; KEKs travel inside the box TLS channel."
+  },
+  {
+   "id": "env.luks-deposit",
+   "kind": "storage-envelope",
+   "label": "Install-time LUKS key deposit (sealed to IRK)",
+   "algorithms": [
+    "X25519 ECIES (Ed25519\u2192X25519)",
+    "HKDF-SHA256",
+    "AES-256-GCM"
+   ],
+   "location": ".com D1 sealed_luks_keys; GET is public",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/flagship-builder/src/userdata.ts:1551",
+    "packages/control-plane/src/luksKeys.ts:112"
+   ],
+   "notes": "Public ciphertext: the first harvest-now-decrypt-later target."
+  },
+  {
+   "id": "env.unlock-response",
+   "kind": "storage-envelope",
+   "label": "Phone\u2192box unlock response (sealed to directory STK)",
+   "algorithms": [
+    "X25519 ECIES",
+    "HKDF-SHA256",
+    "AES-256-GCM"
+   ],
+   "location": "boot mailbox rows",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/phoneEndpoint.ts:68",
+    "packages/boot-core/src/routes.ts:631"
+   ]
+  },
+  {
+   "id": "env.auto-unlock-lease",
+   "kind": "storage-envelope",
+   "label": "Auto-unlock lease v2 (key sealed to STK, IRK-signed)",
+   "algorithms": [
+    "X25519 ECIES",
+    "Ed25519"
+   ],
+   "location": "boot lease rows",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/phoneEndpoint.ts:69",
+    "packages/boot-core/src/routes.ts:169"
+   ]
+  },
+  {
+   "id": "env.share-unlock",
+   "kind": "storage-envelope",
+   "label": "Share boot copy (disk key sealed to member key)",
+   "algorithms": [
+    "X25519 ECIES",
+    "Ed25519 share-unlock signature"
+   ],
+   "location": ".com server_shares",
+   "pq": "classical-only",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "apps/web/public/webapp/lib/serverShares.js:435",
+    "packages/protocol/src/serverShare.ts:27"
+   ]
+  },
+  {
+   "id": "env.appliance-factory-key",
+   "kind": "storage-envelope",
+   "label": "VM appliance LUKS volume key (shared per published image)",
+   "algorithms": [
+    "LUKS2 (factory passphrase is a public constant)"
+   ],
+   "location": "published appliance image (R2)",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/flagship-builder/src/appliance.ts:16",
+    "packages/flagship-builder/src/applianceFactory.ts:152"
+   ],
+   "notes": "Slot rotation does not change the volume key; no reencrypt in repo. Not a classical-crypto issue; listed for completeness."
+  },
+  {
+   "id": "env.d1-backup",
+   "kind": "storage-envelope",
+   "label": "Encrypted D1 backups",
+   "algorithms": [
+    "age (X25519)"
+   ],
+   "location": "R2 flagship-d1-backups",
+   "pq": "classical-only",
+   "owner": "unassigned (release/verification)",
+   "evidence": [
+    "scripts/d1-backup.sh:9"
+   ]
+  },
+  {
+   "id": "ver.boot-gate",
+   "kind": "verifier",
+   "label": "Boot service identity gate",
+   "algorithms": [
+    "Ed25519 verify"
+   ],
+   "location": "packages/boot-core",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/boot-core/src/gate.ts:214"
+   ]
+  },
+  {
+   "id": "data.disk-key",
+   "kind": "data",
+   "label": "Box LUKS disk key",
+   "algorithms": [],
+   "location": "box RAM at boot",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "installer/boot-stage.sh:443"
+   ]
+  },
+  {
+   "id": "data.disk-plaintext",
+   "kind": "data",
+   "label": "Box disk contents (apps, data, secrets at rest)",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "installer/boot-stage.sh:443"
+   ]
+  },
+  {
+   "id": "data.account-root",
+   "kind": "data",
+   "label": "Account root (UMK) confidentiality",
+   "algorithms": [],
+   "location": "phone",
+   "pq": "n/a",
+   "owner": "unassigned (native/web)",
+   "evidence": [
+    "packages/protocol/src/keys.ts:19"
+   ]
+  },
+  {
+   "id": "data.app-secrets",
+   "kind": "data",
+   "label": "SWK-sealed box secrets (app env, API keys, provider credentials)",
+   "algorithms": [],
+   "location": "box data dir",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/server-daemon/src/serviceEnvStore.ts:141"
+   ]
+  },
+  {
+   "id": "data.box-session",
+   "kind": "data",
+   "label": "Native\u2194box session traffic (admin and app data)",
+   "algorithms": [],
+   "location": "in transit",
+   "pq": "n/a",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "installer/tls-frontend/main.go:79"
+   ]
+  },
+  {
+   "id": "data.backups",
+   "kind": "data",
+   "label": "Server backups and peer-backup bricks",
+   "algorithms": [],
+   "location": "owner files / peers / .com",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/serverBackup.ts:54"
+   ]
+  },
+  {
+   "id": "data.com-db",
+   "kind": "data",
+   "label": "Account directory and metadata (D1)",
+   "algorithms": [],
+   "location": ".com",
+   "pq": "n/a",
+   "owner": "unassigned (release/verification)",
+   "evidence": [
+    "scripts/d1-backup.sh:9"
+   ]
+  },
+  {
+   "id": "eff.box-code",
+   "kind": "effect",
+   "label": "Arbitrary code runs as root on the box",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (release/verification)",
+   "evidence": [
+    "packages/server-daemon/src/artifactUpdate.ts:135"
+   ]
+  },
+  {
+   "id": "eff.owner-update",
+   "kind": "effect",
+   "label": "Owner-ordered update applies",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (release/verification)",
+   "evidence": [
+    "packages/server-daemon/src/updateConsumer.ts:438"
+   ],
+   "gate": "all"
+  },
+  {
+   "id": "eff.device-enroll",
+   "kind": "effect",
+   "label": "A new device is admitted to the account",
+   "algorithms": [],
+   "location": ".com + clients",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/deviceCapability.ts:71"
+   ]
+  },
+  {
+   "id": "eff.recovery",
+   "kind": "effect",
+   "label": "Account recovery / re-pair completes",
+   "algorithms": [],
+   "location": ".com + box",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/recovery.ts:15"
+   ]
+  },
+  {
+   "id": "eff.app-access",
+   "kind": "effect",
+   "label": "App access/rank change or share grant",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/serverShare.ts:27"
+   ]
+  },
+  {
+   "id": "eff.debug-root",
+   "kind": "effect",
+   "label": "Debug SSH with passwordless sudo on the box",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/server-daemon/src/debugAccessGate.ts:123"
+   ]
+  },
+  {
+   "id": "eff.routing",
+   "kind": "effect",
+   "label": "A box name's traffic is routed to a chosen tunnel",
+   "algorithms": [],
+   "location": ".com + relay",
+   "pq": "n/a",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "packages/control-plane/src/routing.ts:138"
+   ]
+  },
+  {
+   "id": "eff.lock-clear",
+   "kind": "effect",
+   "label": "Boot suspension cleared / lease deposited",
+   "algorithms": [],
+   "location": "boot service",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/bootSuspension.ts:25"
+   ]
+  },
+  {
+   "id": "eff.dns",
+   "kind": "effect",
+   "label": "DNS record change in flagship.services",
+   "algorithms": [],
+   "location": "Cloudflare",
+   "pq": "n/a",
+   "owner": "unassigned (networking)",
+   "evidence": [
+    "apps/dns-broker/src/index.ts:12"
+   ]
+  },
+  {
+   "id": "eff.app-install",
+   "kind": "effect",
+   "label": "An app release is admitted on a subscriber box",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (runtime/build)",
+   "evidence": [
+    "packages/server-daemon/src/publisherPins.ts:1"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": "key.ios-se-wrap",
+   "to": "key.umk",
+   "type": "unwraps",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:1618"
+   ]
+  },
+  {
+   "from": "store.icloud-keychain",
+   "to": "key.ios-se-wrap",
+   "type": "replaces",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:1192"
+   ],
+   "notes": "Synced wrapped blob is what an attacker needs before the SE wrap matters.",
+   "inferred": true
+  },
+  {
+   "from": "store.android-blockstore",
+   "to": "key.umk",
+   "type": "unwraps",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/BlockStoreUmkStore.kt:1"
+   ],
+   "inferred": true
+  },
+  {
+   "from": "key.android-keystore",
+   "to": "key.umk",
+   "type": "unwraps",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/Keystore.kt:17"
+   ]
+  },
+  {
+   "from": "env.device-pairing",
+   "to": "key.umk",
+   "type": "unwraps",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DevicePairing.kt:117"
+   ]
+  },
+  {
+   "from": "exe.webapp",
+   "to": "key.umk",
+   "type": "unwraps",
+   "evidence": [
+    "apps/web/public/webapp/lib/bootApproval.js:84"
+   ],
+   "notes": "Replaced webapp code reads the UMK in the browser."
+  },
+  {
+   "from": "chan.com-webpki",
+   "to": "exe.webapp",
+   "type": "executes",
+   "evidence": [
+    "apps/web/public/webapp/lib/bootApproval.js:84"
+   ],
+   "notes": "Code delivery is authenticated only by WebPKI.",
+   "inferred": true
+  },
+  {
+   "from": "svc.app-stores",
+   "to": "exe.mobile-app",
+   "type": "executes",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:227"
+   ],
+   "inferred": true
+  },
+  {
+   "from": "exe.mobile-app",
+   "to": "key.umk",
+   "type": "unwraps",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:227"
+   ],
+   "inferred": true
+  },
+  {
+   "from": "key.keyfile",
+   "to": "key.umk",
+   "type": "recovers",
+   "evidence": [
+    "packages/protocol/src/keyfile.ts:36"
+   ]
+  },
+  {
+   "from": "key.recovery-passphrase",
+   "to": "env.recovery-escrow",
+   "type": "unwraps",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/RecoveryDerivation.kt:7"
+   ],
+   "group": "pass"
+  },
+  {
+   "from": "key.passkey-prf",
+   "to": "env.recovery-escrow",
+   "type": "unwraps",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AdminRootEscrow.kt:6"
+   ],
+   "group": "prf"
+  },
+  {
+   "from": "store.passkey-sync",
+   "to": "key.passkey-prf",
+   "type": "unwraps",
+   "evidence": [
+    "packages/control-plane/src/recoveryProof.ts:20"
+   ],
+   "inferred": true
+  },
+  {
+   "from": "env.recovery-escrow",
+   "to": "key.umk",
+   "type": "recovers",
+   "evidence": [
+    "apps/web/public/recovery/recoveryWrap.js:28"
+   ]
+  },
+  {
+   "from": "env.recovery-escrow",
+   "to": "key.admin-root",
+   "type": "recovers",
+   "evidence": [
+    "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AdminRootEscrow.kt:6"
+   ]
+  },
+  {
+   "from": "key.umk",
+   "to": "key.irk",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/keys.ts:39"
+   ],
+   "notes": "derives"
+  },
+  {
+   "from": "key.umk",
+   "to": "key.bak",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/keys.ts:146"
+   ]
+  },
+  {
+   "from": "key.umk",
+   "to": "key.swk",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/keys.ts:150"
+   ],
+   "notes": "derives"
+  },
+  {
+   "from": "key.umk",
+   "to": "key.app-aid",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/keys.ts:102"
+   ]
+  },
+  {
+   "from": "key.umk",
+   "to": "key.household",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/keys.ts:129"
+   ]
+  },
+  {
+   "from": "key.umk",
+   "to": "key.archive-kek",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/keys.ts:141"
+   ]
+  },
+  {
+   "from": "key.umk",
+   "to": "key.share-member",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/serverShare.ts:69"
+   ]
+  },
+  {
+   "from": "key.umk",
+   "to": "data.account-root",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/keys.ts:19"
+   ]
+  },
+  {
+   "from": "key.ios-se-wrap",
+   "to": "key.admin-root",
+   "type": "unwraps",
+   "evidence": [
+    "apps/mobile/ios/Sources/Flagship/Keystore.swift:743"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "env.luks-deposit",
+   "type": "unwraps",
+   "evidence": [
+    "packages/flagship-builder/src/userdata.ts:1551"
+   ]
+  },
+  {
+   "from": "env.luks-deposit",
+   "to": "data.disk-key",
+   "type": "unwraps",
+   "evidence": [
+    "packages/control-plane/src/luksKeys.ts:112"
+   ]
+  },
+  {
+   "from": "key.stk",
+   "to": "env.unlock-response",
+   "type": "unwraps",
+   "evidence": [
+    "installer/unseal-helper/internal/unseal/unseal.go:63"
+   ]
+  },
+  {
+   "from": "env.unlock-response",
+   "to": "data.disk-key",
+   "type": "unwraps",
+   "evidence": [
+    "installer/boot-stage.sh:443"
+   ]
+  },
+  {
+   "from": "key.stk",
+   "to": "env.auto-unlock-lease",
+   "type": "unwraps",
+   "evidence": [
+    "installer/boot-stage.sh:251"
+   ]
+  },
+  {
+   "from": "env.auto-unlock-lease",
+   "to": "data.disk-key",
+   "type": "unwraps",
+   "evidence": [
+    "installer/boot-stage.sh:443"
+   ]
+  },
+  {
+   "from": "svc.com-directory",
+   "to": "env.unlock-response",
+   "type": "replaces",
+   "evidence": [
+    "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:764"
+   ],
+   "notes": "Phone seals the reply to whatever STK the directory names."
+  },
+  {
+   "from": "chan.com-webpki",
+   "to": "svc.com-directory",
+   "type": "replaces",
+   "evidence": [
+    "apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift:764"
+   ],
+   "inferred": true
+  },
+  {
+   "from": "key.share-member",
+   "to": "env.share-unlock",
+   "type": "unwraps",
+   "evidence": [
+    "apps/web/public/webapp/lib/serverShares.js:435"
+   ]
+  },
+  {
+   "from": "env.share-unlock",
+   "to": "data.disk-key",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/serverShare.ts:27"
+   ]
+  },
+  {
+   "from": "data.disk-key",
+   "to": "data.disk-plaintext",
+   "type": "unwraps",
+   "evidence": [
+    "installer/boot-stage.sh:443"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "eff.lock-clear",
+   "type": "authorizes",
+   "evidence": [
+    "packages/boot-core/src/routes.ts:169"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "ver.boot-gate",
+   "type": "authorizes",
+   "evidence": [
+    "packages/boot-core/src/gate.ts:214"
+   ]
+  },
+  {
+   "from": "key.watch-delegate",
+   "to": "ver.boot-gate",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/watchDelegate.ts:67"
+   ]
+  },
+  {
+   "from": "ver.boot-gate",
+   "to": "eff.lock-clear",
+   "type": "authorizes",
+   "evidence": [
+    "packages/boot-core/src/routes.ts:169"
+   ]
+  },
+  {
+   "from": "key.demo-irk-kek",
+   "to": "key.irk",
+   "type": "unwraps",
+   "evidence": [
+    "packages/control-plane/src/demoIdentity.ts:36"
+   ],
+   "notes": "Demo accounts only.",
+   "profile": "compatibility"
+  },
+  {
+   "from": "key.stk",
+   "to": "env.swk-delivery",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/swkDelivery.ts:64"
+   ]
+  },
+  {
+   "from": "env.swk-delivery",
+   "to": "key.swk",
+   "type": "unwraps",
+   "evidence": [
+    "packages/server-daemon/src/swkDepositConsumer.ts:72"
+   ]
+  },
+  {
+   "from": "key.stk",
+   "to": "env.cgk-delivery",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/cgkDelivery.ts:66"
+   ]
+  },
+  {
+   "from": "env.cgk-delivery",
+   "to": "key.cgk",
+   "type": "unwraps",
+   "evidence": [
+    "packages/server-daemon/src/cgkDepositConsumer.ts:62"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "env.swk-delivery",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/swkDelivery.ts:64"
+   ]
+  },
+  {
+   "from": "key.swk",
+   "to": "data.app-secrets",
+   "type": "unwraps",
+   "evidence": [
+    "packages/server-daemon/src/serviceEnvStore.ts:141"
+   ]
+  },
+  {
+   "from": "key.swk",
+   "to": "key.pbk",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/peerBackupNet.ts:87"
+   ]
+  },
+  {
+   "from": "key.pbk",
+   "to": "data.backups",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/peerBackupNet.ts:87"
+   ]
+  },
+  {
+   "from": "key.archive-kek",
+   "to": "data.backups",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/archiveKeys.ts:57"
+   ]
+  },
+  {
+   "from": "key.backup-passcode",
+   "to": "data.backups",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/serverBackup.ts:54"
+   ]
+  },
+  {
+   "from": "key.age-backup",
+   "to": "env.d1-backup",
+   "type": "unwraps",
+   "evidence": [
+    "scripts/d1-backup.sh:9"
+   ]
+  },
+  {
+   "from": "env.d1-backup",
+   "to": "data.com-db",
+   "type": "unwraps",
+   "evidence": [
+    "scripts/d1-backup.sh:9"
+   ]
+  },
+  {
+   "from": "svc.keyd",
+   "to": "key.swk",
+   "type": "unwraps",
+   "evidence": [
+    "packages/keyd/src/service.ts:111"
+   ],
+   "notes": "swk.hkdf returns subkeys to any client-group caller."
+  },
+  {
+   "from": "exe.daemon",
+   "to": "svc.keyd",
+   "type": "executes",
+   "evidence": [
+    "packages/keyd/src/server.ts:127"
+   ],
+   "notes": "No peer-credential authorization; any client-group process may call every op."
+  },
+  {
+   "from": "exe.daemon",
+   "to": "data.disk-plaintext",
+   "type": "unwraps",
+   "evidence": [
+    "packages/server-daemon/src/index.ts:676"
+   ],
+   "notes": "Runs as root on the unlocked box."
+  },
+  {
+   "from": "exe.daemon",
+   "to": "eff.box-code",
+   "type": "executes",
+   "evidence": [
+    "packages/server-daemon/src/artifactUpdate.ts:135"
+   ]
+  },
+  {
+   "from": "key.maintainer",
+   "to": "art.box-artifact",
+   "type": "authorizes",
+   "evidence": [
+    "installer/verify-box-artifact.sh:96",
+    "release/box-artifact-trust.json:4"
+   ]
+  },
+  {
+   "from": "art.box-artifact",
+   "to": "exe.daemon",
+   "type": "executes",
+   "evidence": [
+    "packages/server-daemon/src/artifactUpdate.ts:135"
+   ],
+   "notes": "First-boot update needs only the release signature."
+  },
+  {
+   "from": "key.maintainer",
+   "to": "eff.owner-update",
+   "type": "authorizes",
+   "evidence": [
+    "installer/verify-box-artifact.sh:96"
+   ],
+   "group": "release"
+  },
+  {
+   "from": "key.admin-root",
+   "to": "eff.owner-update",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/updateConsumer.ts:438"
+   ],
+   "group": "owner"
+  },
+  {
+   "from": "key.irk",
+   "to": "eff.owner-update",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/updateConsumer.ts:438"
+   ],
+   "notes": "IRK when no admin root is pinned.",
+   "group": "owner"
+  },
+  {
+   "from": "eff.owner-update",
+   "to": "eff.box-code",
+   "type": "executes",
+   "evidence": [
+    "packages/server-daemon/src/artifactUpdate.ts:135"
+   ]
+  },
+  {
+   "from": "key.maintainer",
+   "to": "key.ca-hot",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/maintainerCa.ts:69"
+   ],
+   "notes": "CA endorsement lease."
+  },
+  {
+   "from": "key.admin-root",
+   "to": "eff.device-enroll",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/deviceCapability.ts:71"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "eff.device-enroll",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/deviceCapability.ts:71"
+   ]
+  },
+  {
+   "from": "key.device-grant",
+   "to": "eff.app-access",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/deviceCapability.ts:71"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "eff.recovery",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/recovery.ts:15"
+   ]
+  },
+  {
+   "from": "key.admin-root",
+   "to": "eff.recovery",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/recovery.ts:15"
+   ],
+   "notes": "veto"
+  },
+  {
+   "from": "key.irk",
+   "to": "eff.app-access",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/serverShare.ts:27"
+   ]
+  },
+  {
+   "from": "key.admin-root",
+   "to": "eff.app-access",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/serverShare.ts:27"
+   ]
+  },
+  {
+   "from": "key.ca-hot",
+   "to": "eff.app-access",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/serverShare.ts:27"
+   ],
+   "notes": "account-key attestation for share accept",
+   "inferred": true
+  },
+  {
+   "from": "key.admin-root",
+   "to": "eff.debug-root",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/debugAccess.ts:53"
+   ]
+  },
+  {
+   "from": "key.debug-ssh",
+   "to": "eff.debug-root",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/debugAccessGate.ts:123"
+   ]
+  },
+  {
+   "from": "eff.debug-root",
+   "to": "eff.box-code",
+   "type": "executes",
+   "evidence": [
+    "packages/server-daemon/src/debugAccessGate.ts:123"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "key.rck",
+   "type": "authorizes",
+   "evidence": [
+    "packages/control-plane/src/routing.ts:138"
+   ]
+  },
+  {
+   "from": "key.rck",
+   "to": "eff.routing",
+   "type": "authorizes",
+   "evidence": [
+    "packages/control-plane/src/routing.ts:138"
+   ]
+  },
+  {
+   "from": "key.stk",
+   "to": "eff.relay-route",
+   "type": "authorizes",
+   "evidence": [
+    "apps/web/src/tunnel/tunnelHub.ts:896"
+   ]
+  },
+  {
+   "from": "chan.fly-tls",
+   "to": "eff.relay-route",
+   "type": "downgrades",
+   "evidence": [
+    "fly.toml:54"
+   ],
+   "notes": "Box does not pin the hub TLS; relay blessing is observe-only.",
+   "inferred": true
+  },
+  {
+   "from": "key.hub",
+   "to": "ver.relay-trust",
+   "type": "authorizes",
+   "evidence": [
+    "apps/web/src/server.ts:465"
+   ]
+  },
+  {
+   "from": "key.ca-hot",
+   "to": "ver.relay-trust",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/serviceBlessing.ts:34"
+   ]
+  },
+  {
+   "from": "eff.relay-route",
+   "to": "eff.routing",
+   "type": "authorizes",
+   "evidence": [
+    "apps/web/src/tunnel/tunnelHub.ts:896"
+   ]
+  },
+  {
+   "from": "svc.com-directory",
+   "to": "svc.dns-broker",
+   "type": "authorizes",
+   "evidence": [
+    "apps/dns-broker/src/policy.ts:31"
+   ],
+   "notes": "Broker trusts pubkeys from .com lookups."
+  },
+  {
+   "from": "chan.com-webpki",
+   "to": "svc.dns-broker",
+   "type": "replaces",
+   "evidence": [
+    "apps/dns-broker/src/policy.ts:31"
+   ],
+   "inferred": true
+  },
+  {
+   "from": "svc.dns-broker",
+   "to": "eff.dns",
+   "type": "authorizes",
+   "evidence": [
+    "apps/dns-broker/src/index.ts:12"
+   ]
+  },
+  {
+   "from": "key.dns-token",
+   "to": "eff.dns",
+   "type": "authorizes",
+   "evidence": [
+    "apps/dns-broker/src/index.ts:12"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "svc.dns-broker",
+   "type": "authorizes",
+   "evidence": [
+    "apps/dns-broker/src/index.ts:12"
+   ]
+  },
+  {
+   "from": "key.stk",
+   "to": "svc.dns-broker",
+   "type": "authorizes",
+   "evidence": [
+    "apps/dns-broker/src/index.ts:12"
+   ]
+  },
+  {
+   "from": "key.publisher",
+   "to": "eff.app-install",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/appRelease.ts:18"
+   ]
+  },
+  {
+   "from": "art.oci-image",
+   "to": "eff.app-install",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/runtimes/catalog.ts:25"
+   ],
+   "notes": "Digest pin in a release-signed catalog."
+  },
+  {
+   "from": "key.maintainer",
+   "to": "art.oci-image",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/runtimes/catalog.ts:25"
+   ],
+   "notes": "Catalog digests ship inside the signed box artifact.",
+   "inferred": true
+  },
+  {
+   "from": "key.adapter-pipeline",
+   "to": "eff.app-install",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/adapterAttestation.ts:58"
+   ],
+   "inferred": true
+  },
+  {
+   "from": "key.tls-leaf",
+   "to": "chan.box-tls",
+   "type": "authorizes",
+   "evidence": [
+    "packages/keyd/src/tls.ts:94"
+   ]
+  },
+  {
+   "from": "svc.letsencrypt",
+   "to": "chan.box-tls",
+   "type": "authorizes",
+   "evidence": [
+    "packages/keyd/src/acme.ts:32"
+   ],
+   "notes": "Browsers trust any LE-issued cert; natives add the pin.",
+   "inferred": true
+  },
+  {
+   "from": "key.stk",
+   "to": "ver.native-pin",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/daemonStatus.ts:37"
+   ]
+  },
+  {
+   "from": "ver.native-pin",
+   "to": "chan.box-tls",
+   "type": "authorizes",
+   "evidence": [
+    "apps/mobile/shared/Sources/FlagshipAPI/Client/BoxCertPinning.swift:201"
+   ]
+  },
+  {
+   "from": "chan.box-tls",
+   "to": "data.box-session",
+   "type": "unwraps",
+   "evidence": [
+    "installer/tls-frontend/main.go:79"
+   ]
+  },
+  {
+   "from": "key.acme-account",
+   "to": "key.tls-leaf",
+   "type": "authorizes",
+   "evidence": [
+    "packages/keyd/src/acme.ts:32"
+   ]
+  },
+  {
+   "from": "key.push-device",
+   "to": "svc.apns-fcm",
+   "type": "unwraps",
+   "evidence": [
+    "packages/protocol/src/push.ts:34"
+   ],
+   "notes": "Relayed payloads are content-free; metadata only."
+  },
+  {
+   "from": "key.account-read-token",
+   "to": "data.com-db",
+   "type": "unwraps",
+   "evidence": [
+    "packages/control-plane/src/accountReadToken.ts:12"
+   ]
+  },
+  {
+   "from": "chan.admin-secret",
+   "to": "data.com-db",
+   "type": "authorizes",
+   "evidence": [
+    "apps/com/src/prodReap.ts:637"
+   ]
+  },
+  {
+   "from": "env.builder-pairing",
+   "to": "key.irk",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/builderPairing.ts:136"
+   ],
+   "notes": "Studio pairing transfers signing authority for recipes; SAS is the only MITM check.",
+   "inferred": true
+  }
+ ],
+ "targets": [
+  {
+   "node": "data.disk-plaintext",
+   "claim": "confidentiality",
+   "profile": "strict"
+  },
+  {
+   "node": "data.disk-key",
+   "claim": "confidentiality",
+   "profile": "strict"
+  },
+  {
+   "node": "data.account-root",
+   "claim": "confidentiality",
+   "profile": "strict"
+  },
+  {
+   "node": "data.app-secrets",
+   "claim": "confidentiality",
+   "profile": "strict"
+  },
+  {
+   "node": "data.box-session",
+   "claim": "confidentiality",
+   "profile": "strict"
+  },
+  {
+   "node": "data.backups",
+   "claim": "confidentiality",
+   "profile": "strict"
+  },
+  {
+   "node": "data.com-db",
+   "claim": "confidentiality",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.box-code",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.device-enroll",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.recovery",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.app-access",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.debug-root",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.routing",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.lock-clear",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.dns",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.app-install",
+   "claim": "authorization",
+   "profile": "strict"
+  }
+ ]
+}
