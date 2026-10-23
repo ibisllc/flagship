@@ -315,6 +315,7 @@ import { AccessJournal } from "./accessJournal.js";
 import { buildAccessSync, deriveAccessSyncKey, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers } from "./accessPeers.js";
 import { BoxReadToken } from "./boxReadToken.js";
+import { warnIfSharedApplianceDiskKey } from "./applianceDiskKey.js";
 
 /**
  * The `.com` doorbell (doorbell.ts): created once the box knows its account and
@@ -746,6 +747,10 @@ async function main(): Promise<void> {
   onCorruptState((r) =>
     activityLog.note("server.state.corrupt", `${basename(r.path)} couldn't be read and was set aside. ${r.effect}`, { ok: false }),
   );
+  void warnIfSharedApplianceDiskKey({
+    warnedMarkerPath: `${dataDir}/appliance-disk-key-warning.json`,
+    note: (kind, detail) => activityLog.note(kind, detail, { ok: false }),
+  }).catch((e: Error) => console.warn(`[disk-key] check failed: ${e.message}`));
   // The owner-assigned front page (its own route below, and server backups).
   const frontPage = new FrontPageStore();
   await frontPage.load();
