@@ -109,6 +109,7 @@ import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
 
 /** Either custodian: the keys in this process, or in flagship-keyd. */
+import { AuthorityHub, GrantIndex, OperationLedger, TokenFamily } from "./authority/index.js";
 type KeyCustodianLike = KeyCustodian | KeydCustodian;
 import { IdentityInjector } from "./identityInjector.js";
 import {
@@ -566,6 +567,32 @@ export async function swkHexFromInstallBlob(trust: {
   } catch {
     return null;
   }
+}
+
+const AUTHORITY_ROOT = "owner-root:account";
+
+/**
+ * Open the authority state. The root grant stands for the account's own authority: everything
+ * derived from a paired device hangs below it, so a recovery or rotation can lift it all at once.
+ */
+async function openAuthorityHub(dir: string): Promise<AuthorityHub> {
+  const grants = new GrantIndex(join(dir, "grants.json"));
+  await grants.load();
+  if (!grants.get(AUTHORITY_ROOT) && !grants.unavailable) {
+    await grants.issue({
+      id: AUTHORITY_ROOT, kind: "owner-session", issuer: "account", subject: "account", accountGeneration: 1,
+      audience: "box", capability: "owner", policyRevision: 1, issuedAt: Date.now(),
+    });
+  }
+  const ledger = new OperationLedger(join(dir, "operations.json"), {
+    grantsLive: (ids, at) => ids.every((i) => grants.isLive(i, at)),
+    currentRevision: () => 0,
+    verifyApproval: () => false,
+  });
+  await ledger.load();
+  const recovered = await ledger.recover().catch(() => ({ unknown: [], expired: [] }));
+  if (recovered.unknown.length) console.warn(`[authority] ${recovered.unknown.length} operation(s) were interrupted; their outcome is unknown until reconciled`);
+  return new AuthorityHub(grants, ledger);
 }
 
 /** Persist the SWK hex to /var/flagship/swk.hex (mode 0600). A deposit claim
@@ -1106,6 +1133,15 @@ async function main(): Promise<void> {
   // ---- Paired-session store (phone-paired browser bearer tokens) ----
   const pairedSessions = new FilePairedSessionStore(defaultPairedSessionPath(dataDir));
   await pairedSessions.load();
+  // ---- Authority index (N05): grants, operations and revocation of derived authority ----
+  // Kept in the state directory beside the keys, never under data/, so restoring an app's data
+  // cannot bring a revoked session back.
+  const authorityHub = await openAuthorityHub(join(dataDir, "authority"));
+  {
+    const owner = new TokenFamily(authorityHub, "owner-session", "account");
+    const companion = new TokenFamily(authorityHub, "companion-session", "account");
+    await pairedSessions.attachAuthority({ owner, companion, parentOf: () => [AUTHORITY_ROOT] });
+  }
   // SEC-AUTH-001: companion tokens issued before the owner-only build gate
   // could build and deploy; end them once, on the first boot of this code.
   {
@@ -1554,6 +1590,10 @@ async function main(): Promise<void> {
       updateServer,
     });
     servicePlatformRefForServer.current = runtime.servicePlatform;
+    await runtime.appApiKeyStore.attachAuthority({
+      family: new TokenFamily(authorityHub, "app-api-key", "account"),
+      parentOf: () => [AUTHORITY_ROOT],
+    });
     // Self-update boot health-gate: startDaemonRuntime resolves only after the
     // supervised tunnel's first HELLO_ACK — the first of the two health signals.
     selfUpdateHealth.markTunnelUp();
@@ -1671,6 +1711,7 @@ async function main(): Promise<void> {
       identityKeypair,
       custodian,
       pairedSessions,
+      authorityHub,
       browserBundle,
       alertInbox,
       backupLoop,
@@ -2475,6 +2516,7 @@ async function wireRuntimeSurfaces(deps: {
   identityKeypair: Keypair;
   custodian: KeyCustodianLike;
   pairedSessions: FilePairedSessionStore;
+  authorityHub: AuthorityHub;
   browserBundle: BrowserBundle | null;
   alertInbox: InMemoryAlertInbox;
   backupLoop: BackupLoop | null;
@@ -2499,6 +2541,7 @@ async function wireRuntimeSurfaces(deps: {
     identityKeypair,
     custodian,
     pairedSessions,
+    authorityHub,
     browserBundle,
     alertInbox,
     backupLoop,
@@ -2784,6 +2827,7 @@ async function wireRuntimeSurfaces(deps: {
     const mcpSwk = swkBytes ?? new Uint8Array(32);
     const mcpKeys = new FileMcpKeyStore(join(dataDir, "mcp-keys"), mcpSwk);
     await mcpKeys.load();
+    await mcpKeys.attachAuthority({ family: new TokenFamily(authorityHub, "mcp-key", "account"), parentOf: () => [AUTHORITY_ROOT] });
     const realCmd = (await import("./serviceRunner.js")).realCommandRunner;
     const gitImporter = new GitImporter({
       cmd: realCmd,

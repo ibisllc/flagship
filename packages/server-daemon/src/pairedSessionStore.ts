@@ -20,6 +20,7 @@ import { dirname, join } from "node:path";
 import { writeFileDurable } from "./durableFile.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { PairedSessionGate } from "./alertInboxHttp.js";
+import { tokenFingerprint, type TokenFamily } from "./authority/index.js";
 
 export interface PairedSession {
   addedAt: number;
@@ -50,6 +51,40 @@ export class FilePairedSessionStore implements PairedSessionGate {
 
   constructor(private readonly path: string) {}
 
+  /**
+   * N05 — owner and companion sessions join the authority index: a session the index does not
+   * know, or has revoked, is refused, and revoking its parent device removes it here.
+   */
+  private authority: { owner: TokenFamily; companion: TokenFamily; parentOf: () => string[] } | null = null;
+
+  async attachAuthority(a: { owner: TokenFamily; companion: TokenFamily; parentOf: () => string[] }): Promise<void> {
+    this.authority = a;
+    for (const [token, row] of this.byToken) await this.issueGrant(token, row);
+    const drop = async (ref: string) => {
+      for (const [token] of [...this.byToken]) {
+        if (tokenFingerprint(token) === ref) {
+          this.byToken.delete(token);
+          await this.flush();
+        }
+      }
+    };
+    a.owner.onRevoked(drop);
+    a.companion.onRevoked(drop);
+  }
+
+  private async issueGrant(token: string, row: PairedSession): Promise<void> {
+    const a = this.authority;
+    if (!a) return;
+    const fam = row.companion ? a.companion : a.owner;
+    await fam.adopt({
+      ref: tokenFingerprint(token),
+      parents: a.parentOf(),
+      capability: row.companion ? "read" : "owner",
+      expiresAt: row.companion ? row.expiresAt ?? null : null,
+      issuedAt: row.addedAt,
+    });
+  }
+
   /** Read on boot; safe to call multiple times. */
   async load(): Promise<void> {
     if (!existsSync(this.path)) return;
@@ -76,6 +111,7 @@ export class FilePairedSessionStore implements PairedSessionGate {
   async add(token: string, addedAt: number = Date.now()): Promise<void> {
     if (!token || token.length < 16) throw new Error("token too short");
     this.byToken.set(token, { addedAt });
+    await this.issueGrant(token, { addedAt });
     await this.flush();
   }
 
@@ -98,6 +134,7 @@ export class FilePairedSessionStore implements PairedSessionGate {
     };
     if (args.userAgent) row.companionUserAgent = args.userAgent;
     this.byToken.set(args.token, row);
+    await this.issueGrant(args.token, row);
     await this.flush();
   }
 
@@ -147,9 +184,20 @@ export class FilePairedSessionStore implements PairedSessionGate {
     return out;
   }
 
+  /** Revoke the index grants for sessions being removed, so work running under them stops too. */
+  private async revokeGrants(rows: Array<[string, PairedSession]>, reason: string): Promise<void> {
+    const a = this.authority;
+    if (!a) return;
+    for (const [token, row] of rows) {
+      await (row.companion ? a.companion : a.owner).revoke(tokenFingerprint(token), reason).catch(() => {});
+    }
+  }
+
   async remove(token: string): Promise<void> {
+    const row = this.byToken.get(token);
     if (this.byToken.delete(token)) {
       await this.flush();
+      if (row) await this.revokeGrants([[token, row]], "session removed");
     }
   }
 
@@ -163,21 +211,28 @@ export class FilePairedSessionStore implements PairedSessionGate {
   async removeAll(): Promise<number> {
     const n = this.byToken.size;
     if (n === 0) return 0;
+    const rows = [...this.byToken];
     this.byToken.clear();
     await this.flush();
+    await this.revokeGrants(rows, "every paired session removed");
     return n;
   }
 
   /** Drop every companion (Remote) session, keeping the owner's. Returns how many went. */
   async removeCompanions(): Promise<number> {
     let n = 0;
+    const gone: Array<[string, PairedSession]> = [];
     for (const [token, row] of this.byToken) {
       if (row.companion === true) {
         this.byToken.delete(token);
+        gone.push([token, row]);
         n++;
       }
     }
-    if (n > 0) await this.flush();
+    if (n > 0) {
+      await this.flush();
+      await this.revokeGrants(gone, "remote sessions removed");
+    }
     return n;
   }
 
@@ -200,6 +255,10 @@ export class FilePairedSessionStore implements PairedSessionGate {
     if (!token) return jerr(401, "missing paired-session token");
     const row = this.byToken.get(token);
     if (!row) return jerr(401, "invalid paired-session token");
+    if (this.authority) {
+      const fam = row.companion ? this.authority.companion : this.authority.owner;
+      if (!fam.isLive(tokenFingerprint(token))) return jerr(401, "paired-session token revoked");
+    }
     // P14 — companion sessions hard-expire at `expiresAt`. The gate
     // surfaces a recognisable 401 reason so the webapp can prompt the
     // user to re-dock instead of treating it like an invalid token.

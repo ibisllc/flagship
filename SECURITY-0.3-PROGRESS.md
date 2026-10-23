@@ -23,6 +23,7 @@ TPM/measured boot only as far as software can prove).
 - N04 recovery wait/veto: an admin's signed veto of a pending recovery decided against completion by one atomic claim (migration 0108, protocol vectors, `.com`, webapp, iOS, Android)
 - SEC-RECIPE-001 offline recipe workload key: `flagship/offline-secrets/v1` commitment signed by the account key (bound to server name + serial + key hash), required by the builder (`loadBlob`) and re-verified on the box; signed by webapp, iOS and Android; Mac passes it through (vectors `test-vectors/offline-secrets`)
 - N03 cloud-recovery record v2: one signature over every ciphertext digest, fetch-token/PRF-salt hashes, versions, policy, generation, nonce and the previous record's digest; explicit keep/replace/remove/none per escrow; compare-and-swap in storage (migration 0109); `.com` rejects unknown fields; clients check each ciphertext against its signed digest before unwrapping and the signature after (webapp + recovery sub-origin, iOS, Android; vectors `test-vectors/recovery-record`). A v1 row is labelled legacy until its owner's next enrolment replaces it; wipe & restart still writes a legacy row (no passphrase gate until re-enrolled)
+- N05 core: grant index with parent/child revocation, epoch kept in the state dir (not app data), fail-closed on a damaged file; operation ledger (requested..applied/outcome-unknown, single-use challenge, idempotency, recheck at start and before the irreversible commit, crash recovery to outcome-unknown); hub that cancels dependent operations and stops registered work under a deadline; paired sessions, app API keys and IDE keys joined to the index (unknown or revoked = refused; revoking a parent removes the tokens)
 - N09 archive reads bounded (entries, duplicates, sizes, expanded bytes) with hostile-archive tests
 - SEC-AUTH-002 one default-deny authorization layer in front of every control-API route
 - TLS/ACME with the key in keyd: TLS key + CSR + handshake signing in keyd, ACME account signing by request kind, `KeydAcmeIssuer`, `flagship-tlsd` Go frontend as a crypto.Signer, legacy-key takeover and rotation, tlsd unit + appliance check (end to end against a mock CA and real keyd)
@@ -30,7 +31,7 @@ TPM/measured boot only as far as software can prove).
 
 ## Open, in order
 0. Owner/operator before release: publish the first signed artifacts (run `box-artifact.yml`, sign offline, `release-index.ts`), point `release/box-release.json` at that commit and sequence, run `node scripts/gen-box-release.mjs --write`, re-pin the bootstrap sha in userdata.test.ts. Legacy git-installed boxes cannot update in place (installer refuses a real /opt/flagship); reburn. Gym boxes need an artifact for the gym commit signed by the gym trust key.
-4. N05 transactions/revocation; N06 keyless web; N07 freshness/lead
+4. N05 remainder: operation-ledger use by the update/migration/uninstall consumers, the per-service Access and permissions page (API + three clients), browser/stream/build work registration; N06 keyless web; N07 freshness/lead
 5. SEC-AUTH-002 central capability matrix + delegated companion build/deploy
 6. SEC-MIG-002 migration sandbox; SEC-BROWSER-002 per-app contexts + grants; SEC-ADAPTER-002 attested index
 7. N09 restore, N11 identity pins/forks, N12 build/credential boundary
