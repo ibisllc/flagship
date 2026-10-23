@@ -11822,8 +11822,7 @@
   },
   "turn_off_2": {
     "en": "Turn off…",
-    "ctx": "ui/screens/QuantumSafetyScreen.kt:126 (arg of FSDangerButton)",
-    "args": 1
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:126 (arg of FSDangerButton)"
   },
   "not_ready_yet": {
     "en": "Not ready yet",
