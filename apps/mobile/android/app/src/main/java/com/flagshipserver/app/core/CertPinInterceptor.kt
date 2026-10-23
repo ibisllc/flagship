@@ -30,12 +30,16 @@ import javax.net.ssl.SSLSession
 internal fun leafDerSha256Hex(leafDer: ByteArray?): String? =
     leafDer?.let { HexUtil.encode(MessageDigest.getInstance("SHA-256").digest(it)) }
 
-class CertPinInterceptor(private val pinFor: (String) -> String?) : Interceptor {
+class CertPinInterceptor(
+    private val pinFor: (String) -> String?,
+    private val isKnownBox: (String) -> Boolean = { false },
+) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         enforce(
             host = chain.request().url.host,
             leafDer = chain.connection()?.handshake()?.peerCertificates?.firstOrNull()?.encoded,
             pinFor = pinFor,
+            isKnownBox = isKnownBox,
         )
         return chain.proceed(chain.request())
     }
@@ -44,11 +48,16 @@ class CertPinInterceptor(private val pinFor: (String) -> String?) : Interceptor 
         /** Throws SSLPeerUnverifiedException unless the connection passes the
          *  pin decision. `leafDer == null` (cleartext / no handshake) on a
          *  PINNED host is refused — a pinned box is HTTPS by construction. */
-        fun enforce(host: String, leafDer: ByteArray?, pinFor: (String) -> String?) {
-            if (!CertPinDecision.accept(leafDerSha256Hex(leafDer), host, pinFor)) {
+        fun enforce(host: String, leafDer: ByteArray?, pinFor: (String) -> String?, isKnownBox: (String) -> Boolean = { false }) {
+            if (!CertPinDecision.accept(leafDerSha256Hex(leafDer), host, pinFor, isKnownBox)) {
                 throw SSLPeerUnverifiedException(
-                    "Certificate for $host does not match the server's STK-signed " +
-                        "fingerprint — refusing connection",
+                    if (pinFor(host) == null) {
+                        "No verified certificate fingerprint for $host yet — refusing connection until the " +
+                            "server's signed status arrives"
+                    } else {
+                        "Certificate for $host does not match the server's STK-signed " +
+                            "fingerprint — refusing connection"
+                    },
                 )
             }
         }
@@ -61,15 +70,16 @@ class CertPinInterceptor(private val pinFor: (String) -> String?) : Interceptor 
 class CertPinHostnameVerifier(
     private val pinFor: (String) -> String?,
     private val delegate: HostnameVerifier = OkHostnameVerifier,
+    private val isKnownBox: (String) -> Boolean = { false },
 ) : HostnameVerifier {
     override fun verify(hostname: String, session: SSLSession): Boolean {
         if (!delegate.verify(hostname, session)) return false
-        if (pinFor(hostname) == null) return true
+        if (pinFor(hostname) == null) return !isKnownBox(hostname)
         val leafDer = try {
             session.peerCertificates.firstOrNull()?.encoded
         } catch (_: Throwable) {
             null
         }
-        return CertPinDecision.accept(leafDerSha256Hex(leafDer), hostname, pinFor)
+        return CertPinDecision.accept(leafDerSha256Hex(leafDer), hostname, pinFor, isKnownBox)
     }
 }

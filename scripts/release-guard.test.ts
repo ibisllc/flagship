@@ -268,6 +268,29 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     }
   });
 
+  it("the install path fails every build when it goes back to NodeSource, git, npm or a branch default", () => {
+    dir = makeCleanTree();
+    expect(run({ RELEASE: "", RELEASE_GUARD_ROOT: dir }).code).toBe(0);
+    mkdirSync(join(dir, "packages/flagship-builder/src"), { recursive: true });
+    const file = join(dir, "packages/flagship-builder/src/userdata.ts");
+    const cases: Array<[string, string]> = [
+      ["NodeSource", "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -\n"],
+      ["git clone", "git clone --depth 50 https://example.invalid/x.git /opt/flagship\n"],
+      ["npm install", "npm install --no-audit\n"],
+      ["npx tsx", "npx tsx scripts/install-helper.ts gen-identity\n"],
+      ["a Go toolchain", "apt-get install -y golang-go\n"],
+      ["a branch default", 'const ref = installerGitRef || "main";\n'],
+    ];
+    for (const [name, line] of cases) {
+      writeFileSync(file, `export const x = 1;\n${line}`);
+      const r = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
+      expect(r.code, name).toBe(1);
+      expect(r.stderr, name).toMatch(/install path resolves code from the network|recipe defaults to a branch/);
+    }
+    writeFileSync(file, "# no git clone, no npm install here\nexport const x = 1;\n");
+    expect(run({ RELEASE: "", RELEASE_GUARD_ROOT: dir }).code).toBe(0);
+  });
+
   it("the real repo carries no wipe tooling", () => {
     expect(run({ RELEASE: "" }).stderr).not.toContain("bulk user-wipe tooling reappeared");
   });

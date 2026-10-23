@@ -23,7 +23,7 @@
   "dependencies": {
     "@flagship/protocol": "*",
     "qrcode": "^1.5.4",
-    "ws": "^8.18.0"
+    "ws": "8.20.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.25.0",

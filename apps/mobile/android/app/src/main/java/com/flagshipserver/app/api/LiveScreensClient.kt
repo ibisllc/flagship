@@ -32,7 +32,7 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 class LiveScreensClient(
-    private val client: OkHttpClient = OkHttpClient(),
+    private val client: OkHttpClient,
     private val store: SessionStoring,
     private val json: Json = Json {
         ignoreUnknownKeys = true
@@ -349,6 +349,21 @@ class LiveScreensClient(
     override suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         request("/api/screens/debug-access", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
 
+    override suspend fun securitySliver(): com.flagshipserver.app.core.SecuritySliverResponse =
+        request("/api/screens/security-sliver", com.flagshipserver.app.core.SecuritySliverResponse.serializer())
+
+    override suspend fun publisherState(serviceId: String): com.flagshipserver.app.core.WaitingPublisherResponse =
+        request("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/publisher", com.flagshipserver.app.core.WaitingPublisherResponse.serializer())
+
+    override suspend fun trustPublisher(serviceId: String, trust: com.flagshipserver.app.core.PublisherTrust, signatureHex: String) {
+        val body = json.encodeToString(com.flagshipserver.app.core.PublisherTrustBody.serializer(), com.flagshipserver.app.core.PublisherTrustBody(trust, signatureHex)).toByteArray()
+        request<Unit>("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/publisher/trust", null, "POST", body)
+    }
+
+    override suspend fun rejectPublisher(serviceId: String) {
+        request<Unit>("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/publisher/reject", null, "POST", "{}".toByteArray())
+    }
+
     override suspend fun debugAccessRevoke(bodyJson: String): DebugAccessChangeResponse =
         request("/api/screens/debug-access/revoke", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
 
@@ -597,15 +612,14 @@ class LiveScreensClient(
         }
     }
 
-    /** The box's event socket. The token rides the query (the box's contract)
-     *  and the header (what the paired-session gate reads first). */
+    /** The box's event socket. The session rides in a header only: the box refuses a token in the URL. */
     override fun screensEvents(): Flow<ScreensEvent> = channelFlow {
         val base = base()
         val token = token()
         val wsUrl = base
             .replaceFirst("https://", "wss://")
             .replaceFirst("http://", "ws://") +
-            "/api/screens/events?sessionToken=" + java.net.URLEncoder.encode(token, "UTF-8")
+            "/api/screens/events"
         val req = Request.Builder()
             .url(wsUrl)
             .header("x-flagship-session", token)

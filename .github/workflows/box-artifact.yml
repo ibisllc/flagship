@@ -1,0 +1,67 @@
+name: box-artifact
+
+# Builds the box release artifact for ONE exact commit (SEC-REL-001). The build is
+# clean-room: exact lockfile with lifecycle scripts off, the Node archive checked
+# against a pinned SHA-256, the unseal helper compiled with a pinned Go. The output
+# is an UNSIGNED manifest plus the artifact: release keys are held offline and sign
+# with `tools/box-artifact/build.ts sign`, then `release-index.ts` publishes the index.
+# Run it twice on the same commit and the digests match (reproducible).
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact 40-hex commit to build (never a branch or tag)
+        required: true
+      sequence:
+        description: Release sequence number (anti-rollback; must exceed the last published)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Refuse anything but a full commit
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          printf '%s' "$COMMIT" | grep -Eq '^[0-9a-f]{40}$' || { echo "commit must be 40 hex characters"; exit 1; }
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.22.1
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: installer/unseal-helper/go.mod
+          cache: false
+      - name: Install build tooling (exact lockfile, no scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build the artifact
+        env:
+          COMMIT: ${{ inputs.commit }}
+          SEQUENCE: ${{ inputs.sequence }}
+          ARCH: ${{ matrix.arch }}
+        run: npx tsx tools/box-artifact/build.ts build --commit "$COMMIT" --arch "$ARCH" --sequence "$SEQUENCE" --out out
+      - name: Digest summary
+        run: |
+          cd out
+          sha256sum *.tar.gz | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: box-artifact-${{ matrix.arch }}
+          path: out/
+          if-no-files-found: error

@@ -107,6 +107,19 @@ class ServerSettingsStore(private val prefs: SharedPreferences) {
         }.apply()
     }
 
+    /** Take the box's own account of its switch (server-detail `deadMan`) as the truth, so a lease
+     *  deposited from this phone is bounded by the real deadline even when another device turned the
+     *  switch on or affirmed it. */
+    fun syncDeadMan(serverDomain: String, enabled: Boolean, windowMs: Long, graceMs: Long, lockoutMode: String, leaseExpiry: Long) {
+        saveDeadManPolicy(serverDomain, enabled, windowMs.takeIf { it > 0 } ?: deadManWindowMs(serverDomain),
+            graceMs.takeIf { it > 0 } ?: deadManGraceMs(serverDomain), lockoutMode)
+        setDeadManLeaseExpiry(serverDomain, if (enabled && leaseExpiry > 0) leaseExpiry else null)
+    }
+
+    /** The switch's state for one server, as [DeadManLeaseBound] needs it. */
+    fun deadManBound(serverDomain: String) =
+        SecretRequestCoordinator.DeadManBound(deadManEnabled(serverDomain), deadManLeaseExpiry(serverDomain))
+
     /** Record (or clear, with null) the lease deadline the box reported. */
     fun setDeadManLeaseExpiry(serverDomain: String, expiry: Long?) {
         prefs.edit().apply {

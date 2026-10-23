@@ -93,6 +93,7 @@ import {
   scopeLabel,
 } from "../lib/appApiKeys.js";
 import { formatWhen } from "../lib/dateFormat.js";
+import { fetchPermissions, renderPermissions, revokeOutcomeText, revokePermission } from "../lib/permissions.js";
 import { DB_NOTE, DB_OPEN, DB_TITLE, canUseDatabase, dbErrorMessage, fetchDbStores } from "../lib/appDb.js";
 import { appStorageLines } from "../lib/appStorage.js";
 import { getActiveProfile } from "../lib/profiles.js";
@@ -200,6 +201,7 @@ export async function renderServiceDetail(serviceId) {
       <div id="sd-egress">${renderInternetSection(s)}</div>
       <div id="sd-api-keys"></div>
       <div id="sd-database"></div>
+      <div id="sd-permissions"></div>
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <h2 class="mt-4">App config</h2>
@@ -276,6 +278,7 @@ export async function renderServiceDetail(serviceId) {
     else bindEgressHandlers(s);
     void loadApiKeysSection(s);
     void loadDatabaseEntry(s);
+    void loadPermissions(s);
     void loadRunsOn(s);
   } catch (e) {
     if (e instanceof ScreensError) {
@@ -575,6 +578,33 @@ export function renderDatabaseEntry({ stores = null, error = "" } = {}) {
         ${line}
         <button id="sd-db-open" class="full-width mt-2">${escapeHtml(DB_OPEN)}</button>
       </div>`;
+}
+
+async function loadPermissions(app) {
+  if (isCompanionProfile()) return;
+  const fetchJson = (path, init) => screensFetch(path, init);
+  let data = null;
+  try {
+    data = await fetchPermissions(app.serviceId, fetchJson);
+  } catch {
+    return;
+  }
+  if (currentServiceId !== app.serviceId) return;
+  const slot = $("sd-permissions");
+  if (!slot || !data) return;
+  slot.innerHTML = renderPermissions(data);
+  const act = async (grantId, button) => {
+    button.disabled = true;
+    try {
+      const r = await revokePermission(app.serviceId, grantId, fetchJson);
+      toast(revokeOutcomeText(r), (r?.stuckWork ?? []).length ? "err" : "ok");
+    } catch (e) {
+      toast(humanError(e), "err");
+    }
+    await loadPermissions(app);
+  };
+  slot.querySelectorAll("[data-permission-revoke]").forEach((b) => b.addEventListener("click", () => void act(b.getAttribute("data-permission-revoke"), b)));
+  slot.querySelector("[data-permission-revoke-all]")?.addEventListener("click", (ev) => void act(null, ev.currentTarget));
 }
 
 async function loadDatabaseEntry(app) {

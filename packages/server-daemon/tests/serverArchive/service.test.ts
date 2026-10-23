@@ -922,7 +922,7 @@ describe("the daemon's HTTP writer", () => {
     const sep = raw.indexOf("\r\n\r\n");
     const head = raw.subarray(0, sep).toString();
     expect(head).toContain("HTTP/1.1 206 Partial Content");
-    expect(head).toContain(`Content-Length: ${payload.length}`);
+    expect(head.toLowerCase()).toContain(`content-length: ${payload.length}`);
     expect(raw.subarray(sep + 4)).toEqual(payload);
   });
 
@@ -933,10 +933,10 @@ describe("the daemon's HTTP writer", () => {
       body: "",
       stream: { length: 5, open: () => Duplex.from(Buffer.from("hello")) },
     }));
-    sock.push(Buffer.from("HEAD /x HTTP/1.1\r\n\r\n"));
+    sock.push(Buffer.from("HEAD /x HTTP/1.1\r\nHost: a\r\n\r\n"));
     await done;
     const raw = Buffer.concat(out).toString();
-    expect(raw).toContain("Content-Length: 5");
+    expect(raw.toLowerCase()).toContain("content-length: 5");
     expect(raw.endsWith("\r\n\r\n")).toBe(true);
   });
 });

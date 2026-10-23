@@ -3,10 +3,13 @@ import {
   signAuthCode,
   signInstallBlob,
   ed,
+  signOfflineSecrets,
+  swkCommitment,
   type AuthCode,
   type InstallBlob,
 } from "@flagship/protocol";
 import { installBlobToJson } from "../src/userdata.js";
+import { hexToBytes } from "../src/installBlobParse.js";
 import { loadBlobFromString } from "../src/loadBlob.js";
 
 // SWK provisioning: the phone embeds `swkHex` (= deriveSWK(umk, serverId)) as an
@@ -50,7 +53,7 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string } {
     registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode,
     authCodeUserSignature: signAuthCode(authCode, irk),
-    installerGitRef: "main",
+    installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     rckPubKey: rck.publicKey,
   };
   return { blob, blobSignatureHex: hx(signInstallBlob(blob, irk)) };
@@ -95,11 +98,27 @@ describe("installBlobToJson — swkHex sibling", () => {
 describe("loadBlobFromString — swkHex passthrough", () => {
   it("reads a valid top-level swkHex sibling (lowercased) off the recipe", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const recipe = JSON.stringify(
-      installBlobToJson(blob, blobSignatureHex, undefined, SWK.toUpperCase()),
-    );
-    const loaded = loadBlobFromString(recipe);
+    const obj = {
+      ...installBlobToJson(blob, blobSignatureHex, undefined, SWK.toUpperCase()),
+      offlineSecrets: signOfflineSecrets(
+        {
+          serverDomain: blob.serverDomain,
+          serial: blob.authCode.serial,
+          swkSha256Hex: swkCommitment(hexToBytes(SWK)),
+          issuedAt: blob.authCode.issuedAt + 1000,
+        },
+        makeKeypair(7),
+      ),
+    };
+    const loaded = loadBlobFromString(JSON.stringify(obj));
     expect(loaded.swkHex).toBe(SWK);
+    expect(loaded.offlineSecrets).toBeDefined();
+  });
+
+  it("refuses a workload key the owner did not sign for", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const recipe = JSON.stringify(installBlobToJson(blob, blobSignatureHex, undefined, SWK));
+    expect(() => loadBlobFromString(recipe)).toThrow(/did not sign/);
   });
 
   it("is undefined when the recipe carries no swkHex", () => {

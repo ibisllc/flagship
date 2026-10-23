@@ -30,15 +30,36 @@ public enum CertPinVerdict: Equatable, Sendable {
     /// HARD-FAIL: a pin governs this host and the served leaf differs
     /// (or could not be read) — refuse the connection.
     case mismatch
+    /// HARD-FAIL: this is a box the phone knows but it holds no verified pin for it yet.
+    /// A request to a known box never falls back to ordinary web trust
+    /// (SECURITY-HARDENING-PLAN.md 7.1): the phone refreshes the signed status first.
+    case blocked
+}
+
+/// Which hosts are boxes this phone knows. The app installs it once at launch
+/// (`CertPinRegistry.shared.isKnownBox`); every pinning delegate consults it.
+public enum BoxPinPolicy {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var known: (@Sendable (String) -> Bool)?
+
+    public static func install(isKnownBox: @escaping @Sendable (String) -> Bool) {
+        lock.lock(); known = isKnownBox; lock.unlock()
+    }
+
+    public static func isKnownBox(_ host: String) -> Bool {
+        lock.lock(); let k = known; lock.unlock()
+        return k?(host) ?? false
+    }
 }
 
 public enum CertPinDecision {
     public static func verdict(
         host: String,
         leafDerSha256Hex: String?,
-        pinFor: (String) -> String?
+        pinFor: (String) -> String?,
+        isKnownBox: (String) -> Bool = { _ in false }
     ) -> CertPinVerdict {
-        guard let pin = pinFor(host), !pin.isEmpty else { return .noPin }
+        guard let pin = pinFor(host), !pin.isEmpty else { return isKnownBox(host) ? .blocked : .noPin }
         guard let leaf = leafDerSha256Hex, leaf.lowercased() == pin.lowercased() else {
             return .mismatch
         }
@@ -63,6 +84,7 @@ public final class CertPinMismatchSink: @unchecked Sendable {
 
     private let lock = NSLock()
     private var lastMismatchMs: [String: Int64] = [:]
+    private var lastMissingPinMs: [String: Int64] = [:]
 
     public init() {}
 
@@ -92,8 +114,26 @@ public final class CertPinMismatchSink: @unchecked Sendable {
         return nowMs - at <= Self.freshnessMs
     }
 
+    /// Called by the delegate when a known box had no verified pin and the request was refused.
+    public func recordMissingPin(host: String, nowMs: Int64 = CertPinMismatchSink.nowMs()) {
+        let key = Self.normalize(host)
+        guard !key.isEmpty else { return }
+        lock.lock(); lastMissingPinMs[key] = nowMs; lock.unlock()
+    }
+
+    /// True iff a request to `host` was refused for want of a pin within the freshness window; the
+    /// caller then refreshes the server's signed status instead of showing a generic network error.
+    public func consumeRecentMissingPin(host: String, nowMs: Int64 = CertPinMismatchSink.nowMs()) -> Bool {
+        let key = Self.normalize(host)
+        guard !key.isEmpty else { return false }
+        lock.lock(); defer { lock.unlock() }
+        guard let at = lastMissingPinMs[key] else { return false }
+        lastMissingPinMs.removeValue(forKey: key)
+        return nowMs - at <= Self.freshnessMs
+    }
+
     public func clear() {
-        lock.lock(); lastMismatchMs.removeAll(); lock.unlock()
+        lock.lock(); lastMismatchMs.removeAll(); lastMissingPinMs.removeAll(); lock.unlock()
     }
 }
 
@@ -101,9 +141,14 @@ public final class CertPinMismatchSink: @unchecked Sendable {
 /// challenges. Thin by design — see `CertPinDecision` for the logic.
 public final class BoxCertPinningDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
     private let pinFor: @Sendable (String) -> String?
+    private let isKnownBox: @Sendable (String) -> Bool
 
-    public init(pinFor: @escaping @Sendable (String) -> String?) {
+    public init(
+        pinFor: @escaping @Sendable (String) -> String?,
+        isKnownBox: @escaping @Sendable (String) -> Bool = { BoxPinPolicy.isKnownBox($0) }
+    ) {
         self.pinFor = pinFor
+        self.isKnownBox = isKnownBox
     }
 
     public func urlSession(
@@ -111,13 +156,14 @@ public final class BoxCertPinningDelegate: NSObject, URLSessionDelegate, @unchec
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        let (disposition, credential) = Self.handle(challenge, pinFor: pinFor)
+        let (disposition, credential) = Self.handle(challenge, pinFor: pinFor, isKnownBox: isKnownBox)
         completionHandler(disposition, credential)
     }
 
     static func handle(
         _ challenge: URLAuthenticationChallenge,
-        pinFor: (String) -> String?
+        pinFor: (String) -> String?,
+        isKnownBox: (String) -> Bool = { _ in false }
     ) -> (URLSession.AuthChallengeDisposition, URLCredential?) {
         guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
               let trust = challenge.protectionSpace.serverTrust
@@ -133,12 +179,16 @@ public final class BoxCertPinningDelegate: NSObject, URLSessionDelegate, @unchec
         switch CertPinDecision.verdict(
             host: host,
             leafDerSha256Hex: Self.leafDerSha256Hex(trust),
-            pinFor: pinFor
+            pinFor: pinFor,
+            isKnownBox: isKnownBox
         ) {
         case .noPin:
             return (.performDefaultHandling, nil)
         case .match:
             return (.useCredential, URLCredential(trust: trust))
+        case .blocked:
+            CertPinMismatchSink.shared.recordMissingPin(host: host)
+            return (.cancelAuthenticationChallenge, nil)
         case .mismatch:
             // UX-A — flag the host so the client that's about to see this
             // request fail can surface the pin-mismatch message specifically.

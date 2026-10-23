@@ -30,13 +30,10 @@
  * It only verifies signatures and binds principals to the directory.
  */
 
-import { ed } from "@flagship/protocol";
+import { BOOT_AUTH_SCHEME, canonicalBootAuth, ed, encodeBootAuthHeader, signBootAuth } from "@flagship/protocol";
 import { equalHex } from "./hex.js";
 import type { DirectoryClient } from "./directory.js";
 import type { NonceStore } from "./nonceStore.js";
-
-/** The canonical-bytes tag for a boot-worker request authorization. */
-const TAG_BOOT_AUTH = "flagship/boot-auth/v1";
 
 /** Default freshness window — ±5 min on the signed `issuedAt`. */
 export const DEFAULT_MAX_AGE_MS = 5 * 60_000;
@@ -76,36 +73,12 @@ export interface GateEnvelope {
   signatureHex: string;
 }
 
-const AUTH_SCHEME = "Flagship-Boot-v1";
-
 /** The authorization header name (case-insensitive on the wire). */
 export const AUTH_HEADER = "Authorization";
 
-/**
- * Canonical bytes the signature covers. `|`-separated with the
- * `flagship/<purpose>/v1` tag prefix, matching the house convention.
- * Every field that the verifier binds is included; the signature itself
- * is NOT.
- */
-function canonicalBootAuth(e: Omit<GateEnvelope, "signatureHex">): Uint8Array {
-  return new TextEncoder().encode(
-    [
-      TAG_BOOT_AUTH,
-      e.role,
-      e.serverDomain,
-      e.method.toUpperCase(),
-      e.path,
-      e.pubKeyHex.toLowerCase(),
-      e.nonceHex.toLowerCase(),
-      e.issuedAt,
-    ].join("|"),
-  );
-}
-
 /** Build the `Authorization` header value for a signed envelope (clients). */
 export function encodeAuthHeader(e: GateEnvelope): string {
-  const json = JSON.stringify(e);
-  return `${AUTH_SCHEME} ${b64urlEncode(new TextEncoder().encode(json))}`;
+  return encodeBootAuthHeader(e);
 }
 
 /**
@@ -125,8 +98,7 @@ export function signBootRequest(
   },
   privSeed: Uint8Array,
 ): string {
-  const sig = ed.sign(canonicalBootAuth(args), privSeed);
-  return encodeAuthHeader({ ...args, signatureHex: bytesToHexLocal(sig) });
+  return signBootAuth(args, privSeed);
 }
 
 export type GateResult =
@@ -303,7 +275,7 @@ function parseAuthHeader(header: string | null): GateEnvelope | null {
   const sp = header.indexOf(" ");
   if (sp <= 0) return null;
   const scheme = header.slice(0, sp);
-  if (scheme.toLowerCase() !== AUTH_SCHEME.toLowerCase()) return null;
+  if (scheme.toLowerCase() !== BOOT_AUTH_SCHEME.toLowerCase()) return null;
   const payload = header.slice(sp + 1).trim();
   if (!payload) return null;
   let json: unknown;

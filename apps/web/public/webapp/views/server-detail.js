@@ -8,6 +8,7 @@ import { accountPods, anyCopying, appSandboxNotice, fetchServerApps, isPodOnline
 import { isCompanionProfile } from "../lib/companionGuard.js";
 import {
   enableLongLived,
+  bindLeasesToDeadMan,
   listLeases,
   revokeLease,
 } from "../lib/leases.js";
@@ -32,6 +33,15 @@ import {
   DEADMAN_DEFAULT_PRESET,
   fmtRemaining,
 } from "../lib/lockAndPower.js";
+import {
+  describeLockResult,
+  lockAndPower,
+  readSuspension,
+  rememberDeadManView,
+  retryPendingLocks,
+  setOwnerSuspension,
+  clearLockPending,
+} from "../lib/bootSuspension.js";
 import { getPodBaseUrl } from "../lib/api.js";
 import {
   getFrontPage,
@@ -527,9 +537,11 @@ export async function renderServerDetail() {
       <div class="card" id="lock-power-card">
         <p class="note">
           ${escapeHtml(isLuksBox(body)
-            ? "Power the box down or restart it. Either drops the in-memory disk key, so the next boot waits for your approval to unlock."
+            ? "Lock and turn off, or lock and restart. A lock is recorded at the boot service, so this server can't unlock itself again until you resume it: the next start waits for your approval. It can't take back anything already copied from a running server."
             : "Power the box down or restart it.")}
         </p>
+        <p class="note small" id="lock-state">Checking the lock…</p>
+        <button id="lock-resume-btn" class="secondary full-width hidden">Resume (allow auto-unlock again)</button>
         <div class="row-2 mt-2">
           <button id="power-off-btn" class="danger" data-power-mode="off">${escapeHtml(powerLabel("off", body))}</button>
           <button id="power-restart-btn" class="danger" data-power-mode="restart">${escapeHtml(powerLabel("restart", body))}</button>
@@ -636,7 +648,9 @@ export async function renderServerDetail() {
     `;
     wireAutoUnlock(body.serverFqdn);
     wireFrontPage(body);
+    rememberDeadManView(body.serverFqdn, body.deadMan ?? null);
     wireLockPower(body);
+    wireLockState(body);
     wireDeadMan(body);
     wireJournal(body);
     wireDebugAccess(body);
@@ -1132,22 +1146,111 @@ async function runPowerAction(body, mode, btn, allButtons, status) {
           btn.textContent = s > 0 ? `${actionLabel} in ${s}…` : `${actionLabel}…`;
         },
       });
-      await sendPowerOff({
-        baseUrl,
-        mode,
-        umk: session.umk,
-        // Slice D: power-off/restart is a SENSITIVE order (admin root when present).
-        signWithIrk: sensitiveSigner(),
-      });
+      // SEC-LOCK-001: locking is two results, reported apart. The durable lock at the
+      // boot service is what survives a stolen box; the power order is just the order.
+      const send = (m) =>
+        sendPowerOff({
+          baseUrl,
+          mode: m,
+          umk: session.umk,
+          // Slice D: power-off/restart is a SENSITIVE order (admin root when present).
+          signWithIrk: sensitiveSigner(),
+        });
+      const result = await lockAndPower({ serverDomain: body.serverFqdn, mode, sendPower: send });
+      if (result.needsChoice === "shutdown-instead") {
+        if (status) {
+          status.classList.remove("hidden");
+          status.textContent = describeLockResult(result);
+        }
+        const again = await askShutdownInstead(describeLockResult(result));
+        if (again) {
+          const r2 = await lockAndPower({ serverDomain: body.serverFqdn, mode: "off", sendPower: send });
+          if (status) status.textContent = describeLockResult(r2);
+          toast(r2.lock === "confirmed" ? "Locked and powering off" : "Powering off; remote lock pending", r2.lock === "confirmed" ? "ok" : "err");
+        }
+        return;
+      }
       if (status) {
         status.classList.remove("hidden");
-        status.textContent =
-          mode === "restart" ? "Restarting — the server will go offline briefly." : "Powering off — the server is going offline.";
+        status.textContent = describeLockResult(result);
       }
+      if (result.power === "failed") toast("The power command didn't reach the server", "err");
+      else if (result.lock === "pending") toast("Sent, but the remote lock is still pending", "err");
+      else toast(`${actionLabel} sent; locked`, "ok");
+      void refreshLockState(body.serverFqdn);
+      return;
       toast(`${actionLabel} sent`, "ok");
     } finally {
       btn.textContent = origLabel;
       for (const b of allButtons) b.disabled = false;
+    }
+  });
+}
+
+/** Ask whether to shut down when a restart could not be locked at the boot service. */
+function askShutdownInstead(message) {
+  return new Promise((resolve) => {
+    const dlg = document.createElement("dialog");
+    dlg.className = "modal-card";
+    dlg.setAttribute("aria-label", "Shut down instead?");
+    dlg.innerHTML = `
+      <h3 class="modal-title">Shut down instead?</h3>
+      <p class="modal-message">${escapeHtml(message)}</p>
+      <div class="row-2 mt-3">
+        <button class="secondary" data-no>Keep running</button>
+        <button class="danger" data-yes>Shut down</button>
+      </div>`;
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    const done = (v) => {
+      if (dlg.open) dlg.close();
+      dlg.remove();
+      resolve(v);
+    };
+    dlg.querySelector("[data-yes]").addEventListener("click", () => done(true));
+    dlg.querySelector("[data-no]").addEventListener("click", () => done(false));
+    dlg.addEventListener("cancel", () => done(false));
+  });
+}
+
+/** The boot lock state card: locked or not, and the way back (a signed resume + a fresh lease). */
+async function refreshLockState(serverFqdn) {
+  const el = $("lock-state");
+  if (!el) return;
+  const st = await readSuspension(serverFqdn);
+  const btn = $("lock-resume-btn");
+  if (st === null) {
+    el.textContent = "Couldn't read the lock state right now.";
+    btn?.classList.add("hidden");
+    return;
+  }
+  if (st.suspended) {
+    el.textContent = "Locked: this server can't unlock itself. It will ask you to approve its next start. This lock stops the boot service from handing out the unlock key. It cannot take back a key or data already copied from a running server, and a server running changed software can ignore it.";
+    btn?.classList.remove("hidden");
+  } else {
+    el.textContent = "Not locked.";
+    btn?.classList.add("hidden");
+  }
+}
+
+function wireLockState(body) {
+  void retryPendingLocks().then((done) => {
+    if (done.includes(body.serverFqdn)) toast("Remote lock confirmed", "ok");
+  }).catch(() => {});
+  void refreshLockState(body.serverFqdn);
+  $("lock-resume-btn")?.addEventListener("click", async () => {
+    const btn = $("lock-resume-btn");
+    btn.disabled = true;
+    try {
+      const r = await setOwnerSuspension(body.serverFqdn, "resume");
+      if (!r.durable) throw new Error("Couldn't resume right now. Try again.");
+      clearLockPending(body.serverFqdn);
+      toast("Resumed. Turn auto-unlock back on below if you want it.", "ok");
+    } catch (e) {
+      toast(humanError(e), "err");
+    } finally {
+      btn.disabled = false;
+      void refreshLockState(body.serverFqdn);
     }
   });
 }
@@ -1281,6 +1384,19 @@ async function applyDeadManPolicy(body, { enabled, preset, lockoutMode }) {
   });
 }
 
+/**
+ * The switch just changed or was affirmed (SEC-DEADMAN-001): remember its
+ * deadline and make every auto-unlock lease respect it, in the same tap. If a
+ * lease can't be bounded the error surfaces; the switch is not shown as safe.
+ */
+async function boundLeasesAfter(body, result, enabled) {
+  const leaseExpiry = result?.leaseExpiry ?? result?.body?.leaseExpiry ?? null;
+  const view = { enabled, leaseExpiry: typeof leaseExpiry === "number" ? leaseExpiry : 0 };
+  rememberDeadManView(body.serverFqdn, view);
+  if (!enabled || !view.leaseExpiry) return;
+  await bindLeasesToDeadMan(body.serverFqdn, view);
+}
+
 function wireDeadMan(body) {
   const enableBtn = $("deadman-enable-btn");
   const disableBtn = $("deadman-disable-btn");
@@ -1292,7 +1408,8 @@ function wireDeadMan(body) {
     enableBtn.disabled = true;
     enableBtn.textContent = "Signing…";
     try {
-      await applyDeadManPolicy(body, { enabled: true, preset: selectedWindowPreset(), lockoutMode });
+      const r = await applyDeadManPolicy(body, { enabled: true, preset: selectedWindowPreset(), lockoutMode });
+      await boundLeasesAfter(body, r, true);
       setDeadManEnabledUi(true, null);
       toast("Dead-man lock enabled — affirm to start the lease", "ok");
     } catch (e) {
@@ -1311,6 +1428,7 @@ function wireDeadMan(body) {
         preset: selectedWindowPreset(),
         lockoutMode: $("deadman-lockout")?.value === "restart" ? "restart" : "off",
       });
+      rememberDeadManView(body.serverFqdn, { enabled: false, leaseExpiry: 0 });
       setDeadManEnabledUi(false, null);
       toast("Dead-man lock disabled", "ok");
     } catch (e) {
@@ -1324,7 +1442,8 @@ function wireDeadMan(body) {
     tightenBtn.disabled = true;
     const lockoutMode = $("deadman-lockout")?.value === "restart" ? "restart" : "off";
     try {
-      await applyDeadManPolicy(body, { enabled: true, preset: DEADMAN_TIGHTEN_PRESET, lockoutMode });
+      const r = await applyDeadManPolicy(body, { enabled: true, preset: DEADMAN_TIGHTEN_PRESET, lockoutMode });
+      await boundLeasesAfter(body, r, true);
       const sel = $("deadman-window");
       if (sel) sel.value = DEADMAN_TIGHTEN_PRESET.id;
       setDeadManEnabledUi(true, null);
@@ -1350,6 +1469,7 @@ function wireDeadMan(body) {
         // Slice D: dead-man affirmation is a SENSITIVE order (admin root when present).
         signWithIrk: sensitiveSigner(),
       });
+      await boundLeasesAfter(body, r, true);
       setDeadManEnabledUi(true, r.leaseExpiry);
       toast("Affirmed — lease renewed", "ok");
     } catch (e) {

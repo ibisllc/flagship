@@ -583,3 +583,12 @@ describe("re-pair initiate budget", () => {
     expect(perUser!.limit).toBeLessThanOrEqual(3);
   });
 });
+
+describe("the box's set-only lock is budgeted (N10)", () => {
+  it("maps POST /api/boot/suspension/box to its own endpoint and nothing else on that path", async () => {
+    const { endpointFor, LIMITS } = await import("../src/rateLimit.js");
+    expect(endpointFor("POST", "/api/boot/suspension/box")).toBe("boot-suspension-box");
+    expect(endpointFor("PUT", "/api/boot/suspension")).toBeNull(); // the owner's lock and resume are not throttled
+    expect(LIMITS["boot-suspension-box"]).toEqual([{ axis: "ip", limit: 30, windowSec: 3600 }]);
+  });
+});

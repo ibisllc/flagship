@@ -1,4 +1,4 @@
-import { executeLockAndPower, type AutoUnlockSuppressor, type HostPowerRunner } from "./deadMan.js";
+import { executeLockAndPower, type AutoUnlockSuppressor, type BootSuspender, type HostPowerRunner } from "./deadMan.js";
 import type { DeadManController } from "./deadMan.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import {
@@ -57,7 +57,11 @@ export function buildDeadManHttp(controller: DeadManController) {
       if (!ok) {
         return { status: 403, headers: H, body: JSON.stringify({ error: "rejected" }) };
       }
-      return { status: 200, headers: H, body: JSON.stringify({ ok: true, enabled: policy.enabled }) };
+      return {
+        status: 200,
+        headers: H,
+        body: JSON.stringify({ ok: true, enabled: policy.enabled, leaseExpiry: controller.leaseExpiry() }),
+      };
     }
 
     const affirm = parseAffirm(r);
@@ -104,6 +108,8 @@ export interface PowerHttpOptions {
   activeGrants?: readonly AdminGrantView[];
   suppressor: AutoUnlockSuppressor;
   runner: HostPowerRunner;
+  /** Posts the STK-signed boot suspension; without it a restart becomes a shutdown. */
+  suspender?: BootSuspender | null;
   now?: () => number;
   /** Replay window for `issuedAt`. Default 5 min — mirrors the dead-man. */
   maxAgeMs?: number;
@@ -160,8 +166,19 @@ export function buildPowerHttp(opts: PowerHttpOptions) {
     ) {
       return { status: 403, headers: H, body: JSON.stringify({ error: "invalid signature" }) };
     }
-    await executeLockAndPower({ mode: order.mode, suppressor: opts.suppressor, runner: opts.runner });
-    return { status: 200, headers: H, body: JSON.stringify({ ok: true, mode: order.mode }) };
+    const result = await executeLockAndPower({
+      mode: order.mode,
+      suppressor: opts.suppressor,
+      runner: opts.runner,
+      suspender: opts.suspender ?? null,
+      reason: "manual-lock",
+    });
+    // Report what happened, not what was asked: a restart that could not be locked became a shutdown.
+    return {
+      status: 200,
+      headers: H,
+      body: JSON.stringify({ ok: true, mode: result.mode, requestedMode: result.requestedMode, suspension: result.suspension }),
+    };
   };
 }
 

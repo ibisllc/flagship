@@ -172,6 +172,48 @@ class TrustedDevicesViewModel(
         }
     }
 
+    /** What a rejection of a pending recovery came to. */
+    sealed interface RecoveryVetoOutcome {
+        data object Rejected : RecoveryVetoOutcome
+        /** Already cancelled or finished; nothing to do. */
+        data object AlreadyOver : RecoveryVetoOutcome
+        data class Failed(val reason: String) : RecoveryVetoOutcome
+    }
+
+    /** N04: an active admin rejects the pending recovery. Asks for the admin key (the device's
+     *  biometric), signs the exact attempt and posts it. The screen confirms first. */
+    suspend fun vetoPendingRecovery(
+        adminKey: suspend (String) -> com.google.crypto.tink.subtle.Ed25519Sign = { r -> Keystore.adminRootKey(r) },
+        adminPubHex: () -> String? = { Keystore.adminRootPubHex() },
+    ): RecoveryVetoOutcome {
+        val user = username()
+        val pending = _pendingRePair.value?.pending
+        if (user.isNullOrEmpty() || pending == null || pending.objectedAt != null) return RecoveryVetoOutcome.AlreadyOver
+        return try {
+            val key = adminKey("Reject the account recovery")
+            val pub = adminPubHex() ?: return RecoveryVetoOutcome.Failed("This device has no admin key.")
+            val veto = com.flagshipserver.app.core.RePairVeto(user, pending.newIrkPub, pending.initiatedAt, pending.completesAt, pub, now())
+            server.vetoRePair(
+                user,
+                com.flagshipserver.app.api.RePairVetoRequest(
+                    request = com.flagshipserver.app.api.RePairVetoRequest.Inner(user, pending.newIrkPub, pending.initiatedAt, pending.completesAt, pub, veto.issuedAt),
+                    signature = HexUtil.encode(veto.sign(key)),
+                ),
+            )
+            loadPendingRePair()
+            RecoveryVetoOutcome.Rejected
+        } catch (t: com.flagshipserver.app.api.ScreensError.Http) {
+            if (t.status == 409) {
+                loadPendingRePair()
+                RecoveryVetoOutcome.AlreadyOver
+            } else {
+                RecoveryVetoOutcome.Failed(UserErrorText.of(t, "Couldn't reject the recovery. Try again."))
+            }
+        } catch (t: Throwable) {
+            RecoveryVetoOutcome.Failed(UserErrorText.of(t, "Couldn't reject the recovery. Try again."))
+        }
+    }
+
     suspend fun disconnect(device: DirectoryDevice): Boolean {
         val user = username() ?: return false
         if (device.isCurrent) return false

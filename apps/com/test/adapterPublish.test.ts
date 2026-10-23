@@ -6,7 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { D1Database } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
 import { handleAdapterIndex, type AdapterBucketLike } from "../src/adapterIndex.js";
-import { MAX_NEW_PER_PUBLISH, README, repoDir, runAdapterPublish, type AdapterPublishEnv } from "../src/adapterPublish.js";
+import {
+  MAX_NEW_PER_PUBLISH,
+  README,
+  communityPublish,
+  repoDir,
+  runAdapterPublish,
+  type AdapterPublishEnv,
+} from "../src/adapterPublish.js";
 import { scheduled } from "../src/scheduled.js";
 import { runAdapterInsights } from "../src/adapterInsights.js";
 
@@ -142,6 +149,7 @@ let env: AdapterPublishEnv;
 const realFetch = globalThis.fetch;
 
 beforeEach(() => {
+  communityPublish.enabled = true;
   gh = new FakeGitHub({ "README.md": "# flagship-adapters\n" });
   sqlite = createSqliteD1();
   db = sqlite as unknown as D1Database;
@@ -155,8 +163,24 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  communityPublish.enabled = false;
   globalThis.fetch = realFetch;
   sqlite.close();
+});
+
+describe("community adapters are quarantined by default (SEC-ADAPTER-001)", () => {
+  it("publishes nothing, whatever the token, repo or review key, and never touches GitHub", async () => {
+    communityPublish.enabled = false;
+    const r = await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, NOW);
+    expect(r).toEqual({ published: false, reason: "quarantined" });
+    expect(gh.calls).toEqual([]);
+  });
+
+  it("ships with the switch off", async () => {
+    vi.resetModules();
+    const fresh = await import("../src/adapterPublish.js");
+    expect(fresh.communityPublish.enabled).toBe(false);
+  });
 });
 
 const sha = (n: number) => n.toString(16).padStart(64, "0");

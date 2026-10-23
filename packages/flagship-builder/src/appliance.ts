@@ -1,9 +1,9 @@
+import { BOX_RELEASE } from "./boxReleaseConfig.js";
+import { INSTALL_BOX_ARTIFACT_SH, VERIFY_BOX_ARTIFACT_SH } from "./boxInstallerScripts.js";
 import { createHash } from "node:crypto";
 import { open } from "node:fs/promises";
 import {
   APPLIANCE_BUILD_KEYFILE,
-  BOX_NPM_SCOPE,
-  BOX_TSC_BUILD,
   LUKS_ASSERT_SINGLE_SLOT_FN,
 } from "./userdata.js";
 
@@ -198,13 +198,11 @@ export function buildAppliancePrepareScript(opts: AppliancePrepareOptions): stri
   if (!/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,199}$/.test(opts.gitRef) || opts.gitRef.includes("..")) {
     throw new Error("invalid appliance git ref");
   }
-  if (opts.gitCommit !== undefined && !/^[0-9a-f]{40}$/.test(opts.gitCommit)) {
+  const commit = opts.gitCommit ?? BOX_RELEASE.commit;
+  if (!/^[0-9a-f]{40}$/.test(commit)) {
     throw new Error("invalid appliance git commit");
   }
   const repo = opts.repoUrl ?? "https://github.com/ibisllc/flagship.git";
-  const clone = opts.gitCommit
-    ? `timeout -k 10 300 git clone --depth 2 --no-checkout '${repo}' /opt/flagship && timeout -k 10 300 git -C /opt/flagship fetch --depth 2 origin '${opts.gitCommit}' && git -C /opt/flagship checkout --detach '${opts.gitCommit}'`
-    : `timeout -k 10 300 git clone --depth 2 --branch '${opts.gitRef}' '${repo}' /opt/flagship || { timeout -k 10 300 git clone --depth 2 '${repo}' /opt/flagship; timeout -k 10 300 git -C /opt/flagship fetch --depth 2 origin '${opts.gitRef}'; git -C /opt/flagship checkout '${opts.gitRef}'; }`;
   if (!/^https:\/\/[A-Za-z0-9._\/-]+(?:\.git)?$/.test(repo) || repo.includes("..")) {
     throw new Error("invalid appliance repository URL");
   }
@@ -225,35 +223,49 @@ path-exclude=/usr/share/locale/*
 path-include=/usr/share/locale/en_US*
 path-include=/usr/share/locale/locale.alias
 DPKGCFG
-timeout -k 10 90 curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
 echo "[appliance-factory] installing Flagship runtime packages"
-timeout -k 15 600 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends nodejs jq git curl ca-certificates cryptsetup cryptsetup-initramfs lvm2 xxd openssl gnupg cloud-guest-utils golang-go docker.io docker-cli docker-compose
-if ! command -v npm >/dev/null 2>&1; then
-    timeout -k 15 600 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends npm
-fi
-command -v npm >/dev/null 2>&1 || { echo "[appliance-factory] npm unavailable"; exit 1; }
+timeout -k 15 600 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends jq curl ca-certificates cryptsetup cryptsetup-initramfs lvm2 xxd openssl gnupg cloud-guest-utils docker.io docker-cli docker-compose
 echo "[appliance-factory] runtime packages ready"
-rm -rf /opt/flagship
-echo "[appliance-factory] cloning Flagship ref=${opts.gitRef}${opts.gitCommit ? ` at ${opts.gitCommit}` : ""}"
-${clone}
+case "$(dpkg --print-architecture)" in
+    amd64) BOX_ARCH=amd64 ;;
+    arm64) BOX_ARCH=arm64 ;;
+    *) echo "[appliance-factory] unsupported architecture"; exit 1 ;;
+esac
+COMMIT='${commit}'
+BOX_ARTIFACT_NAME="flagship-box-\${COMMIT:0:12}-$BOX_ARCH"
+BOX_ARTIFACT_BASE='${BOX_RELEASE.artifactBase}'
+mkdir -p /usr/local/lib/flagship-installer /var/flagship
+cat > /usr/local/lib/flagship-installer/verify-box-artifact.sh <<'FLAGSHIP_VERIFY_BOX_ARTIFACT_EOF'
+${VERIFY_BOX_ARTIFACT_SH}
+FLAGSHIP_VERIFY_BOX_ARTIFACT_EOF
+cat > /usr/local/lib/flagship-installer/install-box-artifact.sh <<'FLAGSHIP_INSTALL_BOX_ARTIFACT_EOF'
+${INSTALL_BOX_ARTIFACT_SH}
+FLAGSHIP_INSTALL_BOX_ARTIFACT_EOF
+chmod 755 /usr/local/lib/flagship-installer/*.sh
+for ext in tar.gz manifest.json; do
+    timeout -k 15 1800 curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "/var/tmp/$BOX_ARTIFACT_NAME.$ext" "$BOX_ARTIFACT_BASE/$BOX_ARTIFACT_NAME.$ext" || { echo "[appliance-factory] could not download $BOX_ARTIFACT_NAME.$ext"; exit 1; }
+done
+BOX_ARTIFACT_SHA="$(jq -er .manifest.artifactSha256 "/var/tmp/$BOX_ARTIFACT_NAME.manifest.json")"
+echo "[appliance-factory] installing the signed release commit=$COMMIT"
+bash /usr/local/lib/flagship-installer/install-box-artifact.sh \\
+    --manifest "/var/tmp/$BOX_ARTIFACT_NAME.manifest.json" \\
+    --artifact "/var/tmp/$BOX_ARTIFACT_NAME.tar.gz" \\
+    --trust-keys "${BOX_RELEASE.trust.keys.join(",")}" \\
+    --threshold ${BOX_RELEASE.trust.threshold} \\
+    --expect-sha256 "$BOX_ARTIFACT_SHA" \\
+    --expect-commit "$COMMIT" \\
+    --arch "$BOX_ARCH" \\
+    --node-floor ${BOX_RELEASE.nodeFloor} \\
+    --min-sequence ${BOX_RELEASE.minSequence}
+rm -f "/var/tmp/$BOX_ARTIFACT_NAME".*
 cd /opt/flagship
-echo "[appliance-factory] installing pinned workspace dependencies"
-timeout -k 15 600 npm install --no-audit --no-fund ${BOX_NPM_SCOPE}
-echo "[appliance-factory] compiling workspace"
-timeout -k 15 300 ${BOX_TSC_BUILD}
-[ -e /opt/flagship/node_modules/@flagship/protocol/package.json ] || { echo "[appliance-factory] workspace link missing"; exit 1; }
+[ -e /opt/flagship/node_modules/@flagship/protocol/package.json ] || { echo "[appliance-factory] release incomplete"; exit 1; }
 printf '%s\\n' '${opts.gitRef}' > /opt/flagship/.flagship-appliance-ref
-echo "[appliance-factory] compiled workspace ready"
 mkdir -p /usr/local/lib/flagship-appliance
-echo "[appliance-factory] compiling initramfs unseal helper"
-( cd /opt/flagship/installer/unseal-helper && timeout -k 15 300 env HOME=/root GOPATH=/root/go GOMODCACHE=/root/go/pkg/mod CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false -ldflags '-s -w' -o /usr/local/lib/flagship-appliance/flagship-unseal . )
-chmod 755 /usr/local/lib/flagship-appliance/flagship-unseal
-echo "[appliance-factory] initramfs unseal helper ready"
-[ -x /usr/local/lib/flagship-appliance/flagship-unseal ] || { echo "[appliance-factory] unseal helper missing before Go purge"; exit 1; }
-echo "[appliance-factory] purging Go toolchain (static unseal helper already built)"
-apt-get purge -y golang-go golang-* 2>/dev/null || true
+install -m 755 /opt/flagship/installer/flagship-unseal /usr/local/lib/flagship-appliance/flagship-unseal
+echo "[appliance-factory] signed release and unseal helper ready"
 apt-get autoremove -y --purge
-rm -rf /root/go /root/.cache/go-build /root/.npm /root/.cache /usr/lib/go-* /usr/local/go
+rm -rf /root/.npm /root/.cache
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 echo "[appliance-factory] build caches removed"

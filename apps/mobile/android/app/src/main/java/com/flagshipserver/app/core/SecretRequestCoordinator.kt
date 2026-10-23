@@ -91,7 +91,14 @@ class SecretRequestCoordinator(
     private val pendingLeases: PendingLeases? = null,
     /** Pauses before the 2nd and 3rd try of a lease deposit that failed in passing. */
     private val leaseRetryDelaysMs: List<Long> = listOf(1_000L, 3_000L),
+    /** The dead-man switch as this phone last knew it, for a server. A lease never outlives its deadline. */
+    private val deadManBound: (serverDomain: String) -> DeadManBound? = { null },
+    /** What this phone last confirmed about the server's lock: true = locked, null = never confirmed. */
+    private val lockedServer: (serverDomain: String) -> Boolean? = { null },
 ) {
+    /** The dead-man switch's state for one server, as [DeadManLeaseBound] needs it. */
+    data class DeadManBound(val enabled: Boolean, val deadline: Long?)
+
     sealed class CoordinatorException(message: String) : Exception(message) {
         object NoSealedLuksKey :
             CoordinatorException("No sealed disk key is on file for this server yet.")
@@ -357,8 +364,18 @@ class SecretRequestCoordinator(
         material: IrkMaterial,
     ): String? {
         val issuedAt = now()
+        // A locked server takes no new lease: only an explicit, signed resume re-arms auto-unlock.
+        if (lockedServer(serverDomain) == true) return null
+        // With the dead-man switch on, a lease may not outlive the affirmation that keeps it alive
+        // (SEC-DEADMAN-001); with no live deadline, no lease at all.
+        val dm = deadManBound(serverDomain)
+        val expiresAt = DeadManLeaseBound.expiry(
+            requested = issuedAt + 365L * 24 * 60 * 60 * 1000,  // ~1 year; renewed each approve
+            enabled = dm?.enabled ?: false,
+            deadline = dm?.deadline,
+            now = issuedAt,
+        ) ?: return null
         val leaseId = AutoUnlockLeaseV2.randomLeaseId()
-        val expiresAt = issuedAt + 365L * 24 * 60 * 60 * 1000  // ~1 year; renewed each approve
         val lease = AutoUnlockLeaseV2.build(
             serverDomain = serverDomain,
             stkPub = stkPub,
@@ -431,6 +448,12 @@ class SecretRequestCoordinator(
         val done = mutableListOf<Pair<String, String>>()
         for ((server, p) in waiting) {
             if (p.lease.expiresAt <= now()) {
+                store.clear(server)
+                continue
+            }
+            // A lease built before a lock, or past the dead-man deadline, must not be sent now.
+            val dm = deadManBound(server)
+            if (lockedServer(server) == true || (dm?.enabled == true && p.lease.expiresAt > (dm.deadline ?: 0L))) {
                 store.clear(server)
                 continue
             }

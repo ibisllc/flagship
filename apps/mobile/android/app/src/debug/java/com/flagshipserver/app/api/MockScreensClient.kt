@@ -342,6 +342,22 @@ class MockScreensClient(
 
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
 
+    var sliver: com.flagshipserver.app.core.SecuritySliverResponse = com.flagshipserver.app.core.SecuritySliverResponse()
+    val publisherStates: MutableMap<String, com.flagshipserver.app.core.WaitingPublisherResponse> = mutableMapOf()
+    val trustCalls: MutableList<Triple<String, com.flagshipserver.app.core.PublisherTrust, String>> = mutableListOf()
+    val rejectCalls: MutableList<String> = mutableListOf()
+
+    override suspend fun securitySliver(): com.flagshipserver.app.core.SecuritySliverResponse { tick(); return sliver }
+    override suspend fun publisherState(serviceId: String): com.flagshipserver.app.core.WaitingPublisherResponse {
+        tick()
+        return publisherStates[serviceId] ?: com.flagshipserver.app.core.WaitingPublisherResponse()
+    }
+    override suspend fun trustPublisher(serviceId: String, trust: com.flagshipserver.app.core.PublisherTrust, signatureHex: String) {
+        tick()
+        trustCalls += Triple(serviceId, trust, signatureHex)
+    }
+    override suspend fun rejectPublisher(serviceId: String) { tick(); rejectCalls += serviceId }
+
     /** Debug access as a box would hold it: a grant turns it on until its end, a revoke turns it off. */
     var debugAccessState: DebugAccessView = DebugAccessView(on = false)
     val debugAccessBodies: MutableList<String> = mutableListOf()

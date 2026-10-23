@@ -16,7 +16,7 @@
 // "<App> suggests an access list" with its hosts, Review (opens the app's
 // access-list editor with the draft) and Not now.
 
-import { boxClient, getPodBaseUrl, getSessionToken, makeCurrentPod } from "./api.js";
+import { boxClient, getPodBaseUrl, getSessionToken, makeCurrentPod, wsTicketUrl } from "./api.js";
 import { loadAccountPods, sessionServers } from "./appPlacement.js";
 import { getSession } from "./state.js";
 import { sensitiveSigner } from "./adminRoot.js";
@@ -188,8 +188,11 @@ export function createAccessEventSocket({
   setTimer = (fn, ms) => setTimeout(fn, ms),
   clearTimer = (h) => clearTimeout(h),
   maxFailures = 3,
+  // Turns the stable address `url()` names into the one-time address to connect to (a ticket).
+  resolveUrl = null,
 }) {
   let ws = null;
+  let opening = false;
   let currentUrl = null;
   let failures = 0;
   let timer = null;
@@ -209,6 +212,23 @@ export function createAccessEventSocket({
   }
 
   function open(u) {
+    if (!resolveUrl) return connect(u);
+    if (opening) return;
+    opening = true;
+    Promise.resolve()
+      .then(() => resolveUrl(u))
+      .then((real) => {
+        if (real && currentUrl === u) connect(real); // else the pod changed while the ticket was on its way
+      })
+      .catch(() => {
+        failures++;
+      })
+      .finally(() => {
+        opening = false;
+      });
+  }
+
+  function connect(u) {
     let s;
     try {
       s = new WebSocketImpl(u);
@@ -256,12 +276,14 @@ export function createAccessEventSocket({
   return { ensure, disconnect, get failures() { return failures; } };
 }
 
+// The stable address of the socket, used to notice a change of pod. It carries no secret: the
+// connection itself is opened with a single-use ticket (`resolveUrl`).
 function screensSocketUrl() {
   const base = getPodBaseUrl();
   const tok = getSessionToken();
   if (!base || !tok) return null;
   const wsBase = base.replace(/^http/, "ws").replace(/\/+$/, "");
-  return `${wsBase}${ACCESS_EVENTS_PATH}?sessionToken=${encodeURIComponent(tok)}`;
+  return `${wsBase}${ACCESS_EVENTS_PATH}`;
 }
 
 export function podServerDomain() {
@@ -429,6 +451,7 @@ export function startAccessAlerts({ isUnlocked }) {
   });
   const socket = createAccessEventSocket({
     url: () => (isActive() ? screensSocketUrl() : null),
+    resolveUrl: () => wsTicketUrl(ACCESS_EVENTS_PATH),
     onEvent: () => void controller.check({ force: true }),
   });
   const poke = (force = false) => {

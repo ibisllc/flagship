@@ -221,7 +221,7 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("export async function deleteCloudRecovery");
     expect(r.body).toContain("export async function hasCloudRecovery");
     // Canonical bytes pinned to the protocol-side tag.
-    expect(r.body).toContain("flagship/upload-recovery-record/v1");
+    expect(r.body).toContain("buildRecoveryEnvelope");
     // After Task #73 the webapp delegates every WebAuthn call to the
     // dedicated sub-origin via window.open + postMessage. The lib file
     // no longer materialises a PRF wrap of its own — see the dedicated
@@ -372,7 +372,7 @@ describe("/webapp PWA static surface", () => {
     // v56 picks each new app's server, lists a server's apps and copies apps between servers.
     // v57 titles a server's page with its name.
     // v58 shows one status pill per app across its servers, and each server's state on the app page.
-    expect(r.body).toContain('SHELL_VERSION = "v156"');
+    expect(r.body).toContain('SHELL_VERSION = "v164"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

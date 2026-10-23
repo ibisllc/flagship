@@ -66,6 +66,12 @@ export interface CommandRunnerOpts {
   input?: Buffer | string;
   /** Kill the child (SIGKILL) when this aborts: a build over its disk limit. */
   signal?: AbortSignal;
+  /**
+   * The child's WHOLE environment. When set, nothing of the daemon's own
+   * environment is inherited, so a child that talks to a hostile server never
+   * holds the daemon's secrets.
+   */
+  env?: Record<string, string>;
 }
 
 export interface CommandRunner {
@@ -257,7 +263,7 @@ function armTimeout(
 export const realCommandRunner: CommandRunner = {
   run(cmd, args, opts) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: "inherit" });
+      const p = spawn(cmd, args, { stdio: "inherit", ...(opts?.env ? { env: opts.env } : {}) });
       const timer = armTimeout(p, opts, reject);
       armSignal(p, opts);
       // A spawn failure (e.g. the binary is missing — `docker` ENOENT) emits
@@ -275,7 +281,7 @@ export const realCommandRunner: CommandRunner = {
   },
   capture(cmd, args, opts) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: [opts?.input !== undefined ? "pipe" : "ignore", "pipe", "pipe"] });
+      const p = spawn(cmd, args, { stdio: [opts?.input !== undefined ? "pipe" : "ignore", "pipe", "pipe"], ...(opts?.env ? { env: opts.env } : {}) });
       if (opts?.input !== undefined) {
         p.stdin?.on("error", () => {});
         p.stdin?.end(opts.input);

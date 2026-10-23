@@ -99,6 +99,8 @@ public struct SettingsTab: View {
                     controlDevices: vm.controlDevices,
                     trustedDevices: vm.trustedDevices,
                     pendingRePair: vm.pendingRePair,
+                    canRejectRecovery: Keystore.hasAdminRoot,
+                    onRejectRecovery: { await vm.vetoPendingRecovery() },
                     canAddDevice: AddDeviceGate.allows(app),
                     onAddDevice: {
                         guard AddDeviceGate.allows(app) else { return }

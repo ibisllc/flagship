@@ -204,6 +204,7 @@ fun SecureAccountScreen(
                         server = flagshipServer,
                         passkeys = ceremony,
                         irk = irkMaterial.signer,
+                        irkPubHex = irkMaterial.pubHex,
                         username = username,
                         umkSeed = umk,
                         passphrase = passphrase,
