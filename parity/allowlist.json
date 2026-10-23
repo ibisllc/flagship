@@ -3,6 +3,16 @@
   "entries": [
     {
       "check": "test-vectors",
+      "key": "kotlin:language-negotiation",
+      "reason": "Android never picks a language itself: the OS chooses among the app's values-<lang> resources (per-app language in system settings). The vectors are the rule for the webapp, the box pages and the website."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:language-negotiation",
+      "reason": "iOS never picks a language itself: the OS chooses among the app's localisations (Settings > App > Language). The vectors are the rule for the webapp, the box pages and the website, which negotiate Accept-Language / navigator.languages."
+    },
+    {
+      "check": "test-vectors",
       "key": "mac:vm-core-vectors.applianceSeed",
       "reason": "By the section's own notes the Mac's JSONEncoder writes an equivalent seed body, not the same bytes, so it doesn't assert this vector."
     },
