@@ -388,6 +388,75 @@ describe("ServicePlatform.uninstall is admin-only (docs/service-access-gating.md
   });
 });
 
+describe("ServicePlatform.restartService (after an update moved the working tree)", () => {
+  it("starts the installed app again, and says so for one that is not installed", async () => {
+    const irk = makeKey();
+    const { runner, calls } = fakeRunner();
+    const platform = new ServicePlatform({ host: { username: HOST_USERNAME, irkPub: irk.publicKey }, swk: fakeSwk(), appRunner: runner, dataProvisioner: makeProvisioner() });
+    await platform.install({
+      request: { serverId: HOST_FQDN, creator: HOST_USERNAME, slug: "game1", manifestJson: SELF_MANIFEST, issuedAt: Date.now() },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    const before = calls.length;
+    expect(await platform.restartService("alice--game1")).toEqual({ ok: true });
+    expect(calls.slice(before).some((c) => c.includes("docker") && c.includes("run"))).toBe(true);
+    expect(await platform.restartService("alice--nothing")).toEqual({ ok: false, reason: "not installed" });
+  });
+});
+
+describe("ServicePlatform.uninstall as a ledger operation", () => {
+  async function world() {
+    const { mkdtemp } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { AuthorityHub, GrantIndex, OperationLedger } = await import("../src/authority/index.js");
+    const dir = await mkdtemp(join(tmpdir(), "uninstall-op-"));
+    const idx = new GrantIndex(join(dir, "grants.json"));
+    await idx.load();
+    await idx.issue({ id: "root", kind: "owner-session", issuer: "account", subject: "account", accountGeneration: 1, audience: "box", capability: "owner", policyRevision: 1, issuedAt: Date.now() });
+    const ledger = new OperationLedger(join(dir, "ops.json"), {
+      grantsLive: (ids, at) => ids.every((i) => idx.isLive(i, at)),
+      currentRevision: () => 0,
+      verifyApproval: () => false,
+    });
+    await ledger.load();
+    const hub = new AuthorityHub(idx, ledger);
+    const irk = makeKey();
+    const { runner } = fakeRunner();
+    const platform = new ServicePlatform({
+      host: { username: HOST_USERNAME, irkPub: irk.publicKey },
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: makeProvisioner(),
+      operations: { hub, grantDeps: ["root"] },
+    });
+    await platform.install({
+      request: { serverId: HOST_FQDN, creator: HOST_USERNAME, slug: "game1", manifestJson: SELF_MANIFEST, issuedAt: Date.now() },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    const request = { serverId: HOST_FQDN, creator: HOST_USERNAME, slug: "game1", issuedAt: Date.now() };
+    const go = () => platform.uninstall({ request, signature: signUninstallService(request, irk), verify: () => true });
+    return { hub, platform, go };
+  }
+
+  it("is recorded as applied, and a replay finds the app already gone", async () => {
+    const { hub, platform, go } = await world();
+    expect((await go()).ok).toBe(true);
+    expect(platform.byServiceId("alice--game1")).toBeUndefined();
+    expect(hub.ops.list({ kind: "app-uninstall" })[0]?.state).toBe("applied");
+    expect(await go()).toEqual({ ok: true, alreadyGone: true });
+  });
+
+  it("removes nothing once the owner's grant is revoked", async () => {
+    const { hub, platform, go } = await world();
+    await hub.revoke("root", "signed out");
+    expect((await go()).ok).toBe(false);
+    expect(platform.byServiceId("alice--game1")).toBeDefined();
+  });
+});
+
 describe("ServicePlatform.uninstall (idempotent)", () => {
   it("uninstalls + cleans up the URL/registry slot", async () => {
     const irk = makeKey();

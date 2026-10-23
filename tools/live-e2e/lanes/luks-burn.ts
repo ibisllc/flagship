@@ -40,6 +40,7 @@
  *      LUKS_LANE_PLAN (default 2xCPU-4GB).
  * Exit 0 = one-slot evidence captured and cleanup verified; 1 otherwise.
  */
+import { BOX_RELEASE } from "@flagship/protocol";
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
@@ -184,7 +185,7 @@ async function main(): Promise<number> {
     registrationUrl: `https://${CONTROL}/api/server/register`,
     authCode,
     authCodeUserSignature: acSig,
-    installerGitRef: "main",
+    installerGitRef: process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit,
     rckPubKey: rck.publicKey,
   };
   const recipeJson = JSON.stringify({
@@ -196,7 +197,7 @@ async function main(): Promise<number> {
     registrationUrl: blob.registrationUrl,
     authCode: acWire,
     authCodeUserSignature: bytesToHex(acSig),
-    installerGitRef: "main",
+    installerGitRef: process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit,
     rckPubKey: bytesToHex(rck.publicKey),
     blobSignatureHex: bytesToHex(signInstallBlob(blob, irk)),
   });

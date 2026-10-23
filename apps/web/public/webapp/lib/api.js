@@ -287,6 +287,20 @@ export function boxClient(podFqdn = "") {
   };
 }
 
+/**
+ * A WebSocket URL for one of the box's stream routes, carrying a single-use ticket instead of the
+ * session token (N06: the bearer never rides in a URL). Resolves null when this device has no
+ * session for the pod. The ticket is spent by the first upgrade, so ask again for each connection.
+ */
+export async function wsTicketUrl(route, podFqdn = "") {
+  const c = boxClient(podFqdn);
+  if (!c.baseUrl || !c.token()) return null;
+  const body = await c.fetch("/api/screens/ws-ticket", { method: "POST", body: JSON.stringify({ route }) });
+  if (!body || typeof body.ticket !== "string") throw new ScreensError("the box gave no ticket", 502, body);
+  const wsBase = c.baseUrl.replace(/^http/, "ws").replace(/\/+$/, "");
+  return `${wsBase}${route}?ticket=${encodeURIComponent(body.ticket)}`;
+}
+
 /** Point the current-pod slot at `podFqdn` when this device has a session for
  *  it. Resolves to whether it moved (or already pointed there). */
 export function makeCurrentPod(podFqdn) {

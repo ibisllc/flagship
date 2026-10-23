@@ -11,6 +11,7 @@ import {
 import {
   InMemorySecretMailboxStorage,
   InMemoryBoxSealedLeaseStorage,
+  InMemoryBootSuspensionStorage,
 } from "@flagship/storage";
 import { routeBoot, type BootRouteDeps } from "../src/routes.js";
 import { signBootRequest } from "../src/gate.js";
@@ -75,8 +76,10 @@ class RecordingNotify implements NotifyPipe {
 let now = 1_000_000;
 function makeDeps(notify: NotifyPipe): BootRouteDeps {
   const directory = makeDirectory();
+  const suspensions = new InMemoryBootSuspensionStorage();
   return {
-    boxSealedLeases: new InMemoryBoxSealedLeaseStorage(),
+    boxSealedLeases: new InMemoryBoxSealedLeaseStorage(suspensions),
+    bootSuspensions: suspensions,
     secretMailbox: new InMemorySecretMailboxStorage(),
     directory,
     notify,

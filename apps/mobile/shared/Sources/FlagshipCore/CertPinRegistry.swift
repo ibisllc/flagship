@@ -193,6 +193,32 @@ public final class CertPinRegistry: @unchecked Sendable {
 
     // MARK: - Lookup (the enforcement input)
 
+    /// True when `host` is a box this phone knows (it has derived the box's STK, or the box is in
+    /// the directory): the box itself or any name under its wildcard. Used to refuse a request to
+    /// a known box that has no verified pin rather than fall back to ordinary web trust.
+    public func isKnownBox(host: String) -> Bool {
+        let h = Self.normalize(host)
+        guard !h.isEmpty else { return false }
+        lock.lock()
+        defer { lock.unlock() }
+        if now() < enrollmentAllowedUntil[h] ?? 0 { return false }
+        return stkPubs.keys.contains { h == $0 || h.hasSuffix(".\($0)") }
+    }
+
+    /// The one narrow window in which a freshly created box may be reached before its first signed
+    /// status gives the phone a pin: the caller names the exact host and the exchange it makes is
+    /// authenticated by the paired STK, not by this connection. Expires on its own.
+    public func allowUnpinnedEnrollment(host: String, forSeconds seconds: Double = 120) {
+        let h = Self.normalize(host)
+        guard !h.isEmpty else { return }
+        lock.lock()
+        enrollmentAllowedUntil[h] = now() + min(seconds, 300)
+        lock.unlock()
+    }
+
+    private var enrollmentAllowedUntil: [String: TimeInterval] = [:]
+    private func now() -> TimeInterval { Date().timeIntervalSince1970 }
+
     /// The pin governing `host`, or nil when no verified pin exists (⇒
     /// default TLS validation stands). Matches the box FQDN exactly OR any
     /// host under it (`<service>.<server>.<user>` rides the box wildcard).

@@ -47,11 +47,11 @@ class OkHttpBrowserStream(
             val wsBase = base
                 .replaceFirst("https://", "wss://")
                 .replaceFirst("http://", "ws://")
-            val encodedToken = java.net.URLEncoder.encode(token, "UTF-8")
             val encodedTabId = java.net.URLEncoder.encode(tabId, "UTF-8")
                 .replace("+", "%20")
-            val url = "$wsBase/api/screens/browser-tabs/$encodedTabId/stream?sessionToken=$encodedToken"
-            val req = Request.Builder().url(url).build()
+            // The session rides in a header, never in the URL (N06): URLs end up in proxies and logs.
+            val url = "$wsBase/api/screens/browser-tabs/$encodedTabId/stream"
+            val req = Request.Builder().url(url).header("x-flagship-session", token).build()
             val closeLatch = CompletableDeferred<Boolean>()
             val socket = client.newWebSocket(req, object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {

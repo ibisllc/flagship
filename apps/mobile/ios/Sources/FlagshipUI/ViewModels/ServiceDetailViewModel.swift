@@ -244,6 +244,21 @@ public final class ServiceDetailViewModel {
         d.dataLayerInstances.contains { $0.store == "postgres" }
     }
 
+    public private(set) var permissions: ServicePermissionsController?
+    public private(set) var restoredAccess: RestoredAccessController?
+    public private(set) var updateMode: UpdateModeController?
+    /// Whether this device can sign an admin order (approving restored permissions needs it).
+    public var canApproveRestored: Bool { accessCanChange }
+
+    private func syncPermissions() async {
+        if permissions == nil { permissions = ServicePermissionsController(serviceId: serviceId, client: client) }
+        if restoredAccess == nil { restoredAccess = RestoredAccessController(serviceRef: serviceId, client: client) }
+        if updateMode == nil { updateMode = UpdateModeController(serviceId: serviceId, client: client) }
+        await permissions?.load()
+        await restoredAccess?.load()
+        await updateMode?.load()
+    }
+
     private func syncDatabase(hasPostgres: Bool) async {
         guard accessCanChange, hasPostgres else { database = nil; return }
         if database == nil { database = AppDatabaseController(serviceId: serviceId, client: client) }
@@ -360,7 +375,8 @@ public final class ServiceDetailViewModel {
             let hasPostgres = Self.hasPostgres(di)
             async let dbSync: Void = syncDatabase(hasPostgres: hasPostgres)
             async let runsOnSync: Void = syncRunsOn(di.app)
-            _ = await (accessSync, keysSync, dbSync, runsOnSync)
+            async let permsSync: Void = syncPermissions()
+            _ = await (accessSync, keysSync, dbSync, runsOnSync, permsSync)
         } catch {
             // UX-A/UX-B — plain language; a cert-pin mismatch reads as a
             // possible interception warning, not a generic network error.

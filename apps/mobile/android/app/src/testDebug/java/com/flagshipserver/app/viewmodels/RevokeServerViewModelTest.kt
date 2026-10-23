@@ -26,6 +26,7 @@ import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.PendingRePairSnapshot
 import com.flagshipserver.app.api.RckRegisterRequest
 import com.flagshipserver.app.api.RePairCompleteRequest
+import com.flagshipserver.app.api.RePairVetoRequest
 import com.flagshipserver.app.api.RePairCompleteResponse
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.api.RePairInitiateResponse
@@ -195,6 +196,7 @@ class RevokeServerViewModelTest {
         override suspend fun initiateRePair(username: String, body: RePairInitiateRequest, ifMatch: String?): RePairInitiateResponse = throw error
         override suspend fun completeRePair(username: String, body: RePairCompleteRequest): RePairCompleteResponse = throw error
         override suspend fun fetchPendingRePair(username: String): PendingRePairSnapshot = throw error
+        override suspend fun vetoRePair(username: String, body: RePairVetoRequest): Unit = throw error
         override suspend fun wipeRestart(username: String, body: WipeRestartRequest, ifMatch: String?): WipeRestartResponse = throw error
         override suspend fun renameApp(username: String, serviceId: String, body: AppRenameRequest): AppRenameResponse = throw error
         override suspend fun getAppLinks(username: String, serviceId: String): AppLinksResponse = throw error

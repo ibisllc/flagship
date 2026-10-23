@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "about": "The box release every new server installs (SEC-INSTALL-001). `commit` is the exact 40-hex source commit the signed artifact was built from, never a branch or tag; `sequence` is the manifest sequence a box must not go below. `scripts/gen-box-release.mjs --write` copies this, release/box-artifact-trust.json and release/security-floor.json into the generated constants the apps, the web builder and the Studios compile in; `--check` (and the test suite) fails on drift. Set it in the release run, after the artifact and its signed manifest are published.",
+  "commit": "386e29c84899283c167c9ce983d2dc2acbaa4f11",
+  "sequence": 1,
+  "artifactBase": "https://flagshipserver.com/build/iso"
+}

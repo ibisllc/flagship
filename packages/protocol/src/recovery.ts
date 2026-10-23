@@ -14,6 +14,7 @@ import type { Bytes, Keypair } from "./types.js";
 
 const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
 const TAG_RE_PAIR_OBJECT = "flagship/re-pair-object/v1";
+const TAG_RE_PAIR_VETO = "flagship/re-pair-veto/v1";
 const TAG_RE_PAIR_COMPLETE = "flagship/re-pair-complete/v1";
 const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
 const TAG_UPLOAD_RECOVERY_RECORD = "flagship/upload-recovery-record/v1";
@@ -422,6 +423,48 @@ export function verifyInheritanceDeclaration(
 ): boolean {
   try {
     return ed.verify(sig, canonicalInheritanceDeclaration(d), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+
+/**
+ * An active admin's veto of a pending recovery (SECURITY-HARDENING-PLAN.md 10.6, N04).
+ *
+ * Signed by the account's admin root (held by every active admin device, behind that
+ * device's biometric). It binds the exact attempt: the pending device key, when the
+ * attempt began and its deadline, and the vetoing key, so a veto of one attempt cannot be
+ * replayed against a later one (a veto cancels that attempt only; a retry starts a fresh
+ * full wait). The tag is the verb: a captured veto can never read as an objection by the
+ * recoverer or as a completion.
+ */
+export interface RePairVeto {
+  username: string;
+  newIrkPub: Bytes;
+  initiatedAt: number;
+  completesAt: number;
+  vetoerPub: Bytes;
+  issuedAt: number;
+}
+
+export function canonicalRePairVeto(r: RePairVeto): Bytes {
+  legacyFieldGuard("username", r.username);
+  for (const [k, v] of Object.entries({ initiatedAt: r.initiatedAt, completesAt: r.completesAt, issuedAt: r.issuedAt })) {
+    if (!Number.isSafeInteger(v) || v < 0) throw new Error(`invalid ${k}`);
+  }
+  return new TextEncoder().encode(
+    [TAG_RE_PAIR_VETO, r.username.toLowerCase(), hex(r.newIrkPub), r.initiatedAt, r.completesAt, hex(r.vetoerPub), r.issuedAt].join("|"),
+  );
+}
+
+export function signRePairVeto(r: RePairVeto, vetoer: Keypair): Bytes {
+  return ed.sign(canonicalRePairVeto(r), vetoer.privateKey);
+}
+
+export function verifyRePairVeto(r: RePairVeto, sig: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRePairVeto(r), r.vetoerPub);
   } catch {
     return false;
   }

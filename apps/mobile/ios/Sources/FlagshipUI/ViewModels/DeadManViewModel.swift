@@ -45,6 +45,9 @@ public final class DeadManViewModel {
     /// UNUserNotificationCenter. Default reschedules the real reminders.
     private let scheduleReminders: (String, String, Int64) -> Void
     private let cancelReminders: (String) -> Void
+    /// Revokes the server's auto-unlock leases before the switch is enabled, so none outlives it.
+    private let bootLock: BootLock?
+    private let irkSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
 
     public init(
         client: any LockPowerClient,
@@ -54,9 +57,13 @@ public final class DeadManViewModel {
         signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         scheduleReminders: ((String, String, Int64) -> Void)? = nil,
-        cancelReminders: ((String) -> Void)? = nil
+        cancelReminders: ((String) -> Void)? = nil,
+        bootLock: BootLock? = nil,
+        irkSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil
     ) {
         self.client = client
+        self.bootLock = bootLock
+        self.irkSigner = irkSigner ?? { reason in try await Keystore.deriveIRK(reason: reason) }
         self.serverDomain = serverDomain
         self.serverName = serverName
         self.store = store
@@ -100,6 +107,17 @@ public final class DeadManViewModel {
             phase = .failed("Couldn't access your account key. \(HumanError.humanize(error))")
             return
         }
+        // Turning the switch on: first remove every auto-unlock lease, because none may outlive
+        // the affirmation. Auto-unlock re-arms at your next phone approval, bounded by the deadline.
+        if enabled, let bootLock {
+            do {
+                let irk = try await irkSigner("Remove auto-unlock for \(serverDomain)")
+                try await bootLock.revokeAllLeases(serverDomain: serverDomain, irk: irk)
+            } catch {
+                phase = .failed("Couldn't remove this server's auto-unlock lease, so the lock-down was not turned on. \(HumanError.humanize(error))")
+                return
+            }
+        }
         let policy = DeadManPolicy(
             serverId: serverDomain,
             enabled: enabled,
@@ -113,6 +131,7 @@ public final class DeadManViewModel {
             phase = .failed("Couldn't sign. \(HumanError.humanize(error))")
             return
         }
+        var policyLeaseExpiry: Int64 = 0
         do {
             let env = policy.envelope(signatureHex: HexUtil.encode(sig))
             let result = try await client.setDeadManPolicy(
@@ -124,6 +143,7 @@ public final class DeadManViewModel {
                 phase = .failed("The server rejected the change. Try again.")
                 return
             }
+            policyLeaseExpiry = result.leaseExpiry
         } catch let e as ScreensClientError {
             phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
             return
@@ -133,6 +153,11 @@ public final class DeadManViewModel {
         }
 
         store.save(serverDomain: serverDomain, enabled: enabled, windowMs: windowMs, graceMs: graceMs, lockoutMode: lockoutMode.rawValue)
+        if enabled, policyLeaseExpiry > 0 {
+            store.setLeaseExpiry(policyLeaseExpiry, for: serverDomain)
+            leaseExpiry = policyLeaseExpiry
+            scheduleReminders(serverDomain, serverName, policyLeaseExpiry)
+        }
         self.enabled = enabled
         self.window = window
         self.lockoutMode = lockoutMode

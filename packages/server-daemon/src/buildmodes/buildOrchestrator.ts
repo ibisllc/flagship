@@ -61,6 +61,7 @@ import {
 } from "@flagship/protocol";
 import { indexableRepo, licensePathOf, type AdapterIndex, type StoreReason } from "./adapterIndex.js";
 import type { BuildSnapshot, BuildStore } from "./buildStore.js";
+import type { AdaptConsentGate, AiCostEstimate, ConsentInput, ConsentVerdict } from "./adaptConsent.js";
 
 /** What a build that was mid-run when the daemon stopped says afterwards. */
 export const INTERRUPTED_AI_REASON =
@@ -303,6 +304,11 @@ export interface BuildOrchestratorDeps {
    * (back-compat: tests inject an `adaptRunner` directly).
    */
   adaptCredentialAvailable?: (buildId: string) => boolean;
+  /**
+   * Per-operation consent for a run that spends the owner's key or credits (adaptConsent.ts). Absent ⇒ no
+   * consent step (tests, and boxes that have not wired it).
+   */
+  adaptConsent?: AdaptConsentGate;
   /** Keeps builds across a daemon restart (`restore` reads it back). Unset ⇒ memory only. */
   store?: BuildStore;
   /** Coalesce saves this long (default 300 ms). */
@@ -729,15 +735,28 @@ export class BuildOrchestrator {
    * build's state (`adapt`), which the phone polls. The pass can run for
    * many minutes, longer than a phone keeps one request open.
    */
-  startAdaptGit(buildId: string, opts: { instructions?: string } = {}): { ok: true } | { ok: false; status: number; reason: string } {
+  /** The owner's consent for one AI adapt run: ok, or the estimate to show and why it is not enough. */
+  checkAdaptConsent(buildId: string, consent: ConsentInput | undefined): ConsentVerdict {
+    return this.deps.adaptConsent ? this.deps.adaptConsent.check(buildId, "adapt", consent) : { ok: true };
+  }
+
+  startAdaptGit(
+    buildId: string,
+    opts: { instructions?: string; consent?: ConsentInput } = {},
+  ): { ok: true } | { ok: false; status: number; reason: string; estimate?: AiCostEstimate } {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, status: 404, reason: "not a git build" };
     if (st.adapt?.status === "running") return { ok: false, status: 409, reason: "the AI is already adapting this repo" };
     if (this.sealedBuilds.has(buildId)) return { ok: false, status: 409, reason: CLOSED_TO_AI };
     if (!this.adaptConfigured(buildId)) return { ok: false, status: 503, reason: "AI adapt not configured" };
+    const verdict = this.checkAdaptConsent(buildId, opts.consent);
+    if (!verdict.ok) return { ok: false, status: verdict.status, reason: verdict.reason, estimate: verdict.estimate };
     st.adapt = { status: "running", startedAt: this.now(), phase: "staging" };
     this.touch(buildId);
-    void this.adaptGit(buildId, opts)
+    void this.adaptGit(buildId, {
+      ...(opts.instructions !== undefined ? { instructions: opts.instructions } : {}),
+      ...(verdict.tokenBudget !== undefined ? { tokenBudget: verdict.tokenBudget } : {}),
+    })
       .catch((e: unknown): AdaptResult => ({ ok: false, reason: (e as Error).message }))
       .then((r) => {
         const cur = this.states.get(buildId);
@@ -778,7 +797,8 @@ export class BuildOrchestrator {
    * a build with no loaded workspace, no `adaptRunner` configured, or a
    * model output that produced no manifest.
    */
-  async adaptGit(buildId: string, opts: { instructions?: string } = {}): Promise<AdaptResult> {
+  /** `tokenBudget`: the amount the owner signed for this run (`checkAdaptConsent`); the run stops there. */
+  async adaptGit(buildId: string, opts: { instructions?: string; tokenBudget?: number } = {}): Promise<AdaptResult> {
     try {
       return await this.adaptGitNow(buildId, opts);
     } finally {
@@ -786,7 +806,7 @@ export class BuildOrchestrator {
     }
   }
 
-  private async adaptGitNow(buildId: string, opts: { instructions?: string }): Promise<AdaptResult> {
+  private async adaptGitNow(buildId: string, opts: { instructions?: string; tokenBudget?: number }): Promise<AdaptResult> {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
     if (this.sealedBuilds.has(buildId)) return { ok: false, reason: CLOSED_TO_AI };
@@ -905,7 +925,7 @@ export class BuildOrchestrator {
   private async adaptGitAgentic(
     buildId: string,
     ws: BuildWorkspace,
-    opts: { instructions?: string },
+    opts: { instructions?: string; tokenBudget?: number },
   ): Promise<AdaptResult> {
     const repoFiles = ws.list();
     this.aiTouched.add(buildId);
@@ -948,7 +968,14 @@ export class BuildOrchestrator {
         contextTokens: await agentRunner.contextTokens?.(buildId).catch(() => undefined),
         ...(this.deps.modelRedactor ? { redact: this.deps.modelRedactor } : {}),
         ...(opts.instructions != null ? { instructions: opts.instructions } : {}),
-        ...(this.deps.agentMaxTurns != null ? { options: { maxTurns: this.deps.agentMaxTurns } } : {}),
+        ...(this.deps.agentMaxTurns != null || opts.tokenBudget != null
+          ? {
+              options: {
+                ...(this.deps.agentMaxTurns != null ? { maxTurns: this.deps.agentMaxTurns } : {}),
+                ...(opts.tokenBudget != null ? { tokenBudget: opts.tokenBudget } : {}),
+              },
+            }
+          : {}),
       });
     } catch (e) {
       // runBuildAgent never throws, but defend the boundary anyway.

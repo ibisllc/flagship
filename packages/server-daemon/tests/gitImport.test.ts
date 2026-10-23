@@ -206,6 +206,65 @@ describe("GitImporter.inspect — journaling + clone failure", () => {
   });
 });
 
+describe("GitImporter.inspect — the clone itself is hardened (SEC N02, E04)", () => {
+  async function cloneCall(gitUrl: string, resolved: string[]) {
+    const calls: Array<{ args: string[]; env?: Record<string, string> }> = [];
+    const importer = new GitImporter({
+      cmd: { run: async (_c, args, o) => void calls.push({ args, ...(o?.env ? { env: o.env } : {}) }) },
+      workingDir: workDir(),
+      resolveHost: async () => resolved,
+    });
+    await importer.inspect({ gitUrl });
+    return calls[0]!;
+  }
+  const configs = (args: string[]) => args.flatMap((a, i) => (args[i - 1] === "-c" ? [a] : []));
+
+  it("connects only to the address that was checked, follows no redirect and runs no hooks", async () => {
+    const call = await cloneCall("https://example.org:8443/a/b", ["93.184.216.34", "2606:2800:220:1::1"]);
+    const c = configs(call.args);
+    expect(c).toContain("http.curloptResolve=example.org:8443:93.184.216.34");
+    expect(c).toContain("http.curloptResolve=example.org:8443:[2606:2800:220:1::1]");
+    expect(c).toContain("http.followRedirects=false");
+    expect(c).toContain("core.hooksPath=/dev/null");
+    expect(c).toContain("credential.helper=");
+    expect(c).toContain("protocol.allow=never");
+    expect(c).toContain("protocol.https.allow=always");
+    expect(call.args).toContain("--no-recurse-submodules");
+    expect(call.args.indexOf("clone")).toBeGreaterThan(call.args.lastIndexOf("-c"));
+  });
+
+  it("hands git nothing of the daemon's environment", async () => {
+    process.env["FLAGSHIP_TEST_SECRET"] = "s3cret";
+    try {
+      const call = await cloneCall("https://github.com/a/b", ["140.82.112.3"]);
+      expect(call.env).toBeDefined();
+      expect(Object.keys(call.env!)).not.toContain("FLAGSHIP_TEST_SECRET");
+      expect(JSON.stringify(call.env)).not.toContain("s3cret");
+      expect(call.env!["GIT_CONFIG_NOSYSTEM"]).toBe("1");
+      expect(call.env!["GIT_CONFIG_GLOBAL"]).toBe("/dev/null");
+      expect(call.env!["GIT_ALLOW_PROTOCOL"]).toBe("https:http");
+    } finally {
+      delete process.env["FLAGSHIP_TEST_SECRET"];
+    }
+  });
+
+  it.each([
+    ["an IPv4-mapped loopback written in hex", "::ffff:7f00:1"],
+    ["an expanded IPv6 loopback", "0:0:0:0:0:0:0:1"],
+    ["the metadata address, mapped", "::ffff:a9fe:a9fe"],
+  ])("refuses a name that resolves to %s", async (_n, addr) => {
+    let cloned = false;
+    const importer = new GitImporter({
+      cmd: { run: async () => void (cloned = true) },
+      workingDir: workDir(),
+      resolveHost: async () => [addr],
+    });
+    const r = await importer.inspect({ gitUrl: "https://rebind.example/a/b" });
+    expect(r.fit).toBe(false);
+    expect(cloned).toBe(false);
+  });
+});
+
 describe("GitImporter.inspect — SSRF guard on the clone host", () => {
   it("rejects a clone URL pointing at a literal loopback IP (no clone)", async () => {
     let cloned = false;

@@ -223,6 +223,58 @@ interface ScreensClient {
     suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         throw ScreensError.NotImplemented("debug access")
 
+    /** `GET /api/screens/services/:id/permissions`: what can act for this app and the work under it. */
+    suspend fun servicePermissions(serviceId: String): com.flagshipserver.app.core.ServicePermissions =
+        throw ScreensError.NotImplemented("permissions")
+
+    /** `POST …/permissions/revoke`: end one grant, or all of the app's when [grantId] is null. */
+    suspend fun revokeServicePermission(serviceId: String, grantId: String?): com.flagshipserver.app.core.PermissionRevokeResult =
+        throw ScreensError.NotImplemented("permissions")
+
+    /** `GET /api/screens/restored-access`: permissions a restore held back for an admin. */
+    suspend fun restoredAccessDrafts(): com.flagshipserver.app.core.RestoredAccessList =
+        throw ScreensError.NotImplemented("restored permissions")
+
+    /** `POST /api/service-access/restored`: an admin's signature over the exact draft. */
+    suspend fun approveRestoredAccess(body: com.flagshipserver.app.core.RestoredAccessApproveBody): Unit =
+        throw ScreensError.NotImplemented("restored permissions")
+
+    suspend fun discardRestoredAccess(serviceRef: String): Unit =
+        throw ScreensError.NotImplemented("restored permissions")
+
+    /** `GET/POST /api/screens/services/:id/update-mode`: manual (default), staged, automatic or frozen. */
+    suspend fun updateMode(serviceId: String): com.flagshipserver.app.core.UpdateModeState =
+        throw ScreensError.NotImplemented("update modes")
+
+    suspend fun setUpdateMode(serviceId: String, mode: String): Unit =
+        throw ScreensError.NotImplemented("update modes")
+
+    /** `/api/screens/companion-delegation`: let one Remote session build or deploy one app. */
+    suspend fun companionDelegations(sessionId: String): com.flagshipserver.app.core.CompanionDelegationList =
+        throw ScreensError.NotImplemented("delegations")
+
+    suspend fun allowCompanionBuild(body: com.flagshipserver.app.core.CompanionDelegationBody): Unit =
+        throw ScreensError.NotImplemented("delegations")
+
+    suspend fun endCompanionDelegation(sessionId: String, serviceRef: String): Unit =
+        throw ScreensError.NotImplemented("delegations")
+
+    /** `GET /api/screens/security-sliver`: the box's security notices, each line with its own severity. */
+    suspend fun securitySliver(): com.flagshipserver.app.core.SecuritySliverResponse =
+        throw ScreensError.NotImplemented("security sliver")
+
+    /** `GET /api/screens/services/:id/publisher`: the pinned publisher key and any key waiting for the owner. */
+    suspend fun publisherState(serviceId: String): com.flagshipserver.app.core.WaitingPublisherResponse =
+        throw ScreensError.NotImplemented("publisher key")
+
+    /** `POST /api/screens/services/:id/publisher/trust` with the owner's signature over exactly that change. */
+    suspend fun trustPublisher(serviceId: String, trust: com.flagshipserver.app.core.PublisherTrust, signatureHex: String): Unit =
+        throw ScreensError.NotImplemented("publisher key")
+
+    /** `POST /api/screens/services/:id/publisher/reject`: keep updates paused. */
+    suspend fun rejectPublisher(serviceId: String): Unit =
+        throw ScreensError.NotImplemented("publisher key")
+
     /** `POST /api/screens/debug-access/revoke` with `{revoke, signatureHex}`. */
     suspend fun debugAccessRevoke(bodyJson: String): DebugAccessChangeResponse =
         throw ScreensError.NotImplemented("debug access")

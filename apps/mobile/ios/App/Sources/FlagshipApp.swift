@@ -108,7 +108,10 @@ struct FlagshipApp: App {
         // then HARD-FAIL unless the served leaf matches the box's
         // STK-signed fingerprint when a verified pin exists (A′ phase 4).
         // SSE + the browser-stream WebSocket share the same session, so
-        // they're covered too. No pin ⇒ default validation stands.
+        // they're covered too. A host that is not one of this phone's boxes keeps
+        // default validation; a known box with no verified pin is refused, never
+        // let through on ordinary web trust (SECURITY-HARDENING-PLAN.md 7.1).
+        BoxPinPolicy.install(isKnownBox: { CertPinRegistry.shared.isKnownBox(host: $0) })
         let pinnedSession = BoxPinnedURLSession.make(
             pinFor: { CertPinRegistry.shared.pinFor(host: $0) }
         )

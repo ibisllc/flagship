@@ -10,6 +10,7 @@ import {
   signDeviceEndpointClaim,
   signLeaseRevocation,
   signSecretRequest,
+  verifySecretRequest,
   type DeviceEndpointClaim,
   type Keypair,
   type SecretPurpose,
@@ -19,6 +20,7 @@ import { InMemoryStorage } from "@flagship/storage";
 import {
   handleGetSecretRequests,
   handleGetSecretResponse,
+  handleReadSecretRequests,
   handleListBoxSealedLeases,
   handlePostBoxSealedLease,
   handlePostSecretRequest,
@@ -638,3 +640,20 @@ function hexToBytes(s: string): Uint8Array {
   for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
   return out;
 }
+
+describe("GET /users/:u/secret-requests — for a device without the IRK", () => {
+  it("returns each pending request with the box's own signature, which verifies only under that box's key", async () => {
+    const irk = makeKey();
+    const stk = makeKey();
+    const storage = await setup({ irk, stk });
+    const { body } = postSecretRequestBody({ stk });
+    expect((await handlePostSecretRequest(deps(storage), HOST, body)).status).toBe(200);
+    const res = await handleReadSecretRequests({ secretMailbox: storage.secretMailbox }, USERNAME);
+    expect(res.status).toBe(200);
+    const [r] = (res.body as { requests: Array<{ serverDomain: string; stkPub: string; purpose: SecretPurpose; requestNonceHex: string; issuedAt: number; requestSignature: string }> }).requests;
+    const req: SecretRequest = { serverDomain: r!.serverDomain, stkPub: hexToBytes(r!.stkPub), purpose: r!.purpose, nonce: hexToBytes(r!.requestNonceHex), issuedAt: r!.issuedAt };
+    expect(verifySecretRequest(req, hexToBytes(r!.requestSignature), stk.publicKey)).toBe(true);
+    expect(verifySecretRequest(req, hexToBytes(r!.requestSignature), makeKey().publicKey)).toBe(false);
+    expect((await handleReadSecretRequests({ secretMailbox: storage.secretMailbox }, "Bad Name!")).status).toBe(400);
+  });
+});

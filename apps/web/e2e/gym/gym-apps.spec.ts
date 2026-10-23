@@ -1148,10 +1148,10 @@ test.describe("gym webapp apps", () => {
     // No app order went to home or to attic (auto-pair asking attic, a box
     // this browser has no session for, for one is expected).
     expect(
-      calls.some(
-        (c) => c.method !== "GET" && c.url.host !== MEDIA && c.url.host.endsWith("flagship.services") && !c.url.pathname.endsWith("/api/orders-from-user"),
-      ),
-    ).toBe(false);
+      calls
+        .filter((c) => c.method !== "GET" && c.url.host !== MEDIA && c.url.host.endsWith("flagship.services") && !c.url.pathname.endsWith("/api/orders-from-user") && !c.url.pathname.endsWith("/api/screens/ws-ticket"))
+        .map((c) => `${c.method} ${c.url.pathname}`),
+    ).toEqual([]);
     await shot(page, testInfo, "runs-on-removed");
   });
 
