@@ -418,7 +418,7 @@ final class GymOctoberTests: XCTestCase {
 
     func test_flagshipInferenceCreditsInAiKeys() throws {
         let app = launch(tab: "settings")
-        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "AI keys")).firstMatch
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "AI API keys")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 15), "Settings should list AI keys.")
         row.tap()
         let card = app.otherElements["free-ai-card"]

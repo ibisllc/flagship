@@ -31,8 +31,8 @@ describe("web-experience gating — Process-URL authorize view", () => {
     expect(r.body).not.toContain("deriveAccountIdFromSeed");
     // On success the SecuredSession is persisted locally.
     expect(r.body).toContain("saveSecuredSession");
-    // The "Process URL" affordance + confirm copy.
-    expect(r.body).toContain("Process URL");
+    // The paste form (reached without a link) + confirm copy.
+    expect(r.body).toContain('id="aa-process"');
     expect(r.body).toContain('tr("Open {0} on {1}?", app, server)');
     expect(r.body).not.toMatch(/restricted site/i);
   });
@@ -87,11 +87,12 @@ describe("web-experience gating — Process-URL authorize view", () => {
     expect(r.body).toContain('id="view-secured-sessions"');
     expect(r.body).toContain('id="secured-sessions-content"');
     expect(r.body).toContain('id="access-authorize-content"');
-    // Settings → "Open secured sessions" + "Process URL".
+    // Settings → "Open secured sessions"; a pasted /access link goes through
+    // "Scan a code or enter a link" (Process URL is gone).
     expect(r.body).toContain('id="settings-tab-secured-sessions"');
-    expect(r.body).toContain('id="settings-tab-process-url"');
+    expect(r.body).not.toContain('id="settings-tab-process-url"');
     expect(r.body).toContain("Open secured sessions");
-    expect(r.body).toContain("Process URL");
+    expect(r.body).not.toContain(">Process URL<");
   });
 
   it("app.js imports, inits, IA-maps, and row-wires the two views", async () => {
@@ -105,6 +106,7 @@ describe("web-experience gating — Process-URL authorize view", () => {
     expect(r.body).toContain('"view-secured-sessions": "settings"');
     expect(r.body).toContain('"view-access-authorize": "settings"');
     expect(r.body).toContain('wire("settings-tab-secured-sessions", enterSecuredSessions)');
-    expect(r.body).toContain('wire("settings-tab-process-url"');
+    expect(r.body).not.toContain('wire("settings-tab-process-url"');
+    expect(r.body).toContain('wire("settings-tab-join-account"');
   });
 });

@@ -182,7 +182,7 @@
           </div>
         </div>
 
-        <h2 class="mt-5">AI keys</h2>
+        <h2 class="mt-5">AI API keys</h2>
         <div class="card" id="home-active-provider">
           <p class="note">loading…</p>
         </div>
@@ -190,6 +190,7 @@
 
       <!-- View 3b: Activity tab — unlock approvals + install progress + audit log -->
       <section id="view-activity" class="hidden" data-tab="activity">
+        <div id="activity-no-server" hidden></div>
         <div id="activity-approvals" role="region" aria-labelledby="activity-approvals-heading">
           <h2 id="activity-approvals-heading">Server approvals <span class="pill warn" id="activity-approvals-count" hidden>0</span></h2>
           <p class="note">
@@ -202,6 +203,7 @@
           </div>
         </div>
 
+        <div id="activity-with-server">
         <h2 class="mt-5">Install progress</h2>
         <div class="card">
           <p class="note">
@@ -214,6 +216,7 @@
         <h2 class="mt-5">Live feed</h2>
         <div id="activity-feed">
           <div class="card placeholder">loading…</div>
+        </div>
         </div>
       </section>
 
@@ -250,7 +253,7 @@
           <div class="fs-group-header">ACCOUNT</div>
           <div class="fs-group">
             <button class="fs-row" id="settings-tab-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI API keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Cloud recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row hidden" id="settings-tab-name-dibs"><span class="fs-row-icon icon" data-row-icon="dibs"></span><span class="fs-row-body"><span class="fs-row-title">Claim your .com name</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
@@ -262,7 +265,7 @@
           <div class="fs-group-header">DEVICES</div>
           <div class="fs-group">
             <button class="fs-row" id="settings-tab-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-join-account"><span class="fs-row-icon icon" data-row-icon="scan"></span><span class="fs-row-body"><span class="fs-row-title">Scan a pairing code</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-join-account"><span class="fs-row-icon icon" data-row-icon="scan"></span><span class="fs-row-body"><span class="fs-row-title">Scan a code or enter a link</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Remote</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
@@ -273,7 +276,6 @@
           <div class="fs-group-header">WEB ACCESS</div>
           <div class="fs-group">
             <button class="fs-row" id="settings-tab-secured-sessions"><span class="fs-row-icon icon" data-row-icon="secured"></span><span class="fs-row-body"><span class="fs-row-title">Open secured sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-process-url"><span class="fs-row-icon icon" data-row-icon="processurl"></span><span class="fs-row-body"><span class="fs-row-title">Process URL</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
 
@@ -298,7 +300,7 @@
              confirmation carries the warning. -->
         <div class="fs-group-section">
           <div class="card stack-sm" id="settings-session-card">
-            <button class="danger-outline full-width" id="settings-pin-lock">Lock the app</button>
+            <button class="secondary full-width" id="settings-pin-lock">Lock the app</button>
             <button class="secondary full-width hidden" id="settings-pin-change">Change PIN</button>
             <button class="danger-outline full-width" id="settings-signout">Sign out</button>
           </div>
@@ -498,7 +500,7 @@
         <div id="invite-redeem-content"></div>
       </section>
 
-      <!-- Web-experience gating: "Process URL" authorize (paste an /access link) -->
+      <!-- Web-experience gating: authorize a browser from an /access link (Settings → Scan a code or enter a link) -->
       <section id="view-access-authorize" class="hidden">
         <h2>Open an app in a browser</h2>
         <div id="access-authorize-content"></div>
@@ -511,7 +513,7 @@
       <section id="view-secured-sessions" class="hidden">
         <h2>Secured sessions</h2>
         <p class="note">
-          Browsers you signed in to private apps with "Process URL". Refresh to
+          Browsers you signed in to private apps with a sign-in link. Refresh to
           check if one's still in, or Stop to sign it out.
         </p>
         <div id="secured-sessions-content"></div>
@@ -975,7 +977,6 @@
            recovery codes from a larger screen. -->
       <section id="view-account-security" class="hidden">
         <p class="fs-detail-label">ACCOUNT SECURITY</p>
-        <p class="note">Manage recovery protection and account-level security.</p>
         <div id="account-security-content"></div>
         <button class="secondary full-width mt-2" id="account-security-back">← Back</button>
       </section>
@@ -1013,7 +1014,10 @@
       </section>
 
       <section id="view-recovery" class="hidden">
-        <p class="fs-detail-label">CLOUD RECOVERY</p>
+        <div class="detail-head">
+          <p class="fs-detail-label">CLOUD RECOVERY</p>
+          <button class="icon-button" id="recovery-help" aria-label="How this works" title="How this works" aria-haspopup="dialog"><span class="icon"></span></button>
+        </div>
         <div class="card hidden" id="recovery-reattach-card">
           <p><strong>Re-attach progress</strong></p>
           <p class="note">See per-app re-anchoring after recovery.</p>
@@ -1044,10 +1048,6 @@
           <button id="recovery-keyfile-export" class="full-width mt-2">Back up account key</button>
         </div>
 
-        <div class="card mt-2">
-          <p><strong>How this works</strong></p>
-          <p class="note">Recovery requires both your recovery passphrase and access to the passkey stored by your browser or password manager. Together they unlock the encrypted account key; Flagship cannot read it or reset your passphrase.</p>
-        </div>
 
         <details class="card mt-2">
           <summary>Advanced: legacy wrapped-UMK export</summary>
@@ -1063,7 +1063,7 @@
 
       <!-- View 5: Settings — providers, identity, reset. -->
       <section id="view-settings" class="hidden">
-        <h2>AI providers</h2>
+        <h2>AI API keys</h2>
         <div id="free-ai-card" class="hidden"></div>
         <div id="providers-list"></div>
         <button id="add-provider-go" class="full-width mt-2">+ Add provider</button>

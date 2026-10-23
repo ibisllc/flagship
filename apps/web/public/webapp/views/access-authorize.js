@@ -1,4 +1,4 @@
-// Web-experience gating — "Process URL" authorize flow
+// Web-experience gating — authorize a browser from an /access link
 // (docs/service-access-gating.md, "Web-experience gating").
 //
 // A plain browser can't register the `flagship://` scheme, so the webapp can't
@@ -59,7 +59,7 @@ function renderPaste(prefill = "", error = "") {
       </p>
       <textarea id="aa-link" rows="3" class="mt-2" placeholder="https://flagshipserver.com/access?server=…" autocomplete="off" autocapitalize="off" spellcheck="false">${escapeHtml(prefill)}</textarea>
       ${error ? `<p class="err-text mt-2">${escapeHtml(error)}</p>` : ""}
-      <button id="aa-process" class="full-width mt-2">${tr("Process URL")}</button>
+      <button id="aa-process" class="full-width mt-2">${tr("Open")}</button>
     </div>`;
   $("aa-process")?.addEventListener("click", () => {
     const raw = $("aa-link")?.value ?? "";

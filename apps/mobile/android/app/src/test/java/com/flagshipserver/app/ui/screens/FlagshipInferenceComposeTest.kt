@@ -134,7 +134,9 @@ class FlagshipInferenceComposeTest {
         }
         composeRule.onNodeWithText(FreeAiCopy.PROVIDER_TITLE, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(line, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onAllNodes(hasText("Delete")).fetchSemanticsNodes().size.let { check(it == 1) { "deletes: $it" } }
+        // The saved key is one compact row; its actions (delete included) sit behind its ⋯ button.
+        composeRule.onAllNodes(hasText("Personal · Anthropic")).fetchSemanticsNodes().size.let { check(it == 1) { "rows: $it" } }
+        composeRule.onAllNodes(hasText("Delete key")).fetchSemanticsNodes().size.let { check(it == 0) { "deletes before the menu: $it" } }
         shot("credits-android-settings")
         composeRule.onNodeWithTag("free-ai-make-default").performClick()
         composeRule.waitForIdle()

@@ -40,6 +40,7 @@ import { addProfile } from "../lib/profiles.js";
 import { generateDeviceId } from "../lib/accountMetadata.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
 import { toast } from "../lib/toast.js";
+import { humanError } from "../lib/humanError.js";
 import { failureText } from "../lib/rateLimited.js";
 import { escapeHtml } from "../lib/util.js";
 import {
@@ -279,15 +280,19 @@ export function initJoinView() {
   // No router event needed — enterJoin() is called from the boot path.
 }
 
-// Settings → "Scan a pairing code": add this browser to another account (or
-// another of yours) while signed in, as iOS and Android do. The join makes a
-// new profile; the current one stays as it is.
+// Settings → "Scan a code or enter a link": one place for every Flagship code
+// or link (a pairing code that adds this browser to another account, a
+// private app's sign-in link, a share link, a server transfer offer). A pasted
+// link takes the same parser and the same screen as a scanned one, so it is no
+// weaker: a join still asks for the 6-digit match code on both screens.
+// MIRRORS iOS ScanOrLinkScreen and Android ScanOrLinkScreen.
 
-export const JOIN_ANOTHER_TITLE = tr("Scan a pairing code");
+export const JOIN_ANOTHER_TITLE = tr("Scan a code or enter a link");
 export const JOIN_ANOTHER_MESSAGE =
-  tr("Add this browser to another account. On a device of that account, open Settings → Trusted devices → Add device, then scan the code it shows or paste its link here.");
+  tr("Scan a Flagship QR code, or paste its link. To add this browser to another account, open Settings → Trusted devices → Add device on a device of that account.");
 export const JOIN_LINK_INVALID = tr("That isn't a pairing link. It looks like https://flagshipserver.com/join?sid=…");
-export const JOIN_SCAN_FAILED = tr("Couldn't scan. Paste the pairing link instead.");
+export const LINK_INVALID = tr("That isn't a Flagship code or link. Copy the whole link and try again.");
+export const JOIN_SCAN_FAILED = tr("Couldn't scan. Paste the link instead.");
 
 /** The pairing link in what was pasted or scanned, or an error sentence. */
 export function readJoinInput(text) {
@@ -295,24 +300,56 @@ export function readJoinInput(text) {
   return parseJoinLink(raw) ? { link: raw, error: "" } : { link: null, error: JOIN_LINK_INVALID };
 }
 
-export async function openJoinAnotherAccount({ canScan = null } = {}) {
+/** Open what was scanned or pasted on the screen a tapped link opens. */
+export async function openFlagshipLink(found) {
+  switch (found.kind) {
+    case "join":
+      return enterJoin(found.value);
+    case "access": {
+      const { enterAccessAuthorize } = await import("./access-authorize.js");
+      return enterAccessAuthorize(found.value);
+    }
+    case "share": {
+      const { enterShareAccept } = await import("./share-accept.js");
+      const { canAddServers, refuseAddServer } = await import("../lib/addServerGate.js");
+      if (!canAddServers()) return refuseAddServer();
+      return enterShareAccept(found.value);
+    }
+    case "transfer": {
+      const { enterTransferClaim } = await import("./transfer-claim.js");
+      return enterTransferClaim(found.value).catch((e) => {
+        if (e?.code !== "cancelled") throw e;
+      });
+    }
+    default:
+      return undefined;
+  }
+}
+
+export async function openScanOrLink({ canScan = null } = {}) {
   const { scanWithCamera, hasBarcodeDetector } = await import("../qrScanner.js");
+  const { classifyFlagshipLink } = await import("../lib/flagshipLinkInput.js");
   const scan = canScan ?? hasBarcodeDetector();
+  const canPaste = typeof navigator !== "undefined" && typeof navigator.clipboard?.readText === "function";
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
   dlg.setAttribute("aria-label", JOIN_ANOTHER_TITLE);
   dlg.innerHTML = `
     <h3 class="modal-title">${escapeHtml(JOIN_ANOTHER_TITLE)}</h3>
     <p class="modal-message">${escapeHtml(JOIN_ANOTHER_MESSAGE)}</p>
-    <input class="full-width mt-2" data-join-input placeholder="https://flagshipserver.com/join?…" autocomplete="off" />
     ${scan
       ? `<button class="secondary full-width mt-2" data-join-scan>${tr("Scan QR with camera")}</button>
-         <video class="full-width mt-2 hidden" data-join-video playsinline muted style="border-radius:8px;max-height:320px;background:#000"></video>`
+         <video class="full-width mt-2 hidden scan-video" data-join-video playsinline muted></video>`
       : ""}
+    <label class="mt-3" for="scan-or-link-input">${tr("Code or link")}</label>
+    <div class="input-with-action">
+      <input id="scan-or-link-input" data-join-input placeholder="https://flagshipserver.com/…" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      ${canPaste ? `<button class="secondary" data-join-paste>${tr("Paste")}</button>` : ""}
+    </div>
     <p class="modal-error err-text hidden" data-join-error></p>
     <div class="row-2 mt-3">
       <button class="secondary" data-join-cancel>${tr("Cancel")}</button>
-      <button data-join-continue>${tr("Continue")}</button>
+      <button data-join-continue>${tr("Open")}</button>
     </div>`;
   document.body.appendChild(dlg);
   dlg.showModal();
@@ -335,10 +372,10 @@ export async function openJoinAnotherAccount({ canScan = null } = {}) {
     dlg.remove();
   };
   const go = (text) => {
-    const { link, error } = readJoinInput(text);
-    if (!link) return showError(error);
+    const found = classifyFlagshipLink(text);
+    if (!found) return showError(LINK_INVALID);
     close();
-    enterJoin(link);
+    void openFlagshipLink(found).catch((e) => toast(humanError(e), "err"));
   };
   q("[data-join-cancel]").addEventListener("click", close);
   q("[data-join-continue]").addEventListener("click", () => go(input.value));
@@ -346,6 +383,15 @@ export async function openJoinAnotherAccount({ canScan = null } = {}) {
     if (ev.key === "Enter") {
       ev.preventDefault();
       go(input.value);
+    }
+  });
+  q("[data-join-paste]")?.addEventListener("click", async () => {
+    try {
+      input.value = (await navigator.clipboard.readText()) ?? "";
+      err.classList.add("hidden");
+      input.focus();
+    } catch {
+      input.focus();
     }
   });
   q("[data-join-scan]")?.addEventListener("click", async (ev) => {

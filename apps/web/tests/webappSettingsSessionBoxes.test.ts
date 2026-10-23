@@ -26,9 +26,9 @@ function card(html: string, id: string): string {
 describe("Settings tab session and danger boxes", () => {
   const tab = section("view-settings-tab");
 
-  it("puts Lock the app and Sign out in one box, styled like iOS's red-outline buttons", () => {
+  it("puts Lock the app (plain) and Sign out (red) in one box", () => {
     const box = card(tab, "settings-session-card");
-    expect(box).toContain('<button class="danger-outline full-width" id="settings-pin-lock">Lock the app</button>');
+    expect(box).toContain('<button class="secondary full-width" id="settings-pin-lock">Lock the app</button>');
     expect(box).toContain('<button class="danger-outline full-width" id="settings-signout">Sign out</button>');
     expect(box).not.toContain("<p");
   });
@@ -41,7 +41,15 @@ describe("Settings tab session and danger boxes", () => {
     expect(INDEX).not.toContain('id="settings-tab-reset"');
   });
 
-  it("the AI keys page no longer carries its own Session and Danger zone cards", () => {
+  it("Sign out and Remove this device stay red while recovery-gated, only dimmed", () => {
+    const css = readFileSync(resolve(WEBAPP, "style.css"), "utf8");
+    const gated = css.slice(css.indexOf("button.danger-outline.gated"));
+    const rule = gated.slice(0, gated.indexOf("}"));
+    expect(rule).toContain("opacity: 0.6");
+    expect(rule).not.toContain("--ink-muted");
+  });
+
+  it("the AI API keys page no longer carries its own Session and Danger zone cards", () => {
     const providers = section("view-settings");
     expect(providers).not.toContain("settings-signout");
     expect(providers).not.toContain("settings-reset");
