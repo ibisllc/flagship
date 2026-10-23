@@ -10917,5 +10917,29 @@
   "Couldn't reject the recovery": {
     "en": "Couldn't reject the recovery",
     "ctx": "webapp/views/trusted-devices.js:357"
+  },
+  "locked: it can't unlock itself until you resume it": {
+    "en": "locked: it can't unlock itself until you resume it",
+    "ctx": "webapp/lib/bootSuspension.js:249"
+  },
+  "remote lock pending: it will be retried": {
+    "en": "remote lock pending: it will be retried",
+    "ctx": "webapp/lib/bootSuspension.js:249"
+  },
+  "until you end it": {
+    "en": "until you end it",
+    "ctx": "webapp/lib/permissions.js:55"
+  },
+  "as soon as it finishes": {
+    "en": "as soon as it finishes",
+    "ctx": "webapp/lib/recoveryVeto.js:47"
+  },
+  "unreachable": {
+    "en": "unreachable",
+    "ctx": "webapp/views/server-detail.js:871"
+  },
+  "on": {
+    "en": "on",
+    "ctx": "webapp/views/server-detail.js:881"
   }
 }
