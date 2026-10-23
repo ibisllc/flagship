@@ -75,6 +75,9 @@ export interface VoiciNamesDeps {
   auditEvents?: AuditEventStorage;
   /** The dibs window, the `.com` lookup and the proofs (nameDibs.ts). */
   dibs: Pick<NameDibsDeps, "window" | "claims" | "fetch">;
+  /** A name is only set for an app a server of the account runs (the same check the upkeep uses),
+   *  so names cannot be parked on made-up service ids. Absent in tests that don't care. */
+  appRunning?: (username: string, serviceId: string) => Promise<boolean>;
   now?: () => number;
 }
 
@@ -272,6 +275,10 @@ export async function handleVoiciNameSet(
     return ok({ ok: true, link: await voiciLinkState(deps, u, order.serviceId) });
   }
 
+  if (deps.appRunning && !(await deps.appRunning(u, order.serviceId))) {
+    return refuse(409, "app-not-running", "none of this account's servers runs this app");
+  }
+
   // The account's limits first: they are known before a name is even looked at.
   const state = await voiciLinkState(deps, u, order.serviceId);
   const allowed = current ? state.held <= state.limit : state.held + 1 <= state.limit;
@@ -296,7 +303,7 @@ export async function handleVoiciNameSet(
   };
   const claimed = await deps.voiciNames.claim(rec);
   if (!claimed.ok) return refuse(409, "taken", "that name is taken");
-  if (current) await deps.voiciNames.release(u, order.serviceId, "replaced", now);
+  if (current) await deps.voiciNames.release(u, order.serviceId, "replaced", now, current.key);
   await deps.voiciNames.recordChange(u, order.serviceId, now, order.nonce);
   await audit(deps, u, "voici-name-set", `voi.ci/${typed}${current ? ` (was ${current.display})` : ""}`, now);
   return ok({ ok: true, link: await voiciLinkState(deps, u, order.serviceId) });
@@ -353,7 +360,7 @@ export async function runVoiciNamesMaintenance(
     const idle = now - r.lastActiveAt;
     const releasesAt = r.lastActiveAt + VOICI_NAME_INACTIVE_MS;
     if (idle >= VOICI_NAME_INACTIVE_MS) {
-      await deps.voiciNames.release(r.username, r.serviceId, "lapsed" as VoiciNameReleaseReason, now);
+      await deps.voiciNames.release(r.username, r.serviceId, "lapsed" as VoiciNameReleaseReason, now, r.key);
       released++;
       await hooks.notify?.({ kind: "released", username: r.username, serviceId: r.serviceId, name: r.display, releasesAt }).catch(() => {});
       continue;

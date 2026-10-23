@@ -392,7 +392,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                     scope.launch {
                         rejectMessage = when (val out = vm.vetoPendingRecovery()) {
                             is TrustedDevicesViewModel.RecoveryVetoOutcome.Rejected -> null
-                            is TrustedDevicesViewModel.RecoveryVetoOutcome.AlreadyOver -> stringResource(R.string.this_recovery_was_already_cancelled_or)
+                            is TrustedDevicesViewModel.RecoveryVetoOutcome.AlreadyOver -> FSStrings.get(R.string.this_recovery_was_already_cancelled_or)
                             is TrustedDevicesViewModel.RecoveryVetoOutcome.Failed -> out.reason
                         }
                     }
