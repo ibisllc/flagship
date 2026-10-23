@@ -2773,10 +2773,6 @@
     "en": "Account security",
     "ctx": "ui/screens/AccountSecurityScreen.kt:104 (title=)"
   },
-  "manage_recovery_protection_and_account_level": {
-    "en": "Manage recovery protection and account-level security.",
-    "ctx": "ui/screens/AccountSecurityScreen.kt:106 (subtitle=)"
-  },
   "code_protection_is_on": {
     "en": "Code protection is on",
     "ctx": "ui/screens/AccountSecurityScreen.kt:118 (prose)"
@@ -5756,22 +5752,6 @@
     "en": "Tap Refresh to check",
     "ctx": "ui/screens/SecuredSessionScreens.kt:152 (prose)"
   },
-  "process_a_link": {
-    "en": "Process a link",
-    "ctx": "ui/screens/SecuredSessionScreens.kt:180 (title=)"
-  },
-  "paste_a_flagship_link_a_private": {
-    "en": "Paste a Flagship link: a private app's \"Get link\" string, or a \"take over this server\" transfer link someone shared with you.",
-    "ctx": "ui/screens/SecuredSessionScreens.kt:183 (subtitle=)"
-  },
-  "link": {
-    "en": "Link",
-    "ctx": "ui/screens/SecuredSessionScreens.kt:189 (label=)"
-  },
-  "that_doesnt_look_like_a_flagship": {
-    "en": "That doesn't look like a Flagship link.",
-    "ctx": "ui/screens/SecuredSessionScreens.kt:225 (prose)"
-  },
   "back_up_with_a_passcode": {
     "en": "Back up with a passcode…",
     "ctx": "ui/screens/ServerArchiveScreens.kt:92 (label=)"
@@ -7295,14 +7275,6 @@
     "en": "Add, replace or remove the devices that hold your keys",
     "ctx": "ui/screens/SettingsScreen.kt:269 (subtitle=)"
   },
-  "scan_a_pairing_code": {
-    "en": "Scan a pairing code",
-    "ctx": "ui/screens/SettingsScreen.kt:278 (title=)"
-  },
-  "add_this_phone_to_another_account": {
-    "en": "Add this phone to another account",
-    "ctx": "ui/screens/SettingsScreen.kt:279 (subtitle=)"
-  },
   "browsers_you_opened_through_remote": {
     "en": "Browsers you opened through Remote",
     "ctx": "ui/screens/SettingsScreen.kt:286 (subtitle=)"
@@ -7326,14 +7298,6 @@
   "sites_youve_signed_a_browser_into": {
     "en": "Sites you've signed a browser into",
     "ctx": "ui/screens/SettingsScreen.kt:320 (subtitle=)"
-  },
-  "process_url": {
-    "en": "Process URL",
-    "ctx": "ui/screens/SettingsScreen.kt:326 (title=)"
-  },
-  "open_a_sign_in_link_you": {
-    "en": "Open a sign-in link you copied",
-    "ctx": "ui/screens/SettingsScreen.kt:327 (subtitle=)"
   },
   "backup_peers": {
     "en": "Backup & peers",

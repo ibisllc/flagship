@@ -659,7 +659,6 @@
     <string name="last_device">último dispositivo</string>
     <string name="another_device_is_still">otro dispositivo sigue</string>
     <string name="account_security">Seguridad de la cuenta</string>
-    <string name="manage_recovery_protection_and_account_level">Gestiona la protección de recuperación y la seguridad a nivel de cuenta.</string>
     <string name="code_protection_is_on">La protección con código está activada</string>
     <string name="single_device_account">Cuenta de un solo dispositivo</string>
     <string name="recovery_needs_your_6_digit_code">La recuperación requiere un código de 6 dígitos del autenticador (o un código de recuperación) y una espera de 24 horas.</string>
@@ -1384,10 +1383,6 @@
     <string name="started_2">· iniciada %1$s</string>
     <string name="stop">Detener</string>
     <string name="tap_refresh_to_check">Toca Actualizar para comprobar</string>
-    <string name="process_a_link">Procesar un enlace</string>
-    <string name="paste_a_flagship_link_a_private">Pega un enlace de Flagship: la cadena «Obtener enlace» de una app privada o un enlace de traspaso «tomar el control de este servidor» que alguien te haya compartido.</string>
-    <string name="link">Enlace</string>
-    <string name="that_doesnt_look_like_a_flagship">Eso no parece un enlace de Flagship.</string>
     <string name="back_up_with_a_passcode">Copia de seguridad con un código…</string>
     <string name="back_up">Hacer copia de %1$s</string>
     <string name="saved">Guardado.</string>
@@ -1753,16 +1748,12 @@
     <string name="switch_between_your_clouds">Cambiar entre tus nubes</string>
     <string name="trusted_devices">Dispositivos de confianza</string>
     <string name="add_replace_or_remove_the_devices">Añade, reemplaza o quita los dispositivos que guardan tus claves</string>
-    <string name="scan_a_pairing_code">Escanear un código de vinculación</string>
-    <string name="add_this_phone_to_another_account">Añadir este teléfono a otra cuenta</string>
     <string name="browsers_you_opened_through_remote">Navegadores que abriste mediante Remoto</string>
     <string name="companions">Acompañantes</string>
     <string name="read_only_browser_session_4h">Sesión de navegador de solo lectura (4 h)</string>
     <string name="web_access">Acceso web</string>
     <string name="open_secured_sessions">Abrir sesiones protegidas</string>
     <string name="sites_youve_signed_a_browser_into">Sitios en los que has iniciado sesión desde un navegador</string>
-    <string name="process_url">Procesar URL</string>
-    <string name="open_a_sign_in_link_you">Abre un enlace de inicio de sesión que copiaste</string>
     <string name="backup_peers">Copia de seguridad y pares</string>
     <string name="shard_health_across_peers">Estado de los fragmentos entre pares</string>
     <string name="app_2">App</string>
