@@ -286,7 +286,6 @@
   "s9876e64009": "Ejecutar escáneres automáticos que generen carga sostenida.",
   "scf5d5d34dc": "Publicar detalles antes de que se distribuya la corrección o antes de nuestra fecha de divulgación acordada (aspiramos a 90 días como máximo, negociable en problemas críticos).",
   "s6113805e30": "Salón de la fama",
-  "sefd58307d1": "Investigadores que nos reportaron una vulnerabilidad, con los commits que la cerraron. Se les da crédito en la forma que cada informante pida: nombre, alias o anónimo, con un enlace si lo desea. Se listan sin atribución hasta que nos indiquen su preferencia; nunca publicamos un nombre que no nos hayan dado. (Las fichas técnicas siguen en inglés.)",
   "s6600e49241": "Reportar una vulnerabilidad",
   "s74c47fae88": "Usa el formulario de abajo (preferido: pide los campos estructurados adecuados) o escribe a <1>security@flagshipserver.com</1>. Se recomiendan los informes cifrados. Usa nuestra clave PGP:",
   "s84f28e32dd": "<1>Descarga la clave pública</1>, o deja que tu cliente de correo la encuentre para <2>security@flagshipserver.com</2> (publicada mediante Web Key Directory).",
@@ -470,5 +469,6 @@
   "s4bc920353e": "Notas de campo de la construcción de un producto de nube personal que se toma en serio el autoalojamiento. Suscríbete con el enlace RSS de arriba; esta página tiene límite de peticiones (sin píxeles de vigilancia, sin captura de boletín).",
   "sefe57fd6f9": "Las primeras publicaciones llegarán junto con el lanzamiento de la Beta 0.2. Hasta entonces, la fuente de verdad sobre lo que construimos es la <1>documentación</1>, el <2>modelo de seguridad</2> y la página de <3>código abierto</3>.",
   "s8f7b9ab588": "Borradores",
-  "seb2f4750ac": "Publicamos cuando tenemos algo concreto que decir. Sigue el feed RSS."
+  "seb2f4750ac": "Publicamos cuando tenemos algo concreto que decir. Sigue el feed RSS.",
+  "sba026addff": "Los investigadores que nos informaron de una vulnerabilidad, y los commits que cerraron cada informe, están en el <1>cuadro de honor</1>."
 }
