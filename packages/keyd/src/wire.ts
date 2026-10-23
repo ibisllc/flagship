@@ -28,6 +28,18 @@ export const OPS = [
   "cgk.seal",
   "cgk.open",
   "cgk.deriveAppCopyEnvKey",
+  "tls.createKey",
+  "tls.csr",
+  "tls.install",
+  "tls.activate",
+  "tls.active",
+  "tls.sign",
+  "tls.list",
+  "tls.remove",
+  "acme.create",
+  "acme.importGranted",
+  "acme.jwk",
+  "acme.sign",
   "provision.swk",
   "provision.cgk",
 ] as const;
@@ -113,6 +125,14 @@ export function strArg(args: Record<string, unknown>, name: string, max = 256): 
   const v = args[name];
   if (typeof v !== "string" || v.length === 0 || v.length > max || /[\u0000-\u001f]/.test(v)) {
     throw new KeydError("bad-request", `${name} must be a short string`);
+  }
+  return v;
+}
+
+export function pemArg(args: Record<string, unknown>, name: string, max = 64 * 1024): string {
+  const v = args[name];
+  if (typeof v !== "string" || v.length === 0 || v.length > max || !/^[A-Za-z0-9+/=\-\s]+$/.test(v)) {
+    throw new KeydError("bad-request", `${name} must be PEM text`);
   }
   return v;
 }

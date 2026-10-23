@@ -6,3 +6,5 @@ export * from "./client.js";
 export * from "./syncClient.js";
 export * from "./migrate.js";
 export * from "./unit.js";
+export * from "./tls.js";
+export * from "./acme.js";

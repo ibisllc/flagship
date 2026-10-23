@@ -116,6 +116,12 @@ export class RateLimiter {
 export const DEFAULT_RATE_LIMITS: Record<string, { perSecond: number; burst: number }> = {
   sign: { perSecond: 2000, burst: 4000 },
   unseal: { perSecond: 50, burst: 100 },
+  "tls.sign": { perSecond: 500, burst: 1000 },
+  "tls.createKey": { perSecond: 5 / 3600, burst: 5 },
+  "tls.install": { perSecond: 0.2, burst: 10 },
+  "acme.sign": { perSecond: 2, burst: 60 },
+  "acme.importGranted": { perSecond: 1 / 60, burst: 3 },
+  "acme.create": { perSecond: 1 / 60, burst: 3 },
   "provision.swk": { perSecond: 0.1, burst: 3 },
   "provision.cgk": { perSecond: 0.1, burst: 3 },
   "*": { perSecond: 5000, burst: 10000 },

@@ -15,7 +15,9 @@ import {
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { BOX_SIGN_PURPOSES, checkSign } from "./policy.js";
-import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, strArg, toHex, type KeydRequest } from "./wire.js";
+import { AcmeAccount, type AcmeRequest } from "./acme.js";
+import { TlsKeys } from "./tls.js";
+import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
 
 export interface KeyStore {
   /** Persist a provisioned secret (0400, owned by the keyd user). */
@@ -28,6 +30,10 @@ export interface KeydServiceInit {
   cgk?: Uint8Array | undefined;
   store?: KeyStore;
   signPurposes?: ReadonlySet<string>;
+  /** TLS leaf keys; absent means this keyd serves no TLS operations. */
+  tls?: TlsKeys;
+  /** The ACME account key; needs `tls`. */
+  acme?: AcmeAccount;
 }
 
 /**
@@ -43,6 +49,8 @@ export class KeydService {
   #cgk: Uint8Array | null;
   readonly #store: KeyStore | undefined;
   readonly #purposes: ReadonlySet<string>;
+  readonly #tls: TlsKeys | null;
+  readonly #acme: AcmeAccount | null;
 
   constructor(init: KeydServiceInit) {
     if (init.identitySeed.length !== 32) throw new Error("keyd: identity seed must be 32 bytes");
@@ -53,6 +61,8 @@ export class KeydService {
     this.#cgk = init.cgk ? init.cgk.slice() : null;
     this.#store = init.store;
     this.#purposes = init.signPurposes ?? BOX_SIGN_PURPOSES;
+    this.#tls = init.tls ?? null;
+    this.#acme = init.acme ?? null;
   }
 
   get publicKeyHex(): string {
@@ -66,6 +76,8 @@ export class KeydService {
     this.#cgk?.fill(0);
     this.#swk = null;
     this.#cgk = null;
+    this.#tls?.destroy();
+    this.#acme?.destroy();
   }
 
   /** Which operations a connection may use before it has said hello: none. */
@@ -152,6 +164,87 @@ export class KeydService {
         }
         return { result: { key: toHex(new Uint8Array(hkdfSync("sha256", this.#cgkOrThrow(), new Uint8Array(0), info, 32))) } };
       }
+      case "tls.createKey": {
+        noExtraArgs(a, ["names"]);
+        if (!Array.isArray(a.names) || a.names.some((n) => typeof n !== "string")) throw new KeydError("bad-request", "names must be a list of strings");
+        const r = this.#tlsOrThrow().createKey(a.names as string[]);
+        return { result: { handle: r.handle, spki: r.spkiHex } };
+      }
+      case "tls.csr": {
+        noExtraArgs(a, ["handle"]);
+        return { result: { csr: toHex(this.#tlsOrThrow().csr(strArg(a, "handle", 32))) } };
+      }
+      case "tls.install": {
+        noExtraArgs(a, ["handle", "chain"]);
+        const chain = pemArg(a, "chain");
+        const r = this.#tlsOrThrow().install(strArg(a, "handle", 32), chain);
+        return { result: { notBefore: r.notBefore, notAfter: r.notAfter, names: r.names } };
+      }
+      case "tls.activate": {
+        noExtraArgs(a, ["handle"]);
+        this.#tlsOrThrow().activate(strArg(a, "handle", 32));
+        return { result: { active: true } };
+      }
+      case "tls.active": {
+        noExtraArgs(a, []);
+        return { result: { active: this.#tlsOrThrow().active() } };
+      }
+      case "tls.sign": {
+        noExtraArgs(a, ["handle", "digest"]);
+        const digest = hexArg(a, "digest", { min: 32, max: 48 });
+        return { result: { sig: toHex(this.#tlsOrThrow().sign(strArg(a, "handle", 32), digest)) } };
+      }
+      case "tls.list":
+        noExtraArgs(a, []);
+        return { result: { keys: this.#tlsOrThrow().list(), allowedNames: this.#tlsOrThrow().names() } };
+      case "tls.remove": {
+        noExtraArgs(a, ["handle"]);
+        this.#tlsOrThrow().remove(strArg(a, "handle", 32));
+        return { result: { removed: true } };
+      }
+      case "acme.create": {
+        noExtraArgs(a, []);
+        this.#acmeOrThrow().create();
+        return { result: { jwk: this.#acmeOrThrow().jwk() } };
+      }
+      case "acme.importGranted": {
+        // The owner sealed the account key to this box's identity; keyd opens it and keeps it.
+        noExtraArgs(a, ["blob"]);
+        const blob = hexArg(a, "blob", { min: 44, max: 64 * 1024 });
+        let pem: string;
+        try {
+          pem = new TextDecoder().decode(openSealedFromEd25519Recipient(blob, this.#seed));
+        } catch {
+          throw new KeydError("failed", "could not open the granted account key");
+        }
+        this.#acmeOrThrow().importPem(pem);
+        return { result: { jwk: this.#acmeOrThrow().jwk() } };
+      }
+      case "acme.jwk": {
+        noExtraArgs(a, []);
+        const acct = this.#acmeOrThrow();
+        return { result: { present: acct.present, ...(acct.present ? { jwk: acct.jwk(), thumbprint: acct.thumbprint() } : {}) } };
+      }
+      case "acme.sign": {
+        noExtraArgs(a, ["kind", "url", "nonce", "kid", "contact", "names", "handle", "certificate", "reason"]);
+        const kind = strArg(a, "kind", 24);
+        const base = { url: strArg(a, "url", 512), nonce: strArg(a, "nonce", 128) };
+        const kid = () => strArg(a, "kid", 512);
+        let req: AcmeRequest;
+        switch (kind) {
+          case "newAccount": req = { kind, ...base, contact: strArg(a, "contact", 256) }; break;
+          case "newOrder":
+            if (!Array.isArray(a.names) || a.names.some((n) => typeof n !== "string")) throw new KeydError("bad-request", "names must be a list of strings");
+            req = { kind, ...base, kid: kid(), names: a.names as string[] };
+            break;
+          case "postAsGet": req = { kind, ...base, kid: kid() }; break;
+          case "challenge": req = { kind, ...base, kid: kid() }; break;
+          case "finalize": req = { kind, ...base, kid: kid(), handle: strArg(a, "handle", 32) }; break;
+          case "revoke": req = { kind, ...base, kid: kid(), certificateDer: hexArg(a, "certificate", { min: 64, max: 16 * 1024 }), reason: typeof a.reason === "number" ? a.reason : 0 }; break;
+          default: throw new KeydError("bad-request", "unknown ACME request kind");
+        }
+        return { result: this.#acmeOrThrow().sign(req) };
+      }
       case "provision.swk":
       case "provision.cgk": {
         noExtraArgs(a, ["key"]);
@@ -186,6 +279,16 @@ export class KeydService {
       if (e instanceof KeydError) throw e;
       throw new KeydError("failed", "authentication failed");
     }
+  }
+
+  #acmeOrThrow(): AcmeAccount {
+    if (!this.#acme) throw new KeydError("not-provisioned", "this keyd serves no ACME account");
+    return this.#acme;
+  }
+
+  #tlsOrThrow(): TlsKeys {
+    if (!this.#tls) throw new KeydError("not-provisioned", "this keyd serves no TLS keys");
+    return this.#tls;
   }
 
   #swkOrThrow(): Uint8Array {

@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@flagship/protocol": "*",
+    "@noble/curves": "2.2.0",
     "@noble/hashes": "1.8.0"
   },
   "license": "BUSL-1.1"
