@@ -46,6 +46,12 @@ no-store`):
 - `GET /api/users/<u>/pods` and `GET /api/users/<u>/stream`
 - `GET /api/users/<u>/audit`
 - `GET /api/users/<u>/apps/aliases` and `GET /api/users/<u>/apps/<id>/links`
+- `GET /api/server/<d>/sealed-luks-key`, the disk key sealed to the account
+  IRK: only a token minted by a device of the server's account or its IRK
+  (a server's own token is refused). It is classical ciphertext, so anyone
+  holding a copy opens it once X25519 falls.
+- `GET /api/server/<d>/unlock-key/lease-v2`, the disk key sealed to the box:
+  only that box's own STK token (boxes read leases from the boot worker).
 
 Demo accounts (a `demo_users` row) are keyless by design and read without a
 token, so store review keeps working on any build.

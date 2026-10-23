@@ -297,14 +297,17 @@ public final class ServerShareClient: Sendable {
     private let apex: @Sendable () -> URL
     private let boot: @Sendable () -> URL
     private let boxBase: @Sendable (String) -> URL?
+    private let readTokens: (any AccountReadTokenSource)?
 
     public init(
         com: any ServerShareTransport,
         box: any ServerShareTransport,
         apex: @escaping @Sendable () -> URL = { Endpoints.controlBaseUrl },
         boot: @escaping @Sendable () -> URL = { Endpoints.bootBaseUrl },
-        boxBase: @escaping @Sendable (String) -> URL? = { URL(string: CompanionTicketURL.podBaseUrl(forFqdn: $0)) }
+        boxBase: @escaping @Sendable (String) -> URL? = { URL(string: CompanionTicketURL.podBaseUrl(forFqdn: $0)) },
+        readTokens: (any AccountReadTokenSource)? = nil
     ) {
+        self.readTokens = readTokens
         self.com = com
         self.box = box
         self.apex = apex
@@ -337,11 +340,21 @@ public final class ServerShareClient: Sendable {
                            body: ShareUnlockBody(unlock: unlock, signature: signature, sealedKey: sealedKey))
     }
 
-    /// The disk key sealed to the owner's phone keys (as boot approval reads it).
-    public func sealedDiskKey(serverDomain: String) async throws -> String {
+    /// The disk key sealed to the owner's phone keys (as boot approval reads
+    /// it). `.com` answers only the account's own devices: the account read token.
+    public func sealedDiskKey(serverDomain: String, username: String) async throws -> String {
         struct R: Decodable { let sealedKey: String }
-        let r: R = try await send(com, apex(), "GET", "/api/server/\(seg(serverDomain))/sealed-luks-key", body: nil as String?)
-        return r.sealedKey
+        let path = "/api/server/\(seg(serverDomain))/sealed-luks-key"
+        func get(_ token: String?) async throws -> R {
+            try await send(com, apex(), "GET", path, body: nil as String?,
+                           headers: token.map { ["authorization": "Bearer \($0)"] } ?? [:])
+        }
+        do {
+            return try await get(await readTokens?.token(for: username)).sealedKey
+        } catch let e as ServerShareHTTPError where e.status == 401 {
+            guard let fresh = await readTokens?.tokenAfterRejection(for: username) else { throw e }
+            return try await get(fresh).sealedKey
+        }
     }
 
     // MARK: .com, the second account

@@ -42,7 +42,7 @@ class MockSecretMailboxClient : SecretMailboxClient {
     }
     private val answeredNonces = mutableSetOf<String>()
 
-    override suspend fun fetchSealedLuksKey(serverDomain: String): SealedLuksKeyResponse {
+    override suspend fun fetchSealedLuksKey(serverDomain: String, username: String): SealedLuksKeyResponse {
         val hex = sealedLuksKeyHex ?: throw HttpException(404, "no sealed key on file")
         return SealedLuksKeyResponse(serverDomain, hex, 1L)
     }

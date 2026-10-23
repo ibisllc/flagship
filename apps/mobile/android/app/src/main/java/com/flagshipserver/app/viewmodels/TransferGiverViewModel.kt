@@ -128,7 +128,7 @@ class TransferGiverViewModel(
             // Unseal the box's disk key (sealed FOR the giver IRK at install) and
             // re-seal to the acquirer IRK. A box with no LUKS key has nothing to
             // hand off — skip to completion.
-            val sealed = runCatching { mailbox.fetchSealedLuksKey(serverDomain) }.getOrNull()
+            val sealed = runCatching { mailbox.fetchSealedLuksKey(serverDomain, username) }.getOrNull()
             if (sealed != null && sealed.sealedKey.isNotEmpty()) {
                 val diskKey = ServerTransferFlow.openGiverDiskKey(sealed.sealedKey, irkSeed())
                 val deposit = ServerTransferFlow.buildDiskKeyDeposit(

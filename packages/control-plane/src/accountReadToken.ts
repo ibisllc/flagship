@@ -176,6 +176,17 @@ async function authorizeBox(
   return { sub: `s:${domain}`, key: r.stkPubHex, ttlMs: BOX_TOKEN_TTL_MS };
 }
 
+export interface AccountReadOptions {
+  /** Narrows which signers' tokens pass, by the claims' `sub`
+   *  (`d:<deviceId>`, `irk`, `s:<serverDomain>`). */
+  allow?: (sub: string) => boolean;
+}
+
+/** Only the account's own devices and its IRK: the people, not its servers. */
+export const ACCOUNT_KEY_HOLDERS_ONLY: AccountReadOptions = {
+  allow: (sub) => sub === "irk" || sub.startsWith("d:"),
+};
+
 export type AccountReadCheck = { ok: true; demo: boolean } | { ok: false; response: HandlerResponseWithHeaders };
 
 /**
@@ -186,6 +197,7 @@ export async function requireAccountRead(
   deps: AccountReadTokenDeps,
   username: string,
   authorization: string | null | undefined,
+  opts: AccountReadOptions = {},
 ): Promise<AccountReadCheck> {
   const u = username.toLowerCase();
   if (await deps.demoUsers.get(u)) return { ok: true, demo: true };
@@ -195,6 +207,7 @@ export async function requireAccountRead(
   const claims = await decode(match[1]!, deps.secret);
   const now = (deps.now ?? (() => Date.now()))();
   if (!claims || claims.u !== u || now >= claims.exp) return denied;
+  if (opts.allow && !opts.allow(claims.sub)) return denied;
   if (!(await signerStillCurrent(deps, claims))) return denied;
   return { ok: true, demo: false };
 }

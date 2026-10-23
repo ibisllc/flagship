@@ -14,6 +14,7 @@ const KNOWN: Record<string, string> = {
   "keystore.js": "account key, admin root and device key custody in the browser: to move to the phone",
   "lib/leases.js": "boot-lease keys: to move to the phone",
   "lib/bootApproval.js": "boot approval signing: to move to the phone",
+  "lib/boxKeyPins.js": "box key pins: public keys and a verify-only boot-key binding",
   "lib/pairingRelay.js": "ephemeral pairing keys for the QR relay: native-assisted flow needed",
   "lib/buildDraft.js": "sealing a draft to the box: no signing key",
   "lib/serverShare.js": "share envelopes",
