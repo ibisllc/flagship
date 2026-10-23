@@ -52,8 +52,6 @@ public struct SwkDepositCoordinator {
     /// rides an already-unlocked session or waits for the next one. Injectable so
     /// tests run without a Keychain session (default: the real session cache).
     private let hasSessionKey: () -> Bool
-    /// The box keys this device pinned at first blessing: every deposit is sealed to the pin only.
-    private let serverKeys: ServerKeyPins
 
     public init(
         username: String,
@@ -63,17 +61,15 @@ public struct SwkDepositCoordinator {
         cgkStore: PendingCgkDepositStore = PendingCgkDepositStore(),
         hasSessionKey: @escaping () -> Bool = { Keystore.hasSessionKey() },
         deriveIrkAndSwk: @escaping (_ serverId: String, _ reason: String) async throws -> (irk: Curve25519.Signing.PrivateKey, swkHex: String) = { serverId, reason in
-            let m = try await Keystore.deriveIRKAndBoxSwk(serverId: serverId, reason: reason)
+            let m = try await Keystore.deriveIRKBoxStkAndSwk(serverId: serverId, reason: reason)
             return (m.irk, m.boxSwkHex)
         },
         deriveCgkHex: @escaping (_ reason: String) async throws -> String = { reason in
             let m = try await Keystore.deriveIRKAndCgk(reason: reason)
             return m.cgkHex
         },
-        resolveMigrationSwk: ((_ podDomain: String) async -> MigrationSwkResolution)? = nil,
-        serverKeys: ServerKeyPins = ServerKeyPins()
+        resolveMigrationSwk: ((_ podDomain: String) async -> MigrationSwkResolution)? = nil
     ) {
-        self.serverKeys = serverKeys
         self.username = username
         self.mailbox = mailbox
         self.store = store
@@ -117,12 +113,10 @@ public struct SwkDepositCoordinator {
         // what stops the "random Face ID on the Home screen" the periodic reconcile
         // used to cause when a box left a deposit owed.
         guard allowAuthentication || hasSessionKey() else { return }
-        // Seal only to the key this device pinned at the server's first blessing
-        // (docs/first-contact.md). Before the pin there is nothing to seal to: the
-        // markers stay and the next pass after the blessing deposits. A directory
-        // naming another key refuses (never seal to `.com`'s word).
-        guard let boxIdentityPub = serverKeys.pinnedStk(serverDomain) else { return }
-        if let listed = HexUtil.decode(identityPubKeyHex), listed.count == 32, listed != boxIdentityPub { return }
+        guard let boxIdentityPub = HexUtil.decode(identityPubKeyHex), boxIdentityPub.count == 32 else { return }
+        // A key other than the pinned one stays owed; boot approval shows the owner why.
+        guard (try? BoxKeyPins.shared.require(username: username, serverDomain: serverDomain,
+                                              reportedHex: identityPubKeyHex)) != nil else { return }
 
         // Server-migration (docs/server-migration.md invariant 4): when this pod
         // is the attached NEW box of a live migration, its SWK MUST derive from
@@ -144,7 +138,7 @@ public struct SwkDepositCoordinator {
             guard swkOwed || pairingOrderJson != nil || cgkOwed else { return }
         }
         do {
-            let (irk, swkHex) = try await deriveIrkAndSwk(swkServerId, String(localized: "Authorize \(serverDomain) to run apps"))
+            let (irk, swkHex) = try await deriveIrkAndSwk(swkServerId, "Authorize \(serverDomain) to run apps")
 
             if swkOwed, let swk = HexUtil.decode(swkHex), swk.count == 32 {
                 let body = try SwkDelivery.buildDeposit(
@@ -176,7 +170,7 @@ public struct SwkDepositCoordinator {
             // serverId), sealed to THIS box's registered identity. Best-effort:
             // a box without a CGK just doesn't gossip yet (never bricked).
             if cgkOwed {
-                let cgkHex = try await deriveCgkHex(String(localized: "Authorize \(serverDomain) to join your cloud"))
+                let cgkHex = try await deriveCgkHex("Authorize \(serverDomain) to join your cloud")
                 if let cgk = HexUtil.decode(cgkHex), cgk.count == 32 {
                     let body = try CgkDelivery.buildDeposit(
                         username: username,

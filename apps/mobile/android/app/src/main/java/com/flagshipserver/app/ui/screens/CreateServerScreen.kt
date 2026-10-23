@@ -1495,6 +1495,8 @@ internal suspend fun mintRecipeBundle(
     // always post-boot delivered), so it is owed on EVERY created server,
     // independent of the embed-secrets choice.
     cgkDepositStore?.markPending(serverDomain)
+    // A server this device (re)creates gets a new box key: pin whichever key it registers with next.
+    com.flagshipserver.app.core.BoxKeyPins.shared.forget(username, serverDomain)
 
     // Debug-friendly server (Advanced): bake an admin-signed debug-access grant
     // (the pasted key, 7 days) into the recipe as the UNSIGNED `debugGrant`

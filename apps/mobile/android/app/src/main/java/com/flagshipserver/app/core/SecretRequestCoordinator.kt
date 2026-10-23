@@ -2,16 +2,13 @@
 // (docs/security-phone-as-unlock-endpoint.md). Kotlin mirror of
 // FlagshipCore/SecretRequestCoordinator.swift.
 //
-//   1. fetchRequests — builds an IRK-signed DeviceEndpointClaim
-//      mailbox-auth credential, POSTs /api/secret-requests, then judges
-//      every returned request against the key THIS device pinned for the
-//      server (docs/first-contact.md, FirstContact). `.com` is NOT a trust
-//      anchor: a request naming another key than the pin is refused and
-//      shown ("This server's key changed"); one whose signature fails is
-//      DROPPED. A server with no pin yet is a first sight: the request must
-//      verify under the key it names, a server this device created must
-//      carry its enrollment proof, and the owner sees the six-digit code
-//      computed here from that key before Approve pins it.
+//   1. fetchVerifiedRequests — builds an IRK-signed DeviceEndpointClaim
+//      mailbox-auth credential, POSTs /api/secret-requests, then
+//      RE-VERIFIES every returned request against the box's STK as
+//      INDEPENDENTLY resolved from the directory (/api/users/:u/pods).
+//      `.com` is NOT a trust anchor: a request whose STK mismatches the
+//      directory (or whose signature fails under it) is DROPPED, never
+//      surfaced for confirm.
 //   2. confirmAndRespond — for the verified request the user taps "yes,
 //      this is my box" (the device-info backstop). By purpose:
 //        - unlock-key:  GET the phone-sealed LUKS key, unseal it with the
@@ -28,7 +25,6 @@
 
 package com.flagshipserver.app.core
 
-import com.flagshipserver.app.R
 import com.flagshipserver.app.api.BoxSealedLeaseWire
 import com.flagshipserver.app.api.LeaseRevokeWire
 import com.flagshipserver.app.api.MailboxAuthEnvelope
@@ -91,8 +87,6 @@ class SecretRequestCoordinator(
      * owner-signed. Mirror of iOS `watchDelegateKeyProvider`.
      */
     private val watchDelegate: () -> WatchDelegateSigner? = { null },
-    /** First contact: the pins, the enrollment secrets this device keeps, Studio's report. */
-    private val firstContact: FirstContact = FirstContact(),
     /** Leases the worker could not take yet, kept for [retryPendingLeases]. */
     private val pendingLeases: PendingLeases? = null,
     /** Pauses before the 2nd and 3rd try of a lease deposit that failed in passing. */
@@ -101,39 +95,32 @@ class SecretRequestCoordinator(
     private val deadManBound: (serverDomain: String) -> DeadManBound? = { null },
     /** What this phone last confirmed about the server's lock: true = locked, null = never confirmed. */
     private val lockedServer: (serverDomain: String) -> Boolean? = { null },
+    /** The box keys this phone pinned; a reply is never sealed to another. */
+    private val pins: BoxKeyPins = BoxKeyPins.shared,
 ) {
     /** The dead-man switch's state for one server, as [DeadManLeaseBound] needs it. */
     data class DeadManBound(val enabled: Boolean, val deadline: Long?)
 
     sealed class CoordinatorException(message: String) : Exception(message) {
         object NoSealedLuksKey :
-            CoordinatorException(FSStrings.get(R.string.no_sealed_disk_key_is_on))
+            CoordinatorException("No sealed disk key is on file for this server yet.")
         object LuksUnsealFailed :
-            CoordinatorException(FSStrings.get(R.string.couldnt_unseal_the_disk_key_with))
+            CoordinatorException("Couldn't unseal the disk key with this phone's keys.")
         class DirectoryMissingServer(domain: String) :
             CoordinatorException("This server ($domain) isn't registered to your account.")
         class PurposeUnsupported(purpose: String) :
-            CoordinatorException(FSStrings.get(R.string.unsupported_secret_request_type, purpose))
+            CoordinatorException("Unsupported secret request type: $purpose.")
         class NoPendingRequest(domain: String) :
             CoordinatorException("This server ($domain) isn't waiting for an unlock right now.")
-        /** First contact refused: no pin, no blessing. */
-        class Refused(val reason: FirstContactRefusal) : CoordinatorException(reason.message())
-        /** A first sight: the owner has to see [look]'s code (or Studio's confirmation) and approve that key. */
-        class FirstLookRequired(val look: FirstLook) :
-            CoordinatorException(FSStrings.get(R.string.server_code_check_first))
     }
 
-    /** A request judged against the pin, ready to show the owner. [refusal]
-     *  set: shown with its sentence and never answered. [firstLook] set: no
-     *  pin yet, the code box sits above Approve. */
+    /** A request that PASSED directory re-verification, ready to show the
+     *  user the device-info confirm sheet. The raw [PendingSecretRequest] +
+     *  the directory-resolved STK are retained so confirm doesn't re-resolve. */
     data class VerifiedRequest(
         val pending: PendingSecretRequest,
-        /** The key the reply is sealed to: the pin, or on a first sight the key the box named and signed with. */
-        val stkPubHex: String,
-        val firstLook: FirstLook? = null,
-        /** Approving pins [firstLook]'s key (false: an unlock whose proof comes with the entitlement request). */
-        val pinOnApprove: Boolean = false,
-        val refusal: FirstContactRefusal? = null,
+        /** STK as resolved from the DIRECTORY (not the mailbox echo). */
+        val directoryStkPubHex: String,
     ) {
         val id: String get() = pending.id
         val serverDomain: String get() = pending.serverDomain
@@ -149,54 +136,44 @@ class SecretRequestCoordinator(
     // ---- 1. Fetch + re-verify -----------------------------------------
 
     /** Build the mailbox auth, fetch the account's pending requests, and
-     *  judge each against this device's pin (FirstContact). Returned: the
-     *  ones to answer (pinned, or a first sight with its [FirstLook]) and the
-     *  refused ones with their sentence. A request whose signature fails is
-     *  SILENTLY dropped. */
-    suspend fun fetchRequests(): List<VerifiedRequest> {
-        val material = irk.resolve(FSStrings.get(R.string.check_for_servers_waiting_for_approval))
+     *  keep only those that re-verify against the DIRECTORY STK. A request
+     *  `.com` returns whose STK isn't directory-bound (or whose signature
+     *  fails under that STK) is SILENTLY dropped — never offered for
+     *  confirm. */
+    suspend fun fetchVerifiedRequests(): List<VerifiedRequest> {
+        val material = irk.resolve("Check for servers waiting for approval")
         val auth = buildMailboxAuth(material)
         val pendingResp = mailbox.fetchPendingRequests(auth)
+        val directory = mailbox.fetchPods(username)
+        pins.observe(username, directory.pods)
 
-        val out = mutableListOf<VerifiedRequest>()
+        val verified = mutableListOf<VerifiedRequest>()
         for (pending in pendingResp.requests) {
+            // The DIRECTORY is the trust anchor for the STK — not the
+            // mailbox echo. No directory entry ⇒ `.com` can't vouch.
+            val stkHex = directory.identityPubKey(pending.serverDomain) ?: continue
+            val stkPub = HexUtil.decode(stkHex) ?: continue
+            if (stkPub.size != 32) continue
+            // The mailbox echo MUST equal the directory STK — a relay can't
+            // splice in a different stkPub.
+            if (!pending.stkPub.equals(stkHex, ignoreCase = true)) continue
             val purpose = SecretPurpose.fromWire(pending.purpose) ?: continue
             val sig = HexUtil.decode(pending.requestSignature) ?: continue
-            val verdict = firstContact.judge(
+            // RE-VERIFY the box's request against the DIRECTORY STK.
+            val ok = SecretRequest.verify(
+                signature = sig,
+                stkPub = stkPub,
                 serverDomain = pending.serverDomain,
-                namedStkHex = pending.stkPub,
+                stkPubHex = stkHex,
                 purpose = purpose,
-                verifySignature = { key, keyHex ->
-                    SecretRequest.verify(
-                        signature = sig,
-                        stkPub = key,
-                        serverDomain = pending.serverDomain,
-                        stkPubHex = keyHex,
-                        purpose = purpose,
-                        nonceHex = pending.requestNonceHex,
-                        issuedAt = pending.issuedAt,
-                    )
-                },
-                enrollmentProof = pending.deviceInfo?.enrollmentProof,
+                nonceHex = pending.requestNonceHex,
+                issuedAt = pending.issuedAt,
             )
-            when (verdict) {
-                is FirstContact.Verdict.Pinned -> out += VerifiedRequest(pending, verdict.stkPubHex)
-                is FirstContact.Verdict.FirstSight ->
-                    out += VerifiedRequest(pending, verdict.look.stkPubHex, verdict.look, verdict.pinOnApprove)
-                is FirstContact.Verdict.Refused -> {
-                    ErrorLog.caught("first-contact", IllegalStateException("refused a request from ${pending.serverDomain}: ${verdict.reason}"), verdict.reason.name.lowercase())
-                    out += VerifiedRequest(pending, verdict.stkPubHex, refusal = verdict.reason)
-                }
-                FirstContact.Verdict.Invalid -> Unit
-            }
+            if (!ok) continue
+            verified.add(VerifiedRequest(pending = pending, directoryStkPubHex = stkHex))
         }
-        return out
+        return verified
     }
-
-    /** Only the requests signed by the key this device pinned (no first sight, no refusal):
-     *  what a path that can't show the code box (the watch) may answer. */
-    suspend fun fetchVerifiedRequests(): List<VerifiedRequest> =
-        fetchRequests().filter { it.refusal == null && it.firstLook == null }
 
     // ---- 2. Confirm (one tap = the human backstop) --------------------
 
@@ -216,15 +193,13 @@ class SecretRequestCoordinator(
         // A security notice has this app locked until it is updated: no approval is signed, except
         // the one that lets the owner's own server start.
         if (purpose != SecretPurpose.UNLOCK_KEY) UpdateLock.requireUnlocked()
-        verified.refusal?.let { throw CoordinatorException.Refused(it) }
-        val stkPub = HexUtil.decode(verified.stkPubHex)
+        val stkPub = HexUtil.decode(verified.directoryStkPubHex)
             ?.takeIf { it.size == 32 }
             ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)
+        // Before any prompt: a key other than the one this phone pinned gets nothing.
+        pins.require(username, verified.serverDomain, verified.directoryStkPubHex)
 
-        val material = irk.resolve(FSStrings.get(R.string.approve_your_servers_boot_secret))
-        // First blessing: the owner saw the code for this very key. Pin it before anything is sealed.
-        val pinnedNow = verified.firstLook != null && verified.pinOnApprove
-        if (pinnedNow) firstContact.pin(verified.firstLook!!)
+        val material = irk.resolve("Approve your server's boot secret")
         val delegate: WatchDelegateSigner? =
             if (purpose == SecretPurpose.UNLOCK_KEY && !depositAutoLease) watchDelegate() else null
         // Slice D — resolve the admin master root ONCE for this ceremony (silent
@@ -233,7 +208,7 @@ class SecretRequestCoordinator(
         // it; null ⇒ this device is non-admin/legacy ⇒ they stay IRK-signed. A
         // watch-delegate approval mints neither, so it never asks for it.
         val orderKey: Ed25519Sign? =
-            if (delegate == null) adminSigner?.invoke(FSStrings.get(R.string.authorize_your_server_to_serve)) else null
+            if (delegate == null) adminSigner?.invoke("Authorize your server to serve") else null
 
         var unlockKey: ByteArray? = null
         val sealedHex = when (purpose) {
@@ -282,10 +257,7 @@ class SecretRequestCoordinator(
         // owner-IRK-signed entitlement for the box's STK so it comes online with
         // no second tap (consent to boot ⇒ consent to serve). Best-effort — a
         // failure never fails the unlock; the box can still fetch one via relay.
-        // A server this device created and has not pinned yet gets no entitlement here: it asks
-        // for one with its enrollment proof, and that request pins it.
-        val awaitingProof = verified.firstLook != null && !verified.pinOnApprove
-        if (purpose == SecretPurpose.UNLOCK_KEY && delegate == null && !awaitingProof) {
+        if (purpose == SecretPurpose.UNLOCK_KEY && delegate == null) {
             try {
                 val carrierHex = buildEntitlementReply(verified, stkPub, material, orderKey)
                 val auth = buildMailboxAuth(material)
@@ -308,10 +280,6 @@ class SecretRequestCoordinator(
             }
         }
 
-        // The app-name certificate grant, in the same biometric session as the first blessing,
-        // over the PINNED key. Sent when the box can be reached; kept to send again otherwise.
-        if (pinnedNow && delegate == null) sendWildcardGrant(verified.serverDomain, orderKey ?: material.signer)
-
         // "auto" mode: deposit a box-sealed lease (the user's IRK authorizes
         // it here — I2) using the key we just recovered (never .com-visible).
         val key = unlockKey
@@ -332,41 +300,16 @@ class SecretRequestCoordinator(
     suspend fun approvePendingUnlock(
         serverDomain: String,
         depositAutoLease: Boolean = false,
-        /** The key whose code the owner was shown (a first sight); null when nothing was shown yet. */
-        acceptFirstSightKey: String? = null,
     ): String? {
-        val live = livePending(serverDomain, SecretPurpose.UNLOCK_KEY, acceptFirstSightKey)
-        return confirmAndRespond(live, depositAutoLease = depositAutoLease)
-    }
-
-    /** The live request of [purpose] for [serverDomain]. A refusal throws its sentence; a first
-     *  sight whose key the owner hasn't been shown throws [CoordinatorException.FirstLookRequired]. */
-    private suspend fun livePending(serverDomain: String, purpose: SecretPurpose, acceptFirstSightKey: String?): VerifiedRequest {
-        val live = fetchRequests()
-            .filter { it.serverDomain.equals(serverDomain, ignoreCase = true) && it.purpose == purpose }
+        val mine = fetchVerifiedRequests()
+            .filter {
+                it.serverDomain.equals(serverDomain, ignoreCase = true) &&
+                    it.purpose == SecretPurpose.UNLOCK_KEY
+            }
             .sortedByDescending { it.pending.postedAt }
-            .firstOrNull { now() <= it.pending.expiresAt }
+        val live = mine.firstOrNull { now() <= it.pending.expiresAt }
             ?: throw CoordinatorException.NoPendingRequest(serverDomain)
-        live.refusal?.let { throw CoordinatorException.Refused(it) }
-        val look = live.firstLook
-        if (look != null && !look.stkPubHex.equals(acceptFirstSightKey, ignoreCase = true)) {
-            throw CoordinatorException.FirstLookRequired(look)
-        }
-        return live
-    }
-
-    private suspend fun sendWildcardGrant(serverDomain: String, signer: Ed25519Sign) {
-        val pin = firstContact.pinnedHex(serverDomain) ?: return
-        val grant = WildcardGrants.sign(username, serverDomain, pin, now(), signer) ?: return
-        WildcardGrants.outbox.put(serverDomain, grant)
-        val taken = try {
-            WildcardGrants.deliver(serverDomain, grant.issuedAt, grant.signatureHex)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            false
-        }
-        if (taken) WildcardGrants.outbox.remove(serverDomain)
+        return confirmAndRespond(live, depositAutoLease = depositAutoLease)
     }
 
     /** One-tap approval for the directory-driven ENTITLEMENT card — the Box
@@ -375,8 +318,15 @@ class SecretRequestCoordinator(
      *  fetch + re-verify the live `entitlement` request and respond (mint the
      *  owner-IRK RootEntitlement carrier) under ONE biometric. No lease.
      *  Mirror of iOS SecretRequestCoordinator.approvePendingEntitlement. */
-    suspend fun approvePendingEntitlement(serverDomain: String, acceptFirstSightKey: String? = null): String? {
-        val live = livePending(serverDomain, SecretPurpose.ENTITLEMENT, acceptFirstSightKey)
+    suspend fun approvePendingEntitlement(serverDomain: String): String? {
+        val mine = fetchVerifiedRequests()
+            .filter {
+                it.serverDomain.equals(serverDomain, ignoreCase = true) &&
+                    it.purpose == SecretPurpose.ENTITLEMENT
+            }
+            .sortedByDescending { it.pending.postedAt }
+        val live = mine.firstOrNull { now() <= it.pending.expiresAt }
+            ?: throw CoordinatorException.NoPendingRequest(serverDomain)
         return confirmAndRespond(live, depositAutoLease = false)
     }
 
@@ -384,7 +334,7 @@ class SecretRequestCoordinator(
      *  longer self-unlock and falls back to phone-gated approval (downgrade,
      *  not brick). [leaseId] is the one returned by confirmAndRespond. */
     suspend fun revokeAutoUnlockLease(serverDomain: String, leaseId: String) {
-        val material = irk.resolve(FSStrings.get(R.string.require_approval_to_boot_this_server))
+        val material = irk.resolve("Require approval to boot this server")
         val issuedAt = now()
         // The boot worker's DELETE carries no body signature — it's
         // authorized by the owner-IRK Flagship-Boot-v1 header bound to the
@@ -499,7 +449,7 @@ class SecretRequestCoordinator(
         val store = pendingLeases ?: return emptyList()
         val waiting = store.all()
         if (waiting.isEmpty()) return emptyList()
-        val material = irk.resolve(FSStrings.get(R.string.finish_setting_up_automatic_unlock))
+        val material = irk.resolve("Finish setting up automatic unlock")
         val done = mutableListOf<Pair<String, String>>()
         for ((server, p) in waiting) {
             if (p.lease.expiresAt <= now()) {
@@ -537,7 +487,7 @@ class SecretRequestCoordinator(
         material: IrkMaterial,
     ): Pair<String, ByteArray> {
         val sealedLuks = try {
-            mailbox.fetchSealedLuksKey(verified.serverDomain)
+            mailbox.fetchSealedLuksKey(verified.serverDomain, username)
         } catch (e: HttpException) {
             if (e.status == 404) throw CoordinatorException.NoSealedLuksKey else throw e
         }

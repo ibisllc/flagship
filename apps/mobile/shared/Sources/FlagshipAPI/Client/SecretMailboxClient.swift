@@ -25,7 +25,7 @@ public protocol SecretMailboxClient: Sendable {
     /// sealed FOR the phone (the phone unseals it with its delegated /
     /// BAK / IRK Ed25519 key). 404 → no sealed key on file. Stays on the
     /// identity plane (owner identity-state, set at install).
-    func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse
+    func fetchSealedLuksKey(serverDomain: String, username: String) async throws -> SealedLuksKeyResponse
 
     /// GET /api/users/:u/pods — the directory. The phone resolves the
     /// box's STK INDEPENDENTLY of the mailbox echo from here, so a lying
@@ -969,9 +969,20 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         try await sendBoot("POST", "/api/boot/response", body: body, bootAuth: bootAuth, acceptStatuses: [200, 201, 204])
     }
 
-    public func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse {
+    /// `.com` hands the IRK-sealed disk key only to the account's own
+    /// devices, so the read carries the account read token.
+    public func fetchSealedLuksKey(serverDomain: String, username: String) async throws -> SealedLuksKeyResponse {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
-        return try await getReturning("/api/server/\(encoded)/sealed-luks-key")
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/server/\(encoded)/sealed-luks-key"))
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await urlSession.gatedData(for: $0)
+        }
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(SealedLuksKeyResponse.self, from: data)
     }
 
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
@@ -1349,7 +1360,7 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
             $0.serverDomain.lowercased() == response.serverDomain.lowercased() && $0.requestNonceHex == response.requestNonceHex
         }
     }
-    public func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse {
+    public func fetchSealedLuksKey(serverDomain: String, username: String) async throws -> SealedLuksKeyResponse {
         guard let hex = sealedLuksKeyHex else {
             throw ScreensClientError.http(status: 404, message: String(localized: "no sealed key on file"))
         }

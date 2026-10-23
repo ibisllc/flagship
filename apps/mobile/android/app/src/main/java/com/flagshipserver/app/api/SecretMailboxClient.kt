@@ -28,7 +28,7 @@ interface SecretMailboxClient {
 
     /** GET /api/server/:domain/sealed-luks-key — the LUKS key sealed FOR
      *  the phone. 404 → no sealed key on file. Stays on the identity plane. */
-    suspend fun fetchSealedLuksKey(serverDomain: String): SealedLuksKeyResponse
+    suspend fun fetchSealedLuksKey(serverDomain: String, username: String): SealedLuksKeyResponse
 
     /** GET /api/users/:u/pods — the directory. The phone resolves the
      *  box's STK INDEPENDENTLY of the mailbox echo from here. Identity plane. */
@@ -814,12 +814,16 @@ class LiveSecretMailboxClient(
         )
     }
 
-    override suspend fun fetchSealedLuksKey(serverDomain: String): SealedLuksKeyResponse {
+    // `.com` hands the IRK-sealed disk key only to the account's own devices.
+    override suspend fun fetchSealedLuksKey(serverDomain: String, username: String): SealedLuksKeyResponse {
         val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
-        return transport.getJson(
-            "$base/api/server/$encoded/sealed-luks-key",
-            responseSerializer = SealedLuksKeyResponse.serializer(),
-        )
+        return AccountReadTokens.authorize(username) { auth ->
+            transport.getJson(
+                "$base/api/server/$encoded/sealed-luks-key",
+                responseSerializer = SealedLuksKeyResponse.serializer(),
+                extraHeaders = auth,
+            )
+        }
     }
 
     override suspend fun fetchPods(username: String): PodsDirectoryResponse {

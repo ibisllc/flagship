@@ -750,6 +750,16 @@ struct BootUnlockApprovalCard: View {
                         .accessibilityIdentifier("sd-approve-unlock-retry")
                 }
             }
+        case .keyChanged(let changed):
+            statusCard(c: c) {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Label("This server's key changed", systemImage: "exclamationmark.shield.fill")
+                        .font(FS.font.body()).foregroundColor(c.danger)
+                    Text(changed.errorDescription ?? "").font(FS.font.caption()).foregroundColor(c.text)
+                    FSGhostButton("Trust its new key", block: true) { Task { await vm.trustNewKey() } }
+                        .accessibilityIdentifier("sd-approve-unlock-trust-new-key")
+                }
+            }
         }
     }
 

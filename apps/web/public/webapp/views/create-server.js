@@ -34,6 +34,7 @@ import { controlApex, serverFqdn } from "../lib/apex.js";
 import { buildPairingOrder } from "../lib/bootApproval.js";
 import { signOfflineSecrets } from "../lib/offlineSecrets.js";
 import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
+import { forgetBoxKeyPin } from "../lib/boxKeyPins.js";
 import { clearPendingRck, reuseOrRecordRck } from "../lib/pendingRck.js";
 import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
 import { setSessionToken, setSessionTokenForPod } from "../lib/api.js";
@@ -896,6 +897,8 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     markSwkDepositPending(blob.serverDomain);
     if (pairingOrderJson) markPairingDepositPending(blob.serverDomain, pairingOrderJson);
   }
+  // A server this device (re)creates gets a new box key: pin whichever key it registers with next.
+  forgetBoxKeyPin(session.username, blob.serverDomain);
   // Debug-friendly server (Advanced opt-in): sign + embed the admin-root
   // debug-access grant for the pasted key as the recipe's unsigned `debugGrant`
   // sibling. Absent (the production default) ⇒ the recipe carries no grant ⇒

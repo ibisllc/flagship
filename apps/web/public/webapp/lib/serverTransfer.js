@@ -25,6 +25,7 @@ import { AddServerRefusedError, isAddServerRefusal } from "./addServerGate.js";
 import { ed25519PubToX25519 } from "./edToMont.js";
 import { sealForBrowserKey } from "./buildDraft.js";
 import { openSealedWithIrk } from "./leases.js";
+import { fetchSealedDiskKey } from "./bootApproval.js";
 import { verifyWithEd25519Pub, hexToBytes as keystoreHexToBytes } from "../keystore.js";
 
 import { tr } from "./i18n.js";
@@ -600,7 +601,7 @@ export async function resealDiskKeyForAcquirer(args, deps = {}) {
   const diskKey =
     typeof deps.openDiskKey === "function"
       ? await deps.openDiskKey()
-      : await defaultOpenGiverDiskKey({ serverDomain, umk, origin, fetch: f });
+      : await defaultOpenGiverDiskKey({ serverDomain, username, umk, origin, fetch: f });
 
   // 2. Re-seal to the acquirer IRK (Ed25519 pub → X25519 → seal).
   const acquirerX = ed25519PubToX25519(hexFromHexString(acquirerIrkPubHex));
@@ -719,10 +720,8 @@ export async function claimResealedDiskKey(args, deps = {}) {
   return { ready: true, diskKey };
 }
 
-async function defaultOpenGiverDiskKey({ serverDomain, umk, origin, fetch: f }) {
-  const sealedRes = await f(
-    `${origin}/api/server/${encodeURIComponent(serverDomain)}/sealed-luks-key`,
-  );
+async function defaultOpenGiverDiskKey({ serverDomain, username, umk, origin, fetch: f }) {
+  const sealedRes = await fetchSealedDiskKey(serverDomain, username, { fetch: f, comBase: origin });
   if (!sealedRes.ok) {
     throw err(`no sealed key on file for ${serverDomain}: ${sealedRes.status}`, sealedRes.status);
   }

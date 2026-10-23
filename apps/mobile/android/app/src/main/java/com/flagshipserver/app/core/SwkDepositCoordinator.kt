@@ -20,7 +20,6 @@
 
 package com.flagshipserver.app.core
 
-import com.flagshipserver.app.R
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.Keystore
@@ -60,9 +59,6 @@ class SwkDepositCoordinator(
      *  (default: the real session latch). Mirror of iOS `hasSessionKey`. */
     private val hasSessionKey: () -> Boolean =
         { BiometricAuthority.current()?.isFresh() ?: false },
-    /** The server key this device pinned at the first blessing (docs/first-contact.md). Every
-     *  deposit is sealed to it, never to the key `.com` lists. */
-    private val pinnedStk: (serverDomain: String) -> ByteArray? = { ServerKeyPins.shared.pinnedStk(it) },
 ) {
     /** Deposit what's OWED for a box that has registered (carrying
      *  `identityPubKeyHex`): the SWK (turns on the service platform) AND/OR the
@@ -81,10 +77,10 @@ class SwkDepositCoordinator(
         // This is what stops the "random Face ID on the Home screen" the periodic
         // reconcile used to cause when a box left a deposit owed. Mirror of iOS.
         if (!hasSessionKey()) return
-        // Sealed only to the pinned key. Not pinned yet (the first blessing hasn't happened) or a
-        // listing that names another key: the markers stay and a later pass deposits.
-        val boxIdentityPub = pinnedStk(serverDomain) ?: return
-        if (!HexUtil.encode(boxIdentityPub).equals(identityPubKeyHex, ignoreCase = true)) return
+        val boxIdentityPub = HexUtil.decode(identityPubKeyHex) ?: return
+        if (boxIdentityPub.size != 32) return
+        // A key other than the pinned one stays owed; boot approval shows the owner why.
+        if (runCatching { BoxKeyPins.shared.require(username, serverDomain, identityPubKeyHex) }.isFailure) return
 
         // Server-migration (docs/server-migration.md invariant 4): when this pod
         // is the attached NEW box of a live migration, its SWK MUST derive from
@@ -104,7 +100,7 @@ class SwkDepositCoordinator(
         }
         try {
             val (irk, irkPubHex, swkHex) =
-                deriveIrkAndSwk(swkServerId, FSStrings.get(R.string.authorize_to_run_apps, serverDomain))
+                deriveIrkAndSwk(swkServerId, "Authorize $serverDomain to run apps")
 
             if (swkOwed) {
                 val swk = HexUtil.decode(swkHex)

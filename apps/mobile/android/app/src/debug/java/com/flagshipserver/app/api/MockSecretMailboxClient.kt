@@ -42,41 +42,8 @@ class MockSecretMailboxClient : SecretMailboxClient {
     }
     private val answeredNonces = mutableSetOf<String>()
 
-    /** Seals a disk key for the phone on demand (the gym seals one to this device's IRK). */
-    var sealedLuksKeyFor: (suspend (String) -> String?)? = null
-
-    /** What GET /api/users/:u/secret-requests returns (box-signed, read-token). */
-    var signedRequests: List<SignedSecretRequest> = emptyList()
-    override suspend fun readSecretRequests(username: String) = SignedSecretRequestsResponse(signedRequests)
-
-    // ---- Watch boot key (boot-core routes.ts) ----------------------------
-    val watchBootKeys: MutableMap<String, WatchBootDepositWire> = mutableMapOf()
-    val watchBootPuts: MutableList<Pair<WatchBootDepositWire, String>> = mutableListOf()
-    val watchBootDeletes: MutableList<Pair<String, String>> = mutableListOf()
-    /** Servers the boot worker treats as locked (423 to a delegate). */
-    var lockedDomains: Set<String> = emptySet()
-
-    override suspend fun putWatchBootKey(deposit: WatchBootDepositWire, bootAuth: String) {
-        runCatching { com.flagshipserver.app.core.WatchBootDelegate.canonicalBytes(deposit.toDeposit().attestation) }
-            .getOrElse { throw HttpException(400, """{"error":"malformed body"}""") }
-        watchBootPuts += deposit to bootAuth
-        watchBootKeys[deposit.serverDomain.lowercase()] = deposit
-    }
-
-    override suspend fun getWatchBootKey(serverDomain: String, bootAuth: String): WatchBootDepositWire {
-        if (serverDomain.lowercase() in lockedDomains) {
-            throw HttpException(423, """{"error":"this server is locked: approve its start-up from your phone","locked":true}""")
-        }
-        return watchBootKeys[serverDomain.lowercase()] ?: throw HttpException(404, """{"error":"no copy for this watch"}""")
-    }
-
-    override suspend fun deleteWatchBootKey(serverDomain: String, bootAuth: String) {
-        watchBootDeletes += serverDomain to bootAuth
-        watchBootKeys.remove(serverDomain.lowercase())
-    }
-
-    override suspend fun fetchSealedLuksKey(serverDomain: String): SealedLuksKeyResponse {
-        val hex = sealedLuksKeyHex ?: sealedLuksKeyFor?.invoke(serverDomain) ?: throw HttpException(404, "no sealed key on file")
+    override suspend fun fetchSealedLuksKey(serverDomain: String, username: String): SealedLuksKeyResponse {
+        val hex = sealedLuksKeyHex ?: throw HttpException(404, "no sealed key on file")
         return SealedLuksKeyResponse(serverDomain, hex, 1L)
     }
 
@@ -155,17 +122,6 @@ class MockSecretMailboxClient : SecretMailboxClient {
 
     override suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) {
         revoked.add(request to bootAuth)
-    }
-
-    /** Servers whose every lease was revoked (`DELETE {boot}/api/boot/lease/:domain`, release 0.3's
-     *  SEC-DEADMAN-001: switching the dead-man lock on first drops every auto-unlock lease). */
-    val revokedAll: MutableList<Pair<String, String>> = mutableListOf()
-
-    /** The worker's handleRevokeAllLeases: an owner header for that server, then every lease goes. */
-    override suspend fun revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) {
-        ownerPubFromHeader(bootAuth) ?: throw HttpException(401, """{"error":"unauthorized"}""")
-        leases.remove(serverDomain)
-        revokedAll.add(serverDomain to bootAuth)
     }
 
     val pairingDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()

@@ -142,7 +142,7 @@ public final class TransferGiverViewModel {
             // Unseal the box's disk key (sealed FOR the giver IRK at install) and
             // re-seal it to the acquirer IRK. A box with no LUKS key (un-encrypted)
             // has nothing to hand off — skip straight to completion.
-            let sealed = try? await mailbox.fetchSealedLuksKey(serverDomain: serverDomain)
+            let sealed = try? await mailbox.fetchSealedLuksKey(serverDomain: serverDomain, username: username)
             if let sealedHex = sealed?.sealedKey {
                 let diskKey = try ServerTransferFlow.openGiverDiskKey(sealedHex: sealedHex, giverIrk: key)
                 let auth = try ServerTransferFlow.buildDiskKeyDeposit(

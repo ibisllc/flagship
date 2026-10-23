@@ -147,6 +147,8 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.core.CertPinRegistry.shared.attach(
             com.flagshipserver.app.core.CertPinPrefs(applicationContext),
         )
+        com.flagshipserver.app.core.BoxKeyPins.shared =
+            com.flagshipserver.app.core.BoxKeyPins(com.flagshipserver.app.core.BoxKeyPinPrefs(applicationContext))
         FlagshipFcmService.ensureChannel(applicationContext)
         biometric = BiometricAuthority(this)
         BiometricAuthority.set(biometric)
@@ -295,6 +297,7 @@ class MainActivity : FragmentActivity() {
         val liveMailbox = LiveSecretMailboxClient(
             OkHttpJsonTransport(okHttp),
             onPods = { response ->
+                com.flagshipserver.app.core.BoxKeyPins.shared.observe(response.username, response.pods)
                 if (Keystore.hasUmkSeed()) {
                     val pins = com.flagshipserver.app.core.ServerKeyPins.shared
                     com.flagshipserver.app.core.CertPinRegistry.shared.update(response.pods, pins::pinnedStk)

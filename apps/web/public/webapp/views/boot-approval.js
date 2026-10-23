@@ -23,6 +23,8 @@ import {
 } from "../lib/bootApproval.js";
 import { fetchFirstBootMap } from "../lib/boxInbox.js";
 import { codeBoxHtml, refusalHtml } from "../lib/firstContact.js";
+import { repinBoxKey } from "../lib/boxKeyPins.js";
+import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 
 import { tr } from "../lib/i18n.js";
 let inFlightId = null;
@@ -178,6 +180,8 @@ function bindCards(root, verified, firstBootMap) {
       } catch (e) {
         if (isAlreadyAnswered(e)) {
           answered = true; // someone answered it already: done, no error
+        } else if (e?.code === "box-key-changed") {
+          await offerTrustNewKey(e);
         } else {
           console.error("approval failed", e);
           toast(tr("Couldn't approve {0}. {1}", req.serverDomain, boxErrorText(e)), "err");
@@ -195,6 +199,21 @@ function bindCards(root, verified, firstBootMap) {
       }
     });
   }
+}
+
+/** The pinned box key differs from `.com`'s: say so, and re-pin only on a fresh unlock. */
+async function offerTrustNewKey(e) {
+  const r = await confirmFreshUnlock({
+    title: "This server's key changed",
+    message: e.message,
+    okLabel: "Trust its new key",
+  });
+  if (!r.ok) {
+    if (r.error) toast(r.error, "err");
+    return;
+  }
+  repinBoxKey(getSession().username, e.serverDomain, e.reportedHex);
+  toast(`This device now trusts ${e.serverDomain}'s new key. Approve it again.`);
 }
 
 function startPoll() {

@@ -9,9 +9,9 @@
 
 package com.flagshipserver.app.viewmodels
 
-import com.flagshipserver.app.core.FSStrings
-import com.flagshipserver.app.R
 import com.flagshipserver.app.core.UserErrorText
+import com.flagshipserver.app.core.BoxKeyChangedException
+import com.flagshipserver.app.core.BoxKeyPins
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
@@ -28,11 +28,10 @@ interface ApprovalSource {
      *  the live unlock-key request for [serverDomain] and respond, all under a
      *  SINGLE biometric. Returns the deposited lease id (auto mode) or null.
      *  Throws when no live request is waiting. */
-    suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean, acceptFirstSightKey: String? = null): String?
+    suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean): String?
     /** One-tap approval for the directory-driven ENTITLEMENT card (serve-auth) —
-     *  fetch + verify the live `entitlement` request and respond. [acceptFirstSightKey]:
-     *  the key whose code the owner was shown at a first sight (docs/first-contact.md). */
-    suspend fun approvePendingEntitlement(serverDomain: String, acceptFirstSightKey: String? = null): String?
+     *  fetch + verify the live `entitlement` request and respond. */
+    suspend fun approvePendingEntitlement(serverDomain: String): String?
 }
 
 /** [SecretRequestCoordinator] already IS the production approval source — this
@@ -40,10 +39,10 @@ interface ApprovalSource {
 class CoordinatorApprovalSource(
     private val coordinator: SecretRequestCoordinator,
 ) : ApprovalSource {
-    override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean, acceptFirstSightKey: String?): String? =
-        coordinator.approvePendingUnlock(serverDomain, depositAutoLease, acceptFirstSightKey)
-    override suspend fun approvePendingEntitlement(serverDomain: String, acceptFirstSightKey: String?): String? =
-        coordinator.approvePendingEntitlement(serverDomain, acceptFirstSightKey)
+    override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean): String? =
+        coordinator.approvePendingUnlock(serverDomain, depositAutoLease)
+    override suspend fun approvePendingEntitlement(serverDomain: String): String? =
+        coordinator.approvePendingEntitlement(serverDomain)
 }
 
 class BootUnlockApprovalViewModel(
@@ -60,6 +59,11 @@ class BootUnlockApprovalViewModel(
      *  disk key) or ENTITLEMENT (authorize the box to serve). The approve
      *  dispatch keys off this so ONE card type serves both lanes. */
     private val purpose: SecretPurpose = SecretPurpose.UNLOCK_KEY,
+    /** Re-pins after the owner confirms with a biometric. Injectable for tests. */
+    private val confirmNewKey: suspend (BoxKeyChangedException) -> Unit = { e ->
+        com.flagshipserver.app.keystore.BiometricAuthority.confirmNow("Trust the new key of ${e.serverDomain}")
+        BoxKeyPins.shared.repin(e.username, e.serverDomain, e.reportedHex)
+    },
 ) : ViewModel() {
 
     sealed interface State {
@@ -70,10 +74,6 @@ class BootUnlockApprovalViewModel(
          *  biometric has fired (or will, until the owner taps Approve). */
         data object RequestPending : State
 
-        /** First sight (docs/first-contact.md): the code computed here from the key the box named,
-         *  shown above Approve. Approving pins that key. */
-        data class ConfirmCode(val look: com.flagshipserver.app.core.FirstLook) : State
-
         /** Approval crypto + POST in flight (the one biometric happened here). */
         data object Approving : State
 
@@ -82,6 +82,10 @@ class BootUnlockApprovalViewModel(
 
         /** The approve failed (incl. the box already gave up). Retry re-arms. */
         data class Failed(val message: String) : State
+
+        /** `.com` lists a box key other than the one this phone pinned:
+         *  nothing was sent. The owner may trust the new key (a reinstall). */
+        data class KeyChanged(val error: BoxKeyChangedException) : State
     }
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -97,8 +101,8 @@ class BootUnlockApprovalViewModel(
      *  gave up) clears it. Never disturbs an in-flight or terminal approve. */
     fun setAwaitingUnlock(awaiting: Boolean) {
         when (_state.value) {
-            is State.Approving, is State.Approved, is State.ConfirmCode -> return
-            is State.Failed -> {
+            is State.Approving, is State.Approved -> return
+            is State.Failed, is State.KeyChanged -> {
                 // Keep a failure visible until the user acts; but if the box is
                 // no longer waiting, the failure is moot — clear it.
                 if (!awaiting) {
@@ -119,33 +123,36 @@ class BootUnlockApprovalViewModel(
 
     /** Owner tapped Approve. ONE biometric ceremony: fetch + verify the live
      *  request, unseal the key, respond, and (auto mode) deposit the lease. */
-    suspend fun approve() = approveWith(acceptKey = null)
-
-    /** The owner saw the code (or Studio's confirmation) and approves that very key. */
-    suspend fun approveShownKey() {
-        val look = (_state.value as? State.ConfirmCode)?.look ?: return
-        approveWith(acceptKey = look.stkPubHex)
-    }
-
-    private suspend fun approveWith(acceptKey: String?) {
+    suspend fun approve() {
         val source = makeSource()
         if (source == null) {
-            _state.value = State.Failed(FSStrings.get(R.string.sign_in_to_approve_this_server))
+            _state.value = State.Failed("Sign in to approve this server.")
             return
         }
         _state.value = State.Approving
         _state.value = try {
             when (purpose) {
-                SecretPurpose.UNLOCK_KEY -> source.approvePendingUnlock(serverDomain, depositAutoLease(), acceptKey)
-                SecretPurpose.ENTITLEMENT -> source.approvePendingEntitlement(serverDomain, acceptKey)
+                SecretPurpose.UNLOCK_KEY -> source.approvePendingUnlock(serverDomain, depositAutoLease())
+                SecretPurpose.ENTITLEMENT -> source.approvePendingEntitlement(serverDomain)
             }
             State.Approved
-        } catch (e: SecretRequestCoordinator.CoordinatorException.FirstLookRequired) {
-            State.ConfirmCode(e.look)
-        } catch (e: SecretRequestCoordinator.CoordinatorException.Refused) {
-            State.Failed(e.reason.message())
+        } catch (e: BoxKeyChangedException) {
+            State.KeyChanged(e)
         } catch (t: Throwable) {
-            State.Failed(UserErrorText.of(t, FSStrings.get(R.string.approval_failed_try_again)))
+            State.Failed(UserErrorText.of(t, "Approval failed. Try again."))
+        }
+    }
+
+    /** The owner says the key change is theirs (a reinstall, a replacement):
+     *  re-pin after a biometric, then back to the prompt to approve again. */
+    suspend fun trustNewKey() {
+        val changed = (_state.value as? State.KeyChanged)?.error ?: return
+        _state.value = try {
+            confirmNewKey(changed)
+            denied = false
+            State.RequestPending
+        } catch (t: Throwable) {
+            State.Failed(UserErrorText.of(t, "Couldn't confirm. Try again."))
         }
     }
 

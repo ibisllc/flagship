@@ -6,7 +6,6 @@
 
 package com.flagshipserver.app.core
 
-import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -348,10 +347,10 @@ class ServerShareClient(
         const val SHARE_TOKEN_HEADER = "x-flagship-share-token"
         const val SESSION_HEADER = "x-flagship-session"
 
-        val NOTICES_NOT_SHARED get() = FSStrings.get(R.string.the_owner_hasnt_let_you_approve)
-        val NOTICES_NO_TOKEN get() = FSStrings.get(R.string.this_phone_cant_receive_notices_right)
+        const val NOTICES_NOT_SHARED = "The owner hasn't let you approve this server's start-up."
+        const val NOTICES_NO_TOKEN = "This phone can't receive notices right now. Check that notifications are allowed for Flagship."
         /** Only an admin device of the joining account accepts (owner rule 2026-10-16); the shared server checks it. */
-        val ACCEPT_ADMIN_ONLY get() = FSStrings.get(R.string.only_an_admin_device_of_your)
+        const val ACCEPT_ADMIN_ONLY = "Only an admin device of your account can accept a co-manage invitation."
         /** The box's refusals of a first grant; each carries a sentence for the owner. */
         private val ACCEPT_REFUSAL_CODES = setOf("accept-not-admin", "accept-signature", "accept-stale", "accept-unverifiable")
 
@@ -360,11 +359,11 @@ class ServerShareClient(
 
         /** What to tell the person when the box refuses a co-manager's update order. */
         fun updateRefusalText(code: String?, error: String?): String = when (code) {
-            "busy", "pending-verify" -> FSStrings.get(R.string.an_update_is_already_underway)
-            "from-commit-mismatch" -> FSStrings.get(R.string.the_server_changed_version_refresh_and)
-            "manage-only" -> FSStrings.get(R.string.only_someone_who_can_manage_this)
-            "stale" -> FSStrings.get(R.string.your_devices_clock_looks_off_check)
-            else -> error?.takeIf { it.isNotBlank() } ?: FSStrings.get(R.string.the_server_refused_the_update)
+            "busy", "pending-verify" -> "An update is already underway."
+            "from-commit-mismatch" -> "The server changed version. Refresh and try again."
+            "manage-only" -> "Only someone who can manage this server can update it."
+            "stale" -> "Your device's clock looks off. Check it and try again."
+            else -> error?.takeIf { it.isNotBlank() } ?: "The server refused the update."
         }
     }
 
@@ -385,12 +384,14 @@ class ServerShareClient(
         options: ShareOptions,
     ): CreatedShare {
         val label = ServerShare.normalizeShareLabel(options.label)
-            ?: throw ShareException(ShareException.Kind.Invalid, FSStrings.get(R.string.give_the_person_a_name_of))
+            ?: throw ShareException(ShareException.Kind.Invalid, "Give the person a name of up to 64 characters.")
         require(options.level in ServerShare.SHARE_LEVELS)
         val stk = stkPubHex.lowercase()
         if (HexUtil.decode(stk)?.size != 32) {
-            throw ShareException(ShareException.Kind.Invalid, FSStrings.get(R.string.this_server_has_no_registered_identity))
+            throw ShareException(ShareException.Kind.Invalid, "This server has no registered identity yet.")
         }
+        // The offer pins this key for the person it's shared with: it must be the one this phone pinned.
+        BoxKeyPins.shared.require(username, serverDomain, stk)
         val shareId = HexUtil.encode(random(16))
         val secret = random(32)
         val issuedAt = now()
@@ -408,7 +409,7 @@ class ServerShareClient(
                 expiresAt = expiresAt,
             ).toJson(),
         )
-        val reason = FSStrings.get(R.string.share_with, serverName, label)
+        val reason = "Share $serverName with $label"
         val umk = keys.umk(reason)
         val ownerHex = ServerShare.sealShareJson(
             ServerShare.deriveShareOwnerRecordKey(umk),
@@ -441,19 +442,19 @@ class ServerShareClient(
     suspend fun ownerShares(username: String, serverDomain: String, ownerSession: String?): OwnerShares {
         var boxProblem: String? = null
         val onBox: BoxShares? = if (ownerSession == null) {
-            boxProblem = FSStrings.get(R.string.this_phone_isnt_signed_in_to)
+            boxProblem = "This phone isn't signed in to this server yet."
             null
         } else {
             try {
                 val r = boxCall("GET", serverDomain, "/api/screens/shares", ownerSession)
                 if (r.status == 200) decode(r, BoxShares.serializer()) else {
-                    boxProblem = FSStrings.get(R.string.the_server_didnt_list_its_shares, r.status)
+                    boxProblem = "The server didn't list its shares (${r.status})."
                     null
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Exception) {
-                boxProblem = FSStrings.get(R.string.cant_reach_this_server_right_now)
+                boxProblem = "Can't reach this server right now."
                 null
             }
         }
@@ -461,7 +462,7 @@ class ServerShareClient(
         val endedOnBox = onBox?.ended.orEmpty().map { it.shareId }.toSet()
         val activeIds = onBox?.shares.orEmpty().map { it.shareId }.toSet()
         val household = if (rows.any { it.state != "ended" }) {
-            ServerShare.deriveShareOwnerRecordKey(keys.umk(FSStrings.get(R.string.show_who_this_server_is_shared)))
+            ServerShare.deriveShareOwnerRecordKey(keys.umk("Show who this server is shared with"))
         } else {
             null
         }
@@ -519,7 +520,7 @@ class ServerShareClient(
 
     /** "Their phone shows the same code": sign #1 with the acceptance, then deposit B's boot copy if asked. */
     suspend fun confirm(username: String, serverDomain: String, ownerSession: String, share: AcceptedShare) {
-        if (share.sas == null) throw ShareException(ShareException.Kind.Invalid, FSStrings.get(R.string.this_acceptance_doesnt_check_out_remove))
+        if (share.sas == null) throw ShareException(ShareException.Kind.Invalid, "This acceptance doesn't check out. Remove it and share again.")
         val grant = ServerShare.Grant(
             serverDomain = serverDomain,
             shareId = share.shareId,
@@ -530,7 +531,7 @@ class ServerShareClient(
             label = share.label,
             issuedAt = now(),
         )
-        val key = keys.sensitive(FSStrings.get(R.string.give_access_to_this_server, share.label))
+        val key = keys.sensitive("Give ${share.label} access to this server")
         val body = ShareGrantBody(grant, ServerShare.signHex(grant, key), share.accept, share.acceptSignature, share.acceptAdmin)
         val r = boxPost(serverDomain, "/api/screens/shares", ownerSession, body, ShareGrantBody.serializer())
         // The box says why it can't take this acceptance, in words for the owner.
@@ -553,7 +554,7 @@ class ServerShareClient(
             label = share.label,
             issuedAt = maxOf(now(), share.issuedAt + 1),
         )
-        val key = keys.sensitive(FSStrings.get(R.string.change_what_can_do_on_this, share.label))
+        val key = keys.sensitive("Change what ${share.label} can do on this server")
         expectOk(
             boxPost(serverDomain, "/api/screens/shares", ownerSession, ShareGrantBody(grant, ServerShare.signHex(grant, key)), ShareGrantBody.serializer()),
             "change this share",
@@ -564,7 +565,7 @@ class ServerShareClient(
     /** Remove: #2 to the box and to `.com`. Either one ends the share; a `.com` 404 is fine. */
     suspend fun remove(username: String, serverDomain: String, ownerSession: String?, shareId: String, label: String) {
         val revoke = ServerShare.Revoke(serverDomain, shareId, now())
-        val body = ShareRevokeBody(revoke, ServerShare.signHex(revoke, keys.sensitive(FSStrings.get(R.string.stop_sharing_this_server_with, label))))
+        val body = ShareRevokeBody(revoke, ServerShare.signHex(revoke, keys.sensitive("Stop sharing this server with $label")))
         var boxOk = false
         var boxError: Exception? = null
         if (ownerSession != null) {
@@ -588,7 +589,7 @@ class ServerShareClient(
     /** Cancel an offer nobody has used yet: the `.com` revoke only. */
     suspend fun cancel(username: String, serverDomain: String, shareId: String, label: String) {
         val revoke = ServerShare.Revoke(serverDomain, shareId, now())
-        val body = ShareRevokeBody(revoke, ServerShare.signHex(revoke, keys.sensitive(FSStrings.get(R.string.cancel_the_link_for, label))))
+        val body = ShareRevokeBody(revoke, ServerShare.signHex(revoke, keys.sensitive("Cancel the link for $label")))
         val r = post(apex, "${apexBase()}/api/users/${enc(username)}/server-shares/$shareId/revoke", body, ShareRevokeBody.serializer())
         if (r.status != 404) expectOk(r, "cancel the link")
     }
@@ -598,24 +599,28 @@ class ServerShareClient(
         val url = "${apexBase()}/api/users/${enc(username)}/server-shares/$shareId/unlock"
         if (!on) {
             val unlock = ServerShare.Unlock(serverDomain, shareId, memberPubHex, ServerShare.SHARE_UNLOCK_OFF, now())
-            val sig = ServerShare.signHex(unlock, keys.sensitive(FSStrings.get(R.string.stop_letting_them_start_this_server)))
+            val sig = ServerShare.signHex(unlock, keys.sensitive("Stop letting them start this server"))
             val r = post(apex, url, ShareUnlockBody(unlock, sig), ShareUnlockBody.serializer())
             if (r.status != 410) expectOk(r, "withdraw the start-up copy")
             return
         }
-        val reason = FSStrings.get(R.string.let_them_approve_this_servers_start)
-        val got = call(apex, "GET", "${apexBase()}/api/server/${enc(serverDomain)}/sealed-luks-key")
-        if (got.status == 404) throw ShareException(ShareException.Kind.NotFound, FSStrings.get(R.string.no_disk_key_is_on_file))
+        val reason = "Let them approve this server's start-up"
+        // `.com` answers only the account's own devices: the read token.
+        val got = AccountReadTokens.authorize(username) { auth ->
+            call(apex, "GET", "${apexBase()}/api/server/${enc(serverDomain)}/sealed-luks-key", headers = auth)
+                .also { if (it.status == 401) throw HttpException(401, "") }
+        }
+        if (got.status == 404) throw ShareException(ShareException.Kind.NotFound, "No disk key is on file for this server, so nobody else can unlock it.")
         expectOk(got, "read the disk key")
         val sealedBlob = HexUtil.decode(decode(got, SealedKeyWire.serializer()).sealedKey)
-            ?: throw ShareException(ShareException.Kind.Invalid, FSStrings.get(R.string.the_disk_key_on_file_is))
+            ?: throw ShareException(ShareException.Kind.Invalid, "The disk key on file is damaged.")
         val diskKey = try {
             SecretSeal.openWithEd25519Seed(sealedBlob, keys.irkSeed(reason))
         } catch (_: Exception) {
-            throw ShareException(ShareException.Kind.Invalid, FSStrings.get(R.string.this_phones_keys_cant_open_this))
+            throw ShareException(ShareException.Kind.Invalid, "This phone's keys can't open this server's disk key.")
         }
         val memberPub = HexUtil.decode(memberPubHex)?.takeIf { it.size == 32 }
-            ?: throw ShareException(ShareException.Kind.Invalid, FSStrings.get(R.string.their_key_is_malformed))
+            ?: throw ShareException(ShareException.Kind.Invalid, "Their key is malformed.")
         val sealedHex = HexUtil.encode(SecretSeal.sealForEd25519Recipient(diskKey, memberPub))
         diskKey.fill(0)
         val unlock = ServerShare.Unlock(serverDomain, shareId, memberPubHex, ServerShare.shareSha256Hex(sealedHex), now())
@@ -631,7 +636,7 @@ class ServerShareClient(
 
     private suspend fun listRows(username: String): List<ComShareRow> {
         val list = ServerShare.ListRequest(username, now())
-        val sig = ServerShare.signHex(list, keys.accountKey(FSStrings.get(R.string.show_who_this_server_is_shared)))
+        val sig = ServerShare.signHex(list, keys.accountKey("Show who this server is shared with"))
         val r = post(apex, "${apexBase()}/api/users/${enc(username)}/server-shares/list", ShareListBody(list, sig), ShareListBody.serializer())
         expectOk(r, "list your shares")
         return decode(r, ComShareList.serializer()).shares
@@ -651,8 +656,8 @@ class ServerShareClient(
         val token = ServerShare.shareTokenFromSecret(secret)
         val r = call(apex, "GET", "${apexBase()}/api/server-shares/${link.shareId}", headers = mapOf(SHARE_TOKEN_HEADER to token))
         when (r.status) {
-            404 -> throw ShareException(ShareException.Kind.BadLink, FSStrings.get(R.string.this_link_doesnt_work_ask_for))
-            410 -> throw ShareException(ShareException.Kind.Expired, FSStrings.get(R.string.this_link_has_expired_ask_for))
+            404 -> throw ShareException(ShareException.Kind.BadLink, "This link doesn't work. Ask for a new one.")
+            410 -> throw ShareException(ShareException.Kind.Expired, "This link has expired. Ask for a new one.")
         }
         expectOk(r, "open the link")
         val view = decode(r, ComShareView.serializer())
@@ -664,7 +669,7 @@ class ServerShareClient(
                     view.offer,
                 ),
             )
-        }.getOrNull() ?: throw ShareException(ShareException.Kind.BadLink, FSStrings.get(R.string.this_link_doesnt_work_ask_for))
+        }.getOrNull() ?: throw ShareException(ShareException.Kind.BadLink, "This link doesn't work. Ask for a new one.")
         offers[link.shareId] = offer
         return OpenedShare(link.shareId, link.secretHex, view.state, offer, view.acceptance)
     }
@@ -675,7 +680,7 @@ class ServerShareClient(
      * re-opened link this account already accepted resumes instead.
      */
     suspend fun accept(opened: OpenedShare): Pair<SharedEntry, String> {
-        if (opened.state == "ended") throw ShareException(ShareException.Kind.Ended, FSStrings.get(R.string.the_owner_has_stopped_sharing_this))
+        if (opened.state == "ended") throw ShareException(ShareException.Kind.Ended, "The owner has stopped sharing this server.")
         val who = account()
         if (opened.acceptanceHex == null && (who == null || !canAccept(keys.adminRootPubHex() != null, who.isDemo))) {
             throw ShareException(ShareException.Kind.NotAdmin, ACCEPT_ADMIN_ONLY)
@@ -696,7 +701,7 @@ class ServerShareClient(
         }
         if (opened.acceptanceHex != null) {
             val mine = existing?.accept?.takeIf { it.memberPubHex == memberPubHex }
-                ?: throw ShareException(ShareException.Kind.AlreadyUsed, FSStrings.get(R.string.someone_else_already_used_this_link))
+                ?: throw ShareException(ShareException.Kind.AlreadyUsed, "Someone else already used this link. Ask the owner for a new one.")
             val entry = SharedEntry(null, opened.shareId, opened.secretHex, serverDomain, opened.offer.serverName, mine.acceptedAt)
             return saveToInbox(umk, entry) to sas
         }
@@ -712,9 +717,9 @@ class ServerShareClient(
         val token = ServerShare.shareTokenFromSecret(secret)
         val r = post(apex, "${apexBase()}/api/server-shares/${opened.shareId}/accept", ShareAcceptBody(sealed), ShareAcceptBody.serializer(), mapOf(SHARE_TOKEN_HEADER to token))
         when (r.status) {
-            409 -> throw ShareException(ShareException.Kind.AlreadyUsed, FSStrings.get(R.string.someone_else_already_used_this_link))
-            410 -> throw ShareException(ShareException.Kind.Expired, FSStrings.get(R.string.this_link_has_expired_ask_for))
-            404 -> throw ShareException(ShareException.Kind.BadLink, FSStrings.get(R.string.this_link_doesnt_work_ask_for))
+            409 -> throw ShareException(ShareException.Kind.AlreadyUsed, "Someone else already used this link. Ask the owner for a new one.")
+            410 -> throw ShareException(ShareException.Kind.Expired, "This link has expired. Ask for a new one.")
+            404 -> throw ShareException(ShareException.Kind.BadLink, "This link doesn't work. Ask for a new one.")
         }
         expectOk(r, "accept")
         val entry = SharedEntry(null, opened.shareId, opened.secretHex, serverDomain, opened.offer.serverName, accept.acceptedAt)
@@ -731,14 +736,14 @@ class ServerShareClient(
         val r = call(apex, "GET", "${apexBase()}/api/users/${enc(who.username)}/account-key-attestation")
         expectOk(r, "accept")
         val attestation = ServerShare.parseAccountKeyAttestation(errorObject(r)?.get("attestation"))
-            ?: throw ShareException(ShareException.Kind.Refused, FSStrings.get(R.string.couldnt_accept_try_again))
+            ?: throw ShareException(ShareException.Kind.Refused, "Couldn't accept. Try again.")
         val admit = ServerShare.AcceptAdmin(accept.serverDomain, accept.shareId, accept.memberPubHex, accept.acceptedAt, attestation.keyKind, attestation.keyPubHex)
         val signature = when {
             who.isDemo -> {
                 val d = post(apex, "${apexBase()}/api/dev/sample-user/${enc(who.username)}/share-accept", DemoShareAcceptBody(admit), DemoShareAcceptBody.serializer())
                 expectOk(d, "accept")
                 (errorObject(d)?.get("signature") as? JsonPrimitive)?.content
-                    ?: throw ShareException(ShareException.Kind.Refused, FSStrings.get(R.string.couldnt_accept_try_again))
+                    ?: throw ShareException(ShareException.Kind.Refused, "Couldn't accept. Try again.")
             }
             attestation.keyKind == ServerShare.KEY_KIND_ADMIN_ROOT -> {
                 // This phone's admin root must be the one the account pins now.
@@ -778,7 +783,7 @@ class ServerShareClient(
 
     /** B's "Shared with me" entries, newest first; entries this phone can't open are skipped. */
     suspend fun inbox(): List<SharedEntry> {
-        val umk = keys.umk(FSStrings.get(R.string.show_the_servers_shared_with_you))
+        val umk = keys.umk("Show the servers shared with you")
         val req = ServerShare.InboxRequest(HexUtil.encode(ServerShare.deriveShareInboxPub(umk)), ServerShare.OP_LIST, "", "", now())
         val sig = ServerShare.signHex(req, ServerShare.deriveShareInboxKey(umk))
         val r = post(apex, "${apexBase()}/api/share-inbox", ShareInboxBody(req, sig), ShareInboxBody.serializer())
@@ -796,7 +801,7 @@ class ServerShareClient(
     }
 
     suspend fun inboxDelete(entryId: String) {
-        val umk = keys.umk(FSStrings.get(R.string.remove_a_shared_server))
+        val umk = keys.umk("Remove a shared server")
         val req = ServerShare.InboxRequest(HexUtil.encode(ServerShare.deriveShareInboxPub(umk)), ServerShare.OP_DELETE, entryId, "", now())
         val sig = ServerShare.signHex(req, ServerShare.deriveShareInboxKey(umk))
         expectOk(post(apex, "${apexBase()}/api/share-inbox", ShareInboxBody(req, sig), ShareInboxBody.serializer()), "remove the share")
@@ -813,7 +818,7 @@ class ServerShareClient(
     /** Sign in to the server with this share's member key (#5 over a box nonce). */
     suspend fun signIn(entry: SharedEntry, reuse: Boolean = true): ShareSignIn {
         if (reuse) cachedSession(entry.shareId)?.let { return ShareSignIn.In(it) }
-        val umk = keys.umk(FSStrings.get(R.string.open, entry.serverName))
+        val umk = keys.umk("Open ${entry.serverName}")
         val member = ServerShare.deriveShareMemberKey(umk, entry.shareId)
         val memberPubHex = HexUtil.encode(ServerShare.deriveShareMemberPub(umk, entry.shareId))
         val n = boxCall("GET", entry.serverDomain, "/api/shares/nonce", null)
@@ -828,7 +833,7 @@ class ServerShareClient(
                     forgetSession(entry.shareId)
                     ShareSignIn.Ended
                 }
-                else -> throw ShareException(ShareException.Kind.Refused, FSStrings.get(R.string.the_server_refused_this_sign_in, errorText(r)))
+                else -> throw ShareException(ShareException.Kind.Refused, "The server refused this sign-in: ${errorText(r)}.")
             }
         }
         expectOk(r, "sign in")
@@ -867,7 +872,7 @@ class ServerShareClient(
         val headers = mapOf(SHARE_TOKEN_HEADER to ServerShare.shareTokenFromSecret(HexUtil.decode(entry.secretHex)!!))
         if (!on) {
             val reg = pushStore.get(entry.shareId) ?: return
-            val umk = keys.umk(FSStrings.get(R.string.stop_notices_for, entry.serverName))
+            val umk = keys.umk("Stop notices for ${entry.serverName}")
             val push = ServerShare.Push(
                 entry.serverDomain, entry.shareId, HexUtil.encode(ServerShare.deriveShareMemberPub(umk, entry.shareId)),
                 ServerShare.OP_DELETE, reg.platform, reg.tokenSha256, now(),
@@ -879,7 +884,7 @@ class ServerShareClient(
         }
         val (platform, token) = pushToken()?.takeIf { it.second.isNotEmpty() }
             ?: throw ShareException(ShareException.Kind.Refused, NOTICES_NO_TOKEN)
-        val umk = keys.umk(FSStrings.get(R.string.get_notices_for, entry.serverName))
+        val umk = keys.umk("Get notices for ${entry.serverName}")
         val tokenSha256 = ServerShare.shareSha256Hex(token)
         val push = ServerShare.Push(
             entry.serverDomain, entry.shareId, HexUtil.encode(ServerShare.deriveShareMemberPub(umk, entry.shareId)),
@@ -888,8 +893,8 @@ class ServerShareClient(
         val body = SharePushBody(push, ServerShare.signHex(push, ServerShare.deriveShareMemberKey(umk, entry.shareId)), token)
         val r = post(apex, url, body, SharePushBody.serializer(), headers)
         if (r.status == 403 && errorCode(r) == "unlock-not-shared") throw ShareException(ShareException.Kind.NotShared, NOTICES_NOT_SHARED)
-        if (r.status == 404) throw ShareException(ShareException.Kind.BadLink, FSStrings.get(R.string.this_shares_link_no_longer_works))
-        if (r.status == 410) throw ShareException(ShareException.Kind.Ended, FSStrings.get(R.string.the_owner_stopped_sharing_this_server))
+        if (r.status == 404) throw ShareException(ShareException.Kind.BadLink, "This share's link no longer works.")
+        if (r.status == 410) throw ShareException(ShareException.Kind.Ended, "The owner stopped sharing this server.")
         expectOk(r, "turn on the notices")
         pushStore.put(entry.shareId, SharePushRegistration(platform, tokenSha256))
     }
@@ -912,7 +917,7 @@ class ServerShareClient(
      * endorsement as for the owner. Returns once the box took the order.
      */
     suspend fun orderUpdate(entry: SharedEntry, targetCommit: String, fromCommit: String) {
-        val umk = keys.umk(FSStrings.get(R.string.update, entry.serverName))
+        val umk = keys.umk("Update ${entry.serverName}")
         val update = ServerShare.Update(
             serverDomain = entry.serverDomain,
             shareId = entry.shareId,
@@ -932,14 +937,14 @@ class ServerShareClient(
             forgetSession(entry.shareId)
             r = send(fresh = true)
         }
-        if (r == null) throw ShareException(ShareException.Kind.NotShared, FSStrings.get(R.string.this_server_isnt_shared_with_you))
+        if (r == null) throw ShareException(ShareException.Kind.NotShared, "This server isn't shared with you right now.")
         if (r.status in 200..299) return
         throw ShareException(ShareException.Kind.Refused, updateRefusalText(errorCode(r), (errorObject(r)?.get("error") as? JsonPrimitive)?.content))
     }
 
     /** Leave: #4 to the box and to `.com`, then drop the inbox entry. */
     suspend fun leave(entry: SharedEntry) {
-        val umk = keys.umk(FSStrings.get(R.string.leave, entry.serverName))
+        val umk = keys.umk("Leave ${entry.serverName}")
         val member = ServerShare.deriveShareMemberKey(umk, entry.shareId)
         val memberPubHex = HexUtil.encode(ServerShare.deriveShareMemberPub(umk, entry.shareId))
         val leave = ServerShare.Leave(entry.serverDomain, entry.shareId, memberPubHex, now())
@@ -962,7 +967,7 @@ class ServerShareClient(
     /** Pending start-ups this share may approve: only requests signed by the STK the owner pinned in the offer. */
     suspend fun pendingStartups(entry: SharedEntry): List<ShareStartup> {
         val offer = offerFor(entry)
-        val umk = keys.umk(FSStrings.get(R.string.check_whether_is_starting, entry.serverName))
+        val umk = keys.umk("Check whether ${entry.serverName} is starting")
         val path = "/api/boot/share/pending/${entry.serverDomain}"
         val r = call(apex, "GET", "${bootBase()}$path", headers = mapOf("Authorization" to shareAuth(umk, entry, "GET", path)))
         if (r.status == 403 || r.status == 404) return emptyList()
@@ -987,21 +992,21 @@ class ServerShareClient(
     suspend fun approveStartup(entry: SharedEntry, startup: ShareStartup) {
         val offer = offerFor(entry)
         if (!verifiedStartup(startup.pending, offer, entry.serverDomain)) {
-            throw ShareException(ShareException.Kind.Refused, FSStrings.get(R.string.this_start_up_request_isnt_from, entry.serverName))
+            throw ShareException(ShareException.Kind.Refused, "This start-up request isn't from ${entry.serverName}.")
         }
-        val umk = keys.umk(FSStrings.get(R.string.unlock, entry.serverName))
+        val umk = keys.umk("Unlock ${entry.serverName}")
         val keyPath = "/api/boot/share/key/${entry.serverDomain}"
         val got = call(apex, "GET", "${bootBase()}$keyPath", headers = mapOf("Authorization" to shareAuth(umk, entry, "GET", keyPath)))
         if (got.status == 404 || got.status == 403) {
-            throw ShareException(ShareException.Kind.NotShared, FSStrings.get(R.string.the_owner_hasnt_let_you_start))
+            throw ShareException(ShareException.Kind.NotShared, "The owner hasn't let you start this server.")
         }
         expectOk(got, "read your start-up copy")
         val blob = HexUtil.decode(decode(got, SealedKeyWire.serializer()).sealedKey)
-            ?: throw ShareException(ShareException.Kind.Invalid, FSStrings.get(R.string.your_start_up_copy_is_damaged))
+            ?: throw ShareException(ShareException.Kind.Invalid, "Your start-up copy is damaged.")
         val diskKey = try {
             SecretSeal.openWithEd25519Seed(blob, ServerShare.deriveShareMemberKeySeed(umk, entry.shareId))
         } catch (_: Exception) {
-            throw ShareException(ShareException.Kind.Invalid, FSStrings.get(R.string.your_start_up_copy_cant_be))
+            throw ShareException(ShareException.Kind.Invalid, "Your start-up copy can't be opened on this phone.")
         }
         val stk = HexUtil.decode(offer.stkPubHex)!!
         val req = startup.pending.request
@@ -1054,7 +1059,7 @@ class ServerShareClient(
         val r = withShareSession(entry) { boxCall("GET", entry.serverDomain, "/api/shares/invites?service=${enc(serviceRef)}", it) }
         if (r.status !in 200..299) throw inviteRefusal(r, ShareCoInviteCopy.READ_FAILED)
         val body = decode(r, ShareInvitesWire.serializer())
-        val umk = keys.umk(FSStrings.get(R.string.see_who_you_invited_to, entry.serverName))
+        val umk = keys.umk("See who you invited to ${entry.serverName}")
         return ShareCoInviteState.from(body, ServerShare.deriveShareInviteBundleKey(umk, entry.shareId))
     }
 
@@ -1077,7 +1082,7 @@ class ServerShareClient(
         if (ownerAid == null || !Regex("^[0-9a-f]{64}$").matches(ownerAid)) {
             throw ShareInviteRefusal("no-owner", ShareCoInviteCopy.NO_OWNER)
         }
-        val umk = keys.umk(FSStrings.get(R.string.invite_someone_to, entry.serverName))
+        val umk = keys.umk("Invite someone to ${entry.serverName}")
         val secret = random(32)
         val inviteId = HexUtil.encode(random(32))
         val request = ShareInviteCreateRequest(
@@ -1102,7 +1107,7 @@ class ServerShareClient(
 
     /** Withdraw one of B's own invites: `flagship/service-invite/revoke/v1` signed with B's member key. */
     suspend fun withdrawCoInvite(entry: SharedEntry, inviteId: String) {
-        val member = ServerShare.deriveShareMemberKey(keys.umk(FSStrings.get(R.string.withdraw_an_invite_to, entry.serverName)), entry.shareId)
+        val member = ServerShare.deriveShareMemberKey(keys.umk("Withdraw an invite to ${entry.serverName}"), entry.shareId)
         val revoke = ShareInviteRevoke(inviteId, now())
         val body = ShareInviteWithdrawBody(revoke, HexUtil.encode(member.sign(revoke.canonicalBytes())))
         val r = withShareSession(entry) { boxPost(entry.serverDomain, "/api/shares/invites/withdraw", it, body, ShareInviteWithdrawBody.serializer()) }
@@ -1143,7 +1148,7 @@ class ServerShareClient(
             410 -> ShareException.Kind.Ended
             else -> ShareException.Kind.Refused
         }
-        throw ShareException(kind, FSStrings.get(R.string.couldnt, what, errorText(r)))
+        throw ShareException(kind, "Couldn't $what: ${errorText(r)}.")
     }
 
     private fun enc(s: String): String = java.net.URLEncoder.encode(s, "UTF-8")

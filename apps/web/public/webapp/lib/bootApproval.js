@@ -8,14 +8,14 @@
 //
 //   1. fetchVerifiedRequests — build an IRK-signed DeviceEndpointClaim
 //      mailbox-auth credential, POST /api/secret-requests on .com, then
-//      verify every returned request under the key it names and check that
-//      key against this device's pin (lib/serverPins.js, docs/first-contact.md).
-//      Before a pin the directory must name the same key; after it, a request
-//      under another key is shown refused. `.com` is a blind relay, not a
-//      trust anchor (invariants I2/I3).
+//      RE-VERIFY every returned request against the box's STK as
+//      INDEPENDENTLY resolved from the directory (/api/users/:u/pods).
+//      A request whose STK mismatches the directory (or whose signature
+//      fails under it) is DROPPED, never surfaced — `.com` is a blind
+//      relay, not a trust anchor (invariants I2/I3).
 //   2. approveUnlock — for the user-confirmed request: GET the phone-
 //      sealed LUKS key, unseal it with the IRK, re-seal it FOR the box's
-//      pinned STK bound to (nonce, purpose), and POST the reply to the boot
+//      STK bound to (nonce, purpose), and POST the reply to the boot
 //      worker authed by an owner-IRK Flagship-Boot-v1 header.
 //
 // This webapp build only handles the `unlock-key` purpose (the common
@@ -40,11 +40,10 @@ import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex, bootOrigin } from "./apex.js";
 import { importX25519Private } from "./x25519.js";
 import { accountReadFetch } from "./accountRead.js";
+import { observePods, requirePinnedBoxKey } from "./boxKeyPins.js";
 
-import { pinnedStk, pinServerKey, sealingStk, noteKeyChanged, forgetFirstContactSecrets } from "./serverPins.js";
-import { classifyFirstContact, grantAppNames, refusalText, KEY_CHANGED } from "./firstContact.js";
-
-import { tr } from "./i18n.js";
+const COM_BASE = controlApex();
+const BOOT_BASE = bootOrigin();
 
 const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
 const TAG_SECRET_REQUEST = "flagship/secret-request/v1";
@@ -215,15 +214,15 @@ async function irkPubHex(umk) {
  * @property {string} serverDomain
  * @property {string} purpose            "unlock-key" | "entitlement"
  * @property {string} requestNonceHex
- * @property {string} directoryStkPubHex the key that signed the request (the pin, once pinned)
+ * @property {string} directoryStkPubHex the STK from the DIRECTORY (not the echo)
  * @property {object|null} deviceInfo    unsigned display hint (ip/region/os/hostname)
- * @property {object} firstContact       lib/firstContact.js classifyFirstContact: pin state, code, refusal
  */
 
 /**
- * Fetch the account's pending boot requests. A request not signed by the key
- * it names, or (before a pin) naming a key the directory doesn't, is dropped;
- * one naming a key other than the pin is kept with a refusal to show.
+ * Fetch the account's pending boot requests + keep only those that
+ * re-verify against the directory STK. A request `.com` returns whose
+ * STK isn't directory-bound — or whose signature fails under it, or
+ * whose echo differs from the directory — is SILENTLY dropped.
  *
  * @param {{ fetch?: typeof fetch, comBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
  * @returns {Promise<VerifiedBootRequest[]>}
@@ -234,7 +233,7 @@ export async function fetchVerifiedRequests(deps = {}) {
   if (!username) throw new Error("sign in to approve a box");
   if (!session.umk) throw new Error("unlock the webapp first");
   const f = deps.fetch || fetch;
-  const comBase = deps.comBase || controlApex();
+  const comBase = deps.comBase || COM_BASE;
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
@@ -267,24 +266,23 @@ export async function fetchVerifiedRequests(deps = {}) {
       .then((r) => (r.ok ? r.json() : { pods: [] })),
   ]);
 
-  // The directory's key and whether the box has ever come online (non-revoked entries only).
-  const dir = new Map();
+  observePods(username, dirResp.pods, deps);
+  // Directory STK map (non-revoked entries only).
+  const dirStk = new Map();
   for (const p of dirResp.pods ?? []) {
     if (p.revokedAt == null && p.serverDomain && p.identityPubKey) {
-      dir.set(String(p.serverDomain).toLowerCase(), {
-        stk: String(p.identityPubKey).toLowerCase(),
-        cameOnline: p.lastReported != null || p.currentCert != null,
-      });
+      dirStk.set(String(p.serverDomain).toLowerCase(), String(p.identityPubKey).toLowerCase());
     }
   }
 
   const out = [];
   for (const req of pendingResp.requests ?? []) {
     const domain = String(req.serverDomain ?? "").toLowerCase();
-    const entry = dir.get(domain);
-    if (!entry) continue; // not one of this account's servers
-    const stkHex = String(req.stkPub ?? "").toLowerCase();
-    // The request must be signed by the key it names (the box's own STK).
+    const stkHex = dirStk.get(domain);
+    if (!stkHex) continue; // no directory entry → `.com` can't vouch
+    // The mailbox echo MUST equal the directory STK (relay can't splice).
+    if (String(req.stkPub ?? "").toLowerCase() !== stkHex) continue;
+    // RE-VERIFY the box's request signature under the DIRECTORY STK.
     let stkPub;
     let sig;
     try {
@@ -309,18 +307,6 @@ export async function fetchVerifiedRequests(deps = {}) {
       verified = false;
     }
     if (!verified) continue;
-    // Before a pin, the directory must name the same key (the relay can't splice one in); after it,
-    // the pin decides and a request under any other key is shown refused.
-    const pinned = pinnedStk(domain);
-    if (!pinned && entry.stk !== stkHex) continue;
-    if (pinned && pinned !== stkHex && entry.stk !== stkHex) noteKeyChanged(domain, entry.stk);
-    const firstContact = await classifyFirstContact({
-      serverDomain: domain,
-      stkPubHex: stkHex,
-      purpose: req.purpose,
-      deviceInfo: req.deviceInfo ?? null,
-      cameOnline: entry.cameOnline,
-    }, { umk: session.umk });
     out.push({
       id: `${req.serverDomain}#${req.requestNonceHex}`,
       serverDomain: req.serverDomain,
@@ -328,51 +314,9 @@ export async function fetchVerifiedRequests(deps = {}) {
       requestNonceHex: req.requestNonceHex,
       directoryStkPubHex: stkHex,
       deviceInfo: req.deviceInfo ?? null,
-      firstContact,
     });
   }
   return out;
-}
-
-/**
- * The key a reply for `req` is sealed or minted for. A request the device refuses never gets one;
- * a first-sight request pins its key here, the moment the owner approves.
- */
-async function keyForReply(req) {
-  const fc = req.firstContact;
-  if (!fc) {
-    const k = sealingStk(req.serverDomain, req.directoryStkPubHex);
-    if (!k) throw keyChangedOrUnpinned(req);
-    return k;
-  }
-  if (fc.refusal) throw Object.assign(new Error(refusalText(fc.refusal)), { code: fc.refusal });
-  const stk = String(req.directoryStkPubHex).toLowerCase();
-  if (fc.pinState === "pinned") {
-    const k = sealingStk(req.serverDomain, stk);
-    if (!k) throw keyChangedOrUnpinned(req);
-    return k;
-  }
-  if (fc.pinState === "awaiting-proof") return stk;
-  pinServerKey(req.serverDomain, stk, fc.pinState === "proven" ? "proof" : fc.studioConfirmed ? "studio" : "first-sight");
-  await forgetFirstContactSecrets(req.serverDomain);
-  return stk;
-}
-
-function keyChangedOrUnpinned(req) {
-  return pinnedStk(req.serverDomain)
-    ? Object.assign(new Error(refusalText(KEY_CHANGED)), { code: KEY_CHANGED })
-    : new Error("approve this server's start-up first");
-}
-
-/** Sign the app-name grant for a freshly pinned server in the same moment; never fails the approval. */
-async function grantAfterPin(req) {
-  const fc = req.firstContact;
-  if (!fc || fc.refusal || fc.pinState === "pinned" || fc.pinState === "awaiting-proof") return;
-  try {
-    await grantAppNames(req.serverDomain);
-  } catch (e) {
-    console.warn("[first-contact] app-name grant not signed:", e?.message || e);
-  }
 }
 
 /**
@@ -386,7 +330,7 @@ async function grantAfterPin(req) {
 async function postBootResponse(req, sealedHex, deps) {
   const session = getSession();
   const f = deps.fetch || fetch;
-  const bootBase = deps.bootBase || bootOrigin();
+  const bootBase = deps.bootBase || BOOT_BASE;
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
   const path = "/api/boot/response";
@@ -429,21 +373,30 @@ async function postBootResponse(req, sealedHex, deps) {
  * @param {VerifiedBootRequest} req
  * @param {{ fetch?: typeof fetch, comBase?: string, bootBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
  */
+/**
+ * GET the disk key `.com` holds sealed to this account's IRK. `.com` answers
+ * only the account's own devices, so the read carries its read token.
+ */
+export function fetchSealedDiskKey(serverDomain, username, { fetch: f = fetch, comBase = COM_BASE } = {}) {
+  return accountReadFetch(
+    `${comBase}/api/server/${encodeURIComponent(serverDomain)}/sealed-luks-key`,
+    { cache: "no-store" },
+    { fetch: f, baseUrl: comBase, username },
+  );
+}
+
 async function respondUnlock(req, deps = {}) {
   const session = getSession();
   if (!session.umk) throw new Error("unlock the webapp first");
   const f = deps.fetch || fetch;
-  const comBase = deps.comBase || controlApex();
+  const comBase = deps.comBase || COM_BASE;
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  const stkHex = await keyForReply(req);
-  const stkEdPub = hexToBytes(stkHex);
+  const stkEdPub = hexToBytes(requirePinnedBoxKey(session.username, req.serverDomain, req.directoryStkPubHex, deps));
 
   // 1. GET the phone-sealed LUKS key (sealed FOR the IRK at install).
-  const sealedRes = await f(
-    `${comBase}/api/server/${encodeURIComponent(req.serverDomain)}/sealed-luks-key`,
-  );
+  const sealedRes = await fetchSealedDiskKey(req.serverDomain, session.username, { fetch: f, comBase });
   if (sealedRes.status === 404) throw new Error("no sealed disk key is on file for this box yet");
   if (!sealedRes.ok) throw new Error(`sealed-luks-key: HTTP ${sealedRes.status}`);
   const sealedJson = await sealedRes.json();
@@ -466,12 +419,6 @@ async function respondUnlock(req, deps = {}) {
   });
   await postBootResponse(req, bytesToHex(sealed), deps);
 
-  // The device that made the recipe waits for the box's proof, which only its entitlement request
-  // can carry (the start-up unlock is asked before the disk, and the secret on it, is open): no
-  // deposit, so the box asks for its entitlement next and the code is checked there.
-  if (req.firstContact?.pinState === "awaiting-proof") return { ok: true };
-  await grantAfterPin(req);
-
   // 4. Fold "authorize it to serve" INTO this unlock approval (the primary
   // layer). Best-effort — a failure never fails the unlock; the box can still
   // request the entitlement via the inbox fallback.
@@ -481,7 +428,7 @@ async function respondUnlock(req, deps = {}) {
     // gate is tag-routed, so the co-signed IRK mailbox-auth still falls back to
     // `sign` (the membership IRK the deposit lane needs).
     await depositEntitlement(
-      { serverDomain: req.serverDomain, stkPubHex: stkHex },
+      { serverDomain: req.serverDomain, stkPubHex: req.directoryStkPubHex },
       { fetch: f, comBase, signWithIrk: sensitiveSigner(sign), now: () => now },
     );
   } catch (e) {
@@ -515,18 +462,16 @@ async function respondEntitlement(req, deps = {}) {
   // header on postBootResponse stays IRK (its tag is not sensitive).
   const sign = deps.signWithIrk || sensitiveSigner();
   const now = (deps.now || Date.now)();
-  const stkHex = await keyForReply(req);
 
   const carrierHex = await buildEntitlementCarrier({
     username,
-    podPubKeyHex: stkHex,
+    podPubKeyHex: String(req.directoryStkPubHex).toLowerCase(),
     podCanonical: req.serverDomain,
     issuedAt: now,
     signWithIrk: sign,
     umk: session.umk,
   });
   await postBootResponse(req, carrierHex, deps);
-  await grantAfterPin(req);
   return { ok: true };
 }
 
@@ -548,17 +493,17 @@ export const BOX_REQUEST_TYPES = {
   "unlock-key": {
     title: (ctx = {}) =>
       (ctx.firstBoot ?? true)
-        ? tr("Unlock device and authorize it to join your cloud")
-        : tr("Unlock device"),
+        ? "Unlock device and authorize it to join your cloud"
+        : "Unlock device",
     detail: (ctx = {}) =>
       (ctx.firstBoot ?? true)
-        ? tr("Unlocks the encrypted disk and authorizes this box to serve your account.")
-        : tr("Unlocks the encrypted disk so this box comes back online."),
+        ? "Unlocks the encrypted disk and authorizes this box to serve your account."
+        : "Unlocks the encrypted disk so this box comes back online.",
     respond: respondUnlock,
   },
   entitlement: {
-    title: () => tr("Authorize this box to serve your account"),
-    detail: () => tr("Lets this box come online and serve your services."),
+    title: () => "Authorize this box to serve your account",
+    detail: () => "Lets this box come online and serve your services.",
     respond: respondEntitlement,
   },
 };
@@ -600,7 +545,7 @@ export async function depositEntitlement(args, deps = {}) {
   if (!username) throw new Error("sign in first");
   if (!session.umk) throw new Error("unlock the webapp first");
   const f = deps.fetch || fetch;
-  const comBase = deps.comBase || controlApex();
+  const comBase = deps.comBase || COM_BASE;
   // Slice D: the RootEntitlement is an ADMIN-ROOT order (only admins bring a box
   // online) — a reburned admin-pinned box REJECTS an IRK-signed RootEntitlement
   // at HELLO (server-daemon entitlementRelay → authorizeSensitiveOrder). The
@@ -611,8 +556,7 @@ export async function depositEntitlement(args, deps = {}) {
   const sign = deps.signWithIrk || sensitiveSigner();
   const now = (deps.now || Date.now)();
 
-  const stkPubHex = sealingStk(args.serverDomain, args.stkPubHex);
-  if (!stkPubHex) throw new Error("this server's key isn't pinned on this device");
+  const stkPubHex = String(args.stkPubHex).toLowerCase();
   const carrierHex = await buildEntitlementCarrier({
     username,
     podPubKeyHex: stkPubHex,
@@ -672,7 +616,7 @@ export async function depositEntitlement(args, deps = {}) {
  *   issuedAt: number, signWithIrk: Function, umk: Uint8Array }} args
  */
 export async function buildSwkDeliveryCarrier({ serverDomain, swk, boxIdentityPub, issuedAt, signWithIrk, umk }) {
-  if (swk.length !== 32) throw new Error(tr("SWK must be 32 bytes"));
+  if (swk.length !== 32) throw new Error("SWK must be 32 bytes");
   if (boxIdentityPub.length !== 32) throw new Error("box identity pubkey must be 32 bytes");
   const sealed = await sealForBoxStk(swk, boxIdentityPub);
   // Field guard: serverDomain must never contain '|' or control chars (mirrors
@@ -711,12 +655,11 @@ export async function depositSwk(args, deps = {}) {
   if (!username) throw new Error("sign in first");
   if (!session.umk) throw new Error("unlock the webapp first");
   const f = deps.fetch || fetch;
-  const comBase = deps.comBase || controlApex();
+  const comBase = deps.comBase || COM_BASE;
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  const stkPubHex = sealingStk(args.serverDomain, args.stkPubHex);
-  if (!stkPubHex) throw new Error("this server's key isn't pinned on this device");
+  const stkPubHex = requirePinnedBoxKey(username, args.serverDomain, args.stkPubHex, deps);
   const carrierHex = await buildSwkDeliveryCarrier({
     serverDomain: args.serverDomain,
     swk: hexToBytes(args.swkHex),
@@ -777,7 +720,7 @@ export async function depositSwk(args, deps = {}) {
  *   issuedAt: number, signWithIrk: Function, umk: Uint8Array }} args
  */
 export async function buildCgkDeliveryCarrier({ serverDomain, cgk, boxIdentityPub, issuedAt, signWithIrk, umk }) {
-  if (cgk.length !== 32) throw new Error(tr("CGK must be 32 bytes"));
+  if (cgk.length !== 32) throw new Error("CGK must be 32 bytes");
   if (boxIdentityPub.length !== 32) throw new Error("box identity pubkey must be 32 bytes");
   const sealed = await sealForBoxStk(cgk, boxIdentityPub);
   // Field guard: serverDomain must never contain '|' or control chars (mirrors
@@ -818,12 +761,11 @@ export async function depositCgk(args, deps = {}) {
   if (!username) throw new Error("sign in first");
   if (!session.umk) throw new Error("unlock the webapp first");
   const f = deps.fetch || fetch;
-  const comBase = deps.comBase || controlApex();
+  const comBase = deps.comBase || COM_BASE;
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  const stkPubHex = sealingStk(args.serverDomain, args.stkPubHex);
-  if (!stkPubHex) throw new Error("this server's key isn't pinned on this device");
+  const stkPubHex = requirePinnedBoxKey(username, args.serverDomain, args.stkPubHex, deps);
   const carrierHex = await buildCgkDeliveryCarrier({
     serverDomain: args.serverDomain,
     cgk: hexToBytes(args.cgkHex),
@@ -956,16 +898,16 @@ export async function depositPairingOrder(args, deps = {}) {
   if (!username) throw new Error("sign in first");
   if (!session.umk) throw new Error("unlock the webapp first");
   const f = deps.fetch || fetch;
-  const comBase = deps.comBase || controlApex();
+  const comBase = deps.comBase || COM_BASE;
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  const stkPubHex = sealingStk(serverDomain, identityPubKeyHex);
-  if (!stkPubHex) throw new Error("this server's key isn't pinned on this device");
+  const boxIdentityPub = hexToBytes(requirePinnedBoxKey(username, serverDomain, identityPubKeyHex, deps));
   // Seal the plaintext order JSON DIRECTLY to the box identity -- the daemon's
   // pairing-deposit consumer unseals `deposit.sealed` and decodes it as the
   // `{request, signature}` JSON (no carrier wrapper, unlike the SWK lane).
-  const sealed = await sealForBoxStk(te(pairingOrderJson), hexToBytes(stkPubHex));
+  const sealed = await sealForBoxStk(te(pairingOrderJson), boxIdentityPub);
+  const stkPubHex = String(identityPubKeyHex).toLowerCase();
 
   // IRK mailbox-auth -- same shape as the SWK / entitlement deposit.
   const phoneIrkPubHex = await irkPubHex(session.umk);
