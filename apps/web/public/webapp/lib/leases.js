@@ -2,8 +2,8 @@
 // Android deposit them (packages/protocol/src/phoneEndpoint.ts §4).
 //
 // The browser opens the disk key `.com` holds sealed for this account's IRK,
-// re-seals it FOR the box's STK (the directory-bound key), and signs a lease
-// that pins that STK. `.com` stores only the sealed blob (it never sees the
+// re-seals it FOR the box's boot key (vouched for by the pinned STK; the STK
+// itself for a box without one), and signs a lease that pins that key. `.com` stores only the sealed blob (it never sees the
 // key) and releases it to the box on reboot; the box unseals it itself.
 //
 //   enableLongLived(serverFqdn)  — deposit a lease (7 days; renew by calling
@@ -21,6 +21,7 @@ import { importX25519Private } from "./x25519.js";
 import { ed25519PubToX25519 } from "./edToMont.js";
 import { accountReadFetch } from "./accountRead.js";
 import { requirePinnedBoxKey } from "./boxKeyPins.js";
+import { bootKeyFor } from "./bootKey.js";
 import { fetchSealedDiskKey } from "./bootApproval.js";
 import { boundedLeaseTtl, cachedDeadManView, readSuspension, retryPendingLocks } from "./bootSuspension.js";
 
@@ -101,7 +102,11 @@ export async function enableLongLived(serverFqdn, ttlMs = DEFAULT_LONG_TTL_MS, d
   // 1. The box's STK, from the directory: the only key the lease may seal for.
   const listedStk = await (deps.boxStk || directoryStk)(serverFqdn, session, { fetch: f, comBase });
   if (!listedStk) throw new Error(`${serverFqdn} isn't in your account's server list`);
-  const stkPubHex = requirePinnedBoxKey(session.username, serverFqdn, listedStk, deps);
+  const pinnedStkHex = requirePinnedBoxKey(session.username, serverFqdn, listedStk, deps);
+  // The box opens its lease before its disk is open, with its boot key; a box
+  // without one (installed before boot keys) still holds its STK on /boot.
+  const bootHex = await (deps.bootKey || bootKeyFor)(session.username, serverFqdn, { fetch: f, comBase, ...deps });
+  const stkPubHex = bootHex ?? pinnedStkHex;
 
   // 2. The disk key `.com` holds sealed for this account's IRK.
   const sealedRes = await fetchSealedDiskKey(serverFqdn, session.username, { fetch: f, comBase });
