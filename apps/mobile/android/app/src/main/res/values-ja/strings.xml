@@ -504,7 +504,7 @@
     <string name="your_watch_is_waiting_to_approve">ウォッチがサーバーの起動を承認しようと待っています。ロックを解除してから、ウォッチで「承認」をもう一度タップしてください。</string>
     <string name="s_start_up">%1$s の起動</string>
     <string name="your_watch_asked_to_approve_unlock">ウォッチが %1$s の承認を求めました。承認できるよう Flagship のロックを一度解除してから、ウォッチで「承認」をもう一度タップしてください。</string>
-    <string name="turn_on_quick_approve_from_watch">まず、スマートフォンの Flagship で「ウォッチからのクイック承認」をオンにしてください。</string>
+    <string name="turn_on_quick_approve_from_watch">まず、スマートフォンの Flagship で「ウォッチで承認」をオンにしてください。</string>
     <string name="unlock_flagship_on_your_phone_once">スマートフォンで Flagship のロックを一度解除してから、もう一度承認してください。</string>
     <string name="open_flagship_on_your_phone_and">スマートフォンで Flagship を開き、ロックを一度解除してから、もう一度承認してください。</string>
     <string name="sign_in_to_flagship_on_your">まず、スマートフォンで Flagship にサインインしてください。</string>
@@ -2006,7 +2006,7 @@
     <string name="assistant">アシスタント</string>
     <string name="build_logs">ビルドログ</string>
     <string name="interrupt_with_a_follow_up">追加メッセージで中断</string>
-    <string name="quick_approve_from_watch">ウォッチからのクイック承認</string>
+    <string name="quick_approve_from_watch">ウォッチで承認</string>
     <string name="approve_a_server_boot_from_your">このスマートフォンで Flagship のロックが解除されている間、Wear OS ウォッチからサーバーの起動を承認できます。その他の操作（サーバーの取り消し、消去して再開、デバイスの置き換え）には常にスマートフォンが必要です。デフォルトはオフです。</string>
     <string name="active_renews_by">有効 — %1$s までに更新</string>
     <string name="your_stuff_on">あなたのデータを、\n</string>
@@ -2031,7 +2031,7 @@
     <string name="tap_below_to_unlock">下をタップしてロックを解除します。</string>
     <string name="this_erases_this_devices_account_key_3">このデバイスのアカウントキーとデータを消去し、機密情報が保存されたまま残らないようにします。アカウントとサーバーには影響しません。リカバリーパスキーでサインインし直せば同じキーが復元され、再ペアリングは不要です。</string>
     <string name="let_your_watch_approve">ウォッチに承認させる</string>
-    <string name="unlock_flagship_once_so_quick_approve">クイック承認が署名できるよう、Flagship のロックを一度解除してください</string>
+    <string name="unlock_flagship_once_so_quick_approve">「ウォッチで承認」が署名できるよう、Flagship のロックを一度解除してください</string>
     <string name="show_your_servers">サーバーを表示</string>
     <string name="confirm_its_you_to_load_your">サーバーを読み込むには、ご本人確認をしてください</string>
     <string name="web_browser">ウェブブラウザー</string>

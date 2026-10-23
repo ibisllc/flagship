@@ -89,7 +89,6 @@
   "Turn on code protection": "开启代码保护",
   "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.": "当 Flagship 在此 iPhone 上处于解锁状态时，可在 Apple Watch 上批准服务器启动。其他操作（撤销服务器、擦除并重启、更换设备）仍需 iPhone。默认关闭。",
   "Active — renews by %@": "已启用，将于 %@ 前续期",
-  "Quick approve from Apple Watch": "通过 Apple Watch 快速批准",
   "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.": "生成新的管理员密钥，并移除其他所有设备的管理员权限。它们仍以成员身份保持登录，但在恢复之前无法擦除、转移或停用你的服务器。设备丢失或被盗，或要撤下另一位管理员时使用。服务器会在下次签到时切换。",
   "Admin key rotated. Other devices must recover to regain admin.": "管理员密钥已轮换。其他设备必须恢复才能重新获得管理员权限。",
   "Your recovery backup still holds your old admin key. Re-run recovery setup to fix this.": "你的恢复备份仍保存着旧的管理员密钥。请重新运行恢复设置来修复。",
@@ -242,7 +241,6 @@
   "Only an admin device can change this app's internet access.": "只有管理员设备才能更改此应用的互联网访问权限。",
   "Only an admin device can create or revoke API keys.": "只有管理员设备才能创建或吊销 API 密钥。",
   "Only an admin device can change this app's data.": "只有管理员设备才能更改此应用的数据。",
-  "Only an admin device can turn on quick approve from Apple Watch.": "只有管理员设备才能开启通过 Apple Watch 快速批准。",
   "Only an admin device can delete this account.": "只有管理员设备才能删除此账户。",
   "Only an admin device can share this server.": "只有管理员设备才能共享此服务器。",
   "Only an admin device can change this server. This device can see it.": "只有管理员设备才能更改此服务器。此设备可以查看它。",
@@ -2492,7 +2490,6 @@
   "Your Apple Watch is waiting to approve a server's start-up. Unlock, then tap Approve on the watch again.": "你的 Apple Watch 正在等待批准某台服务器的启动。请解锁，然后在手表上再次点按“批准”。",
   "Your watch asked to approve %@. Unlock Flagship once so it can, then tap Approve on the watch again.": "你的手表请求批准 %@。请先解锁一次 Flagship，这样它才能批准，然后在手表上再次点按“批准”。",
   "%@'s start-up": "%@ 的启动",
-  "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.": "请先在 iPhone 上的 Flagship 中开启“通过 Apple Watch 快速批准”。",
   "Unlock Flagship on your iPhone once, then approve again.": "请先在 iPhone 上解锁一次 Flagship，然后再次批准。",
   "Open Flagship on your iPhone and unlock it once, then approve again.": "请在 iPhone 上打开 Flagship，解锁一次，然后再次批准。",
   "Sign in to Flagship on your iPhone first.": "请先在 iPhone 上登录 Flagship。",
@@ -2516,5 +2513,8 @@
   "%lld days": "%lld 天",
   "%lld minute": "%lld 分钟",
   "overdue by %@": "已逾期 %@",
-  "None of your servers runs this app yet": "你的服务器还都没有运行此应用"
+  "None of your servers runs this app yet": "你的服务器还都没有运行此应用",
+  "Approve from watch": "通过手表批准",
+  "Only an admin device can turn on Approve from watch.": "只有管理员设备才能开启“通过手表批准”。",
+  "Turn on Approve from watch in Flagship on your iPhone first.": "请先在 iPhone 上的 Flagship 中开启“通过手表批准”。"
 }

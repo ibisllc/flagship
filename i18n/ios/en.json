@@ -374,10 +374,6 @@
     "en": "Active — renews by %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:196"
   },
-  "Quick approve from Apple Watch": {
-    "en": "Quick approve from Apple Watch",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:175"
-  },
   "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.": {
     "en": "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:227"
@@ -1000,10 +996,6 @@
   "Only an admin device can change this app's data.": {
     "en": "Only an admin device can change this app's data.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:66"
-  },
-  "Only an admin device can turn on quick approve from Apple Watch.": {
-    "en": "Only an admin device can turn on quick approve from Apple Watch.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:67"
   },
   "Only an admin device can delete this account.": {
     "en": "Only an admin device can delete this account.",
@@ -10966,10 +10958,6 @@
     "en": "%@'s start-up",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApprovalPrompt.swift:56"
   },
-  "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.": {
-    "en": "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.",
-    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift:32"
-  },
   "Unlock Flagship on your iPhone once, then approve again.": {
     "en": "Unlock Flagship on your iPhone once, then approve again.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift:34"
@@ -11072,5 +11060,17 @@
   "None of your servers runs this app yet": {
     "en": "None of your servers runs this app yet",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift"
+  },
+  "Approve from watch": {
+    "en": "Approve from watch",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:175"
+  },
+  "Only an admin device can turn on Approve from watch.": {
+    "en": "Only an admin device can turn on Approve from watch.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift:67"
+  },
+  "Turn on Approve from watch in Flagship on your iPhone first.": {
+    "en": "Turn on Approve from watch in Flagship on your iPhone first.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift:32"
   }
 }

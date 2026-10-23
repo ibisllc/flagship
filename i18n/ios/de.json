@@ -89,7 +89,6 @@
   "Turn on code protection": "Codeschutz einschalten",
   "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.": "Genehmige Serverstarts auf deiner Apple Watch, solange Flagship auf diesem iPhone entsperrt ist. Alles andere (Server widerrufen, löschen und neu starten, Gerät ersetzen) braucht weiterhin das iPhone. Standardmäßig aus.",
   "Active — renews by %@": "Aktiv – wird bis %@ erneuert",
-  "Quick approve from Apple Watch": "Schnell genehmigen per Apple Watch",
   "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.": "Erstellt einen neuen Admin-Schlüssel und entzieht allen anderen Geräten die Administratorrechte. Sie bleiben als Mitglieder angemeldet, können deine Server aber erst nach einer Wiederherstellung wieder löschen, übertragen oder außer Betrieb nehmen. Nutze das, wenn ein Gerät verloren oder gestohlen ist, oder um einen anderen Administrator auszuschließen. Die Server wechseln bei ihrer nächsten Rückmeldung.",
   "Admin key rotated. Other devices must recover to regain admin.": "Admin-Schlüssel rotiert. Andere Geräte brauchen eine Wiederherstellung, um wieder Admin zu sein.",
   "Your recovery backup still holds your old admin key. Re-run recovery setup to fix this.": "Dein Wiederherstellungs-Backup enthält noch deinen alten Admin-Schlüssel. Führe die Wiederherstellungs-Einrichtung erneut aus, um das zu beheben.",
@@ -242,7 +241,6 @@
   "Only an admin device can change this app's internet access.": "Nur ein Admin-Gerät kann den Internetzugriff dieser App ändern.",
   "Only an admin device can create or revoke API keys.": "Nur ein Admin-Gerät kann API-Schlüssel erstellen oder widerrufen.",
   "Only an admin device can change this app's data.": "Nur ein Admin-Gerät kann die Daten dieser App ändern.",
-  "Only an admin device can turn on quick approve from Apple Watch.": "Nur ein Admin-Gerät kann „Schnell genehmigen per Apple Watch“ einschalten.",
   "Only an admin device can delete this account.": "Nur ein Admin-Gerät kann dieses Konto löschen.",
   "Only an admin device can share this server.": "Nur ein Admin-Gerät kann diesen Server teilen.",
   "Only an admin device can change this server. This device can see it.": "Nur ein Admin-Gerät kann diesen Server ändern. Dieses Gerät kann ihn ansehen.",
@@ -2492,7 +2490,6 @@
   "Your Apple Watch is waiting to approve a server's start-up. Unlock, then tap Approve on the watch again.": "Deine Apple Watch wartet darauf, den Start eines Servers zu genehmigen. Entsperre und tippe auf der Uhr noch einmal auf „Genehmigen“.",
   "Your watch asked to approve %@. Unlock Flagship once so it can, then tap Approve on the watch again.": "Deine Uhr wollte %@ genehmigen. Entsperre Flagship einmal, damit sie das kann, und tippe auf der Uhr noch einmal auf „Genehmigen“.",
   "%@'s start-up": "Start von %@",
-  "Turn on Quick approve from Apple Watch in Flagship on your iPhone first.": "Schalte zuerst „Schnell genehmigen per Apple Watch“ in Flagship auf deinem iPhone ein.",
   "Unlock Flagship on your iPhone once, then approve again.": "Entsperre Flagship einmal auf deinem iPhone und genehmige dann erneut.",
   "Open Flagship on your iPhone and unlock it once, then approve again.": "Öffne Flagship auf deinem iPhone, entsperre es einmal und genehmige dann erneut.",
   "Sign in to Flagship on your iPhone first.": "Melde dich zuerst auf deinem iPhone bei Flagship an.",
@@ -2516,5 +2513,8 @@
   "%lld days": "%lld Tage",
   "%lld minute": "%lld Minute",
   "overdue by %@": "seit %@ überfällig",
-  "None of your servers runs this app yet": "Noch keiner deiner Server führt diese App aus"
+  "None of your servers runs this app yet": "Noch keiner deiner Server führt diese App aus",
+  "Approve from watch": "Per Uhr genehmigen",
+  "Only an admin device can turn on Approve from watch.": "Nur ein Admin-Gerät kann „Per Uhr genehmigen“ einschalten.",
+  "Turn on Approve from watch in Flagship on your iPhone first.": "Schalte zuerst „Per Uhr genehmigen“ in Flagship auf deinem iPhone ein."
 }
