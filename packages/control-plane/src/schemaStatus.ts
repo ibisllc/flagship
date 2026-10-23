@@ -90,6 +90,7 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   // Signed community adapter attestations, the adapter index chain, distinct complaint sources.
   "0113",
   // The key each box keeps on /boot for unlocking, vouched for by its STK.
+  // Hybrid key bindings, the boot-key binding's hybrid signature, assurance policy per scope.
 ];
 
 export interface SchemaStatusDeps {

@@ -418,6 +418,15 @@ of the last check here: **not yet checked**.
   downgrade, wasmtime-wasi escape, …) patched. Shipping order: D1 0110 → `.com` (shell v166) →
   endorsed box release → iOS/Android store builds (old store builds lose the disk-key read for
   real accounts) → republish both VM appliances. None of it has run on a real box, VM or phone.
+  **Full quantum safety, milestone 1 (box pilot):** every identity role has a hybrid key binding
+  (`flagship/pq-key-binding/v1`) and critical signatures go through one gate
+  (`verifyCriticalSignature`, TS `pqTrust.ts` + Rust `flagship-crypto::trust`, vectors
+  `test-vectors/pq-binding/`, spec `pq-suites.md` §9-§10). keyd (both backends) holds an ML-DSA-65
+  key next to the STK (`sign.hybrid`); the daemon binds it on `.com` (D1 migration **0111**,
+  `/api/server/:host/pq-key-binding`), hybrid-signs the boot-key binding (v2 beside v1) and
+  daemon-status, which `.com` gates; the webapp (shell **v167**) pins the box's ML-DSA key. No
+  policy row is strict anywhere. Milestone 2: Swift/Kotlin ports, phone-held IRK/admin/device
+  bindings, the boot client's own ML-DSA key, signed policy changes into D1.
 
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
