@@ -99,3 +99,8 @@ artifacts/
 
 # Compiled gettext catalogs (generated from apps/builder-linux/po by scripts/i18n-linux.mjs build)
 apps/builder-linux/locale/
+
+# Store art (docs/store-assets/README.md): rendered images and screen captures are rebuilt, never committed
+store/out/
+store/captures/
+store/.capture-output/
