@@ -7,6 +7,12 @@
 **Status:** Engineering directive for review; verified stop-ship findings are
 listed below, but no implementation is implied by this document
 
+**Handoff:** This is the consolidated recipe, including review items N01–N14
+and the subsequent owner decisions. Use §§16–18 together with the earlier
+mechanisms and ship gates. Assign engineering owners and reviewers before
+execution; §18.15 identifies protocol designs that still need review and
+prototypes. Document completion is not implementation or release approval.
+
 **Primary objective:** Prevent a creator, companion session, anonymous adapter,
 dependency, network attacker, physical attacker, or compromised daemon
 component from crossing its intended authority boundary. In particular, none
@@ -71,13 +77,21 @@ Version pinning alone is not the solution. Pin security-critical inputs exactly
 and verify their hashes, but keep a deliberate, reviewed update process so
 known vulnerabilities do not remain frozen forever.
 
+This recipe also covers the cross-cutting controls that make those boundaries
+hold under malformed traffic, retries, partial outages, restores and evolving
+app identity: maintained HTTP parsing; connection-time network enforcement;
+complete signed recovery records; transactional approvals/revocation; policy
+freshness and fenced leadership; keyless browser migration; safe data restore;
+lineage-aware forks and upstream sync; and resource/rollout operations. See §18
+for the integrated implementation contracts and evidence gates.
+
 ### 1.1 Priority and release decision
 
 | Priority | Meaning | Current items |
 |---|---|---|
-| **P0 / stop-ship** | Disable or fix before another public box image, third-party app install, or Remote session | Root migration execution; companion build/deploy; Node 20 and `curl \| bash`; mutable install ref; ineffective lock/dead-man denial; browser cross-origin/profile escape; macOS root-helper caller/path/device validation |
-| **P1 / pre-GA** | Must pass before claiming the affected feature is secure | Anonymous/community adapter trust; re-pair step-up decision; signed artifact/provenance; Secure Boot/measured boot for physical-theft claims; daemon privilege separation |
-| **P2 / defense in depth** | Important, scheduled work after the immediate boundary is closed | Out-of-process key custody, TPM non-exportability, CT monitoring, reproducible builds, threshold release signing, advanced recovery drills |
+| **P0 / stop-ship** | Disable or fix before another public box image, third-party app install, or Remote session | Root migration execution; companion build/deploy; Node 20 and `curl \| bash`; mutable install ref; ineffective lock/dead-man denial; browser cross-origin/profile escape; macOS root-helper caller/path/device validation; HTTP duplicate dispatch/framing ambiguity; address-classification and dial-time bypasses |
+| **P1 / pre-GA** | Must pass before claiming the affected feature is secure | Anonymous/community adapter trust; passkey-recovery wait/veto enforcement; signed artifact/provenance; Secure Boot/measured boot for physical-theft claims; daemon privilege separation; complete recovery-record signatures; operation/revocation transactions; authorization freshness; safe restore/import |
+| **P2 / defense in depth** | Important, scheduled work after the immediate boundary is closed | Out-of-process key custody, TPM non-exportability, CT monitoring, reproducible builds, threshold release signing, advanced recovery drills, cross-service resource reserve and incident-evidence hardening |
 
 “Feature not launched” reduces exposure; it does not reduce the severity of a
 reachable code path. Operations must establish whether cross-creator apps,
@@ -131,10 +145,11 @@ The following statements become release gates, not aspirations.
    app's least-privileged sandbox with its own data authority. The host daemon
    does not spawn them as its own user.
 12. **Session type is enforced server-side:** Every authenticated daemon route
-   declares the capabilities it accepts. A companion token can read explicitly
-   allowlisted views and submit an owner-approval request; it cannot build,
-   mint keys, deploy, change state, or reach a route merely because that route
-   checks only for “some paired session.”
+   declares the capabilities it accepts. A companion is read-only unless a
+   phone-approved, service-scoped delegation authorizes the action. A generic
+   paired session never implies build/deploy authority. The website holds no
+   private security/signing keys: operations requiring signatures go to the
+   phone for biometric-gated signing of the exact action.
 13. **Untrusted contributions are inert:** Anonymous/community adapters are
    suggestions, never automatically trusted programs. Hashing, regex checks,
    popularity, complaint counts, and model review do not authorize execution.
@@ -283,7 +298,7 @@ and egress boundary also holds. Stop automatic community consumption until the
 signed, quarantined design in §10.3 exists. Repo-authored adapters pinned to the
 repo's reviewed commit are a distinct, narrower trust case.
 
-### 3.8 Re-pair treats possession of the current IRK as step-up — P1 decision
+### 3.8 Current-IRK re-pair bypasses recovery proof — P1
 
 `packages/control-plane/src/rePair.ts` accepts `oldIrkSignature` as a complete
 recovery credential and skips TOTP/recovery proof. The comment calls the
@@ -291,12 +306,12 @@ registered key something an attacker “provably cannot hold”; theft of a key
 file, unlocked device, browser storage, or compromised endpoint disproves that
 assumption. The current code does **not** skip every protection: it still waits
 the account-type grace period and stamps the 14-day quarantine at completion.
-The verified gap is the missing independent factor/admin-root requirement for
-an account-root rotation.
-
-Adopt the §10.6 step-up policy explicitly. Do not silently remove the
-registered-key recovery route without proving that a legitimate single-device
-owner still has a safe recovery ceremony.
+The verified gap is that a current-IRK signature can bypass the independent
+recovery proof. The approved recovery path for an owner with no available
+registered device is passkey-based recovery followed by a waiting period that
+gives any remaining active admin a chance to reject the pending device; see
+§10.6. Do not add another factor on top of that ceremony or allow the IRK-only
+path to skip its wait/veto protections.
 
 ### 3.9 The macOS root helper accepts unsafe authority and objects — P0
 
@@ -543,12 +558,18 @@ worker enforces it before lease lookup/release:
 - storage, cache, replication, and restore failures resolve to suspended, not
   unlocked.
 
-Manual “Lock and turn off/restart” is a two-plane transaction. The phone first
-sets owner-signed suspension and revokes all active auto-unlock leases for the
-server, waits for the boot worker's durable acknowledgement, then sends the
-box-direct power order. The UI must report partial state precisely and retry a
-pending cloud suspension; it must never say “locked” when only the local marker
-was written.
+Manual “Lock and turn off” is a two-plane transaction. The phone
+immediately sends the box-direct power order while it sets owner-signed
+suspension and revokes all active auto-unlock leases. Do not delay local
+shutdown while waiting for the boot worker. The UI reports the two outcomes
+separately: for example, “Box powered off; remote lock pending” until the boot
+worker durably acknowledges suspension. Retry a pending cloud suspension and
+never say “locked” when only the local marker was written.
+
+“Lock and restart” must instead wait for durable suspension acknowledgement
+before restarting: otherwise early boot could reuse an unrevoked auto-unlock
+lease. If suspension cannot be confirmed, offer shutdown with the pending-lock
+status rather than an immediate restart.
 
 Dead-man protection must not depend only on the expiring box being online at
 the moment it fires. When dead-man is enabled, an auto-unlock lease's expiry may
@@ -793,6 +814,10 @@ because they are familiar.
 This section carries forward `TODO-VOICI-SERVICE-SLUGS.md` while adding the
 security requirements that must accompany reusable names.
 
+Reusable names here mean marketing locators such as `voi.ci/<slug>`, never
+account usernames or canonical publisher `author--slug` identities. Those
+identities are permanently retired on deletion and never reassigned (§18.11).
+
 The agreed product constraints are part of the design input:
 
 - each publicly exposed service may receive one free user-chosen
@@ -988,7 +1013,7 @@ session to a typed principal and capabilities before routing. At minimum:
 | Principal | Allowed authority |
 |---|---|
 | Owner/admin paired session | Explicit owner UI/API capabilities; sensitive operations still require signed/biometric orders where specified |
-| Companion Remote session | Explicit read projections and `request-write`; no raw owner secrets, build credentials, key minting, deploy, app/data/access mutation, backup/restore, power, or policy change |
+| Companion Remote session | Read/request-approval by default; build/deploy only under an explicit phone-signed, service-scoped, expiring delegation; no private signing keys, host secrets, or implicit authority over other services |
 | Co-manager/share session | Only the share's signed per-action scope; never inherits owner merely by entering the paired-session store |
 | App token | That app's narrow daemon API only; never `/api/build`, `/api/llm`, `/api/screens`, key custody, or another app |
 | MCP/build token | One build and its exact tool set; cannot become a paired session or deploy without a separate owner authorization |
@@ -1000,12 +1025,24 @@ accepted principals, required capability, and whether an application-layer
 signature/biometric is required. Unregistered routes reject by default. A CI
 inventory fails when a paired-session route lacks metadata.
 
+The website never receives or stores private security/signing keys, including
+account/admin, recovery, app-access proof, release, and box keys. It may hold
+public verification material and narrowly scoped session credentials; those
+credentials cannot sign orders or bypass a required phone signature. Every
+operation that requires a user signature sends its typed payload to the phone
+for biometric-gated signing. The phone independently checks purpose, target,
+service/release digest, scope, nonce and expiry, and shows the meaningful action
+before signing; browser-supplied display text is not authoritative. The daemon
+verifies the signature and exact action binding. Normal box-to-box protocol
+signing remains with box keys outside the website.
+
 Patch `/api/build/*` and `/api/llm/sessions*` immediately with an owner-only
 check. Rotate/revoke all existing companion tokens, MCP keys created by a
 companion, and builds/deployments attributable to those sessions; inspect the
 privacy-safe activity journal before deciding whether owner notification or app
 removal is required. Add a test that runs every companion token against every
-daemon route/method and permits only the declared read/request-write matrix.
+daemon route/method and permits only the declared capability matrix, including
+the explicit delegated build/deploy case in §16.2.
 
 ### 10.3 Community adapter trust
 
@@ -1017,14 +1054,19 @@ The safer product model has three provenance classes:
 
 1. **Repo-authored:** the adapter is in the exact source commit the owner chose.
    It is still untrusted app code but shares that repo's provenance.
-2. **Flagship-reviewed:** deterministic validation, isolated build/test, egress
-   observation, human security review, and a Flagship reviewer signature bind
-   the adapter hash, repo commit, toolchain, test evidence, and declared
-   capabilities. Two reviewers are required for adapters that add executable
-   code, install hooks, migrations, browser access, secrets, or egress.
+2. **Flagship AI-vetted:** deterministic validation, isolated build/test and
+   the defined AI-review pipeline complete before Flagship signs an attestation
+   binding the exact adapter digest, base revision, validator/model version,
+   test evidence and capabilities. This is not a human security-review or safety
+   certification. An admin may indefinitely trust currently attested digests
+   per service; that standing choice, not the model verdict, authorizes use.
+   Additional human review may be recorded separately without becoming an
+   undisclosed requirement for the agreed AI-vetted option.
 3. **Community suggestion:** anonymous or pseudonymous content remains an inert
-   diff. It can seed the owner's private sandbox/AI review but is never selected
-   or installed automatically and carries no “safe” badge.
+   diff until a service admin explicitly chooses its exact digest. It is never
+   selected or installed automatically and carries no “safe” badge; an owner
+   may still choose a clearly labeled manual install after reviewing the diff
+   and acknowledging missing or failed review.
 
 Publish signed, append-only, rollback-protected index metadata with expiry and
 key rotation, not just a mutable Git branch and hash-named bodies. Verify the
@@ -1052,13 +1094,31 @@ containment. Re-enable only with all of the following:
   policy) before first navigation, checking initial URL, redirects, link/form/
   script navigation, popup, subframe, worker fetch, WebSocket, download, and
   non-HTTP scheme. Resolve DNS and block loopback, link-local, RFC1918/ULA,
-  metadata, host services, and rebinding unless a separately approved local
-  capability requires an exact destination;
+  metadata, host services, and rebinding unless a separately approved
+  local-network capability authorizes the destination (§18.2); metadata and
+  protected host services remain blocked even with a whole-LAN grant;
 - a current main-frame URL/origin check immediately before and after every
   `fill`, `click`, DOM read, screenshot, input request, and raw input action;
   mismatch closes/quarantines the tab and returns a policy error;
 - app identity attached inside `BrowserManager`, not supplied by a later HTTP
   handler after `Target.createTarget`; creation races fail closed;
+- do not make a fixed developer-authored domain allowlist the only way to use
+  the browser. Let an app clearly request a typed browser capability and access
+  list through the harness; the harness asks the user/admin and records a
+  revocable grant scoped to that service, capabilities, exact URLs and/or
+  explicitly approved wildcard domains, and chosen duration. Offer sensible
+  choices such as once, this session, or remember for this service. Approval
+  includes redirects initiated by approved sites, including to other public
+  origins, without another prompt. Explain that behavior and wildcard reach
+  before approval. Bind redirect-derived access to the browser-observed
+  navigation chain; it is not permission for arbitrary unrelated direct
+  navigation. Local/private and protected-destination checks still apply;
+- derive the destination and requested action from the live browser state, not
+  app-supplied labels. Public internet destinations should be broadly usable
+  after approval. Local/private-network access gets a separate exact-target
+  or whole-local-network warning and grant; metadata endpoints, the Flagship
+  host/control plane, and
+  other protected host services stay unreachable from app browser contexts;
 - no password/OTP/cookie autofill into app-controlled contexts unless the phone
   shows the exact verified origin and the owner approves that single fill; and
 - derive every phone prompt's scheme/host/port from the live main frame, never
@@ -1070,8 +1130,9 @@ containment. Re-enable only with all of the following:
 
 Tests must cover every navigation mechanism, nested/popup chains, DNS rebinding,
 service workers, WebSockets, `data:`/`blob:`/`file:`/custom schemes, current-URL
-TOCTOU races, and proof that cookies from app A, app B, and the owner browser are
-mutually invisible.
+TOCTOU races, allow/deny/prompt behavior for granted and new destinations, and
+proof that cookies from app A, app B, and the owner browser are mutually
+invisible.
 
 ### 10.5 macOS privileged helper
 
@@ -1107,24 +1168,25 @@ confirmation, oversized/sparse images, and helper/app version skew.
 
 ### 10.6 Re-pair and account-root rotation
 
-Treat rotation of the account IRK/admin root as more sensitive than an ordinary
-IRK-signed operation. Recommended policy:
+Treat account recovery and new-device enrollment as a pending ceremony, not an
+instant login that silently becomes an administrator:
 
-- on an admin-pinned account, require an admin-root-signed replacement order
-  plus either approval from another existing admin device or an independent
-  enrolled recovery factor (passkey recovery proof, TOTP, or one-time recovery
-  code); a bare current-IRK signature is insufficient;
-- on a multi-device legacy account, require the existing IRK **and** TOTP/
-  recovery code or an explicit approval from another non-quarantined device;
-- on a single-device account, preserve a documented last-device recovery path,
-  but require the current key plus an independent passkey/recovery factor when
-  one exists. If none exists, use the longest grace, prominent multi-channel
-  alerts, no silent completion, strict grant wipe, and quarantine; decide
-  explicitly whether that residual risk is acceptable before GA;
-- never let a quarantined device approve, veto on behalf of another admin,
-  lower the grace, change wipe policy, or lift its own quarantine; and
-- bind every factor/approval to username, old and new roots, device, wipe
-  policy, nonce, initiation generation, and expiry. Consume one-time factors
+- when no registered device is available, successful enrolled passkey recovery
+  (including its recovery passphrase where that enrollment requires one) may
+  restore the account key and start a pending new-device enrollment; do not
+  require an additional unavailable-device approval;
+- start the published waiting period, immediately notify every active admin
+  and registered device, and let any active admin reject/remove (“boot”) the
+  pending device during that period;
+- the pending device receives no admin authority and cannot shorten the wait,
+  change recovery policy, suppress notices, or veto its own enrollment;
+- if an active admin rejects it, cancel the pending enrollment and revoke its
+  temporary sessions/credentials. If the wait ends without rejection, activate
+  the device and apply the normal quarantine and audit rules;
+- a bare current-IRK signature must not skip the wait, notices, or admin veto
+  window. Existing devices may use their normal authenticated admin flow; and
+- bind the recovery proof and pending enrollment to the account, new device,
+  initiation generation, nonce, and expiry. Consume one-time factors
   atomically.
 
 Keep the existing grace, audit, old-key proof served to boxes, box-side chain
@@ -1132,7 +1194,9 @@ verification, and 14-day quarantine. Correct comments and UI that equate key
 possession with proof that an attacker cannot hold it. Build a recovery matrix
 for stolen key file, stolen unlocked phone, SIM/email compromise, one remaining
 device, multiple devices, no TOTP, lost passkey, control-plane rollback, and
-concurrent re-pair attempts before changing availability behavior.
+concurrent re-pair attempts. Test that a passkey-recovered pending device can
+be rejected throughout the wait and receives no admin authority before it
+ends.
 
 ## 11. Required tests and evidence
 
@@ -1200,15 +1264,22 @@ No phase is done because unit tests pass. Produce the following evidence.
   and data restore. Verify the daemon itself is not root.
 - Generate owner, companion, co-manager, app, and build tokens and replay each
   against every route/method. Compare to the checked-in capability matrix;
-  unclassified routes and companion mutations fail CI.
-- Specifically prove a companion cannot create/adapt/deploy/discard a build,
+  unclassified routes and undelegated companion mutations fail CI.
+- Specifically prove an undelegated companion cannot create/adapt/deploy/discard a build,
   mint/replace/retrieve an MCP or LLM credential, call legacy vibe-code, mutate
   app/data/access state, or smuggle a write through a read endpoint.
-- Submit an adapter that is syntactically valid and fits the public base but
-  exfiltrates secrets, weakens access at runtime, adds a delayed payload, or
-  prompt-injects the reviewer. It stays inert without the required reviewer
-  signatures and owner approval. Tamper, roll back, expire, or equivocate the
-  signed index and prove boxes reject it.
+- Exercise the delegated companion path: only the named service and operations
+  work, expiry/revocation take effect, and replay or payload substitution fails.
+  Verify no browser storage, page context, tool output or response contains a
+  private security/signing key; required signatures come from the phone after
+  biometric approval of the exact operation.
+- Submit adapters with secret-exfiltration attempts, weakened access, delayed
+  payloads and reviewer prompt injection. Verify rejection by applicable
+  deterministic/sandbox controls and that a positive model verdict alone
+  never authorizes execution. Test manual digest approval and the explicit
+  per-service standing AI-vetted policy; changed unvetted digests stay inert
+  pending manual acceptance. Tamper, roll back, expire or equivocate the signed
+  index/attestation and prove boxes reject it. Review is not proof of benign code.
 
 ### Boot, lock, helper, browser, and recovery tests
 
@@ -1342,7 +1413,8 @@ in progress.
 - ship per-app browser contexts and continuous policy before re-enabling the
   browser API;
 - harden the macOS helper; and
-- ship durable boot suspension plus the selected re-pair step-up policy.
+- ship durable boot suspension plus the passkey-recovery wait/veto policy in
+  §10.6.
 
 **Gate:** production release/update succeeds with package registries and source
 hosts blocked, any artifact/manifest change fails verification, and every P0/P1
@@ -1447,8 +1519,9 @@ The program is complete only when all of the following are true:
   enforcement, with no shared owner/app cookies or post-redirect read escape;
 - the macOS helper accepts only Flagship's designated client and cannot be made
   to follow arbitrary paths or overwrite an internal/startup disk;
-- account-root re-pair follows the approved independent-factor/admin policy
-  while preserving explicit last-device recovery, grace, audit, and quarantine;
+- passkey recovery with no registered device starts a pending enrollment with
+  a waiting period, immediate notices, an active-admin rejection window, and
+  no admin authority before activation; a bare IRK signature cannot skip it;
 - theft, dependency compromise, CA misissuance, release compromise, renewal
   outage, rotation, recovery, and rollback drills have dated evidence;
 - public security claims match the weakest supported production mode rather
@@ -1492,16 +1565,16 @@ The program is complete only when all of the following are true:
     route capability metadata, default-deny middleware, and exhaustive route
     matrix tests.
 15. **SEC-ADAPTER-002 (P1):** Implement provenance classes, signed append-only
-    metadata, deterministic on-box revalidation, human reviewer signatures,
-    owner diff/approval, and sandbox evidence.
+    metadata, deterministic on-box revalidation, exact-digest AI-vetting
+    attestations, manual/standing per-service owner policy, and sandbox evidence.
 16. **SEC-BROWSER-002 (P1):** Build per-app contexts, request/navigation
     interception, local-network/rebinding defense, current-origin checks, and
     cross-context isolation tests.
 17. **SEC-MAC-002 (P1):** Replace path arguments with opaque image/media IDs and
     implement FD-safe staging plus Disk Arbitration/I/O Registry validation.
-18. **SEC-REPAIR-001 (P1):** Approve and implement the re-pair step-up matrix;
-    correct the “attacker cannot hold the key” assumption and preserve
-    last-device recovery evidence.
+18. **SEC-REPAIR-001 (P1):** Implement passkey-based pending enrollment,
+    waiting period and active-admin rejection; ensure IRK-only proof cannot
+    skip the window, and preserve last-device recovery evidence.
 19. **SEC-MBOOT-001 (P1):** Specify UKI/Secure Boot/TPM measurements, local
     attestation pairing, phone quote verification, policy advancement, and
     recovery for each supported hardware class.
@@ -1602,3 +1675,1376 @@ P0 before discussing implementation language or TPM vendor details. The second
 meeting approves the invariants, attacker model, re-pair availability policy,
 and production-versus-software fallback claims. Those choices matter, but the
 security boundary and acceptance tests must drive them.
+
+## 16. Owner usability decisions and implementer advisory
+
+These are product decisions from the 2026-10-22 owner review. Preserve the
+default security boundaries while keeping service-level controls easy to find
+and independently configurable. A warning acknowledges a scoped risk; it must
+not grant authority beyond the named service or bypass a mandatory isolation
+boundary.
+
+### 16.1 Creator app updates and migrations — agreed direction
+
+- Keep update controls per service. Third-party automatic updates may be
+  disabled independently for each service; an admin can review and approve an
+  update for that service, with its publisher, version, and requested changes
+  visible.
+- Admin approval may authorize the service update, but never host-root
+  execution. Migrations stay inside the restricted migration sandbox even
+  after explicit approval.
+
+### 16.2 Companion Remote build/deploy — agreed direction
+
+- Companion Remote remains read-only by default. An admin may grant
+  **Build and deploy** independently for a named service, after a warning that
+  the session can change that service's code and release a version.
+- Scope the grant to the named service, expire it with the companion session,
+  and make it revocable. It grants no access to other services or host secrets.
+- No private security/signing key is ever present in the website. Send every
+  required user-signing operation to the phone for biometric approval; the
+  website can request an action and submit the resulting signed order. Keep
+  build credentials on the server and keep delegated authority within its
+  phone-approved scope.
+
+### 16.3 Community adapters — current behavior and owner decisions
+
+- Current code does perform deterministic validation before queueing a
+  submission in D1/R2: source/revision and license checks, adapter-rule and
+  edited-file checks, plus checks for added secrets and server addresses. The
+  ordinary submit response is asynchronous (`202`); `wait: true` returns the
+  validation verdict. Passing those checks is not a human security review.
+- The AI review is optional (`ADAPTER_REVIEW_ANTHROPIC_KEY`) and cannot be
+  treated as an authorization decision. With no key, rule-passing adapters may
+  still be queued and included by the daily publisher in the public
+  `ibisllc/flagship-adapters` repository. Boxes currently consume that shared
+  catalog automatically.
+- **Owner decision:** preserve deterministic validation and show the AI-review
+  status prominently. When review succeeds, say the community adapter was
+  checked with AI and that this is not a safety guarantee. When review is
+  unavailable or fails, label that plainly; do not imply it was checked. This
+  status does not prevent an admin from choosing to install after reviewing
+  the exact diff and acknowledging the warning. AI review remains advisory and
+  never authorizes an adapter by itself.
+- **Owner decision:** offer manual digest acceptance or the revocable,
+  per-service option “Always trust adapters vetted by Flagship using AI.”
+  This standing policy lasts indefinitely and accepts each exact digest only
+  with a currently valid Flagship-signed AI-vetting attestation. Every changed
+  unvetted digest still requires manual acceptance; accepting one does not
+  authorize future unvetted versions. Show source project, revision, digest,
+  review status and useful change summary. Keep choices independent by service.
+- Encourage adapter authors to make updates survive minor upstream releases:
+  prefer stable public interfaces and semantic anchors over brittle file
+  offsets, keep changes minimal, declare compatibility ranges, and validate
+  against representative upstream versions. Track compatibility evidence and
+  report when an adapter no longer fits its base instead of silently applying
+  it.
+- Provide a simple, searchable public directory of projects with community
+  adapters. Include the upstream project and owner links, license, adapter
+  status, supported versions, review status, and latest digest. Make it easy
+  for a maintainer to contact Flagship or contribute/adopt an official
+  `flagship.app.json`; do not expose submitter or box-owner identities.
+- Enrich the adapter manifest with versioned, typed capability declarations
+  so adapters can request useful integrations and service features. A
+  declaration is a request, not a grant: capabilities are default-deny,
+  explicitly approved by the admin per service, enforced by narrow brokers,
+  and included in the digest-bound review/acceptance. Never let adapter JSON
+  grant host access, read another service's data, or bypass the app sandbox.
+
+### 16.4 Lost-device account recovery — agreed direction
+
+- If the owner has lost all registered devices but can complete the enrolled
+  passkey recovery ceremony, allow them to start a pending new-device
+  enrollment. Preserve any recovery passphrase required by that enrolled
+  ceremony; do not require approval from a device they no longer have.
+- Apply the agreed waiting period and notify every active admin immediately.
+  Any active admin may reject/remove (“boot”) the pending device during the
+  wait. If no active admin rejects it before the wait ends, activate it under
+  the existing quarantine and audit rules.
+- The pending device has no admin authority during the wait. The current IRK
+  alone cannot skip the wait or the active-admin rejection window. This policy
+  is meant to preserve recovery usability while giving a remaining co-admin a
+  practical chance to stop a stolen-passkey takeover.
+
+### 16.5 Headless browser access and service isolation — agreed direction
+
+- The headless browser is a useful way for apps to reach websites and should
+  remain flexible. An app may ask the harness for a browser feature or URL;
+  the harness presents the request to the user/admin, who can approve it for
+  that service. Provide practical grant durations such as once, this session,
+  or remembered for that service, with a clear way to review and revoke grants.
+- The app must clearly state its requested access list. The admin may approve
+  exact URLs and/or wildcard domains for that service, with a clear explanation
+  of each wildcard's reach. Treat that list as permission for the service to
+  perform the navigation behavior it entails: redirects initiated by approved
+  sites may reach other public destinations without another prompt. Explain
+  this reach at approval; do not claim listed sites are a strict destination
+  boundary. Unrelated direct destinations require added scope or the optional
+  public-web grant. Local/private access needs a separate exact-device or
+  revocable whole-local-network grant; protected host services and metadata
+  stay blocked.
+- Services from the same developer do not get to inspect each other's browser
+  state, cookies, local storage, DOM, or JavaScript data by default. There is
+  no security benefit in letting one service silently take another's data just
+  because their publisher matches. If a real product feature needs sharing,
+  provide an explicit service-to-service API or broker permission that names
+  the data and actions shared and is approved by the user/admin. Keep separate
+  browser contexts regardless of publisher identity.
+
+### 16.6 App-to-app messages — agreed direction
+
+- Extend the existing sibling-chat API, retaining permissionless messaging
+  among the owner's own deployments and adding cross-deployment addressing
+  (for example, `message(receiverAppAuthor, receiverAppSlug, rawMessage,
+  deployUser = self)`). A cross-user target is only the canonical logical
+  address `author--app.targetuser`; there is no server selector or cross-user
+  broadcast/fan-out option. The current
+  `/api/live_siblings/*` and multipod APIs are mainly same-app replica tools;
+  extend them deliberately rather than exposing their live peer list as a
+  general app-discovery API.
+- A listener subscription is logically keyed by
+  `(appAuthor, appSlug, deploymentScope = local-only | all, serverScope = a
+  server | all)`. Registering a listener—even one that accepts messages from
+  anyone—does not itself prompt the user, create an outbound connection, or
+  authorize cross-deployment traffic. It only says which messages this app is
+  willing to receive, subject to the cross-deployment grants below. Prefer
+  explicit scope defaults (`local-only`) so `all` is an intentional choice.
+  Server-specific listener/replica controls remain local to the owning
+  account; they do not create externally addressable server-specific inboxes.
+- Each initial send creates a conversation and returns a conversation code to
+  the sender. The recipient receives
+  `(senderAppAuthor, senderAppSlug, timeSubmitted, rawMessage,
+  recipientConversationCode)`. Replies use
+  `message(recipientConversationCode, rawMessage)`; the harness routes them to
+  the original sender, which receives its own distinct code for the same
+  conversation. The harness keeps the mapping; the apps do not learn each
+  other's routing codes or need to reveal network addresses to keep a
+  conversation going. Use three independently generated, high-entropy random
+  identifiers: app 1's local conversation ID, an inter-harness conversation ID,
+  and app 2's local conversation ID. The harnesses translate among these three
+  namespaces; no app receives the other identifiers. Each harness validates its
+  own binding to its local app runtime, authenticated remote peer, recipient,
+  authorization and session generation; the remote harness cannot select or
+  overwrite that binding. Authenticate inter-harness frames and reject unknown
+  or mismatched routes. Random IDs prevent accidental reuse and guessing but
+  do not themselves detect a corrupted routing table: validate the complete
+  route binding and fail closed on inconsistencies. Every app call also
+  authenticates its app token; knowing another app's ID grants no access.
+- Keep conversation mappings in bounded runtime state. A conversation becomes
+  established only when the first reply is delivered back to the initiator;
+  an initial one-way/spam message is not a live conversation and must not be
+  counted as a reply relationship. If a runtime loses its mapping, a later
+  send using that runtime's stale conversation ID may produce a local
+  `conversation-dead` result only for a conversation previously established
+  as two-way. Do not reveal this state to an unrelated app or remote sender.
+  Retain a minimal established-conversation record or obtain authenticated
+  evidence from the surviving peer before emitting this result; if all such
+  evidence is lost, the harness cannot infer prior two-way establishment.
+  Bind new random IDs to a fresh runtime generation so stale references cannot
+  attach to a new conversation. Apply table-size, payload and rate limits;
+  lifetime authorization ends on explicit revocation or lost conversation
+  state, rather than an arbitrary timer silently contradicting **Allow**.
+- Cross-owner communication is a separate trust relationship because boxes
+  must establish network contact and direct connectivity can expose addresses.
+  An outbound cross-network attempt alerts the sending admin before contact;
+  the alert identifies the target app/deployment and can carry an optional
+  human recognition phrase (generated as a six-digit code by default, editable
+  to at most 30 characters). The phrase is shown to both admins so they can
+  compare it through a separate channel; it only helps if the receiver has an
+  independently expected phrase. A phrase supplied by an unknown sender is
+  not identity proof. It is not an authentication factor, message content, or
+  substitute for bilateral approval; protect it in transit between admin
+  notices and keep it out of ordinary logs.
+- For inbound traffic, first check whether the local target app currently has
+  a matching listener. If not, discard the initial message silently: do not
+  alert, queue it, or reveal that no listener exists. If a listener exists,
+  alert the receiving admin before delivering the body to the app. Identify
+  the request as “a remote machine claiming to run [sender slug] by [sender
+  author] is trying to contact your copy of [receiver slug] by [receiver
+  author]”; show the optional recognition phrase if
+  present. Offer **Allow** (authorize this conversation for its lifetime) and
+  **Always allow** (let any foreign app start conversations with this local
+  app, without per-sender prompts). Both grants are scoped to that receiving
+  app, revocable, and lost if the relevant harness authorization state is
+  reset; listener registration alone never creates either grant. Continue to
+  require an authorized listener for delivery even under **Always allow**.
+- An invited visitor can instead present cryptographic proof of active access
+  to the recipient's restricted app, explicitly authorizing harness chat on
+  that visitor's behalf. Validate the redeemed grant and proof of possession;
+  a shareable invite URL or knowledge of an invite secret alone is insufficient.
+  Bind a fresh challenge/proof to that exact recipient app/deployment, visitor's
+  per-app identity, requested chat purpose, source endpoint/session, expiry and
+  one-use nonce. User signatures follow the phone/biometric rule above; the
+  website never holds the signing key. Re-check revocation and derive the
+  visitor's current effective `member`, `manager` or `master` rank at the
+  receiving harness; never accept a caller's asserted rank. Re-check access on
+  later deliveries: withdrawal ends the invitation-authorized channel and
+  rank changes update delivered authorization metadata without inventing a
+  harness-wide prohibition on writes by rank.
+- Valid invitation-bound chat authorization replaces the receiving admin's
+  per-contact alert. Deliver verified access status and rank separately from
+  raw message text so the app can apply its own rank policy. This proves that
+  a current app visitor authorized the connection, not that the remote machine
+  runs publisher-authentic code. Preserve per-app visitor identity isolation:
+  no account-wide identifier is exposed across apps. When existing authority
+  also covers the outgoing route, no additional chat-admin alert is needed;
+  an app-access grant cannot override another server owner's outbound policy.
+- Permit one active invitation-authenticated conversation per visitor identity
+  and recipient app, across all of that app's servers and the visitor's
+  devices/invites. The current app lead is the sole authority for admitting
+  cross-user starts and atomically reserving the slot. Record consumed proof
+  nonces and active bindings so retries, replay and ordinary restarts cannot
+  open a second conversation within the same lead generation. After validating the
+  visitor's current proof, a duplicate start can return “This connection has
+  already been used; consider alerting the remote administrator.” This result
+  is confined to that authenticated visitor's own slot; unrelated callers
+  retain the generic acceptance response. Deduplicate retries of the same
+  request. A verified close/dead state releases the slot for a fresh authorized
+  start; never reuse an already consumed proof or silently replace the current
+  conversation. No-listener drops do not consume a proof or reserve a slot.
+- Scope outbound and inbound grants to app identities and deployment scope;
+  after approval, re-check them at delivery and make revocation effective
+  promptly. Coalesce/rate-limit pending approval alerts and cap pending state,
+  but do not alert at all when no listener exists. Messaging among the same
+  owner's servers remains permissionless. Prefer daemon-to-daemon connectivity
+  so app code is not given peer IPs; explain that direct connections can reveal
+  addresses to the other box. Do not retain recognition phrases in ordinary
+  logs or expose them to app code.
+- Cross-user traffic always resolves the canonical app/user address to its
+  current authorized app lead. Knowing another server's name does not permit
+  bypassing that lead or opening a separate cross-user inbox on a sibling.
+  The lead distributes routing and internal-state changes to its siblings;
+  this replication is internal and invisible to external callers. Validate
+  lead changes against the account's signed authority and fence former leads
+  using a generation so two servers cannot independently admit conversations.
+  Exclude the sending app runtime from every recipient search.
+- A catastrophic lead change may lose conversation routing and terminate
+  existing conversations. The harness does not promise transparent recovery,
+  reliable delivery, or exactly-once app effects. Document this for app
+  developers: cache needed state, use application message IDs, ACKs, retry and
+  deduplication, and establish a new conversation when necessary. Planned lead
+  changes may transfer state; catastrophic recovery starts a fresh routing
+  generation and rejects old handles and old-generation admission proofs.
+  Fresh visitor proof and current app-access authorization are required to
+  reopen a lost invitation-authenticated conversation. Loss of routing state
+  must never restore withdrawn access or silently authorize an old session.
+- Use immutable canonical app identity `(creator, slug)` (shown to people as
+  `slug--author`). It is defined on `feat/marketplace`, so this feature must
+  branch from that dependency rather than invent an incompatible identity.
+  An honest local harness derives sender identity from the app token, preventing
+  one local app from impersonating another. A remote machine owner can modify
+  their harness and claim an arbitrary app author/slug; authenticating the peer
+  box does not attest to its software. Treat remote app identity as a claim,
+  and expose verified invitation/access facts separately. Keep app identity
+  consistent across local and cross-deployment messages: canonical app identity,
+  not a mutable
+  display name or globally reusable account/server identifier. The harness
+  uses deployment identity internally to apply the bilateral grant, but the
+  app-facing inbound tuple need only contain claimed remote app identity,
+  submission time, body, and its local conversation code; do not disclose
+  sender account/server identity by default. The opaque
+  conversation code is a per-conversation routing handle, not a stable peer
+  identity. Apps may exchange additional self-asserted protocol details in the
+  body. Without `deployUser`, route only within the owner's deployments.
+  Cross-user callers select the target user/app and cannot select its server.
+- Messaging among the owner's own deployments and listener registration do
+  **not** prompt or require admin approval; a listener may accept messages from
+  any sender. Its scope selects which deployment(s) of the receiving app listen,
+  not an allow-list of sender identities. Cross-owner sends require the sending
+  admin's outgoing and receiving admin's incoming approval, scoped to app
+  identities and deployment scope, or the verified invitation-bound chat
+  authorization above; listener registration itself does not approve that
+  relationship. Advise app builders to handle untrusted senders
+  safely and to ignore or stay silent toward spam rather than registering
+  listeners across every deployment without need.
+- A send response means only “the harness accepted this message for
+  processing.” For cross-deployment sends, it must not reveal whether the
+  remote app, deployment, or approval exists; use the same response for
+  unknown targets, missing grants, offline/closed receivers, no matching
+  listener, and non-response. Do not expose delivery/read receipts. The
+  recipient independently decides whether and how to reply, and replies are
+  subject to the reverse-direction grant. The harness's connection method is
+  an implementation choice: relaying avoids direct peer-IP disclosure but
+  exposes routing metadata to the relay; direct box-to-box connections reveal
+  peer IP addresses to the boxes, so preserve the bilateral warning/approval
+  if direct routing is used. Exchanging a domain in the app payload is an
+  app-level choice and is not required by the conversation-code mechanism.
+- Bind locally authenticated sender identity, remote app claims and verified
+  visitor-access facts to separate fields in the harness envelope; raw message
+  text cannot override them. Treat free-text bodies as hostile app data, including when an
+  app passes them to a model: never as system instructions, executable content,
+  or proof of authority. Add payload limits, expiry, replay/deduplication
+  controls, per-app quotas, and abuse monitoring. Rate-limit senders that
+  generate unusually high unanswered traffic, using aggregate volume and
+  unanswered ratios with gradual cooldowns; do not expose per-recipient
+  delivery or response facts to the sender. Preserve legitimate fire-and-
+  forget uses: a lack of reply alone is not proof of spam and must not trigger
+  an immediate blanket ban.
+- Preserve the platform's content-privacy boundary: control-plane and relay
+  components should route end-to-end-protected message bodies and avoid
+  plaintext retention. Routing metadata (source/target app identity, optional
+  server, timing, and volume) may still reveal relationships to infrastructure
+  operators; document this limit and minimize/log-protect metadata.
+- Once the API ships, add a model-prompt chapter for building/adapting services
+  that documents initial send, listener scopes/filters, per-side conversation
+  codes and async replies, cross-deployment approval and invitation-proof
+  exceptions, lead-only cross-user addressing, catastrophic lead-change
+  recovery, the one-active-conversation rule, safe listener patterns,
+  message-as-untrusted-data handling, and spam etiquette. Do not advertise an
+  API before its harness and routing implementation exist.
+
+### 16.7 Install, fork, update and persistent security UX — agreed direction
+
+- Keep the install screen lean. Retain existing create, Git-import and
+  marketplace paths where available; do not add a generic “install from
+  anywhere” picker. The per-service page already offers an app backup archive.
+  Add one “Install from archive” path only if implementation review confirms
+  there is no matching single-app archive import; reuse that service-backup
+  format rather than inventing another package type.
+- An unchanged third-party bundle remains signed by its actual publisher. A Git
+  repository compiled by Flagship into a local app is authored and signed by
+  the local user. Editing an installed app with AI/MCP creates a locally
+  authored, locally signed fork. Preserve upstream repository, publisher,
+  authenticated source status, and exact base commit as provenance; provenance
+  is not authority to execute or overwrite the local fork. The permanent
+  author/app identity and per-server publisher-key pin rules in §18.11
+  still apply.
+- The app owns portable-data and session serialization. Flagship transports the
+  files declared by the app's export; it does not secretly inspect or migrate
+  browser sessions. An owner-created archive is signed over its exact manifest
+  and contents, is presented as an owner-authored snapshot/fork, and does not
+  restore permissions, credentials, revoked authority, or upstream signing
+  identity. Explain sensitive session contents and require explicit export and
+  import approval.
+- Offer “check upstream / propose sync” for a fork with recorded upstream
+  lineage. It fetches one verified candidate commit and stages a three-way
+  comparison/rebase against the recorded base and local edits. It never silently
+  changes the fork and is not covered by the upstream app's automatic-update
+  setting. AI-assisted conflict repair runs only in isolated staging with
+  sample data and redacted output. Before a model call using a user's key or
+  paid credits, disclose provider and reasonable cost/credit estimate and get
+  per-operation consent. Show commit, source/capability/adapter diff, conflicts,
+  test and health results, and data/schema effects. The owner separately
+  approves the exact staged artifact for promotion. Failure leaves live code
+  and data untouched; rollback preserves current revocations and authority.
+- Keep each security-sliver item independent and visible for its own duration;
+  the sliver grows instead of collapsing or truncating. Active issues remain
+  until resolved; after resolution use minimum visible durations of 90 days for
+  critical, 30 high, 14 moderate and 7 low. Approval/acknowledgement does not
+  shorten or reset the timer. Platform policy sets severity; app text cannot.
+  Expired items remain in audit history. Avoid duplicate push loops for an
+  unchanged condition.
+
+## 17. Implementation contract for the owner decisions
+
+This section makes §16 actionable. It specifies desired behavior, not work
+already implemented. Earlier emergency restrictions apply until their safe
+replacement passes its gates; permanent policy is §16 plus this contract.
+Update earlier matrices and tests when implementing a replacement so an old
+blanket prohibition does not defeat a deliberate scoped grant. Preserve the
+isolation, signature, key-custody and artifact-verification boundaries in §2.
+
+### 17.1 Shared authorization and phone-signing mechanism
+
+- Put versioned canonical payloads and verifiers in `packages/protocol`, using
+  the existing purpose-tag conventions. Separate approval of a capability from
+  approval of an exact operation. Payloads bind issuer, audience, account/app
+  scope, action, relevant content digest, request nonce, generation and expiry.
+  Do not sign arbitrary strings supplied by a website or app.
+- The browser submits an unsigned action request. The daemon/control plane
+  supplies the authoritative typed action and a fresh challenge. The phone
+  validates its target against locally trusted identity, displays the action,
+  obtains biometric approval, and signs. The recipient verifies signature,
+  scope, freshness, generation and single-use nonce before atomically applying
+  it. Changing any field requires a new signature. Return a result tied to the
+  original request ID; a request acknowledgement is not action completion.
+- No private account, recovery, signing, access-proof or box key is exposed to
+  website JavaScript, browser storage, URLs, analytics, downloads or tool
+  output. Short-lived scoped UI sessions carry no signing authority. Keep
+  normal infrastructure signing in native/box principals. Inventory and remove
+  existing frontend key generation/import/export/signing paths when migrating;
+  move those user workflows to the phone rather than silently disabling them.
+- Store grants as typed records with an immutable grant ID, exact subject and
+  scope, signature/provenance, generation, creation/expiry and revocation state.
+  Expiry is optional for lifetime conversation grants; session delegations
+  must expire. Keep admission-proof expiry separate from conversation lifetime.
+  Check live authority at execution, not just when the UI opened. Persist
+  consumed sensitive-order nonces and revocations against replay/restore.
+- Put permission settings under each service, with Allow once / Session /
+  Remember where appropriate, readable scope, expiry and Revoke. A grant for
+  one service never expands another service's authority. Pending requests can
+  be denied/cancelled and are bounded; do not repeatedly prompt for a denied
+  operation until its request/scope materially changes or the admin retries.
+
+### 17.2 Service updates, adapters and companion workflows
+
+| Workflow | Record and enforcement | Completion/failure behavior |
+|---|---|---|
+| Third-party update | Per-service update policy; creator identity, release digest, capability diff, migration manifest and snapshot ID | Stage first; phone approves new authority. Opted-in code-only updates may follow policy. Execute migrations only through §10.1 sandbox; report code/schema generation together and restore the snapshot only through the declared rollback path. |
+| Community adapter | Per-service manual acceptance of an exact digest, or standing trust in exact digests with valid Flagship AI-vetting attestations; bind source/base revision, review evidence and capability digest | Show AI review success/unavailable/failure accurately. Changed unvetted digests require manual acceptance; standing vetted trust is indefinite and revocable. Capability expansion still needs approval. Malformed artifacts or failed integrity checks cannot be made valid by clicking through a warning. |
+| Companion delegation | Phone-signed grant binding companion session, named service, permitted build/deploy operations and expiry no later than session expiry | Default read-only; verify the grant on every tool/route and revoke derived credentials with it. Keep build credentials server-side. Operations requiring signed orders, including an exact release install/deploy where required, still go to the phone with the release digest. |
+
+Implement update/migration changes at `servicePlatform.ts`, `updateClient.ts`
+and `runMigration.ts`, rather than adding a UI-only toggle. Enforce companion
+scope centrally before build/LLM handlers as well as inside downstream tools.
+For adapters, update submission/publishing metadata and on-box consumption:
+acceptance is not a property of the public catalog. Keep the searchable adapter
+directory and upstream-maintainer outreach described in §16.3; distinguish an
+upstream-authored adapter from an independently submitted community adapter.
+
+### 17.3 Browser permission mechanism
+
+- Store a per-service grant containing capabilities/actions, normalized origin
+  patterns, optional URL restrictions, allowed schemes/ports, local-network
+  exceptions and duration. The app supplies an explanation and requested list;
+  the harness shows the normalized effective list to the admin. Preserve a
+  separate persistent browser context for each service.
+- Compile exact hosts and approved wildcard domains using parsed URLs and DNS
+  label boundaries. Define wildcard apex matching explicitly; `*.example.com`
+  must never match `example.com.attacker.test`. Show the expanded meaning of
+  broad grants. A URL path restriction is not an independent browser security
+  principal: the same-origin site may execute scripts with that origin's
+  authority, and the prompt must not claim path-level cookie isolation.
+- Apply the effective grant to navigation, redirects, subresources, workers,
+  WebSockets, popups and downloads. Approved-site redirects proceed without
+  another prompt, including to other public origins. Track the actual redirect
+  chain and resulting document in the browser manager; app-supplied claims of
+  a redirect cannot expand scope. The resulting page can perform its approved
+  browser actions. Unrelated direct navigations/links outside effective scope
+  can request added scope. Local-address and metadata protections still run
+  after DNS resolution and on every redirect, even under a wildcard grant.
+- All reads/actions verify tab/context ownership and effective current scope.
+  A transition between two covered origins is permitted; an origin mismatch
+  means departure from the effective grant, not any change of hostname.
+  Revocation cancels affected pending work and prevents further reads. Keep
+  same-publisher services isolated; explicit harness messages can exchange
+  voluntarily shared data without exposing another context's storage.
+- Implement in the browser manager/context registry and network interceptor,
+  with `browser/apiHandlers.ts` using those checks. A route-only URL check
+  cannot enforce redirects or requests initiated by page scripts.
+
+### 17.4 Lock, recovery and hardware UX mechanisms
+
+- Treat power state and boot-suspension state as independent reported results.
+  A phone-signed lock starts durable suspension/lease revocation and requests
+  shutdown immediately. Show confirmed states only; retain/retry the pending
+  remote operation while accurately reporting unavailable confirmation.
+  Lock-and-restart waits for durable suspension first. Resume requires a later
+  phone-signed generation; lease renewal alone cannot resume a suspension.
+- Couple dead-man lease expiry to the signed affirmation deadline before the
+  timer can be advertised as active. An offline final suspension post must not
+  leave an auto-unlock lease valid beyond that deadline. Exercise phone, box
+  and boot-worker failures independently.
+- Recovery is `requested -> waiting -> activated` or `rejected/cancelled`.
+  Record server-side start/activation times and the enrolled recovery proof;
+  notify active admins immediately. The pending device gets no admin/session
+  shortcut. A valid veto wins atomically against activation. Use the existing
+  agreed wait duration and show its actual deadline across clients.
+- Detect hardware capabilities during enrollment. Show hardware-isolated or
+  software-isolated mode before enabling unattended unlock. Normal endorsed
+  updates advance measured-boot policy through the approved path; unexpected
+  measurements enter a distinct recovery ceremony. Software-mode acceptance
+  cannot manufacture TPM protection or justify an evil-maid security claim.
+
+### 17.5 Chat API and local data contracts
+
+The following are logical contracts, not claims that endpoints already exist.
+Expose one SDK over versioned daemon routes and extend the existing sibling
+transport; keep replica-management APIs separate from public chat addressing.
+
+```ts
+listen({ originScope, ownedInstanceScope }): Subscription
+message({ receiverAuthor, receiverApp, body, targetUser = "self",
+          requestId, accessProof? }): { accepted: true, conversationId }
+message({ conversationId, body, requestId }): { accepted: true }
+close({ conversationId }): { accepted: true }
+```
+
+- Resolve the calling app/runtime from its app token. It cannot register for
+  another app. `originScope` is same-account or all-accounts willingness;
+  `ownedInstanceScope` selects this owned server or owned instances, never
+  remote-owned servers. These explicit field names replace ambiguous `local`
+  / `all` shorthand. Registering a listener never prompts an admin.
+- A cross-user target is exclusively `author--app.targetuser`, resolved to its
+  current authorized lead. Reject server selectors in cross-user requests;
+  there is no remote server-list or broadcast operation. Local replica APIs
+  may still address owned servers. Exclude the originating runtime from local
+  recipient searches. External traffic always enters through the target lead.
+- Return an initial local conversation ID without exposing remote existence,
+  listener, approval or delivery state. Invalid local request syntax/auth can
+  fail normally; all remote outcomes retain the generic accepted result.
+  SDK events carry sender author/slug claims, submission time, raw body and the
+  receiver's local conversation ID. Verified access/rank metadata is a separate
+  harness field. Do not imply sender-supplied time is a trusted clock.
+- Generate three independent CSPRNG IDs of at least 128 bits: local app A ID,
+  inter-harness wire ID, local app B ID. Keep the two local IDs off the wire
+  between peers. Each routing record binds its local ID, local app/runtime,
+  peer identity/session, wire ID, logical target, lead generation, authority
+  reference and state. Validate the full binding at each hop. Do not accept a
+  peer-supplied local app ID or let a remote close overwrite another binding.
+- Use the existing authenticated box identity/transport mechanisms to protect
+  frames; infrastructure relays carry encrypted bodies. Box authentication
+  establishes a peer key, while remote app author/slug remain claims. Do not
+  invent application cryptography or turn an app message into arbitrary raw
+  IP networking. Keep message payloads and recognition phrases out of logs.
+- `requestId` deduplicates a local app's retries: the same authenticated caller
+  and request return the same result, while changed content under that ID is
+  rejected. This does not promise reliable delivery or exactly-once app effects.
+  Developers use body-level message IDs, ACKs, caching and deduplication.
+
+### 17.6 Chat admission, approval and conversation state
+
+The initiator starts in `pending-outbound`; approved contact proceeds to
+`pending-inbound`. The lead checks matching listener registrations before
+queueing or alerting. No listener means immediate silent drop, with bounded
+local pending metadata only; no inbound queue, no approval prompt and no proof
+consumption. Match across internal registrations rather than bypassing the
+lead to probe a sibling.
+
+For a matching listener, admit when a standing receiving-app policy or a valid
+invitation-bound proof applies. Otherwise hold an inert bounded request and
+ask the receiving admin, using the “remote machine claiming to run…” wording.
+The sender's admin authorizes previously unapproved outgoing scope before
+contact. Existing authorization avoids repeated prompts within that scope.
+The recognition phrase is optional UI-only metadata: six generated digits or
+up to 30 user-selected characters, encrypted in transit and never delivered to
+the app. Its value is comparison through an independent human channel.
+
+**Allow** authorizes this conversation until revoked or its state is lost.
+**Always allow** authorizes new inbound conversations from anyone to this
+receiving app while that policy remains valid; it does not authorize other
+apps, create a listener or approve another owner's outgoing traffic. Include
+deny/cancel/revoke actions. Group repeated pending requests, cap pending body
+bytes/count/age, and rate-limit alert creation separately from messages.
+
+Bilateral conversation approval includes replies in that conversation; no
+second outbound approval is required merely to answer. It does not authorize
+unrelated new conversations or other apps.
+
+An admitted first message enters `awaiting-first-reply`. Mark `established`
+only after the return message reaches the initiator harness; an authenticated
+internal acknowledgement lets the peer update its state. That acknowledgement
+does not become a public delivery receipt for unestablished first contacts.
+Closing, lost route, revoked authority or a fenced lead ends the channel.
+Emit `conversation-dead` only to a previously established participant for which
+there is retained or peer-authenticated establishment evidence. If all evidence
+is lost, expire the local unknown route without inventing past establishment.
+Keep a small metadata/tombstone ledger if this notification must survive an
+ordinary restart; do not retain bodies solely to implement it.
+
+### 17.7 Invitation proof and one active conversation
+
+- Obtain the receiver lead's fresh challenge bound to logical app/user target
+  and current lead generation. The invited visitor's phone signs a typed chat
+  authorization using the app-specific identity associated with redeemed
+  access. Bind the challenge, nonce, current access-grant reference, source
+  endpoint/session key, requested purpose and short admission expiry. A browser
+  cookie, copied invite URL or arbitrary signed text is insufficient.
+- The receiving lead verifies proof of possession and the existing app-access
+  authority, resolves the visitor's stable per-app identity across their devices
+  and invite grants, checks revocation, and computes current effective rank.
+  It passes verified access/rank separately to the app, whose own code decides
+  what the rank may do. The grant authorizes a visitor's chat connection and
+  attests nothing about code on the visitor's remote host.
+- In one atomic transaction, check/deduplicate the request, check/consume its
+  fresh nonce, and reserve `activeChat(recipientApp, visitorPerAppId,
+  leadGeneration)`. Only the current lead performs admission. An existing slot
+  produces the agreed duplicate-connection warning only after valid current
+  proof for that same visitor; other callers see generic acceptance. A retry
+  of the same request returns its existing result instead of a duplicate alert.
+- Admission reserves the single slot even before the first reply; establishment
+  remains a separate two-way state. A bounded pending-admission timeout can
+  close the old routes and release an abandoned unestablished slot atomically;
+  a late reply on that closed route cannot revive the reservation. Close/dead/revoked state releases
+  the slot; a consumed nonce is never reusable. Do not persist duplicate
+  reservations for different servers/devices of the same visitor.
+- Re-check visitor access and rank during delivery. Withdrawal ends the channel;
+  demotion changes metadata without the harness inventing app-specific rank
+  restrictions. Valid prior access grants remove the receiving-admin alert;
+  they do not override an independent sending server owner's network policy.
+- Provide an authenticated “close my existing conversation” action for device
+  switching, followed by a fresh signed start. Competing starts never silently
+  evict the existing slot. Bind the slot to recipient installation and
+  recipient-scoped visitor identity; unrelated apps or recipient deployments
+  must not correlate that visitor through a shared identifier. Admission-proof
+  expiry does not expire an established conversation-lifetime grant.
+
+### 17.8 Lead changes and state-loss boundary
+
+- Reuse the account's signed lead/route authority, with a monotonic generation
+  and fencing check on admissions and inter-harness frames. Gossip alone cannot
+  make a new lead authoritative. Reject stale generations; a partition cannot
+  permit two independently authoritative lead admission paths.
+  A generation number alone is not fencing: verify that the existing lead
+  mechanism supplies an exclusive, bounded authority lease or equivalent
+  quorum/transactional exclusion. Specify its clock/expiry assumptions and
+  refuse new admissions when exclusive authority cannot be confirmed. Add this
+  mechanism if the existing leader election only gives eventual convergence.
+- The lead distributes routing/listener/permission changes and conversation
+  metadata to siblings. Transfer a state checkpoint during planned handover
+  where possible. Security-relevant access withdrawals and policy revocations
+  must remain authoritative independently of optional message-body caches.
+- Catastrophic replacement may drop every old conversation. A fresh generation
+  invalidates old IDs, challenges, admission proofs and slot reservations.
+  Reopening uses current app-access state and fresh proof; never restore a
+  withdrawn right from an old checkpoint. Do not use simultaneous old/new lead
+  acceptance to disguise recovery as seamless.
+- Document failure events and recovery examples in the builder/adaptation
+  prompt when shipping the API: app ACK/retry logic, message IDs, cached state,
+  duplicate handling, first-contact silence, lead-loss reconnect and untrusted
+  inbound text. Apply model privacy redaction when that information is returned
+  to a model. Do not expose account/server identities through model tool output.
+
+### 17.9 Integration sequence and acceptance evidence
+
+1. Land shared signed-order/capability schemas, live revocation checks and
+   phone flows; update the companion matrix and frontend key inventory.
+2. Implement service-scoped updates, adapter acceptance/status, browser grants,
+   lock status and recovery state transitions on all affected clients. Use the
+   already specified migration/browser/boot isolation gates before re-enabling
+   their emergency-disabled paths.
+3. Build local cross-app chat on token isolation and the three-ID mapping; then
+   add lead-only cross-user transport, approvals and invitation admission. Since
+   canonical publisher/app identity depends on `feat/marketplace`, develop that
+   feature on a dependent branch; do not ship unlaunched marketplace code on
+   `main` as an incidental chat change.
+4. Exercise meaningful negative cases: cross-app ID injection; corrupted/stale
+   route binding; no-listener silence; cancelled/expired/revoked approvals;
+   false sender labels; nonce replay; parallel starts on two servers; invite
+   withdrawal/rank change; first-reply loss; split leadership; checkpoint loss;
+   stale proof after catastrophic replacement. Verify bodies/keys/phrases do
+   not appear in logs, browser signing state or model output.
+5. Prove each UX exception as well as each denial: manually accepted unreviewed
+   adapter, delegated one-service Remote build, approved wildcard/redirect,
+   immediate shutdown with pending suspension, notification-free invited chat,
+   app-wide **Always allow**, lifetime **Allow**, and fresh reconnect after lead
+   loss. Record what actually shipped and what remains a design proposal.
+
+These are implementation and verification instructions. Passing this document
+review does not establish that the current code satisfies them.
+
+## 18. Cross-cutting implementation contracts from the additional review
+
+These requirements complete §§1–17; they are part of this plan, not optional
+appendix material. They add implementation detail where the existing sections
+were incomplete. If a generic proposal below conflicts with an explicit owner
+decision in §§16–17, the owner decision controls; preserve its security
+invariants and use these contracts to implement it. IDs N01–N14 are retained
+for ticket traceability.
+
+### 18.1 N01 — HTTP ingress and request framing
+
+Replace the hand-written control-API HTTP parser with a maintained parser
+behind the existing box-local TLS termination. Preserve SNI routing, ACME ALPN,
+streaming and WebSockets; do not move TLS termination to Flagship. Until
+replacement lands, make dispatch a one-way state transition before awaiting a
+handler, pause/detach input and reject trailing or pipelined requests on
+single-request connections. This is containment, not the final parser fix.
+
+One parser interpretation must govern authentication, routing and forwarding.
+Reject malformed request lines, duplicate/conflicting Host or authority,
+invalid lengths, obsolete folding and ambiguous Transfer-Encoding/Content-Length
+framing. Never concatenate or silently overwrite security headers. Bound
+pre-authentication header bytes/counts, allocations, time and concurrency; use
+32 KiB headers and 1 MiB control JSON as starting test limits, then benchmark
+real clients. Upload/archive routes have explicit streaming limits rather than
+raising global caps. Enforce header/body/idle deadlines and backpressure on
+relay, LAN and loopback; client disconnect cancels work where possible. Match
+Host/:authority to authenticated SNI and supported aliases; derive forwarding
+metadata from transport, discard caller-supplied forwarding/Connection-nominated
+identity headers, and audit the streaming app parser too. Errors expose generic
+IDs externally and sanitized detail locally.
+
+Acceptance: the duplicate-dispatch regression seed in §18.17 invokes once;
+exercise malformed/duplicate headers, TE/CL conflicts, fragmented and slow
+headers, disconnects, WebSocket upgrades and repeated transport delivery. Every
+case has one bounded result. Legitimate large uploads remain streamed; no
+service-level override can waive framing ambiguity. Reference RFC 9112 §6.3.
+
+### 18.2 N02 — One destination policy, enforced by each dialer
+
+Use a reviewed binary-address classifier with CIDR comparisons, normalizing
+IPv4-mapped IPv6 before classification. Cover expanded IPv6, unspecified,
+loopback, private, link-local, multicast, mapped/translation and reserved
+ranges, scoped/interface-local addresses, plus public-address hairpin paths to
+the owner's own box/control plane. Share the parser/classification library
+across browser egress, Git imports, provider URLs, adapter fetches, webhooks,
+backups and domain validation; then verify every real dialer enforces it.
+
+Resolve, classify, select and dial the numeric address without a second
+uncontrolled DNS lookup; retain the hostname for TLS verification. Re-check
+every redirect, reconnect and alternate route. Put host-driven Git/fetch work in
+an unprivileged network namespace or broker; disable untrusted Git redirects,
+SSH proxy commands, credential helpers, hooks, global/system config and
+unapproved protocols. Private-repository access may use an exact per-service
+endpoint grant and scoped credential. IPv6 must be demonstrably disabled at
+the relevant boundary or successfully filtered: inability to install ip6tables
+does not prove it is disabled. Test Docker restart, interface/firewall reload,
+container-IP reuse, raw sockets, host networking, alternative ports, UDP/QUIC
+and spoofed/stale app-to-IP attribution. Do not start a workload before its
+policy is active.
+
+Be honest about TLS filtering: the transparent proxy sees SNI, not encrypted
+HTTP paths, authority or bodies. A host grant permits data transmission to
+that host, possibly a multi-tenant or upload service; it is not DLP. Reauthorize
+every plain-HTTP request or close after one, reject unapproved CONNECT/tunnels,
+and do not claim CDP Fetch alone covers WebRTC or every protocol. For strict
+integrations, use a typed on-box broker that constructs requests. Keep DNS
+filters' query reconstruction, record/additional-section validation and TCP/
+UDP work bounded; wildcard DNS can carry data in names.
+
+Phone-authorized browser actions bind service, context, tab, frame, document/
+navigation generation, verified origin and exact operation. Invalidate input
+when any binding changes; if the binding cannot be enforced at dispatch, cancel
+the action and ask the user to retry rather than race-checking before/after.
+Downloads/screenshots receive the same context/generation checks and bounded
+retention. Permission choices remain those in §16.5 and §17.3: listed sites
+(including their redirects to other public origins), public web, one
+selected local device, or revocable whole-local-network per service. LAN grants
+never include metadata, host control APIs or another app's data.
+
+Acceptance: E01 classifier vectors; DNS rebinding cannot alter the dial;
+Git redirect cannot reach metadata; correct behavior for redirects, public web,
+approved LAN devices and IPv6; every browser/navigation transport uses the
+effective grant. Reference OWASP SSRF Prevention Cheat Sheet.
+
+### 18.3 N03 — Sign the complete recovery record and its evolution
+
+Version recovery records so signatures bind every behavior-changing value:
+account authority generation, credential ID, wrapped-UMK digest,
+wrapped-admin-root digest, retained wrapped ACME-key digest, fetch-token hash,
+PRF-salt hash, KDF/algorithm versions, intended recovery policy, record
+generation and nonce. For updates/deletions bind the prior record digest and
+represent optional fields explicitly as `keep`, `replace` or `remove`; omission
+cannot inherit security state silently. Check ciphertext sizes/digests before
+storage and validate the same envelope in native clients before unwrap.
+
+Audit each signed protocol field: accepted fields, behavioral effect,
+canonicalization and verifier. Reject unknown security-bearing fields within a
+version, use explicit protocol version changes, preserve purpose tags and
+separator checks, and define UTF-8, integer bounds and duplicate-key handling.
+Use shared TypeScript/Swift/Kotlin vectors. Do not rewrite deployed canonical
+bytes without a migration plan.
+
+Migrate recovery on the phone, retain the working old record until the new one
+has been verified by a real restore check, and label unsigned legacy extras.
+Unavailable verification blocks only the affected update/enrollment with a
+specific upgrade path.
+
+Acceptance: mutate, omit, swap and replay every field; no valid signature may
+authorize a different effective record. Use compare-and-swap for concurrent
+changes. Malicious storage substitution is detected; suppression/unavailability
+remain documented limitations.
+
+### 18.4 N04 — Enforce recovery wait/veto at the authority layer
+
+The wait/veto rule in §16.4 must survive direct possession of a recovered IRK
+and admin root. Separate account/recovery proof from operational device
+authority. Sensitive actions require a device signature and locally verified
+active enrollment; caller-supplied device IDs are not authority. A root starts
+recovery but cannot directly authorize ordinary sensitive actions, activate a
+device, replace the root or weaken recovery policy. Active devices continue to
+approve normal enrollments.
+
+Define typed, generation-bound `RecoveryStart`, `RecoveryVeto`,
+`RecoveryCancel` and `RecoveryActivate` events for a specific pending ID,
+device key, recovery method and deadline. Persist state and make transitions
+atomic; a valid veto accepted before activation wins every race. Cancel derived
+pending credentials too. Trust Flagship's signed recovery ledger/clock for
+ordering, deadline and receipt of vetoes. Signed vetoes can be carried by
+periodic authenticated peer status updates; peers retry/forward until Flagship
+durably acknowledges. Push is only a wake-up hint. The wait window is at least
+twice the configured offline-alert threshold and longer than the peer retry
+budget plus margin; freeze both threshold and deadline when the attempt begins.
+No requirement that a lost/offline device acknowledge.
+
+Before veto signing, show a deliberate “Are you sure?” screen naming the
+recovery attempt and stating that veto cancels it and a retry begins a fresh
+full wait. Require phone biometric signing; a push swipe or accidental single
+tap is insufficient. Immediately alert active admins and show start, deadline,
+veto action and attempt status in the durable inbox/sliver. Independently show
+offline device/server banners with last contact and delayed-update implications,
+and this prompt: “If this is unusual, please check on the physical safety of
+your device and server.” Silence alone is not proof of attack. The warning
+supplements, never replaces, immediate recovery notices.
+
+Persist enrolled authority mode outside optional config. After device-authority
+migration, missing/corrupt state enters native recovery rather than falling back
+to bare-root/IRK mode. Add verifier support first; migrate each box only after a
+working native admin and recovery path are verified. Mark legacy boxes visibly;
+they cannot claim the new guarantee.
+
+Acceptance: give a pending device both old roots and try every sensitive route;
+deny until activation. Exercise veto/activation deadline races, replays,
+out-of-order/retried peer updates, lost acknowledgements, configured timing and
+the 2× rule, offline banners, literal physical-safety text, fat-finger guard,
+fresh full wait after veto, ordinary admin enrollment and no-device recovery.
+Retain the documented residual: a total partition may prevent a signed veto
+from reaching Flagship before the deadline. Flagship is trusted not to activate
+early or suppress a durably accepted veto. No UI should imply a delivery
+guarantee through total partition. An active malicious admin can veto each
+fresh attempt; a veto cancels only that attempt, never permanently disables
+recovery. Do not add an automatic ignore-veto escape or an independent witness
+requirement. Any future dispute route needs a separate owner decision.
+
+### 18.5 N05 — Approval, execution and revocation are transactions
+
+Keep separate typed grant and operation records. A grant identifies issuer,
+subject, account generation, service installation, audience, capability and
+constraints, parent grant(s), policy revision, issue/expiry/revoke state. An
+operation identifies authenticated requester, idempotency key, canonical
+payload hash, artifact/capability digests, expected state revision, grant
+dependencies, challenge, approval deadline, state and result digest. These are
+logical fields, not a new ad hoc wire format. A phone signature binds the exact
+operation and expected target state; the phone derives its summary from
+validated fields and trusted identity, not app-supplied marketing text.
+
+Use durable states `requested -> awaiting-approval -> authorized -> executing
+-> applied | failed | cancelled | outcome-unknown`. Persist before acknowledging
+a durable transition. Consume approval nonce and operation atomically. Recheck
+authority, generation, content hash, state revision and expiry at execution and
+before irreversible commit. Use downstream idempotency IDs and reconciliation;
+never blindly retry an uncertain destructive effect. Concurrent admin edits
+use compare-and-swap and display changed state.
+
+Index derived authority: companion/MCP/build tokens, jobs, browser actions,
+downloads, streams, secret handles and conversations. Parent revocation
+invalidates children and actively cancels open work, not just future HTTP
+handshakes. If a migration crosses an irreversible commit, finish safe cleanup,
+block new work and report actual outcome. Revocation cannot retract already
+delivered data or undo external side effects. Initial target: enforce within
+five seconds on reachable local components; offline components show pending
+with N07 freshness deadline. Store revocation epochs outside ordinary app
+rollback.
+
+Use authenticated time/generation checkpoints for grants, recovery, boot leases
+and update metadata. Track monotonic time during boot and durable authenticated
+time across reboot. Backward wall-clock movement cannot extend authority;
+forward movement cannot complete recovery silently. If software-only restore
+cannot establish time, pause time-sensitive authority and offer native recovery.
+Unauthenticated NTP or HTTP Date alone cannot decide a privileged deadline.
+
+UX: one per-service Access and permissions page lists grants/children, scope,
+expiry, device and Revoke; offer “stop this service and revoke its access.”
+Secret-reading access is separate from ordinary read/GET. Acceptance: mutate an
+approved payload, revoke during build/migration/browser/stream, race admins,
+crash at each commit point and restore old state; prove scoped success and
+cross-service denial.
+
+### 18.6 N06 — Complete the keyless-web migration
+
+Inventory browser key generation/import/export, unwrap, recovery, signing,
+backup and cross-device flows (`recovery.js`, `keyfile.js`,
+`keyfileBackup.js`, companion handoff included). Move usable setup/recovery and
+keyfile workflows to native phone flows before removing web paths; document a
+second supported native-device route so owners without a working phone are not
+stranded. Rotate/revoke previously browser-held authority; deleting local
+storage does not revoke stolen copies. Clear obsolete worker caches only after
+a verified native transition and keep recovery for offline clients.
+
+No private signing, identity, recovery, authorization or channel-encryption key
+may exist in website JavaScript, even ephemerally. In particular, move the
+companion QR handoff ephemeral X25519 private key to a reviewed native-assisted
+flow. Web may relay opaque ciphertext or a short-lived scoped bearer ticket,
+not private key/plaintext. Phone signs every required action after biometric
+approval. Browser TLS keys are not website JS keys.
+
+Treat bearers as sensitive authority: hash at rest if redisplay is unnecessary;
+session lists show opaque IDs; audience/service/operations/lifetime are narrow;
+revoke token families with parent device/grant. Remove long-lived URL tokens.
+WebSockets use an authenticated single-use short-lived upgrade ticket bound to
+route/session/service/Origin, atomically consumed and redacted from logs. Evaluate
+HttpOnly cookie/BFF only with CSRF protection; CORS is not authentication.
+Bind `postMessage` to exact origins/windows/nonces; isolate owner/Remote UI from
+app origins, restrictive CSP, no third-party scripts on approval screens, safe
+diff/name rendering and content-free pushes. Document that compromised web
+hosting/service worker can misrepresent UI or steal browser-visible sessions,
+while phone verification still protects signed actions.
+
+Acceptance: inspect every browser-visible flow; test stolen/replayed tickets,
+Origin mismatch, cancelled phone approval, stale worker, revocation during a
+WebSocket and final-device recovery. No prohibited private key reaches web JS.
+
+### 18.7 N07 — Freshness, propagation and exclusive leadership
+
+Signed entries prove who authored them, not that a newer withdrawal is absent.
+Keep ordinary convergence, but separately define current authorization. Each
+authenticated checkpoint binds app installation, authority epoch, ordered
+policy revision, revocation digest, leader term and freshness deadline. Verify
+underlying owner/device signatures; the lead cannot invent membership. Use
+causal revisions/conflict rules, not unbounded wall-clock last-writer-wins or a
+peer-supplied far-future timestamp.
+
+External guest/revocable permissions work only while the box holds a current
+authenticated lease for that exact policy revision. On expiry, fail closed for
+affected external access while preserving local owner control and app data.
+Known local revocation is immediate. Duration must be chosen through a protocol
+and outage threat model, not an unexplained five-minute default. Show which
+replicas may still have old state and the actual deadline.
+
+For every replicated security document (app-access list, browser URL allowlist,
+adapter trust and others), display propagation lights bound to exact document
+digest and replica: green for human devices, blue for servers, dark until
+acknowledged, bright when that replica confirms. Distinguish offline/pending/
+failed; never infer safety from dark or global freshness from bright. New edits
+cannot inherit acknowledgements for old digests; retain history. Lights aid
+operators but do not replace expiry enforcement. If a replica cannot refresh
+before its lease expires, affected external access pauses. Preserve enrolled
+owner local/native management and recovery during cloud outage.
+
+Cross-user chat requires an exclusive lead term, not the highest gossip rank.
+Multiple boxes need a persisted majority lease/term with explicit membership
+and non-overlapping leases; singleton persists term locally. Planned handover
+fences old lead. Loss of quorum stops new cross-user admissions, while local
+messaging remains available; queued apps retry with bounded backoff. Catastrophic
+replacement needs phone-authorized new term and former-authority expiry/fencing.
+Clock drift and lease assumptions are protocol-reviewed. Generation alone
+cannot instantly stop an isolated former lead. Keep high-water marks outside
+restored service data; if every witness is lost, enter explicit recovery, never
+guess freshness. The lease refreshes authority without expiring the user's
+conversation-lifetime Allow or prompting again.
+
+Acceptance: partition/restart a replica after access removal; verify guest use
+stops after freshness expiry and resumes only after current revision. Test two
+leads, clock jumps, stale checkpoints, regrant ordering, forced replacement and
+propagation UI (“pending on one offline server,” not “revoked everywhere”).
+
+### 18.8 N08 — Chat receiver safety and abuse controls
+
+Preserve §16.6–§17.8: no admin prompt for local sends/listeners; foreign send
+approval before app delivery when a listener exists; silently drop with no
+listener; one cross-user logical target `author--app.targetuser` resolved to
+lead; no sender-selected server; three different random IDs; invitation proof;
+one active invitation conversation; no self-delivery; no false identity claims.
+
+Permissionless delivery is not delegation of receiver powers. Messages are
+untrusted data; reply is voluntary. A listener cannot use chat to borrow the
+receiver's files, credentials, browser grant or outbound network permission.
+Privileged RPC needs the receiver app's own explicit policy/capability. Provide
+SDK examples that do not feed bodies to system instructions or execute URLs/
+commands automatically. Trusted envelope fields (derived local identity,
+remote claimed author/slug, verified access/rank metadata, time) are separate
+from raw body. Remote author/slug is always a claim; filter text never proves
+publisher identity. Scope local identity to installation/runtime generation.
+If regex filters exist, use bounded non-backtracking evaluation and length/
+complexity limits; start with explicit literal/glob semantics.
+
+Bind routes to installation/runtime generation, grant dependency, peer key,
+direction, lead term and close state. Use bounded monotonic replay counters per
+direction and bounded replay window. Persist counters with restored channel
+state or create a fresh channel generation. Retries reuse idempotency IDs and
+do not duplicate within promised dedup window; do not promise exactly-once app
+effects. Keep local conversation ID only in its app, wire ID between harnesses,
+other app's ID private. IDs prevent guessing, not routing-table corruption.
+
+Challenge/listener checks must not create an app-existence oracle. Initial
+acceptance comes from a bounded local queue, independent of remote listener,
+approval or delivery. A challenge is stateless/authenticated or equivalently
+bounded; check listener before retrieving/consuming proof or alerting. Remote
+outcomes use generic acceptance. Duplicate-slot warning is the narrow exception
+after valid proof of that visitor's own slot. Do not expose delivery/read status.
+
+Rate-limit across local app, peer key, receiving installation, source network
+and host resource pool; claims can be invented and keys rotated. Bound starts,
+bytes, pending approvals, fan-in, proof work and body lifetime before expensive
+work. For unanswered-message abuse use absolute volume plus ratio/growth and
+feedback, gradual cooldown; reply rate is not proof of innocence and silence
+alone is not spam. Coalesce alerts and offer receiving-service Block/Mute while
+preserving legitimate fire-and-forget behavior and emergency owner actions.
+Recognition phrases are admin-only, encrypted, safely rendered up to 30 chars;
+six digits are a human hint, never cryptographic authentication. Keep wire IDs,
+peer coordinates and phrases out of models and ordinary logs. Cross-user
+transport must protect bodies end-to-end from relays; routing metadata can still
+reveal relationships and must be minimized/log-protected.
+
+Once implemented, update `llm/systemPrompt.ts`, builder SDK and adaptation
+guidance together with local sends, safe filters, cross-user approval, invite
+proof, first-contact silence, lead-loss, safe RPC and spam etiquette. Use sample
+identities only; never reveal owner/account/server placement or installed-app
+inventory. Do not advertise unavailable APIs. Document local chat as a data
+channel in app capability descriptions and offer listener pause/block controls
+without initial-send prompts. A willing peer can share data it legitimately
+holds; the platform must not promise non-exfiltration through permitted peers.
+Acceptance includes confused
+deputy, regex exhaustion, forged labels, proof relay, sibling/lead bypass,
+missing-listener oracle, replay, crash/reset, mid-channel revocation, alert
+flood and legitimate high-volume local-message tests.
+
+### 18.9 N09 — Restore is a new execution/admission event
+
+Inventory backups separately: app data/code, provider credentials, recovery
+material and operational security state. Generic restore never restores session
+tokens, consumed nonces, old leader leases, browser grants or current authority.
+New hardware gets a new box identity. Portable apps own and document their
+export/import boundary; credentials/sessions/authority are reconnected or
+reissued separately. See §16.7 for app archive/signature/session rules.
+
+Verify archive authentication, version, scope and manifest before activation.
+Extract in disposable unprivileged quota-limited storage. Allow expected file
+types/paths only; reject duplicates, conflicting normalization, links escaping,
+devices and ambiguous sparse files. Bound manifest size, file count, expanded
+bytes, nesting, decompression work and time before writing. Compare every part
+with the complete manifest; reject missing/duplicate/unexpected parts. Integrity
+does not prove benign content. Preflight space and reserve recovery capacity.
+Pin executable image digests; tags cannot resolve to new code silently.
+
+Restore DB as target app's constrained role. Cluster-admin dumps and Forgejo
+repositories require separate isolated pipelines: never execute foreign SQL as
+production cluster admin or extract untrusted tar to host paths. Audit triggers,
+functions, hooks and executable metadata before starting with new credentials.
+Restore permissions only as inert drafts, reconcile fresh signed revocations,
+deny stale guests until §18.7 catch-up, rotate tokens/browser sessions/copied
+provider credentials on scope/owner change, and never revive boot leases/chat
+IDs. Summarize recovered data, code version, reconnects, permissions awaiting
+approval and failed parts. Atomically activate coherent code/schema/data;
+retain old working data until owner confirms; rollback never rolls authority
+back. Use application checkpoint/quiesce for DB+files or disclose inconsistency.
+
+Backups need independent recovery copies whose deletion credentials are
+unavailable to app/daemon workloads, tested restore drills and owner-controlled
+offline/native recovery if cloud/release services fail. Restore wizard reviews
+at service level, not per file. An app archive install is one option only if
+missing today; server-archive restore is separate. Show the archive's declared
+contents before import and offer data export if safe executable restoration
+cannot be completed. Keep its password/key native and out of model inputs.
+Sensitive sessions require
+explicit approval and native archive key custody. Acceptance: hostile archive,
+oversize/duplicates, symlink swap, SQL/functions, hooks, old tags, partial
+restore, full disk, power failure and revoked-user backup; data rollback cannot
+revive revoked tokens. PostgreSQL executable restore warning:
+https://www.postgresql.org/docs/17/app-pgrestore.html.
+
+### 18.10 N10 — State honestly what lock/lease revocation can revoke
+
+Deleting an online lease prevents future retrieval from an honest boot worker;
+it does not invalidate a copied sealed lease plus its decryption key or disk
+plaintext captured while unlocked. A database expiry is not cryptographic
+expiry of downloaded bytes, and attacker-controlled software boot can ignore
+local expiry. Distinguish shutdown, boot-service suspension and hardware/profile
+guarantee in UI. Inventory sleep, hibernation, crash dumps, recovery media and
+alternate LUKS slots. Never promise revocation of stolen plaintext.
+
+For hardware-backed auto-unlock, prototype fresh per-boot authorization bound
+to TPM-attested measured state, ephemeral unlock-session public key, nonce,
+boot epoch and suspension generation. Seal disk secret so release requires
+current authorization; use a reviewed TPM policy resistant to replay, state
+rollback and power loss, not a nonce in JSON. Boot worker never receives
+plaintext disk key. Software-only devices may retain phone approval and durable
+remote suspension with an explicit weaker guarantee against captured secrets.
+Running-OS compromise remains out of scope. Rate-limit authenticated STK
+suspension writes and reject generation overflow/jumps so stolen STK cannot
+permanently block owner resume; only owner/admin starts a valid new epoch.
+Review owner/admin resume, STK set-only suspension, shared/co-manager unlock,
+recovery media and offline keys together. App overrides and share/access ranks
+cannot clear suspension.
+
+Acceptance: capture a pre-lock lease, suspend, remove markers and replay across
+profiles; record remaining replay. Test old TPM state, copied disk, hibernation,
+LUKS slots, shared unlock, clock rollback and interrupted resume on real hardware
+for hardware claims.
+
+### 18.11 N11 — Identity, publisher pins, forks and update continuity
+
+Resolve friendly `author--app.targetuser` to immutable publisher/app identity,
+account generation and installation ID. A rename/reclaim cannot inherit old
+releases, invites, secrets or chat routes. Pin resolved target for a conversation;
+remote author/slug stays a claim. Every bundle signature covers exact package
+digest, canonical permanent identity, version and capability manifest. Persist
+first verified publisher key/key epoch per server. Same-name different-key
+package is rejected unless a valid continuity chain exists; Flagship cannot
+silently create a new identity under retired name. Even a valid rotation chain
+requires a per-service high-salience warning and phone-signed approval before
+new key/code/data access. Show old/new fingerprints and continuity status;
+offer “Trust this new key for this service” / “Reject and pause updates.” Keep
+sliver for severity duration; candidate key cannot replace code or access data
+before approval. Lost old key without continuity means new identity.
+
+Verified update from same pinned publisher and installation lineage preserves
+runtime data, separate browser context and sessions; this is a trust decision
+that publisher code may use retained data/capabilities. Capability expansion
+still needs approval. New-server restore is a new installation unless explicit
+app export transfers declared state; app owns session serialization. Uninstall
+deletes all app-specific state and does not delete durable publisher pin (system
+identity metadata). Never leave hidden quarantine/recently-deleted app content;
+offer export before final uninstall confirmation. Retain only minimal, scoped
+non-content revocation tombstones to prevent stale authority/name reuse.
+
+Offer manual, staged, automatic update modes per service, manual preselected.
+Auto-apply only exact verified same-key updates within approved capabilities;
+key change, capability growth, integrity/provenance error pauses. Roll back only
+to signed code meeting active security floor/schema. Signature proves publisher
+and bytes, not good intent. Upstream sync for locally signed forks is an explicit
+proposal under §16.7, not an app-update mode. Keep app origins bound to verified
+identity with new generation for new identity; use host-only secure cookies and
+isolate management UI from app origins. Verify public-suffix assumptions; do
+not rely on sibling hostnames or clearing an offline visitor's browser storage
+to establish the boundary. Uninstall deletes app files, DB, browser context,
+sessions, credentials/secret handles, runtime/API tokens, pending approvals,
+listeners, chat slots, subscriptions, code/build artifacts and route ownership.
+Document scope/retention of the minimal non-content identity/revocation records.
+
+Acceptance: modes/default, same-key session persistence, new-key stop, warning
+and signed approval, uninstall deletion with pin retention, export/import as
+new install without authority, cross-account restore, retired-name attempt,
+key alert, no pre-approval update and old-origin revisit.
+
+### 18.12 N12 — Build/model boundary, credentials, and provenance
+
+Preserve staging: models use sample data, never live service data; redact every
+box-written result/tool output. Treat repository text, adapters, browser content,
+logs and chat as hostile data, not instructions. Enforce capabilities at every
+tool/broker, including indirect calls. Build workers stay outside daemon
+authority: no live data/provider keys/signing credentials/Docker socket/shared
+writable cross-tenant cache. Network-limited builds still run compiler and
+dependency scripts. Prefer isolated rootless workers; consider microVMs for
+hostile cross-tenant creators. Publish isolation profile honestly. Promotion
+binds exact bytes, source, adapter digest, toolchain, tests and capabilities;
+never rebuild after approval.
+
+Typed on-box credential brokers return handles constrained by provider/account/
+operations, destination/TLS identity/method/size/cost; strip credentials across
+redirects and never forward a provider token to another base URL. Raw API key is
+an explicit exception with warning that app can copy it; it never grants
+account/admin/box keys. Revocation may require provider rotation.
+
+Adapter AI review is an attestation, not authorization. Bind Flagship-signed
+attestation to exact input digest, base revision, validator/model version and
+test evidence; revoke as needed. Per-service manual mode or indefinite trust of
+exact currently attested digests is allowed. Changed digest without attestation
+requires manual acceptance; pending/failed/expired review is not “vetted.”
+Signature/integrity errors and sandbox violations are hard failures, not
+warnings a user can waive. Official means authenticated upstream control, not
+popularity/safety. Unchanged adapter digest avoids repetitive prompts; new
+upstream app version gets capability diff, compatibility and update decision.
+Apply patches transactionally; ambiguous anchors/partial patches fail. Keep
+searchable public community-adapter directory (project, maintainer/adoption
+path, license, digest, supported versions, honest status) without owner install
+counts, private repo details or submitter identities. Support upstream adoption
+and official manifest; never let adapter JSON grant host access or read other
+service data.
+
+For imported/edited apps, the local owner is the signer; retain upstream URL,
+publisher, base commit and authentication status as provenance. Sync is explicit:
+fetch a specific verified candidate; compare base and local diff; build/rebase
+only in isolated staging; show source/capability/adapter/data/schema effects,
+conflicts and tests. AI repair needs per-operation consent after provider and
+reasonable cost/credit estimate if using user key or paid quota. The exact
+staged artifact gets separate owner promotion approval. Failure leaves live app
+and data untouched; discard or explicitly label staging. Health rollback is
+atomic and never reverts revocations. Acceptance: Git import/fork signer and
+lineage, clean/conflicting rebase, paid-key consent, no live mutation on failure,
+exact artifact promotion and rollback preserving authority.
+
+Also test malicious build scripts and model tool calls, shared-cache poisoning,
+provider credential leakage on redirects, and unchanged adapters across
+compatible upstream releases. They must not expose live data or host authority,
+alter approved artifacts, or evade capability-expansion approval.
+
+### 18.13 N13 — Resource reserve, safe rollout and incident operations
+
+Budget unauthenticated sockets, handshakes, queues, signature checks, DNS,
+decompression, browser tabs, builds, DB, inbox, disk bytes/inodes, logs and
+pending alerts per service and host; per-IP alone fails shared networks and
+distributed attackers. Enforce before expensive work. Reserve CPU/memory/disk
+and management lane for native lock/revoke/recovery; an app cannot consume last
+space needed to persist revocation. Load-test pausing a spammed app without
+disabling unrelated apps. Owners may tune budgets with hard device limits shown;
+these caps are not payment gates.
+
+Maintain compatibility matrix (phone, box, boot worker, web shell, helper,
+protocol, verifier); deploy verifying receivers before issuing clients/enforcing
+minimum versions. Test mixed versions. Unknown grants/signature versions never
+fall back to legacy broad authority. Separate minimum-security from preferred
+version. Health rollback only to code meeting floor/schema; otherwise preserve
+data and enter restricted recovery with signed artifact. Never roll back
+revocations. Authenticate floor metadata with purpose/generation/expiry and
+dedicated release authority; defend against compromised cloud bricking devices
+with threshold roles and offline recovery. Stale update catalog blocks new
+updates, not unrelated local apps. Use established update-metadata framework
+(for example TUF roles/freshness/root rotation) rather than one signed URL.
+
+Track verified artifact/config running on consenting boxes. Signed local event
+records include grant/operation states, signer role, digests, revocation epochs
+and result, but never bodies/tokens/phrases/keys/private source. Phone-held
+checkpoints detect some rollback; root-compromised box may suppress logs, so do
+not call logs tamper-proof. Native preview/export requires owner consent. Incident
+actions are scoped (pause service, revoke grants, rotate provider key, isolate
+box, distribute signed artifact); no general operator remote execution/plaintext
+inspection channel. Test release-key loss, malicious CI, backup deletion/cloud
+outage with dated receipts. Run `npm run rate-limits` per AGENTS.md weekly and
+before launch; stage cohorts and define rollback/data criteria. No production
+probes or secret disclosure during document work.
+
+### 18.14 N14 — Human-control defaults, security sliver and evidence
+
+Normal path: app declares useful powers; harness derives concise truthful
+explanation; phone approves meaningful scope; app runs without recurring
+prompts within scope. Requests expanding scope appear in one inbox and per-app
+permission page. For each approval show verified service/publisher when known,
+requested action/data/destination/duration and undo path. Claimed remote names
+remain claims; app explanation cannot rename target or suppress warning. Reject
+deceptive controls/bidi in names; low-level IDs/digests are expandable details.
+Offer Allow once/session/remember where meaningful; conversation Allow keeps
+its agreed lifetime. Denial cooldown prevents repeated phone interruption.
+
+The top-of-app security sliver is persistent and independent per issue: CA
+expiry, recovery/veto, publisher-key rotation, offline replicas delaying policy,
+major trust/permission change. Each line carries severity, affected target,
+state, last update, deadline/action and time remaining. Grow to fit all lines;
+on short screens allow scroll but never merge/truncate them. Active items remain
+until resolved; then retain critical 90d, high 30d, moderate 14d, low 7d.
+Acknowledgement/approval does not shorten/reset. Severity comes from platform,
+not app. Escalation creates new higher-severity event; expiry only removes from
+sliver, not audit history. Avoid repeat push for unchanged condition. Test
+several severities and independent clocks, including after approve/reject.
+
+Default per-service controls: community adapter manual or indefinitely trust
+exact Flagship-attested digests; creator updates manual preselected, staged or
+automatic same-key/in-scope; browser listed sites or optional public web; local
+network exact device or revocable whole LAN; companion read-only with scoped
+delegation; local chat/listeners no prompt; cross-user Allow/Always allow under
+§17; offline guests fail closed at freshness expiry with propagation lights;
+software-only profile explicitly weaker; restored legacy app isolated first.
+Malformed signatures, invalid integrity and broken isolation have no ordinary
+override. Dangerous but supported scope (public web, broad LAN, unvetted adapter)
+may be explicitly accepted with warning where §§16–17 say so.
+
+Recovery, trusted-device loss and biometric failure remain native/documented;
+do not silently replace biometric signature with unlocked browser or device-
+unlock-only approval. Accessibility or alternate biometric policy changes need
+owner review. Report outcomes accurately: accepted != delivered; shutdown sent
+!= power confirmed; revoke stored != every offline replica current. Acceptance
+includes durability, timeouts, durations and UI parity on supported clients.
+
+### 18.15 Cross-cutting work sequence and acceptance matrix
+
+Use dependency waves, not a reason to defer live P0s:
+
+1. **Targeted containment:** reachable P0s plus N01 parser, N02 classifier/
+   dialer and N03 recovery signatures. Prove ingress and actual dial paths.
+2. **Authority foundation:** N04 recovery device authority, N05 transaction and
+   revocation engine, N06 native/keyless migration, N07 freshness/lead fencing.
+   Exercise mixed-client and real-device recovery.
+3. **Workload/data:** N09 restore, N11 identity lifecycle, N12 build/secret
+   provenance; complete migration/browser/helper boundaries from §§10/17. Run
+   hostile archive/build/migration tests on appliance and restore drills.
+4. **Communication:** N08 local SDK then cross-user lead/invitation admission
+   and abuse controls. Preserve no-prompt local/invited paths. Marketplace
+   identity dependency remains on the correct feature branch.
+5. **Physical/operations:** N10 replay-resistant TPM work and N13 resource,
+   rollout and incident drills. Hardware claims need dated hardware evidence.
+
+For every grant/operation test authorized success, cross-service/install
+generation, revoked/expired parent, changed payload, replay, concurrency,
+cancelled phone prompt, unknown protocol, missing config, power loss/full disk,
+stale restore, offline peer and malicious cloud metadata. Test shared vectors on
+TypeScript/Swift/Kotlin, native approval/recovery, browser contexts, Linux
+network namespace, and privileged helper on real platforms. A unit boolean is
+not evidence production wiring calls it. Exercise TLS, native pinning, ingress,
+stream/WebSocket, relay and LAN together. Measure approval frequency, repeated
+denials, revocation latency, stale-policy expiry, restore success, false network
+blocks and management latency using privacy-minimal metrics; improve UX without
+disabling enforcement.
+
+Assign a named engineering owner and reviewer to each work package. N04's
+device-authority/recovery protocol, N07's majority leases, membership changes,
+freshness durations and clock-drift bounds, and N10's TPM authorization policy
+require focused design review and working prototypes before their guarantees
+can be claimed. Those are engineering deliverables, not settled wire protocols
+in this recipe. Revalidate dated runtime/CA advisories against official sources
+before selecting the shipped runtime floor.
+
+Implement launched-feature fixes on the approved path to `main`; unlaunched
+feature code remains on its own branch. Marketplace-dependent chat work needs
+a compatible dependent branch. Do not move unrelated multilingual work or
+untracked files as part of implementing this plan.
+
+### 18.16 Evidence and review confidence
+
+“Reproduced” means a small local, non-network check exercised the actual module.
+“Observed” means the behavior is visible in the inspected source. “Design gap”
+means an invariant is missing or underspecified; it is not an exploit claim.
+
+| Evidence | Observation | Limits of the conclusion |
+|---|---|---|
+| E01 — reproduced | `egress/policy.ts:isPublicAddress` returns true for `0:0:0:0:0:0:0:1`, `::ffff:7f00:1` and `::ffff:a00:1`, although these represent loopback/private destinations | Confirms a classifier defect. No live SSRF or production reachability was tested; resolver normalization and downstream routing affect exploitability |
+| E02 — reproduced | `runtime.ts:_handleHttpConnectionForTest` dispatches one complete request twice if another byte arrives while its async handler is pending | Confirms duplicate dispatch. Which operations can be repeated depends on downstream authorization/idempotency |
+| E03 — observed | The daemon parser buffers input without the explicit head/body limits and deadlines present in `appConnection.ts`; it overwrites duplicate headers and uses permissive `parseInt` for Content-Length | Requires front-to-back framing and denial-of-service tests; not a demonstrated request-smuggling exploit |
+| E04 — observed | `buildmodes/gitImport.ts` validates DNS, then invokes host `git clone` by name; the shown path does not bind Git's eventual connection to the checked address | A check/connect and redirect gap to test. No live rebinding attempt was made |
+| E05 — observed | `accessSync.ts` stops catch-up after the default 120 seconds when no peer is known live, then serves its local list | Existing availability choice can expose stale rights after partition; entries themselves are independently verified, which should be preserved |
+| E06 — observed | `rePair.ts:handleObjectRePair` verifies the incoming/new IRK and explicitly implements self-cancel, not the agreed existing-admin veto | A concrete mismatch between current code and desired behavior; other endpoint surfaces still need an inventory |
+| E07 — observed | `adminAuthorityLocal.ts` accepts the bare pinned admin root directly; `recovery.js` and the recovery store support a wrapped admin root | Merely marking a recovered phone pending cannot constrain someone who can produce otherwise-valid root signatures |
+| E08 — observed | `webauthnRecovery.ts` verifies an upload claim over username, credential ID, wrapped-UMK hash and time, while storing fetch-token hash, PRF-salt hash, wrapped admin root and wrapped ACME key outside that claim | Signature coverage gap. Tampering need not decrypt anything to break or alter recovery; account takeover was not reproduced |
+| E09 — observed | `pairedSessionStore.ts` accepts `?sessionToken=...`; `screens/screensWs.ts` documents that transport; browser profiles persist tokens | More exposure through URL-bearing systems. No token leakage incident is claimed |
+| E10 — observed | `serverArchive/restore.ts` already rejects unexpected entry types/paths and checks part hashes, but its small-metadata reader accumulates bytes without a local size cap and its path map does not reject duplicate entry names | Preserve the existing guards; add bounded parsing and uniqueness. No malicious archive was executed |
+| E11 — observed | `appCopy/ops.ts` restores as an app DB role, but `volumeDump.ts` also has cluster-admin SQL restore and host-side Forgejo tar restore | Different trust levels need different restore pipelines; authenticated backup does not establish benign SQL/files |
+| E12 — observed | Boot auto mode fetches a reusable sealed LUKS key and locally unseals it using the STK; `boot-stage.sh` documents the `/boot` key | Server refusal cannot invalidate an already obtained ciphertext plus its decryption key |
+| E13 — observed | The egress proxy authorizes initial SNI/HTTP Host and then splices the stream; DNS forwarding sends the accepted query onward; IPv6 firewall installation failure is caught and logged | These are connection-level controls with deployment assumptions, not comprehensive HTTP/data-flow mediation |
+
+Paths in this table are under `packages/server-daemon/src/` unless otherwise
+named: recovery handlers are under `packages/control-plane/src/`, browser
+recovery is `apps/web/public/webapp/lib/recovery.js`, and boot paths are
+`installer/boot-stage.sh` and `packages/boot-core/src/routes.ts`.
+
+Useful controls already present must survive the work: app-scoped DB restores;
+archive path/type checks and hashes; egress dialing the checked numeric address
+in its own proxy; stripping incoming `X-Flagship-*` headers; per-app connection
+limits; canonical-field separator checks; and independent verification of
+replicated access entries. `rePair.ts`'s implementation already fails closed
+when TOTP verification lacks its KEK, despite stale comments suggesting a
+structural fallback. Do not report that stale comment as a live bypass.
+
+Re-run these checks against the release commit before fixing/releasing and add
+adversarial integration tests. The additional review's baseline
+was local commit `97095cff30d14a1618175ec10098d901b76c531c` on
+`feat/multilingual`; branch/deployment may differ. Current dated Node/CA
+assertions must be verified against official release evidence before choosing
+the shipped runtime floor; do not freeze a dated version forever.
+
+### 18.17 Focused regression seeds
+
+These are compact local reproductions, not network tests or production exploit
+claims. Preserve the original test harness if it is more stable than these
+commands.
+
+Address classification (expected public-only classifier result in parentheses):
+
+```sh
+node --import tsx --input-type=module -e '
+import { isPublicAddress } from "./packages/server-daemon/src/egress/policy.ts";
+for (const ip of ["::1", "0:0:0:0:0:0:0:1", "::ffff:127.0.0.1",
+                  "::ffff:7f00:1", "::ffff:a00:1", "2606:4700:4700::1111"])
+  console.log(ip, isPublicAddress(ip));
+'
+```
+
+Observed before fix: `false, true, false, true, true, true`; the second,
+fourth and fifth results are wrong. Correct behavior rejects all loopback and
+private representations while accepting the public IPv6 test address.
+
+Duplicate dispatch with a pending handler:
+
+```sh
+node --import tsx --input-type=module -e '
+import { Duplex } from "node:stream";
+import { _handleHttpConnectionForTest as attach }
+  from "./packages/server-daemon/src/runtime.ts";
+const socket = new Duplex({ read() {}, write(_c, _e, cb) { cb(); } });
+let calls = 0;
+attach(socket, async () => { calls++; return new Promise(() => {}); });
+socket.emit("data", Buffer.from(
+  "POST /probe HTTP/1.1\r\nHost: example.test\r\nContent-Length: 1\r\n\r\nx"));
+socket.emit("data", Buffer.from("y"));
+console.log({ completeRequestsSent: 1, handlerInvocations: calls });
+socket.destroy();
+'
+```
+
+Observed before fix: `{ completeRequestsSent: 1, handlerInvocations: 2 }`.
+Required result is exactly one handler invocation with bounded handling of
+trailing input.
+
+Completion requires code and operations to pass these evidence gates on
+supported configurations, the approved useful integrations to work, and
+external security claims to match actual limitations. Neither document review
+nor this consolidated recipe proves the product secure.
