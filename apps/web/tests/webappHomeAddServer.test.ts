@@ -22,7 +22,7 @@ function fakeRoot() {
   };
 }
 
-describe("who sees Add/Restore server", () => {
+describe("who sees Add / Restore a server", () => {
   it("a device holding the admin root does", () => {
     expect(canAddServers({ adminRootSeed: new Uint8Array(32) }, {})).toBe(true);
   });
@@ -38,11 +38,12 @@ describe("who sees Add/Restore server", () => {
 });
 
 describe("the empty Home", () => {
-  it("offers an admin device the same Add/Restore server button, wired to the menu", () => {
+  it("offers an admin device the same Add / Restore a server button, wired to the menu", () => {
     const root = fakeRoot();
     renderEmptyServersList(root, { reason: "no-servers", username: "plucky-avocet", canAdd: true });
     expect(root.innerHTML).toContain("Your account is ready");
-    expect(root.innerHTML).toContain('id="home-add-server">+ Add/Restore server<');
+    expect(root.innerHTML).toContain('id="home-add-server"><span class="icon" aria-hidden="true">');
+    expect(root.innerHTML).toContain("<span>Add / Restore a server</span></button>");
     expect(root.innerHTML).not.toContain("empty-create-server");
     expect(root.innerHTML).not.toContain("empty-co-manage");
     expect(root.innerHTML).not.toContain("Co-manage a running server");
@@ -69,9 +70,9 @@ describe("the empty Home", () => {
 });
 
 describe("the populated list", () => {
-  it("shows Add/Restore server and Take over only to an admin device", () => {
+  it("shows Add / Restore a server and Take over only to an admin device", () => {
     expect(VIEW).toMatch(
-      /\$\{canAddServers\(\) \? `<button class="secondary" id="home-add-server">\$\{escapeHtml\(ADD_IMPORT_LABEL\)\}<\/button>\s*<button class="linklike mt-1" id="home-take-over">/,
+      /\$\{canAddServers\(\) \? `\$\{addRestoreButtonHtml\("secondary"\)\}\s*<button class="linklike mt-1" id="home-take-over">/,
     );
   });
 

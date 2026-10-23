@@ -66,7 +66,7 @@ import {
   serverOrderOf,
 } from "../lib/serverOrder.js";
 import { preferLeaderAsCurrent } from "../lib/appPlacement.js";
-import { ADD_IMPORT_LABEL, openAddOrRestore } from "./import-backup.js";
+import { addRestoreButtonHtml, openAddOrRestore } from "./import-backup.js";
 
 import { tr, trn } from "../lib/i18n.js";
 registerView("view-home", { tab: "home" });
@@ -611,7 +611,7 @@ export { canAddServers, ADD_SERVERS_ADMIN_ONLY };
 
 const TAKE_OVER_LINK = tr("Someone handing you a box? Take over →");
 
-/** Home's one way to bring a server in: "Add/Restore server" opens the
+/** Home's one way to bring a server in: "Add / Restore a server" opens the
  *  Create / Co-manage / Restore menu, whether or not the account has servers. */
 const addServerSettle = createSettleGuard();
 let addServerSettleObserver = null;
@@ -672,8 +672,8 @@ function wireTakeOver(root) {
  *
  *  An account is an IDENTITY, not a server (docs/login-and-account-redesign.md):
  *  once it is open (a username is claimed + bound to this device key), zero
- *  servers is the normal state. An admin device gets the same "Add/Restore
- *  server" button as a populated list; any other device of the account is
+ *  servers is the normal state. An admin device gets the same "Add / Restore
+ *  a server" button as a populated list; any other device of the account is
  *  told only an admin device can add one. With no account yet (no username /
  *  mid-pair), "Create a server" opens the account first.
  */
@@ -698,7 +698,7 @@ export function renderEmptyServersList(root, { reason, username, canAdd = canAdd
       ? tr("Pair the webapp to your phone or pod first, or jump straight in and build a fresh server.")
       : tr("Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.");
   const action = accountOpen
-    ? `<button class="primary full-width" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}</button>
+    ? `${addRestoreButtonHtml("primary full-width")}
       <button class="linklike mt-2" id="home-take-over">${escapeHtml(TAKE_OVER_LINK)}</button>`
     : `<button class="primary full-width" id="empty-create-server">${tr("Create a server")}</button>`;
   root.innerHTML = `
@@ -1235,7 +1235,7 @@ function renderServerCards() {
     <div class="fs-hero-compact" data-home-compact aria-hidden="true">${tr("Servers")}</div>
     <div class="fs-hero">
       <h2 class="fs-hero-title" data-home-title>${tr("Servers")}</h2>
-      ${canAddServers() ? `<button class="secondary" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}</button>
+      ${canAddServers() ? `${addRestoreButtonHtml("secondary")}
       <button class="linklike mt-1" id="home-take-over">${escapeHtml(TAKE_OVER_LINK)}</button>` : ""}
       ${searchField({ value: homeQuery, placeholder: tr("Search servers"), id: "home-search" })}
       ${chipRow({ items: chips, selected: homeFilter, ariaLabel: tr("Filter servers") })}
@@ -1252,7 +1252,7 @@ function renderServerCards() {
  * old nodes + their listeners, so re-binding can't stack handlers).
  */
 function wireHomeListControls(list) {
-  // "+ Add/Restore server" (admin devices only): create a server, co-manage
+  // "Add / Restore a server" (admin devices only): create a server, co-manage
   // someone else's server from their share link, or restore from a backup.
   wireAddServer(list);
   // Tap a registered server card → open its detail screen. Clicks that

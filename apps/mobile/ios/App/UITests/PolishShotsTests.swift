@@ -136,8 +136,8 @@ final class PolishShotsTests: GymSweepCase {
     func test_settingsScreens() throws {
         let app = launch(tab: "settings")
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 20))
-        let rows = ["Account security", "AI keys", "Cloud recovery", "Back up account key", "Profiles", "Remote",
-                    "Companion requests", "Open secured sessions", "Process URL", "Peer backup", "Privacy", "About Flagship"]
+        let rows = ["Account security", "AI API keys", "Cloud recovery", "Back up account key", "Profiles", "Remote",
+                    "Companion requests", "Open secured sessions", "Peer backup", "Privacy", "About Flagship"]
         for (i, title) in rows.enumerated() {
             let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
             var tries = 0

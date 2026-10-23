@@ -174,7 +174,6 @@ public struct SettingsTab: View {
                     onOpenPeerBackup: { path.append(.peerBackup) },
                     onOpenCompanionDock: { path.append(.companionDock) },
                     onOpenSecuredSessions: { path.append(.securedSessions) },
-                    onOpenProcessUrl: { path.append(.processUrl) },
                     onOpenCompanionRequests: { path.append(.companionRequests) },
                     pendingCompanionWritesCount: pendingCompanionCount,
                     onOpenAbout: { path.append(.about) },
@@ -429,22 +428,10 @@ public struct SettingsTab: View {
                 )
             )
         case .scanPairingCode:
-            // Phase 3b — incoming side via the in-app scanner (no
-            // pre-filled URL → the screen shows the camera).
-            JoinAccountScreen(
-                vm: JoinAccountViewModel(relay: pairingRelay, server: server),
-                onJoined: { profile in
-                    app.addProfile(
-                        Profile(
-                            cloudName: profile.cloudName,
-                            accountId: profile.cloudName,
-                            deviceId: profile.deviceId,
-                            deviceDisplayName: profile.deviceDisplayName
-                        ),
-                        setActive: true
-                    )
-                }
-            )
+            // "Scan a code or enter a link": a scanned or pasted Flagship code
+            // or link goes through the deep-link router, so it opens the same
+            // screen a tapped link opens (a /join link: JoinAccountScreen).
+            ScanOrLinkScreen()
         case .joinAccount(let joinUrl):
             // Phase 3b — incoming side via a deeplink/universal link.
             JoinAccountScreen(
@@ -511,8 +498,6 @@ public struct SettingsTab: View {
             )
         case .securedSessions:
             SecuredSessionsContainer()
-        case .processUrl:
-            ProcessUrlScreen()
         }
     }
 }
@@ -686,7 +671,7 @@ struct PrivacyScreen: View {
                         .foregroundColor(c.text)
                 }
                 .tint(c.accent)
-                Text("On by default. Flagship asks you to unlock each time the app launches or returns from the background, so you stay signed in without re-entering your passphrase. Turn it off to open straight in. Either way your services keep running and your pods stay reachable — this only controls who can see and tap.")
+                Text("On by default: unlock each time the app opens or comes back, without retyping your passphrase. Off: it opens straight in. Your servers keep running either way; this only controls who can see and tap.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                 if let msg = pendingError {
@@ -707,7 +692,7 @@ struct PrivacyScreen: View {
                 }
                 .tint(c.accent)
                 .accessibilityIdentifier("privacy-require-passphrase-toggle")
-                Text("Off by default. When on, Flagship doesn't keep you signed in — each launch needs a full sign-in with your account passphrase, not just a quick unlock. The strongest option, and the slowest.")
+                Text("Off by default. On: Flagship never keeps you signed in; every launch needs your account passphrase, not just a quick unlock. Strongest and slowest.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
 

@@ -542,11 +542,11 @@ final class GymSweepBuildTests: GymSweepCase {
         expectNoProbe(app, "started chat")
     }
 
-    /// Settings → AI keys: "Make default" makes Flagship Inference the
+    /// Settings → AI API keys: "Make default" makes Flagship Inference the
     /// default for new builds, and the key step then marks it last used.
     func test_flagshipInferenceMakeDefault() throws {
         let app = launch(tab: "settings", ["-smoke-chat"])
-        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "AI keys")).firstMatch
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "AI API keys")).firstMatch
         XCTAssertTrue(reveal(app, row))
         row.tap()
         let make = app.buttons["free-ai-make-default"]

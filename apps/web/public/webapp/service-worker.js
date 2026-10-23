@@ -420,6 +420,8 @@ const OPTIONAL_SHELL = [
   "/vendor/noble-hashes/crypto.js",
   "/lib/push.js",
   "/lib/icons.js",
+  "/lib/flagshipLinkInput.js",
+  "/lib/noServerCard.js",
   "/lib/auditLog.js",
   "/lib/accountRead.js",
   "/lib/serverOrder.js",
