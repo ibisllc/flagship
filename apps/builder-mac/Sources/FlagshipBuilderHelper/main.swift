@@ -8,9 +8,15 @@ import FlagshipBuilderCore
 /// process spawned through the osascript auth trampoline), it runs in a
 /// clean root context that can open the raw device.
 
-let helperVersion = "1"
+let helperVersion = "2"
 
 final class HelperService: NSObject, FlagshipHelperProtocol {
+    private let clientUID: uid_t
+
+    init(clientUID: uid_t) {
+        self.clientUID = clientUID
+    }
+
     func ping(withReply reply: @escaping (String) -> Void) {
         reply(helperVersion)
     }
@@ -19,47 +25,68 @@ final class HelperService: NSObject, FlagshipHelperProtocol {
                     devicePath: String,
                     logPath: String,
                     withReply reply: @escaping (Int, String) -> Void) {
-        // Validate inputs defensively — this runs as root.
-        guard FileManager.default.fileExists(atPath: imagePath) else {
-            reply(-1, "image not found at \(imagePath)"); return
+        // This runs as root on strings from a client: open and check every
+        // object here, once, and use only what was opened (HelperPolicy).
+        let diskID: String
+        let image: (handle: FileHandle, size: Int64)
+        let log: FileHandle
+        let facts: HelperPolicy.DiskFacts
+        let systemDisks: Set<String>
+        do {
+            diskID = try HelperPolicy.wholeDiskID(fromNode: devicePath)
+            image = try HelperPolicy.openImage(path: imagePath, clientUID: clientUID)
+            systemDisks = try HelperPolicy.systemWholeDisks()
+            facts = try Self.facts(of: diskID, systemDisks: systemDisks, imageBytes: image.size)
+            log = try HelperPolicy.createLog(path: logPath, clientUID: clientUID)
+        } catch {
+            reply(-1, error.localizedDescription); return
         }
-        guard devicePath.hasPrefix("/dev/disk") else {
-            reply(-1, "refusing non-/dev/disk device: \(devicePath)"); return
-        }
-
-        FileManager.default.createFile(atPath: logPath, contents: nil)
-        let log = FileHandle(forWritingAtPath: logPath)
         func append(_ s: String) {
-            if let d = (s + "\n").data(using: .utf8) { log?.write(d) }
+            if let d = (s + "\n").data(using: .utf8) { try? log.write(contentsOf: d) }
         }
 
         append("FLAGSHIP_PHASE:write")
         do {
-            try DiskWrite.write(imagePath: imagePath, devicePath: devicePath) { frac in
+            try DiskWrite.write(image: image.handle,
+                                size: Int(image.size),
+                                devicePath: "/dev/" + diskID,
+                                beforeOpen: {
+                // The disk was unmounted; make sure it is still the same one.
+                let again = try Self.facts(of: diskID, systemDisks: try HelperPolicy.systemWholeDisks(), imageBytes: image.size)
+                guard again == facts else { throw HelperPolicy.Refusal.diskChanged }
+            }) { frac in
                 append(String(format: "FLAGSHIP_PROGRESS:%.4f", frac))
             }
-            try? log?.close()
+            try? log.close()
             reply(0, "")
         } catch {
             append("write failed: \(error.localizedDescription)")
-            try? log?.close()
+            try? log.close()
             reply(-1, error.localizedDescription)
         }
+    }
+
+    private static func facts(of id: String,
+                              systemDisks: Set<String>,
+                              imageBytes: Int64) throws -> HelperPolicy.DiskFacts {
+        let plist: Data
+        do { plist = try DiskEnumerator.runDiskutil(["info", "-plist", id]) }
+        catch { throw HelperPolicy.Refusal.diskInfoUnavailable("diskutil") }
+        return try HelperPolicy.assess(plist: plist, wantedID: id, systemDisks: systemDisks, imageBytes: imageBytes)
     }
 }
 
 final class HelperDelegate: NSObject, NSXPCListenerDelegate {
     func listener(_ listener: NSXPCListener,
                   shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
-        // Only accept connections from our own signed app. Pinning the
-        // bundle id under Apple's anchor means an attacker would need an
-        // Apple-issued cert AND our bundle id to connect.
-        let req = "identifier \"\(kFlagshipAppBundleID)\" and anchor apple generic"
-        if #available(macOS 13.0, *) {
-            connection.setCodeSigningRequirement(req)
-        }
+        // Only Flagship's own signed app may connect: Apple's anchor, our bundle
+        // id, our Developer ID chain and our Team ID. The requirement is set
+        // before the interface is exported, and the connection is refused on
+        // a system too old to enforce it.
+        guard #available(macOS 13.0, *) else { return false }
+        connection.setCodeSigningRequirement(HelperPolicy.clientRequirement())
         connection.exportedInterface = NSXPCInterface(with: FlagshipHelperProtocol.self)
-        connection.exportedObject = HelperService()
+        connection.exportedObject = HelperService(clientUID: connection.effectiveUserIdentifier)
         connection.resume()
         return true
     }
