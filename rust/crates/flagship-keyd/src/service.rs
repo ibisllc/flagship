@@ -16,7 +16,9 @@ use crate::policy::{
     BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, check_sign, is_pairing_order,
     is_service_id,
 };
-use crate::tls::TlsKeys;
+use crate::tls::{
+    TlsKeys, is_ecdhe_params, tls12_server_signed_message, tls13_server_signed_message,
+};
 use crate::wire::{
     Args, ErrorCode, HexBounds, KEYD_PROTOCOL_VERSION, KeydError, KeydResult, PEM_MAX, hex_arg,
     no_extra_args, pem_arg, str_arg, string_list, to_hex,
@@ -364,10 +366,40 @@ impl KeydService {
                 done(obj! { "active" => self.tls()?.active() })
             }
             "tls.sign" => {
-                no_extra_args(a, &["handle", "digest"])?;
-                let digest = hex_arg(a, "digest", HexBounds::range(32, 48))?;
+                // keyd builds the signed input from the TLS fields: the certificate key signs TLS
+                // 1.3 CertificateVerify and TLS 1.2 ServerKeyExchange inputs and nothing else.
+                let handle = str_arg(a, "handle", 32)?;
+                let version = str_arg(a, "tls", 8)?;
+                let message = match version {
+                    "1.3" => {
+                        no_extra_args(a, &["handle", "tls", "transcriptHash"])?;
+                        let th = hex_arg(a, "transcriptHash", HexBounds::range(32, 48))?;
+                        if th.len() != 32 && th.len() != 48 {
+                            return Err(KeydError::bad_request(
+                                "transcriptHash must be 32 or 48 bytes",
+                            ));
+                        }
+                        tls13_server_signed_message(&th)
+                    }
+                    "1.2" => {
+                        no_extra_args(
+                            a,
+                            &["handle", "tls", "clientRandom", "serverRandom", "params"],
+                        )?;
+                        let cr = hex_arg(a, "clientRandom", HexBounds::exact(32))?;
+                        let sr = hex_arg(a, "serverRandom", HexBounds::exact(32))?;
+                        let params = hex_arg(a, "params", HexBounds::range(4, 4 + 133))?;
+                        if !is_ecdhe_params(&params) {
+                            return Err(KeydError::bad_request(
+                                "params must be named-curve ECDHE parameters",
+                            ));
+                        }
+                        tls12_server_signed_message(&cr, &sr, &params)
+                    }
+                    _ => return Err(KeydError::bad_request("tls must be 1.3 or 1.2")),
+                };
                 let tls = self.tls()?;
-                done(obj! { "sig" => to_hex(&tls.sign(str_arg(a, "handle", 32)?, &digest)?) })
+                done(obj! { "sig" => to_hex(&tls.sign_handshake(handle, &message)?) })
             }
             "tls.list" => {
                 no_extra_args(a, &[])?;

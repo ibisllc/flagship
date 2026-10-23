@@ -81,9 +81,9 @@ afterAll(async () => {
   if (dir) rmSync(dir, { recursive: true, force: true });
 });
 
-function request(servername: string, host = servername): Promise<{ status: string; header: string }> {
+function request(servername: string, host = servername, maxVersion?: "TLSv1.2"): Promise<{ status: string; header: string }> {
   return new Promise((resolve, reject) => {
-    const s = tlsConnect({ host: "127.0.0.1", port, servername, ca: caPem, ALPNProtocols: ["http/1.1"] }, () => {
+    const s = tlsConnect({ host: "127.0.0.1", port, servername, ca: caPem, ALPNProtocols: ["http/1.1"], ...(maxVersion ? { maxVersion } : {}) }, () => {
       s.write(`GET / HTTP/1.1\r\nHost: ${host}\r\n\r\n`);
     });
     let out = "";
@@ -100,6 +100,11 @@ d("the Go TLS frontend with a real keyd", () => {
     const h = JSON.parse(r.header);
     expect(h).toMatchObject({ sni: `chess.${FQDN}`, alpn: "http/1.1" });
     expect(seen.at(-1)!.body).toContain("GET / HTTP/1.1");
+  });
+
+  it("signs TLS 1.3 CertificateVerify and TLS 1.2 ServerKeyExchange through keyd's structured tls.sign", async () => {
+    expect(JSON.parse((await request(`chess.${FQDN}`)).header)).toMatchObject({ tls: "1.3" });
+    expect(JSON.parse((await request(`chess.${FQDN}`, `chess.${FQDN}`, "TLSv1.2")).header)).toMatchObject({ tls: "1.2" });
   });
 
   it("serves the apex too and refuses a name the certificate does not cover", async () => {

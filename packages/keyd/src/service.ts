@@ -16,7 +16,7 @@ import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
 import { BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, checkSign, isPairingOrder, isServiceId } from "./policy.js";
 import { AcmeAccount, type AcmeRequest } from "./acme.js";
-import { TlsKeys } from "./tls.js";
+import { TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage } from "./tls.js";
 import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
 
 /** The access-sync key's HKDF info; the daemon's accessSync.ts derives the same key in process. */
@@ -232,9 +232,27 @@ export class KeydService {
         return { result: { active: this.#tlsOrThrow().active() } };
       }
       case "tls.sign": {
-        noExtraArgs(a, ["handle", "digest"]);
-        const digest = hexArg(a, "digest", { min: 32, max: 48 });
-        return { result: { sig: toHex(this.#tlsOrThrow().sign(strArg(a, "handle", 32), digest)) } };
+        // keyd builds the signed input itself from the TLS fields, so the certificate key signs
+        // TLS 1.3 CertificateVerify and TLS 1.2 ServerKeyExchange inputs and nothing else.
+        const handle = strArg(a, "handle", 32);
+        const version = strArg(a, "tls", 8);
+        let message: Uint8Array;
+        if (version === "1.3") {
+          noExtraArgs(a, ["handle", "tls", "transcriptHash"]);
+          const th = hexArg(a, "transcriptHash", { min: 32, max: 48 });
+          if (th.length !== 32 && th.length !== 48) throw new KeydError("bad-request", "transcriptHash must be 32 or 48 bytes");
+          message = tls13ServerSignedMessage(th);
+        } else if (version === "1.2") {
+          noExtraArgs(a, ["handle", "tls", "clientRandom", "serverRandom", "params"]);
+          const cr = hexArg(a, "clientRandom", { exact: 32 });
+          const sr = hexArg(a, "serverRandom", { exact: 32 });
+          const params = hexArg(a, "params", { min: 4, max: 4 + 133 });
+          if (!isEcdheParams(params)) throw new KeydError("bad-request", "params must be named-curve ECDHE parameters");
+          message = tls12ServerSignedMessage(cr, sr, params);
+        } else {
+          throw new KeydError("bad-request", "tls must be 1.3 or 1.2");
+        }
+        return { result: { sig: toHex(this.#tlsOrThrow().signHandshake(handle, message)) } };
       }
       case "tls.list":
         noExtraArgs(a, []);

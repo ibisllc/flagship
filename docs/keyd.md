@@ -64,7 +64,11 @@ tunnel --> flagship-tlsd (Go, no key) --tls.sign--> keyd        decrypted --> da
 ```
 
 - keyd makes the TLS leaf key (P-256), the CSR for exactly the names the key was made for, and
-  signs TLS handshake digests only once a certificate for that key is installed. The names a box
+  signs TLS handshakes only once a certificate for that key is installed. `tls.sign` takes the
+  TLS fields, never a digest: `{tls: "1.3", transcriptHash}` or `{tls: "1.2", clientRandom,
+  serverRandom, params}` (named-curve ECDHE params), and keyd builds the CertificateVerify or
+  ServerKeyExchange input itself and signs it with ECDSA P-256/SHA-256, so the key is no
+  general signing oracle for the frontend. The names a box
   may have (`<server>` and `*.<server>`) come from its own recipe through the migration step,
   never from a request. `tls.active` is what flagship-tlsd serves; a renewal is `tls.install`
   then `tls.activate`, picked up within seconds with no dropped connections.
@@ -73,8 +77,8 @@ tunnel --> flagship-tlsd (Go, no key) --tls.sign--> keyd        decrypted --> da
   Encrypt hosts over https, only for the box's names, only with a CSR keyd made, only to revoke
   the box's own certificates. The ACME client in the daemon (`acme/keydAcme.ts`) does the
   protocol and never sees a key.
-- `flagship-tlsd` (`installer/tls-frontend`, Go standard library only) is a `crypto.Signer`
-  whose signing is a keyd request. TLS 1.2+, `http/1.1`, `acme-tls/1` is not negotiated, and it
+- `flagship-tlsd` (`installer/tls-frontend`, Go standard library only, Go 1.25+) is a
+  `crypto.MessageSigner` whose signing is a structured keyd request. TLS 1.2+, `http/1.1`, `acme-tls/1` is not negotiated, and it
   serves only names the certificate covers. It listens on loopback for the tunnel and hands the
   daemon decrypted connections on `/run/flagship-tls/upstream.sock` behind one JSON header line.
 - DNS-01 only in this mode (TLS-ALPN-01 would need a second key inside the frontend).
