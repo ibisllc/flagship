@@ -5,19 +5,20 @@
 
 import { bytesToHex } from "../keystore.js";
 
+import { tr } from "./i18n.js";
 export const TAG_COMPANION_DELEGATION = "flagship/companion-delegation/v1";
 export const DELEGATION_OPS = Object.freeze(["build", "deploy"]);
 export const DELEGATION_MAX_MS = 24 * 3600_000;
 
 export const DELEGATION_COPY = Object.freeze({
-  open: "Let it build…",
-  title: "Let this browser build an app",
-  intro: "A browser docked through Remote can only look. This lets it change one app you pick, for a short time. It ends on its own, or when you end it, or when the session ends.",
-  build: "Change the app (build)",
-  deploy: "Put changes live (deploy)",
+  open: tr("Let it build…"),
+  title: tr("Let this browser build an app"),
+  intro: tr("A browser docked through Remote can only look. This lets it change one app you pick, for a short time. It ends on its own, or when you end it, or when the session ends."),
+  build: tr("Change the app (build)"),
+  deploy: tr("Put changes live (deploy)"),
   allow: "Allow",
-  end: "End it",
-  adminOnly: "Only an admin device can let a browser build.",
+  end: tr("End it"),
+  adminOnly: tr("Only an admin device can let a browser build."),
 });
 
 const SESSION_ID_RE = /^[0-9a-f]{16}$/;

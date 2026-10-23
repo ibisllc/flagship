@@ -41,7 +41,7 @@ public final class RestoredAccessController {
         defer { busy = false }
         do {
             let order = RestoredAccessApproveOrder(serviceRef: serviceRef, draftSha256: d.sha256, issuedAt: Int64(now().timeIntervalSince1970 * 1000))
-            let key = try await signer("Approve the permissions restored for \(serviceRef)")
+            let key = try await signer(String(localized: "Approve the permissions restored for \(serviceRef)"))
             let sig = try key.signature(for: order.canonicalBytes())
             try await client.approveRestoredAccess(request: order.request, signatureHex: hex(Data(sig)))
             error = nil
@@ -127,7 +127,7 @@ public final class CompanionDelegationController {
                 sessionId: sessionId, serviceRef: serviceRef, ops: ops, issuedAt: issued,
                 expiresAt: issued + min(max(durationMs, 60_000), CompanionDelegationOrder.maxMs)
             )
-            let key = try await signer("Let a browser change \(serviceRef)")
+            let key = try await signer(String(localized: "Let a browser change \(serviceRef)"))
             let sig = try key.signature(for: order.canonicalBytes())
             try await client.allowCompanionBuild(request: order.request, signatureHex: hex(Data(sig)))
             error = nil

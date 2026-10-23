@@ -2,6 +2,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.core.AppAccessOrders
@@ -49,7 +51,7 @@ class RestoredAccessViewModel(
         val d = _draft.value ?: return
         try {
             val order = AppAccessOrders.RestoredApprove(serviceRef, d.sha256, now())
-            val key = signer("Approve the permissions restored for $serviceRef")
+            val key = signer(FSStrings.get(R.string.approve_the_permissions_restored_for, serviceRef))
             val sig = HexUtil.encode(key.sign(AppAccessOrders.canonicalBytes(order)))
             client.approveRestoredAccess(RestoredAccessApproveBody(RestoredApproveRequest(serviceRef, d.sha256, order.issuedAt), sig))
             _error.value = null
@@ -133,7 +135,7 @@ class CompanionDelegationViewModel(
             val sorted = ops.toSet().sorted()
             val order = CompanionDelegation.Order(sessionId, serviceRef, sorted, issued, issued + durationMs.coerceIn(60_000L, CompanionDelegation.MAX_MS))
             val bytes = CompanionDelegation.canonicalBytes(order)
-            val key = signer("Let a browser change $serviceRef")
+            val key = signer(FSStrings.get(R.string.let_a_browser_change, serviceRef))
             client.allowCompanionBuild(CompanionDelegationBody(CompanionDelegationRequest(sessionId, serviceRef, sorted, order.issuedAt, order.expiresAt), HexUtil.encode(key.sign(bytes))))
             _error.value = null
         } catch (e: CancellationException) {
