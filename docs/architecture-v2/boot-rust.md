@@ -31,39 +31,16 @@ ctutils, libc, cc, find-msvc-tools, unicode-ident).
 
 ### `unlock` options
 
-```
-flagship-boot unlock --handoff cryptsetup --device DEV --name NAME [options]
-flagship-boot unlock --handoff stdout [options] | cryptsetup luksOpen --key-file - DEV NAME
-  --boot-dir DIR (/boot)  --lock-once-marker PATH  --boot-host URL  --mode auto|approve
-  --policy compat|strict  --allow-host HOST…  --ca-bundle PEM  --http-timeout-secs 30
-  --relay-window-secs N (FLAGSHIP_RELAY_WINDOW_SECS, else 31536000)
-  --heartbeat-secs N (FLAGSHIP_RELAY_HEARTBEAT_SECS, else 120)
-  --console /dev/console  --cryptsetup PATH  --allow-loopback-http (tests)
-exit 0 opened · 1 no key · cryptsetup's own code · 64 usage
-```
-
-The retry policy is today's, unchanged: one lease GET (30 s); one announce,
-fatal if refused; polls with a fresh header each time, backoff 3, 6, 9, 12,
-15 s then 15 s; heartbeat re-announce of the *same* signed request every
-120 s; stop at the window. A 200 whose payload is missing or does not open
-ends the relay without retry, as today.
-
-Secret handling: the STK seed is read from `identity.pem` inside the process;
-the key goes into cryptsetup's stdin (`luksOpen --key-file -`) as raw bytes,
-or to stdout only when stdout is not a terminal. Never argv, environment or a
-file; seed, X25519 scalar, shared secret, HKDF key and plaintext are in
-`Zeroizing` buffers. Core dumps are off and the process is non-dumpable.
-
-Endpoint policy: HTTPS only (plain HTTP only to loopback with
-`--allow-loopback-http`), the configured origin must be `scheme://host[:port]`
-(no path, query or user info), no redirects followed, no proxy environment,
-Mozilla roots baked in (or `--ca-bundle`). Approved hosts: built-in
-`boot.flagshipserver.com`, `--allow-host`, and lines of
-`/boot/flagship-boot-allowed-hosts`. `compat` (default) uses an unapproved
-host from `/boot/flagship-boot-host` with a warning, because enterprise clones
-and the gym repoint the worker through that file today; `strict` refuses it,
-treats an unknown mode value as `approve`, and ignores `--console` unless
-`/boot/flagship-debug-mode` exists.
+`flagship-boot unlock` follows the generated premount (§5): it reads
+`/boot/flagship-boot-key.pem` (the STK is not on `/boot`), accepts only an https
+boot host on the approved list (built-ins, `--allow-host`,
+`flagship-boot-allowed-hosts`; no port), treats any mode but exactly `auto` as
+approve, checks a lease (owner key from `--owner-key`, else
+`flagship-owner-key.pub` beside the lock marker, then in the boot dir) before
+opening it, re-signs its request at least every 21600 s, clamps the window to
+604800 s and exits 75 when it ends, and reads the console only on a debug burn.
+The old `--policy compat|strict` and `--strict-endpoints` are gone (exit 64).
+The key goes only to cryptsetup's stdin. See `src/unlock/mod.rs` for the flags.
 
 ## 2. Interop evidence
 

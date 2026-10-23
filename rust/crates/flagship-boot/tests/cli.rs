@@ -1,7 +1,7 @@
 //! `flagship-boot unlock` end to end: the real binary, the real HTTP client
 //! (over loopback HTTP, the only plain-HTTP case the policy allows), the
-//! `/boot` files the shell reads, and a stand-in cryptsetup that records what
-//! it was given.
+//! `/boot` files the premount reads, and a stand-in cryptsetup that records
+//! what it was given.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -128,7 +128,7 @@ fn boot_dir(name: &str, port: u16, mode: &str) -> PathBuf {
     ];
     der.extend_from_slice(&SEED_A);
     std::fs::write(
-        dir.join("identity.pem"),
+        dir.join("flagship-boot-key.pem"),
         format!(
             "-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n",
             Base64::encode_string(&der)
@@ -142,6 +142,11 @@ fn boot_dir(name: &str, port: u16, mode: &str) -> PathBuf {
     )
     .unwrap();
     std::fs::write(dir.join("flagship-boot-unlock-mode"), format!("{mode}\n")).unwrap();
+    std::fs::write(
+        dir.join("flagship-owner-key.pub"),
+        format!("{}\n", gohex::encode(&owner_pub())),
+    )
+    .unwrap();
     dir
 }
 
@@ -290,11 +295,11 @@ fn redirects_are_never_followed() {
     );
     let (port, _seen) = serve(with_lease, Some(loc));
     let dir = boot_dir("redirect", port, "auto");
-    let out = unlock(&dir, &["--handoff", "stdout"]);
+    let out = unlock(&dir, &["--handoff", "stdout", "--relay-window-secs", "1"]);
     let log = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(1), "{log}");
-    assert!(log.contains("box-lease HTTP 302"), "{log}");
-    assert!(log.contains("relay boot-request HTTP 302"), "{log}");
+    assert_eq!(out.status.code(), Some(75), "{log}");
+    assert!(log.contains("no usable lease (HTTP 302"), "{log}");
+    assert!(log.contains("unlock request refused (HTTP 302"), "{log}");
     assert!(
         elsewhere.accept().is_err(),
         "the redirect target was contacted"
@@ -324,32 +329,135 @@ fn cryptsetup_refusal_is_reported_with_its_code() {
 }
 
 #[test]
-fn strict_policy_refuses_an_unapproved_worker_before_any_request() {
-    let dir = boot_dir("strict", 9, "auto");
+fn an_unapproved_or_plain_worker_is_refused_before_any_request() {
+    let dir = boot_dir("unapproved", 9, "auto");
+    for (host, why) in [
+        ("https://boot.example.org", "not an approved endpoint"),
+        ("http://boot.flagshipserver.com", "must use https"),
+        (
+            "https://boot.flagshipserver.com:8443",
+            "must not name a port",
+        ),
+    ] {
+        let out = unlock(&dir, &["--handoff", "stdout", "--boot-host", host]);
+        assert_eq!(out.status.code(), Some(1), "{host}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains(why), "{host}");
+    }
+    std::fs::remove_file(dir.join("flagship-boot-host")).unwrap();
+    let out = unlock(&dir, &["--handoff", "stdout"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("is not a URL"));
+}
+
+#[test]
+fn an_unknown_or_missing_mode_file_asks_the_phone() {
+    for (name, mode) in [("mode-unknown", Some("Auto")), ("mode-missing", None)] {
+        let (port, seen) = serve(
+            |w| {
+                with_lease(w);
+                with_reply(w);
+            },
+            None,
+        );
+        let dir = boot_dir(name, port, mode.unwrap_or("auto"));
+        if mode.is_none() {
+            std::fs::remove_file(dir.join("flagship-boot-unlock-mode")).unwrap();
+        }
+        let out = unlock(&dir, &["--handoff", "stdout"]);
+        let log = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "{log}");
+        assert!(
+            log.contains("unreadable or unknown; asking the phone"),
+            "{log}"
+        );
+        assert!(
+            seen.try_iter()
+                .all(|(_, p)| !p.starts_with("/api/boot/lease"))
+        );
+    }
+}
+
+#[test]
+fn without_an_owner_key_the_lease_is_skipped() {
+    let (port, seen) = serve(
+        |w| {
+            with_lease(w);
+            with_reply(w);
+        },
+        None,
+    );
+    let dir = boot_dir("no-owner", port, "auto");
+    std::fs::write(dir.join("flagship-owner-key.pub"), "not a key\n").unwrap();
+    let out = unlock(&dir, &["--handoff", "stdout"]);
+    let log = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "{log}");
+    assert!(log.contains("no owner key on /boot"), "{log}");
+    assert!(
+        seen.try_iter()
+            .all(|(_, p)| !p.starts_with("/api/boot/lease"))
+    );
+}
+
+#[test]
+fn the_owner_key_next_to_the_lock_marker_wins() {
+    let (port, _) = serve(with_lease, None);
+    let dir = boot_dir("owner-marker-dir", port, "auto");
+    let live = dir.join("live");
+    std::fs::create_dir_all(&live).unwrap();
+    std::fs::write(live.join("flagship-owner-key.pub"), "00".repeat(32)).unwrap();
+    let marker = live.join("flagship-lock-once");
     let out = unlock(
         &dir,
         &[
             "--handoff",
             "stdout",
-            "--boot-host",
-            "https://boot.example.org",
-            "--policy",
-            "strict",
+            "--lock-once-marker",
+            marker.to_str().unwrap(),
+            "--relay-window-secs",
+            "1",
         ],
     );
-    assert_eq!(out.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("not an approved endpoint"));
-    let out = unlock(
-        &dir,
-        &[
-            "--handoff",
-            "stdout",
-            "--boot-host",
-            "http://boot.flagshipserver.com",
-        ],
+    let log = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        log.contains("lease refused: lease signature does not verify under the owner key"),
+        "{log}"
     );
-    assert_eq!(out.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("must use https"));
+    assert_eq!(out.status.code(), Some(75), "{log}");
+}
+
+#[test]
+fn the_window_ending_exits_75_for_a_restart() {
+    let (port, _) = serve(|_| {}, None);
+    let dir = boot_dir("window", port, "approve");
+    let out = unlock(&dir, &["--handoff", "stdout", "--relay-window-secs", "2"]);
+    let log = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(75), "{log}");
+    assert!(log.contains("no phone reply within 2s"), "{log}");
+    assert!(out.stdout.is_empty());
+}
+
+#[test]
+fn the_console_fallback_needs_a_debug_burn() {
+    let (port, _) = serve(with_reply, None);
+    let dir = boot_dir("console", port, "approve");
+    let console = dir.join("console");
+    std::fs::write(&console, "").unwrap();
+    let c = console.to_str().unwrap();
+    let out = unlock(&dir, &["--handoff", "stdout", "--console", c]);
+    assert_eq!(out.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("ignoring --console"));
+    std::fs::write(dir.join("flagship-debug-mode"), "").unwrap();
+    std::fs::write(&console, "manual\n").unwrap();
+    let (port, _) = serve(|_| {}, None);
+    std::fs::write(
+        dir.join("flagship-boot-host"),
+        format!("http://127.0.0.1:{port}"),
+    )
+    .unwrap();
+    let out = unlock(&dir, &["--handoff", "stdout", "--console", c]);
+    let log = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{log}");
+    assert!(log.contains("manual unlock selected"), "{log}");
 }
 
 #[test]
@@ -375,13 +483,25 @@ fn usage_errors_exit_64() {
         .code(),
         Some(64)
     );
+    for removed in [&["--policy", "compat"][..], &["--strict-endpoints"]] {
+        let mut a = vec!["--handoff", "stdout"];
+        a.extend_from_slice(removed);
+        assert_eq!(unlock(&dir, &a).status.code(), Some(64), "{removed:?}");
+    }
+    assert_eq!(
+        unlock(&dir, &["--handoff", "stdout", "--mode", "maybe"])
+            .status
+            .code(),
+        Some(64)
+    );
 }
 
 #[test]
-fn a_missing_identity_fails_without_network() {
-    let dir = boot_dir("no-identity", 9, "auto");
-    std::fs::remove_file(dir.join("identity.pem")).unwrap();
+fn a_missing_boot_key_fails_without_network() {
+    let dir = boot_dir("no-boot-key", 9, "auto");
+    std::fs::write(dir.join("identity.pem"), "the STK is no longer on /boot").unwrap();
+    std::fs::remove_file(dir.join("flagship-boot-key.pem")).unwrap();
     let out = unlock(&dir, &["--handoff", "stdout"]);
     assert_eq!(out.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("identity.pem"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("flagship-boot-key.pem"));
 }

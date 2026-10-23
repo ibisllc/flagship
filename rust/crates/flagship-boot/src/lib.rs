@@ -11,7 +11,8 @@
 //!
 //! The formats: [`seal`] (sealed blobs and `SealedSecretResponse`),
 //! [`canonical`] (signed `SecretRequest` and box-auth headers), [`identity`]
-//! (the `/boot/identity.pem` STK).
+//! (the Ed25519 PKCS#8 boot key, `/boot/flagship-boot-key.pem`), [`lease`]
+//! (the owner-signed auto-unlock lease check).
 
 pub mod canonical;
 pub mod compat;
@@ -20,5 +21,6 @@ pub mod gohex;
 pub mod gojson;
 pub mod hardening;
 pub mod identity;
+pub mod lease;
 pub mod seal;
 pub mod unlock;

@@ -6,6 +6,7 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
     clippy::panic,
     clippy::print_stdout
 )]
@@ -16,6 +17,8 @@ use std::process::{Command, Stdio};
 
 const VECTORS: &str =
     include_str!("../../../../packages/protocol/test-vectors/boot-unseal/vectors.json");
+const BOOT_KEY_VECTORS: &str =
+    include_str!("../../../../packages/protocol/test-vectors/boot-key/vectors.json");
 
 fn find_go() -> Option<PathBuf> {
     [
@@ -472,6 +475,636 @@ fn corpus(dir: &Path) -> Vec<Case> {
         &bad_utf8,
         true,
     ));
+    cases.extend(identity_and_lease_cases(dir, s, l));
+    cases
+}
+
+fn pem(der: &[u8]) -> String {
+    use base64ct::{Base64, Encoding};
+    format!(
+        "-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n",
+        Base64::encode_string(der)
+    )
+}
+
+fn write(dir: &Path, name: &str, body: &[u8]) -> String {
+    let p = dir.join(name);
+    std::fs::write(&p, body).unwrap();
+    p.to_str().unwrap().to_owned()
+}
+
+/// --identity-pem, --identity-stdin, the one-source rule, and --lease-json
+/// through every boot-key lease vector plus the decoder's edge cases.
+fn identity_and_lease_cases(dir: &Path, a_seed: &str, lease_hex: &str) -> Vec<Case> {
+    const V1: [u8; 16] = [
+        0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04,
+        0x20,
+    ];
+    let mut der = V1.to_vec();
+    der.extend_from_slice(&flagship_boot::gohex::decode(a_seed.as_bytes()).unwrap());
+    let good = write(dir, "a.pem", pem(&der).as_bytes());
+    let crlf = write(
+        dir,
+        "a-crlf.pem",
+        format!("junk\r\n{}", pem(&der).replace('\n', "\r\n\t ")).as_bytes(),
+    );
+    let mut v2 = der.clone();
+    v2[1] = 0x51;
+    v2[4] = 0x01;
+    let v2 = write(dir, "v2.pem", pem(&v2).as_bytes());
+    let short = write(dir, "short.pem", pem(&der[..47]).as_bytes());
+    let not_pem = write(dir, "not.pem", b"hello");
+    let reversed = write(
+        dir,
+        "reversed.pem",
+        b"-----END PRIVATE KEY-----\n-----BEGIN PRIVATE KEY-----\n",
+    );
+    let bad_b64 = write(
+        dir,
+        "bad64.pem",
+        b"-----BEGIN PRIVATE KEY-----\n!!!!\n-----END PRIVATE KEY-----\n",
+    );
+    let l = lease_hex;
+    let id_cases: Vec<(&str, Vec<&str>, &[u8])> = vec![
+        (
+            "pem file",
+            vec!["--identity-pem", &good, "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "pem crlf and junk",
+            vec!["--identity-pem", &crlf, "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "pem v2 refused",
+            vec!["--identity-pem", &v2, "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "pem short",
+            vec!["--identity-pem", &short, "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "pem not pem",
+            vec!["--identity-pem", &not_pem, "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "pem end before begin",
+            vec!["--identity-pem", &reversed, "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "pem bad base64",
+            vec!["--identity-pem", &bad_b64, "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "pem missing file",
+            vec!["--identity-pem", "/nonexistent/k.pem", "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "pem directory",
+            vec!["--identity-pem", "/", "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "stdin seed",
+            vec!["--identity-stdin", "--sealed-hex", l],
+            a_seed.as_bytes(),
+        ),
+        (
+            "stdin seed newline",
+            vec!["--identity-stdin", "--sealed-hex", l, "--raw"],
+            format!(" {a_seed}\n").as_bytes().to_vec().leak(),
+        ),
+        (
+            "stdin seed bad hex",
+            vec!["--identity-stdin", "--sealed-hex", l],
+            b"xyz",
+        ),
+        (
+            "stdin seed short",
+            vec!["--identity-stdin", "--sealed-hex", l],
+            b"abcd",
+        ),
+        (
+            "stdin seed empty",
+            vec!["--identity-stdin", "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "stdin seed over the limit",
+            vec!["--identity-stdin", "--sealed-hex", l],
+            "0".repeat(300).into_bytes().leak(),
+        ),
+        (
+            "stdin=false is no source",
+            vec!["--identity-stdin=false", "--sealed-hex", l],
+            b"",
+        ),
+        (
+            "two sources",
+            vec![
+                "--identity-pem",
+                &good,
+                "--identity-stdin",
+                "--sealed-hex",
+                l,
+            ],
+            a_seed.as_bytes(),
+        ),
+        (
+            "hex and pem",
+            vec![
+                "--identity-priv-hex",
+                a_seed,
+                "--identity-pem",
+                &good,
+                "--sealed-hex",
+                l,
+            ],
+            b"",
+        ),
+        (
+            "three sources",
+            vec![
+                "--identity-priv-hex",
+                a_seed,
+                "--identity-pem",
+                &good,
+                "--identity-stdin",
+            ],
+            b"",
+        ),
+        (
+            "shared stdin response",
+            vec!["--identity-stdin", "--response-json", "-"],
+            a_seed.as_bytes(),
+        ),
+        (
+            "shared stdin lease",
+            vec![
+                "--identity-stdin",
+                "--lease-json",
+                "-",
+                "--server-domain",
+                "x",
+                "--owner-pub-hex",
+                "00",
+            ],
+            a_seed.as_bytes(),
+        ),
+    ];
+    let mut cases: Vec<Case> = id_cases
+        .into_iter()
+        .map(|(n, a, input)| stdin_case(n, &a, input, true))
+        .collect();
+
+    let v: serde_json::Value = serde_json::from_str(BOOT_KEY_VECTORS).unwrap();
+    let boot_seed = v["bootKeySeedHex"].as_str().unwrap().to_owned();
+    let owner = v["ownerPubHex"].as_str().unwrap().to_owned();
+    let domain = v["serverDomain"].as_str().unwrap().to_owned();
+    let now = v["lease"]["now"].as_i64().unwrap().to_string();
+    let mut valid = String::new();
+    for c in v["lease"]["cases"].as_array().unwrap() {
+        let name = c["name"].as_str().unwrap();
+        let body = c["lease"].to_string();
+        if name == "valid" {
+            valid = body.clone();
+        }
+        let file = write(
+            dir,
+            &format!("lease-{}.json", name.replace(' ', "-")),
+            body.as_bytes(),
+        );
+        let base = [
+            "--identity-priv-hex",
+            &boot_seed,
+            "--server-domain",
+            &domain,
+            "--owner-pub-hex",
+            &owner,
+            "--now-ms",
+            &now,
+        ];
+        let mut a = base.to_vec();
+        a.extend(["--lease-json", &file]);
+        cases.push(case(&format!("lease {name}"), &a));
+        let mut a = base.to_vec();
+        a.extend(["--lease-json", "-", "--raw"]);
+        cases.push(stdin_case(
+            &format!("lease {name} stdin raw"),
+            &a,
+            body.as_bytes(),
+            true,
+        ));
+    }
+    let valid_file = write(dir, "lease-valid-copy.json", valid.as_bytes());
+    let vf = valid_file.as_str();
+    let (bs, ow, dm, nw) = (
+        boot_seed.as_str(),
+        owner.as_str(),
+        domain.as_str(),
+        now.as_str(),
+    );
+    let upper_domain = dm.to_ascii_uppercase();
+    let upper_owner = ow.to_ascii_uppercase();
+    let lease_cli: Vec<(&str, Vec<&str>)> = vec![
+        (
+            "lease no server-domain",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--owner-pub-hex",
+                ow,
+            ],
+        ),
+        (
+            "lease no owner",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+            ],
+        ),
+        (
+            "lease empty server-domain",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                "",
+                "--owner-pub-hex",
+                ow,
+            ],
+        ),
+        (
+            "lease bad owner hex",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                "zz",
+            ],
+        ),
+        (
+            "lease short owner",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                "abcd",
+            ],
+        ),
+        (
+            "lease upper-case owner",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                &upper_owner,
+                "--now-ms",
+                nw,
+            ],
+        ),
+        (
+            "lease upper-case domain",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                &upper_domain,
+                "--owner-pub-hex",
+                ow,
+                "--now-ms",
+                nw,
+            ],
+        ),
+        (
+            "lease bad now-ms",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+                "--now-ms",
+                "soon",
+            ],
+        ),
+        (
+            "lease float now-ms",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+                "--now-ms",
+                "1.5",
+            ],
+        ),
+        (
+            "lease plus now-ms",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+                "--now-ms",
+                "+1760000060000",
+            ],
+        ),
+        (
+            "lease negative now-ms",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+                "--now-ms",
+                "-5",
+            ],
+        ),
+        (
+            "lease at expiry",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+                "--now-ms",
+                "1760604800000",
+            ],
+        ),
+        (
+            "lease by the clock",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+            ],
+        ),
+        (
+            "lease missing file",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                "/nonexistent/l.json",
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+            ],
+        ),
+        (
+            "lease directory",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                "/",
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+            ],
+        ),
+        (
+            "lease wins over response-json",
+            vec![
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                vf,
+                "--response-json",
+                "/nonexistent",
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+                "--now-ms",
+                nw,
+            ],
+        ),
+        (
+            "lease other box key",
+            vec![
+                "--identity-priv-hex",
+                a_seed,
+                "--lease-json",
+                vf,
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+                "--now-ms",
+                nw,
+            ],
+        ),
+        ("lease identity checked first", vec!["--lease-json", vf]),
+    ];
+    for (n, a) in lease_cli {
+        cases.push(case(n, &a));
+    }
+    let lease: serde_json::Value = serde_json::from_str(&valid).unwrap();
+    let field = |k: &str| lease[k].to_string();
+    let edit = |f: &dyn Fn(&mut serde_json::Map<String, serde_json::Value>)| {
+        let mut m = lease.as_object().unwrap().clone();
+        f(&mut m);
+        serde_json::Value::Object(m).to_string()
+    };
+    let json_bodies: Vec<(&str, String)> = vec![
+        ("lease json null", "null".into()),
+        ("lease json array", "[]".into()),
+        ("lease json empty object", "{}".into()),
+        ("lease json truncated", valid[..valid.len() - 1].to_owned()),
+        ("lease json trailing garbage", format!("{valid} x")),
+        ("lease json empty input", String::new()),
+        (
+            "lease json folded keys",
+            valid
+                .replace("\"serverDomain\"", "\"SERVERDOMAIN\"")
+                .replace("\"sealedKey\"", "\"\u{17f}ealedKey\""),
+        ),
+        (
+            "lease json later null unsets",
+            format!("{},\"leaseId\":null}}", &valid[..valid.len() - 1]),
+        ),
+        (
+            "lease json later duplicate wins",
+            format!("{{\"signature\":\"00\",{}", &valid[1..]),
+        ),
+        (
+            "lease json duplicate bad last",
+            format!("{},\"stkPub\":\"00\"}}", &valid[..valid.len() - 1]),
+        ),
+        (
+            "lease json maxUses string",
+            edit(&|m| {
+                m.insert("maxUses".into(), "3".into());
+            }),
+        ),
+        (
+            "lease json issuedAt float",
+            edit(&|m| {
+                m.insert("issuedAt".into(), serde_json::json!(1.5));
+            }),
+        ),
+        (
+            "lease json issuedAt overflow",
+            valid.replace(&field("issuedAt"), "9223372036854775808"),
+        ),
+        (
+            "lease json expiresAt string",
+            edit(&|m| {
+                m.insert("expiresAt".into(), "1".into());
+            }),
+        ),
+        (
+            "lease json leaseId number",
+            edit(&|m| {
+                m.insert("leaseId".into(), 7.into());
+            }),
+        ),
+        (
+            "lease json leaseId with pipe",
+            edit(&|m| {
+                m.insert("leaseId".into(), "a|b".into());
+            }),
+        ),
+        (
+            "lease json leaseId empty",
+            edit(&|m| {
+                m.insert("leaseId".into(), "".into());
+            }),
+        ),
+        (
+            "lease json domain with control",
+            edit(&|m| {
+                m.insert("serverDomain".into(), "a\u{1}b".into());
+            }),
+        ),
+        (
+            "lease json no issuedAt",
+            edit(&|m| {
+                m.remove("issuedAt");
+            }),
+        ),
+        (
+            "lease json no maxUses",
+            edit(&|m| {
+                m.remove("maxUses");
+            }),
+        ),
+        (
+            "lease json short stkPub",
+            edit(&|m| {
+                m.insert("stkPub".into(), "abcd".into());
+            }),
+        ),
+        (
+            "lease json odd sealedKey",
+            edit(&|m| {
+                m.insert("sealedKey".into(), "abc".into());
+            }),
+        ),
+        (
+            "lease json empty sealedKey",
+            edit(&|m| {
+                m.insert("sealedKey".into(), "".into());
+            }),
+        ),
+        (
+            "lease json upper-case hex",
+            edit(&|m| {
+                for k in ["stkPub", "sealedKey", "signature"] {
+                    let up = m[k].as_str().unwrap().to_ascii_uppercase();
+                    m.insert(k.into(), up.into());
+                }
+            }),
+        ),
+        (
+            "lease json short sealedKey",
+            edit(&|m| {
+                m.insert("sealedKey".into(), "00".repeat(20).into());
+            }),
+        ),
+        (
+            "lease json unknown fields",
+            edit(&|m| {
+                m.insert("extra".into(), serde_json::json!([1, {"a": null}]));
+            }),
+        ),
+    ];
+    for (n, body) in json_bodies {
+        cases.push(stdin_case(
+            n,
+            &[
+                "--identity-priv-hex",
+                bs,
+                "--lease-json",
+                "-",
+                "--server-domain",
+                dm,
+                "--owner-pub-hex",
+                ow,
+                "--now-ms",
+                nw,
+            ],
+            body.as_bytes(),
+            true,
+        ));
+    }
     cases
 }
 

@@ -6,6 +6,8 @@
 use crate::goflag::{self, FlagError, Kind, Spec};
 use crate::gohex;
 use crate::gojson;
+use crate::identity;
+use crate::lease;
 use crate::seal;
 use std::io::{Read, Write};
 use zeroize::Zeroizing;
@@ -18,7 +20,17 @@ pub const SPECS: &[Spec] = &[
     Spec {
         name: "identity-priv-hex",
         kind: Kind::Str,
-        usage: "box Ed25519 identity (STK) seed, 32 bytes hex (64 chars)",
+        usage: "box Ed25519 key seed, 32 bytes hex (tests only: it shows in the process list)",
+    },
+    Spec {
+        name: "identity-pem",
+        kind: Kind::Str,
+        usage: "path to the box's Ed25519 PKCS#8 PEM key",
+    },
+    Spec {
+        name: "identity-stdin",
+        kind: Kind::Bool,
+        usage: "read the box's Ed25519 key seed (64 hex chars) from stdin",
     },
     Spec {
         name: "sealed-hex",
@@ -44,6 +56,26 @@ pub const SPECS: &[Spec] = &[
         name: "response-json",
         kind: Kind::Str,
         usage: "path to a SealedSecretResponse JSON ('-' for stdin); implies --response",
+    },
+    Spec {
+        name: "lease-json",
+        kind: Kind::Str,
+        usage: "path to an auto-unlock lease JSON ('-' for stdin); checked before it is opened",
+    },
+    Spec {
+        name: "server-domain",
+        kind: Kind::Str,
+        usage: "this box's FQDN; required with --lease-json",
+    },
+    Spec {
+        name: "owner-pub-hex",
+        kind: Kind::Str,
+        usage: "the owner key the lease must be signed by, 32 bytes hex; required with --lease-json",
+    },
+    Spec {
+        name: "now-ms",
+        kind: Kind::Str,
+        usage: "the time to check lease expiry against, epoch ms (default: the clock)",
     },
     Spec {
         name: "raw",
@@ -82,6 +114,14 @@ fn go_errno_text(e: &std::io::Error) -> String {
     }
 }
 
+fn clock_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|d| i64::try_from(d.as_millis()).ok())
+        .unwrap_or(i64::MAX)
+}
+
 fn read_all(r: &mut dyn Read, display: &str) -> Result<Zeroizing<Vec<u8>>, String> {
     let mut buf = Zeroizing::new(Vec::new());
     r.read_to_end(&mut buf)
@@ -109,20 +149,76 @@ fn run_inner(
         FlagError::Failed(m) => m,
     })?;
 
-    let identity = v.str("identity-priv-hex");
-    if identity.is_empty() {
-        return Err("--identity-priv-hex is required".into());
+    let sources = [
+        !v.str("identity-priv-hex").is_empty(),
+        !v.str("identity-pem").is_empty(),
+        v.bool("identity-stdin"),
+    ]
+    .iter()
+    .filter(|&&set| set)
+    .count();
+    if sources != 1 {
+        return Err(
+            "give exactly one of --identity-pem, --identity-stdin or --identity-priv-hex".into(),
+        );
     }
-    let seed = Zeroizing::new(decode_hex("identity-priv-hex", identity)?);
-    if seed.len() != 32 {
-        return Err(format!(
-            "--identity-priv-hex must be 32 bytes (64 hex chars), got {} bytes",
-            seed.len()
-        ));
-    }
-
     let response_json = v.str("response-json");
-    let secret = if !response_json.is_empty() {
+    let lease_json = v.str("lease-json");
+    if v.bool("identity-stdin") && (response_json == b"-" || lease_json == b"-") {
+        return Err("--identity-stdin cannot share stdin with a JSON input".into());
+    }
+    let seed: Zeroizing<Vec<u8>> = if !v.str("identity-pem").is_empty() {
+        let path = v.str("identity-pem");
+        let pem = read_file(path)
+            .map_err(|e| format!("reading identity key {}: {e}", goflag::go_quote(path)))?;
+        let seed = identity::seed_from_pkcs8_pem_go(&pem).map_err(|e| e.to_string())?;
+        Zeroizing::new(seed.to_vec())
+    } else if v.bool("identity-stdin") {
+        let b = read_all(&mut (&mut *stdin).take(256), "/dev/stdin")
+            .map_err(|e| format!("reading identity seed from stdin: {e}"))?;
+        Zeroizing::new(decode_hex("identity-stdin", &b)?)
+    } else {
+        Zeroizing::new(decode_hex("identity-priv-hex", v.str("identity-priv-hex"))?)
+    };
+    let seed: Zeroizing<[u8; 32]> = match <[u8; 32]>::try_from(seed.as_slice()) {
+        Ok(s) => Zeroizing::new(s),
+        Err(_) => {
+            return Err(format!(
+                "the identity seed must be 32 bytes (64 hex chars), got {} bytes",
+                seed.len()
+            ));
+        }
+    };
+
+    let secret = if !lease_json.is_empty() {
+        if v.str("server-domain").is_empty() || v.str("owner-pub-hex").is_empty() {
+            return Err(
+                "--server-domain and --owner-pub-hex are required with --lease-json".into(),
+            );
+        }
+        let owner = decode_hex("owner-pub-hex", v.str("owner-pub-hex"))?;
+        if owner.len() != 32 {
+            return Err(format!(
+                "--owner-pub-hex must be 32 bytes (64 hex chars), got {} bytes",
+                owner.len()
+            ));
+        }
+        let now = match v.str("now-ms") {
+            b"" => clock_ms(),
+            n => core::str::from_utf8(n)
+                .ok()
+                .and_then(|t| t.parse::<i64>().ok())
+                .ok_or("--now-ms is not a number")?,
+        };
+        let body = if lease_json == b"-" {
+            read_all(&mut (&mut *stdin).take(1 << 20), "/dev/stdin")
+        } else {
+            read_file(lease_json)
+        }
+        .map_err(|e| format!("reading lease JSON: {e}"))?;
+        lease::open_auto_unlock_lease(&body, &seed, v.str("server-domain"), &owner, now)
+            .map_err(|e| e.to_string())?
+    } else if !response_json.is_empty() {
         let blob = if response_json == b"-" {
             read_all(stdin, "/dev/stdin")
                 .map_err(|e| format!("reading response JSON from stdin: {e}"))?
@@ -137,8 +233,13 @@ fn run_inner(
         let r = gojson::unmarshal_response(&blob)
             .map_err(|e| format!("parsing SealedSecretResponse JSON: {e}"))?;
         let sealed = decode_hex("sealedHex", &r.sealed_hex)?;
-        seal::open_sealed_secret_response_bytes(&sealed, &seed, &r.request_nonce_hex, &r.purpose)
-            .map_err(|e| e.to_string())?
+        seal::open_sealed_secret_response_bytes(
+            &sealed,
+            seed.as_slice(),
+            &r.request_nonce_hex,
+            &r.purpose,
+        )
+        .map_err(|e| e.to_string())?
     } else if v.bool("response") {
         let sealed_hex = v.str("sealed-hex");
         if sealed_hex.is_empty() {
@@ -150,7 +251,7 @@ fn run_inner(
         let sealed = decode_hex("sealed-hex", sealed_hex)?;
         seal::open_sealed_secret_response_bytes(
             &sealed,
-            &seed,
+            seed.as_slice(),
             v.str("nonce-hex"),
             v.str("purpose"),
         )
@@ -161,7 +262,7 @@ fn run_inner(
             return Err("--sealed-hex is required (or use --response-json)".into());
         }
         let sealed = decode_hex("sealed-hex", sealed_hex)?;
-        seal::open_sealed_from_ed25519_seed(&sealed, &seed).map_err(|e| e.to_string())?
+        seal::open_sealed_from_ed25519_seed(&sealed, seed.as_slice()).map_err(|e| e.to_string())?
     };
 
     let written = if v.bool("raw") {
