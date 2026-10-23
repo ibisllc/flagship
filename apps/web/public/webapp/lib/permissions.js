@@ -5,27 +5,28 @@
 
 import { escapeHtml } from "./util.js";
 
+import { tr } from "./i18n.js";
 export const PERMISSIONS_COPY = Object.freeze({
-  title: "Access & permissions",
-  none: "Nothing can act for this app right now.",
-  revoke: "End this access",
-  revokeAll: "End all access",
-  stuck: "Some work did not stop yet:",
-  ended: (n) => (n === 1 ? "Access ended." : `${n} accesses ended.`),
+  title: tr("Access & permissions"),
+  none: tr("Nothing can act for this app right now."),
+  revoke: tr("End this access"),
+  revokeAll: tr("End all access"),
+  stuck: tr("Some work did not stop yet:"),
+  ended: (n) => (n === 1 ? tr("Access ended.") : tr("{0} accesses ended.", n)),
 });
 
 const KIND_LABEL = Object.freeze({
-  "owner-session": "Owner session",
-  "companion-session": "Browser or companion session",
-  "app-api-key": "App API key",
-  "mcp-key": "IDE key",
+  "owner-session": tr("Owner session"),
+  "companion-session": tr("Browser or companion session"),
+  "app-api-key": tr("App API key"),
+  "mcp-key": tr("IDE key"),
   "build-token": "Build",
-  share: "Shared server",
+  share: tr("Shared server"),
   "member-invite": "Invitation",
-  "browser-grant": "Browser access",
+  "browser-grant": tr("Browser access"),
   "secret-handle": "Secret",
   "stream-ticket": "Stream",
-  job: "Background job",
+  job: tr("Background job"),
 });
 
 export const permissionKindLabel = (kind) => KIND_LABEL[kind] ?? kind;
@@ -51,7 +52,7 @@ export async function revokePermission(serviceId, grantId, fetchJson) {
 }
 
 function whenText(ms) {
-  return ms ? `until ${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC` : "until you end it";
+  return ms ? tr("until {0} UTC", new Date(ms).toISOString().slice(0, 16).replace("T", " ")) : "until you end it";
 }
 
 export function renderPermissions(data) {
@@ -61,15 +62,15 @@ export function renderPermissions(data) {
     .map(
       (g) => `
         <div class="sd-permission mt-2" data-permission="${escapeHtml(g.id)}">
-          <div class="weight-600">${escapeHtml(permissionKindLabel(g.kind))} <span class="pill">${escapeHtml(g.capability)}</span>${g.secretAccess ? ' <span class="pill warn">can read secrets</span>' : ""}</div>
+          <div class="weight-600">${escapeHtml(permissionKindLabel(g.kind))} <span class="pill">${escapeHtml(g.capability)}</span>${g.secretAccess ? ` <span class="pill warn">${tr("can read secrets")}</span>` : ""}</div>
           <div class="muted-sm text-xs">${escapeHtml(whenText(g.expiresAt))}</div>
-          ${(g.openWork ?? []).map((w) => `<div class="muted-sm text-xs">Running: ${escapeHtml(w)}</div>`).join("")}
+          ${(g.openWork ?? []).map((w) => `<div class="muted-sm text-xs">${tr("Running: {0}", escapeHtml(w))}</div>`).join("")}
           <button type="button" class="secondary mt-1" data-permission-revoke="${escapeHtml(g.id)}">${escapeHtml(PERMISSIONS_COPY.revoke)}</button>
         </div>`,
     )
     .join("");
   const pending = (data.pendingOperations ?? [])
-    .map((o) => `<div class="muted-sm text-xs">Waiting: ${escapeHtml(o.kind)} (${escapeHtml(o.state)})</div>`)
+    .map((o) => `<div class="muted-sm text-xs">${tr("Waiting: {0} ({1})", escapeHtml(o.kind), escapeHtml(o.state))}</div>`)
     .join("");
   return `
       <h2 class="mt-4">${escapeHtml(PERMISSIONS_COPY.title)}</h2>

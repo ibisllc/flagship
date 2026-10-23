@@ -19,6 +19,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import okhttp3.Interceptor
 import okhttp3.Response
 import okhttp3.internal.tls.OkHostnameVerifier
@@ -52,11 +53,9 @@ class CertPinInterceptor(
             if (!CertPinDecision.accept(leafDerSha256Hex(leafDer), host, pinFor, isKnownBox)) {
                 throw SSLPeerUnverifiedException(
                     if (pinFor(host) == null) {
-                        "No verified certificate fingerprint for $host yet — refusing connection until the " +
-                            "server's signed status arrives"
+                        FSStrings.get(R.string.no_verified_certificate_fingerprint_for_yet, host)
                     } else {
-                        "Certificate for $host does not match the server's STK-signed " +
-                            "fingerprint — refusing connection"
+                        FSStrings.get(R.string.certificate_for_does_not_match_the, host)
                     },
                 )
             }

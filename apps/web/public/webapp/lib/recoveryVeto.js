@@ -11,13 +11,14 @@ import { formatWhen } from "./dateFormat.js";
 import { adminRootPubHex, signWithAdminRoot } from "../keystore.js";
 import { controlApex } from "./apex.js";
 
+import { tr } from "./i18n.js";
 export const TAG_RE_PAIR_VETO = "flagship/re-pair-veto/v1";
 
-export const VETO_CONFIRM_TITLE = "Reject this recovery?";
+export const VETO_CONFIRM_TITLE = tr("Reject this recovery?");
 export const VETO_CONFIRM_MESSAGE =
-  "This cancels the recovery attempt. If the real owner is trying to get back in, they will have to start again and wait the full time. Only reject it if you do not expect it.";
+  tr("This cancels the recovery attempt. If the real owner is trying to get back in, they will have to start again and wait the full time. Only reject it if you do not expect it.");
 export const UNUSUAL_RECOVERY_NOTE =
-  "If this is unusual, please check on the physical safety of your device and server.";
+  tr("If this is unusual, please check on the physical safety of your device and server.");
 
 const hexOf = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
@@ -42,10 +43,10 @@ export function renderRecoveryReview(snapshot, isAdmin, nowMs = Date.now()) {
   const done = typeof p.completesAt === "number" && p.completesAt <= nowMs;
   return `
     <div class="card" data-recovery-review role="alert">
-      <div class="weight-600"><span aria-hidden="true">⚠️</span> A recovery of this account is waiting</div>
-      <p class="note small">A new device asked to take over this account. It becomes active ${done ? "as soon as it finishes" : `on ${escapeHtml(formatWhen(p.completesAt, nowMs))}`} unless an admin rejects it. It has no admin authority until then.</p>
+      <div class="weight-600"><span aria-hidden="true">⚠️</span> ${tr("A recovery of this account is waiting")}</div>
+      <p class="note small">${tr("A new device asked to take over this account. It becomes active {0} unless an admin rejects it. It has no admin authority until then.", done ? "as soon as it finishes" : tr("on {0}", escapeHtml(formatWhen(p.completesAt, nowMs))))}</p>
       <p class="note small">${escapeHtml(UNUSUAL_RECOVERY_NOTE)}</p>
-      <button class="danger" id="reject-recovery-btn">Reject recovery</button>
+      <button class="danger" id="reject-recovery-btn">${tr("Reject recovery")}</button>
     </div>`;
 }
 
@@ -71,7 +72,7 @@ export async function submitRecoveryVeto({ username, pending, adminRootSeed }, d
       signature: typeof sig === "string" ? sig : hexOf(sig),
     }),
   });
-  if (resp.status === 409) throw new Error("This recovery was already cancelled or finished.");
-  if (!resp.ok) throw new Error(`Couldn't reject the recovery (${resp.status})`);
+  if (resp.status === 409) throw new Error(tr("This recovery was already cancelled or finished."));
+  if (!resp.ok) throw new Error(tr("Couldn't reject the recovery ({0})", resp.status));
   return resp.json().catch(() => ({}));
 }
