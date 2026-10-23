@@ -1081,12 +1081,11 @@ async function main(): Promise<void> {
       serverDomain: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
       unsealToBox: (blob) => custodian.unsealToBox(blob),
+      // Under keyd the verified delivery goes to keyd sealed; the key never enters this process.
+      ...(keyd ? { adoptSealed: (sealed: Uint8Array) => keyd.provisionSwkSealed(sealed) } : {}),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       ...bellFetch(),
-      persistSwk: async (hex) => {
-        if (keyd) keyd.provisionSwk(hexToBytes(hex.trim()));
-        else await persistSwkHex(swkHexFilePath, hex);
-      },
+      persistSwk: (hex) => persistSwkHex(swkHexFilePath, hex),
       restart: () => restarts.request("SWK provisioned via deposit; restarting to enable the service platform"),
       markerStore: fileSwkMarkerStore(`${dataDir}/swk-claimed.json`),
       guard: restarts.guard,
@@ -1117,12 +1116,10 @@ async function main(): Promise<void> {
       serverDomain: env.serverFqdn!,
       ownerIrkPub: cfg.irkPublicKey,
       unsealToBox: (blob) => custodian.unsealToBox(blob),
+      ...(keyd ? { adoptSealed: (sealed: Uint8Array) => keyd.provisionCgkSealed(sealed) } : {}),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       ...bellFetch(),
-      persistCgk: async (hex) => {
-        if (keyd) keyd.provisionCgk(hexToBytes(hex.trim()));
-        else await persistCgkHex(cgkHexFilePath, hex);
-      },
+      persistCgk: (hex) => persistCgkHex(cgkHexFilePath, hex),
       restart: () => restarts.request("CGK provisioned via deposit; restarting to enable gossip"),
       markerStore: fileCgkMarkerStore(`${dataDir}/cgk-claimed.json`),
       guard: restarts.guard,
@@ -1686,7 +1683,7 @@ async function main(): Promise<void> {
           serverFqdn: env.serverFqdn!,
           controlPlaneBaseUrl: env.controlPlaneBaseUrl,
           ownerIrkPub: cfg.irkPublicKey,
-          unsealToBox: (blob) => custodian.unsealToBox(blob),
+          unsealToBox: (blob) => custodian.unsealPairingOrder(blob),
           pairedSessions,
           ...bellFetch(),
           markerStore: pairingMarker,
@@ -2895,7 +2892,7 @@ async function wireRuntimeSurfaces(deps: {
   const adapterOrigins = new FileAdapterOrigins(join(dataDir, "data", "adapter-origins.json"));
   await adapterOrigins.load().catch((e) => console.warn(`[adapters] origins unreadable: ${(e as Error).message}`));
   if (runtime.servicePlatform) {
-    const mcpSwk = swkBytes ?? new Uint8Array(32);
+    const mcpSwk = swkHex ? custodian.asSwkOps() : new Uint8Array(32);
     const mcpKeys = new FileMcpKeyStore(join(dataDir, "mcp-keys"), mcpSwk);
     await mcpKeys.load();
     await mcpKeys.attachAuthority({ family: new TokenFamily(authorityHub, "mcp-key", "account"), parentOf: () => [AUTHORITY_ROOT] });

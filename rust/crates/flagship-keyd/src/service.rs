@@ -12,22 +12,15 @@ use crate::acme::{AcmeAccount, AcmeRequest};
 use crate::crypto::{Key32, gcm_open, gcm_seal, hkdf32, hmac_sha256, open_sealed, sha256};
 use crate::files::save_key_file;
 use crate::obj;
-use crate::policy::{BOX_SIGN_PURPOSES, check_sign};
+use crate::policy::{
+    BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, check_sign, is_pairing_order,
+    is_service_id,
+};
 use crate::tls::TlsKeys;
 use crate::wire::{
     Args, ErrorCode, HexBounds, KEYD_PROTOCOL_VERSION, KeydError, KeydResult, PEM_MAX, hex_arg,
     no_extra_args, pem_arg, str_arg, string_list, to_hex,
 };
-
-/// The only labels a workload-key derivation may use (`SWK_DERIVE_LABELS` in opaqueKey.ts).
-pub const SWK_DERIVE_LABELS: &[&str] = &[
-    "flagship.chunk.v1",
-    "flagship.llm.v1",
-    "flagship.tls.v1",
-    "flagship.pb-manifest.v1",
-    "flagship/peer-backup-key/v1",
-    "flagship.app-secret.v1",
-];
 
 const GOSSIP_TAG: &str = "flagship/gossip/v2|";
 const ACCESS_SYNC_TAG: &str = "flagship/access-sync/v1|";
@@ -206,20 +199,34 @@ impl KeydService {
                 })
             }
             "unseal" => {
-                no_extra_args(a, &["blob"])?;
+                // Only a sealed message the daemon must read, checked by its shape once opened; a
+                // sealed key never comes back out (provision.* and acme.importGranted keep those).
+                no_extra_args(a, &["blob", "purpose"])?;
                 let blob = hex_arg(a, "blob", HexBounds::range(44, 1024 * 1024))?;
+                let purpose = str_arg(a, "purpose", 32)?;
+                if !UNSEAL_PURPOSES.contains(&purpose) {
+                    return Err(KeydError::forbidden(
+                        "keyd opens no sealed message of that kind",
+                    ));
+                }
                 let plain = open_sealed(&blob, self.stk()?)
                     .map_err(|_| KeydError::failed("could not open the blob"))?;
+                if !is_pairing_order(&plain) {
+                    return Err(KeydError::forbidden(
+                        "the sealed message is not a pairing order",
+                    ));
+                }
                 done(obj! { "plain" => to_hex(&plain) })
             }
             "swk.hkdf" => {
-                // Only the labels the box derives; a compromised daemon cannot choose its own subkey.
+                // Only the two fixed, unsalted subkeys the daemon needs; the chunk, LLM, app-secret
+                // and TLS-at-rest subkeys stay behind their own operations.
                 no_extra_args(a, &["salt", "info"])?;
                 let info = str_arg(a, "info", 128)?;
-                if !SWK_DERIVE_LABELS.contains(&info) {
+                if !SWK_HKDF_LABELS.contains(&info) {
                     return Err(KeydError::forbidden("that derivation label is not allowed"));
                 }
-                let salt = hex_arg(a, "salt", HexBounds::max(512))?;
+                let salt = hex_arg(a, "salt", HexBounds::max(0))?;
                 done(obj! { "key" => to_hex(hkdf32(self.swk()?, &salt, info.as_bytes()).as_ref()) })
             }
             "swk.seal" => {
@@ -260,6 +267,11 @@ impl KeydService {
                 no_extra_args(a, &["serviceId"])?;
                 let swk = self.swk()?;
                 let id = str_arg(a, "serviceId", 200)?;
+                if !is_service_id(id) {
+                    return Err(KeydError::bad_request(
+                        "serviceId must be <creator>--<slug> or <slug>",
+                    ));
+                }
                 done(
                     obj! { "secret" => to_hex(hkdf32(swk, id.as_bytes(), b"flagship.app-secret.v1").as_ref()) },
                 )
@@ -414,12 +426,27 @@ impl KeydService {
                 done(acct.sign(&req, tls)?)
             }
             "provision.swk" | "provision.cgk" => {
-                no_extra_args(a, &["key"])?;
+                // `sealed`: the owner's delivery sealed to this box, opened and kept here so it never
+                // passes through the daemon. `key`: a key the daemon already holds, moved in.
+                no_extra_args(a, &["key", "sealed"])?;
                 let which = if op == "provision.swk" { "swk" } else { "cgk" };
-                let key = key32(&Zeroizing::new(hex_arg(a, "key", HexBounds::exact(32))?));
+                if a.contains_key("key") == a.contains_key("sealed") {
+                    return Err(KeydError::bad_request("give key or sealed"));
+                }
+                let key = if a.contains_key("sealed") {
+                    let sealed = hex_arg(a, "sealed", HexBounds::range(44, 1024))?;
+                    let plain = open_sealed(&sealed, self.stk()?)
+                        .map_err(|_| KeydError::failed("could not open the sealed key"))?;
+                    if plain.len() != 32 {
+                        return Err(KeydError::failed("the sealed key is not 32 bytes"));
+                    }
+                    key32(&plain)
+                } else {
+                    key32(&Zeroizing::new(hex_arg(a, "key", HexBounds::exact(32))?))
+                };
                 let current = if which == "swk" { &self.swk } else { &self.cgk };
                 // A key is provisioned once. Replacing one is a restore or replacement workflow
-                // (a new keyd state), never a request over the socket.
+                // (a new keyd state, made offline by root), never a request over the socket.
                 if let Some(cur) = current {
                     if cur.as_ref() == key.as_ref() {
                         return done(obj! { "stored" => false, "already" => true });

@@ -37,7 +37,7 @@ import { AcmeAccount, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydServer
 import { KeydAcmeIssuer } from "../../server-daemon/src/acme/keydAcme.js";
 import { keydAcmeApi } from "../../server-daemon/src/keydAsync.js";
 import { MockAcme } from "../../server-daemon/tests/helpers/mockAcme.js";
-import { CGK, SEED, SWK } from "./helpers.js";
+import { CGK, PAIRING_ORDER, SEED, SWK } from "./helpers.js";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const BIN = process.env.FLAGSHIP_KEYD_RUST_BIN ?? join(ROOT, "rust/target/debug/flagship-keyd");
@@ -196,12 +196,13 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
       const key = opaqueKey({
         publicKey: PUB,
         sign: (m) => unhex(sync.call("sign", { msg: hex(m) }).sig),
-        unseal: (b) => unhex(sync.call("unseal", { blob: hex(b) }).plain),
+        unseal: (b) => unhex(sync.call("unseal", { blob: hex(b), purpose: "pairing-order" }).plain),
       });
       const order = { serverDomain: "home.a.flagship.services", epoch: 1, seq: 1, action: "suspend" as const, reason: "dead-man", signer: "box" as const, issuedAt: 1760000000000 };
       expect(verifyBootSuspension(order, signBootSuspension(order, key), PUB)).toBe(true);
       expect(() => signBootSuspension({ ...order, signer: "owner" as const }, key)).toThrow();
-      expect(new TextDecoder().decode(openSealedFromEd25519Recipient(sealForEd25519Recipient(enc("sealed"), PUB), key))).toBe("sealed");
+      expect(openSealedFromEd25519Recipient(sealForEd25519Recipient(PAIRING_ORDER, PUB), key)).toEqual(PAIRING_ORDER);
+      expect(() => openSealedFromEd25519Recipient(sealForEd25519Recipient(SWK, PUB), key)).toThrow(/not a pairing order/);
       for (let i = 0; i < 200; i++) expect(String(sync.call("swk.deriveServiceSecret", { serviceId: `alice--app${i}` }).secret)).toBe(hex(deriveServiceSecret(SWK, `alice--app${i}`)));
     } finally {
       sync.close();
@@ -213,10 +214,11 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
     const k = await startRust();
     try {
       const c = await client(k.sock);
-      const blob = sealForEd25519Recipient(enc("hello"), PUB);
-      expect(Buffer.from(unhex((await c.call("unseal", { blob: hex(blob) })).plain)).toString()).toBe("hello");
-      const other = sealForEd25519Recipient(enc("hello"), ed.getPublicKey(new Uint8Array(32).fill(9)));
-      await expect(c.call("unseal", { blob: hex(other) })).rejects.toMatchObject({ code: "failed" });
+      const blob = sealForEd25519Recipient(PAIRING_ORDER, PUB);
+      expect(unhex((await c.call("unseal", { blob: hex(blob), purpose: "pairing-order" })).plain)).toEqual(PAIRING_ORDER);
+      const other = sealForEd25519Recipient(PAIRING_ORDER, ed.getPublicKey(new Uint8Array(32).fill(9)));
+      await expect(c.call("unseal", { blob: hex(other), purpose: "pairing-order" })).rejects.toMatchObject({ code: "failed" });
+      await expect(c.call("unseal", { blob: hex(sealForEd25519Recipient(SWK, PUB)), purpose: "pairing-order" })).rejects.toMatchObject({ code: "forbidden", message: "the sealed message is not a pairing order" });
       c.close();
     } finally {
       await k.cleanup();
@@ -264,10 +266,11 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
       expect((await c.call("swk.deriveServiceSecret", { serviceId: "alice--chess" })).secret).toBe(hex(deriveServiceSecret(SWK, "alice--chess")));
       expect((await c.call("swk.deriveBackupManifestKey")).key).toBe(hex(deriveBackupManifestKey(SWK)));
       expect((await c.call("swk.deriveTlsKey", { serverId: FQDN })).key).toBe(hex(hkdf(sha256, SWK, enc(FQDN), enc("flagship.tls.v1"), 32)));
-      const salt = hex(enc("alice--chess"));
-      expect((await c.call("swk.hkdf", { salt, info: "flagship.app-secret.v1" })).key).toBe(hex(hkdf(sha256, SWK, enc("alice--chess"), enc("flagship.app-secret.v1"), 32)));
-      await expect(c.call("swk.hkdf", { salt, info: "flagship/root-entitlement/v1" })).rejects.toMatchObject({ code: "forbidden" });
-      await expect(c.call("swk.hkdf", { salt, info: "" })).rejects.toMatchObject({ code: "bad-request" });
+      expect((await c.call("swk.hkdf", { salt: "", info: "flagship/peer-backup-key/v1" })).key).toBe(hex(hkdf(sha256, SWK, new Uint8Array(0), enc("flagship/peer-backup-key/v1"), 32)));
+      expect((await c.call("swk.hkdf", { salt: "", info: "flagship.pb-manifest.v1" })).key).toBe(hex(deriveBackupManifestKey(SWK)));
+      await expect(c.call("swk.hkdf", { salt: "", info: "flagship.app-secret.v1" })).rejects.toMatchObject({ code: "forbidden" });
+      await expect(c.call("swk.hkdf", { salt: "aa", info: "flagship.pb-manifest.v1" })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("swk.hkdf", { salt: "", info: "" })).rejects.toMatchObject({ code: "bad-request" });
       const g = await c.call("cgk.seal", { pt: hex(enc("gossip")) });
       expect(Buffer.from(openGossip(unhex(g.blob), CGK)).toString()).toBe("gossip");
       expect(Buffer.from(unhex((await c.call("cgk.open", { blob: hex(sealGossip(enc("back"), CGK)) })).pt)).toString()).toBe("back");
@@ -291,12 +294,13 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
       expect((await c.call("provision.swk", { key: hex(SWK) })).already).toBe(true);
       await expect(c.call("provision.swk", { key: hex(new Uint8Array(32).fill(7)) })).rejects.toMatchObject({ code: "forbidden", message: "swk is already provisioned" });
       await expect(c.call("provision.swk", { key: "00" })).rejects.toMatchObject({ code: "bad-request" });
+      expect(await c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) })).toEqual({ stored: true });
+      expect(readKeyFile(join(k.dir, "cgk.key"))).toEqual(CGK);
       c.close();
       const file = join(k.dir, "swk.key");
       expect(statSync(file).mode & 0o777).toBe(0o400);
       expect(readFileSync(file, "utf8")).toBe(hex(SWK) + "\n");
       expect(readKeyFile(file)).toEqual(SWK);
-      expect(existsSync(join(k.dir, "cgk.key"))).toBe(false);
     } finally {
       await k.cleanup();
     }
@@ -412,7 +416,17 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["sign", { msg: boot("box", hex(PUB)) }, true], ["sign", { msg: boot("box", "00") }, true], ["sign", { msg: boot("owner", hex(PUB)) }, true],
         ["sign", { msg: hex(enc("flagship/app-release/v1|a|1")) }, true], ["sign", { msg: hex(enc("flagship/pb-checkin/v1|a|1")) }, true],
         ["sign", { msg: hex(enc("flagship/pb-root-deposit/v1|a|1")) }, true], ["sign", { msg: hex(enc("flagship/membership/v1|a")) }, true], ["sign", { msg: hex(enc("flagship/service-grant/v1|a")) }, true],
-        ["unseal", { blob: blob(43) }, true], ["unseal", { blob: blob(44) }, true], ["unseal", { blob: blob(100) }, true], ["unseal", { blob: blob(10), x: 1 }, true],
+        ["unseal", { blob: blob(43), purpose: "pairing-order" }, true], ["unseal", { blob: blob(44), purpose: "pairing-order" }, true], ["unseal", { blob: blob(100), purpose: "pairing-order" }, true],
+        ["unseal", { blob: blob(10), x: 1 }, true], ["unseal", { blob: blob(44) }, true], ["unseal", { blob: blob(44), purpose: "swk" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(PAIRING_ORDER, PUB)), purpose: "pairing-order" }, true], ["unseal", { blob: hex(sealForEd25519Recipient(SWK, PUB)), purpose: "pairing-order" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(enc('{"request":{"type":"add-paired-session"},"signature":1}'), PUB)), purpose: "pairing-order" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(enc('[{"request":{"type":"add-paired-session"},"signature":"a"}]'), PUB)), purpose: "pairing-order" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(enc("\ufeff" + new TextDecoder().decode(PAIRING_ORDER)), PUB)), purpose: "pairing-order" }, true],
+        ["unseal", { blob: hex(sealForEd25519Recipient(Uint8Array.of(0xff, 0x7b), PUB)), purpose: "pairing-order" }, true],
+        ["swk.hkdf", { salt: "", info: "flagship/peer-backup-key/v1" }, true], ["swk.hkdf", { salt: "", info: "flagship.pb-manifest.v1" }, true], ["swk.hkdf", { salt: "aa", info: "flagship.pb-manifest.v1" }, true],
+        ["swk.hkdf", { salt: "", info: "flagship.app-secret.v1" }, true], ["swk.hkdf", { salt: "", info: "flagship.chunk.v1" }, true],
+        ["swk.deriveServiceSecret", { serviceId: "habit-tracker" }, true], ["swk.deriveServiceSecret", { serviceId: "a--b--c" }, true], ["swk.deriveServiceSecret", { serviceId: "a---b" }, true],
+        ["swk.deriveServiceSecret", { serviceId: "Alice--chess" }, true], ["swk.deriveServiceSecret", { serviceId: "a--" }, true], ["swk.deriveServiceSecret", { serviceId: "a--b-" }, true], ["swk.deriveServiceSecret", { serviceId: "a".repeat(64) }, true],
         ["swk.hkdf", { salt: "aa", info: "flagship.llm.v1" }, true], ["swk.hkdf", { salt: "aa", info: "nope" }, true], ["swk.hkdf", { salt: "a", info: "flagship.llm.v1" }, true],
         ["swk.hkdf", { info: "flagship.llm.v1" }, true], ["swk.hkdf", { salt: blob(513), info: "flagship.llm.v1" }, true], ["swk.hkdf", { salt: "", info: "x".repeat(129) }, true],
         ["swk.open", { ciphertext: blob(16), nonce: blob(11) }, true], ["swk.open", { ciphertext: blob(15), nonce: blob(12) }, true], ["swk.open", { ciphertext: blob(16), nonce: blob(12) }, true],
@@ -440,6 +454,9 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["acme.sign", { kind: "revoke", url: "u", nonce: "n", kid: "k", certificate: "00" }, true], ["acme.sign", { bogus: 1 }, true],
         ["acme.importGranted", { blob: blob(43) }, true], ["acme.importGranted", { blob: blob(60) }, true],
         ["provision.swk", { key: hex(SWK) }, true], ["provision.swk", { key: blob(32) }, true], ["provision.cgk", { key: blob(31) }, true], ["provision.cgk", {}, true],
+        ["provision.swk", { sealed: hex(sealForEd25519Recipient(SWK, PUB)) }, true], ["provision.swk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) }, true],
+        ["provision.cgk", { sealed: hex(sealForEd25519Recipient(enc("x"), PUB)) }, true], ["provision.cgk", { sealed: blob(44) }, true], ["provision.cgk", { sealed: blob(43) }, true],
+        ["provision.cgk", { key: hex(CGK), sealed: blob(44) }, true], ["provision.cgk", { key: null }, true], ["provision.cgk", { sealed: "zz" }, true],
       ];
       const frames = [{ id: 1, op: "hello", args: { v: 1, component: "diff" } }, ...cases.map(([op, args], i) => ({ id: i + 2, op, args }))];
       const strip = (r: Record<string, unknown>, whole: boolean) => (whole || r.ok === false ? r : { id: r.id, ok: r.ok });

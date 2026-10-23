@@ -3,6 +3,7 @@ import { writeFileDurable } from "./durableFile.js";
 import {
   carrierHexToCgkDelivery,
   openAndVerifyCgkDelivery,
+  verifyCgkDelivery,
 } from "@flagship/protocol";
 
 /**
@@ -35,6 +36,9 @@ import {
 
 const HEX = /^[0-9a-f]+$/;
 
+/** What a claim reports for a key keyd adopted: keyd holds it, this process never saw it. */
+export const ADOPTED = "held-by-keyd";
+
 function bytesToHex(b: Uint8Array): string {
   let s = "";
   for (const x of b) s += x.toString(16).padStart(2, "0");
@@ -55,10 +59,26 @@ export function decodeAndVerifyCgkCarrier(args: {
   ownerIrkPub: Uint8Array;
   /** Custodian-backed unseal (opens a blob sealed to the box identity). */
   unsealToBox: (blob: Uint8Array) => Uint8Array;
+  /**
+   * Under flagship-keyd: hand the verified sealed key to keyd, which opens and keeps it, so the
+   * key never enters this process. Used instead of `unsealToBox`; the result is then ADOPTED.
+   */
+  adoptSealed?: ((sealed: Uint8Array) => void) | undefined;
   serverDomain: string;
 }): string | null {
   const parsed = carrierHexToCgkDelivery(args.sealedHex);
   if (!parsed) return null;
+  if (args.adoptSealed) {
+    const d = parsed.delivery;
+    if (d.serverDomain.toLowerCase() !== args.serverDomain.toLowerCase()) return null;
+    if (!verifyCgkDelivery(d, parsed.signature, args.ownerIrkPub)) return null;
+    try {
+      args.adoptSealed(d.sealed);
+    } catch {
+      return null;
+    }
+    return ADOPTED;
+  }
   const cgk = openAndVerifyCgkDelivery({
     delivery: parsed.delivery,
     signature: parsed.signature,
@@ -103,6 +123,8 @@ export interface ClaimCgkDepositOptions {
   ownerIrkPub: Uint8Array;
   /** Custodian-backed unseal — opens the CGK carrier sealed to the box identity. */
   unsealToBox: (blob: Uint8Array) => Uint8Array;
+  /** Under flagship-keyd: keyd opens and keeps the verified sealed key (see decode…Carrier). */
+  adoptSealed?: (sealed: Uint8Array) => void;
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /**
@@ -169,6 +191,7 @@ export async function claimCgkDeposit(opts: ClaimCgkDepositOptions): Promise<Cgk
     sealedHex,
     ownerIrkPub: opts.ownerIrkPub,
     unsealToBox: opts.unsealToBox,
+    adoptSealed: opts.adoptSealed,
     serverDomain: opts.serverDomain,
   });
   if (!cgkHex) {
@@ -180,7 +203,7 @@ export async function claimCgkDeposit(opts: ClaimCgkDepositOptions): Promise<Cgk
 
   log("[cgk-deposit] verified owner-IRK CGK delivery; persisting + restarting to enable gossip");
   try {
-    await opts.persistCgk(cgkHex);
+    if (cgkHex !== ADOPTED) await opts.persistCgk(cgkHex);
   } catch (e) {
     // If we couldn't persist, do NOT mark/restart — we'd lose the (now-consumed)
     // deposit. Surface the error and keep polling; but the GET already consumed

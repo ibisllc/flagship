@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { openLlmPayload, sealLlmPayload, type Bytes, type SealedBlob } from "@flagship/protocol";
 import type { TokenFamily } from "../authority/index.js";
 import { withFileLock } from "../durableFile.js";
+import type { SwkOps } from "../keyCustodian.js";
 
 const KEY_PREFIX = "fmcp_";
 
@@ -107,16 +108,25 @@ export class InMemoryMcpKeyStore implements McpKeyStore {
   }
 }
 
+type SwkSeal = Pick<SwkOps, "sealWithSwk" | "openWithSwk">;
+
 export class FileMcpKeyStore implements McpKeyStore {
   private byBuild = new Map<string, McpKeyRecord>();
   private byHash = new Map<string, string>();
+  private readonly swk: SwkSeal;
 
   constructor(
     private readonly dir: string,
-    private readonly swk: Bytes,
+    swk: Bytes | SwkSeal,
     private readonly now: () => number = () => Date.now(),
     private readonly rand: () => Uint8Array = () => randomBytes(24),
-  ) {}
+  ) {
+    // Under keyd the LLM subkey stays there: seal and open are keyd operations.
+    this.swk =
+      swk instanceof Uint8Array
+        ? { sealWithSwk: (pt) => sealLlmPayload(pt, swk), openWithSwk: (b) => openLlmPayload(b, swk) }
+        : swk;
+  }
 
   async load(): Promise<void> {
     if (!existsSync(this.dir)) return;
@@ -146,7 +156,7 @@ export class FileMcpKeyStore implements McpKeyStore {
     // the key before them, so the first new key stayed valid, and a revoke
     // racing a mint could leave a key on disk that came back on restart.
     return withFileLock(this.file(buildId), async (write) => {
-      await write(sealedToHex(sealLlmPayload(new TextEncoder().encode(JSON.stringify(rec)), this.swk)));
+      await write(sealedToHex(this.swk.sealWithSwk(new TextEncoder().encode(JSON.stringify(rec)))));
       const prev = this.byBuild.get(buildId);
       if (prev) this.byHash.delete(hashKey(prev.key));
       this.byBuild.set(buildId, rec);
@@ -223,7 +233,7 @@ export class FileMcpKeyStore implements McpKeyStore {
   private unseal(hex: string): McpKeyRecord | null {
     const blob = sealedFromHex(hex);
     if (!blob) return null;
-    const plain = openLlmPayload(blob, this.swk);
+    const plain = this.swk.openWithSwk(blob);
     const obj = JSON.parse(new TextDecoder().decode(plain)) as unknown;
     if (
       !obj ||
