@@ -1,0 +1,16 @@
+{
+  "ja": {
+    "file": "NotoSansJP-Store.woff2",
+    "weight": 500,
+    "source": "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf",
+    "sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+    "chars": "—…、。「」『』〜あがくけしじただてでとなにのはひめるをアウォクサスットドバフプマラリン・ー元分動宅家待態手承招族状目確自認起鍵開首！％（），．：；？"
+  },
+  "zh-Hans": {
+    "file": "NotoSansSC-Store.woff2",
+    "weight": 500,
+    "source": "https://github.com/google/fonts/raw/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf",
+    "sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
+    "chars": "—…、。「」『』〜・ー一上了云人份会你准务动匙只启器在备它家密就尽己应开态手才打批有服机然状用留的目能腕自行请运邀里钥！％（），．：；？"
+  }
+}

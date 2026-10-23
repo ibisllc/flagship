@@ -1,0 +1,18 @@
+<!doctype html>
+<!-- Store template: the closing card. The caption where every slide has it, the mark standing on the shelf where
+     the devices stand, the address under the shelf. docs/store-assets/store-assets-brief.md. -->
+<html lang="en"><head><meta charset="utf-8"><title>Flagship store art: closing</title>
+<link rel="stylesheet" href="store.css"></head>
+<body class="light">
+<script src="slide.js"></script>
+<script>
+window.layout = (spec, k) => {
+  k.head(spec, document.body);
+  const st = k.stage(document.body);
+  const s = st.h * 0.74; // wider than the slide: the mark is cropped by the right edge
+  const m = k.el("div", "mark", document.body, { width: k.px(s), height: k.px(s), left: k.px(st.left), top: k.px(st.top + st.h - s) });
+  for (const c of ["frame", "ring", "core"]) k.el("div", c, m);
+  k.shelf({ ...spec, foot: { ...spec.foot, left: "flagshipserver.com" } }, document.body);
+};
+</script>
+</body></html>
