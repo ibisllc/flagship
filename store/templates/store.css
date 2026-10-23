@@ -1,0 +1,115 @@
+/* Store art (docs/store-assets/store-assets-brief.md §3). The product's own tokens (docs/design-system.md §2-3):
+   warm paper / warm near-black, ink / cream, one teal accent per slide, Geist + Geist Mono, Noto Sans JP/SC for
+   Japanese and Chinese. Every size is a fraction of the canvas (--W, --H in px, set by slide.js), so one template
+   draws every store size. Fonts are vendored in ../fonts and never fetched. */
+
+@font-face { font-family: "Geist"; font-weight: 100 900; src: url("../fonts/Geist-Variable.woff2") format("woff2-variations"); }
+@font-face { font-family: "Geist Mono"; font-weight: 100 900; src: url("../fonts/GeistMono-Variable.woff2") format("woff2-variations"); }
+@font-face { font-family: "Store JP"; font-weight: 500; src: url("../fonts/NotoSansJP-Store.woff2") format("woff2"); }
+@font-face { font-family: "Store SC"; font-weight: 500; src: url("../fonts/NotoSansSC-Store.woff2") format("woff2"); }
+
+:root {
+  --W: 1320; --H: 2868;
+  --w: calc(var(--W) * 1px);
+  --h: calc(var(--H) * 1px);
+  --u: calc(var(--H) * 0.01px);      /* 1 % of the height */
+  --pad: calc(var(--W) * 0.075px);
+  --caption-size: calc(var(--H) * 0.05px);
+  --sans: "Geist", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+}
+:root[lang="ja"] { --sans: "Geist", "Store JP", sans-serif; --mono: "Geist Mono", "Store JP", monospace; }
+:root[lang="zh-Hans"] { --sans: "Geist", "Store SC", sans-serif; --mono: "Geist Mono", "Store SC", monospace; }
+
+.light { --bg: #F7F6F2; --bg-2: #F0EEE8; --ink: #14140F; --muted: #555149; --rule: #E5E3DC; --rule-strong: #C8C5BB; --accent: #14B8A6; --body: #14140F; --body-edge: #14140F; --screen-bg: #FFFFFF; }
+.dark  { --bg: #0A0A09; --bg-2: #14130F; --ink: #ECE7D6; --muted: #A39D8F; --rule: #25231C; --rule-strong: #3A372E; --accent: #2DD4BF; --body: #1C1B17; --body-edge: #3A372E; --screen-bg: #161512; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: var(--w); height: var(--h); overflow: hidden; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; position: relative; }
+
+/* ---- the words ---------------------------------------------------------------------------- */
+
+.head { position: absolute; left: var(--pad); right: var(--pad); top: calc(var(--u) * 5.2); z-index: 3; }
+.eyebrow {
+  display: flex; align-items: center; gap: calc(var(--u) * 0.9);
+  font-family: var(--mono); font-weight: 500; font-size: calc(var(--u) * 1.12);
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); line-height: 1;
+}
+.eyebrow::before { content: ""; width: calc(var(--u) * 2.2); height: max(2px, calc(var(--u) * 0.11)); background: var(--accent); flex: none; }
+.eyebrow .num { color: var(--ink); }
+:root[lang="ja"] .eyebrow, :root[lang="zh-Hans"] .eyebrow { letter-spacing: 0.08em; }
+
+.caption {
+  margin-top: calc(var(--u) * 2);
+  font-weight: 500; font-size: var(--caption-size); line-height: 1.04; letter-spacing: -0.03em;
+  text-wrap: balance; white-space: pre-line; hyphens: manual; overflow-wrap: normal;
+  max-width: 100%;
+}
+:root[lang="ja"] .caption, :root[lang="zh-Hans"] .caption {
+  font-size: calc(var(--caption-size) * 0.92); line-height: 1.22; letter-spacing: 0.01em;
+  word-break: keep-all; line-break: strict; text-wrap: wrap;
+}
+
+/* ---- the shelf: one teal hairline at the same height on every slide ----------------------- */
+
+.shelf { position: absolute; left: 0; right: 0; top: calc(var(--u) * 95); height: max(2px, calc(var(--u) * 0.1)); background: var(--accent); z-index: 4; }
+.foot {
+  position: absolute; left: var(--pad); right: var(--pad); top: calc(var(--u) * 96.3);
+  font-family: var(--mono); font-weight: 500; font-size: calc(var(--u) * 1.05); letter-spacing: 0.14em;
+  text-transform: lowercase; color: var(--muted); display: flex; justify-content: space-between; z-index: 4;
+}
+.foot .standin { color: #B91C1C; text-transform: uppercase; }
+.dark .foot .standin { color: #F87171; }
+
+/* ---- the stage the device stands in ------------------------------------------------------- */
+
+.stage { position: absolute; left: var(--pad); right: var(--pad); top: calc(var(--u) * 22.5); bottom: calc(var(--u) * 5); display: flex; align-items: flex-end; justify-content: center; z-index: 2; }
+
+.device { position: relative; background: var(--body); flex: none; box-shadow: 0 0 0 max(1px, calc(var(--u) * 0.05)) var(--body-edge); }
+.device .screen { position: absolute; overflow: hidden; background: var(--screen-bg); }
+.device .screen img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+.device .island { position: absolute; background: #050505; border-radius: 999px; z-index: 2; }
+.device .button { position: absolute; background: var(--body); box-shadow: 0 0 0 max(1px, calc(var(--u) * 0.05)) var(--body-edge); }
+
+/* the watch: case, crown and two strap stubs, flat */
+.watch { position: relative; flex: none; }
+.watch .strap { position: absolute; left: 18%; right: 18%; background: var(--bg-2); box-shadow: inset 0 0 0 max(1px, calc(var(--u) * 0.06)) var(--rule-strong); }
+.watch .case { position: absolute; background: var(--body); box-shadow: 0 0 0 max(1px, calc(var(--u) * 0.06)) var(--body-edge); }
+.watch .screen { position: absolute; overflow: hidden; background: #000; }
+.watch .screen img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.watch .crown { position: absolute; background: var(--body); box-shadow: 0 0 0 max(1px, calc(var(--u) * 0.06)) var(--body-edge); border-radius: 30%; }
+
+/* ---- a capture that does not exist yet ---------------------------------------------------- */
+
+.missing {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 0.9em;
+  padding: 9%; background-color: var(--bg-2); color: var(--muted);
+  background-image: repeating-linear-gradient(135deg, transparent 0 22px, var(--rule) 22px 24px);
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: var(--ph-size, 28px); line-height: 1.35; letter-spacing: 0.02em;
+  border: max(2px, calc(var(--u) * 0.15)) dashed #B91C1C;
+}
+.missing b { color: #B91C1C; font-weight: 600; letter-spacing: 0.14em; font-size: 1.25em; }
+.missing span { background: var(--bg-2); padding: 0.1em 0.3em; overflow-wrap: anywhere; }
+.missing.round { border-radius: 50%; padding: 18%; text-align: center; align-items: center; }
+
+/* ---- slide 1: the app icon's circle, huge, behind the phone ------------------------------- */
+
+.sun { position: absolute; border-radius: 50%; background: var(--accent); z-index: 1; }
+
+/* ---- the closing card: the mark standing on the shelf ------------------------------------- */
+
+.mark { position: absolute; z-index: 2; }
+.mark .frame { position: absolute; inset: 0; border-radius: 14%; background: #0A0A09; }
+.mark .ring { position: absolute; inset: 22%; border-radius: 50%; background: #FFFFFF; }
+.mark .core { position: absolute; inset: 25%; border-radius: 50%; background: #14B8A6; }
+/* the logo's own dark form (apps/web/public/logo.svg): teal square, white core */
+.dark .mark .frame, .dark .mark .ring { background: #14B8A6; }
+.dark .mark .core { background: #FFFFFF; }
+
+/* ---- full-bleed (Apple Watch, Wear OS) ---------------------------------------------------- */
+
+.bleed { position: absolute; inset: 0; }
+.bleed img { width: 100%; height: 100%; object-fit: cover; display: block; }
+body.raw { background: #000; }
+body.raw .missing { --ph-size: 15px; padding: 8%; }
