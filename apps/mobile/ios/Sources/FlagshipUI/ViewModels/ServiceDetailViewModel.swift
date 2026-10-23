@@ -434,9 +434,9 @@ public final class ServiceDetailViewModel {
         if fqdn.split(separator: ".").count < 3 {
             let suggested = "www.\(fqdn)"
             customDomainPrompt = CustomDomainPrompt(
-                title: "Subdomains only",
-                message: "This only supports subdomains — an apex like \(fqdn) can't take a CNAME. Use \(suggested)?",
-                confirmTitle: "Use \(suggested)",
+                title: String(localized: "Subdomains only"),
+                message: String(localized: "This only supports subdomains — an apex like \(fqdn) can't take a CNAME. Use \(suggested)?"),
+                confirmTitle: String(localized: "Use \(suggested)"),
                 destructive: false,
                 onConfirm: { [weak self] in
                     guard let self else { return }
@@ -458,9 +458,9 @@ public final class ServiceDetailViewModel {
         // confirms (there's no "forget a domain" affordance otherwise).
         if let existing = customDomain, existing != fqdn {
             customDomainPrompt = CustomDomainPrompt(
-                title: "Replace custom domain?",
-                message: "This will permanently replace the current custom domain (\(existing)). It can't be undone, even if the new one fails to verify.",
-                confirmTitle: "Replace",
+                title: String(localized: "Replace custom domain?"),
+                message: String(localized: "This will permanently replace the current custom domain (\(existing)). It can't be undone, even if the new one fails to verify."),
+                confirmTitle: String(localized: "Replace"),
                 destructive: true,
                 onConfirm: { [weak self] in
                     Task { await self?.bindCustomDomain(fqdn) }
@@ -484,11 +484,11 @@ public final class ServiceDetailViewModel {
         // pre-D) before recording the order. Canonical bytes are unchanged.
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await Keystore.sensitiveOrderSigningKey(reason: "Attach a custom domain")
+            irk = try await Keystore.sensitiveOrderSigningKey(reason: String(localized: "Attach a custom domain"))
         } catch {
             customDomainPrompt = CustomDomainPrompt(
-                title: "Couldn't request custom domain",
-                message: "Couldn't access your account keys: \(error.localizedDescription)",
+                title: String(localized: "Couldn't request custom domain"),
+                message: String(localized: "Couldn't access your account keys: \(error.localizedDescription)"),
                 confirmTitle: nil, destructive: false, onConfirm: nil
             )
             return
@@ -502,8 +502,8 @@ public final class ServiceDetailViewModel {
             signature = try irk.signature(for: canonical)
         } catch {
             customDomainPrompt = CustomDomainPrompt(
-                title: "Couldn't request custom domain",
-                message: "Couldn't sign the request: \(error.localizedDescription)",
+                title: String(localized: "Couldn't request custom domain"),
+                message: String(localized: "Couldn't sign the request: \(error.localizedDescription)"),
                 confirmTitle: nil, destructive: false, onConfirm: nil
             )
             return
@@ -534,7 +534,7 @@ public final class ServiceDetailViewModel {
             // server-busy, never a CNAME verdict (that's async). Show
             // the server's reason verbatim.
             customDomainPrompt = CustomDomainPrompt(
-                title: "Couldn't request custom domain",
+                title: String(localized: "Couldn't request custom domain"),
                 message: error.localizedDescription,
                 confirmTitle: nil,
                 destructive: false,
