@@ -286,7 +286,6 @@
   "s9876e64009": "Automatisierte Scanner einsetzen, die dauerhafte Last erzeugen.",
   "scf5d5d34dc": "Details veröffentlichen, bevor der Fix ausgeliefert wurde oder bevor unser gemeinsam vereinbarter Offenlegungstermin erreicht ist (wir streben höchstens 90 Tage an, bei kritischen Problemen verhandelbar).",
   "s6113805e30": "Hall of Fame",
-  "sefd58307d1": "Forschende, die uns eine Schwachstelle gemeldet haben, mit den Commits, die sie geschlossen haben. Genannt in der Form, die jede meldende Person wünscht: Name, Handle oder anonym, auf Wunsch mit Link. Ohne Namensnennung aufgeführt, bis uns die Präferenz mitgeteilt wurde; wir veröffentlichen nie einen Namen, den wir nicht erhalten haben. (Die technischen Einträge bleiben auf Englisch.)",
   "s6600e49241": "Sicherheitslücke melden",
   "s74c47fae88": "Nutze das Formular unten (bevorzugt: es fragt die richtigen strukturierten Felder ab) oder schreib an <1>security@flagshipserver.com</1>. Verschlüsselte Meldungen sind willkommen. Verwende unseren PGP-Schlüssel:",
   "s84f28e32dd": "<1>Lade den öffentlichen Schlüssel herunter</1>, oder lass dein Mailprogramm ihn für <2>security@flagshipserver.com</2> finden (veröffentlicht über das Web Key Directory).",
@@ -470,5 +469,6 @@
   "s4bc920353e": "Feldnotizen vom Bau eines Personal-Cloud-Produkts, das Self-Hosting ernst nimmt. Abonniere über den RSS-Link oben; diese Seite ist ratenbegrenzt (keine Überwachungs-Pixel, kein Newsletter-Einfangen).",
   "sefe57fd6f9": "Die ersten Beiträge erscheinen zusammen mit dem Start der Beta 0.2. Bis dahin sind die <1>Doku</1>, das <2>Sicherheitsmodell</2> und die <3>Open-Source</3>-Seite die maßgebliche Quelle dafür, was wir bauen.",
   "s8f7b9ab588": "Entwürfe",
-  "seb2f4750ac": "Wir veröffentlichen, wenn wir etwas Konkretes zu sagen haben. Folge dem RSS-Feed."
+  "seb2f4750ac": "Wir veröffentlichen, wenn wir etwas Konkretes zu sagen haben. Folge dem RSS-Feed.",
+  "sba026addff": "Forschende, die uns eine Schwachstelle gemeldet haben, und die Commits, die jede Meldung geschlossen haben, stehen in der <1>Hall of Fame</1>."
 }

@@ -2553,8 +2553,8 @@
       "security.html"
     ]
   },
-  "sefd58307d1": {
-    "en": "Researchers who reported a vulnerability to us, with the commits that closed it. Credited in whatever form each reporter asks for: name, handle, or anonymous, with a link if they want one. Listed without attribution until they have told us their preference; we never publish a name we have not been given.",
+  "sba026addff": {
+    "en": "Researchers who reported a vulnerability to us, and the commits that closed each report, are on the <1>hall of fame</1>.",
     "kind": "text",
     "ctx": "p",
     "pages": [
