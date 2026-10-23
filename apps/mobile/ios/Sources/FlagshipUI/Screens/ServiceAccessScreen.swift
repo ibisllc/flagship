@@ -109,7 +109,7 @@ public struct ServiceAccessScreen: View {
             isPresented: Binding(get: { confirmScope != nil }, set: { if !$0 { confirmScope = nil } }),
             titleVisibility: .visible
         ) {
-            Button(confirmScope == true ? "Separate lists" : "One list") {
+            Button(confirmScope == true ? String(localized: "Separate lists") : "One list") {
                 if let want = confirmScope { Task { await applyScope(want) } }
                 confirmScope = nil
             }
@@ -754,7 +754,7 @@ public struct ServiceAccessScreen: View {
     private func applyScope(_ want: Bool) async {
         guard let vm else { return }
         if await vm.setSeparateLists(want) {
-            toasts.success(want ? "Each server now keeps its own list." : "Every server now uses one list.")
+            toasts.success(want ? String(localized: "Each server now keeps its own list.") : String(localized: "Every server now uses one list."))
         } else if vm.scopeNeedsPro {
             return
         } else if case .failed(let msg) = vm.phase {
