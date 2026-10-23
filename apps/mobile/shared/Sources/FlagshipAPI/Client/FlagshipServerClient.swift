@@ -172,6 +172,11 @@ public protocol FlagshipServerClient: Sendable {
     /// webapp's `fetchPendingRePair`.
     func fetchPendingRePair(username: String) async throws -> PendingRePairSnapshot
 
+    /// An active admin rejects a pending recovery (N04). POST /api/users/:u/re-pair/veto;
+    /// the body is a `RePairVeto` signed by the account's admin root. 409 = it was already
+    /// cancelled or completed; 403 = not the pinned admin key.
+    func vetoRePair(username: String, body: RePairVetoRequest) async throws
+
     /// E2 — atomic Wipe & restart. Rotates IRK + recovery envelope in
     /// one server transaction. Body carries OLD-IRK signature over
     /// canonical flagship/wipe-restart/v1 bytes + the new envelope.
@@ -628,6 +633,25 @@ public struct RePairCompleteRequest: Encodable, Sendable {
     }
 }
 
+/// Body for POST /api/users/:u/re-pair/veto.
+public struct RePairVetoRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let newIrkPub: String
+        public let initiatedAt: Int64
+        public let completesAt: Int64
+        public let vetoerPub: String
+        public let issuedAt: Int64
+        public init(username: String, newIrkPub: String, initiatedAt: Int64, completesAt: Int64, vetoerPub: String, issuedAt: Int64) {
+            self.username = username; self.newIrkPub = newIrkPub; self.initiatedAt = initiatedAt
+            self.completesAt = completesAt; self.vetoerPub = vetoerPub; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String
+    public init(request: Inner, signature: String) { self.request = request; self.signature = signature }
+}
+
 public struct RePairInitiateResponse: Decodable, Equatable, Sendable {
     public let ok: Bool
     public let completesAt: Int64
@@ -650,16 +674,19 @@ public struct PendingRePairInfo: Decodable, Equatable, Sendable {
     public let initiatedAt: Int64
     public let completesAt: Int64
     public let objectedAt: Int64?
+    /// The admin key that rejected this attempt, when one did.
+    public let vetoedBy: String?
     public init(
         newIrkPub: String,
         oldIrkPub: String,
         initiatedAt: Int64,
         completesAt: Int64,
-        objectedAt: Int64? = nil
+        objectedAt: Int64? = nil,
+        vetoedBy: String? = nil
     ) {
         self.newIrkPub = newIrkPub; self.oldIrkPub = oldIrkPub
         self.initiatedAt = initiatedAt; self.completesAt = completesAt
-        self.objectedAt = objectedAt
+        self.objectedAt = objectedAt; self.vetoedBy = vetoedBy
     }
 }
 
@@ -3034,6 +3061,19 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// default to `{ pending: nil }` (nothing in flight). Set
     /// `pendingRePairUnavailable` to model an older Worker (404).
     public var pendingRePairByUser: [String: PendingRePairInfo] = [:]
+    public private(set) var lastRePairVeto: (username: String, body: RePairVetoRequest)?
+    public var rePairVetoError: ScreensClientError?
+
+    public func vetoRePair(username: String, body: RePairVetoRequest) async throws {
+        try await tick()
+        lastRePairVeto = (username, body)
+        if let e = rePairVetoError { throw e }
+        if let p = pendingRePairByUser[username.lowercased()] {
+            pendingRePairByUser[username.lowercased()] = PendingRePairInfo(
+                newIrkPub: p.newIrkPub, oldIrkPub: p.oldIrkPub, initiatedAt: p.initiatedAt, completesAt: p.completesAt,
+                objectedAt: body.request.issuedAt, vetoedBy: body.request.vetoerPub)
+        }
+    }
     public var pendingRePairUnavailable: Bool = false
 
     public func fetchPendingRePair(username: String) async throws -> PendingRePairSnapshot {
@@ -3942,6 +3982,20 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(RePairCompleteResponse.self, from: data)
+    }
+
+    public func vetoRePair(username: String, body: RePairVetoRequest) async throws {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/re-pair/veto"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
     }
 
     public func fetchPendingRePair(username: String) async throws -> PendingRePairSnapshot {
