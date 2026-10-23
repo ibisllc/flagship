@@ -16,6 +16,7 @@ import { boxClient, ScreensError } from "./api.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { _internal as bootSeal, fetchSealedDiskKey } from "./bootApproval.js";
 import { requirePinnedBoxKey } from "./boxKeyPins.js";
+import { sharedBootKeyFor } from "./bootKey.js";
 import { humanError } from "./humanError.js";
 import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes, adminRootPubHex } from "../keystore.js";
 import { confirmFreshUnlock } from "./freshUnlock.js";
@@ -986,9 +987,15 @@ export async function fetchShareStartups(entry, deps = {}) {
   for (const r of Array.isArray(res.body?.requests) ? res.body.requests : []) {
     if (!r?.request || r.request.purpose !== "unlock-key") continue;
     if (lower(r.request.serverDomain) !== lower(entry.serverDomain)) continue;
-    if (lower(r.request.stkPub) !== offer.stkPubHex) continue;
-    if (!(await verifyRequest(r, offer.stkPubHex))) continue;
-    out.push({ serverDomain: r.request.serverDomain, nonce: r.request.nonce, stkPub: offer.stkPubHex, purpose: "unlock-key", issuedAt: r.request.issuedAt });
+    // Signed by the pinned STK, or by the boot key that STK vouches for.
+    let signer = offer.stkPubHex;
+    if (lower(r.request.stkPub) !== offer.stkPubHex) {
+      const boot = await sharedBootKeyFor(entry.serverDomain, offer.stkPubHex, { fetch: d.fetch, comBase: d.apex });
+      if (!boot || lower(r.request.stkPub) !== boot) continue;
+      signer = boot;
+    }
+    if (!(await verifyRequest(r, signer))) continue;
+    out.push({ serverDomain: r.request.serverDomain, nonce: r.request.nonce, stkPub: signer, purpose: "unlock-key", issuedAt: r.request.issuedAt });
   }
   return out;
 }
@@ -999,8 +1006,13 @@ export async function approveShareStartup(entry, req, deps = {}) {
   const d = ctx(deps);
   const offer = pinnedOffers.get(entry.shareId) ?? (await readSharedOffer(entry, deps)).offer;
   if (!offer) throw new ShareError("Couldn't confirm which server this is.", "no-offer");
+  let recipient = offer.stkPubHex;
   if (lower(req?.stkPub) !== offer.stkPubHex) {
-    throw new ShareError("This start-up request doesn't come from the server that was shared with you.", "wrong-stk");
+    const boot = await sharedBootKeyFor(entry.serverDomain, offer.stkPubHex, { fetch: d.fetch, comBase: d.apex });
+    if (!boot || lower(req?.stkPub) !== boot) {
+      throw new ShareError("This start-up request doesn't come from the server that was shared with you.", "wrong-stk");
+    }
+    recipient = boot;
   }
   const member = await memberKey(d, entry.shareId);
   const keyPath = `/api/boot/share/key/${lower(entry.serverDomain)}`;
@@ -1017,7 +1029,7 @@ export async function approveShareStartup(entry, req, deps = {}) {
     throw new ShareError("Couldn't open your copy of the disk key.", "copy");
   }
   const sealed = await bootSeal.buildSealedResponse(diskKey, {
-    stkEdPub: hexToBytes(offer.stkPubHex),
+    stkEdPub: hexToBytes(recipient),
     nonceHex: req.nonce,
     purpose: "unlock-key",
   });
