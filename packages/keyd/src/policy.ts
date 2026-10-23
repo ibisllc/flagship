@@ -29,6 +29,8 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/dns01-delete/v1",
   "flagship/box-trust-status/v1",
   "flagship/box-read-token-request/v1",
+  "flagship/server-register/v1",
+  "flagship/put-sealed-luks-key/v1",
   "flagship/boot-suspension/v1",
   "flagship/boot-auth/v1",
   "flagship/inject/v1",

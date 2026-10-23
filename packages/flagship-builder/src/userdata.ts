@@ -836,8 +836,9 @@ wait_for_registration_network() {
 }
 wait_for_registration_network
 report_phase registering
-flagship-tsx scripts/install-helper.ts sign-server-register \\
-    --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
+# Once flagship-keyd holds the key the register step signs through it (the key is no longer in this file).
+if [ -n "\${SERVER_IDENTITY_PRIV_HEX:-}" ]; then ID_ARGS=(--priv-hex "$SERVER_IDENTITY_PRIV_HEX"); else ID_ARGS=(--keyd-socket /run/flagship-keyd/keyd.sock); fi
+flagship-tsx scripts/install-helper.ts sign-server-register "\${ID_ARGS[@]}" \\
     --auth-code-blob /var/flagship/install-blob.json \\
     > /run/register-payload.json
 echo "[register] POST $REGISTRATION_URL"

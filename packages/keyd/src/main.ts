@@ -2,7 +2,8 @@
 import { join } from "node:path";
 import { KeydServer, fileKeyStore, readKeyFile } from "./server.js";
 import { KeydService } from "./service.js";
-import { migrateKeyFiles } from "./migrate.js";
+import { handOverToKeydUser, migrateKeyFiles, scrubEnvFile } from "./migrate.js";
+import { KEYD_CLIENT_GROUP, KEYD_USER } from "./unit.js";
 
 const STATE = process.env.FLAGSHIP_KEYD_STATE ?? "/var/lib/flagship-keyd";
 const SOCKET = process.env.FLAGSHIP_KEYD_SOCKET ?? "/run/flagship-keyd/keyd.sock";
@@ -12,7 +13,13 @@ async function main(): Promise<void> {
   if (cmd === "migrate") {
     const legacy = process.env.FLAGSHIP_KEYD_LEGACY_DIR ?? "/var/flagship";
     const r = migrateKeyFiles({ legacyDir: legacy, keydDir: STATE });
-    console.log(JSON.stringify(r));
+    handOverToKeydUser(STATE, KEYD_USER, KEYD_CLIENT_GROUP);
+    // The identity key must not ride back in through the daemon's environment files.
+    const scrubbed = [
+      scrubEnvFile("/etc/flagship/daemon.env", ["FLAGSHIP_IDENTITY_PRIV_HEX", "FLAGSHIP_SWK_HEX"]),
+      scrubEnvFile("/etc/flagship-bootstrap.env", ["SERVER_IDENTITY_PRIV_HEX"]),
+    ];
+    console.log(JSON.stringify({ ...r, scrubbedEnvFiles: scrubbed.filter(Boolean).length }));
     return;
   }
   if (cmd !== "serve") throw new Error(`unknown command ${cmd}`);

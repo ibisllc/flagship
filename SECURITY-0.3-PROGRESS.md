@@ -20,6 +20,11 @@ TPM/measured boot only as far as software can prove).
 - SEC-REL-001/SEC-NODE-001/SEC-INSTALL-001  signed box artifact (k-of-n, sequence, Node floor), offline verifier+installer, reproducible builder, CI workflow `box-artifact.yml`; every bootstrap (d-i, VM appliance, demo cloud-config) installs it for an exact 40-hex commit; engine, goldens, webapp/iOS/Android defaults regenerated from `release/*.json`
 - SEC-UPD-001 (artifact update)  self-update downloads the signed release, installs it with the same verifier, flips one symlink; rollback and the update guard only flip back to a release on disk (no git/npm/compiler); release index `releases.json` (advice only); daemon refuses Node below the floor; release-guard fails any return to NodeSource/git/npm/Go or a branch default
 
+- N04 recovery wait/veto: an admin's signed veto of a pending recovery decided against completion by one atomic claim (migration 0108, protocol vectors, `.com`, webapp, iOS, Android)
+- N09 archive reads bounded (entries, duplicates, sizes, expanded bytes) with hostile-archive tests
+- SEC-AUTH-002 one default-deny authorization layer in front of every control-API route
+- keyd: out-of-process custody of the box identity, workload and gossip keys (`docs/keyd.md`), opaque stand-ins, unit + migration + install, appliance unit check
+
 ## Open, in order
 0. Owner/operator before release: publish the first signed artifacts (run `box-artifact.yml`, sign offline, `release-index.ts`), point `release/box-release.json` at that commit and sequence, run `node scripts/gen-box-release.mjs --write`, re-pin the bootstrap sha in userdata.test.ts. Legacy git-installed boxes cannot update in place (installer refuses a real /opt/flagship); reburn. Gym boxes need an artifact for the gym commit signed by the gym trust key.
 3. SEC-RECIPE-001 raw swkHex sibling (box ignores it; needs signed offline carrier) -- left alone so far: gym + advanced/offline mode use it

@@ -220,6 +220,12 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     }
   });
 
+  it("the register step signs through flagship-keyd once the key has moved there", () => {
+    const b = bootstrap();
+    expect(b).toContain("ID_ARGS=(--keyd-socket /run/flagship-keyd/keyd.sock)");
+    expect(b).toContain('sign-server-register "${ID_ARGS[@]}"');
+  });
+
   it("installs the flagship-daemon unit running the release's own Node, not npm", () => {
     const b = bootstrap();
     expect(b).toContain("cat > /etc/systemd/system/flagship-daemon.service");
@@ -1290,7 +1296,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "0481c20b250fed0cbd5153ec31d20e64913748040e071039fe371536939ed694",
+      "75f6d3d26f908c0589738af62c15372e636086b772f269a393149bd88424958d",
     );
   });
 

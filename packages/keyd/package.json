@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./unit": {
+      "types": "./dist/unit.d.ts",
+      "default": "./dist/unit.js"
     }
   },
   "bin": {

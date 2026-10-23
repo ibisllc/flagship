@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -51,4 +52,29 @@ export function migrateKeyFiles(opts: { legacyDir: string; keydDir: string; iden
     result.moved.push(name);
   }
   return result;
+}
+
+/**
+ * Remove the identity key from the environment files systemd feeds to the daemon, so a
+ * restart does not hand it back. Only the named variables are dropped; everything else in
+ * the file is kept byte for byte.
+ */
+export function scrubEnvFile(path: string, variables: readonly string[]): boolean {
+  if (!existsSync(path)) return false;
+  const text = readFileSync(path, "utf8");
+  const kept = text.split("\n").filter((line) => !variables.some((v) => line.startsWith(`${v}=`)));
+  const next = kept.join("\n");
+  if (next === text) return false;
+  const mode = statSync(path).mode & 0o777;
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, next, { mode });
+  renameSync(tmp, path);
+  return true;
+}
+
+/** Give the keyd user its state (only when running as root, i.e. as the migration step). */
+export function handOverToKeydUser(dir: string, user: string, group: string): void {
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    execFileSync("chown", ["-R", `${user}:${group}`, dir]);
+  }
 }

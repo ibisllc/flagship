@@ -101,6 +101,11 @@ import {
 } from "./identityRotateHttp.js";
 import { AppMembership } from "./membership.js";
 import { KeyCustodian, type SwkOps } from "./keyCustodian.js";
+import { KeydCustodian } from "./keydCustodian.js";
+import { installKeyd } from "./keydInstall.js";
+
+/** Either custodian: the keys in this process, or in flagship-keyd. */
+type KeyCustodianLike = KeyCustodian | KeydCustodian;
 import { IdentityInjector } from "./identityInjector.js";
 import {
   defaultPairedSessionPath,
@@ -582,7 +587,33 @@ async function main(): Promise<void> {
   let cfg = await tryLoadConfig();
   const env = envFromProcess();
 
-  if (!env.serverFqdn || !env.identityPrivKeyHex) {
+  // ---- flagship-keyd (SECURITY-HARDENING-PLAN.md 5.1) ----
+  // When keyd's socket is there, the box identity, workload and gossip keys live in that
+  // process and this one holds only stand-ins. Without it (an older box, a developer run)
+  // the keys load in-process as before, and says so; FLAGSHIP_KEYD_REQUIRED=1 refuses that.
+  const keydSocket = process.env.FLAGSHIP_KEYD_SOCKET;
+  const keyd: KeydCustodian | null = keydSocket && existsSync(keydSocket) ? new KeydCustodian({ socketPath: keydSocket, component: "daemon" }) : null;
+  if (!keyd && process.env.FLAGSHIP_KEYD_REQUIRED !== "1") {
+    // A box without keyd gets it now (root, systemd, keyd in this release). Its first start moves
+    // the keys in and removes the readable copies; this process then restarts to use it.
+    const outcome = await installKeyd({
+      repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+      run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+      onLog: (m) => console.log(m),
+    });
+    if (outcome === "installed") process.exit(0);
+  }
+  if (!keyd) {
+    if (process.env.FLAGSHIP_KEYD_REQUIRED === "1") {
+      console.error("[daemon] FLAGSHIP_KEYD_REQUIRED is set but flagship-keyd is not answering; refusing to hold keys in this process.");
+      process.exit(2);
+    }
+    console.warn("[daemon] flagship-keyd is not running: the box keys are held in this process (weaker isolation).");
+  } else {
+    console.log(`[daemon] keys are held by flagship-keyd (box key ${Buffer.from(keyd.boxPublicKey()).toString("hex").slice(0, 16)}…)`);
+  }
+
+  if (!env.serverFqdn || (!env.identityPrivKeyHex && !keyd)) {
     console.error(
       "[daemon] Missing required inputs. Set FLAGSHIP_SUBDOMAIN + FLAGSHIP_IDENTITY_PRIV_HEX, " +
         "or supply FLAGSHIP_CONFIG with the same fields.",
@@ -669,7 +700,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const identityPrivKey = hexToBytes(env.identityPrivKeyHex);
+  const identityPrivKey = keyd ? keyd.identityKeypair().privateKey : hexToBytes(env.identityPrivKeyHex!);
 
   // ---- Discover the tunnel hub (so we can move infra without redeploying daemons) ----
 
@@ -840,18 +871,41 @@ async function main(): Promise<void> {
   // or the raw SWK: they hold a narrow interface slice (BoxSigner / SwkOps /
   // GossipOps) and call an operation. See keyCustodian.ts for the honest
   // in-process-boundary caveat.
-  const custodian = new KeyCustodian({
-    identityPriv: identityPrivKey,
-    swk: swkHex ? hexToBytes(swkHex.trim()) : undefined,
-    cgk: (await resolveCgk({ cgkHexFilePath: "/var/flagship/cgk.hex" })) ?? undefined,
-  });
+  const legacyCgk = (await resolveCgk({ cgkHexFilePath: "/var/flagship/cgk.hex" })) ?? undefined;
+  if (keyd) {
+    // The first boot under keyd moves any key still on this side of the socket into it, once,
+    // and removes the readable copy. After that the daemon never sees the bytes again.
+    if (swkHex && !keyd.hasSwk) {
+      keyd.provisionSwk(hexToBytes(swkHex.trim()));
+      await rm(swkHexFilePath, { force: true }).catch(() => {});
+      console.log("[daemon] workload key moved into flagship-keyd");
+    }
+    if (legacyCgk && !keyd.hasCgk) {
+      keyd.provisionCgk(legacyCgk);
+      await rm("/var/flagship/cgk.hex", { force: true }).catch(() => {});
+      console.log("[daemon] gossip key moved into flagship-keyd");
+    }
+    if (keyd.hasSwk) swkHex = "held-by-keyd";
+  }
+  const custodian: KeyCustodianLike =
+    keyd ??
+    new KeyCustodian({
+      identityPriv: identityPrivKey,
+      swk: swkHex ? hexToBytes(swkHex.trim()) : undefined,
+      cgk: legacyCgk,
+    });
+  // Raw workload-key bytes for the few consumers that take `swk: Bytes`. Under keyd this is
+  // an opaque stand-in that derives labelled subkeys there; in-process it is the key itself.
+  const swkBytes: Uint8Array | null = !swkHex ? null : keyd ? keyd.swkHandle() : hexToBytes(swkHex.trim());
 
   const { backupLoop, repairAccumulator, repairScheduler, pbFramesHandler } =
     wirePeerBackup({
       swkHex,
+      swkBytes,
       swkOps: swkHex ? custodian.asSwkOps() : null,
       serverId: env.serverFqdn ?? null,
-      identityPrivKeyHex: env.identityPrivKeyHex ?? null,
+      identityPrivKeyHex: keyd ? null : (env.identityPrivKeyHex ?? null),
+      identityKeypair: keyd ? keyd.identityKeypair() : null,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
       dataDir,
     });
@@ -909,7 +963,10 @@ async function main(): Promise<void> {
       unsealToBox: (blob) => custodian.unsealToBox(blob),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       ...bellFetch(),
-      persistSwk: (hex) => persistSwkHex(swkHexFilePath, hex),
+      persistSwk: async (hex) => {
+        if (keyd) keyd.provisionSwk(hexToBytes(hex.trim()));
+        else await persistSwkHex(swkHexFilePath, hex);
+      },
       restart: () => restarts.request("SWK provisioned via deposit; restarting to enable the service platform"),
       markerStore: fileSwkMarkerStore(`${dataDir}/swk-claimed.json`),
       guard: restarts.guard,
@@ -934,7 +991,7 @@ async function main(): Promise<void> {
   // wrong-box → keep polling, never persist/brick; idempotent). demo/gym
   // (cfg-absent) is a no-op.
   const cgkHexFilePath = "/var/flagship/cgk.hex";
-  const hasCgk = (await resolveCgk({ cgkHexFilePath })) !== null;
+  const hasCgk = keyd ? keyd.hasCgk : (await resolveCgk({ cgkHexFilePath })) !== null;
   if (!hasCgk && cfg && env.controlPlaneBaseUrl) {
     const cgkPoller = buildCgkDepositPoller({
       serverDomain: env.serverFqdn!,
@@ -942,7 +999,10 @@ async function main(): Promise<void> {
       unsealToBox: (blob) => custodian.unsealToBox(blob),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       ...bellFetch(),
-      persistCgk: (hex) => persistCgkHex(cgkHexFilePath, hex),
+      persistCgk: async (hex) => {
+        if (keyd) keyd.provisionCgk(hexToBytes(hex.trim()));
+        else await persistCgkHex(cgkHexFilePath, hex);
+      },
       restart: () => restarts.request("CGK provisioned via deposit; restarting to enable gossip"),
       markerStore: fileCgkMarkerStore(`${dataDir}/cgk-claimed.json`),
       guard: restarts.guard,
@@ -1233,7 +1293,7 @@ async function main(): Promise<void> {
       ? new PeerBackupEngine({
           serverId: env.serverFqdn,
           dataDir,
-          pbk: derivePeerBackupKey(hexToBytes(swkHex.trim())),
+          pbk: derivePeerBackupKey(swkBytes!),
           sign: (msg) => custodian.signAsBox(msg),
           comBaseUrl: env.controlPlaneBaseUrl,
           policy: backupPolicy,
@@ -1542,6 +1602,7 @@ async function main(): Promise<void> {
       env: env as RuntimeEnv,
       dataDir,
       swkHex,
+      swkBytes,
       identityKeypair,
       custodian,
       pairedSessions,
@@ -1855,12 +1916,15 @@ interface PeerBackupBundle {
  */
 function wirePeerBackup(deps: {
   swkHex: string | null;
+  swkBytes: Uint8Array | null;
   /** The custodian's SwkOps slice — used by the live BackupLoop (encryptChunk).
    *  The raw `swkHex` stays for the manifest seal/upload plumbing, which still
    *  calls the pure `sealBackupManifest`/`fetchBackupManifest` helpers. */
   swkOps: SwkOps | null;
   serverId: string | null;
   identityPrivKeyHex: string | null;
+  /** The box identity when keyd holds it (replaces the hex). */
+  identityKeypair?: Keypair | null;
   controlPlaneBaseUrl: string | null;
   dataDir: string;
 }): PeerBackupBundle {
@@ -1869,7 +1933,9 @@ function wirePeerBackup(deps: {
   const ownShards = new FileShardBytesStore(`${deps.dataDir}/peer-backup/own-shards`);
   const manifestStore = new FileManifestStore(`${deps.dataDir}/peer-backup/manifest.json`);
 
-  const identity: Keypair | null = deps.identityPrivKeyHex
+  const identity: Keypair | null = deps.identityKeypair
+    ? deps.identityKeypair
+    : deps.identityPrivKeyHex
     ? (() => {
         const priv = hexToBytes(deps.identityPrivKeyHex);
         return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
@@ -1879,7 +1945,7 @@ function wirePeerBackup(deps: {
 
   let backupLoop: BackupLoop | null = null;
   if (deps.swkHex) {
-    const swk = hexToBytes(deps.swkHex.trim());
+    const swk = deps.swkBytes!;
     const shipping =
       live && deps.serverId && identity && deps.controlPlaneBaseUrl
         ? {
@@ -2176,7 +2242,7 @@ async function loadEntitlementsOrExit(deps: {
   cfg: ServerConfig | null;
   dataDir: string;
   identityKeypair: Keypair;
-  custodian: KeyCustodian;
+  custodian: KeyCustodianLike;
   reportStatus: StatusReporter;
 }): Promise<EntitlementBundle> {
   const { env, cfg, dataDir, identityKeypair, custodian, reportStatus } = deps;
@@ -2339,8 +2405,10 @@ async function wireRuntimeSurfaces(deps: {
   env: RuntimeEnv;
   dataDir: string;
   swkHex: string | null;
+  /** The workload key for consumers that take raw bytes (an opaque stand-in under keyd). */
+  swkBytes: Uint8Array | null;
   identityKeypair: Keypair;
-  custodian: KeyCustodian;
+  custodian: KeyCustodianLike;
   pairedSessions: FilePairedSessionStore;
   browserBundle: BrowserBundle | null;
   alertInbox: InMemoryAlertInbox;
@@ -2362,6 +2430,7 @@ async function wireRuntimeSurfaces(deps: {
     env,
     dataDir,
     swkHex,
+    swkBytes,
     identityKeypair,
     custodian,
     pairedSessions,
@@ -2647,7 +2716,7 @@ async function wireRuntimeSurfaces(deps: {
   const adapterOrigins = new FileAdapterOrigins(join(dataDir, "data", "adapter-origins.json"));
   await adapterOrigins.load().catch((e) => console.warn(`[adapters] origins unreadable: ${(e as Error).message}`));
   if (runtime.servicePlatform) {
-    const mcpSwk = swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32);
+    const mcpSwk = swkBytes ?? new Uint8Array(32);
     const mcpKeys = new FileMcpKeyStore(join(dataDir, "mcp-keys"), mcpSwk);
     await mcpKeys.load();
     const realCmd = (await import("./serviceRunner.js")).realCommandRunner;
@@ -3553,9 +3622,7 @@ async function wireRuntimeSurfaces(deps: {
   // Dev daemons that ship without FLAGSHIP_CONFIG skip the watcher.
   if (cfg) {
     const irkHexFromCfg = bytesToHexStr(cfg.irkPublicKey);
-    const reissuerJournalSwk = swkHex
-      ? hexToBytes(swkHex.trim())
-      : new Uint8Array(32);   // no SWK yet → journal can't be decrypted
+    const reissuerJournalSwk = swkBytes ?? new Uint8Array(32);   // no SWK yet → journal can't be decrypted
     const journalStore = new FileJournalStore(defaultJournalPath(dataDir));
     const journalPruner = startJournalPruner({
       store: journalStore,
@@ -3641,7 +3708,7 @@ async function wireOwnerHandlers(deps: {
   /** The box's STK (identity) keypair — signs the gating-v2 revocation poll. */
   identityKeypair: Keypair;
   /** Signs the box's set-only boot suspension (it never holds the raw key itself). */
-  custodian: KeyCustodian;
+  custodian: KeyCustodianLike;
   /** Peer-backup loop (null when no SWK) — flushed on a finalBackup decommission. */
   backupLoop: BackupLoop | null;
   /** Migrate's pause: a move on the archive path needs no final flush. */

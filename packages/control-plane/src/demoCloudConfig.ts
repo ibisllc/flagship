@@ -446,8 +446,8 @@ echo "[register] starting"
 cd /opt/flagship
 . /etc/flagship-bootstrap.env
 NOW=$(date +%s%3N)
-flagship-tsx scripts/install-helper.ts sign-server-register \
-    --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \
+if [ -n "\${SERVER_IDENTITY_PRIV_HEX:-}" ]; then ID_ARGS=(--priv-hex "$SERVER_IDENTITY_PRIV_HEX"); else ID_ARGS=(--keyd-socket /run/flagship-keyd/keyd.sock); fi
+flagship-tsx scripts/install-helper.ts sign-server-register "\${ID_ARGS[@]}" \
     --auth-code-blob /var/flagship/install-blob.json \
     > /run/register-payload.json
 echo "[register] POST $REGISTRATION_URL"
@@ -457,7 +457,7 @@ curl -fsS -X POST -H "content-type: application/json" \
 CTRL_BASE=$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')
 if [ -n "\${SEALED_LUKS_KEY_HEX:-}" ]; then
     flagship-tsx scripts/install-helper.ts sign-sealed-key \
-        --priv "$SERVER_IDENTITY_PRIV_HEX" \
+        "\${ID_ARGS[@]/--priv-hex/--priv}" \
         --server-id "$SERVER_DOMAIN" \
         --sealed-hex "$SEALED_LUKS_KEY_HEX" \
         --issued-at "$NOW" \
