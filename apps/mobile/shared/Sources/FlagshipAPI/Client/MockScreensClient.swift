@@ -1544,7 +1544,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 status: .pending,
                 expectedTxtRecord: expected,
                 observedTxtRecord: nil,
-                reason: "Waiting for DNS propagation (typical: 1–5 minutes)."
+                reason: String(localized: "Waiting for DNS propagation (typical: 1–5 minutes).")
             )
         }
         return VerifyCustomDomainResponse(

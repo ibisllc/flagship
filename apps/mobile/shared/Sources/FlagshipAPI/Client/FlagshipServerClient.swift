@@ -3425,7 +3425,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                 let wait = Int((customDomainMinInterval - elapsed).rounded(.up))
                 throw ScreensClientError.http(
                     status: 429,
-                    message: "Too soon — try again in \(wait)s."
+                    message: String(localized: "Too soon — try again in \(wait)s.")
                 )
             }
         }
@@ -4387,7 +4387,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             let decoded = try? JSONDecoder().decode(ErrBody.self, from: data)
             let message = decoded?.error
                 ?? String(data: data, encoding: .utf8)
-                ?? "Couldn't request custom domain."
+                ?? String(localized: "Couldn't request custom domain.")
             throw ScreensClientError.http(status: status, message: message)
         }
         // 200 = recorded only (the POST returns { recorded:true }, NOT
