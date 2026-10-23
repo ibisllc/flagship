@@ -74,9 +74,11 @@ import {
   SystemctlPowerRunner,
   executeLockAndPower,
   type AutoUnlockSuppressor,
+  type BootSuspender,
   type HostPowerRunner,
 } from "./deadMan.js";
 import { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
+import { BootSuspensionClient, bootBaseFromControl } from "./bootSuspensionClient.js";
 import { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
 import { buildJournalHttp, JournalctlReader } from "./journalHttp.js";
 import {
@@ -1604,6 +1606,7 @@ async function main(): Promise<void> {
     hostPowerRunner,
     servicePlatformRef: servicePlatformRefForServer,
     identityKeypair,
+    custodian,
     backupLoop,
     migratePause,
   });
@@ -3656,6 +3659,8 @@ async function wireOwnerHandlers(deps: {
   servicePlatformRef: ServicePlatformRef;
   /** The box's STK (identity) keypair — signs the gating-v2 revocation poll. */
   identityKeypair: Keypair;
+  /** Signs the box's set-only boot suspension (it never holds the raw key itself). */
+  custodian: KeyCustodian;
   /** Peer-backup loop (null when no SWK) — flushed on a finalBackup decommission. */
   backupLoop: BackupLoop | null;
   /** Migrate's pause: a move on the archive path needs no final flush. */
@@ -3664,8 +3669,17 @@ async function wireOwnerHandlers(deps: {
   const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair } = deps;
   if (!cfg) return;
 
+  // The box can lock itself out at the boot worker, never unlock (SEC-LOCK-001).
+  const suspender: BootSuspender | null = env.controlPlaneBaseUrl
+    ? new BootSuspensionClient({
+        serverDomain: env.serverFqdn,
+        bootBase: bootBaseFromControl(env.controlPlaneBaseUrl),
+        signer: deps.custodian,
+      })
+    : null;
   const deadMan = new DeadManController({
     serverId: env.serverFqdn,
+    suspender,
     irkPub: cfg.irkPublicKey,
     // Slice D — gate policy/affirm on the pinned admin root when present.
     ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
@@ -3683,6 +3697,7 @@ async function wireOwnerHandlers(deps: {
       username: cfg.userId,
       suppressor: autoUnlockSuppressor,
       runner: hostPowerRunner,
+      suspender,
     }),
   );
   // Owner-assignable apex: GET/POST /api/front-page + the 302 itself.
@@ -3930,8 +3945,9 @@ async function wireOwnerHandlers(deps: {
       wipeContent: realWipeContent,
       // Converge on the shared lock-and-poweroff latch — suppress auto-unlock,
       // then power off (the same primitive the dead-man + manual power-off use).
-      lockAndPower: () =>
-        executeLockAndPower({ mode: "off", suppressor: autoUnlockSuppressor, runner: hostPowerRunner }),
+      lockAndPower: async () => {
+        await executeLockAndPower({ mode: "off", suppressor: autoUnlockSuppressor, runner: hostPowerRunner, suspender, reason: "manual-lock" });
+      },
       // wipe-after-handoff: MIGRATION-AWARE bounded confirm. When a migration
       // session exists for this box, only its `taken-over` phase confirms (and
       // `aborted` denies immediately — data preserved); with no session it

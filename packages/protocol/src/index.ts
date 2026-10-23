@@ -45,6 +45,7 @@ export * from "./accountKeyAttestation.js";
 export * from "./accountReadToken.js";
 export * from "./addressPolicy.js";
 export * from "./bootSuspension.js";
+export * from "./bootAuth.js";
 export * from "./serverOrder.js";
 export * from "./appApiKey.js";
 export * from "./appCopy.js";

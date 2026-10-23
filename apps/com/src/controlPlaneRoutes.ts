@@ -913,6 +913,7 @@ export async function tryBootHost(
 
   const deps: BootRouteDeps = {
     boxSealedLeases: storage.boxSealedLeases,
+    bootSuspensions: storage.bootSuspensions,
     secretMailbox: storage.secretMailbox,
     directory,
     notify,
