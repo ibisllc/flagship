@@ -30,6 +30,8 @@
  * address, and re-validating redirects is the pragmatic layer.
  */
 
+import { classifyAddress, type AddressClass } from "@flagship/protocol";
+
 export interface BaseUrlGuardOptions {
   /**
    * Allow `http://` (not just https). Off by default — only flip on for an
@@ -122,7 +124,7 @@ export function assertSafeProviderBaseUrl(
   // The metadata IP is special: blocked unconditionally (even on the
   // allowlist would be surprising, but private-range permission must NOT
   // re-open it).
-  if (ip && ipEquals(ip, METADATA_IPV4)) {
+  if (ip && (ipEquals(ip, METADATA_IPV4) || classifyIp(ip) === "metadata")) {
     throw new UnsafeBaseUrlError(raw, "cloud metadata IP");
   }
 
@@ -140,8 +142,12 @@ export function assertSafeProviderBaseUrl(
  */
 function assertIpAllowed(raw: string, ip: ParsedIp, opts: BaseUrlGuardOptions): void {
   const cls = classifyIp(ip);
+  if (cls === "metadata") throw new UnsafeBaseUrlError(raw, "cloud metadata IP");
   if (cls === "loopback") throw new UnsafeBaseUrlError(raw, "loopback IP");
   if (cls === "link-local") throw new UnsafeBaseUrlError(raw, "link-local IP");
+  if ((cls === "multicast" || cls === "reserved" || cls === "invalid") ) {
+    throw new UnsafeBaseUrlError(raw, "non-public IP");
+  }
   if (cls === "private" && !opts.allowPrivate) {
     throw new UnsafeBaseUrlError(raw, "private IP");
   }
@@ -237,6 +243,21 @@ export async function assertResolvedHostSafe(
   opts: BaseUrlGuardOptions = {},
   resolve?: HostResolver,
 ): Promise<string> {
+  return (await resolveSafeHost(host, subject, opts, resolve)).host;
+}
+
+/**
+ * Like `assertResolvedHostSafe`, but also returns the addresses that passed so
+ * the caller can connect to exactly those (resolve, classify, then dial the
+ * numeric address) instead of resolving the name a second time. `addresses` is
+ * empty for an IP literal or an allowlisted host, which need no pinning.
+ */
+export async function resolveSafeHost(
+  host: string,
+  subject: string,
+  opts: BaseUrlGuardOptions = {},
+  resolve?: HostResolver,
+): Promise<{ host: string; addresses: string[] }> {
   const h = host.toLowerCase();
   if (h.length === 0) throw new UnsafeBaseUrlError(subject, "empty host");
 
@@ -249,14 +270,14 @@ export async function assertResolvedHostSafe(
 
   const literal = parseIpLiteral(h);
   if (literal) {
-    if (ipEquals(literal, METADATA_IPV4)) {
+    if (ipEquals(literal, METADATA_IPV4) || classifyIp(literal) === "metadata") {
       throw new UnsafeBaseUrlError(subject, "cloud metadata IP");
     }
     if (!allowlisted) assertIpAllowed(subject, literal, opts);
-    return h;
+    return { host: h, addresses: [] };
   }
 
-  if (allowlisted) return h;
+  if (allowlisted) return { host: h, addresses: [] };
 
   const resolver = resolve ?? defaultHostResolver;
   let addrs: string[];
@@ -270,12 +291,12 @@ export async function assertResolvedHostSafe(
   for (const addr of addrs) {
     const ip = parseIpLiteral(addr);
     if (!ip) throw new UnsafeBaseUrlError(subject, "unparseable resolved address");
-    if (ipEquals(ip, METADATA_IPV4)) {
+    if (ipEquals(ip, METADATA_IPV4) || classifyIp(ip) === "metadata") {
       throw new UnsafeBaseUrlError(subject, "resolves to cloud metadata IP");
     }
     assertIpAllowed(subject, ip, opts);
   }
-  return h;
+  return { host: h, addresses: addrs };
 }
 
 /**
@@ -288,7 +309,9 @@ export function isInternalIpLiteral(addr: string): boolean {
   return ip !== null && classifyIp(ip) !== "public";
 }
 
-type IpKind = "loopback" | "link-local" | "private" | "public";
+function classifyIp(ip: ParsedIp): AddressClass {
+  return classifyAddress(ip.version === 4 ? ip.v4!.join(".") : ip.v6!);
+}
 
 interface ParsedIp {
   version: 4 | 6;
@@ -327,57 +350,4 @@ function parseV4(h: string): [number, number, number, number] | null {
     octets.push(n);
   }
   return [octets[0]!, octets[1]!, octets[2]!, octets[3]!];
-}
-
-function classifyIp(ip: ParsedIp): IpKind {
-  if (ip.version === 4 && ip.v4) return classifyV4(ip.v4);
-  if (ip.version === 6 && ip.v6) return classifyV6(ip.v6);
-  return "public";
-}
-
-function classifyV4([a, b]: [number, number, number, number]): IpKind {
-  if (a === 127) return "loopback"; // 127.0.0.0/8
-  if (a === 169 && b === 254) return "link-local"; // 169.254.0.0/16
-  if (a === 10) return "private"; // 10.0.0.0/8
-  if (a === 192 && b === 168) return "private"; // 192.168.0.0/16
-  if (a === 172 && b >= 16 && b <= 31) return "private"; // 172.16.0.0/12
-  if (a === 100 && b >= 64 && b <= 127) return "private"; // 100.64.0.0/10 (CGNAT)
-  if (a === 0) return "private"; // 0.0.0.0/8 — "this host"
-  return "public";
-}
-
-function classifyV6(raw: string): IpKind {
-  // Drop a zone id (fe80::1%eth0) if present.
-  const v6 = raw.split("%")[0]!.toLowerCase();
-
-  if (v6 === "::1") return "loopback";
-  if (v6 === "::" || v6 === "::0") return "private"; // unspecified
-
-  // IPv4-mapped, dotted form (::ffff:127.0.0.1) — classify on the v4.
-  const mappedDotted = v6.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  if (mappedDotted) {
-    const v4 = parseV4(mappedDotted[1]!);
-    if (v4) return classifyV4(v4);
-  }
-  // IPv4-mapped, hex form (the URL parser normalizes ::ffff:127.0.0.1 to
-  // ::ffff:7f00:1) — reconstruct the embedded v4 from the two hextets.
-  const mappedHex = v6.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (mappedHex) {
-    const hi = parseInt(mappedHex[1]!, 16);
-    const lo = parseInt(mappedHex[2]!, 16);
-    const v4: [number, number, number, number] = [
-      (hi >> 8) & 0xff,
-      hi & 0xff,
-      (lo >> 8) & 0xff,
-      lo & 0xff,
-    ];
-    return classifyV4(v4);
-  }
-
-  if (v6.startsWith("fe8") || v6.startsWith("fe9") || v6.startsWith("fea") || v6.startsWith("feb")) {
-    return "link-local"; // fe80::/10
-  }
-  if (v6.startsWith("fc") || v6.startsWith("fd")) return "private"; // fc00::/7 ULA
-
-  return "public";
 }

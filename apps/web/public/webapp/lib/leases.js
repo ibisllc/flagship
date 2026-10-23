@@ -20,6 +20,7 @@ import { controlApex } from "./apex.js";
 import { importX25519Private } from "./x25519.js";
 import { ed25519PubToX25519 } from "./edToMont.js";
 import { accountReadFetch } from "./accountRead.js";
+import { boundedLeaseTtl, cachedDeadManView, readSuspension, retryPendingLocks } from "./bootSuspension.js";
 
 export const TAG_AUTO_UNLOCK_LEASE_V2 = "flagship/auto-unlock-lease/v2";
 export const TAG_AUTO_UNLOCK_LEASE_REVOKE = "flagship/auto-unlock-lease-revoke/v1";
@@ -84,6 +85,17 @@ export async function enableLongLived(serverFqdn, ttlMs = DEFAULT_LONG_TTL_MS, d
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
+  // A locked server takes no new lease: only an explicit, signed resume reopens it.
+  const lock = await (deps.readSuspension || readSuspension)(serverFqdn, deps);
+  if (lock === null) throw new Error("couldn't check whether this server is locked; not depositing a lease");
+  if (lock.suspended) throw new Error("this server is locked: resume it before turning auto-unlock back on");
+
+  // With the dead-man switch on, a lease may not outlive the affirmation that keeps the switch alive.
+  const deadMan = deps.deadMan !== undefined ? deps.deadMan : cachedDeadManView(serverFqdn, deps);
+  if (deadMan === undefined) throw new Error("couldn't tell whether the dead-man switch is on; open this server's page first");
+  ttlMs = boundedLeaseTtl(ttlMs, deadMan, now);
+  if (ttlMs <= 0) throw new Error("the dead-man switch has lapsed: keep this server unlocked first, then turn auto-unlock on");
+
   // 1. The box's STK, from the directory: the only key the lease may seal for.
   const stkPubHex = await (deps.boxStk || directoryStk)(serverFqdn, session, { fetch: f, comBase });
   if (!stkPubHex) throw new Error(`${serverFqdn} isn't in your account's server list`);
@@ -143,6 +155,25 @@ export async function revokeLease(serverFqdn, leaseId, deps = {}) {
 }
 
 /**
+ * After the dead-man switch is turned on or affirmed: make every lease respect
+ * its deadline. Leases that would outlive it are revoked and, if auto-unlock was
+ * on, one fresh lease bounded by the deadline takes their place. Returns what
+ * it did; a failure to revoke is thrown, because a lease that outlives the
+ * switch is the thing this prevents.
+ */
+export async function bindLeasesToDeadMan(serverFqdn, deadMan, deps = {}) {
+  const now = (deps.now || Date.now)();
+  const active = await (deps.listLeases || listLeases)(serverFqdn);
+  if (active.length === 0) return { revoked: 0, deposited: null };
+  const cap = deadMan?.enabled ? Number(deadMan.leaseExpiry) || 0 : Infinity;
+  const tooLong = active.filter((l) => l.expiresAt > cap);
+  for (const l of tooLong) await (deps.revokeLease || revokeLease)(serverFqdn, l.leaseId, deps);
+  if (tooLong.length === 0 || cap <= now) return { revoked: tooLong.length, deposited: null };
+  const r = await (deps.enableLongLived || enableLongLived)(serverFqdn, DEFAULT_LONG_TTL_MS, { ...deps, deadMan });
+  return { revoked: tooLong.length, deposited: r };
+}
+
+/**
  * Re-deposit on `serverFqdn` when its newest lease has less than `windowMs`
  * left. Silent (the IRK is in the unlocked session); a server with no lease
  * (auto-unlock off) or one that can't be listed is left alone.
@@ -158,6 +189,9 @@ export async function renewIfExpiringSoon(serverFqdn, windowMs = RENEW_WINDOW_MS
   }
   if (active.length === 0) return [];
   const now = (deps.now || Date.now)();
+  // Never renew silently when we can't tell the server's state: a locked server stays locked,
+  // and a lease must stay inside the dead-man deadline. enableLongLived re-checks both.
+  if (cachedDeadManView(serverFqdn, deps) === undefined) return [];
   const newest = active.reduce((a, b) => (b.expiresAt > a.expiresAt ? b : a));
   if (newest.expiresAt - now > windowMs) return [];
   try {
@@ -174,6 +208,8 @@ export async function renewIfExpiringSoon(serverFqdn, windowMs = RENEW_WINDOW_MS
  */
 export async function tickRenewals(serverFqdns) {
   const out = [];
+  // First, any lock the boot service hasn't confirmed yet (SEC-LOCK-001).
+  await retryPendingLocks().catch(() => {});
   for (const fqdn of serverFqdns) {
     const r = await renewIfExpiringSoon(fqdn);
     if (r.length) out.push({ serverFqdn: fqdn, renewed: r });

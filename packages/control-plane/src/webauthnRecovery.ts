@@ -1,9 +1,14 @@
 import {
-  verifyUploadRecoveryRecord,
-  type UploadRecoveryRecord,
+  checkRecoveryEvolution,
+  recoveryRecordDigest,
+  verifyRecoveryRecord,
+  type RecoveryEscrowChange,
+  type RecoveryRecordV2,
+  type StoredRecoveryState,
 } from "@flagship/protocol";
 import type {
   UsernameStorage,
+  WebauthnRecoveryRecord,
   WebauthnRecoveryStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
@@ -13,7 +18,8 @@ import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "
 /**
  * Webapp cloud-shard recovery (WebAuthn PRF).
  *
- * `POST   /api/recovery`                            IRK-signed; upserts the record
+ * `POST   /api/recovery`                            IRK-signed v2 envelope (N03); compare-and-swap
+ *                                                  on the previous record's digest
  * `GET    /api/recovery/by-username/:username`       public metadata only — returns
  *                                                  credentialId + the SHA-256 of the
  *                                                  stored ciphertext, NOT the ciphertext
@@ -70,129 +76,186 @@ function base64DecodeBytes(s: string): Uint8Array | null {
   }
 }
 
+const MAX_CIPHERTEXT_BYTES = 16 * 1024;
+
+function parseEscrow(v: unknown): RecoveryEscrowChange | null {
+  if (!v || typeof v !== "object") return null;
+  const e = v as { change?: unknown; digestHex?: unknown };
+  if (e.change === "remove" || e.change === "none") return Object.keys(e).length === 1 ? { change: e.change } : null;
+  if ((e.change === "keep" || e.change === "replace") && typeof e.digestHex === "string" && Object.keys(e).length === 2) {
+    return { change: e.change, digestHex: e.digestHex };
+  }
+  return null;
+}
+
+const CLAIM_KEYS = [
+  "op", "username", "irkPubHex", "adminRootPubHex", "credentialIdHex", "wrappedUmkDigestHex", "adminRoot", "acmeKey",
+  "fetchTokenHashHex", "prfSaltHashHex", "kdfVersion", "algVersion", "policy", "generation", "nonceHex",
+  "priorDigestHex", "issuedAt",
+] as const;
+
+/** Strict claim parse: exactly the signed fields, correct types, nothing extra (N03: reject unknown fields). */
+function parseClaim(v: unknown): RecoveryRecordV2 | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const keys = Object.keys(o);
+  if (keys.length !== CLAIM_KEYS.length || !CLAIM_KEYS.every((k) => k in o)) return null;
+  const adminRoot = parseEscrow(o.adminRoot);
+  const acmeKey = parseEscrow(o.acmeKey);
+  if (!adminRoot || !acmeKey) return null;
+  for (const k of ["op", "username", "irkPubHex", "adminRootPubHex", "credentialIdHex", "wrappedUmkDigestHex", "fetchTokenHashHex", "prfSaltHashHex", "policy", "nonceHex", "priorDigestHex"] as const) {
+    if (typeof o[k] !== "string") return null;
+  }
+  for (const k of ["kdfVersion", "algVersion", "generation", "issuedAt"] as const) {
+    if (typeof o[k] !== "number") return null;
+  }
+  return { ...(o as unknown as RecoveryRecordV2), adminRoot, acmeKey };
+}
+
+function b64Field(v: unknown, name: string): { bytes: Uint8Array; b64: string } | { error: string } | null {
+  if (v === undefined || v === null) return null;
+  if (typeof v !== "string") return { error: `${name} must be base64` };
+  const bytes = base64DecodeBytes(v);
+  if (!bytes) return { error: `${name} must be valid base64` };
+  if (bytes.length === 0 || bytes.length > MAX_CIPHERTEXT_BYTES) return { error: `${name} must be 1..${MAX_CIPHERTEXT_BYTES} bytes` };
+  return { bytes, b64: v };
+}
+
+async function storedState(rec: WebauthnRecoveryRecord): Promise<StoredRecoveryState> {
+  const digestOf = async (b64: string | undefined) => (b64 ? sha256Hex(base64DecodeBytes(b64) ?? new Uint8Array()) : undefined);
+  const adminRootDigestHex = await digestOf(rec.wrappedAdminRootB64);
+  const acmeKeyDigestHex = await digestOf(rec.wrappedAcmeAccountKeyB64);
+  return {
+    digestHex: rec.signed?.digestHex ?? "legacy",
+    generation: rec.signed?.generation ?? 0,
+    wrappedUmkDigestHex: (await digestOf(rec.wrappedUmkB64))!,
+    ...(adminRootDigestHex ? { adminRootDigestHex } : {}),
+    ...(acmeKeyDigestHex ? { acmeKeyDigestHex } : {}),
+  };
+}
+
+const EVOLUTION_REFUSALS: Record<string, string> = {
+  "stale-prior": "the stored recovery record changed since this was signed; refresh and retry",
+  "bad-generation": "the record generation is not the next one",
+  "keep-mismatch": "the signed escrow state does not match what is stored",
+  "keep-without-prior": "there is no earlier record to keep escrow from",
+  "nothing-to-remove": "there is no such escrow to remove",
+  "delete-needs-prior": "there is no recovery record to delete",
+};
+
+/** The checks both writes share: who signed, for which authority, and that the signature is fresh. */
+async function checkEnvelope(
+  deps: WebauthnRecoveryDeps,
+  body: unknown,
+  op: "put" | "delete",
+  urlUsername?: string,
+): Promise<
+  | { response: HandlerResponse }
+  | { claim: RecoveryRecordV2; signatureHex: string; existing: WebauthnRecoveryRecord | undefined; b: Record<string, unknown> }
+> {
+  const now = deps.now ?? (() => Date.now());
+  const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
+  const b = (body ?? {}) as Record<string, unknown>;
+  const claim = parseClaim(b.claim);
+  if (!claim || typeof b.signature !== "string" || !/^[0-9a-f]{128}$/.test(b.signature)) {
+    return { response: malformed("malformed recovery record envelope (a v2 signed record is required)") };
+  }
+  if (claim.op !== op) return { response: malformed("wrong operation for this route") };
+  if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(claim.username)) return { response: malformed("invalid username") };
+  if (urlUsername !== undefined && claim.username.toLowerCase() !== urlUsername.toLowerCase()) {
+    return { response: forbidden("username / url mismatch") };
+  }
+  if (Math.abs(now() - claim.issuedAt) > maxAgeMs) return { response: forbidden("stale request") };
+  const userRec = await deps.usernames.get(claim.username);
+  if (!userRec) return { response: notFound("unknown username") };
+  // The signature must come from the key the account holds now, with the admin root it pins now.
+  if (claim.irkPubHex !== userRec.irkPubHex.toLowerCase()) return { response: forbidden("the record was not signed by the account's current key") };
+  if (claim.adminRootPubHex !== (userRec.adminRootPubHex ? userRec.adminRootPubHex.toLowerCase() : "none")) {
+    return { response: forbidden("the record names a different admin root than the account pins") };
+  }
+  let ok = false;
+  try {
+    ok = verifyRecoveryRecord(claim, hexToBytes(b.signature), hexToBytes(userRec.irkPubHex));
+  } catch {
+    return { response: malformed("the recovery record is not canonical") };
+  }
+  if (!ok) return { response: forbidden("invalid signature") };
+  const existing = await deps.webauthnRecovery.get(claim.username);
+  return { claim, signatureHex: b.signature, existing, b };
+}
+
 /**
- * Upload a wrapped-UMK ciphertext.
- *
- * Validation:
- *   - body shape is { request: { username, credentialId, wrappedUmk, issuedAt }, signature }
- *   - username row exists in the usernames table — IRK pubkey is fetched from there
- *   - signature verifies against that IRK pubkey
- *   - issuedAt is within maxAgeMs of now (replay defense)
- *   - wrappedUmk is well-formed base64 (we sign over its SHA-256 to keep
- *     canonical-bytes small; the upload-time hash is recomputed from the
- *     ciphertext on the wire and checked against the signed hash before
- *     the row is written, so .com cannot be tricked into storing
- *     attacker-substituted ciphertext under a victim's passkey)
+ * Write the account's cloud-recovery record (N03). The body is
+ * `{ claim, signature, wrappedUmk, wrappedAdminRoot?, wrappedAcmeAccountKey? }`: the signed claim
+ * names the digest of every ciphertext, the position in the record's history and the previous
+ * record's digest. A different ciphertext, a stale writer or a skipped generation is refused, so
+ * no valid signature authorizes a record other than the one it describes.
  */
 export async function handleUploadWebauthnRecovery(
   deps: WebauthnRecoveryDeps,
   body: unknown,
 ): Promise<HandlerResponse> {
   const now = deps.now ?? (() => Date.now());
-  const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
+  const checked = await checkEnvelope(deps, body, "put");
+  if ("response" in checked) return checked.response;
+  const { claim, signatureHex, existing, b } = checked;
 
-  const b = body as { request?: Record<string, unknown>; signature?: unknown };
-  const r = b?.request ?? {};
-  if (
-    typeof r.username !== "string" ||
-    typeof r.credentialId !== "string" ||
-    typeof r.wrappedUmk !== "string" ||
-    typeof r.issuedAt !== "number" ||
-    typeof b?.signature !== "string"
-  ) {
-    return malformed("malformed body");
+  const umk = b64Field(b.wrappedUmk, "wrappedUmk");
+  if (!umk) return malformed("wrappedUmk is required");
+  if ("error" in umk) return malformed(umk.error);
+  const admin = b64Field(b.wrappedAdminRoot, "wrappedAdminRoot");
+  if (admin && "error" in admin) return malformed(admin.error);
+  const acme = b64Field(b.wrappedAcmeAccountKey, "wrappedAcmeAccountKey");
+  if (acme && "error" in acme) return malformed(acme.error);
+  if (!/^[0-9a-f]{16,512}$/.test(claim.credentialIdHex)) return malformed("credentialId must be 8-256 hex bytes");
+
+  if ((await sha256Hex(umk.bytes)) !== claim.wrappedUmkDigestHex) {
+    return forbidden("the wrapped UMK is not the one that was signed");
   }
-  if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(r.username)) {
-    return malformed("invalid username");
+  // A ciphertext is on the wire exactly when the claim replaces it; keep/none/remove carry none.
+  const wantsAdmin = claim.adminRoot.change === "replace";
+  const wantsAcme = claim.acmeKey.change === "replace";
+  if (wantsAdmin !== !!admin || wantsAcme !== !!acme) {
+    return malformed("escrow ciphertexts must accompany exactly the fields the record replaces");
   }
-  if (!/^[0-9a-fA-F]{16,512}$/.test(r.credentialId)) {
-    return malformed("credentialId must be 8-256 hex bytes");
+  if (claim.adminRoot.change === "replace" && admin && !("error" in admin) && (await sha256Hex(admin.bytes)) !== claim.adminRoot.digestHex) {
+    return forbidden("the wrapped admin root is not the one that was signed");
   }
-  // Task #74: passphrase-derived hashes — optional on the wire to keep
-  // the canonical-bytes type stable (the protocol hashes only the
-  // wrappedUmk bytes, not these new fields), but the recovery sub-origin
-  // page always sends them. We accept-if-present + validate shape; rows
-  // without them remain readable via the legacy presence GET but cannot
-  // serve out the ciphertext through the new gated POST.
-  if (r.fetchTokenHash !== undefined && r.fetchTokenHash !== null) {
-    if (typeof r.fetchTokenHash !== "string" || !/^[0-9a-f]{64}$/.test(r.fetchTokenHash)) {
-      return malformed("fetchTokenHash must be 64 hex chars (SHA-256)");
-    }
-  }
-  if (r.prfSaltHash !== undefined && r.prfSaltHash !== null) {
-    if (typeof r.prfSaltHash !== "string" || !/^[0-9a-f]{64}$/.test(r.prfSaltHash)) {
-      return malformed("prfSaltHash must be 64 hex chars (SHA-256)");
-    }
-  }
-  // Wrapped UMK is base64; decode to recompute the signed hash, then
-  // store as base64. Cap at 16 KiB ciphertext to keep D1 row size sane.
-  const wrappedBytes = base64DecodeBytes(r.wrappedUmk);
-  if (!wrappedBytes) {
-    return malformed("wrappedUmk must be valid base64");
-  }
-  if (wrappedBytes.length === 0 || wrappedBytes.length > 16 * 1024) {
-    return malformed("wrappedUmk must be 1..16384 bytes");
+  if (claim.acmeKey.change === "replace" && acme && !("error" in acme) && (await sha256Hex(acme.bytes)) !== claim.acmeKey.digestHex) {
+    return forbidden("the wrapped ACME key is not the one that was signed");
   }
 
-  if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return forbidden("stale request");
-  }
-
-  const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return notFound("unknown username");
-
-  let sig: Uint8Array;
-  try {
-    sig = hexToBytes(b.signature);
-  } catch {
-    return malformed("invalid signature hex");
-  }
-  const wrappedUmkHashHex = await sha256Hex(wrappedBytes);
-  const claim: UploadRecoveryRecord = {
-    username: r.username,
-    credentialIdHex: r.credentialId,
-    wrappedUmkHashHex,
-    issuedAt: r.issuedAt,
-  };
-  if (!verifyUploadRecoveryRecord(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return forbidden("invalid signature");
-  }
+  const verdict = checkRecoveryEvolution(existing ? await storedState(existing) : undefined, claim);
+  if (!verdict.ok) return conflict(EVOLUTION_REFUSALS[verdict.reason] ?? verdict.reason);
 
   const t = now();
-  const existing = await deps.webauthnRecovery.get(r.username);
-  await deps.webauthnRecovery.upsert({
-    username: r.username,
-    credentialIdHex: r.credentialId,
-    wrappedUmkB64: r.wrappedUmk,
-    irkPubHex: userRec.irkPubHex,
-    ...(typeof r.fetchTokenHash === "string" ? { fetchTokenHashHex: r.fetchTokenHash.toLowerCase() } : {}),
-    ...(typeof r.prfSaltHash === "string" ? { prfSaltHashHex: r.prfSaltHash.toLowerCase() } : {}),
-    // #28 — the ACME account key, escrowed as opaque ciphertext alongside the
-    // UMK. Optional (same accept-if-present pattern as the hashes above; not
-    // in the signed canonical — it's ciphertext, so tampering breaks recovery
-    // of the account key, never forges it). Preserve an existing value when a
-    // re-upload omits it (e.g. a UMK-only refresh).
-    ...(typeof r.wrappedAcmeAccountKey === "string" && r.wrappedAcmeAccountKey.length > 0
-      ? { wrappedAcmeAccountKeyB64: r.wrappedAcmeAccountKey }
-      : existing?.wrappedAcmeAccountKeyB64
-        ? { wrappedAcmeAccountKeyB64: existing.wrappedAcmeAccountKeyB64 }
-        : {}),
-    // Slice D (D-3) — the ADMIN MASTER ROOT, escrowed as opaque ciphertext
-    // alongside the UMK. Same accept-if-present + preserve-on-replace pattern
-    // as the ACME field above (not in the signed canonical — it's ciphertext,
-    // so tampering breaks recovery of the admin root, never forges authority;
-    // the box only trusts the rotation proof chain). A NEW value on re-upload
-    // is the post-rotation re-escrow; an omitting re-upload (UMK-only refresh)
-    // preserves the escrow.
-    ...(typeof r.wrappedAdminRoot === "string" && r.wrappedAdminRoot.length > 0
-      ? { wrappedAdminRootB64: r.wrappedAdminRoot }
-      : existing?.wrappedAdminRootB64
-        ? { wrappedAdminRootB64: existing.wrappedAdminRootB64 }
-        : {}),
-    createdAt: existing?.createdAt ?? t,
-    updatedAt: t,
-  });
-  return { status: 200, body: { ok: true, updated: !!existing } };
+  const keptAdmin = claim.adminRoot.change === "keep" ? existing?.wrappedAdminRootB64 : undefined;
+  const keptAcme = claim.acmeKey.change === "keep" ? existing?.wrappedAcmeAccountKeyB64 : undefined;
+  const adminB64 = admin && !("error" in admin) ? admin.b64 : keptAdmin;
+  const acmeB64 = acme && !("error" in acme) ? acme.b64 : keptAcme;
+  const stored = await deps.webauthnRecovery.replaceIfDigest(
+    {
+      username: claim.username,
+      credentialIdHex: claim.credentialIdHex,
+      wrappedUmkB64: umk.b64,
+      irkPubHex: claim.irkPubHex,
+      fetchTokenHashHex: claim.fetchTokenHashHex,
+      prfSaltHashHex: claim.prfSaltHashHex,
+      ...(acmeB64 ? { wrappedAcmeAccountKeyB64: acmeB64 } : {}),
+      ...(adminB64 ? { wrappedAdminRootB64: adminB64 } : {}),
+      signed: {
+        digestHex: recoveryRecordDigest(claim),
+        generation: claim.generation,
+        signedClaimJson: JSON.stringify(claim),
+        signatureHex,
+      },
+      createdAt: existing?.createdAt ?? t,
+      updatedAt: t,
+    },
+    claim.priorDigestHex,
+  );
+  if (!stored) return conflict(EVOLUTION_REFUSALS["stale-prior"]!);
+  return { status: 200, body: { ok: true, updated: !!existing, generation: claim.generation, digestHex: recoveryRecordDigest(claim) } };
 }
 
 /**
@@ -229,6 +292,14 @@ export async function handleFetchWebauthnRecovery(
       // Pre-migration rows return `false` — the webapp shows a "re-enrol
       // to unlock cloud recovery" hint instead of attempting the fetch.
       hasFetchTokenGate: !!rec.fetchTokenHashHex,
+      // N03: where the signed history stands. `legacy` rows carry unsigned escrow extras and are
+      // replaced by a v2 record on the owner's next enrolment.
+      legacy: !rec.signed,
+      ...(rec.signed ? { generation: rec.signed.generation, digestHex: rec.signed.digestHex } : {}),
+      // Digests (never ciphertext) of the escrows held, so the owner's next signed record can say
+      // `keep:<digest>` instead of inheriting them silently.
+      ...(rec.wrappedAdminRootB64 ? { adminRootDigestHex: await sha256Hex(base64DecodeBytes(rec.wrappedAdminRootB64) ?? new Uint8Array()) } : {}),
+      ...(rec.wrappedAcmeAccountKeyB64 ? { acmeKeyDigestHex: await sha256Hex(base64DecodeBytes(rec.wrappedAcmeAccountKeyB64) ?? new Uint8Array()) } : {}),
       updatedAt: rec.updatedAt,
     },
   };
@@ -335,73 +406,34 @@ export async function handleFetchWrappedUmkWithToken(
       // defense against a malicious .com swapping the salt to coerce
       // a different PRF output.
       ...(rec.prfSaltHashHex ? { prfSaltHash: rec.prfSaltHashHex } : {}),
+      // N03 — the signed claim exactly as stored, so the client checks every ciphertext above
+      // against its signed digest before unwrapping, and the signature once it holds the key.
+      // Absent for a legacy row, which the client labels as carrying unsigned extras.
+      ...(rec.signed
+        ? { signed: { claim: JSON.parse(rec.signed.signedClaimJson) as unknown, signatureHex: rec.signed.signatureHex, digestHex: rec.signed.digestHex, generation: rec.signed.generation } }
+        : { legacy: true }),
       updatedAt: rec.updatedAt,
     },
   };
 }
 
 /**
- * Kill switch — remove the cloud copy. Reuses the upload envelope shape
- * (signed by the user's IRK) so revocation doesn't need a new canonical
- * type. We require the credentialIdHex + wrappedUmkHash to match the
- * stored record's, so a leaked old signature can't be replayed to delete
- * a freshly-uploaded record.
+ * Kill switch — remove the cloud copy. A signed v2 `delete` that names the record it deletes by
+ * digest and generation, so a leaked old signature cannot remove a record written since.
  */
 export async function handleDeleteWebauthnRecovery(
   deps: WebauthnRecoveryDeps,
   username: string,
   body: unknown,
 ): Promise<HandlerResponse> {
-  const now = deps.now ?? (() => Date.now());
-  const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
-
-  const b = body as { request?: Record<string, unknown>; signature?: unknown };
-  const r = b?.request ?? {};
-  if (
-    typeof r.username !== "string" ||
-    typeof r.credentialId !== "string" ||
-    typeof r.wrappedUmkHash !== "string" ||
-    typeof r.issuedAt !== "number" ||
-    typeof b?.signature !== "string"
-  ) {
-    return malformed("malformed body");
-  }
-  if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return forbidden("username / url mismatch");
-  }
-  if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return forbidden("stale request");
-  }
-
-  const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return notFound("unknown username");
-  const existing = await deps.webauthnRecovery.get(r.username);
+  const checked = await checkEnvelope(deps, body, "delete", username);
+  if ("response" in checked) return checked.response;
+  const { claim, existing } = checked;
   if (!existing) return notFound("no recovery record");
-
-  // Pin the delete to the *current* record's bytes — old leaked sigs
-  // can't replay against a freshly-uploaded record (wrappedUmkHash will
-  // differ).
-  const expectedHash = await sha256Hex(base64DecodeBytes(existing.wrappedUmkB64) ?? new Uint8Array());
-  if (r.wrappedUmkHash !== expectedHash) {
-    return conflict("stored record changed since signature");
+  const verdict = checkRecoveryEvolution(await storedState(existing), claim);
+  if (!verdict.ok) return conflict(EVOLUTION_REFUSALS[verdict.reason] ?? verdict.reason);
+  if (!(await deps.webauthnRecovery.deleteIfDigest(claim.username, claim.priorDigestHex))) {
+    return conflict(EVOLUTION_REFUSALS["stale-prior"]!);
   }
-
-  let sig: Uint8Array;
-  try {
-    sig = hexToBytes(b.signature);
-  } catch {
-    return malformed("invalid signature hex");
-  }
-  const claim: UploadRecoveryRecord = {
-    username: r.username,
-    credentialIdHex: r.credentialId,
-    wrappedUmkHashHex: r.wrappedUmkHash,
-    issuedAt: r.issuedAt,
-  };
-  if (!verifyUploadRecoveryRecord(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return forbidden("invalid signature");
-  }
-
-  await deps.webauthnRecovery.delete(r.username);
   return { status: 200, body: { ok: true } };
 }

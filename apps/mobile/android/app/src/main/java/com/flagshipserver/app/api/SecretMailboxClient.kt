@@ -54,6 +54,25 @@ interface SecretMailboxClient {
      *  approval (downgrade, not brick). */
     suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String)
 
+    /** GET {boot}/api/boot/suspension/:domain — the durable lock record
+     *  (owner-IRK via `bootAuth`). SEC-LOCK-001. */
+    suspend fun readBootSuspension(serverDomain: String, bootAuth: String): BootSuspensionStateWire =
+        throw UnsupportedOperationException("boot suspension")
+
+    /** PUT {boot}/api/boot/suspension — an owner-signed lock or resume (a new
+     *  epoch). `durable` on the result is true only when the worker says it
+     *  wrote the record; anything else must be shown as "not locked". */
+    suspend fun putBootSuspension(
+        order: BootSuspensionOrderWire,
+        signatureHex: String,
+        bootAuth: String,
+    ): BootSuspensionPutResult = throw UnsupportedOperationException("boot suspension")
+
+    /** DELETE {boot}/api/boot/lease/:domain — revoke EVERY lease for the
+     *  server (owner-IRK). Used when the dead-man switch is switched on. */
+    suspend fun revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String): Unit =
+        throw UnsupportedOperationException("revoke all leases")
+
     /** POST /api/server/:domain/pairing-deposit — phone, IRK mailbox-auth.
      *  Create-time pairing: pre-register a sealed `add-paired-session` order on
      *  `.com` the moment the recipe is minted, so the booting box claims it on
@@ -370,6 +389,54 @@ data class LeaseRevokeWire(
 
 @Serializable
 data class LeaseDepositPost(val lease: BoxSealedLeaseWire, val signature: String)
+
+/** The boot worker's lock record for a server (`GET /api/boot/suspension/:domain`). */
+@Serializable
+data class BootSuspensionStateWire(
+    val serverDomain: String,
+    val suspended: Boolean,
+    val epoch: Long,
+    val seq: Long,
+    val reason: String? = null,
+    val signer: String? = null,
+    val orderIssuedAt: Long? = null,
+    val updatedAt: Long? = null,
+    val signature: String? = null,
+)
+
+/** The `order` object of a suspension PUT. Field names match the worker. */
+@Serializable
+data class BootSuspensionOrderWire(
+    val serverDomain: String,
+    val epoch: Long,
+    val seq: Long,
+    val action: String,
+    val reason: String,
+    val signer: String,
+    val issuedAt: Long,
+)
+
+@Serializable
+data class BootSuspensionPutBody(val order: BootSuspensionOrderWire, val signature: String)
+
+@Serializable
+data class BootSuspensionPutReply(
+    val durable: Boolean? = null,
+    val leasesRevoked: Int? = null,
+    val state: BootSuspensionStateWire? = null,
+    val code: String? = null,
+    val error: String? = null,
+    val current: BootSuspensionStateWire? = null,
+)
+
+/** What a suspension PUT came to; `durable` is the only thing that means "locked". */
+data class BootSuspensionPutResult(
+    val durable: Boolean,
+    val leasesRevoked: Int = 0,
+    val state: BootSuspensionStateWire? = null,
+    val refusal: String? = null,
+    val status: Int = 200,
+)
 
 /** The `{ response }` body for POST {boot}/api/boot/response. */
 @Serializable
@@ -742,6 +809,55 @@ class LiveSecretMailboxClient(
         transport.execute(
             method = "DELETE",
             url = "$bootBase/api/boot/lease/${request.serverDomain}/${request.leaseId}",
+            body = null,
+            contentType = null,
+            extraHeaders = mapOf("Authorization" to bootAuth),
+            accept = setOf(200, 204),
+        )
+    }
+
+    override suspend fun readBootSuspension(serverDomain: String, bootAuth: String): BootSuspensionStateWire =
+        transport.getJson(
+            url = "$bootBase/api/boot/suspension/$serverDomain",
+            responseSerializer = BootSuspensionStateWire.serializer(),
+            extraHeaders = mapOf("Authorization" to bootAuth),
+        )
+
+    override suspend fun putBootSuspension(
+        order: BootSuspensionOrderWire,
+        signatureHex: String,
+        bootAuth: String,
+    ): BootSuspensionPutResult {
+        val bytes = transport.json
+            .encodeToString(BootSuspensionPutBody.serializer(), BootSuspensionPutBody(order, signatureHex))
+            .toByteArray(Charsets.UTF_8)
+        val res = transport.execute(
+            method = "PUT",
+            url = "$bootBase/api/boot/suspension",
+            body = bytes,
+            contentType = "application/json",
+            extraHeaders = mapOf("Authorization" to bootAuth),
+            accept = setOf(200, 400, 403, 404, 409, 503),
+        )
+        val reply = runCatching {
+            transport.json.decodeFromString(BootSuspensionPutReply.serializer(), String(res.body, Charsets.UTF_8))
+        }.getOrNull()
+        if (res.status == 200 && reply?.durable == true) {
+            return BootSuspensionPutResult(durable = true, leasesRevoked = reply.leasesRevoked ?: 0, state = reply.state, status = res.status)
+        }
+        if (res.status == 503) return BootSuspensionPutResult(durable = false, refusal = "not-durable", status = res.status)
+        return BootSuspensionPutResult(
+            durable = false,
+            state = reply?.current,
+            refusal = reply?.code ?: reply?.error ?: "refused",
+            status = res.status,
+        )
+    }
+
+    override suspend fun revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) {
+        transport.execute(
+            method = "DELETE",
+            url = "$bootBase/api/boot/lease/$serverDomain",
             body = null,
             contentType = null,
             extraHeaders = mapOf("Authorization" to bootAuth),

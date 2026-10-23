@@ -15,8 +15,8 @@
 #      Apps' data needs exactly this (their files are per-app Docker
 #      volumes). Failing here exits non-zero, so systemd retries
 #      (Restart=on-failure).
-#   4. Write the ready marker, then bring up the OPTIONAL services (forgejo,
-#      chromium), removing containers of services this compose file no
+#   4. Write the ready marker, then bring up the OPTIONAL service (forgejo),
+#      removing (an older box's chromium among them) containers of services this compose file no
 #      longer has (an older box's minio, redis, adminer, redis-commander).
 #      A failure there is logged and never takes Postgres down or fails the
 #      unit.
@@ -38,7 +38,7 @@ READY_MARKER="$SECRETS_DIR/data-services.ready"
 COMPOSE=${FLAGSHIP_DATA_COMPOSE:-/opt/flagship/installer/data-services/docker-compose.yml}
 CORE="postgres"
 
-mkdir -p "$DATA_DIR/postgres" "$DATA_DIR/forgejo" "$DATA_DIR/chromium/profile"
+mkdir -p "$DATA_DIR/postgres" "$DATA_DIR/forgejo"
 # An older box's object and key-value stores: gone with their services. An
 # empty directory goes too; one that still holds data is left for the owner.
 rmdir "$DATA_DIR/minio" "$DATA_DIR/redis" 2>/dev/null || true
@@ -64,15 +64,10 @@ chmod 700 "$DATA_DIR"
 # container can't create /var/lib/gitea/git and crashloops on startup.
 chown -R 1000:1000 "$DATA_DIR/forgejo"
 
-# Chromium runs as UID 1000 (matches our `flagship` user inside the image).
-# It needs to read+write its profile dir; it also needs the dir to NOT
-# contain a stale SingletonLock from a previous unclean shutdown — the
-# container's start.sh removes those, but if we ever pre-seed the profile
-# we want the right perms ready to go.
-chown -R 1000:1000 "$DATA_DIR/chromium"
-rm -f "$DATA_DIR/chromium/profile/SingletonLock" \
-      "$DATA_DIR/chromium/profile/SingletonCookie" \
-      "$DATA_DIR/chromium/profile/SingletonSocket" || true
+# The app browser is off (SEC-BROWSER-001): every app shared one Chromium
+# profile, so its cookies and logins could cross apps. Destroy it; it comes
+# back only with a per-app context design.
+rm -rf "$DATA_DIR/chromium" || true
 
 gen_secret() {
     head -c 32 /dev/urandom | base64 | tr -d '+/=\n' | head -c 40

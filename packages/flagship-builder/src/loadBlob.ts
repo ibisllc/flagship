@@ -20,7 +20,7 @@
  * to authorize an install. .com's involvement in the burn step is
  * a non-feature.
  */
-import { verifyInstallBlob, type InstallBlob } from "@flagship/protocol";
+import { verifyInstallBlob, verifyOfflineSecrets, type InstallBlob } from "@flagship/protocol";
 import { readFile } from "node:fs/promises";
 import { hexToBytes, parseInstallBlob } from "./installBlobParse.js";
 
@@ -51,6 +51,12 @@ export interface LoadedBlob {
    */
   swkHex?: string;
   /**
+   * The owner's signed commitment to {@link swkHex} (`flagship/offline-secrets/v1`): required
+   * whenever the recipe carries a workload key, verified here before anything is built, and
+   * carried into install-blob.json so the box checks it again.
+   */
+  offlineSecrets?: string;
+  /**
    * Owner debug access — the JSON string `{grant,signatureHex}` an admin
    * device signs behind Face ID when the owner turns on "Debug-friendly
    * server" (the `flagship/debug-access/v2` envelope: an SSH key and an end
@@ -73,6 +79,7 @@ export class BuilderLoadError extends Error {
       | "missing-field"
       | "expired"
       | "bad-signature"
+      | "unsigned-secret"
       | "io",
   ) {
     super(message);
@@ -197,5 +204,25 @@ export function loadBlobFromString(
       "bad-signature",
     );
   }
-  return { blob, blobSignatureHex: sigHex, pairingOrder, swkHex, debugGrant, source };
+  // SEC-RECIPE-001: a workload key in the recipe file is only as trustworthy as the file, so it
+  // must be committed to by the owner's account key for THIS server and order.
+  const rawOffline = (parsed as Record<string, unknown>).offlineSecrets;
+  let offlineSecrets: string | undefined;
+  if (swkHex !== undefined) {
+    const verdict = verifyOfflineSecrets(rawOffline, swkHex, {
+      serverDomain: blob.serverDomain,
+      serial: blob.authCode.serial,
+      userPub: blob.authCode.userPubKey,
+      issuedAt: blob.authCode.issuedAt,
+      expiresAt: blob.authCode.expiresAt,
+    });
+    if (!verdict.ok) {
+      throw new BuilderLoadError(
+        `the recipe carries a workload key its owner did not sign for this server (${verdict.reason}); build it again from the app`,
+        "unsigned-secret",
+      );
+    }
+    offlineSecrets = JSON.stringify(rawOffline);
+  }
+  return { blob, blobSignatureHex: sigHex, pairingOrder, swkHex, offlineSecrets, debugGrant, source };
 }

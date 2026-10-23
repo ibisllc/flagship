@@ -143,7 +143,7 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
     await rm(cacheDir, { recursive: true, force: true });
   });
 
-  it("subscriber pulls updates, alert inbox stays empty (clean auto path)", async () => {
+  it("subscriber pulls updates; the owner approval applies them (manual path)", async () => {
     const server = new UpdateServer({
       cacheDir,
       appDistribution: () => ({
@@ -160,7 +160,7 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       lineageAnchor: firstCommit,
       currentTip: firstCommit,
       lastAppliedMigration: "",
-      updatePolicy: "auto",
+      updatePolicy: "manual",
     });
 
     let restartCount = 0;
@@ -176,14 +176,17 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       },
       emitPhoneAlert: (a: PhoneUpdateAlert) => inbox.emit(a),
     });
-    const res = await client.pullOne({ serviceId: APP_ID });
+    const staged = await client.pullOne({ serviceId: APP_ID });
+    expect(staged).toMatchObject({ kind: "halted-manual-pending", to: secondCommit });
+    expect(restartCount).toBe(0);
+    expect(inbox.size()).toBe(1);
+    const res = await client.applyPending({ serviceId: APP_ID });
     expect(res).toMatchObject({
       kind: "applied",
       from: firstCommit,
       to: secondCommit,
     });
     expect(restartCount).toBe(1);
-    expect(inbox.size()).toBe(0);
 
     const after = await store.get(APP_ID);
     expect(after?.currentTip).toBe(secondCommit);
@@ -343,7 +346,7 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       lineageAnchor: firstCommit,
       currentTip: firstCommit,
       lastAppliedMigration: "",
-      updatePolicy: "auto",
+      updatePolicy: "manual",
     });
     let restartCount = 0;
     const client = new UpdateClient({
@@ -359,7 +362,8 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       emitPhoneAlert: (a: PhoneUpdateAlert) => inbox.emit(a),
     });
     const first = await client.pullOne({ serviceId: APP_ID });
-    expect(first.kind).toBe("applied");
+    expect(first.kind).toBe("halted-manual-pending");
+    expect((await client.applyPending({ serviceId: APP_ID })).kind).toBe("applied");
     expect(restartCount).toBe(1);
 
     // No new commits upstream — second pull is a no-op.

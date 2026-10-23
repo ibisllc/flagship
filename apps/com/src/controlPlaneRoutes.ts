@@ -101,6 +101,7 @@ import {
   handleRevokeAcmeAccountKeyDelivery,
   handleNotifyOwner,
   handleObjectRePair,
+  handleVetoRePair,
   handleTotpDisable,
   handleTotpEnrollBegin,
   handleTotpEnrollConfirm,
@@ -166,6 +167,7 @@ import {
   handlePostServerHealth,
   handleUserPubKeyCert,
   handleAccountKeyAttestation,
+  handleAuthTime,
   buildPushForwarder,
   wrapForwarderAsV12Fanout,
   handleGetEntitlementRevocations,
@@ -558,6 +560,7 @@ const ROUTE_RE = {
   SERVER_REGISTRY_UNREVOKE: /^\/api\/server-registry\/unrevoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   ACCOUNT_KEY_ATTESTATION: /^\/api\/users\/([^/]+)\/account-key-attestation$/,
+  AUTH_TIME: /^\/api\/auth-time$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   MAINTAINER_BLESSING: /^\/api\/maintainer-blessing$/,
   // Relay blessing — the `.services` hub asks `.com` to bless its
@@ -729,6 +732,7 @@ const ROUTE_RE = {
   RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
   RE_PAIR_OBJECT: /^\/api\/users\/([^/]+)\/re-pair\/object$/,
   RE_PAIR_COMPLETE: /^\/api\/users\/([^/]+)\/re-pair\/complete$/,
+  RE_PAIR_VETO: /^\/api\/users\/([^/]+)\/re-pair\/veto$/,
   RE_PAIR_GET: /^\/api\/users\/([^/]+)\/re-pair$/,
   // v1.2 Plan B Phase 3 — TOTP 2FA enrollment + verification.
   TOTP_ENROLL_BEGIN: /^\/api\/users\/([^/]+)\/totp\/enroll-begin$/,
@@ -913,6 +917,8 @@ export async function tryBootHost(
 
   const deps: BootRouteDeps = {
     boxSealedLeases: storage.boxSealedLeases,
+    watchBootKeys: storage.watchBootKeys,
+    bootSuspensions: storage.bootSuspensions,
     secretMailbox: storage.secretMailbox,
     directory,
     notify,
@@ -1353,6 +1359,10 @@ export async function tryControlPlane(
         decodeURIComponent(m[1]!),
       ),
     );
+  }
+  // The CA's signed "now" for one caller's nonce: a box's authenticated clock (N07).
+  if (method === "GET" && ROUTE_RE.AUTH_TIME.test(path)) {
+    return finish(await handleAuthTime({ ca, caGate }, url.searchParams.get("nonce")));
   }
   if (method === "GET" && ROUTE_RE.CA_CERT.test(path)) {
     return finish(handleCaCert({ ca, usernames: storage.usernames }));
@@ -2300,6 +2310,22 @@ export async function tryControlPlane(
     return finishPlain(
       await handleObjectRePair(
         { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_VETO))) {
+    const vetoFanout = buildOptionalV12PushFanout(env);
+    return finishPlain(
+      await handleVetoRePair(
+        {
+          usernames: storage.usernames,
+          pendingRePairs: storage.pendingRePairs,
+          pushTokens: storage.pushTokens,
+          auditEvents: storage.auditEvents,
+          ...(vetoFanout ? { pushFanout: vetoFanout } : {}),
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),

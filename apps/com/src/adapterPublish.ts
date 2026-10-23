@@ -33,6 +33,16 @@ export interface AdapterPublishEnv {
   ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
 }
 
+/**
+ * SEC-ADAPTER-001: anonymous adapters are untrusted program changes, and the
+ * rule checks plus an optional model review cannot establish that one is
+ * benign. Nothing is published until the signed, reviewed index of
+ * docs/security-hardening (SEC-ADAPTER-002) exists. Submissions still queue,
+ * quarantined, so nothing is lost. This is a code switch on purpose: setting
+ * `ADAPTER_REVIEW_ANTHROPIC_KEY` must never re-open it. Tests flip it.
+ */
+export const communityPublish = { enabled: false };
+
 export type PublishResult =
   | { published: false; reason: string }
   | { published: true; commit: string; added: number; confirmed: number; removedRepos: number; withdrawn: number };
@@ -118,6 +128,10 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
       .prepare(`DELETE FROM adapter_complaints WHERE day < ? AND file_sha256 NOT IN (${RETIRED_FILES})`)
       .bind(complaintCutoff);
   const pruneComplaints = () => pruneStmt().run();
+  if (!communityPublish.enabled) {
+    await pruneComplaints();
+    return { published: false, reason: "quarantined" };
+  }
   if (!bucket || !token || !repoName) {
     // Nothing goes public, but owners' notes still expire on time.
     await pruneComplaints();

@@ -126,18 +126,14 @@ class MockFlagshipServerClientTest {
     @Test fun recoveryEnvelope_registerThenFetch() = runTest {
         val c = make()
         c.registerRecoveryEnvelope(
-            RecoveryEnvelopeRequest(
-                request = RecoveryEnvelopeRequest.Inner(
-                    username = "demo1234",
-                    credentialId = "cid",
-                    wrappedUmk = "WRAPPED",
-                    issuedAt = 1700000000000L,
-                ),
-                signature = "00",
+            com.flagshipserver.app.keystore.makeRecoveryUpload(
+                username = "demo1234",
+                credentialIdHex = "aabbccddeeff00112233445566778899",
+                wrappedUmk = "V1JBUFBFRA==",
             ),
         )
-        val fetched = c.fetchRecoveryEnvelope("cid")
-        assertEquals("WRAPPED", fetched.wrappedUmk)
+        val fetched = c.fetchRecoveryEnvelope("aabbccddeeff00112233445566778899")
+        assertEquals("V1JBUFBFRA==", fetched.wrappedUmk)
         try {
             c.fetchRecoveryEnvelope("missing")
             fail("expected 404")

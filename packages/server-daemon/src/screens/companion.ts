@@ -228,7 +228,7 @@ export async function handleListCompanions(
   const rows = deps.pairedSessions.listCompanions(now());
   const companions: CompanionSummary[] = rows.map((r) => {
     const out: CompanionSummary = {
-      tokenPrefix: r.token.slice(0, 12),
+      tokenPrefix: r.id,
       redeemedAt: r.addedAt,
       // v1 — `lastSeenMs` is the redeem time; a future revision will
       // wire it into the gate so we can show "active 30s ago".
@@ -257,17 +257,9 @@ export async function handleRevokeCompanion(
     return jerr(400, "tokenPrefix (>= 8 chars) required");
   }
   const prefix = body.tokenPrefix;
-  const matches = deps.pairedSessions
-    .list()
-    .filter((s) => s.token.startsWith(prefix));
-  if (matches.length === 0) {
-    // Idempotent — already gone is fine.
-    return jok({ ok: true });
-  }
-  if (matches.length > 1) {
-    return jerr(409, "ambiguous prefix; provide more chars");
-  }
-  await deps.pairedSessions.remove(matches[0]!.token);
+  const outcome = await deps.pairedSessions.removeByIdPrefix(prefix);
+  // Idempotent — already gone is fine.
+  if (outcome === "ambiguous") return jerr(409, "ambiguous prefix; provide more chars");
   return jok({ ok: true });
 }
 

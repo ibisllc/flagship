@@ -1,3 +1,5 @@
+import { hkdfFromSwk } from "./swkDerive.js";
+import { opaqueOps } from "./opaqueKey.js";
 import { gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
@@ -10,7 +12,7 @@ export interface EncryptedChunk {
 }
 
 export function deriveChunkKey(swk: Bytes, contentHash: Bytes): Bytes {
-  return hkdf(sha256, swk, contentHash, new TextEncoder().encode("flagship.chunk.v1"), 32);
+  return hkdfFromSwk(swk, contentHash, "flagship.chunk.v1");
 }
 
 export function encryptChunk(plaintext: Bytes, swk: Bytes): EncryptedChunk {
@@ -36,7 +38,7 @@ export function decryptChunk(chunk: EncryptedChunk, swk: Bytes): Bytes {
  * Both sides (phone and server) hold SWK, so both can derive this key.
  */
 export function deriveLlmKey(swk: Bytes): Bytes {
-  return hkdf(sha256, swk, new Uint8Array(0), new TextEncoder().encode("flagship.llm.v1"), 32);
+  return hkdfFromSwk(swk, new Uint8Array(0), "flagship.llm.v1");
 }
 
 export interface SealedBlob {
@@ -179,6 +181,11 @@ export function openSealedFromEd25519Recipient(
 ): Bytes {
   if (recipientEd25519Priv.length !== 32) {
     throw new Error("recipient Ed25519 priv (seed) must be 32 bytes");
+  }
+  const opaque = opaqueOps(recipientEd25519Priv);
+  if (opaque) {
+    if (!opaque.unseal) throw new Error("this key cannot open sealed blobs");
+    return opaque.unseal(blob);
   }
   const x25519Priv = ed25519.utils.toMontgomerySecret(recipientEd25519Priv);
   return openSealed(blob, x25519Priv);

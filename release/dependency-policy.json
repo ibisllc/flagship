@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "boundaryPackages": {
+    "packages/server-daemon": [
+      "@peculiar/asn1-schema",
+      "@peculiar/asn1-x509",
+      "@peculiar/x509",
+      "acme-client",
+      "fastify",
+      "pg",
+      "reflect-metadata",
+      "tar-stream",
+      "ws",
+      "unpdf",
+      "@ibisllc/maintainers"
+    ],
+    "packages/protocol": [
+      "@noble/ciphers",
+      "@noble/curves",
+      "@noble/ed25519",
+      "@noble/hashes"
+    ],
+    "packages/hello-daemon": [
+      "acme-client",
+      "selfsigned",
+      "ws"
+    ],
+    "packages/keyd": [
+      "@noble/hashes"
+    ]
+  },
+  "installScriptAllowlist": {
+    "esbuild": "only verifies the platform binary that arrives as an optional dependency; used by the builder and developer tooling, never installed on a box",
+    "fsevents": "macOS file watcher for developer tooling; never installed on a box"
+  }
+}

@@ -696,8 +696,8 @@ final class WizardModel: ObservableObject {
             return
         }
 
+        // The helper creates this file itself (exclusively); the app only reads it.
         let logFile = "/tmp/flagship-builder-\(UUID().uuidString).log"
-        FileManager.default.createFile(atPath: logFile, contents: nil)
         let stopTail = Box(false)
         Task.detached {
             var lastSize: Int = 0

@@ -889,7 +889,7 @@ class ImportBackupViewModel(
         }
 
         fun describe(a: ServerRestoreApp): String = when (a.state) {
-            "done" -> "${a.name}: restored"
+            "done" -> a.summary?.needs?.takeIf { it.isNotEmpty() }?.let { "${a.name}: restored. ${it.joinToString(" ")}" } ?: "${a.name}: restored"
             "skipped" -> "${a.name}: skipped (${a.reason ?: "already here"})"
             "failed" -> "${a.name}: couldn't be restored (${a.reason ?: "unknown reason"})"
             "restoring" -> "${a.name}: restoring…"

@@ -5,7 +5,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildSealedSecretResponse, ed, signSecretRequest, type Keypair, type SecretRequest } from "@flagship/protocol";
-import { InMemoryBoxSealedLeaseStorage, InMemorySecretMailboxStorage } from "@flagship/storage";
+import { InMemoryBootSuspensionStorage, InMemoryBoxSealedLeaseStorage, InMemorySecretMailboxStorage } from "@flagship/storage";
 import { routeBoot, type BootRouteDeps } from "../src/routes.js";
 import { signBootRequest, type GateRole } from "../src/gate.js";
 import { InMemoryNonceStore } from "../src/nonceStore.js";
@@ -47,8 +47,10 @@ function directory(withShares = true): DirectoryClient {
 }
 function deps(withShares = true): BootRouteDeps {
   const dir = directory(withShares);
+  const suspensions = new InMemoryBootSuspensionStorage();
   return {
-    boxSealedLeases: new InMemoryBoxSealedLeaseStorage(),
+    boxSealedLeases: new InMemoryBoxSealedLeaseStorage(suspensions),
+    bootSuspensions: suspensions,
     secretMailbox: new InMemorySecretMailboxStorage(),
     directory: dir,
     notify: { notifyOwner: async () => true },

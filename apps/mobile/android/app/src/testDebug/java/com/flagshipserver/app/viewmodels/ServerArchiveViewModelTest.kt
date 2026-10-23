@@ -453,6 +453,19 @@ class ServerArchiveViewModelTest {
         assertEquals("the last part starts past 2 GiB", (dataBytes - 1) / (4L * 1024 * 1024) * 4L * 1024 * 1024, c.restoreChunks.last().first)
     }
 
+    @Test fun aRestoredAppSaysWhatItStillNeeds() {
+        val summary = com.flagshipserver.app.api.ServerRestoreSummary(
+            awaitingApproval = listOf("who can use it (2 people), until an admin approves"),
+            reconnect = listOf("1 API key (create them again)"),
+            notes = listOf("main: its database holds 1 function"),
+        )
+        assertEquals(
+            "Wiki: restored. Waiting for an admin: who can use it (2 people), until an admin approves. Set up again: 1 API key (create them again). Note: main: its database holds 1 function.",
+            ImportBackupViewModel.describe(com.flagshipserver.app.api.ServerRestoreApp("a", "Wiki", "done", summary = summary)),
+        )
+        assertEquals("Wiki: restored", ImportBackupViewModel.describe(com.flagshipserver.app.api.ServerRestoreApp("a", "Wiki", "done", summary = com.flagshipserver.app.api.ServerRestoreSummary())))
+    }
+
     @Test fun describesEachApp() {
         assertEquals("Wiki: restored", ImportBackupViewModel.describe(com.flagshipserver.app.api.ServerRestoreApp("a", "Wiki", "done")))
         assertEquals("Wiki: skipped (already here)", ImportBackupViewModel.describe(com.flagshipserver.app.api.ServerRestoreApp("a", "Wiki", "skipped")))

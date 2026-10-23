@@ -73,6 +73,10 @@ export type RateLimitEndpoint =
   // the control-plane's own 5-per-15-min counter lives in one isolate's
   // memory, so this is the cap that holds across Cloudflare's machines.
   | "totp-verify"
+  // A box's set-only lock (dead-man, manual): signed with its STK, so a stolen STK could
+  // otherwise hammer the boot service. The counter inside an epoch moves one step a write and the
+  // owner's resume is a separate epoch, so this only bounds the noise (SECURITY-HARDENING-PLAN 18.10).
+  | "boot-suspension-box"
   | "device-grants-revoke"
   | "device-grants-mint"
   // Watch delegate keys (Phase 2c) — same shape as device grants:
@@ -216,6 +220,7 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 20, windowSec: 900 },
     { axis: "usernameHash", limit: 5, windowSec: 900 },
   ],
+  "boot-suspension-box": [{ axis: "ip", limit: 30, windowSec: 3600 }],
   "device-grants-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -553,6 +558,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/re-pair$/.test(pathname)) {
     return "re-pair-initiate";
   }
+  if (m === "POST" && pathname === "/api/boot/suspension/box") return "boot-suspension-box";
   if (m === "POST" && /^\/api\/users\/[^/]+\/totp\/verify$/.test(pathname)) {
     return "totp-verify";
   }

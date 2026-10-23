@@ -267,6 +267,7 @@ private fun AdminRootRotateCard(
                                 server = server,
                                 passkeys = PasskeyCeremonyAdapter(passkeys, act),
                                 irk = irkMaterial.signer,
+                                irkPubHex = irkMaterial.pubHex,
                                 username = username,
                                 passphrase = passphrase,
                                 newAdminRootSeed = newSeed,
