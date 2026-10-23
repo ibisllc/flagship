@@ -1,0 +1,24 @@
+{
+  "_about": "The one made-up world every store capture shows (brief §5). No real person, box, address or domain other than flagshipserver.com. Native capture tests and scripts/store-assets/capture-webapp.spec.ts read this file; times are relative so no date format is pinned to one locale. Only the UI language changes between captures.",
+  "account": "river-otter",
+  "apex": "flagship.services",
+  "servers": [
+    { "name": "home",  "fqdn": "home.river-otter.flagship.services",  "leader": true,  "liveness": "live", "uptimeHours": 312 },
+    { "name": "cabin", "fqdn": "cabin.river-otter.flagship.services", "leader": false, "liveness": "live", "uptimeHours": 46 }
+  ],
+  "unlockRequest": { "server": "cabin", "askedMinutesAgo": 1 },
+  "apps": [
+    { "slug": "notes",      "name": "Notes",      "summary": "Shared notes for the house",        "server": "home",  "access": "members" },
+    { "slug": "photos",     "name": "Photos",     "summary": "Family photos, full resolution",     "server": "home",  "access": "members" },
+    { "slug": "recipes",    "name": "Recipes",    "summary": "What we cook, and how",              "server": "home",  "access": "open" },
+    { "slug": "chess-club", "name": "Chess Club", "summary": "Games and a ladder for the club",    "server": "cabin", "access": "members" },
+    { "slug": "budget",     "name": "Budget",     "summary": "Monthly spending, by category",      "server": "home",  "access": "members" }
+  ],
+  "membersApp": "chess-club",
+  "members": [
+    { "name": "Ana",   "rank": "manager" },
+    { "name": "Kenji", "rank": "member" },
+    { "name": "Lea",   "rank": "member" }
+  ],
+  "backups": { "server": "home", "schedule": "nightly", "keep": 7, "policy": "phone", "lastHoursAgo": 6, "sizeGiB": 3.4 }
+}
