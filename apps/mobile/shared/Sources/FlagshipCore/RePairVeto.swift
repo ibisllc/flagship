@@ -48,7 +48,7 @@ public struct RePairVeto: Equatable, Sendable {
 
 /// The sentences the recovery screens show, one place so the three apps agree.
 public enum RecoveryReviewCopy {
-    public static let confirmTitle = "Reject this recovery?"
-    public static let confirmMessage = "This cancels the recovery attempt. If the real owner is trying to get back in, they will have to start again and wait the full time. Only reject it if you do not expect it."
-    public static let unusualNote = "If this is unusual, please check on the physical safety of your device and server."
+    public static let confirmTitle = String(localized: "Reject this recovery?")
+    public static let confirmMessage = String(localized: "This cancels the recovery attempt. If the real owner is trying to get back in, they will have to start again and wait the full time. Only reject it if you do not expect it.")
+    public static let unusualNote = String(localized: "If this is unusual, please check on the physical safety of your device and server.")
 }
