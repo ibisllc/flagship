@@ -2690,5 +2690,6 @@
   "The app was open to all.": "L’application était ouverte à tous.",
   "Restored permissions approved.": "Autorisations restaurées approuvées.",
   "The restored list changed. Review it and approve again.": "La liste restaurée a changé. Vérifiez-la et approuvez-la à nouveau.",
-  "{0} discarded.": "{0} supprimé."
+  "{0} discarded.": "{0} supprimé.",
+  "The server is restarting": "Le serveur redémarre"
 }

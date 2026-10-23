@@ -2690,5 +2690,6 @@
   "The app was open to all.": "此应用曾对所有人开放。",
   "Restored permissions approved.": "已批准恢复的权限。",
   "The restored list changed. Review it and approve again.": "恢复的名单已更改。请检查后再次批准。",
-  "{0} discarded.": "已丢弃 {0}。"
+  "{0} discarded.": "已丢弃 {0}。",
+  "The server is restarting": "服务器正在重启"
 }
