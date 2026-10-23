@@ -2672,4 +2672,7 @@
     <string name="hide_key_settings">Hide key settings</string>
     <string name="options_for">Options for %1$s</string>
     <string name="none_of_your_servers_runs_this_app_yet">None of your servers runs this app yet</string>
+    <string name="locked_it_cant_unlock_itself_until">locked: it can\'t unlock itself until you resume it</string>
+    <string name="remote_lock_pending_it_will_be">remote lock pending: it will be retried</string>
+    <string name="it_shut_down_instead_of_restarting">(it shut down instead of restarting because the lock could not be confirmed)</string>
 </resources>

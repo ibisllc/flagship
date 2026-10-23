@@ -162,15 +162,15 @@ object LockWords {
             if (powerSent) {
                 val did = executed ?: mode
                 var s = if (did == PowerMode.OFF) FSStrings.get(R.string.the_server_is_powering_off) else FSStrings.get(R.string.the_server_is_restarting)
-                if (executed != null && executed != mode) s += " (it shut down instead of restarting because the lock could not be confirmed)"
+                if (executed != null && executed != mode) s += " " + FSStrings.get(R.string.it_shut_down_instead_of_restarting)
                 parts += s
             } else {
                 parts += FSStrings.get(R.string.the_power_command_didnt_reach_the)
             }
         }
         when (lock) {
-            is BootLockOutcome.Confirmed -> parts += "locked: it can't unlock itself until you resume it"
-            is BootLockOutcome.Pending -> parts += "remote lock pending: it will be retried"
+            is BootLockOutcome.Confirmed -> parts += FSStrings.get(R.string.locked_it_cant_unlock_itself_until)
+            is BootLockOutcome.Pending -> parts += FSStrings.get(R.string.remote_lock_pending_it_will_be)
             null -> {}
         }
         return if (parts.isEmpty()) "" else parts.joinToString("; ") + "."
