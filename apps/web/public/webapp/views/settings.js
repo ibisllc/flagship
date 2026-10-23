@@ -53,6 +53,7 @@ import { get as profileGet } from "../lib/profilesStore.js";
 import { holdsAdminKey, removeWarning, saveKeyFirst, signOutWarning } from "../lib/adminKeyWarning.js";
 
 import { tr } from "../lib/i18n.js";
+import { keyIcon, moreHorizontalIcon } from "../lib/icons.js";
 registerView("view-settings");
 
 function maskKey(k) {
@@ -118,22 +119,32 @@ export async function renderProviders() {
 
   for (const e of stored.entries) {
     const isActive = stored.activeId === e.id;
+    const tail = maskKey(e.apiKey);
+    const name = keyRowName(e);
+    const moreId = `key-more-${escapeHtml(e.id)}`;
     const card = document.createElement("div");
-    card.className = `card mt-2 provider-entry${isActive ? " is-active" : ""}`;
+    // One compact row (icon, name, masked key, default tag, actions); the
+    // key's relay switch and default model open under it from the ⋯ button.
+    card.className = `card mt-2 provider-entry key-row${isActive ? " is-active" : ""}`;
     card.innerHTML = `
-      <div class="row row-top">
-        <div>
-          <div class="weight-600">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
-          <div class="value text-xs mt-1">${escapeHtml(maskKey(e.apiKey))}</div>
-          ${defaultModelSlot(`data-default-model-for="${escapeHtml(e.id)}"`)}
-          <label class="inline-check mt-1">
-            <input type="checkbox" role="switch" data-action="relay" data-id="${escapeHtml(e.id)}"${e.relay !== false ? " checked" : ""} />
-            <span class="faint-sm">${escapeHtml(relayCaption(e.relay !== false))}</span>
-          </label>
+      <div class="key-row-main">
+        <span class="icon key-row-icon" aria-hidden="true">${keyIcon}</span>
+        <div class="key-row-text">
+          <div class="key-row-name">${escapeHtml(name)}</div>
+          <div class="key-row-tail mono">${escapeHtml(tail)}</div>
         </div>
-        <div class="btn-row-sm">
-          <button class="${isActive ? "" : "secondary"}" data-action="set-active" data-id="${escapeHtml(e.id)}">${isActive ? "active" : "use"}</button>
-          <button class="secondary" data-action="remove" data-id="${escapeHtml(e.id)}">${tr("remove")}</button>
+        ${isActive ? `<span class="key-row-tag">${tr("Default")}</span>` : ""}
+        <button class="icon-button" data-action="more" aria-expanded="false" aria-controls="${moreId}" aria-label="${tr("Options for {0}", escapeHtml(name))}">${moreHorizontalIcon}</button>
+      </div>
+      <div class="key-row-more" id="${moreId}" hidden>
+        ${defaultModelSlot(`data-default-model-for="${escapeHtml(e.id)}"`)}
+        <label class="inline-check mt-1">
+          <input type="checkbox" role="switch" data-action="relay" data-id="${escapeHtml(e.id)}"${e.relay !== false ? " checked" : ""} />
+          <span class="faint-sm">${escapeHtml(relayCaption(e.relay !== false))}</span>
+        </label>
+        <div class="btn-row-sm mt-2">
+          ${isActive ? "" : `<button class="secondary" data-action="set-active" data-id="${escapeHtml(e.id)}">${tr("Make default")}</button>`}
+          <button class="danger" data-action="remove" data-id="${escapeHtml(e.id)}">${tr("Delete key")}</button>
         </div>
       </div>
     `;
@@ -141,6 +152,15 @@ export async function renderProviders() {
     mountEntryDefaultModel(card.querySelector("[data-default-model-for]"), e);
   }
 
+  list.querySelectorAll('[data-action="more"]').forEach((b) => {
+    b.addEventListener("click", () => {
+      const panel = document.getElementById(b.getAttribute("aria-controls"));
+      if (!panel) return;
+      const open = panel.hidden;
+      panel.hidden = !open;
+      b.setAttribute("aria-expanded", String(open));
+    });
+  });
   list.querySelectorAll('[data-action="set-active"]').forEach((b) => {
     b.addEventListener("click", async () => {
       try {
@@ -167,9 +187,9 @@ export async function renderProviders() {
     b.addEventListener("click", async () => {
       const { inlineConfirm } = await import("../lib/modal.js");
       const ok = await inlineConfirm({
-        title: tr("Remove this provider?"),
+        title: tr("Delete this key?"),
         message: tr("The API key for this provider will be deleted from this device."),
-        okLabel: tr("Remove"),
+        okLabel: tr("Delete"),
         danger: true,
       });
       if (!ok) return;
@@ -182,6 +202,15 @@ export async function renderProviders() {
       }
     });
   });
+}
+
+/** A saved key's name in its row: its label, with the provider when the label
+ *  doesn't already say it. */
+export function keyRowName(e) {
+  const label = String(e.label ?? "").trim();
+  const provider = String(e.provider ?? "").trim();
+  if (!label || label.toLowerCase() === provider.toLowerCase()) return provider;
+  return `${label} · ${provider}`;
 }
 
 export const DEFAULT_MODEL_LABEL = tr("Default model");

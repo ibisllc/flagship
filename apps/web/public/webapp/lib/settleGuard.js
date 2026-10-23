@@ -1,11 +1,11 @@
 // A button that takes no tap for a moment after the layout above it changed.
 //
-// Home's "Add/Restore server" sits under banners that arrive after the page
+// Home's "Add / Restore a server" sits under banners that arrive after the page
 // paints (account backup nudge, "sign in again", the paused-status line). A
 // tap aimed at something that was there a moment ago would otherwise land on
 // the button that moved under the finger.
 //
-// MIRRORS: Android Home (450 ms settle on Add/Restore server).
+// MIRRORS: Android Home (450 ms settle on Add / Restore a server).
 
 export const SETTLE_MS = 450;
 

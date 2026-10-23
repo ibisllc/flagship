@@ -32,13 +32,8 @@ public struct AccountSecurityScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Text("Manage recovery protection and account-level security.")
-                    .font(FS.font.bodySm())
-                    .foregroundColor(c.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, FS.space.s4)
-
                 badge(c: c)
+                    .padding(.top, FS.space.s4)
                 explainer(c: c)
                 actions(c: c)
 
@@ -72,7 +67,7 @@ public struct AccountSecurityScreen: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Use this only if a device may be lost or stolen. It replaces your admin key everywhere and REMOVES admin from every other device — they'll need to recover to regain it. This can't be undone.")
+            Text("Only if a device may be lost or stolen. Every other device loses admin and must recover to get it back. This can't be undone.")
         }
         .sheet(isPresented: $showEnableSheet) {
             AccountSecurityEnableSheet(viewModel: viewModel) {
@@ -99,7 +94,7 @@ public struct AccountSecurityScreen: View {
                 showDisableSheet = false
             }
         } message: {
-            Text("Removes your authenticator and recovery codes. Recovery goes back to a 3-day wait. Refused while other trusted devices exist.")
+            Text("Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist.")
         }
     }
 
@@ -111,13 +106,13 @@ public struct AccountSecurityScreen: View {
                     .imageScale(.large)
                     .foregroundColor(viewModel.isMultiDevice ? c.success : c.primary)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(viewModel.isMultiDevice ? String(localized: "Code protection is on") : "Single-device account")
+                    Text(viewModel.isMultiDevice ? String(localized: "Code protection is on") : String(localized: "Single-device account"))
                         .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                         .accessibilityIdentifier("account-security-badge")
                     Text(viewModel.isMultiDevice
-                         ? String(localized: "Recovering this account needs a 6-digit code from your authenticator app (or a recovery code) and a 24-hour wait.")
-                         : "Account recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.")
+                         ? String(localized: "Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.")
+                         : String(localized: "Recovery needs a recovery credential, then a 3-day wait. Your other devices are alerted but can't cancel it."))
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                 }
@@ -131,8 +126,8 @@ public struct AccountSecurityScreen: View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             FSSectionLabel(viewModel.isMultiDevice ? String(localized: "Currently enabled") : String(localized: "Why turn it on?"))
             Text(viewModel.isMultiDevice
-                 ? String(localized: "Your authenticator was set up on this device on \(formattedDate(viewModel.totpEnrolledAt)). Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost.")
-                 : "A second check outside Apple's iCloud Keychain. If your iCloud password is ever stolen, the attacker still needs a live 6-digit code from your authenticator app to take over your account.")
+                 ? String(localized: "Set up on this device on \(formattedDate(viewModel.totpEnrolledAt)). Keep your recovery codes safe: they're the only way back in if you lose your authenticator app.")
+                 : String(localized: "A check outside iCloud Keychain: anyone who steals your iCloud password still needs a live code from your authenticator app to take over your account."))
                 .font(FS.font.bodySm())
                 .foregroundColor(c.text)
         }
@@ -192,7 +187,7 @@ public struct AccountSecurityScreen: View {
                         .accessibilityIdentifier("watch-delegate-admin-only")
                 }
 
-                Text("Approve a server boot from your Apple Watch while Flagship is unlocked on this iPhone. Other actions (revoke server, wipe & restart, replace device) always need your iPhone. Off by default.")
+                Text("Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.")
                     .accessibilityIdentifier("watch-delegate-note")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
@@ -229,7 +224,7 @@ public struct AccountSecurityScreen: View {
                         .font(FS.font.scaled(16, weight: .semibold))
                         .foregroundColor(c.text)
                 }
-                Text("If a device might be lost or stolen, rotate your admin key. It becomes the only admin key; every other device loses admin until it recovers.")
+                Text("Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
 
@@ -283,7 +278,7 @@ public struct AccountSecurityScreen: View {
     @ViewBuilder
     private func reEscrowStep(c: FSColors, vm: RotateAdminRootViewModel) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Your admin key changed. Enter your recovery passphrase to update your recovery backup — otherwise recovery would restore the OLD admin key.")
+            Text("Your admin key changed. Enter your recovery passphrase so recovery restores the new key, not the old one.")
                 .font(FS.font.caption())
                 .foregroundColor(c.text)
 
@@ -391,9 +386,9 @@ struct AccountSecurityEnableSheet: View {
     private func step1(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             FSSectionLabel(String(localized: "Step 1 of 4"))
-            Text("You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.")
+            Text("You need an authenticator app (1Password, Google Authenticator, Authy…). Scan the QR code or paste the key we show.")
                 .foregroundColor(c.text)
-            Text("With code protection on, recovery needs your 6-digit code (or a recovery code) and a 24-hour wait instead of the 3-day wait.")
+            Text("Recovery then needs your 6-digit code (or a recovery code) and a 24-hour wait, not 3 days.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
             FSPrimaryButton(String(localized: "Continue"), block: true, large: true) {
@@ -480,7 +475,7 @@ struct AccountSecurityEnableSheet: View {
                 Text("Step 4 of 4 — save your recovery codes")
                     .font(FS.font.scaled(14, weight: .semibold)).foregroundColor(c.text)
             }
-            Text("Print these or store them in a password manager. Each code works once if you lose your authenticator. They're the ONLY way back in.")
+            Text("Print them or keep them in a password manager. Each works once. If you lose your authenticator, they're the only way back in.")
                 .foregroundColor(c.text)
             FSCard {
                 VStack(alignment: .leading, spacing: 6) {

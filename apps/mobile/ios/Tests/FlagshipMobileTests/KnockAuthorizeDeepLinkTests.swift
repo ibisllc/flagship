@@ -5,7 +5,7 @@ import XCTest
 /// (docs/service-access-gating.md, "Web-experience gating"):
 /// `flagship://access?server=<fqdn>&svc=<label>&ref=<serviceRef>&page=<pageId>`
 /// — handed to a browser by the box's knock page (button + QR), and also
-/// paste-able via Settings → "Process URL".
+/// paste-able via Settings → "Scan a code or enter a link".
 final class KnockAuthorizeDeepLinkTests: XCTestCase {
     private let server = "home.alice.flagship.services"
     private let svc = "notes"
@@ -148,7 +148,7 @@ final class KnockAuthorizeDeepLinkTests: XCTestCase {
     }
 
     func testPastedInviteLinkAlsoParses() {
-        // "Process URL" accepts any recognized Flagship deeplink, not just access.
+        // "Scan a code or enter a link" accepts any recognized Flagship deeplink, not just access.
         let secret = String(repeating: "ab", count: 32)
         let raw = "flagship://invite?server=\(server)&k=\(secret)"
         XCTAssertEqual(

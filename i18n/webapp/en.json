@@ -86,10 +86,6 @@
     "en": "No cloud recovery is set up on this account.",
     "ctx": "webapp/lib/accountAccess.js:47"
   },
-  "Scan a pairing code": {
-    "en": "Scan a pairing code",
-    "ctx": "webapp/index.html"
-  },
   "From a device that's already signed in — its Settings → Add device.": {
     "en": "From a device that's already signed in — its Settings → Add device.",
     "ctx": "webapp/lib/accountAccess.js:52"
@@ -3385,10 +3381,6 @@
   "A private app's sign-in page gives you a link to paste here. On that page, choose \"Get link to paste in the app\", then paste the link below to sign that browser in.": {
     "en": "A private app's sign-in page gives you a link to paste here. On that page, choose \"Get link to paste in the app\", then paste the link below to sign that browser in.",
     "ctx": "webapp/views/access-authorize.js:53"
-  },
-  "Process URL": {
-    "en": "Process URL",
-    "ctx": "webapp/index.html"
   },
   "That doesn't look like a Flagship access link.": {
     "en": "That doesn't look like a Flagship access link.",
@@ -8406,10 +8398,6 @@
     "en": "Account key",
     "ctx": "webapp/index.html"
   },
-  "AI keys": {
-    "en": "AI keys",
-    "ctx": "webapp/index.html"
-  },
   "Server approvals": {
     "en": "Server approvals",
     "ctx": "webapp/index.html"
@@ -8618,10 +8606,6 @@
   },
   "Secured sessions": {
     "en": "Secured sessions",
-    "ctx": "webapp/index.html"
-  },
-  "Browsers you signed in to private apps with \"Process URL\". Refresh to\n          check if one's still in, or Stop to sign it out.": {
-    "en": "Browsers you signed in to private apps with \"Process URL\". Refresh to\n          check if one's still in, or Stop to sign it out.",
     "ctx": "webapp/index.html"
   },
   "REMOTE": {
@@ -9064,10 +9048,6 @@
     "en": "ACCOUNT SECURITY",
     "ctx": "webapp/index.html"
   },
-  "Manage recovery protection and account-level security.": {
-    "en": "Manage recovery protection and account-level security.",
-    "ctx": "webapp/index.html"
-  },
   "Phones and tablets that hold your account keys.": {
     "en": "Phones and tablets that hold your account keys.",
     "ctx": "webapp/index.html"
@@ -9108,10 +9088,6 @@
     "en": "Store an encrypted copy of your account key for a new browser.",
     "ctx": "webapp/index.html"
   },
-  "Recovery requires both your recovery passphrase and access to the passkey stored by your browser or password manager. Together they unlock the encrypted account key; Flagship cannot read it or reset your passphrase.": {
-    "en": "Recovery requires both your recovery passphrase and access to the passkey stored by your browser or password manager. Together they unlock the encrypted account key; Flagship cannot read it or reset your passphrase.",
-    "ctx": "webapp/index.html"
-  },
   "Advanced: legacy wrapped-UMK export": {
     "en": "Advanced: legacy wrapped-UMK export",
     "ctx": "webapp/index.html"
@@ -9122,10 +9098,6 @@
   },
   "Import wrapped UMK": {
     "en": "Import wrapped UMK",
-    "ctx": "webapp/index.html"
-  },
-  "AI providers": {
-    "en": "AI providers",
     "ctx": "webapp/index.html"
   },
   "+ Add provider": {
@@ -9804,10 +9776,6 @@
   },
   "<strong>Anyone with both this file and its passphrase can take over your account and lock you out.</strong>": {
     "en": "<strong>Anyone with both this file and its passphrase can take over your account and lock you out.</strong>",
-    "ctx": "webapp/index.html"
-  },
-  "<strong>How this works</strong>": {
-    "en": "<strong>How this works</strong>",
     "ctx": "webapp/index.html"
   },
   "Older device-to-device transfer of the raw wrapped key (same passphrase on both browsers). Prefer the <code>.flagshipkey</code> backup above.": {
@@ -10941,5 +10909,109 @@
   "on": {
     "en": "on",
     "ctx": "webapp/views/server-detail.js:881"
+  },
+  "Scan a pairing code": {
+    "en": "Scan a pairing code",
+    "ctx": "webapp/lib/accountAccess.js:52"
+  },
+  "Add a server first": {
+    "en": "Add a server first",
+    "ctx": "webapp/lib/noServerCard.js:13"
+  },
+  "Services run on your own server. Add one to start building.": {
+    "en": "Services run on your own server. Add one to start building.",
+    "ctx": "webapp/lib/noServerCard.js:14"
+  },
+  "Process URL": {
+    "en": "Process URL",
+    "ctx": "webapp/views/access-authorize.js:62"
+  },
+  "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.": {
+    "en": "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.",
+    "ctx": "webapp/views/account-security.js:42"
+  },
+  "Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.": {
+    "en": "Recovery needs a 6-digit authenticator code (or a recovery code) and a 24-hour wait.",
+    "ctx": "webapp/views/account-security.js:98"
+  },
+  "Recovery needs a recovery credential, then a 3-day wait. Your other devices are alerted but can't cancel it.": {
+    "en": "Recovery needs a recovery credential, then a 3-day wait. Your other devices are alerted but can't cancel it.",
+    "ctx": "webapp/views/account-security.js:99"
+  },
+  "Set up on {0}. Keep your recovery codes safe: they're the only way back in if you lose your authenticator app.": {
+    "en": "Set up on {0}. Keep your recovery codes safe: they're the only way back in if you lose your authenticator app.",
+    "ctx": "webapp/views/account-security.js:118"
+  },
+  "A check outside your browser's password manager: anyone who breaks into it still needs a live code from your authenticator app to take over your account.": {
+    "en": "A check outside your browser's password manager: anyone who breaks into it still needs a live code from your authenticator app to take over your account.",
+    "ctx": "webapp/views/account-security.js:125"
+  },
+  "Print them or keep them in a password manager. Each works once. If you lose your authenticator, they're the only way back in.": {
+    "en": "Print them or keep them in a password manager. Each works once. If you lose your authenticator, they're the only way back in.",
+    "ctx": "webapp/views/account-security.js:169"
+  },
+  "Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist.": {
+    "en": "Removes your authenticator and recovery codes. The account goes back to single-device with a 3-day recovery wait. Refused while other trusted devices exist.",
+    "ctx": "webapp/views/account-security.js:306"
+  },
+  "Add / Restore a server": {
+    "en": "Add / Restore a server",
+    "ctx": "webapp/views/import-backup.js:46"
+  },
+  "The server keeps waiting for its backup. Start again from Add / Restore a server, or delete the server on Home.": {
+    "en": "The server keeps waiting for its backup. Start again from Add / Restore a server, or delete the server on Home.",
+    "ctx": "webapp/views/import-backup.js:751"
+  },
+  "Scan a code or enter a link": {
+    "en": "Scan a code or enter a link",
+    "ctx": "webapp/index.html"
+  },
+  "Scan a Flagship QR code, or paste its link. To add this browser to another account, open Settings → Trusted devices → Add device on a device of that account.": {
+    "en": "Scan a Flagship QR code, or paste its link. To add this browser to another account, open Settings → Trusted devices → Add device on a device of that account.",
+    "ctx": "webapp/views/join.js:292"
+  },
+  "That isn't a Flagship code or link. Copy the whole link and try again.": {
+    "en": "That isn't a Flagship code or link. Copy the whole link and try again.",
+    "ctx": "webapp/views/join.js:294"
+  },
+  "Couldn't scan. Paste the link instead.": {
+    "en": "Couldn't scan. Paste the link instead.",
+    "ctx": "webapp/views/join.js:295"
+  },
+  "Paste": {
+    "en": "Paste",
+    "ctx": "webapp/views/join.js:347"
+  },
+  "Default": {
+    "en": "Default",
+    "ctx": "webapp/views/settings.js:136"
+  },
+  "Options for {0}": {
+    "en": "Options for {0}",
+    "ctx": "webapp/views/settings.js:137"
+  },
+  "Make default": {
+    "en": "Make default",
+    "ctx": "webapp/views/settings.js:146"
+  },
+  "AI API keys": {
+    "en": "AI API keys",
+    "ctx": "webapp/index.html"
+  },
+  "Browsers you signed in to private apps with a sign-in link. Refresh to\n          check if one's still in, or Stop to sign it out.": {
+    "en": "Browsers you signed in to private apps with a sign-in link. Refresh to\n          check if one's still in, or Stop to sign it out.",
+    "ctx": "webapp/index.html"
+  },
+  "How this works": {
+    "en": "How this works",
+    "ctx": "webapp/index.html"
+  },
+  "Recovery requires both your recovery passphrase and access to the passkey stored by your browser or password manager. Together they unlock the encrypted account key; Flagship cannot read it or reset your passphrase.": {
+    "en": "Recovery requires both your recovery passphrase and access to the passkey stored by your browser or password manager. Together they unlock the encrypted account key; Flagship cannot read it or reset your passphrase.",
+    "ctx": "webapp/views/recovery.js:556"
+  },
+  "Scheduled": {
+    "en": "Scheduled",
+    "ctx": "webapp/lib/savedBackups.js:162"
   }
 }

@@ -96,6 +96,18 @@ import com.flagshipserver.app.viewmodels.LoadingState
 internal val NO_SERVER_TITLE get() = FSStrings.get(R.string.add_a_server_first)
 internal val NO_SERVER_HINT get() = FSStrings.get(R.string.services_run_on_your_own_server)
 
+/** "Add a server first": Services and Activity while the account has no
+ *  server. MIRRORS iOS `NoServerYetCard` and the webapp's `noServerCardHtml`. */
+@Composable
+internal fun NoServerYetState(modifier: Modifier = Modifier) {
+    FSEmptyState(
+        title = NO_SERVER_TITLE,
+        message = NO_SERVER_HINT,
+        icon = Icons.Outlined.Dns,
+        modifier = modifier,
+    )
+}
+
 /** Presentation-only creator filter (mirrors iOS AppsOwnerFilter). */
 private enum class OwnerFilter(val label: String) { ALL(FSStrings.get(R.string.all)), YOURS(FSStrings.get(R.string.yours)), SHARED(FSStrings.get(R.string.shared)) }
 
@@ -189,12 +201,7 @@ fun ServicesListScreen(nav: NavController) {
         refreshing = state is LoadingState.Loading,
     ) {
         if (noServer) {
-            FSEmptyState(
-                title = NO_SERVER_TITLE,
-                message = NO_SERVER_HINT,
-                icon = Icons.Outlined.Dns,
-                modifier = Modifier.testTag("services-no-server"),
-            )
+            NoServerYetState(Modifier.testTag("services-no-server"))
         } else if (allApps.isEmpty() && state is LoadingState.Failed) {
             ErrorCard(
                 message = (state as LoadingState.Failed).message,

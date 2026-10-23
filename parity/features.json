@@ -13,7 +13,7 @@
     },
     {
       "id": "home-server-order",
-      "title": "Home: drag server order (server-order/v1), leader badge, Add/Restore server (Create a server, Co-manage a running server, Restore from backup)",
+      "title": "Home: drag server order (server-order/v1), leader badge, Add / Restore a server (Create a server, Co-manage a running server, Restore from backup)",
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerOrder.swift", "flagship/server-order/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerOrderCard.swift", "Make leader"]] },
@@ -313,12 +313,22 @@
     },
     {
       "id": "join-another-account",
-      "title": "Join another account while signed in",
+      "title": "Settings → Scan a code or enter a link: join another account while signed in, or open any Flagship code or link (camera or pasted; replaces Process URL, same parser and screens as a tapped link)",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift", "case \\.joinAccount"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "fun ConnectAccountScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/SettingsScreen.kt", "join-device-scan"]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/join.js", "export async function openJoinAnotherAccount"], ["apps/web/public/webapp/index.html", "settings-tab-join-account"]] }
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift", "case \\.joinAccount"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ScanOrLinkScreen.swift", "public struct ScanOrLinkScreen"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "fun ConnectAccountScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/SettingsScreen.kt", "join-device-scan"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ScanOrLinkScreen.kt", "fun ScanOrLinkScreen"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/join.js", "export async function openScanOrLink"], ["apps/web/public/webapp/lib/flagshipLinkInput.js", "export function classifyFlagshipLink"], ["apps/web/public/webapp/index.html", "settings-tab-join-account"]] }
+      }
+    },
+    {
+      "id": "no-server-card",
+      "title": "Services and Activity say \"Add a server first\" while the account has no server (Activity keeps Server approvals)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/ServicesTab.swift", "struct NoServerYetCard"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift", "if noServer \\{ NoServerYetCard\\(\\) \\}"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServicesListScreen.kt", "fun NoServerYetState"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ActivityScreen.kt", "activity-no-server"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/noServerCard.js", "export function noServerCardHtml"], ["apps/web/public/webapp/views/activity.js", "noServerCardHtml\\(\\)"], ["apps/web/public/webapp/views/services-list.js", "noServerCardHtml\\(\\)"]] }
       }
     },
     {
@@ -584,8 +594,8 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerBackupFormat.swift", "flagship/server-restore/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "Backup/clone server"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "struct ImportBackupScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "isDemoAccount: app.isDemoAccount"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Add/Import a server"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/ServerArchiveModels.swift", "flagship/archive-download/v1"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerArchive.kt", "flagship/server-archive/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "Backup/clone server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Add/Restore server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/ServerArchiveModels.kt", "flagship/archive-download/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerBackupFormat.kt", "flagship/server-restore/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "fun ImportBackupScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "R\\.string\\.waiting_for_its_backup\\b"]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverBackupFormat.js", "flagship/server-restore/v1"], ["apps/web/public/webapp/views/server-detail.js", "Backup/clone server"], ["apps/web/public/webapp/views/import-backup.js", "createServerForRestore"], ["apps/web/public/webapp/views/home.js", "ADD_IMPORT_LABEL"], ["apps/web/public/webapp/lib/serverArchive.js", "flagship/archive-download/v1"], ["apps/web/public/webapp/lib/serverArchive.js", "export function archiveErrorText"]] }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerArchive.kt", "flagship/server-archive/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "Backup/clone server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "R\\.string\\.add_restore_server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/ServerArchiveModels.kt", "flagship/archive-download/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerBackupFormat.kt", "flagship/server-restore/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "fun ImportBackupScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "R\\.string\\.waiting_for_its_backup\\b"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverBackupFormat.js", "flagship/server-restore/v1"], ["apps/web/public/webapp/views/server-detail.js", "Backup/clone server"], ["apps/web/public/webapp/views/import-backup.js", "createServerForRestore"], ["apps/web/public/webapp/views/home.js", "addRestoreButtonHtml"], ["apps/web/public/webapp/lib/serverArchive.js", "flagship/archive-download/v1"], ["apps/web/public/webapp/lib/serverArchive.js", "export function archiveErrorText"]] }
       }
     },
     {

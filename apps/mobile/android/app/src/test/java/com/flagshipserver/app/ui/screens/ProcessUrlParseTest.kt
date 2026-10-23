@@ -1,4 +1,4 @@
-// "Process URL" parse helper — a pasted /access link (https or flagship://) / "Get link"
+// The access-link parse helper (Settings → Scan a code or enter a link): a pasted /access link (https or flagship://) / "Get link"
 // string resolves to an AuthorizeKnock (or null). Uri.parse needs Robolectric.
 
 package com.flagshipserver.app.ui.screens

@@ -674,14 +674,14 @@ public struct HomeScreen: View {
         }
     }
 
-    /// "Add/Import a server": the one way to bring a server in (Create /
+    /// "Add / Restore a server": the one way to bring a server in (Create /
     /// Co-manage / Import), above the list or on the empty state.
     @ViewBuilder
     private func addServerButton(c: FSColors) -> some View {
         Button(action: { if addSettle.accepts() { showAddOrImport = true } }) {
             HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill").foregroundColor(c.accent)
-                Text("Add/Restore server").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
+                Text("Add / Restore a server").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
                 Spacer()
             }
             .padding(.horizontal, FS.space.s4)
@@ -692,7 +692,7 @@ public struct HomeScreen: View {
         }
         .buttonStyle(FSPressStyle())
         .accessibilityIdentifier("home-add-server")
-        .confirmationDialog("Add/Restore server", isPresented: $showAddOrImport, titleVisibility: .visible) {
+        .confirmationDialog("Add / Restore a server", isPresented: $showAddOrImport, titleVisibility: .visible) {
             Button("Create a server") { onAddServer() }
                 .accessibilityIdentifier("home-add-new-server")
             Button("Co-manage a running server") { onCoManage() }

@@ -171,8 +171,9 @@ public enum SettingsRoute: Hashable, Sendable {
     /// Carries the scanned pairing-link string; routes into the
     /// JoinAccountViewModel add-profile flow.
     case joinAccount(joinUrl: String)
-    /// Phase 3b — the in-app scanner entry for the incoming side
-    /// ("Scan a pairing code"), reached from Settings → Devices.
+    /// Settings → Devices → "Scan a code or enter a link": the in-app
+    /// scanner, with a field for a pasted link or code. Any Flagship link
+    /// (a /join pairing code included) goes through the deep-link router.
     case scanPairingCode
     case privacy
     /// B7 — Replace-device FINALIZE surface. Reached after `initiate`
@@ -206,10 +207,6 @@ public enum SettingsRoute: Hashable, Sendable {
     /// row: serviceUrl / browserAgent / started-at + a debounced Refresh
     /// (online/offline) and a Stop (close + remove). Reached from Settings.
     case securedSessions
-    /// Web-experience gating — "Process URL": a paste field that takes a
-    /// `https://flagshipserver.com/access#…` link (or the raw "Get link" string) from a
-    /// box's knock page and routes it into the same KnockAuthorize flow.
-    case processUrl
     /// Last-device account-DEATH ceremony (docs/account-deletion-and-name-reclaim.md
     /// §2). Reached only when `SignOutPolicy.evaluate(...) == .deletionCeremony`
     /// (no cloud recovery AND this is the last device) after the confirm popup.

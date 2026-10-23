@@ -159,7 +159,7 @@ export function statusLines(view, { formatBytes, formatTime = (t) => new Date(t)
 /** One row of the list: "Oct 16, 3:00 AM · 1.2 GB · Scheduled · 3 apps" and a left-out line. */
 export function rowText(b, { formatBytes, formatTime = (t) => new Date(t).toLocaleString(dateLocale()) }) {
   const n = b.apps?.length ?? 0;
-  const main = trn(n, "{1} · {2} · {3} · {0} app", "{1} · {2} · {3} · {0} apps", formatTime(b.createdAt), formatBytes(b.bundleBytes ?? b.bytes + b.backupBytes), b.trigger === "schedule" ? "Scheduled" : tr("Back up now"));
+  const main = trn(n, "{1} · {2} · {3} · {0} app", "{1} · {2} · {3} · {0} apps", formatTime(b.createdAt), formatBytes(b.bundleBytes ?? b.bytes + b.backupBytes), b.trigger === "schedule" ? tr("Scheduled") : tr("Back up now"));
   const left = b.left?.length ? tr("Left out: {0}", b.left.map((x) => x.name).join(", ")) : "";
   return { main, left };
 }

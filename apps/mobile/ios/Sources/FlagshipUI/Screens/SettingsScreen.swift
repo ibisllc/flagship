@@ -122,9 +122,6 @@ public struct SettingsScreen: View {
     /// Web-experience gating — open "Open secured sessions" (browser QR-login
     /// sessions this phone has authorized).
     var onOpenSecuredSessions: () -> Void = {}
-    /// Web-experience gating — open "Process URL" (paste an `https://flagshipserver.com/access`
-    /// link / "Get link" string to authorize a site).
-    var onOpenProcessUrl: () -> Void = {}
     /// P14 Phase 2 — open the Companion-requests inbox. The badge count
     /// next to the row reflects `pendingCompanionWritesCount`.
     var onOpenCompanionRequests: () -> Void = {}
@@ -220,7 +217,6 @@ public struct SettingsScreen: View {
         onOpenPeerBackup: @escaping () -> Void = {},
         onOpenCompanionDock: @escaping () -> Void = {},
         onOpenSecuredSessions: @escaping () -> Void = {},
-        onOpenProcessUrl: @escaping () -> Void = {},
         onOpenCompanionRequests: @escaping () -> Void = {},
         pendingCompanionWritesCount: Int = 0,
         onOpenAbout: @escaping () -> Void = {},
@@ -270,7 +266,6 @@ public struct SettingsScreen: View {
         self.onOpenPeerBackup = onOpenPeerBackup
         self.onOpenCompanionDock = onOpenCompanionDock
         self.onOpenSecuredSessions = onOpenSecuredSessions
-        self.onOpenProcessUrl = onOpenProcessUrl
         self.onOpenCompanionRequests = onOpenCompanionRequests
         self.pendingCompanionWritesCount = pendingCompanionWritesCount
         self.onOpenAbout = onOpenAbout
@@ -518,7 +513,7 @@ public struct SettingsScreen: View {
                 accessibilityId: "settings-open-account-security",
                 action: onOpenAccountSecurity
             ),
-            FSSettingsRow(icon: "sparkles", title: String(localized: "AI keys"), subtitle: String(localized: "Bring-your-own keys for building apps"), action: onOpenAiKeys),
+            FSSettingsRow(icon: "sparkles", title: String(localized: "AI API keys"), subtitle: String(localized: "Bring-your-own keys for building apps"), action: onOpenAiKeys),
         ] + (isDemoAccount ? [] : [
             FSSettingsRow(icon: "key.horizontal.fill", title: String(localized: "Cloud recovery"), subtitle: String(localized: "Recover on a new device"), action: onOpenRecovery),
             FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: String(localized: "Back up account key"), subtitle: String(localized: "Save an encrypted key file"), action: onOpenKeyfileBackup),
@@ -594,7 +589,7 @@ public struct SettingsScreen: View {
                     Button(action: onScanPairingCode) {
                         HStack(spacing: FS.space.s2) {
                             Image(systemName: "qrcode.viewfinder")
-                            Text("Scan a pairing code").font(FS.font.bodySm())
+                            Text("Scan a code or enter a link").font(FS.font.bodySm())
                             Spacer()
                             Image(systemName: "chevron.right").imageScale(.small).foregroundColor(c.textMuted)
                         }
@@ -895,7 +890,6 @@ public struct SettingsScreen: View {
     private func webAccessGroup(c: FSColors) -> some View {
         FSSettingsListSection(String(localized: "Web access"), rows: [
             FSSettingsRow(icon: "lock.open.laptopcomputer", title: String(localized: "Open secured sessions"), subtitle: String(localized: "Sites you've signed a browser into"), accessibilityId: "settings-open-secured-sessions", action: onOpenSecuredSessions),
-            FSSettingsRow(icon: "link", title: String(localized: "Process URL"), subtitle: String(localized: "Open a sign-in link you copied"), action: onOpenProcessUrl),
         ])
     }
 
@@ -929,14 +923,18 @@ public struct SettingsScreen: View {
         let gated = signOutPolicy == .blockedNoRecovery
         return FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                FSDangerButton(String(localized: "Lock the app"), block: true, large: true, action: onLock)
+                // Locking erases nothing, so it is not red; the three that
+                // remove something are (owner, 2026-10-23). A recovery-gated
+                // one stays red, dimmed, and a tap says why.
+                FSSecondaryButton(String(localized: "Lock the app"), block: true, large: true, action: onLock)
                     .accessibilityIdentifier("settings-lock-btn")
-                FSDangerButton(String(localized: "Sign out"), muted: gated, block: true, large: true) {
+                FSDangerButton(String(localized: "Sign out"), block: true, large: true) {
                     if gated { onRecoveryRequired() }
                     else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
                     else if holdsAdminKey { signOutWarning = true }
                     else { signOutConfirm = true }
                 }
+                .opacity(gated ? 0.6 : 1)
                 .accessibilityIdentifier("settings-sign-out-btn")
             }
         }
@@ -956,12 +954,13 @@ public struct SettingsScreen: View {
         return section(String(localized: "Danger zone"), c: c) {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    FSDangerButton(String(localized: "Remove this device from account"), muted: gated, block: true) {
+                    FSDangerButton(String(localized: "Remove this device from account"), block: true) {
                         if gated { onRecoveryRequired() }
                         else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
                         else if holdsRescueKey { removeWarning = true }
                         else { showRemoveConfirm = true }
                     }
+                    .opacity(gated ? 0.6 : 1)
                     .accessibilityIdentifier("remove-from-account-btn")
                     FSDangerButton(String(localized: "Delete account"), block: true, action: onDeleteAccount)
                         .accessibilityIdentifier("settings-delete-account-btn")
