@@ -607,3 +607,200 @@ test.describe("gym ux owner round", () => {
     await shot(page, testInfo, "settings-bottom");
   });
 });
+
+// ───────────────────────────── app chat requests (N08) ─────────────────────────────
+
+const CHAT_CANON: [string, string] = ["/lib/chatApproval.js", "canonicalChatApproval"];
+const SW_GENERIC = () => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "ACCESS_REQUESTS" } }));
+
+type ChatReq = { requestId: string; kind: "incoming" | "outgoing"; claimedSender: { author: string; slug: string }; receiverApp: { author: string; slug: string }; phrase?: string; count: number; at: number };
+
+/** The box's chat screens (chat/approvals.ts): the list, a signed answer that removes the request, and the Always allow revoke. */
+function chatBox(m: Mock, page: Page, keys: Keys, state: { requests: ChatReq[]; always: Array<{ author: string; slug: string }> }): Mock {
+  m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
+  m.get(box(HOME, "/api/screens/chat/requests"), () => ({ json: { requests: state.requests, always: state.always } }));
+  m.post(
+    box(HOME, "/api/screens/chat/answer"),
+    sensitive(
+      page,
+      keys,
+      CHAT_CANON,
+      (b) => ({ arg: { serverDomain: HOME, requestId: b.requestId, kind: b.kind, decision: b.decision, issuedAt: b.issuedAt }, sig: b.signature }),
+      (c) => {
+        const r = state.requests.find((q) => q.requestId === c.body.requestId);
+        if (!r) return { status: 404, json: { error: "that request is no longer waiting" } };
+        state.requests = state.requests.filter((q) => q !== r);
+        if (c.body.decision === "always") state.always.push(r.receiverApp);
+        return { json: { ok: true } };
+      },
+    ),
+  );
+  m.post(box(HOME, "/api/screens/chat/always/revoke"), (c: Call) => {
+    state.always = state.always.filter((a) => !(a.author === c.body.author && a.slug === c.body.slug));
+    return { json: { ended: 1 } };
+  });
+  return m;
+}
+
+const incoming = (id: string, from: string): ChatReq => ({ requestId: id, kind: "incoming", claimedSender: { author: from, slug: "chess" }, receiverApp: { author: "smoketest", slug: "notes" }, count: 1, at: Date.now() });
+
+test.describe("gym ux chat requests", () => {
+  test("gym ux chat requests a request shows in a sheet and under Activity, and Allow and Deny send signed answers", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    const state = {
+      requests: [
+        { ...incoming("r1", "alice"), phrase: "blue fox", count: 3 },
+        { requestId: "r2", kind: "outgoing" as const, claimedSender: { author: "smoketest", slug: "notes" }, receiverApp: { author: "bob", slug: "board" }, count: 1, at: Date.now() },
+      ],
+      always: [] as Array<{ author: string; slug: string }>,
+    };
+    const m = chatBox(await mock(page), page, keys, state);
+    await page.evaluate(SW_GENERIC);
+
+    // Incoming: the sender is a claim, the phrase and the count are shown; Allow.
+    const sheet = page.locator(".modal-overlay", { has: page.locator("[data-chat-sheet]") });
+    await expect(sheet.locator("[data-chat-sheet]")).toHaveText("A remote machine claiming to run alice/chess wants to start a chat with your app notes.", { timeout: 10_000 });
+    await expect(sheet).toContainText("Flagship can't confirm who runs that machine.");
+    await expect(sheet).toContainText("The sender's recognition phrase: blue fox");
+    await expect(sheet).toContainText("It asked 3 times.");
+    await expect(sheet.locator('[data-choice="always"]')).toHaveText("Always allow");
+    await shot(page, testInfo, "chat-request-sheet");
+    await sheet.locator('[data-choice="allow"]').click();
+    const allow = await m.waitFor("/api/screens/chat/answer");
+    expect(allow.body).toMatchObject({ requestId: "r1", kind: "incoming", decision: "allow" });
+    expect(await signer(page, keys, CHAT_CANON, { serverDomain: HOME, ...allow.body }, allow.body.signature)).toBe("admin");
+
+    // Outgoing: no Always allow; Deny.
+    await expect(page.locator("[data-chat-sheet]")).toHaveText("Your app notes wants to start a chat with bob/board, an app on another owner's server.", { timeout: 10_000 });
+    await expect(page.locator('.modal-overlay [data-choice="always"]')).toHaveCount(0);
+    await page.locator('.modal-overlay [data-choice="deny"]').click();
+    const deny = await m.waitFor("/api/screens/chat/answer", "POST", 2);
+    expect(deny.body).toMatchObject({ requestId: "r2", kind: "outgoing", decision: "deny" });
+    expect(await signer(page, keys, CHAT_CANON, { serverDomain: HOME, ...deny.body }, deny.body.signature)).toBe("admin");
+    await expect(page.locator(".modal-overlay")).toHaveCount(0);
+
+    // A new one arrives on the screens socket: Not now, then Deny it from Activity.
+    state.requests.push(incoming("r3", "carol"));
+    await page.evaluate(() => document.dispatchEvent(new CustomEvent("flagship:screens-event", { detail: { type: "chat-request" } })));
+    await expect(page.locator("[data-chat-sheet]")).toContainText("carol/chess", { timeout: 10_000 });
+    await page.locator('.modal-overlay [data-choice="later"]').click();
+    expect(m.sent("/api/screens/chat/answer")).toHaveLength(2);
+    await page.click('[data-tab-target="activity"]');
+    const card = page.locator('#activity-chat [data-chat-request="r3"]');
+    await expect(card).toContainText("A remote machine claiming to run carol/chess wants to start a chat with your app notes.", { timeout: 10_000 });
+    await expect(page.locator("#activity-chat-heading")).toHaveText("App chat requests");
+    await shot(page, testInfo, "chat-request-activity");
+    await card.locator('[data-chat-answer="deny"]').click();
+    const deny3 = await m.waitFor("/api/screens/chat/answer", "POST", 3);
+    expect(deny3.body).toMatchObject({ requestId: "r3", decision: "deny" });
+    await expect(page.locator("#activity-chat")).toBeHidden({ timeout: 10_000 });
+  });
+
+  test("gym ux chat requests Always allow is listed under Activity and Ask me each time ends it", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    const state = { requests: [incoming("r1", "alice")], always: [] as Array<{ author: string; slug: string }> };
+    const m = chatBox(await mock(page), page, keys, state);
+    await page.evaluate(SW_GENERIC);
+    const sheet = page.locator(".modal-overlay", { has: page.locator("[data-chat-sheet]") });
+    await expect(sheet).toContainText("Always allow lets any remote machine start a chat with notes without asking you.", { timeout: 10_000 });
+    await sheet.locator('[data-choice="always"]').click();
+    const always = await m.waitFor("/api/screens/chat/answer");
+    expect(always.body).toMatchObject({ requestId: "r1", kind: "incoming", decision: "always" });
+    expect(await signer(page, keys, CHAT_CANON, { serverDomain: HOME, ...always.body }, always.body.signature)).toBe("admin");
+
+    await page.click('[data-tab-target="activity"]');
+    const row = page.locator('#activity-chat [data-chat-always="smoketest/notes"]');
+    await expect(row).toHaveText(/Any remote machine can start a chat with notes without asking you\./, { timeout: 10_000 });
+    await expect(page.locator("#activity-chat")).toContainText("No chat requests are waiting.");
+    await shot(page, testInfo, "chat-always-listed");
+    await row.locator("[data-chat-revoke]").click();
+    const revoke = await m.waitFor("/api/screens/chat/always/revoke");
+    expect(revoke.body).toEqual({ author: "smoketest", slug: "notes" });
+    await expect(page.locator("#activity-chat")).toBeHidden({ timeout: 10_000 });
+  });
+});
+
+// ───────────────────────────── AI-run consent (N12) ─────────────────────────────
+
+const CONSENT_CANON: [string, string] = ["/lib/aiRepairConsent.js", "canonicalAiRepairConsent"];
+const GIT_ID = "0123456789abcdef";
+const PROMO_PASS = { provider: "flagship", apiKey: "fa.gym-pass", baseUrl: "https://inference.flagshipserver.com/v1", source: "promo", relay: true };
+const ESTIMATE = { provider: "flagship", source: "promo", operation: "adapt", lowTokens: 12_000, highTokens: 72_000, unit: "tokens" };
+const onHomePath = (p: string) => (u: URL) => u.host === HOME && u.pathname === p;
+
+/** A not-fit git build reopened from Build sessions, with Flagship Inference as the only key. */
+async function gitBuild(page: Page, m: Mock, onAdapt: (c: Call) => unknown): Promise<{ adapt: () => Record<string, unknown> }> {
+  let adapt: Record<string, unknown> = { status: "failed", reason: "The server restarted while the AI was working on this build. Its files are kept: run the AI again, or deploy." };
+  const credits = { remainingCredits: 1840, weeklyCredits: 500, tokensPerCredit: 1000, remainingTokens: 1_840_000 };
+  m.on(undefined, (u: URL) => u.pathname === "/api/free-ai/status", { available: true, ended: false, reason: null, credits })
+    .on(undefined, (u: URL) => u.pathname === "/api/free-ai/token", { ok: true, credential: PROMO_PASS, model: "low", expiresAt: Date.now() + 43_200_000, credits })
+    .on(undefined, (u: URL) => u.pathname === "/api/inference/models", { models: [{ id: "low", tier: "Low", model: "m", multiplier: 1, label: "Low", default: true }], defaultModel: "low", creditTokens: 1000, inputWeight: 1, outputWeight: 4 })
+    .get("/api/users/smoketest/pods", { pods: [livePod(HOME)] })
+    .get(onHomePath("/api/llm/sessions"), { sessions: [] })
+    .get(onHomePath("/api/build/sessions"), { builds: [{ buildId: GIT_ID, mode: "git", name: "blog", startedAt: Date.now(), open: true }] })
+    .post(onHomePath(`/api/build/sessions/${GIT_ID}/adapt`), async (c: Call) => {
+      const r = (await onAdapt(c)) as { status?: number; json: unknown } | undefined;
+      if (r && (r.status ?? 200) < 300) adapt = { status: "done", fileCount: 3, deployed: true, deployedUrl: `https://blog.${HOME}` };
+      return r;
+    })
+    .get(onHomePath(`/api/build/sessions/${GIT_ID}/journal`), { entries: [] })
+    .get(onHomePath(`/api/build/sessions/${GIT_ID}`), () => ({ json: { state: { buildId: GIT_ID, mode: "git", serverFqdn: HOME, createdAt: 1, gitFit: false, name: "blog", adapt }, files: ["a"] } }));
+  await page.click('[data-tab-target="apps"]');
+  await page.click("#services-list-open-vibe-code");
+  await page.click("#build-source-journal-link");
+  const row = page.locator(`#build-journal-list .build-session-row[data-build="${GIT_ID}"]`);
+  await expect(row).toContainText("blog", { timeout: 10_000 });
+  await row.click();
+  await expect(page.locator("#build-git-adapt")).toBeVisible({ timeout: 10_000 });
+  return { adapt: () => adapt };
+}
+
+test.describe("gym ux ai consent", () => {
+  test("gym ux ai consent an adapt shows the estimate first and Continue resends it with a signed consent", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    const verify = sensitive(
+      page,
+      keys,
+      CONSENT_CANON,
+      (b) => ({ arg: { serverDomain: HOME, buildId: GIT_ID, operation: "adapt", provider: b.consent?.provider, source: b.consent?.source, highTokens: b.consent?.highTokens, issuedAt: b.consent?.issuedAt }, sig: b.consent?.signature }),
+      () => ({ status: 202, json: { ok: true, started: true } }),
+    );
+    await gitBuild(page, m, (c) => (c.body?.consent ? verify(c) : { status: 428, json: { error: "consent-required", code: "ai-consent", estimate: ESTIMATE } }));
+    await page.click("#build-git-adapt");
+    const consent = page.locator(".modal-overlay", { has: page.locator("[data-ai-consent]") });
+    await expect(consent.locator("[data-ai-consent]")).toHaveText("This uses AI that costs money", { timeout: 10_000 });
+    await expect(consent.locator("[data-ai-consent-range]")).toHaveText("This run could use about 12,000 to 72,000 tokens. This is an estimate, not a limit.");
+    await expect(consent.locator("[data-ai-consent-payer]")).toHaveText("Flagship Inference runs it, and it is paid from your free Flagship Inference credits.");
+    await shot(page, testInfo, "ai-consent-sheet");
+    expect(m.sent(`/api/build/sessions/${GIT_ID}/adapt`)).toHaveLength(1);
+    await consent.locator('[data-choice="continue"]').click();
+    const second = await m.waitFor(`/api/build/sessions/${GIT_ID}/adapt`, "POST", 2);
+    expect(second.body.consent).toMatchObject({ provider: "flagship", source: "promo", highTokens: 72_000 });
+    expect(second.body.credential).toMatchObject({ provider: "flagship" });
+    expect(
+      await signer(page, keys, CONSENT_CANON, { serverDomain: HOME, buildId: GIT_ID, operation: "adapt", provider: "flagship", source: "promo", highTokens: 72_000, issuedAt: second.body.consent.issuedAt }, second.body.consent.signature),
+    ).toBe("admin");
+    await expect(page.locator("#build-git-verdict")).toContainText("Installed ✓", { timeout: 15_000 });
+  });
+
+  test("gym ux ai consent Cancel sends nothing more and offers the adapt again", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    await gitBuild(page, m, () => ({ status: 428, json: { error: "consent-required", code: "ai-consent", estimate: { ...ESTIMATE, provider: "openai", source: "byok" } } }));
+    const polls = () => m.sent(`/api/build/sessions/${GIT_ID}`, "GET").filter((c) => c.url.pathname === `/api/build/sessions/${GIT_ID}`).length;
+    const before = polls();
+    await page.click("#build-git-adapt");
+    const consent = page.locator(".modal-overlay", { has: page.locator("[data-ai-consent]") });
+    await expect(consent.locator("[data-ai-consent-payer]")).toHaveText("OpenAI runs it with your own API key, so OpenAI bills you for it.", { timeout: 10_000 });
+    await consent.locator('[data-choice="cancel"]').click();
+    await expect(page.locator(".modal-overlay")).toHaveCount(0);
+    await expect(page.locator("#build-git-adapt")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#build-git-verdict .build-git-adapting")).toHaveCount(0);
+    await shot(page, testInfo, "ai-consent-cancelled");
+    expect(m.sent(`/api/build/sessions/${GIT_ID}/adapt`)).toHaveLength(1);
+    // Nothing was started, so nothing is followed.
+    await page.waitForTimeout(3_000);
+    expect(polls()).toBe(before);
+  });
+});

@@ -63,6 +63,8 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/server-restore/v1", //         a new server waits for one backup (adding a server)
   "flagship/debug-access/v2", //           let an SSH key in as `debug` until a set time
   "flagship/debug-access-revoke/v1", //    turn debug access off at once
+  "flagship/chat-approval/v1", //          answer an app chat request (chat/approvals.ts)
+  "flagship/ai-repair-consent/v1", //      agree to one AI run's cost (buildmodes/adaptConsent.ts)
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion

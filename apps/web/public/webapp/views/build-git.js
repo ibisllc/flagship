@@ -46,6 +46,10 @@ import { getSession } from "../lib/state.js";
 import { turnRelayOffForCredential } from "../providers.js";
 import { RELAY_TURNED_OFF, TURN_RELAY_OFF, isRelayFailure } from "../lib/aiRelay.js";
 
+import { withAiConsent } from "../lib/aiConsentUi.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
+import { podServerDomain } from "../lib/accessAlerts.js";
+
 import { tr } from "../lib/i18n.js";
 registerView("view-build-git");
 
@@ -527,7 +531,13 @@ async function adapt() {
     adaptCredential = await freshCredential(adaptCredential, "");
     const body = adaptRequestBody({ credential: adaptCredential, share });
     const outcome = await startAndFollowAdapt({
-      start: () => boxFetch(`${path}/adapt`, { method: "POST", body: JSON.stringify(body) }),
+      start: () =>
+        withAiConsent({
+          send: (consent) => boxFetch(`${path}/adapt`, { method: "POST", body: JSON.stringify(consent ? { ...body, consent } : body) }),
+          serverDomain: client().fqdn || podServerDomain(),
+          buildId: id,
+          sign: (bytes) => sensitiveSigner()(getSession()?.umk, bytes),
+        }),
       follow: () => followAdapt({
         fetchState: () => boxFetch(path),
         fetchJournal: () => boxFetch(`${path}/journal`),
@@ -544,6 +554,10 @@ async function adapt() {
       }),
     });
     if (buildId !== id) return;
+    if (outcome?.cancelled) {
+      if (lastVerdict) renderVerdict(lastVerdict);
+      return;
+    }
     showAdaptOutcome(outcome);
   } catch (e) {
     if (buildId !== id) return;
