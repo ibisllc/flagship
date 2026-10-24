@@ -7,8 +7,8 @@ import FlagshipAPI
 /// cert-fingerprint pinning primitive (cert-model A′, phase 4).
 ///
 /// The box signs the tuple with its STK; `.com` relays it VERBATIM on
-/// `/pods` (`signedStatus: { report, signatureHex }`). A phone that derives
-/// the box STK locally (`ServerKeys.deriveStkPub` — NOT `.com`'s
+/// `/pods` (`signedStatus: { report, signatureHex }`). A phone that pinned
+/// the box STK at first blessing (`ServerKeyPins` — NOT `.com`'s
 /// `identityPubKey` echo) re-verifies the leaf-cert fingerprint end-to-end,
 /// so a rogue `.com` can DROP a report but cannot FORGE one.
 ///
@@ -44,7 +44,7 @@ public enum DaemonStatus {
         return Data(segments.joined(separator: "|").utf8)
     }
 
-    /// Verify the box's signature under its (locally derived) STK pubkey.
+    /// Verify the box's signature under its (pinned) STK pubkey.
     /// Returns false — never throws — on malformed input, mirroring the TS
     /// `verifyDaemonStatusReport`.
     public static func verify(_ r: DaemonStatusReport, signature: Data, stkPub: Data) -> Bool {

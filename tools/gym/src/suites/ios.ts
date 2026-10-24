@@ -15,6 +15,7 @@ import { ios, iosTotal, shot } from "./helpers.js";
 import { IOS_SWEEP_SCENARIOS } from "./ios-sweep.js";
 import { IOS_NOTICES } from "./iosNotices.js";
 import { IOS_GONE } from "./iosGone.js";
+import { IOS_FIRST_CONTACT } from "./iosFirstContact.js";
 
 // ───────────────────────── every-merge (fast gate) ─────────────────────────
 
@@ -1411,4 +1412,5 @@ export const IOS_GYM_SCENARIOS: readonly Scenario[] = [
   ...IOS_SWEEP_SCENARIOS,
   ...IOS_NOTICES,
   ...IOS_GONE,
+  ...IOS_FIRST_CONTACT,
 ];

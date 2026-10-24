@@ -96,8 +96,8 @@ struct SecretRequestCard: View {
             return isFirstBoot
                 ? String(localized: "Unlock device and authorize it to join your cloud")
                 : String(localized: "Unlock device")
-        case .entitlement:  return "Authorize device to join your cloud"
-        case .none:         return "Boot secret"
+        case .entitlement:  return String(localized: "Authorize device to join your cloud")
+        case .none:         return String(localized: "Boot secret")
         }
     }
 
@@ -123,15 +123,21 @@ struct SecretRequestCard: View {
                     .foregroundColor(c.textMuted)
                     .padding(.top, FS.space.s1)
 
-                FSPrimaryButton(
-                    isInFlight ? String(localized: "Signing…") : String(localized: "Yes, this is my server"),
-                    enabled: !isInFlight,
-                    block: true,
-                    large: true
-                ) {
-                    Task { await onApprove() }
+                let box = ServerCodeBox.kind(for: request)
+                if let box {
+                    ServerCodeBox(kind: box).padding(.top, FS.space.s2)
                 }
-                .padding(.top, FS.space.s2)
+                if !request.trust.isRefused {
+                    FSPrimaryButton(
+                        isInFlight ? String(localized: "Signing…") : String(localized: "Yes, this is my server"),
+                        enabled: !isInFlight,
+                        block: true,
+                        large: true
+                    ) {
+                        Task { await onApprove() }
+                    }
+                    .padding(.top, box == nil ? FS.space.s2 : FS.space.s1)
+                }
             }
         }
     }

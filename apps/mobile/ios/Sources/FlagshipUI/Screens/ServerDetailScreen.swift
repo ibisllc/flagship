@@ -177,7 +177,8 @@ public struct ServerDetailScreen: View {
                     // set, and renders nothing otherwise.
                     BootUnlockApprovalCard(
                         serverDomain: fqdn,
-                        awaitingUnlock: awaitingUnlock
+                        awaitingUnlock: awaitingUnlock,
+                        listedStkPubHex: identityPubKeyHex
                     )
                     // The Box Request Inbox's serve-authorization lane: a box that
                     // posted an entitlement request (no deposit, or an unencrypted
@@ -185,7 +186,8 @@ public struct ServerDetailScreen: View {
                     BootUnlockApprovalCard(
                         serverDomain: fqdn,
                         awaitingUnlock: awaitingEntitlement,
-                        purpose: .entitlement
+                        purpose: .entitlement,
+                        listedStkPubHex: identityPubKeyHex
                     )
                 }
                 switch state {
@@ -671,6 +673,9 @@ struct BootUnlockApprovalCard: View {
     /// disk key) or `.entitlement` (authorize the box to serve). The detection
     /// flag passed in as `awaitingUnlock` is just "is this lane waiting?".
     var purpose: SecretPurpose = .unlockKey
+    /// The key the directory lists for this server: the card shows its code before the
+    /// first blessing, and Approve refuses a request naming any other key.
+    var listedStkPubHex: String = ""
 
     @State private var vm: BootUnlockApprovalViewModel?
 
@@ -700,7 +705,8 @@ struct BootUnlockApprovalCard: View {
             serverDomain: serverDomain,
             purpose: purpose,
             makeCoordinator: makeCoordinator,
-            initialAwaiting: awaitingUnlock
+            initialAwaiting: awaitingUnlock,
+            listedStkPubHex: listedStkPubHex
         )
         return content(vm: model, c: c)
             .onAppear {
@@ -709,6 +715,9 @@ struct BootUnlockApprovalCard: View {
             }
             .onChange(of: awaitingUnlock) { _, now in
                 model.setAwaitingUnlock(now)
+            }
+            .onChange(of: listedStkPubHex) { _, now in
+                model.setListedStk(now)
             }
             .onDisappear { vm?.stop() }
     }
@@ -759,11 +768,23 @@ struct BootUnlockApprovalCard: View {
                         .foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, FS.space.s1)
-                    FSPrimaryButton(ctaLabel, block: true, large: true) {
-                        Task { await vm.approve() }
+                    switch vm.keyNote {
+                    case .none:
+                        EmptyView()
+                    case .code(let code):
+                        ServerCodeBox(kind: .code(code)).padding(.top, FS.space.s2)
+                    case .confirmedByStudio:
+                        ServerCodeBox(kind: .confirmedByStudio).padding(.top, FS.space.s2)
+                    case .keyChanged:
+                        ServerCodeBox(kind: .refused(FirstContact.keyChangedText)).padding(.top, FS.space.s2)
                     }
-                    .accessibilityIdentifier("sd-approve-unlock")
-                    .padding(.top, FS.space.s2)
+                    if vm.keyNote != .keyChanged {
+                        FSPrimaryButton(ctaLabel, block: true, large: true) {
+                            Task { await vm.approve() }
+                        }
+                        .accessibilityIdentifier("sd-approve-unlock")
+                        .padding(.top, vm.keyNote == .none ? FS.space.s2 : FS.space.s1)
+                    }
                     FSGhostButton(String(localized: "Deny"), block: true) { vm.deny() }
                         .accessibilityIdentifier("sd-deny-unlock")
                 }

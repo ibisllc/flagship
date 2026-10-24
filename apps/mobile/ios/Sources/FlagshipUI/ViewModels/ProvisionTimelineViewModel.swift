@@ -118,6 +118,7 @@ public final class ProvisionTimelineViewModel {
             guard let next = (try? await server.fetchProvisionStatus(serial: serial)) ?? nil else {
                 return false
             }
+            StudioSeenStore.shared.record(next)
             return apply(next)
 
         case .directory(let username, let fqdn, let fetch):

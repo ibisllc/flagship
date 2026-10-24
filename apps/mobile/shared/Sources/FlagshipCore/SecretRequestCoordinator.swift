@@ -7,11 +7,13 @@ import FlagshipAPI
 ///
 ///   1. fetchPending — builds an IRK-signed `DeviceEndpointClaim`
 ///      mailbox-auth credential, POSTs `/api/secret-requests`, and
-///      RE-VERIFIES every returned request against the box's STK as
-///      INDEPENDENTLY resolved from the directory (`/api/users/:u/pods`).
-///      `.com` is not a trust anchor: a request whose STK mismatches the
-///      directory (or whose signature fails under it) is dropped, NOT
-///      surfaced for confirm.
+///      RE-VERIFIES every returned request's signature under the key it names,
+///      then weighs that key against this device's pin (docs/first-contact.md):
+///      the pinned key, first sight (no pin yet: the server code is computed
+///      here from that key, and the enrollment proof must verify when this
+///      device made the recipe), or refused (a different key than the pin, or
+///      a recipe proof that fails). `.com` is not a trust anchor: its
+///      directory only filters to servers of the account.
 ///   2. confirm — for the verified request the user taps "yes, this is my
 ///      box" (the device-info backstop). By purpose:
 ///        - unlock-key:  GET the phone-sealed LUKS key, unseal it with the
@@ -34,6 +36,12 @@ public final class SecretRequestCoordinator {
         case directoryMissingServer(String)
         case purposeUnsupported(String)
         case noPendingRequest(String)
+        /// The request names a key other than the one this device pinned.
+        case keyChanged(String)
+        /// This device made the recipe and the box's enrollment proof is missing or wrong.
+        case notFromRecipe(String)
+        /// A server not pinned yet was approved where its code was not on screen.
+        case codeNotShown(String)
 
         public var errorDescription: String? {
             switch self {
@@ -47,18 +55,38 @@ public final class SecretRequestCoordinator {
                 return String(localized: "Unsupported secret request type: \(p).")
             case .noPendingRequest:
                 return String(localized: "Your box stopped waiting. Power-cycle it (unplug, plug back in) and it'll ask again.")
+            case .keyChanged:
+                return FirstContact.keyChangedText
+            case .notFromRecipe:
+                return FirstContact.notFromRecipeText
+            case .codeNotShown:
+                return String(localized: "Check this server's code before you approve it. Open Server approvals in Activity.")
             }
         }
     }
 
-    /// A request that PASSED directory re-verification, ready to show the
-    /// user the device-info confirm sheet. The raw `PendingSecretRequest`
-    /// + the resolved STK are retained so confirm doesn't re-resolve.
+    /// A request whose signature verified under the key it names, weighed
+    /// against this device's pin. Refused ones (`trust.isRefused`) are kept so
+    /// the approvals list can say why; they can never be approved.
     public struct VerifiedRequest: Equatable, Sendable, Identifiable {
         public let pending: PendingSecretRequest
-        /// The STK as resolved from the DIRECTORY (not the mailbox echo).
-        public let directoryStkPubHex: String
+        /// The key the request names and is signed by (64 lowercase hex).
+        public let stkPubHex: String
+        public let trust: FirstContactTrust
+        /// Studio reported this exact key from the server's console, under the key this device gave it.
+        public let studioConfirmed: Bool
+        public init(pending: PendingSecretRequest, stkPubHex: String, trust: FirstContactTrust = .pinned, studioConfirmed: Bool = false) {
+            self.pending = pending
+            self.stkPubHex = stkPubHex.lowercased()
+            self.trust = trust
+            self.studioConfirmed = studioConfirmed
+        }
         public var id: String { pending.id }
+        /// The six-digit code for a first sight, computed here from the request's key.
+        public var serverCode: String? {
+            if case .firstSight(let code, _) = trust { return code }
+            return nil
+        }
         public var serverDomain: String { pending.serverDomain }
         public var purpose: SecretPurpose? { SecretPurpose(rawValue: pending.purpose) }
         public var deviceInfo: DeviceInfoHint? { pending.deviceInfo }
@@ -100,6 +128,13 @@ public final class SecretRequestCoordinator {
     private let watchDelegateKeyProvider: () -> Curve25519.Signing.PrivateKey?
     private let now: () -> Int64
     private let nonceGen: () -> Data
+    /// The box keys this device pinned: the only trust anchor for a server's key.
+    private let serverKeys: ServerKeyPins
+    /// The enrollment secrets this device keeps for servers it created.
+    private let firstContactSecrets: FirstContactSecretStore
+    private let studioSeen: StudioSeenStore
+    /// Where the app-name grant signed at a first blessing is kept until the server takes it.
+    private let wildcardGrants: ServerWildcardGrantKeeper
 
     public init(
         mailbox: SecretMailboxClient,
@@ -109,8 +144,16 @@ public final class SecretRequestCoordinator {
         orderKeyProvider: @escaping () async throws -> Curve25519.Signing.PrivateKey? = { nil },
         watchDelegateKeyProvider: @escaping () -> Curve25519.Signing.PrivateKey? = { nil },
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
-        nonceGen: @escaping () -> Data = { SecretRequestCoordinator.randomNonce() }
+        nonceGen: @escaping () -> Data = { SecretRequestCoordinator.randomNonce() },
+        serverKeys: ServerKeyPins = ServerKeyPins(),
+        firstContactSecrets: FirstContactSecretStore = KeychainFirstContactSecrets(),
+        studioSeen: StudioSeenStore = .shared,
+        wildcardGrants: ServerWildcardGrantKeeper = .shared
     ) {
+        self.serverKeys = serverKeys
+        self.firstContactSecrets = firstContactSecrets
+        self.studioSeen = studioSeen
+        self.wildcardGrants = wildcardGrants
         self.mailbox = mailbox
         self.username = username
         self.irkProvider = irkProvider
@@ -129,11 +172,10 @@ public final class SecretRequestCoordinator {
 
     // MARK: - 1. Fetch + re-verify
 
-    /// Build the mailbox auth, fetch the account's pending requests, and
-    /// keep only those that re-verify against the directory STK. A request
-    /// `.com` returns whose STK isn't directory-bound (or whose signature
-    /// fails under that STK) is SILENTLY dropped — never offered for
-    /// confirm.
+    /// Build the mailbox auth, fetch the account's pending requests, keep
+    /// those signed by the key they name for a server of the account, and
+    /// weigh each key against this device's pin. A request that fails its
+    /// signature is SILENTLY dropped; a refused one is returned marked so.
     public func fetchVerifiedRequests() async throws -> [VerifiedRequest] {
         let irk = try await irkProvider()
         let auth = try buildMailboxAuth(irk: irk)
@@ -142,17 +184,11 @@ public final class SecretRequestCoordinator {
 
         var verified: [VerifiedRequest] = []
         for pending in pendingResp.requests {
-            guard let stkHex = directory.identityPubKey(forServerDomain: pending.serverDomain),
-                  let stkPubData = HexUtil.decode(stkHex), stkPubData.count == 32,
-                  let stkPub = try? Curve25519.Signing.PublicKey(rawRepresentation: stkPubData)
-            else {
-                // No directory entry → `.com` cannot vouch for this box.
-                continue
-            }
-            // The mailbox echo MUST equal the directory STK — a relay can't
-            // splice in a different stkPub.
-            guard pending.stkPub.lowercased() == stkHex.lowercased() else { continue }
-            guard let purpose = SecretPurpose(rawValue: pending.purpose),
+            // Only a server of this account; the directory's key is not consulted.
+            guard directory.identityPubKey(forServerDomain: pending.serverDomain) != nil else { continue }
+            guard let stkPubData = HexUtil.decode(pending.stkPub), stkPubData.count == 32,
+                  let stkPub = try? Curve25519.Signing.PublicKey(rawRepresentation: stkPubData),
+                  let purpose = SecretPurpose(rawValue: pending.purpose),
                   let nonce = HexUtil.decode(pending.requestNonceHex),
                   let sig = HexUtil.decode(pending.requestSignature)
             else { continue }
@@ -163,11 +199,27 @@ public final class SecretRequestCoordinator {
                 nonce: nonce,
                 issuedAt: pending.issuedAt
             )
-            // RE-VERIFY the box's request against the DIRECTORY STK.
             guard SecretRequest.verify(request, signature: sig, stkPub: stkPub) else { continue }
-            verified.append(VerifiedRequest(pending: pending, directoryStkPubHex: stkHex))
+            let stkHex = HexUtil.encode(stkPubData)
+            verified.append(VerifiedRequest(
+                pending: pending,
+                stkPubHex: stkHex,
+                trust: trust(for: pending, stkPubHex: stkHex, purpose: purpose),
+                studioConfirmed: studioSeen.confirmed(serverDomain: pending.serverDomain, stkPubHex: stkHex)
+            ))
         }
         return verified
+    }
+
+    private func trust(for pending: PendingSecretRequest, stkPubHex: String, purpose: SecretPurpose) -> FirstContactTrust {
+        FirstContact.assess(
+            serverDomain: pending.serverDomain,
+            stkPubHex: stkPubHex,
+            purpose: purpose,
+            enrollmentProof: pending.deviceInfo?.enrollmentProof,
+            pins: serverKeys,
+            secrets: firstContactSecrets
+        )
     }
 
     // MARK: - 2. Confirm (one tap = the human backstop)
@@ -185,11 +237,21 @@ public final class SecretRequestCoordinator {
         guard let purpose = verified.purpose else {
             throw CoordinatorError.purposeUnsupported(verified.pending.purpose)
         }
-        guard let stkPubData = HexUtil.decode(verified.directoryStkPubHex), stkPubData.count == 32,
+        guard let stkPubData = HexUtil.decode(verified.stkPubHex), stkPubData.count == 32,
               let nonce = HexUtil.decode(verified.pending.requestNonceHex)
         else {
             throw CoordinatorError.directoryMissingServer(verified.serverDomain)
         }
+        // Weigh the key again now: a pin made since the list loaded counts.
+        let standing = trust(for: verified.pending, stkPubHex: verified.stkPubHex, purpose: purpose)
+        let pinsNow: Bool
+        switch standing {
+        case .keyChanged: throw CoordinatorError.keyChanged(verified.serverDomain)
+        case .notFromRecipe: throw CoordinatorError.notFromRecipe(verified.serverDomain)
+        case .pinned: pinsNow = false
+        case .firstSight(_, let pinsOnApprove): pinsNow = pinsOnApprove
+        }
+        let firstSight = standing != .pinned
         let request = SecretRequest(
             serverDomain: verified.serverDomain,
             stkPub: stkPubData,
@@ -205,8 +267,9 @@ public final class SecretRequestCoordinator {
         // entitlement path still needs the IRK for its mailbox/boot AUTH
         // envelope, and the delegate is scoped to the boot-approval response
         // alone, so we resolve the IRK lazily only when a branch needs it.
+        // A first sight is approved on the phone with the account key, never by the watch delegate.
         let delegateKey: Curve25519.Signing.PrivateKey? =
-            (purpose == .unlockKey && !depositAutoLease) ? watchDelegateKeyProvider() : nil
+            (purpose == .unlockKey && !depositAutoLease && !firstSight) ? watchDelegateKeyProvider() : nil
         let irk: Curve25519.Signing.PrivateKey? =
             delegateKey == nil ? try await irkProvider() : nil
         func requireIrk() throws -> Curve25519.Signing.PrivateKey {
@@ -214,6 +277,16 @@ public final class SecretRequestCoordinator {
             // runs only on the delegate==nil path, where irk was resolved above.
             guard let irk else { throw CoordinatorError.purposeUnsupported("internal: missing IRK") }
             return irk
+        }
+
+        // First blessing: pin the key, then everything below is sealed to the pin.
+        var orderKeyForGrant: Curve25519.Signing.PrivateKey?
+        if pinsNow {
+            guard serverKeys.pin(stkPubData, for: verified.serverDomain) else {
+                throw CoordinatorError.keyChanged(verified.serverDomain)
+            }
+            firstContactSecrets.delete(for: verified.serverDomain)
+            studioSeen.forget(verified.serverDomain)
         }
 
         let sealedHex: String
@@ -229,8 +302,10 @@ public final class SecretRequestCoordinator {
             // IRK). Resolving the order key here reuses the memoized ceremony
             // key cache, so no extra biometric fires beyond the one that opened
             // the IRK above. The boot-response AUTH envelope below stays IRK.
+            let orderKey = try await orderKeyProvider()
+            orderKeyForGrant = orderKey
             sealedHex = try buildEntitlementReply(
-                request: request, irk: try requireIrk(), orderKey: try await orderKeyProvider()
+                request: request, irk: try requireIrk(), orderKey: orderKey
             )
         }
 
@@ -272,7 +347,9 @@ public final class SecretRequestCoordinator {
         // entitlement for the box's STK so it comes online with no second tap
         // (consent to boot ⇒ consent to serve). Best-effort — a failure never
         // fails the unlock; the box can still fetch one via the relay.
-        if purpose == .unlockKey, let irk {
+        // Not before a pin: a server this device made asks for its entitlement
+        // with the enrollment proof, which is what pins it.
+        if purpose == .unlockKey, let irk, !(firstSight && !pinsNow) {
             // Slice D — the folded-in entitlement is signed under the admin
             // master root when present (an admin-pinned box rejects an
             // IRK-signed one), else the IRK. Best-effort: the order key is
@@ -280,13 +357,24 @@ public final class SecretRequestCoordinator {
             // biometric), and a failure just skips the pre-deposit — the box
             // still gets one via an explicit entitlement request.
             let orderKey = try? await orderKeyProvider()
-            try? await depositEntitlement(request: request, irk: irk, orderKey: orderKey)
+            orderKeyForGrant = orderKey ?? nil
+            try? await depositEntitlement(request: request, irk: irk, orderKey: orderKey ?? nil)
+        }
+
+        // The app-name grant, signed in the same biometric session over the
+        // PINNED key with the sensitive-order key (admin root where pinned, else
+        // the IRK), kept until the server takes it. Best-effort.
+        if pinsNow, let key = orderKeyForGrant ?? irk {
+            try? wildcardGrants.sign(username: username, serverDomain: verified.serverDomain,
+                                     pinnedStk: stkPubData, key: key, issuedAt: now())
+            let domain = verified.serverDomain, grants = wildcardGrants, pins = serverKeys
+            Task { await grants.deliverKept(domain, pins: pins) }
         }
 
         // "auto" mode: deposit a box-sealed lease so the box self-unlocks on
         // future reboots (the user's IRK authorizes it here — I2). Only for
         // unlock-key; the key is the one we just recovered, never `.com`-visible.
-        if depositAutoLease, purpose == .unlockKey, let key = unlockKey {
+        if depositAutoLease, purpose == .unlockKey, let key = unlockKey, !(firstSight && !pinsNow) {
             return try await depositAutoUnlockLease(request: request, luksKey: key, irk: try requireIrk())
         }
         return nil
@@ -330,7 +418,8 @@ public final class SecretRequestCoordinator {
     @discardableResult
     public func approvePendingUnlock(
         serverDomain: String,
-        depositAutoLease: Bool
+        depositAutoLease: Bool,
+        expectedStkPubHex: String? = nil
     ) async throws -> String? {
         let verified = try await fetchVerifiedRequests()
         let mine = verified
@@ -339,6 +428,7 @@ public final class SecretRequestCoordinator {
         guard let live = mine.first(where: { now() <= $0.pending.expiresAt }) else {
             throw CoordinatorError.noPendingRequest(serverDomain)
         }
+        try Self.requireShownKey(live, expectedStkPubHex: expectedStkPubHex)
         return try await confirmAndRespond(live, depositAutoLease: depositAutoLease)
     }
 
@@ -352,7 +442,7 @@ public final class SecretRequestCoordinator {
     /// second Face ID. No lease (entitlement carries no secret). Throws
     /// `.noPendingRequest` if the box gave up between the refresh and the tap.
     @discardableResult
-    public func approvePendingEntitlement(serverDomain: String) async throws -> String? {
+    public func approvePendingEntitlement(serverDomain: String, expectedStkPubHex: String? = nil) async throws -> String? {
         let verified = try await fetchVerifiedRequests()
         let mine = verified
             .filter { $0.serverDomain.lowercased() == serverDomain.lowercased() && $0.purpose == .entitlement }
@@ -360,7 +450,21 @@ public final class SecretRequestCoordinator {
         guard let live = mine.first(where: { now() <= $0.pending.expiresAt }) else {
             throw CoordinatorError.noPendingRequest(serverDomain)
         }
+        try Self.requireShownKey(live, expectedStkPubHex: expectedStkPubHex)
         return try await confirmAndRespond(live, depositAutoLease: false)
+    }
+
+    /// The server card shows the code of the key it expects before Approve; a
+    /// request naming any other key is not the server the owner looked at.
+    static func requireShownKey(_ live: VerifiedRequest, expectedStkPubHex: String?) throws {
+        if live.trust == .keyChanged { throw CoordinatorError.keyChanged(live.serverDomain) }
+        if live.trust == .notFromRecipe { throw CoordinatorError.notFromRecipe(live.serverDomain) }
+        guard live.trust != .pinned else { return }
+        // A first sight is approved only after its code was on screen.
+        guard let expected = expectedStkPubHex?.lowercased(), !expected.isEmpty else {
+            throw CoordinatorError.codeNotShown(live.serverDomain)
+        }
+        if expected != live.stkPubHex { throw CoordinatorError.keyChanged(live.serverDomain) }
     }
 
     /// Kill switch — revoke a server's auto-unlock lease. The box can no

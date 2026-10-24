@@ -374,6 +374,16 @@
       }
     },
     {
+      "id": "first-contact",
+      "title": "First contact: pin a server's own key at its first blessing (enrollment proof, server code above Approve, app-name grant)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerKeyPins.swift", "public func pinnedStk\\("], ["apps/mobile/shared/Sources/FlagshipCore/FirstContact.swift", "enrollmentProof: enrollmentProof"], ["apps/mobile/shared/Sources/FlagshipCore/SecretRequestCoordinator.swift", "serverKeys\\.pin\\(stkPubData"], ["apps/mobile/ios/Sources/FlagshipUI/Components/ServerCodeBox.swift", "FirstContact\\.codeLine"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/CreateServerViewModel.swift", "enrollmentKeyHex: enrollmentKeyHex"], ["apps/mobile/shared/Sources/FlagshipCore/ServerWildcardGrantKeeper.swift", "ServerWildcardGrantUpkeep"]] },
+        "android": { "status": "missing", "reason": "The protocol port (core/Enrollment.kt, core/ServerWildcardGrant.kt) exists; the client flow is built on its own branch.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/Enrollment.kt", "serverCode"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerKeyPins.kt", "pinnedStk"]] },
+        "web": { "status": "missing", "reason": "lib/enrollment.js and lib/serverWildcardGrant.js exist; the client flow is built on its own branch.", "anchors": [["apps/web/public/webapp/lib/enrollment.js", "serverCode"], ["apps/web/public/webapp/lib/serverKeyPins.js", "pinnedStk"]] }
+      }
+    },
+    {
       "id": "push-secret-request",
       "title": "Push: secret-request (boot/unlock approval) tap opens Activity with the Server approvals section open and the request in it",
       "ref": "ios",

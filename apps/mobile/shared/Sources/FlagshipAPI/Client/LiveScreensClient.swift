@@ -378,6 +378,16 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         try await request("/api/screens/server-order", method: "POST", body: try JSONEncoder().encode(order))
     }
+    private struct WildcardGrantStatus: Decodable { let granted: Bool }
+    private struct WildcardGrantAck: Decodable { let ok: Bool? }
+    public func serverWildcardGrantStatus() async throws -> Bool {
+        let r: WildcardGrantStatus = try await request("/api/screens/server-wildcard-grant")
+        return r.granted
+    }
+    public func deliverServerWildcardGrant(issuedAt: Int64, signatureHex: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["issuedAt": issuedAt, "signature": signatureHex])
+        let _: WildcardGrantAck = try await request("/api/screens/server-wildcard-grant", method: "POST", body: body)
+    }
     public func securitySliver() async throws -> SecuritySliverResponse {
         try await request("/api/screens/security-sliver")
     }

@@ -8,8 +8,8 @@ import FlagshipAPI
 /// Each box independently verifies the ServiceBlessing it is handed by the
 /// `.services` hub; that verdict is genuinely per-box. The daemon signs this
 /// tuple with its STK; `.com` relays it VERBATIM on `/pods`
-/// (`trustStatus: { report, signatureHex }`). A phone that derives the box
-/// STK locally (`ServerKeys.deriveStkPub` — NOT `.com`'s echo) re-verifies
+/// (`trustStatus: { report, signatureHex }`). A phone that pinned the box
+/// STK at first blessing (`ServerKeyPins` — NOT `.com`'s echo) re-verifies
 /// it end-to-end, so a rogue `.com` can DROP a report but cannot FORGE one:
 /// the per-server warning a client renders is the box's own word.
 ///
@@ -46,7 +46,7 @@ public enum BoxTrustStatus {
         return Data(segments.joined(separator: "|").utf8)
     }
 
-    /// Verify the box's signature under its (locally derived) STK pubkey.
+    /// Verify the box's signature under its (pinned) STK pubkey.
     /// Returns false — never throws — on malformed input.
     public static func verify(_ r: BoxTrustStatusReport, signature: Data, stkPub: Data) -> Bool {
         guard signature.count == 64,

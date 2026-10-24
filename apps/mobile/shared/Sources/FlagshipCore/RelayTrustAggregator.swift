@@ -39,15 +39,18 @@ public struct RelayCertFailure: Identifiable, Equatable, Sendable {
 
 /// Verifies each box's STK-signed relay-trust verdict and aggregates the
 /// untrusted ones by `failingCertHash` across a `/pods` list. A box's trust
-/// claim is AUTHENTICATED (verified under `identityPubKey`), never trusted
+/// claim is AUTHENTICATED (verified under the pinned server key), never trusted
 /// blindly — a relayed report whose signature does not verify is DROPPED, so a
 /// rogue `.com` can drop but not forge a verdict. Pure aside from the crypto
 /// verify (no I/O), so it is unit-testable in the shared package.
 public enum RelayTrustAggregator {
-    /// Aggregate directly from the `/pods` wire entries. `identityPubKey` is the
-    /// box's registered STK (hex); a garbled key / signature simply drops that
-    /// pod's verdict.
-    public static func aggregate(pods: [PodDirectoryEntry]) -> [RelayCertFailure] {
+    /// Aggregate directly from the `/pods` wire entries, verifying each verdict
+    /// under the server key this device pinned (`ServerKeyPins`); an unpinned
+    /// server or a garbled signature simply drops that pod's verdict.
+    public static func aggregate(
+        pods: [PodDirectoryEntry],
+        pinnedStk: (String) -> Data? = { ServerKeyPins().pinnedStk($0) }
+    ) -> [RelayCertFailure] {
         // certHash → (servers, overridden)
         var servers: [String: [String]] = [:]
         var order: [String] = []
@@ -55,7 +58,8 @@ public enum RelayTrustAggregator {
 
         for pod in pods {
             guard let ts = pod.trustStatus else { continue }
-            guard let stk = HexUtil.decode(pod.identityPubKey), stk.count == 32 else { continue }
+            // Verified under the key this device pinned, never the key `.com` lists.
+            guard let stk = pinnedStk(pod.serverDomain), stk.count == 32 else { continue }
             guard BoxTrustStatus.verify(ts.report, signatureHex: ts.signatureHex, stkPub: stk) else {
                 continue // unauthenticated verdict — drop
             }

@@ -36,6 +36,8 @@ public struct WatchApprovalResponder {
     public static let openAndUnlock = String(localized: "Open Flagship on your iPhone and unlock it once, then approve again.")
     public static let signedOut = String(localized: "Sign in to Flagship on your iPhone first.")
     public static let gone = String(localized: "This server isn't waiting any more.")
+    /// A server this phone has not pinned yet is approved once on the iPhone, where its code shows.
+    public static let approveOnPhoneFirst = String(localized: "Approve this server once on your iPhone first. Its code shows there.")
     /// The iPhone's app is locked behind a required update (docs/security-notices.md 6.3).
     public static let updateRequired = String(localized: "Update Flagship on your iPhone first. Approving is paused until you do.")
     /// The owner locked the server (SEC-LOCK-001): a watch can't start it.
@@ -106,6 +108,13 @@ public struct WatchApprovalResponder {
             let wanted = cmd.requestId.lowercased()
             guard let req = pending.first(where: { $0.id.lowercased() == wanted && $0.purpose == .unlockKey }) else {
                 return fail(Self.gone)
+            }
+            // Only a server this phone pinned: a first sight shows its code on the phone, a changed key is refused.
+            switch req.trust {
+            case .pinned: break
+            case .keyChanged: return fail(FirstContact.keyChangedText)
+            case .notFromRecipe: return fail(FirstContact.notFromRecipeText)
+            case .firstSight: return fail(Self.approveOnPhoneFirst)
             }
             // No auto-unlock lease: that deposit is signed with the owner IRK,
             // and the delegate's approval covers this unlock alone.

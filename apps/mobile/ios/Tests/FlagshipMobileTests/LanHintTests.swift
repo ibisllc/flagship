@@ -15,9 +15,9 @@ final class LanHintTests: XCTestCase {
     let sigHex = "9fc9b39958189204e86823a832b42257f3a2773d671a8292be0826c3a45e3cdb"
         + "b6c3f212dd159b73f86d5b9ad5815e8e024b3f9042c127133dfb30fdeb73e800"
 
-    var stkPub: Data { ServerKeys.deriveStkPub(umkSeed: umk, serverId: server)! }
+    var stkPub: Data { TestServerKeys.deriveStkPub(umkSeed: umk, serverId: server)! }
     var signer: Curve25519.Signing.PrivateKey {
-        try! Curve25519.Signing.PrivateKey(rawRepresentation: ServerKeys.deriveStkSeed(umkSeed: umk, serverId: server)!)
+        try! Curve25519.Signing.PrivateKey(rawRepresentation: TestServerKeys.deriveStkSeed(umkSeed: umk, serverId: server)!)
     }
     var hint: LanHint.Hint {
         LanHint.Hint(
@@ -87,11 +87,11 @@ final class LanDirectRegistryTests: XCTestCase {
     func envelope(_ eps: [LanHint.Endpoint], expires: Int64? = nil) -> LanHint.Envelope {
         let h = LanHint.Hint(serverDomain: box, certSha256: pin, endpoints: eps,
                              issuedAt: start, expiresAt: expires ?? start + 3_600_000)
-        let key = try! Curve25519.Signing.PrivateKey(rawRepresentation: ServerKeys.deriveStkSeed(umkSeed: umk, serverId: box)!)
+        let key = try! Curve25519.Signing.PrivateKey(rawRepresentation: TestServerKeys.deriveStkSeed(umkSeed: umk, serverId: box)!)
         let sig = try! key.signature(for: LanHint.canonical(h))
         return .init(hint: h, signatureHex: sig.map { String(format: "%02x", $0) }.joined())
     }
-    var stkPub: Data { ServerKeys.deriveStkPub(umkSeed: umk, serverId: box)! }
+    var stkPub: Data { TestServerKeys.deriveStkPub(umkSeed: umk, serverId: box)! }
 
     func testRoutesOnlyAfterTheProbeProvesTheBox() async {
         let prober = FakeProber([])

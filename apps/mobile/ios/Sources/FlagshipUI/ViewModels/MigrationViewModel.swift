@@ -147,11 +147,21 @@ public final class MigrationViewModel {
     private func prepareInitiate() async {
         do {
             let pods = try await mailbox.fetchPods(username: username)
-            guard let stk = pods.identityPubKey(forServerDomain: serverFqdn) else {
+            guard let listed = pods.identityPubKey(forServerDomain: serverFqdn) else {
                 mode = .failed(String(localized: "Couldn't read this server's current key from the directory — is it online? It must be reachable to migrate."))
                 return
             }
-            oldStkPubHex = stk
+            // The key this phone pinned at the server's first blessing; `.com`'s
+            // directory may only refuse (docs/first-contact.md).
+            guard let pinned = ServerKeyPins().pinnedStkHex(serverFqdn) else {
+                mode = .failed(String(localized: "Approve this server once from this phone first, then migrate it."))
+                return
+            }
+            guard pinned == listed.lowercased() else {
+                mode = .failed(FirstContact.keyChangedText)
+                return
+            }
+            oldStkPubHex = pinned
         } catch {
             mode = .failed(String(localized: "Couldn't reach your account directory. Check your connection and try again."))
             return
@@ -287,11 +297,8 @@ public final class MigrationViewModel {
         // discards it), so a SetRoutingTarget cannot be signed. The `.com`
         // take-over handler rebinds the directory identity server-side, and
         // the hub's eviction + the new box's HELLO claim move the live route.
-        // Cert re-pin is automatic: the migrated box re-derives the SAME
-        // status STK (it runs the same SWK — deriveStkPub is SWK-derived and
-        // the SWK is unchanged across migration), so its first verified
-        // daemon-status report REPLACES the old fingerprint pin in
-        // CertPinRegistry.update (case 2 of the reconcile).
+        // The new box has its own key: this phone pins it at its first
+        // blessing (docs/first-contact.md), like any new server.
         await refresh()
     }
 

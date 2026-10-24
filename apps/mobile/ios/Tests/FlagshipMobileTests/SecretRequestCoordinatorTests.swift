@@ -67,6 +67,14 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {}
     }
 
+    /// This phone pinned the box's key at its first blessing (docs/first-contact.md), so these
+    /// tests run against an already-blessed server.
+    private func pinnedKeys() -> ServerKeyPins {
+        let pins = ServerKeyPins.volatile()
+        pins.pin(boxStk().publicKey.rawRepresentation, for: "home.alice.flagship.services")
+        return pins
+    }
+
     // Fixtures: a phone IRK, a box STK, and a phone unseal key.
     private let username = "alice"
     private func phoneIrk() -> Curve25519.Signing.PrivateKey {
@@ -109,7 +117,11 @@ final class SecretRequestCoordinatorTests: XCTestCase {
             irkProvider: { self.phoneIrk() },
             unsealSeedProvider: { _ in [self.unsealSeed] },
             now: { 999 },
-            nonceGen: { Data(repeating: 0xaa, count: 32) }
+            nonceGen: { Data(repeating: 0xaa, count: 32) },
+            serverKeys: pinnedKeys(),
+            firstContactSecrets: InMemoryFirstContactSecrets(),
+            studioSeen: StudioSeenStore(secrets: { InMemoryFirstContactSecrets() }),
+            wildcardGrants: ServerWildcardGrantKeeper(defaults: UserDefaults(suiteName: "src-\(UUID().uuidString)")!)
         )
     }
 
@@ -127,7 +139,7 @@ final class SecretRequestCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testRejectsForeignDirectoryStk() async throws {
+    func testAForeignDirectoryKeyIsNotConsultedThePinDecides() async throws {
         let mailbox = MockMailbox(username: username)
         let (pending, _) = makeBoxRequest(purpose: .unlockKey, nonce: Data(repeating: 0x33, count: 32), domain: "home.alice.flagship.services")
         mailbox.pending = [pending]
@@ -140,7 +152,26 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         )]
         let coord = makeCoordinator(mailbox)
         let verified = try await coord.fetchVerifiedRequests()
-        XCTAssertTrue(verified.isEmpty, "a request whose STK isn't directory-bound must be dropped")
+        XCTAssertEqual(verified.map(\.trust), [.pinned], "the request names the pinned key; .com's listing is not a trust input")
+        // A request signed by another key than the pinned one is refused, whatever .com lists.
+        let other = Curve25519.Signing.PrivateKey()
+        let nonce = Data(repeating: 0x34, count: 32)
+        let req = SecretRequest(serverDomain: "home.alice.flagship.services", stkPub: other.publicKey.rawRepresentation,
+                                purpose: .unlockKey, nonce: nonce, issuedAt: 1_700_000_000_000)
+        mailbox.pending = [PendingSecretRequest(
+            serverDomain: "home.alice.flagship.services", requestNonceHex: HexUtil.encode(nonce),
+            stkPub: HexUtil.encode(other.publicKey.rawRepresentation), purpose: "unlock-key", issuedAt: req.issuedAt,
+            requestSignature: HexUtil.encode(try other.signature(for: req.canonicalBytes())), deviceInfo: nil,
+            postedAt: 1, expiresAt: 1_700_000_300_000)]
+        let changed = try await coord.fetchVerifiedRequests()
+        XCTAssertEqual(changed.map(\.trust), [.keyChanged])
+        do {
+            try await coord.confirmAndRespond(changed[0])
+            XCTFail("a changed key must be refused")
+        } catch {
+            XCTAssertEqual(error as? SecretRequestCoordinator.CoordinatorError, .keyChanged("home.alice.flagship.services"))
+        }
+        XCTAssertNil(mailbox.lastPostedResponse, "nothing sealed to the other key")
     }
 
     @MainActor
@@ -271,7 +302,11 @@ final class SecretRequestCoordinatorTests: XCTestCase {
             unsealSeedProvider: { _ in [self.unsealSeed] },
             watchDelegateKeyProvider: { delegate },
             now: { 999 },
-            nonceGen: { Data(repeating: 0xaa, count: 32) }
+            nonceGen: { Data(repeating: 0xaa, count: 32) },
+            serverKeys: pinnedKeys(),
+            firstContactSecrets: InMemoryFirstContactSecrets(),
+            studioSeen: StudioSeenStore(secrets: { InMemoryFirstContactSecrets() }),
+            wildcardGrants: ServerWildcardGrantKeeper(defaults: UserDefaults(suiteName: "src-\(UUID().uuidString)")!)
         )
         let verified = try await coord.fetchVerifiedRequests()
         // fetch builds the mailbox-auth with the IRK (a separate, background
@@ -328,7 +363,11 @@ final class SecretRequestCoordinatorTests: XCTestCase {
             unsealSeedProvider: { _ in [self.unsealSeed] },
             watchDelegateKeyProvider: { delegate },
             now: { 999 },
-            nonceGen: { Data(repeating: 0xaa, count: 32) }
+            nonceGen: { Data(repeating: 0xaa, count: 32) },
+            serverKeys: pinnedKeys(),
+            firstContactSecrets: InMemoryFirstContactSecrets(),
+            studioSeen: StudioSeenStore(secrets: { InMemoryFirstContactSecrets() }),
+            wildcardGrants: ServerWildcardGrantKeeper(defaults: UserDefaults(suiteName: "src-\(UUID().uuidString)")!)
         )
         let verified = try await coord.fetchVerifiedRequests()
         irkCalls = 0 // ignore the poll's mailbox-auth IRK use
@@ -421,7 +460,11 @@ final class SecretRequestCoordinatorTests: XCTestCase {
             unsealSeedProvider: { _ in [self.unsealSeed] },
             orderKeyProvider: { self.adminRoot() },
             now: { 999 },
-            nonceGen: { Data(repeating: 0xaa, count: 32) }
+            nonceGen: { Data(repeating: 0xaa, count: 32) },
+            serverKeys: pinnedKeys(),
+            firstContactSecrets: InMemoryFirstContactSecrets(),
+            studioSeen: StudioSeenStore(secrets: { InMemoryFirstContactSecrets() }),
+            wildcardGrants: ServerWildcardGrantKeeper(defaults: UserDefaults(suiteName: "src-\(UUID().uuidString)")!)
         )
     }
 
@@ -696,7 +739,11 @@ final class SecretRequestCoordinatorTests: XCTestCase {
             unsealSeedProvider: { _ in [self.unsealSeed] },
             watchDelegateKeyProvider: { delegate },
             now: { 999 },
-            nonceGen: { Data(repeating: 0xaa, count: 32) }
+            nonceGen: { Data(repeating: 0xaa, count: 32) },
+            serverKeys: pinnedKeys(),
+            firstContactSecrets: InMemoryFirstContactSecrets(),
+            studioSeen: StudioSeenStore(secrets: { InMemoryFirstContactSecrets() }),
+            wildcardGrants: ServerWildcardGrantKeeper(defaults: UserDefaults(suiteName: "src-\(UUID().uuidString)")!)
         )
         return (mailbox, coord, pending.id)
     }

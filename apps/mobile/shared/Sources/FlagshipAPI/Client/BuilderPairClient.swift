@@ -26,6 +26,10 @@ public enum BuilderOutbound: Sendable {
     case phoneHello(phonePkB64: String)
     case confirmPairing
     case deliver(ciphertextB64: String, nonceB64: String)
+    /// The recipe plus, beside it (never inside), the per-server key Studio confirms the server code
+    /// with (docs/first-contact.md 4): the 32-byte key sealed under the same session key, fresh nonce.
+    /// An older Studio ignores the two extra fields.
+    case deliverWithConfirmKey(ciphertextB64: String, nonceB64: String, confirmKeyCiphertextB64: String, confirmKeyNonceB64: String)
     case raw(json: String)     // consent-result etc.
 }
 
@@ -54,6 +58,9 @@ extension BuilderOutbound {
             return Self.obj(["kind": "confirm-pairing"])
         case .deliver(let ct, let nonce):
             return Self.obj(["kind": "deliver", "ciphertext": ct, "nonce": nonce])
+        case .deliverWithConfirmKey(let ct, let nonce, let kct, let knonce):
+            return Self.obj(["kind": "deliver", "ciphertext": ct, "nonce": nonce,
+                             "confirmKeyCiphertext": kct, "confirmKeyNonce": knonce])
         case .raw(let json):
             return json
         }

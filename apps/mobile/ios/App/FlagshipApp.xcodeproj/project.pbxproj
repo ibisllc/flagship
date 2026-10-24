@@ -29,6 +29,7 @@
 		4139AA3CADE3E3E93DEF5F57 /* InstallProgressLiveActivityCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BCEBBC9F7EBD3839DF504F /* InstallProgressLiveActivityCenter.swift */; };
 		4345352FFED495B0CDBC46C1 /* GymSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37428FD47DEB4CA4A278965E /* GymSupport.swift */; };
 		477681FB8855FCBE67AAFE77 /* WidgetBundleEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00FD448EA89E02E3EC94E310 /* WidgetBundleEntry.swift */; };
+		48C23FDF3A7381950BC41BB0 /* GymFirstContactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F1A003A8C38C67209983C29 /* GymFirstContactTests.swift */; };
 		4B5304800B09623388924E78 /* ProvisionTimelineWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C08C9B4454F05A0F494D78 /* ProvisionTimelineWatchView.swift */; };
 		4DA2B1666DDC13A3F5C0A521 /* GymDeviceBugsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22681341998C8DBEB11CF356 /* GymDeviceBugsTests.swift */; };
 		52740C43DE82D908A417150D /* FlagshipAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4050D91C1A76B12D804925FA /* FlagshipAppIntents.swift */; };
@@ -152,6 +153,7 @@
 		1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymFeatureMirrorTests.swift; sourceTree = "<group>"; };
 		1D124909BEC6A0E1871FFEEF /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodStatusSnapshot.swift; sourceTree = "<group>"; };
+		1F1A003A8C38C67209983C29 /* GymFirstContactTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymFirstContactTests.swift; sourceTree = "<group>"; };
 		22681341998C8DBEB11CF356 /* GymDeviceBugsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymDeviceBugsTests.swift; sourceTree = "<group>"; };
 		2A2B35B7246FAB05386D1BEA /* GymIPadSweepTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymIPadSweepTests.swift; sourceTree = "<group>"; };
 		2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTimelinePublisher.swift; sourceTree = "<group>"; };
@@ -209,10 +211,10 @@
 		EB03394B07AE3AC9DDF17FDF /* FlagshipWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchWidgets.entitlements; sourceTree = "<group>"; };
 		F770CD2952CF826FD5D49B33 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		FD2441AEC552535EC74BF456 /* GymOctoberTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymOctoberTests.swift; sourceTree = "<group>"; };
-		"TEMP_26CD7573-DEF2-460E-838F-86F80C98CB07" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_5681E10F-223E-4C31-8F8C-D7F197D17AE7" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_882F270F-E939-4052-B3E3-B20DE4A6924B" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_88E0E124-8C47-43AE-9E9E-25CE48D84956" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_114D5C34-BA14-4347-89B1-53C08A9C07C7" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_7BC82DC7-1F42-4D03-83CE-F91EF68A3AC3" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_B1548B49-C769-4A72-A80F-4812EBB95AAE" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_EFFC1608-D17A-4FB9-93BD-00E1790DBA67" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -374,6 +376,7 @@
 				22681341998C8DBEB11CF356 /* GymDeviceBugsTests.swift */,
 				9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */,
 				1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */,
+				1F1A003A8C38C67209983C29 /* GymFirstContactTests.swift */,
 				2A2B35B7246FAB05386D1BEA /* GymIPadSweepTests.swift */,
 				2D3499CD4ED81FE13DF74CC7 /* GymIPadTests.swift */,
 				91E3BD7AFAF1A09A4E82D2FA /* GymLiveTests.swift */,
@@ -397,13 +400,13 @@
 			path = UITests;
 			sourceTree = "<group>";
 		};
-		"TEMP_CC614317-3D6A-45BB-81D3-2DF285BA5EA3" /* . */ = {
+		"TEMP_D306C5BF-9BD0-46E4-B126-DD8AA441BA7E" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_88E0E124-8C47-43AE-9E9E-25CE48D84956" /* project.yml */,
-				"TEMP_26CD7573-DEF2-460E-838F-86F80C98CB07" /* FlagshipApp.xcodeproj */,
-				"TEMP_5681E10F-223E-4C31-8F8C-D7F197D17AE7" /* FlagshipApp.entitlements */,
-				"TEMP_882F270F-E939-4052-B3E3-B20DE4A6924B" /* Info.plist */,
+				"TEMP_7BC82DC7-1F42-4D03-83CE-F91EF68A3AC3" /* project.yml */,
+				"TEMP_B1548B49-C769-4A72-A80F-4812EBB95AAE" /* FlagshipApp.xcodeproj */,
+				"TEMP_EFFC1608-D17A-4FB9-93BD-00E1790DBA67" /* FlagshipApp.entitlements */,
+				"TEMP_114D5C34-BA14-4347-89B1-53C08A9C07C7" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
@@ -558,7 +561,13 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
+				de,
 				en,
+				es,
+				fr,
+				ja,
+				"pt-BR",
+				"zh-Hans",
 			);
 			mainGroup = 9B2D8042E40702FE32A73EA3;
 			minimizedProjectReferenceProxies = 1;
@@ -642,6 +651,7 @@
 				4DA2B1666DDC13A3F5C0A521 /* GymDeviceBugsTests.swift in Sources */,
 				8CDC40B8810F689102B838D2 /* GymEveryMergeTests.swift in Sources */,
 				BD9630458EA132BCD16ADCA4 /* GymFeatureMirrorTests.swift in Sources */,
+				48C23FDF3A7381950BC41BB0 /* GymFirstContactTests.swift in Sources */,
 				C394A5E1241291F4E4EF8754 /* GymIPadSweepTests.swift in Sources */,
 				044DDAEFDED42ACC06772BE5 /* GymIPadTests.swift in Sources */,
 				F8E5776F2B87DE67108074EE /* GymLiveTests.swift in Sources */,

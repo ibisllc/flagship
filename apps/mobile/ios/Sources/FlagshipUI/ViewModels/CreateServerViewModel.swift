@@ -166,6 +166,9 @@ public final class CreateServerViewModel {
     /// The routing key a pending name was minted with, so a retry registers
     /// the same claim (`.com` refuses a second, different key for a name).
     private let rckStore: PendingRckStore
+    /// Where the recipe's one-time enrollment secret (and Studio's confirm key) is kept until the
+    /// server is pinned (docs/first-contact.md): Keychain, this device only. Injectable for tests.
+    public var firstContactSecrets: FirstContactSecretStore = KeychainFirstContactSecrets()
     /// Per-service leadership: records that a CGK deposit is OWED for this server.
     /// The CGK is NEVER embedded in the recipe (it is the per-cloud gossip secret),
     /// so it is owed on EVERY created server, regardless of embed-secrets. The Home
@@ -429,24 +432,19 @@ public final class CreateServerViewModel {
             debugGrant = try Self.debugGrant(serverDomain: serverDomain, rawKey: debugSshKey)
             debugKey = try await debugGrantKey(String(localized: "Turn on debug access for \(name)"))
         }
-        // ONE biometric ceremony yields the IRK AND the new box's STK
-        // pubkey. The STK pub is cached in the pin registry so later
-        // (biometric-free) /pods refreshes can verify the box's STK-signed
-        // daemon-status report and pin its real cert fingerprint (A′
-        // phase 4) — the directory's identityPubKey echo is never trusted.
-        // ONE biometric also yields the box's SWK (hex). The box can't derive
-        // it (no UMK), so the phone provisions it as an UNSIGNED `swkHex` recipe
-        // sibling the daemon persists at first boot to turn on the service/build
-        // platform. This is the box-side `ServerKeys.deriveSwk` (DOTS) key — the
-        // protocol/daemon derivation, same UMK seed + serverId as the STK above —
-        // NOT the app-backup `Keystore.deriveSWK` (slashes).
-        let mint = try await Keystore.deriveIRKBoxStkAndSwk(
+        // ONE biometric ceremony yields the IRK and the box's SWK (hex). The box
+        // can't derive the SWK (no UMK), so the phone provisions it as an UNSIGNED
+        // `swkHex` recipe sibling the daemon persists at first boot to turn on the
+        // service/build platform. This is the box-side `ServerKeys.deriveSwk` (DOTS)
+        // key — NOT the app-backup `Keystore.deriveSWK` (slashes). The box makes its
+        // own identity key (STK) at install; this phone pins it at the first
+        // blessing (docs/first-contact.md), never derives it.
+        let mint = try await Keystore.deriveIRKAndBoxSwk(
             serverId: serverDomain,
             reason: String(localized: "Mint installer for \(name)")
         )
         let irk = mint.irk
         let boxSwkHex = mint.boxSwkHex
-        CertPinRegistry.shared.registerBoxStk(domain: serverDomain, stkPub: mint.boxStkPub)
 
         let delegated = Curve25519.Signing.PrivateKey()
         let acIssuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -619,6 +617,17 @@ public final class CreateServerViewModel {
         // independent of the embed-secrets choice.
         cgkDepositStore.markPending(for: serverDomain)
 
+        // First contact (docs/first-contact.md): a fresh one-time secret rides the
+        // recipe as the UNSIGNED top-level `enrollmentKeyHex`; the box proves with it
+        // that its key is the one built from this recipe. This device keeps a copy
+        // (Keychain, this device only) until it pins the server.
+        let enrollmentKey = Enrollment.newSecret()
+        let enrollmentKeyHex = HexUtil.encode(enrollmentKey)
+        firstContactSecrets.save(
+            FirstContactSecret(enrollmentKeyHex: enrollmentKeyHex, authCodeSerial: blob.authCode.serial),
+            for: serverDomain
+        )
+
         // Debug-friendly server (Advanced): the debug-access grant rides as the
         // UNSIGNED `debugGrant` sibling, signed with the key its own Face ID
         // unsealed above (the admin root; the IRK on a demo account).
@@ -633,7 +642,8 @@ public final class CreateServerViewModel {
             pairingOrder: embeddedPairingOrder,
             swkHex: embeddedSwkHex,
             offlineSecrets: embeddedOfflineSecrets,
-            debugGrant: debugGrantSibling
+            debugGrant: debugGrantSibling,
+            enrollmentKeyHex: enrollmentKeyHex
         )
     }
 
@@ -679,8 +689,13 @@ public struct SignedInstallBlob: Sendable {
     /// the config-pinned owner IRK + this box's FQDN before enabling the debug
     /// console user. nil for the production default (no debug grant).
     public let debugGrant: String?
+    /// First contact: the recipe's one-time enrollment secret (64 hex), an UNSIGNED
+    /// top-level sibling like `swkHex` (docs/first-contact.md). The box proves with
+    /// it that its key is the one built from this recipe.
+    public let enrollmentKeyHex: String?
 
-    public init(blob: InstallBlob, signatureHex: String, pairingOrder: String? = nil, swkHex: String? = nil, offlineSecrets: OfflineSecretsCommitment? = nil, debugGrant: String? = nil) {
+    public init(blob: InstallBlob, signatureHex: String, pairingOrder: String? = nil, swkHex: String? = nil, offlineSecrets: OfflineSecretsCommitment? = nil, debugGrant: String? = nil, enrollmentKeyHex: String? = nil) {
+        self.enrollmentKeyHex = enrollmentKeyHex
         self.blob = blob
         self.signatureHex = signatureHex
         self.pairingOrder = pairingOrder
@@ -707,6 +722,8 @@ public struct SignedInstallBlob: Sendable {
         /// install-blob.json as the `debugGrant` sibling. Omitted from JSON when
         /// nil so a non-debug recipe is byte-identical to before.
         public let debugGrant: String?
+        /// Top-level recipe sibling: the one-time enrollment secret (first contact).
+        public let enrollmentKeyHex: String?
     }
     public struct OnWireBlob: Codable, Sendable {
         public let version: Int
@@ -779,7 +796,8 @@ public struct SignedInstallBlob: Sendable {
             pairingOrder: pairingOrder,
             swkHex: swkHex,
             offlineSecrets: offlineSecrets,
-            debugGrant: debugGrant
+            debugGrant: debugGrant,
+            enrollmentKeyHex: enrollmentKeyHex
         )
     }
 }

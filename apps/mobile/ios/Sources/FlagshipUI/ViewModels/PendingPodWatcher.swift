@@ -127,6 +127,7 @@ public final class PendingPodWatcher {
             }
             return false
         }
+        StudioSeenStore.shared.record(status)
         consecutiveNoCheckpoint = 0
 
         let podName = app.pods.first(where: { $0.podId == podId })?.name

@@ -8,9 +8,9 @@ import FlagshipAPI
 /// Populated from `/pods` responses: each pod may carry the box's STK-signed
 /// daemon-status report relayed VERBATIM (`signedStatus`). A pin is recorded
 /// for the box FQDN only when ALL of these hold:
-///   - the STK pubkey derived LOCALLY from the phone's UMK
-///     (`ServerKeys.deriveStkPub` — `.com`'s `identityPubKey` echo is NOT a
-///     trust input) verifies the report signature,
+///   - the box key this device PINNED at the server's first blessing
+///     (`ServerKeyPins.pinnedStk`, docs/first-contact.md — `.com`'s
+///     `identityPubKey` echo is NOT a trust input) verifies the report signature,
 ///   - the report's `serverDomain` matches the pod's domain,
 ///   - the report is fresh (`issuedAt` within `DaemonStatus.maxReportAgeMs`),
 ///   - the report carries a well-formed `certSha256` (64 hex).
@@ -23,18 +23,10 @@ import FlagshipAPI
 ///
 /// A service host `x.<server>.<user>.flagship.services` pins to the box's
 /// fingerprint — the per-box wildcard `*.<server>.<user>` is the same cert.
-///
-/// iOS twist vs Android: the UMK is biometric-gated on iOS, so the STK pub
-/// (PUBLIC key material) is derived at moments the UMK is already unlocked
-/// (server creation — `Keystore.deriveIRKAndBoxStkPub`) and CACHED here
-/// persistently; the per-refresh `update(pods:)` then verifies with the
-/// cached pubs and never prompts. A pod with no cached STK pub simply gets
-/// no pin.
 public final class CertPinRegistry: @unchecked Sendable {
     /// Process-wide registry consulted by the shared pinned URLSession.
     public static let shared = CertPinRegistry()
 
-    private static let stkPubsDefaultsKey = "flagship.certpin.boxStkPubs.v1"
     private static let hex64 = try! NSRegularExpression(pattern: "^[0-9a-f]{64}$")
 
     private let lock = NSLock()
@@ -44,55 +36,27 @@ public final class CertPinRegistry: @unchecked Sendable {
     /// evidence that installed `pins`; retaining it lets detail UI show real
     /// certificate metadata without trusting an unsigned relay projection.
     private var reports: [String: DaemonStatusReport] = [:]
-    /// box FQDN (lowercase) → locally derived STK pubkey (32 bytes).
-    private var stkPubs: [String: Data] = [:]
-    private let defaults: UserDefaults?
+    /// The server keys this device pinned at first blessing: the only STK source.
+    public let serverKeys: ServerKeyPins
 
-    /// `defaults == nil` ⇒ fully in-memory (tests / previews).
-    public init(persistingIn defaults: UserDefaults? = .standard) {
-        self.defaults = defaults
-        if let stored = defaults?.dictionary(forKey: Self.stkPubsDefaultsKey) as? [String: String] {
-            for (domain, hex) in stored {
-                if let pub = HexUtil.decode(hex), pub.count == 32 {
-                    stkPubs[domain] = pub
-                }
-            }
-        }
+    /// `defaults == nil` ⇒ the key pins live only in memory (tests / previews).
+    public init(persistingIn defaults: UserDefaults? = .standard, serverKeys: ServerKeyPins? = nil) {
+        self.serverKeys = serverKeys ?? defaults.map { ServerKeyPins(defaults: $0) } ?? ServerKeyPins.volatile()
+        UserDefaults.standard.removeObject(forKey: "flagship.certpin.boxStkPubs.v1")
     }
 
-    // MARK: - STK-pub cache
+    // MARK: - STK
 
-    /// Record a box's locally derived STK pubkey (public material — safe to
-    /// persist unprotected). Called where the UMK is already unlocked.
-    public func registerBoxStk(domain: String, stkPub: Data) {
-        guard stkPub.count == 32 else { return }
-        let key = Self.normalize(domain)
-        guard !key.isEmpty else { return }
-        lock.lock()
-        stkPubs[key] = stkPub
-        let snapshot = stkPubs
-        lock.unlock()
-        persist(snapshot)
-    }
-
-    /// The cached STK pubkey for a box, if this device has derived it — used
-    /// to verify the box's LAN hint without unlocking the UMK again.
+    /// The pinned STK pubkey for a box, if this device has blessed it — used
+    /// to verify the box's LAN hint and status reports without unlocking the UMK.
     public func stkPub(forDomain domain: String) -> Data? {
-        let key = Self.normalize(domain)
-        lock.lock()
-        defer { lock.unlock() }
-        return stkPubs[key]
-    }
-
-    private func persist(_ snapshot: [String: Data]) {
-        guard let defaults else { return }
-        defaults.set(snapshot.mapValues { HexUtil.encode($0) }, forKey: Self.stkPubsDefaultsKey)
+        serverKeys.pinnedStk(Self.normalize(domain))
     }
 
     // MARK: - /pods reconciliation
 
     /// Reconcile the registry against a fresh `/pods` response using the
-    /// CACHED STK pubs (no UMK access ⇒ no biometric). KEEP-LAST-KNOWN-GOOD
+    /// PINNED server keys (no UMK access ⇒ no biometric). KEEP-LAST-KNOWN-GOOD
     /// (SEC-1): a pin is the phone's only defense against a `.com`-minted
     /// rogue cert, so it is dropped ONLY on an explicit signal, never on the
     /// mere ABSENCE of a fresh verified report. Three cases per the user's
@@ -148,26 +112,6 @@ public final class CertPinRegistry: @unchecked Sendable {
         }
     }
 
-    /// Seed-supplied variant (mirrors Android `update(pods, umkSeed)`):
-    /// derives + caches each pod's STK pub from the UMK seed, then
-    /// reconciles. For call sites that already hold the unwrapped UMK.
-    public func update(
-        pods: [PodDirectoryEntry],
-        umkSeed: Data,
-        nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
-    ) {
-        guard umkSeed.count == 32 else {
-            update(pods: pods, nowMs: nowMs)
-            return
-        }
-        for pod in pods {
-            if let pub = ServerKeys.deriveStkPub(umkSeed: umkSeed, serverId: pod.serverDomain) {
-                registerBoxStk(domain: pod.serverDomain, stkPub: pub)
-            }
-        }
-        update(pods: pods, nowMs: nowMs)
-    }
-
     private func verifiedStatus(
         for pod: PodDirectoryEntry,
         domain: String,
@@ -179,10 +123,7 @@ public final class CertPinRegistry: @unchecked Sendable {
               // for some other box must not pin this one.
               Self.normalize(signed.report.serverDomain) == domain
         else { return nil }
-        lock.lock()
-        let stkPub = stkPubs[domain]
-        lock.unlock()
-        guard let stkPub,
+        guard let stkPub = serverKeys.pinnedStk(domain),
               DaemonStatus.verify(signed.report, signatureHex: signed.signatureHex, stkPub: stkPub),
               nowMs - signed.report.issuedAt <= DaemonStatus.maxReportAgeMs,
               let pin = signed.report.certSha256?.lowercased(),
@@ -193,8 +134,8 @@ public final class CertPinRegistry: @unchecked Sendable {
 
     // MARK: - Lookup (the enforcement input)
 
-    /// True when `host` is a box this phone knows (it has derived the box's STK, or the box is in
-    /// the directory): the box itself or any name under its wildcard. Used to refuse a request to
+    /// True when `host` is a box this phone knows (it pinned the box's STK at first blessing): the
+    /// box itself or any name under its wildcard. Used to refuse a request to
     /// a known box that has no verified pin rather than fall back to ordinary web trust.
     public func isKnownBox(host: String) -> Bool {
         let h = Self.normalize(host)
@@ -202,7 +143,7 @@ public final class CertPinRegistry: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if now() < enrollmentAllowedUntil[h] ?? 0 { return false }
-        return stkPubs.keys.contains { h == $0 || h.hasSuffix(".\($0)") }
+        return serverKeys.pinnedServer(forHost: h) != nil
     }
 
     /// The one narrow window in which a freshly created box may be reached before its first signed
@@ -253,15 +194,14 @@ public final class CertPinRegistry: @unchecked Sendable {
         return reports[key]
     }
 
-    /// Drop every pin (sign-out / profile switch). The STK-pub cache is
-    /// also dropped — a different account's boxes derive differently.
+    /// Drop every cert pin and server-key pin (sign-out / profile switch / wipe):
+    /// the next approval of each server pins on first sight with the code box.
     public func clear() {
         lock.lock()
         pins.removeAll()
         reports.removeAll()
-        stkPubs.removeAll()
         lock.unlock()
-        defaults?.removeObject(forKey: Self.stkPubsDefaultsKey)
+        serverKeys.clear()
     }
 
     // MARK: - Helpers

@@ -451,8 +451,13 @@ public struct DeviceInfoHint: Codable, Equatable, Sendable {
     public let region: String?
     public let os: String?
     public let hostname: String?
-    public init(ip: String? = nil, region: String? = nil, os: String? = nil, hostname: String? = nil) {
+    /// First contact (docs/first-contact.md): HMAC-SHA256 under the recipe's one-time secret, proving the
+    /// key this request names is the one built from that recipe. Only the device that made the recipe can
+    /// check it; `.com` passes it through unread.
+    public let enrollmentProof: String?
+    public init(ip: String? = nil, region: String? = nil, os: String? = nil, hostname: String? = nil, enrollmentProof: String? = nil) {
         self.ip = ip; self.region = region; self.os = os; self.hostname = hostname
+        self.enrollmentProof = enrollmentProof
     }
 }
 

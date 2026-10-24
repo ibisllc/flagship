@@ -59,7 +59,7 @@ final class CertPinDecisionTests: XCTestCase {
         // consult it.
         let reg = CertPinRegistry(persistingIn: nil)
         let stkPub = HexUtil.decode(DaemonStatusVerifierTests.stkPubHex)!
-        reg.registerBoxStk(domain: DaemonStatusVerifierTests.report.serverDomain, stkPub: stkPub)
+        reg.serverKeys.pin(stkPub, for: DaemonStatusVerifierTests.report.serverDomain)
         reg.update(
             pods: [PodDirectoryEntry(
                 serverDomain: DaemonStatusVerifierTests.report.serverDomain,

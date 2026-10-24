@@ -68,7 +68,9 @@ public enum GymSweepSeams {
             let mailbox = mocks.mailbox
             server.onServerNameReleased = { [weak mailbox] domain in mailbox?.deletedDomains.insert(domain.lowercased()) }
         }
+        firstContactReset(mocks)
         home(args, app, operations, mocks)
+        firstContact(args, app, mocks)
         server(args, app, mocks)
         apps(args, app, mocks)
         settings(args, app, mocks)

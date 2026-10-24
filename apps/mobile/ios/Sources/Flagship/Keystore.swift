@@ -357,29 +357,6 @@ public struct Keystore {
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
-    /// A′ cert pinning — the IRK plus the new box's STK PUBLIC key, both
-    /// derived in ONE biometric ceremony (a separate STK-pub call would
-    /// re-unwrap the UMK and double-prompt Face ID during server creation).
-    /// The STK pub mirrors the protocol path `deriveSTK(deriveSWK(UMK,
-    /// serverId))` via `ServerKeys` (FlagshipCore) and is what
-    /// `CertPinRegistry` verifies STK-signed daemon-status reports against —
-    /// `.com`'s `identityPubKey` echo is NOT a trust input.
-    public static func deriveIRKAndBoxStkPub(
-        serverId: String,
-        reason: String
-    ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxStkPub: Data) {
-        let umk = try await unwrappedUMK(reason: reason)
-        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
-        let irk = try Curve25519.Signing.PrivateKey(
-            rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
-        )
-        let umkData = umk.withUnsafeBytes { Data($0) }
-        guard let stkPub = ServerKeys.deriveStkPub(umkSeed: umkData, serverId: serverId) else {
-            throw KeystoreError.derivationFailed("box STK pubkey for \(serverId)")
-        }
-        return (irk, stkPub)
-    }
-
     /// The box's Service Workload Key (SWK) as lowercase hex — the deterministic
     /// `HKDF-SHA256(UMK seed, info="flagship.swk.v1|<serverId>")` the daemon
     /// re-derives nowhere (the box can't: it has no UMK), so the phone provisions
@@ -397,31 +374,29 @@ public struct Keystore {
         return HexUtil.encode(swk)
     }
 
-    /// A′ cert pinning + SWK provisioning in ONE biometric: the IRK, the new
-    /// box's STK PUBLIC key, AND the box's deterministic SWK (hex), all derived
-    /// from a single UMK unwrap (a separate SWK call would re-prompt Face ID
-    /// during server creation). The SWK is the box-side `ServerKeys.deriveSwk`
-    /// (DOTS) key — NOT the app-backup `deriveSWK` (slashes).
-    public static func deriveIRKBoxStkAndSwk(
+    /// SWK provisioning in ONE biometric: the IRK and the box's deterministic
+    /// SWK (hex), both from a single UMK unwrap (a separate SWK call would
+    /// re-prompt Face ID during server creation). The SWK is the box-side
+    /// `ServerKeys.deriveSwk` (DOTS) key — NOT the app-backup `deriveSWK`
+    /// (slashes). The box's own key (STK) is never derived: the box makes it at
+    /// install and the phone pins it at the first blessing (docs/first-contact.md).
+    public static func deriveIRKAndBoxSwk(
         serverId: String,
         reason: String
-    ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxStkPub: Data, boxSwkHex: String) {
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxSwkHex: String) {
         let umk = try await unwrappedUMK(reason: reason)
         let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
         let irk = try Curve25519.Signing.PrivateKey(
             rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
         )
         let umkData = umk.withUnsafeBytes { Data($0) }
-        guard let stkPub = ServerKeys.deriveStkPub(umkSeed: umkData, serverId: serverId) else {
-            throw KeystoreError.derivationFailed("box STK pubkey for \(serverId)")
-        }
         guard let swk = ServerKeys.deriveSwk(umkSeed: umkData, serverId: serverId) else {
             throw KeystoreError.derivationFailed("box SWK for \(serverId)")
         }
-        return (irk, stkPub, HexUtil.encode(swk))
+        return (irk, HexUtil.encode(swk))
     }
 
-    /// CGK provisioning twin of `deriveIRKBoxStkAndSwk` for per-service
+    /// CGK provisioning twin of `deriveIRKAndBoxSwk` for per-service
     /// leadership (Phase 6): the IRK plus the per-CLOUD Cloud Gossip Key (hex) in
     /// ONE biometric. The CGK is `CloudGossip.deriveCGK(umk.seed)` — per cloud,
     /// NOT per server (no serverId), so it is the same key for every box of the
@@ -829,10 +804,21 @@ public struct Keystore {
         do {
             let box = try AES.GCM.SealedBox(combined: wrapped)
             let seed = try AES.GCM.open(box, using: unwrapKey)
-            return try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+            let key = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+            adminRootOpened(key)
+            return key
         } catch {
             throw KeystoreError.unwrapFailed(String(describing: error))
         }
+    }
+
+    /// Called each time a Face ID moment opens the admin root, so work that can only
+    /// be signed with it (the owed app-name grants, docs/first-contact.md) rides a
+    /// biometric the owner does anyway. Set once by the app.
+    nonisolated(unsafe) public static var onAdminRootOpened: (@Sendable (Curve25519.Signing.PrivateKey) -> Void)?
+
+    private static func adminRootOpened(_ key: Curve25519.Signing.PrivateKey) {
+        onAdminRootOpened?(key)
     }
 
     /// The signing key for a SENSITIVE/destructive order (§8.3), GATED: if this
@@ -931,6 +917,7 @@ public struct Keystore {
                 throw KeystoreError.unwrapFailed("admin-root: \(error)")
             }
         }
+        if let adminRoot { adminRootOpened(adminRoot) }
         return (irk, bak, adminRoot)
     }
 
@@ -1169,8 +1156,7 @@ public struct Keystore {
         }
         keychainDelete(account: KCKey.accountReadTokens)
         WrappingKeypair.deleteSEKeyIfExists(profile: id)
-        // The cert-pin STK-pub cache derives from this UMK — a wiped
-        // account must not leave pins (or pub anchors) behind.
+        // A wiped account must not leave cert pins or server-key pins behind.
         CertPinRegistry.shared.clear()
     }
 

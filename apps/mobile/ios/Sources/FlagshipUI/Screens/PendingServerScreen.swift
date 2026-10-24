@@ -66,7 +66,8 @@ public struct PendingServerScreen: View {
                 // relay). The Approve card goes first; it renders nothing until a
                 // live request for this box exists.
                 if let domain = approvalDomain, !domain.isEmpty {
-                    BootUnlockApprovalCard(serverDomain: domain, awaitingUnlock: awaitingUnlock)
+                    BootUnlockApprovalCard(serverDomain: domain, awaitingUnlock: awaitingUnlock,
+                                           listedStkPubHex: pod.identityPubKeyHex)
                 }
 
                 // While the box waits for the owner, the install checklist is

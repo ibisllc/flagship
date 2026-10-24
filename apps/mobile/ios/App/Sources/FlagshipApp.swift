@@ -143,6 +143,9 @@ struct FlagshipApp: App {
         // in the background on power and Wi-Fi. Registered before launch ends.
         PhoneBackupTask.register(clients: podClients)
         PhoneBackupTask.schedule()
+        // First contact: hand each server its app-name grant once it answers, and sign
+        // owed grants at the next Face ID that opens the admin root.
+        FirstContactUpkeep.install(clients: podClients)
         // The lock/power-off + dead-man routes are signature-authed daemon
         // endpoints on the SAME box; share the box-pinned session so a rogue
         // `.com` cert can't intercept a power-off / affirmation either.
