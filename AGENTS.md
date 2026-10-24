@@ -477,6 +477,17 @@ of the last check here: **not yet checked**.
   time (`POST /api/time`, `trustedClock.ts`, floor on disk and `/boot`, read by the Rust boot
   client); Android opens PQ seeds with the unlock prompt's CryptoObject (no 300 s window). The Mac
   hook timeouts were load (Debian VM: both commits green); the premount test's Linux hang is fixed.
+  **Milestone 6, boot unlock v2 and the TPM** (`pq-suites.md` §19, drill `drills/m6-upcloud.md`):
+  the boot key gains an ML-DSA half and an X-Wing lease key (STK-hybrid `boot-key-binding/v3`, D1
+  **0114**); each unlock request is hybrid-signed with a fresh per-boot reply key; phones (iOS,
+  Android, watch path) seal replies and v3 leases hybrid and sign with the account key's PQ half;
+  the Go helper, Rust `flagship-boot` and the premount open them and, when `/boot` says strict,
+  refuse classical replies and leases (vectors TS/Rust/Go/Swift/Kotlin incl. downgrade). The lease
+  key is sealed to a TPM 2.0 under a PCR policy (software fallback; resealed after an approved boot;
+  labelled classical custody). Also: box-artifact and CA-lease PQ companions are signed by
+  `pq-release-key.mjs`; phones and the webapp gate CA leases (shell **v171**); the Go helper reads
+  the time floor; keyd signs master only with owner evidence it checks. Open: metal and device
+  runs, no TPM quote or UKI, existing boxes keep the v1 premount until reburned, review (Q01/N10).
   Order: an endorsed box release first (its deposit reads carry the token; until `.com` serves
   `/api/time` a box stays on its own clock raised to the floor), then `.com`, then store builds.
 

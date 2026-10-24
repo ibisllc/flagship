@@ -236,7 +236,21 @@ still unlocks that disk; what it no longer yields is the STK, which authorizes
 everything the box does after boot (SWK/CGK deposits, tunnel, orders). Real
 protection of the boot key needs TPM sealing (plan N10).
 
-## 6. Where v2 plugs in (design sketch only)
+## 6. v2: what milestone 6 built (`pq-suites.md` §19)
+
+Built (draft, unreviewed, never run on metal): the boot key's ML-DSA half and an X-Wing lease
+key (TPM-sealed when a TPM answers), a fresh X-Wing reply key per request, hybrid-signed v2
+requests, hybrid-sealed replies and v3 leases signed by the owner's hybrid key, and the unlock
+policy on /boot that makes a strict box refuse every classical reply and lease. In the Go helper
+(`--v2-request`, `--reply-kem-key`, `--lease-kem-key`, `--owner-pq-pub-file`,
+`--unlock-policy-file`, `--time-floor-file`), the Rust compat CLI (same flags, same output; the
+Go/Rust parity corpus covers the v2 refusals), the Rust `unlock` flow (`PqBoot`, `v2.rs`,
+`tpm.rs`) and the generated premount (TPM unseal with tpm2-tools into a pipe). Not built: the
+TPM quote over a fresh challenge (no attestation), suspension and authority generations in the
+request, measured `/boot` (UKI), a migration that rewrites the premount on existing boxes (they
+keep the v1 premount until reburned). The sketch below is kept for those parts.
+
+## 6a. Where the rest of v2 plugs in (design sketch only)
 
 Depends on the PQ suite selection (another agent's draft), security N10's TPM
 policy review, keyd custody, and Q03. Nothing below is implemented.
