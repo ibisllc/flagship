@@ -234,6 +234,7 @@ public actor PqIdentityBinder {
     }
 }
 
+#if DEBUG
 /// A software key store for tests, previews and the mock gym: the seed is kept in memory.
 public final class InMemoryPqIdentityKeyStore: PqIdentityKeyStore, @unchecked Sendable {
     private let lock = NSLock()
@@ -322,3 +323,4 @@ public final class MockPqKeyBindingClient: PqKeyBindingClient, @unchecked Sendab
         stored[Self.slot(w)] = w
     }
 }
+#endif
