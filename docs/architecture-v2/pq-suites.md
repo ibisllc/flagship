@@ -892,6 +892,89 @@ once a release-key binding exists and refuses `--no-pq` once the pin is set;
     responder KEM key) adequate for forward secrecy and KCI?
 22. Sibling boxes are pinned on first sight from `/pods` + `.com`'s binding: a malicious `.com`
     at first contact can introduce an impostor sibling. Should sibling STKs come from the signed
-    server order instead?
+    server order instead? (Done in §16.1: under strict they do, with each sibling's key id.)
 23. Phones take rollout evidence as given when replaying (the box re-checks its own). Is a phone
     that believes "strict" when the box is not a safe failure in all paths?
+
+## 16. Closing the classical gaps left after milestone 5
+
+Each item below was a place where a classical-only or unauthenticated path could still decide
+authority. DRAFT like the rest of this file; external review (Q01) still applies.
+
+### 16.1 Siblings vouched for by the account, not `.com`
+
+Answers §15.1 question 22. The server order (`flagship/server-order/v1`, admin root else IRK, and
+its hybrid half) may carry `pqKeyIds`: per listed STK, the hybrid key id of that box's `box-stk`
+binding as the signing phone pinned it, or `-`. The canonical bytes are the v1 string plus
+`|pq=<ids comma-joined>`, so an order without them is byte-identical to v1 (vectors
+`server-order/pq-vectors.json`, TS/Swift/Kotlin). iOS and Android name the ids while any server is
+strict. A box (`siblingChainRefusal`, `pqChannel.ts`) accepts a sibling's PQ binding (for the
+PQ session it opens and the ones it answers, so access sync too) only when, under strict, the
+held order lists the sibling's STK, was hybrid-verified, and names exactly that key id; outside
+strict only an order that names a different key id is refused. Gossip frames from a server the
+hybrid-signed order does not list are dropped under strict (`admitSibling`), whatever the CGK MAC
+says. `.com` still serves `/pods` and the bindings; it can no longer introduce a sibling.
+
+### 16.2 The box artifact's k-of-n signatures
+
+`flagship/box-artifact/v2|<sha256(v1)>|<signer>|<keyId>`, hybrid-signed by each signer under a
+`release-key` binding with subject `flagship-box-artifact` carried in the manifest file
+(`pqBindings`); the pin is `release/box-artifact-trust.json` `pq` (generated into
+`BOX_RELEASE.trust.pq`, `BOX_ARTIFACT_PQ_PIN`). Empty pin: classical k-of-n. Pinned: a signer counts
+only with its verified companion (`pq-signature-required` when the classical ones alone would have
+met the threshold); manifests signed before the cut-over are listed by v1 digest
+(`legacyManifests`). The installer's shell verifier checks the same with OpenSSL 3.5+ (Ed25519 and
+ML-DSA-65 with the hybrid context string), vectors `box-artifact/pq-vectors.json`.
+
+### 16.3 CA endorsement leases
+
+`flagship/ca-lease/v2|<endorsementId>|<sha256(v1)>|<signedBy>|<keyId>`, hybrid-signed by the
+ca-track holder under a `release-key` binding with subject `flagship-ca-track`
+(`.maintainers/ca-pq/`). Pin `CA_LEASE_PQ_PIN` (empty today); once set, the box (folder and
+relay-trust material), and the Worker drop a lease with no verified companion unless its v1 digest
+is in `legacyLeases`. Vectors `ca-lease-pq/vectors.json`. The phones and the webapp still check the
+classical lease only (parity allowlist).
+
+### 16.4 Deposit reads
+
+The consume-once GETs of `swk-`, `cgk-`, `pairing-` and `entitlement-deposit` need the named
+server's own read token (`requireServerRead`, sub `s:<host>`); demo accounts read without one. The
+box's pollers send it (`ownDepositFetch`).
+
+### 16.5 keyd key slots
+
+`provision.swk` / `provision.cgk` no longer take the first key offered. A sealed delivery must
+carry the owner's signature over `flagship/<swk|cgk>-delivery/v1|<server>|<sealed>|<issuedAt>`,
+checked by keyd under the owner key `migrate` (root, at each keyd start) pins in `owner.json`; a raw
+key needs the boot ceremony's one-time token (`provision-ceremony.token`, written by keyd at start
+while a slot is empty, valid ten minutes, readable by keyd and root only). TS and Rust keyd answer
+byte for byte the same (rustBackend cross-check).
+
+### 16.6 Identity assertions to apps
+
+keyd signs `flagship/inject/v1` and `flagship/identity-header/v1` only in their fixed shapes: a
+member's per-app id at member | manager | master, `anonymous|anonymous`, or `apikey:<id>|api` with
+its scope (`identityAssertion.ts`, vectors `identity-assertion/`). On the box an invited person's
+rank is what an admin's verified order set, else the app's default when an admin's key made the
+invite, else Member: the manifest's `default_role` never raises anyone else, and the legacy
+membership store never raises anyone.
+
+## 17. Authenticated time
+
+`POST /api/time {nonce}` answers `flagship/signed-time/v1|<nonce>|<ms>` signed by `.com`'s CA
+operational key; the box accepts it only under a CA key its baked maintainer pin authorizes at that
+time (`signedTime.ts`, `trustedClock.ts`). The box runs it forward on the monotonic clock, keeps a
+floor on its disk and in `/boot/flagship-time-floor`, and expiry checks (CA leases, admin grants,
+debug access, device book and sibling bindings, share acceptance) read `trustedNow()`: never
+earlier than the floor or the authenticated estimate. The Rust boot client reads the floor, so a
+clock set back cannot revive an expired auto-unlock lease. Without an answer it is the system clock
+raised to the floor (`status().source`). Open: the Go `flagship-unseal` helper ignores the floor.
+
+## 18. Android: one prompt per session for hybrid signatures
+
+The ML-DSA seeds are wrapped under a session KEK (software AES-256-GCM, `0x02 || iv || ct`,
+AAD `flagship/pq-seed-wrap/v2`); the KEK is wrapped by a per-use-auth Keystore key and opened by the
+CryptoObject of the session's unlock prompt (`PqSessionKek`, `BiometricGate.evaluateUnlockingPq`).
+It stays in memory until the session locks, like the account key. Seeds under the old 300 s window
+are rewrapped right after that prompt; without a vault the old wrapping stays. iOS was not affected
+(its seeds open under the session's LAContext).
