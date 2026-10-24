@@ -47,6 +47,18 @@ public enum BootKey {
         return pins.pinnedBootKey(username: username, serverDomain: serverDomain)
     }
 
+    /// Boot unlock v2: the box's v2 material, verified under the STK's hybrid binding this device
+    /// pinned and naming the boot key it pinned; nil when the box has none or it does not verify.
+    public static func v2Material(username: String, serverDomain: String, bootPubHex: String,
+                                  mailbox: any SecretMailboxClient, pins: BoxKeyPins, now: Int64) async -> BootUnlockV2.Material? {
+        guard let stk = pins.verifiedBoxPqBinding(username: username, serverDomain: serverDomain),
+              let wire = try? await mailbox.fetchBootKeyBinding(serverDomain: serverDomain),
+              let text = wire.pqJSON,
+              let obj = try? JSONSerialization.jsonObject(with: Data(text.utf8))
+        else { return nil }
+        return try? BootUnlockV2.verifyMaterial(obj, serverDomain: serverDomain, bootPubHex: bootPubHex, stkBinding: stk, now: now)
+    }
+
     /// For a shared server: the boot key the STK pinned in the owner's offer
     /// vouches for, or nil. Nothing is stored.
     public static func forSharedServer(serverDomain: String, pinnedStkHex: String,

@@ -58,6 +58,24 @@ public enum QuantumSafetyService {
         return PqBoxChannelTunnel.Identity(binding: b, sign: sign)
     }
 
+    /// Boot unlock v2: the account key's (IRK) hybrid half on this device, as the coordinator's
+    /// owner signer; nil when this device holds no ML-DSA key for it.
+    public static func ownerPqSigner(irk: Curve25519.Signing.PrivateKey, username: String) async -> SecretRequestCoordinator.OwnerPqSigner? {
+        let id = PqIdentity(role: .accountIrk, subjectId: username, edKey: irk)
+        guard let held = await PqKeyStore.shared.key(for: id), let ml = QSHex.unhex(held.mldsaPubHex) else { return nil }
+        let edPub = [UInt8](irk.publicKey.rawRepresentation)
+        return SecretRequestCoordinator.OwnerPqSigner(publicKey: edPub + ml) { purpose, payload in
+            try PqHybrid.hybridSign(edPublicKey: edPub, mldsaPublicKey: ml, purpose: purpose, payload: payload,
+                                    edSign: { [UInt8](try irk.signature(for: Data($0))) }, mldsaSign: held.sign)
+        }
+    }
+
+    /// Whether this device replays the server's installation policy as strict.
+    public static func isStrict(username: String, serverDomain: String) -> Bool {
+        guard let r = store.replayed(account: username, scope: PolicyScope(kind: .installation, id: serverDomain.lowercased())) else { return false }
+        return AssurancePolicy.strictInForce(r.state)
+    }
+
     /// True when any server this device holds for the account is strict: sensitive orders then
     /// carry the signer's hybrid signature too.
     public static func anyStrict(username: String) -> Bool { store.anyStrict(account: username) }

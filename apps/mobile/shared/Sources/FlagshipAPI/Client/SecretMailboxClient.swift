@@ -189,9 +189,38 @@ public struct BootKeyBindingWire: Codable, Equatable, Sendable {
     /// The STK's hybrid signature over `flagship/boot-key-binding/v2|…` (architecture v2), when
     /// the box has an ML-DSA key; required once this device pinned that key.
     public let hybridSignature: String?
-    public init(binding: Binding, signature: String, hybridSignature: String? = nil) {
-        self.binding = binding; self.signature = signature; self.hybridSignature = hybridSignature
+    /// Boot unlock v2 (pq-suites.md §19): the `pq` material as raw JSON, verified by the caller
+    /// under the STK's pinned hybrid binding (`BootUnlockV2.verifyMaterial`).
+    public var pqJSON: String? = nil
+    public init(binding: Binding, signature: String, hybridSignature: String? = nil, pqJSON: String? = nil) {
+        self.binding = binding; self.signature = signature; self.hybridSignature = hybridSignature; self.pqJSON = pqJSON
     }
+    private enum CodingKeys: String, CodingKey { case binding, signature, hybridSignature, pq }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        binding = try c.decode(Binding.self, forKey: .binding)
+        signature = try c.decode(String.self, forKey: .signature)
+        hybridSignature = try c.decodeIfPresent(String.self, forKey: .hybridSignature)
+        pqJSON = rawJSON(try c.decodeIfPresent(AnyCodable.self, forKey: .pq))
+    }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(binding, forKey: .binding)
+        try c.encode(signature, forKey: .signature)
+        try c.encodeIfPresent(hybridSignature, forKey: .hybridSignature)
+        if let any = anyJSON(pqJSON) { try c.encode(any, forKey: .pq) }
+    }
+}
+
+/// A free-form JSON member kept as text (Sendable), for the PQ fields the caller verifies itself.
+func rawJSON(_ any: AnyCodable?) -> String? {
+    guard let any, !(any.value is NSNull), let d = try? JSONEncoder().encode(any) else { return nil }
+    return String(data: d, encoding: .utf8)
+}
+
+func anyJSON(_ text: String?) -> AnyCodable? {
+    guard let text, let d = text.data(using: .utf8) else { return nil }
+    return try? JSONDecoder().decode(AnyCodable.self, from: d)
 }
 
 /// The boot worker's lock record for a server (`GET /api/boot/suspension/:domain`).
@@ -470,6 +499,9 @@ public struct PendingSecretRequest: Codable, Equatable, Sendable, Identifiable {
     public let deviceInfo: DeviceInfoHint?
     public let postedAt: Int64
     public let expiresAt: Int64
+    /// Boot unlock v2: the request's `pq` extension (reply key + the boot key's hybrid
+    /// signature) as raw JSON; the phone verifies it (`BootUnlockV2.verifyRequest`).
+    public var pqJSON: String? = nil
 
     /// Stable id for SwiftUI lists — (domain, nonce) is unique per request.
     public var id: String { "\(serverDomain)#\(requestNonceHex)" }
@@ -477,12 +509,42 @@ public struct PendingSecretRequest: Codable, Equatable, Sendable, Identifiable {
     public init(
         serverDomain: String, requestNonceHex: String, stkPub: String,
         purpose: String, issuedAt: Int64, requestSignature: String,
-        deviceInfo: DeviceInfoHint?, postedAt: Int64, expiresAt: Int64
+        deviceInfo: DeviceInfoHint?, postedAt: Int64, expiresAt: Int64, pqJSON: String? = nil
     ) {
         self.serverDomain = serverDomain; self.requestNonceHex = requestNonceHex
         self.stkPub = stkPub; self.purpose = purpose; self.issuedAt = issuedAt
         self.requestSignature = requestSignature; self.deviceInfo = deviceInfo
-        self.postedAt = postedAt; self.expiresAt = expiresAt
+        self.postedAt = postedAt; self.expiresAt = expiresAt; self.pqJSON = pqJSON
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case serverDomain, requestNonceHex, stkPub, purpose, issuedAt, requestSignature, deviceInfo, postedAt, expiresAt, pq
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        serverDomain = try c.decode(String.self, forKey: .serverDomain)
+        requestNonceHex = try c.decode(String.self, forKey: .requestNonceHex)
+        stkPub = try c.decode(String.self, forKey: .stkPub)
+        purpose = try c.decode(String.self, forKey: .purpose)
+        issuedAt = try c.decode(Int64.self, forKey: .issuedAt)
+        requestSignature = try c.decode(String.self, forKey: .requestSignature)
+        deviceInfo = try c.decodeIfPresent(DeviceInfoHint.self, forKey: .deviceInfo)
+        postedAt = try c.decode(Int64.self, forKey: .postedAt)
+        expiresAt = try c.decode(Int64.self, forKey: .expiresAt)
+        pqJSON = rawJSON(try c.decodeIfPresent(AnyCodable.self, forKey: .pq))
+    }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(serverDomain, forKey: .serverDomain)
+        try c.encode(requestNonceHex, forKey: .requestNonceHex)
+        try c.encode(stkPub, forKey: .stkPub)
+        try c.encode(purpose, forKey: .purpose)
+        try c.encode(issuedAt, forKey: .issuedAt)
+        try c.encode(requestSignature, forKey: .requestSignature)
+        try c.encodeIfPresent(deviceInfo, forKey: .deviceInfo)
+        try c.encode(postedAt, forKey: .postedAt)
+        try c.encode(expiresAt, forKey: .expiresAt)
+        if let any = anyJSON(pqJSON) { try c.encode(any, forKey: .pq) }
     }
 }
 

@@ -34,6 +34,8 @@ public final class SecretRequestCoordinator {
         case directoryMissingServer(String)
         case purposeUnsupported(String)
         case noPendingRequest(String)
+        /// Boot unlock v2 refused under strict (`BootUnlockV2` codes).
+        case quantumSafe(String)
 
         public var errorDescription: String? {
             switch self {
@@ -47,6 +49,10 @@ public final class SecretRequestCoordinator {
                 return "Unsupported secret request type: \(p)."
             case .noPendingRequest:
                 return "Your box stopped waiting. Power-cycle it (unplug, plug back in) and it'll ask again."
+            case .quantumSafe("phone-cannot-sign-hybrid"):
+                return "This server is quantum-safe. Approve it on a device that holds your account key's quantum-resistant half (Settings, Quantum-safe protection)."
+            case .quantumSafe:
+                return "This server is quantum-safe, but it hasn't published its quantum-resistant unlock key. Update the server, or turn quantum-safe protection off for it."
             }
         }
     }
@@ -62,6 +68,9 @@ public final class SecretRequestCoordinator {
         /// unlock request from a box whose disk is still shut) the boot key
         /// the pinned STK vouched for. nil means the STK.
         public var recipientPubHex: String? = nil
+        /// Boot unlock v2: the box's verified material and this request's per-boot reply key.
+        public var pqMaterial: BootUnlockV2.Material? = nil
+        public var replyKemPubHex: String? = nil
         public var id: String { pending.id }
         public var serverDomain: String { pending.serverDomain }
         public var purpose: SecretPurpose? { SecretPurpose(rawValue: pending.purpose) }
@@ -106,6 +115,17 @@ public final class SecretRequestCoordinator {
     private let nonceGen: () -> Data
     /// The box keys this device pinned; a reply is never sealed to another.
     private let pins: BoxKeyPins
+    /// Boot unlock v2: the owner key's hybrid half on this device (nil when it holds none).
+    private let ownerPqProvider: (Curve25519.Signing.PrivateKey) async -> OwnerPqSigner?
+    /// Whether the server's policy (as this device replays it) is strict.
+    private let strictFor: (String) -> Bool
+
+    /// The owner key's hybrid public key and a signer for it.
+    public struct OwnerPqSigner {
+        public let publicKey: [UInt8]
+        public let sign: BootUnlockV2.OwnerSigner
+        public init(publicKey: [UInt8], sign: @escaping BootUnlockV2.OwnerSigner) { self.publicKey = publicKey; self.sign = sign }
+    }
 
     public init(
         mailbox: SecretMailboxClient,
@@ -116,9 +136,13 @@ public final class SecretRequestCoordinator {
         watchDelegateKeyProvider: @escaping () -> Curve25519.Signing.PrivateKey? = { nil },
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         nonceGen: @escaping () -> Data = { SecretRequestCoordinator.randomNonce() },
-        pins: BoxKeyPins = .shared
+        pins: BoxKeyPins = .shared,
+        ownerPqProvider: @escaping (Curve25519.Signing.PrivateKey) async -> OwnerPqSigner? = { _ in nil },
+        strictFor: @escaping (String) -> Bool = { _ in false }
     ) {
         self.pins = pins
+        self.ownerPqProvider = ownerPqProvider
+        self.strictFor = strictFor
         self.mailbox = mailbox
         self.username = username
         self.irkProvider = irkProvider
@@ -190,7 +214,19 @@ public final class SecretRequestCoordinator {
             )
             // RE-VERIFY the box's request under that key.
             guard SecretRequest.verify(request, signature: sig, stkPub: signer) else { continue }
-            verified.append(VerifiedRequest(pending: pending, directoryStkPubHex: stkHex, recipientPubHex: recipient))
+            var v = VerifiedRequest(pending: pending, directoryStkPubHex: stkHex, recipientPubHex: recipient)
+            // Boot unlock v2: the box's hybrid material through the pinned STK, then the request's
+            // hybrid signature under the boot key's hybrid key. Anything that fails leaves v1.
+            if let boot = recipient, let text = pending.pqJSON,
+               let material = await BootKey.v2Material(username: username, serverDomain: pending.serverDomain,
+                                                       bootPubHex: boot, mailbox: mailbox, pins: pins, now: now()),
+               let obj = try? JSONSerialization.jsonObject(with: Data(text.utf8)),
+               let kem = try? BootUnlockV2.verifyRequest(serverDomain: pending.serverDomain, bootPubHex: boot, purpose: pending.purpose,
+                                                         nonceHex: pending.requestNonceHex, issuedAt: pending.issuedAt, pq: obj, material: material) {
+                v.pqMaterial = material
+                v.replyKemPubHex = HexUtil.encode(Data(kem))
+            }
+            verified.append(v)
         }
         return verified
     }
@@ -245,8 +281,11 @@ public final class SecretRequestCoordinator {
         // entitlement path still needs the IRK for its mailbox/boot AUTH
         // envelope, and the delegate is scoped to the boot-approval response
         // alone, so we resolve the IRK lazily only when a branch needs it.
+        // A strict server needs the owner key's hybrid signature, so the watch's quick approve
+        // (no IRK) does not apply to it: the phone asks for the account key.
+        let strict = strictFor(verified.serverDomain)
         let delegateKey: Curve25519.Signing.PrivateKey? =
-            (purpose == .unlockKey && !depositAutoLease) ? watchDelegateKeyProvider() : nil
+            (purpose == .unlockKey && !depositAutoLease && !strict) ? watchDelegateKeyProvider() : nil
         let irk: Curve25519.Signing.PrivateKey? =
             delegateKey == nil ? try await irkProvider() : nil
         func requireIrk() throws -> Curve25519.Signing.PrivateKey {
@@ -260,7 +299,7 @@ public final class SecretRequestCoordinator {
         var unlockKey: Data?
         switch purpose {
         case .unlockKey:
-            let reply = try await buildUnlockReply(request: sealRequest)
+            let reply = try await buildUnlockReply(request: sealRequest, verified: verified, irk: irk, strict: strict)
             sealedHex = reply.sealedHex
             unlockKey = reply.luksKey
         case .entitlement:
@@ -327,7 +366,8 @@ public final class SecretRequestCoordinator {
         // future reboots (the user's IRK authorizes it here — I2). Only for
         // unlock-key; the key is the one we just recovered, never `.com`-visible.
         if depositAutoLease, purpose == .unlockKey, let key = unlockKey {
-            return try await depositAutoUnlockLease(request: sealRequest, luksKey: key, irk: try requireIrk())
+            return try await depositAutoUnlockLease(request: sealRequest, luksKey: key, irk: try requireIrk(),
+                                                    material: verified.pqMaterial, strict: strict)
         }
         return nil
     }
@@ -433,7 +473,9 @@ public final class SecretRequestCoordinator {
     private func depositAutoUnlockLease(
         request: SecretRequest,
         luksKey: Data,
-        irk: Curve25519.Signing.PrivateKey
+        irk: Curve25519.Signing.PrivateKey,
+        material: BootUnlockV2.Material? = nil,
+        strict: Bool = false
     ) async throws -> String? {
         let issuedAt = now()
         // A locked server takes no new lease: only an explicit, signed resume re-arms auto-unlock.
@@ -448,7 +490,14 @@ public final class SecretRequestCoordinator {
             now: issuedAt
         ) else { return nil }
         let leaseId = AutoUnlockLeaseV2.randomLeaseId()
-        let lease = try AutoUnlockLeaseV2.build(
+        // Boot unlock v2: a v3 lease is sealed to the box's lease key and signed hybrid inside;
+        // the worker still checks the classical outer signature.
+        let owner = material != nil ? await ownerPqProvider(irk) : nil
+        let leaseVersion: Int
+        do {
+            leaseVersion = try BootUnlockV2.chooseLeaseVersion(strict: strict, material: material != nil, canSignHybrid: owner != nil)
+        } catch let e as BootUnlockV2.Failure { throw CoordinatorError.quantumSafe(e.code) }
+        var lease = try AutoUnlockLeaseV2.build(
             serverDomain: request.serverDomain,
             stkPub: request.stkPub,
             leaseId: leaseId,
@@ -456,6 +505,12 @@ public final class SecretRequestCoordinator {
             issuedAt: issuedAt,
             expiresAt: expiresAt
         )
+        if leaseVersion == 3, let material, let owner {
+            lease.sealedKey = Data(try BootUnlockV2.sealLease(
+                serverDomain: request.serverDomain, bootPubHex: HexUtil.encode(request.stkPub), leaseId: leaseId,
+                issuedAt: issuedAt, expiresAt: expiresAt, leaseKemPublicKey: material.leaseKemPublicKey,
+                diskKey: [UInt8](luksKey), ownerHybridPublicKey: owner.publicKey, sign: owner.sign))
+        }
         let sig = try lease.sign(with: irk)
         let depositAuth = try BootAuth.ownerHeader(
             serverDomain: lease.serverDomain,
@@ -486,7 +541,8 @@ public final class SecretRequestCoordinator {
     /// Fetch the phone-sealed LUKS key, unseal it with the phone's existing
     /// Ed25519 key material (the installer sealed it against one of these),
     /// then re-seal it FOR `request.stkPub` (the boot key, or the STK) bound to (nonce, purpose).
-    private func buildUnlockReply(request: SecretRequest) async throws -> (sealedHex: String, luksKey: Data) {
+    private func buildUnlockReply(request: SecretRequest, verified: VerifiedRequest? = nil,
+                                  irk: Curve25519.Signing.PrivateKey? = nil, strict: Bool = false) async throws -> (sealedHex: String, luksKey: Data) {
         let sealedLuks: SealedLuksKeyResponse
         do {
             sealedLuks = try await mailbox.fetchSealedLuksKey(serverDomain: request.serverDomain, username: username)
@@ -509,6 +565,20 @@ public final class SecretRequestCoordinator {
         }
         guard let key = luksKey else { throw CoordinatorError.luksUnsealFailed }
 
+        // Boot unlock v2 (pq-suites.md §19): the box's policy, not the request, decides whether a
+        // classical reply is still allowed.
+        let owner: OwnerPqSigner? = (verified?.pqMaterial != nil && irk != nil) ? await ownerPqProvider(irk!) : nil
+        let version: Int
+        do {
+            version = try BootUnlockV2.chooseReplyVersion(strict: strict, material: verified?.pqMaterial != nil,
+                                                          requestHasPq: verified?.replyKemPubHex != nil, canSignHybrid: owner != nil)
+        } catch let e as BootUnlockV2.Failure { throw CoordinatorError.quantumSafe(e.code) }
+        if version == 2, let owner, let replyHex = verified?.replyKemPubHex, let reply = HexUtil.decode(replyHex) {
+            let sealed = try BootUnlockV2.buildReply(
+                serverDomain: request.serverDomain, bootPubHex: HexUtil.encode(request.stkPub), nonceHex: HexUtil.encode(request.nonce),
+                replyKemPub: [UInt8](reply), diskKey: [UInt8](key), ownerHybridPublicKey: owner.publicKey, issuedAt: now(), sign: owner.sign)
+            return (HexUtil.encode(Data(sealed)), key)
+        }
         // Re-seal FOR the box's STK, nonce/purpose-bound. Also hand back the
         // recovered key so an "auto" approval can deposit a box-sealed lease.
         let resp = try SealedSecretResponse.build(secret: key, request: request, now: now)
