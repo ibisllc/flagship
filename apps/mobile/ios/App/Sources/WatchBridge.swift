@@ -91,7 +91,8 @@ final class WatchBridge: NSObject {
                         mailbox: mailbox,
                         username: username,
                         delegateKey: { Keystore.watchDelegateKey() },
-                        bootKey: { Keystore.watchBootKey() }
+                        bootKey: { Keystore.watchBootKey() },
+                        pinnedStk: { CertPinRegistry.shared.stkPub(forDomain: $0) }
                     ).approve(requestId: requestId)
                 }
             )

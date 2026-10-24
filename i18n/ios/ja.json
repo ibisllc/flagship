@@ -2600,5 +2600,6 @@
   "This server isn't registered to your account.": "このサーバーはあなたのアカウントに登録されていません。",
   "This server is locked. Approve its start-up from your iPhone.": "このサーバーはロックされています。iPhone から起動を承認してください。",
   "Turn on Approve from watch in Account security first.": "先に「アカウントのセキュリティ」で「ウォッチで承認」をオンにしてください。",
-  "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "ウォッチの承認の期限が切れました。「アカウントのセキュリティ」で「ウォッチで承認」をオフにしてから、もう一度オンにしてください。"
+  "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "ウォッチの承認の期限が切れました。「アカウントのセキュリティ」で「ウォッチで承認」をオフにしてから、もう一度オンにしてください。",
+  "This server's key doesn't match. Approve its start-up from your phone.": "このサーバーのキーが一致しません。スマートフォンから起動を承認してください。"
 }
