@@ -85,6 +85,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0111",
   // Owner-signed assurance policy changes, chained per scope.
   "0112",
+  // The owner's hybrid signature beside the server order's classical one.
+  "0113",
 ];
 
 export interface SchemaStatusDeps {

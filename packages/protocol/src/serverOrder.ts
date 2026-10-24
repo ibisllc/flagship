@@ -27,6 +27,8 @@ export interface ServerOrder {
 export interface SignedServerOrder {
   order: ServerOrder;
   signature: string;
+  /** Architecture v2: the signer's hybrid signature, kept so boxes can pass it on and re-check it. */
+  pqSignature?: { suite: string; signature: string };
 }
 
 export function canonicalServerOrder(o: ServerOrder): Bytes {
@@ -65,7 +67,7 @@ export function verifyServerOrder(o: ServerOrder, signatureHex: string, pub: Byt
 /** Parse an untrusted `{order, signature}` into its typed shape, or null. Does not verify. */
 export function parseSignedServerOrder(raw: unknown): SignedServerOrder | null {
   if (!raw || typeof raw !== "object") return null;
-  const r = raw as { order?: Partial<ServerOrder>; signature?: unknown };
+  const r = raw as { order?: Partial<ServerOrder>; signature?: unknown; pqSignature?: unknown };
   const o = r.order;
   if (
     !o || typeof o.user !== "string" || !Array.isArray(o.stks) ||
@@ -79,7 +81,11 @@ export function parseSignedServerOrder(raw: unknown): SignedServerOrder | null {
   } catch {
     return null;
   }
-  return { order, signature: r.signature.toLowerCase() };
+  const pq = r.pqSignature as { suite?: unknown; signature?: unknown } | undefined;
+  const pqSignature = pq && typeof pq === "object" && typeof pq.suite === "string" && typeof pq.signature === "string"
+    ? { suite: pq.suite, signature: pq.signature.toLowerCase() }
+    : undefined;
+  return { order, signature: r.signature.toLowerCase(), ...(pqSignature ? { pqSignature } : {}) };
 }
 
 /**

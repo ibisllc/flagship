@@ -6,8 +6,10 @@ import {
   verifyUpdateOrder,
   type AdminGrantView,
   type UpdateOrder,
+  canonicalUpdateOrder,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { hybridOrderSignature } from "./pqAuthority.js";
 import { readInstalledReleaseSync, type ReleaseSwapper, ArtifactRefusedError } from "./artifactUpdate.js";
 import type { AuthorityHub } from "./authority/hub.js";
 import { LedgerError } from "./authority/operationLedger.js";
@@ -253,6 +255,8 @@ export function filePendingVerifyStore(path: string): PendingVerifyStore {
 export function decodeUpdateOrderCarrier(sealedHex: string): {
   order: UpdateOrder;
   signature: Uint8Array;
+  /** The client's hybrid signature (architecture v2), required while strict is in force. */
+  pqSignature?: unknown;
 } {
   const hexLower = sealedHex.toLowerCase();
   if (!HEX.test(hexLower) || hexLower.length % 2 !== 0) {
@@ -279,6 +283,7 @@ export function decodeUpdateOrderCarrier(sealedHex: string): {
       issuedAt?: unknown;
     };
     signature?: unknown;
+    pqSignature?: unknown;
   };
   const o = p?.order;
   if (
@@ -308,6 +313,7 @@ export function decodeUpdateOrderCarrier(sealedHex: string): {
       issuedAt: o.issuedAt,
     },
     signature,
+    ...(p.pqSignature !== undefined ? { pqSignature: p.pqSignature } : {}),
   };
 }
 
@@ -428,8 +434,9 @@ export async function runUpdateConsumer(
   // 2. Decode the carrier (shape only — no trust yet).
   let order: UpdateOrder;
   let signature: Uint8Array;
+  let pqSignature: unknown;
   try {
-    ({ order, signature } = decodeUpdateOrderCarrier(sealedHex));
+    ({ order, signature, pqSignature } = decodeUpdateOrderCarrier(sealedHex));
   } catch (e) {
     log(`[self-update] carrier rejected: ${(e as Error).message}`);
     return { applied: false, reason: "rejected" };
@@ -446,6 +453,7 @@ export async function runUpdateConsumer(
       order,
       signature,
       verify: verifyUpdateOrder,
+      hybrid: hybridOrderSignature(canonicalUpdateOrder(order), pqSignature),
       ownerIrkPub: opts.ownerIrkPub,
       adminRootPub: opts.adminRootPub,
       username: opts.username,

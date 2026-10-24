@@ -1,6 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
+  canonicalServerOrder,
   parseSignedServerOrder,
   verifyServerOrder,
   type AdminGrantView,
@@ -8,6 +9,7 @@ import {
   type SignedServerOrder,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { hybridOrderSignature } from "./pqAuthority.js";
 import { writeFileDurable } from "./durableFile.js";
 
 /**
@@ -73,6 +75,7 @@ export function buildServerOrderHolder(opts: ServerOrderHolderOptions): ServerOr
     const ok = authorizeSensitiveOrder<ServerOrder>({
       order: signed.order,
       signature: sigBytes(signed.signature),
+      hybrid: hybridOrderSignature(canonicalServerOrder(signed.order), signed.pqSignature ?? (raw as { pqSignature?: unknown } | null)?.pqSignature),
       verify: (o, sig, pub) => verifyServerOrder(o, hex(sig), pub),
       ownerIrkPub: opts.ownerIrkPub,
       ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),

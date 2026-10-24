@@ -71,6 +71,7 @@ export async function handlePostServerOrder(
     orderJson: JSON.stringify(order),
     signatureHex: signature,
     issuedAt: order.issuedAt,
+    pqSignatureJson: signed.pqSignature ? JSON.stringify(signed.pqSignature) : null,
   });
   if (!put.ok) return conflict(put.reason);
   return ok({ ok: true });
@@ -84,7 +85,11 @@ export async function readServerOrder(
   const row = await serverOrders.get(username);
   if (!row) return null;
   try {
-    return parseSignedServerOrder({ order: JSON.parse(row.orderJson), signature: row.signatureHex });
+    return parseSignedServerOrder({
+      order: JSON.parse(row.orderJson),
+      signature: row.signatureHex,
+      ...(row.pqSignatureJson ? { pqSignature: JSON.parse(row.pqSignatureJson) } : {}),
+    });
   } catch {
     return null;
   }

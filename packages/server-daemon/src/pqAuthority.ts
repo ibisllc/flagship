@@ -66,3 +66,19 @@ export function gateSigner(ctx: PqAuthorityContext | null, signerPubHex: string,
     return e instanceof PqTrustError ? e.code : "bad-signature";
   }
 }
+
+const HEX = /^(?:[0-9a-f]{2})+$/;
+
+/**
+ * The hybrid signature a client sends beside an order's classical one (`pqSignature: { suite,
+ * signature }` next to `signature`), bound to that order's canonical bytes. A field that is
+ * present but not this shape becomes an envelope the gate refuses, so a broken PQ half never
+ * reads as "no PQ half".
+ */
+export function hybridOrderSignature(canonical: Uint8Array, raw: unknown): HybridOrderSignature | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const o = raw as { suite?: unknown; signature?: unknown };
+  const suite = o && typeof o === "object" && typeof o.suite === "string" ? o.suite : "unknown";
+  const signature = o && typeof o === "object" && typeof o.signature === "string" && HEX.test(o.signature) ? o.signature : "zz";
+  return { message: canonical, envelope: { suite: suite as SignatureEnvelope["suite"], signature } };
+}

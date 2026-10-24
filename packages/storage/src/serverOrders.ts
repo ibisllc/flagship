@@ -10,6 +10,8 @@ export interface ServerOrderRecord {
   orderJson: string;
   signatureHex: string;
   issuedAt: number;
+  /** The hybrid signature as JSON `{suite, signature}` (migration 0113), when the client sent one. */
+  pqSignatureJson?: string | null;
 }
 
 export interface ServerOrderStorage {
@@ -24,6 +26,7 @@ interface ServerOrderRow {
   order_json: string;
   signature_hex: string;
   issued_at: number;
+  pq_signature_json?: string | null;
 }
 
 export class D1ServerOrderStorage implements ServerOrderStorage {
@@ -31,26 +34,27 @@ export class D1ServerOrderStorage implements ServerOrderStorage {
 
   async get(username: string) {
     const row = await this.db
-      .prepare("SELECT username, order_json, signature_hex, issued_at FROM server_orders WHERE username = ?1")
+      .prepare("SELECT username, order_json, signature_hex, issued_at, pq_signature_json FROM server_orders WHERE username = ?1")
       .bind(username.toLowerCase())
       .first<ServerOrderRow>();
     return row
-      ? { username: row.username, orderJson: row.order_json, signatureHex: row.signature_hex, issuedAt: row.issued_at }
+      ? { username: row.username, orderJson: row.order_json, signatureHex: row.signature_hex, issuedAt: row.issued_at, pqSignatureJson: row.pq_signature_json ?? null }
       : null;
   }
 
   async putIfNewer(rec: ServerOrderRecord) {
     const r = await this.db
       .prepare(
-        `INSERT INTO server_orders (username, order_json, signature_hex, issued_at)
-         VALUES (?1, ?2, ?3, ?4)
+        `INSERT INTO server_orders (username, order_json, signature_hex, issued_at, pq_signature_json)
+         VALUES (?1, ?2, ?3, ?4, ?5)
          ON CONFLICT(username) DO UPDATE SET
            order_json = excluded.order_json,
            signature_hex = excluded.signature_hex,
-           issued_at = excluded.issued_at
+           issued_at = excluded.issued_at,
+           pq_signature_json = excluded.pq_signature_json
          WHERE excluded.issued_at > server_orders.issued_at`,
       )
-      .bind(rec.username.toLowerCase(), rec.orderJson, rec.signatureHex, rec.issuedAt)
+      .bind(rec.username.toLowerCase(), rec.orderJson, rec.signatureHex, rec.issuedAt, rec.pqSignatureJson ?? null)
       .run();
     return (r.meta?.changes ?? 0) > 0
       ? { ok: true as const }
