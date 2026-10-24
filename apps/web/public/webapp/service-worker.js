@@ -358,6 +358,7 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v170: Quantum-safe protection lists each strict server's apps with their own browser answer (view only).
 //  v169: Settings, Quantum-safe protection shows each server's policy (view only: the browser holds no PQ key); security notices need the release key's PQ half once its pin is set (lib/releasePqPin.js).
 //  v168: the browser checks the owner-signed assurance policy and the critical-signature gate (lib/assurancePolicy.js, lib/pqBinding.js); a strict server needs the boot key's hybrid signature.
 //  v167: the box's STK binds an ML-DSA-65 key; the browser pins it under the pinned STK and then needs the boot-key binding's hybrid signature (lib/pqBinding.js, vendor/noble-post-quantum).
@@ -371,7 +372,7 @@
 //  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
 //  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v169";
+const SHELL_VERSION = "v170";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

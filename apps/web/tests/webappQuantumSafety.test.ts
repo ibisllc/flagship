@@ -47,4 +47,16 @@ describe("webapp quantum-safe protection view", () => {
     expect(html).toContain('id="view-quantum-safety"');
     expect(readFileSync(resolve(__dirname, "../public/webapp/service-worker.js"), "utf8")).toContain('"/views/quantum-safety.js"');
   });
+
+  it("lists a strict server's apps from what the server reports, each with its own browser answer", async () => {
+    const v = await view();
+    expect(v.appIdsOf({ runsServices: ["b--two", "a--one", "a--one", "BAD id"] })).toEqual(["a--one", "b--two"]);
+    expect(v.appIdsOf({ leadsServices: ["x--y"] })).toEqual(["x--y"]);
+    expect(v.appIdsOf({})).toEqual([]);
+    const scope = { kind: "service", id: "home.alice.flagship.services:a--one" };
+    expect(v.describeApp(legacyPolicyState(scope), true)).toBe("browsers may reach it");
+    expect(v.describeApp({ ...legacyPolicyState(scope), profile: "strict", rollout: "enforced" }, false)).toBe(
+      "only the Flagship app; browsers are refused (as reported by flagshipserver.com)",
+    );
+  });
 });
