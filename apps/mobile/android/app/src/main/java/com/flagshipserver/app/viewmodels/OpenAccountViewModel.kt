@@ -218,6 +218,8 @@ class OpenAccountViewModel(
                 setActive = true,
             )
 
+            // Bind the new IRK, admin root and device key to ML-DSA-65 keys, in the background.
+            com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
             _phase.value = OpenAccountPhase.Opened
         } catch (t: Throwable) {
             _phase.value = OpenAccountPhase.Failed(UserErrorText.of(t, "Couldn't open your account. Try again."))
