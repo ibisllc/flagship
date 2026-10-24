@@ -11066,22 +11066,6 @@
     "en": "The server is restarting",
     "ctx": "webapp/lib/bootSuspension.js:248"
   },
-  " from {0}": {
-    "en": " from {0}",
-    "ctx": "webapp/lib/appPlacement.js:352"
-  },
-  "other server keeps its copy": {
-    "en": "other server keeps its copy",
-    "ctx": "webapp/lib/appPlacement.js:354"
-  },
-  "other {0} servers keep their copies": {
-    "en": "other {0} servers keep their copies",
-    "ctx": "webapp/lib/appPlacement.js:354"
-  },
-  "This uninstalls {0}{1} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.{2}": {
-    "en": "This uninstalls {0}{1} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.{2}",
-    "ctx": "webapp/lib/appPlacement.js:356"
-  },
   "Let it build…": {
     "en": "Let it build…",
     "ctx": "webapp/lib/companionDelegation.js:14"
@@ -11150,14 +11134,6 @@
     "en": "This app stays on the version it is on.",
     "ctx": "webapp/lib/updateMode.js:14"
   },
-  " until {0}": {
-    "en": " until {0}",
-    "ctx": "webapp/views/paired-sessions.js:40"
-  },
-  "May {0} {1}{2}": {
-    "en": "May {0} {1}{2}",
-    "ctx": "webapp/views/paired-sessions.js:40"
-  },
   "App": {
     "en": "App",
     "ctx": "webapp/views/paired-sessions.js:68"
@@ -11194,8 +11170,36 @@
     "en": "Back up the app, save the file, then remove it.",
     "ctx": "webapp/views/service-detail.js:1062"
   },
-  " Your {0}.": {
-    "en": " Your {0}.",
+  "This uninstalls {0} from {1} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.": {
+    "en": "This uninstalls {0} from {1} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.",
+    "ctx": "webapp/lib/appPlacement.js:353"
+  },
+  "This uninstalls {0} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.": {
+    "en": "This uninstalls {0} and deletes its files, database, sign-ins, keys and settings there. Nothing is kept in a recently-deleted folder, so this can't be undone. To keep your data, cancel and use Back up now first.",
     "ctx": "webapp/lib/appPlacement.js:354"
+  },
+  "May build and deploy {0} until {1}": {
+    "en": "May build and deploy {0} until {1}",
+    "ctx": "webapp/views/paired-sessions.js:37"
+  },
+  "May deploy {0} until {1}": {
+    "en": "May deploy {0} until {1}",
+    "ctx": "webapp/views/paired-sessions.js:37"
+  },
+  "May build {0} until {1}": {
+    "en": "May build {0} until {1}",
+    "ctx": "webapp/views/paired-sessions.js:37"
+  },
+  "May build and deploy {0}": {
+    "en": "May build and deploy {0}",
+    "ctx": "webapp/views/paired-sessions.js:39"
+  },
+  "May deploy {0}": {
+    "en": "May deploy {0}",
+    "ctx": "webapp/views/paired-sessions.js:39"
+  },
+  "May build {0}": {
+    "en": "May build {0}",
+    "ctx": "webapp/views/paired-sessions.js:39"
   }
 }

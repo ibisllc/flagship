@@ -232,7 +232,7 @@ export async function openAccount(username, deps) {
     signatureHex: toHex(await (deps.signWithDevice
       ? deps.signWithDevice(deviceKey, canonicalDeviceSelfProfile(deviceUnsigned))
       : new Uint8Array(await crypto.subtle.sign(
-          { name: tr("Ed25519") },
+          { name: "Ed25519" },
           deviceKey.privateKey,
           canonicalDeviceSelfProfile(deviceUnsigned),
         )))),
