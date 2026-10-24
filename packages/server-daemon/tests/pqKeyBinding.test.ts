@@ -47,8 +47,8 @@ describe("the box's hybrid key on a strict installation", () => {
   it("binds once, re-binds the boot key with both signatures, and reports through the gate", async () => {
     const c = await com();
     const args = { serverDomain: S, stkPubHex: hex(stk.publicKey), mldsaPubHex, stkHybrid, controlPlaneBaseUrl: BASE, fetch: c.fetchImpl };
-    expect(await ensureStkPqBinding(args)).toBe("bound");
-    expect(await ensureStkPqBinding(args)).toBe("ok");
+    expect((await ensureStkPqBinding(args)).status).toBe("bound");
+    expect((await ensureStkPqBinding(args)).status).toBe("ok");
 
     const files = new Map([["/boot/flagship-boot-key.pub", hex(bootPub)]]);
     const deps = { exists: (p: string) => files.has(p), read: async (p: string) => files.get(p)!, write: async () => {} };

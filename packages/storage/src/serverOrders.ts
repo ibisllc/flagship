@@ -38,7 +38,7 @@ export class D1ServerOrderStorage implements ServerOrderStorage {
       .bind(username.toLowerCase())
       .first<ServerOrderRow>();
     return row
-      ? { username: row.username, orderJson: row.order_json, signatureHex: row.signature_hex, issuedAt: row.issued_at, pqSignatureJson: row.pq_signature_json ?? null }
+      ? { username: row.username, orderJson: row.order_json, signatureHex: row.signature_hex, issuedAt: row.issued_at, ...(row.pq_signature_json ? { pqSignatureJson: row.pq_signature_json } : {}) }
       : null;
   }
 
