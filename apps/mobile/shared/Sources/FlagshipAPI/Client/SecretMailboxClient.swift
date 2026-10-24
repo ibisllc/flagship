@@ -123,6 +123,14 @@ public protocol SecretMailboxClient: Sendable {
     /// DELETE {boot}/api/boot/lease/:domain — revoke EVERY lease for the
     /// server (owner-IRK). Used when the dead-man switch is switched on.
     func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws
+
+    /// PUT {boot}/api/boot/watch-key — owner header: a copy of one server's disk key sealed to a watch's
+    /// boot-only key, attested by the account key (docs/watch-boot-approval-without-unlock.md, option (a)).
+    func depositWatchBootKey(_ deposit: WatchBootDepositWire, bootAuth: String) async throws
+    /// GET {boot}/api/boot/watch-key/:domain — delegate header: this watch's copy. 423 while the server is locked.
+    func fetchWatchBootKey(serverDomain: String, bootAuth: String) async throws -> WatchBootDepositWire
+    /// DELETE {boot}/api/boot/watch-key/:domain — owner header: every watch copy for the server goes.
+    func revokeWatchBootKeys(serverDomain: String, bootAuth: String) async throws
 }
 
 public extension SecretMailboxClient {
@@ -138,9 +146,42 @@ public extension SecretMailboxClient {
     func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws {
         throw ScreensClientError.notImplemented("revoke all leases")
     }
+    func depositWatchBootKey(_ deposit: WatchBootDepositWire, bootAuth: String) async throws {
+        throw ScreensClientError.notImplemented("watch boot key")
+    }
+    func fetchWatchBootKey(serverDomain: String, bootAuth: String) async throws -> WatchBootDepositWire {
+        throw ScreensClientError.notImplemented("watch boot key")
+    }
+    func revokeWatchBootKeys(serverDomain: String, bootAuth: String) async throws {
+        throw ScreensClientError.notImplemented("watch boot key")
+    }
 }
 
 /// The boot worker's lock record for a server (`GET /api/boot/suspension/:domain`).
+/// One watch's copy of a server's disk key, as the boot worker stores it (`flagship/watch-boot-delegate/v1`).
+public struct WatchBootDepositWire: Codable, Equatable, Sendable {
+    public let serverDomain: String
+    public let delegatePubHex: String
+    public let decryptPubHex: String
+    public let keySha256Hex: String
+    public let issuedAt: Int64
+    public let expiresAt: Int64
+    public let sealedKeyHex: String
+    public let signatureHex: String
+
+    public init(serverDomain: String, delegatePubHex: String, decryptPubHex: String, keySha256Hex: String,
+                issuedAt: Int64, expiresAt: Int64, sealedKeyHex: String, signatureHex: String) {
+        self.serverDomain = serverDomain
+        self.delegatePubHex = delegatePubHex
+        self.decryptPubHex = decryptPubHex
+        self.keySha256Hex = keySha256Hex
+        self.issuedAt = issuedAt
+        self.expiresAt = expiresAt
+        self.sealedKeyHex = sealedKeyHex
+        self.signatureHex = signatureHex
+    }
+}
+
 public struct BootSuspensionStateWire: Codable, Equatable, Sendable {
     public let serverDomain: String
     public let suspended: Bool
@@ -991,6 +1032,25 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         try await sendBoot("DELETE", "/api/boot/lease/\(serverDomain)", body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
     }
 
+    public func depositWatchBootKey(_ deposit: WatchBootDepositWire, bootAuth: String) async throws {
+        struct Body: Encodable { let deposit: WatchBootDepositWire }
+        try await sendBoot("PUT", "/api/boot/watch-key", body: try JSONEncoder().encode(Body(deposit: deposit)),
+                           bootAuth: bootAuth, acceptStatuses: [200, 201])
+    }
+
+    public func fetchWatchBootKey(serverDomain: String, bootAuth: String) async throws -> WatchBootDepositWire {
+        struct Reply: Decodable { let deposit: WatchBootDepositWire }
+        let (data, status) = try await bootExchange("GET", "/api/boot/watch-key/\(serverDomain)", body: Data(), bootAuth: bootAuth)
+        guard status == 200 else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(Reply.self, from: data).deposit
+    }
+
+    public func revokeWatchBootKeys(serverDomain: String, bootAuth: String) async throws {
+        try await sendBoot("DELETE", "/api/boot/watch-key/\(serverDomain)", body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
+    }
+
     public func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         // String-concat the URL (not appendingPathComponent) so the multi-segment
@@ -1232,6 +1292,9 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         SecretRequestsResponse(username: auth.auth.username, requests: pending)
     }
     public func postResponse(response: SecretResponseBody, bootAuth: String) async throws {
+        if bootHeader(bootAuth)?.role == "delegate", lockedDomains.contains(response.serverDomain.lowercased()) {
+            throw ScreensClientError.http(status: 423, message: Self.lockedBody)
+        }
         postedResponses.append((response, bootAuth))
         // `.com` drops a request once it has an answer.
         pending.removeAll {
@@ -1307,6 +1370,52 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         revokedAll.append((serverDomain, bootAuth))
         GymProbe.note("revoked all leases \(serverDomain)")
     }
+    /// The boot worker's watch copies, by server (lower-cased).
+    public var watchBootKeys: [String: WatchBootDepositWire] = [:]
+    /// Servers the owner locked: a delegate gets nothing for them (423).
+    public var lockedDomains: Set<String> = []
+    public private(set) var watchBootKeyRevokes: [String] = []
+
+    private struct BootHeader: Decodable { let role: String; let serverDomain: String; let method: String; let path: String; let pubKeyHex: String? }
+
+    private func bootHeader(_ bootAuth: String) -> BootHeader? {
+        var b64 = String(bootAuth.split(separator: " ").last ?? "")
+            .replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        guard let data = Data(base64Encoded: b64) else { return nil }
+        return try? JSONDecoder().decode(BootHeader.self, from: data)
+    }
+
+    private static let lockedBody = #"{"error":"this server is locked: approve its start-up from your phone","locked":true}"#
+
+    public func depositWatchBootKey(_ deposit: WatchBootDepositWire, bootAuth: String) async throws {
+        guard let h = bootHeader(bootAuth), h.role == "owner", h.method == "PUT", h.path == "/api/boot/watch-key",
+              h.serverDomain.lowercased() == deposit.serverDomain.lowercased()
+        else { throw ScreensClientError.http(status: 401, message: "unauthorized") }
+        watchBootKeys[deposit.serverDomain.lowercased()] = deposit
+        GymProbe.note("watch boot key deposited \(deposit.serverDomain)")
+    }
+
+    public func fetchWatchBootKey(serverDomain: String, bootAuth: String) async throws -> WatchBootDepositWire {
+        guard let h = bootHeader(bootAuth), h.role == "delegate", h.method == "GET",
+              h.path == "/api/boot/watch-key/\(serverDomain)"
+        else { throw ScreensClientError.http(status: 401, message: "unauthorized") }
+        if lockedDomains.contains(serverDomain.lowercased()) { throw ScreensClientError.http(status: 423, message: Self.lockedBody) }
+        guard let d = watchBootKeys[serverDomain.lowercased()], d.delegatePubHex == h.pubKeyHex else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"no copy for this watch"}"#)
+        }
+        return d
+    }
+
+    public func revokeWatchBootKeys(serverDomain: String, bootAuth: String) async throws {
+        guard let h = bootHeader(bootAuth), h.role == "owner", h.method == "DELETE",
+              h.path == "/api/boot/watch-key/\(serverDomain)"
+        else { throw ScreensClientError.http(status: 401, message: "unauthorized") }
+        watchBootKeys[serverDomain.lowercased()] = nil
+        watchBootKeyRevokes.append(serverDomain)
+        GymProbe.note("watch boot key removed \(serverDomain)")
+    }
+
     public private(set) var pairingDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
     public func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {
         pairingDeposits.append((serverDomain, body))

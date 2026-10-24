@@ -544,12 +544,25 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                     @unknown default: continue
                     }
                     if AppAccessEvents.isRequestFrame(data) { continuation.yield(()) }
+                    if ChatRequestEvents.isRequestFrame(data) { ChatRequestEvents.post() }
                 }
                 ws.cancel(with: .normalClosure, reason: nil)
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    public func chatRequests() async throws -> ChatRequestsResponse {
+        try await request("/api/screens/chat/requests")
+    }
+    public func chatAnswer(_ answer: ChatAnswerRequest) async throws {
+        _ = try await requestData("/api/screens/chat/answer", method: "POST", body: try JSONEncoder().encode(answer), timeout: 30)
+    }
+    public func chatRevokeAlways(_ app: ChatAppIdentity) async throws -> Int {
+        struct Ended: Decodable { let ended: Int? }
+        let r: Ended = try await request("/api/screens/chat/always/revoke", method: "POST", body: try JSONEncoder().encode(app))
+        return r.ended ?? 0
     }
 
     public func peerBackupStatus() async throws -> PeerBackupStatusResponse {
@@ -613,6 +626,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                         }
                         if AppAccessEvents.isRequestFrame(data) {
                             AppAccessEvents.post()
+                            continue
+                        }
+                        if ChatRequestEvents.isRequestFrame(data) {
+                            ChatRequestEvents.post()
                             continue
                         }
                         if let frame = try? JSONDecoder().decode(VibeCodeFrame.self, from: data) {

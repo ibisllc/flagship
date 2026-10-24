@@ -122,6 +122,22 @@ public enum GymOrderCanonical {
         signers.registerCanonical("backup-policy") { p in
             try? (p as? BackupPolicyOrder)?.canonicalBytes()
         }
+        signers.registerCanonical("chat-approval") { p in
+            guard let r = p as? [String: Any], let server = r["serverDomain"] as? String,
+                  let a = r["answer"] as? ChatAnswerRequest,
+                  let kind = ChatApproval.Kind(rawValue: a.kind), let decision = ChatApproval.Decision(rawValue: a.decision)
+            else { return nil }
+            return try? ChatApproval(serverDomain: server, requestId: a.requestId, kind: kind, decision: decision,
+                                     issuedAt: a.issuedAt).canonicalBytes()
+        }
+        signers.registerCanonical("ai-consent") { p in
+            guard let r = p as? [String: Any], let server = r["serverDomain"] as? String, let buildId = r["buildId"] as? String,
+                  let op = (r["operation"] as? String).flatMap(AiRepairConsent.Operation.init(rawValue:)),
+                  let c = r["consent"] as? AiConsentBody, let source = AiRepairConsent.Source(rawValue: c.source)
+            else { return nil }
+            return try? AiRepairConsent(serverDomain: server, buildId: buildId, operation: op, provider: c.provider,
+                                        source: source, highTokens: c.highTokens, issuedAt: c.issuedAt).canonicalBytes()
+        }
     }
 
     private static func int64(_ v: Any?) -> Int64? {

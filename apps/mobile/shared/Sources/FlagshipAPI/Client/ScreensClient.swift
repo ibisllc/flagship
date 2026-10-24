@@ -129,6 +129,14 @@ public protocol ScreensClient: Sendable {
     /// `GET /api/screens/events` (WebSocket): one value per
     /// `{"type":"access-request"}` frame. Finishes when the socket closes.
     func accessRequestEvents() -> AsyncStream<Void>
+    /// `GET /api/screens/chat/requests`: app chats waiting for an admin, and the apps that take chats without asking.
+    func chatRequests() async throws -> ChatRequestsResponse
+    /// `POST /api/screens/chat/answer`: the owner's signed answer.
+    func chatAnswer(_ answer: ChatAnswerRequest) async throws
+    /// `POST /api/screens/chat/always/revoke`: the app asks again from now on. Returns how many
+    /// conversations that Always allow had let in were ended.
+    @discardableResult
+    func chatRevokeAlways(_ app: ChatAppIdentity) async throws -> Int
     /// `POST /api/screens/server-order` (docs/server-order.md): hand the box
     /// the owner's signed server order; it answers with the one it now holds.
     /// An older box answers 404 and gets the order from `.com` instead.
@@ -518,6 +526,15 @@ public extension ScreensClient {
     }
     func accessRequestEvents() -> AsyncStream<Void> {
         AsyncStream { $0.finish() }
+    }
+    func chatRequests() async throws -> ChatRequestsResponse {
+        throw ScreensClientError.notImplemented("app chat")
+    }
+    func chatAnswer(_ answer: ChatAnswerRequest) async throws {
+        throw ScreensClientError.notImplemented("app chat")
+    }
+    func chatRevokeAlways(_ app: ChatAppIdentity) async throws -> Int {
+        throw ScreensClientError.notImplemented("app chat")
     }
     func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         throw ScreensClientError.notImplemented("server order")
