@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import Flagship
 import FlagshipAPI
+import FlagshipCore
 
 /// Backs the git build mode. One option: paste a repo URL → "Check repo"
 /// runs the box's Flagship-fitness check → the verdict card offers either
@@ -27,6 +28,11 @@ public final class BuildGitViewModel {
         case deploying
         /// Installed — carries the live URL.
         case installed(url: String)
+        /// The box asks the owner to agree to what the AI run may cost before
+        /// anything runs (HTTP 428, `flagship/ai-repair-consent/v1`).
+        case consent(AiCostEstimate)
+        /// Signing the consent and sending the adapt again.
+        case consenting(AiCostEstimate)
     }
 
     public var gitUrl: String = ""
@@ -62,10 +68,14 @@ public final class BuildGitViewModel {
     private var lastVerdict: BuildGitResponse?
     private let client: any ScreensClient
     private let keys: SavedKeyStore
+    private let consentSigner: AppAccessSigner
+    /// The key the adapt waiting on consent was asked to run with.
+    private var consentCredential: LlmProviderCredential?
 
-    public init(client: any ScreensClient, keys: SavedKeyStore = SavedKeyStore()) {
+    public init(client: any ScreensClient, keys: SavedKeyStore = SavedKeyStore(), consentSigner: AppAccessSigner? = nil) {
         self.client = client
         self.keys = keys
+        self.consentSigner = consentSigner ?? AppAccessOrder.defaultSigner
     }
 
     /// The progress line for a running adapt.
@@ -159,6 +169,44 @@ public final class BuildGitViewModel {
     /// `credential` is the BYOK key chosen at the AI-key step; it's delivered
     /// to the box over its own pinned pipe and never logged.
     public func adapt(credential: LlmProviderCredential? = nil) async {
+        await runAdapt(credential: credential, consent: nil)
+    }
+
+    /// Agree to the estimate on screen: sign it (one Face ID) and ask again with the consent.
+    public func agreeToConsent() async {
+        guard case .consent(let estimate) = phase, let buildId else { return }
+        phase = .consenting(estimate)
+        guard let domain = await client.boxDomain(),
+              let op = AiRepairConsent.Operation(rawValue: estimate.operation),
+              let source = AiRepairConsent.Source(rawValue: estimate.source) else {
+            errorMessage = AiConsentCopy.cantSign
+            phase = .consent(estimate)
+            return
+        }
+        do {
+            let key = try await consentSigner(AiConsentCopy.signReason)
+            let at = Int64(Date().timeIntervalSince1970 * 1000)
+            let order = AiRepairConsent(serverDomain: domain, buildId: buildId, operation: op, provider: estimate.provider,
+                                        source: source, highTokens: estimate.highTokens, issuedAt: at)
+            let sig = try key.signature(for: order.canonicalBytes())
+            let body = AiConsentBody(issuedAt: at, provider: estimate.provider, source: estimate.source,
+                                     highTokens: estimate.highTokens, signature: HexUtil.encode(sig))
+            await runAdapt(credential: consentCredential, consent: body)
+        } catch {
+            errorMessage = BiometricGate.GateError.from(error) == .userCancelled ? AiConsentCopy.notAgreed : AiConsentCopy.cantSign
+            phase = .consent(estimate)
+        }
+    }
+
+    /// Cancel runs nothing: back to the not-ready card.
+    public func cancelConsent() {
+        guard case .consent = phase else { return }
+        consentCredential = nil
+        errorMessage = nil
+        if let v = lastVerdict { phase = .verdict(v) } else { phase = .idle }
+    }
+
+    private func runAdapt(credential: LlmProviderCredential?, consent: AiConsentBody?) async {
         guard let buildId, !sealed else { return }
         errorMessage = nil
         if let credential { adaptCredential = credential }
@@ -166,14 +214,21 @@ public final class BuildGitViewModel {
         do {
             let r = try await client.buildAdaptStart(
                 buildId: buildId,
-                BuildAdaptRequest(credential: credential, background: true, share: share)
+                BuildAdaptRequest(credential: credential, background: true, share: share, consent: consent)
             )
+            consentCredential = nil
             if r.started == true {
                 try await followAdapt(buildId: buildId)
             } else {
                 finishAdapt(fileCount: r.fileCount ?? 0, deployedUrl: r.deployed == true ? r.deployedUrl : nil,
                             reason: r.reason)
             }
+        } catch let error where AiConsentRequired.from(error) != nil {
+            let ask = AiConsentRequired.from(error)!
+            consentCredential = credential
+            // A 403 means the consent sent no longer covers the box's estimate: show the new one.
+            errorMessage = ask.status == 428 ? nil : AiConsentCopy.refused(ask.reason)
+            phase = .consent(ask.estimate)
         } catch let ScreensClientError.http(status, _) where status == 503 {
             shouldFallBackToScratch = true
         } catch let error as ScreensClientError where Self.closedToAI(error) {
@@ -368,5 +423,36 @@ public final class BuildGitViewModel {
         keptFiles = false
         adaptCredential = nil
         lastVerdict = nil
+    }
+}
+
+/// The words for the consent an AI run needs before it spends the owner's key or credits.
+public enum AiConsentCopy {
+    public static let title = String(localized: "Before the AI starts")
+    public static let agree = String(localized: "Agree and run the AI")
+    public static let agreeing = String(localized: "Starting…")
+    public static let signReason = String(localized: "Agree to what this AI run may cost")
+    public static let note = String(localized: "This is an estimate, not a promise. Nothing runs until you agree, and your answer covers this one run only.")
+    public static let notAgreed = String(localized: "You didn't agree, so nothing ran.")
+    public static let cantSign = String(localized: "Couldn't sign your answer. Nothing ran.")
+
+    public static func tokens(_ e: AiCostEstimate) -> String {
+        String(localized: "It may use \(e.lowTokens.formatted()) to \(e.highTokens.formatted()) tokens.")
+    }
+
+    public static func payer(_ e: AiCostEstimate) -> String {
+        if e.source == "promo" {
+            return String(localized: "It runs on Flagship Inference and comes out of your free credits.")
+        }
+        return String(localized: "It runs on your own \(e.provider) key, so \(e.provider) bills you for it.")
+    }
+
+    public static func refused(_ reason: String?) -> String {
+        switch reason {
+        case "the estimate grew since you agreed": return String(localized: "The estimate changed since you agreed. Check it and agree again.")
+        case "the provider changed since you agreed": return String(localized: "The AI provider changed since you agreed. Check it and agree again.")
+        case "that consent is stale": return String(localized: "Your answer took too long to reach the server. Agree again.")
+        default: return String(localized: "The server didn't accept your answer. Check the estimate and agree again.")
+        }
     }
 }
