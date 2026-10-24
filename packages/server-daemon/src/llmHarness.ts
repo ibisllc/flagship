@@ -55,6 +55,17 @@ export interface LlmHarnessOptions {
   relay?: ProviderRelay;
   /** Test seam: name → addresses, for the "is this baseUrl on the LAN" check. */
   resolveHost?: (host: string) => Promise<string[]>;
+  /**
+   * Architecture v2 (docs/architecture-v2/pq-suites.md §13.6): the owner's connector choice
+   * while the server is strict. Given `ai-<provider>` (`ai-flagship-inference` for Flagship
+   * Inference), returns the sentence to refuse with when the owner blocked it, else null.
+   */
+  connectorGate?: (connectorId: string) => string | null;
+}
+
+/** The connector a credential's calls go to (its scope is `<server>:<id>`). */
+export function connectorIdFor(credential: { provider: string; source?: string }): string {
+  return credential.source === "promo" ? "ai-flagship-inference" : `ai-${credential.provider.toLowerCase()}`;
 }
 
 /**
@@ -200,7 +211,7 @@ export type ChatStreamOutcome =
   | { ok: true }
   | {
       ok: false;
-      reason: "unknown-provider" | "unsafe-base-url" | "no-streaming" | "provider-error" | "relay-unavailable";
+      reason: "unknown-provider" | "unsafe-base-url" | "no-streaming" | "provider-error" | "relay-unavailable" | "connector-blocked";
       message: string;
     };
 
@@ -250,6 +261,7 @@ export class LlmHarness {
     this.registry = opts.registry ?? defaultRegistry;
     this.streamingRegistry = opts.streamingRegistry ?? defaultStreamingRegistry;
     this.baseUrlGuard = opts.baseUrlGuard;
+    this.connectorGate = opts.connectorGate;
     // Tests inject their own fetchers; we honor them verbatim so a test
     // controls the wire. Production leaves them unset and each call builds
     // an SSRF-guarded fetch bound to the effective per-credential posture
@@ -376,11 +388,18 @@ export class LlmHarness {
    * baseUrl SSRF guard, then stream `ChatStreamEvent`s to `onEvent`.
    * Returns a structured outcome (no model text — that flows via events).
    */
+  private readonly connectorGate?: (connectorId: string) => string | null;
+
   async chatStream(
     credential: LlmCredential,
     request: ChatRequest,
     onEvent: (e: ChatStreamEvent) => void,
   ): Promise<ChatStreamOutcome> {
+    const blocked = this.connectorGate?.(connectorIdFor(credential));
+    if (blocked) {
+      onEvent({ kind: "error", message: blocked });
+      return { ok: false, reason: "connector-blocked", message: blocked };
+    }
     if (!this.streamingRegistry.has(credential.provider)) {
       const message = "no streaming adapter for provider";
       onEvent({ kind: "error", message });
@@ -440,6 +459,8 @@ export class LlmHarness {
     if (!this.registry.has(credential.provider)) {
       throw new Error("unknown provider");
     }
+    const blocked = this.connectorGate?.(connectorIdFor(credential));
+    if (blocked) throw new Error(blocked);
     if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
       assertSafeProviderBaseUrl(credential.baseUrl, this.guardFor(credential));
     }
@@ -495,6 +516,8 @@ export class LlmHarness {
     if (!this.registry.has(req.provider)) {
       return this.sealError({ ok: false, provider: req.provider, message: "unknown provider" });
     }
+    const blocked = this.connectorGate?.(connectorIdFor({ provider: req.provider }));
+    if (blocked) return this.sealError({ ok: false, provider: req.provider, message: blocked });
 
     // Defense-in-depth: a sealed-request baseUrl must not point at an
     // internal service before it ever reaches a provider fetch.

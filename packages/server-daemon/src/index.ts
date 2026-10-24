@@ -316,7 +316,7 @@ import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
-import { AssurancePolicySync } from "./assurancePolicySync.js";
+import { AssurancePolicySync, ScopedPolicies } from "./assurancePolicySync.js";
 import { setPqAuthority } from "./pqAuthority.js";
 import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard } from "./pqChannel.js";
 import { AccessJournal } from "./accessJournal.js";
@@ -331,6 +331,8 @@ import { warnIfSharedApplianceDiskKey } from "./applianceDiskKey.js";
  * reply says is empty never leaves the box.
  */
 const doorbellRef: { current: Doorbell | null } = { current: null };
+/** The owner's connector choices under strict (pqChannel wiring sets it once the policy is replayed). */
+const connectorGateRef: { current: ((connectorId: string) => string | null) | null } = { current: null };
 const bellFetch = (): { fetchImpl?: typeof fetch } =>
   doorbellRef.current ? { fetchImpl: doorbellRef.current.fetch } : {};
 /** Poll a consumer the moment its lane starts to ring. */
@@ -2789,6 +2791,8 @@ async function wireRuntimeSurfaces(deps: {
   const llmHarness = new LlmHarness({
     swk: custodian.asSwkOps(),
     relay: providerRelay({ connector: runtime.outboundRelay }),
+    // Architecture v2: an AI provider the owner blocked while this server is strict.
+    connectorGate: (id) => connectorGateRef.current?.(id) ?? null,
   });
   const llmCredentials = new FileBuildCredentialStore(
     join(dataDir, "llm-credentials"),
@@ -4133,12 +4137,42 @@ async function wireOwnerHandlers(deps: {
   runtime.addGuard(pqStrictGuard({ strict: () => strictInForce(assurance.policy()), browsersAllowed: () => assurance.browsersAllowed(), channelOf: (r) => pqServer.channelOf(r) }));
   runtime.addGuard((req) => pqServer.handle(req));
   const pqBoxFetch = pqSessionFetch({ identity: () => deps.readStkPqIdentity(), responder: siblingBinding });
+  // The owner's per-app and per-connector choices (pq-suites.md §13.6), replayed like the installation's.
+  const scoped = new ScopedPolicies({
+    dir: accessDataDir,
+    account: cfg.userId,
+    serverDomain: env.serverFqdn,
+    fetchScope: async (scope) => {
+      const r = await deviceBookReader.fetch(
+        `${comBase}/api/accounts/${encodeURIComponent(cfg.userId)}/assurance-policy/${scope.kind}/${encodeURIComponent(scope.id)}`,
+      );
+      return r.ok ? await r.json() : null;
+    },
+    adminRootHex: () => (cfg.adminRootPub && cfg.adminRootPub.length === 32 ? bytesToHexStr(cfg.adminRootPub) : null),
+    isAdminDevice: (pub) => deviceBook.classify(pub)?.tier === "admin" && !!cfg.adminRootPub,
+    bindingFor: (pub) => deviceBook.pqBindingFor(pub),
+    ownEvidence: () => ({ stkBound: deps.readStkHybrid() !== null, bootKeyHybrid: deps.readStkHybrid() !== null && hasBootKey() }),
+    log: (m) => console.warn(m),
+  });
+  for (const id of ["ai-flagship-inference", "ai-anthropic", "ai-openai", "ai-google", "ai-openrouter", "ai-deepinfra"]) scoped.for("connector", id);
+  connectorGateRef.current = (id) =>
+    strictInForce(assurance.policy()) && strictInForce(scoped.for("connector", id).policy())
+      ? "The owner blocked this AI provider on this server while it is quantum-safe. Change it in the Flagship app, Settings, Quantum-safe protection."
+      : null;
+  // An app whose own strict change said "only the Flagship app" refuses browsers.
+  runtime.addAppGate(async (_req, ref) => {
+    if (!ref) return null;
+    const p = scoped.for("service", ref);
+    if (!strictInForce(p.policy()) || p.browsersAllowed()) return null;
+    return { status: 403, headers: { "content-type": "text/plain; charset=utf-8" }, body: "This app only accepts quantum-safe connections from the Flagship app." };
+  });
   const accessSyncFetch: typeof fetch = (input, init) => (strictInForce(assurance.policy()) ? pqBoxFetch(input, init) : fetch(input, init));
   void primeSiblings().catch(() => {});
   void deviceBook.refresh().then(() => assurance.refresh());
   {
     const t = setInterval(() => {
       void assurance.refresh();
+      void scoped.refreshAll();
       void primeSiblings().catch(() => {});
     }, 15 * 60_000);
     if (typeof t.unref === "function") t.unref();
