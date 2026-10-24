@@ -346,8 +346,12 @@ struct FlagshipApp: App {
         // enrolled biometric on a Simulator) — consent-only, no crypto
         // emitted; see GymSeams. EXCEPT under -smoke-locked: the launch lock
         // screen AUTO-prompts, and a bypassed prompt would auto-unlock the
-        // very trap that scenario asserts (D4-E1).
-        GymSeams.bypassBiometricGates = !wantLocked
+        // very trap that scenario asserts (D4-E1). `-smoke-accept-biometric`
+        // passes the prompts while locked too (the lock screen still waits for
+        // a tap: `awaitingManualUnlock`), so the lock-screen Sign out, which
+        // asks first, reaches its question on a simulator with or without an
+        // enrolled face.
+        GymSeams.bypassBiometricGates = !wantLocked || args.contains("-smoke-accept-biometric")
         GymSeams.refuseBiometricGates = args.contains("-smoke-refuse-biometric")
         GymSeams.accountRootSeed = Data(repeating: 0x47, count: 32)
         // The smoke account is admin-pinned like every account opened today:

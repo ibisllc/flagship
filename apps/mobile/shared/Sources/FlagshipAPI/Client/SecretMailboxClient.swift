@@ -1290,6 +1290,23 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws {
         revoked.append((request, bootAuth))
     }
+    /// Servers whose every lease was revoked (`DELETE {boot}/api/boot/lease/:domain`, release 0.3's
+    /// SEC-DEADMAN-001: switching the dead-man lock on first drops every auto-unlock lease).
+    public private(set) var revokedAll: [(serverDomain: String, bootAuth: String)] = []
+    /// The worker's handleRevokeAllLeases: an owner header for that server and route, then every lease goes.
+    public func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws {
+        struct Header: Decodable { let role: String; let serverDomain: String; let method: String; let path: String; let signatureHex: String }
+        var b64 = String(bootAuth.split(separator: " ").last ?? "")
+            .replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        guard let data = Data(base64Encoded: b64),
+              let h = try? JSONDecoder().decode(Header.self, from: data),
+              h.role == "owner", h.method == "DELETE", h.serverDomain == serverDomain,
+              h.path == "/api/boot/lease/\(serverDomain)", !h.signatureHex.isEmpty
+        else { throw ScreensClientError.http(status: 401, message: "unauthorized") }
+        revokedAll.append((serverDomain, bootAuth))
+        GymProbe.note("revoked all leases \(serverDomain)")
+    }
     public private(set) var pairingDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
     public func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {
         pairingDeposits.append((serverDomain, body))
