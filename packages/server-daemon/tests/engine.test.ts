@@ -39,7 +39,7 @@ describe("engineArgv", () => {
     const spec = EGRESS_NETWORKS.find((n) => n.kind === "build")!;
     const [cmd, args] = engineArgv("docker", networkCreateArgs(spec.network, spec), "podman");
     expect(cmd).toBe("podman");
-    expect(args).toEqual(["network", "create", "--disable-dns", "--driver", "bridge", "--internal", "--interface-name", "fs-build", "--label", "flagship.icc=false", "flagship-build"]);
+    expect(args).toEqual(["network", "create", "--disable-dns", "--driver", "bridge", "--label", "flagship.internal=true", "--interface-name", "fs-build", "--opt", "mode=unmanaged", "--label", "flagship.icc=false", "flagship-build"]);
   });
   it("refuses forms with no Podman meaning instead of guessing", () => {
     expect(() => engineArgv("docker", ["swarm", "init"], "podman")).toThrow(/no translation/);
@@ -57,6 +57,7 @@ describe("Podman networks", () => {
           network_interface: "fs-apps",
           internal: false,
           labels: { "flagship.icc": "false" },
+          options: { mode: "unmanaged" },
           subnets: [{ subnet: "10.89.0.0/24", gateway: "10.89.0.1" }],
           containers: { c1: { name: "flagship-a--b", interfaces: { eth0: { subnets: [{ ipnet: "10.89.0.5/24" }] } } } },
         },
@@ -71,6 +72,7 @@ describe("Podman networks", () => {
       subnets: ["10.89.0.0/24"],
       gateways: ["10.89.0.1"],
       containers: [{ name: "flagship-a--b", ipv4: "10.89.0.5" }],
+      unmanaged: true,
     });
   });
   it("still reads Docker's shape", () => {

@@ -10,7 +10,7 @@
  */
 import type { CommandRunner } from "../serviceRunner.js";
 import { EGRESS_NETWORKS, type EgressNetworkSpec } from "./policy.js";
-import { PODMAN_ICC_LABEL, activeEngine } from "../engine/engine.js";
+import { PODMAN_ICC_LABEL, PODMAN_INTERNAL_LABEL, activeEngine } from "../engine/engine.js";
 import { installIccIsolation, type FirewallBridge } from "./firewall.js";
 
 export const BRIDGE_NAME_OPTION = "com.docker.network.bridge.name";
@@ -27,6 +27,8 @@ export interface NetworkInfo {
   subnets: string[];
   gateways: string[];
   containers: Array<{ name: string; ipv4: string }>;
+  /** Podman only: netavark uses a bridge the daemon owns (`mode=unmanaged`). */
+  unmanaged?: boolean;
 }
 
 /** `docker network create` args; a sandbox network gets its fixed bridge name. */
@@ -64,6 +66,7 @@ interface RawPodmanNetwork {
   network_interface?: string;
   internal?: boolean;
   labels?: Record<string, string> | null;
+  options?: Record<string, string> | null;
   subnets?: Array<{ subnet?: string; gateway?: string }> | null;
   containers?: Record<string, { name?: string; interfaces?: Record<string, { subnets?: Array<{ ipnet?: string }> | null }> | null }> | null;
 }
@@ -75,8 +78,9 @@ function parsePodmanNetwork(n: RawPodmanNetwork): NetworkInfo | null {
     id: n.id,
     name: n.name,
     bridge: n.network_interface ?? "",
-    internal: n.internal === true,
+    internal: n.internal === true || n.labels?.[PODMAN_INTERNAL_LABEL] === "true",
     icc: n.labels?.[PODMAN_ICC_LABEL] !== "false",
+    unmanaged: n.options?.mode === "unmanaged",
     subnets: subnets.map((c) => c.subnet ?? "").filter((x) => /^\d+\.\d+\.\d+\.\d+\/\d+$/.test(x)),
     gateways: subnets.map((c) => c.gateway ?? "").filter((g) => /^\d+\.\d+\.\d+\.\d+$/.test(g)),
     containers: Object.values(n.containers ?? {}).map((c) => {
@@ -129,7 +133,8 @@ export async function ensureSandboxNetwork(
   log: (m: string) => void = () => {},
 ): Promise<NetworkInfo> {
   let info = await inspectNetwork(cmd, spec.network);
-  if (info && (info.bridge !== spec.bridge || info.internal !== spec.internal || info.icc !== spec.icc)) {
+  const podman = activeEngine() === "podman";
+  if (info && (info.bridge !== spec.bridge || info.internal !== spec.internal || info.icc !== spec.icc || (podman && (info.unmanaged === false || info.gateways.length === 0)))) {
     const old = info;
     log(
       `[egress] recreating ${spec.network} on bridge ${spec.bridge}${spec.internal ? " (internal)" : ""}${spec.icc ? "" : " (containers isolated)"} (was ${old.bridge}${old.internal ? ", internal" : ""}${old.icc ? ", containers connected" : ""})`,
@@ -150,7 +155,24 @@ export async function ensureSandboxNetwork(
     info = await inspectNetwork(cmd, spec.network);
     if (!info) throw new Error(`docker network ${spec.network} could not be created`);
   }
+  if (podman) await ensureHostBridge(cmd, info);
   return info;
+}
+
+/**
+ * Podman: the bridge itself, with the network's gateway address, up before any container
+ * joins (netavark is told the bridge is unmanaged). IPv4 only, like Docker's bridges.
+ */
+export async function ensureHostBridge(cmd: CommandRunner, info: NetworkInfo): Promise<void> {
+  const gw = info.gateways[0];
+  const subnet = info.subnets[0];
+  if (!gw || !subnet || !/^[a-zA-Z0-9_.-]{1,15}$/.test(info.bridge)) throw new Error(`network ${info.name} has no bridge address to set up`);
+  const prefix = subnet.split("/")[1]!;
+  const has = cmd.capture ? await cmd.capture("ip", ["-o", "addr", "show", "dev", info.bridge]).then((r) => r.stdout, () => null) : null;
+  if (has === null) await cmd.run("ip", ["link", "add", info.bridge, "type", "bridge"]);
+  if (!(has ?? "").includes(` ${gw}/${prefix} `)) await cmd.run("ip", ["addr", "add", `${gw}/${prefix}`, "dev", info.bridge]).catch(() => {});
+  await cmd.run("sysctl", ["-q", "-w", `net.ipv6.conf.${info.bridge}.disable_ipv6=1`]).catch(() => {});
+  await cmd.run("ip", ["link", "set", info.bridge, "up"]);
 }
 
 /**
