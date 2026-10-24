@@ -13,6 +13,7 @@ import {
   handleMintAccountReadToken,
   peekAccountReadToken,
   requireAccountRead,
+  requireServerRead,
   type AccountReadTokenDeps,
 } from "../src/accountReadToken.js";
 
@@ -243,5 +244,39 @@ describe("a read token whose MAC was already checked", () => {
     expect(await peekAccountReadToken("s3cret", "Bearer nonsense")).toBeNull();
     expect(await peekAccountReadToken("s3cret", null)).toBeNull();
     expect(await peekAccountReadToken(undefined, `Bearer ${token}`)).toBeNull();
+  });
+});
+
+describe("a server's read of its own consume-once deposit", () => {
+  const OTHER = `home4.${U}.flagship.services`;
+
+  it("passes only with that server's own token", async () => {
+    const h = await harness();
+    const other = key(82);
+    await h.storage.servers.put({ serverDomain: OTHER, username: U, identityPubKeyHex: hex(other.publicKey), registeredAt: 1 });
+    const byBox = (await mint(h.deps, { body: boxBody(h.stk) })).token!;
+    const bySibling = (await mint(h.deps, {
+      body: (() => {
+        const box = { username: U, serverDomain: OTHER, stkPubHex: hex(other.publicKey), issuedAt: NOW, nonceHex: "ee".repeat(16) };
+        return { box, signature: hex(signBoxReadTokenRequest(box, (m) => ed.sign(m, other.privateKey))) };
+      })(),
+    })).token!;
+    const byDevice = (await mint(h.deps, { device: deviceAuth(h.device) })).token!;
+    expect((await requireServerRead(h.deps, DOMAIN, null)).ok).toBe(false);
+    expect((await requireServerRead(h.deps, DOMAIN, `Bearer ${byDevice}`)).ok).toBe(false);
+    expect((await requireServerRead(h.deps, DOMAIN, `Bearer ${bySibling}`)).ok).toBe(false);
+    expect((await requireServerRead(h.deps, DOMAIN.toUpperCase(), `Bearer ${byBox}`)).ok).toBe(true);
+    expect((await requireServerRead(h.deps, "nobody.example.flagship.services", `Bearer ${byBox}`)).ok).toBe(false);
+  });
+
+  it("stops once the server is revoked; a demo account reads without a token", async () => {
+    const h = await harness();
+    const byBox = (await mint(h.deps, { body: boxBody(h.stk) })).token!;
+    await h.storage.servers.revoke(DOMAIN, "lost", NOW);
+    expect((await requireServerRead(h.deps, DOMAIN, `Bearer ${byBox}`)).ok).toBe(false);
+    const demo = `home.demo-user.flagship.services`;
+    await h.storage.servers.put({ serverDomain: demo, username: "demo-user", identityPubKeyHex: hex(key(90).publicKey), registeredAt: 1 });
+    await h.storage.demoUsers.insert({ username: "demo-user" } as unknown as DemoUserRecord);
+    expect((await requireServerRead(h.deps, demo, null)).ok).toBe(true);
   });
 });

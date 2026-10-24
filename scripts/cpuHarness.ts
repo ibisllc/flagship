@@ -185,6 +185,8 @@ export interface World {
   servers: { domain: string; stk: Keypair }[];
   /** A read token minted for the admin device, valid for the world. */
   readToken: string;
+  /** The first server's own read token (its deposit reads need it). */
+  boxReadToken: string;
   rateLimitCalls: number;
   close(): void;
 }
@@ -322,6 +324,7 @@ export async function buildWorld(opts: WorldOptions = {}): Promise<World> {
     devices,
     servers,
     readToken: "",
+    boxReadToken: "",
     rateLimitCalls: 0,
     close: () => raw.close(),
   };
@@ -366,6 +369,11 @@ export async function buildWorld(opts: WorldOptions = {}): Promise<World> {
   // Pods with realistic heartbeats: the real signed daemon-status POST.
   for (const s of servers) await postDaemonStatus(world, s, appsPerServer);
   world.readToken = await mintDeviceReadToken(world, world.devices[0]!);
+  {
+    const res = await tryControlPlane(readTokenBoxRequest(world, world.servers[0]!), world.env);
+    if (!res || res.status !== 200) throw new Error(`harness: box read-token mint failed (${res?.status})`);
+    world.boxReadToken = ((await res.json()) as { token: string }).token;
+  }
   world.meter.reset();
   return world;
 }
@@ -664,7 +672,8 @@ export const SCENARIOS: Scenario[] = [
     ["transfer-rehome", "transfer/rehome"],
   ].map(([id, tail]) =>
     http(`lane-${id}`, `GET /api/server/<d>/${tail} (box polls an empty lane)`, "every box, every 5 min", (w) =>
-      new Request(`${ORIGIN}/api/server/${w.servers[0]!.domain}/${tail}`), { expect: [200, 204, 400, 404] })),
+      new Request(`${ORIGIN}/api/server/${w.servers[0]!.domain}/${tail}`, /-deposit$/.test(tail!) ? { headers: { authorization: `Bearer ${w.boxReadToken}` } } : {}),
+    { expect: [200, 204, 400, 404] })),
   http("apps-aliases", "GET /api/users/<u>/apps/aliases (read token)", "boxes, every minute", (w) =>
     authed(w, `/api/users/${ACCOUNT}/apps/aliases`)),
   http("notices", "GET /api/notices (maintainer-signed notice)", "apps, on a poll", () =>

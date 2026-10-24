@@ -32,7 +32,9 @@ import {
   type Mandate,
 } from "@ibisllc/maintainers";
 import {
+  gateCaLeasesPq,
   MAINTAINER_PINNED_MANDATE_HASH,
+  type CaLeasePqMaterial,
   type CaTrustChain,
 } from "@flagship/protocol";
 
@@ -49,6 +51,10 @@ import caRenewal20261006 from "../../../.maintainers/tracks/ca/mandates/20261006
 // The committed CaEndorsement leases. Starts `[]`; the human ceremony
 // appends (see docs/ca-operations.md "CaEndorsement ceremony runbook").
 import caEndorsementsBundle from "../../../.maintainers/ca-endorsements/bundle.json";
+// Their hybrid PQ companions and the ca-track key's binding (caLeasePq.ts). While the code pin
+// CA_LEASE_PQ_PIN names no key they change nothing; once it does, a lease without a verified
+// companion (or not listed as signed before the cut-over) gives no authority.
+import caLeasePqBundle from "../../../.maintainers/ca-pq/bundle.json";
 
 /**
  * The committed ca-track mandate log, oldest-first (canonical-log
@@ -61,7 +67,14 @@ const CA_TRACK_MANDATES: Mandate[] = [
   caRenewal20261006 as Mandate,
 ];
 
-const CA_ENDORSEMENTS: CaEndorsement[] = caEndorsementsBundle as CaEndorsement[];
+const CA_LEASE_PQ: CaLeasePqMaterial = caLeasePqBundle as CaLeasePqMaterial;
+const RAW_CA_ENDORSEMENTS: CaEndorsement[] = caEndorsementsBundle as CaEndorsement[];
+// Gated once per isolate, on the first request: a Worker's clock reads 0 at module load.
+let gatedCaEndorsements: CaEndorsement[] | null = null;
+function caEndorsements(): CaEndorsement[] {
+  gatedCaEndorsements ??= gateCaLeasesPq(RAW_CA_ENDORSEMENTS, CA_LEASE_PQ, { now: Date.now() }).accepted;
+  return gatedCaEndorsements;
+}
 
 /**
  * The forward chain for a pin, verified once per isolate. The mandate JSON is
@@ -95,7 +108,7 @@ export function workerCaTrustChain(
   const verifiedChain = verifiedChainFor(pinnedMandateHash);
   return {
     authorizedCaKeys(now: number): string[] {
-      return authorizedCaKeys(CA_ENDORSEMENTS, verifiedChain, new Date(now));
+      return authorizedCaKeys(caEndorsements(), verifiedChain, new Date(now));
     },
   };
 }
@@ -136,11 +149,13 @@ export function caTrustChainPublicMaterial(): {
   pinnedMandateHash: string;
   mandates: readonly Mandate[];
   caEndorsements: readonly CaEndorsement[];
+  caLeasePq: CaLeasePqMaterial;
 } {
   return {
     pinnedMandateHash: MAINTAINER_PINNED_MANDATE_HASH,
     mandates: CA_TRACK_MANDATES,
-    caEndorsements: CA_ENDORSEMENTS,
+    caEndorsements: RAW_CA_ENDORSEMENTS,
+    caLeasePq: CA_LEASE_PQ,
   };
 }
 
@@ -151,10 +166,10 @@ export function activeCaLeaseNotAfterMs(now: number): number[] {
   // (notBefore <= now < notAfter). We filter the committed endorsements
   // by the resolved key set, then surface their notAfter timestamps.
   const liveKeys = new Set(
-    authorizedCaKeys(CA_ENDORSEMENTS, verifiedChain, new Date(now)),
+    authorizedCaKeys(caEndorsements(), verifiedChain, new Date(now)),
   );
   const out: number[] = [];
-  for (const e of CA_ENDORSEMENTS) {
+  for (const e of caEndorsements()) {
     if (!liveKeys.has(e.caPubkey)) continue;
     const notAfter = Date.parse(e.notAfter);
     const notBefore = Date.parse(e.notBefore);

@@ -187,6 +187,34 @@ export const ACCOUNT_KEY_HOLDERS_ONLY: AccountReadOptions = {
   allow: (sub) => sub === "irk" || sub.startsWith("d:"),
 };
 
+/**
+ * Only the named server itself: its own deposits (SWK, CGK, pairing order, entitlement) are
+ * consume-once, so an anonymous read could take them before the box does.
+ */
+export function thisServerOnly(serverDomain: string): AccountReadOptions {
+  const want = `s:${serverDomain.toLowerCase()}`;
+  return { allow: (sub) => sub === want };
+}
+
+/**
+ * Gate a server's consume-once read of its own deposit: the bearer must be that server's own
+ * read token (minted with its STK). An unknown server answers the same 401, so the route says
+ * nothing about which names exist. Demo accounts read without a token, as everywhere else.
+ */
+export async function requireServerRead(
+  deps: AccountReadTokenDeps,
+  serverDomain: string,
+  authorization: string | null | undefined,
+): Promise<AccountReadCheck> {
+  const domain = serverDomain.toLowerCase();
+  // Started together (one D1 round trip on the Worker), and remembered for the checks below: the
+  // server's row and the demo flag of the account its name says (`<server>.<account>.<apex>`).
+  const named = domain.split(".")[1];
+  const [reg] = await Promise.all([deps.servers.get(domain), named ? deps.demoUsers.get(named) : undefined]);
+  if (!reg || reg.revokedAt) return { ok: false, response: unauthorized("this server's read token is required") };
+  return await requireAccountRead(deps, reg.username, authorization, thisServerOnly(domain));
+}
+
 export type AccountReadCheck = { ok: true; demo: boolean } | { ok: false; response: HandlerResponseWithHeaders };
 
 /**

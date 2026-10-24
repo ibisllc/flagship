@@ -177,7 +177,10 @@ export type RateLimitEndpoint =
   // costliest check `.com` runs, and an honest box or device sends one a few times a year;
   // per source and per server or account (the path names it).
   | "pq-binding-put"
-  | "assurance-policy-post";
+  | "assurance-policy-post"
+  // Architecture v2 signed time (POST /api/time, signedTime.ts): anonymous, one Ed25519
+  // signature each; a box asks at boot and every few hours.
+  | "signed-time";
 
 /**
  * Endpoints that refuse when the counter can't be reached: each one gates
@@ -390,6 +393,7 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "subject", limit: 30, windowSec: 3600 },
   ],
+  "signed-time": [{ axis: "ip", limit: 30, windowSec: 60 }],
 };
 
 export interface RateLimitInput {
@@ -597,6 +601,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "PUT" && /^\/api\/server\/[^/]+\/(?:pq-key-binding|boot-key)$/.test(pathname)) return "pq-binding-put";
   if (m === "PUT" && /^\/api\/accounts\/[^/]+\/pq-key-bindings$/.test(pathname)) return "pq-binding-put";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/assurance-policy$/.test(pathname)) return "assurance-policy-post";
+  if (m === "POST" && pathname === "/api/time") return "signed-time";
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";
   if (m === "POST" && pathname === "/api/accounts") return "username-claim";
   if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
