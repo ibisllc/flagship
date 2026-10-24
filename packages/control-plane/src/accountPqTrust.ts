@@ -133,7 +133,11 @@ export async function currentAccountBindings(
   userRec: UsernameRecord,
   devices: ReadonlyMap<string, string>,
 ): Promise<AccountBindingSet> {
-  const rows = await pqTrust.listAccountBindings(userRec.username, [...devices.keys()]);
+  return selectCurrentBindings(await pqTrust.listAccountBindings(userRec.username, [...devices.keys()]), userRec, devices);
+}
+
+/** Keeps the rows whose Ed25519 key is the identity's current key. */
+export function selectCurrentBindings(rows: readonly PqKeyBindingRecord[], userRec: UsernameRecord, devices: ReadonlyMap<string, string>): AccountBindingSet {
   const out: AccountBindingSet = { accountIrk: null, adminRoot: null, devices: new Map() };
   for (const r of rows) {
     const ed = r.ed25519PubHex.toLowerCase();

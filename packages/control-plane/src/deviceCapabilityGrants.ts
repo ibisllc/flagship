@@ -23,7 +23,7 @@
  * docs/v2-device-addressing-and-real-ticket.md §3.2 for the chain.
  */
 
-import { currentAccountBindings } from "./accountPqTrust.js";
+import { selectCurrentBindings } from "./accountPqTrust.js";
 import {
   DEVICE_SCOPES,
   isSensitiveScope,
@@ -427,14 +427,16 @@ export async function handleListAccountDeviceGrants(
   const userNorm = username.toLowerCase();
   const userRec = await deps.usernames.get(userNorm);
   if (!userRec) return notFound("username not registered");
-  const [grants, devices] = await Promise.all([
+  // The bindings read joins the same batch: D1 picks the live devices inside the statement.
+  const [grants, devices, pqRows] = await Promise.all([
     deps.storage.listForUser(userNorm),
     deps.identities.listForAccount(userNorm),
+    deps.pqTrust ? deps.pqTrust.listAccountBindings(userNorm) : Promise.resolve(null),
   ]);
   const live = new Map(
     devices.filter((d) => d.revokedAt === null).map((d) => [d.deviceId, d.devicePubHex.toLowerCase()] as const),
   );
-  const pq = deps.pqTrust ? await currentAccountBindings(deps.pqTrust, userRec, live) : null;
+  const pq = pqRows ? selectCurrentBindings(pqRows, userRec, live) : null;
   const out: Array<Record<string, unknown>> = [];
   for (const g of grants) {
     if (g.revokedAt !== null || live.get(g.deviceId) !== g.devicePubHex.toLowerCase()) continue;
