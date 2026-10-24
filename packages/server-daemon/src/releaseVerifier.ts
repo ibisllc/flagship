@@ -54,6 +54,7 @@ import {
 } from "@ibisllc/maintainers";
 import {
   classifyReleaseEndorsements,
+  gateCaLeasesPq,
   MAINTAINER_PINNED_MANDATE_HASH,
   RELEASE_PQ_LABEL,
   RELEASE_PQ_PIN,
@@ -84,6 +85,9 @@ export interface MaintainersStoreSnapshot {
   releasePqBindings: unknown[];
   /** `.maintainers/release-pq/endorsements/*.json`: the hybrid companions (v2). */
   releasePqEndorsements: unknown[];
+  /** `.maintainers/ca-pq/bindings/*.json` and `endorsements/*.json`: the CA leases' PQ half. */
+  caPqBindings: unknown[];
+  caPqEndorsements: unknown[];
 }
 
 /** The PQ half of the verdict (docs/architecture-v2/pq-suites.md §12). */
@@ -214,7 +218,9 @@ export function caTrustChainFromFolder(
   const store = readStoreFromDisk(rootDir);
   const mandates = store.mandatesByTrack.get("ca") ?? [];
   const caChain = verifyMandateChainFromPin(pin, mandates);
-  return makeCaTrustChain(caChain, store.caEndorsements);
+  // A lease counts only with its PQ companion once the code pin names a ca-track key (caLeasePq.ts).
+  const leases = gateCaLeasesPq(store.caEndorsements, { bindings: store.caPqBindings, endorsements: store.caPqEndorsements }, { now: Date.now() }).accepted;
+  return makeCaTrustChain(caChain, leases);
 }
 
 /**
@@ -464,6 +470,8 @@ function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
     caEndorsements: [],
     releasePqBindings: [],
     releasePqEndorsements: [],
+    caPqBindings: [],
+    caPqEndorsements: [],
   };
   if (!fs.existsSync(rootDir) || !fs.statSync(rootDir).isDirectory()) {
     return out;
@@ -517,6 +525,8 @@ function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
   }
   out.releasePqBindings = readJsonDir(path.join(rootDir, "release-pq", "bindings"));
   out.releasePqEndorsements = readJsonDir(path.join(rootDir, "release-pq", "endorsements"));
+  out.caPqBindings = readJsonDir(path.join(rootDir, "ca-pq", "bindings"));
+  out.caPqEndorsements = readJsonDir(path.join(rootDir, "ca-pq", "endorsements"));
   return out;
 }
 

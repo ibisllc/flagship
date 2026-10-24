@@ -81,6 +81,23 @@ class MockClaimer implements RouteClaimer {
 // 1. Ingest: decrypt + verify + upsert; reject bad MAC.
 // ─────────────────────────────────────────────────────────────────────────
 describe("inbound /internal/gossip ingest", () => {
+  it("drops a frame from a sibling the account does not vouch for (strict), even with a good MAC", async () => {
+    const view = new SiblingView(10_000);
+    const listed = new Set(["aa".repeat(32)]);
+    const handle = buildGossipIngestHandler({
+      cgk: CGK,
+      view,
+      user: USER,
+      selfId: "self.harry.flagship.services",
+      admitSibling: (stk) => (listed.has(stk) ? null : "not-in-server-order"),
+      now: () => 5000,
+    });
+    await handle(req(sealedBody(ann({ name: "rogue.harry.flagship.services", birthAuthHex: "bb".repeat(32) }))));
+    expect(view.size()).toBe(0);
+    await handle(req(sealedBody(ann({ name: "b.harry.flagship.services" }))));
+    expect(view.size()).toBe(1);
+  });
+
   it("decrypts, verifies the MAC, and upserts the sibling (replying 204, body ignored)", async () => {
     const view = new SiblingView(10_000);
     const handle = buildGossipIngestHandler({

@@ -10,7 +10,8 @@ import {
   type PqKeyBindingWire,
   type PqSessionIdentity,
 } from "@flagship/protocol";
-import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard } from "../src/pqChannel.js";
+import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard, siblingChainRefusal } from "../src/pqChannel.js";
+import type { SignedServerOrder } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "../src/runtime.js";
 
 const NOW = Date.now();
@@ -136,5 +137,45 @@ describe("sibling PQ pins", () => {
     const again = new SiblingPqPins({ path: join(dir, "pins.json"), fetchBinding: async () => served });
     await again.load();
     expect(await again.bindingFor(SIB, sib.stk)).toBeNull();
+  });
+});
+
+describe("a sibling the account vouches for (server order, pq-suites.md §16)", () => {
+  const order = (stks: string[], pqKeyIds?: string[]): SignedServerOrder => ({
+    order: { user: "alice", stks, issuedAt: NOW, nonce: "ab".repeat(32), ...(pqKeyIds ? { pqKeyIds } : {}) },
+    signature: "00".repeat(64),
+  });
+  const ctx = (o: SignedServerOrder | null, hybrid: boolean, strict: boolean) => ({ order: () => o, orderIsHybrid: () => hybrid, strict: () => strict });
+
+  it("under strict: only a server the hybrid-signed order lists, with the key id it names", () => {
+    const kid = sib.binding.keyIdHex;
+    expect(siblingChainRefusal(ctx(null, false, true), sib.stk, kid)).toBe("no-server-order");
+    expect(siblingChainRefusal(ctx(order([box.stk]), true, true), sib.stk, kid)).toBe("not-in-server-order");
+    expect(siblingChainRefusal(ctx(order([box.stk, sib.stk], ["-", kid]), false, true), sib.stk, kid)).toBe("server-order-not-hybrid");
+    expect(siblingChainRefusal(ctx(order([box.stk, sib.stk]), true, true), sib.stk, kid)).toBe("pq-key-not-in-order");
+    expect(siblingChainRefusal(ctx(order([box.stk, sib.stk], ["-", "-"]), true, true), sib.stk, kid)).toBe("pq-key-not-in-order");
+    expect(siblingChainRefusal(ctx(order([box.stk, sib.stk], ["-", "cd".repeat(32)]), true, true), sib.stk, kid)).toBe("pq-key-not-the-orders");
+    expect(siblingChainRefusal(ctx(order([box.stk, sib.stk], ["-", kid]), true, true), sib.stk, kid)).toBeNull();
+  });
+
+  it("outside strict: as before, except an order that names another key id", () => {
+    const kid = sib.binding.keyIdHex;
+    expect(siblingChainRefusal(ctx(null, false, false), sib.stk, kid)).toBeNull();
+    expect(siblingChainRefusal(ctx(order([box.stk]), false, false), sib.stk, kid)).toBeNull();
+    expect(siblingChainRefusal(ctx(order([sib.stk], ["cd".repeat(32)]), false, false), sib.stk, kid)).toBe("pq-key-not-the-orders");
+  });
+
+  it("the pins refuse an unvouched sibling at first sight and again when the order changes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pq-chain-"));
+    let held: SignedServerOrder | null = order([box.stk, sib.stk], ["-", sib.binding.keyIdHex]);
+    const chain = (stk: string, kid: string) => siblingChainRefusal(ctx(held, true, true), stk, kid);
+    const pins = new SiblingPqPins({ path: join(dir, "pins.json"), fetchBinding: async () => sib.wire, chain });
+    expect((await pins.bindingFor(SIB, sib.stk))?.keyIdHex).toBe(sib.binding.keyIdHex);
+    expect(pins.known(SIB, sib.binding.keyIdHex)).not.toBeNull();
+    held = order([box.stk]);
+    expect(pins.known(SIB, sib.binding.keyIdHex)).toBeNull();
+    expect(await pins.bindingFor(SIB, sib.stk)).toBeNull();
+    const fresh = new SiblingPqPins({ path: join(dir, "fresh.json"), fetchBinding: async () => sib.wire, chain: () => "not-in-server-order" });
+    expect(await fresh.bindingFor(SIB, sib.stk)).toBeNull();
   });
 });

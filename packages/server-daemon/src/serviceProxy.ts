@@ -31,7 +31,7 @@
  */
 
 import { request as httpRequest } from "node:http";
-import type { Bytes } from "@flagship/protocol";
+import { checkIdentityAssertion, type Bytes } from "@flagship/protocol";
 import type { BoxSigner } from "./keyCustodian.js";
 import type { InstalledService } from "./servicePlatform.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
@@ -238,6 +238,11 @@ export async function prepareAppRequest(
   const fields = [`flagship/inject/v1`, app.serviceId, user, role, ts];
   // An API-key request's scope is signed too, as a sixth field.
   if (apiKey) fields.push(apiKey.scope);
+  // Only a member's rank, an anonymous visitor or a key is ever asserted (keyd refuses the rest
+  // too): a resolver that came back with any other role is refused here, never signed.
+  if (checkIdentityAssertion(fields.join("|")) !== null) {
+    return respond(403, { error: "this visitor's rank could not be established" });
+  }
   const sig = deps.injector.signAsBox(new TextEncoder().encode(fields.join("|")));
   forwardHeaders["x-flagship-app-id"] = app.serviceId;
   forwardHeaders["x-flagship-visitor"] = visitor;

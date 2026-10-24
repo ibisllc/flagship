@@ -286,11 +286,11 @@ describe("claimSwkDeposit under flagship-keyd", () => {
   it("hands keyd the verified sealed key; the plaintext never reaches the daemon", async () => {
     const irk = makeKey(1);
     const boxKey = makeKey(9);
-    const keyd = await startKeydWorker({ seed: boxKey.privateKey });
+    const keyd = await startKeydWorker({ seed: boxKey.privateKey, owner: { irkPubHex: Buffer.from(irk.publicKey).toString("hex"), serverFqdn: DOMAIN } });
     const remote = new KeydCustodian({ socketPath: keyd.sock, component: "test" });
     try {
       const h = harness({ fetchImpl: fetchReturning(carrier({ irk: makeKey(2), boxKey, swk: SWK })) });
-      const adopt = (sealed: Uint8Array) => remote.provisionSwkSealed(sealed);
+      const adopt = (sealed: Uint8Array, proof: { serverDomain: string; issuedAt: number; signature: Uint8Array }) => remote.provisionSwkSealed(sealed, proof);
       const refuse = () => {
         throw new Error("the daemon must not unseal");
       };

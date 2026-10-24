@@ -39,6 +39,12 @@ export function buildGossipIngestHandler(deps: {
   selfId: string;
   /** Offer a sibling's server order to the holder (which verifies it). */
   onServerOrder?: (raw: unknown, from: string) => Promise<unknown> | void;
+  /**
+   * Whether a sibling (by the STK its frame names) may be counted at all; null admits it. While
+   * strict is in force a frame from a server the account's signed order does not list is dropped
+   * (pq-suites.md §16); the CGK alone is not enough.
+   */
+  admitSibling?: (stkHex: string) => string | null;
   now?: () => number;
   onLog?: (m: string) => void;
 }) {
@@ -75,7 +81,12 @@ export function buildGossipIngestHandler(deps: {
       if (typeof a.user !== "string" || a.user.toLowerCase() !== user) return EMPTY_204;
       if (typeof a.name !== "string" || a.name.toLowerCase() === selfId) return EMPTY_204;
 
-      // 5. Upsert into the live view.
+      // 5. Only a sibling the account vouches for, then upsert into the live view.
+      const refused = typeof a.birthAuthHex === "string" ? deps.admitSibling?.(a.birthAuthHex) ?? null : "no-stk";
+      if (refused) {
+        deps.onLog?.(`[gossip] dropping a frame from ${a.name}: ${refused}`);
+        return EMPTY_204;
+      }
       deps.view.upsert(a, now());
       deps.onLog?.(`[gossip] ingested frame from ${a.name} (${a.services.length} services)`);
 

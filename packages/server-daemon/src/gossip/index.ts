@@ -82,6 +82,8 @@ export interface WireGossipResult {
 }
 
 export interface WireGossipDeps {
+  /** Whether a sibling's frame may be counted (gossipHttp.ts `admitSibling`); absent admits all. */
+  admitSibling?: (stkHex: string) => string | null;
   /** This box's account (UserId). */
   user: string;
   /** This box's podCanonical/fqdn — its gossip `name` + self-id. */
@@ -180,6 +182,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     view,
     user: deps.user,
     selfId: deps.serverFqdn,
+    ...(deps.admitSibling ? { admitSibling: deps.admitSibling } : {}),
     ...(deps.serverOrder
       ? { onServerOrder: (raw: unknown, from: string) => deps.serverOrder!.offer(raw, from) }
       : {}),
