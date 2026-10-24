@@ -66,7 +66,8 @@ describe("routing a command", () => {
     expect(await routePrivileged("docker", ["ps"])).toBeNull();
   });
 
-  it("sends host commands to the broker once unprivileged, and keeps its own", async () => {
+  // Only an unprivileged process routes to the broker; run as root (a CI VM) it does everything itself.
+  it.skipIf(process.getuid?.() === 0)("sends host commands to the broker once unprivileged, and keeps its own", async () => {
     process.env[UNPRIVILEGED_ENV] = "1";
     ran.length = 0;
     expect(await routePrivileged("docker", ["ps"])).toEqual({ stdout: "ran", stderr: "" });

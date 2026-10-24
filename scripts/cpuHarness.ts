@@ -814,8 +814,19 @@ export async function calibrationMs(): Promise<number> {
     return cpuNowMs() - t;
   };
   for (let i = 0; i < 3; i++) once();
+  // Some kernels count CPU time in scheduler ticks, so one pass can read 0 ms: each sample runs
+  // the loop until at least 10 ms have accumulated and takes the mean.
+  const sample = () => {
+    let total = 0;
+    let n = 0;
+    while (total < 10 || n === 0) {
+      total += once();
+      n++;
+    }
+    return total / n;
+  };
   const xs: number[] = [];
-  for (let i = 0; i < 15; i++) xs.push(once());
+  for (let i = 0; i < 15; i++) xs.push(sample());
   return Math.min(...xs);
 }
 

@@ -52,7 +52,8 @@ describe("the admin's grant for the account's app names", () => {
 
   it("adds *.<user> to the box's own certificate, and sends the grant only with that one challenge", async () => {
     expect(boxCertSans(SERVER, true)).toEqual([SERVER, `*.${SERVER}`]);
-    expect(boxCertSans(SERVER, true, true)).toEqual([SERVER, `*.${SERVER}`, "*.alice.flagship.services"]);
+    // *.alice covers the box's own name, and Let's Encrypt refuses an order that names both.
+    expect(boxCertSans(SERVER, true, true)).toEqual([`*.${SERVER}`, "*.alice.flagship.services"]);
     const sent: Array<Record<string, unknown>> = [];
     const fetchImpl = (async (_u: string, init: { body: string }) => {
       sent.push(JSON.parse(init.body) as Record<string, unknown>);

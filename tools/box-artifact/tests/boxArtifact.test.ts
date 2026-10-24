@@ -106,7 +106,7 @@ describe("deterministic tar", () => {
     expect(existsSync(join(app, "node_modules/left-pad/test/x.js"))).toBe(true);
     // owners are root and every entry carries the commit's time
     const listing = execFileSync("tar", ["-tvzf", tgz], { encoding: "utf8" });
-    expect(listing).toMatch(/root\s+root/);
+    expect(listing).toMatch(/root[\s/]+root/);
     expect(listing).not.toMatch(/\b2026\b/);
     expect(gunzipSync(art.tarGz).length % 512).toBe(0);
   });
