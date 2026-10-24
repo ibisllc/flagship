@@ -543,7 +543,7 @@ export class ServiceAccessStore {
     const p = this.principal(pubHex);
     if (p) return this.accountRank(serviceRef, p);
     if (!this.isAllowed(serviceRef, pubHex)) return null;
-    return this.roleOf(serviceRef, pubHex, defaultRole) ?? ladderRole(defaultRole) ?? "member";
+    return this.roleOf(serviceRef, pubHex, defaultRole) ?? "member";
   }
 
   allowList(serviceRef: string): string[] {
@@ -828,8 +828,12 @@ export class ServiceAccessStore {
    * (the default may be `master`, and old `admin` maps to master too).
    */
   private unsetRank(e: ServiceAccessEntry | undefined, inviteId: string, defaultRole: string): MemberRole {
-    if (cappedTier(e?.roles.tiers[inviteId])) return "member";
-    return ladderRole(defaultRole) ?? "member";
+    // A join whose rank no admin set: an invite an admin's key made takes the app's default (the
+    // admin issued it under that default); any other is a Member. The manifest (`default_role`,
+    // written by the app's author or an AI) never raises anyone an admin did not invite
+    // (AGENTS.md "Three ranks, and only admins change them").
+    if (e?.roles.tiers[inviteId] === "admin") return ladderRole(defaultRole) ?? "member";
+    return "member";
   }
 
   /** The role an invite gives (unset: the app's default; a member invite: Member). */
@@ -863,7 +867,8 @@ export class ServiceAccessStore {
       const set = ladderRole(e.roles.grants[`${id}/${aid}`]) ?? ladderRole(e.roles.invites[id]);
       // A member invite's join counts as set (at Member), so the app's
       // default never stands in for it.
-      if (set !== null || cappedTier(e.roles.tiers[id])) anySet = true;
+      // An admin's invite counts as set too: its unset rank is the app's default (unsetRank).
+      if (set !== null || cappedTier(e.roles.tiers[id]) || e.roles.tiers[id] === "admin") anySet = true;
       best = higher(best, set ?? this.unsetRank(e, id, defaultRole));
     }
     return anySet ? best : null;

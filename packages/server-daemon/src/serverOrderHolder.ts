@@ -9,7 +9,7 @@ import {
   type SignedServerOrder,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
-import { hybridOrderSignature } from "./pqAuthority.js";
+import { hybridOrderSignature, pqAuthority } from "./pqAuthority.js";
 import { writeFileDurable } from "./durableFile.js";
 
 /**
@@ -28,6 +28,8 @@ export interface ServerOrderHolder {
   load(): Promise<void>;
   /** The held order, or null. */
   current(): SignedServerOrder | null;
+  /** True when the held order carried a hybrid signature the gate verified (pq-suites.md §16). */
+  currentIsHybrid(): boolean;
   /** Position of `stkHex` in the held order (0 = first), or null when unlisted. */
   rankOf(stkHex: string): number | null;
   /** Verify + adopt `raw` (a `{order, signature}`) when newer. True when adopted. */
@@ -60,29 +62,34 @@ function sigBytes(h: string): Uint8Array {
 export function buildServerOrderHolder(opts: ServerOrderHolderOptions): ServerOrderHolder {
   const log = opts.onLog ?? (() => {});
   let held: SignedServerOrder | null = null;
+  let heldHybrid = false;
   let ranks = new Map<string, number>();
 
-  const adopt = (o: SignedServerOrder) => {
-    held = o;
+  const adopt = (o: SignedServerOrder & { hybrid?: boolean }) => {
+    const { hybrid, ...signed } = o;
+    held = signed;
+    heldHybrid = hybrid === true;
     ranks = new Map(o.order.stks.map((s, i) => [s, i]));
   };
 
-  const verified = (raw: unknown): SignedServerOrder | null => {
+  const verified = (raw: unknown): (SignedServerOrder & { hybrid: boolean }) | null => {
     const signed = parseSignedServerOrder(raw);
     if (!signed) return null;
     if (signed.order.user.toLowerCase() !== opts.user.toLowerCase()) return null;
     if (!/^[0-9a-f]{128}$/.test(signed.signature)) return null;
+    const hybrid = hybridOrderSignature(canonicalServerOrder(signed.order), signed.pqSignature ?? (raw as { pqSignature?: unknown } | null)?.pqSignature);
     const ok = authorizeSensitiveOrder<ServerOrder>({
       order: signed.order,
       signature: sigBytes(signed.signature),
-      hybrid: hybridOrderSignature(canonicalServerOrder(signed.order), signed.pqSignature ?? (raw as { pqSignature?: unknown } | null)?.pqSignature),
+      hybrid,
       verify: (o, sig, pub) => verifyServerOrder(o, hex(sig), pub),
       ownerIrkPub: opts.ownerIrkPub,
       ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
       username: opts.user,
       ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
     });
-    return ok ? signed : null;
+    // A hybrid half that was sent and did not verify fails the gate, so "sent" here means verified.
+    return ok ? { ...signed, hybrid: hybrid !== undefined && pqAuthority() !== null } : null;
   };
 
   return {
@@ -95,6 +102,7 @@ export function buildServerOrderHolder(opts: ServerOrderHolderOptions): ServerOr
       }
     },
     current: () => held,
+    currentIsHybrid: () => heldHybrid,
     rankOf: (stkHex) => ranks.get(stkHex.toLowerCase()) ?? null,
     async offer(raw, source) {
       try {
@@ -107,7 +115,8 @@ export function buildServerOrderHolder(opts: ServerOrderHolderOptions): ServerOr
         if (held && o.order.issuedAt <= held.order.issuedAt) return false;
         try {
           await mkdir(dirname(opts.path), { recursive: true, mode: 0o700 });
-          await writeFileDurable(opts.path, `${JSON.stringify(o)}\n`);
+          const { hybrid: _h, ...wire } = o;
+          await writeFileDurable(opts.path, `${JSON.stringify(wire)}\n`);
         } catch (e) {
           log(`[server-order] couldn't save the order (${(e as Error).message}); using it in memory`);
         }

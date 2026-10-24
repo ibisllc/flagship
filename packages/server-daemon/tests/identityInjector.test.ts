@@ -30,7 +30,7 @@ function makePairedApp(opts: { withSarah: boolean; publicRoutes?: string[] }) {
   if (opts.withSarah) {
     const nonce = newInviteNonce();
     const issuedAt = Date.now();
-    const token: InviteToken = { serviceId: APP, role: "parent", nonce, issuedAt, expiresAt: issuedAt + 60_000 };
+    const token: InviteToken = { serviceId: APP, role: "manager", nonce, issuedAt, expiresAt: issuedAt + 60_000 };
     const inviteSig = signInvite(token, ownerIrk);
     const acceptance: InviteAcceptance = {
       inviteNonce: nonce,
@@ -63,7 +63,7 @@ describe("IdentityInjector — happy paths", () => {
     expect(decision.action).toBe("allow");
     if (decision.action !== "allow") return;
     expect(decision.headers["X-Flagship-Member"]).toMatch(/^[0-9a-f]{32}$/);
-    expect(decision.headers["X-Flagship-Role"]).toBe("parent");
+    expect(decision.headers["X-Flagship-Role"]).toBe("manager");
     expect(decision.headers["X-Flagship-Signature"]).toMatch(/^[0-9a-f]{128}$/);
   });
 
@@ -106,7 +106,7 @@ describe("IdentityInjector — header signatures verify cleanly", () => {
     const v = verifyIdentityHeaders(lower, runtimePub);
     expect(v.ok).toBe(true);
     if (!v.ok) return;
-    expect(v.role).toBe("parent");
+    expect(v.role).toBe("manager");
   });
 
   it("verifyIdentityHeaders rejects tampered role", () => {
@@ -115,7 +115,7 @@ describe("IdentityInjector — header signatures verify cleanly", () => {
     if (decision.action !== "allow") throw new Error("expected allow");
     const lower: Record<string, string> = {};
     for (const [k, v] of Object.entries(decision.headers)) lower[k.toLowerCase()] = v;
-    lower["x-flagship-role"] = "admin"; // attempt privilege escalation
+    lower["x-flagship-role"] = "master"; // attempt privilege escalation
     expect(verifyIdentityHeaders(lower, runtimePub).ok).toBe(false);
   });
 

@@ -1,4 +1,4 @@
-import { ed } from "@flagship/protocol";
+import { checkIdentityAssertion, ed, isAssertedRank } from "@flagship/protocol";
 import type { AppMembership } from "./membership.js";
 import type { Bytes } from "@flagship/protocol";
 import type { BoxSigner } from "./keyCustodian.js";
@@ -98,6 +98,11 @@ export class IdentityInjector {
     }
 
     const role = this.app.members.getRole(irkPub);
+    // A member asserted at anything but a Flagship rank (an `owner` or `admin` left in an old
+    // store) is refused, never signed: the box asserts member < manager < master only.
+    if (role !== null && !isAssertedRank(role)) {
+      return { action: "deny", status: 403, reason: "this member has no Flagship rank in this app" };
+    }
     if (role === null) {
       if (this.isPublic(req.path)) {
         return this.signAnonymous();
@@ -116,6 +121,7 @@ export class IdentityInjector {
   private signMember(stableId: string, role: string): Decision {
     const issuedAt = this.now();
     const canonical = canonicalHeaderBytes(stableId, role, issuedAt);
+    if (checkIdentityAssertion(canonical) !== null) return { action: "deny", status: 403, reason: "this member's identity could not be asserted" };
     const sig = this.signer.signAsBox(canonical);
     return {
       action: "allow",

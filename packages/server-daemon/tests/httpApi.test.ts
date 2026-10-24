@@ -60,7 +60,7 @@ describe("daemon HTTP — invite redemption", () => {
     const issuedAt = Date.now();
     const token: InviteToken = {
       serviceId: "habit-tracker",
-      role: "parent",
+      role: "manager",
       nonce,
       issuedAt,
       expiresAt: issuedAt + 60_000,
@@ -79,7 +79,7 @@ describe("daemon HTTP — invite redemption", () => {
       payload: {
         token: {
           serviceId: "habit-tracker",
-          role: "parent",
+          role: "manager",
           nonce: bytesToHex(nonce),
           issuedAt,
           expiresAt: token.expiresAt,
@@ -95,7 +95,7 @@ describe("daemon HTTP — invite redemption", () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.role).toBe("parent");
+    expect(body.role).toBe("manager");
     expect(body.stableId).toMatch(/^[0-9a-f]{32}$/);
 
     // Now Sarah is a member; identity-decide for her returns allow.

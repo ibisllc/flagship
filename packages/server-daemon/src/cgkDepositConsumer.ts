@@ -63,7 +63,7 @@ export function decodeAndVerifyCgkCarrier(args: {
    * Under flagship-keyd: hand the verified sealed key to keyd, which opens and keeps it, so the
    * key never enters this process. Used instead of `unsealToBox`; the result is then ADOPTED.
    */
-  adoptSealed?: ((sealed: Uint8Array) => void) | undefined;
+  adoptSealed?: ((sealed: Uint8Array, proof: { serverDomain: string; issuedAt: number; signature: Uint8Array }) => void) | undefined;
   serverDomain: string;
 }): string | null {
   const parsed = carrierHexToCgkDelivery(args.sealedHex);
@@ -73,7 +73,7 @@ export function decodeAndVerifyCgkCarrier(args: {
     if (d.serverDomain.toLowerCase() !== args.serverDomain.toLowerCase()) return null;
     if (!verifyCgkDelivery(d, parsed.signature, args.ownerIrkPub)) return null;
     try {
-      args.adoptSealed(d.sealed);
+      args.adoptSealed(d.sealed, { serverDomain: d.serverDomain, issuedAt: d.issuedAt, signature: parsed.signature });
     } catch {
       return null;
     }
@@ -124,7 +124,7 @@ export interface ClaimCgkDepositOptions {
   /** Custodian-backed unseal — opens the CGK carrier sealed to the box identity. */
   unsealToBox: (blob: Uint8Array) => Uint8Array;
   /** Under flagship-keyd: keyd opens and keeps the verified sealed key (see decode…Carrier). */
-  adoptSealed?: (sealed: Uint8Array) => void;
+  adoptSealed?: (sealed: Uint8Array, proof: { serverDomain: string; issuedAt: number; signature: Uint8Array }) => void;
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /**

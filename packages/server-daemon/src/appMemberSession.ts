@@ -19,15 +19,14 @@
  *     docs/service-access-gating.md "Account members"): an admin device is
  *     master and the account's other devices and co-managers manager unless
  *     an admin order says otherwise; an invited person has the rank their
- *     grants give, else the legacy membership store's, else the manifest's
- *     `default_role` (an `owner` there reads as master);
+ *     grants give, else Member (the manifest's `default_role` and the legacy
+ *     membership store never raise it);
  *   - stable id: per app, from the app secret and a key: the owner AID for
  *     every device of the owning account (one person, many devices), the
  *     share key for a co-manager, the per-app id for an invited person. It
  *     can't be linked across apps.
  */
-import type { Bytes } from "@flagship/protocol";
-import { ladderRole, readSessionCookie, type ServiceAccessStore, type ServiceSessionStore } from "./serviceAccess.js";
+import { readSessionCookie, type ServiceAccessStore, type ServiceSessionStore } from "./serviceAccess.js";
 import type { SessionResolver } from "./serviceProxy.js";
 
 export interface AppSessionResolverOptions {
@@ -47,20 +46,17 @@ export function buildAppSessionResolver(opts: AppSessionResolverOptions): Sessio
     if (!opts.access.isAllowed(app.serviceId, sess.aid)) return null;
     const p = opts.access.principal(sess.aid);
     const identity = hexToBytes(opts.access.appIdentityKey(sess.aid));
-    const role = p ? opts.access.accountRank(app.serviceId, p) : invitedRole(sess.aid, hexToBytes(sess.aid));
+    const role = p ? opts.access.accountRank(app.serviceId, p) : invitedRole(sess.aid);
     if (!role) return null;
     // Someone outside the owner's own devices (an invited person, a co-manager) also needs a current
     // freshness checkpoint; a device of the owner's account never does.
     const external = !p || p.kind === "co-manager";
     return { memberPub: identity, stableId: app.membership.stableIdFor(identity), role, ...(external ? { external: true } : {}) };
 
-    function invitedRole(aidHex: string, pub: Bytes): string {
-      const d = app.manifest.access.default_role;
-      const set = opts.access.roleOf(app.serviceId, aidHex, d);
-      if (set !== null) return set;
-      const assigned = ladderRole(app.membership.members.getRole(pub));
-      if (assigned !== null) return assigned;
-      return ladderRole(d) ?? "member";
+    // An invited person's rank is what an admin's verified order set for them, else Member: the
+    // legacy membership store and the manifest's `default_role` never raise it.
+    function invitedRole(aidHex: string): string {
+      return opts.access.roleOf(app.serviceId, aidHex, app.manifest.access.default_role) ?? "member";
     }
   };
 }

@@ -18,6 +18,7 @@ import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { keepCorruptAside, readStateFile, removeDurable, writeFileDurable } from "./durableFile.js";
 import { runSetupStep } from "./privileged.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
+import { trustedNow } from "./trustedClock.js";
 
 /**
  * Owner debug access (docs/recipe-delivery-and-remote-install.md "Debug
@@ -253,7 +254,7 @@ export class DebugAccessController {
   private readonly log: (m: string) => void;
 
   constructor(private readonly opts: DebugAccessOptions) {
-    this.now = opts.now ?? (() => Date.now());
+    this.now = opts.now ?? trustedNow;
     this.log = opts.log ?? (() => {});
   }
 

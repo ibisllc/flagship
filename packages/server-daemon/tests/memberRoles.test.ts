@@ -195,9 +195,9 @@ describe("setting a role", () => {
     await store.revokeGroup("sam-1", SERVICE);
     expect(store.isAllowed(SERVICE, OTHER)).toBe(true);
     expect(store.roleOf(SERVICE, OTHER, "member")).toBe("member");
-    // An unset grant counts as the app's default.
+    // An unset grant is a Member, whatever the app's default says: only an admin's order raises it.
     await store.addAllowed(SERVICE, OTHER, "unset-link");
-    expect(store.roleOf(SERVICE, OTHER, "manager")).toBe("manager");
+    expect(store.roleOf(SERVICE, OTHER, "manager")).toBe("member");
     // Revoking the last grants ends membership.
     await store.revokeGroup("family", SERVICE);
     await store.revokeGroup("unset-link", SERVICE);

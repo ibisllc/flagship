@@ -27,8 +27,10 @@ import {
   decodeInnerResponse,
   encodeInner,
   finishPqSession,
+  serverOrderPqKeyId,
   startPqSession,
   verifyPqKeyBinding,
+  type SignedServerOrder,
   type PqSessionChannel,
   type PqSessionIdentity,
   type PqSessionInitiatorLookup,
@@ -39,6 +41,7 @@ import {
 import { writeFileDurable } from "./durableFile.js";
 import { extractPairedSessionToken } from "./pairedSessionStore.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
+import { trustedNow } from "./trustedClock.js";
 
 const MAX_PENDING = 256;
 const MAX_SESSIONS = 2048;
@@ -198,9 +201,37 @@ export function pqStrictGuard(opts: {
 }
 
 /**
- * The account's other servers' PQ keys, pinned on first sight: `.com` serves each server's
- * `box-stk` binding, which must verify under the STK `/pods` names, and the first ML-DSA key per
- * STK wins (a later one is a key change and is refused), so `.com` cannot swap it.
+ * Whether the account itself vouches for a sibling's keys (pq-suites.md §16), from the server
+ * order this box holds and verified under its pinned admin root (else IRK): the sibling's STK must
+ * be listed, and the hybrid key id the order names for it must be the binding's. While strict is
+ * in force the order must also carry a verified hybrid signature and name the key id, so neither
+ * `.com` (which serves `/pods` and the bindings) nor a forged classical signature can introduce a
+ * sibling. Outside strict an order that names another key id is still refused; a sibling the order
+ * does not mention is let in as before. Returns null when vouched for, else why not.
+ */
+export function siblingChainRefusal(
+  ctx: { order: () => SignedServerOrder | null; orderIsHybrid: () => boolean; strict: () => boolean },
+  stkHex: string,
+  keyIdHex: string,
+): string | null {
+  const held = ctx.order();
+  const strict = ctx.strict();
+  const stk = stkHex.toLowerCase();
+  if (!held) return strict ? "no-server-order" : null;
+  const named = serverOrderPqKeyId(held.order, stk);
+  if (named !== null && named !== "-" && named !== keyIdHex) return "pq-key-not-the-orders";
+  if (!strict) return null;
+  if (!held.order.stks.includes(stk)) return "not-in-server-order";
+  if (!ctx.orderIsHybrid()) return "server-order-not-hybrid";
+  if (named === null || named === "-") return "pq-key-not-in-order";
+  return null;
+}
+
+/**
+ * The account's other servers' PQ keys. `.com` serves each server's `box-stk` binding, which must
+ * verify under the STK `/pods` names; the first ML-DSA key per STK wins (a later one is a key
+ * change and is refused); and `chain` (siblingChainRefusal) must vouch for it through the
+ * account-signed server order, at first sight and at every later use.
  */
 export class SiblingPqPins {
   private pins = new Map<string, { stk: string; mldsa: string; issuedAt: number }>();
@@ -210,10 +241,18 @@ export class SiblingPqPins {
     private readonly opts: {
       path: string;
       fetchBinding: (domain: string) => Promise<unknown>;
+      /** siblingChainRefusal bound to this box's order and policy; absent: no account check (tests). */
+      chain?: (stkHex: string, keyIdHex: string) => string | null;
       now?: () => number;
       log?: (m: string) => void;
     },
   ) {}
+
+  private vouched(b: VerifiedPqKeyBinding, domain: string): boolean {
+    const why = this.opts.chain?.(b.ed25519PubHex, b.keyIdHex) ?? null;
+    if (why) this.opts.log?.(`[pq-session] ${domain}: the account does not vouch for its keys (${why})`);
+    return why === null;
+  }
 
   async load(): Promise<void> {
     try {
@@ -229,7 +268,7 @@ export class SiblingPqPins {
     const d = domain.toLowerCase();
     const stk = stkHex.toLowerCase();
     const cached = this.verified.get(d);
-    if (cached && cached.ed25519PubHex === stk) return cached;
+    if (cached && cached.ed25519PubHex === stk) return this.vouched(cached, d) ? cached : null;
     const pin = this.pins.get(d);
     if (pin && pin.stk !== stk) return null;
     let wire: unknown;
@@ -244,9 +283,10 @@ export class SiblingPqPins {
         subjectId: d,
         ed25519PubHex: stk,
         mldsaPubHex: pin?.mldsa ?? null,
-        now: (this.opts.now ?? Date.now)(),
+        now: (this.opts.now ?? trustedNow)(),
         ...(pin ? { minIssuedAt: pin.issuedAt } : {}),
       });
+      if (!this.vouched(b, d)) return null;
       this.verified.set(d, b);
       if (!pin) {
         this.pins.set(d, { stk, mldsa: b.mldsaPubHex, issuedAt: b.issuedAt });
@@ -262,7 +302,7 @@ export class SiblingPqPins {
   /** For the session lookup: a sibling whose binding this box already verified. */
   known(subject: string, keyIdHex: string): VerifiedPqKeyBinding | null {
     const b = this.verified.get(subject.toLowerCase());
-    return b && b.keyIdHex === keyIdHex ? b : null;
+    return b && b.keyIdHex === keyIdHex && this.vouched(b, subject.toLowerCase()) ? b : null;
   }
 }
 

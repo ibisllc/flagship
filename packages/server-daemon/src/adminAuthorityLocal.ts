@@ -1,5 +1,6 @@
 import { requireMasterAdmin, type AdminGrantView } from "@flagship/protocol";
 import { gateSigner, pqAuthority, type HybridOrderSignature, type PqAuthorityContext } from "./pqAuthority.js";
+import { trustedNow } from "./trustedClock.js";
 
 /**
  * Slice D — box-local sensitive-order authorization gate
@@ -55,7 +56,7 @@ export interface AuthorizeSensitiveOrderArgs<TOrder> {
    * the delegated path.
    */
   activeGrants?: readonly AdminGrantView[];
-  /** ms clock (defaults to Date.now()); used for grant expiry. */
+  /** ms clock (defaults to the box's authenticated clock, trustedClock.ts); used for grant expiry. */
   now?: number;
   /**
    * Architecture v2: the order's hybrid signature by the same signer, when the client sent one.
@@ -92,7 +93,7 @@ function classicalSigner<TOrder>(args: AuthorizeSensitiveOrderArgs<TOrder>): str
 
   // 1. The bare admin master root signs directly (the box-side owner-admin path).
   if (args.verify(args.order, args.signature, args.adminRootPub)) {
-    return requireMasterAdmin(adminRootHex, args.username, adminRootHex, grants, args.now).ok ? adminRootHex : null;
+    return requireMasterAdmin(adminRootHex, args.username, adminRootHex, grants, args.now ?? trustedNow()).ok ? adminRootHex : null;
   }
 
   // 2. A delegated admin device: the order is signed by a device key that holds a
@@ -102,7 +103,7 @@ function classicalSigner<TOrder>(args: AuthorizeSensitiveOrderArgs<TOrder>): str
     const devicePub = g.grant.devicePubKey;
     if (devicePub.length !== 32) continue;
     if (!args.verify(args.order, args.signature, devicePub)) continue;
-    if (requireMasterAdmin(bytesToHex(devicePub), args.username, adminRootHex, grants, args.now).ok) {
+    if (requireMasterAdmin(bytesToHex(devicePub), args.username, adminRootHex, grants, args.now ?? trustedNow()).ok) {
       return bytesToHex(devicePub);
     }
   }

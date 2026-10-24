@@ -31,6 +31,20 @@ import type { BoxSigner, GossipOps, SwkOps, BootAuthArgs } from "./keyCustodian.
 const hex = (b: Uint8Array): string => Buffer.from(b).toString("hex");
 const unhex = (s: unknown): Bytes => Uint8Array.from(Buffer.from(String(s), "hex"));
 
+/** The owner's signature on a sealed SWK/CGK delivery, as the carrier holds it. */
+export interface DeliveryProof {
+  serverDomain: string;
+  issuedAt: number;
+  signature: Bytes;
+}
+
+function proofArgs(p: DeliveryProof): { serverDomain: string; issuedAt: number; signature: string } {
+  return { serverDomain: p.serverDomain, issuedAt: p.issuedAt, signature: hex(p.signature) };
+}
+
+/** Where keyd writes the boot ceremony's token (packages/keyd CEREMONY_TOKEN_FILE). */
+export const KEYD_CEREMONY_TOKEN_PATH = "/var/lib/flagship-keyd/provision-ceremony.token";
+
 export interface KeydCustodianOptions {
   socketPath: string;
   component?: string;
@@ -188,21 +202,26 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
     return String(this.#client.call("cgk.accessSyncMac", { msg: hex(canonical) }).mac);
 
   // ── Provisioning (once; keyd refuses a different key afterwards) ───────
-  provisionSwk(key: Bytes): void {
-    this.#client.call("provision.swk", { key: hex(key) });
+  /**
+   * Move in a key this box already held (install blob, legacy file). keyd lets it in only with
+   * the boot ceremony's one-time token, which keyd wrote beside its state at this start for root
+   * to read (`ceremonyToken`); without it keyd refuses and the key stays where it was.
+   */
+  provisionSwk(key: Bytes, ceremonyToken: string): void {
+    this.#client.call("provision.swk", { key: hex(key), ceremony: ceremonyToken });
     this.#hasSwk = true;
   }
-  provisionCgk(key: Bytes): void {
-    this.#client.call("provision.cgk", { key: hex(key) });
+  provisionCgk(key: Bytes, ceremonyToken: string): void {
+    this.#client.call("provision.cgk", { key: hex(key), ceremony: ceremonyToken });
     this.#hasCgk = true;
   }
-  /** Hand keyd the owner's sealed delivery; keyd opens and keeps the key. */
-  provisionSwkSealed(sealed: Bytes): void {
-    this.#client.call("provision.swk", { sealed: hex(sealed) });
+  /** Hand keyd the owner's sealed delivery and its signature; keyd checks both, opens it and keeps the key. */
+  provisionSwkSealed(sealed: Bytes, proof: DeliveryProof): void {
+    this.#client.call("provision.swk", { sealed: hex(sealed), ...proofArgs(proof) });
     this.#hasSwk = true;
   }
-  provisionCgkSealed(sealed: Bytes): void {
-    this.#client.call("provision.cgk", { sealed: hex(sealed) });
+  provisionCgkSealed(sealed: Bytes, proof: DeliveryProof): void {
+    this.#client.call("provision.cgk", { sealed: hex(sealed), ...proofArgs(proof) });
     this.#hasCgk = true;
   }
 

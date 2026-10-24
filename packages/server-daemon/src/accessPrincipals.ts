@@ -31,6 +31,7 @@ import {
   type DeviceCapabilityGrant,
   type DeviceScope,
 } from "@flagship/protocol";
+import { trustedNow } from "./trustedClock.js";
 
 export type DeviceTier = "admin" | "member";
 
@@ -123,7 +124,7 @@ export class AccountDeviceBook {
   private readonly now: () => number;
 
   constructor(private readonly opts: AccountDeviceBookOptions) {
-    this.now = opts.now ?? (() => Date.now());
+    this.now = opts.now ?? trustedNow;
   }
 
   async load(): Promise<void> {

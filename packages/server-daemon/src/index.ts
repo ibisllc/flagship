@@ -104,7 +104,7 @@ import {
 } from "./identityRotateHttp.js";
 import { AppMembership } from "./membership.js";
 import { KeyCustodian, type SwkOps } from "./keyCustodian.js";
-import { KeydCustodian } from "./keydCustodian.js";
+import { KEYD_CEREMONY_TOKEN_PATH, KeydCustodian, type DeliveryProof } from "./keydCustodian.js";
 import { KeydClient } from "@flagship/keyd";
 import { keydTlsKeyd } from "./keydAsync.js";
 import type { OpaqueTlsOptions } from "./runtime.js";
@@ -319,11 +319,13 @@ import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { AssurancePolicySync, ScopedPolicies } from "./assurancePolicySync.js";
 import { setPqAuthority } from "./pqAuthority.js";
-import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard } from "./pqChannel.js";
+import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard, siblingChainRefusal } from "./pqChannel.js";
 import { AccessJournal } from "./accessJournal.js";
 import { accessSyncKeyFromOps, buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers } from "./accessPeers.js";
-import { BoxReadToken } from "./boxReadToken.js";
+import { BoxReadToken, ownDepositFetch } from "./boxReadToken.js";
+import { TrustedClock, setTrustedClock, trustedNow } from "./trustedClock.js";
+import { warnIfSharedApplianceDiskKey } from "./applianceDiskKey.js";
 
 /**
  * The `.com` doorbell (doorbell.ts): created once the box knows its account and
@@ -333,6 +335,11 @@ import { BoxReadToken } from "./boxReadToken.js";
 const doorbellRef: { current: Doorbell | null } = { current: null };
 /** The owner's connector choices under strict (pqChannel wiring sets it once the policy is replayed). */
 const connectorGateRef: { current: ((connectorId: string) => string | null) | null } = { current: null };
+/**
+ * Whether a sibling's gossip frame may be counted, set once the owner's assurance policy is
+ * loaded (wireOwnerHandlers): while strict, only servers the account's hybrid-signed order lists.
+ */
+const siblingAdmitRef: { current: ((stkHex: string) => string | null) | null } = { current: null };
 const bellFetch = (): { fetchImpl?: typeof fetch } =>
   doorbellRef.current ? { fetchImpl: doorbellRef.current.fetch } : {};
 /** Poll a consumer the moment its lane starts to ring. */
@@ -767,6 +774,10 @@ async function main(): Promise<void> {
   onCorruptState((r) =>
     activityLog.note("server.state.corrupt", `${basename(r.path)} couldn't be read and was set aside. ${r.effect}`, { ok: false }),
   );
+  void warnIfSharedApplianceDiskKey({
+    warnedMarkerPath: `${dataDir}/appliance-disk-key-warning.json`,
+    note: (kind, detail) => activityLog.note(kind, detail, { ok: false }),
+  }).catch((e: Error) => console.warn(`[disk-key] check failed: ${e.message}`));
   // The owner-assigned front page (its own route below, and server backups).
   const frontPage = new FrontPageStore();
   await frontPage.load();
@@ -1024,15 +1035,28 @@ async function main(): Promise<void> {
   if (keyd) {
     // The first boot under keyd moves any key still on this side of the socket into it, once,
     // and removes the readable copy. After that the daemon never sees the bytes again.
+    // keyd lets a raw key in only with the boot ceremony's token (root reads it beside keyd's
+    // state); without it the key stays where it was and the box keeps running as before.
+    const ceremony = (swkHex && !keyd.hasSwk) || (legacyCgk && !keyd.hasCgk)
+      ? ((await tryReadFile(process.env.FLAGSHIP_KEYD_CEREMONY_TOKEN ?? KEYD_CEREMONY_TOKEN_PATH))?.trim() ?? "")
+      : "";
     if (swkHex && !keyd.hasSwk) {
-      keyd.provisionSwk(hexToBytes(swkHex.trim()));
-      await rm(swkHexFilePath, { force: true }).catch(() => {});
-      console.log("[daemon] workload key moved into flagship-keyd");
+      try {
+        keyd.provisionSwk(hexToBytes(swkHex.trim()), ceremony);
+        await rm(swkHexFilePath, { force: true }).catch(() => {});
+        console.log("[daemon] workload key moved into flagship-keyd");
+      } catch (e) {
+        console.warn(`[daemon] flagship-keyd did not take the workload key (${(e as Error).message})`);
+      }
     }
     if (legacyCgk && !keyd.hasCgk) {
-      keyd.provisionCgk(legacyCgk);
-      await rm("/var/flagship/cgk.hex", { force: true }).catch(() => {});
-      console.log("[daemon] gossip key moved into flagship-keyd");
+      try {
+        keyd.provisionCgk(legacyCgk, ceremony);
+        await rm("/var/flagship/cgk.hex", { force: true }).catch(() => {});
+        console.log("[daemon] gossip key moved into flagship-keyd");
+      } catch (e) {
+        console.warn(`[daemon] flagship-keyd did not take the gossip key (${(e as Error).message})`);
+      }
     }
     if (keyd.hasSwk) swkHex = "held-by-keyd";
   }
@@ -1143,8 +1167,46 @@ async function main(): Promise<void> {
   // SWK resolution above picks it up and the service platform constructs. Runs
   // ONLY in the no-SWK + production (cfg present) state — the recipe-embedded
   // swkHex path is entirely untouched; demo/gym (cfg-absent) is a no-op.
+  // The box's own deposits (SWK, CGK, pairing order, entitlement) are consume-once on `.com`, so
+  // `.com` hands them only to this box's own read token, minted with its STK.
+  const depositFetch: typeof fetch =
+    cfg && env.controlPlaneBaseUrl && env.serverFqdn
+      ? ownDepositFetch(
+          new BoxReadToken({
+            comBaseUrl: env.controlPlaneBaseUrl,
+            username: cfg.userId,
+            serverFqdn: env.serverFqdn,
+            boxPublicKey: () => identityKeypair.publicKey,
+            signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+          }),
+        )
+      : (...a) => fetch(...a);
+  const depositReads = (): { fetchImpl: typeof fetch } => bellFetch().fetchImpl ? { fetchImpl: bellFetch().fetchImpl! } : { fetchImpl: depositFetch };
   if (cfg && env.controlPlaneBaseUrl && env.serverFqdn) {
-    doorbellRef.current = new Doorbell({ serverDomain: env.serverFqdn, username: cfg.userId });
+    doorbellRef.current = new Doorbell({ serverDomain: env.serverFqdn, username: cfg.userId, fetchImpl: depositFetch });
+  }
+  // ---- Authenticated time (pq-suites.md §17) ----
+  // Expiry checks read the box's authenticated clock: `.com`'s CA-signed time over a fresh nonce,
+  // run forward on the monotonic clock, never earlier than the floor kept on disk and on /boot.
+  if (env.controlPlaneBaseUrl) {
+    const clock = new TrustedClock({
+      comBaseUrl: env.controlPlaneBaseUrl,
+      chain: () => {
+        try {
+          return caTrustChainFromFolder({ gitRepoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship" });
+        } catch {
+          return null;
+        }
+      },
+      floorPath: `${dataDir}/time-floor.json`,
+      bootFloorPath: hasBootKey() ? "/boot/flagship-time-floor" : null,
+      log: (m) => console.log(m),
+    });
+    await clock.load();
+    if (!(await clock.refresh(8_000))) console.warn(`[time] no authenticated time yet (${clock.status().lastRefusal}); expiry checks use the system clock raised to the floor`);
+    setTrustedClock(clock);
+    const t = setInterval(() => void clock.refresh().then((ok) => (ok ? undefined : clock.checkpoint())), 6 * 60 * 60_000);
+    if (typeof t.unref === "function") t.unref();
   }
   if (!swkHex && cfg && env.controlPlaneBaseUrl) {
     const swkPoller = buildSwkDepositPoller({
@@ -1152,9 +1214,9 @@ async function main(): Promise<void> {
       ownerIrkPub: cfg.irkPublicKey,
       unsealToBox: (blob) => custodian.unsealToBox(blob),
       // Under keyd the verified delivery goes to keyd sealed; the key never enters this process.
-      ...(keyd ? { adoptSealed: (sealed: Uint8Array) => keyd.provisionSwkSealed(sealed) } : {}),
+      ...(keyd ? { adoptSealed: (sealed: Uint8Array, proof: DeliveryProof) => keyd.provisionSwkSealed(sealed, proof) } : {}),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-      ...bellFetch(),
+      ...depositReads(),
       persistSwk: (hex) => persistSwkHex(swkHexFilePath, hex),
       restart: () => restarts.request("SWK provisioned via deposit; restarting to enable the service platform"),
       markerStore: fileSwkMarkerStore(`${dataDir}/swk-claimed.json`),
@@ -1186,9 +1248,9 @@ async function main(): Promise<void> {
       serverDomain: env.serverFqdn!,
       ownerIrkPub: cfg.irkPublicKey,
       unsealToBox: (blob) => custodian.unsealToBox(blob),
-      ...(keyd ? { adoptSealed: (sealed: Uint8Array) => keyd.provisionCgkSealed(sealed) } : {}),
+      ...(keyd ? { adoptSealed: (sealed: Uint8Array, proof: DeliveryProof) => keyd.provisionCgkSealed(sealed, proof) } : {}),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-      ...bellFetch(),
+      ...depositReads(),
       persistCgk: (hex) => persistCgkHex(cgkHexFilePath, hex),
       restart: () => restarts.request("CGK provisioned via deposit; restarting to enable gossip"),
       markerStore: fileCgkMarkerStore(`${dataDir}/cgk-claimed.json`),
@@ -1756,7 +1818,7 @@ async function main(): Promise<void> {
           ownerIrkPub: cfg.irkPublicKey,
           unsealToBox: (blob) => custodian.unsealPairingOrder(blob),
           pairedSessions,
-          ...bellFetch(),
+          ...depositReads(),
           markerStore: pairingMarker,
           onVerified: async (json) => {
               await adoptPairingSiblings(json);
@@ -1862,6 +1924,7 @@ async function main(): Promise<void> {
   // no timer, no behavior change. Mounts onto the live runtime + arms the
   // dead-man SIGTERM/SIGINT stop hooks.
   await wireOwnerHandlers({
+    serverOrder,
     readStkHybrid: () => stkHybridRef.current,
     readStkPqIdentity: () => stkPqIdentityRef.current,
     authorityHub,
@@ -2036,6 +2099,7 @@ async function main(): Promise<void> {
         listServiceSlugs: () =>
           servicePlatformRefForServer.current?.list().map((a) => a.slug) ?? [],
         ...(serverOrder ? { serverOrder } : {}),
+        admitSibling: (stk) => siblingAdmitRef.current?.(stk) ?? null,
         // The zone this box lives in (`<server>.<user>.<apex>`): the gym's
         // boxes are under gym.flagship.services, so broadcast and the
         // leader-routed URLs must not assume the production apex.
@@ -2553,6 +2617,15 @@ async function loadEntitlementsOrExit(deps: {
         stkPub: identityKeypair.publicKey,
         controlPlaneBaseUrl: env.controlPlaneBaseUrl,
         entitlementBundlePath,
+        fetchImpl: ownDepositFetch(
+          new BoxReadToken({
+            comBaseUrl: env.controlPlaneBaseUrl,
+            username: cfg.userId,
+            serverFqdn: env.serverFqdn,
+            boxPublicKey: () => identityKeypair.publicKey,
+            signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+          }),
+        ),
         onLog: (m) => console.log(m),
       }));
       if (deposited) {
@@ -3516,7 +3589,7 @@ async function wireRuntimeSurfaces(deps: {
         } catch {
           chain = null;
         }
-        return checkShareAcceptAdmin({ accept, proof, chain, now: Date.now() });
+        return checkShareAcceptAdmin({ accept, proof, chain, now: trustedNow() });
       },
     });
     const { dropped } = await store.load();
@@ -3983,6 +4056,8 @@ async function wireOwnerHandlers(deps: {
   backupLoop: BackupLoop | null;
   /** Migrate's pause: a move on the archive path needs no final flush. */
   migratePause: MigratePause | null;
+  /** The owner's server order as this box verified it: the account's word for its siblings. */
+  serverOrder: ServerOrderHolder | null;
 }): Promise<void> {
   const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair, authorityHub } = deps;
   if (!cfg) return;
@@ -4111,6 +4186,17 @@ async function wireOwnerHandlers(deps: {
   const comBase = env.controlPlaneBaseUrl.replace(/\/+$/, "");
   const siblingPins = new SiblingPqPins({
     path: `${accessDataDir}/pq-sibling-pins.json`,
+    // The account vouches for each sibling through the server order it signed (pq-suites.md §16).
+    chain: (stk, keyId) =>
+      siblingChainRefusal(
+        {
+          order: () => deps.serverOrder?.current() ?? null,
+          orderIsHybrid: () => deps.serverOrder?.currentIsHybrid() ?? false,
+          strict: () => strictInForce(assurance.policy()),
+        },
+        stk,
+        keyId,
+      ),
     fetchBinding: async (d) => {
       const r = await fetch(`${comBase}/api/server/${encodeURIComponent(d)}/pq-key-binding`, { headers: { accept: "application/json" } });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -4119,6 +4205,12 @@ async function wireOwnerHandlers(deps: {
     log: (m) => console.warn(m),
   });
   await siblingPins.load();
+  siblingAdmitRef.current = (stk) => {
+    if (!strictInForce(assurance.policy())) return null;
+    const held = deps.serverOrder?.current() ?? null;
+    if (!held || !held.order.stks.includes(stk.toLowerCase())) return "not-in-server-order";
+    return deps.serverOrder?.currentIsHybrid() ? null : "server-order-not-hybrid";
+  };
   let podsCache: { at: number; pods: Array<{ serverDomain: string; identityPubKey: string; revokedAt?: number | null }> } | null = null;
   const siblingPods = async () => {
     if (podsCache && Date.now() - podsCache.at < 5 * 60_000) return podsCache.pods;

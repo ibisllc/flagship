@@ -85,3 +85,23 @@ export class BoxReadToken {
     return body.token;
   }
 }
+
+const OWN_DEPOSIT = /\/api\/server\/[^/]+\/(?:swk|cgk|pairing|entitlement)-deposit$/;
+
+/**
+ * A fetch for the box's pollers: reads of its own consume-once deposits carry its read token
+ * (`.com` refuses them otherwise); everything else goes out as before. When no token can be
+ * minted (`.com` unreachable, or a demo box) the read goes without one: a demo account is let in
+ * and a real one gets its 401, which the poller retries.
+ */
+export function ownDepositFetch(reader: Pick<BoxReadToken, "fetch">, fetchImpl: typeof fetch = (...a) => fetch(...a)): typeof fetch {
+  return async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (!OWN_DEPOSIT.test(url.split("?")[0]!)) return await fetchImpl(input, init);
+    try {
+      return await reader.fetch(url, init ?? {});
+    } catch {
+      return await fetchImpl(input, init);
+    }
+  };
+}

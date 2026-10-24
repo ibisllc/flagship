@@ -237,7 +237,7 @@ describe("the owner opens their own app", () => {
 });
 
 describe("invited members", () => {
-  it("an allow-listed person signs in with the app's default role, or the role they were given", async () => {
+  it("an allow-listed person signs in as a Member; the old membership store never raises them", async () => {
     const up = await container();
     const app = makeApp(up.port);
     await access.setMode(SVC, "restricted");
@@ -252,20 +252,20 @@ describe("invited members", () => {
     expect(verifyInjected(h)).toBe(true);
     app.membership.members.internalAdd(memberAid.publicKey, "manager");
     await send(b.port, "/private", { cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("manager");
+    expect(up.seen()["x-flagship-role"]).toBe("member");
   });
 
-  it("an invited person never gets the owner role", async () => {
+  it("an invited person's rank never comes from the manifest's default or the old store", async () => {
     const up = await container();
     const app = makeApp(up.port, "owner");
     await access.addAllowed(SVC, hex(memberAid.publicKey));
     const b = await box(app);
     const cookie = await cookieOf(b, memberAid);
     await send(b.port, "/private", { cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("master");
+    expect(up.seen()["x-flagship-role"]).toBe("member");
     app.membership.members.internalAdd(memberAid.publicKey, "owner");
     await send(b.port, "/private", { cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("master");
+    expect(up.seen()["x-flagship-role"]).toBe("member");
   });
 
   it("removing someone signs them out on their next request", async () => {

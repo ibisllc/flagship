@@ -3,7 +3,7 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { BOX_RELEASE } from "@flagship/protocol";
+import { BOX_ARTIFACT_PQ_PIN, BOX_RELEASE, boxArtifactPqPinConfigured } from "@flagship/protocol";
 
 /**
  * Self-update by signed artifact (SEC-UPD-001, SEC-INSTALL-001). The box never
@@ -143,6 +143,9 @@ export function buildArtifactSwapper(opts: ArtifactSwapperOptions): ReleaseSwapp
             "--arch", arch,
             "--node-floor", cfg.nodeFloor,
             "--min-sequence", String(cfg.minSequence),
+            ...(boxArtifactPqPinConfigured(BOX_ARTIFACT_PQ_PIN)
+              ? ["--pq-key-ids", BOX_ARTIFACT_PQ_PIN.keyIds.join(","), ...(BOX_ARTIFACT_PQ_PIN.legacyManifests.length ? ["--legacy-manifests", BOX_ARTIFACT_PQ_PIN.legacyManifests.join(",")] : [])]
+              : []),
           ]);
         } catch (e) {
           const code = (e as { code?: unknown }).code;

@@ -29,6 +29,8 @@
 import {
   MAINTAINER_PINNED_MANDATE_HASH,
   ed,
+  gateCaLeasesPq,
+  type CaLeasePqMaterial,
   type ServiceBlessing,
 } from "@flagship/protocol";
 import {
@@ -38,6 +40,7 @@ import {
   type Mandate,
 } from "@ibisllc/maintainers";
 import { shouldRelayThroughHub, type RelayGateReason } from "./relayBlessing.js";
+import { trustedNow } from "./trustedClock.js";
 
 export type RelayTrustVerdictReason =
   | RelayGateReason
@@ -128,7 +131,7 @@ export class RelayTrustVerifier {
     this.pinnedMandateHash = opts.pinnedMandateHash ?? MAINTAINER_PINNED_MANDATE_HASH;
     this.chainCacheMs = opts.chainCacheMs ?? DEFAULT_CHAIN_CACHE_MS;
     this.fetchImpl = opts.fetchImpl ?? fetch;
-    this.now = opts.now ?? (() => Date.now());
+    this.now = opts.now ?? trustedNow;
     this.log = opts.log ?? ((l) => console.log(l));
   }
 
@@ -143,10 +146,13 @@ export class RelayTrustVerifier {
     const body = (await resp.json()) as {
       mandates?: Mandate[];
       caEndorsements?: CaEndorsement[];
+      caLeasePq?: CaLeasePqMaterial;
     };
+    // A lease counts only with its PQ companion once the code pin names a ca-track key
+    // (caLeasePq.ts); `.com` cannot lift that by leaving the companions out.
     const material: MaintainerChainMaterial = {
       mandates: Array.isArray(body.mandates) ? body.mandates : [],
-      caEndorsements: Array.isArray(body.caEndorsements) ? body.caEndorsements : [],
+      caEndorsements: gateCaLeasesPq(Array.isArray(body.caEndorsements) ? body.caEndorsements : [], body.caLeasePq, { now }).accepted,
     };
     this.cache = { material, fetchedAt: now };
     return material;
