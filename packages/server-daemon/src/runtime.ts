@@ -69,6 +69,7 @@ import { acceptSiblingUpgrade } from "./sibling/wsServer.js";
 import type { UpdateServer } from "./updateServer.js";
 import { bootEgress, type EgressRuntime } from "./egress/boot.js";
 import { ensureUnfencedNetworks } from "./egress/networks.js";
+import { checkpointingStore } from "./archV2Boot.js";
 import { AppQuotaManager, LoopVolumes, RealPgQuota, buildDiskWatcher, hostDiskUse } from "./appQuota/index.js";
 
 export interface OpaqueTlsOptions {
@@ -1627,7 +1628,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         apOpts.registry !== undefined
           ? apOpts.registry
           : opts.dataDir
-            ? new SealedInstalledServicesStore(`${opts.dataDir}/data/installed-services.sealed`, apOpts.swk)
+            ? checkpointingStore(new SealedInstalledServicesStore(`${opts.dataDir}/data/installed-services.sealed`, apOpts.swk))
             : null,
       onLog: (m) => console.warn(m),
       // Creator SQL runs in a one-shot sandbox, never in this process (SEC-MIG-002).
