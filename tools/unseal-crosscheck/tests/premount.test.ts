@@ -15,8 +15,13 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   buildAutoUnlockLeaseV2,
+  buildBootReplyV2,
   buildSealedSecretResponse,
   ed,
+  hybridSealKeygen,
+  hybridSign,
+  hybridSigKeygen,
+  sealLeaseV3,
   signAutoUnlockLeaseV2,
   type Keypair,
 } from "@flagship/protocol";
@@ -99,6 +104,13 @@ let port: number;
 let deps: BootRouteDeps;
 let requests: Array<{ method: string; path: string }>;
 let answerRelay: boolean;
+/** The phone answers with a v1 reply even to a v2 request (an old phone, or a downgrade). */
+let replyV1: boolean;
+// Boot unlock v2: the boot key's ML-DSA half, the owner's hybrid key and the lease key.
+const BOOT_MLDSA = new Uint8Array(32).fill(0x2b);
+const ownerHybrid = hybridSigKeygen(owner.privateKey, new Uint8Array(32).fill(0x17));
+const LEASE_SEED = new Uint8Array(32).fill(0x5b);
+const leaseKem = hybridSealKeygen(LEASE_SEED);
 
 function pkcs8Pem(seed: Uint8Array): string {
   const der = Buffer.concat([
@@ -153,14 +165,22 @@ beforeAll(async () => {
       const out = await routeBoot(deps, req.method ?? "GET", path, (req.headers.authorization as string) ?? null, parsed);
       if (out && req.method === "POST" && path === "/api/boot/request" && out.status === 200 && answerRelay) {
         const r = parsed.request;
-        const reply = buildSealedSecretResponse(LUKS_KEY, {
-          serverDomain: r.serverDomain,
-          stkPub: Buffer.from(r.stkPub, "hex"),
-          purpose: r.purpose,
-          nonce: Buffer.from(r.nonce, "hex"),
-          issuedAt: r.issuedAt,
-        });
-        await deps.secretMailbox.putResponse(DOMAIN, r.nonce, hex(reply.sealed), Date.now(), Date.now());
+        const sealed = parsed.pq && !replyV1
+          ? buildBootReplyV2({
+              ctx: { serverDomain: r.serverDomain, bootPubHex: r.stkPub, nonceHex: r.nonce, replyKemPubHex: parsed.pq.replyKemPubHex },
+              diskKey: LUKS_KEY,
+              ownerHybridPublicKey: ownerHybrid.publicKey,
+              sign: (purpose, m) => hybridSign(ownerHybrid.secretKey, purpose, m),
+              issuedAt: Date.now(),
+            })
+          : buildSealedSecretResponse(LUKS_KEY, {
+              serverDomain: r.serverDomain,
+              stkPub: Buffer.from(r.stkPub, "hex"),
+              purpose: r.purpose,
+              nonce: Buffer.from(r.nonce, "hex"),
+              issuedAt: r.issuedAt,
+            }).sealed;
+        await deps.secretMailbox.putResponse(DOMAIN, r.nonce, hex(sealed), Date.now(), Date.now());
       }
       res.writeHead(out?.status ?? 404, { "content-type": "application/json" });
       res.end(JSON.stringify(out?.body ?? { error: "not found" }));
@@ -175,6 +195,8 @@ afterAll(() => {
 });
 
 interface Setup {
+  /** Boot unlock v2 files on /boot; `lease` picks how the lease key is held. */
+  v2?: { policy?: string; lease?: "file" | "tpm" | "none"; tpmReleases?: boolean };
   mode?: string;
   bootHost?: string;
   ownerKey?: string | null;
@@ -212,6 +234,23 @@ function stage(s: Setup): string {
   stub("sleep", `echo "$1" >> "${R}/run/sleeps"\nexec /bin/sleep 1`);
   writeFileSync(join(R, "run/expected-key"), LUKS_KEY);
   writeFileSync(join(R, "premount.sh"), buildUnlockPremountScript());
+  if (s.v2) {
+    writeFileSync(join(R, "boot/flagship-boot-mldsa.key"), `${hex(BOOT_MLDSA)}\n`, { mode: 0o600 });
+    writeFileSync(join(R, "boot/flagship-owner-pq.pub"), `${hex(ownerHybrid.publicKey)}\n`);
+    if (s.v2.policy !== undefined) writeFileSync(join(R, "boot/flagship-unlock-policy"), s.v2.policy);
+    if (s.v2.lease === "file") writeFileSync(join(R, "boot/flagship-lease-kem.key"), `${hex(LEASE_SEED)}\n`, { mode: 0o600 });
+    if (s.v2.lease === "tpm") {
+      mkdirSync(join(R, "boot/flagship-lease-kem.tpm"));
+      for (const f of ["seal.pub", "seal.priv"]) writeFileSync(join(R, "boot/flagship-lease-kem.tpm", f), "blob");
+      writeFileSync(join(R, "boot/flagship-lease-kem.tpm/pcrs"), "sha256:0,7\n");
+      // The TPM releases the seed only under the PCR policy the test sets.
+      stub("tpm2_createprimary", `echo "$@" >> "${R}/run/tpm-argv.log"`);
+      stub("tpm2_load", `echo "$@" >> "${R}/run/tpm-argv.log"`);
+      stub("tpm2_unseal", `echo "$@" >> "${R}/run/tpm-argv.log"\n[ -f "${R}/run/pcr-ok" ] || { echo "ERROR: policy check failed" >&2; exit 1; }\necho ${hex(LEASE_SEED)}`);
+      stub("modprobe", "exit 0");
+      if (s.v2.tpmReleases !== false) writeFileSync(join(R, "run/pcr-ok"), "");
+    }
+  }
   return R;
 }
 
@@ -258,6 +297,34 @@ function reset(): void {
   deps = freshDeps();
   requests = [];
   answerRelay = true;
+  replyV1 = false;
+}
+
+async function depositLeaseV3(policy: { fields?: Partial<{ expiresAt: number }> } = {}): Promise<void> {
+  const now = Date.now();
+  const leaseId = "f".repeat(32);
+  const expiresAt = policy.fields?.expiresAt ?? now + 3_600_000;
+  const sealedKey = sealLeaseV3({
+    lease: { serverDomain: DOMAIN, bootPubHex: hex(bootKey.publicKey), leaseId, issuedAt: now, expiresAt },
+    leaseKemPublicKey: leaseKem.publicKey,
+    diskKey: LUKS_KEY,
+    ownerHybridPublicKey: ownerHybrid.publicKey,
+    sign: (purpose, m) => hybridSign(ownerHybrid.secretKey, purpose, m),
+  });
+  const outer = buildAutoUnlockLeaseV2({ serverDomain: DOMAIN, stkPub: bootKey.publicKey, leaseId, luksKey: LUKS_KEY, issuedAt: now, expiresAt });
+  outer.sealedKey = sealedKey;
+  await deps.boxSealedLeases.put({
+    serverDomain: DOMAIN,
+    leaseId,
+    stkPubHex: hex(bootKey.publicKey),
+    sealedKeyHex: hex(sealedKey),
+    issuedAt: now,
+    expiresAt,
+    maxUses: null,
+    usesConsumed: 0,
+    signatureHex: hex(signAutoUnlockLeaseV2(outer, owner)),
+    depositedAt: now,
+  });
 }
 
 describe("the generated premount, end to end", () => {
@@ -363,5 +430,78 @@ describe("the generated premount, end to end", () => {
     const r = await run(R);
     expect(r.out).toContain("no owner key on /boot; asking the phone");
     expect(r.code).toBe(0);
+  }, 60_000);
+
+  it("v2 strict: hybrid-signs the request with a fresh reply key and opens the phone's hybrid reply", async () => {
+    reset();
+    const R = stage({ mode: "approve\n", v2: { policy: "strict\n" } });
+    const r = await run(R);
+    expect(r.out).toContain("boot unlock v2: on (policy: strict)");
+    expect(r.out).toContain("unlocked with the phone's reply");
+    expect(r.code).toBe(0);
+    expect(existsSync(join(R, "run/flagship-reply.key"))).toBe(false);
+    const argv = readFileSync(join(R, "run/helper-argv.log"), "utf8");
+    expect(argv).toContain("--v2-request");
+    expect(argv).not.toContain(hex(BOOT_MLDSA));
+    noSecretsLeft(R);
+  }, 60_000);
+
+  it("v2 strict: a classical v1 reply is refused (no downgrade), and the box asks again", async () => {
+    reset();
+    replyV1 = true;
+    const R = stage({ mode: "approve\n", v2: { policy: "strict\n" } });
+    const r = await run(R, { FLAGSHIP_RELAY_WINDOW_SECS: "25" });
+    expect(r.out).toContain("boot-unlock-v2: strict-refuses-v1");
+    expect(r.out).not.toContain("unlocked with the phone's reply");
+    expect(existsSync(join(R, "run/rebooted"))).toBe(true);
+  }, 90_000);
+
+  it("v2 compat: an old phone's v1 reply still opens", async () => {
+    reset();
+    replyV1 = true;
+    const R = stage({ mode: "approve\n", v2: { policy: "compat\n" } });
+    const r = await run(R);
+    expect(r.out).toContain("unlocked with the phone's reply");
+    expect(r.code).toBe(0);
+  }, 60_000);
+
+  it("v2 strict: opens a v3 lease with the lease key file, and refuses a v1 lease", async () => {
+    reset();
+    await depositLeaseV3();
+    const R = stage({ v2: { policy: "strict\n", lease: "file" } });
+    const r = await run(R);
+    expect(r.out).toContain("unlocked from the auto-unlock lease");
+    reset();
+    await depositLease(owner);
+    const R2 = stage({ v2: { policy: "strict\n", lease: "file" } });
+    const r2 = await run(R2);
+    expect(r2.out).toContain("lease refused: flagship-unseal: boot-unlock-v2: strict-refuses-v1");
+    expect(r2.out).toContain("unlocked with the phone's reply");
+  }, 90_000);
+
+  it("v2 TPM: the lease key comes from the TPM; a changed boot chain (PCR mismatch) asks the phone", async () => {
+    reset();
+    await depositLeaseV3();
+    const R = stage({ v2: { policy: "strict\n", lease: "tpm" } });
+    const r = await run(R);
+    expect(r.out).toContain("unlocked from the auto-unlock lease");
+    expect(readFileSync(join(R, "run/tpm-argv.log"), "utf8")).toContain("-p pcr:sha256:0,7");
+    reset();
+    await depositLeaseV3();
+    const R2 = stage({ v2: { policy: "strict\n", lease: "tpm", tpmReleases: false } });
+    const r2 = await run(R2);
+    expect(r2.out).toContain("the TPM did not release the lease key");
+    expect(r2.out).toContain("unlocked with the phone's reply");
+    expect(r2.code).toBe(0);
+  }, 90_000);
+
+  it("v2: an expired v3 lease past the time floor asks the phone", async () => {
+    reset();
+    await depositLeaseV3({ fields: { expiresAt: Date.now() + 60_000 } });
+    const R = stage({ v2: { policy: "strict\n", lease: "file" } });
+    writeFileSync(join(R, "boot/flagship-time-floor"), `${Date.now() + 120_000}\n`);
+    const r = await run(R);
+    expect(r.out).toContain("boot-unlock-v2: lease-expired");
+    expect(r.out).toContain("unlocked with the phone's reply");
   }, 60_000);
 });

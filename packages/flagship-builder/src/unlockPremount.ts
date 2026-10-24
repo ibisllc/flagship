@@ -34,6 +34,11 @@ export function buildUnlockPremountScript(approvedHosts: readonly string[] = APP
 #   approve: the phone, every boot.
 # The disk key goes from the unseal helper straight into cryptsetup's stdin. It
 # is never in a file, a variable or a command line, and neither is any key seed.
+# Boot unlock v2 (docs/architecture-v2/pq-suites.md §19), when /boot holds the
+# boot key's ML-DSA half: each request is hybrid-signed with a fresh per-boot
+# reply key (in /run, opened once), leases are v3 (sealed to the lease key, read
+# from the TPM when /boot holds a sealed object, else from its file), and the
+# unlock policy file decides whether a classical reply or lease is refused.
 PREREQ=""
 prereqs() { echo "$PREREQ"; }
 case "$1" in prereqs) prereqs; exit 0;; esac
@@ -171,11 +176,48 @@ sign_box_auth_header() {
     printf 'Flagship-Boot-v1 %s' "$(printf '%s' "$_bjson" | b64url)"
 }
 
+# A /boot file the daemon keeps current: the live partition's copy first, then
+# the one frozen into the initrd. Prints nothing when neither exists.
+boot_file() {
+    if [ -n "$LOCK_ONCE_MOUNT" ] && [ -e "$LOCK_ONCE_MOUNT/$1" ]; then echo "$LOCK_ONCE_MOUNT/$1"; return 0; fi
+    if [ -e "$R/boot/$1" ]; then echo "$R/boot/$1"; return 0; fi
+    return 1
+}
+# v2 inputs every open passes: the owner's hybrid key, the unlock policy and the
+# daemon's authenticated time floor (a clock set back never revives a lease).
+V2_OPEN_ARGS=""
+if _f="$(boot_file flagship-owner-pq.pub)"; then V2_OPEN_ARGS="$V2_OPEN_ARGS --owner-pq-pub-file $_f"; fi
+if _f="$(boot_file flagship-unlock-policy)"; then V2_OPEN_ARGS="$V2_OPEN_ARGS --unlock-policy-file $_f"; fi
+if _f="$(boot_file flagship-time-floor)"; then V2_OPEN_ARGS="$V2_OPEN_ARGS --time-floor-file $_f"; fi
+BOOT_PQ_KEY="$(boot_file flagship-boot-mldsa.key || true)"
+REPLY_KEY="$R/run/flagship-reply.key"
+log_line "boot unlock v2: $( [ -n "$BOOT_PQ_KEY" ] && echo on || echo off ) (policy: $(cat "$(boot_file flagship-unlock-policy || echo /nonexistent)" 2>/dev/null || echo compat))"
+
 # The helper writes the raw key to the pipe and cryptsetup reads it; the
 # pipeline's status is cryptsetup's (an empty key fails to open).
 open_with() {
-    "$UNSEAL_HELPER" --identity-pem "$BOOT_KEY" --raw "$@" 2>"$R/run/flagship-unseal.err" \\
+    # shellcheck disable=SC2086
+    "$UNSEAL_HELPER" --identity-pem "$BOOT_KEY" --raw $V2_OPEN_ARGS "$@" 2>"$R/run/flagship-unseal.err" \\
         | cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"
+}
+
+# The lease key sealed to the TPM (packages/server-daemon/src/bootPqTpm.ts):
+# the object's only authorization is its PCR policy, so a changed boot chain or
+# another machine gets nothing and the box asks the phone. Seed on stdout.
+tpm_lease_seed() {
+    _td="$1"
+    _tw="$R/run/flagship-tpm"
+    rm -rf "$_tw"; mkdir -p "$_tw"
+    for _m in tpm_crb tpm_tis; do modprobe "$_m" 2>/dev/null || true; done
+    TPM2TOOLS_TCTI="\${TPM2TOOLS_TCTI:-device:/dev/tpmrm0}"; export TPM2TOOLS_TCTI
+    _pcrs="$(cat "$_td/pcrs" 2>/dev/null || true)"
+    case "$_pcrs" in sha256:[0-9]*) ;; *) rm -rf "$_tw"; return 1;; esac
+    _rc=0
+    tpm2_createprimary -Q -C o -g sha256 -G ecc256:aes128cfb -c "$_tw/primary.ctx" >/dev/null 2>&1 \\
+        && tpm2_load -Q -C "$_tw/primary.ctx" -u "$_td/seal.pub" -r "$_td/seal.priv" -c "$_tw/seal.ctx" >/dev/null 2>&1 \\
+        && tpm2_unseal -c "$_tw/seal.ctx" -p "pcr:$_pcrs" 2>/dev/null || _rc=1
+    rm -rf "$_tw"
+    return $_rc
 }
 unseal_error() {
     head -c 200 "$R/run/flagship-unseal.err" 2>/dev/null || true
@@ -225,7 +267,19 @@ unlock_via_box_lease() {
         rm -f "$LEASE_RESP"
         return 1
     fi
-    if open_with --lease-json "$LEASE_RESP" --server-domain "$SERVER_DOMAIN" --owner-pub-hex "$OWNER_PUB"; then
+    _opened=no
+    if _td="$(boot_file flagship-lease-kem.tpm)" && [ -d "$_td" ]; then
+        if tpm_lease_seed "$_td" | open_with --lease-json "$LEASE_RESP" --server-domain "$SERVER_DOMAIN" --owner-pub-hex "$OWNER_PUB" --lease-kem-key -; then
+            _opened=yes
+        else
+            log_line "the TPM did not release the lease key (boot chain or machine changed?) or the lease was refused"
+        fi
+    elif _lk="$(boot_file flagship-lease-kem.key)"; then
+        if open_with --lease-json "$LEASE_RESP" --server-domain "$SERVER_DOMAIN" --owner-pub-hex "$OWNER_PUB" --lease-kem-key "$_lk"; then _opened=yes; fi
+    elif open_with --lease-json "$LEASE_RESP" --server-domain "$SERVER_DOMAIN" --owner-pub-hex "$OWNER_PUB"; then
+        _opened=yes
+    fi
+    if [ "$_opened" = yes ]; then
         rm -f "$LEASE_RESP"
         log_line "unlocked from the auto-unlock lease"
         return 0
@@ -243,9 +297,16 @@ unlock_via_relay() {
         REQUESTS=$((REQUESTS + 1))
         NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
         NOW_MS=$(now_ms)
-        SIG="$(sign_canonical "flagship/secret-request/v1|\${SERVER_DOMAIN}|\${PUB_HEX}|unlock-key|\${NONCE}|\${NOW_MS}")"
-        REQ_BODY=$(printf '{"request":{"serverDomain":"%s","stkPub":"%s","purpose":"unlock-key","nonce":"%s","issuedAt":%s},"signature":"%s"}' \\
-            "$SERVER_DOMAIN" "$PUB_HEX" "$NONCE" "$NOW_MS" "$SIG")
+        rm -f "$REPLY_KEY"
+        if [ -n "$BOOT_PQ_KEY" ]; then
+            REQ_BODY="$("$UNSEAL_HELPER" --identity-pem "$BOOT_KEY" --v2-request --server-domain "$SERVER_DOMAIN" \\
+                --nonce-hex "$NONCE" --boot-pq-key "$BOOT_PQ_KEY" --reply-kem-out "$REPLY_KEY" --now-ms "$NOW_MS" 2>"$R/run/flagship-unseal.err")" \\
+                || fatal "cannot sign the v2 request: $(unseal_error)"
+        else
+            SIG="$(sign_canonical "flagship/secret-request/v1|\${SERVER_DOMAIN}|\${PUB_HEX}|unlock-key|\${NONCE}|\${NOW_MS}")"
+            REQ_BODY=$(printf '{"request":{"serverDomain":"%s","stkPub":"%s","purpose":"unlock-key","nonce":"%s","issuedAt":%s},"signature":"%s"}' \\
+                "$SERVER_DOMAIN" "$PUB_HEX" "$NONCE" "$NOW_MS" "$SIG")
+        fi
         REQUEST_END=$(( $(date +%s) + REQUEST_LIFETIME_SECS ))
         [ "$REQUEST_END" -le "$RELAY_DEADLINE" ] || REQUEST_END=$RELAY_DEADLINE
         POST_RESP="$R/run/flagship-secret-request-resp.json"
@@ -276,13 +337,16 @@ unlock_via_relay() {
                 HELPER_JSON="$R/run/flagship-unseal-input.json"
                 printf '{"serverDomain":"%s","requestNonceHex":"%s","purpose":"unlock-key","sealedHex":"%s","issuedAt":0}' \\
                     "$SERVER_DOMAIN" "$NONCE" "$SEALED" > "$HELPER_JSON"
-                if [ -n "$SEALED" ] && open_with --response-json "$HELPER_JSON"; then
-                    rm -f "$HELPER_JSON" "$RESP"
+                _reply_args=""
+                [ -f "$REPLY_KEY" ] && _reply_args="--server-domain $SERVER_DOMAIN --reply-kem-key $REPLY_KEY"
+                # shellcheck disable=SC2086
+                if [ -n "$SEALED" ] && open_with --response-json "$HELPER_JSON" $_reply_args; then
+                    rm -f "$HELPER_JSON" "$RESP" "$REPLY_KEY"
                     log_line "unlocked with the phone's reply (attempt $ATTEMPT)"
                     return 0
                 fi
                 log_line "the reply did not open the disk: $(unseal_error); asking again"
-                rm -f "$HELPER_JSON" "$RESP"
+                rm -f "$HELPER_JSON" "$RESP" "$REPLY_KEY"
                 break
             elif [ "$CODE" != "404" ]; then
                 log_line "reply poll HTTP $CODE: $(head -c 200 "$RESP" 2>/dev/null || true)"

@@ -271,7 +271,7 @@ d-i cdrom-detect/eject boolean false
 ### Packages. Debian names for the bootstrap's deps (Node 20 itself comes from
 ### the bootstrap's NodeSource one-liner).
 tasksel tasksel/first multiselect standard, ssh-server
-d-i pkgsel/include string git curl jq ca-certificates xxd cryptsetup cryptsetup-initramfs lvm2 gnupg openssl${wifiPackagesBlock}
+d-i pkgsel/include string git curl jq ca-certificates xxd cryptsetup cryptsetup-initramfs lvm2 gnupg openssl tpm2-tools${wifiPackagesBlock}
 d-i pkgsel/upgrade select none
 popularity-contest popularity-contest/participate boolean false
 
