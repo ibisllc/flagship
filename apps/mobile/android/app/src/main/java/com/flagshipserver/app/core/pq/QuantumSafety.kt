@@ -108,8 +108,9 @@ object QuantumSafety {
     fun strictChange(
         account: String, scope: AssurancePolicy.Scope, from: AssurancePolicy.PolicyState, browsersAllowed: Boolean,
         peers: List<String>, signerKind: String, signerKeyId: String, now: Long,
+        reentry: AssurancePolicy.StrictReentryEvidence? = null,
     ) = AssurancePolicy.Change(account.lowercase(), scope, from.profile, "strict", from.generation + 1, from.headDigest, affectedPeersDigest(peers),
-        if (browsersAllowed) listOf(BROWSER_LOSS) else emptyList(), null, signerKind, signerKeyId.lowercase(), PqTrust.SUITE_HYBRID, now)
+        if (browsersAllowed) listOf(BROWSER_LOSS) else emptyList(), reentry, signerKind, signerKeyId.lowercase(), PqTrust.SUITE_HYBRID, now)
 
     fun compatibilityChange(
         account: String, scope: AssurancePolicy.Scope, from: AssurancePolicy.PolicyState, loss: List<String>,
@@ -150,4 +151,7 @@ object QuantumSafety {
     }
 
     fun connectorScope(server: String, connector: String) = AssurancePolicy.Scope("connector", "${server.lowercase()}:$connector")
+
+    /** An app's scope: `<serverDomain>:<service id>`. Strict there means only the Flagship app reaches it. */
+    fun serviceScope(server: String, service: String) = AssurancePolicy.Scope("service", "${server.lowercase()}:$service")
 }
