@@ -92,6 +92,7 @@ import { initServiceDetailView } from "./views/service-detail.js";
 import { initAppAccessView } from "./views/app-access.js";
 import { initAppDbView } from "./views/app-db.js";
 import { startAccessAlerts } from "./lib/accessAlerts.js";
+import { startChatAlerts } from "./lib/chatAlerts.js";
 import { canSyncPushSetting, startPushSettingSync } from "./lib/pushSetting.js";
 import { unsubscribeFromWebPush } from "./lib/push.js";
 import { initServiceAccessView } from "./views/service-access.js";
@@ -672,6 +673,8 @@ async function boot() {
   // the screens socket's access-request event, and ask about each in a sheet.
   // Never over the lock, never on a companion, never with Push notifications off.
   startAccessAlerts({ isUnlocked: sliversUnlocked });
+  // App chat requests from other owners' apps (lib/chatAlerts.js), on the same triggers.
+  startChatAlerts({ isUnlocked: sliversUnlocked });
 
   // The Push notifications switch (same doc, "Turning alerts off"): on load
   // and on every return to the foreground, tell each box whether to send
