@@ -2761,12 +2761,6 @@
     <string name="chat_request_now_always_sender">%1$s/%2$s can now start a chat with %3$s without asking</string>
     <string name="ai_consent_cap">This run can use up to about %1$s tokens. The run stops there.</string>
     <string name="watch_boot_key_mismatch">This server\'s key doesn\'t match. Approve its start-up from your phone.</string>
-    <string name="manage_recovery_protection_and_account_level">Manage recovery protection and account-level security.</string>
-    <string name="process_a_link">Process a link</string>
-    <string name="paste_a_flagship_link_a_private">Paste a Flagship link: a private app\'s \"Get link\" string, or a \"take over this server\" transfer link someone shared with you.</string>
-    <string name="link">Link</string>
-    <string name="that_doesnt_look_like_a_flagship">That doesn\'t look like a Flagship link.</string>
-    <string name="lock_and">Lock and\u0020</string>
     <string name="server_key_changed">This server\'s key changed. If you did not rebuild it, do not approve anything for it.</string>
     <string name="server_not_from_your_recipe">This server was not built from your recipe. Do not approve it.</string>
     <string name="server_code_on_monitor">If your machine has a monitor, it is showing this code: %1$s</string>
@@ -2902,12 +2896,6 @@
     <string name="only_the_flagship_app">Only the Flagship app</string>
     <string name="also_browsers">Also browsers</string>
     <string name="turn_off_2">Turn off…</string>
-    <string name="powering_off">powering off</string>
-    <string name="this_server_is_it_will_go">This server is %1$s — it will go offline.</string>
-    <string name="scan_a_pairing_code">Scan a pairing code</string>
-    <string name="add_this_phone_to_another_account">Add this phone to another account</string>
-    <string name="process_url">Process URL</string>
-    <string name="open_a_sign_in_link_you">Open a sign-in link you copied</string>
     <string name="separate_list_on_each_server">Separate list on each server</string>
     <string name="each_server_keeps_its_own_members">Each server keeps its own members and invites.</string>
     <string name="comes_with_pro">Comes with Pro.</string>
