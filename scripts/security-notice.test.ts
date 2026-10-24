@@ -4,7 +4,17 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ed, parseSecurityNotice, verifySecurityNotice, securityNoticeOutcome } from "@flagship/protocol";
+import {
+  canonicalPqKeyBinding,
+  ed,
+  hybridSigKeygen,
+  hybridSign,
+  parseSecurityNotice,
+  releasePqKeyId,
+  signSecurityNoticePq,
+  verifySecurityNotice,
+  securityNoticeOutcome,
+} from "@flagship/protocol";
 // @ts-expect-error plain ESM script
 import * as sn from "./security-notice.mjs";
 
@@ -153,6 +163,29 @@ describe("security-notice signing", () => {
     expect(verifySecurityNotice(parsed, [pub])).toEqual({ ok: true });
     expect(securityNoticeOutcome(parsed, { platform: "ios", build: 11, protocol: 1 }, Date.parse("2026-11-02T00:00:00Z")).action).toBe("lock");
     expect(sn.highestSignedSeq(root)).toBe(1);
+  });
+
+  it("adds the PQ half with the release key and refuses to skip it once the pin is set", async () => {
+    const edSeed = new Uint8Array(32).fill(0x41);
+    const mlSeed = new Uint8Array(32).fill(0x42);
+    const { publicKey, secretKey } = hybridSigKeygen(edSeed, mlSeed);
+    const pub = Buffer.from(publicKey.subarray(0, 32)).toString("hex");
+    const st = { role: "release-key" as const, subjectId: "flagship-release", ed25519PubHex: pub, mldsaPubHex: Buffer.from(publicKey.subarray(32)).toString("hex"), issuedAt: NOW - DAY };
+    const binding = { v: 1 as const, ...st, signature: Buffer.from(hybridSign(secretKey, "flagship/pq-key-binding/v1", canonicalPqKeyBinding(st))).toString("hex") };
+    const root = tmpRoot();
+    fs.mkdirSync(path.join(root, "release-pq", "bindings"), { recursive: true });
+    fs.writeFileSync(path.join(root, "release-pq", "bindings", "k.json"), JSON.stringify(binding));
+    expect(sn.noticePqPlan({ noPq: true, root, signerPub: pub, pinned: true }).error).toMatch(/--no-pq/);
+    expect(sn.noticePqPlan({ noPq: false, root, signerPub: "ab".repeat(32), pinned: true }).error).toMatch(/no binding/);
+    const plan = sn.noticePqPlan({ noPq: false, root, signerPub: pub, pinned: false });
+    expect(plan.binding.mldsaPubHex).toBe(st.mldsaPubHex);
+    const signer = { pubKey: pub, sign: (m: Uint8Array) => Buffer.from(ed.sign(m, edSeed)).toString("hex") };
+    const { body } = sn.buildBody(args(...REQUIRED, "--deprecate-protocol", "1", "--allow-unshipped"), { now: NOW, root });
+    const pin = [releasePqKeyId(st.ed25519PubHex, st.mldsaPubHex)];
+    const addPq = (n: never) => signSecurityNoticePq(n, plan.binding, async (m: Uint8Array) => ed.sign(m, edSeed), mlSeed);
+    const notice = await sn.signAndWrite({ body, signer, root, authorityKeys: [pub], addPq, pqKeyIds: pin });
+    expect(verifySecurityNotice(parseSecurityNotice(notice)!, [pub], pin)).toEqual({ ok: true });
+    await expect(sn.signAndWrite({ body, signer, root: tmpRoot(), authorityKeys: [pub], pqKeyIds: pin })).rejects.toThrow(/pq-missing/);
   });
 
   it("writes nothing when the signer is not the authority", async () => {

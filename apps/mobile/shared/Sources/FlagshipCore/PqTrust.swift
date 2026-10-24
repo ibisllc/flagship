@@ -12,7 +12,7 @@ import Foundation
 /// what is required, so stripping the hybrid suite cannot downgrade a strict scope.
 public enum PqTrust {
     public static let tagPqKeyBinding = "flagship/pq-key-binding/v1"
-    public static let roles = ["account-irk", "admin-root", "device", "box-stk", "boot-key"]
+    public static let roles = ["account-irk", "admin-root", "device", "box-stk", "boot-key", "release-key"]
     /// How far ahead of the verifier's clock a binding may be dated.
     public static let maxSkewMs: Int64 = 5 * 60 * 1000
     static let mldsaPubHexLen = 1952 * 2

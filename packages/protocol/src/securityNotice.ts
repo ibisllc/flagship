@@ -23,7 +23,13 @@
  * The notice carries no URL: the store link comes from the app itself.
  */
 import { ed } from "./edSync.js";
+import { HYBRID_SIG_LEN, hybridSignExternal, hybridVerify, pqKeyId, SUITE_HYBRID_SIG_ED25519_MLDSA65_V1 } from "./pqHybrid.js";
+import { pqKeyBindingFromWire, verifyPqKeyBinding, type PqKeyBindingWire } from "./pqTrust.js";
+import { RELEASE_PQ_PIN } from "./releasePqPin.js";
 import type { Bytes, Keypair } from "./types.js";
+
+/** The release key's binding subject (pq-suites.md §12.1): notices are signed by the same pair. */
+export const SECURITY_NOTICE_PQ_SUBJECT = "flagship-release";
 
 export const TAG_SECURITY_NOTICE = "flagship/security-notice/v1";
 
@@ -81,6 +87,18 @@ export interface SecurityNotice extends SecurityNoticeBody {
   /** lower-hex Ed25519 pubkey of the ca-track maintainer authority that signed. */
   signedBy: string;
   /** lower-hex Ed25519 signature over the canonical bytes. */
+  signature: string;
+  /**
+   * The PQ half (pq-suites.md §14): the release key's hybrid signature over the same canonical
+   * bytes (purpose `flagship/security-notice/v1`) and the binding that pairs `signedBy` with the
+   * release ML-DSA key. Required once the release PQ pin names a key.
+   */
+  pq?: SecurityNoticePq;
+}
+
+export interface SecurityNoticePq {
+  binding: PqKeyBindingWire;
+  /** lower-hex hybrid signature, 3373 bytes. */
   signature: string;
 }
 
@@ -228,11 +246,27 @@ export function signSecurityNotice(body: SecurityNoticeBody, authority: Keypair)
 }
 
 /** Attach an externally made signature (the maintainers CLI's signer) to a body. */
-export function assembleSecurityNotice(body: SecurityNoticeBody, signedBy: string, signatureHex: string): SecurityNotice {
-  return assemble(body, signedBy, signatureHex);
+export function assembleSecurityNotice(body: SecurityNoticeBody, signedBy: string, signatureHex: string, pq?: SecurityNoticePq): SecurityNotice {
+  return assemble(body, signedBy, signatureHex, pq);
 }
 
-function assemble(body: SecurityNoticeBody, signedBy: string, signature: string): SecurityNotice {
+/**
+ * Adds the PQ half to a classically signed notice: the YubiKey signs M' with the Ed25519 half
+ * (`ed25519Sign`), the in-memory release ML-DSA seed the other half (pq-suites.md §14).
+ */
+export async function signSecurityNoticePq(
+  n: SecurityNotice,
+  binding: PqKeyBindingWire,
+  ed25519Sign: (m: Bytes) => Promise<Bytes>,
+  mldsaSeed: Bytes,
+): Promise<SecurityNotice> {
+  if (binding.ed25519PubHex !== n.signedBy) throw new SecurityNoticeError("pq-binding-mismatch");
+  const pk = fromHex(binding.ed25519PubHex + binding.mldsaPubHex);
+  const sig = await hybridSignExternal(pk, TAG_SECURITY_NOTICE, canonicalSecurityNotice(n, n.signedBy), ed25519Sign, mldsaSeed);
+  return assemble(n, n.signedBy, n.signature, { binding, signature: toHex(sig) });
+}
+
+function assemble(body: SecurityNoticeBody, signedBy: string, signature: string, pq?: SecurityNoticePq): SecurityNotice {
   const platforms: SecurityNoticeBody["platforms"] = {};
   for (const name of SECURITY_NOTICE_PLATFORMS) {
     const m = body.platforms[name];
@@ -254,6 +288,7 @@ function assemble(body: SecurityNoticeBody, signedBy: string, signature: string)
     message: body.message,
     signedBy,
     signature,
+    ...(pq ? { pq: { binding: pq.binding, signature: pq.signature } } : {}),
   };
 }
 
@@ -285,10 +320,27 @@ export function parseSecurityNotice(v: unknown): SecurityNotice | null {
   } catch {
     return null;
   }
-  return assemble(body, r.signedBy, r.signature);
+  let pq: SecurityNoticePq | undefined;
+  if (r.pq !== undefined) {
+    const q = r.pq as Record<string, unknown> | null;
+    if (!q || typeof q !== "object" || Array.isArray(q) || Object.keys(q).sort().join(",") !== "binding,signature") return null;
+    if (typeof q.signature !== "string" || q.signature.length !== HYBRID_SIG_LEN * 2 || !/^[0-9a-f]+$/.test(q.signature)) return null;
+    try {
+      pq = { binding: pqKeyBindingFromWire(q.binding), signature: q.signature };
+    } catch {
+      return null;
+    }
+  }
+  return assemble(body, r.signedBy, r.signature, pq);
 }
 
-export type SecurityNoticeReject = "malformed" | "unauthorized-signer" | "signature-invalid";
+export type SecurityNoticeReject =
+  | "malformed"
+  | "unauthorized-signer"
+  | "signature-invalid"
+  | "pq-missing"
+  | "pq-key-not-pinned"
+  | "pq-signature-invalid";
 
 /**
  * Is the signature good, and is the signer one of `authorityKeys` (the
@@ -298,6 +350,7 @@ export type SecurityNoticeReject = "malformed" | "unauthorized-signer" | "signat
 export function verifySecurityNotice(
   n: SecurityNotice,
   authorityKeys: readonly string[],
+  pqKeyIds: readonly string[] = RELEASE_PQ_PIN.keyIds,
 ): { ok: true } | { ok: false; reason: SecurityNoticeReject } {
   let bytes: Bytes;
   try {
@@ -307,12 +360,33 @@ export function verifySecurityNotice(
   }
   if (!HEX128.test(n.signature)) return { ok: false, reason: "malformed" };
   if (!authorityKeys.includes(n.signedBy)) return { ok: false, reason: "unauthorized-signer" };
+  let classical = false;
   try {
-    if (ed.verify(fromHex(n.signature), bytes, fromHex(n.signedBy))) return { ok: true };
+    classical = ed.verify(fromHex(n.signature), bytes, fromHex(n.signedBy));
   } catch {
-    /* falls through */
+    classical = false;
   }
-  return { ok: false, reason: "signature-invalid" };
+  if (!classical) return { ok: false, reason: "signature-invalid" };
+  return verifyNoticePq(n, bytes, pqKeyIds);
+}
+
+/**
+ * The PQ half (pq-suites.md §14). With the pin empty a notice without it passes as before; one
+ * that carries it must still verify (never a fallback to the classical half alone). With the pin
+ * set it is required, under a key the pin names, bound to `signedBy`.
+ */
+function verifyNoticePq(n: SecurityNotice, bytes: Bytes, pqKeyIds: readonly string[]): { ok: true } | { ok: false; reason: SecurityNoticeReject } {
+  if (!n.pq) return pqKeyIds.length ? { ok: false, reason: "pq-missing" } : { ok: true };
+  const b = n.pq.binding;
+  const keyId = toHex(pqKeyId(SUITE_HYBRID_SIG_ED25519_MLDSA65_V1, fromHex(b.ed25519PubHex + b.mldsaPubHex)));
+  if (pqKeyIds.length && !pqKeyIds.includes(keyId)) return { ok: false, reason: "pq-key-not-pinned" };
+  try {
+    const vb = verifyPqKeyBinding(b, { role: "release-key", subjectId: SECURITY_NOTICE_PQ_SUBJECT, ed25519PubHex: n.signedBy, now: Number.MAX_SAFE_INTEGER });
+    hybridVerify(vb.hybridPublicKey, TAG_SECURITY_NOTICE, bytes, fromHex(n.pq.signature));
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "pq-signature-invalid" };
+  }
 }
 
 export interface SecurityNoticeClient {
@@ -378,11 +452,12 @@ export function acceptSecurityNotice(
   store: SecurityNoticeStore,
   candidate: unknown,
   authorityKeys: readonly string[],
+  pqKeyIds: readonly string[] = RELEASE_PQ_PIN.keyIds,
 ): { store: SecurityNoticeStore; refused: SecurityNoticeRefusal | null } {
   if (candidate === null || candidate === undefined) return { store, refused: null };
   const n = parseSecurityNotice(candidate);
   if (!n) return { store, refused: "malformed" };
-  const v = verifySecurityNotice(n, authorityKeys);
+  const v = verifySecurityNotice(n, authorityKeys, pqKeyIds);
   if (!v.ok) return { store, refused: v.reason };
   if (n.seq <= store.highestSeq) return { store, refused: "stale" };
   return { store: { highestSeq: n.seq, notice: n }, refused: null };

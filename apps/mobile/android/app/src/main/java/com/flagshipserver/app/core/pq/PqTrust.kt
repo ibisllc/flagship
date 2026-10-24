@@ -23,7 +23,7 @@ class PqTrustException(val code: String) : Exception(code)
 
 object PqTrust {
     const val TAG_PQ_KEY_BINDING = "flagship/pq-key-binding/v1"
-    val ROLES = listOf("account-irk", "admin-root", "device", "box-stk", "boot-key")
+    val ROLES = listOf("account-irk", "admin-root", "device", "box-stk", "boot-key", "release-key")
     const val MAX_SKEW_MS = 5 * 60 * 1000L
     const val ED25519_SIG_LEN = 64
     private const val MLDSA65_PK_HEX_LEN = 1952 * 2
