@@ -32,7 +32,7 @@ import {
 import type { Bytes } from "./types.js";
 
 export const TAG_PQ_KEY_BINDING = "flagship/pq-key-binding/v1";
-export const PQ_BINDING_ROLES = ["account-irk", "admin-root", "device", "box-stk", "boot-key"] as const;
+export const PQ_BINDING_ROLES = ["account-irk", "admin-root", "device", "box-stk", "boot-key", "release-key"] as const;
 export type PqBindingRole = (typeof PQ_BINDING_ROLES)[number];
 /** How far ahead of the verifier's clock a binding may be dated. */
 export const PQ_BINDING_MAX_SKEW_MS = 5 * 60 * 1000;

@@ -74,3 +74,5 @@ export * from "./appRelease.js";
 export * from "./assurancePolicy.js";
 export * from "./pqHybrid.js";
 export * from "./pqTrust.js";
+export * from "./releaseEndorsementPq.js";
+export * from "./releasePqPin.js";
