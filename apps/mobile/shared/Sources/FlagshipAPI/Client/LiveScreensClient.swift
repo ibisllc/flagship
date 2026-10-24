@@ -42,7 +42,14 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         if let host, let tunnel = PqBoxTunnelRegistry.current, tunnel.carries(host: host) {
             return try await tunnel.send(req, host: host) { [self] outer in try await self.sendRaw(outer, host: host) }
         }
-        return try await sendRaw(req, host: host)
+        let (data, resp) = try await sendRaw(req, host: host)
+        // A server another admin device made strict says so; ask again over the channel.
+        if let host, let tunnel = PqBoxTunnelRegistry.current, (resp as? HTTPURLResponse)?.statusCode == 403,
+           String(decoding: data.prefix(512), as: UTF8.self).contains("\"pq-channel-required\"") {
+            tunnel.markStrict(host: host)
+            return try await tunnel.send(req, host: host) { [self] outer in try await self.sendRaw(outer, host: host) }
+        }
+        return (data, resp)
     }
 
     private func sendRaw(_ req: URLRequest, host: String?) async throws -> (Data, URLResponse) {

@@ -200,6 +200,12 @@ public enum PqIdentityBindingService {
         _binder = PqIdentityBinder(store: PqKeyStore.shared, client: client)
     }
 
+    /// The live `.com` client, when configured (the strict opt-in screen reads and posts with it).
+    public static var client: LivePqKeyBindingClient? {
+        lock.lock(); defer { lock.unlock() }
+        return _client
+    }
+
     private static var current: (PqIdentityBinder, LivePqKeyBindingClient)? {
         lock.lock(); defer { lock.unlock() }
         guard let b = _binder, let c = _client else { return nil }

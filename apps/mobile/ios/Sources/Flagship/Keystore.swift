@@ -1161,6 +1161,9 @@ public struct Keystore {
         }
         keychainDelete(account: KCKey.accountReadTokens)
         WrappingKeypair.deleteSEKeyIfExists(profile: id)
+        // Architecture v2: the PQ halves of this profile's identities go with them.
+        pqRecordsDeleteAll(profile: id)
+        PqKeyStore.shared.clearSession()
         // The cert-pin STK-pub cache derives from this UMK — a wiped
         // account must not leave pins (or pub anchors) behind.
         CertPinRegistry.shared.clear()
@@ -1219,6 +1222,7 @@ public struct Keystore {
         _activeProfileHydrated = true
         activeProfileLock.unlock()
         clearSessionKeyCache()
+        PqKeyStore.shared.clearSession()
         CertPinRegistry.shared.clear()
     }
 
@@ -1314,6 +1318,33 @@ public struct Keystore {
     static func pqRecordRead(_ base: String) -> Data? { keychainRead(account: account(base)) }
     static func pqRecordWrite(_ base: String, _ data: Data) throws { try keychainWrite(account: account(base), data: data, sync: .deviceLocal) }
     static func pqRecordDelete(_ base: String) { keychainDelete(account: account(base)) }
+
+    /// Erases every PQ identity key of a profile (architecture v2): the wrapped ML-DSA seeds and
+    /// the Secure Enclave ML-DSA keys' records. Called by `wipe()` (sign out, Remove this device,
+    /// Wipe & restart), so no PQ half outlives the account keys it was bound to.
+    static func pqRecordsDeleteAll(profile: String) {
+        let prefix = "com.flagship.pq-identity."
+        let normalized = normalizeProfileId(profile)
+        let mine: (String) -> Bool = { acct in
+            guard acct.hasPrefix(prefix) else { return false }
+            if normalized != defaultProfileId { return acct.hasSuffix(".\(normalized)") }
+            // Default profile: the slot ends with the identity's 16-hex key prefix, no suffix.
+            let last = acct.split(separator: ".").last.map(String.init) ?? ""
+            return last.count == 16 && last.allSatisfy { $0.isHexDigit }
+        }
+        var found = InMemoryStore.shared.accounts(prefix: prefix)
+        let q: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+        var result: CFTypeRef?
+        if SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess, let rows = result as? [[String: Any]] {
+            found += rows.compactMap { $0[kSecAttrAccount as String] as? String }
+        }
+        for acct in Set(found) where mine(acct) { keychainDelete(account: acct) }
+    }
 
     private static func unwrapUMK(
         wrapped: Data,
@@ -1551,6 +1582,10 @@ final class InMemoryStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         items.removeValue(forKey: account)
         syncClasses.removeValue(forKey: account)
+    }
+    func accounts(prefix: String) -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return items.keys.filter { $0.hasPrefix(prefix) }
     }
     /// W8 test-only — last-write sync class for `account`, or nil if
     /// nothing has been written.

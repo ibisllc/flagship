@@ -109,6 +109,10 @@ public struct SettingsScreen: View {
     /// container hosts AccountSecurityScreen + drives the enable /
     /// disable flows.
     var onOpenAccountSecurity: () -> Void = {}
+    var onOpenQuantumSafety: () -> Void = {}
+    /// Architecture v2: each trusted device's post-quantum key, by device id ("hardware PQ",
+    /// "PQ, hardware-wrapped", or that it has none yet).
+    var pqLabels: [String: String] = [:]
     /// W3 — open the Profiles picker (multi-cloud).
     var onOpenProfiles: () -> Void = {}
     /// P9 — open the peer-backup management screen.
@@ -210,6 +214,8 @@ public struct SettingsScreen: View {
         onOpenRecovery: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
+        onOpenQuantumSafety: @escaping () -> Void = {},
+        pqLabels: [String: String] = [:],
         onOpenProfiles: @escaping () -> Void = {},
         onOpenPeerBackup: @escaping () -> Void = {},
         onOpenCompanionDock: @escaping () -> Void = {},
@@ -258,6 +264,8 @@ public struct SettingsScreen: View {
         self.onOpenRecovery = onOpenRecovery
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenAccountSecurity = onOpenAccountSecurity
+        self.onOpenQuantumSafety = onOpenQuantumSafety
+        self.pqLabels = pqLabels
         self.onOpenProfiles = onOpenProfiles
         self.onOpenPeerBackup = onOpenPeerBackup
         self.onOpenCompanionDock = onOpenCompanionDock
@@ -510,6 +518,8 @@ public struct SettingsScreen: View {
                 accessibilityId: "settings-open-account-security",
                 action: onOpenAccountSecurity
             ),
+            FSSettingsRow(icon: "atom", title: "Quantum-safe protection", subtitle: "Strict protection per server",
+                          accessibilityId: "settings-open-quantum-safety", action: onOpenQuantumSafety),
             FSSettingsRow(icon: "sparkles", title: "AI keys", subtitle: "Bring-your-own keys for building apps", action: onOpenAiKeys),
         ] + (isDemoAccount ? [] : [
             FSSettingsRow(icon: "key.horizontal.fill", title: "Cloud recovery", subtitle: "Recover on a new device", action: onOpenRecovery),
@@ -717,6 +727,10 @@ public struct SettingsScreen: View {
                         Text("Device \(d.supportCode)")
                     }
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    if let pq = pqLabels[d.deviceId] {
+                        Text(pq).font(FS.font.caption()).foregroundColor(c.textMuted)
+                            .accessibilityIdentifier("settings-device-pq-\(d.deviceId)")
+                    }
                     if d.isManaged {
                         Text(d.isLocked ? "Administrator-managed · locked" : "Administrator-managed")
                             .font(FS.font.caption()).foregroundColor(c.textMuted)

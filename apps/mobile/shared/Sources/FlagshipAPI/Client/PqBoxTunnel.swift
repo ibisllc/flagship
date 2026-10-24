@@ -7,6 +7,8 @@ import Foundation
 public protocol PqBoxTunnel: Sendable {
     /// True when requests to `host` must go over the channel (the server is strict for this device).
     func carries(host: String) -> Bool
+    /// The server answered `pq-channel-required`: from now on requests to it go over the channel.
+    func markStrict(host: String)
     func send(_ request: URLRequest, host: String,
               transport: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse)) async throws -> (Data, URLResponse)
 }
