@@ -8580,10 +8580,6 @@
     "en": "Pair",
     "ctx": "webapp/index.html"
   },
-  "Vibe-code a new service, or share-install one from a creator.": {
-    "en": "Vibe-code a new service, or share-install one from a creator.",
-    "ctx": "webapp/index.html"
-  },
   "Vibe-code": {
     "en": "Vibe-code",
     "ctx": "webapp/index.html"
@@ -11197,26 +11193,6 @@
   " Your {0}.": {
     "en": " Your {0}.",
     "ctx": "webapp/lib/appPlacement.js:354"
-  },
-  "AI keys": {
-    "en": "AI keys",
-    "ctx": "webapp/index.html"
-  },
-  "Browsers you signed in to private apps with \"Process URL\". Refresh to\n          check if one's still in, or Stop to sign it out.": {
-    "en": "Browsers you signed in to private apps with \"Process URL\". Refresh to\n          check if one's still in, or Stop to sign it out.",
-    "ctx": "webapp/index.html"
-  },
-  "Manage recovery protection and account-level security.": {
-    "en": "Manage recovery protection and account-level security.",
-    "ctx": "webapp/index.html"
-  },
-  "AI providers": {
-    "en": "AI providers",
-    "ctx": "webapp/index.html"
-  },
-  "<strong>How this works</strong>": {
-    "en": "<strong>How this works</strong>",
-    "ctx": "webapp/index.html"
   },
   "Pro Max": {
     "en": "Pro Max",
