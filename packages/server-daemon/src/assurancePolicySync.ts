@@ -208,3 +208,39 @@ export class AssurancePolicySync {
     return { suiteVerified, signerActive };
   }
 }
+
+/**
+ * The owner's policies for this server's apps and connectors (`<serverDomain>:<name>` scopes),
+ * each replayed by its own AssurancePolicySync and kept beside the installation's. A scope is
+ * created the first time it is asked about, loads what it held and refreshes in the background;
+ * until then it reads as the state it last held (legacy for a new one).
+ */
+export class ScopedPolicies {
+  private readonly syncs = new Map<string, AssurancePolicySync>();
+
+  constructor(
+    private readonly opts: Omit<AssurancePolicySyncOptions, "scope" | "path" | "fetchChain"> & {
+      dir: string;
+      fetchScope: (scope: PolicyScope) => Promise<unknown>;
+    },
+  ) {}
+
+  for(kind: "service" | "connector", name: string): AssurancePolicySync {
+    const id = `${this.opts.serverDomain.toLowerCase()}:${name}`;
+    const key = `${kind}|${id}`;
+    let s = this.syncs.get(key);
+    if (!s) {
+      const scope: PolicyScope = { kind, id };
+      const file = `${this.opts.dir}/assurance-${kind}-${name.replace(/[^a-z0-9.-]/gi, "_")}.json`;
+      s = new AssurancePolicySync({ ...this.opts, scope, path: file, fetchChain: () => this.opts.fetchScope(scope) });
+      this.syncs.set(key, s);
+      const created = s;
+      void created.load().then(() => created.refresh()).catch(() => {});
+    }
+    return s;
+  }
+
+  async refreshAll(): Promise<void> {
+    for (const s of this.syncs.values()) await s.refresh().catch(() => {});
+  }
+}
