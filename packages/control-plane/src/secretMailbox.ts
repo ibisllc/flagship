@@ -1170,6 +1170,8 @@ export async function handlePostUpdateDeposit(
       issuedAt?: unknown;
     };
     signature?: unknown;
+    /** Architecture v2: the owner's hybrid signature, passed to the box opaque (it verifies it). */
+    pqSignature?: unknown;
   };
   const dep = b?.deposit ?? {};
   const o = b?.order ?? {};
@@ -1265,6 +1267,7 @@ export async function handlePostUpdateDeposit(
           issuedAt: order.issuedAt,
         },
         signature: b.signature.toLowerCase(),
+        ...(pqSignatureForCarrier(b.pqSignature) ?? {}),
       }),
     ),
   );
@@ -1459,4 +1462,12 @@ function safeParse(s: string): unknown {
   } catch {
     return null;
   }
+}
+
+/** A client's `pqSignature` beside an order, carried to the box only in its exact shape. */
+function pqSignatureForCarrier(raw: unknown): { pqSignature: { suite: string; signature: string } } | null {
+  const p = raw as { suite?: unknown; signature?: unknown } | null | undefined;
+  if (!p || typeof p !== "object" || typeof p.suite !== "string" || typeof p.signature !== "string") return null;
+  if (p.suite.length > 64 || p.signature.length > 8192 || !/^[0-9a-f]+$/.test(p.signature)) return null;
+  return { pqSignature: { suite: p.suite, signature: p.signature } };
 }
