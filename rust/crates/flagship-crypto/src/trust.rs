@@ -88,6 +88,7 @@ pub enum Role {
     Device,
     BoxStk,
     BootKey,
+    ReleaseKey,
 }
 
 impl Role {
@@ -99,6 +100,7 @@ impl Role {
             Self::Device => "device",
             Self::BoxStk => "box-stk",
             Self::BootKey => "boot-key",
+            Self::ReleaseKey => "release-key",
         }
     }
 
@@ -111,6 +113,7 @@ impl Role {
             "device" => Ok(Self::Device),
             "box-stk" => Ok(Self::BoxStk),
             "boot-key" => Ok(Self::BootKey),
+            "release-key" => Ok(Self::ReleaseKey),
             _ => Err(TrustError::BindingRole),
         }
     }
