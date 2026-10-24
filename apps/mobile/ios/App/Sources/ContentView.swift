@@ -28,6 +28,9 @@ struct ContentView: View {
     /// "<App> wants to reach <host>" sheets, asked of every managed box on
     /// foreground, on a `generic` push and on each box's events socket.
     @State private var accessAlerts: AppAccessAlertCenter?
+    /// "A remote machine claiming to run … wants to talk to …" sheets (app chat
+    /// between owners), asked of every managed box on the same wakes.
+    @State private var chatAlerts: ChatRequestCenter?
     /// Settings → Privacy → "Push notifications": the registration on `.com`
     /// and every box's access-alert setting follow it.
     @State private var pushPrefs: PushPreferenceSync?
@@ -68,6 +71,20 @@ struct ContentView: View {
         )) {
             if let accessAlerts {
                 AppAccessAlertSheet(center: accessAlerts)
+            }
+        }
+        // One request at a time, and never over an access question.
+        .sheet(isPresented: Binding(
+            get: {
+                app.isPaired && app.isUnlocked && privacy.pushNotificationsEnabled
+                    && accessAlerts?.current == nil && chatAlerts?.current != nil
+            },
+            set: { shown in
+                if !shown, let center = chatAlerts, let id = center.current?.id { center.dismissed(id: id) }
+            }
+        )) {
+            if let chatAlerts {
+                ChatRequestSheet(center: chatAlerts)
             }
         }
         .fullScreenCover(isPresented: Binding(
@@ -296,6 +313,20 @@ struct ContentView: View {
             center.observeEvents()
             accessAlerts = center
         }
+        if chatAlerts == nil {
+            let app = self.app
+            let chats = ChatRequestCenter(
+                boxes: managedBoxes(),
+                isActive: { [weak app] in
+                    guard let app else { return false }
+                    return app.isPaired && app.isUnlocked && !app.isRestrictedDevice && AdminOrderGate.allows(app)
+                        && !UpdateLock.shared.isLocked && !AccountGoneRegistry.shared.isGone
+                },
+                alertsEnabled: { privacy.pushNotificationsEnabled }
+            )
+            chats.observeEvents()
+            chatAlerts = chats
+        }
         if pushPrefs == nil {
             let registrar: @MainActor () -> PushRegistrar? = {
                 (UIApplication.shared.delegate as? AppDelegate)?.pushRegistrar
@@ -319,13 +350,21 @@ struct ContentView: View {
             Task { await prefs.resync() }
         }
         if inFront && !app.isRestrictedDevice && AdminOrderGate.allows(app) && privacy.pushNotificationsEnabled {
+            let chats = chatAlerts
             Task {
                 await center.refresh()
+                await chats?.refresh()
                 await center.startListening()
             }
         } else {
             center.stopListening()
-            if !privacy.pushNotificationsEnabled { Task { await center.refresh() } }
+            if !privacy.pushNotificationsEnabled {
+                let chats = chatAlerts
+                Task {
+                    await center.refresh()
+                    await chats?.refresh()
+                }
+            }
         }
     }
 
