@@ -85,5 +85,6 @@ export * from "./voiciName.js";
 export * from "./assurancePolicy.js";
 export * from "./pqHybrid.js";
 export * from "./pqTrust.js";
+export * from "./pqSession.js";
 export * from "./releaseEndorsementPq.js";
 export * from "./releasePqPin.js";
