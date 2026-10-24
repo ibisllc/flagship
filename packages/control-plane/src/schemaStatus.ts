@@ -85,6 +85,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0110",
   // Custom voi.ci names, their changes and retired codes (named links).
   "0111",
+  // Passkey-checked recovery, its one-use challenges, and Studio's server-seen record.
+  "0112",
 ];
 
 export interface SchemaStatusDeps {
