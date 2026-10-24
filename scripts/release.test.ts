@@ -427,9 +427,10 @@ describe("release.sh parsers against captured tool output", () => {
     expect(r.out).toMatch(/^0110_server_boot_keys\.sql$/m);
     expect(r.out).toMatch(/^0111_pq_key_bindings\.sql$/m);
     expect(r.out).toMatch(/^0112_assurance_policy_changes\.sql$/m);
-    expect(r.out.split("\n")).toHaveLength(8);
+    expect(r.out).toMatch(/^0113_server_order_pq_signature\.sql$/m);
+    expect(r.out.split("\n")).toHaveLength(9);
     // a ledger that has everything -> nothing pending
-    const all = JSON.stringify([{ results: ["0105", "0106", "0107", "0108", "0109", "0110", "0111", "0112", ...JSON.parse(fx("wrangler-d1-ledger.synthetic.json"))[0].results.map((x: { version: string }) => x.version)].map((version) => ({ version })) }]);
+    const all = JSON.stringify([{ results: ["0105", "0106", "0107", "0108", "0109", "0110", "0111", "0112", "0113", ...JSON.parse(fx("wrangler-d1-ledger.synthetic.json"))[0].results.map((x: { version: string }) => x.version)].map((version) => ({ version })) }]);
     expect(sh(`pending_migrations ${dir}`, all).out).toBe("");
   });
 

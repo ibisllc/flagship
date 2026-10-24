@@ -92,6 +92,7 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   // The key each box keeps on /boot for unlocking, vouched for by its STK.
   // Hybrid key bindings, the boot-key binding's hybrid signature, assurance policy per scope.
   // Owner-signed assurance policy changes, chained per scope.
+  // The owner's hybrid signature beside the server order's classical one.
 ];
 
 export interface SchemaStatusDeps {
