@@ -21,8 +21,8 @@ import java.io.File
 
 class ServerOrderVectorsTest {
 
-    private fun vectorsFile(): File {
-        val rel = "packages/protocol/test-vectors/server-order/vectors.json"
+    private fun vectorsFile(name: String = "vectors.json"): File {
+        val rel = "packages/protocol/test-vectors/server-order/$name"
         val candidates = ArrayList<File>()
         System.getProperty("user.dir")?.let { candidates.add(File(it)) }
         runCatching { javaClass.protectionDomain?.codeSource?.location?.toURI()?.let { candidates.add(File(it)) } }
@@ -52,7 +52,24 @@ class ServerOrderVectorsTest {
         stks = f["stks"]!!.jsonArray.map { it.jsonPrimitive.content },
         issuedAt = f["issuedAt"]!!.jsonPrimitive.long,
         nonce = f.s("nonce"),
+        pqKeyIds = f["pqKeyIds"]?.jsonArray?.map { it.jsonPrimitive.content },
     )
+
+    @Test fun namesEachServersPqKeyIdInTheSignedBytes() {
+        val p = Json.parseToJsonElement(vectorsFile("pq-vectors.json").readText()).jsonObject
+        val o = p.o("order")
+        val order = order(o.o("fields"))
+        val canonical = String(ServerOrderProtocol.canonicalBytes(order))
+        assertEquals(o.s("canonical"), canonical)
+        assertTrue(verifies(o.s("signatureHex"), canonical))
+        val stripped = order.copy(pqKeyIds = null)
+        assertFalse(verifies(o.s("signatureHex"), String(ServerOrderProtocol.canonicalBytes(stripped))))
+        for (r in p["refuse"]!!.jsonArray) {
+            assertThrows(IllegalArgumentException::class.java) { ServerOrderProtocol.canonicalBytes(order(r.jsonObject.o("fields"))) }
+        }
+        val named = ServerOrderProtocol.withPqKeyIds(stripped) { if (it == order.stks[0]) "11".repeat(32) else null }
+        assertEquals(listOf("11".repeat(32), "-", "-"), named.pqKeyIds)
+    }
 
     private fun verifies(sigHex: String, canonical: String): Boolean =
         runCatching { Ed25519Verify(bytes(keys.s("irkPubHex"))).verify(bytes(sigHex), canonical.toByteArray()) }.isSuccess

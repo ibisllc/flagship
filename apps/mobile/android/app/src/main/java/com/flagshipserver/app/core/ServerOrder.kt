@@ -20,6 +20,12 @@ data class ServerOrder(
     val issuedAt: Long,
     /** 32 random bytes, lowercase hex. */
     val nonce: String,
+    /**
+     * Architecture v2 (pq-suites.md §16): per server in [stks], the hybrid key id of the box PQ
+     * binding this phone pinned, or `-`. Signed with the order so boxes pin their siblings
+     * through the account instead of `.com`. Null: the v1 canonical bytes.
+     */
+    val pqKeyIds: List<String>? = null,
 )
 
 /** A signed order as it travels: `/pods`, `POST /api/accounts/<u>/server-order`. */
@@ -47,10 +53,17 @@ object ServerOrderProtocol {
         require(o.stks.toSet().size == o.stks.size) { "stks must not repeat" }
         require(HEX64.matches(o.nonce)) { "nonce must be 32-byte lowercase hex" }
         require(o.issuedAt > 0) { "issuedAt must be positive" }
-        return listOf(TAG, o.user.lowercase(), o.stks.joinToString(","), o.issuedAt.toString(), o.nonce)
-            .joinToString("|")
-            .toByteArray(Charsets.UTF_8)
+        val parts = mutableListOf(TAG, o.user.lowercase(), o.stks.joinToString(","), o.issuedAt.toString(), o.nonce)
+        o.pqKeyIds?.let { ids ->
+            require(ids.size == o.stks.size && ids.all { it == "-" || HEX64.matches(it) }) { "pqKeyIds must name one key id per stk" }
+            parts += "pq=" + ids.joinToString(",")
+        }
+        return parts.joinToString("|").toByteArray(Charsets.UTF_8)
     }
+
+    /** The same order naming each server's pinned PQ key id (`-` where none is pinned). */
+    fun withPqKeyIds(o: ServerOrder, keyIdFor: (String) -> String?): ServerOrder =
+        o.copy(pqKeyIds = o.stks.map { stk -> keyIdFor(stk)?.takeIf { HEX64.matches(it) } ?: "-" })
 
     fun sign(o: ServerOrder, signer: Ed25519Sign): String = HexUtil.encode(signer.sign(canonicalBytes(o)))
 
