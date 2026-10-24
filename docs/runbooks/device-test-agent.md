@@ -78,6 +78,44 @@ build, then:
    Studio window's own error text, and `powercfg /requests` output for the
    sleep check.
 
+### Windows PC: architecture v2 drills (branch `feat/architecture`, milestones 6 and 7)
+
+The owner's Windows test machine has a TPM 2.0 and an NVIDIA GPU. Both drills below run on the
+**metal**, booted natively from a USB stick, never in a Studio VM: Studio's hosted VMs on Windows
+get no TPM (a VM's virtual TPM would be the Windows host's, which protects nothing against that
+host, plan §7) and no GPU (Studio cannot pass a GPU through to a guest).
+
+**A. TPM unlock drill (milestone 6, `docs/architecture-v2/pq-suites.md` §19).**
+
+1. Back up anything on the spare internal disk or use a second disk: the install wipes it. In the
+   firmware: TPM (fTPM / PTT) on, Secure Boot as it ships, USB boot allowed.
+2. In Studio built from `feat/architecture`, burn a USB stick for a disposable demo account on the
+   gym (never `playstore-test-0725`), boot the PC from it, and approve the first unlock on the
+   phone (iOS or Android built from `feat/architecture`).
+3. Once the box is online: on the box (debug access), check
+   `ls /boot/flagship-boot-mldsa.key /boot/flagship-lease-kem.tpm/` and
+   `cat /boot/flagship-lease-kem.tpm/pcrs` (expect `sha256:` and the measured PCRs, 7 at least),
+   and that `/boot/flagship-lease-kem.key` is absent. Record `tpm2_getcap properties-fixed`
+   (manufacturer, firmware version).
+4. Turn auto-unlock on from the phone (the phone deposits a v3 lease). Reboot: pass = it unlocks
+   with no phone prompt, and `/boot/flagship-unlock.log` says "unlocked from the auto-unlock lease".
+5. **PCR mismatch:** toggle Secure Boot (or boot once with a different boot entry) and reboot.
+   Pass = the log says "the TPM did not release the lease key" and the phone is asked; approve it.
+   Reboot again with nothing changed: pass = no prompt (the daemon resealed after the approved boot).
+6. **Strict:** on the phone, Settings, Quantum-safe protection, turn strict on for this server.
+   Reboot with auto-unlock off: pass = the phone's approval works (v2); then try approving from the
+   webapp: pass = the box refuses it (`strict-refuses-v1` in the unlock log) and the webapp says to
+   use the phone.
+7. **TPM clear / reset:** in the firmware, clear the TPM, boot. Pass = the box asks the phone (no
+   lease opens) and, after approval, `/boot/flagship-lease-kem.tpm/` is rewritten. Record whether
+   any step needed a recovery passphrase.
+8. Report the receipts as in "Report" below (one file per drill), with the unlock log, the
+   `pcrs` file and the TPM vendor line.
+
+**B. NVIDIA GPU test (milestone 7).** Use the same native USB boot (a Studio VM cannot reach the
+GPU). The steps come with milestone 7; until then only record `lspci -nn | grep -i nvidia` and the
+driver the box reports.
+
 ## Chromebook
 
 1. **Webapp in Chrome.** Same walk as Windows item 1. Install it (Chrome ⋮ →

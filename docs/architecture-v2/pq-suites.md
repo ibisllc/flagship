@@ -924,7 +924,9 @@ says. `.com` still serves `/pods` and the bindings; it can no longer introduce a
 only with its verified companion (`pq-signature-required` when the classical ones alone would have
 met the threshold); manifests signed before the cut-over are listed by v1 digest
 (`legacyManifests`). The installer's shell verifier checks the same with OpenSSL 3.5+ (Ed25519 and
-ML-DSA-65 with the hybrid context string), vectors `box-artifact/pq-vectors.json`.
+ML-DSA-65 with the hybrid context string), vectors `box-artifact/pq-vectors.json`. Since milestone 6
+`scripts/pq-release-key.mjs sign-box-artifact` adds a signer's companion and binding to a signed
+manifest file.
 
 ### 16.3 CA endorsement leases
 
@@ -932,8 +934,9 @@ ML-DSA-65 with the hybrid context string), vectors `box-artifact/pq-vectors.json
 ca-track holder under a `release-key` binding with subject `flagship-ca-track`
 (`.maintainers/ca-pq/`). Pin `CA_LEASE_PQ_PIN` (empty today); once set, the box (folder and
 relay-trust material), and the Worker drop a lease with no verified companion unless its v1 digest
-is in `legacyLeases`. Vectors `ca-lease-pq/vectors.json`. The phones and the webapp still check the
-classical lease only (parity allowlist).
+is in `legacyLeases`. Vectors `ca-lease-pq/vectors.json`. Since milestone 6 the phones and the
+webapp gate the blessing's leases the same way, and `scripts/pq-release-key.mjs sign-ca-lease`
+(or `rotate-and-endorse-ca.mjs --pq`) signs the companion.
 
 ### 16.4 Deposit reads
 
@@ -968,7 +971,8 @@ floor on its disk and in `/boot/flagship-time-floor`, and expiry checks (CA leas
 debug access, device book and sibling bindings, share acceptance) read `trustedNow()`: never
 earlier than the floor or the authenticated estimate. The Rust boot client reads the floor, so a
 clock set back cannot revive an expired auto-unlock lease. Without an answer it is the system clock
-raised to the floor (`status().source`). Open: the Go `flagship-unseal` helper ignores the floor.
+raised to the floor (`status().source`). Since milestone 6 the Go `flagship-unseal` helper reads it too
+(`--time-floor-file`).
 
 ## 18. Android: one prompt per session for hybrid signatures
 
@@ -978,3 +982,95 @@ CryptoObject of the session's unlock prompt (`PqSessionKek`, `BiometricGate.eval
 It stays in memory until the session locks, like the account key. Seeds under the old 300 s window
 are rewrapped right after that prompt; without a vault the old wrapping stays. iOS was not affected
 (its seeds open under the session's LAContext).
+
+## 19. Milestone 6: boot unlock v2 (`packages/protocol/src/bootUnlockV2.ts`)
+
+DRAFT like the rest of this file; external review (Q01) and the N10 TPM policy review still apply.
+Vectors: `test-vectors/boot-unlock-v2/vectors.json` (TS generates; Rust `flagship-boot`, Go
+`flagship-unseal`, Swift and Kotlin check every case, with the downgrade cases).
+
+### 19.1 Keys
+
+| Key | Where | Custody label |
+|---|---|---|
+| boot key Ed25519 | `/boot/flagship-boot-key.pem` (unchanged) | software, on /boot |
+| boot key ML-DSA-65 seed | `/boot/flagship-boot-mldsa.key` (0600, made by the daemon) | software, on /boot |
+| lease key (X-Wing seed) | sealed to the TPM in `/boot/flagship-lease-kem.tpm/`, else `/boot/flagship-lease-kem.key`; escrowed in the encrypted root (`<dataDir>/boot-pq/lease-kem.key`) | `tpm` or `software` (in the STK's statement) |
+| reply key (X-Wing) | per request, in the premount's `/run` (tmpfs), deleted after its one open; in-process for the Rust `unlock` flow | ephemeral |
+| owner key | `/boot/flagship-owner-pq.pub`: the account IRK's hybrid key from the binding the device book verified | n/a |
+
+The boot key binds its ML-DSA half with `flagship/pq-key-binding/v1` (role `boot-key`, subject the
+server domain). The STK's hybrid key (keyd `sign.hybrid`, hybrid-only purpose) vouches for both:
+`flagship/boot-key-binding/v3|<domain>|<bootPub>|<bootHybridKeyId>|<leaseKemKeyId>|<custody>|<issuedAt>`.
+`.com` stores the material (D1 **0114** `server_boot_key_pq`) only when it verifies under the stored
+`box-stk` binding and names the boot key it just verified, and serves it as `pq` beside the
+boot-key binding. Phones verify it again under the STK binding they pinned.
+
+### 19.2 Messages
+
+- Request: the v1 request (the worker's gate checks it) plus `pq: { v: 2, replyKemPubHex, signature }`,
+  the boot hybrid key over `flagship/secret-request/v2|<domain>|<bootPub>|unlock-key|<nonce>|<replyKemKeyId>|<issuedAt>`.
+  The worker parks `pq` (D1 0114 `boot_request_pq`, shape-checked) for the phone's listing.
+- Reply: `flagship/hybrid-seal/v1` to the reply key, purpose `flagship/boot-reply/v2`, context
+  (domain, boot key, `unlock-key`, nonce), header session nonce = the request nonce; plaintext
+  `u16be(n) || disk key || owner hybrid signature` over
+  `flagship/boot-reply/v2|<domain>|<bootPub>|unlock-key|<nonce>|<replyKemKeyId>|<sha512(key)>|<issuedAt>`.
+  It travels in the unchanged `sealed` field (a v2 envelope starts with its magic; a v1 seal with an
+  X25519 point).
+- Lease v3: the v2 lease JSON the worker checks, whose `sealedKey` is a hybrid seal to the lease key
+  (purpose `flagship/auto-unlock-lease/v3`, context domain, boot key, lease id, header issued/expires)
+  carrying the disk key and the owner's hybrid signature over
+  `flagship/auto-unlock-lease/v3|<domain>|<bootPub>|<leaseKemKeyId>|<leaseId>|<sha512(key)>|<issuedAt>|<expiresAt>|<maxUses>`,
+  so `.com` cannot change the id, times or cap the box checks.
+
+### 19.3 Downgrade
+
+The box's unlock policy file (`/boot/flagship-unlock-policy`, `strict` or `compat`, written by the
+daemon from its own policy replay) decides, never the reply. Strict refuses every v1 reply and v1
+lease (`strict-refuses-v1`) in the Go helper, the Rust compat CLI and the Rust `unlock` flow; no
+file is compat; any other content is strict once v2 material exists. A phone sends v2 when the box's
+material and the request's `pq` verify and it holds the account key's ML-DSA half; outside strict it
+falls back to v1; under strict it refuses (`box-has-no-v2`, `phone-cannot-sign-hybrid`). The webapp
+holds no PQ key, so it answers v1 and tells the owner to use the phone; a strict box refuses that
+reply itself. Watch quick approve does not apply to a strict server (it holds no account key).
+Expiry reads the clock raised to `/boot/flagship-time-floor` in both helpers.
+
+What a file on /boot cannot give: integrity. Whoever holds the powered-off disk can delete the
+policy file (compat) or the v2 files. The TPM's PCR policy covers the boot chain, not these files;
+a measured `/boot` (UKI) is BO02's remaining work.
+
+### 19.4 The TPM (`packages/server-daemon/src/bootPqTpm.ts`, `rust/crates/flagship-boot/src/tpm.rs`)
+
+On a box where `tpm2_getcap` answers (`/dev/tpmrm0`, or `TPM2TOOLS_TCTI`), the daemon seals the
+lease seed as a sealed data object under the owner hierarchy's ECC P-256 primary (re-created from
+the TPM's seed: `-C o -g sha256 -G ecc256:aes128cfb`), attributes `fixedtpm|fixedparent|noda`, no
+usable password: its only authorization is `PolicyPCR` over the measured candidates among PCRs
+0, 2, 4, 7, 8, 9 (firmware, option ROMs, boot loader and EFI images, Secure Boot state, GRUB
+commands, and the kernel and initrd GRUB measured). No measured PCR: software custody. The
+premount unseals it with tpm2-tools (staged by the initramfs hook with the TCTI and TPM modules)
+into a pipe to the helper. A changed chain or another machine: the TPM refuses, the box asks the
+phone, and after that approved boot the daemon reseals the same escrowed seed under the new chain,
+so deposited leases keep working. Label: the TPM is classical custody gating a PQ-sealed key; it is
+not PQ attestation and not a quote (no fresh-release policy yet). The PCR set is not reviewed (N10).
+
+### 19.5 keyd: master needs the owner's evidence (closes §16.6's open item)
+
+keyd signs a `master` identity assertion only through `sign.identity`, with evidence it checks
+itself (`checkMasterEvidence`, vectors `identity-assertion/master-evidence.json`, TS and Rust keyd
+cross-checked): the member id is the per-app id keyd derives from the SWK and the sign-in key, and
+the owner's device grant for that key with the `admin` scope (under the admin root `owner.json`
+pins from the box's config; the IRK on a box without one), unexpired, or an admin order raising
+that key to master in this app. Plain `sign` refuses master. The daemon passes the device book's
+grant for an admin device and asserts manager when it has no evidence or keyd refuses. Left open:
+keyd sees no later demotion order or revoked grant, and an admin-root rotation after the boot
+ceremony leaves `owner.json` on the seed root until keyd's next start.
+
+### 19.6 Open questions for the Q01 reviewer (additions)
+
+24. The reply key is generated per request and kept in the initramfs's `/run` between the request
+    and the poll (two helper invocations). Is tmpfs residency for up to 6 hours acceptable, or must
+    the relay move into one process (the Rust `unlock` flow) before strict is offered?
+25. The owner signature sits inside the seal (sign-then-encrypt). Should the statement also bind
+    the reply's envelope header bytes, not only issuedAt and the nonce?
+26. Lease v3 keeps the worker's classical outer signature for its own checks. Is anything lost by
+    the box ignoring the outer signature once the inner hybrid one verifies?

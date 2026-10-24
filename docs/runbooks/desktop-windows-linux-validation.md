@@ -110,3 +110,10 @@ gh workflow run studio-release.yml -f version=<x.y.z> -f publish=true
 
 Point `INSTALLER_DOWNLOADS` in `apps/com/src/route.ts` (and its test) at the new
 asset names, then `npx tsc -b && (cd apps/com && npm run deploy)`.
+
+## Architecture v2 drills on the Windows test machine
+
+The TPM unlock drill (milestone 6) and the NVIDIA GPU test (milestone 7) run on the PC itself,
+booted natively from a USB stick, never in a Studio-hosted VM: Studio VMs on Windows get no TPM of
+their own and no GPU passthrough. Steps: `device-test-agent.md`, "Windows PC: architecture v2
+drills".
