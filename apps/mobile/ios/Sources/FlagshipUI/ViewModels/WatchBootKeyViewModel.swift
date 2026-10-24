@@ -25,32 +25,28 @@ public final class WatchBootKeyViewModel {
 
     private let enroller: WatchBootKeyEnroller
     private let store: WatchBootKeyStore
+    private let pins: WatchBootStkPins
     private let delegateReady: () -> Bool
     private let now: () -> Int64
 
     public init(serverDomain: String, enroller: WatchBootKeyEnroller, store: WatchBootKeyStore = WatchBootKeyStore(),
-                delegateReady: @escaping () -> Bool, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+                pins: WatchBootStkPins = WatchBootStkPins(), delegateReady: @escaping () -> Bool, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.serverDomain = serverDomain
         self.enroller = enroller
         self.store = store
+        self.pins = pins
         self.delegateReady = delegateReady
         self.now = now
         reload()
     }
 
     /// The live wiring: the Keystore's watch keys, the account key behind Face ID, the boot worker.
-    public static func live(serverDomain: String, mailbox: SecretMailboxClient) -> WatchBootKeyViewModel {
+    public static func live(serverDomain: String, mailbox: SecretMailboxClient, username: String) -> WatchBootKeyViewModel {
         let reason = String(localized: "Let your watch start \(serverDomain)")
         let enroller = WatchBootKeyEnroller(
             mailbox: mailbox,
-            // The copy is only useful with the box key pinned on this phone, which the watch seals to.
-            irk: {
-                let keys = try await Keystore.deriveIRKAndBoxStkPub(serverId: serverDomain, reason: reason)
-                if CertPinRegistry.shared.stkPub(forDomain: serverDomain) == nil {
-                    CertPinRegistry.shared.registerBoxStk(domain: serverDomain, stkPub: keys.boxStkPub)
-                }
-                return keys.irk
-            },
+            username: username,
+            irk: { try await Keystore.deriveIRK(reason: reason) },
             unsealSeeds: { domain in
                 var seeds: [Data] = []
                 if let bak = try? await Keystore.deriveBAK(serverId: domain, reason: reason) { seeds.append(bak.rawRepresentation) }
@@ -94,6 +90,8 @@ public final class WatchBootKeyViewModel {
         do {
             try await enroller.turnOff(serverDomain: serverDomain)
             store.set(nil, for: serverDomain)
+            // Turning it off is the owner's re-trust: the next time on records the key the server then has.
+            pins.forget(serverDomain)
             expiresAt = nil
             phase = .idle
         } catch {
@@ -138,6 +136,7 @@ public enum WatchDelegateRenewal {
                 let reason = String(localized: "Let your watch start \(domain)")
                 let enroller = WatchBootKeyEnroller(
                     mailbox: mailbox,
+                    username: username,
                     irk: {
                         guard let irk = Keystore.sessionIRKIfCached() else { throw CancellationError() }
                         return irk

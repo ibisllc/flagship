@@ -7,6 +7,7 @@ import FlagshipCore
 struct WatchBootKeyCard: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(AppState.self) private var app
 
     let serverDomain: String
     @State private var vm: WatchBootKeyViewModel?
@@ -27,7 +28,7 @@ struct WatchBootKeyCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sd-watch-boot")
         .task(id: serverDomain) {
-            if vm == nil { vm = WatchBootKeyViewModel.live(serverDomain: serverDomain, mailbox: mailbox) }
+            if vm == nil { vm = WatchBootKeyViewModel.live(serverDomain: serverDomain, mailbox: mailbox, username: app.currentUser ?? "") }
             vm?.reload()
         }
         .alert(String(localized: "Let your watch start this server?"), isPresented: $confirmOn) {
