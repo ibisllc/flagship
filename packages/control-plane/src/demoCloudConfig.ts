@@ -509,8 +509,8 @@ chmod 600 /etc/flagship-bootstrap.env
 cat > /etc/systemd/system/flagship-data-services.service <<'DSUNIT'
 [Unit]
 Description=Flagship data-layer (postgres/forgejo/chromium)
-After=docker.service network-online.target
-Wants=docker.service network-online.target
+After=docker.service podman.socket network-online.target
+Wants=network-online.target
 StartLimitIntervalSec=2h
 StartLimitBurst=40
 
