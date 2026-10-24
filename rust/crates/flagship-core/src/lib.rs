@@ -13,6 +13,7 @@ pub mod handover;
 pub mod journal;
 pub mod lock;
 pub mod port;
+pub mod shadow;
 
 pub use controller::{Controller, Decision, Mode, Report};
 pub use journal::{Journal, JournalError, OpKind, OpState};
