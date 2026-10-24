@@ -3,6 +3,7 @@ import {
   checkPipeUpgrade,
   checkRateLimit,
   clientIp,
+  bindingSubject,
   endpointFor,
   extractIrkPub,
   extractUsernameHash,
@@ -80,6 +81,18 @@ describe("rateLimit — endpoint detection", () => {
     // a "token id" of `relay` for any other endpoint.
     expect(endpointFor("POST", "/api/push/register")).not.toBe("push-revoke");
     expect(endpointFor("POST", "/api/push/relay")).not.toBe("push-revoke");
+  });
+
+  it("limits the PQ binding writes and policy changes per source and per server or account", () => {
+    expect(endpointFor("PUT", "/api/server/home.alice.flagship.services/pq-key-binding")).toBe("pq-binding-put");
+    expect(endpointFor("PUT", "/api/server/home.alice.flagship.services/boot-key")).toBe("pq-binding-put");
+    expect(endpointFor("PUT", "/api/accounts/alice/pq-key-bindings")).toBe("pq-binding-put");
+    expect(endpointFor("POST", "/api/accounts/alice/assurance-policy")).toBe("assurance-policy-post");
+    expect(endpointFor("GET", "/api/server/home.alice.flagship.services/pq-key-binding")).toBeNull();
+    expect(endpointFor("GET", "/api/accounts/alice/pq-key-bindings")).toBeNull();
+    expect(bindingSubject("pq-binding-put", "/api/server/Home.Alice.flagship.services/pq-key-binding")).toBe("server:home.alice.flagship.services");
+    expect(bindingSubject("assurance-policy-post", "/api/accounts/alice/assurance-policy")).toBe("accounts:alice");
+    expect(bindingSubject("free-ai", "/api/accounts/alice/assurance-policy")).toBeUndefined();
   });
 
   it("returns null for unrelated routes (no false-positive rate limits)", () => {
