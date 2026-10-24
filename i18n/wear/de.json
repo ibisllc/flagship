@@ -12,5 +12,9 @@
   "approved": "Genehmigt",
   "approval_failed": "Genehmigung fehlgeschlagen.",
   "approve": "Genehmigen",
-  "this_server_isnt_waiting_any_more": "Dieser Server wartet nicht mehr."
+  "this_server_isnt_waiting_any_more": "Dieser Server wartet nicht mehr.",
+  "open_the_approve_page_on_this_watch": "Öffne die Seite Genehmigen auf dieser Uhr, um zu genehmigen.",
+  "set_a_screen_lock_on_this_watch": "Richte auf dieser Uhr eine Displaysperre ein, um mit ihr zu genehmigen.",
+  "unlock_this_watch_to_approve": "Entsperre diese Uhr, um zu genehmigen.",
+  "put_this_watch_on_your_wrist": "Lege diese Uhr an dein Handgelenk, um zu genehmigen."
 }

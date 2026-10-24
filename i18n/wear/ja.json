@@ -12,5 +12,9 @@
   "approved": "承認済み",
   "approval_failed": "承認に失敗しました。",
   "approve": "承認",
-  "this_server_isnt_waiting_any_more": "このサーバーはもう待機していません。"
+  "this_server_isnt_waiting_any_more": "このサーバーはもう待機していません。",
+  "open_the_approve_page_on_this_watch": "承認するには、このウォッチで承認ページを開いてください。",
+  "set_a_screen_lock_on_this_watch": "このウォッチで承認するには、画面ロックを設定してください。",
+  "unlock_this_watch_to_approve": "承認するには、このウォッチのロックを解除してください。",
+  "put_this_watch_on_your_wrist": "承認するには、このウォッチを手首に着けてください。"
 }

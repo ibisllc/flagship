@@ -1996,7 +1996,7 @@
   "build_logs": "Registros de compilación",
   "interrupt_with_a_follow_up": "Interrumpir con un mensaje adicional",
   "quick_approve_from_watch": "Aprobar desde el reloj",
-  "approve_a_server_boot_from_your": "Aprueba el arranque de un servidor desde tu reloj Wear OS mientras Flagship esté desbloqueado en este teléfono. Las demás acciones (revocar el servidor, borrar y reiniciar, reemplazar el dispositivo) siempre requieren tu teléfono. Desactivado por defecto.",
+  "approve_a_server_boot_from_your": "Aprueba el arranque de un servidor desde tu reloj Wear OS mientras Flagship esté desbloqueado en este teléfono o, para los servidores que actives abajo, mientras este teléfono esté bloqueado. Las demás acciones (revocar el servidor, borrar y reiniciar, reemplazar el dispositivo) siempre requieren tu teléfono. Desactivado por defecto.",
   "active_renews_by": "Activo: se renueva antes del %1$s",
   "your_stuff_on": "Tus cosas,\nen ",
   "your_hardware": "tu hardware.",
@@ -2742,5 +2742,6 @@
   "chat_always_allow_line_sender": "Una máquina remota que dice ejecutar %1$s/%2$s puede iniciar un chat con %3$s sin preguntarte.",
   "chat_always_ended_sender": "%1$s/%2$s tendrá que volver a preguntar antes de iniciar un chat con %3$s",
   "chat_request_now_always_sender": "%1$s/%2$s ya puede iniciar un chat con %3$s sin preguntar",
-  "ai_consent_cap": "Esta ejecución puede usar hasta unos %1$s tokens. La ejecución se detiene ahí."
+  "ai_consent_cap": "Esta ejecución puede usar hasta unos %1$s tokens. La ejecución se detiene ahí.",
+  "watch_boot_key_mismatch": "La clave de este servidor no coincide. Aprueba su arranque desde tu teléfono."
 }

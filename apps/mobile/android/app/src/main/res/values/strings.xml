@@ -2001,7 +2001,7 @@
     <string name="build_logs">Build logs</string>
     <string name="interrupt_with_a_follow_up">Interrupt with a follow-up</string>
     <string name="quick_approve_from_watch">Approve from watch</string>
-    <string name="approve_a_server_boot_from_your">Approve a server boot from your Wear OS watch while Flagship is unlocked on this phone. Other actions (revoke server, wipe &amp; restart, replace device) always need your phone. Off by default.</string>
+    <string name="approve_a_server_boot_from_your">Approve a server\'s start-up from your Wear OS watch while Flagship is unlocked on this phone, or, for the servers you turn on below, while this phone is locked. Other actions (revoke server, wipe &amp; restart, replace device) always need your phone. Off by default.</string>
     <string name="active_renews_by">Active — renews by %1$s</string>
     <string name="your_stuff_on">Your stuff,\non\u0020</string>
     <string name="your_hardware">your hardware.</string>
@@ -2749,4 +2749,5 @@
     <string name="chat_always_ended_sender">%1$s/%2$s has to ask again before starting a chat with %3$s</string>
     <string name="chat_request_now_always_sender">%1$s/%2$s can now start a chat with %3$s without asking</string>
     <string name="ai_consent_cap">This run can use up to about %1$s tokens. The run stops there.</string>
+    <string name="watch_boot_key_mismatch">This server\'s key doesn\'t match. Approve its start-up from your phone.</string>
 </resources>

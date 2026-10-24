@@ -12,5 +12,9 @@
   "approved": "Approuvé",
   "approval_failed": "Échec de l’approbation.",
   "approve": "Approuver",
-  "this_server_isnt_waiting_any_more": "Ce serveur n’attend plus."
+  "this_server_isnt_waiting_any_more": "Ce serveur n’attend plus.",
+  "open_the_approve_page_on_this_watch": "Ouvrez la page Approuver sur cette montre pour approuver.",
+  "set_a_screen_lock_on_this_watch": "Définissez un verrouillage d’écran sur cette montre pour approuver depuis celle-ci.",
+  "unlock_this_watch_to_approve": "Déverrouillez cette montre pour approuver.",
+  "put_this_watch_on_your_wrist": "Mettez cette montre à votre poignet pour approuver."
 }
