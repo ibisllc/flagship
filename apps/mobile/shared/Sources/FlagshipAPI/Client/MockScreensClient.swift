@@ -908,7 +908,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     // MARK: - App chat (chat/approvals.ts)
 
     public var mockChatRequests: [ChatRequest] = []
-    public var mockChatAlways: [ChatAppIdentity] = []
+    public var mockChatAlways: [ChatAlwaysAllow] = []
     public private(set) var chatAnswers: [ChatAnswerRequest] = []
 
     public func chatRequests() async throws -> ChatRequestsResponse {
@@ -924,17 +924,20 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             throw ScreensClientError.http(status: 404, message: #"{"error":"that request is no longer waiting"}"#)
         }
         let r = mockChatRequests.remove(at: i)
-        if answer.decision == "always", !mockChatAlways.contains(r.receiverApp) { mockChatAlways.append(r.receiverApp) }
+        let standing = ChatAlwaysAllow(receiverApp: r.receiverApp, claimedSender: r.claimedSender)
+        if answer.decision == "always", !mockChatAlways.contains(standing) { mockChatAlways.append(standing) }
         chatAnswers.append(answer)
         GymProbe.note("chat \(answer.decision) \(answer.kind) \(r.claimedSender.label)")
     }
 
-    public func chatRevokeAlways(_ app: ChatAppIdentity) async throws -> Int {
+    public func chatRevokeAlways(_ revoke: ChatRevokeRequest) async throws -> Int {
         try await tick()
-        let had = mockChatAlways.contains(app) ? 1 : 0
-        mockChatAlways.removeAll { $0 == app }
-        GymProbe.note("chat always revoked \(app.label)")
-        return had
+        let app = ChatAppIdentity(author: revoke.author, slug: revoke.slug)
+        let ends: (ChatAlwaysAllow) -> Bool = { $0.receiverApp == app && (revoke.sender == nil || $0.claimedSender == revoke.sender) }
+        let n = mockChatAlways.filter(ends).count
+        mockChatAlways.removeAll(where: ends)
+        GymProbe.note("chat always revoked \(revoke.sender?.label ?? "*")>\(app.label)")
+        return n
     }
 
     private var accessEventContinuations: [AsyncStream<Void>.Continuation] = []

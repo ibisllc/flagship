@@ -11249,8 +11249,8 @@
     "en": "Agree to what this AI run may cost",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:434"
   },
-  "This is an estimate, not a promise. Nothing runs until you agree, and your answer covers this one run only.": {
-    "en": "This is an estimate, not a promise. Nothing runs until you agree, and your answer covers this one run only.",
+  "Nothing runs until you agree, and your answer covers this one run only.": {
+    "en": "Nothing runs until you agree, and your answer covers this one run only.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:435"
   },
   "You didn't agree, so nothing ran.": {
@@ -11261,8 +11261,8 @@
     "en": "Couldn't sign your answer. Nothing ran.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:437"
   },
-  "It may use %@ to %@ tokens.": {
-    "en": "It may use %@ to %@ tokens.",
+  "It may use up to about %@ tokens; the run stops there.": {
+    "en": "It may use up to about %@ tokens; the run stops there.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:440"
   },
   "It runs on Flagship Inference and comes out of your free credits.": {
@@ -11293,8 +11293,8 @@
     "en": "It has asked %lld times.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:23"
   },
-  "Always allow lets any remote machine reach %@ without asking. You can revoke it on this server's page.": {
-    "en": "Always allow lets any remote machine reach %@ without asking. You can revoke it on this server's page.",
+  "Always allow lets %@ reach %@ again without asking. You can revoke it on this server's page.": {
+    "en": "Always allow lets %@ reach %@ again without asking. You can revoke it on this server's page.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:27"
   },
   "Denied. Nothing from %@ reaches %@.": {
@@ -11305,20 +11305,20 @@
     "en": "Denied. %@ won't talk to %@.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:33"
   },
-  "%@ now takes chats from other owners' apps without asking.": {
-    "en": "%@ now takes chats from other owners' apps without asking.",
+  "%@ now takes chats from %@ without asking.": {
+    "en": "%@ now takes chats from %@ without asking.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:34"
   },
   "Allowed. %@ can talk to %@.": {
     "en": "Allowed. %@ can talk to %@.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:35"
   },
-  "%@ takes chats from other owners' apps without asking.": {
-    "en": "%@ takes chats from other owners' apps without asking.",
+  "%@ → %@, without asking": {
+    "en": "%@ → %@, without asking",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:41"
   },
-  "%@ asks you again from now on.": {
-    "en": "%@ asks you again from now on.",
+  "%@ asks you again before %@ can talk to it.": {
+    "en": "%@ asks you again before %@ can talk to it.",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:45"
   },
   "Answer a chat request for %@": {
