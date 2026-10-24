@@ -310,6 +310,7 @@ import { buildReleaseCatalog } from "./updateReleases.js";
 import { runFirstBootUpdate } from "./firstBootUpdate.js";
 import { installHealthReporter } from "./healthReporter.js";
 import { ensureBootKeyBinding, hasBootKey, rebindBootKey, syncOwnerKeyFile } from "./bootKeyFiles.js";
+import { bootPqPaths, ensureBootPqMaterial, syncBootUnlockFiles } from "./bootPq.js";
 import { ensureStkPqBinding } from "./pqKeyBinding.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
@@ -1155,6 +1156,20 @@ async function main(): Promise<void> {
       })
         .then((r) => r === "bound" && console.log("[boot-key] the boot key binding was signed again for this STK"))
         .catch((e) => console.warn(`[boot-key] boot key binding not checked: ${(e as Error).message}`));
+      // Boot unlock v2 (pq-suites.md §19): only once the STK's hybrid key is bound on `.com`.
+      if (stkHybridRef.current && process.env.FLAGSHIP_BOOT_PQ !== "0") {
+        await ensureBootPqMaterial({
+          serverDomain,
+          stkPub: identityKeypair.publicKey,
+          stk: identityKeypair,
+          stkHybrid: stkHybridRef.current,
+          controlPlaneBaseUrl: base,
+          paths: bootPqPaths(dataDir),
+          log: (m) => console.log(m),
+        })
+          .then((r) => r === "sent" && console.log("[boot-pq] the boot key's v2 material was sent to .com"))
+          .catch((e) => console.warn(`[boot-pq] boot v2 material not checked: ${(e as Error).message}`));
+      }
     })();
   }
 
@@ -4181,6 +4196,19 @@ async function wireOwnerHandlers(deps: {
   });
   await assurance.load();
   setPqAuthority({ policy: () => assurance.policy(), bindingFor: (pub) => deviceBook.pqBindingFor(pub) });
+  // /boot mirrors what the box verified: the owner's hybrid key and whether strict is in force,
+  // so the next boot refuses a classical unlock exactly when the box would (pq-suites.md §19).
+  if (hasBootKey()) {
+    const bootPaths = bootPqPaths(process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship");
+    const syncBoot = () =>
+      syncBootUnlockFiles(bootPaths, {
+        ownerHybridPub: deviceBook.pqBindingFor(Buffer.from(cfg.irkPublicKey).toString("hex"))?.hybridPublicKey ?? null,
+        strict: strictInForce(assurance.policy()),
+      }).catch((e) => console.warn(`[boot-pq] /boot unlock files not written: ${(e as Error).message}`));
+    void syncBoot();
+    const t = setInterval(() => void syncBoot(), 10 * 60_000);
+    if (typeof t.unref === "function") t.unref();
+  }
   // The PQ channel (pq-suites.md §13): phones from the device book, the account's other servers
   // from keys pinned on first sight; while strict is in force, private requests take no other way.
   const comBase = env.controlPlaneBaseUrl.replace(/\/+$/, "");
