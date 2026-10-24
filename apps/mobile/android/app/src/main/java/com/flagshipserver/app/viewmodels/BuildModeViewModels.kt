@@ -85,7 +85,12 @@ class BuildGitViewModel(
     /** How often a background adapt is polled, and for how long at most. */
     private val pollIntervalMs: Long = 2_000,
     private val pollLimitMs: Long = 45 * 60 * 1_000L,
+    /** Signs the owner's consent to an AI run (the sensitive-order key). */
+    private val consentSigner: suspend (String) -> com.google.crypto.tink.subtle.Ed25519Sign = { r -> com.flagshipserver.app.keystore.Keystore.adminSigningKey(r) },
 ) {
+    /** Asks the owner before an AI run that costs money (the box's 428). */
+    val consent = com.flagshipserver.app.core.AiConsentPrompt()
+
     sealed interface GitPhase {
         data object Idle : GitPhase
         data object Checking : GitPhase
@@ -191,13 +196,25 @@ class BuildGitViewModel(
         _phase.value = GitPhase.Adapting()
         if (buildSealed) id = reimport() ?: return@launch
         try {
-            val r = client.adaptStart(
-                id,
-                com.flagshipserver.app.api.BuildAdaptRequest(
-                    instructions = instructions, credential = credential, background = true,
-                    share = _share.value,
-                ),
-            )
+            val r = com.flagshipserver.app.core.AiConsent.withConsent(
+                prompt = consent,
+                buildId = id,
+                serverDomain = { client.boxFqdn() },
+                signer = consentSigner,
+            ) { c ->
+                client.adaptStart(
+                    id,
+                    com.flagshipserver.app.api.BuildAdaptRequest(
+                        instructions = instructions, credential = credential, background = true,
+                        share = _share.value, consent = c,
+                    ),
+                )
+            }
+            if (r == null) {
+                // The owner said no: nothing ran, back to the verdict.
+                _phase.value = lastVerdict ?: GitPhase.Idle
+                return@launch
+            }
             if (r.started == true) {
                 followAdaptWithLimit(id)
             } else {
@@ -577,7 +594,11 @@ class BuildJournalViewModel(
      *  [client] / [fetchLiveSessions], the server the screen is on. */
     private val servers: () -> List<Server> = { emptyList() },
     private val pollIntervalMs: Long = 3_000,
+    private val consentSigner: suspend (String) -> com.google.crypto.tink.subtle.Ed25519Sign = { r -> com.flagshipserver.app.keystore.Keystore.adminSigningKey(r) },
 ) {
+    /** Asks the owner before an AI run that costs money (the box's 428). */
+    val consent = com.flagshipserver.app.core.AiConsentPrompt()
+
     /** What the detail page offers for the build's own state: an AI adapt
      *  that failed (a box restart brings an interrupted one back failed,
      *  with the box's sentence) can be deployed as it is or run again. */
@@ -707,9 +728,21 @@ class BuildJournalViewModel(
 
     /** Run the AI on the build again with [credential], and follow it. */
     fun runAiAgain(buildId: String, credential: com.flagshipserver.app.api.LlmProviderCredential?): Job = scope.launch {
+        val before = _detailAdapt.value
         _detailAdapt.value = DetailAdapt.Working(BuildGitViewModel.ADAPTING_DEFAULT)
         try {
-            val r = client.adaptStart(buildId, com.flagshipserver.app.api.BuildAdaptRequest(credential = credential, background = true))
+            val r = com.flagshipserver.app.core.AiConsent.withConsent(
+                prompt = consent,
+                buildId = buildId,
+                serverDomain = { client.boxFqdn() },
+                signer = consentSigner,
+            ) { c ->
+                client.adaptStart(buildId, com.flagshipserver.app.api.BuildAdaptRequest(credential = credential, background = true, consent = c))
+            }
+            if (r == null) {
+                _detailAdapt.value = before
+                return@launch
+            }
             if (r.started != true) {
                 _detailAdapt.value = adaptEnded(r.fileCount ?: 0, r.deployed, r.deployedUrl, null)
                 return@launch

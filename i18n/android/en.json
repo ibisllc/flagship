@@ -11212,5 +11212,163 @@
     "en": "May build %1$s",
     "ctx": "ui/screens/SecurityControlsSections.kt:125 (prose)",
     "args": 1
+  },
+  "chat_request_incoming": {
+    "en": "A remote machine claiming to run %1$s/%2$s wants to start a chat with your app %3$s.",
+    "ctx": "core/ChatRequestCenter.kt chat request title",
+    "args": 3
+  },
+  "chat_request_outgoing": {
+    "en": "Your app %1$s wants to start a chat with %2$s/%3$s, an app on another owner's server.",
+    "ctx": "core/ChatRequestCenter.kt chat request title",
+    "args": 3
+  },
+  "chat_request_incoming_note": {
+    "en": "Flagship can't confirm who runs that machine. Only allow it if you expected this app to get in touch.",
+    "ctx": "core/ChatRequestCenter.kt"
+  },
+  "chat_request_outgoing_note": {
+    "en": "Allowing it lets your app send messages to that app and read its answers.",
+    "ctx": "core/ChatRequestCenter.kt"
+  },
+  "chat_request_phrase": {
+    "en": "The sender's recognition phrase: %1$s",
+    "ctx": "core/ChatRequestCenter.kt",
+    "args": 1
+  },
+  "chat_request_denied": {
+    "en": "Chat request denied",
+    "ctx": "core/ChatRequestCenter.kt toast"
+  },
+  "chat_request_allowed": {
+    "en": "Chat request allowed",
+    "ctx": "core/ChatRequestCenter.kt toast"
+  },
+  "chat_request_gone": {
+    "en": "That request is no longer waiting.",
+    "ctx": "core/ChatRequestCenter.kt"
+  },
+  "chat_request_already_answered": {
+    "en": "That request was already answered.",
+    "ctx": "core/ChatRequestCenter.kt"
+  },
+  "chat_request_admin_only": {
+    "en": "Only an admin device can answer chat requests.",
+    "ctx": "core/ChatRequestCenter.kt"
+  },
+  "chat_always_allow": {
+    "en": "Always allow",
+    "ctx": "ui/screens/ChatRequestScreens.kt button"
+  },
+  "chat_requests_none_waiting": {
+    "en": "No chat requests are waiting.",
+    "ctx": "ui/screens/ChatRequestScreens.kt"
+  },
+  "chat_always_heading": {
+    "en": "Apps that take chats without asking",
+    "ctx": "ui/screens/ChatRequestScreens.kt heading"
+  },
+  "chat_requests_section": {
+    "en": "App chat requests",
+    "ctx": "ui/screens/ActivityScreen.kt section title"
+  },
+  "chat_ask_me_each_time": {
+    "en": "Ask me each time",
+    "ctx": "ui/screens/ChatRequestScreens.kt button"
+  },
+  "chat_requests_section_hint": {
+    "en": "Chats between your apps and apps on other owners' servers",
+    "ctx": "ui/screens/ActivityScreen.kt section hint"
+  },
+  "chat_request_sign_reason": {
+    "en": "Answer a chat request for %1$s",
+    "ctx": "core/ChatRequestCenter.kt biometric prompt",
+    "args": 1
+  },
+  "ai_consent_title": {
+    "en": "This uses AI that costs money",
+    "ctx": "ui/screens/AiConsentDialog.kt title"
+  },
+  "ai_consent_payer_promo": {
+    "en": "Flagship Inference runs it, and it is paid from your free Flagship Inference credits.",
+    "ctx": "core/AiConsentFlow.kt"
+  },
+  "ai_consent_payer_byok": {
+    "en": "%1$s runs it with your own API key, so %1$s bills you for it.",
+    "ctx": "core/AiConsentFlow.kt",
+    "args": 1
+  },
+  "ai_consent_once": {
+    "en": "You are agreeing to this one run only. Nothing starts until you continue.",
+    "ctx": "ui/screens/AiConsentDialog.kt"
+  },
+  "ai_consent_sign_reason": {
+    "en": "Agree to this AI run",
+    "ctx": "core/AiConsentFlow.kt biometric prompt"
+  },
+  "watch_boot_title": {
+    "en": "Start-ups with this phone locked",
+    "ctx": "ui/screens/WatchQuickApproveCard.kt heading"
+  },
+  "watch_boot_explainer": {
+    "en": "Turn this on for a server and your watch can approve its start-up while this phone is locked. A server you locked still has to be started from this phone.",
+    "ctx": "ui/screens/WatchQuickApproveCard.kt"
+  },
+  "watch_boot_until": {
+    "en": "On until %1$s",
+    "ctx": "ui/screens/WatchQuickApproveCard.kt",
+    "args": 1
+  },
+  "watch_boot_server_locked": {
+    "en": "This server is locked. Approve its start-up from your phone.",
+    "ctx": "core/WatchApprovalResponder.kt (shown on the watch)"
+  },
+  "watch_boot_enable_reason": {
+    "en": "Let your watch start %1$s with this phone locked",
+    "ctx": "viewmodels/WatchBootViewModel.kt biometric prompt",
+    "args": 1
+  },
+  "watch_boot_disable_reason": {
+    "en": "Stop your watch starting %1$s with this phone locked",
+    "ctx": "viewmodels/WatchBootViewModel.kt biometric prompt",
+    "args": 1
+  },
+  "watch_boot_failed": {
+    "en": "Couldn't change this: %1$s",
+    "ctx": "viewmodels/WatchBootViewModel.kt",
+    "args": 1
+  },
+  "chat_request_asked_times": {
+    "en": {
+      "one": "It asked %1$d time.",
+      "other": "It asked %1$d times."
+    },
+    "ctx": "core/ChatRequestCenter.kt",
+    "plural": true
+  },
+  "chat_always_allow_note_sender": {
+    "en": "Always allow lets a remote machine claiming to run %1$s/%2$s start a chat with %3$s without asking you again. You can stop this under Activity.",
+    "ctx": "core/ChatRequestCenter.kt",
+    "args": 3
+  },
+  "chat_always_allow_line_sender": {
+    "en": "A remote machine claiming to run %1$s/%2$s can start a chat with %3$s without asking you.",
+    "ctx": "ui/screens/ChatRequestScreens.kt",
+    "args": 3
+  },
+  "chat_always_ended_sender": {
+    "en": "%1$s/%2$s has to ask again before starting a chat with %3$s",
+    "ctx": "ui/screens/ChatRequestScreens.kt toast",
+    "args": 3
+  },
+  "chat_request_now_always_sender": {
+    "en": "%1$s/%2$s can now start a chat with %3$s without asking",
+    "ctx": "core/ChatRequestCenter.kt toast",
+    "args": 3
+  },
+  "ai_consent_cap": {
+    "en": "This run can use up to about %1$s tokens. The run stops there.",
+    "ctx": "core/AiConsentFlow.kt",
+    "args": 1
   }
 }

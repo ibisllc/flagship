@@ -53,6 +53,19 @@ fun watchResponder(app: AppState, mailbox: SecretMailboxClient, inForeground: ()
         hasSessionKey = { app.isUnlocked.value && SessionIrkAccess.isSessionUnlocked() },
         appInForeground = inForeground,
         onNeedsUnlock = { cmd -> WatchApprovalPrompt.shared.watchIsWaiting(cmd.serverFqdn) },
+        bootApprover = {
+            val user = app.currentUser.value?.takeIf { it.isNotEmpty() }
+            if (user == null || !app.isPaired.value) {
+                null
+            } else {
+                com.flagshipserver.app.core.WatchBootApprover(
+                    mailbox = mailbox,
+                    username = user,
+                    delegate = { SessionIrkAccess.watchDelegate() },
+                    store = com.flagshipserver.app.keystore.KeystoreWatchBootKeys(),
+                )
+            }
+        },
         makeSource = {
             val user = app.currentUser.value?.takeIf { it.isNotEmpty() }
             if (user == null || !app.isPaired.value) {

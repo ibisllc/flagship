@@ -65,6 +65,8 @@ data class BuildAdaptRequest(
     /** Whether the box publishes this adaptation to the public store once it
      *  deploys. Older boxes ignore it and share by default. */
     val share: Boolean? = null,
+    /** The owner's signed consent to this one run, sent after the box's 428. */
+    val consent: com.flagshipserver.app.core.AiConsentWire? = null,
 )
 
 /** POST /api/build/sessions/:id/adapt response. A 409 means the box already
@@ -289,6 +291,9 @@ interface BuildClient {
         val r = adapt(buildId, req)
         return BuildAdaptReply(ok = r.ok, fileCount = r.fileCount)
     }
+
+    /** The FQDN of the box this client talks to, which a signed consent names. */
+    suspend fun boxFqdn(): String? = null
 
     /** `GET /api/build/sessions/:id`: the build's state, with `adapt` progress. */
     suspend fun state(buildId: String): BuildStateResponse = throw ScreensError.NotImplemented("build state")
