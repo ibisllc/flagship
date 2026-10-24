@@ -375,8 +375,11 @@ public struct BuildGitScreen: View {
 
     /// The not-ready card shows an adapt failure inside itself.
     private var showsNotReadyCard: Bool {
-        if case .verdict(let r) = vm.phase { return !r.fit }
-        return false
+        switch vm.phase {
+        case .verdict(let r): return !r.fit
+        case .consent, .consenting: return true
+        default: return false
+        }
     }
 
     private var checking: Bool {
@@ -481,6 +484,8 @@ public struct BuildGitScreen: View {
                 adapterExport(c: c)
                 journalLink(c: c)
             }
+        case .consent(let e), .consenting(let e):
+            consentCard(e, c: c)
         case .deploying:
             FSCard {
                 HStack(spacing: FS.space.s2) {
@@ -500,6 +505,40 @@ public struct BuildGitScreen: View {
                 }
                 adapterExport(c: c)
             }
+        }
+    }
+
+    /// What the AI run may cost, in the box's own numbers: a token range, the
+    /// provider and who pays. Agree signs a consent for this one run; Cancel
+    /// runs nothing.
+    private func consentCard(_ e: AiCostEstimate, c: FSColors) -> some View {
+        let busy: Bool = { if case .consenting = vm.phase { return true }; return false }()
+        return FSCard {
+            HStack(spacing: FS.space.s2) {
+                Image(systemName: "gauge.with.dots.needle.33percent").foregroundColor(c.warning)
+                Text(AiConsentCopy.title).font(FS.font.h4()).foregroundColor(c.text)
+                    .accessibilityIdentifier("build-git-consent-title")
+            }
+            Text(AiConsentCopy.tokens(e)).font(FS.font.body()).foregroundColor(c.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("build-git-consent-tokens")
+            Text(AiConsentCopy.payer(e)).font(FS.font.body()).foregroundColor(c.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("build-git-consent-payer")
+            Text(AiConsentCopy.note).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let err = vm.errorMessage {
+                Text(err).font(FS.font.bodySm()).foregroundColor(c.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("build-git-consent-error")
+            }
+            FSPrimaryButton(busy ? AiConsentCopy.agreeing : AiConsentCopy.agree, enabled: !busy, block: true) {
+                Task { await vm.agreeToConsent() }
+            }
+            .accessibilityIdentifier("build-git-consent-agree")
+            FSSecondaryButton(String(localized: "Cancel"), block: true) { vm.cancelConsent() }
+                .disabled(busy)
+                .accessibilityIdentifier("build-git-consent-cancel")
         }
     }
 
