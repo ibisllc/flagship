@@ -51,6 +51,7 @@ import {
   checkPipeUpgrade,
   accountNameInApiPath,
   chargeAccountGone,
+  bindingSubject,
   checkRateLimit,
   clientIp,
   endpointFor,
@@ -918,11 +919,13 @@ async function routeImpl(
     }
     const irkPub = extractIrkPub(rlEndpoint, parsed);
     const usernameHash = extractUsernameHash(url.pathname);
+    const subject = bindingSubject(rlEndpoint, url.pathname);
     const rl = await checkRateLimit(env, {
       endpoint: rlEndpoint,
       ip: clientIp(request),
       ...(irkPub ? { irkPub } : {}),
       ...(usernameHash ? { usernameHash } : {}),
+      ...(subject ? { subject } : {}),
     }, ctx);
     if (rl.limited) return rateLimitedResponse(rl);
   }

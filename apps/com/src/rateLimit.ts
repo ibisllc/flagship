@@ -170,7 +170,14 @@ export type RateLimitEndpoint =
   // hundreds of source fetches; three complaints retire an adapter, so they
   // are also budgeted per adapter and per (address, adapter).
   | "adapter-submit"
-  | "adapter-complain";
+  | "adapter-complain"
+  // Architecture v2 key bindings (PUT /api/server/<host>/pq-key-binding, /boot-key and
+  // PUT /api/accounts/<u>/pq-key-bindings) and owner-signed assurance policy changes
+  // (POST /api/accounts/<u>/assurance-policy). Each is signed and verified with ML-DSA, the
+  // costliest check `.com` runs, and an honest box or device sends one a few times a year;
+  // per source and per server or account (the path names it).
+  | "pq-binding-put"
+  | "assurance-policy-post";
 
 /**
  * Endpoints that refuse when the counter can't be reached: each one gates
@@ -374,6 +381,15 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ipSubject", limit: 1, windowSec: 86_400 },
     { axis: "subject", limit: 10, windowSec: 3600 },
   ],
+  "pq-binding-put": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 60, windowSec: 3600 },
+    { axis: "subject", limit: 20, windowSec: 3600 },
+  ],
+  "assurance-policy-post": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "subject", limit: 30, windowSec: 3600 },
+  ],
 };
 
 export interface RateLimitInput {
@@ -569,8 +585,18 @@ export function retryAfterPhrase(sec: number): string {
  * Returns `null` for anything that isn't one of the four protected
  * routes — the caller passes those straight through.
  */
+/** The server or account a PQ binding or policy write is about (its rate-limit subject). */
+export function bindingSubject(endpoint: RateLimitEndpoint, pathname: string): string | undefined {
+  if (endpoint !== "pq-binding-put" && endpoint !== "assurance-policy-post") return undefined;
+  const m = /^\/api\/(server|accounts)\/([^/]+)\//.exec(pathname);
+  return m ? `${m[1]}:${decodeURIComponent(m[2]!).toLowerCase()}` : undefined;
+}
+
 export function endpointFor(method: string, pathname: string): RateLimitEndpoint | null {
   const m = method.toUpperCase();
+  if (m === "PUT" && /^\/api\/server\/[^/]+\/(?:pq-key-binding|boot-key)$/.test(pathname)) return "pq-binding-put";
+  if (m === "PUT" && /^\/api\/accounts\/[^/]+\/pq-key-bindings$/.test(pathname)) return "pq-binding-put";
+  if (m === "POST" && /^\/api\/accounts\/[^/]+\/assurance-policy$/.test(pathname)) return "assurance-policy-post";
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";
   if (m === "POST" && pathname === "/api/accounts") return "username-claim";
   if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
