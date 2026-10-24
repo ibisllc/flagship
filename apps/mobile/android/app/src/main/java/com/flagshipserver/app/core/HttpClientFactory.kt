@@ -32,6 +32,8 @@ object HttpClientFactory {
             .addInterceptor(UpdateLockInterceptor())
             // A removed account answers 404 account-not-found: note it once, then answer locally.
             .addInterceptor(AccountGoneInterceptor())
+            // Architecture v2: a strict server takes private requests over the PQ channel only.
+            .addInterceptor(com.flagshipserver.app.core.pq.PqChannelInterceptor.shared)
             // No static control-apex cert pin — standard system CA trust (see
             // the header note). Box cert-fingerprint pinning (A′ phase 4,
             // hard-fail) stays, on two seams: the hostname verifier runs on

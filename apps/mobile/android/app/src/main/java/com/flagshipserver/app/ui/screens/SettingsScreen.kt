@@ -226,6 +226,13 @@ fun SettingsScreen(nav: NavController) {
                     testTag = "settings-open-account-security",
                 ),
                 FSSettingsRowData(
+                    icon = Icons.Outlined.Shield,
+                    title = "Quantum-safe protection",
+                    subtitle = "Strict protection per server",
+                    onClick = { nav.navigate("quantum-safety") },
+                    testTag = "settings-open-quantum-safety",
+                ),
+                FSSettingsRowData(
                     icon = Icons.Outlined.AutoAwesome,
                     title = "AI keys",
                     subtitle = "Bring-your-own keys for building apps",

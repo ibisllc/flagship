@@ -197,6 +197,9 @@ class BoxKeyPins(private val persistence: Persistence? = null, private val now: 
                 if (pin.mldsa != v.mldsaPubHex || pin.mldsaIssuedAt != v.issuedAt) {
                     write(username, pins + (domain to pin.copy(mldsa = v.mldsaPubHex, mldsaIssuedAt = v.issuedAt)))
                 }
+                runCatching {
+                    com.flagshipserver.app.core.pq.PqTrust.verifyPqKeyBinding(wire, com.flagshipserver.app.core.pq.PqTrust.Expectation("box-stk", domain, pin.stk, v.mldsaPubHex, Long.MAX_VALUE / 2))
+                }.getOrNull()?.let { verifiedPq["${username.lowercase()}|$domain"] = it }
                 return v.mldsaPubHex
             }
             is com.flagshipserver.app.core.pq.BoxPqKeyPin.Verdict.Mismatch ->
@@ -206,6 +209,12 @@ class BoxKeyPins(private val persistence: Persistence? = null, private val now: 
     }
 
     fun pinnedBoxPqKey(username: String, serverDomain: String): String? = read(username)[serverDomain.lowercase()]?.mldsa
+
+    private val verifiedPq = java.util.concurrent.ConcurrentHashMap<String, com.flagshipserver.app.core.pq.PqTrust.VerifiedBinding>()
+
+    /** The box's verified `box-stk` binding under the pinned keys, once seen this run: the PQ session's pin. */
+    fun verifiedBoxPqBinding(username: String, serverDomain: String): com.flagshipserver.app.core.pq.PqTrust.VerifiedBinding? =
+        verifiedPq["${username.lowercase()}|${serverDomain.lowercase()}"]
 
     private fun key(username: String) = "flagship.boxKeyPins.v1:${username.lowercase()}"
 

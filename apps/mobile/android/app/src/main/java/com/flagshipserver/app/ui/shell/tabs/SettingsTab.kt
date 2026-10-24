@@ -131,6 +131,7 @@ fun SettingsTab() {
             )
         }
         composable("account-security") { AccountSecurityScreen(nav) }
+        composable("quantum-safety") { com.flagshipserver.app.ui.screens.QuantumSafetyScreen(nav) }
         composable("paired-sessions") { PairedSessionsScreen(nav) }
         composable("recovery") { RecoveryScreen(nav) }
         composable("post-recovery") { PostRecoveryScreen(nav) }

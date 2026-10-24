@@ -692,6 +692,12 @@ internal fun formatCompletesAt(ms: Long): String =
 private fun TrustedDeviceRow(device: TrustedDevicesViewModel.DirectoryDevice, onMenu: () -> Unit) {
     val lines = buildList {
         add("${platformDisplay(device.platformClass)} · Device ${device.supportCode}")
+        // Architecture v2: this phone's post-quantum key and how it is held ("PQ, hardware-wrapped").
+        if (device.isCurrent) {
+            com.flagshipserver.app.keystore.QuantumSafetyService.pqKeys?.entry("device", device.deviceId.lowercase())?.let {
+                add("Post-quantum key: ${it.label.text}")
+            }
+        }
         if (device.isManaged) {
             add(if (device.isLocked) "Administrator-managed · locked" else "Administrator-managed")
         } else if (device.lastSeenAt > device.createdAt) {
