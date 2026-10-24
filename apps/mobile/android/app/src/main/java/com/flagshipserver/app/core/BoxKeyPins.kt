@@ -43,7 +43,15 @@ class BoxKeyPins(private val persistence: Persistence? = null, private val now: 
     }
 
     @Serializable
-    data class Pin(val stk: String, val pinnedAt: Long, val boot: String? = null, val bootIssuedAt: Long? = null)
+    data class Pin(
+        val stk: String,
+        val pinnedAt: Long,
+        val boot: String? = null,
+        val bootIssuedAt: Long? = null,
+        /** Architecture v2: the ML-DSA-65 key the pinned STK bound (pq/BoxPqKeyPin.kt). */
+        val mldsa: String? = null,
+        val mldsaIssuedAt: Long? = null,
+    )
 
     private val memory = HashMap<String, String>()
     private val serializer = MapSerializer(String.serializer(), Pin.serializer())
@@ -68,6 +76,14 @@ class BoxKeyPins(private val persistence: Persistence? = null, private val now: 
             return listOf(BOOT_KEY_BINDING_TAG, serverDomain.lowercase(), bootPubHex, issuedAt.toString())
                 .joinToString("|").toByteArray(Charsets.UTF_8)
         }
+
+        /** The STK's v2 hybrid signature over a boot-key binding, under the pinned STK + ML-DSA keys. */
+        fun verifyBootKeyBindingV2(
+            bindingDomain: String, bootPubHex: String, issuedAt: Long,
+            hybridSignatureHex: String?, stkHex: String, mldsaPubHex: String,
+        ): Boolean = com.flagshipserver.app.core.pq.BoxPqKeyPin.verifyBootKeyBindingV2(
+            bindingDomain, bootPubHex, issuedAt, hybridSignatureHex, stkHex, mldsaPubHex,
+        )
 
         fun verifyBootKeyBinding(
             bindingDomain: String, bootPubHex: String, issuedAt: Long,
@@ -139,9 +155,19 @@ class BoxKeyPins(private val persistence: Persistence? = null, private val now: 
         if (pins.containsKey(domain)) write(username, pins - domain)
     }
 
-    /** Adopt a box's boot-only key only through a binding the PINNED STK signed. */
+    /** Adopt a box's boot-only key only through a binding the PINNED STK signed. Once this
+     *  server's ML-DSA key is pinned (or its installation is [strict]), the STK's v2 hybrid
+     *  signature is required too, so stripping it cannot downgrade the server. */
     @Synchronized
-    fun acceptBootKeyBinding(username: String, serverDomain: String, bootPubHex: String, issuedAt: Long, signatureHex: String): String? {
+    fun acceptBootKeyBinding(
+        username: String,
+        serverDomain: String,
+        bootPubHex: String,
+        issuedAt: Long,
+        signatureHex: String,
+        hybridSignatureHex: String? = null,
+        strict: Boolean = false,
+    ): String? {
         val domain = serverDomain.lowercase()
         val pins = read(username)
         val pin = pins[domain] ?: return null
@@ -149,9 +175,37 @@ class BoxKeyPins(private val persistence: Persistence? = null, private val now: 
         val sig = HexUtil.decode(signatureHex) ?: return null
         if (!verifyBootKeyBinding(domain, bootPubHex, issuedAt, sig, stk, domain)) return null
         if ((pin.bootIssuedAt ?: -1) > issuedAt) return null
+        if (strict && pin.mldsa == null) return null
+        if (pin.mldsa != null && !verifyBootKeyBindingV2(domain, bootPubHex, issuedAt, hybridSignatureHex, pin.stk, pin.mldsa)) return null
         write(username, pins + (domain to pin.copy(boot = bootPubHex, bootIssuedAt = issuedAt)))
         return bootPubHex
     }
+
+    /**
+     * Pin the ML-DSA key a box's STK bound, through a binding the PINNED STK and that key both
+     * signed. Returns the ML-DSA key, or null when there is no STK pin or the binding is refused.
+     * A binding naming another ML-DSA key than the pinned one throws [BoxKeyChangedException].
+     */
+    @Synchronized
+    fun acceptStkPqBinding(username: String, serverDomain: String, wire: kotlinx.serialization.json.JsonElement?): String? {
+        val domain = serverDomain.lowercase()
+        val pins = read(username)
+        val pin = pins[domain] ?: return null
+        val v = com.flagshipserver.app.core.pq.BoxPqKeyPin.decide(pin.stk, pin.mldsa, pin.mldsaIssuedAt, domain, wire, now())
+        when (v) {
+            is com.flagshipserver.app.core.pq.BoxPqKeyPin.Verdict.Pinned -> {
+                if (pin.mldsa != v.mldsaPubHex || pin.mldsaIssuedAt != v.issuedAt) {
+                    write(username, pins + (domain to pin.copy(mldsa = v.mldsaPubHex, mldsaIssuedAt = v.issuedAt)))
+                }
+                return v.mldsaPubHex
+            }
+            is com.flagshipserver.app.core.pq.BoxPqKeyPin.Verdict.Mismatch ->
+                throw BoxKeyChangedException(username.lowercase(), domain, pin.mldsa.orEmpty(), v.reportedHex)
+            is com.flagshipserver.app.core.pq.BoxPqKeyPin.Verdict.Invalid -> return null
+        }
+    }
+
+    fun pinnedBoxPqKey(username: String, serverDomain: String): String? = read(username)[serverDomain.lowercase()]?.mldsa
 
     private fun key(username: String) = "flagship.boxKeyPins.v1:${username.lowercase()}"
 

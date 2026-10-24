@@ -164,7 +164,12 @@ class SecretRequestCoordinator(
             var signerPub = stkPub
             if (echo != signerHex) {
                 if (purpose != SecretPurpose.UNLOCK_KEY) continue
-                val boot = BootKey.bootKeyFor(username, pending.serverDomain, mailbox::fetchBootKeyBinding, pins)
+                // A changed ML-DSA key is a key change: send nothing to that box.
+                val boot = try {
+                    BootKey.bootKeyFor(username, pending.serverDomain, mailbox::fetchBootKeyBinding, pins, mailbox::fetchPqKeyBinding)
+                } catch (_: BoxKeyChangedException) {
+                    continue
+                }
                 if (boot == null || boot != echo) continue
                 signerHex = boot
                 signerPub = HexUtil.decode(boot)?.takeIf { it.size == 32 } ?: continue

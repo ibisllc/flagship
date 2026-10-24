@@ -34,6 +34,10 @@ interface SecretMailboxClient {
      *  the box has none (404). Public; the caller verifies it under the pinned STK. */
     suspend fun fetchBootKeyBinding(serverDomain: String): com.flagshipserver.app.core.BootKeyBindingWire? = null
 
+    /** GET /api/server/:host/pq-key-binding: the box's STK→ML-DSA key binding (architecture v2),
+     *  or null (404). Public; the caller verifies it under the pinned STK. */
+    suspend fun fetchPqKeyBinding(serverDomain: String): kotlinx.serialization.json.JsonElement? = null
+
     /** GET /api/users/:u/pods — the directory. The phone resolves the
      *  box's STK INDEPENDENTLY of the mailbox echo from here. Identity plane. */
     suspend fun fetchPods(username: String): PodsDirectoryResponse
@@ -768,6 +772,13 @@ class LiveSecretMailboxClient(
         val r = transport.execute("GET", "$base/api/server/$encoded/boot-key", accept = setOf(200, 404))
         if (r.status != 200) return null
         return com.flagshipserver.app.core.BootKey.parse(String(r.body, Charsets.UTF_8))
+    }
+
+    override suspend fun fetchPqKeyBinding(serverDomain: String): kotlinx.serialization.json.JsonElement? {
+        val encoded = java.net.URLEncoder.encode(serverDomain.lowercase(), "UTF-8")
+        val r = transport.execute("GET", "$base/api/server/$encoded/pq-key-binding", accept = setOf(200, 404))
+        if (r.status != 200) return null
+        return runCatching { kotlinx.serialization.json.Json.parseToJsonElement(String(r.body, Charsets.UTF_8)) }.getOrNull()
     }
 
     override suspend fun fetchPods(username: String): PodsDirectoryResponse {
