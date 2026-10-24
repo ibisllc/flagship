@@ -23,8 +23,8 @@ use super::transport::{HttpResponse, Method, Transport};
 use crate::canonical;
 use crate::gohex;
 use crate::identity::BoxIdentity;
-use crate::lease;
 use crate::seal;
+use crate::v2::{self, UnlockPolicy};
 use core::fmt;
 use std::io::Write;
 use zeroize::Zeroizing;
@@ -147,6 +147,25 @@ impl fmt::Display for UnlockError {
 
 impl std::error::Error for UnlockError {}
 
+/// The boot key's v2 material on /boot (pq-suites.md §19).
+pub struct PqBoot {
+    /// The boot key's ML-DSA-65 seed (`flagship-boot-mldsa.key`): signs v2 requests.
+    pub mldsa_seed: Zeroizing<[u8; 32]>,
+    /// The owner's hybrid key (`flagship-owner-pq.pub`) v2 replies and v3 leases are signed by.
+    pub owner_pq: Option<Vec<u8>>,
+    /// The lease key's seed (from the TPM, or `flagship-lease-kem.key`); `None` skips v3 leases.
+    pub lease_seed: Option<Zeroizing<[u8; 32]>>,
+}
+
+impl fmt::Debug for PqBoot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PqBoot")
+            .field("owner_pq", &self.owner_pq.is_some())
+            .field("lease_seed", &self.lease_seed.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 /// Everything one boot's unlock needs.
 pub struct Unlocker<'a> {
     /// The box FQDN (`/boot/server-domain`).
@@ -169,6 +188,10 @@ pub struct Unlocker<'a> {
     pub console_hint: bool,
     /// Progress lines (stderr in the binary). Never receives secrets.
     pub log: &'a mut dyn Write,
+    /// v2 material; `None` keeps the v1 flow.
+    pub pq: Option<&'a PqBoot>,
+    /// Strict refuses every classical reply and lease.
+    pub policy: UnlockPolicy,
 }
 
 impl fmt::Debug for Unlocker<'_> {
@@ -277,11 +300,14 @@ impl Unlocker<'_> {
         }
         let seed = self.identity.seed();
         let now = i64::try_from(self.clock.now_ms()).unwrap_or(i64::MAX);
-        match lease::open_auto_unlock_lease(
+        match v2::open_auto_unlock_lease_any(
             &resp.body,
             &seed,
             self.server_domain.as_bytes(),
             &owner,
+            self.pq.and_then(|p| p.owner_pq.as_deref()),
+            self.pq.and_then(|p| p.lease_seed.as_deref()),
+            self.policy,
             now,
         ) {
             Ok(key) => {
@@ -317,14 +343,32 @@ impl Unlocker<'_> {
         while self.clock.now_secs() < deadline {
             requests = requests.saturating_add(1);
             let nonce = self.fresh_nonce_hex()?;
-            let body = canonical::secret_request_body(
-                self.identity,
-                self.server_domain,
-                PURPOSE_UNLOCK_KEY,
-                &nonce,
-                self.clock.now_ms(),
-            )
-            .map_err(|e| UnlockError::Field(e.to_string()))?;
+            let reply_seed = match self.pq {
+                Some(_) => Some(Zeroizing::new(
+                    self.random.nonce32().map_err(UnlockError::Random)?,
+                )),
+                None => None,
+            };
+            let body = match (self.pq, &reply_seed) {
+                (Some(pq), Some(rs)) => v2::sign_request_v2(
+                    &self.identity.seed(),
+                    &pq.mldsa_seed,
+                    self.server_domain,
+                    &nonce,
+                    i64::try_from(self.clock.now_ms()).unwrap_or(i64::MAX),
+                    rs,
+                    false,
+                )
+                .map_err(|e| UnlockError::Field(e.to_string()))?,
+                _ => canonical::secret_request_body(
+                    self.identity,
+                    self.server_domain,
+                    PURPOSE_UNLOCK_KEY,
+                    &nonce,
+                    self.clock.now_ms(),
+                )
+                .map_err(|e| UnlockError::Field(e.to_string()))?,
+            };
             let request_end = self
                 .clock
                 .now_secs()
@@ -351,16 +395,10 @@ impl Unlocker<'_> {
                         let opened = match hex_field(&r.body, "sealed") {
                             None => Err("no sealed payload".to_owned()),
                             Some(h) => gohex::decode(h.as_bytes())
-                                .map_err(|_| seal::SealError::BlobTooShort)
+                                .map_err(|_| "the sealed payload is not hex".to_owned())
                                 .and_then(|sealed| {
-                                    seal::open_sealed_secret_response(
-                                        &sealed,
-                                        seed.as_slice(),
-                                        &nonce,
-                                        PURPOSE_UNLOCK_KEY,
-                                    )
-                                })
-                                .map_err(|e| e.to_string()),
+                                    self.open_reply(&sealed, &seed, &nonce, reply_seed.as_deref())
+                                }),
                         };
                         match opened {
                             Ok(key) => {
@@ -408,6 +446,35 @@ impl Unlocker<'_> {
         let e = UnlockError::WindowElapsed(timing.window_secs);
         self.line(&e.to_string());
         Err(e)
+    }
+
+    fn open_reply(
+        &self,
+        sealed: &[u8],
+        seed: &[u8; 32],
+        nonce: &str,
+        reply_seed: Option<&[u8; 32]>,
+    ) -> Result<Zeroizing<Vec<u8>>, String> {
+        v2::box_accepts(self.policy, sealed).map_err(|e| e.to_string())?;
+        if !v2::is_v2_sealed(sealed) {
+            return seal::open_sealed_secret_response(
+                sealed,
+                seed.as_slice(),
+                nonce,
+                PURPOSE_UNLOCK_KEY,
+            )
+            .map_err(|e| e.to_string());
+        }
+        let (Some(pq), Some(rs)) = (self.pq, reply_seed) else {
+            return Err("a v2 reply but no v2 material on /boot".into());
+        };
+        let owner = pq
+            .owner_pq
+            .as_deref()
+            .ok_or("a v2 reply but no owner hybrid key on /boot")?;
+        let boot = self.identity.pub_hex().to_owned();
+        v2::open_boot_reply_v2(sealed, self.server_domain, &boot, nonce, rs, owner)
+            .map_err(|e| e.to_string())
     }
 
     /// POST the signed request; `Some(why)` when it was not accepted.

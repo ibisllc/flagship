@@ -12,11 +12,13 @@
 mod common;
 
 use common::*;
+use flagship_boot::gohex;
 use flagship_boot::identity::BoxIdentity;
 use flagship_boot::seal;
-use flagship_boot::unlock::flow::{Mode, RelayTiming, UnlockError, Unlocker};
+use flagship_boot::unlock::flow::{Mode, PqBoot, RelayTiming, UnlockError, Unlocker};
 use flagship_boot::unlock::policy::EndpointPolicy;
 use flagship_boot::unlock::transport::Method;
+use flagship_boot::v2::UnlockPolicy;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -25,6 +27,8 @@ struct Run {
     clock: FakeClock,
     log: Vec<u8>,
     owner: Option<[u8; 32]>,
+    pq: Option<PqBoot>,
+    policy: UnlockPolicy,
 }
 
 impl Run {
@@ -37,6 +41,8 @@ impl Run {
             clock: FakeClock::new(now),
             log: Vec::new(),
             owner: Some(owner_pub()),
+            pq: None,
+            policy: UnlockPolicy::Compat,
         }
     }
 
@@ -57,6 +63,8 @@ impl Run {
             timing,
             console_hint: false,
             log: &mut self.log,
+            pq: self.pq.as_ref(),
+            policy: self.policy,
         };
         u.unlock(mode).map(|k| k.to_vec())
     }
@@ -496,4 +504,72 @@ fn a_stale_clock_is_refused_by_the_worker() {
     let w = r.worker.0.borrow();
     assert!(w.refusals.len() >= 3);
     assert!(w.refusals.iter().all(|x| x == "stale request"));
+}
+
+fn pq_boot() -> PqBoot {
+    PqBoot {
+        mldsa_seed: zeroize::Zeroizing::new(BOOT_PQ_SEED),
+        owner_pq: Some(owner_pq()),
+        lease_seed: None,
+    }
+}
+
+#[test]
+fn strict_v2_relay_signs_the_request_and_opens_the_hybrid_reply() {
+    let mut r = Run::new(|w| w.reply = Reply::V2 { after: 1 });
+    r.pq = Some(pq_boot());
+    r.policy = UnlockPolicy::Strict;
+    assert_eq!(r.unlock(Mode::Approve, QUICK).unwrap(), luks_key());
+    let body: serde_json::Value =
+        serde_json::from_str(r.worker.0.borrow().bodies.last().unwrap()).unwrap();
+    let boot = flagship_crypto::HybridSigningKey::from_seeds(&SEED_A, &BOOT_PQ_SEED).unwrap();
+    let rq = &body["request"];
+    let stmt = [
+        "flagship/secret-request/v2",
+        rq["serverDomain"].as_str().unwrap(),
+        rq["stkPub"].as_str().unwrap(),
+        "unlock-key",
+        rq["nonce"].as_str().unwrap(),
+        &gohex::encode(&flagship_crypto::key_id(
+            flagship_protocol::SuiteId::HybridSealV1,
+            &gohex::decode(body["pq"]["replyKemPubHex"].as_str().unwrap().as_bytes()).unwrap(),
+        )),
+        &rq["issuedAt"].to_string(),
+    ]
+    .join("|");
+    boot.verifying_key()
+        .verify(
+            "flagship/secret-request/v2",
+            stmt.as_bytes(),
+            &gohex::decode(body["pq"]["signature"].as_str().unwrap().as_bytes()).unwrap(),
+        )
+        .unwrap();
+}
+
+#[test]
+fn strict_refuses_a_classical_reply() {
+    let mut r = Run::new(|w| w.reply = reply_for(SEED_A, "unlock-key", None));
+    r.pq = Some(pq_boot());
+    r.policy = UnlockPolicy::Strict;
+    let short = RelayTiming {
+        window_secs: 60,
+        heartbeat_secs: 120,
+        request_lifetime_secs: 21_600,
+    };
+    assert!(matches!(
+        r.unlock(Mode::Approve, short),
+        Err(UnlockError::WindowElapsed(_))
+    ));
+    assert!(
+        r.log().contains("boot-unlock-v2: strict-refuses-v1"),
+        "{}",
+        r.log()
+    );
+}
+
+#[test]
+fn compat_with_v2_material_still_takes_an_old_phones_reply() {
+    let mut r = Run::new(|w| w.reply = reply_for(SEED_A, "unlock-key", None));
+    r.pq = Some(pq_boot());
+    assert_eq!(r.unlock(Mode::Approve, QUICK).unwrap(), luks_key());
 }

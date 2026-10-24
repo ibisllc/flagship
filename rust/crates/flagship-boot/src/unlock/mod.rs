@@ -267,6 +267,53 @@ pub struct Plan {
     pub notes: Vec<String>,
     /// The persisted time floor (`flagship-time-floor`), epoch ms; 0 when there is none.
     pub time_floor_ms: u64,
+    /// v2 material on /boot, when the box has it.
+    pub pq: Option<flow::PqBoot>,
+    /// `flagship-unlock-policy`.
+    pub policy: crate::v2::UnlockPolicy,
+}
+
+/// A 32-byte seed written as hex (one trailing newline), or nothing.
+fn read_seed(path: &Path) -> Option<zeroize::Zeroizing<[u8; 32]>> {
+    let raw = zeroize::Zeroizing::new(std::fs::read(path).ok()?);
+    let t = raw.strip_suffix(b"\n").unwrap_or(&raw);
+    let b = zeroize::Zeroizing::new(crate::gohex::decode(t).ok()?);
+    <[u8; 32]>::try_from(b.as_slice())
+        .ok()
+        .map(zeroize::Zeroizing::new)
+}
+
+/// The boot key's v2 files: `flagship-boot-mldsa.key`, `flagship-owner-pq.pub`, and the lease
+/// key from the TPM (`flagship-lease-kem.tpm/`) or `flagship-lease-kem.key`.
+fn read_pq(dir: &Path, notes: &mut Vec<String>) -> Option<flow::PqBoot> {
+    let mldsa_seed = read_seed(&dir.join("flagship-boot-mldsa.key"))?;
+    let owner_pq = std::fs::read(dir.join("flagship-owner-pq.pub"))
+        .ok()
+        .and_then(|b| {
+            let t = b.strip_suffix(b"\n").unwrap_or(&b).to_vec();
+            crate::gohex::decode(&t)
+                .ok()
+                .filter(|k| k.len() == crate::v2::HYBRID_PK_LEN)
+        });
+    let tpm_dir = dir.join("flagship-lease-kem.tpm");
+    let lease_seed = if tpm_dir.is_dir() {
+        match crate::tpm::unseal_seed(&tpm_dir) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                notes.push(format!(
+                    "lease key not released by the TPM ({e}); asking the phone"
+                ));
+                None
+            }
+        }
+    } else {
+        read_seed(&dir.join("flagship-lease-kem.key"))
+    };
+    Some(flow::PqBoot {
+        mldsa_seed,
+        owner_pq,
+        lease_seed,
+    })
 }
 
 /// Resolve the boot facts the premount reads.
@@ -353,6 +400,23 @@ pub fn plan(o: &Options) -> Result<Plan, String> {
             .or_else(|| read_owner_key(&dir.join("flagship-owner-key.pub"))),
     };
 
+    let pq = read_pq(dir, &mut notes);
+    let policy = crate::v2::parse_unlock_policy(
+        std::fs::read(dir.join("flagship-unlock-policy"))
+            .ok()
+            .as_deref(),
+        pq.is_some(),
+    );
+    notes.push(format!(
+        "unlock policy = {} (v2 material: {})",
+        if policy == crate::v2::UnlockPolicy::Strict {
+            "strict"
+        } else {
+            "compat"
+        },
+        if pq.is_some() { "yes" } else { "no" }
+    ));
+
     let defaults = RelayTiming::default();
     let timing = RelayTiming {
         window_secs: o
@@ -379,6 +443,8 @@ pub fn plan(o: &Options) -> Result<Plan, String> {
         timing,
         notes,
         time_floor_ms: read_time_floor(&dir.join("flagship-time-floor")).unwrap_or(0),
+        pq,
+        policy,
     })
 }
 
@@ -449,6 +515,8 @@ pub fn main(args: &[Vec<u8>], log: &mut dyn Write) -> i32 {
         timing: p.timing,
         console_hint: console.is_some(),
         log,
+        pq: p.pq.as_ref(),
+        policy: p.policy,
     };
     let key = match unlocker.unlock(p.mode) {
         Ok(k) => k,

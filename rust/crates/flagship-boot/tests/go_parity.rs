@@ -1108,13 +1108,274 @@ fn identity_and_lease_cases(dir: &Path, a_seed: &str, lease_hex: &str) -> Vec<Ca
     cases
 }
 
+/// Boot unlock v2 flags: refusals (a successful reply open deletes its key, so only the lease
+/// succeeds here) and the v2 request's errors.
+fn v2_cases(dir: &Path) -> Vec<Case> {
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../packages/protocol/test-vectors/boot-unlock-v2/vectors.json"
+    );
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+    let k = |a: &str, b: &str| v["keys"][a][b].as_str().unwrap().to_owned();
+    let owner = write(
+        dir,
+        "v2-owner.pq",
+        format!("{}\n", k("owner", "publicKey")).as_bytes(),
+    );
+    let short = write(dir, "v2-owner-short.pq", b"abcd\n");
+    let reply = write(
+        dir,
+        "v2-reply.key",
+        format!("{}\n", k("replyKem", "seed")).as_bytes(),
+    );
+    let other = write(
+        dir,
+        "v2-other.key",
+        format!("{}\n", k("otherKem", "seed")).as_bytes(),
+    );
+    let lease_key = write(
+        dir,
+        "v2-lease.key",
+        format!("{}\n", k("leaseKem", "seed")).as_bytes(),
+    );
+    let boot_pq = write(
+        dir,
+        "v2-boot.pq",
+        format!("{}\n", k("boot", "mldsaSeed")).as_bytes(),
+    );
+    let strict = write(dir, "v2-strict", b"strict\n");
+    let junk = write(dir, "v2-junk", b"maybe");
+    let exists = write(dir, "v2-exists.key", b"x");
+    let floor = write(dir, "v2-floor", b"9999999999999\n");
+    let domain = v["serverDomain"].as_str().unwrap().to_owned();
+    let nonce = v["reply"]["ctx"]["nonceHex"].as_str().unwrap().to_owned();
+    let reply_json = |sealed: &str| {
+        format!(
+            "{{\"serverDomain\":\"{domain}\",\"requestNonceHex\":\"{nonce}\",\"purpose\":\"unlock-key\",\"sealedHex\":\"{sealed}\",\"issuedAt\":1}}"
+        )
+    };
+    let mut cases = Vec::new();
+    let edseed = k("boot", "edSeed");
+    for c in v["reply"]["cases"].as_array().unwrap() {
+        if c["expect"] == "ok" || c["expect"] == "accept-v1" {
+            continue;
+        }
+        let f = write(
+            dir,
+            &format!("v2-reply-{}.json", cases.len()),
+            reply_json(c["sealed"].as_str().unwrap()).as_bytes(),
+        );
+        cases.push(case(
+            &format!("v2 reply {}", c["name"]),
+            &[
+                "--identity-priv-hex",
+                &edseed,
+                "--response-json",
+                &f,
+                "--server-domain",
+                &domain,
+                "--reply-kem-key",
+                &reply,
+                "--owner-pq-pub-file",
+                &owner,
+                "--unlock-policy-file",
+                &strict,
+            ],
+        ));
+    }
+    let ok = write(
+        dir,
+        "v2-reply-ok.json",
+        reply_json(v["reply"]["sealed"].as_str().unwrap()).as_bytes(),
+    );
+    let base = [
+        "--identity-priv-hex",
+        edseed.as_str(),
+        "--response-json",
+        ok.as_str(),
+        "--server-domain",
+        domain.as_str(),
+    ];
+    fn with<'a>(base: &[&'a str], extra: &[&'a str]) -> Vec<&'a str> {
+        [base, extra].concat()
+    }
+    cases.push(case(
+        "v2 reply to another reply key",
+        &with(
+            &base,
+            &["--reply-kem-key", &other, "--owner-pq-pub-file", &owner],
+        ),
+    ));
+    cases.push(case(
+        "v2 reply without a reply key",
+        &with(&base, &["--owner-pq-pub-file", &owner]),
+    ));
+    cases.push(case(
+        "v2 reply without the owner key file",
+        &with(
+            &base,
+            &[
+                "--reply-kem-key",
+                &reply,
+                "--owner-pq-pub-file",
+                "/nonexistent/owner.pq",
+            ],
+        ),
+    ));
+    cases.push(case(
+        "v2 reply short owner key",
+        &with(
+            &base,
+            &["--reply-kem-key", &reply, "--owner-pq-pub-file", &short],
+        ),
+    ));
+    cases.push(case(
+        "v2 junk policy with v2 material",
+        &[
+            "--identity-priv-hex",
+            &edseed,
+            "--sealed-hex",
+            &"09".repeat(124),
+            "--owner-pq-pub-file",
+            &owner,
+            "--unlock-policy-file",
+            &junk,
+        ],
+    ));
+    cases.push(case(
+        "v2 junk policy without v2 material",
+        &[
+            "--identity-priv-hex",
+            &edseed,
+            "--sealed-hex",
+            &"09".repeat(124),
+            "--unlock-policy-file",
+            &junk,
+        ],
+    ));
+    let l = &v["lease"];
+    let lease_body = format!(
+        "{{\"serverDomain\":\"{domain}\",\"leaseId\":\"{}\",\"stkPub\":\"{}\",\"sealedKey\":\"{}\",\"issuedAt\":{},\"expiresAt\":{},\"signature\":\"{}\"}}",
+        l["fields"]["leaseId"].as_str().unwrap(),
+        k("boot", "pubHex"),
+        l["sealedKey"].as_str().unwrap(),
+        l["fields"]["issuedAt"],
+        l["fields"]["expiresAt"],
+        "00".repeat(64)
+    );
+    let lease = write(dir, "v2-lease.json", lease_body.as_bytes());
+    let now = (l["fields"]["issuedAt"].as_i64().unwrap() + 1).to_string();
+    let lb = [
+        "--identity-priv-hex",
+        edseed.as_str(),
+        "--lease-json",
+        lease.as_str(),
+        "--server-domain",
+        domain.as_str(),
+        "--owner-pub-hex",
+        &"ab".repeat(32),
+        "--owner-pq-pub-file",
+        owner.as_str(),
+        "--unlock-policy-file",
+        strict.as_str(),
+        "--now-ms",
+        now.as_str(),
+    ];
+    cases.push(case(
+        "v3 lease opens",
+        &[&lb[..], &["--lease-kem-key", &lease_key]].concat(),
+    ));
+    cases.push(stdin_case(
+        "v3 lease key on stdin",
+        &[&lb[..], &["--lease-kem-key", "-"]].concat(),
+        format!("{}\n", k("leaseKem", "seed")).as_bytes(),
+        true,
+    ));
+    cases.push(case(
+        "v3 lease past the time floor",
+        &[
+            &lb[..],
+            &["--lease-kem-key", &lease_key, "--time-floor-file", &floor],
+        ]
+        .concat(),
+    ));
+    cases.push(case(
+        "v3 lease with another lease key",
+        &[&lb[..], &["--lease-kem-key", &other]].concat(),
+    ));
+    cases.push(case("v3 lease without a lease key", &lb));
+    cases.push(case(
+        "v3 lease and JSON on stdin",
+        &[
+            "--identity-priv-hex",
+            &edseed,
+            "--lease-json",
+            "-",
+            "--lease-kem-key",
+            "-",
+        ],
+    ));
+    let rq = [
+        "--identity-priv-hex",
+        edseed.as_str(),
+        "--v2-request",
+        "--server-domain",
+        domain.as_str(),
+        "--nonce-hex",
+        nonce.as_str(),
+    ];
+    cases.push(case("v2 request without its flags", &rq));
+    cases.push(case(
+        "v2 request onto an existing reply key",
+        &[
+            &rq[..],
+            &["--boot-pq-key", &boot_pq, "--reply-kem-out", &exists],
+        ]
+        .concat(),
+    ));
+    cases.push(case(
+        "v2 request with a bad boot pq key",
+        &[
+            &rq[..],
+            &["--boot-pq-key", &short, "--reply-kem-out", "/nonexistent/x"],
+        ]
+        .concat(),
+    ));
+    cases.push(case(
+        "v2 request with a missing boot pq key",
+        &[
+            &rq[..],
+            &[
+                "--boot-pq-key",
+                "/nonexistent/pq",
+                "--reply-kem-out",
+                "/nonexistent/x",
+            ],
+        ]
+        .concat(),
+    ));
+    cases.push(case(
+        "now-ms not a number",
+        &[
+            "--identity-priv-hex",
+            &edseed,
+            "--sealed-hex",
+            "00",
+            "--now-ms",
+            "soon",
+        ],
+    ));
+    cases
+}
+
 #[test]
 fn the_rust_binary_behaves_like_the_go_helper() {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("go-parity");
     std::fs::create_dir_all(&dir).unwrap();
     let Some(go) = build_go(&dir) else { return };
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_flagship-boot"));
-    let cases = corpus(&dir);
+    let mut cases = corpus(&dir);
+    cases.extend(v2_cases(&dir));
     let mut failures = Vec::new();
     for c in &cases {
         let g = run(&go, &c.args, &c.stdin, &dir);

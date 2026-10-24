@@ -925,6 +925,8 @@ dependencies = [
  "aes-gcm",
  "base64ct",
  "ed25519-dalek",
+ "flagship-crypto",
+ "flagship-protocol",
  "getrandom 0.4.3",
  "hkdf",
  "rustix",
