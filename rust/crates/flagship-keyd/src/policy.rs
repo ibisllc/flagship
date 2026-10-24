@@ -189,6 +189,16 @@ pub fn check_sign_with(
             ));
         }
     }
+    if purpose == "flagship/inject/v1" || purpose == "flagship/identity-header/v1" {
+        // The identity the box asserts to an app (protocol identityAssertion.ts): a member's
+        // rank, an anonymous visitor or an API key, one fixed shape each.
+        let text = String::from_utf8_lossy(msg);
+        if let Some(code) = identity_assertion_refusal(strip_bom(&text)) {
+            return Err(KeydError::forbidden(format!(
+                "the box asserts only a member, anonymous or an API key ({code})"
+            )));
+        }
+    }
     if purpose == "flagship/boot-suspension/v1" || purpose == "flagship/boot-auth/v1" {
         let text = String::from_utf8_lossy(msg);
         let parts: Vec<&str> = strip_bom(&text).split('|').collect();
@@ -209,6 +219,89 @@ pub fn check_sign_with(
         }
     }
     Ok(purpose)
+}
+
+const ASSERTED_RANKS: &[&str] = &["member", "manager", "master"];
+
+fn assertion_field(s: &str) -> bool {
+    (1..=128).contains(&s.len()) && s.bytes().all(|c| (0x21..=0x7e).contains(&c))
+}
+
+fn assertion_time(s: &str) -> bool {
+    let b = s.as_bytes();
+    match b {
+        [b'0'] => true,
+        [first, rest @ ..] => {
+            (b'1'..=b'9').contains(first) && rest.len() <= 15 && rest.iter().all(u8::is_ascii_digit)
+        }
+        [] => false,
+    }
+}
+
+fn api_user(s: &str) -> bool {
+    s.strip_prefix("apikey:").is_some_and(|k| {
+        (1..=64).contains(&k.len())
+            && k.bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+    })
+}
+
+fn user_role_refusal(user: &str, role: &str, api_allowed: bool) -> Option<&'static str> {
+    if !assertion_field(user) {
+        return Some("bad-user");
+    }
+    if role == "anonymous" {
+        return (user != "anonymous").then_some("bad-user");
+    }
+    if role == "api" {
+        if !api_allowed {
+            return Some("bad-role");
+        }
+        return (!api_user(user)).then_some("bad-user");
+    }
+    if !ASSERTED_RANKS.contains(&role) {
+        return Some("bad-role");
+    }
+    (user == "anonymous" || user.starts_with("apikey:")).then_some("bad-user")
+}
+
+/// `checkIdentityAssertion` (protocol identityAssertion.ts): `None` for a well-formed
+/// `flagship/inject/v1` or `flagship/identity-header/v1`, else the refusal code. Vectors:
+/// packages/protocol/test-vectors/identity-assertion.
+pub fn identity_assertion_refusal(text: &str) -> Option<&'static str> {
+    let parts: Vec<&str> = text.split('|').collect();
+    let part = |i: usize| parts.get(i).copied().unwrap_or_default();
+    match part(0) {
+        "flagship/inject/v1" => {
+            if parts.len() != 5 && parts.len() != 6 {
+                return Some("bad-shape");
+            }
+            if !assertion_field(part(1)) {
+                return Some("bad-app");
+            }
+            if let Some(r) = user_role_refusal(part(2), part(3), true) {
+                return Some(r);
+            }
+            if !assertion_time(part(4)) {
+                return Some("bad-time");
+            }
+            if part(3) == "api" {
+                return (parts.len() != 6 || !matches!(part(5), "read" | "write"))
+                    .then_some("bad-scope");
+            }
+            (parts.len() == 6).then_some("bad-shape")
+        }
+        "flagship/identity-header/v1" => {
+            if parts.len() != 4 {
+                return Some("bad-shape");
+            }
+            if let Some(r) = user_role_refusal(part(1), part(2), false) {
+                return Some(r);
+            }
+            (!assertion_time(part(3))).then_some("bad-time")
+        }
+        _ => Some("not-an-assertion"),
+    }
 }
 
 /// `s.slice(0, n)` for UTF-16 code units, never splitting a surrogate pair.
@@ -530,11 +623,14 @@ mod tests {
             "flagship/secret-request/v1"
         );
         assert_eq!(
-            ok("flagship/inject/v1|app|user|role|1"),
+            ok("flagship/inject/v1|app|user|member|1"),
             "flagship/inject/v1"
         );
         assert_eq!(ok("pb-put|a|1|2|peer"), "pb-put");
-        assert_eq!(ok("\u{feff}flagship/inject/v1|x"), "flagship/inject/v1");
+        assert_eq!(
+            ok("\u{feff}flagship/inject/v1|x|anonymous|anonymous|1"),
+            "flagship/inject/v1"
+        );
         assert_eq!(
             ok("flagship/app-release/v1|app|1"),
             "flagship/app-release/v1"
@@ -682,5 +778,22 @@ mod tests {
         assert_eq!(js_slice("abc", 2), "ab");
         assert_eq!(js_slice("a\u{1F600}b", 2), "a");
         assert_eq!(js_slice("a\u{1F600}b", 3), "a\u{1F600}");
+    }
+
+    #[test]
+    fn identity_assertions_match_the_shared_vectors() {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../packages/protocol/test-vectors/identity-assertion/vectors.json"
+        ))
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        let cases = v.get("cases").and_then(|c| c.as_array()).unwrap();
+        assert!(cases.len() > 20);
+        for c in cases {
+            let msg = c.get("msg").and_then(|m| m.as_str()).unwrap();
+            let want = c.get("expect").and_then(|e| e.as_str());
+            assert_eq!(identity_assertion_refusal(msg), want, "{msg}");
+        }
     }
 }

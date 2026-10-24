@@ -118,3 +118,18 @@ pub fn load_policy(state: &Path) -> std::io::Result<Option<String>> {
 pub fn names_for(fqdn: &str) -> Vec<String> {
     vec![fqdn.to_owned(), format!("*.{fqdn}")]
 }
+
+/// `loadOwnerAnchor` (migrate.ts): the owner key root in `owner.json`, lowercase hex, or `None`.
+pub fn load_owner_anchor(state: &Path) -> Option<String> {
+    let text = fs::read_to_string(state.join("owner.json")).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let k = v.get("irkPubHex")?.as_str()?;
+    (k.len() == 64
+        && k.bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)))
+    .then(|| k.to_owned())
+}
+
+/// `CEREMONY_TOKEN_FILE` and `CEREMONY_WINDOW_MS` (migrate.ts).
+pub const CEREMONY_TOKEN_FILE: &str = "provision-ceremony.token";
+pub const CEREMONY_WINDOW_MS: i64 = 10 * 60_000;
