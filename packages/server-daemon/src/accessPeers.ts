@@ -11,6 +11,7 @@
  * that stops answering drops out at the next refresh, so the next one leads.
  */
 import type { AccessPeers } from "./accessSync.js";
+import type { ViewMember } from "./gossip/siblingView.js";
 
 export interface PodView {
   serverDomain: string;
@@ -49,6 +50,26 @@ export interface PodsPeers extends AccessPeers {
   refresh(): Promise<void>;
   start(everyMs?: number): void;
   stop(): void;
+}
+
+/**
+ * The other servers as gossip election members. Birth dates are unknown here, so
+ * every member is compared at 0 and the server order decides (mergeSiblings).
+ */
+export function peerSiblings(
+  runners: PeerRunner[],
+  labelOf: (serviceRef: string) => string | undefined,
+  rankOf: (stkHex: string) => number | null,
+): ViewMember[] {
+  return runners.map((r) => ({
+    id: r.domain,
+    domain: r.domain,
+    stkHex: r.stkHex,
+    birthDate: 0,
+    orderRank: rankOf(r.stkHex),
+    liveness: "live" as const,
+    services: r.apps.map(labelOf).filter((x): x is string => !!x),
+  }));
 }
 
 export function buildPodsPeers(opts: PodsPeersOptions): PodsPeers {

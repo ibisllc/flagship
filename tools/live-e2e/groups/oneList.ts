@@ -10,12 +10,8 @@ import { bytesToHex } from "@noble/hashes/utils";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  buildCgkDelivery,
   signJournalRequest,
   type JournalRequest,
-  cgkDeliveryToCarrierHex,
-  deriveCGK,
-  signDeviceEndpointClaim,
   deriveAppAccountId,
   deriveHouseholdKey,
   randomServiceInviteId,
@@ -33,6 +29,7 @@ import {
   type PhoneOrder,
   type ServerOrder,
 } from "@flagship/protocol";
+import { depositCgk } from "../lib/cgk.js";
 import { pair, pods } from "../lib/fleet.js";
 import { CONTROL, assert, cookieVal, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import { installWhoami, setMode, waitServing } from "./gating.js";
@@ -92,37 +89,9 @@ export const oneList: Group = {
     };
 
     // Gym boxes have no phone to hand them the account's cloud gossip key (the
-    // box-to-box hand-over's key comes from it), so the gym deposits it, as the
-    // owner's phone does after a box registers.
+    // box-to-box hand-over's key comes from it), so the gym deposits it.
     const gossiping = await rec.check("both boxes get the cloud gossip key", async () => {
-      const list = await pods(A.username);
-      const cgk = deriveCGK(A.keys.umk);
-      for (const b of [b1, b2]) {
-        const stkHex = String(list.find((p) => p.serverDomain === b.fqdn)?.identityPubKey ?? "").toLowerCase();
-        assert(/^[0-9a-f]{64}$/.test(stkHex), `no STK for ${b.serverName}`);
-        const now = Date.now();
-        const { delivery, signature } = buildCgkDelivery({
-          serverDomain: b.fqdn,
-          cgk,
-          boxIdentityPub: Buffer.from(stkHex, "hex"),
-          irk: A.keys.irk,
-          issuedAt: now,
-        });
-        const nonce = randomBytes(32);
-        const auth = { username: A.username, endpointLabel: "device", phoneIrkPub: A.keys.irk.publicKey, issuedAt: now, expiresAt: now + 120_000, nonce };
-        const r = await postJson(`https://${CONTROL}/api/server/${encodeURIComponent(b.fqdn)}/cgk-deposit`, {
-          auth: { ...auth, phoneIrkPub: bytesToHex(auth.phoneIrkPub), nonce: bytesToHex(nonce) },
-          authSignature: bytesToHex(signDeviceEndpointClaim(auth, A.keys.irk)),
-          deposit: {
-            serverDomain: b.fqdn,
-            requestNonceHex: randomBytes(32).toString("hex"),
-            stkPub: stkHex,
-            sealed: cgkDeliveryToCarrierHex(delivery, signature),
-            issuedAt: now,
-          },
-        });
-        assert(r.status === 200, `cgk deposit ${b.serverName} ${r.status}: ${short(r.text)}`);
-      }
+      await depositCgk(A, [b1, b2]);
       await until("both boxes gossip", async () => {
         for (const b of [b1, b2]) {
           const r = await tryHttp(`https://${b.fqdn}/api/leads`, {}, 15_000);
