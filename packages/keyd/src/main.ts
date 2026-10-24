@@ -71,7 +71,7 @@ async function main(): Promise<void> {
   }
   const service = new KeydService({
     identitySeed: identity, pqSeed, swk, cgk, store: fileKeyStore(STATE), ...(tls ? { tls } : {}), ...(acme ? { acme } : {}),
-    owner: owner && policy ? { irkPubHex: owner.irkPubHex, serverFqdn: policy.serverFqdn } : null,
+    owner: owner && policy ? { irkPubHex: owner.irkPubHex, serverFqdn: policy.serverFqdn, adminRootPubHex: owner.adminRootPubHex ?? null } : null,
     ceremony,
   });
   identity.fill(0);

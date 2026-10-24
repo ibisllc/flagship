@@ -791,3 +791,53 @@ describe.skipIf(!HAVE_BIN)("ACME through the Rust keyd", () => {
   });
 });
 
+describe.skipIf(!HAVE_BIN)("master evidence in the Rust keyd", () => {
+  it("signs master only with the owner's evidence, with the TS keyd's answers", async () => {
+    const { KeydService } = await import("../src/service.js");
+    const { deriveServiceMemberStableId, deriveServiceSecret } = await import("@flagship/protocol");
+    const root = new Uint8Array(32).fill(0x24);
+    const rootHex = Buffer.from(ed.getPublicKey(root)).toString("hex");
+    const dev = Buffer.from(ed.getPublicKey(new Uint8Array(32).fill(0x25))).toString("hex");
+    const app = "alice--chess";
+    const me = deriveServiceMemberStableId(deriveServiceSecret(SWK, app), Buffer.from(dev, "hex"));
+    const grant = `flagship/device-capability-grant/v2|0b6f2d3e-0000-4000-8000-000000000001|alice|dev-1|${dev}|admin,apps|1|${Date.now() + 86_400_000}`;
+    const ev = { appId: app, identityPubHex: dev, statement: grant, signatureHex: Buffer.from(ed.sign(new TextEncoder().encode(grant), root)).toString("hex") };
+    const dir = stateDir({ owner: false });
+    writeFileSync(join(dir, "owner.json"), JSON.stringify({ irkPubHex: OWNER_PUB_HEX, adminRootPubHex: rootHex }), { mode: 0o400 });
+    const k = await spawnRust(dir);
+    const ts = new KeydService({ identitySeed: SEED, swk: SWK, owner: { irkPubHex: OWNER_PUB_HEX, serverFqdn: FQDN, adminRootPubHex: rootHex } });
+    try {
+      const c = await client(k.sock);
+      const msgOk = hex(enc(`flagship/inject/v1|${app}|${me}|master|${Date.now()}`));
+      const other = hex(enc(`flagship/inject/v1|${app}|${"0".repeat(32)}|master|1`));
+      const tsAnswer = (op: string, args: Record<string, unknown>) => {
+        try {
+          return { ok: ts.handle({ op, args } as never).result };
+        } catch (e) {
+          return { err: (e as Error).message };
+        }
+      };
+      const rsAnswer = async (op: string, args: Record<string, unknown>) => {
+        try {
+          return { ok: await c.call(op, args) };
+        } catch (e) {
+          return { err: (e as Error).message };
+        }
+      };
+      for (const [op, args] of [
+        ["sign.identity", { msg: msgOk, ...ev }],
+        ["sign.identity", { msg: other, ...ev }],
+        ["sign.identity", { msg: msgOk, ...ev, signatureHex: "00".repeat(64) }],
+        ["sign", { msg: msgOk }],
+        ["sign.identity", { msg: hex(enc(`flagship/inject/v1|${app}|${me}|manager|1`)), ...ev }],
+      ] as const) {
+        expect(await rsAnswer(op, args), `${op} ${JSON.stringify(args).slice(0, 60)}`).toEqual(tsAnswer(op, args));
+      }
+      expect((await rsAnswer("sign.identity", { msg: msgOk, ...ev })).ok).toBeDefined();
+    } finally {
+      await k.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+

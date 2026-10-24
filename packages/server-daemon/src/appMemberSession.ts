@@ -31,7 +31,8 @@ import type { SessionResolver } from "./serviceProxy.js";
 
 export interface AppSessionResolverOptions {
   sessions: Pick<ServiceSessionStore, "lookup">;
-  access: Pick<ServiceAccessStore, "isAllowed" | "principal" | "accountRank" | "roleOf" | "appIdentityKey">;
+  access: Pick<ServiceAccessStore, "isAllowed" | "principal" | "accountRank" | "roleOf" | "appIdentityKey"> &
+    Partial<Pick<ServiceAccessStore, "masterEvidence">>;
   now?: () => number;
 }
 
@@ -48,7 +49,8 @@ export function buildAppSessionResolver(opts: AppSessionResolverOptions): Sessio
     const identity = hexToBytes(opts.access.appIdentityKey(sess.aid));
     const role = p ? opts.access.accountRank(app.serviceId, p) : invitedRole(sess.aid);
     if (!role) return null;
-    return { memberPub: identity, stableId: app.membership.stableIdFor(identity), role };
+    const masterEvidence = role === "master" && p ? opts.access.masterEvidence?.(app.serviceId, p) ?? null : null;
+    return { memberPub: identity, stableId: app.membership.stableIdFor(identity), role, ...(masterEvidence ? { masterEvidence } : {}) };
 
     // An invited person's rank is what an admin's verified order set for them, else Member: the
     // legacy membership store and the manifest's `default_role` never raise it.

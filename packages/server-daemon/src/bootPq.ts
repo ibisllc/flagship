@@ -22,7 +22,7 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   bootKeyBindingToWire,
-  canonicalBootKeyBindingV3,
+  signBootKeyBindingV3,
   hybridSign,
   hybridSigKeygen,
   hybridSealKeygen,
@@ -138,7 +138,7 @@ export function buildBootPqWire(args: {
   );
   boot.secretKey.fill(0);
   const statement = { serverDomain: domain, bootPubHex, bootMldsaPubHex, leaseKemPubHex, custody: args.custody, issuedAt: args.issuedAt };
-  const stkSignature = Buffer.from(args.stkHybrid(canonicalBootKeyBindingV3(statement))).toString("hex");
+  const stkSignature = Buffer.from(signBootKeyBindingV3(statement, args.stkHybrid)).toString("hex");
   return { v: 1, ...statement, bootBinding, stkSignature };
 }
 

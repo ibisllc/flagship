@@ -146,6 +146,21 @@ pub fn check_sign_with(
     allowed: &[&str],
     mldsa_pub_hex: Option<&str>,
 ) -> KeydResult<String> {
+    check_sign_inner(msg, public_key_hex, allowed, mldsa_pub_hex, false)
+}
+
+/// `checkSign` with `masterEvidence: true` (the `sign.identity` op): only a `master` assertion.
+pub fn check_sign_master(msg: &[u8], public_key_hex: &str, allowed: &[&str]) -> KeydResult<String> {
+    check_sign_inner(msg, public_key_hex, allowed, None, true)
+}
+
+fn check_sign_inner(
+    msg: &[u8],
+    public_key_hex: &str,
+    allowed: &[&str],
+    mldsa_pub_hex: Option<&str>,
+    master_evidence: bool,
+) -> KeydResult<String> {
     if msg.is_empty() || msg.len() > MAX_SIGN_BYTES {
         return Err(KeydError::bad_request("message size out of range"));
     }
@@ -199,6 +214,18 @@ pub fn check_sign_with(
             return Err(KeydError::forbidden(format!(
                 "the box asserts only a member, anonymous or an API key ({code})"
             )));
+        }
+        // Master is asserted only through sign.identity, with the owner's evidence keyd checks.
+        let is_master = asserted_identity(strip_bom(&text)).is_some_and(|a| a.2 == "master");
+        if is_master && !master_evidence {
+            return Err(KeydError::forbidden(
+                "master needs sign.identity with the owner's evidence",
+            ));
+        }
+        if !is_master && master_evidence {
+            return Err(KeydError::forbidden(
+                "sign.identity is for master assertions only",
+            ));
         }
     }
     if purpose == "flagship/boot-suspension/v1" || purpose == "flagship/boot-auth/v1" {
@@ -270,6 +297,113 @@ fn user_role_refusal(user: &str, role: &str, api_allowed: bool) -> Option<&'stat
 /// `checkIdentityAssertion` (protocol identityAssertion.ts): `None` for a well-formed
 /// `flagship/inject/v1` or `flagship/identity-header/v1`, else the refusal code. Vectors:
 /// packages/protocol/test-vectors/identity-assertion.
+/// `assertedIdentity`: (app, user, role) of a well-formed assertion (app `None` for the header).
+pub fn asserted_identity(text: &str) -> Option<(Option<&str>, &str, &str)> {
+    if identity_assertion_refusal(text).is_some() {
+        return None;
+    }
+    let p: Vec<&str> = text.split('|').collect();
+    match p.first().copied() {
+        Some("flagship/inject/v1") => {
+            Some((p.get(1).copied(), p.get(2).copied()?, p.get(3).copied()?))
+        }
+        _ => Some((None, p.get(1).copied()?, p.get(2).copied()?)),
+    }
+}
+
+fn is_hex_len(s: &str, n: usize) -> bool {
+    s.len() == n
+        && s.bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// The evidence keyd checks before it signs `master` (TS `MasterEvidence`).
+#[derive(Debug)]
+pub struct MasterEvidence<'a> {
+    pub app_id: &'a str,
+    pub identity_pub_hex: &'a str,
+    pub statement: &'a str,
+    pub signature_hex: &'a str,
+}
+
+/// `checkMasterEvidence` (identityAssertion.ts), same codes in the same order.
+pub fn check_master_evidence(
+    text: &str,
+    ev: &MasterEvidence<'_>,
+    irk_pub_hex: &str,
+    admin_root_pub_hex: Option<&str>,
+    now: i64,
+    stable_id_of: &dyn Fn(&str, &[u8; 32]) -> String,
+    verify: &dyn Fn(&str, &[u8], &str) -> bool,
+) -> Option<&'static str> {
+    let Some((app, user, role)) = asserted_identity(text) else {
+        return Some("not-master");
+    };
+    if role != "master" {
+        return Some("not-master");
+    }
+    if !assertion_field(ev.app_id) || !is_hex_len(ev.identity_pub_hex, 64) {
+        return Some("bad-evidence");
+    }
+    if ev.statement.len() > 4096 || !is_hex_len(ev.signature_hex, 128) {
+        return Some("bad-evidence");
+    }
+    if app.is_some_and(|a| a != ev.app_id) {
+        return Some("wrong-app");
+    }
+    let Some(pub_bytes) = crate::crypto::from_hex(ev.identity_pub_hex)
+        .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+    else {
+        return Some("bad-evidence");
+    };
+    if stable_id_of(ev.app_id, &pub_bytes) != user {
+        return Some("wrong-member");
+    }
+    let root = admin_root_pub_hex.filter(|r| is_hex_len(r, 64));
+    let signer = root.unwrap_or(irk_pub_hex);
+    let p: Vec<&str> = ev.statement.split('|').collect();
+    let part = |i: usize| p.get(i).copied().unwrap_or_default();
+    match part(0) {
+        "flagship/device-capability-grant/v2" => {
+            if p.len() != 8 {
+                return Some("bad-evidence");
+            }
+            if part(4) != ev.identity_pub_hex {
+                return Some("wrong-key");
+            }
+            if root.is_some() && !part(5).split(',').any(|x| x == "admin") {
+                return Some("not-admin");
+            }
+            let exp = part(7);
+            let ok_num = !exp.is_empty()
+                && exp.len() <= 16
+                && exp.bytes().all(|c| c.is_ascii_digit())
+                && !(exp.len() > 1 && exp.starts_with('0'));
+            if !ok_num || exp.parse::<i64>().map_or(true, |e| e <= now) {
+                return Some("expired");
+            }
+        }
+        "flagship/app-rank/v1" => {
+            if p.len() != 5 {
+                return Some("bad-evidence");
+            }
+            if part(1) != ev.app_id {
+                return Some("wrong-app");
+            }
+            let dev = format!("device:{}", ev.identity_pub_hex);
+            let aid = format!("aid:{}", ev.identity_pub_hex);
+            if part(2) != dev && part(2) != aid {
+                return Some("wrong-key");
+            }
+            if part(3) != "master" {
+                return Some("not-admin");
+            }
+        }
+        _ => return Some("bad-evidence"),
+    }
+    (!verify(ev.signature_hex, ev.statement.as_bytes(), signer)).then_some("bad-signature")
+}
+
 pub fn identity_assertion_refusal(text: &str) -> Option<&'static str> {
     let parts: Vec<&str> = text.split('|').collect();
     let part = |i: usize| parts.get(i).copied().unwrap_or_default();
@@ -568,7 +702,7 @@ pub fn parse_rate_limits(json: &str) -> KeydResult<HashMap<String, Limit>> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
 
     const PUB: &str = "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12";
@@ -797,5 +931,82 @@ mod tests {
             let want = c.get("expect").and_then(|e| e.as_str());
             assert_eq!(identity_assertion_refusal(msg), want, "{msg}");
         }
+    }
+
+    #[test]
+    fn master_evidence_matches_the_shared_vectors() {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../packages/protocol/test-vectors/identity-assertion/master-evidence.json"
+        ))
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        let s = |x: &serde_json::Value| x.as_str().unwrap().to_owned();
+        let swk: [u8; 32] = crate::crypto::from_hex(&s(&v["swk"]))
+            .unwrap()
+            .try_into()
+            .unwrap();
+        for id in v["stableIds"].as_array().unwrap() {
+            let p: [u8; 32] = crate::crypto::from_hex(&s(&id["identityPubHex"]))
+                .unwrap()
+                .try_into()
+                .unwrap();
+            assert_eq!(
+                crate::crypto::member_stable_id(&swk, &s(&id["app"]), &p),
+                s(&id["stableId"])
+            );
+        }
+        let now = v["now"].as_i64().unwrap();
+        let verify = |sig: &str, m: &[u8], pk: &str| -> bool {
+            let k: [u8; 32] = crate::crypto::from_hex(pk).unwrap().try_into().unwrap();
+            let g: [u8; 64] = crate::crypto::from_hex(sig).unwrap().try_into().unwrap();
+            ed25519_dalek::VerifyingKey::from_bytes(&k)
+                .unwrap()
+                .verify_strict(m, &ed25519_dalek::Signature::from_bytes(&g))
+                .is_ok()
+        };
+        let stable = |app: &str, p: &[u8; 32]| crate::crypto::member_stable_id(&swk, app, p);
+        for c in v["cases"].as_array().unwrap() {
+            let ev = &c["ev"];
+            let (app, idp, st, sig) = (
+                s(&ev["appId"]),
+                s(&ev["identityPubHex"]),
+                s(&ev["statement"]),
+                s(&ev["signatureHex"]),
+            );
+            let e = MasterEvidence {
+                app_id: &app,
+                identity_pub_hex: &idp,
+                statement: &st,
+                signature_hex: &sig,
+            };
+            let root = c["anchors"]["adminRootPubHex"].as_str();
+            let got = check_master_evidence(
+                &s(&c["msg"]),
+                &e,
+                &s(&c["anchors"]["irkPubHex"]),
+                root,
+                now,
+                &stable,
+                &verify,
+            );
+            assert_eq!(
+                got.unwrap_or("ok"),
+                c["expect"].as_str().unwrap(),
+                "{}",
+                c["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn plain_sign_refuses_master() {
+        let pk = "ab".repeat(32);
+        let m = b"flagship/inject/v1|john--chess|0123456789abcdef0123456789abcdef|master|1";
+        assert!(check_sign(m, &pk, BOX_SIGN_PURPOSES).is_err());
+        assert!(check_sign_master(m, &pk, BOX_SIGN_PURPOSES).is_ok());
+        let mgr = b"flagship/inject/v1|john--chess|0123456789abcdef0123456789abcdef|manager|1";
+        assert!(check_sign(mgr, &pk, BOX_SIGN_PURPOSES).is_ok());
+        assert!(check_sign_master(mgr, &pk, BOX_SIGN_PURPOSES).is_err());
     }
 }

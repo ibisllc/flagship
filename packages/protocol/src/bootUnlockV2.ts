@@ -149,6 +149,11 @@ export function canonicalBootKeyBindingV3(s: BootPqStatement): Bytes {
   );
 }
 
+/** The STK's hybrid signature over the v3 statement (keyd `sign.hybrid`, hybrid-only purpose). */
+export function signBootKeyBindingV3(s: BootPqStatement, stkHybrid: (msg: Bytes) => Bytes): Bytes {
+  return stkHybrid(canonicalBootKeyBindingV3(s));
+}
+
 export interface VerifiedBootPq {
   serverDomain: string;
   bootPubHex: string;

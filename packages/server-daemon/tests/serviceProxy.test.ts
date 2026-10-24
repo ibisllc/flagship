@@ -526,3 +526,49 @@ describe("sibling-app guard (docs/app-apis.md §4)", () => {
     expect((await handleAppRequest(app, req("GET", {}), deps)).status).toBe(200);
   });
 });
+
+describe("master assertions need keyd's check of the owner's evidence", () => {
+  const session = (masterEvidence?: { statement: string; signatureHex: string }) => () => ({
+    memberPub: new Uint8Array(32).fill(7),
+    stableId: "0123456789abcdef0123456789abcdef",
+    role: "master",
+    ...(masterEvidence ? { masterEvidence } : {}),
+  });
+  const run = async (injector: ReturnType<typeof boxSigner>, ev?: { statement: string; signatureHex: string }) => {
+    const { app } = await makeApp({ publicRoutes: ["/"] });
+    let captured: Record<string, string> = {};
+    await handleAppRequest(app, fakeReq("/"), {
+      injector,
+      resolveSession: session(ev),
+      forward: async (_h, _p, req) => {
+        captured = req.headers;
+        return { status: 200, body: "" };
+      },
+      now: () => 999,
+    });
+    return captured;
+  };
+
+  it("a key holder that checks evidence: master with it, manager without it or when refused", async () => {
+    const key = makeKey();
+    const seen: string[] = [];
+    const base = boxSigner(key);
+    const signer = Object.assign(Object.create(base) as ReturnType<typeof boxSigner>, {
+      signAsBox: (m: Uint8Array) => base.signAsBox(m),
+      boxPublicKey: () => base.boxPublicKey(),
+      signMasterIdentity: (msg: Uint8Array, ev: { statement: string }) => {
+        seen.push(ev.statement);
+        if (ev.statement !== "good") throw new Error("forbidden");
+        return ed.sign(msg, key.privateKey);
+      },
+    });
+    expect((await run(signer, { statement: "good", signatureHex: "00" }))["x-flagship-role"]).toBe("master");
+    expect((await run(signer, { statement: "bad", signatureHex: "00" }))["x-flagship-role"]).toBe("manager");
+    expect((await run(signer))["x-flagship-role"]).toBe("manager");
+    expect(seen).toEqual(["good", "bad"]);
+  });
+
+  it("an in-process custodian (no separate key holder) keeps master", async () => {
+    expect((await run(boxSigner(makeKey())))["x-flagship-role"]).toBe("master");
+  });
+});

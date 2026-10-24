@@ -51,6 +51,8 @@ pub struct KeydService {
     /// TS `owner`: the owner's account key and this box's name, pinned by root at the boot
     /// ceremony (`owner.json` + `policy.json`); a sealed delivery must be signed under it.
     owner: Option<(ed25519_dalek::VerifyingKey, String)>,
+    /// The admin root from `owner.json` (`adminRootPubHex`), when the account has one.
+    admin_root_hex: Option<String>,
     /// TS `ceremony`: the boot ceremony's one-time token and until when it lets a raw key in.
     ceremony: Option<(Key32, i64)>,
     clock: Clock,
@@ -120,6 +122,7 @@ impl KeydService {
             tls,
             acme,
             owner: None,
+            admin_root_hex: None,
             ceremony: None,
             clock: system_clock(),
         }
@@ -137,6 +140,19 @@ impl KeydService {
         self.owner = key
             .filter(|_| !server_fqdn.is_empty())
             .map(|k| (k, server_fqdn.to_lowercase()));
+        self
+    }
+
+    /// The admin root `owner.json` pins (TS `owner.adminRootPubHex`); anything but 64 hex is none.
+    #[must_use]
+    pub fn with_admin_root(mut self, admin_root_pub_hex: Option<&str>) -> Self {
+        self.admin_root_hex = admin_root_pub_hex
+            .filter(|h| {
+                h.len() == 64
+                    && h.bytes()
+                        .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+            })
+            .map(str::to_owned);
         self
     }
 
@@ -258,6 +274,77 @@ impl KeydService {
                 no_extra_args(a, &["msg"])?;
                 let msg = hex_arg(a, "msg", HexBounds::min(1))?;
                 let purpose = check_sign(&msg, &self.pub_hex, BOX_SIGN_PURPOSES)?;
+                let sig = self.stk()?.sign(&msg);
+                Ok(Handled {
+                    result: obj! { "sig" => to_hex(&sig.to_bytes()) },
+                    purpose: Some(purpose),
+                })
+            }
+            "sign.identity" => {
+                // A `master` identity assertion (TS sign.identity): signed only with the owner's
+                // evidence for that very sign-in key, checked here against owner.json and the SWK.
+                no_extra_args(
+                    a,
+                    &[
+                        "msg",
+                        "appId",
+                        "identityPubHex",
+                        "statement",
+                        "signatureHex",
+                    ],
+                )?;
+                let msg = hex_arg(a, "msg", HexBounds::range(1, 4096))?;
+                let purpose =
+                    crate::policy::check_sign_master(&msg, &self.pub_hex, BOX_SIGN_PURPOSES)?;
+                let Some((irk, _)) = &self.owner else {
+                    return Err(KeydError::forbidden("no owner key is pinned for this box"));
+                };
+                let irk_hex = to_hex(irk.as_bytes());
+                let swk = self.swk()?;
+                let app_id = str_arg(a, "appId", 128)?;
+                let identity = str_arg(a, "identityPubHex", 64)?;
+                let statement = str_arg(a, "statement", 4096)?;
+                let signature = str_arg(a, "signatureHex", 128)?;
+                if !crate::policy::is_service_id(app_id) {
+                    return Err(KeydError::bad_request(
+                        "appId must be <creator>--<slug> or <slug>",
+                    ));
+                }
+                let ev = crate::policy::MasterEvidence {
+                    app_id,
+                    identity_pub_hex: identity,
+                    statement,
+                    signature_hex: signature,
+                };
+                let stable =
+                    |app: &str, pubk: &[u8; 32]| crate::crypto::member_stable_id(swk, app, pubk);
+                let verify = |sig_hex: &str, m: &[u8], pub_hex: &str| -> bool {
+                    let k = crate::crypto::from_hex(pub_hex)
+                        .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+                        .and_then(|b| ed25519_dalek::VerifyingKey::from_bytes(&b).ok());
+                    let s = crate::crypto::from_hex(sig_hex)
+                        .and_then(|b| <[u8; 64]>::try_from(b.as_slice()).ok());
+                    match (k, s) {
+                        (Some(k), Some(s)) => k
+                            .verify_strict(m, &ed25519_dalek::Signature::from_bytes(&s))
+                            .is_ok(),
+                        _ => false,
+                    }
+                };
+                let text = String::from_utf8_lossy(&msg);
+                if let Some(code) = crate::policy::check_master_evidence(
+                    &text,
+                    &ev,
+                    &irk_hex,
+                    self.admin_root_hex.as_deref(),
+                    (self.clock)(),
+                    &stable,
+                    &verify,
+                ) {
+                    return Err(KeydError::forbidden(format!(
+                        "master needs the owner's evidence for this key ({code})"
+                    )));
+                }
                 let sig = self.stk()?.sign(&msg);
                 Ok(Handled {
                     result: obj! { "sig" => to_hex(&sig.to_bytes()) },
