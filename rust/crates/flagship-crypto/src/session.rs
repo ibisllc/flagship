@@ -204,25 +204,35 @@ pub struct Finish {
     pub confirm: [u8; 32],
 }
 
-/// What the responder signs.
+/// What the responder signs, in the v1 text form keyd's purpose check reads:
+/// `flagship/pq-session-accept/v1|<responder>|<hex SHA-512(SHA-512(hello) || enc || nonce || time)>`.
 #[must_use]
-pub fn accept_tbs(hello_bytes: &[u8], enc: &[u8], nonce: &[u8; 32], issued_at: u64) -> Vec<u8> {
-    let mut out = Vec::with_capacity(1300);
-    out.push(29);
-    out.extend_from_slice(TAG_ACCEPT.as_bytes());
-    out.extend_from_slice(&sha512(&[hello_bytes]));
-    out.extend_from_slice(enc);
-    out.extend_from_slice(nonce);
-    out.extend_from_slice(&issued_at.to_be_bytes());
-    out
+pub fn accept_tbs(
+    hello_bytes: &[u8],
+    responder: &str,
+    enc: &[u8],
+    nonce: &[u8; 32],
+    issued_at: u64,
+) -> Vec<u8> {
+    let core = sha512(&[
+        &sha512(&[hello_bytes]),
+        enc,
+        nonce,
+        &issued_at.to_be_bytes(),
+    ]);
+    format!("{TAG_ACCEPT}|{responder}|{}", crate::trust::hex(&core)).into_bytes()
 }
 
-fn finish_tbs(tbs_a: &[u8], sig_r: &[u8], confirm_r: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(94);
-    out.push(29);
-    out.extend_from_slice(TAG_FINISH.as_bytes());
-    out.extend_from_slice(&sha512(&[tbs_a, sig_r, confirm_r]));
-    out
+/// What the initiator signs.
+#[must_use]
+pub fn finish_tbs(
+    tbs_a: &[u8],
+    sig_r: &[u8],
+    confirm_r: &[u8],
+    initiator_subject: &str,
+) -> Vec<u8> {
+    let d = sha512(&[tbs_a, sig_r, confirm_r]);
+    format!("{TAG_FINISH}|{initiator_subject}|{}", crate::trust::hex(&d)).into_bytes()
 }
 
 struct Prk(Hkdf<Sha512>);
@@ -362,7 +372,13 @@ impl Initiator {
         if a.issued_at.abs_diff(now) > MAX_SKEW_MS {
             return Err(SessionError::Stale);
         }
-        let tbs_a = accept_tbs(&self.hello_bytes, &a.enc, &a.nonce, a.issued_at);
+        let tbs_a = accept_tbs(
+            &self.hello_bytes,
+            &self.hello.responder,
+            &a.enc,
+            &a.nonce,
+            a.issued_at,
+        );
         self.responder
             .hybrid_key()
             .verify(TAG_ACCEPT, &tbs_a, &a.signature)
@@ -379,7 +395,12 @@ impl Initiator {
         if !ct_eq(&prk.confirm("responder-confirm", &th1)?, &a.confirm) {
             return Err(SessionError::ConfirmFailed);
         }
-        let tbs_f = finish_tbs(&tbs_a, &a.signature, &a.confirm);
+        let tbs_f = finish_tbs(
+            &tbs_a,
+            &a.signature,
+            &a.confirm,
+            &self.hello.initiator_subject,
+        );
         let sig_i = sign(TAG_FINISH, &tbs_f)?;
         if sig_i.len() != SIGNATURE_LEN {
             return Err(SessionError::BadSignature);
@@ -469,13 +490,13 @@ pub fn accept(
     let prk = Prk::new(ss.as_slice());
     ss.zeroize();
     let enc = enc.as_slice().to_vec();
-    let tbs_a = accept_tbs(&hello_bytes, &enc, &nonce, now);
+    let tbs_a = accept_tbs(&hello_bytes, &h.responder, &enc, &nonce, now);
     let signature = sign(TAG_ACCEPT, &tbs_a)?;
     if signature.len() != SIGNATURE_LEN {
         return Err(SessionError::BadSignature);
     }
     let confirm = prk.confirm("responder-confirm", &sha512(&[&tbs_a, &signature]))?;
-    let tbs_f = finish_tbs(&tbs_a, &signature, &confirm);
+    let tbs_f = finish_tbs(&tbs_a, &signature, &confirm, &h.initiator_subject);
     Ok((
         Accept {
             enc,

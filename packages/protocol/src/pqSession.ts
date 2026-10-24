@@ -219,9 +219,18 @@ export function pqSessionHelloBytes(h: PqSessionHelloFields): Bytes {
   );
 }
 
-/** What the responder signs (§13.3); exported for the vectors. */
-export function pqSessionAcceptTbs(helloBytes: Bytes, enc: Bytes, nonce: Bytes, issuedAt: number): Bytes {
-  return concat(lp8(utf8(TAG_PQ_SESSION_ACCEPT)), sha512(helloBytes), enc, nonce, u64be(issuedAt));
+/**
+ * What the responder signs (§13.3), in the v1 text form keyd's purpose check reads:
+ * `flagship/pq-session-accept/v1|<responder>|<hex SHA-512(SHA-512(hello) || enc || nonce || time)>`.
+ */
+export function pqSessionAcceptTbs(helloBytes: Bytes, responder: string, enc: Bytes, nonce: Bytes, issuedAt: number): Bytes {
+  const core = sha512(concat(sha512(helloBytes), enc, nonce, u64be(issuedAt)));
+  return utf8(`${TAG_PQ_SESSION_ACCEPT}|${responder}|${toHex(core)}`);
+}
+
+/** What the initiator signs: `flagship/pq-session-finish/v1|<initiatorSubject>|<hex SHA-512(accept || sigR || confirmR)>`. */
+export function pqSessionFinishTbs(tbsA: Bytes, sigR: Bytes, confirmR: Bytes, initiatorSubject: string): Bytes {
+  return utf8(`${TAG_PQ_SESSION_FINISH}|${initiatorSubject}|${toHex(sha512(concat(tbsA, sigR, confirmR)))}`);
 }
 
 function expand(prk: Bytes, label: string, th: Bytes, n: number): Bytes {
@@ -345,7 +354,7 @@ export async function finishPqSession(
     const sigR = fromHex(o.signature, HYBRID_SIG_LEN);
     const confirmR = fromHex(o.confirm, 32);
     if (Math.abs(issuedAt - now) > PQ_SESSION_MAX_SKEW_MS) fail("session-stale");
-    const tbsA = pqSessionAcceptTbs(st.helloBytes, enc, nonce, issuedAt);
+    const tbsA = pqSessionAcceptTbs(st.helloBytes, st.hello.responder, enc, nonce, issuedAt);
     try {
       hybridVerify(st.responderBinding.hybridPublicKey, TAG_PQ_SESSION_ACCEPT, tbsA, sigR);
     } catch {
@@ -361,7 +370,7 @@ export async function finishPqSession(
     ss.fill(0);
     const th1 = sha512(concat(tbsA, sigR));
     if (!equalBytes(confirmTag(prk, "responder-confirm", th1), confirmR)) fail("confirm-failed");
-    const tbsF = concat(lp8(utf8(TAG_PQ_SESSION_FINISH)), sha512(concat(tbsA, sigR, confirmR)));
+    const tbsF = pqSessionFinishTbs(tbsA, sigR, confirmR, st.hello.initiatorSubject);
     const sigI = await st.identity.sign(TAG_PQ_SESSION_FINISH, tbsF);
     if (sigI.length !== HYBRID_SIG_LEN) fail("bad-signature");
     const th3 = sha512(concat(tbsF, sigI));
@@ -433,13 +442,13 @@ export async function acceptPqSession(args: {
   }
   const nonce = random(32, args.randomness?.acceptNonce);
   const issuedAt = timeOk(args.now);
-  const tbsA = pqSessionAcceptTbs(pqSessionHelloBytes(h), enc, nonce, issuedAt);
+  const tbsA = pqSessionAcceptTbs(pqSessionHelloBytes(h), h.responder, enc, nonce, issuedAt);
   const sigR = await args.identity.sign(TAG_PQ_SESSION_ACCEPT, tbsA);
   if (sigR.length !== HYBRID_SIG_LEN) fail("bad-signature");
   const prk = hkdfExtract(sha512, ss, utf8(TAG_PQ_SESSION));
   ss.fill(0);
   const confirmR = confirmTag(prk, "responder-confirm", sha512(concat(tbsA, sigR)));
-  const tbsF = concat(lp8(utf8(TAG_PQ_SESSION_FINISH)), sha512(concat(tbsA, sigR, confirmR)));
+  const tbsF = pqSessionFinishTbs(tbsA, sigR, confirmR, h.initiatorSubject);
   return {
     accept: { v: 1, enc: toHex(enc), nonce: toHex(nonce), issuedAt, signature: toHex(sigR), confirm: toHex(confirmR) },
     pending: { initiator, createdAt: args.now, tbsF, prk },

@@ -18,6 +18,13 @@ const UNWIRED_BOX_PURPOSES = new Set([
   "flagship/sibling-sync/v1",
 ]);
 
+/**
+ * Signed through the PQ session's identity signer (pqChannel.ts hands keyd's sign.hybrid to
+ * packages/protocol/src/pqSession.ts), which this scan cannot follow; the tests in
+ * packages/server-daemon/tests/pqChannel.test.ts and keyd.test.ts cover them.
+ */
+const SESSION_BOX_PURPOSES = new Set(["flagship/pq-session-accept/v1", "flagship/pq-session-finish/v1"]);
+
 /** Signed by the owner, an admin or the account key, never by the box: keyd must refuse them. */
 const NOT_BOX_PURPOSES = [
   "flagship/membership/v1",
@@ -47,7 +54,7 @@ describe("box signing purposes", () => {
   });
 
   it("lists nothing the box does not sign", () => {
-    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t));
+    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t));
     expect(idle).toEqual([]);
     for (const t of NOT_BOX_PURPOSES) expect(BOX_SIGN_PURPOSES.has(t), t).toBe(false);
   });

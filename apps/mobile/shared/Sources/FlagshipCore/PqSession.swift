@@ -101,8 +101,14 @@ public enum PqSession {
         }
     }
 
-    public static func acceptTbs(helloBytes: [UInt8], enc: [UInt8], nonce: [UInt8], issuedAt: Int64) throws -> [UInt8] {
-        try lp8(tagAccept) + sha512(helloBytes) + enc + nonce + PqBin.u64be(UInt64(issuedAt))
+    /// `flagship/pq-session-accept/v1|<responder>|<hex SHA-512(SHA-512(hello) || enc || nonce || time)>`.
+    public static func acceptTbs(helloBytes: [UInt8], responder: String, enc: [UInt8], nonce: [UInt8], issuedAt: Int64) -> [UInt8] {
+        PqBin.utf8("\(tagAccept)|\(responder)|" + PqBin.hex(sha512(sha512(helloBytes) + enc + nonce + PqBin.u64be(UInt64(issuedAt)))))
+    }
+
+    /// `flagship/pq-session-finish/v1|<initiatorSubject>|<hex SHA-512(accept || sigR || confirmR)>`.
+    public static func finishTbs(_ tbsA: [UInt8], _ sigR: [UInt8], _ confirmR: [UInt8], initiatorSubject: String) -> [UInt8] {
+        PqBin.utf8("\(tagFinish)|\(initiatorSubject)|" + PqBin.hex(sha512(tbsA + sigR + confirmR)))
     }
 
     struct Prk {
@@ -171,14 +177,14 @@ public enum PqSession {
             let sigR = try PqSession.hexField(o, "signature", PqHybrid.sigLen)
             let confirmR = try PqSession.hexField(o, "confirm", 32)
             if abs(issuedAt - now) > PqSession.maxSkewMs { throw sfail("session-stale") }
-            let tbsA = try PqSession.acceptTbs(helloBytes: helloBytes, enc: enc, nonce: nonce, issuedAt: issuedAt)
+            let tbsA = PqSession.acceptTbs(helloBytes: helloBytes, responder: hello.responder, enc: enc, nonce: nonce, issuedAt: issuedAt)
             do { try PqHybrid.hybridVerify(publicKey: responder.hybridPublicKey, purpose: PqSession.tagAccept, payload: tbsA, signature: sigR) } catch { throw sfail("bad-signature") }
             guard var ss = PqPrim.xwingDecapsulate(enc, seed) else { throw sfail("confirm-failed") }
             let prk = Prk(ss)
             PqBin.zero(&ss)
             let th1 = PqSession.sha512(tbsA + sigR)
             guard PqBin.equal(try prk.confirm("responder-confirm", th1), confirmR) else { throw sfail("confirm-failed") }
-            let tbsF = try PqSession.lp8(PqSession.tagFinish) + PqSession.sha512(tbsA + sigR + confirmR)
+            let tbsF = PqSession.finishTbs(tbsA, sigR, confirmR, initiatorSubject: hello.initiatorSubject)
             let sigI = try sign(PqSession.tagFinish, tbsF)
             guard sigI.count == PqHybrid.sigLen else { throw sfail("bad-signature") }
             let confirmI = try prk.confirm("initiator-confirm", PqSession.sha512(tbsF + sigI))
@@ -227,11 +233,11 @@ public enum PqSession {
         let prk = Prk(e.ss)
         PqBin.zero(&e.ss)
         let n = nonce ?? PqBin.random(32)
-        let tbsA = try acceptTbs(helloBytes: try h.bytes(), enc: e.ct, nonce: n, issuedAt: now)
+        let tbsA = acceptTbs(helloBytes: try h.bytes(), responder: h.responder, enc: e.ct, nonce: n, issuedAt: now)
         let sigR = try sign(tagAccept, tbsA)
         guard sigR.count == PqHybrid.sigLen else { throw sfail("bad-signature") }
         let confirmR = try prk.confirm("responder-confirm", sha512(tbsA + sigR))
-        let tbsF = try lp8(tagFinish) + sha512(tbsA + sigR + confirmR)
+        let tbsF = finishTbs(tbsA, sigR, confirmR, initiatorSubject: h.initiatorSubject)
         return (["v": 1, "enc": PqBin.hex(e.ct), "nonce": PqBin.hex(n), "issuedAt": now, "signature": PqBin.hex(sigR), "confirm": PqBin.hex(confirmR)],
                 Pending(initiator: ini, createdAt: now, tbsF: tbsF, prk: prk))
     }

@@ -128,7 +128,7 @@ const f = phone.finish;
 const ED = 64;
 
 // An accept for the genuine hello, signed by another box key over the genuine bytes.
-const tbsA = pqSessionAcceptTbs(unhex(phone.helloBytesHex), unhex(a.enc), unhex(a.nonce), a.issuedAt);
+const tbsA = pqSessionAcceptTbs(unhex(phone.helloBytesHex), SERVER, unhex(a.enc), unhex(a.nonce), a.issuedAt);
 const otherSig = hex(hybridSign(SIB.secret, TAG_PQ_SESSION_ACCEPT, tbsA, { deterministic: true }));
 
 const helloCases = [

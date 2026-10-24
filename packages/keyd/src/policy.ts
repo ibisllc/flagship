@@ -37,6 +37,10 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   // Signed with both keys only (`sign.hybrid`; HYBRID_ONLY_PURPOSES).
   "flagship/pq-key-binding/v1",
   "flagship/boot-key-binding/v2",
+  // The PQ session (pq-suites.md §13): the box answers as the responder, and opens box-to-box
+  // sessions (access sync) as the initiator. Hybrid only, naming this box.
+  "flagship/pq-session-accept/v1",
+  "flagship/pq-session-finish/v1",
   "flagship/inject/v1",
   "flagship/sibling-hello/v1",
   "flagship/sibling-sync/v1",
@@ -60,7 +64,12 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
 ]);
 
 /** Purposes keyd signs only with both keys (`sign.hybrid`): a classical-only form means nothing. */
-export const HYBRID_ONLY_PURPOSES: ReadonlySet<string> = new Set(["flagship/pq-key-binding/v1", "flagship/boot-key-binding/v2"]);
+export const HYBRID_ONLY_PURPOSES: ReadonlySet<string> = new Set([
+  "flagship/pq-key-binding/v1",
+  "flagship/boot-key-binding/v2",
+  "flagship/pq-session-accept/v1",
+  "flagship/pq-session-finish/v1",
+]);
 
 /** The only workload-key derivations keyd hands to the daemon (both unsalted). */
 export const SWK_HKDF_LABELS: ReadonlySet<string> = new Set(["flagship.pb-manifest.v1", "flagship/peer-backup-key/v1", "flagship/reissue-journal-key/v1"]);
@@ -130,6 +139,13 @@ export function checkSign(
     const parts = new TextDecoder().decode(msg).split("|");
     if (parts.length !== 6 || parts[1] !== "box-stk" || parts[3] !== publicKeyHex || parts[4] !== hybrid?.mldsaPubHex) {
       throw new KeydError("forbidden", "the box binds only its own two keys, as the box");
+    }
+  }
+  if (purpose === "flagship/pq-session-accept/v1" || purpose === "flagship/pq-session-finish/v1") {
+    // tag|<server domain>|<128-hex transcript digest>: one transcript, nothing else.
+    const parts = new TextDecoder().decode(msg).split("|");
+    if (parts.length !== 3 || !/^[a-z0-9][a-z0-9.-]{0,252}$/.test(parts[1]!) || !/^[0-9a-f]{128}$/.test(parts[2]!)) {
+      throw new KeydError("forbidden", "a session signature names a server and one transcript digest");
     }
   }
   if (purpose === "flagship/boot-suspension/v1" || purpose === "flagship/boot-auth/v1") {

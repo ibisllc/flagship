@@ -121,8 +121,13 @@ object PqSession {
         }
     }
 
-    fun acceptTbs(helloBytes: ByteArray, enc: ByteArray, nonce: ByteArray, issuedAt: Long): ByteArray =
-        lp8(TAG_ACCEPT) + sha512(helloBytes) + enc + nonce + u64be(issuedAt)
+    /** `flagship/pq-session-accept/v1|<responder>|<hex SHA-512(SHA-512(hello) || enc || nonce || time)>`. */
+    fun acceptTbs(helloBytes: ByteArray, responder: String, enc: ByteArray, nonce: ByteArray, issuedAt: Long): ByteArray =
+        utf8("$TAG_ACCEPT|$responder|" + PqHex.encode(sha512(sha512(helloBytes) + enc + nonce + u64be(issuedAt))))
+
+    /** `flagship/pq-session-finish/v1|<initiatorSubject>|<hex SHA-512(accept || sigR || confirmR)>`. */
+    fun finishTbs(tbsA: ByteArray, sigR: ByteArray, confirmR: ByteArray, initiatorSubject: String): ByteArray =
+        utf8("$TAG_FINISH|$initiatorSubject|" + PqHex.encode(sha512(tbsA + sigR + confirmR)))
 
     internal class Prk(ss: ByteArray) {
         private val prk: ByteArray
@@ -195,7 +200,7 @@ object PqSession {
                 val sigR = hexField(o, "signature", PqHybrid.HYBRID_SIG_LEN)
                 val confirmR = hexField(o, "confirm", 32)
                 if (kotlin.math.abs(issuedAt - now) > MAX_SKEW_MS) fail("session-stale")
-                val tbsA = acceptTbs(helloBytes, enc, nonce, issuedAt)
+                val tbsA = acceptTbs(helloBytes, hello.responder, enc, nonce, issuedAt)
                 try {
                     PqHybrid.hybridVerify(responder.hybridPublicKey, TAG_ACCEPT, tbsA, sigR)
                 } catch (_: PqHybridException) {
@@ -210,7 +215,7 @@ object PqSession {
                 ss.fill(0)
                 try {
                     if (!MessageDigest.isEqual(prk.confirm("responder-confirm", sha512(tbsA + sigR)), confirmR)) fail("confirm-failed")
-                    val tbsF = lp8(TAG_FINISH) + sha512(tbsA + sigR + confirmR)
+                    val tbsF = finishTbs(tbsA, sigR, confirmR, hello.initiatorSubject)
                     val sigI = sign.sign(TAG_FINISH, tbsF)
                     if (sigI.size != PqHybrid.HYBRID_SIG_LEN) fail("bad-signature")
                     val confirmI = prk.confirm("initiator-confirm", sha512(tbsF + sigI))
@@ -280,11 +285,11 @@ object PqSession {
         val prk = Prk(ss)
         ss.fill(0)
         val n = nonce?.copyOf() ?: random(32)
-        val tbsA = acceptTbs(h.bytes(), enc, n, now)
+        val tbsA = acceptTbs(h.bytes(), h.responder, enc, n, now)
         val sigR = sign.sign(TAG_ACCEPT, tbsA)
         if (sigR.size != PqHybrid.HYBRID_SIG_LEN) fail("bad-signature")
         val confirmR = prk.confirm("responder-confirm", sha512(tbsA + sigR))
-        val tbsF = lp8(TAG_FINISH) + sha512(tbsA + sigR + confirmR)
+        val tbsF = finishTbs(tbsA, sigR, confirmR, h.initiatorSubject)
         val acc = buildJsonObject {
             put("v", 1); put("enc", PqHex.encode(enc)); put("nonce", PqHex.encode(n)); put("issuedAt", now)
             put("signature", PqHex.encode(sigR)); put("confirm", PqHex.encode(confirmR))
