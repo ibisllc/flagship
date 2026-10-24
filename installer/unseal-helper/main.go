@@ -33,6 +33,17 @@
 //     flagship-unseal --identity-pem /boot/flagship-boot-key.pem \
 //     --lease-json lease.json --server-domain <fqdn> --owner-pub-hex <hex>
 //
+//  4. Boot unlock v2 (docs/architecture-v2/pq-suites.md §19): --v2-request
+//     prints the hybrid-signed request body for /api/boot/request and writes a
+//     fresh per-boot reply key to --reply-kem-out; --response-json opens a v2
+//     reply with --reply-kem-key, and --lease-json a v3 lease with
+//     --lease-kem-key, both checking the owner's hybrid key from
+//     --owner-pq-pub-file. --unlock-policy-file decides whether a classical v1
+//     reply or lease is still taken (strict refuses it).
+//
+// Expiry is checked against the clock (or --now-ms) raised to the floor in
+// --time-floor-file, the daemon's last authenticated time.
+//
 // On any failure (bad key, tag mismatch, ctx/nonce/purpose mismatch, malformed
 // input) it writes a message to stderr and exits non-zero. On success it prints
 // the secret hex to stdout (newline-terminated unless --raw is given, which
@@ -40,8 +51,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -86,6 +99,14 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	ownerPubHex := fs.String("owner-pub-hex", "", "the owner key the lease must be signed by, 32 bytes hex; required with --lease-json")
 	nowMs := fs.String("now-ms", "", "the time to check lease expiry against, epoch ms (default: the clock)")
 	raw := fs.Bool("raw", false, "write the raw secret bytes to stdout instead of hex")
+	timeFloorFile := fs.String("time-floor-file", "", "the daemon's last authenticated time (epoch ms); the clock is never read earlier than it")
+	policyFile := fs.String("unlock-policy-file", "", "the box's unlock policy file (strict refuses a classical v1 reply or lease)")
+	ownerPqFile := fs.String("owner-pq-pub-file", "", "the owner's hybrid key (Ed25519 || ML-DSA-65, hex) v2 replies and v3 leases must be signed by")
+	replyKemKey := fs.String("reply-kem-key", "", "the per-boot reply key seed (hex) a v2 reply is sealed to")
+	leaseKemKey := fs.String("lease-kem-key", "", "the lease key seed (hex) a v3 lease is sealed to ('-' for stdin)")
+	bootPqKey := fs.String("boot-pq-key", "", "the boot key's ML-DSA-65 seed (hex); required with --v2-request")
+	v2Request := fs.Bool("v2-request", false, "print a hybrid-signed v2 unlock request body and write a fresh reply key to --reply-kem-out")
+	replyKemOut := fs.String("reply-kem-out", "", "where --v2-request writes the per-boot reply key seed (created, mode 0600)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -99,8 +120,42 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	if sources != 1 {
 		return fmt.Errorf("give exactly one of --identity-pem, --identity-stdin or --identity-priv-hex")
 	}
-	if *identityStdin && (*responseJSON == "-" || *leaseJSON == "-") {
+	if *identityStdin && (*responseJSON == "-" || *leaseJSON == "-" || *leaseKemKey == "-") {
 		return fmt.Errorf("--identity-stdin cannot share stdin with a JSON input")
+	}
+	if *leaseKemKey == "-" && (*responseJSON == "-" || *leaseJSON == "-") {
+		return fmt.Errorf("--lease-kem-key - cannot share stdin with a JSON input")
+	}
+	now := time.Now().UnixMilli()
+	if *nowMs != "" {
+		n, perr := strconv.ParseInt(*nowMs, 10, 64)
+		if perr != nil {
+			return fmt.Errorf("--now-ms is not a number")
+		}
+		now = n
+	}
+	if *timeFloorFile != "" {
+		if f, ok := readTimeFloor(*timeFloorFile); ok && f > now {
+			now = f
+		}
+	}
+	var ownerPq []byte
+	if *ownerPqFile != "" {
+		b, rerr := os.ReadFile(*ownerPqFile)
+		if rerr == nil {
+			pq, derr := decodeHex("owner-pq-pub-file", string(b))
+			if derr != nil || len(pq) != unseal.HybridSigPublicKeyLen {
+				return fmt.Errorf("--owner-pq-pub-file must hold the owner's %d-byte hybrid key as hex", unseal.HybridSigPublicKeyLen)
+			}
+			ownerPq = pq
+		} else if !errors.Is(rerr, os.ErrNotExist) {
+			return fmt.Errorf("reading owner hybrid key: %w", rerr)
+		}
+	}
+	policy := "compat"
+	if *policyFile != "" {
+		b, rerr := os.ReadFile(*policyFile)
+		policy = unseal.ParseUnlockPolicy(b, rerr == nil, ownerPq != nil)
 	}
 	var seed []byte
 	var err error
@@ -152,6 +207,39 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	}()
 
 	switch {
+	case *v2Request:
+		if *serverDomain == "" || *nonceHex == "" || *bootPqKey == "" || *replyKemOut == "" {
+			return fmt.Errorf("--server-domain, --nonce-hex, --boot-pq-key and --reply-kem-out are required with --v2-request")
+		}
+		ml, rerr := readSeedFile("boot-pq-key", *bootPqKey, stdin)
+		if rerr != nil {
+			return rerr
+		}
+		defer wipe(ml)
+		reply := make([]byte, 32)
+		defer wipe(reply)
+		if _, rerr := io.ReadFull(rand.Reader, reply); rerr != nil {
+			return fmt.Errorf("no randomness for the reply key: %w", rerr)
+		}
+		body, serr := unseal.SignRequestV2(seed, ml, *serverDomain, *nonceHex, now, reply, false)
+		if serr != nil {
+			return serr
+		}
+		f, oerr := os.OpenFile(*replyKemOut, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if oerr != nil {
+			return fmt.Errorf("writing the reply key: %w", oerr)
+		}
+		_, werr := io.WriteString(f, hex.EncodeToString(reply)+"\n")
+		if cerr := f.Close(); werr == nil {
+			werr = cerr
+		}
+		if werr != nil {
+			return fmt.Errorf("writing the reply key: %w", werr)
+		}
+		out, _ := json.Marshal(body)
+		_, werr = stdout.Write(append(out, '\n'))
+		return werr
+
 	case *leaseJSON != "":
 		if *serverDomain == "" || *ownerPubHex == "" {
 			return fmt.Errorf("--server-domain and --owner-pub-hex are required with --lease-json")
@@ -163,14 +251,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		if len(owner) != 32 {
 			return fmt.Errorf("--owner-pub-hex must be 32 bytes (64 hex chars), got %d bytes", len(owner))
 		}
-		now := time.Now().UnixMilli()
-		if *nowMs != "" {
-			n, perr := strconv.ParseInt(*nowMs, 10, 64)
-			if perr != nil {
-				return fmt.Errorf("--now-ms is not a number")
-			}
-			now = n
-		}
 		var body []byte
 		var rerr error
 		if *leaseJSON == "-" {
@@ -181,7 +261,16 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		if rerr != nil {
 			return fmt.Errorf("reading lease JSON: %w", rerr)
 		}
-		secret, err = unseal.OpenAutoUnlockLease(body, seed, *serverDomain, owner, now)
+		var leaseKem []byte
+		if *leaseKemKey != "" {
+			k, kerr := readSeedFile("lease-kem-key", *leaseKemKey, stdin)
+			if kerr != nil {
+				return kerr
+			}
+			leaseKem = k
+			defer wipe(leaseKem)
+		}
+		secret, err = unseal.OpenAutoUnlockLeaseAny(body, seed, *serverDomain, owner, ownerPq, leaseKem, policy, now)
 		if err != nil {
 			return err
 		}
@@ -209,6 +298,28 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		if derr != nil {
 			return derr
 		}
+		if perr := unseal.BoxAcceptsVersion(policy, sealed); perr != nil {
+			return perr
+		}
+		if unseal.IsV2Sealed(sealed) {
+			if *replyKemKey == "" || ownerPq == nil || *serverDomain == "" || r.Purpose != "unlock-key" {
+				return fmt.Errorf("a v2 reply needs --reply-kem-key, --owner-pq-pub-file and --server-domain, for unlock-key only")
+			}
+			k, kerr := readSeedFile("reply-kem-key", *replyKemKey, stdin)
+			if kerr != nil {
+				return kerr
+			}
+			defer wipe(k)
+			bootPub := unseal.PublicKeyHex(seed)
+			secret, err = unseal.OpenBootReplyV2(sealed, *serverDomain, bootPub, r.RequestNonceHex, k, ownerPq)
+			if err != nil {
+				return err
+			}
+			// The reply key opens once.
+			_ = os.WriteFile(*replyKemKey, make([]byte, 65), 0o600)
+			_ = os.Remove(*replyKemKey)
+			break
+		}
 		secret, err = unseal.OpenSealedSecretResponse(sealed, seed, r.RequestNonceHex, r.Purpose)
 		if err != nil {
 			return err
@@ -225,6 +336,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		if derr != nil {
 			return derr
 		}
+		if perr := unseal.BoxAcceptsVersion(policy, sealed); perr != nil {
+			return perr
+		}
 		secret, err = unseal.OpenSealedSecretResponse(sealed, seed, *nonceHex, *purpose)
 		if err != nil {
 			return err
@@ -237,6 +351,9 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		sealed, derr := decodeHex("sealed-hex", *sealedHex)
 		if derr != nil {
 			return derr
+		}
+		if perr := unseal.BoxAcceptsVersion(policy, sealed); perr != nil {
+			return perr
 		}
 		secret, err = unseal.OpenSealedFromEd25519Recipient(sealed, seed)
 		if err != nil {
@@ -263,4 +380,49 @@ func decodeHex(name, s string) ([]byte, error) {
 		return nil, fmt.Errorf("--%s is not valid hex: %w", name, err)
 	}
 	return b, nil
+}
+
+func wipe(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+
+// readSeedFile reads a 32-byte seed written as hex (one trailing newline) from path, or stdin for "-".
+func readSeedFile(name, path string, stdin io.Reader) ([]byte, error) {
+	var b []byte
+	var err error
+	if path == "-" {
+		b, err = io.ReadAll(io.LimitReader(stdin, 256))
+	} else {
+		b, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading --%s: %w", name, err)
+	}
+	defer wipe(b)
+	s, derr := decodeHex(name, string(b))
+	if derr != nil {
+		return nil, derr
+	}
+	if len(s) != 32 {
+		wipe(s)
+		return nil, fmt.Errorf("--%s must hold a 32-byte seed as hex", name)
+	}
+	return s, nil
+}
+
+// readTimeFloor reads the floor as the Rust boot client does: decimal epoch ms, at most 16
+// digits, one optional trailing newline; anything else is ignored.
+func readTimeFloor(path string) (int64, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	t := strings.TrimSuffix(string(b), "\n")
+	if t == "" || len(t) > 16 || strings.Trim(t, "0123456789") != "" {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(t, 10, 64)
+	return n, err == nil
 }
