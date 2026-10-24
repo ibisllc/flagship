@@ -28,6 +28,7 @@
 // and the deposit rides the SAME owner IRK mailbox-auth envelope the self-delete /
 // pairing / transfer deposits use (a signed DeviceEndpointClaim).
 
+import { pinnedStk, trustedStk } from "./serverPins.js";
 import { controlApex } from "./apex.js";
 import {
   get as profileGet,
@@ -182,10 +183,9 @@ export async function resolveReplacementContext(args, deps = {}) {
           String(p.serverDomain ?? "").toLowerCase() ===
           String(serverDomain).toLowerCase(),
       );
-      const stk = pod?.identityPubKey;
-      if (typeof stk === "string" && /^[0-9a-f]{64}$/i.test(stk)) {
-        retiredStkPubHex = stk.toLowerCase();
-      }
+      // The retired key is the one this device pinned; `.com`'s word only before a pin.
+      const stk = pinnedStk(serverDomain) ?? (pod ? trustedStk(serverDomain, pod.identityPubKey) : null);
+      if (stk) retiredStkPubHex = stk;
     }
   } catch {
     /* offline / cors — leave STK null; the caller blocks without it */

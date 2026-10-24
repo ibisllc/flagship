@@ -11325,5 +11325,33 @@
   "{0} asks you again before taking a chat from {1}/{2}": {
     "en": "{0} asks you again before taking a chat from {1}/{2}",
     "ctx": "webapp/lib/chatAlerts.js:249"
+  },
+  "This server's key changed. If you did not rebuild it, do not approve anything for it.": {
+    "en": "This server's key changed. If you did not rebuild it, do not approve anything for it.",
+    "ctx": "webapp/lib/firstContact.js:26"
+  },
+  "This server was not built from your recipe. Do not approve it.": {
+    "en": "This server was not built from your recipe. Do not approve it.",
+    "ctx": "webapp/lib/firstContact.js:25"
+  },
+  "Confirmed by Studio": {
+    "en": "Confirmed by Studio",
+    "ctx": "webapp/lib/firstContact.js:76"
+  },
+  "If your machine has a monitor, it is showing this code: {0}": {
+    "en": "If your machine has a monitor, it is showing this code: {0}",
+    "ctx": "webapp/lib/firstContact.js:79"
+  },
+  "This device hasn't checked this server's key yet.": {
+    "en": "This device hasn't checked this server's key yet.",
+    "ctx": "webapp/lib/serverKeyCard.js:62"
+  },
+  "Trust this server": {
+    "en": "Trust this server",
+    "ctx": "webapp/lib/serverKeyCard.js:64"
+  },
+  "Trusted {0}.": {
+    "en": "Trusted {0}.",
+    "ctx": "webapp/lib/serverKeyCard.js:90"
   }
 }

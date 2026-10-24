@@ -11,6 +11,7 @@
 //   "pending"   -> owed: the box hasn't come online yet OR the deposit failed.
 //   "deposited" -> done: the SWK was accepted by `.com` (idempotency marker).
 
+import { sealingStk } from "./serverPins.js";
 import { getSession } from "./state.js";
 import { deriveSwkFromSeed } from "../keystore.js";
 import { depositSwk } from "./bootApproval.js";
@@ -81,6 +82,8 @@ export async function depositSwkIfNeeded(args, deps = {}) {
   const { serverDomain, identityPubKeyHex } = args;
   if (!serverDomain || !identityPubKeyHex) return;
   if (!isSwkDepositPending(serverDomain)) return;
+  // Sealed only to the key this device pinned at the server's first blessing (docs/first-contact.md).
+  if (!sealingStk(serverDomain, identityPubKeyHex)) return;
   const session = getSession();
   if (!session?.umk || !session?.username) return; // locked / signed out
 

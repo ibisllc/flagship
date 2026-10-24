@@ -131,6 +131,8 @@ import { inlineConfirm } from "../lib/modal.js";
 import { formatWhen } from "../lib/dateFormat.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { liveSync } from "../lib/liveSync.js";
+import { podStk } from "../lib/serverPins.js";
+import { wireServerKeyCard } from "../lib/serverKeyCard.js";
 import { healthForServer } from "../lib/serverHealth.js";
 import {
   healthRow,
@@ -485,6 +487,7 @@ export async function renderServerDetail() {
     if (!detailFqdn && body?.serverFqdn) startHealthWatch(body.serverFqdn);
     root.innerHTML = `
       ${body.debugAccess ? debugAccessBannerHtml(body.debugAccess) : ""}
+      <div id="server-key-slot"></div>
       <div class="card">
         <div class="row"><span class="label">${tr("FQDN")}</span><span class="value">${escapeHtml(body.serverFqdn)}</span></div>
         <div class="row"><span class="label">${tr("Username")}</span><span class="value">${escapeHtml(body.username)}</span></div>
@@ -636,6 +639,7 @@ export async function renderServerDetail() {
         canTransfer: true,
       })}
     `;
+    void wireServerKeyCard($("server-key-slot"), body.serverFqdn, detailPod).catch(() => {});
     wireAutoUnlock(body.serverFqdn);
     wireFrontPage(body);
     rememberDeadManView(body.serverFqdn, body.deadMan ?? null);
@@ -760,14 +764,14 @@ async function leaderModel(fqdn, deps = {}) {
   const want = String(fqdn).toLowerCase();
   const pods = accountPods(await (deps.loadAccountPods ?? loadAccountPods)(getSession().username));
   const ranked = rankPods(pods, currentServerOrder());
-  const stks = ranked.map((p) => String(p.identityPubKey ?? "").toLowerCase()).filter(Boolean);
+  const stks = ranked.map((p) => podStk(p)).filter(Boolean);
   const index = ranked.findIndex((p) => podFqdn(p) === want);
   const self = ranked[index];
   const isLeader = index >= 0 && index === ranked.findIndex((p) => isPodOnline(p));
   const demo = deps.demo ?? isDemoProfile(getActiveProfile());
   return {
     pods,
-    stk: String(self?.identityPubKey ?? "").toLowerCase(),
+    stk: self ? podStk(self) : "",
     stks,
     position: index + 1,
     isLeader,

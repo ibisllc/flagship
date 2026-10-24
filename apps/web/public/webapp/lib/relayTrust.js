@@ -25,6 +25,7 @@
 // byte-for-byte (and its Swift/Kotlin mirrors) — the box signed them.
 
 import { verifyWithEd25519Pub, hexToBytes } from "../keystore.js";
+import { podStk } from "./serverPins.js";
 import { serverTrust } from "./serverTrust.js";
 
 const TAG = "flagship/box-trust-status/v1";
@@ -81,7 +82,8 @@ export async function aggregateRelayFailures(pods, deps = {}) {
     if (!ts || typeof ts !== "object" || !ts.report || typeof ts.signatureHex !== "string") {
       continue;
     }
-    const stk = pod?.identityPubKey;
+    // Under the key this device pinned; a pod naming another key is dropped (docs/first-contact.md).
+    const stk = podStk(pod);
     if (!(await verify(ts.report, ts.signatureHex, stk))) continue; // unauthenticated → drop
     const report = ts.report;
     if (report.relayVerdict !== "untrusted") continue;

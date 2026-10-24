@@ -17,7 +17,7 @@ const KNOWN: Record<string, string> = {
   "lib/pairingRelay.js": "ephemeral pairing keys for the QR relay: native-assisted flow needed",
   "lib/buildDraft.js": "sealing a draft to the box: no signing key",
   "lib/watchBootDelegate.js": "opens/seals the boot-only disk-key copy for a watch: no signing key (the account signature comes from the caller)",
-  "lib/enrollment.js": "checks a new server's first-contact proof with the recipe's one-time secret (HMAC): no signing or account key",
+  "lib/enrollment.js": "checks a new server's first-contact proof with the recipe's one-time secret, and Studio's report of the key it saw (HMAC): no signing or account key",
   "lib/serverShare.js": "share envelopes",
   "lib/serverShares.js": "share envelopes",
   "lib/pinLock.js": "local app-lock wrap key (never leaves the browser, signs nothing)",

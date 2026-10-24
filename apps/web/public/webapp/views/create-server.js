@@ -1,6 +1,8 @@
 // Client-side draft composer for a new server. The webapp signs the recipe
 // locally, downloads it, and the user opens that file in Flagship Studio.
 
+import { newEnrollmentSecretHex } from "../lib/enrollment.js";
+import { keepEnrollmentSecret, retrustServer } from "../lib/serverPins.js";
 import { BOX_RELEASE_COMMIT } from "../lib/boxRelease.js";
 import { $, registerView, show } from "../lib/router.js";
 import { boxErrorText, humanError } from "../lib/humanError.js";
@@ -483,6 +485,8 @@ export function downloadRecipe(blobBundle) {
   // writes it to install-blob.json and the box-side gate can verify it. Absent
   // (the production default) ⇒ recipe is byte-identical + carries no grant.
   if (blobBundle.debugGrant) recipe.debugGrant = blobBundle.debugGrant;
+  // First contact: the one-time enrollment secret, an unsigned sibling like `swkHex`.
+  if (blobBundle.enrollmentKeyHex) recipe.enrollmentKeyHex = blobBundle.enrollmentKeyHex;
   const json = JSON.stringify(recipe, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -863,6 +867,15 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   }
 
   const bundle = { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
+  // First contact (docs/first-contact.md): a fresh one-time secret rides beside the signed blob; the
+  // box proves with it that its key was built from this recipe. A new recipe for a name is the
+  // explicit re-trust: whatever this device pinned for it before is forgotten.
+  bundle.enrollmentKeyHex = (opts.newEnrollmentSecretHex ?? newEnrollmentSecretHex)();
+  retrustServer(blob.serverDomain);
+  await (opts.keepEnrollmentSecret ?? keepEnrollmentSecret)(session.umk, blob.serverDomain, {
+    secretHex: bundle.enrollmentKeyHex,
+    serial: onWireBlob.authCode.serial,
+  });
   // SWK + pairing provisioning (secret-free recipe, docs/recipe-delivery-and-remote-install.md).
   //   embed-secrets ON (advanced/offline): bake BOTH the box's deterministic SWK
   //     and the plaintext `pairingOrder` into the recipe as UNSIGNED siblings;

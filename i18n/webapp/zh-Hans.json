@@ -2756,5 +2756,12 @@
   "A machine claiming to run {0}/{1} can start chats with {2} without asking you.": "声称运行 {0}/{1} 的机器无需询问即可与 {2} 发起聊天。",
   "{0} now accepts chats from {1}/{2} without asking": "{0} 现在无需询问即可接受来自 {1}/{2} 的聊天",
   "{0} asks you again before taking a chat from {1}/{2}": "{0} 在接受来自 {1}/{2} 的聊天前会再次询问你",
-  "Chats your apps take without asking": "你的应用无需询问即可接受的聊天"
+  "Chats your apps take without asking": "你的应用无需询问即可接受的聊天",
+  "This server's key changed. If you did not rebuild it, do not approve anything for it.": "此服务器的密钥已更改。如果你没有重新安装它，请不要为它批准任何请求。",
+  "This server was not built from your recipe. Do not approve it.": "此服务器不是用你的配方构建的。请不要批准它。",
+  "Confirmed by Studio": "已由 Studio 确认",
+  "If your machine has a monitor, it is showing this code: {0}": "如果你的机器接有显示器，它正显示这个代码：{0}",
+  "This device hasn't checked this server's key yet.": "此设备尚未核对此服务器的密钥。",
+  "Trust this server": "信任此服务器",
+  "Trusted {0}.": "已信任 {0}。"
 }

@@ -14,6 +14,7 @@
 // Both orders are verified against the account IRK, so they're signed with
 // it (not the admin root).
 
+import { keyChangedError, pinnedStk, sealingStk } from "./serverPins.js";
 import { bytesToHex, hexToBytes, hkdf32, signWithIrk as defaultSignWithIrk } from "../keystore.js";
 import { getSession } from "./state.js";
 import { controlApex } from "./apex.js";
@@ -97,9 +98,12 @@ export async function enableLongLived(serverFqdn, ttlMs = DEFAULT_LONG_TTL_MS, d
   ttlMs = boundedLeaseTtl(ttlMs, deadMan, now);
   if (ttlMs <= 0) throw new Error("the dead-man switch has lapsed: keep this server unlocked first, then turn auto-unlock on");
 
-  // 1. The box's STK, from the directory: the only key the lease may seal for.
-  const stkPubHex = await (deps.boxStk || directoryStk)(serverFqdn, session, { fetch: f, comBase });
-  if (!stkPubHex) throw new Error(`${serverFqdn} isn't in your account's server list`);
+  // 1. The box's pinned STK (docs/first-contact.md): the only key the lease may seal for. The
+  // directory must still list the server, and a different key there is refused.
+  const listed = await (deps.boxStk || directoryStk)(serverFqdn, session, { fetch: f, comBase });
+  if (!listed) throw new Error(`${serverFqdn} isn't in your account's server list`);
+  const stkPubHex = sealingStk(serverFqdn, listed);
+  if (!stkPubHex) throw pinnedStk(serverFqdn) ? keyChangedError(serverFqdn) : Object.assign(new Error("approve this server's next start-up on this device first"), { code: "server-not-pinned" });
 
   // 2. The disk key `.com` holds sealed for this account's IRK.
   const sealedRes = await f(`${comBase}/api/server/${encodeURIComponent(serverFqdn)}/sealed-luks-key`);

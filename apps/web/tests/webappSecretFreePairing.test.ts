@@ -17,6 +17,7 @@ import {
   _internal,
 } from "../public/webapp/lib/bootApproval.js";
 import { unlockSession } from "../public/webapp/lib/state.js";
+import { pinServerKey } from "../public/webapp/lib/serverPins.js";
 
 const sealForBoxStk = (_internal as unknown as {
   sealForBoxStk: (pt: Uint8Array, stkEdPub: Uint8Array) => Promise<Uint8Array>;
@@ -117,6 +118,8 @@ describe("buildPairingOrder + depositPairingOrder (secret-free, default online)"
       return { ok: true, status: 200, text: async () => "" } as Response;
     });
 
+    // Sealed only to the key this device pinned (docs/first-contact.md).
+    pinServerKey(SERVER_ID, toHex(boxPub));
     const res = await depositPairingOrder(
       { serverDomain: SERVER_ID, identityPubKeyHex: toHex(boxPub), pairingOrderJson: built.pairingOrderJson },
       { fetch: fakeFetch as unknown as typeof fetch, now: () => ISSUED_AT },

@@ -19,6 +19,7 @@ import { get as profileGet, set as profileSet } from "../lib/profilesStore.js";
 import { PROVISION_PHASE_TITLES, renderProgressDetail, renderSetupStopped } from "../lib/provisionProgress.js";
 import { clearPendingRck } from "../lib/pendingRck.js";
 import { controlApex } from "../lib/apex.js";
+import { noteServerSeen } from "../lib/studioConfirm.js";
 
 import { tr } from "../lib/i18n.js";
 registerView("view-pending-server", { tab: "home" });
@@ -119,6 +120,7 @@ async function readStatus(order) {
     if (resp.status === 404) return { phase: null };
     if (!resp.ok) return null;
     const body = await resp.json();
+    if (order.fqdn) void noteServerSeen(order.fqdn, body).catch(() => {});
     return {
       phase: typeof body?.phase === "string" ? body.phase : null,
       detail: typeof body?.detail === "string" ? body.detail : null,

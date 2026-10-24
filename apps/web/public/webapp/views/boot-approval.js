@@ -22,6 +22,7 @@ import {
   BOX_REQUEST_TYPES,
 } from "../lib/bootApproval.js";
 import { fetchFirstBootMap } from "../lib/boxInbox.js";
+import { codeBoxHtml, refusalHtml } from "../lib/firstContact.js";
 
 import { tr } from "../lib/i18n.js";
 let inFlightId = null;
@@ -51,10 +52,13 @@ function requestCard(req, firstBootMap = {}) {
   const firstBoot = firstBootMap[req.serverDomain] ?? true;
   // Any type the registry knows how to satisfy is actionable here (the webapp
   // is now at parity with mobile — it answers unlock-key AND entitlement).
-  const actionable = !!BOX_REQUEST_TYPES[req.purpose];
+  const refused = !!req.firstContact?.refusal;
+  const actionable = !!BOX_REQUEST_TYPES[req.purpose] && !refused;
   const busy = inFlightId === req.id;
-  const action = actionable
-    ? `<button class="primary full-width mt-2" data-approve-id="${escapeHtml(req.id)}" ${busy ? "disabled" : ""}>
+  const action = refused
+    ? refusalHtml(req.firstContact)
+    : actionable
+    ? `${codeBoxHtml(req.firstContact)}<button class="primary full-width mt-2" data-approve-id="${escapeHtml(req.id)}" ${busy ? "disabled" : ""}>
          ${busy ? tr("Working…") : tr("Yes, this is my box")}
        </button>`
     : `<p class="faint-sm mt-2">${tr("Approve this request from your phone.")}</p>`;

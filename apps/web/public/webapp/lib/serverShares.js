@@ -8,6 +8,7 @@
 // apex, boot, sensitiveSign(bytes), accountSign(bytes), boxFetch(fqdn, path,
 // init) (A's own session on the box) and openDiskKey(serverDomain).
 
+import { noteKeyChanged, pinnedStk, trustedStk } from "./serverPins.js";
 import * as ss from "./serverShare.js";
 import * as si from "./serviceInvite.js";
 import { controlApex, bootOrigin } from "./apex.js";
@@ -130,9 +131,12 @@ export async function createShareOffer(args, deps = {}) {
   const label = ss.normalizeShareLabel(args.label);
   if (!label) throw new ShareError(tr("Give them a name of up to 64 characters, without |."), "bad-label");
   if (args.level !== "view" && args.level !== "manage") throw new ShareError(tr("Pick what they can do."), "bad-level");
-  const stkPubHex = lower(args.stkPubHex);
-  if (!/^[0-9a-f]{64}$/.test(stkPubHex)) throw new ShareError(tr("This server hasn't published its key yet. Try again once it's online."), "no-stk");
   const serverDomain = lower(args.serverDomain);
+  // The offer names the key this device pinned; `.com`'s word only before a pin (docs/first-contact.md).
+  const offered = lower(args.stkPubHex);
+  const stkPubHex = trustedStk(serverDomain, offered) ?? "";
+  if (pinnedStk(serverDomain) && !stkPubHex) throw new ShareError(tr("This server's key changed. If you did not rebuild it, do not approve anything for it."), "key-changed");
+  if (!/^[0-9a-f]{64}$/.test(stkPubHex)) throw new ShareError(tr("This server hasn't published its key yet. Try again once it's online."), "no-stk");
   const unlockAtBoot = !!args.unlockAtBoot;
   const seeAppData = !!args.seeAppData;
   const now = d.now();
@@ -995,6 +999,11 @@ export async function approveShareStartup(entry, req, deps = {}) {
   if (!offer) throw new ShareError(tr("Couldn't confirm which server this is."), "no-offer");
   if (lower(req?.stkPub) !== offer.stkPubHex) {
     throw new ShareError(tr("This start-up request doesn't come from the server that was shared with you."), "wrong-stk");
+  }
+  const pin = pinnedStk(entry.serverDomain);
+  if (pin && pin !== offer.stkPubHex) {
+    noteKeyChanged(entry.serverDomain, offer.stkPubHex);
+    throw new ShareError(tr("This server's key changed. If you did not rebuild it, do not approve anything for it."), "key-changed");
   }
   const member = await memberKey(d, entry.shareId);
   const keyPath = `/api/boot/share/key/${lower(entry.serverDomain)}`;
