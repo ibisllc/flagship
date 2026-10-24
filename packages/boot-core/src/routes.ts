@@ -83,6 +83,25 @@ export interface BootRouteDeps {
   /** Skip the notify push if one fired for this row within this window. */
   pushDedupMs?: number;
   now?: () => number;
+  /**
+   * Boot unlock v2: parks a request's `pq` extension (reply key + the boot key's hybrid
+   * signature) for the phone. Absent: a v2 request is parked without it, so phones see v1.
+   */
+  requestPq?: { put(serverDomain: string, nonceHex: string, pqJson: string, expiresAt: number): Promise<void> };
+}
+
+const HEX_KEM_PUB = /^[0-9a-f]{2432}$/;
+const HEX_HYBRID_SIG = /^[0-9a-f]{6746}$/;
+
+/** The v2 extension's shape (the phone verifies the signature under the boot key's hybrid key). */
+function requestPqJson(pq: unknown): string | null | "bad" {
+  if (pq === undefined || pq === null) return null;
+  if (typeof pq !== "object" || Array.isArray(pq)) return "bad";
+  const o = pq as Record<string, unknown>;
+  if (Object.keys(o).sort().join(",") !== "replyKemPubHex,signature,v" || o.v !== 2) return "bad";
+  if (typeof o.replyKemPubHex !== "string" || !HEX_KEM_PUB.test(o.replyKemPubHex)) return "bad";
+  if (typeof o.signature !== "string" || !HEX_HYBRID_SIG.test(o.signature)) return "bad";
+  return JSON.stringify({ v: 2, replyKemPubHex: o.replyKemPubHex, signature: o.signature });
 }
 
 export interface BootResponse {
@@ -491,6 +510,7 @@ async function handlePostRequest(
     request?: Record<string, unknown>;
     signature?: unknown;
     deviceInfo?: unknown;
+    pq?: unknown;
   };
   const r = b?.request ?? {};
   if (
@@ -507,6 +527,10 @@ async function handlePostRequest(
   if (!HEX_NONCE.test(r.nonce.toLowerCase())) return { status: 400, body: { error: "nonce must be 32 bytes hex" } };
   if (!HEX64.test(r.stkPub.toLowerCase())) return { status: 400, body: { error: "stkPub must be 32 bytes hex" } };
   if (!HEX128.test(b.signature.toLowerCase())) return { status: 400, body: { error: "signature must be 64 bytes hex" } };
+  const pqJson = requestPqJson(b.pq);
+  if (pqJson === "bad" || (pqJson !== null && r.purpose !== "unlock-key")) {
+    return { status: 400, body: { error: "malformed v2 extension" } };
+  }
 
   // Rules 2-4 — box-STK gate bound to (POST, this path, serverDomain).
   const auth = await gate(deps.gate, { role: "box", serverDomain: r.serverDomain, method: "POST", path, allowBootKey: true }, authHeader);
@@ -584,6 +608,10 @@ async function handlePostRequest(
     consumedAt: null,
   });
 
+  if (pqJson !== null && deps.requestPq) {
+    await deps.requestPq.put(r.serverDomain, nonceHex, pqJson, now() + ttlMs);
+  }
+
   // Idempotency + per-nonce dedup. A duplicate nonce is NOT an error — it is
   // the box's HEARTBEAT re-announcing the SAME parked request (same nonce). A
   // heartbeat must (a) refresh the row's TTL so a short DEFAULT_MAILBOX_TTL_MS
@@ -612,7 +640,12 @@ async function handlePostRequest(
       // Forward the box's STK-signed SecretRequest verbatim — the
       // identity plane re-verifies it against its directory (does NOT
       // trust the worker's echo) before pushing.
-      signedRequest: { request: r, signature: b.signature, ...(b.deviceInfo ? { deviceInfo: b.deviceInfo } : {}) },
+      signedRequest: {
+        request: r,
+        signature: b.signature,
+        ...(b.deviceInfo ? { deviceInfo: b.deviceInfo } : {}),
+        ...(pqJson !== null ? { pq: JSON.parse(pqJson) as unknown } : {}),
+      },
       purpose: r.purpose as SecretMailboxPurpose,
     })
     .catch(() => {});

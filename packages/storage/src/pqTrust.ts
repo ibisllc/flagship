@@ -25,6 +25,16 @@ export interface BootKeyHybridRecord {
   storedAt: number;
 }
 
+/** The boot key's v2 material as stored (migration 0114); `wireJson` is the verified wire. */
+export interface BootPqRecord {
+  serverDomain: string;
+  stkPubHex: string;
+  bootKeyPubHex: string;
+  issuedAt: number;
+  wireJson: string;
+  storedAt: number;
+}
+
 export interface PolicyStateRecord {
   scopeKind: string;
   scopeId: string;
@@ -67,6 +77,12 @@ export interface PqTrustStorage {
   putBinding(rec: PqKeyBindingRecord): Promise<PqPutResult>;
   getBootHybrid(serverDomain: string): Promise<BootKeyHybridRecord | null>;
   putBootHybrid(rec: BootKeyHybridRecord): Promise<void>;
+  /** Boot unlock v2 material (0114): the newest `issuedAt` per server wins. */
+  getBootPq?(serverDomain: string): Promise<BootPqRecord | null>;
+  putBootPq?(rec: BootPqRecord): Promise<void>;
+  /** The v2 extension of a parked unlock request (0114). */
+  putRequestPq?(serverDomain: string, nonceHex: string, pqJson: string, expiresAt: number): Promise<void>;
+  getRequestPq?(serverDomain: string, nonceHex: string, now: number): Promise<string | null>;
   getPolicy(scopeKind: string, scopeId: string): Promise<PolicyStateRecord | null>;
   putPolicy(rec: PolicyStateRecord): Promise<void>;
   /** The installation policy and the box-stk binding for a server, in one round trip. */
@@ -209,6 +225,49 @@ export class D1PqTrustStorage implements PqTrustStorage {
       .run();
   }
 
+  async getBootPq(serverDomain: string) {
+    const r = await this.db
+      .prepare("SELECT * FROM server_boot_key_pq WHERE server_domain = ?1")
+      .bind(serverDomain.toLowerCase())
+      .first<{ server_domain: string; stk_pub_hex: string; boot_key_pub_hex: string; issued_at: number; wire_json: string; stored_at: number }>();
+    return r
+      ? { serverDomain: r.server_domain, stkPubHex: r.stk_pub_hex, bootKeyPubHex: r.boot_key_pub_hex, issuedAt: r.issued_at, wireJson: r.wire_json, storedAt: r.stored_at }
+      : null;
+  }
+
+  async putBootPq(rec: BootPqRecord) {
+    await this.db
+      .prepare(
+        `INSERT INTO server_boot_key_pq (server_domain, stk_pub_hex, boot_key_pub_hex, issued_at, wire_json, stored_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(server_domain) DO UPDATE SET
+           stk_pub_hex = excluded.stk_pub_hex, boot_key_pub_hex = excluded.boot_key_pub_hex, issued_at = excluded.issued_at,
+           wire_json = excluded.wire_json, stored_at = excluded.stored_at
+         WHERE excluded.issued_at > server_boot_key_pq.issued_at OR excluded.stk_pub_hex != server_boot_key_pq.stk_pub_hex
+            OR excluded.boot_key_pub_hex != server_boot_key_pq.boot_key_pub_hex`,
+      )
+      .bind(rec.serverDomain.toLowerCase(), rec.stkPubHex.toLowerCase(), rec.bootKeyPubHex.toLowerCase(), rec.issuedAt, rec.wireJson, rec.storedAt)
+      .run();
+  }
+
+  async putRequestPq(serverDomain: string, nonceHex: string, pqJson: string, expiresAt: number) {
+    await this.db
+      .prepare(
+        `INSERT INTO boot_request_pq (server_domain, request_nonce_hex, pq_json, expires_at) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(server_domain, request_nonce_hex) DO UPDATE SET expires_at = excluded.expires_at`,
+      )
+      .bind(serverDomain.toLowerCase(), nonceHex.toLowerCase(), pqJson, expiresAt)
+      .run();
+  }
+
+  async getRequestPq(serverDomain: string, nonceHex: string, now: number) {
+    const r = await this.db
+      .prepare("SELECT pq_json FROM boot_request_pq WHERE server_domain = ?1 AND request_nonce_hex = ?2 AND expires_at > ?3")
+      .bind(serverDomain.toLowerCase(), nonceHex.toLowerCase(), now)
+      .first<{ pq_json: string }>();
+    return r?.pq_json ?? null;
+  }
+
   async getPolicy(scopeKind: string, scopeId: string) {
     return policyOf(
       await this.db.prepare(`SELECT ${POLICY_COLS} FROM assurance_policy_states WHERE scope_kind = ?1 AND scope_id = ?2`).bind(scopeKind, scopeId).first<PolicyRow>(),
@@ -333,6 +392,8 @@ function changeOf(r: ChangeRow): PolicyChangeRecord {
 export class InMemoryPqTrustStorage implements PqTrustStorage {
   private readonly bindings = new Map<string, PqKeyBindingRecord>();
   private readonly boot = new Map<string, BootKeyHybridRecord>();
+  private readonly bootPq = new Map<string, BootPqRecord>();
+  private readonly requestPq = new Map<string, { pqJson: string; expiresAt: number }>();
   private readonly policies = new Map<string, PolicyStateRecord>();
   private readonly changes = new Map<string, PolicyChangeRecord[]>();
 
@@ -362,6 +423,29 @@ export class InMemoryPqTrustStorage implements PqTrustStorage {
       bootKeyPubHex: rec.bootKeyPubHex.toLowerCase(),
       hybridSignatureHex: rec.hybridSignatureHex.toLowerCase(),
     });
+  }
+
+  async getBootPq(serverDomain: string) {
+    const r = this.bootPq.get(serverDomain.toLowerCase());
+    return r ? { ...r } : null;
+  }
+
+  async putBootPq(rec: BootPqRecord) {
+    const key = rec.serverDomain.toLowerCase();
+    const cur = this.bootPq.get(key);
+    const next = { ...rec, serverDomain: key, stkPubHex: rec.stkPubHex.toLowerCase(), bootKeyPubHex: rec.bootKeyPubHex.toLowerCase() };
+    if (!cur || next.issuedAt > cur.issuedAt || next.stkPubHex !== cur.stkPubHex || next.bootKeyPubHex !== cur.bootKeyPubHex) this.bootPq.set(key, next);
+  }
+
+  async putRequestPq(serverDomain: string, nonceHex: string, pqJson: string, expiresAt: number) {
+    const key = `${serverDomain.toLowerCase()}|${nonceHex.toLowerCase()}`;
+    const cur = this.requestPq.get(key);
+    this.requestPq.set(key, { pqJson: cur?.pqJson ?? pqJson, expiresAt });
+  }
+
+  async getRequestPq(serverDomain: string, nonceHex: string, now: number) {
+    const r = this.requestPq.get(`${serverDomain.toLowerCase()}|${nonceHex.toLowerCase()}`);
+    return r && r.expiresAt > now ? r.pqJson : null;
   }
 
   async getPolicy(scopeKind: string, scopeId: string) {
