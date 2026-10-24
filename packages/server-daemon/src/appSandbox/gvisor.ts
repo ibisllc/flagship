@@ -19,6 +19,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import type { CommandRunner } from "../serviceRunner.js";
+import { activeEngine, type EngineKind } from "../engine/engine.js";
 
 export const GVISOR_RELEASE = "20260921.0";
 
@@ -31,6 +32,14 @@ export const GVISOR_SHA512: Readonly<Record<"x86_64" | "aarch64", string>> = {
 export const GVISOR_RUNTIME = "runsc";
 export const GVISOR_BASE_DIR = "/usr/local/lib/flagship-gvisor";
 export const DOCKER_DAEMON_JSON = "/etc/docker/daemon.json";
+/** Podman reads every file in this directory; ours names runsc and nothing else. */
+export const PODMAN_RUNTIME_CONF = "/etc/containers/containers.conf.d/50-flagship-runsc.conf";
+
+/** The containers.conf drop-in that registers runsc with Podman (paths only; Podman adds its cgroup flag). */
+export function podmanRuntimeConf(runsc: string): string {
+  if (!/^\/[A-Za-z0-9._\/-]+$/.test(runsc)) throw new Error(`bad runsc path ${JSON.stringify(runsc)}`);
+  return `# Written by the Flagship daemon: gVisor for every app (docs/app-runtimes.md §5.1).\n[engine.runtimes]\n${GVISOR_RUNTIME} = ["${runsc}"]\n`;
+}
 
 export function gvisorArch(nodeArch: string = process.arch): "x86_64" | "aarch64" | null {
   return nodeArch === "x64" ? "x86_64" : nodeArch === "arm64" ? "aarch64" : null;
@@ -76,6 +85,10 @@ export interface EnsureGvisorOptions {
   probeImage: string;
   baseDir?: string;
   daemonJson?: string;
+  /** Podman's drop-in path (tests). */
+  podmanConf?: string;
+  /** Which engine to register with (default: the box's active engine). */
+  engine?: EngineKind;
   arch?: "x86_64" | "aarch64" | null;
   /** Directory URLs tried before upstream (see gvisorMirrorBases). */
   mirrors?: readonly string[];
@@ -108,6 +121,12 @@ export async function ensureGvisor(o: EnsureGvisorOptions): Promise<GvisorResult
       await install(o, arch, base, dir, want);
     }
     const version = (await o.cmd.capture(runsc, ["--version"], { timeoutMs: 15_000 })).stdout.split("\n")[0]?.trim() || GVISOR_RELEASE;
+    if ((o.engine ?? activeEngine()) === "podman") {
+      await registerWithPodman(o, runsc);
+      await probe(o);
+      await pruneOtherReleases(base);
+      return { ok: true, version, runscPath: runsc };
+    }
     // With docker's systemd cgroup driver, runsc may need to be told so; try
     // as installed first, and keep whichever runs an app-shaped container.
     const driver = (await o.cmd.capture("docker", ["info", "--format", "{{.CgroupDriver}}"], { timeoutMs: 15_000 }).catch(() => ({ stdout: "" }))).stdout.trim();
@@ -236,6 +255,16 @@ async function registerWithDocker(o: EnsureGvisorOptions, runsc: string, runtime
     await sleep(1_000);
   }
   throw new Error("Docker didn't pick up the gVisor runtime");
+}
+
+async function registerWithPodman(o: EnsureGvisorOptions, runsc: string): Promise<void> {
+  const path = o.podmanConf ?? PODMAN_RUNTIME_CONF;
+  const want = podmanRuntimeConf(runsc);
+  const have = await readFile(path, "utf8").catch(() => null);
+  if (have === want) return;
+  await mkdir(join(path, ".."), { recursive: true });
+  await writeFile(`${path}.flagship-tmp`, want, { mode: 0o644 });
+  await rename(`${path}.flagship-tmp`, path);
 }
 
 /**

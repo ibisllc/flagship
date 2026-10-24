@@ -10,6 +10,8 @@
  */
 import type { CommandRunner } from "../serviceRunner.js";
 import { EGRESS_NETWORKS, type EgressNetworkSpec } from "./policy.js";
+import { PODMAN_ICC_LABEL, activeEngine } from "../engine/engine.js";
+import { installIccIsolation, type FirewallBridge } from "./firewall.js";
 
 export const BRIDGE_NAME_OPTION = "com.docker.network.bridge.name";
 export const ICC_OPTION = "com.docker.network.bridge.enable_icc";
@@ -55,6 +57,35 @@ interface RawNetwork {
   Containers?: Record<string, { Name?: string; IPv4Address?: string }> | null;
 }
 
+/** `podman network inspect --format {{json .}}` (netavark's lower-case shape). */
+interface RawPodmanNetwork {
+  name?: string;
+  id?: string;
+  network_interface?: string;
+  internal?: boolean;
+  labels?: Record<string, string> | null;
+  subnets?: Array<{ subnet?: string; gateway?: string }> | null;
+  containers?: Record<string, { name?: string; interfaces?: Record<string, { subnets?: Array<{ ipnet?: string }> | null }> | null }> | null;
+}
+
+function parsePodmanNetwork(n: RawPodmanNetwork): NetworkInfo | null {
+  if (!n.id || !n.name) return null;
+  const subnets = n.subnets ?? [];
+  return {
+    id: n.id,
+    name: n.name,
+    bridge: n.network_interface ?? "",
+    internal: n.internal === true,
+    icc: n.labels?.[PODMAN_ICC_LABEL] !== "false",
+    subnets: subnets.map((c) => c.subnet ?? "").filter((x) => /^\d+\.\d+\.\d+\.\d+\/\d+$/.test(x)),
+    gateways: subnets.map((c) => c.gateway ?? "").filter((g) => /^\d+\.\d+\.\d+\.\d+$/.test(g)),
+    containers: Object.values(n.containers ?? {}).map((c) => {
+      const first = Object.values(c.interfaces ?? {})[0]?.subnets?.[0]?.ipnet ?? "";
+      return { name: c.name ?? "", ipv4: first.split("/")[0]! };
+    }),
+  };
+}
+
 export function parseNetworkInspect(json: string): NetworkInfo | null {
   let raw: RawNetwork | RawNetwork[];
   try {
@@ -63,6 +94,7 @@ export function parseNetworkInspect(json: string): NetworkInfo | null {
     return null;
   }
   const n = Array.isArray(raw) ? raw[0] : raw;
+  if (n && !n.Id && typeof (n as RawPodmanNetwork).id === "string") return parsePodmanNetwork(n as RawPodmanNetwork);
   if (!n?.Id || !n.Name) return null;
   const configs = n.IPAM?.Config ?? [];
   return {
@@ -127,9 +159,15 @@ export async function ensureSandboxNetwork(
  * packages: the old, unfenced behaviour.
  */
 export async function ensureUnfencedNetworks(cmd: CommandRunner, log: (m: string) => void = () => {}): Promise<void> {
+  const isolated: FirewallBridge[] = [];
   for (const spec of EGRESS_NETWORKS) {
-    await ensureSandboxNetwork(cmd, { ...spec, internal: false }, log).catch((e) => {
+    const info = await ensureSandboxNetwork(cmd, { ...spec, internal: false }, log).catch((e) => {
       log(`[egress] could not ensure ${spec.network}: ${(e as Error).message}`);
+      return null;
     });
+    if (info && !spec.icc && info.bridge) isolated.push({ kind: spec.kind, bridge: info.bridge });
+  }
+  if (activeEngine() === "podman" && isolated.length > 0) {
+    await installIccIsolation(cmd, isolated).catch((e) => log(`[egress] containers on one bridge are NOT isolated: ${(e as Error).message}`));
   }
 }

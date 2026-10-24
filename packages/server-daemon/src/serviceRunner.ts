@@ -1,3 +1,4 @@
+import { engineArgv } from "./engine/engine.js";
 import { spawn } from "node:child_process";
 import { checkBuildContextDockerfile } from "./buildmodes/dockerfilePolicy.js";
 import { prepareRuntimeContext } from "./runtimes/buildContext.js";
@@ -261,8 +262,9 @@ function armTimeout(
 }
 
 export const realCommandRunner: CommandRunner = {
-  run(cmd, args, opts) {
+  run(cmd0, args0, opts) {
     return new Promise((resolve, reject) => {
+      const [cmd, args] = engineArgv(cmd0, args0);
       const p = spawn(cmd, args, { stdio: "inherit", ...(opts?.env ? { env: opts.env } : {}) });
       const timer = armTimeout(p, opts, reject);
       armSignal(p, opts);
@@ -279,8 +281,9 @@ export const realCommandRunner: CommandRunner = {
       });
     });
   },
-  capture(cmd, args, opts) {
+  capture(cmd0, args0, opts) {
     return new Promise((resolve, reject) => {
+      const [cmd, args] = engineArgv(cmd0, args0);
       const p = spawn(cmd, args, { stdio: [opts?.input !== undefined ? "pipe" : "ignore", "pipe", "pipe"], ...(opts?.env ? { env: opts.env } : {}) });
       if (opts?.input !== undefined) {
         p.stdin?.on("error", () => {});

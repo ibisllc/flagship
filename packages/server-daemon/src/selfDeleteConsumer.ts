@@ -1,3 +1,4 @@
+import { engineArgv } from "./engine/engine.js";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { writeFileDurable } from "./durableFile.js";
@@ -332,7 +333,7 @@ export async function realWipeContent(
 ): Promise<void> {
   const run = async (cmd: string, args: string[]): Promise<void> => {
     try {
-      await execFileP(cmd, args, { timeout: 120_000 });
+      await execFileP(...engineArgv(cmd, args), { timeout: 120_000 });
     } catch (e) {
       console.log(`[self-delete] ${cmd} ${args.join(" ")} failed (continuing): ${(e as Error).message}`);
     }
@@ -341,19 +342,19 @@ export async function realWipeContent(
   await run("docker", ["compose", "-f", composePath, "down", "-v", "--remove-orphans"]);
   await removeFilesVolumes({
     run: async (cmd, args) => {
-      await execFileP(cmd, args, { timeout: 120_000 });
+      await execFileP(...engineArgv(cmd, args), { timeout: 120_000 });
     },
-    capture: async (cmd, args) => (await execFileP(cmd, args, { timeout: 120_000 })).stdout,
+    capture: async (cmd, args) => (await execFileP(...engineArgv(cmd, args), { timeout: 120_000 })).stdout,
   });
   // The files folders' disk images (appQuota/loopVolumes.ts) hold the
   // apps' files: removing the volumes leaves them, so unmount and delete.
   await new LoopVolumes(
     {
       run: async (cmd, args) => {
-        await execFileP(cmd, args, { timeout: 120_000 });
+        await execFileP(...engineArgv(cmd, args), { timeout: 120_000 });
       },
       capture: async (cmd, args) => {
-        const r = await execFileP(cmd, args, { timeout: 120_000 });
+        const r = await execFileP(...engineArgv(cmd, args), { timeout: 120_000 });
         return { stdout: r.stdout, stderr: r.stderr };
       },
     },

@@ -12,6 +12,7 @@
 import { rename, stat } from "node:fs/promises";
 import type { CommandRunner } from "./serviceRunner.js";
 import { repairSystemPackages, type SystemRepairOptions } from "./systemRepair.js";
+import { activeEngine } from "./engine/engine.js";
 
 export const DOCKER_NETWORK_DB = "/var/lib/docker/network/files/local-kv.db";
 
@@ -60,6 +61,7 @@ export function wakeDocker(o: WakeDockerOptions): Promise<DockerHealth> {
 async function wake(o: WakeDockerOptions): Promise<DockerHealth> {
   const log = o.log ?? (() => {});
   if (await dockerAnswers(o.cmd)) return { ok: true };
+  if (activeEngine() === "podman") return await wakePodman(o, log);
   await startUnits(o.cmd);
   if (await waitUp(o)) return { ok: true };
 
@@ -85,6 +87,25 @@ async function wake(o: WakeDockerOptions): Promise<DockerHealth> {
     }
   }
   return { ok: false, reason: describe(await dockerFailure(o.cmd)) };
+}
+
+/**
+ * Podman has no daemon to start: it either runs or its files are damaged. The one repair is the
+ * same as Docker's (reinstall damaged packages); its storage is never touched.
+ */
+async function wakePodman(o: WakeDockerOptions, log: (m: string) => void): Promise<DockerHealth> {
+  const why = await o.cmd.capture("docker", ["info", "--format", "{{.ServerVersion}}"], { timeoutMs: 15_000 }).then(
+    () => "",
+    (e: Error & { stderr?: string }) => (e.stderr || e.message).replace(/\s+/g, " ").slice(0, 300),
+  );
+  if (BINARY_BROKEN.test(why)) {
+    log("[engine] podman can't load; checking the system's files for damage");
+    const r = await (o.repairSystem ?? repairSystemPackages)({ cmd: o.cmd, log });
+    if (r.ok && r.packages.length > 0 && (await dockerAnswers(o.cmd))) {
+      return { ok: true, repaired: capitalize(`damaged system files were reinstalled (${r.packages.join(", ")})`) };
+    }
+  }
+  return { ok: false, reason: `Podman doesn't run on this server${why ? `: ${why}` : ""}` };
 }
 
 async function startUnits(cmd: Required<CommandRunner>): Promise<void> {

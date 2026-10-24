@@ -1,3 +1,4 @@
+import { engineArgv } from "./engine/engine.js";
 import { spawn } from "node:child_process";
 import { createWriteStream, createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
@@ -67,7 +68,7 @@ const DEFAULT_TIMEOUT_MS = 20 * 60_000; // dumps of a large store can be slow
 export const realVolumeDumpRunner: VolumeDumpRunner = {
   run(cmd, args) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
+      const p = spawn(...engineArgv(cmd, args), { stdio: ["ignore", "inherit", "inherit"] });
       const t = armTimeout(p, reject);
       p.on("error", (e) => {
         clearTimeout(t);
@@ -81,7 +82,7 @@ export const realVolumeDumpRunner: VolumeDumpRunner = {
   },
   capture(cmd, args) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+      const p = spawn(...engineArgv(cmd, args), { stdio: ["ignore", "pipe", "pipe"] });
       let stdout = "";
       let stderr = "";
       const t = armTimeout(p, reject);
@@ -103,7 +104,7 @@ export const realVolumeDumpRunner: VolumeDumpRunner = {
     const tmp = `${outPath}.partial`;
     await new Promise<void>((resolve, reject) => {
       const out = createWriteStream(tmp, { mode: 0o600 });
-      const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+      const p = spawn(...engineArgv(cmd, args), { stdio: ["ignore", "pipe", "pipe"] });
       let stderr = "";
       const t = armTimeout(p, reject);
       p.stderr?.on("data", (d) => (stderr += d.toString()));
@@ -129,7 +130,7 @@ export const realVolumeDumpRunner: VolumeDumpRunner = {
   },
   runFromFile(cmd, args, inPath) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: ["pipe", "inherit", "pipe"] });
+      const p = spawn(...engineArgv(cmd, args), { stdio: ["pipe", "inherit", "pipe"] });
       let stderr = "";
       const t = armTimeout(p, reject);
       p.stderr?.on("data", (d) => (stderr += d.toString()));
