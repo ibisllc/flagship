@@ -2,9 +2,11 @@
 // docs/watch-boot-approval-without-unlock.md). Beside the watch-delegate signing key this device
 // keeps a boot-only X25519 key that never leaves the Keystore. Per server, an owner opt-in deposits
 // a copy of the disk key sealed to it (`flagship/watch-boot-delegate/v1`, attested by the account
-// key) with the boot worker. A watch Approve then needs no account key: read the server's pending
-// start-up from /pods (the read token needs no prompt), fetch this watch's copy, open it with the
-// boot-only key, seal it for the box and post the answer signed by the delegate. The boot worker
+// key) with the boot worker, and keeps the server's STK as derived from the account key then. A
+// watch Approve then needs no account key: learn the server's waiting start-up, fetch this watch's
+// copy, open it with the boot-only key, seal it for the PINNED STK only (never one `.com` names)
+// and post the answer signed by the delegate. The waiting request is read with the account read
+// token and must carry the box's signature under that pinned STK. The boot worker
 // refuses both reads and answers with 423 while the server is locked: a locked server is started
 // from the phone with the account key.
 
@@ -25,10 +27,45 @@ interface WatchBootKeyStore {
     /** The key, minted on first use. Throws when the secure hardware can't keep one. */
     fun loadOrCreate(): BootDecryptKey
     fun existing(): BootDecryptKey?
-    fun copies(): Map<String, Long>
-    fun setCopy(serverDomain: String, expiresAt: Long?)
+    fun copies(): Map<String, WatchBootCopy>
+    fun setCopy(serverDomain: String, copy: WatchBootCopy?)
     /** Forget the key and every copy (the delegate was turned off or the device removed). */
     fun clear()
+}
+
+/** A copy the boot worker holds for this device, and the server's STK pinned when it was made. */
+data class WatchBootCopy(val expiresAt: Long, val stkPubHex: String)
+
+/** A start-up the server is waiting on, as the box signed it. [stkPubHex] is what the source says
+ *  the box's key is: it must equal the pinned one, and the signature must verify under the pin. */
+data class WaitingStartUp(
+    val serverDomain: String,
+    val nonceHex: String,
+    val stkPubHex: String,
+    val issuedAt: Long,
+    val signatureHex: String,
+    val expiresAt: Long,
+)
+
+/** Where the watch path learns of a waiting start-up: nothing it says is trusted until verified. */
+fun interface StartUpSource {
+    suspend fun waiting(serverDomain: String, requestId: String?): WaitingStartUp?
+}
+
+/** `.com`'s GET /api/users/:u/secret-requests, read with the account read token (no prompt). */
+class ReadTokenStartUpSource(
+    private val mailbox: SecretMailboxClient,
+    private val username: String,
+) : StartUpSource {
+    override suspend fun waiting(serverDomain: String, requestId: String?): WaitingStartUp? {
+        val mine = mailbox.readSecretRequests(username).requests.filter {
+            it.serverDomain.equals(serverDomain, ignoreCase = true) && it.purpose == SecretPurpose.UNLOCK_KEY.wire
+        }
+        val nonce = requestId?.substringAfterLast('#')
+        val r = (if (nonce != null) mine.firstOrNull { it.requestNonceHex.equals(nonce, ignoreCase = true) } else null)
+            ?: mine.maxByOrNull { it.issuedAt } ?: return null
+        return WaitingStartUp(r.serverDomain, r.requestNonceHex, r.stkPub, r.issuedAt, r.requestSignature, r.expiresAt)
+    }
 }
 
 /** The owner's per-server opt-in: deposit a copy, or take every copy away. */
@@ -36,6 +73,8 @@ class WatchBootOptIn(
     private val mailbox: SecretMailboxClient,
     private val irk: IrkAccess,
     private val store: WatchBootKeyStore,
+    /** The server's STK derived from this device's account key (the pin the copy is answered with). */
+    private val pinnedStk: (serverDomain: String) -> ByteArray,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val nonceGen: () -> ByteArray = { SecretRequestCoordinator.randomNonce() },
 ) {
@@ -57,9 +96,21 @@ class WatchBootOptIn(
         val delegatePub = HexUtil.decode(delegatePubHex) ?: error("delegate key")
         val deposit = WatchBootDelegate.build(serverDomain, diskKey, delegatePub, key.publicKey, issuedAt, expiresAt) { material.signer.sign(it) }
         val auth = BootAuth.ownerHeader(serverDomain, "PUT", "/api/boot/watch-key", material.signer, material.pubHex, now(), nonceGen())
+        val stk = pinnedStk(serverDomain.lowercase())
+        require(stk.size == 32) { "server key" }
         mailbox.putWatchBootKey(WatchBootDepositWire.of(deposit), auth)
-        store.setCopy(serverDomain.lowercase(), expiresAt)
+        store.setCopy(serverDomain.lowercase(), WatchBootCopy(expiresAt, HexUtil.encode(stk)))
         return expiresAt
+    }
+
+    /** After the delegate was renewed: deposit every live copy again to last as long as it. */
+    suspend fun renewAll(delegatePubHex: String, delegateExpiresAt: Long, reason: (String) -> String): Int {
+        var n = 0
+        for (domain in live().keys) {
+            enable(domain, delegatePubHex, delegateExpiresAt, reason(domain))
+            n++
+        }
+        return n
     }
 
     /** Take every watch copy for the server away. The local mark goes even if the worker can't be reached. */
@@ -75,15 +126,15 @@ class WatchBootOptIn(
     }
 
     /** Servers with a live copy for this device, and until when. */
-    fun live(): Map<String, Long> = store.copies().filterValues { it > now() }
+    fun live(): Map<String, Long> = store.copies().filterValues { it.expiresAt > now() }.mapValues { it.value.expiresAt }
 }
 
 /** Answer a start-up from the watch without the account key. */
 class WatchBootApprover(
     private val mailbox: SecretMailboxClient,
-    private val username: String,
     private val delegate: () -> WatchDelegateSigner?,
     private val store: WatchBootKeyStore,
+    private val source: StartUpSource,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val nonceGen: () -> ByteArray = { SecretRequestCoordinator.randomNonce() },
 ) {
@@ -91,6 +142,8 @@ class WatchBootApprover(
         data object Approved : Outcome
         /** The boot worker says the server is locked: only the phone can start it. */
         data object Locked : Outcome
+        /** The key named for the box isn't the one this phone pinned: nothing is sealed. */
+        data object KeyMismatch : Outcome
         /** No copy for this watch, or nothing to use it with: try the account-key path. */
         data object NotAvailable : Outcome
         /** The server isn't waiting for a start-up any more. */
@@ -98,21 +151,38 @@ class WatchBootApprover(
         data class Failed(val message: String) : Outcome
     }
 
+    private fun copyFor(serverDomain: String): WatchBootCopy? =
+        store.copies()[serverDomain.lowercase()]?.takeIf { it.expiresAt > now() }
+
     fun available(serverDomain: String): Boolean =
-        delegate() != null && store.existing() != null && (store.copies()[serverDomain.lowercase()] ?: 0L) > now()
+        delegate() != null && store.existing() != null && copyFor(serverDomain) != null
 
     suspend fun approve(serverDomain: String, requestId: String?): Outcome {
         val signer = delegate() ?: return Outcome.NotAvailable
         val key = store.existing() ?: return Outcome.NotAvailable
-        val pods = mailbox.fetchPods(username)
-        val pod = pods.pods.firstOrNull { it.serverDomain.equals(serverDomain, ignoreCase = true) && it.revokedAt == null }
-            ?: return Outcome.NotAvailable
-        val stkPub = HexUtil.decode(pod.identityPubKey)?.takeIf { it.size == 32 } ?: return Outcome.NotAvailable
-        val waiting = pod.pendingRequests.filter { it.type == SecretPurpose.UNLOCK_KEY.wire && (it.expiresAt == 0L || it.expiresAt > now()) }
-        val req = (if (requestId != null) waiting.firstOrNull { it.id == requestId } else null)
-            ?: waiting.maxByOrNull { it.issuedAt }
-            ?: return Outcome.NotWaiting
-        val domain = pod.serverDomain
+        val copy = copyFor(serverDomain) ?: return Outcome.NotAvailable
+        val stkPub = HexUtil.decode(copy.stkPubHex)?.takeIf { it.size == 32 } ?: return Outcome.NotAvailable
+        val req = source.waiting(serverDomain, requestId) ?: return Outcome.NotWaiting
+        if (!req.stkPubHex.equals(copy.stkPubHex, ignoreCase = true)) {
+            ErrorLog.caught("watch-boot", IllegalStateException("the key named for $serverDomain isn't the pinned one"), "stk-mismatch")
+            return Outcome.KeyMismatch
+        }
+        val sig = HexUtil.decode(req.signatureHex)
+        val signed = sig != null && req.serverDomain.equals(serverDomain, ignoreCase = true) && SecretRequest.verify(
+            signature = sig,
+            stkPub = stkPub,
+            serverDomain = req.serverDomain,
+            stkPubHex = copy.stkPubHex.lowercase(),
+            purpose = SecretPurpose.UNLOCK_KEY,
+            nonceHex = req.nonceHex,
+            issuedAt = req.issuedAt,
+        )
+        if (!signed) {
+            ErrorLog.caught("watch-boot", IllegalStateException("a start-up for $serverDomain the pinned key didn't sign"), "bad-request-signature")
+            return Outcome.KeyMismatch
+        }
+        if (req.expiresAt <= now()) return Outcome.NotWaiting
+        val domain = req.serverDomain
         val deposit = try {
             mailbox.getWatchBootKey(domain, BootAuth.delegateHeader(domain, "GET", "/api/boot/watch-key/$domain", signer.signer, signer.pubHex, now(), nonceGen()))
         } catch (e: HttpException) {
@@ -132,8 +202,8 @@ class WatchBootApprover(
             return Outcome.NotAvailable
         }
         val diskKey = WatchBootDelegate.openKeyWith(deposit.toDeposit()) { key.agree(it) } ?: return Outcome.NotAvailable
-        val sealed = SealedSecretResponse.build(diskKey, stkPub, req.id, SecretPurpose.UNLOCK_KEY)
-        val body = SecretResponseBody(domain, req.id, SecretPurpose.UNLOCK_KEY.wire, HexUtil.encode(sealed), now())
+        val sealed = SealedSecretResponse.build(diskKey, stkPub, req.nonceHex, SecretPurpose.UNLOCK_KEY)
+        val body = SecretResponseBody(domain, req.nonceHex, SecretPurpose.UNLOCK_KEY.wire, HexUtil.encode(sealed), now())
         return try {
             mailbox.postResponse(body, BootAuth.delegateHeader(domain, "POST", "/api/boot/response", signer.signer, signer.pubHex, now(), nonceGen()))
             Outcome.Approved

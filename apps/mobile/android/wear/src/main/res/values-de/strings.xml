@@ -15,4 +15,8 @@
     <string name="approval_failed">Genehmigung fehlgeschlagen.</string>
     <string name="approve">Genehmigen</string>
     <string name="this_server_isnt_waiting_any_more">Dieser Server wartet nicht mehr.</string>
+    <string name="open_the_approve_page_on_this_watch">Öffne die Seite Genehmigen auf dieser Uhr, um zu genehmigen.</string>
+    <string name="set_a_screen_lock_on_this_watch">Richte auf dieser Uhr eine Displaysperre ein, um mit ihr zu genehmigen.</string>
+    <string name="unlock_this_watch_to_approve">Entsperre diese Uhr, um zu genehmigen.</string>
+    <string name="put_this_watch_on_your_wrist">Lege diese Uhr an dein Handgelenk, um zu genehmigen.</string>
 </resources>

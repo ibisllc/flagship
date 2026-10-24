@@ -65,5 +65,21 @@
   "this_server_isnt_waiting_any_more": {
     "en": "This server isn't waiting any more.",
     "ctx": "com/flagshipserver/wear/WearMainActivity.kt:226 (arg of Text)"
+  },
+  "open_the_approve_page_on_this_watch": {
+    "en": "Open the Approve page on this watch to approve.",
+    "ctx": "WatchPresence.kt"
+  },
+  "set_a_screen_lock_on_this_watch": {
+    "en": "Set a screen lock on this watch to approve from it.",
+    "ctx": "WatchPresence.kt"
+  },
+  "unlock_this_watch_to_approve": {
+    "en": "Unlock this watch to approve.",
+    "ctx": "WatchPresence.kt"
+  },
+  "put_this_watch_on_your_wrist": {
+    "en": "Put this watch on your wrist to approve.",
+    "ctx": "WatchPresence.kt"
   }
 }

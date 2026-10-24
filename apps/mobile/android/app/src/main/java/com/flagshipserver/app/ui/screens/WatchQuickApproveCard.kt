@@ -66,6 +66,7 @@ fun WatchQuickApproveCard(server: FlagshipServerClient, app: AppState) {
                 mailbox = mailbox,
                 irk = com.flagshipserver.app.keystore.KeystoreIrkAccess(),
                 store = com.flagshipserver.app.keystore.KeystoreWatchBootKeys(),
+                pinnedStk = { d -> com.flagshipserver.app.core.ServerKeys.deriveStkPub(com.flagshipserver.app.keystore.Keystore.currentUmkSeed(), d) },
             ),
             delegatePubHex = { com.flagshipserver.app.keystore.Keystore.watchDelegatePubHex() },
         )

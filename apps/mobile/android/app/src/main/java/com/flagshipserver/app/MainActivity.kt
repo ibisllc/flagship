@@ -571,6 +571,29 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(useLive, isForeground, accessPaired, accessUnlocked) {
                 if (isForeground && accessPaired && accessUnlocked) runCatching { pushSwitch.resync() }
             }
+            // Approve from watch renews itself while the app is unlocked, never with a prompt.
+            LaunchedEffect(isForeground, accessPaired, accessUnlocked) {
+                if (!(isForeground && accessPaired && accessUnlocked)) return@LaunchedEffect
+                if (!Keystore.hasWatchDelegateKey()) return@LaunchedEffect
+                val renewal = com.flagshipserver.app.core.WatchDelegateRenewal(
+                    server = effectiveFlagshipServer,
+                    username = { appState.currentUser.value },
+                    delegatePubHex = { Keystore.watchDelegatePubHex() },
+                    saveGrantId = { Keystore.setWatchDelegateGrantId(it) },
+                    silentSigner = {
+                        if (!com.flagshipserver.app.keystore.SessionIrkAccess.isSessionUnlocked()) null
+                        else Keystore.adminSigningKey(FSStrings.get(R.string.allow_your_watch_to_approve_boots))
+                    },
+                    copies = com.flagshipserver.app.core.WatchBootOptIn(
+                        mailbox = effectiveMailbox,
+                        irk = com.flagshipserver.app.keystore.SessionIrkAccess(),
+                        store = com.flagshipserver.app.keystore.KeystoreWatchBootKeys(),
+                        pinnedStk = { d -> com.flagshipserver.app.core.ServerKeys.deriveStkPub(Keystore.currentUmkSeed(), d) },
+                    ),
+                )
+                runCatching { renewal.renewIfDue() }
+                    .onFailure { com.flagshipserver.app.core.ErrorLog.caught("watch-renew", it, com.flagshipserver.app.core.NetworkErrorHumanizer.errorCode(it)) }
+            }
 
             // MULTI-POD (Fix B) — PodSessionSync. When the current/leader pod
             // changes, point the single active base-URL + token slots at THAT

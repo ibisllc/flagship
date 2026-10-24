@@ -60,9 +60,9 @@ fun watchResponder(app: AppState, mailbox: SecretMailboxClient, inForeground: ()
             } else {
                 com.flagshipserver.app.core.WatchBootApprover(
                     mailbox = mailbox,
-                    username = user,
                     delegate = { SessionIrkAccess.watchDelegate() },
                     store = com.flagshipserver.app.keystore.KeystoreWatchBootKeys(),
+                    source = com.flagshipserver.app.core.ReadTokenStartUpSource(mailbox, user),
                 )
             }
         },

@@ -1996,7 +1996,7 @@
   "build_logs": "Logs de build",
   "interrupt_with_a_follow_up": "Interromper com uma mensagem adicional",
   "quick_approve_from_watch": "Aprovar pelo relógio",
-  "approve_a_server_boot_from_your": "Aprove a inicialização de um servidor pelo seu relógio Wear OS enquanto o Flagship estiver desbloqueado neste celular. Outras ações (revogar servidor, apagar e reiniciar, substituir dispositivo) sempre exigem o seu celular. Desativado por padrão.",
+  "approve_a_server_boot_from_your": "Aprove a inicialização de um servidor pelo seu relógio Wear OS enquanto o Flagship estiver desbloqueado neste celular ou, para os servidores que você ativar abaixo, enquanto este celular estiver bloqueado. As demais ações (revogar o servidor, apagar e reiniciar, substituir o dispositivo) sempre exigem seu celular. Desativado por padrão.",
   "active_renews_by": "Ativo — renova até %1$s",
   "your_stuff_on": "Suas coisas,\nno ",
   "your_hardware": "seu hardware.",
@@ -2742,5 +2742,6 @@
   "chat_always_allow_line_sender": "Uma máquina remota que diz executar %1$s/%2$s pode iniciar um chat com %3$s sem perguntar a você.",
   "chat_always_ended_sender": "%1$s/%2$s terá que perguntar de novo antes de iniciar um chat com %3$s",
   "chat_request_now_always_sender": "%1$s/%2$s agora pode iniciar um chat com %3$s sem perguntar",
-  "ai_consent_cap": "Esta execução pode usar até cerca de %1$s tokens. A execução para aí."
+  "ai_consent_cap": "Esta execução pode usar até cerca de %1$s tokens. A execução para aí.",
+  "watch_boot_key_mismatch": "A chave deste servidor não confere. Aprove a inicialização dele pelo seu celular."
 }

@@ -511,20 +511,22 @@ object Keystore {
     private fun watchBootCopiesKey() = pkey("watch.boot.copies")
 
     /** Servers holding a copy of their disk key for this device's boot-only key, with each copy's end. */
-    fun watchBootCopies(): Map<String, Long> {
+    fun watchBootCopies(): Map<String, com.flagshipserver.app.core.WatchBootCopy> {
         val raw = requirePrefs().getString(watchBootCopiesKey(), null) ?: return emptyMap()
         return raw.split('\n').mapNotNull { line ->
-            val i = line.lastIndexOf(' ')
-            if (i <= 0) null else line.substring(i + 1).toLongOrNull()?.let { line.substring(0, i) to it }
+            val parts = line.split(' ')
+            if (parts.size != 3) return@mapNotNull null
+            val ends = parts[1].toLongOrNull() ?: return@mapNotNull null
+            parts[0] to com.flagshipserver.app.core.WatchBootCopy(ends, parts[2])
         }.toMap()
     }
 
-    fun setWatchBootCopy(serverDomain: String, expiresAt: Long?) {
+    fun setWatchBootCopy(serverDomain: String, copy: com.flagshipserver.app.core.WatchBootCopy?) {
         val next = watchBootCopies().toMutableMap()
-        if (expiresAt == null) next.remove(serverDomain) else next[serverDomain] = expiresAt
+        if (copy == null) next.remove(serverDomain) else next[serverDomain] = copy
         val e = requirePrefs().edit()
         if (next.isEmpty()) e.remove(watchBootCopiesKey())
-        else e.putString(watchBootCopiesKey(), next.entries.joinToString("\n") { "${it.key} ${it.value}" })
+        else e.putString(watchBootCopiesKey(), next.entries.joinToString("\n") { "${it.key} ${it.value.expiresAt} ${it.value.stkPubHex}" })
         e.apply()
     }
 

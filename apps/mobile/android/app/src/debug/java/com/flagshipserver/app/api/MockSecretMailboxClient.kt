@@ -45,6 +45,10 @@ class MockSecretMailboxClient : SecretMailboxClient {
     /** Seals a disk key for the phone on demand (the gym seals one to this device's IRK). */
     var sealedLuksKeyFor: (suspend (String) -> String?)? = null
 
+    /** What GET /api/users/:u/secret-requests returns (box-signed, read-token). */
+    var signedRequests: List<SignedSecretRequest> = emptyList()
+    override suspend fun readSecretRequests(username: String) = SignedSecretRequestsResponse(signedRequests)
+
     // ---- Watch boot key (boot-core routes.ts) ----------------------------
     val watchBootKeys: MutableMap<String, WatchBootDepositWire> = mutableMapOf()
     val watchBootPuts: MutableList<Pair<WatchBootDepositWire, String>> = mutableListOf()
