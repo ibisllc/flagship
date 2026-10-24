@@ -1,0 +1,239 @@
+{
+  "tag": "flagship/strict-reentry/v1",
+  "cases": [
+    {
+      "name": "installation-with-admin-root",
+      "inputs": {
+        "account": "alice",
+        "scope": {
+          "kind": "installation",
+          "id": "home.alice.flagship.services"
+        },
+        "leftStrictAt": 1800000000000,
+        "devices": [
+          {
+            "role": "device",
+            "subjectId": "phone-b",
+            "ed25519PubHex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "mldsaPubHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+          },
+          {
+            "role": "device",
+            "subjectId": "phone-a",
+            "ed25519PubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "mldsaPubHex": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+          }
+        ],
+        "deviceCount": 2,
+        "adminRoot": {
+          "role": "admin-root",
+          "subjectId": "alice",
+          "ed25519PubHex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "mldsaPubHex": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+        },
+        "server": {
+          "role": "box",
+          "subjectId": "home.alice.flagship.services",
+          "ed25519PubHex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "mldsaPubHex": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
+        },
+        "recoveryChecked": true,
+        "recoveryCheckedAt": 1800000500000,
+        "nonceHex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "checkedAt": 1800000900000
+      },
+      "texts": [
+        "flagship/strict-reentry/v1|alice|installation|home.alice.flagship.services|1800000000000|verifier-checks|admin-root:alice:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c,box:home.alice.flagship.services:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d,device:phone-a:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a,device:phone-b:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b|1800000900000",
+        "flagship/strict-reentry/v1|alice|installation|home.alice.flagship.services|1800000000000|enrollment|2|device:phone-a:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a,device:phone-b:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+        "flagship/strict-reentry/v1|alice|installation|home.alice.flagship.services|1800000000000|rekey|box:home.alice.flagship.services:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|1800000900000",
+        "flagship/strict-reentry/v1|alice|installation|home.alice.flagship.services|1800000000000|recovery|checked|1800000500000"
+      ],
+      "evidence": {
+        "verifierChecksDigest": "f2422e599d9b85d97d9c67e5e195affe53680482fb3a2d725777423ac0565c27",
+        "enrollmentDigest": "3cfb4e692b2f647c17a71d14922dae1a52b49f536f7c8dfdef93f5f864c7b3ca",
+        "rekeyReceiptDigest": "0947adb01c79e73fa646fdd047808d75aefa07bcce3ac1575fa78cf511016ec2",
+        "recoveryTestDigest": "77c6eed41ae645335f1b46213824bf2e680b8c6388bc02a03ae14b2f2d5740c1"
+      }
+    },
+    {
+      "name": "service-scope-no-admin-root",
+      "inputs": {
+        "account": "alice",
+        "scope": {
+          "kind": "service",
+          "id": "home.alice.flagship.services:alice--notes"
+        },
+        "leftStrictAt": 1800000000000,
+        "devices": [
+          {
+            "role": "device",
+            "subjectId": "phone-b",
+            "ed25519PubHex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "mldsaPubHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+          },
+          {
+            "role": "device",
+            "subjectId": "phone-a",
+            "ed25519PubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "mldsaPubHex": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+          }
+        ],
+        "deviceCount": 2,
+        "adminRoot": null,
+        "server": {
+          "role": "box",
+          "subjectId": "home.alice.flagship.services",
+          "ed25519PubHex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "mldsaPubHex": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
+        },
+        "recoveryChecked": true,
+        "recoveryCheckedAt": 1800000500000,
+        "nonceHex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "checkedAt": 1800000900000
+      },
+      "texts": [
+        "flagship/strict-reentry/v1|alice|service|home.alice.flagship.services:alice--notes|1800000000000|verifier-checks|box:home.alice.flagship.services:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d,device:phone-a:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a,device:phone-b:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b|1800000900000",
+        "flagship/strict-reentry/v1|alice|service|home.alice.flagship.services:alice--notes|1800000000000|enrollment|2|device:phone-a:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a,device:phone-b:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+        "flagship/strict-reentry/v1|alice|service|home.alice.flagship.services:alice--notes|1800000000000|rekey|box:home.alice.flagship.services:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|1800000900000",
+        "flagship/strict-reentry/v1|alice|service|home.alice.flagship.services:alice--notes|1800000000000|recovery|checked|1800000500000"
+      ],
+      "evidence": {
+        "verifierChecksDigest": "d3e7bd6871ed74c233624754789dc7785b39b8a8e5bbcabd0ba00401485d3fc6",
+        "enrollmentDigest": "0a54699566c138f1b03e3b62d5d970de4e4f6797fb79df7066f88c96cdab1e17",
+        "rekeyReceiptDigest": "3091c3d5f18caaa0ab851e75f804d8ab335090b336b641d28eec6d478a28922f",
+        "recoveryTestDigest": "3e2040bb950a3249571c92c1e455b4a577eec88c5dc98c5fd26636525ac20c6d"
+      }
+    }
+  ],
+  "refusals": [
+    {
+      "name": "a device without its PQ key",
+      "inputs": {
+        "account": "alice",
+        "scope": {
+          "kind": "installation",
+          "id": "home.alice.flagship.services"
+        },
+        "leftStrictAt": 1800000000000,
+        "devices": [
+          {
+            "role": "device",
+            "subjectId": "phone-b",
+            "ed25519PubHex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "mldsaPubHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+          },
+          {
+            "role": "device",
+            "subjectId": "phone-a",
+            "ed25519PubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "mldsaPubHex": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+          }
+        ],
+        "deviceCount": 3,
+        "adminRoot": {
+          "role": "admin-root",
+          "subjectId": "alice",
+          "ed25519PubHex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "mldsaPubHex": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+        },
+        "server": {
+          "role": "box",
+          "subjectId": "home.alice.flagship.services",
+          "ed25519PubHex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "mldsaPubHex": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
+        },
+        "recoveryChecked": true,
+        "recoveryCheckedAt": 1800000500000,
+        "nonceHex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "checkedAt": 1800000900000
+      },
+      "code": "devices-not-enrolled"
+    },
+    {
+      "name": "recovery never checked",
+      "inputs": {
+        "account": "alice",
+        "scope": {
+          "kind": "installation",
+          "id": "home.alice.flagship.services"
+        },
+        "leftStrictAt": 1800000000000,
+        "devices": [
+          {
+            "role": "device",
+            "subjectId": "phone-b",
+            "ed25519PubHex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "mldsaPubHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+          },
+          {
+            "role": "device",
+            "subjectId": "phone-a",
+            "ed25519PubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "mldsaPubHex": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+          }
+        ],
+        "deviceCount": 2,
+        "adminRoot": {
+          "role": "admin-root",
+          "subjectId": "alice",
+          "ed25519PubHex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "mldsaPubHex": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+        },
+        "server": {
+          "role": "box",
+          "subjectId": "home.alice.flagship.services",
+          "ed25519PubHex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "mldsaPubHex": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
+        },
+        "recoveryChecked": false,
+        "recoveryCheckedAt": 1800000500000,
+        "nonceHex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "checkedAt": 1800000900000
+      },
+      "code": "recovery-not-checked"
+    },
+    {
+      "name": "short nonce",
+      "inputs": {
+        "account": "alice",
+        "scope": {
+          "kind": "installation",
+          "id": "home.alice.flagship.services"
+        },
+        "leftStrictAt": 1800000000000,
+        "devices": [
+          {
+            "role": "device",
+            "subjectId": "phone-b",
+            "ed25519PubHex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "mldsaPubHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+          },
+          {
+            "role": "device",
+            "subjectId": "phone-a",
+            "ed25519PubHex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "mldsaPubHex": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+          }
+        ],
+        "deviceCount": 2,
+        "adminRoot": {
+          "role": "admin-root",
+          "subjectId": "alice",
+          "ed25519PubHex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "mldsaPubHex": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+        },
+        "server": {
+          "role": "box",
+          "subjectId": "home.alice.flagship.services",
+          "ed25519PubHex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "mldsaPubHex": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
+        },
+        "recoveryChecked": true,
+        "recoveryCheckedAt": 1800000500000,
+        "nonceHex": "ee",
+        "checkedAt": 1800000900000
+      },
+      "code": "bad-input"
+    }
+  ]
+}
