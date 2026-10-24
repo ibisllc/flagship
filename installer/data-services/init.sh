@@ -122,9 +122,16 @@ if [ ! -f "$COMPOSE" ]; then
     exit 1
 fi
 
+# The engine the daemon chose (server-daemon engine/migrate.ts writes it): Podman on new
+# and migrated boxes, where `podman compose` drives docker-compose over Podman's socket.
+ENGINE="${FLAGSHIP_ENGINE:-$(tr -cd 'a-z' < /var/lib/flagship/engine-active 2>/dev/null || true)}"
+if [ "$ENGINE" = podman ] && command -v podman >/dev/null 2>&1; then
+    docker() { podman "$@"; }
+    systemctl start podman.socket >/dev/null 2>&1 || true
+    compose() { podman compose -f "$COMPOSE" --env-file "$SECRETS_FILE" "$@"; }
 # Debian's docker-compose package provides `docker compose`; older installs
 # may only have the standalone binary.
-if docker compose version >/dev/null 2>&1; then
+elif docker compose version >/dev/null 2>&1; then
     compose() { docker compose -f "$COMPOSE" --env-file "$SECRETS_FILE" "$@"; }
 elif command -v docker-compose >/dev/null 2>&1; then
     compose() { docker-compose -f "$COMPOSE" --env-file "$SECRETS_FILE" "$@"; }

@@ -47,6 +47,8 @@ export interface BuildInfo {
   lockSha256: string;
   /** SOURCE_DATE_EPOCH: the source commit's time, in seconds. Every file gets it. */
   sourceDateEpoch: number;
+  /** The Rust toolchain and lock the binaries were built with, and each binary's SHA-256. */
+  rust?: { rustc: string; cargoLockSha256: string; binaries: Record<string, string> };
 }
 
 export interface AssembleInput {
@@ -59,6 +61,9 @@ export interface AssembleInput {
   unsealBinary?: string;
   /** The static `flagship-tlsd` TLS frontend. */
   tlsdBinary?: string;
+  /** The Rust keyd/broker/core, by file name (`flagship-keyd` …), and the PINS.json naming their SHA-256. */
+  rustBinaries?: Record<string, string>;
+  rustPinsJson?: string;
   info: BuildInfo;
 }
 
@@ -98,6 +103,16 @@ export function assembleArtifact(input: AssembleInput): AssembledArtifact {
 
   if (input.tlsdBinary) {
     entries.push({ kind: "file", path: `${root}/app/installer/flagship-tlsd`, data: readFileSync(input.tlsdBinary), executable: true });
+  }
+
+  if (input.rustBinaries && Object.keys(input.rustBinaries).length > 0) {
+    if (!input.rustPinsJson) throw new Error("Rust binaries need their PINS.json");
+    entries.push({ kind: "dir", path: `${root}/app/installer/rust` });
+    for (const name of Object.keys(input.rustBinaries).sort()) {
+      if (!/^flagship-[a-z]+$/.test(name)) throw new Error(`bad Rust binary name ${name}`);
+      entries.push({ kind: "file", path: `${root}/app/installer/rust/${name}`, data: readFileSync(input.rustBinaries[name]!), executable: true });
+    }
+    entries.push({ kind: "file", path: `${root}/app/installer/rust/PINS.json`, data: new TextEncoder().encode(input.rustPinsJson), executable: false });
   }
 
   entries.push({

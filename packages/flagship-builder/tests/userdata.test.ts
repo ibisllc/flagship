@@ -312,23 +312,27 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     );
   });
 
-  it("installs docker so the daemon can run app containers + the data layer", () => {
+  it("installs the engine so the daemon can run app containers + the data layer", () => {
     const b = bootstrap();
-    // Root cause of the field "no docker" crash loop: docker was never
-    // installed, so the daemon's ensureNetwork (`docker network create`)
-    // hit ENOENT. The bootstrap apt line must install the engine, the CLI
-    // (explicitly — --no-install-recommends drops the docker-cli Recommends),
-    // and compose (the `docker compose` subcommand init.sh calls).
-    expect(b).toMatch(/apt-get install -y --no-install-recommends .*docker\.io docker-cli docker-compose/);
-    // docker.service is enabled so the engine is up on first real boot.
-    expect(b).toContain("systemctl enable docker.service containerd.service");
+    // Root cause of the field "no docker" crash loop: the engine was never
+    // installed, so the daemon's ensureNetwork hit ENOENT. A new box installs
+    // Podman (engineSetup.ts), compose's provider and nft for the bridge isolation.
+    expect(b).toMatch(/apt-get install -y --no-install-recommends .*podman netavark aardvark-dns crun conmon catatonit docker-compose nftables zstd/);
+    expect(b).not.toContain("docker.io docker-cli");
+    expect(b).not.toContain("systemctl enable docker.service");
+    // The box switch: a new box runs Podman and the Rust path.
+    expect(b).toContain('{"version":1,"rust":"on","engine":"podman","source":"new-box"}');
+    expect(b).toContain("echo podman > /var/lib/flagship/engine-active");
+    expect(b).toContain("podman.socket");
   });
 
   it("brings up the data layer as a retried, daemon-independent oneshot on every boot", () => {
     const b = bootstrap();
     expect(b).toContain("cat > /etc/systemd/system/flagship-data-services.service");
     expect(b).toContain("ExecStart=/opt/flagship/installer/data-services/init.sh");
-    expect(b).toContain("After=docker.service network-online.target");
+    expect(b).toContain("After=docker.service podman.socket network-online.target");
+    // Never Wants=docker.service: on a migrated box that would start dockerd again.
+    expect(b).not.toContain("Wants=docker.service");
     // No once-only gate: init.sh writes the env file before anything can
     // fail, so gating on it left a failed first run dead for good (home3).
     expect(b).not.toContain("ConditionPathExists=!/var/flagship/data-services.env");
@@ -1291,6 +1295,8 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
+      // Re-pinned 2026-10-23 (architecture v2 milestone 5): new boxes install Podman and
+      // write the box switch with the Rust path on (engineSetup.ts).
       // Re-pinned 2026-10-23: the boot key replaces the STK on /boot; the premount
       // pipes the key into cryptsetup, fails closed on its mode and boot host.
       // Re-pinned 2026-10-22: the bootstrap installs the signed box artifact (SEC-INSTALL-001);
@@ -1305,7 +1311,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "1502b2b2a59bba3a185d5af8943df01e574279bf6f74ae1838d06da66f2460d8",
+      "57f88143d8436a942dc9a30c4680eef1b831d349f8ec290f66466fe457d2d30a",
     );
   });
 
