@@ -23,4 +23,6 @@ pub mod hardening;
 pub mod identity;
 pub mod lease;
 pub mod seal;
+pub mod tpm;
 pub mod unlock;
+pub mod v2;

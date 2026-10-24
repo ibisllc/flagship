@@ -19,6 +19,8 @@ path = "src/main.rs"
 
 [dependencies]
 aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes", "alloc", "zeroize"] }
+flagship-crypto = { path = "../flagship-crypto" }
+flagship-protocol = { path = "../flagship-protocol" }
 base64ct = { version = "=1.8.3", features = ["alloc"] }
 ed25519-dalek = { version = "=3.0.0", default-features = false, features = ["zeroize"] }
 getrandom = { version = "=0.4.3", features = ["std"] }

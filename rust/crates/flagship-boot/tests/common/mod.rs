@@ -74,6 +74,76 @@ pub enum Reply {
     After { after: u32, build: BuildReply },
     /// After `after` 404s, a 200 with no sealed payload.
     Empty { after: u32 },
+    /// After `after` 404s, a v2 reply sealed to the last request's reply key and signed by the
+    /// owner's hybrid key (`OWNER_SEED`, `OWNER_PQ_SEED`).
+    V2 { after: u32 },
+}
+
+/// The owner's ML-DSA seed beside `OWNER_SEED`.
+pub const OWNER_PQ_SEED: [u8; 32] = [0x17; 32];
+/// The boot key's ML-DSA seed beside `SEED_A`.
+pub const BOOT_PQ_SEED: [u8; 32] = [0x1b; 32];
+
+/// The owner's hybrid public key.
+pub fn owner_pq() -> Vec<u8> {
+    flagship_crypto::HybridSigningKey::from_seeds(&OWNER_SEED, &OWNER_PQ_SEED)
+        .unwrap()
+        .verifying_key()
+        .as_bytes()
+        .to_vec()
+}
+
+/// A v2 reply as the phone builds it (bootUnlockV2.ts `buildBootReplyV2`).
+pub fn v2_reply(nonce_hex: &str, reply_pub_hex: &str, issued_at: u64) -> Vec<u8> {
+    use flagship_crypto::seal::{HybridSealPublicKey, SealOptions};
+    use sha2::Digest;
+    let owner = flagship_crypto::HybridSigningKey::from_seeds(&OWNER_SEED, &OWNER_PQ_SEED).unwrap();
+    let boot = flagship_boot::identity::BoxIdentity::from_seed(&SEED_A)
+        .pub_hex()
+        .to_owned();
+    let pk =
+        HybridSealPublicKey::from_bytes(&gohex::decode(reply_pub_hex.as_bytes()).unwrap()).unwrap();
+    let key = luks_key();
+    let stmt = [
+        "flagship/boot-reply/v2",
+        DOMAIN,
+        &boot,
+        "unlock-key",
+        nonce_hex,
+        &gohex::encode(&flagship_crypto::key_id(
+            flagship_protocol::SuiteId::HybridSealV1,
+            pk.as_bytes(),
+        )),
+        &gohex::encode(&sha2::Sha512::digest(&key)),
+        &issued_at.to_string(),
+    ]
+    .join("|");
+    let sig = owner
+        .sign("flagship/boot-reply/v2", stmt.as_bytes())
+        .unwrap();
+    let mut pt = u16::try_from(key.len()).unwrap().to_be_bytes().to_vec();
+    pt.extend_from_slice(&key);
+    pt.extend_from_slice(&sig);
+    let nonce: [u8; 32] = gohex::decode(nonce_hex.as_bytes())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let opts = SealOptions {
+        purpose: "flagship/boot-reply/v2",
+        sender_key_id: flagship_crypto::key_id(
+            flagship_protocol::SuiteId::HybridSigEd25519MlDsa65V1,
+            owner.verifying_key().as_bytes(),
+        ),
+        issued_at,
+        expires_at: None,
+        installation_id: None,
+        authority_generation: None,
+        session_nonce: Some(nonce),
+        policy_digest: None,
+    };
+    let boot_bytes = gohex::decode(boot.as_bytes()).unwrap();
+    let ctx: [&[u8]; 4] = [DOMAIN.as_bytes(), &boot_bytes, b"unlock-key", &nonce];
+    flagship_crypto::seal::seal(&pk, &opts, &ctx, &pt).unwrap()
 }
 
 pub struct Worker {
@@ -259,6 +329,21 @@ impl Worker {
                         status: 200,
                         body: b"{\"serverDomain\":\"x\",\"sealed\":\"\"}".to_vec(),
                     }),
+                    Reply::V2 { after } if self.polls > after => {
+                        let last: serde_json::Value =
+                            serde_json::from_str(self.bodies.last().unwrap()).unwrap();
+                        let reply_pub = last["pq"]["replyKemPubHex"].as_str().unwrap().to_owned();
+                        self.reply = self.next_reply.take().unwrap_or(Reply::Never);
+                        self.polls = 0;
+                        Ok(HttpResponse {
+                            status: 200,
+                            body: format!(
+                                "{{\"serverDomain\":\"{domain}\",\"requestNonceHex\":\"{nonce}\",\"purpose\":\"unlock-key\",\"sealed\":\"{}\",\"issuedAt\":5}}",
+                                gohex::encode(&v2_reply(&nonce, &reply_pub, 5))
+                            )
+                            .into_bytes(),
+                        })
+                    }
                     Reply::After { after, build } if self.polls > after => {
                         self.reply = self.next_reply.take().unwrap_or(Reply::Never);
                         self.polls = 0;
