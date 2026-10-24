@@ -12,5 +12,9 @@
   "approved": "1a9f56594878",
   "approval_failed": "171517e16d6d",
   "approve": "6a170dd7aac6",
-  "this_server_isnt_waiting_any_more": "ee11a3493f90"
+  "this_server_isnt_waiting_any_more": "ee11a3493f90",
+  "open_the_approve_page_on_this_watch": "002f8bcf8d60",
+  "set_a_screen_lock_on_this_watch": "251892755322",
+  "unlock_this_watch_to_approve": "8ec9998261df",
+  "put_this_watch_on_your_wrist": "0508ed541120"
 }

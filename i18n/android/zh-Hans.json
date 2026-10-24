@@ -1996,7 +1996,7 @@
   "build_logs": "构建日志",
   "interrupt_with_a_follow_up": "用后续消息打断",
   "quick_approve_from_watch": "通过手表批准",
-  "approve_a_server_boot_from_your": "在这部手机上的 Flagship 处于解锁状态时，可用你的 Wear OS 手表批准服务器启动。其他操作（撤销服务器、擦除并重新开始、替换设备）始终需要你的手机。默认关闭。",
+  "approve_a_server_boot_from_your": "在这部手机上的 Flagship 已解锁时，或者对于你在下方开启的服务器，即使这部手机已锁定，也可以用 Wear OS 手表批准服务器的启动。其他操作（撤销服务器、清除并重启、更换设备）始终需要你的手机。默认关闭。",
   "active_renews_by": "已启用，将于 %1$s 前续期",
   "your_stuff_on": "你的东西，\n运行在",
   "your_hardware": "你的硬件上。",
@@ -2742,5 +2742,6 @@
   "chat_always_allow_line_sender": "一台自称运行 %1$s/%2$s 的远程机器无需询问你就能与 %3$s 开始聊天。",
   "chat_always_ended_sender": "%1$s/%2$s 与 %3$s 开始聊天前需要再次询问",
   "chat_request_now_always_sender": "%1$s/%2$s 现在无需询问即可与 %3$s 开始聊天",
-  "ai_consent_cap": "这次运行最多可使用约 %1$s 个 token，到达后即停止。"
+  "ai_consent_cap": "这次运行最多可使用约 %1$s 个 token，到达后即停止。",
+  "watch_boot_key_mismatch": "此服务器的密钥不匹配。请在手机上批准它的启动。"
 }

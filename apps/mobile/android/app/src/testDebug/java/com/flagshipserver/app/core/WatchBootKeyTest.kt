@@ -6,8 +6,7 @@
 package com.flagshipserver.app.core
 
 import com.flagshipserver.app.api.MockSecretMailboxClient
-import com.flagshipserver.app.api.PendingRequestSummaryWire
-import com.flagshipserver.app.api.PodDirectoryEntry
+import com.flagshipserver.app.api.SignedSecretRequest
 import com.flagshipserver.companion.ApproveCommand
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
@@ -37,7 +36,7 @@ class WatchBootKeyTest {
     /** The Keystore stand-in: the private key never leaves this object. */
     private class SoftStore : WatchBootKeyStore {
         private var priv: ByteArray? = null
-        val copies = HashMap<String, Long>()
+        val copies = HashMap<String, WatchBootCopy>()
         override fun loadOrCreate(): BootDecryptKey {
             if (priv == null) priv = X25519.generatePrivateKey()
             return existing()!!
@@ -49,9 +48,9 @@ class WatchBootKeyTest {
                 override fun agree(peerPublicKey: ByteArray) = X25519.computeSharedSecret(p, peerPublicKey)
             }
         }
-        override fun copies(): Map<String, Long> = copies.toMap()
-        override fun setCopy(serverDomain: String, expiresAt: Long?) {
-            if (expiresAt == null) copies.remove(serverDomain) else copies[serverDomain] = expiresAt
+        override fun copies(): Map<String, WatchBootCopy> = copies.toMap()
+        override fun setCopy(serverDomain: String, copy: WatchBootCopy?) {
+            if (copy == null) copies.remove(serverDomain) else copies[serverDomain] = copy
         }
         override fun clear() { priv = null; copies.clear() }
     }
@@ -60,25 +59,33 @@ class WatchBootKeyTest {
         override suspend fun resolve(reason: String) = IrkMaterial(Ed25519Sign(irkKp.privateKey), irkSeed, HexUtil.encode(irkKp.publicKey))
     }
 
+    /** A request the box signed with [signer] naming [stkPub], as `.com` relays it. */
+    private fun signed(
+        signer: Ed25519Sign.KeyPair = stkKp,
+        stkPub: ByteArray = signer.publicKey,
+        expiresAt: Long = now + 600_000,
+    ): SignedSecretRequest {
+        val stkHex = HexUtil.encode(stkPub)
+        val sig = Ed25519Sign(signer.privateKey).sign(SecretRequest.canonicalBytes(domain, stkHex, SecretPurpose.UNLOCK_KEY, nonceHex, now - 1_000))
+        return SignedSecretRequest(domain, nonceHex, stkHex, "unlock-key", now - 1_000, HexUtil.encode(sig), expiresAt)
+    }
+
     private fun mailbox() = MockSecretMailboxClient().apply {
         sealedLuksKeyHex = HexUtil.encode(SecretSeal.sealForEd25519Recipient(diskKey, irkKp.publicKey))
-        directory = listOf(
-            PodDirectoryEntry(
-                serverDomain = domain,
-                identityPubKey = HexUtil.encode(stkKp.publicKey),
-                pendingRequests = listOf(PendingRequestSummaryWire(nonceHex, "unlock-key", now - 1_000, now + 600_000)),
-            ),
-        )
-        pending = emptyList()
+        signedRequests = listOf(signed())
     }
+
+    private val forged = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 9 })
 
     private fun header(auth: String) =
         Json.parseToJsonElement(String(java.util.Base64.getUrlDecoder().decode(auth.removePrefix("Flagship-Boot-v1 ")))).jsonObject
 
-    private fun optIn(m: MockSecretMailboxClient, store: SoftStore) = WatchBootOptIn(m, irk, store, now = { now }, nonceGen = { ByteArray(32) { 2 } })
+    private fun optIn(m: MockSecretMailboxClient, store: SoftStore) =
+        WatchBootOptIn(m, irk, store, pinnedStk = { stkKp.publicKey }, now = { now }, nonceGen = { ByteArray(32) { 2 } })
 
     private fun approver(m: MockSecretMailboxClient, store: SoftStore) = WatchBootApprover(
-        m, user, { WatchDelegateSigner(Ed25519Sign(delegateKp.privateKey), delegatePubHex) }, store, now = { now }, nonceGen = { ByteArray(32) { 4 } },
+        m, { WatchDelegateSigner(Ed25519Sign(delegateKp.privateKey), delegatePubHex) }, store,
+        ReadTokenStartUpSource(m, user), now = { now }, nonceGen = { ByteArray(32) { 4 } },
     )
 
     @Test fun optInDepositsAnAttestedCopyThatOutlivesNeitherTheDelegateNorAWeek() = runBlocking {
@@ -94,7 +101,7 @@ class WatchBootKeyTest {
         Ed25519Verify(irkKp.publicKey).verify(HexUtil.decode(dep.signatureHex)!!, WatchBootDelegate.canonicalBytes(dep.toDeposit().attestation))
         assertEquals("owner", header(auth)["role"]!!.jsonPrimitive.content)
         assertEquals("/api/boot/watch-key", header(auth)["path"]!!.jsonPrimitive.content)
-        assertEquals(mapOf(domain to ends), store.copies)
+        assertEquals(mapOf(domain to WatchBootCopy(ends, HexUtil.encode(stkKp.publicKey))), store.copies)
 
         val week = optIn(m, SoftStore()).enable(domain, delegatePubHex, now + 30L * 24 * 3_600_000, "reason")
         assertTrue(week - now <= WatchBootDelegate.MAX_MS)
@@ -152,7 +159,7 @@ class WatchBootKeyTest {
 
     @Test fun withoutACopyTheAccountKeyPathStillAnswers() = runBlocking {
         val m = mailbox()
-        val store = SoftStore().apply { loadOrCreate(); setCopy(domain, now + 60_000) }
+        val store = SoftStore().apply { loadOrCreate(); setCopy(domain, WatchBootCopy(now + 60_000, HexUtil.encode(stkKp.publicKey))) }
         assertEquals(WatchBootApprover.Outcome.NotAvailable, approver(m, store).approve(domain, null))
         assertTrue("a copy the worker doesn't hold is forgotten", store.copies.isEmpty())
         val reply = WatchApprovalResponder(
@@ -165,8 +172,47 @@ class WatchBootKeyTest {
         assertEquals(WatchApprovalResponder.OPEN_AND_UNLOCK, reply.errorMessage)
     }
 
+    /** `.com` naming another key for the box never gets the disk key sealed to it. */
+    @Test fun aKeyFromDotComThatIsntThePinnedOneIsRefused() = runBlocking {
+        val m = mailbox()
+        val store = SoftStore()
+        optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason")
+        m.signedRequests = listOf(signed(signer = forged))
+        assertEquals(WatchBootApprover.Outcome.KeyMismatch, approver(m, store).approve(domain, null))
+        assertTrue(m.postedResponses.isEmpty())
+
+        val reply = WatchApprovalResponder(
+            delegateEnrolled = { true },
+            hasSessionKey = { true },
+            makeSource = { error("no fallback past a key that doesn't match") },
+            bootApprover = { approver(m, store) },
+        ).respond(ApproveCommand(serverFqdn = domain))
+        assertFalse(reply.ok)
+        assertEquals(WatchApprovalResponder.KEY_MISMATCH, reply.errorMessage)
+        assertTrue(m.postedResponses.isEmpty())
+    }
+
+    /** Naming the pinned key is not enough: the box's signature must verify under it. */
+    @Test fun aRequestThePinnedKeyDidntSignIsRefused() = runBlocking {
+        val m = mailbox()
+        val store = SoftStore()
+        optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason")
+        m.signedRequests = listOf(signed(signer = forged, stkPub = stkKp.publicKey))
+        assertEquals(WatchBootApprover.Outcome.KeyMismatch, approver(m, store).approve(domain, null))
+        assertTrue(m.postedResponses.isEmpty())
+    }
+
+    @Test fun anExpiredRequestIsNotAnswered() = runBlocking {
+        val m = mailbox()
+        val store = SoftStore()
+        optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason")
+        m.signedRequests = listOf(signed(expiresAt = now - 1))
+        assertEquals(WatchBootApprover.Outcome.NotWaiting, approver(m, store).approve(domain, null))
+        assertTrue(m.postedResponses.isEmpty())
+    }
+
     @Test fun aServerNotWaitingIsSaidSo() = runBlocking {
-        val m = mailbox().apply { directory = directory.map { it.copy(pendingRequests = emptyList()) } }
+        val m = mailbox().apply { signedRequests = emptyList() }
         val store = SoftStore()
         optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason")
         assertEquals(WatchBootApprover.Outcome.NotWaiting, approver(m, store).approve(domain, null))
