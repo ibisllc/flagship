@@ -1069,6 +1069,26 @@ public struct Keystore {
     public static func clearWatchDelegate() {
         keychainDelete(account: account(KCKey.watchDelegateSeed))
         keychainDelete(account: account(KCKey.watchDelegateGrantId))
+        keychainDelete(account: account(KCKey.watchBootSeed))
+    }
+
+    /// The boot-only X25519 key a watch copy of a server's disk key is sealed
+    /// to (docs/watch-boot-approval-without-unlock.md, option (a)). The Secure
+    /// Enclave holds no X25519 key, and a `.userPresence` item can't be read
+    /// while the iPhone is locked, which is the case this key exists for. So it
+    /// is stored like the delegate signing key: this device only, never
+    /// synced, readable after the first unlock; the presence is the watch's
+    /// own Approve, and it opens nothing but the copies the owner deposited.
+    public static func loadOrCreateWatchBootKey() throws -> Curve25519.KeyAgreement.PrivateKey {
+        if let k = watchBootKey() { return k }
+        let k = Curve25519.KeyAgreement.PrivateKey()
+        try keychainWrite(account: account(KCKey.watchBootSeed), data: k.rawRepresentation, sync: .deviceLocal)
+        return k
+    }
+
+    public static func watchBootKey() -> Curve25519.KeyAgreement.PrivateKey? {
+        guard let raw = keychainRead(account: account(KCKey.watchBootSeed)) else { return nil }
+        return try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: raw)
     }
 
     // MARK: - ACME account key (#28 — cert-minting authority)
@@ -1134,6 +1154,7 @@ public struct Keystore {
                         account(KCKey.irkPendingVersion, profile: id),
                         account(KCKey.watchDelegateSeed, profile: id),
                         account(KCKey.watchDelegateGrantId, profile: id),
+                        account(KCKey.watchBootSeed, profile: id),
                         account(KCKey.acmeAccountKeyScalar, profile: id),
                         account(KCKey.adminRootWrapped, profile: id),
                         account(KCKey.adminRootEphemeralPub, profile: id),
@@ -1167,7 +1188,7 @@ public struct Keystore {
         for id in known {
             for base in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
                          KCKey.irkVersion, KCKey.irkPendingVersion,
-                         KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId,
+                         KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId, KCKey.watchBootSeed,
                          KCKey.acmeAccountKeyScalar,
                          KCKey.adminRootWrapped, KCKey.adminRootEphemeralPub,
                          KCKey.adminRootPub] {
@@ -1320,6 +1341,8 @@ public struct Keystore {
         /// The active delegate's grantId (UUID) — needed to build the
         /// IRK-signed RevokeWatchDelegate when the toggle flips off. */
         static let watchDelegateGrantId = "com.flagship.watchdelegate.grantid"
+        /// The watch's boot-only X25519 key (raw 32 bytes), `.deviceLocal`.
+        static let watchBootSeed        = "com.flagship.watchdelegate.bootkey"
         /// Account read tokens (docs/account-read-token.md), a JSON map of
         /// username → token. `.deviceLocal` and non-biometric: a token only
         /// reads `.com`'s per-account state, and polls must never prompt.
