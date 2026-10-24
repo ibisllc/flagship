@@ -40,6 +40,10 @@ data class InstallBlobBundle(
     // for the production default; omitted from JSON when null (encodeDefaults=
     // false) so a non-debug recipe is byte-identical.
     val debugGrant: String? = null,
+    // First contact (docs/first-contact.md): a fresh one-time 32-byte secret (lowercase hex), an
+    // UNSIGNED top-level sibling like swkHex. The box proves its own key with it in its first
+    // request; this device keeps a copy until it pins the server. Never inside `blob`.
+    val enrollmentKeyHex: String? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)

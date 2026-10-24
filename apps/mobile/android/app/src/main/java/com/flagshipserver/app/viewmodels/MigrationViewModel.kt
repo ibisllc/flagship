@@ -136,8 +136,11 @@ class MigrationViewModel(
 
     private suspend fun prepareInitiate() {
         try {
+            // The old server's key is the one this device pinned (docs/first-contact.md); `.com`'s
+            // listing must agree with it.
             val pods = mailbox.fetchPods(username)
-            val stk = pods.identityPubKey(serverFqdn)
+            val stk = com.flagshipserver.app.core.ServerKeyPins.shared.pinnedHex(serverFqdn)
+                ?.takeIf { it.equals(pods.identityPubKey(serverFqdn), ignoreCase = true) }
             if (stk == null) {
                 _mode.value = MigrationMode.Failed(
                     FSStrings.get(R.string.couldnt_read_this_servers_current_key),

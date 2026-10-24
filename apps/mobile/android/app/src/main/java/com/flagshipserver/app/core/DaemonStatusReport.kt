@@ -3,9 +3,9 @@
 // A′, phase 4).
 //
 // The box signs the tuple with its STK (Ed25519); `.com` relays it VERBATIM
-// on `/pods` (`signedStatus: { report, signatureHex }`). A phone that derives
-// the box STK locally (ServerKeys.deriveStkPub — NOT `.com`'s identityPubKey
-// echo) re-verifies the leaf-cert fingerprint end-to-end, so a rogue `.com`
+// on `/pods` (`signedStatus: { report, signatureHex }`). A phone holding the
+// box STK it PINNED at the first blessing (ServerKeyPins, docs/first-contact.md —
+// NOT `.com`'s identityPubKey echo) re-verifies the leaf-cert fingerprint end-to-end, so a rogue `.com`
 // can DROP a report but cannot FORGE one.
 //
 // Canonical bytes MUST match the TS implementation byte-for-byte (pinned

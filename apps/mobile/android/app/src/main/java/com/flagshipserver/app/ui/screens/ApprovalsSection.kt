@@ -4,9 +4,10 @@
 // you", a loading skeleton, "Try again" on a failed load, and a bounded scroll
 // area so a long list never pushes the other titles off screen.
 //
-// Each request is RE-VERIFIED against the box's STK as independently resolved
-// from the directory before it shows (SecretRequestCoordinator), so what is
-// listed is what the box really asked. For "auto" servers an approval also
+// Each request is judged against the key this phone pinned for the server
+// (SecretRequestCoordinator, docs/first-contact.md), so what is listed is what
+// the box really asked. A first sight shows the six-digit code computed here
+// right above Approve; a refusal shows its sentence and no Approve. For "auto" servers an approval also
 // deposits a box-sealed self-unlock lease (its id is kept per server for the
 // kill switch).
 
@@ -93,7 +94,7 @@ internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.Verifi
                 // Opening the list is the next foreground: send again any lease the
                 // worker could not take earlier, so a restart self-unlocks.
                 runCatching { coord.retryPendingLeases().forEach { (server, id) -> store.setLeaseId(server, id) } }
-                coord.fetchVerifiedRequests()
+                coord.fetchRequests()
             },
             respond = { req ->
                 // "auto" servers (default; absent ⇒ auto) also get a box-sealed
@@ -205,12 +206,18 @@ private fun SecretRequestCard(
                 style = MaterialTheme.typography.bodyMedium,
             )
             req.deviceInfo?.let { info -> DeviceInfoRows(info) }
+            val refusal = req.refusal
+            if (refusal != null) {
+                FirstContactRefusalNotice(stringResource(refusal.resId))
+                return@Column
+            }
             Text(
                 stringResource(R.string.is_this_the_machine_in_front),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(FS.space.s1))
+            req.firstLook?.let { ServerCodeBox(it) }
             FSPrimaryButton(
                 label = if (inFlight) stringResource(R.string.signing) else stringResource(R.string.yes_this_is_my_server),
                 onClick = onApprove,

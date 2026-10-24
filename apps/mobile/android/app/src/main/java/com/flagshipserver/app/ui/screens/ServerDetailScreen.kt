@@ -361,6 +361,15 @@ fun ServerDetailScreen(
         val approvalFqdn = (detail as? LoadingState.Loaded)?.value?.serverFqdn
             ?.takeIf { it.isNotEmpty() }
             ?: serverFqdn?.takeIf { it.isNotEmpty() }
+        // First contact (docs/first-contact.md): the account's list naming another key than the one
+        // this phone pinned is shown, never trusted.
+        val listedKey = pod?.identityPubKeyHex.orEmpty()
+        val keyChanged = remember(pod?.fqdn, listedKey) {
+            val d = pod?.fqdn
+            d != null && listedKey.isNotEmpty() &&
+                com.flagshipserver.app.core.ServerKeyPins.shared.check(d, listedKey) is com.flagshipserver.app.core.ServerKeyPins.Check.Changed
+        }
+        if (keyChanged) FirstContactRefusalNotice(stringResource(R.string.server_key_changed))
         approvalFqdn?.let { fqdn ->
             BootUnlockApprovalCard(serverDomain = fqdn, awaitingUnlock = awaitingUnlock)
             // The Box Request Inbox's serve-authorization lane: a box that posted
@@ -589,11 +598,11 @@ private fun BootUnlockApprovalCard(
                     )
                     // Keep the lease id the approval returned: it is the kill switch's handle.
                     object : ApprovalSource {
-                        override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean) =
-                            inner.approvePendingUnlock(serverDomain, depositAutoLease)
+                        override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean, acceptFirstSightKey: String?) =
+                            inner.approvePendingUnlock(serverDomain, depositAutoLease, acceptFirstSightKey)
                                 .also { id -> if (id != null) store.setLeaseId(serverDomain, id) }
-                        override suspend fun approvePendingEntitlement(serverDomain: String) =
-                            inner.approvePendingEntitlement(serverDomain)
+                        override suspend fun approvePendingEntitlement(serverDomain: String, acceptFirstSightKey: String?) =
+                            inner.approvePendingEntitlement(serverDomain, acceptFirstSightKey)
                     }
                 }
             },
@@ -651,6 +660,31 @@ private fun BootUnlockApprovalCard(
                         modifier = Modifier
                             .padding(top = FS.space.s2)
                             .semantics { contentDescription = "sd-approve-unlock" },
+                    )
+                    FSSecondaryButton(
+                        label = stringResource(R.string.deny),
+                        onClick = { vm.deny() },
+                        block = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-deny-unlock" },
+                    )
+                }
+            }
+        }
+        is BootUnlockApprovalViewModel.State.ConfirmCode -> SdSection(stringResource(R.string.server_waiting)) {
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Text(
+                        headline,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    ServerCodeBox(s.look)
+                    FSPrimaryButton(
+                        label = ctaLabel,
+                        onClick = { scope.launch { vm.approveShownKey() } },
+                        block = true,
+                        large = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-approve-shown-key" },
                     )
                     FSSecondaryButton(
                         label = stringResource(R.string.deny),

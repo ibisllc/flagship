@@ -30,7 +30,7 @@ interface WatchApprovalSource {
 fun SecretRequestCoordinator.asWatchApprovalSource(): WatchApprovalSource {
     val coordinator = this
     return object : WatchApprovalSource {
-        override suspend fun fetchVerifiedRequests() = coordinator.fetchVerifiedRequests()
+        override suspend fun fetchVerifiedRequests() = coordinator.fetchRequests()
         override suspend fun confirmAndRespond(verified: SecretRequestCoordinator.VerifiedRequest, depositAutoLease: Boolean) =
             coordinator.confirmAndRespond(verified, depositAutoLease)
     }
@@ -101,6 +101,9 @@ class WatchApprovalResponder(
             val req = (if (cmd.requestId != null) live.firstOrNull { it.id == cmd.requestId } else null)
                 ?: live.maxByOrNull { it.pending.postedAt }
                 ?: return fail(GONE)
+            // The watch can't show the code box: a first sight is approved on the phone, a refusal is said.
+            req.refusal?.let { return fail(it.message()) }
+            if (req.firstLook != null) return fail(FSStrings.get(R.string.server_first_approval_on_phone))
             // No auto-unlock lease: that deposit is an owner order, and the
             // delegate's approval covers this unlock alone.
             source.confirmAndRespond(req, depositAutoLease = false)

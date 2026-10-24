@@ -73,6 +73,7 @@ class AutoUnlockLeaseSignerTest {
 
     /** A device that holds the admin root: the order key the coordinator is handed is the root. */
     private fun coordinator(mock: MockSecretMailboxClient, leases: PendingLeases? = null) = SecretRequestCoordinator(
+        firstContact = firstContactPinned(domain to stkPubHex),
         mailbox = mock,
         username = user,
         irk = irkAccess,
@@ -155,6 +156,7 @@ class AutoUnlockLeaseSignerTest {
             }
         }
         val c2 = SecretRequestCoordinator(
+        firstContact = firstContactPinned(domain to stkPubHex),
             mailbox = failing, username = user, irk = irkAccess,
             adminSigner = { Ed25519Sign(adminKp.privateKey) }, now = { issuedAt },
             nonceGen = { ByteArray(32) { 1 } }, pendingLeases = kept, leaseRetryDelaysMs = listOf(0L, 0L),

@@ -4,7 +4,7 @@
 // The unit is the FAULTY CERTIFICATE (cert-hash), NOT the box. Each box signs a
 // `flagship/box-trust-status/v1` verdict with its STK; `.com` relays it on
 // `/pods` as `trustStatus`. This aggregator re-verifies EACH under the pod's
-// `identityPubKey` (the registered STK) — a relayed report whose signature does
+// key this device pinned (never `.com`'s `identityPubKey`) — a relayed report whose signature does
 // not verify is DROPPED, so a rogue `.com` can drop but not forge a verdict —
 // then folds the untrusted ones BY `failingCertHash` across all pods into ONE
 // entry per DISTINCT faulty relay authority, spanning every affected server.
@@ -45,15 +45,18 @@ object RelayTrustAggregator {
     private val HEX64 = Regex("^[0-9a-fA-F]{64}$")
 
     /** Verify + aggregate the per-box relay verdicts across a `/pods` list. */
-    fun aggregate(pods: List<PodDirectoryEntry>): List<RelayCertFailure> {
+    fun aggregate(
+        pods: List<PodDirectoryEntry>,
+        /** The server key this device pinned (docs/first-contact.md); a server with none is skipped. */
+        pinnedStk: (serverDomain: String) -> ByteArray? = ServerKeyPins.shared::pinnedStk,
+    ): List<RelayCertFailure> {
         val servers = LinkedHashMap<String, MutableList<String>>()
         val overridden = HashMap<String, Boolean>()
 
         for (pod in pods) {
             val ts = pod.trustStatus ?: continue
             val wire = ts.report ?: continue
-            val stk = HexUtil.decode(pod.identityPubKey)
-            if (stk == null || stk.size != 32) continue
+            val stk = pinnedStk(pod.serverDomain) ?: continue
             val sig = HexUtil.decode(ts.signatureHex) ?: continue
             val verdict = RelayVerdict.fromWire(wire.relayVerdict) ?: continue
             val report = BoxTrustStatusReport.Report(

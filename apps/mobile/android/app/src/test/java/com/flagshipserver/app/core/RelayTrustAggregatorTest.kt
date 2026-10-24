@@ -63,13 +63,23 @@ class RelayTrustAggregatorTest {
         )
     }
 
+    /** In these tests this phone pinned exactly the keys the list names. */
+    private fun pinnedAsListed(pods: List<PodDirectoryEntry>): (String) -> ByteArray? =
+        { d -> pods.firstOrNull { it.serverDomain == d }?.identityPubKey?.let(HexUtil::decode) }
+
+    @Test
+    fun aServerThisPhoneHasNotPinnedIsSkipped() {
+        val pods = listOf(signedPod("a.x", BoxTrustStatusReport.RelayVerdict.UNTRUSTED, certA))
+        assertTrue(RelayTrustAggregator.aggregate(pods) { null }.isEmpty())
+    }
+
     @Test
     fun twoPodsSameCertHashAggregateToOneEntrySpanningBothServers() {
         val pods = listOf(
             signedPod("a.harry1.flagship.services", BoxTrustStatusReport.RelayVerdict.UNTRUSTED, certA),
             signedPod("b.harry1.flagship.services", BoxTrustStatusReport.RelayVerdict.UNTRUSTED, certA),
         )
-        val out = RelayTrustAggregator.aggregate(pods)
+        val out = RelayTrustAggregator.aggregate(pods, pinnedAsListed(pods))
         assertEquals(1, out.size)
         assertEquals(certA, out[0].certHash)
         assertEquals(2, out[0].serverCount)
@@ -87,7 +97,7 @@ class RelayTrustAggregatorTest {
             signedPod("a.x", BoxTrustStatusReport.RelayVerdict.UNTRUSTED, certA),
             signedPod("b.x", BoxTrustStatusReport.RelayVerdict.UNTRUSTED, certB),
         )
-        val out = RelayTrustAggregator.aggregate(pods)
+        val out = RelayTrustAggregator.aggregate(pods, pinnedAsListed(pods))
         assertEquals(listOf(certA, certB), out.map { it.certHash })
     }
 
@@ -98,7 +108,7 @@ class RelayTrustAggregatorTest {
         val pods = listOf(
             signedPod("a.x", BoxTrustStatusReport.RelayVerdict.UNTRUSTED, certA, covering = certA),
         )
-        val out = RelayTrustAggregator.aggregate(pods)
+        val out = RelayTrustAggregator.aggregate(pods, pinnedAsListed(pods))
         assertEquals(1, out.size)
         assertTrue(out[0].overridden)
     }
@@ -108,7 +118,7 @@ class RelayTrustAggregatorTest {
         val pods = listOf(
             signedPod("a.x", BoxTrustStatusReport.RelayVerdict.UNTRUSTED, certA, tamper = true),
         )
-        assertTrue(RelayTrustAggregator.aggregate(pods).isEmpty())
+        assertTrue(RelayTrustAggregator.aggregate(pods, pinnedAsListed(pods)).isEmpty())
     }
 
     @Test
@@ -118,6 +128,6 @@ class RelayTrustAggregatorTest {
             signedPod("b.x", BoxTrustStatusReport.RelayVerdict.UNKNOWN, null),
             PodDirectoryEntry(serverDomain = "c.x", identityPubKey = "cc".repeat(32)),
         )
-        assertTrue(RelayTrustAggregator.aggregate(pods).isEmpty())
+        assertTrue(RelayTrustAggregator.aggregate(pods, pinnedAsListed(pods)).isEmpty())
     }
 }

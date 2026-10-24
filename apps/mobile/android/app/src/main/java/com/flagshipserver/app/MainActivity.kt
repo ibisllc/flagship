@@ -136,6 +136,12 @@ class MainActivity : FragmentActivity() {
         // BEFORE the clients below read Endpoints. A release build has none.
         com.flagshipserver.app.core.Variant.applyLaunchOverrides(intent)
         Keystore.attach(applicationContext)
+        // First contact (docs/first-contact.md): the one pin store, the enrollment secrets of the
+        // servers this device created, and app-name grants waiting for their box, all device-local.
+        com.flagshipserver.app.core.ServerKeyPins.shared =
+            com.flagshipserver.app.core.ServerKeyPins(com.flagshipserver.app.keystore.KeystoreServerKeyPinStore)
+        com.flagshipserver.app.core.FirstContact.shared = com.flagshipserver.app.keystore.KeystoreEnrollmentSecretStore
+        com.flagshipserver.app.core.WildcardGrants.outbox = com.flagshipserver.app.keystore.KeystoreWildcardGrantOutbox
         // Pins and the list of boxes this phone knows survive a restart, so a cold start is not a
         // window in which a known box falls back to ordinary web trust.
         com.flagshipserver.app.core.CertPinRegistry.shared.attach(
@@ -282,24 +288,25 @@ class MainActivity : FragmentActivity() {
         val liveNameDibs = com.flagshipserver.app.api.LiveNameDibsClient(OkHttpJsonTransport(okHttp))
         val liveVoiciName = com.flagshipserver.app.api.LiveVoiciNameClient(OkHttpJsonTransport(okHttp))
         // A′ pinning — every live /pods fetch reconciles the cert-pin
-        // registry under STKs derived from THIS device's UMK. Live-only by
-        // construction (the mock never invokes the observer), so demo/mock
-        // sessions can never install pins; without a UMK there is nothing
-        // to verify against, so no pins either.
+        // registry under the server keys THIS device pinned at each server's
+        // first blessing (docs/first-contact.md). Live-only by construction
+        // (the mock never invokes the observer), so demo/mock sessions can
+        // never install pins; a server with no pinned key gets none either.
         val liveMailbox = LiveSecretMailboxClient(
             OkHttpJsonTransport(okHttp),
             onPods = { response ->
                 if (Keystore.hasUmkSeed()) {
-                    val umkSeed = Keystore.currentUmkSeed()
-                    com.flagshipserver.app.core.CertPinRegistry.shared.update(response.pods, umkSeed)
+                    val pins = com.flagshipserver.app.core.ServerKeyPins.shared
+                    com.flagshipserver.app.core.CertPinRegistry.shared.update(response.pods, pins::pinnedStk)
                     // LAN-direct: refresh the active box's signed LAN hint,
                     // bound to the pin just verified (docs/lan-direct.md).
                     val box = sessionStore.podBaseUrl.value
                         ?.let { runCatching { java.net.URI(it).host }.getOrNull() }
-                    if (box != null) {
+                    val boxKey = box?.let(pins::pinnedStk)
+                    if (box != null && boxKey != null) {
                         com.flagshipserver.app.core.LanDirectRegistry.shared.refresh(
                             box,
-                            com.flagshipserver.app.core.ServerKeys.deriveStkPub(umkSeed, box),
+                            boxKey,
                             com.flagshipserver.app.core.CertPinRegistry.shared.pinFor(box),
                         ) { liveScreens.lanHint() }
                     }
@@ -587,10 +594,50 @@ class MainActivity : FragmentActivity() {
                     copies = com.flagshipserver.app.keystore.WatchBootWiring.optIn(
                         effectiveMailbox,
                         com.flagshipserver.app.keystore.SessionIrkAccess(),
-                    ) { d -> appState.pods.value.firstOrNull { it.fqdn.equals(d, ignoreCase = true) }?.identityPubKeyHex?.takeIf { it.isNotEmpty() } },
+                    ),
                 )
                 runCatching { renewal.renewIfDue() }
                     .onFailure { com.flagshipserver.app.core.ErrorLog.caught("watch-renew", it, com.flagshipserver.app.core.NetworkErrorHumanizer.errorCode(it)) }
+            }
+
+            // First contact (docs/first-contact.md): Studio's report of the key it read on a VM's
+            // console comes through the install's order status; a signed app-name grant goes to its
+            // box through that box's own client.
+            androidx.compose.runtime.SideEffect {
+                com.flagshipserver.app.core.FirstContact.studioSeenSource = { serial ->
+                    effectiveFlagshipServer.fetchProvisionStatus(serial)?.serverSeen.orEmpty()
+                        .map { com.flagshipserver.app.core.ServerSeen(it.stkPubHex, it.macHex) }
+                }
+                com.flagshipserver.app.core.WildcardGrants.deliver = deliver@{ domain, issuedAt, sig ->
+                    val pod = appState.pods.value.firstOrNull { it.fqdn.equals(domain, ignoreCase = true) } ?: return@deliver false
+                    val client = podClients.screens(pod) ?: return@deliver false
+                    client.postServerWildcardGrant(issuedAt, sig)
+                    true
+                }
+            }
+            // Grant upkeep: a pinned server that answers `granted: false` gets the grant waiting for
+            // it, or (on an admin device, only while the session is unlocked) one signed silently.
+            val podsForGrants by appState.pods.collectAsState()
+            LaunchedEffect(isForeground, accessPaired, accessUnlocked, podsForGrants) {
+                if (!(isForeground && accessPaired && accessUnlocked)) return@LaunchedEffect
+                val user = appState.currentUser.value?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
+                val servers = podsForGrants
+                    .filter { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE && !it.isRevoked && it.fqdn.isNotEmpty() }
+                    .mapNotNull { pod -> podClients.screens(pod)?.let { pod.fqdn to it } }
+                if (servers.isEmpty()) return@LaunchedEffect
+                val upkeep = com.flagshipserver.app.core.WildcardGrantUpkeep(
+                    username = user,
+                    isAdminDevice = {
+                        Keystore.hasAdminRoot() ||
+                            com.flagshipserver.app.core.AppState.isDemoAccount(appState.activeProfile, appState.pods.value)
+                    },
+                    silentSigner = {
+                        if (!com.flagshipserver.app.keystore.SessionIrkAccess.isSessionUnlocked()) null
+                        else Keystore.adminSigningKey(FSStrings.get(R.string.let_server_hold_app_names))
+                    },
+                )
+                runCatching { upkeep.run(servers) }
+                    .onFailure { com.flagshipserver.app.core.ErrorLog.caught("wildcard-grant", it, com.flagshipserver.app.core.NetworkErrorHumanizer.errorCode(it)) }
             }
 
             // MULTI-POD (Fix B) — PodSessionSync. When the current/leader pod

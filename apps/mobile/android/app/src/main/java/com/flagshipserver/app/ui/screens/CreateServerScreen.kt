@@ -259,7 +259,7 @@ fun CreateServerScreen(
     // Mint the recipe + pre-publish the auth-code/RCK on .com (the box needs them
     // to register when it phones home, regardless of delivery channel), reusing
     // the shared minter so the recipe is byte-identical across delivery methods.
-    suspend fun mintAndRegister(): MintedBundle {
+    suspend fun mintAndRegister(forStudio: Boolean = false): MintedBundle {
         com.flagshipserver.app.core.ErrorLog.step("create-server", FSStrings.get(R.string.mint_start))
         val username = app.currentUser.value ?: throw IllegalStateException("not paired yet")
         val minted = mintRecipeBundle(
@@ -281,6 +281,7 @@ fun CreateServerScreen(
             isDemoAccount = app.isDemoAccountNow(),
             restore = preset?.restore,
             backupPolicy = backupChoice,
+            forStudio = forStudio,
         )
         com.flagshipserver.app.core.ErrorLog.step("create-server", "minted; registering with .com")
         registerControlPlane(
@@ -312,9 +313,9 @@ fun CreateServerScreen(
             // debug-consent round-trip (the debug grant rides the
             // recipe). Byte-identical recipe to share/copy/burn.
             mint = {
-                val minted = mintAndRegister()
+                val minted = mintAndRegister(forStudio = true)
                 val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
-                BuilderPairController.MintedRecipe(json, minted.serverDomain, minted.serial)
+                BuilderPairController.MintedRecipe(json, minted.serverDomain, minted.serial, minted.studioConfirmKeyHex)
             },
         )
         val link = pendingBuilderLink
@@ -1300,6 +1301,9 @@ internal data class MintedBundle(
     val serverDomain: String,
     val serial: String,
     val irkPubHex: String,
+    /** For a recipe handed to Studio: the key sent BESIDE the recipe (never inside) so Studio can
+     *  confirm the key it reads on the VM's console (docs/first-contact.md). */
+    val studioConfirmKeyHex: String? = null,
 )
 
 /**
@@ -1337,6 +1341,10 @@ internal suspend fun mintRecipeBundle(
     // The server's backup policy, signed and attached beside the pairing order
     // (docs/server-backup-and-clone.md, "Backup policy").
     backupPolicy: BackupPolicyChoice? = null,
+    // First contact: where this device keeps the recipe's enrollment secret until it pins the server.
+    enrollmentStore: com.flagshipserver.app.core.EnrollmentSecretStore? = com.flagshipserver.app.core.FirstContact.shared,
+    // The recipe goes to Studio: also make the Studio confirm key sent beside it.
+    forStudio: Boolean = false,
 ): MintedBundle {
     // Only an admin device of the account adds servers, and only opening the
     // account mints an admin root: refuse here, before any prompt or `.com`
@@ -1504,6 +1512,10 @@ internal suspend fun mintRecipeBundle(
         debugGrantEnvelope(serverDomain, key, signer, now)
     }
 
+    // First contact (docs/first-contact.md): a fresh secret per recipe, kept device-local (and the
+    // Studio confirm key when Studio gets the recipe) until this device pins the server.
+    val enrollment = com.flagshipserver.app.core.FirstContact.newEnrollment(enrollmentStore, serverDomain, serial, withStudioKey = forStudio)
+
     val bundle = InstallBlobBundle(
         blob = WireBlob(
             serverDomain = serverDomain,
@@ -1533,6 +1545,7 @@ internal suspend fun mintRecipeBundle(
             OfflineSecretsCommitment.sign(serverDomain, serial, it, now + 1000) { m -> irk.sign(m) }
         },
         debugGrant = debugGrantSibling,
+        enrollmentKeyHex = enrollment.secretHex,
     )
 
     return MintedBundle(
@@ -1540,6 +1553,7 @@ internal suspend fun mintRecipeBundle(
         serverDomain = serverDomain,
         serial = serial,
         irkPubHex = irkPubHex,
+        studioConfirmKeyHex = enrollment.studioConfirmKeyHex,
     )
 }
 
@@ -1662,4 +1676,8 @@ internal suspend fun registerControlPlane(
             signature = rckSig,
         ),
     )
+    // `.com` took this new recipe: it is the explicit re-trust (docs/first-contact.md). The box built
+    // from it makes a new key, which its enrollment proof and the code then pin; an old pin for the
+    // name must not refuse it.
+    com.flagshipserver.app.core.ServerKeyPins.shared.forget(bundle.blob.serverDomain)
 }

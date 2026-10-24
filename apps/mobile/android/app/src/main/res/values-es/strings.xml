@@ -2746,4 +2746,12 @@
     <string name="chat_request_now_always_sender">%1$s/%2$s ya puede iniciar un chat con %3$s sin preguntar</string>
     <string name="ai_consent_cap">Esta ejecución puede usar hasta unos %1$s tokens. La ejecución se detiene ahí.</string>
     <string name="watch_boot_key_mismatch">La clave de este servidor no coincide. Aprueba su arranque desde tu teléfono.</string>
+    <string name="server_key_changed">La clave de este servidor ha cambiado. Si no lo reconstruiste, no apruebes nada para él.</string>
+    <string name="server_not_from_your_recipe">Este servidor no se creó a partir de tu receta. No lo apruebes.</string>
+    <string name="server_code_on_monitor">Si tu equipo tiene un monitor, está mostrando este código: %1$s</string>
+    <string name="server_code_confirmed_by_studio">Confirmado por Studio</string>
+    <string name="server_code_check_first">Comprueba el código de este servidor antes de aprobarlo.</string>
+    <string name="server_first_approval_on_phone">Aprueba el primer arranque de este servidor en tu teléfono, donde puedes comprobar su código.</string>
+    <string name="server_key_not_pinned">Este teléfono aún no ha comprobado la clave de este servidor. Aprueba primero su próximo arranque en este teléfono.</string>
+    <string name="let_server_hold_app_names">Permite que tu servidor responda por los nombres de tus apps</string>
 </resources>

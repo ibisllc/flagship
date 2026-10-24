@@ -81,7 +81,7 @@ class KnownBoxPinTest {
         val client: OkHttpClient = HttpClientFactory.build()
         assertTrue(client.networkInterceptors.any { it is CertPinInterceptor })
         CertPinRegistry.shared.clear()
-        CertPinRegistry.shared.update(listOf(PodDirectoryEntry(serverDomain = domain, identityPubKey = "00".repeat(32))), ByteArray(32))
+        CertPinRegistry.shared.update(listOf(PodDirectoryEntry(serverDomain = domain, identityPubKey = "00".repeat(32))), { null })
         val interceptor = client.networkInterceptors.filterIsInstance<CertPinInterceptor>().single()
         assertThrows(SSLPeerUnverifiedException::class.java) {
             CertPinInterceptor.enforce(domain, byteArrayOf(1), CertPinRegistry.shared::pinFor, { CertPinRegistry.shared.isKnownBox(it) })

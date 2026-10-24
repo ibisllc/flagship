@@ -38,13 +38,24 @@ sealed interface BuilderInbound {
 sealed interface BuilderOutbound {
     data class PhoneHello(val phonePkB64: String) : BuilderOutbound
     data object ConfirmPairing : BuilderOutbound
-    data class Deliver(val ciphertextB64: String, val nonceB64: String) : BuilderOutbound
+    /** The sealed recipe, and beside it (never inside) first contact's 32-byte Studio confirm key
+     *  sealed with the same session key under its own nonce (docs/first-contact.md). */
+    data class Deliver(
+        val ciphertextB64: String,
+        val nonceB64: String,
+        val confirmKeyCiphertextB64: String? = null,
+        val confirmKeyNonceB64: String? = null,
+    ) : BuilderOutbound
     data class Raw(val json: String) : BuilderOutbound
 
     fun toJson(): String = when (this) {
         is PhoneHello -> """{"kind":"phone-hello","phonePk":"$phonePkB64"}"""
         is ConfirmPairing -> """{"kind":"confirm-pairing"}"""
-        is Deliver -> """{"kind":"deliver","ciphertext":"$ciphertextB64","nonce":"$nonceB64"}"""
+        is Deliver -> if (confirmKeyCiphertextB64 != null && confirmKeyNonceB64 != null) {
+            """{"kind":"deliver","ciphertext":"$ciphertextB64","nonce":"$nonceB64","confirmKeyCiphertext":"$confirmKeyCiphertextB64","confirmKeyNonce":"$confirmKeyNonceB64"}"""
+        } else {
+            """{"kind":"deliver","ciphertext":"$ciphertextB64","nonce":"$nonceB64"}"""
+        }
         is Raw -> json
     }
 }
@@ -165,3 +176,4 @@ class LiveBuilderPairClient(
         }
     }
 }
+

@@ -93,7 +93,7 @@ class ServerKeysTest {
     }
 
     @Test fun derivesThePinnedStkPubFromThePinnedUmkAndServerId() {
-        val pub = ServerKeys.deriveStkPub(
+        val pub = TestStk.pub(
             DaemonStatusVector.UMK_SEED, DaemonStatusVector.SERVER_ID,
         )
         assertEquals(DaemonStatusVector.STK_PUB_HEX, HexUtil.encode(pub))
@@ -102,7 +102,7 @@ class ServerKeysTest {
     @Test fun derivedStkSeedReproducesThePinnedSignatures() {
         // End-to-end HKDF + Ed25519 determinism: signing the pinned canonical
         // bytes with the derived STK private seed yields the pinned signature.
-        val seed = ServerKeys.deriveStkSeed(
+        val seed = TestStk.seed(
             DaemonStatusVector.UMK_SEED, DaemonStatusVector.SERVER_ID,
         )
         val signer = Ed25519Sign(seed)
@@ -117,14 +117,14 @@ class ServerKeysTest {
     }
 
     @Test fun differentServerIdYieldsADifferentStk() {
-        val a = ServerKeys.deriveStkPub(DaemonStatusVector.UMK_SEED, DaemonStatusVector.SERVER_ID)
-        val b = ServerKeys.deriveStkPub(DaemonStatusVector.UMK_SEED, "other.harry1.flagship.services")
+        val a = TestStk.pub(DaemonStatusVector.UMK_SEED, DaemonStatusVector.SERVER_ID)
+        val b = TestStk.pub(DaemonStatusVector.UMK_SEED, "other.harry1.flagship.services")
         assertNotEquals(HexUtil.encode(a), HexUtil.encode(b))
     }
 
     @Test fun differentUmkYieldsADifferentStk() {
-        val a = ServerKeys.deriveStkPub(DaemonStatusVector.UMK_SEED, DaemonStatusVector.SERVER_ID)
-        val b = ServerKeys.deriveStkPub(ByteArray(32) { 0x08 }, DaemonStatusVector.SERVER_ID)
+        val a = TestStk.pub(DaemonStatusVector.UMK_SEED, DaemonStatusVector.SERVER_ID)
+        val b = TestStk.pub(ByteArray(32) { 0x08 }, DaemonStatusVector.SERVER_ID)
         assertNotEquals(HexUtil.encode(a), HexUtil.encode(b))
     }
 
@@ -133,7 +133,7 @@ class ServerKeysTest {
             ServerKeys.deriveSwk(ByteArray(31), DaemonStatusVector.SERVER_ID)
         }
         assertThrows(IllegalArgumentException::class.java) {
-            ServerKeys.deriveStkPub(ByteArray(33), DaemonStatusVector.SERVER_ID)
+            TestStk.pub(ByteArray(33), DaemonStatusVector.SERVER_ID)
         }
     }
 }

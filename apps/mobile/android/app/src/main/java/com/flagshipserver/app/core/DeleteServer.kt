@@ -58,7 +58,11 @@ object DeleteServerFlow {
         }
 
         var erasureRequested = false
-        if (pod.identityPubKeyHex.isNotEmpty()) {
+        // The order names the box it wipes: the key this device pinned. A server never blessed
+        // here has no pin; naming the listed key is no trust (a box ignores an order naming
+        // another key), so the order still goes.
+        val retiredKey = ServerKeyPins.shared.pinnedHex(pod.fqdn) ?: pod.identityPubKeyHex
+        if (retiredKey.isNotEmpty()) {
             try {
                 val body = ReplaceServerFlow.buildDeposit(
                     serverFqdn = pod.fqdn,
@@ -66,7 +70,7 @@ object DeleteServerFlow {
                     irk = mailboxKey(reason),
                     irkPubHex = mailboxPubHex(),
                     orderKey = key,
-                    retiredStkPubHex = pod.identityPubKeyHex,
+                    retiredStkPubHex = retiredKey,
                     finalBackup = false,
                     disposition = ReplaceServerFlow.Disposition.WipeNow,
                     issuedAt = now(),

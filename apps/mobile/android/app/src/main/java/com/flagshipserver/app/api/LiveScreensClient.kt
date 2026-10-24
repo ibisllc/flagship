@@ -359,6 +359,23 @@ class LiveScreensClient(
         return request("/api/screens/server-order", ServerOrderDeliveryResponse.serializer(), "POST", body)
     }
 
+    override suspend fun serverWildcardGrantGranted(): Boolean =
+        request("/api/screens/server-wildcard-grant", WildcardGrantStatus.serializer()).granted
+
+    override suspend fun postServerWildcardGrant(issuedAt: Long, signatureHex: String) {
+        val body = json.encodeToString(WildcardGrantBody.serializer(), WildcardGrantBody(issuedAt, signatureHex)).toByteArray()
+        request("/api/screens/server-wildcard-grant", WildcardGrantAck.serializer(), "POST", body)
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class WildcardGrantStatus(val granted: Boolean = false)
+
+    @kotlinx.serialization.Serializable
+    private data class WildcardGrantBody(val issuedAt: Long, val signature: String)
+
+    @kotlinx.serialization.Serializable
+    private data class WildcardGrantAck(val ok: Boolean = false, val restarting: Boolean = false)
+
     override suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         request("/api/screens/debug-access", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
 

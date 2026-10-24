@@ -342,6 +342,32 @@ class MockScreensClient(
 
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
 
+    // ---- App-name certificate grant (serverWildcardGrant.ts) ------------
+
+    /** The grant the box keeps once one verifies; null until then. */
+    var wildcardGrant: Pair<Long, String>? = null
+    /** Every grant posted, as (issuedAt, signature). */
+    val wildcardGrantPosts: MutableList<Pair<Long, String>> = mutableListOf()
+    /** The key the box signs with, which the grant must name (the gym sets it to the pinned one). */
+    var wildcardGrantStkHex: String? = null
+    var wildcardGrantUser: String = "bright-maple"
+
+    override suspend fun serverWildcardGrantGranted(): Boolean {
+        tick()
+        return wildcardGrant != null
+    }
+
+    override suspend fun postServerWildcardGrant(issuedAt: Long, signatureHex: String) {
+        tick()
+        wildcardGrantPosts += issuedAt to signatureHex
+        val stk = wildcardGrantStkHex
+        if (stk != null) {
+            val bytes = com.flagshipserver.app.core.ServerWildcardGrant.canonicalBytes(wildcardGrantUser, boxFqdn(), stk, issuedAt)
+            MockSignatures.requireAdmin("server-wildcard-grant", bytes, signatureHex)
+        }
+        wildcardGrant = issuedAt to signatureHex
+    }
+
     // ---- App chat (chat/approvals.ts) -----------------------------------
 
     /** Held chat requests; empty unless a scenario seeds them ([seedChat]). */

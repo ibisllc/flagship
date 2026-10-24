@@ -11374,5 +11374,38 @@
   "watch_boot_key_mismatch": {
     "en": "This server's key doesn't match. Approve its start-up from your phone.",
     "ctx": "core/WatchApprovalResponder.kt (shown on the watch)"
+  },
+  "server_key_changed": {
+    "en": "This server's key changed. If you did not rebuild it, do not approve anything for it.",
+    "ctx": "core/FirstContact.kt refusal (docs/first-contact.md, exact security wording)"
+  },
+  "server_not_from_your_recipe": {
+    "en": "This server was not built from your recipe. Do not approve it.",
+    "ctx": "core/FirstContact.kt refusal (exact security wording)"
+  },
+  "server_code_on_monitor": {
+    "en": "If your machine has a monitor, it is showing this code: %1$s",
+    "ctx": "ui/screens/FirstContactViews.kt code box above Approve; %1$s is six digits like 482 913",
+    "args": 1
+  },
+  "server_code_confirmed_by_studio": {
+    "en": "Confirmed by Studio",
+    "ctx": "ui/screens/FirstContactViews.kt in place of the code box"
+  },
+  "server_code_check_first": {
+    "en": "Check this server's code before you approve it.",
+    "ctx": "core/SecretRequestCoordinator.kt first sight"
+  },
+  "server_first_approval_on_phone": {
+    "en": "Approve this server's first start-up on your phone, where you can check its code.",
+    "ctx": "core/WatchApprovalResponder.kt (shown on the watch)"
+  },
+  "server_key_not_pinned": {
+    "en": "This phone hasn't checked this server's key yet. Approve its next start-up on this phone first.",
+    "ctx": "core/ServerKeyPins.kt (watch start-up switch)"
+  },
+  "let_server_hold_app_names": {
+    "en": "Let your server answer for your apps' names",
+    "ctx": "MainActivity.kt biometric reason (app-name certificate grant)"
   }
 }

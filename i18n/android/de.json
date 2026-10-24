@@ -2743,5 +2743,13 @@
   "chat_always_ended_sender": "%1$s/%2$s muss wieder fragen, bevor ein Chat mit %3$s beginnt",
   "chat_request_now_always_sender": "%1$s/%2$s kann jetzt ohne Nachfrage einen Chat mit %3$s beginnen",
   "ai_consent_cap": "Dieser Lauf kann bis zu etwa %1$s Tokens verbrauchen. Dort stoppt er.",
-  "watch_boot_key_mismatch": "Der Schlüssel dieses Servers stimmt nicht überein. Genehmige seinen Start auf deinem Telefon."
+  "watch_boot_key_mismatch": "Der Schlüssel dieses Servers stimmt nicht überein. Genehmige seinen Start auf deinem Telefon.",
+  "server_key_changed": "Der Schlüssel dieses Servers hat sich geändert. Wenn du ihn nicht neu aufgebaut hast, genehmige nichts für ihn.",
+  "server_not_from_your_recipe": "Dieser Server wurde nicht aus deinem Rezept erstellt. Genehmige ihn nicht.",
+  "server_code_on_monitor": "Wenn deine Maschine einen Bildschirm hat, zeigt sie diesen Code: %1$s",
+  "server_code_confirmed_by_studio": "Von Studio bestätigt",
+  "server_code_check_first": "Prüfe den Code dieses Servers, bevor du ihn genehmigst.",
+  "server_first_approval_on_phone": "Genehmige den ersten Start dieses Servers auf deinem Telefon, wo du seinen Code prüfen kannst.",
+  "server_key_not_pinned": "Dieses Telefon hat den Schlüssel dieses Servers noch nicht geprüft. Genehmige zuerst seinen nächsten Start auf diesem Telefon.",
+  "let_server_hold_app_names": "Erlaube deinem Server, für die Namen deiner Apps zu antworten"
 }

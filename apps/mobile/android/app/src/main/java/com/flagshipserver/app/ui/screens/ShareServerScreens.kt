@@ -207,13 +207,18 @@ fun ShareServerCard(serverDomain: String, podId: String) {
     val pod = pods.firstOrNull { it.podId == podId } ?: return
     val user = username?.takeIf { it.isNotEmpty() } ?: return
     val serverName = pod.name.ifBlank { serverDomain.substringBefore('.') }
-    val vm = remember(serverDomain, user, pod.identityPubKeyHex) {
+    // The share carries the key this device pinned (docs/first-contact.md), never `.com`'s listing:
+    // the co-manager seals the disk key to it.
+    val pinnedKey = remember(serverDomain, pod.identityPubKeyHex) {
+        com.flagshipserver.app.core.ServerKeyPins.shared.pinnedHex(serverDomain).orEmpty()
+    }
+    val vm = remember(serverDomain, user, pinnedKey) {
         OwnerShareViewModel(
             client = runtime.client,
             username = user,
             serverDomain = serverDomain,
             serverName = serverName,
-            stkPubHex = pod.identityPubKeyHex,
+            stkPubHex = pinnedKey,
             ownerSession = {
                 sessions.sessionToken(forPodId = podId)
                     ?: sessions.sessionToken.value.takeIf { app.currentPod?.podId == podId }

@@ -2743,5 +2743,13 @@
   "chat_always_ended_sender": "%1$s/%2$s tendrá que volver a preguntar antes de iniciar un chat con %3$s",
   "chat_request_now_always_sender": "%1$s/%2$s ya puede iniciar un chat con %3$s sin preguntar",
   "ai_consent_cap": "Esta ejecución puede usar hasta unos %1$s tokens. La ejecución se detiene ahí.",
-  "watch_boot_key_mismatch": "La clave de este servidor no coincide. Aprueba su arranque desde tu teléfono."
+  "watch_boot_key_mismatch": "La clave de este servidor no coincide. Aprueba su arranque desde tu teléfono.",
+  "server_key_changed": "La clave de este servidor ha cambiado. Si no lo reconstruiste, no apruebes nada para él.",
+  "server_not_from_your_recipe": "Este servidor no se creó a partir de tu receta. No lo apruebes.",
+  "server_code_on_monitor": "Si tu equipo tiene un monitor, está mostrando este código: %1$s",
+  "server_code_confirmed_by_studio": "Confirmado por Studio",
+  "server_code_check_first": "Comprueba el código de este servidor antes de aprobarlo.",
+  "server_first_approval_on_phone": "Aprueba el primer arranque de este servidor en tu teléfono, donde puedes comprobar su código.",
+  "server_key_not_pinned": "Este teléfono aún no ha comprobado la clave de este servidor. Aprueba primero su próximo arranque en este teléfono.",
+  "let_server_hold_app_names": "Permite que tu servidor responda por los nombres de tus apps"
 }

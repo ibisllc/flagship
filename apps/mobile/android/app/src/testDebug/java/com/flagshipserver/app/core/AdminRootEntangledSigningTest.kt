@@ -144,6 +144,7 @@ class AdminRootEntangledSigningTest {
                 IrkMaterial(signer = irk, seed = irkSeed, pubHex = irkPubHex)
         }
         val coord = SecretRequestCoordinator(
+        firstContact = firstContactPinned(serverDomain to stkPubHex),
             mailbox = mock,
             username = user,
             irk = irkAccess,

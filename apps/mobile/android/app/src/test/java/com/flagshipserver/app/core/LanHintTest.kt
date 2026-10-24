@@ -9,8 +9,8 @@ import org.junit.Test
 class LanHintTest {
     private val server = "abc5.harry1.flagship.services"
     private val umk = ByteArray(32) { 7 }
-    private val stkPub = ServerKeys.deriveStkPub(umk, server)
-    private val signer = Ed25519Sign(ServerKeys.deriveStkSeed(umk, server))
+    private val stkPub = TestStk.pub(umk, server)
+    private val signer = Ed25519Sign(TestStk.seed(umk, server))
     private val cert = "ab".repeat(32)
     private val issued = 1791500000000L
 
