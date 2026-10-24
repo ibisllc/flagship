@@ -42,6 +42,8 @@ public struct WatchApprovalResponder {
     public static let serverLocked = String(localized: "This server is locked. Approve its start-up from your iPhone.")
     /// The directory's box key differs from the one this phone pinned: nothing was sent.
     public static let keyMismatch = String(localized: "This server's key doesn't match. Approve its start-up from your phone.")
+    /// The start-up request isn't signed by the server's pinned key: nothing was sent.
+    public static let badSignature = String(localized: "This start-up request isn't signed by your server. Approve it from your phone.")
 
     let delegateEnrolled: () -> Bool
     let hasSessionKey: () -> Bool
@@ -86,6 +88,7 @@ public struct WatchApprovalResponder {
             case .locked: return fail(Self.serverLocked)
             case .gone: return fail(Self.gone)
             case .keyMismatch: return fail(Self.keyMismatch)
+            case .badSignature: return fail(Self.badSignature)
             case .failed(let message): copyFailure = message
             case .noCopy: break
             }
