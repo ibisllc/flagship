@@ -291,6 +291,9 @@ public final class RecoveryViewModel {
                     // re-established via a rotation later.
                 }
             }
+            // A classically recovered root must not gain a PQ binding from this device
+            // (architecture v2): its IRK and admin root are skipped until they rotate.
+            PqKeyStore.shared.markRecovered(username: normalizedUser)
             phase = .recovered
             return seed
         } catch {

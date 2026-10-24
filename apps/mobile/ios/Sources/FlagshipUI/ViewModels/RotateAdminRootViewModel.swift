@@ -207,6 +207,11 @@ public final class RotateAdminRootViewModel {
             phase = .failed(String(localized: "Your admin key was rotated, but saving it on this device failed. Recover on this device to finish. (\(UserErrorText.of(error)))"))
             return
         }
+        // The new root binds a fresh ML-DSA key (architecture v2); in the background, never prompting.
+        if let user = username() {
+            PqIdentityBindingService.bindInBackground(
+                username: user, identities: [PqIdentity(role: .adminRoot, subjectId: user, edKey: newRoot)])
+        }
 
         // 6 — the rotation is DONE (published + sealed); everything from here
         // is best-effort and must not undo that. If recovery is enrolled, the

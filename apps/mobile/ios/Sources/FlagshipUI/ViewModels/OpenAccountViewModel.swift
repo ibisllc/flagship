@@ -248,6 +248,11 @@ public final class OpenAccountViewModel {
                 )
             ))
 
+            PqIdentityBindingService.bindInBackground(username: username, identities: [
+                PqIdentity(role: .accountIrk, subjectId: username, edKey: irk),
+                PqIdentity(role: .adminRoot, subjectId: username, edKey: adminRoot),
+                PqIdentity(role: .device, subjectId: deviceId, edKey: deviceKey),
+            ])
             createdDeviceId = deviceId
             phase = .opened(deviceName: effectiveDeviceName)
         } catch {
