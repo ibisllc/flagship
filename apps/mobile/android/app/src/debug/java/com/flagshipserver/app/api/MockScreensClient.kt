@@ -342,6 +342,61 @@ class MockScreensClient(
 
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
 
+    // ---- App chat (chat/approvals.ts) -----------------------------------
+
+    /** Held chat requests; empty unless a scenario seeds them ([seedChat]). */
+    val chatFixture: MutableList<ChatRequestWire> = mutableListOf()
+    val chatAlwaysFixture: MutableList<ChatAlwaysWire> = mutableListOf()
+    val chatAnswers: MutableList<ChatAnswerBody> = mutableListOf()
+    val chatRevokes: MutableList<ChatAlwaysRevokeBody> = mutableListOf()
+
+    /** One incoming request (a stranger's app asking to chat with Plants) and one outgoing. */
+    fun seedChat() {
+        chatFixture.clear()
+        chatFixture += ChatRequestWire(
+            requestId = "c0ffee01", kind = "incoming",
+            claimedSender = ChatAppIdentity("riverside", "garden-club"), receiverApp = ChatAppIdentity("bright-maple", "plants"),
+            phrase = "blue heron", count = 2, at = now() - 60_000L,
+        )
+        chatFixture += ChatRequestWire(
+            requestId = "c0ffee02", kind = "outgoing",
+            claimedSender = ChatAppIdentity("bright-maple", "wiki"), receiverApp = ChatAppIdentity("northwind", "atlas"),
+            count = 1, at = now() - 30_000L,
+        )
+    }
+
+    override suspend fun chatRequests(): ChatRequestsResponse {
+        tick()
+        return ChatRequestsResponse(chatFixture.toList(), chatAlwaysFixture.toList())
+    }
+
+    override suspend fun chatAnswer(body: ChatAnswerBody) {
+        tick()
+        val kind = com.flagshipserver.app.core.ChatApproval.Kind.entries.first { it.wire == body.kind }
+        val decision = com.flagshipserver.app.core.ChatApproval.Decision.entries.first { it.wire == body.decision }
+        MockSignatures.requireAdmin(
+            "chat-approval",
+            com.flagshipserver.app.core.ChatApproval.canonicalBytes(boxFqdn(), body.requestId, kind, decision, body.issuedAt),
+            body.signature,
+        )
+        val held = chatFixture.firstOrNull { it.requestId == body.requestId && it.kind == body.kind }
+            ?: throw ScreensError.Http(404, """{"error":"that request is no longer waiting"}""")
+        chatAnswers += body
+        chatFixture.remove(held)
+        if (decision == com.flagshipserver.app.core.ChatApproval.Decision.ALWAYS) {
+            val rule = ChatAlwaysWire(held.receiverApp, held.claimedSender)
+            if (rule !in chatAlwaysFixture) chatAlwaysFixture += rule
+        }
+    }
+
+    override suspend fun chatAlwaysRevoke(app: ChatAppIdentity, sender: ChatAppIdentity?): ChatAlwaysRevokeResponse {
+        tick()
+        chatRevokes += ChatAlwaysRevokeBody(app.author, app.slug, sender)
+        val before = chatAlwaysFixture.size
+        chatAlwaysFixture.removeAll { it.receiverApp == app && (sender == null || it.claimedSender == sender) }
+        return ChatAlwaysRevokeResponse(before - chatAlwaysFixture.size)
+    }
+
     var sliver: com.flagshipserver.app.core.SecuritySliverResponse = com.flagshipserver.app.core.SecuritySliverResponse()
     val publisherStates: MutableMap<String, com.flagshipserver.app.core.WaitingPublisherResponse> = mutableMapOf()
     val trustCalls: MutableList<Triple<String, com.flagshipserver.app.core.PublisherTrust, String>> = mutableListOf()

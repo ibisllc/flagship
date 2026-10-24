@@ -373,6 +373,7 @@ private fun SourceTile(title: String, body: String, onClick: () -> Unit, testTag
 @Composable
 private fun DetailAdaptCard(buildId: String, vm: BuildJournalViewModel, nav: NavController) {
     val state by vm.detailAdapt.collectAsState()
+    AiConsentDialog(vm.consent)
     // Back from the AI-key step with a key: run the AI with it.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, buildId) {
@@ -528,6 +529,7 @@ fun BuildGitScreen(nav: NavController) {
         checkedSlug = slug
     }
 
+    AiConsentDialog(vm.consent)
     ScreenScaffold(
         title = stringResource(R.string.git_import),
         subtitle = null,
