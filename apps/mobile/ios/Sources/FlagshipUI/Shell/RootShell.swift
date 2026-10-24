@@ -393,11 +393,16 @@ public extension PrivacySettings.ThemeMode {
 private struct iPhoneShell: View {
     @Binding var selected: RootDestination
     @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
 
     var body: some View {
         TabView(selection: $selected) {
             ForEach(RootDestination.allCases) { dest in
                 destinationContent(dest)
+                    // The TabView hosts each tab in its own UIKit controller, which the
+                    // shell's accessibilityHidden doesn't reach: hide every tab's content
+                    // here too while locked, or VoiceOver reaches it behind the lock screen.
+                    .accessibilityHidden(!app.isUnlocked)
                     .tabItem {
                         Label(dest.title, systemImage: dest.systemImage)
                     }
