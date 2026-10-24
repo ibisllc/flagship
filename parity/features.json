@@ -374,37 +374,6 @@
       }
     },
     {
-      "id": "chat-approvals",
-      "title": "App chat between owners: 'a remote machine claiming to run <author>/<app>' with Allow / Always allow / Deny (chat-approval/v1), Always allows with Revoke",
-      "ref": "ios",
-      "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift", "A remote machine claiming to run"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ChatRequestScreens.swift", "struct ChatRequestsCard"], ["apps/mobile/shared/Sources/FlagshipCore/ChatApproval.swift", "flagship/chat-approval/v1"]] },
-        "android": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] },
-        "web": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] }
-      }
-    },
-    {
-      "id": "ai-run-consent",
-      "title": "AI run consent: the box's 428 estimate (token range, provider, who pays), signed ai-repair-consent/v1 resend, Cancel runs nothing",
-      "ref": "ios",
-      "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift", "func agreeToConsent"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/ChatModels.swift", "struct AiConsentRequired"]] },
-        "android": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] },
-        "web": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] }
-      }
-    },
-    {
-      "id": "watch-boot-locked",
-      "title": "Watch: start a server with the phone locked (boot-only key, per-server copy, watch-boot-delegate/v1; 423 when the server is locked)",
-      "ref": "ios",
-      "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift", "struct WatchBootKeyCard"], ["apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift", "struct WatchBootEnroller|struct WatchBootKeyEnroller"]] },
-        "watch": { "status": "present", "reason": "The watch asks; the iPhone answers from the watch's own copy without the account key.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift", "lockedApprove"], ["apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift", "struct WatchBootApprover"]] },
-        "android": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] },
-        "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
-      }
-    },
-    {
       "id": "push-secret-request",
       "title": "Push: secret-request (boot/unlock approval) tap opens Activity with the Server approvals section open and the request in it",
       "ref": "ios",
@@ -786,7 +755,7 @@
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/chatAlerts.js", "export async function renderChatSection"], ["apps/web/public/webapp/lib/chatAlerts.js", "A remote machine claiming to run"], ["apps/web/public/webapp/lib/chatApproval.js", "flagship/chat-approval/v1"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ChatRequestCenter.kt", "class ChatRequestCenter"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ChatRequestScreens.kt", "fun ChatRequestsList"], ["apps/mobile/android/app/src/main/res/values/strings.xml", "A remote machine claiming to run"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ChatApproval.kt", "flagship/chat-approval/v1"]] },
-        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the approval screens follow the webapp.", "anchors": [] }
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift", "A remote machine claiming to run"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ChatRequestScreens.swift", "struct ChatRequestsCard"], ["apps/mobile/shared/Sources/FlagshipCore/ChatApproval.swift", "flagship/chat-approval/v1"]] }
       }
     },
     {
@@ -796,7 +765,7 @@
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/aiConsentUi.js", "export async function withAiConsent"], ["apps/web/public/webapp/views/build-git.js", "withAiConsent\\("], ["apps/web/public/webapp/lib/aiRepairConsent.js", "flagship/ai-repair-consent/v1"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiConsentFlow.kt", "suspend fun <T> withConsent"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AiConsentDialog.kt", "fun AiConsentDialog"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiRepairConsent.kt", "flagship/ai-repair-consent/v1"]] },
-        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the consent sheet follows the webapp.", "anchors": [] }
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift", "func agreeToConsent"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/ChatModels.swift", "struct AiConsentRequired"]] }
       }
     },
     {
@@ -805,7 +774,8 @@
       "ref": "android",
       "surfaces": {
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/WatchBootKey.kt", "class WatchBootApprover"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/KeystoreWatchBootKeys.kt", "PURPOSE_AGREE_KEY"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/WatchQuickApproveCard.kt", "fun WatchBootServers"]] },
-        "ios": { "status": "missing", "reason": "Pending: the protocol port exists (FlagshipCore/WatchBootDelegate.swift); the Secure Enclave key and the screens are not built.", "anchors": [] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift", "struct WatchBootKeyCard"], ["apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift", "struct WatchBootEnroller|struct WatchBootKeyEnroller"]] },
+        "watch": { "status": "present", "reason": "The watch asks; the iPhone answers from the watch's own copy without the account key.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift", "lockedApprove"], ["apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift", "struct WatchBootApprover"]] },
         "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
       }
     }
