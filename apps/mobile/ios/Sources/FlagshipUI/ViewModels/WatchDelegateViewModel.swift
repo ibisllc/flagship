@@ -13,6 +13,10 @@ import FlagshipCore
 ///       `WatchDelegateKey` with .com (scoped boot-approval, 7-day TTL).
 /// OFF → IRK-sign a `RevokeWatchDelegate`, POST it, and clear the local key.
 ///
+/// ON also makes the boot-only X25519 key beside it (option (a) in
+/// docs/watch-boot-approval-without-unlock.md); each server then opts in on
+/// its own page. OFF takes every server's watch copy away.
+///
 /// Default-OFF: nothing happens until the user flips it on. The IRK stays
 /// fully biometric-gated; only this separate, boot-approval-only key is
 /// minted with a laxer policy so a later Watch-driven boot approval is silent.
@@ -46,6 +50,9 @@ public final class WatchDelegateViewModel {
     private let saveGrantId: (String?) -> Void
     private let now: () -> Int64
     private let grantIdGen: () -> String
+    private let bootKeys: WatchBootKeyStore
+    private let makeBootKey: () throws -> Void
+    private let revokeBootCopies: (String) async throws -> Void
 
     public init(
         server: FlagshipServerClient,
@@ -55,8 +62,19 @@ public final class WatchDelegateViewModel {
         loadGrantId: (() -> String?)? = nil,
         saveGrantId: ((String?) -> Void)? = nil,
         now: (() -> Int64)? = nil,
-        grantIdGen: (() -> String)? = nil
+        grantIdGen: (() -> String)? = nil,
+        bootKeys: WatchBootKeyStore = WatchBootKeyStore(),
+        mailbox: SecretMailboxClient? = nil,
+        makeBootKey: (() throws -> Void)? = nil,
+        revokeBootCopies: ((String) async throws -> Void)? = nil
     ) {
+        self.bootKeys = bootKeys
+        self.makeBootKey = makeBootKey ?? { _ = try Keystore.loadOrCreateWatchBootKey() }
+        self.revokeBootCopies = revokeBootCopies ?? { domain in
+            let irk = try await Keystore.deriveIRK(reason: String(localized: "Stop allowing your Watch to approve boots"))
+            let auth = try BootAuth.ownerHeader(serverDomain: domain, method: "DELETE", path: "/api/boot/watch-key/\(domain)", irk: irk)
+            try await (mailbox ?? LiveSecretMailboxClient()).revokeWatchBootKeys(serverDomain: domain, bootAuth: auth)
+        }
         self.server = server
         self.username = username
         // Slice D — watch delegate MINT + REVOKE are SENSITIVE orders: sign with
@@ -87,6 +105,7 @@ public final class WatchDelegateViewModel {
             let active = list.delegates.first { $0.expiresAt > now() }
             isEnabled = active != nil
             expiresAt = active?.expiresAt
+            bootKeys.delegateExpiresAt = active?.expiresAt
             phase = .idle
         } catch {
             // A read failure leaves the last-known state; surface nothing
@@ -150,6 +169,10 @@ public final class WatchDelegateViewModel {
                 )
             )
             saveGrantId(res.grantId)
+            // The boot-only key each server's watch copy is sealed to; a failure here only means no
+            // server can opt in yet (its page says so).
+            try? makeBootKey()
+            bootKeys.delegateExpiresAt = res.expiresAt
             isEnabled = true
             self.expiresAt = res.expiresAt
             phase = .idle
@@ -169,6 +192,7 @@ public final class WatchDelegateViewModel {
         // Without a known grantId we can't sign a targeted revoke. Treat the
         // toggle as already-off and clear any local key as a belt-and-braces.
         guard let grantId = loadGrantId() else {
+            await dropBootCopies()
             saveGrantId(nil)
             isEnabled = false
             expiresAt = nil
@@ -205,9 +229,19 @@ public final class WatchDelegateViewModel {
             // device stops being able to sign — the server's list re-verify +
             // TTL are the backstops. Report nothing destructive.
         }
+        await dropBootCopies()
         saveGrantId(nil)
         isEnabled = false
         expiresAt = nil
         phase = .idle
+    }
+
+    /// Every server's watch copy goes with the delegate (the worker also refuses a copy whose delegate is
+    /// gone, so a failure here leaves nothing usable behind).
+    private func dropBootCopies() async {
+        for domain in bootKeys.servers(now: now()) {
+            try? await revokeBootCopies(domain)
+        }
+        bootKeys.clear()
     }
 }
