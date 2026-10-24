@@ -762,3 +762,136 @@ key as the trusted one (the pin fixes both halves).
 20. Security notices (`flagship/security-notice/v1`) are signed by the same
     YubiKey and are still classical only; clients would need the pin baked
     into four ports to require a PQ half.
+
+## 13. Milestone 4: the PQ-authenticated session (`flagship/pq-session/v1`)
+
+Code: TS `packages/protocol/src/pqSession.ts`, Rust `rust/crates/flagship-crypto/src/session.rs`,
+Swift `apps/mobile/shared/Sources/FlagshipCore/PqSession.swift`, Kotlin
+`apps/mobile/android/.../core/pq/PqSession.kt`; vectors `test-vectors/pq-session/vectors.json`
+(`npx tsx tools/pq-session-vectors.ts [--check]`; 2 transcripts, 13 hello, 9 accept, 6 finish and
+7 record refusals). The box: `packages/server-daemon/src/pqChannel.ts`. DRAFT, pending Q01.
+
+### 13.1 Why an inner channel
+
+Native clients cannot read a TLS exporter (URLSession, OkHttp), and the box's certificate is
+WebPKI (classical). The session therefore runs inside the existing TLS connection and does not
+depend on it: confidentiality comes from X-Wing, authentication from hybrid AND-signatures under
+keys pinned through `flagship/pq-key-binding/v1`. Breaking X25519, Ed25519 and the certificate
+together reveals nothing and authorizes nothing.
+
+### 13.2 Messages
+
+```
+hello  = { v:1, responder, initiatorRole ("device"|"box-stk"), initiatorSubject,
+           initiatorKeyId, responderKeyId, ephemeralPub (X-Wing, 1216), nonce (32), issuedAt }
+helloBytes = lp8(hello tag) || lp8(responder) || lp8(role) || lp8(subject) || initiatorKeyId
+           || responderKeyId || ephemeralPub || nonce || u64be(issuedAt)
+
+(ss, enc) = X-Wing.Encaps(ephemeralPub)                        responder, fresh 64-byte eseed
+tbsA  = "flagship/pq-session-accept/v1|<responder>|" || hex(SHA-512(SHA-512(helloBytes) || enc || nonceR || u64be(issuedAtR)))
+sigR  = hybrid-sign(responder STK key, purpose accept tag, tbsA)
+PRK   = HKDF-Extract(SHA-512, salt "flagship/pq-session/v1", ss)
+X(l, th) = HKDF-Expand(PRK, lp8("flagship/pq-session-keys/v1") || lp8(l) || th, 32)
+confirmR = HMAC-SHA-512(X("responder-confirm", th1), th1)[0..32],  th1 = SHA-512(tbsA || sigR)
+accept = { v:1, enc, nonce, issuedAt, signature: sigR, confirm: confirmR }
+
+tbsF  = "flagship/pq-session-finish/v1|<initiatorSubject>|" || hex(SHA-512(tbsA || sigR || confirmR))
+sigI  = hybrid-sign(initiator key, purpose finish tag, tbsF)
+confirmI = HMAC(X("initiator-confirm", th3), th3)[0..32],  th3 = SHA-512(tbsF || sigI)
+finish = { v:1, signature: sigI, confirm: confirmI }
+
+th4 = SHA-512(tbsF || sigI || confirmI)
+sessionId = X("session-id", th4); k(i→r) = X("initiator-to-responder", th4); k(r→i) = X("responder-to-initiator", th4)
+record(dir, seq, pt) = u64be(seq) || AES-256-GCM(k(dir), nonce = u32be(dir) || u64be(seq),
+                       aad = lp8(record tag) || sessionId || u8(dir) || u64be(seq), pt)
+```
+
+Both signed messages are v1-style text so keyd's purpose check applies: keyd (TS and Rust) signs
+the two session tags with both keys only, naming one server and one 128-hex digest. A response
+carries its request's sequence number in the other direction; the responder accepts each request
+number once inside a window of 1024 (concurrent calls arrive out of order). Hello and accept are
+fresh within 5 minutes; a pending handshake lives 60 s and is single use; a session idles out
+after 15 minutes and lives at most 12 hours. Records are at most 16 MiB.
+
+### 13.3 Refusals, in order (all four ports)
+
+Hello: shape, hex and lengths (`session-malformed`); responder name or pinned responder key not
+this box (`responder-mismatch`); time (`session-stale`); initiator not a key this box trusts
+under that role, subject and key id (`unknown-initiator`); ephemeral key fails the X-Wing check
+(`bad-public-key`). Accept: shape (`session-malformed`, also a classical-length signature); time;
+the hybrid signature under the pinned box key (`bad-signature`: either half zeroed, another box,
+a tampered `enc` or nonce); decapsulation or confirmation (`confirm-failed`). Finish: shape;
+signature; confirmation. Records: `decrypt-failed`, `replay`, `session-expired`.
+
+### 13.4 Where it runs
+
+- **Box** (`pqChannel.ts`): `POST /api/pq-session/{hello,finish,call}`. A call's record carries
+  one inner HTTP request (`{method, path, headers, body}`, base64 body; never another session
+  path), dispatched through the box's own handler chain and marked as having arrived over the
+  channel. Phones are looked up in the device book (role `device`, their bound key); the account's
+  other servers by `box-stk` bindings fetched from `.com`, verified under the STK `/pods` names and
+  pinned on first sight per server (`pq-sibling-pins.json`; first ML-DSA key wins).
+- **Strict guard**: while the installation is strict, a request with a paired-session token that
+  did not come over the channel is refused (`403 pq-channel-required`), unless the owner's change
+  to strict acknowledged `browser-without-pq-authentication` (then browser sessions pass);
+  `/api/access-sync/*` needs a `box-stk` channel. Access sync to the other servers goes over the
+  channel while strict (`pqSessionFetch`).
+- **iOS / Android**: requests to a server the phone holds as strict go through the session from
+  the request funnel (`PqBoxTunnel` / `PqChannelInterceptor`); a `pq-channel-required` answer
+  marks the server strict and the request is asked again over the channel. With no pinned box key
+  or no usable device key nothing is sent; the person gets a sentence.
+- **Webapp**: no session (no PQ key in website JavaScript). A strict server refuses it unless the
+  owner allowed browsers.
+
+## 14. Security notices: the PQ half
+
+`SecurityNotice.pq = { binding, signature }`: the release key's hybrid signature (purpose
+`flagship/security-notice/v1`) over the notice's unchanged canonical bytes and its
+`release-key` binding to `signedBy`. Pin empty (today): a notice without it is accepted as
+before; one with it must verify. Pin set: required (`pq-missing`), its key id must be pinned
+(`pq-key-not-pinned`), and it must verify (`pq-signature-invalid`). TS, webapp, Swift and Kotlin
+check `test-vectors/security-notice/pq-vectors.json` (10 cases under both pins;
+`npx tsx tools/security-notice-pq-vectors.ts`). `scripts/security-notice.mjs --sign` adds the half
+once a release-key binding exists and refuses `--no-pq` once the pin is set;
+`pq-release-key.mjs pin` writes the key ids into the three client copies too.
+
+## 15. Milestone 4: the strict opt-in and what it enforces
+
+- **The owner's act.** Strict is turned on per server (and per app or connector) by an
+  owner-signed `flagship/assurance-policy/v1` change with the hybrid suite: iOS and Android sign
+  with the admin root (iOS also with an admin device's bound key). The screen requires an answer
+  to "Can browsers still reach this server?"; "Also browsers" is the loss code
+  `browser-without-pq-authentication` signed into the change itself, so the box enforces exactly
+  what the owner saw. Each classical connector (Flagship Inference, own AI keys) needs a choice:
+  "Block it in strict" signs that connector's scope to strict; content-free pushes stay allowed.
+  Leaving strict lists the losses (`classical-signatures-accepted`,
+  `classical-key-exchange-accepted`, `browser-without-pq-authentication`) and signs them.
+- **Readiness** shown before: this device is an admin device and bound, every device of the
+  account is bound, recovery is checked (`.com`'s `recoveryChecked`), the server's STK binding is
+  on `.com`.
+- **Phones** replay each served chain under the pinned admin root (and their own device key)
+  through the gate and keep the newest verified state per scope; an older chain is refused
+  (anti-rollback). Sensitive orders (server order, update order) carry `pqSignature` beside the
+  classical signature while any server is strict; `.com` passes it through opaque (server orders:
+  D1 migration 0113; update deposits: the carrier) and the box verifies it.
+- **Box**: connector scopes `<server>:ai-<provider>` gate every AI provider call
+  (`connectorGate`); a service scope whose strict change did not allow browsers refuses browser
+  requests to that app.
+- **Custody labels**: "hardware PQ" only for a Secure Enclave ML-DSA key (iOS 26+ device keys);
+  otherwise "PQ, hardware-wrapped". The webapp is verify-only and says it cannot change strict.
+- **Wipe**: iOS `Keystore.wipe()` and Android `Keystore.wipe()` erase the profile's PQ seeds,
+  Secure Enclave ML-DSA records and the held policy; sign out and Remove this device call it.
+- **Rate limits** on `.com`: `pq-binding-put` (the three binding PUTs) and
+  `assurance-policy-post`, per source and per server or account.
+
+### 15.1 Open questions for the Q01 reviewer (additions)
+
+21. The session is a new composition (signed-KEM, SIGMA-style, two confirmation MACs); §6.7 asks
+    for external review before relying on it. Is binding the transcript by hash into a v1 text
+    message (for keyd's purpose check) sound, and is the ephemeral-KEM-only design (no static
+    responder KEM key) adequate for forward secrecy and KCI?
+22. Sibling boxes are pinned on first sight from `/pods` + `.com`'s binding: a malicious `.com`
+    at first contact can introduce an impostor sibling. Should sibling STKs come from the signed
+    server order instead?
+23. Phones take rollout evidence as given when replaying (the box re-checks its own). Is a phone
+    that believes "strict" when the box is not a safe failure in all paths?
