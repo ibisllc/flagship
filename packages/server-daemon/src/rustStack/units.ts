@@ -14,6 +14,8 @@
  * row. `flagship-rust-select confirm` (root, ExecStartPost) waits for the component's socket;
  * when it never appears the unit fails, systemd restarts it, and the third quick failure
  * switches that component to its fallback until a different binary arrives. The choice and its
+ * `flagship-rust-select stopped` (root, ExecStopPost) counts a run that systemd says failed, so a
+ * binary that crashes after coming up is caught the same way. The choice and its
  * reason are written to /run/flagship-rust/<component>.status for the daemon and its update gate.
  */
 
@@ -37,7 +39,7 @@ export const CORE_USER = "flagship-core";
 export type RustComponent = "keyd" | "broker" | "core";
 export const RUST_COMPONENTS: readonly RustComponent[] = ["keyd", "broker", "core"];
 
-/** Quick failures before a component falls back, and how long a run must last to count as good. */
+/** Failed runs in a row before a component falls back, and how long a run must last to reset them. */
 export const RUST_MAX_ATTEMPTS = 3;
 export const RUST_STABLE_SECS = 120;
 
@@ -100,18 +102,15 @@ select)
         elif [ "$want" != "$have" ]; then
             reason=hash-mismatch
         else
-            attempts=$(cat "$state/$comp.attempts" 2>/dev/null || echo 0)
-            [[ "$attempts" =~ ^[0-9]+$ ]] || attempts=$max
-            [ "$(cat "$state/$comp.attempts-sha" 2>/dev/null)" = "$have" ] || attempts=0
-            confirmed=$(cat "$state/$comp.confirmed" 2>/dev/null || echo 0)
-            [[ "$confirmed" =~ ^[0-9]+$ ]] || confirmed=0
-            # A run that lasted counts as good: a later crash starts the count again.
-            if [ "$confirmed" -gt 0 ] && [ $((now - confirmed)) -gt "$stable" ] && [ "$(cat "$state/$comp.good" 2>/dev/null)" = "$have" ]; then attempts=0; fi
-            if [ "$attempts" -ge "$max" ]; then
+            # Failed runs of this binary in a row, counted by \`stopped\` (ExecStopPost) from
+            # systemd's own verdict; a new binary starts from zero, and an earlier binary's good
+            # run no longer counts as this one's.
+            crashes=$(cat "$state/$comp.crashes" 2>/dev/null || echo 0)
+            [[ "$crashes" =~ ^[0-9]+$ ]] || crashes=$max
+            [ "$(cat "$state/$comp.crashes-sha" 2>/dev/null)" = "$have" ] || { crashes=0; echo 0 > "$state/$comp.crashes"; echo "$have" > "$state/$comp.crashes-sha"; rm -f "$state/$comp.confirmed"; }
+            if [ "$crashes" -ge "$max" ]; then
                 reason=failed-to-start
             else
-                echo $((attempts + 1)) > "$state/$comp.attempts"
-                echo "$have" > "$state/$comp.attempts-sha"
                 choice=rust; reason=pinned
             fi
         fi
@@ -153,8 +152,23 @@ confirm)
     echo "$sha" > "$state/$comp.good"
     status rust running "$sha"
     ;;
+stopped)
+    # ExecStopPost: systemd says why the run ended. A clean stop (a restart, a shutdown) counts
+    # nothing; a crash, or a start that never came up, counts against the Rust binary, unless it
+    # had been up longer than the stable window, which starts the count again.
+    choice=$(cat "$run/$comp.choice" 2>/dev/null || echo ts)
+    [ "$choice" = rust ] || exit 0
+    [ "\${SERVICE_RESULT:-success}" = success ] && exit 0
+    confirmed=$(cat "$state/$comp.confirmed" 2>/dev/null || echo 0)
+    [[ "$confirmed" =~ ^[0-9]+$ ]] || confirmed=0
+    crashes=$(cat "$state/$comp.crashes" 2>/dev/null || echo 0)
+    [[ "$crashes" =~ ^[0-9]+$ ]] || crashes=0
+    if [ "$confirmed" -gt 0 ] && [ $((now - confirmed)) -gt "$stable" ]; then crashes=0; fi
+    echo $((crashes + 1)) > "$state/$comp.crashes"
+    echo "[rust-path] $comp: the Rust binary stopped (\${SERVICE_RESULT:-?} \${EXIT_CODE:-} \${EXIT_STATUS:-}); failed runs: $((crashes + 1))"
+    ;;
 *)
-    echo "usage: flagship-rust-select select|confirm <component> [socket]" >&2; exit 2 ;;
+    echo "usage: flagship-rust-select select|confirm|stopped <component> [socket]" >&2; exit 2 ;;
 esac
 exit 0
 `;
@@ -188,8 +202,9 @@ export function keydRustDropIn(opts: { nodePath?: string; keydEntry: string }): 
 [Service]
 ExecStartPre=+${RUST_SELECT_PATH} select keyd
 ExecStart=
-ExecStart=${RUST_EXEC_PATH} keyd serve -- ${node} ${opts.keydEntry} serve
+ExecStart=${RUST_EXEC_PATH} keyd serve -- ${node} --jitless ${opts.keydEntry} serve
 ExecStartPost=+${RUST_SELECT_PATH} confirm keyd /run/flagship-keyd/keyd.sock
+ExecStopPost=+${RUST_SELECT_PATH} stopped keyd
 `;
 }
 
@@ -204,6 +219,7 @@ Type=simple
 ExecStartPre=+${RUST_SELECT_PATH} select broker
 ExecStart=${RUST_EXEC_PATH} broker serve --
 ExecStartPost=+${RUST_SELECT_PATH} confirm broker ${BROKER_V1_SOCKET}
+ExecStopPost=+${RUST_SELECT_PATH} stopped broker
 Restart=always
 RestartSec=2
 RuntimeDirectory=flagship-broker
@@ -247,6 +263,7 @@ Group=${CORE_USER}
 ExecStartPre=+${RUST_SELECT_PATH} select core
 ExecStart=${RUST_EXEC_PATH} core shadow --
 ExecStartPost=+${RUST_SELECT_PATH} confirm core ${CORE_DIR}/controller.lock
+ExecStopPost=+${RUST_SELECT_PATH} stopped core
 Restart=always
 RestartSec=5
 StateDirectory=flagship-core

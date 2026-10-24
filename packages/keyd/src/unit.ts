@@ -58,7 +58,9 @@ Group=${KEYD_CLIENT_GROUP}
 # socket, move them in and remove the readable copies. "+" runs this one command
 # with full privileges; the service itself stays sandboxed. Safe to run every time.
 ExecStartPre=+/usr/bin/env FLAGSHIP_KEYD_STATE=${KEYD_STATE_DIR} FLAGSHIP_KEYD_LEGACY_DIR=${legacy} ${node} ${entry} migrate
-ExecStart=${node} ${entry} serve
+# --jitless: MemoryDenyWriteExecute below refuses the writable+executable pages V8's JIT
+# needs, and Node aborts at startup without it (found on a Debian 13 VM, 2026-10-23).
+ExecStart=${node} --jitless ${entry} serve
 Environment=FLAGSHIP_KEYD_STATE=${KEYD_STATE_DIR}
 Environment=FLAGSHIP_KEYD_SOCKET=${KEYD_SOCKET}
 RuntimeDirectory=${KEYD_RUNTIME_DIR}
