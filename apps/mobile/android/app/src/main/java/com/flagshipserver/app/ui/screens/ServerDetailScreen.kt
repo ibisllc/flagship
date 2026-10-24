@@ -594,6 +594,8 @@ private fun BootUnlockApprovalCard(
                             pendingLeases = PendingLeaseStore.from(context),
                             deadManBound = store::deadManBound,
                             lockedServer = BootLockStateStore.from(context)::lastKnownSuspended,
+                            ownerPq = { m -> com.flagshipserver.app.keystore.QuantumSafetyService.ownerPqSigner(user, m) },
+                            strictFor = { d -> com.flagshipserver.app.keystore.QuantumSafetyService.isStrict(user, d) },
                         ),
                     )
                     // Keep the lease id the approval returned: it is the kill switch's handle.

@@ -359,6 +359,8 @@ data class PendingSecretRequest(
     val deviceInfo: DeviceInfoHint? = null,
     val postedAt: Long,
     val expiresAt: Long,
+    /** Boot unlock v2: the request's reply key + the boot key's hybrid signature, verified by the phone. */
+    val pq: kotlinx.serialization.json.JsonElement? = null,
 ) {
     /** Stable id — (domain, nonce) is unique per request. */
     val id: String get() = "$serverDomain#$requestNonceHex"
