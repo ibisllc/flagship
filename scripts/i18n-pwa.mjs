@@ -42,6 +42,8 @@ function listJs(dir = WEBAPP, out = []) {
 // ---- what counts as text a person reads ---------------------------------------------------------
 
 const EXPLICIT_PROPS = new Set(["textContent", "innerText", "placeholder", "title", "alt", "ariaLabel", "label"]);
+// WebCrypto algorithm names and parameters: a `name:` property that is a wire value, never text.
+const NEVER_TEXT = new Set(["AES-GCM", "AES-CBC", "AES-CTR", "AES-KW", "Ed25519", "X25519", "ECDH", "ECDSA", "HKDF", "PBKDF2", "HMAC", "SHA-1", "SHA-256", "SHA-384", "SHA-512", "RSA-OAEP", "RSA-PSS", "RSASSA-PKCS1-v1_5", "P-256", "P-384", "P-521"]);
 const EXPLICIT_KEYS = new Set(["label", "title", "text", "message", "description", "placeholder", "heading", "subtitle", "caption", "hint", "note", "help", "error", "reason", "summary", "body", "buttonLabel", "confirmLabel", "cancelLabel", "okLabel", "emptyText", "tooltip", "ariaLabel", "detail", "headline", "name"]);
 // plain strings that read as a phrase to a person even though looksProse() says no (lower-case fragments of a
 // sentence, validation hints, status words); kept English where the same text is thrown as an Error.
@@ -458,6 +460,7 @@ function transformFile(file) {
         else skip(n, "html in plain string");
         return;
       }
+      if (NEVER_TEXT.has(text)) return;
       const ctx = contextOf(n);
       if (!ctx) return;
       if (((ctx === "explicit" ? looksLabel(text) : looksProse(text)) || FORCE.has(text)) && !(FORCE.has(text) && inError(n))) {

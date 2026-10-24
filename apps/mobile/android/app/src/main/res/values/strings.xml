@@ -2700,11 +2700,15 @@
     <string name="only_an_admin_device_can_let">Only an admin device can let a browser build.</string>
     <string name="resolved">Resolved</string>
     <string name="old_key_new_key">Old key %1$s → new key %2$s</string>
-    <string name="on_the_old_list">%1$s %2$s on the old list.%3$s</string>
-    <string name="may">May %1$s %2$s</string>
     <string name="approve_the_permissions_restored_for">Approve the permissions restored for %1$s</string>
     <string name="let_a_browser_change">Let a browser change %1$s</string>
     <string name="no_new_key_is_waiting_for">No new key is waiting for this service.</string>
     <string name="trust_a_new_publisher_key_for">Trust a new publisher key for %1$s</string>
     <string name="restored_2">%1$s: restored. %2$s</string>
+    <string name="person_on_the_old_list">%1$s person on the old list.</string>
+    <string name="people_on_the_old_list">%1$s people on the old list.</string>
+    <string name="the_app_was_open_to_all">The app was open to all.</string>
+    <string name="may_build_and_deploy">May build and deploy %1$s</string>
+    <string name="may_deploy">May deploy %1$s</string>
+    <string name="may_build">May build %1$s</string>
 </resources>
