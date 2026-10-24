@@ -327,10 +327,14 @@ class MainActivity : FragmentActivity() {
         // Architecture v2: bind this phone's identities to ML-DSA-65 keys ("PQ, hardware-wrapped")
         // at account creation, after a join or admin-root change, and after each unlock. Never
         // prompts; anything unfinished waits for the next unlock.
+        // The unlock prompt opens the PQ session KEK (pq-suites.md §18): seeds made or rewrapped
+        // under it sign for the whole unlocked session without a second prompt.
+        com.flagshipserver.app.keystore.PqSessionKek.vault = com.flagshipserver.app.keystore.KeystorePqKekVault(applicationContext)
         val pqKeyStore = com.flagshipserver.app.keystore.PqKeyStore(
             com.flagshipserver.app.keystore.PqKeyPrefs(applicationContext),
-            com.flagshipserver.app.keystore.KeystorePqSeedWrapper(),
+            com.flagshipserver.app.keystore.SessionKekPqSeedWrapper(com.flagshipserver.app.keystore.KeystorePqSeedWrapper()),
         )
+        com.flagshipserver.app.keystore.PqSessionKek.onOpened = { runCatching { pqKeyStore.rewrapUnderSessionKek() } }
         // Milestone 4: the servers this phone holds as strict, and the PQ tunnel to them.
         com.flagshipserver.app.keystore.QuantumSafetyService.attach(applicationContext, pqKeyStore, com.flagshipserver.app.core.BoxKeyPins.shared)
         com.flagshipserver.app.keystore.PqIdentityUpgrade.binder = com.flagshipserver.app.core.pq.PqIdentityBinder(

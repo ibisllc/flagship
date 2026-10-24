@@ -116,6 +116,8 @@ class PqKeyStore(
         fun load(key: String): String?
         fun save(key: String, value: String)
         fun remove(key: String)
+        /** Every stored key (for [rewrapUnderSessionKek]); empty where the store cannot list. */
+        fun keys(): Set<String> = emptySet()
     }
 
     /** Where `.com` stands on this identity's binding, as this phone last learnt it. */
@@ -186,6 +188,32 @@ class PqKeyStore(
     fun forget(role: String, subjectId: String) = persistence.remove(key(role, subjectId))
 
     /**
+     * Move every seed still under the old Keystore-window wrapping under the session KEK
+     * ([SessionKekPqSeedWrapper]). Run right after the unlock prompt, while its authentication
+     * still opens the old wrapping; a seed it cannot open stays as it was. Returns how many moved.
+     */
+    @Synchronized
+    fun rewrapUnderSessionKek(): Int {
+        val w = wrapper as? SessionKekPqSeedWrapper ?: return 0
+        var moved = 0
+        for (k in persistence.keys().filter { it.startsWith("pq.mldsa.v1.") }) {
+            val e = persistence.load(k)?.let { runCatching { json.decodeFromString(Entry.serializer(), it) }.getOrNull() } ?: continue
+            val blob = PqHex.decode(e.wrappedSeedHex) ?: continue
+            if (blob.isEmpty() || !w.isLegacy(blob)) continue
+            val seed = runCatching { w.unwrap(blob) }.getOrNull() ?: continue
+            try {
+                val again = w.wrap(seed)
+                if (w.isLegacy(again)) return moved
+                persistence.save(k, json.encodeToString(Entry.serializer(), e.copy(wrappedSeedHex = PqHex.encode(again))))
+                moved += 1
+            } finally {
+                seed.fill(0)
+            }
+        }
+        return moved
+    }
+
+    /**
      * The hybrid signature (§5) for [entry] over [payload]: [edSign] signs M' with the identity's
      * Ed25519 key, and the ML-DSA seed is unwrapped for this one signature.
      */
@@ -210,4 +238,5 @@ class PqKeyPrefs(context: Context) : PqKeyStore.Persistence {
     override fun remove(key: String) {
         prefs.edit().remove(key).apply()
     }
+    override fun keys(): Set<String> = prefs.all.keys
 }

@@ -240,7 +240,7 @@ private suspend fun tryUnlock(
 ) {
     setStatus(Status.Authenticating)
     try {
-        BiometricGate.evaluate(activity, title = "Unlock Flagship", subtitle = "Use biometrics to continue")
+        BiometricGate.evaluateUnlockingPq(activity, title = "Unlock Flagship", subtitle = "Use biometrics to continue")
         BiometricAuthority.current()?.markFresh()
         setStatus(Status.Idle)
     } catch (_: BiometricCancelled) {

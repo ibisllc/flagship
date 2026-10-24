@@ -39,7 +39,7 @@ class BiometricAuthority internal constructor(
 
     /** Production constructor — binds [activity] for BiometricPrompt. */
     constructor(activity: FragmentActivity) : this(
-        prompter = BiometricPrompter { t, s -> BiometricGate.evaluate(activity, t, s) },
+        prompter = BiometricPrompter { t, s -> BiometricGate.evaluateUnlockingPq(activity, t, s) },
     )
 
     /**
@@ -110,6 +110,7 @@ class BiometricAuthority internal constructor(
      *  background / sign-out) so the next derive re-authenticates. */
     fun invalidate() {
         fresh = false
+        PqSessionKek.clear()
     }
 
     companion object {

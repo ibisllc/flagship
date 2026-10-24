@@ -757,6 +757,11 @@ object Keystore {
             }
             e.apply()
         }
+        // The session KEK only opens seeds; with every profile gone it goes too.
+        if (profile == null) {
+            for (pp in pqPrefs) pp.edit().remove("pq.kek.v2").apply()
+            PqSessionKek.clear()
+        }
     }
 
     /**

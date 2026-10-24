@@ -50,6 +50,21 @@ object BiometricGate {
     }
 
     /**
+     * The prompt that opens a session: it also carries the PQ session KEK's cipher as its
+     * CryptoObject ([PqSessionKek]), so the one answer releases the PQ seeds for the whole
+     * session and a hybrid signature never asks again (pq-suites.md §18). Without a vault, or
+     * when its cipher cannot be made, it is the plain prompt.
+     */
+    suspend fun evaluateUnlockingPq(activity: FragmentActivity, title: String, subtitle: String) {
+        if (com.flagshipserver.app.core.Variant.bypassBiometricGates) return
+        val pending = PqSessionKek.begin()
+        if (pending == null) return evaluate(activity, title, subtitle)
+        val starter = PlatformPromptStarter(activity, title, subtitle, BiometricPrompt.CryptoObject(pending.cipher))
+        withContext(Dispatchers.Main.immediate) { run(activity.lifecycle, starter) }
+        PqSessionKek.finish(pending, starter.authenticatedCipher)
+    }
+
+    /**
      * Ask until the person answers, never leaving a caller waiting on a prompt
      * that can't show (device bug M11: a prompt started while the screen was
      * off failed silently with "Called after onSaveInstanceState()" and the
@@ -130,7 +145,10 @@ private class PlatformPromptStarter(
     private val activity: FragmentActivity,
     private val title: String,
     private val subtitle: String,
+    private val crypto: BiometricPrompt.CryptoObject? = null,
 ) : PromptStarter {
+    /** The CryptoObject's cipher once the prompt authenticated it. */
+    @Volatile var authenticatedCipher: javax.crypto.Cipher? = null
     override fun start(onOutcome: (PromptOutcome) -> Unit): () -> Unit {
         // BiometricPrompt's own docs mandate the main-thread executor — the
         // callback drives Compose state (AppState.markUnlocked) and, with
@@ -142,6 +160,7 @@ private class PlatformPromptStarter(
             executor,
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    authenticatedCipher = result.cryptoObject?.cipher
                     onOutcome(PromptOutcome.Succeeded)
                 }
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -166,7 +185,7 @@ private class PlatformPromptStarter(
             .setAllowedAuthenticators(Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL)
             .build()
         try {
-            prompt.authenticate(info)
+            if (crypto != null) prompt.authenticate(info, crypto) else prompt.authenticate(info)
         } catch (t: Throwable) {
             onOutcome(PromptOutcome.Error(BiometricFailed.NOT_STARTED, t.message ?: t.javaClass.simpleName))
             return {}
