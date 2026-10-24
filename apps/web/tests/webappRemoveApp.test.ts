@@ -104,7 +104,7 @@ describe("Remove app — the app page", () => {
     expect(body.indexOf("inlineConfirmWithExtra(")).toBeLessThan(body.indexOf("removeAppFromServer("));
     // Only an explicit OK removes; "Back up first" and any dismissal leave the app alone.
     expect(body).toContain('answer !== "ok"');
-    expect(body).toContain('extraLabel: "Back up first"');
+    expect(body).toContain('extraLabel: tr("Back up first")');
     expect(body).toContain("signWithIrk: sensitiveSigner()");
     expect(body).toContain("danger: true");
   });
