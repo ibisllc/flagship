@@ -58,3 +58,20 @@ describe("rankByServerOrder", () => {
     expect(rankByServerOrder(all, null).map((x) => x.stk)).toEqual(["dd", "cc", "bb", "aa"]);
   });
 });
+
+describe("server order with the siblings' PQ key ids", () => {
+  const P = JSON.parse(readFileSync(new URL("../test-vectors/server-order/pq-vectors.json", import.meta.url), "utf8"));
+  const irk = deriveIRK({ seed: bytes(V.keys.umkSeedHex) });
+
+  it("appends the key ids after the v1 fields and signs them", () => {
+    const order = P.order.fields as ServerOrder;
+    expect(new TextDecoder().decode(canonicalServerOrder(order))).toBe(P.order.canonical);
+    expect(signServerOrder(order, irk)).toBe(P.order.signatureHex);
+    expect(verifyServerOrder({ ...order, pqKeyIds: undefined }, P.order.signatureHex, irk.publicKey)).toBe(false);
+    expect(parseSignedServerOrder({ order, signature: P.order.signatureHex })?.order.pqKeyIds).toEqual(order.pqKeyIds);
+  });
+
+  it("refuses every refuse case", () => {
+    for (const r of P.refuse) expect(() => canonicalServerOrder(r.fields), r.why).toThrow();
+  });
+});

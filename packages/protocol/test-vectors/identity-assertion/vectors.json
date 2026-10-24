@@ -1,0 +1,121 @@
+{
+  "about": "Identity assertions the box signs for its apps (packages/protocol/src/identityAssertion.ts). keyd (TS packages/keyd, Rust flagship-keyd) must refuse to sign every case whose `expect` is a code and sign every case whose `expect` is null; `not-an-assertion` is another purpose and goes to keyd's ordinary purpose rules.",
+  "cases": [
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b2c3d4e5f60718293a4b5c6d7e8f9|member|1760000000000",
+      "expect": null
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b2c3d4e5f60718293a4b5c6d7e8f9|manager|1760000000000",
+      "expect": null
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b2c3d4e5f60718293a4b5c6d7e8f9|master|1760000000000",
+      "expect": null
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|anonymous|anonymous|1760000000000",
+      "expect": null
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|apikey:k_9f3a|api|1760000000000|read",
+      "expect": null
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|apikey:k_9f3a|api|1760000000000|write",
+      "expect": null
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b2c3d4e5f60718293a4b5c6d7e8f9|owner|1760000000000",
+      "expect": "bad-role"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b2c3d4e5f60718293a4b5c6d7e8f9|admin|1760000000000",
+      "expect": "bad-role"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|anonymous|master|1760000000000",
+      "expect": "bad-user"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b2c3d4e5f60718293a4b5c6d7e8f9|anonymous|1760000000000",
+      "expect": "bad-user"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|apikey:k_9f3a|master|1760000000000",
+      "expect": "bad-user"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b2c3d4e5f60718293a4b5c6d7e8f9|api|1760000000000|write",
+      "expect": "bad-user"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|apikey:k_9f3a|api|1760000000000",
+      "expect": "bad-scope"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|apikey:k_9f3a|api|1760000000000|admin",
+      "expect": "bad-scope"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b2c3d4e5f60718293a4b5c6d7e8f9|member|1760000000000|write",
+      "expect": "bad-shape"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b|member",
+      "expect": "bad-shape"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b|member|-1",
+      "expect": "bad-time"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|0a1b|member|01",
+      "expect": "bad-time"
+    },
+    {
+      "msg": "flagship/inject/v1||0a1b|member|1",
+      "expect": "bad-app"
+    },
+    {
+      "msg": "flagship/inject/v1|alice notes|0a1b|member|1",
+      "expect": "bad-app"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes||member|1",
+      "expect": "bad-user"
+    },
+    {
+      "msg": "flagship/inject/v1|alice--notes|Master|Member|1",
+      "expect": "bad-role"
+    },
+    {
+      "msg": "flagship/identity-header/v1|0a1b2c3d4e5f60718293a4b5c6d7e8f9|manager|1760000000000",
+      "expect": null
+    },
+    {
+      "msg": "flagship/identity-header/v1|anonymous|anonymous|1760000000000",
+      "expect": null
+    },
+    {
+      "msg": "flagship/identity-header/v1|0a1b2c3d4e5f60718293a4b5c6d7e8f9|owner|1760000000000",
+      "expect": "bad-role"
+    },
+    {
+      "msg": "flagship/identity-header/v1|apikey:k_1|api|1760000000000",
+      "expect": "bad-role"
+    },
+    {
+      "msg": "flagship/identity-header/v1|anonymous|master|1760000000000",
+      "expect": "bad-user"
+    },
+    {
+      "msg": "flagship/identity-header/v1|0a1b|member|1|x",
+      "expect": "bad-shape"
+    },
+    {
+      "msg": "flagship/sibling-hello/v1|x|y",
+      "expect": "not-an-assertion"
+    }
+  ]
+}

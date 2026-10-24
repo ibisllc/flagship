@@ -10,7 +10,11 @@ export const BOX_RELEASE = {
     keys: [
   "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
     ],
+    /** The hybrid PQ pin (boxArtifactPq.ts): signers' key ids, and manifests from before the cut-over. */
+    pq: { keyIds: [] as readonly string[], legacyManifests: [] as readonly string[] },
   },
+  /** The installer's arguments for the PQ pin; empty while the pin names no key. */
+  pqInstallerArgs: "",
   /** The lowest Node a box may run. */
   nodeFloor: "24.22.1",
 } as const;

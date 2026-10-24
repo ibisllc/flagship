@@ -21,6 +21,14 @@ export interface ServerOrder {
   issuedAt: number;
   /** 32 random bytes, lowercase hex. */
   nonce: string;
+  /**
+   * Architecture v2 (pq-suites.md §16): for each server in `stks`, the hybrid key id of its
+   * `box-stk` PQ binding as the signing phone pinned it, or `-` when it holds none. With the
+   * order's hybrid signature this is the account's own word for which ML-DSA key each sibling
+   * holds, so boxes pin their siblings through it instead of through `.com`. Absent: the v1
+   * canonical bytes, unchanged.
+   */
+  pqKeyIds?: string[];
 }
 
 /** A signed order as it travels: `/pods`, the heartbeat reply, gossip frames. */
@@ -44,9 +52,16 @@ export function canonicalServerOrder(o: ServerOrder): Bytes {
   }
   if (!/^[0-9a-f]{64}$/.test(o.nonce)) throw new Error("nonce must be 32-byte lowercase hex");
   if (!Number.isSafeInteger(o.issuedAt) || o.issuedAt <= 0) throw new Error("issuedAt must be positive");
-  return new TextEncoder().encode(
-    [TAG_SERVER_ORDER, o.user.toLowerCase(), o.stks.join(","), o.issuedAt, o.nonce].join("|"),
-  );
+  const parts: (string | number)[] = [TAG_SERVER_ORDER, o.user.toLowerCase(), o.stks.join(","), o.issuedAt, o.nonce];
+  if (o.pqKeyIds !== undefined) {
+    if (!Array.isArray(o.pqKeyIds) || o.pqKeyIds.length !== o.stks.length) throw new Error("pqKeyIds must name one key id per stk");
+    for (const k of o.pqKeyIds) {
+      if (typeof k !== "string" || !(k === "-" || /^[0-9a-f]{64}$/.test(k))) throw new Error("each pqKeyId must be 32-byte lowercase hex or -");
+    }
+    // `pq=` cannot collide with the fixed fields above, and the signer commits to it.
+    parts.push(`pq=${o.pqKeyIds.join(",")}`);
+  }
+  return new TextEncoder().encode(parts.join("|"));
 }
 
 export function signServerOrder(o: ServerOrder, signer: MsgSigner): string {
@@ -75,7 +90,12 @@ export function parseSignedServerOrder(raw: unknown): SignedServerOrder | null {
     typeof o.issuedAt !== "number" || typeof o.nonce !== "string" ||
     typeof r.signature !== "string"
   ) return null;
-  const order: ServerOrder = { user: o.user, stks: [...o.stks], issuedAt: o.issuedAt, nonce: o.nonce };
+  // A client that writes `null` for "no key ids" means the v1 form.
+  if (o.pqKeyIds != null && (!Array.isArray(o.pqKeyIds) || !o.pqKeyIds.every((k) => typeof k === "string"))) return null;
+  const order: ServerOrder = {
+    user: o.user, stks: [...o.stks], issuedAt: o.issuedAt, nonce: o.nonce,
+    ...(o.pqKeyIds != null ? { pqKeyIds: [...o.pqKeyIds] } : {}),
+  };
   try {
     canonicalServerOrder(order);
   } catch {
@@ -101,4 +121,11 @@ export function rankByServerOrder<T extends { stk: string; birthDate: number; do
   return [...servers].sort((a, b) =>
     rank(a) - rank(b) || a.birthDate - b.birthDate || (a.domain < b.domain ? -1 : a.domain > b.domain ? 1 : 0),
   );
+}
+
+/** The hybrid key id the order names for `stkHex`, `-` for none named, or null when unlisted / no ids. */
+export function serverOrderPqKeyId(o: ServerOrder, stkHex: string): string | null {
+  if (!o.pqKeyIds) return null;
+  const i = o.stks.indexOf(stkHex.toLowerCase());
+  return i < 0 ? null : (o.pqKeyIds[i] ?? null);
 }

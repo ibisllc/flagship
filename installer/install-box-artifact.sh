@@ -21,8 +21,9 @@ set -o pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 releases=/opt/flagship-releases current=/opt/flagship state=/var/flagship bin=/usr/local/bin
 manifest="" artifact="" trust="" threshold="" expect_sha="" expect_commit="" arch="" node_floor="" min_sequence=""
+pq_key_ids="" legacy_manifests=""
 
-usage() { echo "usage: $0 --manifest F --artifact F --trust-keys K --threshold N --expect-sha256 H --expect-commit C --arch A --node-floor V [--min-sequence N] [--releases D] [--current P] [--state D] [--bin D]" >&2; exit 2; }
+usage() { echo "usage: $0 --manifest F --artifact F --trust-keys K --threshold N --expect-sha256 H --expect-commit C --arch A --node-floor V [--min-sequence N] [--pq-key-ids K] [--legacy-manifests D] [--releases D] [--current P] [--state D] [--bin D]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --manifest) manifest="$2"; shift 2 ;;
@@ -34,6 +35,8 @@ while [ $# -gt 0 ]; do
     --arch) arch="$2"; shift 2 ;;
     --node-floor) node_floor="$2"; shift 2 ;;
     --min-sequence) min_sequence="$2"; shift 2 ;;
+    --pq-key-ids) pq_key_ids="$2"; shift 2 ;;
+    --legacy-manifests) legacy_manifests="$2"; shift 2 ;;
     --releases) releases="$2"; shift 2 ;;
     --current) current="$2"; shift 2 ;;
     --state) state="$2"; shift 2 ;;
@@ -55,6 +58,9 @@ fi
 verify_args=(--manifest "$manifest" --artifact "$artifact" --trust-keys "$trust" --threshold "$threshold"
   --expect-sha256 "$expect_sha" --expect-commit "$expect_commit" --arch "$arch" --node-floor "$node_floor")
 [ -n "$last_seq" ] && verify_args+=(--last-sequence "$last_seq")
+# The PQ pin (BOX_ARTIFACT_PQ_PIN): once it names a key, every signer needs its hybrid companion.
+[ -n "$pq_key_ids" ] && verify_args+=(--pq-key-ids "$pq_key_ids")
+[ -n "$legacy_manifests" ] && verify_args+=(--legacy-manifests "$legacy_manifests")
 "${BASH:-bash}" "$here/verify-box-artifact.sh" "${verify_args[@]}" || exit 1
 
 commit=$(printf '%s' "$expect_commit" | tr 'A-F' 'a-f')
