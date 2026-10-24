@@ -171,7 +171,7 @@ export async function runWipeRestartCeremony(args, deps = {}) {
     issuedAt,
   });
   const sigBytes = new Uint8Array(
-    await crypto.subtle.sign({ name: tr("Ed25519") }, oldIrk.privateKey, canonical),
+    await crypto.subtle.sign({ name: "Ed25519" }, oldIrk.privateKey, canonical),
   );
 
   // 4 — POST.

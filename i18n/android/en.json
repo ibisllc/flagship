@@ -11160,16 +11160,6 @@
     "ctx": "ui/components/SecuritySliverBar.kt:96 (arg of Text)",
     "args": 2
   },
-  "on_the_old_list": {
-    "en": "%1$s %2$s on the old list.%3$s",
-    "ctx": "ui/screens/SecurityControlsSections.kt:55 (arg of Text)",
-    "args": 3
-  },
-  "may": {
-    "en": "May %1$s %2$s",
-    "ctx": "ui/screens/SecurityControlsSections.kt:120 (arg of Text)",
-    "args": 2
-  },
   "approve_the_permissions_restored_for": {
     "en": "Approve the permissions restored for %1$s",
     "ctx": "viewmodels/SecurityControlsViewModels.kt:52 (prose)",
@@ -11193,5 +11183,34 @@
     "en": "%1$s: restored. %2$s",
     "ctx": "viewmodels/ServerArchiveViewModels.kt:894 (prose)",
     "args": 2
+  },
+  "person_on_the_old_list": {
+    "en": "%1$s person on the old list.",
+    "ctx": "ui/screens/SecurityControlsSections.kt:57 (prose)",
+    "args": 1
+  },
+  "people_on_the_old_list": {
+    "en": "%1$s people on the old list.",
+    "ctx": "ui/screens/SecurityControlsSections.kt:57 (prose)",
+    "args": 1
+  },
+  "the_app_was_open_to_all": {
+    "en": "The app was open to all.",
+    "ctx": "ui/screens/SecurityControlsSections.kt:58 (arg of Text)"
+  },
+  "may_build_and_deploy": {
+    "en": "May build and deploy %1$s",
+    "ctx": "ui/screens/SecurityControlsSections.kt:125 (prose)",
+    "args": 1
+  },
+  "may_deploy": {
+    "en": "May deploy %1$s",
+    "ctx": "ui/screens/SecurityControlsSections.kt:125 (prose)",
+    "args": 1
+  },
+  "may_build": {
+    "en": "May build %1$s",
+    "ctx": "ui/screens/SecurityControlsSections.kt:125 (prose)",
+    "args": 1
   }
 }

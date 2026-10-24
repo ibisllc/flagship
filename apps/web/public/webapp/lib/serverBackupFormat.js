@@ -93,12 +93,12 @@ export async function passcodeKek(passcode, kdf) {
 
 async function seal(key, nonce, aad, plain) {
   const k = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["encrypt"]);
-  return new Uint8Array(await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce, additionalData: aad }, k, plain));
+  return new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad }, k, plain));
 }
 
 async function open(key, nonce, aad, ct) {
   const k = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["decrypt"]);
-  return new Uint8Array(await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce, additionalData: aad }, k, ct));
+  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce, additionalData: aad }, k, ct));
 }
 
 // ---------------------------------------------------------------------------

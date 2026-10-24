@@ -257,9 +257,9 @@ export async function sealForEd25519Pub(plaintext, edPub) {
     hk,
     256,
   );
-  const aesKey = await crypto.subtle.importKey("raw", sym, { name: tr("AES-GCM") }, false, ["encrypt"]);
+  const aesKey = await crypto.subtle.importKey("raw", sym, { name: "AES-GCM" }, false, ["encrypt"]);
   const nonce = randomBytes(12);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, aesKey, plaintext));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plaintext));
   const out = new Uint8Array(32 + 12 + ct.length);
   out.set(ephPub, 0);
   out.set(nonce, 32);
@@ -333,12 +333,12 @@ export async function openSealedWithIrk(umkSeed, blob) {
   const aesKey = await crypto.subtle.importKey(
     "raw",
     new Uint8Array(symBits),
-    { name: tr("AES-GCM") },
+    { name: "AES-GCM" },
     false,
     ["decrypt"],
   );
   const pt = await crypto.subtle.decrypt(
-    { name: tr("AES-GCM"), iv: nonce },
+    { name: "AES-GCM", iv: nonce },
     aesKey,
     ct,
   );

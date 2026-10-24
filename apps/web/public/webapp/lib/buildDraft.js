@@ -228,14 +228,14 @@ export async function sealForBrowserKey(plaintext, browserPkHex) {
   const aesKey = await crypto.subtle.importKey(
     "raw",
     new Uint8Array(symBits),
-    { name: tr("AES-GCM") },
+    { name: "AES-GCM" },
     false,
     ["encrypt"],
   );
   const nonce = new Uint8Array(12);
   crypto.getRandomValues(nonce);
   const ct = new Uint8Array(
-    await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, aesKey, plaintext),
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plaintext),
   );
   const out = new Uint8Array(32 + 12 + ct.length);
   out.set(ephPubBytes, 0);
