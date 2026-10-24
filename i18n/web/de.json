@@ -470,5 +470,10 @@
   "sefe57fd6f9": "Die ersten Beiträge erscheinen zusammen mit dem Start der Beta 0.2. Bis dahin sind die <1>Doku</1>, das <2>Sicherheitsmodell</2> und die <3>Open-Source</3>-Seite die maßgebliche Quelle dafür, was wir bauen.",
   "s8f7b9ab588": "Entwürfe",
   "seb2f4750ac": "Wir veröffentlichen, wenn wir etwas Konkretes zu sagen haben. Folge dem RSS-Feed.",
-  "sba026addff": "Forschende, die uns eine Schwachstelle gemeldet haben, und die Commits, die jede Meldung geschlossen haben, stehen in der <1>Hall of Fame</1>."
+  "sba026addff": "Forschende, die uns eine Schwachstelle gemeldet haben, und die Commits, die jede Meldung geschlossen haben, stehen in der <1>Hall of Fame</1>.",
+  "s1cf830b48e": "Verzeichnis durchsuchen",
+  "s8f7ae3923b": "Jede derzeit veröffentlichte Anpassung, nach Projekt: wo sie liegt, ihre Lizenz, der Digest jedes Adapters, der Upstream-Commit, für den sie erstellt wurde, und ein ehrlicher Status (<1>veröffentlicht</1> oder <2>umstritten</2>, wenn mehr Installationen fehlschlugen als bestätigt wurden). Es ist die Datei <3><4>directory.json</4></3> im öffentlichen Repository. Es gibt keine Installationszahlen und nichts darüber, wer eine eingereicht oder installiert hat, und ein Status ist eine Aufzeichnung, keine Sicherheitszusage. Maintainer können eine Anpassung überflüssig machen, indem sie ihre eigene <5>flagship.app.json</5> committen.",
+  "sf885433e9b": "Adapter-Verzeichnis durchsuchen",
+  "s69437d5481": "Projekt, Host oder Lizenz",
+  "s8897545066": "Verzeichnis wird geladen…"
 }
