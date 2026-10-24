@@ -1996,7 +1996,7 @@
   "build_logs": "Build-Protokolle",
   "interrupt_with_a_follow_up": "Mit einer Nachfrage unterbrechen",
   "quick_approve_from_watch": "Per Uhr genehmigen",
-  "approve_a_server_boot_from_your": "Genehmige den Start eines Servers von deiner Wear-OS-Uhr, solange Flagship auf diesem Telefon entsperrt ist. Andere Aktionen (Server widerrufen, Löschen und Neustart, Gerät ersetzen) brauchen immer dein Telefon. Standardmäßig aus.",
+  "approve_a_server_boot_from_your": "Genehmige den Start eines Servers von deiner Wear-OS-Uhr, solange Flagship auf diesem Telefon entsperrt ist, oder für die Server, die du unten einschaltest, auch wenn dieses Telefon gesperrt ist. Andere Aktionen (Server widerrufen, Löschen und Neustart, Gerät ersetzen) brauchen immer dein Telefon. Standardmäßig aus.",
   "active_renews_by": "Aktiv – wird bis %1$s erneuert",
   "your_stuff_on": "Deine Sachen,\nauf ",
   "your_hardware": "deiner Hardware.",
@@ -2742,5 +2742,6 @@
   "chat_always_allow_line_sender": "Ein entfernter Rechner, der angibt, %1$s/%2$s auszuführen, kann einen Chat mit %3$s beginnen, ohne dich zu fragen.",
   "chat_always_ended_sender": "%1$s/%2$s muss wieder fragen, bevor ein Chat mit %3$s beginnt",
   "chat_request_now_always_sender": "%1$s/%2$s kann jetzt ohne Nachfrage einen Chat mit %3$s beginnen",
-  "ai_consent_cap": "Dieser Lauf kann bis zu etwa %1$s Tokens verbrauchen. Dort stoppt er."
+  "ai_consent_cap": "Dieser Lauf kann bis zu etwa %1$s Tokens verbrauchen. Dort stoppt er.",
+  "watch_boot_key_mismatch": "Der Schlüssel dieses Servers stimmt nicht überein. Genehmige seinen Start auf deinem Telefon."
 }

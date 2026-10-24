@@ -8320,7 +8320,7 @@
     "ctx": "ui/screens/WatchQuickApproveCard.kt:63 (title=)"
   },
   "approve_a_server_boot_from_your": {
-    "en": "Approve a server boot from your Wear OS watch while Flagship is unlocked on this phone. Other actions (revoke server, wipe & restart, replace device) always need your phone. Off by default.",
+    "en": "Approve a server's start-up from your Wear OS watch while Flagship is unlocked on this phone, or, for the servers you turn on below, while this phone is locked. Other actions (revoke server, wipe & restart, replace device) always need your phone. Off by default.",
     "ctx": "ui/screens/WatchQuickApproveCard.kt:79 (arg of Text)"
   },
   "active_renews_by": {
@@ -11370,5 +11370,9 @@
     "en": "This run can use up to about %1$s tokens. The run stops there.",
     "ctx": "core/AiConsentFlow.kt",
     "args": 1
+  },
+  "watch_boot_key_mismatch": {
+    "en": "This server's key doesn't match. Approve its start-up from your phone.",
+    "ctx": "core/WatchApprovalResponder.kt (shown on the watch)"
   }
 }
