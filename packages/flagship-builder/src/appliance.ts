@@ -267,7 +267,7 @@ bash /usr/local/lib/flagship-installer/install-box-artifact.sh \\
     --expect-commit "$COMMIT" \\
     --arch "$BOX_ARCH" \\
     --node-floor ${BOX_RELEASE.nodeFloor} \\
-    --min-sequence ${BOX_RELEASE.minSequence}
+    --min-sequence ${BOX_RELEASE.minSequence}${BOX_RELEASE.pqInstallerArgs}
 rm -f "/var/tmp/$BOX_ARTIFACT_NAME".*
 cd /opt/flagship
 [ -e /opt/flagship/node_modules/@flagship/protocol/package.json ] || { echo "[appliance-factory] release incomplete"; exit 1; }

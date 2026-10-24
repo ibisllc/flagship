@@ -709,7 +709,7 @@ bash /usr/local/lib/flagship-installer/install-box-artifact.sh \\
     --expect-commit "$GIT_REF" \\
     --arch "$BOX_ARCH" \\
     --node-floor ${BOX_RELEASE.nodeFloor} \\
-    --min-sequence ${BOX_RELEASE.minSequence} \\
+    --min-sequence ${BOX_RELEASE.minSequence}${BOX_RELEASE.pqInstallerArgs} \\
     | tee /var/log/flagship-install-artifact.log \\
     || { echo "[flagship-bootstrap] FATAL: the box release was refused; see /var/log/flagship-install-artifact.log"; exit 1; }
 rm -f "/var/tmp/$BOX_ARTIFACT_NAME.tar.gz" "/var/tmp/$BOX_ARTIFACT_NAME.manifest.json"

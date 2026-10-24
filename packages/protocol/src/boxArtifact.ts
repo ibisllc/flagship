@@ -21,6 +21,15 @@
 
 import { ed } from "./edSync.js";
 import { assertCanonicalField, hex } from "./canonicalBase.js";
+import {
+  BOX_ARTIFACT_PQ_PIN,
+  boxArtifactPqPinConfigured,
+  boxArtifactV1Digest,
+  verifiedBoxArtifactBindings,
+  verifyBoxArtifactPq,
+  type BoxArtifactPqPin,
+  type BoxArtifactPqSignature,
+} from "./boxArtifactPq.js";
 import type { Bytes } from "./types.js";
 
 export const TAG_BOX_ARTIFACT = "flagship/box-artifact/v1";
@@ -88,6 +97,8 @@ export interface BoxArtifactSignature {
   keyHex: string;
   /** The signature over `canonicalBoxArtifact`, hex (64 bytes). */
   signatureHex: string;
+  /** The signer's hybrid companion (boxArtifactPq.ts); required once the PQ pin names a key. */
+  pq?: BoxArtifactPqSignature;
 }
 
 export function signBoxArtifact(m: BoxArtifactManifest, privateKey: Bytes): BoxArtifactSignature {
@@ -114,7 +125,8 @@ export type BoxArtifactRefusal =
   | "arch-mismatch"
   | "verifier-too-old"
   | "rollback"
-  | "node-below-floor";
+  | "node-below-floor"
+  | "pq-signature-required";
 
 export interface VerifyBoxArtifactOptions {
   trust: ReleaseTrust;
@@ -131,6 +143,12 @@ export interface VerifyBoxArtifactOptions {
   lastSequence?: number;
   /** The Node security floor, `major.minor.patch`. */
   nodeFloor?: string;
+  /** The PQ pin (default: the code's `BOX_ARTIFACT_PQ_PIN`). */
+  pqPin?: BoxArtifactPqPin;
+  /** The manifest file's `pqBindings`: each signer's `release-key` binding. */
+  pqBindings?: readonly unknown[];
+  /** The verifier's clock, for the bindings' dates (default `Date.now()`). */
+  now?: number;
 }
 
 export type VerifyBoxArtifactResult =
@@ -166,17 +184,32 @@ export function verifyBoxArtifact(
   ) {
     return { ok: false, code: "bad-trust" };
   }
+  // Once the PQ pin names a key, a signer counts only with its verified hybrid companion, except
+  // on a manifest the pin lists as signed before the cut-over.
+  const pin = o.pqPin ?? BOX_ARTIFACT_PQ_PIN;
+  const needPq = boxArtifactPqPinConfigured(pin) && !pin.legacyManifests.includes(boxArtifactV1Digest(bytes));
+  const bindings = needPq ? verifiedBoxArtifactBindings(o.pqBindings ?? [], pin, o.now ?? Date.now()) : new Map();
   const signed = new Set<string>();
+  let classicalOnly = 0;
   for (const s of signatures) {
     const key = s.keyHex.toLowerCase();
     if (!authorized.has(key) || signed.has(key)) continue;
     try {
-      if (ed.verify(Uint8Array.from(Buffer.from(s.signatureHex, "hex")), bytes, Uint8Array.from(Buffer.from(key, "hex")))) signed.add(key);
+      if (!ed.verify(Uint8Array.from(Buffer.from(s.signatureHex, "hex")), bytes, Uint8Array.from(Buffer.from(key, "hex")))) continue;
     } catch {
       // a malformed signature simply does not count
+      continue;
     }
+    if (needPq && !verifyBoxArtifactPq(bytes, key, s.pq, bindings)) {
+      classicalOnly += 1;
+      continue;
+    }
+    signed.add(key);
   }
   if (signed.size < o.trust.threshold) {
+    if (needPq && signed.size + classicalOnly >= o.trust.threshold) {
+      return { ok: false, code: "pq-signature-required", detail: `${signed.size} of ${o.trust.threshold} with their PQ signature` };
+    }
     return { ok: false, code: "not-enough-signatures", detail: `${signed.size} of ${o.trust.threshold}` };
   }
   if (o.expectedArtifactSha256 !== undefined && o.expectedArtifactSha256.toLowerCase() !== m.artifactSha256) return { ok: false, code: "digest-mismatch", detail: "recipe" };

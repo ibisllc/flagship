@@ -1,0 +1,95 @@
+{
+  "about": "The server order with `pqKeyIds` (one hybrid key id per server, `-` for none): the canonical bytes are the v1 string plus `|pq=<ids comma-joined>`. Every platform must build `order.canonical` from `order.fields` byte for byte and reproduce `order.signatureHex` with the IRK of server-order/vectors.json `keys`; every `refuse` case must be refused before signing. Without `pqKeyIds` the v1 vectors apply unchanged.",
+  "order": {
+    "fields": {
+      "user": "plucky-avocet",
+      "stks": [
+        "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+        "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+        "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+      ],
+      "issuedAt": 1760000000000,
+      "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+      "pqKeyIds": [
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        "-",
+        "2222222222222222222222222222222222222222222222222222222222222222"
+      ]
+    },
+    "canonical": "flagship/server-order/v1|plucky-avocet|48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd,5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9,17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1760000000000|030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc|pq=1111111111111111111111111111111111111111111111111111111111111111,-,2222222222222222222222222222222222222222222222222222222222222222",
+    "signatureHex": "6b3c3fd27f457955de7477c88ecf2826a4768503ab4e13352a54c80b0da65c0d381fd388f5bcd03324715b25ad7e01d5ef08290a692f1bdd2c6ebbfd57547c04"
+  },
+  "refuse": [
+    {
+      "why": "one key id fewer than servers",
+      "fields": {
+        "user": "plucky-avocet",
+        "stks": [
+          "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+          "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+          "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+        ],
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+        "pqKeyIds": [
+          "1111111111111111111111111111111111111111111111111111111111111111",
+          "-"
+        ]
+      }
+    },
+    {
+      "why": "a key id that is not 32-byte hex",
+      "fields": {
+        "user": "plucky-avocet",
+        "stks": [
+          "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+          "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+          "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+        ],
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+        "pqKeyIds": [
+          "11111111111111111111111111111111111111111111111111111111111111",
+          "-",
+          "-"
+        ]
+      }
+    },
+    {
+      "why": "an uppercase key id",
+      "fields": {
+        "user": "plucky-avocet",
+        "stks": [
+          "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+          "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+          "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+        ],
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+        "pqKeyIds": [
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "-",
+          "-"
+        ]
+      }
+    },
+    {
+      "why": "an empty key id",
+      "fields": {
+        "user": "plucky-avocet",
+        "stks": [
+          "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+          "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+          "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+        ],
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+        "pqKeyIds": [
+          "",
+          "-",
+          "-"
+        ]
+      }
+    }
+  ]
+}

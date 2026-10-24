@@ -106,3 +106,35 @@ run("verify-box-artifact.sh agrees with the TypeScript verifier", () => {
     expect(spawnSync(BASH!, [SCRIPT], { encoding: "utf8" }).status).toBe(2);
   });
 });
+
+const PQ = JSON.parse(readFileSync(join(ROOT, "packages/protocol/test-vectors/box-artifact/pq-vectors.json"), "utf8"));
+function haveMlDsa(): boolean {
+  const r = spawnSync("openssl", ["list", "-signature-algorithms"], { encoding: "utf8" });
+  return r.status === 0 && /ML-DSA-65/i.test(r.stdout);
+}
+const runPq = BASH && haveTools() && haveMlDsa() ? describe : describe.skip;
+
+runPq("verify-box-artifact.sh agrees on the PQ companion vectors", () => {
+  const pqArtifact = join(dir, "pq-artifact.bin");
+  writeFileSync(pqArtifact, PQ.artifactText.repeat(PQ.artifactRepeat));
+  for (const c of PQ.cases as Array<{ name: string; signatures: unknown[]; pin: { keyIds: string[]; legacyManifests: string[] }; bindings: unknown[]; expect: { ok: boolean; code?: string } }>) {
+    it(c.name, () => {
+      const mpath = join(dir, "pq-manifest.json");
+      writeFileSync(mpath, JSON.stringify({ manifest: PQ.manifest, signatures: c.signatures, pqBindings: c.bindings }));
+      const args = [
+        SCRIPT, "--manifest", mpath, "--artifact", pqArtifact,
+        "--trust-keys", PQ.trust.keys.join(","), "--threshold", String(PQ.trust.threshold),
+        "--expect-sha256", PQ.manifest.artifactSha256, "--expect-commit", PQ.manifest.commit, "--arch", PQ.manifest.arch,
+        "--now", String(PQ.now),
+      ];
+      if (c.pin.keyIds.length) args.push("--pq-key-ids", c.pin.keyIds.join(","));
+      if (c.pin.legacyManifests.length) args.push("--legacy-manifests", c.pin.legacyManifests.join(","));
+      const r = spawnSync(BASH!, args, { encoding: "utf8" });
+      if (c.expect.ok) expect(r.status, r.stderr).toBe(0);
+      else {
+        expect(r.status, r.stderr).toBe(1);
+        expect(r.stderr).toContain(`refused: ${c.expect.code}`);
+      }
+    }, 60_000);
+  }
+});
