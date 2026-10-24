@@ -42,8 +42,9 @@ function sandbox(binaryBody = "#!/bin/bash\nexit 0\n", pinned?: string) {
   const exec = join(root, "exec.sh");
   writeFileSync(exec, rustExecScript(release, paths.runDir));
   const select = (...args: string[]) => spawnSync("bash", [script, ...args], { encoding: "utf8" });
+  const stopped = (result: string) => spawnSync("bash", [script, "stopped", "keyd"], { encoding: "utf8", env: { ...process.env, SERVICE_RESULT: result } });
   const status = () => JSON.parse(readFileSync(join(paths.runDir, "keyd.status"), "utf8")) as Record<string, string>;
-  return { root, paths, select, status, sha, config, exec, bin };
+  return { root, paths, select, stopped, status, sha, config, exec, bin };
 }
 
 describe("flagship-rust-select", () => {
@@ -58,17 +59,40 @@ describe("flagship-rust-select", () => {
     expect(readFileSync(join(s.paths.stateDir, "keyd.good"), "utf8").trim()).toBe(s.sha);
   });
 
-  it("falls back to TypeScript after three starts that never came up", () => {
+  it("falls back to TypeScript after three runs systemd reports as failed", () => {
     const s = sandbox();
-    const missing = join(s.root, "never.sock");
     for (let i = 0; i < 3; i++) {
       expect(s.select("select", "keyd").stdout).toContain("rust");
-      // confirm waits ~20 s for a socket in production; the test removes the wait by pre-failing
-      writeFileSync(join(s.paths.runDir, "keyd.choice"), "rust\n");
+      expect(s.stopped("exit-code").status).toBe(0);
     }
-    void missing;
     expect(s.select("select", "keyd").stdout).toContain("ts (failed-to-start)");
     expect(s.status()).toMatchObject({ choice: "ts", reason: "failed-to-start" });
+  });
+
+  it("does not let an earlier binary's long good run excuse a new binary's crashes", () => {
+    const s = sandbox();
+    s.select("select", "keyd");
+    const sock = join(s.root, "keyd.sock");
+    writeFileSync(sock, "");
+    s.select("confirm", "keyd", sock);
+    writeFileSync(join(s.paths.stateDir, "keyd.confirmed"), "1\n");
+    const body = "#!/bin/bash\nexit 1\n";
+    writeFileSync(s.bin, body);
+    writeFileSync(join(s.paths.releasePath, "installer/rust/PINS.json"), JSON.stringify({ binaries: { "flagship-keyd": createHash("sha256").update(body).digest("hex") } }));
+    for (let i = 0; i < 3; i++) {
+      s.select("select", "keyd");
+      s.stopped("exit-code");
+    }
+    expect(s.select("select", "keyd").stdout).toContain("ts (failed-to-start)");
+  });
+
+  it("counts nothing for a clean stop, so deliberate restarts never fall back", () => {
+    const s = sandbox();
+    for (let i = 0; i < 6; i++) {
+      s.select("select", "keyd");
+      s.stopped("success");
+    }
+    expect(s.select("select", "keyd").stdout).toContain("rust (pinned)");
   });
 
   it("refuses a binary that is not the one the release pinned", () => {
@@ -90,7 +114,11 @@ describe("flagship-rust-select", () => {
 
   it("starts the count again for a new binary (a rollback to the last good release)", () => {
     const s = sandbox();
-    for (let i = 0; i < 4; i++) s.select("select", "keyd");
+    for (let i = 0; i < 3; i++) {
+      s.select("select", "keyd");
+      s.stopped("signal");
+    }
+    s.select("select", "keyd");
     expect(s.status().reason).toBe("failed-to-start");
     const body = "#!/bin/bash\necho other\n";
     writeFileSync(s.bin, body);

@@ -176,26 +176,36 @@ async function apps(): Promise<void> {
   result("icc: dropped again once the table is back", !/hi|Connection refused/.test(again.text), again.text.slice(0, 160));
 
   // Backups and app copies use save/load and the files archive helpers under Podman.
-  await out("docker", ["save", "-o", "/var/tmp/drill-save.tar", `${APP}:1`]);
-  await out("docker", ["image", "rm", "-f", `${APP}:1`]).catch(() => "");
+  // A copy of the image, so removing it does not take the running apps with it (rmi -f would).
+  await out("docker", ["tag", `${APP}:1`, "drill-copy:1"]);
+  await out("docker", ["save", "-o", "/var/tmp/drill-save.tar", "drill-copy:1"]);
+  await out("docker", ["image", "rm", "drill-copy:1"]);
   const loaded = await tryOut("docker", ["load", "-q", "-i", "/var/tmp/drill-save.tar"]);
-  result("image save then load round trip (app copy path)", loaded.ok && (await tryOut("podman", ["image", "exists", `${APP}:1`])).ok, loaded.text.trim());
+  result("image save then load round trip (app copy path)", loaded.ok && (await tryOut("podman", ["image", "exists", "drill-copy:1"])).ok, loaded.text.trim());
   rmSync("/var/tmp/drill-save.tar", { force: true });
   await gateway.stop().catch(() => {});
 }
 
+/** The box key keyd serves, or "" while its socket is not up yet. */
 async function keydPub(): Promise<string> {
   const c = new KeydClient({ socketPath: "/run/flagship-keyd/keyd.sock", component: "drill", timeoutMs: 5000 });
   try {
     return (await c.connect()).publicKey;
+  } catch {
+    return "";
   } finally {
     c.close();
   }
 }
 
+/** Each component's choice/reason, counting only statuses written at or after `since` (seconds). */
+let since = 0;
 async function statuses(): Promise<Record<string, string>> {
   const s = await readRustStatuses({});
-  return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, `${v.choice}/${v.reason}`]));
+  return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v.at >= since ? `${v.choice}/${v.reason}` : "stale"]));
+}
+function fromNow(): void {
+  since = Math.floor(Date.now() / 1000);
 }
 
 async function rust(): Promise<void> {
@@ -209,6 +219,7 @@ async function rust(): Promise<void> {
   result("TS keyd installed and serving", k === "installed" || k === "already-running", k);
   const tsPub = await keydPub();
   setSwitch("on", "podman");
+  fromNow();
   await bootArchV2({ repoPath: "/opt/flagship", cmd, run: (c, a) => realUpdateCommandRunner(c, a), log });
   const s = await until(statuses, (v) => v.keyd === "rust/running" && v.broker === "rust/running" && v.core === "rust/running", 90_000);
   result("all three components on their Rust binaries under systemd", s.keyd === "rust/running" && s.broker === "rust/running" && s.core === "rust/running", s);
@@ -224,7 +235,7 @@ async function rust(): Promise<void> {
   result("broker v1 still refuses a privileged container", /not allowed|forbidden/i.test(refused), refused);
 
   writeFileSync(CORE_CHECKPOINT, tsCheckpoint([{ serviceId: "drill--app" } as never, { serviceId: "drill--q" } as never]), { mode: 0o644 });
-  const agree = await until(async () => JSON.parse(readFileSync(CORE_STATUS, "utf8")), (v) => v.ok === true && v.at > Date.now() / 1000 - 5 && v.divergent === 0, 140_000);
+  const agree = await until(async () => JSON.parse(readFileSync(CORE_STATUS, "utf8")), (v) => v.ok === true && v.installations === 2 && v.divergent === 0, 140_000);
   result("core shadow agrees with the TS controller", agree.ok === true && agree.divergent === 0, agree);
   await out("podman", ["stop", "-t", "2", QAPP]);
   const diverge = await until(async () => JSON.parse(readFileSync(CORE_STATUS, "utf8")), (v) => v.divergent === 1, 140_000);
@@ -243,6 +254,7 @@ async function broken(): Promise<void> {
   copyFileSync(brokerBin, "/var/tmp/flagship-broker.good");
   writeFileSync(`${brokerBin}.new`, Buffer.concat([readFileSync(brokerBin), Buffer.from("x")]), { mode: 0o755 });
   renameSync(`${brokerBin}.new`, brokerBin);
+  fromNow();
   await out("systemctl", ["restart", "flagship-broker"]);
   const s1 = await until(statuses, (v) => v.broker === "ts/hash-mismatch", 30_000);
   result("a binary that is not the pinned one is not run (broker idles in fallback)", s1.broker === "ts/hash-mismatch", s1);
@@ -252,6 +264,7 @@ async function broken(): Promise<void> {
   result("a boot does not restart-loop the fallback", !again.rust.action.startsWith("fail") && ("restarted" in again.rust ? !again.rust.restarted.includes("broker") : true), again.rust);
   copyFileSync("/var/tmp/flagship-broker.good", `${brokerBin}.new`);
   renameSync(`${brokerBin}.new`, brokerBin);
+  fromNow();
   await out("systemctl", ["restart", "flagship-broker"]);
   const s2 = await until(statuses, (v) => v.broker === "rust/running", 30_000);
   result("the right binary comes back", s2.broker === "rust/running", s2);
@@ -266,15 +279,19 @@ async function broken(): Promise<void> {
   pins.binaries["flagship-keyd"] = sha(keydBin);
   writeFileSync(PINS, JSON.stringify(pins, null, 2));
   const t0 = Date.now();
+  fromNow();
   await bootArchV2({ repoPath: "/opt/flagship", cmd, run: (c, a) => realUpdateCommandRunner(c, a), log });
   const s3 = await until(statuses, (v) => v.keyd === "ts/failed-to-start", 150_000);
   result("a crashing keyd binary falls back to the TS keyd after three tries", s3.keyd === "ts/failed-to-start", { ...s3, seconds: Math.round((Date.now() - t0) / 1000) });
-  const pub = await until(keydPub, (v) => v.length > 0, 30_000).catch((e: Error) => e.message);
-  result("the box keeps its keys: the TS keyd answers", /^[0-9a-f]{64}$/.test(String(pub)), String(pub).slice(0, 16));
+  const pub = await until(keydPub, (v) => v.length > 0, 60_000);
+  const exe3 = (await out("bash", ["-c", "readlink /proc/$(systemctl show -p MainPID --value flagship-keyd)/exe"])).trim();
+  log(`keyd process after the fallback: ${exe3}`);
+  result("the box keeps its keys: the TS keyd answers", /^[0-9a-f]{64}$/.test(pub) && exe3.endsWith("/node"), { key: pub.slice(0, 16), exe: exe3 });
   result("the update gate fails that release", !(await rustPathHealthy(cfg, log)));
   copyFileSync("/var/tmp/flagship-keyd.good", `${keydBin}.new`);
   renameSync(`${keydBin}.new`, keydBin);
   copyFileSync("/var/tmp/PINS.good.json", PINS);
+  fromNow();
   await bootArchV2({ repoPath: "/opt/flagship", cmd, run: (c, a) => realUpdateCommandRunner(c, a), log });
   const s4 = await until(statuses, (v) => v.keyd === "rust/running", 90_000);
   result("restored release: keyd back on Rust", s4.keyd === "rust/running", s4);
@@ -306,6 +323,7 @@ async function rollback(): Promise<void> {
   symlinkSync(join(badRel, "app"), "/opt/flagship.new");
   renameSync("/opt/flagship.new", "/opt/flagship");
   writeFileSync("/var/flagship/update-pending.json", JSON.stringify({ previousCommit: good, targetCommit: bad, bootAttempts: 0, stage: "staged" }));
+  fromNow();
   await bootArchV2({ repoPath: "/opt/flagship", cmd, run: (c, a) => realUpdateCommandRunner(c, a), log });
   const s1 = await until(statuses, (v) => v.keyd === "ts/failed-to-start", 150_000);
   result("bad release: keyd falls back, the box keeps running", s1.keyd === "ts/failed-to-start", s1);
@@ -322,73 +340,109 @@ async function rollback(): Promise<void> {
   result("boot gate: the bad release is not healthy", first.action === "retry-restart", first);
   const second = await gate();
   result("boot gate: rolled back to the last good release", second.action === "rolled-back" && readlinkSync("/opt/flagship") === goodApp, { second, link: readlinkSync("/opt/flagship") });
+  fromNow();
   await bootArchV2({ repoPath: "/opt/flagship", cmd, run: (c, a) => realUpdateCommandRunner(c, a), log });
   const s2 = await until(statuses, (v) => v.keyd === "rust/running", 90_000);
   result("after the rollback keyd runs the good release's Rust binary", s2.keyd === "rust/running", s2);
   result("and the gate is healthy again", await rustPathHealthy(cfg, log));
 }
 
-async function luks(): Promise<void> {
-  const work = "/var/tmp/luks-drill";
-  rmSync(work, { recursive: true, force: true });
-  mkdirSync(work, { recursive: true });
-  const runOne = async (label: string, killAfterPct: number | null): Promise<void> => {
-    const img = join(work, `${label}.img`);
-    const key = join(work, `${label}.key`);
-    writeFileSync(key, randomBytes(64), { mode: 0o600 });
-    await out("truncate", ["-s", "1536M", img]);
-    const dev = (await out("losetup", ["--find", "--show", img])).trim();
-    await out("cryptsetup", ["luksFormat", "--type", "luks2", "--batch-mode", "--pbkdf", "pbkdf2", "--pbkdf-force-iterations", "1000", "--key-file", key, dev]);
-    const name = `drill-${label}`;
-    await out("cryptsetup", ["open", "--key-file", key, dev, name]);
-    await out("mkfs.ext4", ["-q", `/dev/mapper/${name}`]);
-    const mnt = join(work, `${label}.mnt`);
-    mkdirSync(mnt);
-    await out("mount", [`/dev/mapper/${name}`, mnt]);
-    await out("dd", ["if=/dev/urandom", `of=${mnt}/owner-data`, "bs=1M", "count=600", "status=none"]);
-    await out("sync", []);
-    const before = sha(`${mnt}/owner-data`);
-    const record = join(work, `${label}.factory.json`);
-    const env = `export ROOT_LUKS_PART='${dev}' FLAGSHIP_LUKS_BUILD_KEY='${key}' FLAGSHIP_LUKS_FACTORY_RECORD='${record}' FLAGSHIP_LUKS_REKEY_MARKER='${work}/${label}.rekeyed.json' FLAGSHIP_LUKS_HEADER_BACKUP='${work}/${label}.header.img' FLAGSHIP_LUKS_TMP='${work}'`;
-    const factory = buildApplianceFactoryLuksRecordBlock(key).replace(/\/etc\/flagship\/appliance-factory-luks\.json/g, record);
-    writeFileSync(join(work, `${label}-factory.sh`), `#!/bin/bash\nset -euo pipefail\n${env}\n${factory}\n`);
-    await out("bash", [join(work, `${label}-factory.sh`)]);
-    const factoryVk = JSON.parse(readFileSync(record, "utf8")).volumeKeySha256 as string;
-    const specialize = `#!/bin/bash\nset -uo pipefail\n${env}\nstage() { echo "[stage] $*"; }\nreport() { echo "[report] $*"; }\n${APPLIANCE_REKEY_BLOCK}\n`;
-    writeFileSync(join(work, `${label}-rekey.sh`), specialize);
-    if (killAfterPct !== null) {
-      // A power cut mid re-encryption: kill cryptsetup once it reports progress, then close and
-      // reopen the disk the way the next boot's initramfs would, and run the specializer again.
-      const r = await tryOut("bash", ["-c", `bash ${work}/${label}-rekey.sh & pid=$!; for i in $(seq 1 600); do if pgrep -x cryptsetup >/dev/null && pgrep -af cryptsetup | grep -q reencrypt; then sleep ${killAfterPct === 0 ? 1 : 2}; pkill -9 -x cryptsetup; echo killed; break; fi; sleep 0.1; done; wait $pid; echo exit=$?`], 600_000);
-      result(`${label}: the interrupted run stops without claiming success`, !/disk re-encrypted under its own key/.test(r.text), r.text.split("\n").slice(-4).join(" | "));
-      await out("umount", [mnt]);
-      await out("cryptsetup", ["close", name]);
-      await out("cryptsetup", ["open", "--key-file", key, dev, name]);
-      const pending = await tryOut("bash", ["-c", `cryptsetup luksDump ${dev} | grep -i reencrypt || true`]);
-      result(`${label}: the header records an unfinished re-encryption`, /reencrypt/i.test(pending.text), pending.text.trim().slice(0, 200));
-      await out("mount", [`/dev/mapper/${name}`, mnt]);
-    }
-    const r2 = await tryOut("bash", [join(work, `${label}-rekey.sh`)], 900_000);
-    result(`${label}: specializer finishes${killAfterPct !== null ? " (resumed)" : ""}`, /disk re-encrypted under its own key/.test(r2.text), r2.text.split("\n").filter((l) => /\[appliance\]|\[stage\]/.test(l)).slice(-4).join(" | "));
-    const newVk = (await out("bash", ["-c", `vk=${work}/vk.$$; cryptsetup luksDump --dump-volume-key --batch-mode --key-file ${key} --volume-key-file $vk ${dev} >/dev/null && sha256sum $vk | cut -d' ' -f1; shred -u $vk`])).trim();
-    result(`${label}: the volume key changed`, /^[0-9a-f]{64}$/.test(newVk) && newVk !== factoryVk, { factory: factoryVk.slice(0, 12), now: newVk.slice(0, 12) });
-    await out("sync", []);
-    await out("umount", [mnt]);
-    await out("cryptsetup", ["close", name]);
-    await out("cryptsetup", ["open", "--key-file", key, dev, name]);
-    await out("mount", [`/dev/mapper/${name}`, mnt]);
-    result(`${label}: the owner's data is intact after re-encryption`, sha(`${mnt}/owner-data`) === before);
-    const slots = (await out("bash", ["-c", `cryptsetup luksDump ${dev} | awk '/^Keyslots:/{f=1;next} /^[A-Za-z]/{f=0} f && /^[[:space:]]+[0-9]+:[[:space:]]*luks2/{n++} END{print n+0}'`])).trim();
-    result(`${label}: exactly one key slot`, slots === "1", slots);
-    await out("umount", [mnt]);
-    await out("cryptsetup", ["close", name]);
-    await out("losetup", ["-d", dev]);
-  };
-  await runOne("clean", null);
-  await runOne("powercut", 30);
+const LUKS_WORK = "/var/tmp/luks-drill";
+
+interface LuksDisk {
+  label: string;
+  img: string;
+  key: string;
+  dev: string;
+  name: string;
+  mnt: string;
+  record: string;
+  env: string;
 }
 
-const phases: Record<string, () => Promise<void>> = { migrate, apps, rust, broken, rollback, luks };
+async function luksOpen(label: string, fresh: boolean): Promise<LuksDisk> {
+  const img = join(LUKS_WORK, `${label}.img`);
+  const key = join(LUKS_WORK, `${label}.key`);
+  if (fresh) {
+    writeFileSync(key, randomBytes(64), { mode: 0o600 });
+    await out("truncate", ["-s", "1536M", img]);
+  }
+  const dev = (await out("losetup", ["--find", "--show", img])).trim();
+  if (fresh) await out("cryptsetup", ["luksFormat", "--type", "luks2", "--batch-mode", "--pbkdf", "pbkdf2", "--pbkdf-force-iterations", "1000", "--key-file", key, dev]);
+  const name = `drill-${label}`;
+  // On the box the initramfs opens the root with the factory key; cryptsetup recovers an
+  // interrupted re-encryption's hotzone from the LUKS2 journal while opening.
+  await out("cryptsetup", ["open", "--key-file", key, dev, name]);
+  if (fresh) await out("mkfs.ext4", ["-q", `/dev/mapper/${name}`]);
+  const mnt = join(LUKS_WORK, `${label}.mnt`);
+  mkdirSync(mnt, { recursive: true });
+  await out("mount", [`/dev/mapper/${name}`, mnt]);
+  const record = join(LUKS_WORK, `${label}.factory.json`);
+  const env = `export ROOT_LUKS_PART='${dev}' FLAGSHIP_LUKS_BUILD_KEY='${key}' FLAGSHIP_LUKS_FACTORY_RECORD='${record}' FLAGSHIP_LUKS_REKEY_MARKER='${LUKS_WORK}/${label}.rekeyed.json' FLAGSHIP_LUKS_HEADER_BACKUP='${LUKS_WORK}/${label}.header.img' FLAGSHIP_LUKS_TMP='${LUKS_WORK}'`;
+  writeFileSync(join(LUKS_WORK, `${label}-rekey.sh`), `#!/bin/bash\nset -uo pipefail\n${env}\nstage() { echo "[stage] $*"; }\nreport() { echo "[report] $*"; }\n${APPLIANCE_REKEY_BLOCK}\n`);
+  return { label, img, key, dev, name, mnt, record, env };
+}
+
+async function luksSeed(d: LuksDisk): Promise<void> {
+  await out("dd", ["if=/dev/urandom", `of=${d.mnt}/owner-data`, "bs=1M", "count=600", "status=none"]);
+  await out("sync", []);
+  writeFileSync(join(LUKS_WORK, `${d.label}.data.sha256`), sha(`${d.mnt}/owner-data`));
+  const factory = buildApplianceFactoryLuksRecordBlock(d.key).replace(/\/etc\/flagship\/appliance-factory-luks\.json/g, d.record);
+  writeFileSync(join(LUKS_WORK, `${d.label}-factory.sh`), `#!/bin/bash\nset -euo pipefail\n${d.env}\n${factory}\n`);
+  await out("bash", [join(LUKS_WORK, `${d.label}-factory.sh`)]);
+}
+
+async function luksVerify(d: LuksDisk, resumed: boolean): Promise<void> {
+  const r2 = await tryOut("bash", [join(LUKS_WORK, `${d.label}-rekey.sh`)], 900_000);
+  result(`${d.label}: specializer finishes${resumed ? " (resumed)" : ""}`, /disk re-encrypted under its own key/.test(r2.text) && (!resumed || /Resuming/.test(r2.text)),
+    r2.text.split("\n").filter((l) => /\[appliance\]|\[stage\]/.test(l)).slice(-3).join(" | "));
+  const factoryVk = JSON.parse(readFileSync(d.record, "utf8")).volumeKeySha256 as string;
+  const newVk = (await out("bash", ["-c", `vk=${LUKS_WORK}/vk.$$; cryptsetup luksDump --dump-volume-key --batch-mode --key-file ${d.key} --volume-key-file $vk ${d.dev} >/dev/null && sha256sum $vk | cut -d' ' -f1; shred -u $vk`])).trim();
+  result(`${d.label}: the volume key changed`, /^[0-9a-f]{64}$/.test(newVk) && newVk !== factoryVk, { factory: factoryVk.slice(0, 12), now: newVk.slice(0, 12) });
+  await out("sync", []);
+  await out("umount", [d.mnt]);
+  await out("cryptsetup", ["close", d.name]);
+  await out("cryptsetup", ["open", "--key-file", d.key, d.dev, d.name]);
+  await out("mount", [`/dev/mapper/${d.name}`, d.mnt]);
+  result(`${d.label}: the owner's data is intact after re-encryption`, sha(`${d.mnt}/owner-data`) === readFileSync(join(LUKS_WORK, `${d.label}.data.sha256`), "utf8"));
+  const slots = (await out("bash", ["-c", `cryptsetup luksDump ${d.dev} | awk '/^Keyslots:/{f=1;next} /^[A-Za-z]/{f=0} f && /^[[:space:]]+[0-9]+:[[:space:]]*luks2/{n++} END{print n+0}'`])).trim();
+  result(`${d.label}: exactly one key slot`, slots === "1", slots);
+  await out("umount", [d.mnt]);
+  await out("cryptsetup", ["close", d.name]);
+  await out("losetup", ["-d", d.dev]);
+}
+
+async function luks(): Promise<void> {
+  rmSync(LUKS_WORK, { recursive: true, force: true });
+  mkdirSync(LUKS_WORK, { recursive: true });
+  const d = await luksOpen("clean", true);
+  await luksSeed(d);
+  await luksVerify(d, false);
+}
+
+/** Starts the re-encryption, then cuts the power (sysrq b: no sync, no unmount) mid-way. */
+async function luksCut(): Promise<void> {
+  mkdirSync(LUKS_WORK, { recursive: true });
+  const d = await luksOpen("powercut", true);
+  await luksSeed(d);
+  writeFileSync("/proc/sys/kernel/sysrq", "1");
+  log("cutting the power during the re-encryption");
+  await tryOut("bash", ["-c", `bash ${LUKS_WORK}/powercut-rekey.sh > ${LUKS_WORK}/powercut-first.log 2>&1 & for i in $(seq 1 600); do if pgrep -af cryptsetup | grep -q reencrypt; then sleep 2; sync -f ${LUKS_WORK}; echo b > /proc/sysrq-trigger; fi; sleep 0.1; done`], 120_000);
+}
+
+/** After the power cut: open as the next boot would, and let the specializer resume. */
+async function luksResume(): Promise<void> {
+  const first = readFileSync(join(LUKS_WORK, "powercut-first.log"), "utf8");
+  result("powercut: the first run never claimed success", !/disk re-encrypted under its own key/.test(first), first.split("\n").slice(-3).join(" | "));
+  const dev0 = (await out("losetup", ["--find", "--show", join(LUKS_WORK, "powercut.img")])).trim();
+  const pending = await tryOut("bash", ["-c", `cryptsetup luksDump ${dev0} | grep -iE "reencrypt|online-reencrypt" || true`]);
+  result("powercut: the header records an unfinished re-encryption", /reencrypt/i.test(pending.text), pending.text.trim().slice(0, 200));
+  await out("losetup", ["-d", dev0]);
+  const d = await luksOpen("powercut", false);
+  await luksVerify(d, true);
+}
+
+const phases: Record<string, () => Promise<void>> = { migrate, apps, rust, broken, rollback, luks, "luks-cut": luksCut, "luks-resume": luksResume };
 const fn = phases[phase];
 if (!fn) {
   console.error(`usage: drill.ts ${Object.keys(phases).join("|")}`);

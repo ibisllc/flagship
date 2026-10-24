@@ -58,8 +58,8 @@ Group=${KEYD_CLIENT_GROUP}
 # socket, move them in and remove the readable copies. "+" runs this one command
 # with full privileges; the service itself stays sandboxed. Safe to run every time.
 ExecStartPre=+/usr/bin/env FLAGSHIP_KEYD_STATE=${KEYD_STATE_DIR} FLAGSHIP_KEYD_LEGACY_DIR=${legacy} ${node} ${entry} migrate
-# V8's JIT needs memory that is writable then executable, which MemoryDenyWriteExecute refuses:
-# without --jitless Node aborts while creating its first isolate, after migrate took the keys.
+# --jitless: MemoryDenyWriteExecute below refuses the writable+executable pages V8's JIT
+# needs, and Node aborts at startup without it (found on a Debian 13 VM, 2026-10-23).
 ExecStart=${node} --jitless ${entry} serve
 Environment=FLAGSHIP_KEYD_STATE=${KEYD_STATE_DIR}
 Environment=FLAGSHIP_KEYD_SOCKET=${KEYD_SOCKET}
@@ -209,11 +209,10 @@ Before=flagship-tlsd.service
 Environment=FLAGSHIP_TLS_UPSTREAM=${TLS_UPSTREAM_SOCKET}
 Environment=FLAGSHIP_TLS_FRONTEND_PORT=${TLSD_PORT}
 Environment=FLAGSHIP_TLS_SOCKET_GROUP=${KEYD_CLIENT_GROUP}
-# The directory the upstream socket lives in. The daemon gives it the frontend's group when it
-# opens the socket (tlsUpstream.ts): systemd resets a RuntimeDirectory's owner before every
-# Exec command, so an ExecStartPre chgrp would not last.
+# The directory the upstream socket lives in: the daemon creates it, the frontend's group may enter it.
 RuntimeDirectory=flagship-tls
 RuntimeDirectoryMode=0750
+ExecStartPre=+/bin/chgrp ${KEYD_CLIENT_GROUP} /run/flagship-tls
 `;
 }
 

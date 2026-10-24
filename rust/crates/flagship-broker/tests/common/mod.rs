@@ -87,6 +87,10 @@ impl Client {
     pub fn send(&mut self, v: &Value) {
         self.s.write_all(&encode_frame(v).unwrap()).unwrap();
     }
+    #[allow(dead_code)]
+    pub fn try_send(&mut self, v: &Value) -> std::io::Result<()> {
+        self.s.write_all(&encode_frame(v).unwrap())
+    }
     pub fn send_raw(&mut self, b: &[u8]) {
         self.s.write_all(b).unwrap();
     }

@@ -561,7 +561,9 @@ fn a_peer_outside_the_policy_is_dropped_before_any_frame() {
         );
     });
     let mut c = Client::connect(&path);
-    c.send(&json!({ "id": 0, "op": "hello", "args": { "version": 1 } }));
+    // The broker may already have closed the socket: on Linux the write then fails with EPIPE,
+    // which is the same verdict (nothing was read, nothing answered).
+    let _ = c.try_send(&json!({ "id": 0, "op": "hello", "args": { "version": 1 } }));
     assert!(c.recv().is_none());
     stop.store(true, Ordering::SeqCst);
 }
