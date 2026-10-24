@@ -63,12 +63,16 @@ public struct BuildAdaptRequest: Codable, Equatable, Sendable {
     /// Whether the box shares this adaptation with the public store, so
     /// others can install the repo without AI. Nil: the box's default (share).
     public let share: Bool?
+    /// The owner's signed consent to this one AI run, sent after the box's
+    /// 428 showed what it may cost (`flagship/ai-repair-consent/v1`).
+    public let consent: AiConsentBody?
     public init(instructions: String? = nil, credential: LlmProviderCredential? = nil, background: Bool? = nil,
-                share: Bool? = nil) {
+                share: Bool? = nil, consent: AiConsentBody? = nil) {
         self.instructions = instructions
         self.credential = credential
         self.background = background
         self.share = share
+        self.consent = consent
     }
 }
 

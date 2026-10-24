@@ -903,6 +903,40 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         GymProbe.note("revoked api key \(keyId)")
     }
 
+    private struct MockConsentRefusal: Encodable { let error: String; let code: String; let estimate: AiCostEstimate }
+
+    // MARK: - App chat (chat/approvals.ts)
+
+    public var mockChatRequests: [ChatRequest] = []
+    public var mockChatAlways: [ChatAppIdentity] = []
+    public private(set) var chatAnswers: [ChatAnswerRequest] = []
+
+    public func chatRequests() async throws -> ChatRequestsResponse {
+        try await tick()
+        return ChatRequestsResponse(requests: mockChatRequests, always: mockChatAlways)
+    }
+
+    public func chatAnswer(_ answer: ChatAnswerRequest) async throws {
+        try await tick()
+        try MockOrderSigners.shared.require(.sensitive, kind: "chat-approval", signatureHex: answer.signature,
+                                            payload: ["serverDomain": await boxDomain() ?? "", "answer": answer] as [String: Any])
+        guard let i = mockChatRequests.firstIndex(where: { $0.requestId == answer.requestId && $0.kind == answer.kind }) else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"that request is no longer waiting"}"#)
+        }
+        let r = mockChatRequests.remove(at: i)
+        if answer.decision == "always", !mockChatAlways.contains(r.receiverApp) { mockChatAlways.append(r.receiverApp) }
+        chatAnswers.append(answer)
+        GymProbe.note("chat \(answer.decision) \(answer.kind) \(r.claimedSender.label)")
+    }
+
+    public func chatRevokeAlways(_ app: ChatAppIdentity) async throws -> Int {
+        try await tick()
+        let had = mockChatAlways.contains(app) ? 1 : 0
+        mockChatAlways.removeAll { $0 == app }
+        GymProbe.note("chat always revoked \(app.label)")
+        return had
+    }
+
     private var accessEventContinuations: [AsyncStream<Void>.Continuation] = []
 
     /// Stays open; `emitAccessRequestEvent()` sends a frame.
@@ -2160,7 +2194,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         GymProbe.note("git check \(req.gitUrl) ref=\(req.ref ?? "-") name=\(req.name ?? "-")")
         if let e = buildGitError { throw e }
         if let f = buildGitFixture { return f }
-        let buildId = "bld-\(UUID().uuidString.prefix(8).lowercased())"
+        // A real box's ids are 16 hex characters, which a signed consent names.
+        let buildId = buildAdaptConsentEstimate != nil
+            ? String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(16).lowercased())
+            : "bld-\(UUID().uuidString.prefix(8).lowercased())"
         let fit = req.gitUrl.lowercased().contains("flagship")
         if fit {
             return BuildGitResponse(
@@ -2197,8 +2234,29 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// Thrown by `buildAdaptStart` (after recording the call).
     public var buildAdaptStartError: Error?
 
+    /// When set, the box asks for the owner's consent first (HTTP 428 with this
+    /// estimate) and starts only with a consent signed over it.
+    public var buildAdaptConsentEstimate: AiCostEstimate?
+    /// Adapt requests refused for want of consent.
+    public private(set) var buildAdaptConsentAsks = 0
+
     public func buildAdaptStart(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptReply {
         try await tick()
+        if let est = buildAdaptConsentEstimate {
+            guard let consent = req.consent else {
+                buildAdaptConsentAsks += 1
+                GymProbe.note("adapt consent asked")
+                let body = try JSONEncoder().encode(MockConsentRefusal(error: "consent-required", code: "ai-consent", estimate: est))
+                throw ScreensClientError.http(status: 428, message: String(decoding: body, as: UTF8.self))
+            }
+            guard consent.provider == est.provider, consent.source == est.source, consent.highTokens >= est.highTokens else {
+                throw ScreensClientError.http(status: 403, message: #"{"error":"the estimate grew since you agreed","code":"ai-consent"}"#)
+            }
+            try MockOrderSigners.shared.require(.sensitive, kind: "ai-consent", signatureHex: consent.signature,
+                                                payload: ["serverDomain": await boxDomain() ?? "", "buildId": buildId,
+                                                          "operation": est.operation, "consent": consent] as [String: Any])
+            GymProbe.note("adapt consented high=\(consent.highTokens)")
+        }
         buildAdaptStartCalls.append((buildId, req))
         GymProbe.note("adapt started share=\(req.share.map { String($0) } ?? "-") provider=\(req.credential?.provider ?? "none")")
         if let e = buildAdaptStartError { throw e }
