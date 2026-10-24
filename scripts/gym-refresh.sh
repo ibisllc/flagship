@@ -27,9 +27,9 @@
 #      GYM_BASE_REF      rebase the gym branch onto this ref instead of origin/main (never pushed)
 #      GYM_START_REF     start the gym worktree from this ref instead of origin/gym, e.g. a pushed
 #                        `gym-ux` that already is a feature branch plus the gym seams (never pushed)
-#      GYM_INSTALLER_GIT_REF  the ref new gym boxes clone (a pushed branch; default gym: only that branch
-#                         carries the gym trust pin, so a box on main can't check
-#                         anything the gym CA signed, e.g. a share's account-key attestation)
+#      GYM_INSTALLER_GIT_REF  the exact commit demo boxes install (default: the commit the gym box
+#                         release from phase 4b names; a branch name is refused since boxes
+#                         install a signed artifact for one exact commit)
 #      GYM_REFRESH_DRY_RUN=1  same as --dry-run
 #
 # Never touches prod: prod is only READ (its secret names, to compare).
@@ -38,7 +38,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$HOME/.fly/bin:$PATH"
 
-GYM_INSTALLER_GIT_REF="${GYM_INSTALLER_GIT_REF:-gym}"
+GYM_INSTALLER_GIT_REF="${GYM_INSTALLER_GIT_REF:-}"
 DRY="${GYM_REFRESH_DRY_RUN:-0}"
 push=1 fly_deploy=1 deploy=1
 for arg in "$@"; do
@@ -279,6 +279,12 @@ elif [ "${GYM_SKIP_BOX_ARTIFACT:-0}" = "1" ]; then
   say "GYM_SKIP_BOX_ARTIFACT=1: leaving the gym's box release as it is"
 else
   bash "$REPO/scripts/gym-box-artifact.sh" --worktree "$WT" $([ "$push" = "1" ] || echo --no-push) || die "gym box artifact failed"
+fi
+# Demo boxes install the gym's own box release, named by its exact commit (a branch name is refused).
+if [ -z "$GYM_INSTALLER_GIT_REF" ] && [ "$DRY" != "1" ]; then
+  GYM_INSTALLER_GIT_REF="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).commit)' "$WT/release/box-release.json")"
+  [[ "$GYM_INSTALLER_GIT_REF" =~ ^[0-9a-f]{40}$ ]] || die "the gym box release names no exact commit ($GYM_INSTALLER_GIT_REF)"
+  say "demo boxes install the gym box release ${GYM_INSTALLER_GIT_REF:0:12}"
 fi
 
 # ── 5. deploy ─────────────────────────────────────────────────────────────
