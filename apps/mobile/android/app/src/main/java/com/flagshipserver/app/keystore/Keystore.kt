@@ -153,6 +153,9 @@ object Keystore {
     /** The active profileId, or null for the default/legacy profile. */
     fun activeProfile(): String? = activeProfileId
 
+    /** The active profile as a Keystore alias suffix ("default" for the legacy profile). */
+    fun activeProfileTag(): String = activeProfileId?.replace(Regex("[^a-z0-9-]"), "_") ?: "default"
+
     /**
      * Suffix a base prefs key for the active profile. The default
      * profile (activeProfileId == null) returns the base key UNCHANGED
@@ -501,6 +504,32 @@ object Keystore {
             .remove(watchDelegateSeedKey())
             .remove(watchDelegateGrantIdKey())
             .apply()
+        // The boot-only key goes with the delegate it serves.
+        KeystoreWatchBootKeys().clear()
+    }
+
+    private fun watchBootCopiesKey() = pkey("watch.boot.copies")
+
+    /** Servers holding a copy of their disk key for this device's boot-only key, with each copy's end. */
+    fun watchBootCopies(): Map<String, Long> {
+        val raw = requirePrefs().getString(watchBootCopiesKey(), null) ?: return emptyMap()
+        return raw.split('\n').mapNotNull { line ->
+            val i = line.lastIndexOf(' ')
+            if (i <= 0) null else line.substring(i + 1).toLongOrNull()?.let { line.substring(0, i) to it }
+        }.toMap()
+    }
+
+    fun setWatchBootCopy(serverDomain: String, expiresAt: Long?) {
+        val next = watchBootCopies().toMutableMap()
+        if (expiresAt == null) next.remove(serverDomain) else next[serverDomain] = expiresAt
+        val e = requirePrefs().edit()
+        if (next.isEmpty()) e.remove(watchBootCopiesKey())
+        else e.putString(watchBootCopiesKey(), next.entries.joinToString("\n") { "${it.key} ${it.value}" })
+        e.apply()
+    }
+
+    fun clearWatchBootCopies() {
+        requirePrefs().edit().remove(watchBootCopiesKey()).apply()
     }
 
     // ---- Admin master root (Slice D device-admin tier) -----------------
@@ -720,6 +749,8 @@ object Keystore {
         editor.remove(pkey(KEY_IRK_PENDING_VERSION))
         editor.remove(watchDelegateSeedKey())
         editor.remove(watchDelegateGrantIdKey())
+        editor.remove(watchBootCopiesKey())
+        runCatching { KeystoreWatchBootKeys().clear() }
         editor.remove(acmeAccountKeyScalarKey())
         // Slice D — drop the admin master root so a removed device retains NO
         // administrative authority (the security invariant: authority is

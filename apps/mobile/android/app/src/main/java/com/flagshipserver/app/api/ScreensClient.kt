@@ -195,6 +195,20 @@ interface ScreensClient {
     suspend fun accessRequests(): AccessRequestsResponse =
         throw ScreensError.NotImplemented("access requests")
 
+    /** `GET /api/screens/chat/requests`: held app-chat requests and the apps
+     *  that take chats without asking. A box without app chat answers 404. */
+    suspend fun chatRequests(): ChatRequestsResponse =
+        throw ScreensError.NotImplemented("chat requests")
+
+    /** `POST /api/screens/chat/answer`: an owner-signed answer to one request. */
+    suspend fun chatAnswer(body: ChatAnswerBody): Unit =
+        throw ScreensError.NotImplemented("chat requests")
+
+    /** `POST /api/screens/chat/always/revoke` (unsigned: it only narrows what
+     *  is open). Answers how many conversations it ended. */
+    suspend fun chatAlwaysRevoke(app: ChatAppIdentity, sender: ChatAppIdentity?): ChatAlwaysRevokeResponse =
+        throw ScreensError.NotImplemented("chat requests")
+
     /** `GET /api/screens/settings/access-alerts`: whether this box pushes
      *  access requests. An older box answers 404. */
     suspend fun accessAlerts(): AccessAlertsSetting =
