@@ -2,11 +2,11 @@
 // docs/watch-boot-approval-without-unlock.md). Beside the watch-delegate signing key this device
 // keeps a boot-only X25519 key that never leaves the Keystore. Per server, an owner opt-in deposits
 // a copy of the disk key sealed to it (`flagship/watch-boot-delegate/v1`, attested by the account
-// key) with the boot worker, and keeps the server's STK as derived from the account key then. A
-// watch Approve then needs no account key: learn the server's waiting start-up, fetch this watch's
-// copy, open it with the boot-only key, seal it for the PINNED STK only (never one `.com` names)
-// and post the answer signed by the delegate. The waiting request is read with the account read
-// token and must carry the box's signature under that pinned STK. The boot worker
+// key) with the boot worker. A watch Approve then needs no account key: learn the server's waiting
+// start-up, fetch this watch's copy, open it with the boot-only key, seal it for the PINNED STK
+// only (ServerKeyPins.pinnedStk, never a key `.com` names) and post the answer signed by the
+// delegate. The waiting request is read with the account read token and must carry the box's
+// signature under that pinned STK. The boot worker
 // refuses both reads and answers with 423 while the server is locked: a locked server is started
 // from the phone with the account key.
 
@@ -34,7 +34,7 @@ interface WatchBootKeyStore {
 }
 
 /** A copy the boot worker holds for this device, and the server's STK pinned when it was made. */
-data class WatchBootCopy(val expiresAt: Long, val stkPubHex: String)
+data class WatchBootCopy(val expiresAt: Long)
 
 /** A start-up the server is waiting on, as the box signed it. [stkPubHex] is what the source says
  *  the box's key is: it must equal the pinned one, and the signature must verify under the pin. */
@@ -73,13 +73,20 @@ class WatchBootOptIn(
     private val mailbox: SecretMailboxClient,
     private val irk: IrkAccess,
     private val store: WatchBootKeyStore,
-    /** The server's STK derived from this device's account key (the pin the copy is answered with). */
-    private val pinnedStk: (serverDomain: String) -> ByteArray,
+    private val pins: ServerKeyPins,
+    /** The key this phone sees for the server now (its own list), offered as the first-seen pin. */
+    private val currentServerKey: suspend (serverDomain: String) -> String?,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val nonceGen: () -> ByteArray = { SecretRequestCoordinator.randomNonce() },
 ) {
     /** Deposit a copy for [delegatePubHex], lasting no longer than the delegate. Returns its end. */
     suspend fun enable(serverDomain: String, delegatePubHex: String, delegateExpiresAt: Long, reason: String): Long {
+        // Interim trust on first use (pending the owner's decision): record the key now if none is.
+        when (pins.recordFirstSeen(serverDomain, currentServerKey(serverDomain.lowercase()))) {
+            ServerKeyPins.Record.Mismatch -> throw ServerKeyChangedException()
+            ServerKeyPins.Record.Unknown -> error("this server's key isn't known yet")
+            else -> Unit
+        }
         val key = store.loadOrCreate()
         val material = irk.resolve(reason)
         val sealed = HexUtil.decode(mailbox.fetchSealedLuksKey(serverDomain).sealedKey)?.takeIf { it.isNotEmpty() }
@@ -96,10 +103,8 @@ class WatchBootOptIn(
         val delegatePub = HexUtil.decode(delegatePubHex) ?: error("delegate key")
         val deposit = WatchBootDelegate.build(serverDomain, diskKey, delegatePub, key.publicKey, issuedAt, expiresAt) { material.signer.sign(it) }
         val auth = BootAuth.ownerHeader(serverDomain, "PUT", "/api/boot/watch-key", material.signer, material.pubHex, now(), nonceGen())
-        val stk = pinnedStk(serverDomain.lowercase())
-        require(stk.size == 32) { "server key" }
         mailbox.putWatchBootKey(WatchBootDepositWire.of(deposit), auth)
-        store.setCopy(serverDomain.lowercase(), WatchBootCopy(expiresAt, HexUtil.encode(stk)))
+        store.setCopy(serverDomain.lowercase(), WatchBootCopy(expiresAt))
         return expiresAt
     }
 
@@ -135,6 +140,7 @@ class WatchBootApprover(
     private val delegate: () -> WatchDelegateSigner?,
     private val store: WatchBootKeyStore,
     private val source: StartUpSource,
+    private val pins: ServerKeyPins,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val nonceGen: () -> ByteArray = { SecretRequestCoordinator.randomNonce() },
 ) {
@@ -160,10 +166,11 @@ class WatchBootApprover(
     suspend fun approve(serverDomain: String, requestId: String?): Outcome {
         val signer = delegate() ?: return Outcome.NotAvailable
         val key = store.existing() ?: return Outcome.NotAvailable
-        val copy = copyFor(serverDomain) ?: return Outcome.NotAvailable
-        val stkPub = HexUtil.decode(copy.stkPubHex)?.takeIf { it.size == 32 } ?: return Outcome.NotAvailable
+        copyFor(serverDomain) ?: return Outcome.NotAvailable
+        val stkPub = pins.pinnedStk(serverDomain) ?: return Outcome.NotAvailable
+        val pinnedHex = HexUtil.encode(stkPub)
         val req = source.waiting(serverDomain, requestId) ?: return Outcome.NotWaiting
-        if (!req.stkPubHex.equals(copy.stkPubHex, ignoreCase = true)) {
+        if (!req.stkPubHex.equals(pinnedHex, ignoreCase = true)) {
             ErrorLog.caught("watch-boot", IllegalStateException("the key named for $serverDomain isn't the pinned one"), "stk-mismatch")
             return Outcome.KeyMismatch
         }
@@ -172,7 +179,7 @@ class WatchBootApprover(
             signature = sig,
             stkPub = stkPub,
             serverDomain = req.serverDomain,
-            stkPubHex = copy.stkPubHex.lowercase(),
+            stkPubHex = pinnedHex,
             purpose = SecretPurpose.UNLOCK_KEY,
             nonceHex = req.nonceHex,
             issuedAt = req.issuedAt,

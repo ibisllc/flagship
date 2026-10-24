@@ -62,12 +62,9 @@ fun WatchQuickApproveCard(server: FlagshipServerClient, app: AppState) {
     val mailbox = com.flagshipserver.app.core.LocalSecretMailboxClient.current
     val bootVm = androidx.compose.runtime.remember(mailbox) {
         com.flagshipserver.app.viewmodels.WatchBootViewModel(
-            optIn = com.flagshipserver.app.core.WatchBootOptIn(
-                mailbox = mailbox,
-                irk = com.flagshipserver.app.keystore.KeystoreIrkAccess(),
-                store = com.flagshipserver.app.keystore.KeystoreWatchBootKeys(),
-                pinnedStk = { d -> com.flagshipserver.app.core.ServerKeys.deriveStkPub(com.flagshipserver.app.keystore.Keystore.currentUmkSeed(), d) },
-            ),
+            optIn = com.flagshipserver.app.keystore.WatchBootWiring.optIn(mailbox, com.flagshipserver.app.keystore.KeystoreIrkAccess()) { d ->
+                app.pods.value.firstOrNull { it.fqdn.equals(d, ignoreCase = true) }?.identityPubKeyHex?.takeIf { it.isNotEmpty() }
+            },
             delegatePubHex = { com.flagshipserver.app.keystore.Keystore.watchDelegatePubHex() },
         )
     }

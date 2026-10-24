@@ -46,8 +46,14 @@ class WatchDelegateRenewalTest {
         val irk = object : IrkAccess {
             override suspend fun resolve(reason: String) = IrkMaterial(Ed25519Sign(irkKp.privateKey), irkSeed, HexUtil.encode(irkKp.publicKey))
         }
-        val store = Store().apply { setCopy(domain, WatchBootCopy(now + left - 60_000, "ab".repeat(32))) }
-        val optIn = WatchBootOptIn(mailbox, irk, store, pinnedStk = { ByteArray(32) { 0x51 } }, now = { now })
+        val store = Store().apply { setCopy(domain, WatchBootCopy(now + left - 60_000)) }
+        val pins = ServerKeyPins(object : ServerKeyPinStore {
+            val m = HashMap<String, String>()
+            override fun get(serverDomain: String) = m[serverDomain]
+            override fun put(serverDomain: String, stkPubHex: String) { m[serverDomain] = stkPubHex }
+            override fun remove(serverDomain: String) { m.remove(serverDomain) }
+        })
+        val optIn = WatchBootOptIn(mailbox, irk, store, pins, { "51".repeat(32) }, now = { now })
         val renewal = WatchDelegateRenewal(
             server, { user }, { pub }, {}, { if (silent) Ed25519Sign(irkKp.privateKey) else null }, optIn, now = { now }, grantIdGen = { "g2" },
         )

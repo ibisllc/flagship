@@ -584,12 +584,10 @@ class MainActivity : FragmentActivity() {
                         if (!com.flagshipserver.app.keystore.SessionIrkAccess.isSessionUnlocked()) null
                         else Keystore.adminSigningKey(FSStrings.get(R.string.allow_your_watch_to_approve_boots))
                     },
-                    copies = com.flagshipserver.app.core.WatchBootOptIn(
-                        mailbox = effectiveMailbox,
-                        irk = com.flagshipserver.app.keystore.SessionIrkAccess(),
-                        store = com.flagshipserver.app.keystore.KeystoreWatchBootKeys(),
-                        pinnedStk = { d -> com.flagshipserver.app.core.ServerKeys.deriveStkPub(Keystore.currentUmkSeed(), d) },
-                    ),
+                    copies = com.flagshipserver.app.keystore.WatchBootWiring.optIn(
+                        effectiveMailbox,
+                        com.flagshipserver.app.keystore.SessionIrkAccess(),
+                    ) { d -> appState.pods.value.firstOrNull { it.fqdn.equals(d, ignoreCase = true) }?.identityPubKeyHex?.takeIf { it.isNotEmpty() } },
                 )
                 runCatching { renewal.renewIfDue() }
                     .onFailure { com.flagshipserver.app.core.ErrorLog.caught("watch-renew", it, com.flagshipserver.app.core.NetworkErrorHumanizer.errorCode(it)) }
