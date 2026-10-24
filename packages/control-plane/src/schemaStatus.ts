@@ -93,6 +93,7 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   // Hybrid key bindings, the boot-key binding's hybrid signature, assurance policy per scope.
   // Owner-signed assurance policy changes, chained per scope.
   // The owner's hybrid signature beside the server order's classical one.
+  "0114",
 ];
 
 export interface SchemaStatusDeps {

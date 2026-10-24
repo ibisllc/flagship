@@ -97,6 +97,13 @@ pub fn unseal_seed(dir: &Path) -> Result<Zeroizing<[u8; 32]>, String> {
                 .arg(&object),
             "tpm2_load",
         )?;
+        // The object's context is saved; free the slots before unseal loads it again.
+        let _ = Command::new("tpm2_flushcontext")
+            .arg("-t")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
         let out = Command::new("tpm2_unseal")
             .arg("-c")
             .arg(&object)
