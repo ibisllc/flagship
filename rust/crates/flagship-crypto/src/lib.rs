@@ -6,6 +6,7 @@
 mod ed25519_strict;
 pub mod error;
 pub mod key_id;
+pub mod release;
 mod rng;
 pub mod seal;
 pub mod sig;
