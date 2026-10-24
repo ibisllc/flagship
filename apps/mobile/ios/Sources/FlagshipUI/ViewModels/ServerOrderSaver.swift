@@ -66,7 +66,11 @@ public struct ServerOrderSaver {
         do {
             let key = try await signer(Self.reason)
             let signature = try order.sign(with: key)
-            let wire = SignedServerOrderWire(order: order.wire, signature: signature)
+            var wire = SignedServerOrderWire(order: order.wire, signature: signature)
+            // A strict server takes the order only with the admin root's hybrid signature too.
+            if QuantumSafetyService.anyStrict(username: user) {
+                wire.pqSignature = await QuantumSafetyService.pqSignature(canonical: try order.canonicalBytes(), edKey: key, role: .adminRoot, username: user)
+            }
             try await mailbox.postServerOrder(username: user, body: wire)
             app.finishServerOrderChange()
             Task { await deliver(wire) }

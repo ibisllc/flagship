@@ -207,6 +207,8 @@ struct FlagshipApp: App {
                 // Architecture v2: bind this session's identities' ML-DSA keys on `.com`
                 // (accounts made before PQ keys upgrade here), never prompting.
                 PqIdentityBindingService.upgradeAtUnlock(username: user, deviceId: deviceId)
+                // Milestone 4: requests to servers this device holds as strict go over the PQ channel.
+                QuantumSafetyService.activate(username: user, deviceId: deviceId)
             }
         }
         appState.retryAccountRead = {

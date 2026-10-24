@@ -134,7 +134,7 @@ public final class UpdateServerViewModel {
         }
 
         phase = .signing
-        let body: UpdateDepositBody
+        var body: UpdateDepositBody
         let issuedAt = now()
         do {
             let reason = String(localized: "Update \(serverFqdn)")
@@ -149,6 +149,14 @@ public final class UpdateServerViewModel {
                 orderKey: orderKey,
                 issuedAt: issuedAt
             )
+            // A strict server applies the order only with its signer's hybrid signature too.
+            if QuantumSafetyService.anyStrict(username: username) {
+                let o = ServerUpdateOrder(serverDomain: body.order.serverDomain, targetCommit: body.order.targetCommit,
+                                          fromCommit: body.order.fromCommit, nonce: body.order.nonce, issuedAt: body.order.issuedAt)
+                let key = orderKey ?? irk
+                body.pqSignature = await QuantumSafetyService.pqSignature(canonical: try o.canonicalBytes(), edKey: key,
+                                                                          role: orderKey == nil ? .accountIrk : .adminRoot, username: username)
+            }
         } catch {
             phase = .failed(String(localized: "Couldn't sign the update order: \(UserErrorText.of(error))"))
             return false

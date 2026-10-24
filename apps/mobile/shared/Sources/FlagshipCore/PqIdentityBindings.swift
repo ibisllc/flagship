@@ -155,6 +155,67 @@ public final class LivePqKeyBindingClient: PqKeyBindingClient, @unchecked Sendab
         return try JSONDecoder().decode(Body.self, from: data).chain
     }
 
+    /// The served chain with `.com`'s `evidence.recoveryChecked` (the readiness check shows it).
+    public func fetchPolicy(username: String, scope: PolicyScope) async throws -> (chain: [AssurancePolicy.SignedChange], recoveryChecked: Bool) {
+        let u = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let id = scope.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? scope.id
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/accounts/\(u)/assurance-policy/\(scope.kind.rawValue)/\(id)"))
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        if let token = await readTokens?.token(for: username) { req.setValue("Bearer \(token)", forHTTPHeaderField: "authorization") }
+        let (data, resp) = try await urlSession.gatedData(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 404 { return ([], false) }
+        guard (200..<300).contains(status) else { throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "") }
+        struct Ev: Decodable { let recoveryChecked: Bool? }
+        struct Body: Decodable { let chain: [AssurancePolicy.SignedChange]; let evidence: Ev? }
+        let b = try JSONDecoder().decode(Body.self, from: data)
+        return (b.chain, b.evidence?.recoveryChecked ?? false)
+    }
+
+    /// `POST {com}/api/accounts/:u/assurance-policy`: nil when stored, else `.com`'s refusal code.
+    public func postPolicyChange(username: String, change: AssurancePolicyChange, signature: SignatureEnvelope) async -> String? {
+        let u = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/accounts/\(u)/assurance-policy"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        struct Body: Encodable { let change: AssurancePolicyChange; let signature: SignatureEnvelope }
+        req.httpBody = try? JSONEncoder().encode(Body(change: change, signature: signature))
+        do {
+            let (data, resp) = try await urlSession.gatedData(for: req)
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(status) { return nil }
+            let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            return (o?["code"] as? String) ?? (o?["error"] as? String) ?? "http \(status)"
+        } catch {
+            return "network"
+        }
+    }
+
+    /// `GET {com}/api/server/:host/pq-key-binding` as JSON (verified by the caller under its pin).
+    public func fetchServerBinding(serverDomain: String) async -> Any? {
+        let h = serverDomain.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/server/\(h)/pq-key-binding"))
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        guard let (data, resp) = try? await urlSession.gatedData(for: req), (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONSerialization.jsonObject(with: data)
+    }
+
+    /// The account's live devices and how many have a PQ binding (`/api/users/:u/device-grants`).
+    public func deviceBindingCounts(username: String) async -> (devices: Int, bound: Int)? {
+        let u = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/device-grants"))
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        if let token = await readTokens?.token(for: username) { req.setValue("Bearer \(token)", forHTTPHeaderField: "authorization") }
+        guard let (data, resp) = try? await urlSession.gatedData(for: req), (resp as? HTTPURLResponse)?.statusCode == 200,
+              let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let grants = o["grants"] as? [[String: Any]] else { return nil }
+        var seen: [String: Bool] = [:]
+        for g in grants {
+            guard let id = g["deviceId"] as? String else { continue }
+            seen[id] = (seen[id] ?? false) || g["pqKeyBinding"] is [String: Any]
+        }
+        return (seen.count, seen.values.filter { $0 }.count)
+    }
+
     /// Parses the GET body; wires that fail the strict wire shape are dropped.
     static func parse(_ data: Data) -> PqAccountBindings? {
         guard let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }

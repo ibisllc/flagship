@@ -211,6 +211,10 @@ public final class BoxKeyPins: @unchecked Sendable {
                     pin.mldsaIssuedAt = at
                     pins[domain] = pin
                 }
+                if let b = try? PqTrust.verifyPqKeyBinding(wire, PqBindingExpectation(role: "box-stk", subjectId: domain, ed25519PubHex: pin.stk,
+                                                                                   mldsaPubHex: k, now: Int64.max / 2)) {
+                    verifiedPq["\(username.lowercased())|\(domain)"] = b
+                }
                 return k
             case .mismatch:
                 let reported = ((wire as? [String: Any])?["mldsaPubHex"] as? String) ?? ""
@@ -219,6 +223,15 @@ public final class BoxKeyPins: @unchecked Sendable {
                 return nil
             }
         }
+    }
+
+    private var verifiedPq: [String: VerifiedPqKeyBinding] = [:]
+
+    /// The box's verified `box-stk` binding under the pinned keys, once `acceptStkPqBinding` saw
+    /// one this launch: what the PQ session pins the box to.
+    public func verifiedBoxPqBinding(username: String, serverDomain: String) -> VerifiedPqKeyBinding? {
+        lock.lock(); defer { lock.unlock() }
+        return verifiedPq["\(username.lowercased())|\(serverDomain.lowercased())"]
     }
 
     public func pinnedBoxPqKey(username: String, serverDomain: String) -> String? {

@@ -38,13 +38,25 @@ public final class PqBoxChannelTunnel: PqBoxTunnel, @unchecked Sendable {
         self.isStrict = isStrict; self.responder = responder; self.identity = identity; self.now = now
     }
 
-    public func carries(host: String) -> Bool { isStrict(host.lowercased()) }
+    private var marked = Set<String>()
+
+    public func carries(host: String) -> Bool {
+        let h = host.lowercased()
+        lock.lock(); let m = marked.contains(h); lock.unlock()
+        return m || isStrict(h)
+    }
+
+    public func markStrict(host: String) {
+        lock.lock(); defer { lock.unlock() }
+        marked.insert(host.lowercased())
+    }
 
     /// Forget every session (sign out, a key change).
     public func reset() {
         lock.lock(); defer { lock.unlock() }
         for (_, s) in open { s.channel.close() }
         open.removeAll()
+        marked.removeAll()
     }
 
     private func cached(_ host: String) -> (channel: PqSession.Channel, id: String)? {

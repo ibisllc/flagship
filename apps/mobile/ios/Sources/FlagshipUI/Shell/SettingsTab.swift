@@ -15,6 +15,7 @@ public struct SettingsTab: View {
     @Environment(PrivacySettings.self) private var privacy
 
     @State private var path: [SettingsRoute] = []
+    @State private var pqLabels: [String: String] = [:]
     @State private var vm: SettingsViewModel?
     @State private var replaceVm: ReplaceDeviceViewModel?
     @State private var replaceToast: String?
@@ -91,6 +92,22 @@ public struct SettingsTab: View {
         }
     }
 
+    /// Each trusted device's post-quantum key, for the Trusted devices list. This device's
+    /// custody is known here; for the others `.com` only says whether a key is registered.
+    private func loadPqLabels() async {
+        guard let user = app.currentUser?.lowercased(), let client = PqIdentityBindingService.client else { return }
+        var out: [String: String] = [:]
+        if let bindings = try? await client.fetch(username: user) {
+            for b in bindings.devices { out[b.subjectId] = "Post-quantum key registered" }
+        }
+        if let deviceId = app.activeProfile?.deviceId.lowercased(),
+           let key = Keystore.sessionAccountDeviceKey(accountId: user, deviceId: deviceId),
+           let custody = PqKeyStore.shared.custody(for: PqIdentity(role: .device, subjectId: deviceId, edKey: key)) {
+            out[deviceId] = "Post-quantum key: \(custody.label)"
+        }
+        pqLabels = out
+    }
+
     @ViewBuilder
     private var content: some View {
         ZStack {
@@ -161,6 +178,7 @@ public struct SettingsTab: View {
                             hasCloudRecovery: app.hasCloudRecovery,
                             isDemoAccount: isDemoSession
                         ) == .allowed else { return }
+                        QuantumSafetyService.forget(username: app.currentUser)
                         Keystore.wipe()
                         app.signOut()
                     },
@@ -168,6 +186,8 @@ public struct SettingsTab: View {
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenAccountSecurity: { path.append(.accountSecurity) },
+                    onOpenQuantumSafety: { path.append(.quantumSafety) },
+                    pqLabels: pqLabels,
                     onOpenProfiles: { path.append(.profiles) },
                     nameDibsOpen: dibsWindowOpen,
                     onOpenNameDibs: { path.append(.nameDibs) },
@@ -201,7 +221,8 @@ public struct SettingsTab: View {
                         // orphan via E7's detector.
                         await pushRegistrar?.revoke()
                         await MainActor.run {
-                            Keystore.wipe()
+                            QuantumSafetyService.forget(username: app.currentUser)
+                        Keystore.wipe()
                             app.signOut()
                         }
                     },
@@ -311,6 +332,7 @@ public struct SettingsTab: View {
                 }
                 .alert("Demo account", isPresented: $showDemoDeleteNotice) {
                     Button("Remove from this device", role: .destructive) {
+                        QuantumSafetyService.forget(username: app.currentUser)
                         Keystore.wipe()
                         app.signOut()
                     }
@@ -353,6 +375,7 @@ public struct SettingsTab: View {
         .task {
             dibsWindowOpen = (try? await nameDibs.window().open) ?? false
         }
+        .task(id: app.currentUser) { await loadPqLabels() }
     }
 
     /// One-shot fetch of the pending companion-write count so the
@@ -410,6 +433,8 @@ public struct SettingsTab: View {
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
         case .accountSecurity:
             AccountSecurityContainer()
+        case .quantumSafety:
+            QuantumSafetyScreen(viewModel: QuantumSafetyViewModel(app: app))
         case .keyfileBackup:
             KeyfileExportScreen(
                 vm: KeyfileExportViewModel(username: app.currentUser ?? "")

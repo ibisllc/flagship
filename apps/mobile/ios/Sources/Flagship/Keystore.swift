@@ -34,11 +34,11 @@ public struct Keystore {
         public var errorDescription: String? {
             switch self {
             case .keyNotFound:
-                return String(localized: "This device doesn't hold your account key yet.")
+                return "This device doesn't hold your account key yet."
             case .biometricFailed:
-                return String(localized: "This device couldn't confirm it was you. Try again.")
+                return "This device couldn't confirm it was you. Try again."
             case .derivationFailed, .wrapFailed, .unwrapFailed, .keychainFailed:
-                return String(localized: "Your account key couldn't be read on this device. Try again.")
+                return "Your account key couldn't be read on this device. Try again."
             }
         }
     }
@@ -222,7 +222,7 @@ public struct Keystore {
 
     /// Generate a fresh UMK seed, wrap it under a Secure-Enclave-derived
     /// key, and persist the ciphertext + ephemeral public key.
-    public static func generateUMK(reason: String = String(localized: "Create your Flagship account")) async throws {
+    public static func generateUMK(reason: String = "Create your Flagship account") async throws {
         try await installUMK(SymmetricKey(size: .bits256), reason: reason)
     }
 
@@ -370,6 +370,29 @@ public struct Keystore {
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
+    /// A′ cert pinning — the IRK plus the new box's STK PUBLIC key, both
+    /// derived in ONE biometric ceremony (a separate STK-pub call would
+    /// re-unwrap the UMK and double-prompt Face ID during server creation).
+    /// The STK pub mirrors the protocol path `deriveSTK(deriveSWK(UMK,
+    /// serverId))` via `ServerKeys` (FlagshipCore) and is what
+    /// `CertPinRegistry` verifies STK-signed daemon-status reports against —
+    /// `.com`'s `identityPubKey` echo is NOT a trust input.
+    public static func deriveIRKAndBoxStkPub(
+        serverId: String,
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxStkPub: Data) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irk = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
+        )
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let stkPub = ServerKeys.deriveStkPub(umkSeed: umkData, serverId: serverId) else {
+            throw KeystoreError.derivationFailed("box STK pubkey for \(serverId)")
+        }
+        return (irk, stkPub)
+    }
+
     /// The box's Service Workload Key (SWK) as lowercase hex — the deterministic
     /// `HKDF-SHA256(UMK seed, info="flagship.swk.v1|<serverId>")` the daemon
     /// re-derives nowhere (the box can't: it has no UMK), so the phone provisions
@@ -387,29 +410,31 @@ public struct Keystore {
         return HexUtil.encode(swk)
     }
 
-    /// SWK provisioning in ONE biometric: the IRK and the box's deterministic
-    /// SWK (hex), both from a single UMK unwrap (a separate SWK call would
-    /// re-prompt Face ID during server creation). The SWK is the box-side
-    /// `ServerKeys.deriveSwk` (DOTS) key — NOT the app-backup `deriveSWK`
-    /// (slashes). The box's own key (STK) is never derived: the box makes it at
-    /// install and the phone pins it at the first blessing (docs/first-contact.md).
-    public static func deriveIRKAndBoxSwk(
+    /// A′ cert pinning + SWK provisioning in ONE biometric: the IRK, the new
+    /// box's STK PUBLIC key, AND the box's deterministic SWK (hex), all derived
+    /// from a single UMK unwrap (a separate SWK call would re-prompt Face ID
+    /// during server creation). The SWK is the box-side `ServerKeys.deriveSwk`
+    /// (DOTS) key — NOT the app-backup `deriveSWK` (slashes).
+    public static func deriveIRKBoxStkAndSwk(
         serverId: String,
         reason: String
-    ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxSwkHex: String) {
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxStkPub: Data, boxSwkHex: String) {
         let umk = try await unwrappedUMK(reason: reason)
         let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
         let irk = try Curve25519.Signing.PrivateKey(
             rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
         )
         let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let stkPub = ServerKeys.deriveStkPub(umkSeed: umkData, serverId: serverId) else {
+            throw KeystoreError.derivationFailed("box STK pubkey for \(serverId)")
+        }
         guard let swk = ServerKeys.deriveSwk(umkSeed: umkData, serverId: serverId) else {
             throw KeystoreError.derivationFailed("box SWK for \(serverId)")
         }
-        return (irk, HexUtil.encode(swk))
+        return (irk, stkPub, HexUtil.encode(swk))
     }
 
-    /// CGK provisioning twin of `deriveIRKAndBoxSwk` for per-service
+    /// CGK provisioning twin of `deriveIRKBoxStkAndSwk` for per-service
     /// leadership (Phase 6): the IRK plus the per-CLOUD Cloud Gossip Key (hex) in
     /// ONE biometric. The CGK is `CloudGossip.deriveCGK(umk.seed)` — per cloud,
     /// NOT per server (no serverId), so it is the same key for every box of the
@@ -595,7 +620,7 @@ public struct Keystore {
     /// byte-identical to `deriveIRK()` run right after `generateUMK()`:
     /// `installUMK` resets the IRK version to v1 and we derive at that version.
     public static func generateUMKAndDeriveIRK(
-        reason: String = String(localized: "Open your Flagship account")
+        reason: String = "Open your Flagship account"
     ) async throws -> Curve25519.Signing.PrivateKey {
         let umkSeed = SymmetricKey(size: .bits256)
         try await installUMK(umkSeed, reason: reason)
@@ -649,7 +674,7 @@ public struct Keystore {
     /// root's pubkey hex (published to `.com` at claim + pinned into the recipe
     /// AuthCode).
     public static func openAccountRoots(
-        reason: String = String(localized: "Open your Flagship account")
+        reason: String = "Open your Flagship account"
     ) async throws -> (irk: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey, adminRootPubHex: String) {
         let umkSeed = SymmetricKey(size: .bits256)
         let umkBytes = umkSeed.withUnsafeBytes { Data($0) }
@@ -698,7 +723,7 @@ public struct Keystore {
     /// existing admin-root slots — callers gate on `hasAdminRoot`.
     @discardableResult
     public static func generateAdminRoot(
-        reason: String = String(localized: "Create your Flagship admin key")
+        reason: String = "Create your Flagship admin key"
     ) async throws -> String {
         let ephemeral = P256.KeyAgreement.PrivateKey()
         let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
@@ -734,7 +759,7 @@ public struct Keystore {
     @discardableResult
     public static func importAdminRoot(
         seed: Data,
-        reason: String = String(localized: "Set up your admin key on this device")
+        reason: String = "Set up your admin key on this device"
     ) async throws -> String {
         // Round-trips through CryptoKit so a malformed seed throws here rather
         // than silently persisting an unusable authority root.
@@ -764,7 +789,7 @@ public struct Keystore {
     /// wrapping key. Signs sensitive/destructive orders (§8.3). Throws
     /// `.keyNotFound` if this device holds no admin root.
     public static func adminRootKey(
-        reason: String = String(localized: "Authorize an admin action")
+        reason: String = "Authorize an admin action"
     ) async throws -> Curve25519.Signing.PrivateKey {
         #if DEBUG
         if let gym = gymAdminRoot() { return gym }
@@ -817,21 +842,10 @@ public struct Keystore {
         do {
             let box = try AES.GCM.SealedBox(combined: wrapped)
             let seed = try AES.GCM.open(box, using: unwrapKey)
-            let key = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
-            adminRootOpened(key)
-            return key
+            return try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
         } catch {
             throw KeystoreError.unwrapFailed(String(describing: error))
         }
-    }
-
-    /// Called each time a Face ID moment opens the admin root, so work that can only
-    /// be signed with it (the owed app-name grants, docs/first-contact.md) rides a
-    /// biometric the owner does anyway. Set once by the app.
-    nonisolated(unsafe) public static var onAdminRootOpened: (@Sendable (Curve25519.Signing.PrivateKey) -> Void)?
-
-    private static func adminRootOpened(_ key: Curve25519.Signing.PrivateKey) {
-        onAdminRootOpened?(key)
     }
 
     /// The signing key for a SENSITIVE/destructive order (§8.3), GATED: if this
@@ -842,7 +856,7 @@ public struct Keystore {
     /// the signing key changes. Non-sensitive orders (pairing, deposits) keep
     /// calling `deriveIRK` directly and are unaffected.
     public static func sensitiveOrderSigningKey(
-        reason: String = String(localized: "Authorize this action")
+        reason: String = "Authorize this action"
     ) async throws -> Curve25519.Signing.PrivateKey {
         if hasAdminRoot {
             return try await adminRootKey(reason: reason)
@@ -930,7 +944,6 @@ public struct Keystore {
                 throw KeystoreError.unwrapFailed("admin-root: \(error)")
             }
         }
-        if let adminRoot { adminRootOpened(adminRoot) }
         return (irk, bak, adminRoot)
     }
 
@@ -1069,26 +1082,6 @@ public struct Keystore {
     public static func clearWatchDelegate() {
         keychainDelete(account: account(KCKey.watchDelegateSeed))
         keychainDelete(account: account(KCKey.watchDelegateGrantId))
-        keychainDelete(account: account(KCKey.watchBootSeed))
-    }
-
-    /// The boot-only X25519 key a watch copy of a server's disk key is sealed
-    /// to (docs/watch-boot-approval-without-unlock.md, option (a)). The Secure
-    /// Enclave holds no X25519 key, and a `.userPresence` item can't be read
-    /// while the iPhone is locked, which is the case this key exists for. So it
-    /// is stored like the delegate signing key: this device only, never
-    /// synced, readable after the first unlock; the presence is the watch's
-    /// own Approve, and it opens nothing but the copies the owner deposited.
-    public static func loadOrCreateWatchBootKey() throws -> Curve25519.KeyAgreement.PrivateKey {
-        if let k = watchBootKey() { return k }
-        let k = Curve25519.KeyAgreement.PrivateKey()
-        try keychainWrite(account: account(KCKey.watchBootSeed), data: k.rawRepresentation, sync: .deviceLocal)
-        return k
-    }
-
-    public static func watchBootKey() -> Curve25519.KeyAgreement.PrivateKey? {
-        guard let raw = keychainRead(account: account(KCKey.watchBootSeed)) else { return nil }
-        return try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: raw)
     }
 
     // MARK: - ACME account key (#28 — cert-minting authority)
@@ -1154,7 +1147,6 @@ public struct Keystore {
                         account(KCKey.irkPendingVersion, profile: id),
                         account(KCKey.watchDelegateSeed, profile: id),
                         account(KCKey.watchDelegateGrantId, profile: id),
-                        account(KCKey.watchBootSeed, profile: id),
                         account(KCKey.acmeAccountKeyScalar, profile: id),
                         account(KCKey.adminRootWrapped, profile: id),
                         account(KCKey.adminRootEphemeralPub, profile: id),
@@ -1169,7 +1161,11 @@ public struct Keystore {
         }
         keychainDelete(account: KCKey.accountReadTokens)
         WrappingKeypair.deleteSEKeyIfExists(profile: id)
-        // A wiped account must not leave cert pins or server-key pins behind.
+        // Architecture v2: the PQ halves of this profile's identities go with them.
+        pqRecordsDeleteAll(profile: id)
+        PqKeyStore.shared.clearSession()
+        // The cert-pin STK-pub cache derives from this UMK — a wiped
+        // account must not leave pins (or pub anchors) behind.
         CertPinRegistry.shared.clear()
     }
 
@@ -1187,7 +1183,7 @@ public struct Keystore {
         for id in known {
             for base in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
                          KCKey.irkVersion, KCKey.irkPendingVersion,
-                         KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId, KCKey.watchBootSeed,
+                         KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId,
                          KCKey.acmeAccountKeyScalar,
                          KCKey.adminRootWrapped, KCKey.adminRootEphemeralPub,
                          KCKey.adminRootPub] {
@@ -1226,6 +1222,7 @@ public struct Keystore {
         _activeProfileHydrated = true
         activeProfileLock.unlock()
         clearSessionKeyCache()
+        PqKeyStore.shared.clearSession()
         CertPinRegistry.shared.clear()
     }
 
@@ -1322,6 +1319,33 @@ public struct Keystore {
     static func pqRecordWrite(_ base: String, _ data: Data) throws { try keychainWrite(account: account(base), data: data, sync: .deviceLocal) }
     static func pqRecordDelete(_ base: String) { keychainDelete(account: account(base)) }
 
+    /// Erases every PQ identity key of a profile (architecture v2): the wrapped ML-DSA seeds and
+    /// the Secure Enclave ML-DSA keys' records. Called by `wipe()` (sign out, Remove this device,
+    /// Wipe & restart), so no PQ half outlives the account keys it was bound to.
+    static func pqRecordsDeleteAll(profile: String) {
+        let prefix = "com.flagship.pq-identity."
+        let normalized = normalizeProfileId(profile)
+        let mine: (String) -> Bool = { acct in
+            guard acct.hasPrefix(prefix) else { return false }
+            if normalized != defaultProfileId { return acct.hasSuffix(".\(normalized)") }
+            // Default profile: the slot ends with the identity's 16-hex key prefix, no suffix.
+            let last = acct.split(separator: ".").last.map(String.init) ?? ""
+            return last.count == 16 && last.allSatisfy { $0.isHexDigit }
+        }
+        var found = InMemoryStore.shared.accounts(prefix: prefix)
+        let q: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+        var result: CFTypeRef?
+        if SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess, let rows = result as? [[String: Any]] {
+            found += rows.compactMap { $0[kSecAttrAccount as String] as? String }
+        }
+        for acct in Set(found) where mine(acct) { keychainDelete(account: acct) }
+    }
+
     private static func unwrapUMK(
         wrapped: Data,
         ephemeralPub: P256.KeyAgreement.PublicKey,
@@ -1383,8 +1407,6 @@ public struct Keystore {
         /// The active delegate's grantId (UUID) — needed to build the
         /// IRK-signed RevokeWatchDelegate when the toggle flips off. */
         static let watchDelegateGrantId = "com.flagship.watchdelegate.grantid"
-        /// The watch's boot-only X25519 key (raw 32 bytes), `.deviceLocal`.
-        static let watchBootSeed        = "com.flagship.watchdelegate.bootkey"
         /// Account read tokens (docs/account-read-token.md), a JSON map of
         /// username → token. `.deviceLocal` and non-biometric: a token only
         /// reads `.com`'s per-account state, and polls must never prompt.
@@ -1560,6 +1582,10 @@ final class InMemoryStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         items.removeValue(forKey: account)
         syncClasses.removeValue(forKey: account)
+    }
+    func accounts(prefix: String) -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return items.keys.filter { $0.hasPrefix(prefix) }
     }
     /// W8 test-only — last-write sync class for `account`, or nil if
     /// nothing has been written.
