@@ -13,7 +13,12 @@ import kotlinx.serialization.json.Json
  * Mirror of the webapp's lib/bootKey.js.
  */
 @Serializable
-data class BootKeyBindingWire(val binding: Binding, val signature: String) {
+data class BootKeyBindingWire(
+    val binding: Binding,
+    val signature: String,
+    /** Architecture v2: the STK's hybrid signature over `flagship/boot-key-binding/v2|...`. */
+    val hybridSignature: String? = null,
+) {
     @Serializable
     data class Binding(val serverDomain: String, val bootPubHex: String, val issuedAt: Long)
 }
@@ -31,7 +36,7 @@ object BootKey {
     private fun normalise(w: BootKeyBindingWire): BootKeyBindingWire? {
         val boot = w.binding.bootPubHex.lowercase()
         if (!HEX32.matches(boot)) return null
-        return w.copy(binding = w.binding.copy(bootPubHex = boot), signature = w.signature.lowercase())
+        return w.copy(binding = w.binding.copy(bootPubHex = boot), signature = w.signature.lowercase(), hybridSignature = w.hybridSignature?.lowercase())
     }
 
     /** The boot key [wire] binds for [serverDomain] under [stkPubHex], or null. A boot key equal to
@@ -67,11 +72,23 @@ object BootKey {
         serverDomain: String,
         fetch: suspend (String) -> BootKeyBindingWire?,
         pins: BoxKeyPins = BoxKeyPins.shared,
+        fetchPqBinding: suspend (String) -> kotlinx.serialization.json.JsonElement? = { null },
     ): String? {
+        // Pin the box's ML-DSA key first (only through the pinned STK), so a boot-key binding
+        // stripped of its hybrid signature is refused below. A changed ML-DSA key throws
+        // BoxKeyChangedException, as a changed STK does.
+        val pq = try {
+            fetchPqBinding(serverDomain.lowercase())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
+        if (pq != null) pins.acceptStkPqBinding(username, serverDomain, pq)
         val w = fetchQuietly(fetch, serverDomain)
         val stk = pins.pinned(username, serverDomain)
         if (w != null && stk != null && w.binding.bootPubHex != stk.lowercase()) {
-            pins.acceptBootKeyBinding(username, serverDomain, w.binding.bootPubHex, w.binding.issuedAt, w.signature)
+            pins.acceptBootKeyBinding(username, serverDomain, w.binding.bootPubHex, w.binding.issuedAt, w.signature, w.hybridSignature)
                 ?.let { return it }
         }
         return pins.pinnedBootKey(username, serverDomain)
