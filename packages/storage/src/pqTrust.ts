@@ -71,8 +71,13 @@ export interface PqTrustStorage {
   putPolicy(rec: PolicyStateRecord): Promise<void>;
   /** The installation policy and the box-stk binding for a server, in one round trip. */
   forServer(serverDomain: string): Promise<{ policy: PolicyStateRecord | null; stkBinding: PqKeyBindingRecord | null }>;
-  /** An account's `account-irk` and `admin-root` bindings plus its devices' `device` bindings, one query. */
-  listAccountBindings(username: string, deviceIds: readonly string[]): Promise<PqKeyBindingRecord[]>;
+  /**
+   * An account's `account-irk` and `admin-root` bindings plus `device` bindings, one query: for
+   * `deviceIds` when given, else for the account's live devices (D1 reads them in the same
+   * statement, so the read can join a batch; in memory every device binding is returned and the
+   * caller filters by its live devices).
+   */
+  listAccountBindings(username: string, deviceIds?: readonly string[]): Promise<PqKeyBindingRecord[]>;
   /** A scope's policy changes, oldest first. */
   listPolicyChanges(scopeKind: string, scopeId: string): Promise<PolicyChangeRecord[]>;
   /**
@@ -237,11 +242,15 @@ export class D1PqTrustStorage implements PqTrustStorage {
     return { policy: policyOf(r), stkBinding: bindingOf(r) };
   }
 
-  async listAccountBindings(username: string, deviceIds: readonly string[]) {
+  async listAccountBindings(username: string, deviceIds?: readonly string[]) {
     const u = username.toLowerCase();
-    const ids = deviceIds.map((d) => d.toLowerCase()).slice(0, 90);
+    const ids = (deviceIds ?? []).map((d) => d.toLowerCase()).slice(0, 90);
     const place = ids.map((_, i) => `?${i + 2}`).join(", ");
-    const devices = ids.length ? ` OR (role = 'device' AND subject_id IN (${place}))` : "";
+    const devices = !deviceIds
+      ? " OR (role = 'device' AND subject_id IN (SELECT device_id FROM device_identities WHERE account_id = ?1 AND revoked_at IS NULL))"
+      : ids.length
+        ? ` OR (role = 'device' AND subject_id IN (${place}))`
+        : "";
     const r = await this.db
       .prepare(`SELECT ${BINDING_COLS} FROM pq_key_bindings WHERE (role IN ('account-irk', 'admin-root') AND subject_id = ?1)${devices}`)
       .bind(u, ...ids)
@@ -372,11 +381,11 @@ export class InMemoryPqTrustStorage implements PqTrustStorage {
     return { policy: await this.getPolicy("installation", d), stkBinding: await this.getBinding("box-stk", d) };
   }
 
-  async listAccountBindings(username: string, deviceIds: readonly string[]) {
+  async listAccountBindings(username: string, deviceIds?: readonly string[]) {
     const u = username.toLowerCase();
-    const ids = new Set(deviceIds.map((d) => d.toLowerCase()));
+    const ids = deviceIds ? new Set(deviceIds.map((d) => d.toLowerCase())) : null;
     return [...this.bindings.values()]
-      .filter((b) => ((b.role === "account-irk" || b.role === "admin-root") && b.subjectId === u) || (b.role === "device" && ids.has(b.subjectId)))
+      .filter((b) => ((b.role === "account-irk" || b.role === "admin-root") && b.subjectId === u) || (b.role === "device" && (!ids || ids.has(b.subjectId))))
       .map((b) => ({ ...b }));
   }
 

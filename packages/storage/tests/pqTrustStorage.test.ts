@@ -75,6 +75,20 @@ for (const [name, make] of backends) {
       expect((await s.listAccountBindings("alice", [])).length).toBe(2);
     });
 
+    it("lists the bindings of the account's live devices when no ids are given", async () => {
+      const all = make();
+      const s = all.pqTrust;
+      await all.usernames.put({ username: "alice", irkPubHex: "ac".repeat(32), claimedAt: 1 });
+      await all.deviceIdentities.put({ accountId: "alice", deviceId: "d1".repeat(16), devicePubHex: "aa".repeat(32), platformClass: null, createdAt: 1, lastSeenAt: 1, revokedAt: null });
+      await all.deviceIdentities.put({ accountId: "alice", deviceId: "d3".repeat(16), devicePubHex: "ab".repeat(32), platformClass: null, createdAt: 1, lastSeenAt: 1, revokedAt: null });
+      await all.deviceIdentities.revoke("alice", "d3".repeat(16), 2);
+      await s.putBinding(rec({ role: "account-irk", subjectId: "alice" }));
+      await s.putBinding(rec({ role: "device", subjectId: "d1".repeat(16) }));
+      await s.putBinding(rec({ role: "device", subjectId: "d3".repeat(16) }));
+      const got = (await s.listAccountBindings("alice")).map((b) => `${b.role}:${b.subjectId}`).sort();
+      expect(got).toEqual(name === "D1" ? ["account-irk:alice", `device:${"d1".repeat(16)}`] : ["account-irk:alice", `device:${"d1".repeat(16)}`, `device:${"d3".repeat(16)}`]);
+    });
+
     it("appends policy changes only at the head, once per generation", async () => {
       const s = make().pqTrust;
       const ch = (generation: number, digest: string, prevDigest: string) => ({
