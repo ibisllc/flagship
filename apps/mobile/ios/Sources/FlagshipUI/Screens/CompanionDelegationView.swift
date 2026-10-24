@@ -23,7 +23,7 @@ struct CompanionDelegationView: View {
             if let ctl = controller {
                 ForEach(ctl.rows) { r in
                     HStack {
-                        Text("May \(r.ops.joined(separator: " and ")) \(r.serviceRef)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                        Text(r.ops.contains("build") && r.ops.contains("deploy") ? String(localized: "May build and deploy \(r.serviceRef)") : !r.ops.contains("build") && r.ops.contains("deploy") ? String(localized: "May deploy \(r.serviceRef)") : String(localized: "May build \(r.serviceRef)")).font(FS.font.caption()).foregroundColor(c.textMuted)
                         Spacer()
                         Button(SecurityControlWords.delegateEnd) { Task { await ctl.end(serviceRef: r.serviceRef) } }
                             .font(FS.font.caption())

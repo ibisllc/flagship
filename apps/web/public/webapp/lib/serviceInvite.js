@@ -187,7 +187,7 @@ async function importGcmKey(householdKey) {
   if (!(householdKey instanceof Uint8Array) || householdKey.length !== 32) {
     throw err("household key must be 32 bytes", "400");
   }
-  return crypto.subtle.importKey("raw", householdKey, { name: tr("AES-GCM") }, false, [
+  return crypto.subtle.importKey("raw", householdKey, { name: "AES-GCM" }, false, [
     "encrypt",
     "decrypt",
   ]);
@@ -207,7 +207,7 @@ export async function sealInviteBundle(bundle, householdKey, inviteId, fixedNonc
   const nonce = fixedNonce ?? randomBytes(12);
   const ct = new Uint8Array(
     await crypto.subtle.encrypt(
-      { name: tr("AES-GCM"), iv: nonce, additionalData: bundleAad(inviteId) },
+      { name: "AES-GCM", iv: nonce, additionalData: bundleAad(inviteId) },
       key,
       bundlePlaintext(bundle),
     ),
@@ -232,7 +232,7 @@ export async function openInviteBundle(sealedHex, householdKey, inviteId) {
   try {
     plain = new Uint8Array(
       await crypto.subtle.decrypt(
-        { name: tr("AES-GCM"), iv: nonce, additionalData: bundleAad(inviteId) },
+        { name: "AES-GCM", iv: nonce, additionalData: bundleAad(inviteId) },
         key,
         ct,
       ),

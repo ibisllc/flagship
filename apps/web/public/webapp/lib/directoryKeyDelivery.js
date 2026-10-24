@@ -82,8 +82,8 @@ async function openSealedWithEd25519Seed(blob, edSeed) {
   const ephKey = await crypto.subtle.importKey("raw", ephPub, "X25519", false, []);
   const shared = await crypto.subtle.deriveBits({ name: "X25519", public: ephKey }, myKey, 256);
   const sym = await hkdfSeal(shared, ephPub);
-  const aesKey = await crypto.subtle.importKey("raw", sym, { name: tr("AES-GCM") }, false, ["decrypt"]);
-  const pt = await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce }, aesKey, ct);
+  const aesKey = await crypto.subtle.importKey("raw", sym, { name: "AES-GCM" }, false, ["decrypt"]);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, aesKey, ct);
   return new Uint8Array(pt);
 }
 
