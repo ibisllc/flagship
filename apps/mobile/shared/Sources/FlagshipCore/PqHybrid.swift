@@ -584,3 +584,38 @@ extension PqHybrid {
         if !(edOk && mlOk) { throw fail("bad-signature") }
     }
 }
+
+// MARK: - Signers whose halves live apart
+
+extension PqHybrid {
+    /// The ML-DSA-65 public key for a 32-byte KeyGen_internal seed.
+    public static func mldsa65PublicKey(seed: [UInt8]) throws -> [UInt8] {
+        guard var kp = PqPrim.mldsaKeypair(seed) else { throw fail("bad-secret-key") }
+        PqBin.zero(&kp.sk)
+        return kp.pk
+    }
+
+    /// Hedged ML-DSA-65 over `message` with `context`, from a software seed.
+    public static func mldsa65Sign(seed: [UInt8], message: [UInt8], context: [UInt8]) throws -> [UInt8] {
+        guard var kp = PqPrim.mldsaKeypair(seed) else { throw fail("bad-secret-key") }
+        defer { PqBin.zero(&kp.sk) }
+        guard let sig = PqPrim.mldsaSign(kp.sk, message, ctx: context, rnd: PqBin.random(32)) else { throw fail("bad-secret-key") }
+        return sig
+    }
+
+    public static func randomSeed() -> [UInt8] { PqBin.random(32) }
+
+    /// The hybrid signature when the two halves are held apart (an Ed25519 identity key and an
+    /// ML-DSA key in the Secure Enclave or a wrapped seed): both sign the same M' (§5.2), and
+    /// the result is checked before it is returned.
+    public static func hybridSign(edPublicKey: [UInt8], mldsaPublicKey: [UInt8], purpose: String, payload: [UInt8],
+                                  edSign: ([UInt8]) throws -> [UInt8],
+                                  mldsaSign: (_ message: [UInt8], _ context: [UInt8]) throws -> [UInt8]) throws -> [UInt8] {
+        let pk = edPublicKey + mldsaPublicKey
+        try parseHybridSigPublicKey(pk)
+        let m = try hybridSigMessage(publicKey: pk, purpose: purpose, payload: payload)
+        let sig = try edSign(m) + mldsaSign(m, PqBin.utf8(tagHybridSigEd25519MlDsa65V1))
+        try hybridVerify(publicKey: pk, purpose: purpose, payload: payload, signature: sig)
+        return sig
+    }
+}
