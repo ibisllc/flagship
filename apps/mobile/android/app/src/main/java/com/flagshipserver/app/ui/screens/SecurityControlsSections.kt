@@ -3,6 +3,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
 import com.flagshipserver.app.core.fsString
 import com.flagshipserver.app.R
 import androidx.compose.foundation.clickable
@@ -54,7 +55,8 @@ fun RestoredAccessSection(serviceId: String, canApprove: Boolean) {
         FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("service-detail-restored-access")) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Text(SecurityControlWords.RESTORED_INTRO, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                Text(fsString(R.string.on_the_old_list, d.people, if (d.people == 1) "person" else "people", if (d.mode == "open") " The app was open to all." else ""), style = MaterialTheme.typography.bodyMedium)
+                Text(if (d.people == 1) fsString(R.string.person_on_the_old_list, d.people) else fsString(R.string.people_on_the_old_list, d.people), style = MaterialTheme.typography.bodyMedium)
+                if (d.mode == "open") Text(stringResource(R.string.the_app_was_open_to_all), style = MaterialTheme.typography.bodyMedium)
                 if (canApprove) {
                     FSPrimaryButton(SecurityControlWords.RESTORED_APPROVE, block = true, modifier = Modifier.testTag("restored-access-approve"), onClick = { scope.launch { vm.approve() } })
                     FSSecondaryButton(SecurityControlWords.RESTORED_DISCARD, block = true, modifier = Modifier.testTag("restored-access-discard"), onClick = { scope.launch { vm.discard() } })
@@ -119,7 +121,9 @@ fun CompanionDelegationRowSection(sessionId: String, canSign: Boolean) {
     Column(Modifier.padding(top = FS.space.s2), verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
         rows.forEach { r ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(fsString(R.string.may, r.ops.joinToString(" and "), r.serviceRef), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                val both = "build" in r.ops && "deploy" in r.ops
+                val deployOnly = "build" !in r.ops && "deploy" in r.ops
+                Text(if (both) fsString(R.string.may_build_and_deploy, r.serviceRef) else if (deployOnly) fsString(R.string.may_deploy, r.serviceRef) else fsString(R.string.may_build, r.serviceRef), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                 FSSecondaryButton(SecurityControlWords.DELEGATE_END, modifier = Modifier.testTag("delegation-end-${r.serviceRef}"), onClick = { scope.launch { vm.end(r.serviceRef) } })
             }
         }
