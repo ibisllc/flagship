@@ -127,6 +127,8 @@ const BRIDGE_NAME_OPTION = "com.docker.network.bridge.name";
 const ICC_OPTION = "com.docker.network.bridge.enable_icc";
 /** Podman has no enable_icc; the label records the intent and the firewall enforces it (bridge family). */
 export const PODMAN_ICC_LABEL = "flagship.icc";
+/** Docker's --internal, recorded for Podman (see translateNetwork). */
+export const PODMAN_INTERNAL_LABEL = "flagship.internal";
 
 function translateFormat(sub: string, args: string[]): string[] {
   const map = FORMAT_MAP[sub];
@@ -151,10 +153,20 @@ function translateNetwork(args: string[]): string[] {
   const out: string[] = ["network", "create", "--disable-dns"];
   for (let i = 2; i < args.length; i++) {
     const a = args[i]!;
+    if (a === "--internal") {
+      // A Podman internal network gets no gateway address, and builds reach their registries
+      // through the gateway on it. The bridge stays routable; the egress firewall's forward
+      // chain is what keeps it from reaching anything else (as it does for staging and apps).
+      out.push("--label", `${PODMAN_INTERNAL_LABEL}=true`);
+      continue;
+    }
     if ((a === "-o" || a === "--opt") && i + 1 < args.length) {
       const opt = args[++i]!;
       if (opt.startsWith(`${BRIDGE_NAME_OPTION}=`)) {
-        out.push("--interface-name", opt.slice(BRIDGE_NAME_OPTION.length + 1));
+        // netavark creates a bridge only when the first container joins and deletes it with the
+        // last; the egress gateway listens on the bridge address from boot, as under Docker, so
+        // the daemon owns the bridge (networks.ts ensureHostBridge) and netavark only uses it.
+        out.push("--interface-name", opt.slice(BRIDGE_NAME_OPTION.length + 1), "--opt", "mode=unmanaged");
       } else if (opt === `${ICC_OPTION}=false`) {
         out.push("--label", `${PODMAN_ICC_LABEL}=false`);
       } else if (opt === `${ICC_OPTION}=true`) {

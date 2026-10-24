@@ -139,8 +139,8 @@ async function apps(): Promise<void> {
   result("deployed under runsc", (await out("podman", ["inspect", APP, "--format", "{{.OCIRuntime}}"])).trim() === "runsc");
   const dmesg = await tryOut("podman", ["exec", APP, "dmesg"]);
   result("the app's kernel is gVisor", /gVisor/i.test(dmesg.text), dmesg.text.split("\n").slice(0, 2).join(" | "));
-  const ro = (await out("podman", ["inspect", APP, "--format", "{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}} {{.HostConfig.SecurityOpt}} {{.HostConfig.PidsLimit}}"])).trim();
-  result("hardening: read-only root, all caps dropped, no-new-privileges, pids limit", /^true .*ALL.*no-new-privileges.* \d+$/i.test(ro), ro);
+  const ro = (await out("podman", ["inspect", APP, "--format", "{{.HostConfig.ReadonlyRootfs}}|{{.EffectiveCaps}}|{{.HostConfig.CapAdd}}|{{.HostConfig.SecurityOpt}}|{{.HostConfig.PidsLimit}}"])).trim();
+  result("hardening: read-only root, no effective capabilities, no-new-privileges, pids limit", /^true\|\[\]\|\[\]\|\[no-new-privileges\]\|\d+$/i.test(ro), ro);
   const data = await tryOut("podman", ["exec", APP, "cat", "/data/hello.txt"]);
   result("migrated files volume mounted at /data", data.text.includes("from docker"), data.text.trim());
 
@@ -162,17 +162,18 @@ async function apps(): Promise<void> {
   await sleep(2000);
   const ip = (await out("podman", ["inspect", QAPP, "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}"])).trim();
   const blocked = await tryOut("podman", ["exec", APP, "wget", "-q", "-O-", "-T", "6", `http://${ip}:8080/`], 60_000);
-  result("icc: app to app on the bridge is dropped", !blocked.text.includes("hi"), { ip, text: blocked.text.slice(0, 160) });
+  result("icc: app to app on the bridge is dropped", !/hi|Connection refused/.test(blocked.text), { ip, text: blocked.text.slice(0, 160) });
   await out("nft", ["delete", "table", "bridge", "flagship_icc"]);
   const open = await tryOut("podman", ["exec", APP, "wget", "-q", "-O-", "-T", "6", `http://${ip}:8080/`], 60_000);
-  result("icc: without the table the same request goes through (the table is what isolates)", open.text.includes("hi"), open.text.slice(0, 160));
+  // Any answer from the other app's stack (its page, or a refusal) means the frame got through.
+  result("icc: without the table the same request goes through (the table is what isolates)", /hi|Connection refused/.test(open.text), open.text.slice(0, 160));
   await installIccIsolation(cmd, [
     { kind: "apps", bridge: "fs-apps" },
     { kind: "staging", bridge: "fs-staging" },
     { kind: "build", bridge: "fs-build" },
   ]);
   const again = await tryOut("podman", ["exec", APP, "wget", "-q", "-O-", "-T", "6", `http://${ip}:8080/`], 60_000);
-  result("icc: dropped again once the table is back", !again.text.includes("hi"));
+  result("icc: dropped again once the table is back", !/hi|Connection refused/.test(again.text), again.text.slice(0, 160));
 
   // Backups and app copies use save/load and the files archive helpers under Podman.
   await out("docker", ["save", "-o", "/var/tmp/drill-save.tar", `${APP}:1`]);
