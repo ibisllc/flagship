@@ -19,6 +19,8 @@ import {
   type Keypair,
   type ServerRevokeBySelf,
   type ServerShareRevoke,
+  strictInForce,
+  type PqSessionIdentity,
 } from "@flagship/protocol";
 import { InMemoryAlertInbox } from "./alertInbox.js";
 import {
@@ -316,6 +318,7 @@ import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { AssurancePolicySync } from "./assurancePolicySync.js";
 import { setPqAuthority } from "./pqAuthority.js";
+import { PqChannelServer, SiblingPqPins, pqSessionFetch, pqStrictGuard } from "./pqChannel.js";
 import { AccessJournal } from "./accessJournal.js";
 import { accessSyncKeyFromOps, buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers } from "./accessPeers.js";
@@ -1080,6 +1083,8 @@ async function main(): Promise<void> {
   // to the STK. Once `.com` holds the STK's key binding, the boot-key binding and the status
   // report also carry the STK's hybrid signature.
   const stkHybridRef: { current: ((msg: Uint8Array) => Uint8Array) | null } = { current: null };
+  // The box's side of the PQ session (pqChannel.ts): its verified STK binding and keyd's signer.
+  const stkPqIdentityRef: { current: PqSessionIdentity | null } = { current: null };
   if (env.controlPlaneBaseUrl) {
     const base = env.controlPlaneBaseUrl;
     const serverDomain = env.serverFqdn;
@@ -1095,8 +1100,9 @@ async function main(): Promise<void> {
             stkHybrid,
             controlPlaneBaseUrl: base,
           });
-          if (r === "bound") console.log("[pq] the STK's ML-DSA key binding was sent to .com");
+          if (r.status === "bound") console.log("[pq] the STK's ML-DSA key binding was sent to .com");
           stkHybridRef.current = stkHybrid;
+          stkPqIdentityRef.current = { binding: r.binding, sign: (_purpose, payload) => stkHybrid(payload) };
         } catch (e) {
           console.warn(`[pq] STK key binding not checked: ${(e as Error).message}`);
         }
@@ -1843,6 +1849,7 @@ async function main(): Promise<void> {
   // dead-man SIGTERM/SIGINT stop hooks.
   await wireOwnerHandlers({
     readStkHybrid: () => stkHybridRef.current,
+    readStkPqIdentity: () => stkPqIdentityRef.current,
     authorityHub,
     frontPage,
     activityLog,
@@ -3938,6 +3945,7 @@ async function wireRuntimeSurfaces(deps: {
 async function wireOwnerHandlers(deps: {
   /** The STK's hybrid signer once `.com` holds its binding (architecture v2), else null. */
   readStkHybrid: () => ((msg: Uint8Array) => Uint8Array) | null;
+  readStkPqIdentity: () => PqSessionIdentity | null;
   authorityHub: AuthorityHub;
   frontPage: FrontPageStore;
   activityLog: ActivityLog;
@@ -4082,9 +4090,52 @@ async function wireOwnerHandlers(deps: {
   });
   await assurance.load();
   setPqAuthority({ policy: () => assurance.policy(), bindingFor: (pub) => deviceBook.pqBindingFor(pub) });
+  // The PQ channel (pq-suites.md §13): phones from the device book, the account's other servers
+  // from keys pinned on first sight; while strict is in force, private requests take no other way.
+  const comBase = env.controlPlaneBaseUrl.replace(/\/+$/, "");
+  const siblingPins = new SiblingPqPins({
+    path: `${accessDataDir}/pq-sibling-pins.json`,
+    fetchBinding: async (d) => {
+      const r = await fetch(`${comBase}/api/server/${encodeURIComponent(d)}/pq-key-binding`, { headers: { accept: "application/json" } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    log: (m) => console.warn(m),
+  });
+  await siblingPins.load();
+  let podsCache: { at: number; pods: Array<{ serverDomain: string; identityPubKey: string; revokedAt?: number | null }> } | null = null;
+  const siblingPods = async () => {
+    if (podsCache && Date.now() - podsCache.at < 5 * 60_000) return podsCache.pods;
+    const r = await deviceBookReader.fetch(`${comBase}/api/users/${encodeURIComponent(cfg.userId)}/pods`).catch(() => null);
+    const body = r && r.ok ? ((await r.json()) as { pods?: unknown }) : null;
+    const pods = Array.isArray(body?.pods) ? (body!.pods as NonNullable<typeof podsCache>["pods"]).filter((p) => !p.revokedAt) : (podsCache?.pods ?? []);
+    podsCache = { at: Date.now(), pods };
+    return pods;
+  };
+  const siblingBinding = async (host: string) => {
+    const p = (await siblingPods()).find((x) => x.serverDomain.toLowerCase() === host.toLowerCase());
+    return p && host.toLowerCase() !== env.serverFqdn.toLowerCase() ? siblingPins.bindingFor(host, p.identityPubKey) : null;
+  };
+  const primeSiblings = async () => {
+    for (const p of await siblingPods()) if (p.serverDomain.toLowerCase() !== env.serverFqdn.toLowerCase()) await siblingPins.bindingFor(p.serverDomain, p.identityPubKey);
+  };
+  const pqServer = new PqChannelServer({
+    self: () => deps.readStkPqIdentity(),
+    lookup: (role, subject, kid) => (role === "device" ? deviceBook.pqBindingForDevice(subject, kid) : siblingPins.known(subject, kid)),
+    dispatch: (req) => runtime.dispatchHttp(req),
+    log: (m) => console.log(m),
+  });
+  runtime.addGuard(pqStrictGuard({ strict: () => strictInForce(assurance.policy()), browsersAllowed: () => assurance.browsersAllowed(), channelOf: (r) => pqServer.channelOf(r) }));
+  runtime.addGuard((req) => pqServer.handle(req));
+  const pqBoxFetch = pqSessionFetch({ identity: () => deps.readStkPqIdentity(), responder: siblingBinding });
+  const accessSyncFetch: typeof fetch = (input, init) => (strictInForce(assurance.policy()) ? pqBoxFetch(input, init) : fetch(input, init));
+  void primeSiblings().catch(() => {});
   void deviceBook.refresh().then(() => assurance.refresh());
   {
-    const t = setInterval(() => void assurance.refresh(), 15 * 60_000);
+    const t = setInterval(() => {
+      void assurance.refresh();
+      void primeSiblings().catch(() => {});
+    }, 15 * 60_000);
     if (typeof t.unref === "function") t.unref();
   }
   void deviceBook.refresh();
@@ -4161,6 +4212,7 @@ async function wireOwnerHandlers(deps: {
       key: deps.custodian.hasCgk ? accessSyncKeyFromOps(deps.custodian) : null,
       installed: (ref) => installedIds().includes(ref),
       apps: installedIds,
+      fetchImpl: accessSyncFetch,
       log: (m) => console.log(m),
     });
     deps.accessSyncRef.current = sync;

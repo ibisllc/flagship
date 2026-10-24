@@ -42,6 +42,8 @@ export interface AssurancePolicySyncOptions {
   bindingFor: (pubHex: string) => VerifiedPqKeyBinding | null;
   /** What the box itself can vouch for: `.com` holds its STK binding, and its boot-key binding is hybrid. */
   ownEvidence: () => { stkBound: boolean; bootKeyHybrid: boolean };
+  /** The scope replayed; the installation (this server) unless an app's scope is given. */
+  scope?: PolicyScope;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -59,14 +61,19 @@ function parseState(raw: unknown, scope: PolicyScope): PolicyState | null {
   return { scope, profile: s.profile!, rollout: s.rollout!, generation: s.generation!, headDigest: s.headDigest, enforcedEver: s.enforcedEver };
 }
 
+/** The loss code that, signed into a change to strict, means "browsers may still reach it". */
+export const BROWSER_LOSS = "browser-without-pq-authentication";
+
 export class AssurancePolicySync {
   private state: PolicyState;
+  /** What the owner acknowledged in the change in force (the browser answer, for a strict scope). */
+  private headLoss: readonly string[] = [];
   private failClosed = false;
   private readonly scope: PolicyScope;
   private readonly now: () => number;
 
   constructor(private readonly opts: AssurancePolicySyncOptions) {
-    this.scope = { kind: "installation", id: opts.serverDomain.toLowerCase() };
+    this.scope = opts.scope ?? { kind: "installation", id: opts.serverDomain.toLowerCase() };
     this.state = legacyPolicyState(this.scope);
     this.now = opts.now ?? Date.now;
   }
@@ -75,6 +82,17 @@ export class AssurancePolicySync {
   policy(): PolicyState {
     if (this.failClosed) return { ...this.state, profile: "strict", rollout: "enforced", enforcedEver: true };
     return this.state;
+  }
+
+  /**
+   * Whether a browser (WebPKI TLS, no PQ channel) may still reach this scope: always outside
+   * strict; under strict only when the owner's signed change to strict said so.
+   */
+  browsersAllowed(): boolean {
+    if (this.failClosed) return false;
+    const s = this.state;
+    if (!(s.profile === "strict" && (s.rollout === "enforced" || s.rollout === "retired"))) return true;
+    return this.headLoss.includes(BROWSER_LOSS);
   }
 
   async load(): Promise<void> {
@@ -90,8 +108,11 @@ export class AssurancePolicySync {
     } catch {
       parsed = null;
     }
-    if (parsed) this.state = parsed;
-    else {
+    if (parsed) {
+      this.state = parsed;
+      const loss = (JSON.parse(text) as { headLoss?: unknown }).headLoss;
+      this.headLoss = Array.isArray(loss) ? loss.filter((x): x is string => typeof x === "string") : [];
+    } else {
       this.failClosed = true;
       this.opts.log?.("[assurance] the stored policy state is unreadable; treating this server as strict until the owner's chain is replayed");
     }
@@ -108,13 +129,14 @@ export class AssurancePolicySync {
     }
     const b = body as { chain?: unknown; evidence?: { recoveryChecked?: unknown } } | null;
     if (!b || !Array.isArray(b.chain)) return this.policy();
-    const replayed = this.replay(b.chain, b.evidence?.recoveryChecked === true);
+    const { state: replayed, headLoss } = this.replayWithLoss(b.chain, b.evidence?.recoveryChecked === true);
     try {
       const next = this.failClosed ? replayed : adoptStoredState(this.state, replayed);
       const changed = this.failClosed || next.generation !== this.state.generation || next.rollout !== this.state.rollout || next.headDigest !== this.state.headDigest;
       this.state = next;
+      if (changed || this.failClosed) this.headLoss = headLoss;
       this.failClosed = false;
-      if (changed) await writeFileDurable(this.opts.path, JSON.stringify(next));
+      if (changed) await writeFileDurable(this.opts.path, JSON.stringify({ ...next, headLoss: this.headLoss }));
     } catch (e) {
       if (e instanceof PolicyError) this.opts.log?.(`[assurance] the served chain is older than the policy in force (${e.code}); kept ours`);
       else throw e;
@@ -124,7 +146,12 @@ export class AssurancePolicySync {
 
   /** Replays a served chain from legacy; stops at the first change that does not verify. */
   replay(chain: readonly unknown[], recoveryChecked: boolean): PolicyState {
+    return this.replayWithLoss(chain, recoveryChecked).state;
+  }
+
+  private replayWithLoss(chain: readonly unknown[], recoveryChecked: boolean): { state: PolicyState; headLoss: readonly string[] } {
     let s = legacyPolicyState(this.scope);
+    let headLoss: readonly string[] = [];
     for (const entry of chain) {
       const e = entry as { change?: AssurancePolicyChange; signature?: SignatureEnvelope } | null;
       const change = e?.change;
@@ -133,12 +160,13 @@ export class AssurancePolicySync {
       try {
         if (change.next === "strict") s = this.prepare(s, change, recoveryChecked);
         s = applyPolicyChange(s, change, (msg, c) => this.check(msg, c, sig, s));
+        headLoss = [...change.acknowledgedLoss];
       } catch (err) {
         this.opts.log?.(`[assurance] change ${change.generation} refused: ${(err as { code?: string }).code ?? (err as Error).message}`);
         break;
       }
     }
-    return s;
+    return { state: s, headLoss };
   }
 
   /** Moves the replay to `prepared` on the box's own evidence before a change to strict. */

@@ -209,6 +209,16 @@ export class AccountDeviceBook {
     return this.pqByPub.get(pubHex.toLowerCase()) ?? null;
   }
 
+  /** A live device's verified binding by device id and hybrid key id (the PQ session's initiator lookup). */
+  pqBindingForDevice(deviceId: string, keyIdHex: string): VerifiedPqKeyBinding | null {
+    for (const d of this.byPub.values()) {
+      if (d.deviceId !== deviceId) continue;
+      const b = this.pqByPub.get(d.pub);
+      if (b && b.role === "device" && b.keyIdHex === keyIdHex) return b;
+    }
+    return null;
+  }
+
   private pinned(): boolean {
     const root = this.opts.adminRootPub();
     return !!root && root.length === 32;
