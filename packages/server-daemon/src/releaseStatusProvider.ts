@@ -8,6 +8,7 @@
  * shape can evolve independently of the verifier's internals.
  */
 
+import { RELEASE_PQ_LABEL, releasePqPinConfigured } from "@flagship/protocol";
 import {
   verifyMaintainersFolder,
   type ReleaseStatus,
@@ -52,6 +53,7 @@ export class FsReleaseStatusProvider implements ReleaseStatusProvider {
         validEndorsements: [],
         endorsementErrors: [],
         pendingTakeoverAlarm: null,
+        releasePq: { pinned: releasePqPinConfigured(), label: RELEASE_PQ_LABEL, lineageOnly: [], refused: [], bindingErrors: [] },
       };
     }
   }

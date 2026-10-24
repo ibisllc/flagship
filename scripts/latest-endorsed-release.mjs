@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Prints the newest maintainer-endorsed release commit in this checkout, as a
-// box would judge it: signatures verified against the baked pin and the
-// endorsement's lineage walked in git (packages/server-daemon's own verifier).
+// box would judge it: signatures verified against the baked pins (the maintainer
+// mandate, and once set the release PQ pin, which then also needs the hybrid
+// companion) and the endorsement's lineage walked in git
+// (packages/server-daemon's own verifier).
 // The VM appliance is built from it, so a new box starts on signed code.
 // Needs `npx tsc -b` and a full-history checkout.
 import { execFileSync } from "node:child_process";

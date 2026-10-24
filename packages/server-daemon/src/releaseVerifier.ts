@@ -53,8 +53,12 @@ import {
   type VerifiedEndorsements,
 } from "@ibisllc/maintainers";
 import {
+  classifyReleaseEndorsements,
   MAINTAINER_PINNED_MANDATE_HASH,
+  RELEASE_PQ_LABEL,
+  RELEASE_PQ_PIN,
   type CaTrustChain,
+  type ReleasePqPin,
 } from "@flagship/protocol";
 import { makeCaTrustChain } from "./caTrustChain.js";
 
@@ -76,6 +80,22 @@ export interface MaintainersStoreSnapshot {
    * fail-closes `no-authorized-ca-keys`.
    */
   caEndorsements: CaEndorsement[];
+  /** `.maintainers/release-pq/bindings/*.json`: release-key bindings, checked against the pin. */
+  releasePqBindings: unknown[];
+  /** `.maintainers/release-pq/endorsements/*.json`: the hybrid companions (v2). */
+  releasePqEndorsements: unknown[];
+}
+
+/** The PQ half of the verdict (docs/architecture-v2/pq-suites.md §12). */
+export interface ReleasePqStatus {
+  /** The code pin names a release key, so every update target needs the v1 AND the PQ signature. */
+  pinned: boolean;
+  label: string;
+  /** Endorsements kept for lineage only (on the chain ending at the pin's marker). */
+  lineageOnly: string[];
+  /** Endorsements refused for a missing or bad PQ companion, with the code. */
+  refused: { releaseId: string; code: string }[];
+  bindingErrors: { keyId: string | null; code: string }[];
 }
 
 export interface TrackVerdict {
@@ -118,6 +138,7 @@ export interface ReleaseStatus {
    * was signed by a successor rather than by the prior holder.
    */
   pendingTakeoverAlarm: TakeoverAlarm | null;
+  releasePq: ReleasePqStatus;
 }
 
 export interface ReleaseVerifierOptions {
@@ -132,6 +153,8 @@ export interface ReleaseVerifierOptions {
    * Overridable so tests can exercise the post-ceremony configured path.
    */
   pinnedMandateHash?: string;
+  /** The release PQ pin. Defaults to `@flagship/protocol`'s `RELEASE_PQ_PIN`. */
+  releasePqPin?: ReleasePqPin;
 }
 
 /**
@@ -144,7 +167,7 @@ export function verifyMaintainersFolder(opts: ReleaseVerifierOptions): ReleaseSt
   const now = opts.now ?? new Date();
   const pin = opts.pinnedMandateHash ?? MAINTAINER_PINNED_MANDATE_HASH;
   const store = readStoreFromDisk(rootDir);
-  return verifyStore(store, now, pin);
+  return verifyStore(store, now, pin, opts.releasePqPin ?? RELEASE_PQ_PIN);
 }
 
 /**
@@ -297,6 +320,7 @@ function verifyStore(
   store: MaintainersStoreSnapshot,
   now: Date,
   pin: string,
+  pqPin: ReleasePqPin,
 ): ReleaseStatus {
   const tracks: TrackVerdict[] = [];
   const chainsByTrack = new Map<TrackName, VerifiedChain>();
@@ -371,6 +395,31 @@ function verifyStore(
     }
   }
 
+  // Once the code pin names a release PQ key, an endorsement is a target only with the v1
+  // signature AND its hybrid companion. The chain check above still ran over every endorsement,
+  // so a legacy one before the pin's marker keeps its place as a predecessor.
+  const pq = classifyReleaseEndorsements(
+    validEndorsements,
+    store.releasePqEndorsements,
+    store.releasePqBindings,
+    { pin: pqPin, now: now.getTime() },
+  );
+  validEndorsements = pq.eligible;
+  for (const r of pq.refused) {
+    endorsementErrors.push({
+      releaseId: r.endorsement.releaseId,
+      reason: "pq-signature-required",
+      detail: r.code,
+    });
+  }
+  const releasePq: ReleasePqStatus = {
+    pinned: pq.pinned,
+    label: RELEASE_PQ_LABEL,
+    lineageOnly: pq.lineageOnly.map((e) => e.releaseId),
+    refused: pq.refused.map((r) => ({ releaseId: r.endorsement.releaseId, code: r.code })),
+    bindingErrors: pq.bindingErrors,
+  };
+
   const currentRelease =
     validEndorsements.length > 0
       ? validEndorsements[validEndorsements.length - 1] ?? null
@@ -395,6 +444,7 @@ function verifyStore(
     validEndorsements,
     endorsementErrors,
     pendingTakeoverAlarm,
+    releasePq,
   };
 }
 
@@ -412,6 +462,8 @@ function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
     mandatesByTrack: new Map(),
     endorsements: [],
     caEndorsements: [],
+    releasePqBindings: [],
+    releasePqEndorsements: [],
   };
   if (!fs.existsSync(rootDir) || !fs.statSync(rootDir).isDirectory()) {
     return out;
@@ -461,6 +513,23 @@ function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
         continue;
       }
       if (isCaEndorsement(parsed)) out.caEndorsements.push(parsed);
+    }
+  }
+  out.releasePqBindings = readJsonDir(path.join(rootDir, "release-pq", "bindings"));
+  out.releasePqEndorsements = readJsonDir(path.join(rootDir, "release-pq", "endorsements"));
+  return out;
+}
+
+/** Every parseable `*.json` in `dir`, filename-sorted; the verifier judges each. */
+function readJsonDir(dir: string): unknown[] {
+  const out: unknown[] = [];
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return out;
+  for (const f of fs.readdirSync(dir).sort()) {
+    if (!f.endsWith(".json")) continue;
+    try {
+      out.push(readJson(path.join(dir, f)));
+    } catch {
+      continue;
     }
   }
   return out;
