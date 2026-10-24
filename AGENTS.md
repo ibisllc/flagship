@@ -331,7 +331,7 @@ of the last check here: **not yet checked**.
   Folded: **multilingual** (es, fr, de, pt-BR, ja, zh-Hans on every surface: site, webapp, box pages, Android +
   Wear, iOS + Watch + widgets, the Studios, APNs; `docs/i18n.md`, gate `npm run i18n`; machine drafts, see
   `i18n/REVIEW.md` and each surface's `review-notes.md`), **named links** (one custom voi.ci name per service,
-  `.com` name dibs; `docs/named-links.md`; D1 **0110**, renumbered from 0107 because 0.3 took 0107-0109), the
+  `.com` name dibs; `docs/named-links.md`; D1 **0111**, renumbered from 0107 because 0.3 took 0107-0110), the
   **lock-screen sign-out** (Face ID / biometric / device PIN before any key-erasing sign-out above the app lock),
   and an **owner UI round** (Home "Add / Restore a server"; Activity's no-server card; shorter Account security
   and Privacy; compact "AI API keys" rows; Cloud recovery help behind (?); "Scan a code or enter a link"
@@ -345,7 +345,7 @@ of the last check here: **not yet checked**.
   builds with Xcode 27.1 RC (the old `ContentView.swift:149` failure does not reproduce). The voi.ci upkeep cron
   moved to its own hourly group (the small cron groups now run hourly, not every 40 minutes).
   **Owner / release checklist (the one list for this release):**
-  1. D1 migrations before the `.com` deploy: 0.3's 0107-0109, then **0110** (voici names).
+  1. D1 migrations before the `.com` deploy: 0.3's 0107-0109, 0110 (watch boot keys), then **0111** (voici names).
   2. Deploy `.com` (shell v170, dibs window, voi.ci routes) and the webapp; an **endorsed box release** (box
      pages in the visitor's language, the canonical-address election, 0.3's box changes); iOS and Android store
      builds.
