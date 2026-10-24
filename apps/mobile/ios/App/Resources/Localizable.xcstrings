@@ -106764,6 +106764,47 @@
           }
         }
       }
+    },
+    "This server's key changed since you turned this on. If you reinstalled it, turn this off and on again to trust the new key.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clave de este servidor cambió desde que lo activaste. Si lo reinstalaste, desactívalo y vuelve a activarlo para confiar en la nueva clave."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clé de ce serveur a changé depuis que vous avez activé cette option. Si vous l’avez réinstallé, désactivez-la puis réactivez-la pour faire confiance à la nouvelle clé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Schlüssel dieses Servers hat sich geändert, seit du das eingeschaltet hast. Wenn du ihn neu installiert hast, schalte es aus und wieder ein, um dem neuen Schlüssel zu vertrauen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A chave deste servidor mudou desde que você ativou isto. Se você o reinstalou, desative e ative de novo para confiar na nova chave."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オンにしたあとでこのサーバーのキーが変わりました。再インストールした場合は、オフにしてからもう一度オンにして新しいキーを信頼してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自你开启此项以来，此服务器的密钥已更改。如果你重新安装了它，请关闭后再开启，以信任新密钥。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
