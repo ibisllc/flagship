@@ -395,8 +395,18 @@ of the last check here: **not yet checked**.
   AI providers the owner blocked and apps kept away from browsers. Notices need the release key's
   PQ half once pinned (four verifiers, vectors `security-notice/pq-vectors.json`). Wipe, sign out
   and Remove this device erase the PQ seeds. `.com` rate-limits the binding PUTs and policy POSTs.
-  Open: external review of the session, a per-app screen, re-entry evidence, Android admin-device
-  signing, any device run. Nothing is strict in production.
+  Open: external review of the session, any device run. Nothing is strict in production.
+  **Milestone 5, the Rust path and Podman** (`engine-and-rust-path.md`, drill
+  `drills/m5-upcloud.md`: 57/57 on a throwaway Debian 13 amd64 UpCloud VM, torn down): a box switch
+  (`/var/lib/flagship/arch-v2.json`; new boxes on, existing boxes unchanged) runs keyd, broker and
+  core from the release's pinned Rust binaries under systemd, each falling back on its own (TS
+  keyd, or idle) after three failed runs; the update gate rolls back a release whose Rust binary
+  regressed. Apps run on Podman with runsc, quotas, egress and nft bridge isolation; an existing
+  box moves off Docker once (Docker's data kept). Found and fixed: the TS keyd unit could never
+  start (MemoryDenyWriteExecute vs V8: now `--jitless`); netavark bridges. Clients: per-app browser
+  answer (iOS, Android; webapp view, shell **v170**), strict re-entry evidence (vectors
+  `strict-reentry`), Android admin-device policy signing. Open: R03 scorecard and arm64, broker
+  still owns only host power, core shadow only, Podman appliance not built, no gym or device run.
 
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
