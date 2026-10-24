@@ -41,7 +41,8 @@ import { buildUnlockPremountScript } from "../../../packages/flagship-builder/sr
 import { bootPqPaths, buildBootPqWire, ensureLeaseCustody } from "../../../packages/server-daemon/src/bootPq.js";
 
 const W = "/var/lib/flagship-m6";
-const TCTI = "swtpm:host=127.0.0.1,port=2321";
+// swtpm behind the kernel vTPM proxy: the box sees /dev/tpmrm0 (with the kernel resource manager), as on metal.
+const TCTI = "device:/dev/tpmrm0";
 const DOMAIN = "home.drill.flagship.services";
 const CRYPT = "m6_crypt";
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -293,7 +294,7 @@ async function beforeReboot(): Promise<void> {
   phase = "setup";
   ensureVolume();
   check("LUKS2 loop volume ready", S.loop !== undefined, S.loop);
-  check("no vTPM device on this VM", !existsSync("/dev/tpmrm0"), existsSync("/dev/tpmrm0") ? "a vTPM exists" : "swtpm stands in");
+  check("/dev/tpmrm0 is swtpm through the kernel vTPM proxy (UpCloud has no vTPM)", sh("tpm2_getcap", ["properties-fixed"], { TPM2TOOLS_TCTI: TCTI }).includes("0x49424D00"), "manufacturer IBM (swtpm)");
   extend7(FIRMWARE);
   check("swtpm answers and PCR 7 carries the stand-in firmware measurement", /0x/i.test(pcr7()), pcr7());
   freshWorker();
