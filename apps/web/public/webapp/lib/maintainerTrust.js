@@ -70,11 +70,11 @@ export async function edVerify(sigHex, msg, pubHex) {
     const key = await crypto.subtle.importKey(
       "raw",
       hexToBytes(pubHex),
-      { name: tr("Ed25519") },
+      { name: "Ed25519" },
       false,
       ["verify"],
     );
-    return await crypto.subtle.verify({ name: tr("Ed25519") }, key, hexToBytes(sigHex), msg);
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, hexToBytes(sigHex), msg);
   } catch {
     return false;
   }

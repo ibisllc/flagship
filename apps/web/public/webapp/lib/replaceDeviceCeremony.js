@@ -122,7 +122,7 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
     issuedAt,
   });
   const sigBytes = new Uint8Array(
-    await crypto.subtle.sign({ name: tr("Ed25519") }, newIrk.privateKey, canonical),
+    await crypto.subtle.sign({ name: "Ed25519" }, newIrk.privateKey, canonical),
   );
   // …and with the OLD (currently registered) IRK over the SAME bytes.
   // That second signature is the credential `.com` requires: the first
@@ -130,7 +130,7 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
   // is public, so neither proves we own the account. This device holds
   // the session UMK, so it can prove it outright.
   const oldSigBytes = new Uint8Array(
-    await crypto.subtle.sign({ name: tr("Ed25519") }, oldIrk.privateKey, canonical),
+    await crypto.subtle.sign({ name: "Ed25519" }, oldIrk.privateKey, canonical),
   );
 
   // 3 — POST initiate.
@@ -263,7 +263,7 @@ export async function completeReplaceDeviceCeremony(args, deps = {}) {
   const newIrkPubHex = bytesToHex(newIrk.publicKey);
   const completeSig = new Uint8Array(
     await crypto.subtle.sign(
-      { name: tr("Ed25519") },
+      { name: "Ed25519" },
       newIrk.privateKey,
       new TextEncoder().encode(
         [TAG_RE_PAIR_COMPLETE, username, newIrkPubHex, issuedAt].join("|"),

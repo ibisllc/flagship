@@ -43,7 +43,7 @@ export async function signedDirectoryFetch(path, init = {}, deps = {}) {
   const signature = deps.signDevice
     ? await deps.signDevice(key, canonicalDirectoryRequest(request))
     : new Uint8Array(await crypto.subtle.sign(
-        { name: tr("Ed25519") },
+        { name: "Ed25519" },
         key.privateKey,
         canonicalDirectoryRequest(request),
       ));
@@ -159,7 +159,7 @@ export async function updateSelfDisplayName(displayName, current, deps = {}) {
   };
   const signature = deps.signDevice
     ? await deps.signDevice(key, canonicalDeviceSelfProfile(unsigned))
-    : new Uint8Array(await crypto.subtle.sign({ name: tr("Ed25519") }, key.privateKey, canonicalDeviceSelfProfile(unsigned)));
+    : new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, key.privateKey, canonicalDeviceSelfProfile(unsigned)));
   return putProfile(`/api/accounts/${encodeURIComponent(profile.accountId)}/devices/${profile.deviceId}/profile`, {
     profile: { ...unsigned, signatureHex: bytesToHex(signature) },
     expectedRevision: current?.revision ?? 0,

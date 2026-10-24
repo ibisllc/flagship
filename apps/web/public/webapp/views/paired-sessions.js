@@ -27,6 +27,18 @@ export function browserSessions(sessions) {
   );
 }
 
+/** One whole sentence per kind of delegation, so no English is glued into a translation. */
+function delegationLine(d) {
+  const app = escapeHtml(d.serviceRef);
+  const both = d.ops.includes("build") && d.ops.includes("deploy");
+  const deployOnly = !d.ops.includes("build") && d.ops.includes("deploy");
+  if (d.expiresAt) {
+    const when = escapeHtml(formatWhen(d.expiresAt));
+    return both ? tr("May build and deploy {0} until {1}", app, when) : deployOnly ? tr("May deploy {0} until {1}", app, when) : tr("May build {0} until {1}", app, when);
+  }
+  return both ? tr("May build and deploy {0}", app) : deployOnly ? tr("May deploy {0}", app) : tr("May build {0}", app);
+}
+
 /** What this browser may build now, and the way to let it build one more app (SEC-AUTH-002). */
 async function renderDelegationSlot(slot, sessionId) {
   let list = [];
@@ -37,7 +49,7 @@ async function renderDelegationSlot(slot, sessionId) {
   }
   const admin = canSignAdminOrders();
   slot.innerHTML = `
-    ${list.map((d) => `<div class="muted-sm text-xs">${tr("May {0} {1}{2}", escapeHtml(d.ops.join(" and ")), escapeHtml(d.serviceRef), d.expiresAt ? tr(" until {0}", escapeHtml(formatWhen(d.expiresAt))) : "")} <button type="button" class="secondary" data-end-delegation="${escapeHtml(d.serviceRef)}">${escapeHtml(DELEGATION_COPY.end)}</button></div>`).join("")}
+    ${list.map((d) => `<div class="muted-sm text-xs">${delegationLine(d)} <button type="button" class="secondary" data-end-delegation="${escapeHtml(d.serviceRef)}">${escapeHtml(DELEGATION_COPY.end)}</button></div>`).join("")}
     ${admin
       ? `<button type="button" class="secondary mt-1" data-open-delegation>${escapeHtml(DELEGATION_COPY.open)}</button>`
       : `<p class="note">${escapeHtml(DELEGATION_COPY.adminOnly)}</p>`}

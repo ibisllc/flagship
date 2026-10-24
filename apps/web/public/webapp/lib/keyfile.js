@@ -73,14 +73,14 @@ function deriveKey(passphrase, salt, p) {
 async function aesGcmEncrypt(keyBytes, nonce, aad, plaintext) {
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt"]);
   return new Uint8Array(
-    await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce, additionalData: aad }, key, plaintext),
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad }, key, plaintext),
   );
 }
 
 async function aesGcmDecrypt(keyBytes, nonce, aad, ciphertext) {
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["decrypt"]);
   return new Uint8Array(
-    await crypto.subtle.decrypt({ name: tr("AES-GCM"), iv: nonce, additionalData: aad }, key, ciphertext),
+    await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce, additionalData: aad }, key, ciphertext),
   );
 }
 

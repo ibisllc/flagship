@@ -75,7 +75,7 @@ export async function encryptProfile(displayName, keyBytes, fields) {
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt"]);
   const plaintext = encoder.encode(`{"version":1,"displayName":${JSON.stringify(name)}}`);
   const ciphertext = await crypto.subtle.encrypt(
-    { name: tr("AES-GCM"), iv: nonce, additionalData: profileAad(fields), tagLength: 128 },
+    { name: "AES-GCM", iv: nonce, additionalData: profileAad(fields), tagLength: 128 },
     key,
     plaintext,
   );
@@ -87,7 +87,7 @@ export async function decryptProfile(envelope, keyBytes) {
   const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["decrypt"]);
   const plaintext = await crypto.subtle.decrypt(
     {
-      name: tr("AES-GCM"),
+      name: "AES-GCM",
       iv: fromHex(envelope.nonceHex),
       additionalData: profileAad(envelope),
       tagLength: 128,
