@@ -79,6 +79,8 @@ internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.Verifi
                 pendingLeases = PendingLeaseStore.from(context),
                 deadManBound = store::deadManBound,
                 lockedServer = BootLockStateStore.from(context)::lastKnownSuspended,
+                ownerPq = { m -> com.flagshipserver.app.keystore.QuantumSafetyService.ownerPqSigner(it, m) },
+                strictFor = { d -> com.flagshipserver.app.keystore.QuantumSafetyService.isStrict(it, d) },
             )
         }
         ApprovalsModel(

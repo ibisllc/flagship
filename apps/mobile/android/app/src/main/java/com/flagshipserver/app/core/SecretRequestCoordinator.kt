@@ -34,6 +34,7 @@ import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.SecretResponseBody
 import com.flagshipserver.app.api.DeviceInfoHint
 import com.google.crypto.tink.subtle.Ed25519Sign
+import com.flagshipserver.app.core.pq.BootUnlockV2
 
 /** Resolves the IRK signer + its raw 32-byte seed for the active version.
  *  Injectable so tests don't touch the AndroidKeyStore / biometric prompt.
@@ -97,7 +98,13 @@ class SecretRequestCoordinator(
     private val lockedServer: (serverDomain: String) -> Boolean? = { null },
     /** The box keys this phone pinned; a reply is never sealed to another. */
     private val pins: BoxKeyPins = BoxKeyPins.shared,
+    /** Boot unlock v2: the account key's hybrid half on this phone (null when it holds none). */
+    private val ownerPq: suspend (IrkMaterial) -> OwnerPqSigner? = { null },
+    /** Whether the server's policy (as this phone replays it) is strict. */
+    private val strictFor: (String) -> Boolean = { false },
 ) {
+    /** The owner key's hybrid public key and a signer for it. */
+    class OwnerPqSigner(val publicKey: ByteArray, val sign: BootUnlockV2.OwnerSigner)
     /** The dead-man switch's state for one server, as [DeadManLeaseBound] needs it. */
     data class DeadManBound(val enabled: Boolean, val deadline: Long?)
 
@@ -112,6 +119,14 @@ class SecretRequestCoordinator(
             CoordinatorException("Unsupported secret request type: $purpose.")
         class NoPendingRequest(domain: String) :
             CoordinatorException("This server ($domain) isn't waiting for an unlock right now.")
+        /** Boot unlock v2 refused under strict ([BootUnlockV2] codes). */
+        class QuantumSafe(val code: String) : CoordinatorException(
+            if (code == "phone-cannot-sign-hybrid") {
+                "This server is quantum-safe. Approve it on a device that holds your account key's quantum-resistant half (Settings, Quantum-safe protection)."
+            } else {
+                "This server is quantum-safe, but it hasn't published its quantum-resistant unlock key. Update the server, or turn quantum-safe protection off for it."
+            },
+        )
     }
 
     /** A request that PASSED directory re-verification, ready to show the
@@ -123,6 +138,9 @@ class SecretRequestCoordinator(
         val directoryStkPubHex: String,
         /** The key the reply is sealed to: the STK, or the boot key its pinned STK bound. */
         val recipientPubHex: String = directoryStkPubHex,
+        /** Boot unlock v2: the box's verified material and this request's per-boot reply key. */
+        val pqMaterial: BootUnlockV2.Material? = null,
+        val replyKemPub: ByteArray? = null,
     ) {
         val id: String get() = pending.id
         val serverDomain: String get() = pending.serverDomain
@@ -186,7 +204,22 @@ class SecretRequestCoordinator(
                 issuedAt = pending.issuedAt,
             )
             if (!ok) continue
-            verified.add(VerifiedRequest(pending = pending, directoryStkPubHex = stkHex, recipientPubHex = signerHex))
+            // Boot unlock v2: the box's hybrid material through the pinned STK, then the request's
+            // hybrid signature under the boot key's hybrid key. Anything that fails leaves v1.
+            var pqMaterial: BootUnlockV2.Material? = null
+            var replyKem: ByteArray? = null
+            if (signerHex != stkHex.lowercase() && pending.pq != null) {
+                val m = BootKey.v2Material(username, pending.serverDomain, signerHex, mailbox::fetchBootKeyBinding, pins, now())
+                if (m != null) {
+                    replyKem = try {
+                        BootUnlockV2.verifyRequest(pending.serverDomain, signerHex, pending.purpose, pending.requestNonceHex, pending.issuedAt, pending.pq, m)
+                    } catch (_: BootUnlockV2.Failure) {
+                        null
+                    }
+                    if (replyKem != null) pqMaterial = m
+                }
+            }
+            verified.add(VerifiedRequest(pending = pending, directoryStkPubHex = stkHex, recipientPubHex = signerHex, pqMaterial = pqMaterial, replyKemPub = replyKem))
         }
         return verified
     }
@@ -222,8 +255,11 @@ class SecretRequestCoordinator(
         } else stkPub
 
         val material = irk.resolve("Approve your server's boot secret")
+        // A strict server needs the owner key's hybrid signature, so the watch's quick approve
+        // does not apply to it.
+        val strict = strictFor(verified.serverDomain)
         val delegate: WatchDelegateSigner? =
-            if (purpose == SecretPurpose.UNLOCK_KEY && !depositAutoLease) watchDelegate() else null
+            if (purpose == SecretPurpose.UNLOCK_KEY && !depositAutoLease && !strict) watchDelegate() else null
         // Slice D — resolve the admin master root ONCE for this ceremony (silent
         // within the biometric-freshness window opened by irk.resolve above). The
         // RootEntitlement + auto-unlock lease are SENSITIVE orders that sign with
@@ -235,7 +271,7 @@ class SecretRequestCoordinator(
         var unlockKey: ByteArray? = null
         val sealedHex = when (purpose) {
             SecretPurpose.UNLOCK_KEY -> {
-                val (hex, key) = buildUnlockReply(verified, diskKeyRecipient, material)
+                val (hex, key) = buildUnlockReply(verified, diskKeyRecipient, material, strict)
                 unlockKey = key
                 hex
             }
@@ -306,7 +342,7 @@ class SecretRequestCoordinator(
         // it here — I2) using the key we just recovered (never .com-visible).
         val key = unlockKey
         if (depositAutoLease && purpose == SecretPurpose.UNLOCK_KEY && key != null) {
-            return depositAutoUnlockLease(verified.serverDomain, diskKeyRecipient, key, material)
+            return depositAutoUnlockLease(verified.serverDomain, diskKeyRecipient, key, material, verified.pqMaterial, strict)
         }
         return null
     }
@@ -389,6 +425,8 @@ class SecretRequestCoordinator(
         stkPub: ByteArray,
         luksKey: ByteArray,
         material: IrkMaterial,
+        pqMaterial: BootUnlockV2.Material? = null,
+        strict: Boolean = false,
     ): String? {
         val issuedAt = now()
         // A locked server takes no new lease: only an explicit, signed resume re-arms auto-unlock.
@@ -403,7 +441,15 @@ class SecretRequestCoordinator(
             now = issuedAt,
         ) ?: return null
         val leaseId = AutoUnlockLeaseV2.randomLeaseId()
-        val lease = AutoUnlockLeaseV2.build(
+        // Boot unlock v2: a v3 lease is sealed to the box's lease key and signed hybrid inside;
+        // the worker still checks the classical outer signature.
+        val owner = if (pqMaterial != null) ownerPq(material) else null
+        val leaseVersion = try {
+            BootUnlockV2.chooseLeaseVersion(strict, pqMaterial != null, owner != null)
+        } catch (e: BootUnlockV2.Failure) {
+            throw CoordinatorException.QuantumSafe(e.code)
+        }
+        var lease = AutoUnlockLeaseV2.build(
             serverDomain = serverDomain,
             stkPub = stkPub,
             leaseId = leaseId,
@@ -411,6 +457,15 @@ class SecretRequestCoordinator(
             issuedAt = issuedAt,
             expiresAt = expiresAt,
         )
+        if (leaseVersion == 3 && pqMaterial != null && owner != null) {
+            lease = lease.copy(
+                sealedKey = BootUnlockV2.sealLease(
+                    serverDomain, HexUtil.encode(stkPub), leaseId, issuedAt, expiresAt,
+                    leaseKemPublicKey = pqMaterial.leaseKemPublicKey, diskKey = luksKey,
+                    ownerHybridPublicKey = owner.publicKey, sign = owner.sign,
+                ),
+            )
+        }
         val wire = BoxSealedLeaseWire(
             serverDomain = lease.serverDomain,
             stkPub = HexUtil.encode(lease.stkPub),
@@ -507,6 +562,7 @@ class SecretRequestCoordinator(
         verified: VerifiedRequest,
         stkPub: ByteArray,
         material: IrkMaterial,
+        strict: Boolean = false,
     ): Pair<String, ByteArray> {
         val sealedLuks = try {
             mailbox.fetchSealedLuksKey(verified.serverDomain, username)
@@ -524,6 +580,22 @@ class SecretRequestCoordinator(
             throw CoordinatorException.LuksUnsealFailed
         }
 
+        // Boot unlock v2 (pq-suites.md §19): the box's policy, not the request, decides whether a
+        // classical reply is still allowed.
+        val owner = if (verified.pqMaterial != null) ownerPq(material) else null
+        val version = try {
+            BootUnlockV2.chooseReplyVersion(strict, verified.pqMaterial != null, verified.replyKemPub != null, owner != null)
+        } catch (e: BootUnlockV2.Failure) {
+            throw CoordinatorException.QuantumSafe(e.code)
+        }
+        val reply = verified.replyKemPub
+        if (version == 2 && owner != null && reply != null) {
+            val sealed = BootUnlockV2.buildReply(
+                verified.serverDomain, HexUtil.encode(stkPub), verified.pending.requestNonceHex, reply, luksKey,
+                owner.publicKey, now(), owner.sign,
+            )
+            return HexUtil.encode(sealed) to luksKey
+        }
         // Re-seal FOR the boot key or STK, nonce/purpose-bound. Hand back the
         // recovered key so an "auto" approval can deposit a box-sealed lease.
         val sealedHex = HexUtil.encode(

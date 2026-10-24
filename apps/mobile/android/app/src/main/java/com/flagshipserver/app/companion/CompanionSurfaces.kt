@@ -63,6 +63,8 @@ fun watchResponder(app: AppState, mailbox: SecretMailboxClient, inForeground: ()
                     username = user,
                     irk = SessionIrkAccess(),
                     watchDelegate = { SessionIrkAccess.watchDelegate() },
+                    ownerPq = { m -> com.flagshipserver.app.keystore.QuantumSafetyService.ownerPqSigner(user, m) },
+                    strictFor = { d -> com.flagshipserver.app.keystore.QuantumSafetyService.isStrict(user, d) },
                 ).asWatchApprovalSource()
             }
         },

@@ -54,6 +54,24 @@ object QuantumSafetyService {
 
     fun anyStrict(username: String): Boolean = store?.anyStrict(username) == true
 
+    /** Whether this phone replays the server's installation policy as strict. */
+    fun isStrict(username: String, serverDomain: String): Boolean =
+        store?.replayed(username.lowercase(), com.flagshipserver.app.core.pq.AssurancePolicy.Scope("installation", serverDomain.lowercase()))?.strict == true
+
+    /**
+     * Boot unlock v2: the account key's (IRK) hybrid half on this phone as the coordinator's owner
+     * signer, whatever the policy; null when this phone holds no ML-DSA key for it.
+     */
+    fun ownerPqSigner(username: String, irk: com.flagshipserver.app.core.IrkMaterial): com.flagshipserver.app.core.SecretRequestCoordinator.OwnerPqSigner? {
+        val keys = pqKeys ?: return null
+        val entry = keys.entry("account-irk", username.lowercase()) ?: return null
+        if (entry.ed25519PubHex != irk.pubHex.lowercase()) return null
+        val pub = PqHex.decode(entry.ed25519PubHex + entry.mldsaPubHex) ?: return null
+        return com.flagshipserver.app.core.SecretRequestCoordinator.OwnerPqSigner(pub) { purpose, payload ->
+            keys.sign(entry, purpose, payload) { m -> irk.signer.sign(m) }
+        }
+    }
+
     /** This phone's device binding and hybrid signer, from keys the unlocked session holds. */
     fun deviceIdentity(user: String, deviceId: String): PqChannelInterceptor.Identity? {
         if (!SessionIrkAccess.isSessionUnlocked() || !Keystore.hasUmkSeed()) return null

@@ -18,6 +18,8 @@ data class BootKeyBindingWire(
     val signature: String,
     /** Architecture v2: the STK's hybrid signature over `flagship/boot-key-binding/v2|...`. */
     val hybridSignature: String? = null,
+    /** Boot unlock v2: the boot key's ML-DSA half and lease key, vouched for by the STK's hybrid key. */
+    val pq: kotlinx.serialization.json.JsonElement? = null,
 ) {
     @Serializable
     data class Binding(val serverDomain: String, val bootPubHex: String, val issuedAt: Long)
@@ -92,6 +94,27 @@ object BootKey {
                 ?.let { return it }
         }
         return pins.pinnedBootKey(username, serverDomain)
+    }
+
+    /**
+     * Boot unlock v2: the box's v2 material, verified under the STK's hybrid binding this phone
+     * pinned and naming the boot key it pinned; null when the box has none or it does not verify.
+     */
+    suspend fun v2Material(
+        username: String,
+        serverDomain: String,
+        bootPubHex: String,
+        fetch: suspend (String) -> BootKeyBindingWire?,
+        pins: BoxKeyPins = BoxKeyPins.shared,
+        now: Long = System.currentTimeMillis(),
+    ): com.flagshipserver.app.core.pq.BootUnlockV2.Material? {
+        val stk = pins.verifiedBoxPqBinding(username, serverDomain) ?: return null
+        val pq = fetchQuietly(fetch, serverDomain)?.pq ?: return null
+        return try {
+            com.flagshipserver.app.core.pq.BootUnlockV2.verifyMaterial(pq, serverDomain, bootPubHex, stk, now)
+        } catch (_: com.flagshipserver.app.core.pq.BootUnlockV2.Failure) {
+            null
+        }
     }
 
     /** For a shared server: the boot key the STK pinned in the owner's offer vouches for, or null. */
