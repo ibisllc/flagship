@@ -358,6 +358,10 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v171: app chat requests from other owners' apps wait under Activity and ask in a sheet (Allow,
+//       Always allow, Deny, each owner-signed; Ask me each time ends an Always allow: lib/chatAlerts.js),
+//       and an AI adapt that spends a key or credits shows its estimate first and runs only on a signed
+//       Continue (lib/aiConsentUi.js).
 //  v170: feat/UX: the webapp in six languages (lib/i18n.js tr/trn, lib/i18nLocales.js; each catalog
 //       i18n/<lang>.json?v=<hash> is fetched per language; Traditional-Chinese and English-first browsers
 //       stay English; swRegister.js loads as a module so the worker registers), named links (the .com
@@ -376,7 +380,7 @@
 //  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
 //  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v170";
+const SHELL_VERSION = "v171";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -449,6 +453,10 @@ const OPTIONAL_SHELL = [
   "/lib/aiRelay.js",
   "/lib/appAccess.js",
   "/lib/accessAlerts.js",
+  "/lib/chatAlerts.js",
+  "/lib/chatApproval.js",
+  "/lib/aiConsentUi.js",
+  "/lib/aiRepairConsent.js",
   "/lib/pushSetting.js",
   "/lib/appApiKeys.js",
   "/lib/freeAi.js",

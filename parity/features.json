@@ -747,6 +747,26 @@
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/VoiciName.swift", "flagship/voici-name/v1"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift", "static func message"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/VoiciLinkField.swift", "struct VoiciLinkField"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/LinkFieldViewModel.kt", "object LinkField"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/VoiciName.kt", "flagship/voici-name/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/LinkFieldSection.kt", "fun LinkFieldSection"]] }
       }
+    },
+    {
+      "id": "chat-approvals",
+      "title": "App chat between owners (N08): held chat requests ask in a sheet and wait under Activity with Allow / Always allow (incoming only) / Deny, each a signed flagship/chat-approval/v1; the sender is shown as a claim; Ask me each time ends an Always allow",
+      "ref": "web",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/chatAlerts.js", "export async function renderChatSection"], ["apps/web/public/webapp/lib/chatAlerts.js", "A remote machine claiming to run"], ["apps/web/public/webapp/lib/chatApproval.js", "flagship/chat-approval/v1"]] },
+        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the approval screens follow the webapp.", "anchors": [] },
+        "android": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the approval screens follow the webapp.", "anchors": [] }
+      }
+    },
+    {
+      "id": "ai-run-consent",
+      "title": "AI-run consent (N12): an adapt the box answers 428 ai-consent shows the token range, provider and who pays; Continue resends it with a signed flagship/ai-repair-consent/v1, Cancel sends nothing",
+      "ref": "web",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/aiConsentUi.js", "export async function withAiConsent"], ["apps/web/public/webapp/views/build-git.js", "withAiConsent\\("], ["apps/web/public/webapp/lib/aiRepairConsent.js", "flagship/ai-repair-consent/v1"]] },
+        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the consent sheet follows the webapp.", "anchors": [] },
+        "android": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the consent sheet follows the webapp.", "anchors": [] }
+      }
     }
   ]
 }
