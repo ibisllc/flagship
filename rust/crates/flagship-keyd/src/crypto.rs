@@ -115,6 +115,24 @@ pub fn b64_decode(text: &str) -> Option<Vec<u8>> {
     base64ct::Base64::decode_vec(text).ok()
 }
 
+/// Lowercase-or-uppercase hex to bytes; `None` for an odd length or a non-hex character.
+pub fn from_hex(text: &str) -> Option<Vec<u8>> {
+    let nib = |c: u8| (c as char).to_digit(16).and_then(|d| u8::try_from(d).ok());
+    let (pairs, rest) = text.as_bytes().as_chunks::<2>();
+    if !rest.is_empty() {
+        return None;
+    }
+    pairs
+        .iter()
+        .map(|[h, l]| Some(nib(*h)?.wrapping_shl(4) | nib(*l)?))
+        .collect()
+}
+
+/// Equal length and bytes, without an early exit.
+pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]

@@ -45,6 +45,18 @@ export interface KeydServiceInit {
   tls?: TlsKeys;
   /** The ACME account key; needs `tls`. */
   acme?: AcmeAccount;
+  /**
+   * The authority a sealed SWK/CGK delivery must be signed by: the owner's account key (IRK) and
+   * this box's name, pinned in keyd's state by root at the boot ceremony (`owner.json`, written by
+   * `migrate`). Absent: no sealed delivery is accepted.
+   */
+  owner?: { irkPubHex: string; serverFqdn: string } | null;
+  /**
+   * The boot ceremony's one-time token (root wrote it beside keyd's state at this start) and
+   * until when it lets a raw key in. Absent: no raw key is accepted over the socket.
+   */
+  ceremony?: { token: Uint8Array; notAfter: number } | null;
+  now?: () => number;
 }
 
 /**
@@ -64,6 +76,9 @@ export class KeydService {
   readonly #purposes: ReadonlySet<string>;
   readonly #tls: TlsKeys | null;
   readonly #acme: AcmeAccount | null;
+  readonly #owner: { irkPub: Uint8Array; serverFqdn: string } | null;
+  #ceremony: { token: Uint8Array; notAfter: number } | null;
+  readonly #now: () => number;
 
   constructor(init: KeydServiceInit) {
     if (init.identitySeed.length !== 32) throw new Error("keyd: identity seed must be 32 bytes");
@@ -79,6 +94,12 @@ export class KeydService {
     this.#purposes = init.signPurposes ?? BOX_SIGN_PURPOSES;
     this.#tls = init.tls ?? null;
     this.#acme = init.acme ?? null;
+    this.#owner =
+      init.owner && /^[0-9a-f]{64}$/.test(init.owner.irkPubHex) && init.owner.serverFqdn
+        ? { irkPub: Uint8Array.from(Buffer.from(init.owner.irkPubHex, "hex")), serverFqdn: init.owner.serverFqdn.toLowerCase() }
+        : null;
+    this.#ceremony = init.ceremony && init.ceremony.token.length === 32 ? { token: init.ceremony.token.slice(), notAfter: init.ceremony.notAfter } : null;
+    this.#now = init.now ?? Date.now;
   }
 
   get publicKeyHex(): string {
@@ -338,15 +359,32 @@ export class KeydService {
       }
       case "provision.swk":
       case "provision.cgk": {
-        // `sealed` is the owner's delivery sealed to this box: keyd opens it and keeps the key,
-        // so it never passes through the daemon. `key` is for a key the daemon already holds
-        // (an install-blob or legacy file being moved in).
-        noExtraArgs(a, ["key", "sealed"]);
+        // A key slot is filled only on proof of authority, never by whoever writes first:
+        // `sealed` is the owner's delivery sealed to this box, with the owner's signature over
+        // `flagship/<swk|cgk>-delivery/v1|<server>|<sealed>|<issuedAt>` under the owner key root
+        // pinned at the boot ceremony; keyd checks it, opens it and keeps the key, so it never
+        // passes through the daemon. `key` is a key the box already held (an install blob or a
+        // legacy file), let in only with the boot ceremony's one-time token while it is valid.
+        noExtraArgs(a, ["key", "sealed", "serverDomain", "issuedAt", "signature", "ceremony"]);
         const which = req.op === "provision.swk" ? "swk" : "cgk";
         if ((a.key === undefined) === (a.sealed === undefined)) throw new KeydError("bad-request", "give key or sealed");
         let key: Uint8Array;
         if (a.sealed !== undefined) {
           const sealed = hexArg(a, "sealed", { min: 44, max: 1024 });
+          const domain = strArg(a, "serverDomain", 253);
+          if (typeof a.issuedAt !== "number" || !Number.isSafeInteger(a.issuedAt) || a.issuedAt < 0) {
+            throw new KeydError("bad-request", "issuedAt must be a non-negative integer");
+          }
+          const signature = hexArg(a, "signature", { exact: 64 });
+          if (!this.#owner) throw new KeydError("forbidden", "no owner key is pinned for this box");
+          const signed = new TextEncoder().encode(`flagship/${which}-delivery/v1|${domain}|${toHex(sealed)}|${a.issuedAt}`);
+          let ok = false;
+          try {
+            ok = domain.toLowerCase() === this.#owner.serverFqdn && ed.verify(signature, signed, this.#owner.irkPub);
+          } catch {
+            ok = false;
+          }
+          if (!ok) throw new KeydError("forbidden", "the owner did not sign this delivery for this box");
           try {
             key = openSealedFromEd25519Recipient(sealed, this.#seed);
           } catch {
@@ -357,7 +395,16 @@ export class KeydService {
             throw new KeydError("failed", "the sealed key is not 32 bytes");
           }
         } else {
+          if (a.serverDomain !== undefined || a.issuedAt !== undefined || a.signature !== undefined) {
+            throw new KeydError("bad-request", "a raw key carries only the ceremony token");
+          }
           key = hexArg(a, "key", { exact: 32 });
+          const token = hexArg(a, "ceremony", { exact: 32 });
+          const c = this.#ceremony;
+          if (!c || this.#now() > c.notAfter || !Buffer.from(c.token).equals(Buffer.from(token))) {
+            key.fill(0);
+            throw new KeydError("forbidden", "a raw key is let in only during the boot ceremony");
+          }
         }
         const current = which === "swk" ? this.#swk : this.#cgk;
         // A key is provisioned once. Replacing one is a restore or replacement workflow (a new
@@ -372,6 +419,11 @@ export class KeydService {
         if (which === "swk") this.#swk = key.slice();
         else this.#cgk = key.slice();
         key.fill(0);
+        // The ceremony token lets each empty slot in once; with both filled it is spent.
+        if (this.#swk && this.#cgk && this.#ceremony) {
+          this.#ceremony.token.fill(0);
+          this.#ceremony = null;
+        }
         return { result: { stored: true } };
       }
       default:

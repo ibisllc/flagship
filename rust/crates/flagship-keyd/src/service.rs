@@ -17,7 +17,8 @@ use crate::policy::{
     is_pairing_order, is_service_id,
 };
 use crate::tls::{
-    TlsKeys, is_ecdhe_params, tls12_server_signed_message, tls13_server_signed_message,
+    Clock, TlsKeys, is_ecdhe_params, system_clock, tls12_server_signed_message,
+    tls13_server_signed_message,
 };
 use crate::wire::{
     Args, ErrorCode, HexBounds, KEYD_PROTOCOL_VERSION, KeydError, KeydResult, PEM_MAX, hex_arg,
@@ -47,6 +48,12 @@ pub struct KeydService {
     store: KeyStoreDir,
     tls: Option<TlsKeys>,
     acme: Option<AcmeAccount>,
+    /// TS `owner`: the owner's account key and this box's name, pinned by root at the boot
+    /// ceremony (`owner.json` + `policy.json`); a sealed delivery must be signed under it.
+    owner: Option<(ed25519_dalek::VerifyingKey, String)>,
+    /// TS `ceremony`: the boot ceremony's one-time token and until when it lets a raw key in.
+    ceremony: Option<(Key32, i64)>,
+    clock: Clock,
 }
 
 impl std::fmt::Debug for KeydService {
@@ -112,7 +119,33 @@ impl KeydService {
             store,
             tls,
             acme,
+            owner: None,
+            ceremony: None,
+            clock: system_clock(),
         }
+    }
+
+    /// The owner key root a sealed SWK/CGK delivery must be signed by (TS `owner`). An
+    /// unparsable key or an empty name leaves no owner pinned, so no delivery is accepted.
+    #[must_use]
+    pub fn with_owner(mut self, irk_pub_hex: &str, server_fqdn: &str) -> Self {
+        let key = (irk_pub_hex.len() == 64)
+            .then(|| crate::crypto::from_hex(irk_pub_hex))
+            .flatten()
+            .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            .and_then(|b| ed25519_dalek::VerifyingKey::from_bytes(&b).ok());
+        self.owner = key
+            .filter(|_| !server_fqdn.is_empty())
+            .map(|k| (k, server_fqdn.to_lowercase()));
+        self
+    }
+
+    /// The boot ceremony's token and its end, epoch ms (TS `ceremony`), read with `clock`.
+    #[must_use]
+    pub fn with_ceremony(mut self, token: Key32, not_after: i64, clock: Clock) -> Self {
+        self.ceremony = Some((token, not_after));
+        self.clock = clock;
+        self
     }
 
     pub fn public_key_hex(&self) -> &str {
@@ -516,15 +549,51 @@ impl KeydService {
                 done(acct.sign(&req, tls)?)
             }
             "provision.swk" | "provision.cgk" => {
-                // `sealed`: the owner's delivery sealed to this box, opened and kept here so it never
-                // passes through the daemon. `key`: a key the daemon already holds, moved in.
-                no_extra_args(a, &["key", "sealed"])?;
+                // Only on proof of authority (service.ts): a sealed delivery signed by the owner
+                // key pinned at the boot ceremony, or a raw key with the ceremony's token.
+                no_extra_args(
+                    a,
+                    &[
+                        "key",
+                        "sealed",
+                        "serverDomain",
+                        "issuedAt",
+                        "signature",
+                        "ceremony",
+                    ],
+                )?;
                 let which = if op == "provision.swk" { "swk" } else { "cgk" };
                 if a.contains_key("key") == a.contains_key("sealed") {
                     return Err(KeydError::bad_request("give key or sealed"));
                 }
                 let key = if a.contains_key("sealed") {
                     let sealed = hex_arg(a, "sealed", HexBounds::range(44, 1024))?;
+                    let domain = str_arg(a, "serverDomain", 253)?.to_owned();
+                    let issued_at = safe_integer(a.get("issuedAt")).ok_or_else(|| {
+                        KeydError::bad_request("issuedAt must be a non-negative integer")
+                    })?;
+                    let signature = hex_arg(a, "signature", HexBounds::exact(64))?;
+                    let Some((owner, fqdn)) = &self.owner else {
+                        return Err(KeydError::forbidden("no owner key is pinned for this box"));
+                    };
+                    let signed = format!(
+                        "flagship/{which}-delivery/v1|{domain}|{}|{issued_at}",
+                        to_hex(&sealed)
+                    );
+                    let verified = domain.to_lowercase() == *fqdn
+                        && <[u8; 64]>::try_from(signature.as_slice()).is_ok_and(|sig| {
+                            owner
+                                .verify_strict(
+                                    signed.as_bytes(),
+                                    &ed25519_dalek::Signature::from_bytes(&sig),
+                                )
+                                .is_ok()
+                        });
+                    if !verified {
+                        return Err(KeydError::forbidden(
+                            "the owner did not sign this delivery for this box",
+                        ));
+                    }
                     let plain = open_sealed(&sealed, self.stk()?)
                         .map_err(|_| KeydError::failed("could not open the sealed key"))?;
                     if plain.len() != 32 {
@@ -532,7 +601,26 @@ impl KeydService {
                     }
                     key32(&plain)
                 } else {
-                    key32(&Zeroizing::new(hex_arg(a, "key", HexBounds::exact(32))?))
+                    if a.contains_key("serverDomain")
+                        || a.contains_key("issuedAt")
+                        || a.contains_key("signature")
+                    {
+                        return Err(KeydError::bad_request(
+                            "a raw key carries only the ceremony token",
+                        ));
+                    }
+                    let key = key32(&Zeroizing::new(hex_arg(a, "key", HexBounds::exact(32))?));
+                    let token = hex_arg(a, "ceremony", HexBounds::exact(32))?;
+                    let now = (self.clock)();
+                    let let_in = self.ceremony.as_ref().is_some_and(|(t, not_after)| {
+                        now <= *not_after && crate::crypto::ct_eq(t.as_ref(), &token)
+                    });
+                    if !let_in {
+                        return Err(KeydError::forbidden(
+                            "a raw key is let in only during the boot ceremony",
+                        ));
+                    }
+                    key
                 };
                 let current = if which == "swk" { &self.swk } else { &self.cgk };
                 // A key is provisioned once. Replacing one is a restore or replacement workflow
@@ -554,11 +642,34 @@ impl KeydService {
                 } else {
                     self.cgk = Some(key);
                 }
+                // Each empty slot once; with both filled the ceremony token is spent.
+                if self.swk.is_some() && self.cgk.is_some() {
+                    self.ceremony = None;
+                }
                 done(obj! { "stored" => true })
             }
             _ => Err(KeydError::new(ErrorCode::UnknownOp, "unknown operation")),
         }
     }
+}
+
+/// `typeof v === "number" && Number.isSafeInteger(v) && v >= 0`, as the integer it is.
+fn safe_integer(v: Option<&Value>) -> Option<u64> {
+    const MAX_SAFE: f64 = 9_007_199_254_740_991.0;
+    let n = match v? {
+        Value::Number(n) => n,
+        _ => return None,
+    };
+    if let Some(u) = n.as_u64() {
+        return (u <= 9_007_199_254_740_991).then_some(u);
+    }
+    let f = n.as_f64()?;
+    // `-0` is a safe integer in JS and prints as `0`.
+    if f.fract() != 0.0 || !(0.0..=MAX_SAFE).contains(&f.abs()) || f < 0.0 {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    Some(f.abs() as u64)
 }
 
 /// The ACME request named by `kind`, with `service.ts`'s argument checks in its order.

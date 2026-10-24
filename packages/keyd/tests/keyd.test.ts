@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { connect } from "node:net";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { deriveBackupManifestKey, deriveServiceSecret, ed, hybridSigKeygen, hybridVerify, openSealedFromEd25519Recipient, sealForEd25519Recipient, sealLlmPayload } from "@flagship/protocol";
 import { BOX_SIGN_PURPOSES, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydError, MAX_FRAME_BYTES, RateLimiter, checkSign, encodeFrame } from "../src/index.js";
@@ -25,13 +26,61 @@ describe("framing", () => {
   });
 });
 
+describe("the identity the box asserts to its apps", () => {
+  const vectors = JSON.parse(
+    readFileSync(join(__dirname, "../../protocol/test-vectors/identity-assertion/vectors.json"), "utf8"),
+  ) as { cases: { msg: string; expect: string | null }[] };
+
+  it("signs only a member's rank, an anonymous visitor or an API key, in their one shape", () => {
+    for (const c of vectors.cases.filter((v) => v.expect !== "not-an-assertion")) {
+      const run = () => checkSign(enc(c.msg), hex(PUB));
+      if (c.expect === null) expect(run(), c.msg).toBe(c.msg.split("|")[0]);
+      else expect(run, c.msg).toThrow(`the box asserts only a member, anonymous or an API key (${c.expect})`);
+    }
+  });
+});
+
+const OWNER_SEED = new Uint8Array(32).fill(0x42);
+const OTHER_SEED = new Uint8Array(32).fill(0x43);
+const OWNER_PUB = ed.getPublicKey(OWNER_SEED);
+const OWNER_FQDN = "home.alice.flagship.services";
+/** An owner-signed SWK/CGK delivery as the daemon hands it to keyd (swkDelivery.ts / cgkDelivery.ts). */
+function delivery(which: "swk" | "cgk", sealed: Uint8Array, signer = OWNER_SEED, domain = OWNER_FQDN, issuedAt = 1_760_000_000_000) {
+  const msg = enc(`flagship/${which}-delivery/v1|${domain}|${hex(sealed)}|${issuedAt}`);
+  return { sealed: hex(sealed), serverDomain: domain, issuedAt, signature: hex(ed.sign(msg, signer)) };
+}
+
+it("without a pinned owner key or a ceremony, nothing fills an empty slot", async () => {
+  const k = await startInProcess({ swk: undefined, cgk: undefined }, { rateLimits: { "*": { perSecond: 1000, burst: 1000 } } });
+  try {
+    const c = new KeydClient({ socketPath: k.sock, component: "test" });
+    await c.connect();
+    await expect(c.call("provision.swk", { key: hex(SWK), ceremony: hex(new Uint8Array(32)) })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(c.call("provision.cgk", delivery("cgk", sealForEd25519Recipient(CGK, PUB)))).rejects.toMatchObject({ code: "forbidden", message: "no owner key is pinned for this box" });
+    expect((await c.call("status")).hasSwk).toBe(false);
+    c.close();
+  } finally {
+    await k.stop();
+  }
+  const token = new Uint8Array(32).fill(5);
+  const late = await startInProcess({ swk: undefined, cgk: undefined, ceremony: { token, notAfter: 5_000 }, now: () => 6_000 }, { rateLimits: { "*": { perSecond: 1000, burst: 1000 } } });
+  try {
+    const c = new KeydClient({ socketPath: late.sock, component: "test" });
+    await c.connect();
+    await expect(c.call("provision.swk", { key: hex(SWK), ceremony: hex(token) })).rejects.toMatchObject({ code: "forbidden", message: "a raw key is let in only during the boot ceremony" });
+    c.close();
+  } finally {
+    await late.stop();
+  }
+});
+
 describe("what the box key may sign", () => {
   const ok = (m: string) => checkSign(enc(m), hex(PUB));
   const denied = (m: Uint8Array | string) => expect(() => checkSign(typeof m === "string" ? enc(m) : m, hex(PUB))).toThrow(KeydError);
 
   it("signs the box's own purposes", () => {
     expect(ok("flagship/secret-request/v1|a|b")).toBe("flagship/secret-request/v1");
-    expect(ok("flagship/inject/v1|app|user|role|1")).toBe("flagship/inject/v1");
+    expect(ok("flagship/inject/v1|app|user|member|1")).toBe("flagship/inject/v1");
     expect(ok("pb-put|a|1|2|peer")).toBe("pb-put");
     expect(ok("flagship/app-release/v1|app|1")).toBe("flagship/app-release/v1");
     for (const t of ["pb-checkin", "pb-directory", "pb-tokens", "pb-redeem", "pb-filler-fetch", "pb-filler-proof", "pb-root-deposit"]) {
@@ -209,28 +258,44 @@ describe("the server", () => {
     }
   });
 
-  it("provisions a key once and refuses a different one", async () => {
+  it("provisions a key once, only on proof of authority, and refuses a different one", async () => {
     const saved: string[] = [];
-    const k = await startInProcess({ swk: undefined, cgk: undefined, store: { save: (n) => void saved.push(n) } }, { rateLimits: { "*": { perSecond: 1000, burst: 1000 } } });
+    const TOKEN = new Uint8Array(32).fill(0x3c);
+    let now = 1_000;
+    const k = await startInProcess(
+      { swk: undefined, cgk: undefined, store: { save: (n) => void saved.push(n) }, owner: { irkPubHex: hex(OWNER_PUB), serverFqdn: OWNER_FQDN }, ceremony: { token: TOKEN, notAfter: 5_000 }, now: () => now },
+      { rateLimits: { "*": { perSecond: 1000, burst: 1000 } } },
+    );
     try {
       const c = new KeydClient({ socketPath: k.sock, component: "test" });
       expect((await c.connect()).hasSwk).toBe(false);
       await expect(c.call("swk.seal", { pt: "00" })).rejects.toMatchObject({ code: "not-provisioned" });
-      expect((await c.call("provision.swk", { key: hex(SWK) })).stored).toBe(true);
-      expect((await c.call("provision.swk", { key: hex(SWK) })).already).toBe(true);
-      await expect(c.call("provision.swk", { key: hex(new Uint8Array(32).fill(7)) })).rejects.toMatchObject({ code: "forbidden" });
-      await expect(c.call("provision.swk", { key: "00" })).rejects.toMatchObject({ code: "bad-request" });
+      // A raw key: only with the boot ceremony's token, while it is valid.
+      await expect(c.call("provision.swk", { key: hex(SWK) })).rejects.toMatchObject({ code: "bad-request", message: "ceremony must be lowercase hex" });
+      await expect(c.call("provision.swk", { key: hex(SWK), ceremony: hex(new Uint8Array(32).fill(1)) })).rejects.toMatchObject({ code: "forbidden", message: "a raw key is let in only during the boot ceremony" });
+      await expect(c.call("provision.swk", { key: hex(SWK), ceremony: hex(TOKEN), issuedAt: 1 })).rejects.toMatchObject({ code: "bad-request" });
+      expect((await c.call("provision.swk", { key: hex(SWK), ceremony: hex(TOKEN) })).stored).toBe(true);
+      expect((await c.call("provision.swk", { key: hex(SWK), ceremony: hex(TOKEN) })).already).toBe(true);
+      await expect(c.call("provision.swk", { key: hex(new Uint8Array(32).fill(7)), ceremony: hex(TOKEN) })).rejects.toMatchObject({ code: "forbidden" });
+      await expect(c.call("provision.swk", { key: "00", ceremony: hex(TOKEN) })).rejects.toMatchObject({ code: "bad-request" });
       expect(saved).toEqual(["swk"]);
-      // The owner's sealed delivery: keyd opens it and keeps the key; it never comes back.
-      await expect(c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(enc("short"), PUB)) })).rejects.toMatchObject({ code: "failed" });
-      await expect(c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(CGK, ed.getPublicKey(new Uint8Array(32).fill(9)))) })).rejects.toMatchObject({ code: "failed" });
-      await expect(c.call("provision.cgk", { key: hex(CGK), sealed: hex(sealForEd25519Recipient(CGK, PUB)) })).rejects.toMatchObject({ code: "bad-request" });
+      // The owner's sealed delivery: signed under the pinned owner key for this box, opened by keyd.
+      const good = delivery("cgk", sealForEd25519Recipient(CGK, PUB));
+      await expect(c.call("provision.cgk", { sealed: good.sealed })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("provision.cgk", { ...good, signature: delivery("cgk", sealForEd25519Recipient(CGK, PUB), OTHER_SEED).signature })).rejects.toMatchObject({ code: "forbidden", message: "the owner did not sign this delivery for this box" });
+      await expect(c.call("provision.cgk", delivery("swk", sealForEd25519Recipient(CGK, PUB)))).rejects.toMatchObject({ code: "forbidden" });
+      await expect(c.call("provision.cgk", delivery("cgk", sealForEd25519Recipient(CGK, PUB), OWNER_SEED, "home.mallory.flagship.services"))).rejects.toMatchObject({ code: "forbidden" });
+      await expect(c.call("provision.cgk", { ...good, issuedAt: -1 })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("provision.cgk", delivery("cgk", sealForEd25519Recipient(enc("short"), PUB)))).rejects.toMatchObject({ code: "failed" });
+      await expect(c.call("provision.cgk", delivery("cgk", sealForEd25519Recipient(CGK, ed.getPublicKey(new Uint8Array(32).fill(9)))))).rejects.toMatchObject({ code: "failed" });
+      await expect(c.call("provision.cgk", { key: hex(CGK), ...good })).rejects.toMatchObject({ code: "bad-request" });
       await expect(c.call("provision.cgk", {})).rejects.toMatchObject({ code: "bad-request" });
-      expect(await c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) })).toEqual({ stored: true });
-      expect(await c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) })).toEqual({ stored: false, already: true });
-      await expect(c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(SWK, PUB)) })).rejects.toMatchObject({ code: "forbidden", message: "cgk is already provisioned" });
+      expect(await c.call("provision.cgk", good)).toEqual({ stored: true });
+      expect(await c.call("provision.cgk", good)).toEqual({ stored: false, already: true });
+      await expect(c.call("provision.cgk", delivery("cgk", sealForEd25519Recipient(SWK, PUB)))).rejects.toMatchObject({ code: "forbidden", message: "cgk is already provisioned" });
       await expect(c.call("unseal", { blob: hex(sealForEd25519Recipient(CGK, PUB)), purpose: "pairing-order" })).rejects.toMatchObject({ code: "forbidden" });
       expect(saved).toEqual(["swk", "cgk"]);
+      now += 1;
       c.close();
     } finally {
       await k.stop();
@@ -357,5 +422,24 @@ describe("hybrid signing (architecture v2)", () => {
     } finally {
       await k.stop();
     }
+  });
+});
+
+describe("the owner key root keyd pins at the boot ceremony", () => {
+  it("comes from root's config, else the install blob, and is rewritten from it", async () => {
+    const { mkdtempSync, writeFileSync: write, readFileSync: read } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { writeOwnerAnchorFromConfig, loadOwnerAnchor } = await import("../src/migrate.js");
+    const dir = mkdtempSync(join(tmpdir(), "keyd-owner-"));
+    const state = join(dir, "state");
+    const cfg = join(dir, "server.json");
+    const blob = join(dir, "install-blob.json");
+    expect(writeOwnerAnchorFromConfig({ serverJson: cfg, installBlob: blob }, state)).toBeNull();
+    write(blob, JSON.stringify({ authCode: { userPubKey: "AB".repeat(32) } }));
+    expect(writeOwnerAnchorFromConfig({ serverJson: cfg, installBlob: blob }, state)).toEqual({ irkPubHex: "ab".repeat(32) });
+    write(cfg, JSON.stringify({ irkPublicKey: "cd".repeat(32) }));
+    writeOwnerAnchorFromConfig({ serverJson: cfg, installBlob: blob }, state);
+    expect(loadOwnerAnchor(state)).toEqual({ irkPubHex: "cd".repeat(32) });
+    expect(JSON.parse(read(join(state, "owner.json"), "utf8"))).toEqual({ irkPubHex: "cd".repeat(32) });
   });
 });

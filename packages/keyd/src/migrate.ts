@@ -121,3 +121,55 @@ export function legacyTlsFiles(legacyDir: string, fqdn: string): { keyPath: stri
   const certPath = `${base}.pem`;
   return existsSync(keyPath) && existsSync(certPath) ? { keyPath, certPath } : null;
 }
+
+/** The owner key root keyd checks a sealed SWK/CGK delivery against (`owner.json`). */
+export interface KeydOwnerAnchor {
+  irkPubHex: string;
+}
+
+/**
+ * Pin the owner's account key (IRK) in keyd's state, from root's own copy of the box's config:
+ * `/etc/flagship/server.json` (`irkPublicKey`) when there is one, else the install blob's
+ * `authCode.userPubKey`. Run as root at every keyd start (the boot ceremony), so a process on the
+ * keyd socket can never choose the key a delivery must be signed by. Returns the anchor or null.
+ */
+export function writeOwnerAnchorFromConfig(
+  sources: { serverJson: string; installBlob: string },
+  keydDir: string,
+): KeydOwnerAnchor | null {
+  const read = (p: string): Record<string, unknown> | null => {
+    try {
+      return existsSync(p) ? (JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  };
+  const hex32 = (v: unknown): string | null => (typeof v === "string" && /^[0-9a-f]{64}$/i.test(v) ? v.toLowerCase() : null);
+  const cfg = read(sources.serverJson);
+  const blob = read(sources.installBlob);
+  const irk = hex32(cfg?.irkPublicKey) ?? hex32((blob?.authCode as Record<string, unknown> | undefined)?.userPubKey);
+  if (!irk) return null;
+  const target = join(keydDir, "owner.json");
+  const anchor: KeydOwnerAnchor = { irkPubHex: irk };
+  if (existsSync(target) && readFileSync(target, "utf8") === JSON.stringify(anchor)) return anchor;
+  mkdirSync(keydDir, { recursive: true, mode: 0o700 });
+  writeFileSync(`${target}.tmp`, JSON.stringify(anchor), { mode: 0o400 });
+  renameSync(`${target}.tmp`, target);
+  return anchor;
+}
+
+export function loadOwnerAnchor(keydDir: string): KeydOwnerAnchor | null {
+  const target = join(keydDir, "owner.json");
+  if (!existsSync(target)) return null;
+  try {
+    const p = JSON.parse(readFileSync(target, "utf8")) as Partial<KeydOwnerAnchor>;
+    return typeof p.irkPubHex === "string" && /^[0-9a-f]{64}$/.test(p.irkPubHex) ? { irkPubHex: p.irkPubHex } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Where the boot ceremony's one-time token for raw keys is written (only keyd and root read it). */
+export const CEREMONY_TOKEN_FILE = "provision-ceremony.token";
+/** How long after keyd starts a raw key may be moved in. */
+export const CEREMONY_WINDOW_MS = 10 * 60_000;

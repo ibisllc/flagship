@@ -46,6 +46,9 @@ import { CGK, PAIRING_ORDER, PQ_SEED, SEED, SWK } from "./helpers.js";
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const BIN = process.env.FLAGSHIP_KEYD_RUST_BIN ?? join(ROOT, "rust/target/debug/flagship-keyd");
 const HAVE_BIN = existsSync(BIN);
+const IDENTITY_VECTORS = (
+  JSON.parse(readFileSync(join(ROOT, "packages/protocol/test-vectors/identity-assertion/vectors.json"), "utf8")) as { cases: { msg: string }[] }
+).cases.map((c) => c.msg);
 if (!HAVE_BIN) console.warn(`rustBackend.test.ts: skipped, no Rust keyd at ${BIN} (run \`cargo build -p flagship-keyd\` in rust/ or set FLAGSHIP_KEYD_RUST_BIN)`);
 
 const FQDN = "home.alice.flagship.services";
@@ -73,13 +76,23 @@ function writeKey(dir: string, name: string, key: Uint8Array): void {
   writeFileSync(join(dir, `${name}.key`), hex(key) + "\n", { mode: 0o400 });
 }
 
-function stateDir(opts: { swk?: boolean; cgk?: boolean; pq?: boolean; fqdn?: string | null } = {}): string {
+const OWNER_SEED = new Uint8Array(32).fill(0x42);
+const OWNER_PUB_HEX = Buffer.from(ed.getPublicKey(OWNER_SEED)).toString("hex");
+/** An owner-signed SWK/CGK delivery as the daemon hands it to keyd. */
+function delivery(which: "swk" | "cgk", sealed: Uint8Array, signer = OWNER_SEED, domain = FQDN, issuedAt: unknown = 1_760_000_000_000) {
+  const msg = new TextEncoder().encode(`flagship/${which}-delivery/v1|${domain}|${Buffer.from(sealed).toString("hex")}|${issuedAt}`);
+  return { sealed: Buffer.from(sealed).toString("hex"), serverDomain: domain, issuedAt, signature: Buffer.from(ed.sign(msg, signer)).toString("hex") };
+}
+const ceremonyToken = (dir: string) => readFileSync(join(dir, "provision-ceremony.token"), "utf8").trim();
+
+function stateDir(opts: { swk?: boolean; cgk?: boolean; pq?: boolean; fqdn?: string | null; owner?: boolean } = {}): string {
   const dir = mkdtempSync(join(tmpdir(), "rkeyd-"));
   writeKey(dir, "identity", SEED);
   if (opts.pq !== false) writeKey(dir, "identity-mldsa", PQ_SEED);
   if (opts.swk !== false) writeKey(dir, "swk", SWK);
   if (opts.cgk !== false) writeKey(dir, "cgk", CGK);
   if (opts.fqdn !== null) writeFileSync(join(dir, "policy.json"), JSON.stringify({ serverFqdn: opts.fqdn ?? FQDN }), { mode: 0o400 });
+  if (opts.owner !== false) writeFileSync(join(dir, "owner.json"), JSON.stringify({ irkPubHex: OWNER_PUB_HEX }), { mode: 0o400 });
   return dir;
 }
 
@@ -169,7 +182,7 @@ async function startTs(dir: string | null = null) {
   const t = mkdtempSync(join(tmpdir(), "tkeyd-"));
   const tls = new TlsKeys(ALLOWED, dir ? join(dir, "tls") : null);
   const acme = new AcmeAccount(tls, undefined, dir ? join(dir, "acme-account.key") : null);
-  const service = new KeydService({ identitySeed: SEED, pqSeed: PQ_SEED, swk: SWK, cgk: CGK, tls, acme });
+  const service = new KeydService({ identitySeed: SEED, pqSeed: PQ_SEED, swk: SWK, cgk: CGK, tls, acme, owner: { irkPubHex: OWNER_PUB_HEX, serverFqdn: FQDN } });
   const server = new KeydServer({ socketPath: join(t, "k.sock"), service, rateLimits: OPEN_LIMITS });
   await server.start();
   return { sock: join(t, "k.sock"), tls, stop: async () => (await server.stop(), rmSync(t, { recursive: true, force: true })) };
@@ -300,11 +313,16 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
       const hello = await c.call("status");
       expect(hello).toMatchObject({ hasSwk: false, hasCgk: false });
       await expect(c.call("swk.seal", { pt: "00" })).rejects.toMatchObject({ code: "not-provisioned" });
-      expect((await c.call("provision.swk", { key: hex(SWK) })).stored).toBe(true);
-      expect((await c.call("provision.swk", { key: hex(SWK) })).already).toBe(true);
-      await expect(c.call("provision.swk", { key: hex(new Uint8Array(32).fill(7)) })).rejects.toMatchObject({ code: "forbidden", message: "swk is already provisioned" });
-      await expect(c.call("provision.swk", { key: "00" })).rejects.toMatchObject({ code: "bad-request" });
-      expect(await c.call("provision.cgk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) })).toEqual({ stored: true });
+      const token = ceremonyToken(k.dir);
+      expect(statSync(join(k.dir, "provision-ceremony.token")).mode & 0o777).toBe(0o400);
+      await expect(c.call("provision.swk", { key: hex(SWK) })).rejects.toMatchObject({ code: "bad-request", message: "ceremony must be lowercase hex" });
+      await expect(c.call("provision.swk", { key: hex(SWK), ceremony: "00".repeat(32) })).rejects.toMatchObject({ code: "forbidden", message: "a raw key is let in only during the boot ceremony" });
+      expect((await c.call("provision.swk", { key: hex(SWK), ceremony: token })).stored).toBe(true);
+      expect((await c.call("provision.swk", { key: hex(SWK), ceremony: token })).already).toBe(true);
+      await expect(c.call("provision.swk", { key: hex(new Uint8Array(32).fill(7)), ceremony: token })).rejects.toMatchObject({ code: "forbidden", message: "swk is already provisioned" });
+      await expect(c.call("provision.swk", { key: "00", ceremony: token })).rejects.toMatchObject({ code: "bad-request" });
+      await expect(c.call("provision.cgk", delivery("cgk", sealForEd25519Recipient(CGK, PUB), new Uint8Array(32).fill(1)))).rejects.toMatchObject({ code: "forbidden", message: "the owner did not sign this delivery for this box" });
+      expect(await c.call("provision.cgk", delivery("cgk", sealForEd25519Recipient(CGK, PUB)))).toEqual({ stored: true });
       expect(readKeyFile(join(k.dir, "cgk.key"))).toEqual(CGK);
       c.close();
       const file = join(k.dir, "swk.key");
@@ -360,8 +378,11 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
     try {
       const c = await client(k.sock);
       const results: string[] = [];
-      for (let i = 0; i < 5; i++) results.push(await c.call("provision.cgk", { key: hex(CGK) }).then(() => "ok", (e) => e.code));
-      expect(results).toEqual(["ok", "ok", "ok", "rate-limited", "rate-limited"]);
+      const token = ceremonyToken(k.dir);
+      for (let i = 0; i < 5; i++) results.push(await c.call("provision.cgk", { key: hex(CGK), ceremony: token }).then(() => "ok", (e) => e.code));
+      // The first fills the slot and spends the ceremony; the limiter counts the calls either way.
+      expect(results.map((r) => (r === "rate-limited" ? r : "passed"))).toEqual(["passed", "passed", "passed", "rate-limited", "rate-limited"]);
+      expect(results[0]).toBe("ok");
       expect((await c.call("status")).publicKey).toBe(hex(PUB));
       c.close();
     } finally {
@@ -458,7 +479,8 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
       // [op, args, compare the whole result?]
       const cases: Array<[string, Record<string, unknown>, boolean]> = [
         ["status", {}, true], ["status", { extra: 1 }, true], ["status", { "2": 1, b: 1, "10": 1 }, true],
-        ["sign", { msg: hex(enc("flagship/inject/v1|a|b")) }, true], ["sign", { msg: hex(enc("﻿flagship/inject/v1|a")) }, true],
+        ["sign", { msg: hex(enc("flagship/inject/v1|a|b")) }, true],
+        ...IDENTITY_VECTORS.map((m): [string, Record<string, unknown>, boolean] => ["sign", { msg: hex(enc(m)) }, true]), ["sign", { msg: hex(enc("﻿flagship/inject/v1|a")) }, true],
         ["sign", { msg: "" }, true], ["sign", { msg: "0" }, true], ["sign", { msg: "AA" }, true], ["sign", {}, true], ["sign", { msg: 7 }, true],
         ["sign", { msg: big }, true], ["sign", { msg: hex(enc("flagship/root-entitlement/v1|x")) }, true], ["sign", { msg: hex(enc("x".repeat(300) + "|")) }, true],
         ["sign", { msg: susp("1") }, true], ["sign", { msg: susp("0") }, true], ["sign", { msg: susp(" 7 ") }, true], ["sign", { msg: susp("1e1") }, true], ["sign", { msg: susp("Infinity") }, true],
@@ -524,11 +546,19 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["provision.swk", { sealed: hex(sealForEd25519Recipient(SWK, PUB)) }, true], ["provision.swk", { sealed: hex(sealForEd25519Recipient(CGK, PUB)) }, true],
         ["provision.cgk", { sealed: hex(sealForEd25519Recipient(enc("x"), PUB)) }, true], ["provision.cgk", { sealed: blob(44) }, true], ["provision.cgk", { sealed: blob(43) }, true],
         ["provision.cgk", { key: hex(CGK), sealed: blob(44) }, true], ["provision.cgk", { key: null }, true], ["provision.cgk", { sealed: "zz" }, true],
+        ["provision.swk", { key: hex(SWK), ceremony: blob(32) }, true], ["provision.swk", { key: hex(SWK), ceremony: blob(31) }, true], ["provision.swk", { key: hex(SWK), ceremony: blob(32), signature: blob(64) }, true],
+        ["provision.cgk", delivery("cgk", sealForEd25519Recipient(CGK, PUB)), true], ["provision.cgk", delivery("swk", sealForEd25519Recipient(CGK, PUB)), true],
+        ["provision.cgk", delivery("cgk", sealForEd25519Recipient(CGK, PUB), new Uint8Array(32).fill(1)), true], ["provision.cgk", delivery("cgk", sealForEd25519Recipient(CGK, PUB), OWNER_SEED, "home.bob.flagship.services"), true],
+        ["provision.cgk", delivery("cgk", sealForEd25519Recipient(CGK, PUB), OWNER_SEED, FQDN.toUpperCase()), true],
+        ["provision.cgk", delivery("cgk", sealForEd25519Recipient(SWK, PUB)), true], ["provision.cgk", delivery("cgk", sealForEd25519Recipient(enc("x"), PUB)), true],
+        ["provision.cgk", { ...delivery("cgk", sealForEd25519Recipient(CGK, PUB)), issuedAt: -1 }, true], ["provision.cgk", { ...delivery("cgk", sealForEd25519Recipient(CGK, PUB)), issuedAt: "1" }, true],
+        ["provision.cgk", { ...delivery("cgk", sealForEd25519Recipient(CGK, PUB)), issuedAt: 1.5 }, true], ["provision.cgk", { ...delivery("cgk", sealForEd25519Recipient(CGK, PUB)), serverDomain: "" }, true],
+        ["provision.cgk", { ...delivery("cgk", sealForEd25519Recipient(CGK, PUB)), signature: blob(63) }, true], ["provision.cgk", { ...delivery("cgk", sealForEd25519Recipient(CGK, PUB)), extra: 1 }, true],
       ];
       const frames = [{ id: 1, op: "hello", args: { v: 1, component: "diff" } }, ...cases.map(([op, args], i) => ({ id: i + 2, op, args }))];
       const strip = (r: Record<string, unknown>, whole: boolean) => (whole || r.ok === false ? r : { id: r.id, ok: r.ok });
-      const a = await talk(rust.sock, frames, undefined, 1500);
-      const b = await talk(ts.sock, frames, undefined, 1500);
+      const a = await talk(rust.sock, frames, undefined, 8000);
+      const b = await talk(ts.sock, frames, undefined, 8000);
       expect(a.responses).toHaveLength(frames.length);
       for (let i = 0; i < cases.length; i++) {
         const whole = cases[i]![2];

@@ -5,12 +5,15 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use flagship_keyd::acme::{AcmeAccount, LETS_ENCRYPT_HOSTS};
-use flagship_keyd::files::{load_policy, names_for, read_key_file, save_key_file};
+use flagship_keyd::files::{
+    CEREMONY_TOKEN_FILE, CEREMONY_WINDOW_MS, load_owner_anchor, load_policy, names_for,
+    read_key_file, save_key_file, write_atomic,
+};
 use flagship_keyd::hardening::harden_process;
 use flagship_keyd::policy::parse_rate_limits;
 use flagship_keyd::server::{PeerPolicy, Server, ServerOptions};
 use flagship_keyd::service::KeydService;
-use flagship_keyd::tls::{TlsKeys, system_clock};
+use flagship_keyd::tls::{TlsKeys, now_ms, system_clock};
 use nix::sys::signal::{SigSet, Signal};
 use zeroize::Zeroizing;
 
@@ -87,6 +90,26 @@ fn run() -> Result<(), String> {
     let swk = read_key_file(&state.join("swk.key")).map_err(|e| e.to_string())?;
     let cgk = read_key_file(&state.join("cgk.key")).map_err(|e| e.to_string())?;
     let fqdn = load_policy(&state).map_err(|e| format!("policy.json: {e}"))?;
+    let owner = load_owner_anchor(&state);
+    // The boot ceremony (main.ts): while a slot is empty, a fresh one-time token only keyd and
+    // root can read lets a key the box already held move in, for a few minutes after this start.
+    let token_path = state.join(CEREMONY_TOKEN_FILE);
+    match std::fs::remove_file(&token_path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("{CEREMONY_TOKEN_FILE}: {e}")),
+    }
+    let ceremony = if swk.is_none() || cgk.is_none() {
+        let mut t = Zeroizing::new([0u8; 32]);
+        getrandom::fill(t.as_mut()).map_err(|e| format!("random: {e}"))?;
+        let text = Zeroizing::new(flagship_keyd::wire::to_hex(t.as_ref()));
+        write_atomic(&token_path, text.as_bytes(), 0o400)
+            .map_err(|e| format!("{CEREMONY_TOKEN_FILE}: {e}"))?;
+        Some((t, now_ms().saturating_add(CEREMONY_WINDOW_MS)))
+    } else {
+        None
+    };
+    let owner_fqdn = fqdn.clone();
     let tls = fqdn.map(|f| TlsKeys::new(names_for(&f), Some(state.join("tls")), system_clock()));
     let acme = match &tls {
         Some(_) => Some(AcmeAccount::new(
@@ -95,8 +118,14 @@ fn run() -> Result<(), String> {
         )?),
         None => None,
     };
-    let service = KeydService::new(&identity, swk, cgk, Some(state.clone()), tls, acme)
+    let mut service = KeydService::new(&identity, swk, cgk, Some(state.clone()), tls, acme)
         .with_pq_seed(&pq_seed)?;
+    if let (Some(irk), Some(f)) = (&owner, &owner_fqdn) {
+        service = service.with_owner(irk, f);
+    }
+    if let Some((token, not_after)) = ceremony {
+        service = service.with_ceremony(token, not_after, system_clock());
+    }
     drop(identity);
     drop(pq_seed);
 

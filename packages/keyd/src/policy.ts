@@ -1,3 +1,4 @@
+import { checkIdentityAssertion, TAG_IDENTITY_HEADER, TAG_INJECT } from "@flagship/protocol";
 import { KeydError } from "./wire.js";
 
 /**
@@ -147,6 +148,13 @@ export function checkSign(
     if (parts.length !== 3 || !/^[a-z0-9][a-z0-9.-]{0,252}$/.test(parts[1]!) || !/^[0-9a-f]{128}$/.test(parts[2]!)) {
       throw new KeydError("forbidden", "a session signature names a server and one transcript digest");
     }
+  }
+  if (purpose === TAG_INJECT || purpose === TAG_IDENTITY_HEADER) {
+    // The identity the box asserts to an app: a member's rank, an anonymous visitor or an API
+    // key, in one fixed shape each (identityAssertion.ts). No owner/admin role, no rank for an
+    // anonymous visitor or a key.
+    const refused = checkIdentityAssertion(msg);
+    if (refused) throw new KeydError("forbidden", `the box asserts only a member, anonymous or an API key (${refused})`);
   }
   if (purpose === "flagship/boot-suspension/v1" || purpose === "flagship/boot-auth/v1") {
     const parts = new TextDecoder().decode(msg).split("|");
