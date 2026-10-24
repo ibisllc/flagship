@@ -823,6 +823,8 @@ data class MaintainerBlessing(
     val caPubkey: String,
     val mandates: List<Mandate>,
     val caEndorsements: List<CaEndorsement>,
+    /** The leases' PQ companions and bindings (`caLeasePq`), for [CaLeasePq.gate]. */
+    val caLeasePq: kotlinx.serialization.json.JsonElement? = null,
 )
 
 object MaintainersComTrust {
@@ -847,7 +849,16 @@ object MaintainersComTrust {
         // `.com` cannot lower the floor: its asserted pin must equal ours.
         if (blessing.pinnedMandateHash != pin) return false
         val chain = MaintainersVerifier.verifyMandateChainFromPin(pin, blessing.mandates)
-        val keys = MaintainersCaVerifier.authorizedCaKeys(blessing.caEndorsements, chain, nowMs)
+        // Once the CA lease PQ pin names a key, a lease without its verified hybrid companion gives
+        // no authority (pq-suites.md §16.3).
+        val pq = blessing.caLeasePq as? kotlinx.serialization.json.JsonObject
+        val leases = CaLeasePq.gate(
+            blessing.caEndorsements,
+            (pq?.get("bindings") as? kotlinx.serialization.json.JsonArray)?.toList() ?: emptyList(),
+            (pq?.get("endorsements") as? kotlinx.serialization.json.JsonArray)?.toList() ?: emptyList(),
+            nowMs = nowMs,
+        )
+        val keys = MaintainersCaVerifier.authorizedCaKeys(leases, chain, nowMs)
         return keys.contains(blessing.caPubkey)
     }
 }

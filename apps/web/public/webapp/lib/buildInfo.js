@@ -8,7 +8,7 @@
 // only when a breaking change to a signed message or wire contract ships.
 
 export const PLATFORM = "web";
-export const WEB_BUILD = 170;
+export const WEB_BUILD = 171;
 export const PROTOCOL_LEVEL = 1;
 
 // The one product version every Flagship surface shows (release/version.json;

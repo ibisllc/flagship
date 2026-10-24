@@ -48,6 +48,7 @@ public struct TrustChecker: Sendable {
         let caPubkey: String
         let mandates: [MandateJSON]
         let caEndorsements: [CaEndorsementJSON]
+        let caLeasePq: AnyCodable?
     }
 
     private func toMandate(_ j: MandateJSON) -> Mandate {
@@ -101,7 +102,8 @@ public struct TrustChecker: Sendable {
                 pinnedMandateHash: j.pinnedMandateHash,
                 caPubkey: j.caPubkey,
                 mandates: j.mandates.map(toMandate),
-                caEndorsements: j.caEndorsements.map(toEndorsement)
+                caEndorsements: j.caEndorsements.map(toEndorsement),
+                caLeasePqJSON: j.caLeasePq.flatMap { try? JSONEncoder().encode($0) }.flatMap { String(data: $0, encoding: .utf8) }
             )
         } catch {
             return .noVerdict

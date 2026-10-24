@@ -327,6 +327,9 @@ export async function fetchVerifiedRequests(deps = {}) {
       // The key the reply is sealed to: the boot key when the box signed with it.
       recipientPubHex: signerHex,
       deviceInfo: req.deviceInfo ?? null,
+      // Boot unlock v2 (pq-suites.md §19): the box asked for a hybrid reply. A browser holds no
+      // PQ key, so it answers classically; a strict box refuses that and the phone must answer.
+      quantumSafeRequest: !!(req.purpose === "unlock-key" && req.pq),
     });
   }
   return out;
