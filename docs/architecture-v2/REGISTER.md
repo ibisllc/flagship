@@ -67,6 +67,23 @@ takes an explicit owner decision and a plan revision. A register edit cannot do 
 | N02 | Rust relay replacement, stream credit/fairness, PQ route/blessing authority | B01, Q02/Q04, ARCH-N01 | networking | Fly (or replacement) relay hosts; boxes on real networks | Relay conformance, bounded queues, mixed-client migration, reconnect, performance | committed (feat/architecture 39ed9fdc4; HELLO crypto, outbound, mailbox, gossip lacking) | TS relay `apps/web/src/tunnel` | Q02/Q04 not accepted, so PQ authority cannot be finished |
 | C01 | Breaking-change preflight, scoped opt-out, compatibility, return-to-strict | all migrations, Q05/Q09 | native + security + release | phones, watches, Studios | Decline without data loss; no downgrade spillover; fresh rekey/recovery on strict re-entry | in progress (feat/architecture: milestones 4–5; per-app browser answer on iOS/Android, view on webapp; re-entry evidence produced by clients) | | Re-entry evidence (rekey receipt, recovery test) not produced by any client yet; per-app browser question has box enforcement but no client screen; no device runs **M5:** strict re-entry evidence (`strictReentry.ts`, vectors in TS/Swift/Kotlin) signed by iOS/Android; Android signs policy as an admin-granted device too. The digests are commitments the box/.com do not recompute; rekey covers sessions, not data at rest. No device runs. |
 
+## Gap closure, 2026-10-24 (feat/architecture, not deployed)
+
+Code and tests on the branch; nothing reviewed, run on a real box or device, or switched on.
+Spec: `pq-suites.md` §16-§18.
+
+| Gap | Packages | What is enforced, where | Left open |
+|---|---|---|---|
+| Siblings trusted on first sight via `.com` | Q07, N02 | Server order `pqKeyIds` (TS/Swift/Kotlin, vectors); box `siblingChainRefusal` for PQ sessions + access sync, gossip `admitSibling`, under strict | Webapp signs orders without ids (never strict-valid); no device run |
+| Box artifact k-of-n classical only | U01, Q04, Q08 | `boxArtifactPq.ts` + installer shell (OpenSSL ML-DSA), pin in `release/box-artifact-trust.json` (empty) | Pin empty; artifact signing tool does not make companions yet |
+| CA leases classical only | Q04, Q09 | `caLeasePq.ts`; box folder + relay-trust material, Worker; pin `CA_LEASE_PQ_PIN` (empty) | Phones/webapp verify the classical lease only; `rotate-and-endorse-ca.mjs` does not sign companions |
+| Anonymous deposit reads | K01 | `.com` `requireServerRead` on swk/cgk/pairing/entitlement GETs; box `ownDepositFetch` | `update` and `self-delete` reads still public (signed orders, box re-verifies) |
+| keyd first-writer-wins | K01, K02 | TS + Rust keyd: owner-signed sealed delivery under `owner.json`, raw keys only with the boot-ceremony token | Root (the daemon today) can still read the token; real isolation needs B01 |
+| Identity headers signed for any role | K01, P01 | keyd (TS + Rust) shape check, vectors; box gives invitees Member unless an admin's order or admin-made invite says otherwise | keyd cannot see grants: a compromised daemon can still assert master for a real member id |
+| No authenticated boot time | BO01, BO02 | `.com` `POST /api/time`; box `TrustedClock` + floor (disk and `/boot`); expiry checks; Rust boot client floor | Go `flagship-unseal` ignores the floor; time is classical (CA Ed25519) |
+| Android 300 s window | Q05, C01 | Session KEK opened by the unlock prompt's CryptoObject; seeds rewrapped | No device run |
+| Hook timeouts on the Mac | A02 | Measured on a Debian 13 VM: both commits green with no hook timeouts (load); the new premount test hung on Linux (a stub exec'd itself) and is fixed, Go helper build cached | n/a |
+
 ## Blockers that code alone cannot clear
 
 These block completion whatever the software state. §6.10 and §14 forbid closing them with a

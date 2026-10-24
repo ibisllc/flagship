@@ -466,6 +466,19 @@ of the last check here: **not yet checked**.
   answer (iOS, Android; webapp view, shell **v170**), strict re-entry evidence (vectors
   `strict-reentry`), Android admin-device policy signing. Open: R03 scorecard and arm64, broker
   still owns only host power, core shadow only, Podman appliance not built, no gym or device run.
+  **Gap closure (2026-10-24, `pq-suites.md` §16-§18, register "Gap closure"):** under strict a box
+  takes a sibling only if the hybrid-signed server order lists it with its PQ key id (`pqKeyIds`,
+  TS/Swift/Kotlin vectors; iOS/Android name them); box artifacts and CA leases get hybrid companions
+  behind empty pins (`release/box-artifact-trust.json` `pq`, `CA_LEASE_PQ_PIN`; the installer shell
+  checks ML-DSA with OpenSSL); `.com` hands swk/cgk/pairing/entitlement deposits only to the box's
+  own read token; keyd (TS + Rust) fills a slot only from an owner-signed delivery (`owner.json`
+  pinned by `migrate`) or with the boot-ceremony token, and signs identity assertions only in their
+  fixed shapes (a manifest default or the old store no longer raises an invitee an admin did not invite); the box keeps CA-signed
+  time (`POST /api/time`, `trustedClock.ts`, floor on disk and `/boot`, read by the Rust boot
+  client); Android opens PQ seeds with the unlock prompt's CryptoObject (no 300 s window). The Mac
+  hook timeouts were load (Debian VM: both commits green); the premount test's Linux hang is fixed.
+  Order: an endorsed box release first (its deposit reads carry the token; until `.com` serves
+  `/api/time` a box stays on its own clock raised to the floor), then `.com`, then store builds.
 
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
