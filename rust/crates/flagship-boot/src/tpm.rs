@@ -120,6 +120,15 @@ pub fn unseal_seed(dir: &Path) -> Result<Zeroizing<[u8; 32]>, String> {
             .map(Zeroizing::new)
             .map_err(|_| "the sealed seed is not 32 bytes".to_owned())
     })();
+    // Without a resource manager loaded objects stay in the TPM's few slots: flush them.
+    for flag in ["-t", "-l", "-s"] {
+        let _ = Command::new("tpm2_flushcontext")
+            .arg(flag)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
     let _ = std::fs::remove_dir_all(&work);
     result
 }

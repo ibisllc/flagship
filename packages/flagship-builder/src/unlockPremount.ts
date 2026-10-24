@@ -216,6 +216,9 @@ tpm_lease_seed() {
     tpm2_createprimary -Q -C o -g sha256 -G ecc256:aes128cfb -c "$_tw/primary.ctx" >/dev/null 2>&1 \\
         && tpm2_load -Q -C "$_tw/primary.ctx" -u "$_td/seal.pub" -r "$_td/seal.priv" -c "$_tw/seal.ctx" >/dev/null 2>&1 \\
         && tpm2_unseal -c "$_tw/seal.ctx" -p "pcr:$_pcrs" 2>/dev/null || _rc=1
+    tpm2_flushcontext -t >/dev/null 2>&1 || true
+    tpm2_flushcontext -l >/dev/null 2>&1 || true
+    tpm2_flushcontext -s >/dev/null 2>&1 || true
     rm -rf "$_tw"
     return $_rc
 }
