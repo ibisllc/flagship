@@ -22,7 +22,9 @@
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
 import {
   HOME,
+  OFFICE,
   PASSPHRASE,
+  USER,
   livePod,
   mock,
   reachHome,
@@ -802,5 +804,175 @@ test.describe("gym ux ai consent", () => {
     // Nothing was started, so nothing is followed.
     await page.waitForTimeout(3_000);
     expect(polls()).toBe(before);
+  });
+});
+
+// ───────────────────────────── first contact ─────────────────────────────
+//
+// docs/first-contact.md: the device that made the recipe checks the box's enrollment proof at the
+// first blessing, shows the code it computes from the key above Approve, pins the key, and signs the
+// app-name certificate grant in the same moment; a key that isn't the pin is refused.
+
+const GRANT_CANON: [string, string] = ["/lib/serverWildcardGrant.js", "canonicalServerWildcardGrant"];
+const SERIAL = "AC-GYM1-0001";
+
+interface BoxRequest { stk: string; request: Record<string, unknown>; code: string }
+
+/** A box key made in the page, and its signed entitlement request (with `proof` when asked). */
+async function boxRequest(page: Page, fqdn: string, opts: { purpose?: string; proof?: "good" | "bad" | "none"; secretHex?: string } = {}): Promise<BoxRequest> {
+  return page.evaluate(async ({ fqdn, purpose, proof, secretHex, serial }) => {
+    const enr = await import("/lib/enrollment.js");
+    const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+    const kp = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"])) as CryptoKeyPair;
+    const stk = hex(new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey)));
+    const nonce = hex(crypto.getRandomValues(new Uint8Array(32)));
+    const issuedAt = Date.now();
+    const canonical = new TextEncoder().encode(["flagship/secret-request/v1", fqdn, stk, purpose, nonce, issuedAt].join("|"));
+    const sig = hex(new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, kp.privateKey, canonical)));
+    const deviceInfo: Record<string, string> = { os: "Debian" };
+    if (proof === "good") deviceInfo.enrollmentProof = (await enr.enrollmentProofHex(secretHex, { serverDomain: fqdn, stkPubHex: stk, authCodeSerial: serial }))!;
+    if (proof === "bad") deviceInfo.enrollmentProof = (await enr.enrollmentProofHex(secretHex, { serverDomain: fqdn, stkPubHex: stk, authCodeSerial: "AC-NOT-MINE" }))!;
+    return {
+      stk,
+      code: (await enr.serverCode(stk))!,
+      request: { serverDomain: fqdn, stkPub: stk, purpose, requestNonceHex: nonce, requestSignature: sig, issuedAt, deviceInfo },
+    };
+  }, { fqdn, purpose: opts.purpose ?? "entitlement", proof: opts.proof ?? "none", secretHex: opts.secretHex ?? "77".repeat(32), serial: SERIAL });
+}
+
+/** This device made the recipe for `fqdn`: it keeps the one-time secret. */
+async function keepSecret(page: Page, fqdn: string, secretHex = "77".repeat(32)): Promise<void> {
+  await page.evaluate(async ({ fqdn, secretHex, serial }) => {
+    const sp = await import("/lib/serverPins.js");
+    const { getSession } = await import("/lib/state.js");
+    await sp.keepEnrollmentSecret(getSession().umk, fqdn, { secretHex, serial });
+  }, { fqdn, secretHex, serial: SERIAL });
+}
+
+const pinOf = (page: Page, fqdn: string) => page.evaluate(async (d) => (await import("/lib/serverPins.js")).pinnedStk(d), fqdn);
+const secretOf = (page: Page, fqdn: string) =>
+  page.evaluate(async (d) => {
+    const { getSession } = await import("/lib/state.js");
+    return (await import("/lib/serverPins.js")).loadEnrollmentSecret(getSession().umk, d);
+  }, fqdn);
+
+/** `/pods` (a server that has never come online) and `.com`'s pending requests for those boxes. */
+function approvals(m: Mock, reqs: BoxRequest[], pods?: Record<string, unknown>[]): void {
+  m.get("/api/users/smoketest/pods", {
+    pods: pods ?? reqs.map((r) => ({
+      serverDomain: r.request.serverDomain,
+      identityPubKey: r.stk,
+      registeredAt: Date.now() - 600_000,
+      pendingRequests: [{ id: r.request.requestNonceHex, type: r.request.purpose, issuedAt: r.request.issuedAt, expiresAt: Number(r.request.issuedAt) + 600_000 }],
+    })),
+  });
+  m.post("/api/secret-requests", { requests: reqs.map((r) => r.request) });
+  m.post("/api/boot/response", { ok: true });
+}
+
+async function openApprovals(page: Page): Promise<void> {
+  await page.evaluate(async () => (await import("/views/boot-approval.js")).enterBootApproval());
+  await expect(page.locator("#view-activity")).toBeVisible({ timeout: 10_000 });
+}
+
+const requestCard = (page: Page, r: BoxRequest) => page.locator(`[data-boot-request-id="${r.request.serverDomain}#${r.request.requestNonceHex}"]`);
+const spaced = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`;
+
+test.describe("gym ux first contact", () => {
+  test("gym ux first contact a good proof shows the code above Approve, pins the key and sends the app-name grant", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    await keepSecret(page, HOME);
+    const r = await boxRequest(page, HOME, { proof: "good" });
+    const m = await mock(page);
+    approvals(m, [r]);
+    m.post(box(HOME, "/api/screens/server-wildcard-grant"), { ok: true, restarting: true });
+    await openApprovals(page);
+    const card = requestCard(page, r);
+    await expect(card.locator("[data-server-code]")).toHaveText(`If your machine has a monitor, it is showing this code: ${spaced(r.code)}`, { timeout: 10_000 });
+    // The code box sits directly above Approve.
+    expect(await card.evaluate((el) => el.querySelector("[data-server-code]")?.nextElementSibling?.hasAttribute("data-approve-id"))).toBe(true);
+    await shot(page, testInfo, "first-contact-code-box");
+    expect(await pinOf(page, HOME)).toBeNull();
+    await card.locator("[data-approve-id]").click();
+    const reply = await m.waitFor("/api/boot/response");
+    const carrier = JSON.parse(Buffer.from(reply.body.response.sealed, "hex").toString("utf8"));
+    expect(carrier.rootEntitlement).toMatchObject({ podPubKey: r.stk, podCanonical: HOME });
+    expect(await pinOf(page, HOME)).toBe(r.stk);
+    expect(await secretOf(page, HOME)).toBeNull();
+    const grant = await m.waitFor("/api/screens/server-wildcard-grant");
+    expect(await signer(page, keys, GRANT_CANON, { username: USER, serverDomain: HOME, stkPubHex: r.stk, issuedAt: grant.body.issuedAt }, grant.body.signature)).toBe("admin");
+  });
+
+  test("gym ux first contact a wrong or missing proof is refused and nothing is pinned", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
+    await keepSecret(page, HOME);
+    await keepSecret(page, OFFICE);
+    const bad = await boxRequest(page, HOME, { proof: "bad" });
+    const none = await boxRequest(page, OFFICE, { proof: "none" });
+    const m = await mock(page);
+    approvals(m, [bad, none]);
+    await openApprovals(page);
+    for (const r of [bad, none]) {
+      const card = requestCard(page, r);
+      await expect(card.locator('[data-first-contact-refusal="not-your-recipe"]')).toHaveText("This server was not built from your recipe. Do not approve it.", { timeout: 10_000 });
+      await expect(card.locator("[data-approve-id]")).toHaveCount(0);
+      await expect(card.locator("[data-server-code]")).toHaveCount(0);
+    }
+    await shot(page, testInfo, "first-contact-not-your-recipe");
+    expect(await pinOf(page, HOME)).toBeNull();
+    expect(await pinOf(page, OFFICE)).toBeNull();
+    expect(m.sent("/api/boot/response")).toHaveLength(0);
+  });
+
+  test("gym ux first contact a request under a key other than the pin is refused, and Home says so", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin" });
+    await page.evaluate(async (d) => (await import("/lib/serverPins.js")).pinServerKey(d, "11".repeat(32)), HOME);
+    const r = await boxRequest(page, HOME, { purpose: "unlock-key" });
+    const m = await mock(page);
+    approvals(m, [r]);
+    m.get(box(HOME, "/api/screens/apps-list"), { apps: [] });
+    await openApprovals(page);
+    const card = requestCard(page, r);
+    await expect(card.locator('[data-first-contact-refusal="key-changed"]')).toHaveText("This server's key changed. If you did not rebuild it, do not approve anything for it.", { timeout: 10_000 });
+    await expect(card.locator("[data-approve-id]")).toHaveCount(0);
+    await shot(page, testInfo, "first-contact-key-changed");
+    await page.click('[data-tab-target="home"]');
+    await renderHome(page);
+    await expect(page.locator('#servers-list [data-first-contact-refusal="key-changed"]')).toHaveText("This server's key changed. If you did not rebuild it, do not approve anything for it.", { timeout: 10_000 });
+    expect(await pinOf(page, HOME)).toBe("11".repeat(32));
+    expect(m.sent("/api/boot/response")).toHaveLength(0);
+  });
+
+  test("gym ux first contact a device without the recipe's secret pins on first sight with the code box", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    const r = await boxRequest(page, HOME, { proof: "none" });
+    const m = await mock(page);
+    approvals(m, [r]);
+    m.post(box(HOME, "/api/screens/server-wildcard-grant"), { ok: true, restarting: true });
+    await openApprovals(page);
+    const card = requestCard(page, r);
+    await expect(card.locator("[data-server-code]")).toHaveText(`If your machine has a monitor, it is showing this code: ${spaced(r.code)}`, { timeout: 10_000 });
+    await shot(page, testInfo, "first-contact-first-sight");
+    await card.locator("[data-approve-id]").click();
+    await m.waitFor("/api/boot/response");
+    expect(await pinOf(page, HOME)).toBe(r.stk);
+    const grant = await m.waitFor("/api/screens/server-wildcard-grant");
+    expect(await signer(page, keys, GRANT_CANON, { username: USER, serverDomain: HOME, stkPubHex: r.stk, issuedAt: grant.body.issuedAt }, grant.body.signature)).toBe("admin");
+  });
+
+  test("gym ux first contact the server page signs the app-name grant silently when the server has none", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    const stk = "11".repeat(32);
+    await page.evaluate(async ({ d, stk }) => (await import("/lib/serverPins.js")).pinServerKey(d, stk), { d: HOME, stk });
+    const m = await mock(page);
+    world(m, [livePod(HOME)]);
+    m.get(box(HOME, "/api/screens/server-wildcard-grant"), { granted: false });
+    m.post(box(HOME, "/api/screens/server-wildcard-grant"), { ok: true, restarting: true });
+    await page.evaluate(async (fqdn) => (await import("/views/server-detail.js")).enterServerDetail(fqdn), HOME);
+    const grant = await m.waitFor("/api/screens/server-wildcard-grant");
+    expect(await signer(page, keys, GRANT_CANON, { username: USER, serverDomain: HOME, stkPubHex: stk, issuedAt: grant.body.issuedAt }, grant.body.signature)).toBe("admin");
+    await expect(page.locator("#server-key-card")).toHaveCount(0);
+    await shot(page, testInfo, "first-contact-silent-grant");
+    expect(m.sent("/api/screens/server-wildcard-grant")).toHaveLength(1);
   });
 });
