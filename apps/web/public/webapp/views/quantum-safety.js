@@ -5,7 +5,8 @@
 //
 // Each server's chain is replayed here with the gate under the admin root this browser holds
 // (lib/assurancePolicy.js, lib/pqBinding.js); a state the browser could not verify is shown as
-// flagshipserver.com's report, labelled as such.
+// flagshipserver.com's report, labelled as such. On a strict server each app's own browser
+// answer (its `<server>:<service id>` scope) is shown the same way; it is set from the app.
 
 import { $, registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
@@ -52,6 +53,31 @@ export function replayServed(scope, chain, adminRootHex, adminBinding) {
   return { state, headLoss };
 }
 
+/** The apps a server reports for itself on /pods (it runs or leads them). Exported for tests. */
+export function appIdsOf(pod) {
+  const ids = Array.isArray(pod?.runsServices) ? pod.runsServices : Array.isArray(pod?.leadsServices) ? pod.leadsServices : [];
+  return [...new Set(ids.filter((x) => typeof x === "string" && /^[a-z0-9-]{1,80}$/.test(x)))].sort();
+}
+
+/** One app's own scope (`<server>:<service id>`): strict there means browsers are refused. Exported for tests. */
+export function describeApp(state, verified) {
+  const source = verified ? "" : " (as reported by flagshipserver.com)";
+  return state && strictInForce(state) ? `only the Flagship app; browsers are refused${source}` : `browsers may reach it${source}`;
+}
+
+async function appLines(base, user, fqdn, ids, rootHex, adminBinding) {
+  const out = [];
+  for (const id of ids) {
+    const scope = { kind: "service", id: `${fqdn}:${id}` };
+    const served = await getJson(`${base}/api/accounts/${encodeURIComponent(user)}/assurance-policy/service/${encodeURIComponent(scope.id)}`).catch(() => null);
+    const chain = Array.isArray(served?.chain) ? served.chain : [];
+    const mine = replayServed(scope, chain, rootHex, adminBinding);
+    const verified = chain.length === 0 || mine.state.generation === chain.length;
+    out.push({ id, line: describeApp(verified ? mine.state : served?.state, verified) });
+  }
+  return out;
+}
+
 async function getJson(url) {
   const r = await accountReadFetch(url, { cache: "no-store" });
   return r.ok ? r.json() : null;
@@ -89,7 +115,11 @@ async function render() {
     const mine = replayServed(scope, chain, rootHex, adminBinding);
     const verified = chain.length === 0 || mine.state.generation === chain.length;
     const d = verified ? describePolicy(mine.state, mine.headLoss, true) : describePolicy(served?.state, chain.at(-1)?.change?.acknowledgedLoss, false);
-    rows.push(`<div class="fs-card qs-row" data-fqdn="${escapeHtml(fqdn)}"><p class="fs-row-title">${escapeHtml(p.name ?? fqdn)}</p><p class="note">${escapeHtml(d.line)}</p></div>`);
+    const apps = d.strict ? await appLines(base, user, fqdn, appIdsOf(p), rootHex, adminBinding) : [];
+    const appHtml = apps.length
+      ? `<p class="note">Apps on this server (set from the Flagship app):</p><ul class="qs-apps">${apps.map((a) => `<li data-service="${escapeHtml(a.id)}">${escapeHtml(a.id)}: ${escapeHtml(a.line)}</li>`).join("")}</ul>`
+      : "";
+    rows.push(`<div class="fs-card qs-row" data-fqdn="${escapeHtml(fqdn)}"><p class="fs-row-title">${escapeHtml(p.name ?? fqdn)}</p><p class="note">${escapeHtml(d.line)}</p>${appHtml}</div>`);
   }
   $("qs-rows").innerHTML = rows.length ? rows.join("") : `<p class="note">You have no servers yet.</p>`;
 }
