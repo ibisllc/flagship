@@ -234,6 +234,18 @@ fn read_owner_key(path: &Path) -> Option<[u8; 32]> {
     crate::gohex::decode(&k).ok()?.try_into().ok()
 }
 
+/// `/boot/flagship-time-floor`: the daemon's last authenticated time (epoch ms, decimal, at most
+/// 16 digits, an optional trailing newline). Anything else is ignored: the floor only ever makes
+/// the clock read later, and an unreadable one leaves the system clock as it was.
+pub fn read_time_floor(path: &Path) -> Option<u64> {
+    let raw = std::fs::read(path).ok()?;
+    let t = raw.strip_suffix(b"\n").unwrap_or(&raw);
+    if t.is_empty() || t.len() > 16 || !t.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    std::str::from_utf8(t).ok()?.parse().ok()
+}
+
 /// What the run resolved from the options and `/boot`.
 #[derive(Debug)]
 pub struct Plan {
@@ -253,6 +265,8 @@ pub struct Plan {
     pub timing: RelayTiming,
     /// Notes for the log (warnings, the mode line).
     pub notes: Vec<String>,
+    /// The persisted time floor (`flagship-time-floor`), epoch ms; 0 when there is none.
+    pub time_floor_ms: u64,
 }
 
 /// Resolve the boot facts the premount reads.
@@ -364,6 +378,7 @@ pub fn plan(o: &Options) -> Result<Plan, String> {
         mode,
         timing,
         notes,
+        time_floor_ms: read_time_floor(&dir.join("flagship-time-floor")).unwrap_or(0),
     })
 }
 
@@ -421,7 +436,8 @@ pub fn main(args: &[Vec<u8>], log: &mut dyn Write) -> i32 {
     let clock = match &console {
         Some(c) => system::SystemClock::with_console(c),
         None => system::SystemClock::new(),
-    };
+    }
+    .with_floor(p.time_floor_ms);
     let mut unlocker = Unlocker {
         server_domain: &p.server_domain,
         identity: &p.identity,

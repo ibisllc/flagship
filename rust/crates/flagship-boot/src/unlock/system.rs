@@ -14,12 +14,25 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[derive(Debug)]
 pub struct SystemClock {
     console: Option<Receiver<String>>,
+    /// The time floor the daemon last wrote to `/boot` (epoch ms): the clock never reads earlier,
+    /// so a box whose clock was set back cannot take a lease that had already expired.
+    floor_ms: u64,
 }
 
 impl SystemClock {
     /// No console fallback (every box that is not a debug burn).
     pub fn new() -> Self {
-        Self { console: None }
+        Self {
+            console: None,
+            floor_ms: 0,
+        }
+    }
+
+    /// Never read earlier than `floor_ms` (the persisted authenticated-time floor).
+    #[must_use]
+    pub fn with_floor(mut self, floor_ms: u64) -> Self {
+        self.floor_ms = floor_ms;
+        self
     }
 
     /// Read lines from `console` (e.g. `/dev/console`) during waits.
@@ -41,6 +54,7 @@ impl SystemClock {
             });
         Self {
             console: spawned.ok().map(|_| rx),
+            floor_ms: 0,
         }
     }
 }
@@ -59,11 +73,13 @@ fn since_epoch() -> Duration {
 
 impl Clock for SystemClock {
     fn now_ms(&self) -> u64 {
-        u64::try_from(since_epoch().as_millis()).unwrap_or(u64::MAX)
+        u64::try_from(since_epoch().as_millis())
+            .unwrap_or(u64::MAX)
+            .max(self.floor_ms)
     }
 
     fn now_secs(&self) -> u64 {
-        since_epoch().as_secs()
+        since_epoch().as_secs().max(self.floor_ms / 1000)
     }
 
     fn wait(&self, secs: u64) -> Wake {
