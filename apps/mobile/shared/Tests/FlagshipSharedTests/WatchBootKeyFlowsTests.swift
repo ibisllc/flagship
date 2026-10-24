@@ -30,9 +30,11 @@ final class WatchBootKeyFlowsTests: XCTestCase {
                                     delegatePub: { pub }, bootPub: { boot.publicKey.rawRepresentation }, now: { now })
     }
 
-    private func approver(_ m: MockSecretMailboxClient) -> WatchBootApprover {
+    private func approver(_ m: MockSecretMailboxClient, pinned: Data? = nil) -> WatchBootApprover {
         let delegate = self.delegate, boot = self.boot, now = self.now
-        return WatchBootApprover(mailbox: m, username: username, delegateKey: { delegate }, bootKey: { boot }, now: { now })
+        let pin = pinned ?? stk.publicKey.rawRepresentation
+        return WatchBootApprover(mailbox: m, username: username, delegateKey: { delegate }, bootKey: { boot },
+                                 pinnedStk: { _ in pin }, now: { now })
     }
 
     private var requestId: (id: String, nonce: Data) {
@@ -87,6 +89,39 @@ final class WatchBootKeyFlowsTests: XCTestCase {
         XCTAssertEqual(opened.suffix(32), diskKey, "The box's key opens the reply and finds its disk key.")
         XCTAssertThrowsError(try SecretSeal.openWithEd25519Seed(blob: HexUtil.decode(posted.response.sealed)!,
                                                                 recipientEd25519Seed: ownerSeed.rawRepresentation))
+    }
+
+    func testADirectoryKeyOtherThanThePinnedOneIsRefusedAndNothingIsSealedOrPosted() async throws {
+        let m = try mailbox()
+        try await enroller(m).turnOn(serverDomain: domain, delegateExpiresAt: now + 86_400_000)
+        m.directory = [PodDirectoryEntry(serverDomain: domain,
+                                         identityPubKey: HexUtil.encode(Curve25519.Signing.PrivateKey().publicKey.rawRepresentation))]
+        let outcome = await approver(m).approve(requestId: requestId.id)
+        XCTAssertEqual(outcome, .keyMismatch)
+        XCTAssertTrue(m.postedResponses.isEmpty)
+        XCTAssertTrue(DiagnosticsLog.shared.recent().contains { $0.code == WatchBootApprover.keyMismatchCode && $0.host == domain })
+    }
+
+    func testItSealsToThePinnedKeyEvenWhenTheDirectoryIsDown() async throws {
+        let m = try mailbox()
+        try await enroller(m).turnOn(serverDomain: domain, delegateExpiresAt: now + 86_400_000)
+        m.podsError = URLError(.notConnectedToInternet)
+        let outcome = await approver(m).approve(requestId: requestId.id)
+        XCTAssertEqual(outcome, .approved)
+        let posted = try XCTUnwrap(m.postedResponses.last)
+        let opened = try SecretSeal.openWithEd25519Seed(blob: HexUtil.decode(posted.response.sealed)!, recipientEd25519Seed: stk.rawRepresentation)
+        XCTAssertEqual(opened.suffix(32), diskKey)
+    }
+
+    func testWithoutAPinnedKeyTheWatchLeavesItToThePhone() async throws {
+        let m = try mailbox()
+        try await enroller(m).turnOn(serverDomain: domain, delegateExpiresAt: now + 86_400_000)
+        let delegate = self.delegate, boot = self.boot, now = self.now
+        let a = WatchBootApprover(mailbox: m, username: username, delegateKey: { delegate }, bootKey: { boot },
+                                  pinnedStk: { _ in nil }, now: { now })
+        let outcome = await a.approve(requestId: requestId.id)
+        XCTAssertEqual(outcome, .noCopy)
+        XCTAssertTrue(m.postedResponses.isEmpty)
     }
 
     func testALockedServerIsAnsweredFromThePhoneOnly() async throws {
@@ -154,6 +189,11 @@ final class WatchApprovalResponderCopyTests: XCTestCase {
         XCTAssertTrue(r.ok)
     }
 
+    func testAKeyMismatchSaysToUseThePhone() async {
+        let r = await responder(session: true, outcome: .keyMismatch).respond(to: .init(requestId: "x#y"))
+        XCTAssertEqual(r.errorMessage, WatchApprovalResponder.keyMismatch)
+    }
+
     func testALockedServerSaysSo() async {
         let r = await responder(session: false, outcome: .locked).respond(to: .init(requestId: "x#y"))
         XCTAssertFalse(r.ok)
@@ -202,5 +242,60 @@ final class ChatAndConsentWireTests: XCTestCase {
         XCTAssertNil(revoke?["sender"], "No sender ends every Always allow to the app.")
         XCTAssertTrue(ChatRequestEvents.isRequestFrame(Data(#"{"type":"chat-request","kind":"incoming"}"#.utf8)))
         XCTAssertFalse(ChatRequestEvents.isRequestFrame(Data(#"{"type":"access-request"}"#.utf8)))
+    }
+}
+
+@MainActor
+final class WatchDelegateRenewerTests: XCTestCase {
+    private let now: Int64 = 1_800_000_000_000
+    private let delegate = Curve25519.Signing.PrivateKey()
+    private let irk = Curve25519.Signing.PrivateKey()
+
+    override func setUp() { MockOrderSigners.shared.reset() }
+
+    private func store() -> WatchBootKeyStore {
+        WatchBootKeyStore(defaults: UserDefaults(suiteName: "WatchDelegateRenewerTests-\(UUID().uuidString)")!)
+    }
+
+    private func renewer(_ s: WatchBootKeyStore, silent: Curve25519.Signing.PrivateKey?, saved: @escaping (String) -> Void = { _ in },
+                         redeposited: @escaping (String, Int64) -> Void = { _, _ in }) -> (WatchDelegateRenewer, MockFlagshipServerClient) {
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let now = self.now, delegate = self.delegate
+        server.nowProvider = { now }
+        let r = WatchDelegateRenewer(server: server, username: "bright-maple", store: s, silentKey: { silent },
+                                     delegateKey: { delegate }, saveGrantId: saved,
+                                     redeposit: { d, e in redeposited(d, e); return e }, now: { now })
+        return (r, server)
+    }
+
+    func testNotDueWithMoreThanTwoDaysLeft() async {
+        let s = store()
+        s.delegateExpiresAt = now + 3 * 86_400_000
+        let result = await renewer(s, silent: irk).0.renewIfDue()
+        XCTAssertEqual(result, .notDue)
+    }
+
+    func testDueButNoKeyWithoutAPromptSkips() async {
+        let s = store()
+        s.delegateExpiresAt = now + 86_400_000
+        let result = await renewer(s, silent: nil).0.renewIfDue()
+        XCTAssertEqual(result, .skipped)
+        XCTAssertEqual(s.delegateExpiresAt, now + 86_400_000)
+    }
+
+    func testDueRenewsSilentlyAndPutsEveryCopyBack() async {
+        let s = store()
+        s.delegateExpiresAt = now + 86_400_000
+        s.set(now + 86_400_000, for: "home.example")
+        s.set(now - 1, for: "cabin.example")
+        var saved: String?
+        var redeposited: [String] = []
+        let result = await renewer(s, silent: irk, saved: { saved = $0 }, redeposited: { d, _ in redeposited.append(d) }).0.renewIfDue()
+        XCTAssertEqual(result, .renewed(expiresAt: now + WatchDelegateRenewer.ttlMs))
+        XCTAssertNotNil(saved)
+        XCTAssertEqual(s.delegateExpiresAt, now + WatchDelegateRenewer.ttlMs)
+        XCTAssertEqual(redeposited, ["cabin.example", "home.example"], "Ended copies come back too.")
+        XCTAssertEqual(s.expiresAt(for: "home.example", now: now), now + WatchDelegateRenewer.ttlMs)
     }
 }

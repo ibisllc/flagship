@@ -2600,5 +2600,6 @@
   "This server isn't registered to your account.": "Dieser Server ist nicht in deinem Konto registriert.",
   "This server is locked. Approve its start-up from your iPhone.": "Dieser Server ist gesperrt. Genehmige seinen Start auf deinem iPhone.",
   "Turn on Approve from watch in Account security first.": "Schalte zuerst Per Uhr genehmigen unter Kontosicherheit ein.",
-  "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "Die Genehmigung deiner Uhr ist abgelaufen. Schalte Per Uhr genehmigen unter Kontosicherheit aus und wieder ein."
+  "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "Die Genehmigung deiner Uhr ist abgelaufen. Schalte Per Uhr genehmigen unter Kontosicherheit aus und wieder ein.",
+  "This server's key doesn't match. Approve its start-up from your phone.": "Der Schlüssel dieses Servers stimmt nicht überein. Genehmige seinen Start auf deinem Telefon."
 }
