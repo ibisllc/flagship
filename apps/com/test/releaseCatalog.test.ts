@@ -83,3 +83,48 @@ describe("release catalog for boxes that can't list their own", () => {
     expect((await handleReleases(url("?current=nope"), { fetch: gh.fetch, cache })).status).toBe(400);
   });
 });
+
+describe("release catalog under the release PQ pin", () => {
+  const V = JSON.parse(
+    readFileSync(join(__dirname, "../../../packages/protocol/test-vectors/release-endorsement-v2/vectors.json"), "utf-8"),
+  ) as {
+    pins: Record<string, import("@flagship/protocol").ReleasePqPin>;
+    bindings: Record<string, unknown>;
+    endorsements: Record<string, Record<string, unknown>>;
+    companions: Record<string, Record<string, unknown>>;
+  };
+  const dirs: Record<string, Record<string, unknown>> = {
+    ".maintainers/endorsements": { "A.json": V.endorsements.A!, "B.json": V.endorsements.B!, "C.json": V.endorsements.C!, "D.json": V.endorsements.D! },
+    ".maintainers/release-pq/endorsements": { "C.json": V.companions.C! },
+    ".maintainers/release-pq/bindings": { "release.json": V.bindings.release! },
+  };
+  const gh = (drop: string[] = []) => async (url: string) => {
+    const m = url.match(/\/contents\/(.+)\?ref=main$/);
+    if (m) {
+      const files = drop.includes(m[1]!) ? undefined : dirs[m[1]!];
+      if (!files) return new Response("not found", { status: 404 });
+      return Response.json(Object.keys(files).map((name) => ({ name, download_url: `https://raw.example/${m[1]}/${name}` })));
+    }
+    const rest = url.slice("https://raw.example/".length);
+    const name = rest.split("/").pop()!;
+    return Response.json(dirs[rest.slice(0, rest.length - name.length - 1)]![name]);
+  };
+  const commit = (n: string) => String(V.endorsements[n]!.commitHash);
+
+  it("offers only the release whose v1 and PQ signatures verify; legacy ones still place commits", async () => {
+    const list = await loadEndorsements(gh(), undefined, { pin: V.pins.main!, now: 1_790_000_000_000 });
+    const c = catalogFor(list, commit("A"), 1);
+    expect(c.releases.map((r) => r.commit)).toEqual([commit("C")]);
+    expect(c.latest?.commit).toBe(commit("C"));
+  });
+
+  it("offers nothing new when the companion is stripped", async () => {
+    const list = await loadEndorsements(gh([".maintainers/release-pq/endorsements"]), undefined, { pin: V.pins.main!, now: 1_790_000_000_000 });
+    expect(catalogFor(list, commit("A"), 1).releases).toEqual([]);
+  });
+
+  it("keeps today's behaviour while the pin is empty", async () => {
+    const list = await loadEndorsements(gh(), undefined, { pin: V.pins.none!, now: 1_790_000_000_000 });
+    expect(catalogFor(list, commit("A"), 1).releases).toHaveLength(4);
+  });
+});
