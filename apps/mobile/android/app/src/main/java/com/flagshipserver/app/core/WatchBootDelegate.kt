@@ -69,6 +69,17 @@ object WatchBootDelegate {
         return if (sha256(key).toHex() == d.attestation.keySha256Hex.lowercase()) key else null
     }
 
+    /** Watch, with the key kept in secure hardware: [agree] is its X25519 agreement. */
+    fun openKeyWith(d: Deposit, agree: (ephPub: ByteArray) -> ByteArray): ByteArray? {
+        val sealed = fromHex(d.sealedKeyHex) ?: return null
+        val key = try {
+            SecretSeal.openWithAgreement(sealed, agree)
+        } catch (_: Exception) {
+            return null
+        }
+        return if (sha256(key).toHex() == d.attestation.keySha256Hex.lowercase()) key else null
+    }
+
     private fun sha256(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b)
     private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
     private fun fromHex(h: String): ByteArray? {

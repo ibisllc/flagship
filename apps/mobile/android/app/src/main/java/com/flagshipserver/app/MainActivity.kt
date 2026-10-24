@@ -508,10 +508,27 @@ class MainActivity : FragmentActivity() {
                 }
             }
             LaunchedEffect(smokeAccessCenter) { smokeAccessCenter?.refresh() }
+            // App chat requests (N08): the same boxes and triggers as access
+            // requests; answering is an admin order, others read the list.
+            val chatCenter = remember {
+                val mockBoxes = mocks?.chatBoxes
+                com.flagshipserver.app.core.ChatRequestCenter(
+                    boxes = if (mockBoxes != null) ({ mockBoxes(appState) }) else accessBoxes,
+                    isActiveGate = {
+                        appState.isPaired.value && appState.isUnlocked.value &&
+                            !com.flagshipserver.app.core.UpdateLock.isLocked &&
+                            !com.flagshipserver.app.core.AccountGone.isGone &&
+                            !appState.isRestrictedDevice()
+                    },
+                    canAnswer = { com.flagshipserver.app.core.AdminOrderGate.allows(appState) },
+                    alertsEnabled = { privacy.pushNotificationsEnabled.value },
+                )
+            }
             val accessScope = androidx.compose.runtime.rememberCoroutineScope()
             androidx.compose.runtime.DisposableEffect(accessCenter) {
                 com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest = {
                     accessScope.launch { accessCenter.refresh() }
+                    accessScope.launch { chatCenter.refresh() }
                 }
                 onDispose { com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest = null }
             }
@@ -523,6 +540,13 @@ class MainActivity : FragmentActivity() {
                     accessCenter.start(this)
                 } else {
                     accessCenter.stop()
+                }
+            }
+            LaunchedEffect(useLive, isForeground, accessPaired, accessUnlocked) {
+                if ((useLive || mocks?.chatBoxes != null) && isForeground && accessPaired && accessUnlocked) {
+                    chatCenter.start(this)
+                } else {
+                    chatCenter.stop()
                 }
             }
             val pushOn by privacy.pushNotificationsEnabled.collectAsState()
@@ -670,6 +694,7 @@ class MainActivity : FragmentActivity() {
                     LocalDeepLinker provides deepLinker,
                     com.flagshipserver.app.core.LocalAccessRequestCenter provides
                         (if (useLive) accessCenter else smokeAccessCenter),
+                    com.flagshipserver.app.core.LocalChatRequestCenter provides chatCenter,
                     LocalPrivacySettings provides privacy,
                     com.flagshipserver.app.core.LocalPushNotificationsSwitch provides pushSwitch,
                     // Real IRK signer for env changes (was the 128-zero
@@ -919,6 +944,10 @@ private fun AppRoot(
                     DeepLink.AccessList(alert.request.serviceId, draft = alert.isDraft, podId = alert.box.podId),
                 )
             }
+        }
+        val chatCenter = com.flagshipserver.app.core.LocalChatRequestCenter.current
+        if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone && chatCenter != null) {
+            com.flagshipserver.app.ui.screens.ChatRequestDialogHost(chatCenter)
         }
         // The watch's Approve reached a session without its biometric yet.
         if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone) {

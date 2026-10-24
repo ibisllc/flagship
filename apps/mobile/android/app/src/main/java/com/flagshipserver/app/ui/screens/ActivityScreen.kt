@@ -13,6 +13,7 @@ import com.flagshipserver.app.ui.theme.softTint
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.LockOpen
@@ -79,6 +80,7 @@ import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 fun ActivityScreen(
@@ -104,6 +106,10 @@ fun ActivityScreen(
     LaunchedEffect(approvals) { approvals.reload() }
     val approvalsState by approvals.state.collectAsState()
     val approvalsCount = (approvalsState as? LoadingState.Loaded)?.value?.size ?: 0
+    val chatCenter = com.flagshipserver.app.core.LocalChatRequestCenter.current
+    LaunchedEffect(chatCenter) { runCatching { chatCenter?.load() } }
+    val chatListing by (chatCenter?.listing ?: kotlinx.coroutines.flow.MutableStateFlow(com.flagshipserver.app.core.ChatRequestCenter.Listing())).collectAsState()
+    val chatScope = androidx.compose.runtime.rememberCoroutineScope()
 
     // Server filter (the PodSwitcher). null == "All servers".
     val pods by app.pods.collectAsState()
@@ -132,7 +138,10 @@ fun ActivityScreen(
         spacing = 0.dp,
         maxContentWidth = if (wide) 1120.dp else com.flagshipserver.app.ui.theme.FSLayout.readingMaxWidth,
         actions = {
-            com.flagshipserver.app.ui.components.TextButton(onClick = { vm.load(); approvals.reload() }) { Text(stringResource(R.string.refresh)) }
+            com.flagshipserver.app.ui.components.TextButton(onClick = {
+                vm.load(); approvals.reload()
+                chatScope.launch { runCatching { chatCenter?.load() } }
+            }) { Text(stringResource(R.string.refresh)) }
         },
     ) {
         val list: @Composable () -> Unit = {
@@ -176,6 +185,20 @@ fun ActivityScreen(
             count = approvalsCount,
             badge = true,
         ) { ApprovalsList(approvals) }
+
+        // App chat (N08): shown while a request waits or an app takes chats without asking.
+        if (chatCenter != null && (chatListing.requests.isNotEmpty() || chatListing.always.isNotEmpty())) {
+            Spacer(Modifier.height(FS.space.s3))
+            Accordion(
+                section = ActivitySection.Chat,
+                title = stringResource(R.string.chat_requests_section),
+                hint = stringResource(R.string.chat_requests_section_hint),
+                isOpen = open == ActivitySection.Chat,
+                onToggle = { toggle(ActivitySection.Chat) },
+                count = chatListing.requests.size,
+                badge = true,
+            ) { ChatRequestsList(chatCenter) }
+        }
 
         val serverTitle = activityServerTitle(pods, effectiveServerFilter)
         val allServers = serverTitle == "All servers"
@@ -264,7 +287,7 @@ fun ActivityScreen(
     }
 }
 
-internal enum class ActivitySection { Approvals, Recovery, Account, Server }
+internal enum class ActivitySection { Approvals, Chat, Recovery, Account, Server }
 
 /** The detail pane of Activity on an expanded window: the open section's content
  *  is drawn here instead of under its title. Null on a phone. */
@@ -318,6 +341,7 @@ private fun Accordion(
             ) {
                 val tileIcon = when (section) {
                     ActivitySection.Approvals -> Icons.Outlined.LockOpen
+                    ActivitySection.Chat -> Icons.Outlined.Forum
                     ActivitySection.Recovery -> Icons.Outlined.Restore
                     ActivitySection.Account -> Icons.Outlined.Person
                     ActivitySection.Server -> Icons.Outlined.Dns

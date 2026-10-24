@@ -319,6 +319,19 @@ class LiveScreensClient(
     override suspend fun accessRequests(): AccessRequestsResponse =
         request("/api/screens/access-requests", AccessRequestsResponse.serializer())
 
+    override suspend fun chatRequests(): ChatRequestsResponse =
+        request("/api/screens/chat/requests", ChatRequestsResponse.serializer())
+
+    override suspend fun chatAnswer(body: ChatAnswerBody) {
+        val bytes = json.encodeToString(ChatAnswerBody.serializer(), body).toByteArray()
+        request<Unit>("/api/screens/chat/answer", null, "POST", bytes)
+    }
+
+    override suspend fun chatAlwaysRevoke(app: ChatAppIdentity, sender: ChatAppIdentity?): ChatAlwaysRevokeResponse {
+        val bytes = json.encodeToString(ChatAlwaysRevokeBody.serializer(), ChatAlwaysRevokeBody(app.author, app.slug, sender)).toByteArray()
+        return request("/api/screens/chat/always/revoke", ChatAlwaysRevokeResponse.serializer(), "POST", bytes)
+    }
+
     override suspend fun accessAlerts(): AccessAlertsSetting =
         request("/api/screens/settings/access-alerts", AccessAlertsSetting.serializer())
 

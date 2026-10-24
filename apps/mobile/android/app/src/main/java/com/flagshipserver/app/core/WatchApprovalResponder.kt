@@ -43,6 +43,8 @@ class WatchApprovalResponder(
     private val now: () -> Long = { System.currentTimeMillis() },
     private val appInForeground: () -> Boolean = { false },
     private val onNeedsUnlock: (ApproveCommand) -> Unit = {},
+    /** The boot-only key path (no account key needed), when this device has one. */
+    private val bootApprover: () -> WatchBootApprover? = { null },
 ) {
     companion object {
         val NOT_ENROLLED get() = FSStrings.get(R.string.turn_on_quick_approve_from_watch)
@@ -53,6 +55,8 @@ class WatchApprovalResponder(
         val SIGNED_OUT get() = FSStrings.get(R.string.sign_in_to_flagship_on_your)
         val GONE get() = FSStrings.get(R.string.this_server_isnt_waiting_any_more)
         val UNSUPPORTED get() = FSStrings.get(R.string.the_watch_asked_for_something_this)
+        /** The boot worker refuses a watch's approval while the server is locked. */
+        val LOCKED get() = FSStrings.get(R.string.watch_boot_server_locked)
     }
 
     suspend fun respond(cmd: ApproveCommand): ApproveReply {
@@ -61,6 +65,25 @@ class WatchApprovalResponder(
         // A security notice has this app locked until it is updated: no approval is signed.
         if (UpdateLock.isLocked) return fail(UpdateLock.REFUSAL)
         if (!delegateEnrolled()) return fail(NOT_ENROLLED)
+        // With the phone locked: the boot-only key opens this watch's copy of the disk key.
+        val boot = bootApprover()?.takeIf { it.available(cmd.serverFqdn) }
+        if (boot != null) {
+            val out = try {
+                boot.approve(cmd.serverFqdn, cmd.requestId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                ErrorLog.caught("watch-boot", e, NetworkErrorHumanizer.errorCode(e))
+                WatchBootApprover.Outcome.Failed(e.message ?: e.javaClass.simpleName)
+            }
+            when (out) {
+                WatchBootApprover.Outcome.Approved -> return ApproveReply(cmd.serverFqdn, ok = true)
+                WatchBootApprover.Outcome.Locked -> return fail(LOCKED)
+                WatchBootApprover.Outcome.NotWaiting -> return fail(GONE)
+                // No usable copy, or a failure: the account-key path below may still answer.
+                WatchBootApprover.Outcome.NotAvailable, is WatchBootApprover.Outcome.Failed -> Unit
+            }
+        }
         if (!hasSessionKey()) {
             onNeedsUnlock(cmd)
             return fail(if (appInForeground()) UNLOCK_ONCE else OPEN_AND_UNLOCK)
@@ -80,6 +103,7 @@ class WatchApprovalResponder(
             source.confirmAndRespond(req, depositAutoLease = false)
             ApproveReply(cmd.serverFqdn, ok = true)
         } catch (e: Throwable) {
+            if ((e as? HttpException)?.status == 423) return fail(LOCKED)
             fail(FSStrings.get(R.string.approval_failed, e.message ?: e.javaClass.simpleName))
         }
     }
