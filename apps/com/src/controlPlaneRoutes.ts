@@ -155,6 +155,8 @@ import {
   handleMintAccountReadToken,
   handleGetOrderHealth,
   requireAccountRead,
+  requireServerRead,
+  handleSignedTime,
   peekAccountReadToken,
   buildBoxDoorbell,
   checkAccountExists,
@@ -569,6 +571,8 @@ const ROUTE_RE = {
   ACCOUNT_KEY_ATTESTATION: /^\/api\/users\/([^/]+)\/account-key-attestation$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   MAINTAINER_BLESSING: /^\/api\/maintainer-blessing$/,
+  // Architecture v2: the CA-signed time a box checks its clock against at boot (signedTime.ts).
+  SIGNED_TIME: /^\/api\/time$/,
   // Relay blessing — the `.services` hub asks `.com` to bless its
   // self-generated key (docs/maintainer-trust-enforcement.md). ~daily.
   HUB_BLESSING: /^\/api\/services\/hub-blessing$/,
@@ -1384,6 +1388,9 @@ export async function tryControlPlane(
   // app trust gate + the box relay blessing). Safe even if `.com` is the
   // suspected party — a rogue `.com` cannot forge a chain hashing to the
   // baked pin.
+  if (method === "POST" && ROUTE_RE.SIGNED_TIME.test(path)) {
+    return finishPlain(handleSignedTime({ ca }, await readJson(request)));
+  }
   if (method === "GET" && ROUTE_RE.MAINTAINER_BLESSING.test(path)) {
     return finish(
       handleMaintainerBlessing({
@@ -1877,9 +1884,10 @@ export async function tryControlPlane(
       );
     }
     if (method === "GET" && (m = path.match(ROUTE_RE.PAIRING_DEPOSIT))) {
-      return finishPlain(
-        await handleConsumePairingDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
-      );
+      const host = decodeURIComponent(m[1]!);
+      const refused = await gateServerRead(storage, env, request, host);
+      if (refused) return refused;
+      return finishPlain(await handleConsumePairingDeposit(buildSecretMailboxDeps(), host));
     }
     // Entitlement deposit-on-unlock — phone deposit (IRK mailbox-auth, the
     // PUBLIC IRK-signed entitlement) + box consume-once read.
@@ -1893,9 +1901,10 @@ export async function tryControlPlane(
       );
     }
     if (method === "GET" && (m = path.match(ROUTE_RE.ENTITLEMENT_DEPOSIT))) {
-      return finishPlain(
-        await handleConsumeEntitlementDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
-      );
+      const host = decodeURIComponent(m[1]!);
+      const refused = await gateServerRead(storage, env, request, host);
+      if (refused) return refused;
+      return finishPlain(await handleConsumeEntitlementDeposit(buildSecretMailboxDeps(), host));
     }
     // Secret-free-recipe SWK delivery — phone deposit (IRK mailbox-auth, the
     // SEALED SWK-delivery carrier) + box consume-once read (sealed-only, public).
@@ -1909,9 +1918,10 @@ export async function tryControlPlane(
       );
     }
     if (method === "GET" && (m = path.match(ROUTE_RE.SWK_DEPOSIT))) {
-      return finishPlain(
-        await handleConsumeSwkDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
-      );
+      const host = decodeURIComponent(m[1]!);
+      const refused = await gateServerRead(storage, env, request, host);
+      if (refused) return refused;
+      return finishPlain(await handleConsumeSwkDeposit(buildSecretMailboxDeps(), host));
     }
     // Post-boot CGK delivery (Phase 6) — phone deposit (IRK mailbox-auth, the
     // SEALED CGK-delivery carrier) + box consume-once read (sealed-only, public).
@@ -1925,9 +1935,10 @@ export async function tryControlPlane(
       );
     }
     if (method === "GET" && (m = path.match(ROUTE_RE.CGK_DEPOSIT))) {
-      return finishPlain(
-        await handleConsumeCgkDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
-      );
+      const host = decodeURIComponent(m[1]!);
+      const refused = await gateServerRead(storage, env, request, host);
+      if (refused) return refused;
+      return finishPlain(await handleConsumeCgkDeposit(buildSecretMailboxDeps(), host));
     }
     // Admin-authorized in-place server-update order — phone deposit (IRK mailbox-
     // auth + the Slice-D admin-authority gate, the sensitive-op check) + box
@@ -3906,6 +3917,18 @@ async function gateAccountRead(
     username,
     request.headers.get("authorization"),
   );
+  return check.ok ? null : finish(check.response);
+}
+
+/** Refuses a server's consume-once deposit read unless it carries that server's own read
+ *  token (box STK-minted); null when the read may go ahead. Demo accounts pass. */
+async function gateServerRead(
+  storage: D1Storage,
+  env: ControlPlaneEnv,
+  request: Request,
+  host: string,
+): Promise<Response | null> {
+  const check = await requireServerRead(accountReadTokenDeps(storage, env), host, request.headers.get("authorization"));
   return check.ok ? null : finish(check.response);
 }
 

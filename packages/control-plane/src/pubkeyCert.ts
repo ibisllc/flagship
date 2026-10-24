@@ -196,6 +196,8 @@ export interface MaintainerBlessingMaterial {
   mandates: readonly unknown[];
   /** Committed CaEndorsement leases. */
   caEndorsements: readonly unknown[];
+  /** Their hybrid PQ companions and the ca-track key's binding (caLeasePq.ts). */
+  caLeasePq?: unknown;
 }
 
 export interface MaintainerBlessingDeps {
@@ -237,6 +239,7 @@ export function handleMaintainerBlessing(
       issuer: deps.ca.issuer,
       mandates: deps.material.mandates,
       caEndorsements: deps.material.caEndorsements,
+      ...(deps.material.caLeasePq !== undefined ? { caLeasePq: deps.material.caLeasePq } : {}),
       caPubkeyAuthorizedNow,
       now,
     },
