@@ -105043,43 +105043,43 @@
         }
       }
     },
-    "This is an estimate, not a promise. Nothing runs until you agree, and your answer covers this one run only.": {
+    "Nothing runs until you agree, and your answer covers this one run only.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Es una estimación, no una promesa. Nada se ejecuta hasta que aceptes, y tu respuesta cubre solo esta ejecución."
+            "value": "Nada se ejecuta hasta que aceptes, y tu respuesta cubre solo esta ejecución."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ceci est une estimation, pas une promesse. Rien ne s’exécute avant votre accord, et votre réponse ne couvre que cette exécution."
+            "value": "Rien ne s’exécute avant votre accord, et votre réponse ne couvre que cette exécution."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Das ist eine Schätzung, kein Versprechen. Nichts läuft, bevor du zustimmst, und deine Antwort gilt nur für diesen einen Lauf."
+            "value": "Nichts läuft, bevor du zustimmst, und deine Antwort gilt nur für diesen einen Lauf."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Isto é uma estimativa, não uma promessa. Nada é executado até você concordar, e sua resposta vale só para esta execução."
+            "value": "Nada é executado até você concordar, e sua resposta vale só para esta execução."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "これは見積もりで、保証ではありません。同意するまで何も実行されず、回答はこの 1 回の実行にだけ有効です。"
+            "value": "同意するまで何も実行されず、回答はこの 1 回の実行にだけ有効です。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这只是预估，不是承诺。在你同意之前不会运行任何内容，你的回答只适用于这一次运行。"
+            "value": "在你同意之前不会运行任何内容，你的回答只适用于这一次运行。"
           }
         }
       }
@@ -105166,43 +105166,43 @@
         }
       }
     },
-    "It may use %@ to %@ tokens.": {
+    "It may use up to about %@ tokens; the run stops there.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Puede usar de %@ a %@ tokens."
+            "value": "Puede usar hasta unos %@ tokens; la ejecución se detiene ahí."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Elle peut utiliser de %@ à %@ jetons."
+            "value": "Elle peut utiliser jusqu’à environ %@ jetons ; l’exécution s’arrête là."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Er kann %@ bis %@ Token verbrauchen."
+            "value": "Er kann bis zu etwa %@ Token verbrauchen; dort hört der Lauf auf."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ela pode usar de %@ a %@ tokens."
+            "value": "Ela pode usar até cerca de %@ tokens; a execução para aí."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@〜%@ トークンを使う可能性があります。"
+            "value": "最大で約 %@ トークンを使い、そこで実行は止まります。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "可能使用 %@ 到 %@ 个令牌。"
+            "value": "最多约使用 %@ 个令牌，运行到此为止。"
           }
         }
       }
@@ -105494,43 +105494,43 @@
         }
       }
     },
-    "Always allow lets any remote machine reach %@ without asking. You can revoke it on this server's page.": {
+    "Always allow lets %@ reach %@ again without asking. You can revoke it on this server's page.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Permitir siempre deja que cualquier máquina remota llegue a %@ sin preguntar. Puedes revocarlo en la página de este servidor."
+            "value": "Permitir siempre deja que %@ llegue a %@ sin volver a preguntar. Puedes revocarlo en la página de este servidor."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autoriser permet à n’importe quelle machine distante d’atteindre %@ sans demander. Vous pouvez le révoquer sur la page de ce serveur."
+            "value": "Toujours autoriser permet à %@ d’atteindre %@ sans redemander. Vous pouvez le révoquer sur la page de ce serveur."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Immer erlauben lässt jede entfernte Maschine ohne Nachfrage zu %@. Du kannst es auf der Seite dieses Servers widerrufen."
+            "value": "Immer erlauben lässt %@ ohne erneute Nachfrage zu %@. Du kannst es auf der Seite dieses Servers widerrufen."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Permitir sempre deixa qualquer máquina remota alcançar %@ sem perguntar. Você pode revogar isso na página deste servidor."
+            "value": "Permitir sempre deixa %@ alcançar %@ sem perguntar de novo. Você pode revogar isso na página deste servidor."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "「常に許可」にすると、どのリモートマシンも確認なしで %@ にアクセスできます。このサーバーのページで取り消せます。"
+            "value": "「常に許可」にすると、%@ は今後確認なしで %@ にアクセスできます。このサーバーのページで取り消せます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "“始终允许”会让任何远程机器无需询问即可访问 %@。你可以在此服务器页面上撤销。"
+            "value": "“始终允许”会让 %@ 今后无需询问即可访问 %@。你可以在此服务器页面上撤销。"
           }
         }
       }
@@ -105617,43 +105617,43 @@
         }
       }
     },
-    "%@ now takes chats from other owners' apps without asking.": {
+    "%@ now takes chats from %@ without asking.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ ahora acepta chats de apps de otros propietarios sin preguntar."
+            "value": "%@ ahora acepta chats de %@ sin preguntar."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ accepte désormais les discussions des apps d’autres propriétaires sans demander."
+            "value": "%@ accepte désormais les discussions de %@ sans demander."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ nimmt jetzt Chats von Apps anderer Besitzer ohne Nachfrage an."
+            "value": "%@ nimmt jetzt Chats von %@ ohne Nachfrage an."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ agora aceita conversas de apps de outros donos sem perguntar."
+            "value": "%@ agora aceita conversas de %@ sem perguntar."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ は、ほかの所有者のアプリからのチャットを確認なしで受け付けるようになりました。"
+            "value": "%@ は %@ からのチャットを確認なしで受け付けるようになりました。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ 现在无需询问即可接受其他所有者应用的聊天。"
+            "value": "%@ 现在无需询问即可接受来自 %@ 的聊天。"
           }
         }
       }
@@ -105699,84 +105699,84 @@
         }
       }
     },
-    "%@ takes chats from other owners' apps without asking.": {
+    "%@ → %@, without asking": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ acepta chats de apps de otros propietarios sin preguntar."
+            "value": "%@ → %@, sin preguntar"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ accepte les discussions des apps d’autres propriétaires sans demander."
+            "value": "%@ → %@, sans demander"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ nimmt Chats von Apps anderer Besitzer ohne Nachfrage an."
+            "value": "%@ → %@, ohne Nachfrage"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ aceita conversas de apps de outros donos sem perguntar."
+            "value": "%@ → %@, sem perguntar"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ は、ほかの所有者のアプリからのチャットを確認なしで受け付けます。"
+            "value": "%@ → %@（確認なし）"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ 无需询问即可接受其他所有者应用的聊天。"
+            "value": "%@ → %@，无需询问"
           }
         }
       }
     },
-    "%@ asks you again from now on.": {
+    "%@ asks you again before %@ can talk to it.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ te volverá a preguntar a partir de ahora."
+            "value": "%@ volverá a preguntarte antes de que %@ pueda hablar con ella."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ vous redemandera désormais."
+            "value": "%@ vous redemandera avant que %@ puisse lui parler."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ fragt dich ab jetzt wieder."
+            "value": "%@ fragt dich wieder, bevor %@ mit ihr sprechen kann."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ vai perguntar a você de novo a partir de agora."
+            "value": "%@ vai perguntar de novo antes que %@ possa conversar com ele."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ は今後また確認を求めます。"
+            "value": "%@ は、%@ と話す前にまた確認を求めます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ 今后会再次询问你。"
+            "value": "%@ 在 %@ 与其对话前会再次询问你。"
           }
         }
       }
