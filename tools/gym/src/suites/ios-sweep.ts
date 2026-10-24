@@ -259,16 +259,16 @@ const BACKUPS: readonly Scenario[] = [
   ),
   sweep(
     "ios-sweep-backups-create-policy",
-    "The create form's backup policy: the three options in the shared words, with the phone reserve for phone-side.",
+    "The create form's backup policy: No backup and On my phone in the shared words (Peer is off at GA), with the phone reserve for phone-side.",
     "GymSweepServerTests/test_createFormOffersThePoliciesWithTheReserve",
     ["home-add-server", "cs-next-button", "cs-next-button", "cs-backup-policy-none"],
     ["cs-backup-policy-phone-only"],
   ),
   sweep(
     "ios-sweep-backups-policy-change",
-    "Change the backup policy Phone-side to Peer-distributed: an admin-root-signed flagship/backup-policy/v1.",
-    "GymSweepServerTests/test_changePolicyPhoneToPeerIsSigned",
-    ["Home", "sd-backups-policy-change", "backup-policy-peer", "backup-policy-save"],
+    "Change the backup policy Phone-side to No backup: an admin-root-signed flagship/backup-policy/v1; Peer is not offered while it is off at GA.",
+    "GymSweepServerTests/test_changePolicyPhoneToNoneIsSigned",
+    ["Home", "sd-backups-policy-change", "backup-policy-none", "backup-policy-save"],
     ["sd-backups-policy"],
   ),
   sweep(
@@ -730,7 +730,7 @@ const HOME: readonly Scenario[] = [
   ),
   sweep(
     "ios-sweep-home-lock-screen",
-    "Lock screen (-smoke-locked): Unlock is offered; Sign out asks first, Cancel closes the question, Sign out anyway returns to Welcome.",
+    "Lock screen (-smoke-locked, -smoke-accept-biometric): Unlock is offered; Sign out passes Face ID, then asks first: Cancel closes the question, Sign out anyway returns to Welcome.",
     "GymSweepHomeTests/test_lockScreenSignOutAsksFirst",
     ["lock-sign-out-btn", "Cancel", "Sign out anyway"],
     ["Create your account"],
@@ -919,8 +919,9 @@ const SETTINGS: readonly Scenario[] = [
   sweep("ios-sweep-settings-secured-sessions", "Open secured sessions: Refresh asks the box; Stop asks, Cancel keeps, Stop session closes it.",
     ST + "test_securedSessionRefreshAndStop", ["secured-session-refresh", "secured-session-stop", "Stop session"],
     ["closed secured session", "secured-sessions-empty"], "D3"),
-  sweep("ios-sweep-settings-process-url", "Process URL: an unreadable link says so; an app link opens Account security.",
-    ST + "test_processUrlRoutesALink", ["process-url-field", "process-url-open"], ["process-url-error", "Account security"], "D3"),
+  // Process URL was merged into "Scan a code or enter a link" (ScanOrLinkScreen) in the owner UI round.
+  sweep("ios-sweep-settings-scan-or-link", "Scan a code or enter a link: an unreadable link says so; an app link opens Account security.",
+    ST + "test_scanOrLinkRoutesAPastedLink", ["settings-scan-pairing-code", "scan-or-link-field", "scan-or-link-open"], ["scan-or-link-error", "Account security"], "D3"),
   sweep("ios-sweep-settings-keyfile", "Account key backup: Create waits for a matching 12+ passphrase and the acknowledgement, then offers the file to share; closing confirms it.",
     ST + "test_keyfileBackupCreatesTheFile", ["keyfile-export-passphrase", "keyfile-export-confirm", "keyfile-export-ack-control", "keyfile-export-create"],
     ["keyfile-export-saved"], "D3"),
@@ -931,8 +932,8 @@ const SETTINGS: readonly Scenario[] = [
   sweep("ios-sweep-settings-add-device", "Add a device: the new phone has scanned; the promote switch flips; Confirm codes match admits it; Done returns.",
     ST + "test_addDeviceConfirmsTheCodeAndAdmits", ["settings-add-device", "add-device-promote-admin-toggle", "Confirm codes match", "Done"],
     ["Device added"], "D3"),
-  sweep("ios-sweep-settings-scan-pairing", "Scan a pairing code opens the join flow.",
-    ST + "test_scanPairingCodeOpensJoin", ["settings-scan-pairing-code"], ["Join an account"], "D3"),
+  sweep("ios-sweep-settings-scan-pairing", "Scan a code or enter a link: a pasted pairing code opens the join flow.",
+    ST + "test_scanOrLinkOpensAPairingCode", ["settings-scan-pairing-code", "scan-or-link-field", "scan-or-link-open"], ["Join an account"], "D3"),
 ];
 
 const SV = "GymSweepServerTests/";
@@ -981,10 +982,10 @@ const SERVER: readonly Scenario[] = [
   ),
   sweep(
     "ios-sweep-server-deadman",
-    "Auto lock-down: on, window, Tighten now, On lapse, Keep unlocked, off: each an admin-signed order.",
+    "Auto lock-down: on (every auto-unlock lease revoked at the boot worker first), window, Tighten now, On lapse, Keep unlocked, off: each an admin-signed order.",
     SV + "test_deadManPolicyWindowLockoutAffirm",
     ["sd-deadman-open", "deadman-toggle", "deadman-window-picker", "deadman-tighten", "deadman-lockout-picker", "deadman-affirm"],
-    ["signed deadman-policy by admin-root", "signed deadman-affirm by admin-root"],
+    ["revoked all leases home.", "signed deadman-policy by admin-root", "signed deadman-affirm by admin-root"],
   ),
   sweep(
     "ios-sweep-server-monitoring",

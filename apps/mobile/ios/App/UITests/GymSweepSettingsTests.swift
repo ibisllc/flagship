@@ -165,10 +165,15 @@ final class GymSweepSettingsTests: GymSweepCase {
         let classic = app.buttons["appicon-classic"]
         let legacy = app.buttons["appicon-legacy"]
         XCTAssertTrue(find(app, legacy))
-        wait(classic, "isSelected == true")
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        legacy.tap()
         let ok = springboard.alerts.buttons["OK"]
+        // The icon is simulator state: an earlier run cut short can leave Legacy chosen.
+        if legacy.isSelected {
+            classic.tap()
+            if ok.waitForExistence(timeout: 8) { ok.tap() }
+        }
+        wait(classic, "isSelected == true", timeout: 15)
+        legacy.tap()
         if ok.waitForExistence(timeout: 8) { ok.tap() }
         wait(legacy, "isSelected == true", timeout: 15)
         classic.tap()
@@ -603,7 +608,8 @@ final class GymSweepSettingsTests: GymSweepCase {
         }
         func deleteKey() {
             keyMenu("Delete key")
-            let confirm = app.buttons["ai-key-delete"]
+            // The confirmation dialog's button can surface twice (action sheet + its popover host).
+            let confirm = app.buttons["ai-key-delete"].firstMatch
             XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Deleting asks first.")
             confirm.tap()
         }
@@ -622,9 +628,14 @@ final class GymSweepSettingsTests: GymSweepCase {
         key.typeText("sk-gym-0123456789abcdef")
         app.buttons["ai-key-add-save"].tap()
         XCTAssertTrue(actions.firstMatch.waitForExistence(timeout: 5), "The saved key is listed.")
-        XCTAssertFalse(app.descendants(matching: .any)["ai-key-default-model"].firstMatch.exists, "The row is compact.")
+        // Flagship Inference's card carries its own Default model row (same id); the key row adds
+        // one only once Key settings is open.
+        let models = app.descendants(matching: .any).matching(identifier: "ai-key-default-model")
+        let freeModels = app.otherElements["free-ai-card"].descendants(matching: .any).matching(identifier: "ai-key-default-model").count
+        XCTAssertEqual(models.count, freeModels, "The row is compact.")
         keyMenu("Key settings")
-        XCTAssertTrue(app.descendants(matching: .any)["ai-key-default-model"].firstMatch.waitForExistence(timeout: 5))
+        let opened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count == %d", freeModels + 1), object: models)
+        XCTAssertEqual(XCTWaiter().wait(for: [opened], timeout: 5), .completed, "Key settings opens the key's Default model row.")
         XCTAssertTrue(app.switches["ai-key-relay"].firstMatch.exists)
 
         // Whichever isn't default offers Make default.
@@ -785,6 +796,23 @@ final class GymSweepSettingsTests: GymSweepCase {
         app.buttons["scan-or-link-open"].tap()
         XCTAssertTrue(app.navigationBars["Account security"].waitForExistence(timeout: 10),
                       "An app link opens the screen it names.")
+    }
+
+    /// The same screen takes a bare pairing code (what "Scan a pairing code"
+    /// used to open) and reads it as its `/join` link: Join an account opens.
+    func test_scanOrLinkOpensAPairingCode() throws {
+        let app = launch(tab: "settings")
+        settings(app)
+        let scan = app.buttons["settings-scan-pairing-code"]
+        XCTAssertTrue(find(app, scan))
+        scan.tap()
+        let field = app.textFields["scan-or-link-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("sid=gym&pk=ERERERERERERERERERERERERERERERERERERERERERE")
+        app.buttons["scan-or-link-open"].tap()
+        XCTAssertTrue(app.navigationBars["Join an account"].waitForExistence(timeout: 10), "A pairing code opens Join.")
+        shot(app, "scan-or-link-pairing-code")
     }
 
     // MARK: - Backups and recovery

@@ -210,17 +210,15 @@ final class GymTotalDetailTests: XCTestCase {
         next1.tap()
 
         // Step 2 — backup policy. The final design step swaps Next → Continue.
-        XCTAssertTrue(
-            app.buttons["cs-backup-policy-none"].waitForExistence(timeout: 10)
-                || app.buttons["cs-backup-policy-peer"].exists,
-            "Step 2 should show the backup-policy radios."
-        )
+        XCTAssertTrue(app.buttons["cs-backup-policy-none"].waitForExistence(timeout: 10), "Step 2 should show the backup-policy radios.")
+        XCTAssertTrue(app.buttons["cs-backup-policy-phone-only"].exists, "Step 2 offers On my phone.")
+        XCTAssertFalse(app.buttons["cs-backup-policy-peer"].exists, "Peer is not offered while peer backup is off (GA).")
         XCTAssertTrue(
             app.buttons["cs-continue-button"].exists,
             "The final design step should offer Continue (→ the delivery chooser)."
         )
         XCTAssertFalse(app.buttons["cs-continue-button"].isEnabled, "Nothing is preselected: Continue waits for a backup choice.")
-        app.chooseBackupPolicy("peer")
+        app.chooseBackupPolicy("phone-only")
         XCTAssertTrue(app.buttons["cs-continue-button"].isEnabled, "A pick turns Continue on.")
         gymShot(app, "create-step2-backup")
     }
@@ -408,7 +406,7 @@ final class GymTotalDetailTests: XCTestCase {
     /// displays a full key.
     func test_aiKeysManagerAddForm() throws {
         let app = launch(tab: "settings")
-        let aiKeys = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'AI keys'")).firstMatch
+        let aiKeys = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'AI API keys'")).firstMatch
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 20), "Settings should render.")
         XCTAssertTrue(revealBySwipe(app, aiKeys), "Settings should offer the AI-keys row.")
         aiKeys.tap()
