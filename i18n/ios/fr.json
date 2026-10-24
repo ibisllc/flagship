@@ -2601,5 +2601,6 @@
   "This server is locked. Approve its start-up from your iPhone.": "Ce serveur est verrouillé. Approuvez son démarrage depuis votre iPhone.",
   "Turn on Approve from watch in Account security first.": "Activez d’abord Approuver depuis la montre dans Sécurité du compte.",
   "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "L’approbation de votre montre a expiré. Désactivez puis réactivez Approuver depuis la montre dans Sécurité du compte.",
-  "This server's key doesn't match. Approve its start-up from your phone.": "La clé de ce serveur ne correspond pas. Approuvez son démarrage depuis votre téléphone."
+  "This server's key doesn't match. Approve its start-up from your phone.": "La clé de ce serveur ne correspond pas. Approuvez son démarrage depuis votre téléphone.",
+  "This start-up request isn't signed by your server. Approve it from your phone.": "Cette demande de démarrage n’est pas signée par votre serveur. Approuvez-la depuis votre téléphone."
 }

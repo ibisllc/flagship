@@ -106723,6 +106723,47 @@
           }
         }
       }
+    },
+    "This start-up request isn't signed by your server. Approve it from your phone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta solicitud de arranque no está firmada por tu servidor. Apruébala desde tu teléfono."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette demande de démarrage n’est pas signée par votre serveur. Approuvez-la depuis votre téléphone."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Startanfrage ist nicht von deinem Server signiert. Genehmige sie auf deinem Telefon."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este pedido de inicialização não foi assinado pelo seu servidor. Aprove-o pelo seu celular."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この起動リクエストにはサーバーの署名がありません。スマートフォンから承認してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此启动请求未经你的服务器签名。请从你的手机批准。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
