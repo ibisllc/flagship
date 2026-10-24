@@ -279,8 +279,10 @@ public struct SignedServerOrderWire: Codable, Equatable, Sendable {
         public let stks: [String]
         public let issuedAt: Int64
         public let nonce: String
-        public init(user: String, stks: [String], issuedAt: Int64, nonce: String) {
-            self.user = user; self.stks = stks; self.issuedAt = issuedAt; self.nonce = nonce
+        /// Architecture v2: each server's pinned PQ key id (`-` for none); signed with the order.
+        public let pqKeyIds: [String]?
+        public init(user: String, stks: [String], issuedAt: Int64, nonce: String, pqKeyIds: [String]? = nil) {
+            self.user = user; self.stks = stks; self.issuedAt = issuedAt; self.nonce = nonce; self.pqKeyIds = pqKeyIds
         }
     }
     public let order: Order

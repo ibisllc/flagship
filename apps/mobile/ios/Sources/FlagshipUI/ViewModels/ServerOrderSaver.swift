@@ -58,7 +58,19 @@ public struct ServerOrderSaver {
             app.finishServerOrderChange()
             return .local
         }
-        let order = ServerOrder.make(user: user, stks: app.serverOrder, now: issuedAt)
+        var order = ServerOrder.make(user: user, stks: app.serverOrder, now: issuedAt)
+        let strict = QuantumSafetyService.anyStrict(username: user)
+        // A strict box pins its siblings through this order: name each server's PQ key as this
+        // phone pinned it (pq-suites.md §16).
+        if strict {
+            let pods = app.pods
+            order = order.withPqKeyIds { stk in
+                guard let pod = pods.first(where: { $0.identityPubKeyHex.lowercased() == stk }), !pod.fqdn.isEmpty,
+                      let b = BoxKeyPins.shared.verifiedBoxPqBinding(username: user, serverDomain: pod.fqdn),
+                      b.ed25519PubHex == stk else { return nil }
+                return b.keyIdHex
+            }
+        }
         guard !order.stks.isEmpty else {
             app.finishServerOrderChange()
             return .local
@@ -68,7 +80,7 @@ public struct ServerOrderSaver {
             let signature = try order.sign(with: key)
             var wire = SignedServerOrderWire(order: order.wire, signature: signature)
             // A strict server takes the order only with the admin root's hybrid signature too.
-            if QuantumSafetyService.anyStrict(username: user) {
+            if strict {
                 wire.pqSignature = await QuantumSafetyService.pqSignature(canonical: try order.canonicalBytes(), edKey: key, role: .adminRoot, username: user)
             }
             try await mailbox.postServerOrder(username: user, body: wire)

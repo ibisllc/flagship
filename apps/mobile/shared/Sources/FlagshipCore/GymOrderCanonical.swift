@@ -10,7 +10,7 @@ public enum GymOrderCanonical {
         signers.registerCanonical("server-order") { p in
             guard let w = p as? SignedServerOrderWire else { return nil }
             return try? ServerOrder(user: w.order.user, stks: w.order.stks, issuedAt: w.order.issuedAt,
-                                    nonce: w.order.nonce).canonicalBytes()
+                                    nonce: w.order.nonce, pqKeyIds: w.order.pqKeyIds).canonicalBytes()
         }
         signers.registerCanonical("server-unrevoke") { p in
             guard let r = p as? ServerUnrevocationRequest else { return nil }
