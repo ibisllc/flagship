@@ -344,12 +344,17 @@ object SecretSeal {
     }
 
     /** Box-side open (used by tests vs a known X25519 priv). */
-    fun openWithX25519(blob: ByteArray, recipientX25519Priv: ByteArray): ByteArray {
+    fun openWithX25519(blob: ByteArray, recipientX25519Priv: ByteArray): ByteArray =
+        openWithAgreement(blob) { ephPub -> X25519.computeSharedSecret(recipientX25519Priv, ephPub) }
+
+    /** Open with a key that never leaves secure hardware: [agree] runs the X25519
+     *  agreement with the sender's ephemeral public key and returns the shared secret. */
+    fun openWithAgreement(blob: ByteArray, agree: (ephPub: ByteArray) -> ByteArray): ByteArray {
         require(blob.size >= 44) { "sealed blob too short" }
         val ephPub = blob.copyOfRange(0, 32)
         val nonce = blob.copyOfRange(32, 44)
         val ct = blob.copyOfRange(44, blob.size)
-        val shared = X25519.computeSharedSecret(recipientX25519Priv, ephPub)
+        val shared = agree(ephPub)
         val key = hkdfSha256(shared, ephPub, TAG.toByteArray(), 32)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))

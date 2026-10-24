@@ -104,6 +104,9 @@ class LiveBuildClient(
         )
     }
 
+    override suspend fun boxFqdn(): String? =
+        runCatching { java.net.URI(base()).host }.getOrNull()
+
     override suspend fun state(buildId: String): BuildStateResponse =
         request("/api/build/sessions/$buildId", BuildStateResponse.serializer())
 

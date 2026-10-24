@@ -119,6 +119,8 @@ class GymMocks(
     val shares: ServerShareRuntime?,
     /** The boxes the app-wide access dialogs ask, when the run raises them. */
     val accessBoxes: ((AppState) -> List<AccessBox>)?,
+    /** The boxes app-chat requests are read from (the mock box). */
+    val chatBoxes: ((AppState) -> List<AccessBox>)? = null,
 )
 
 /** The mock box's access-control fixture (fixed device keys and names). */

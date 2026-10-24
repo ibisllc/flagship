@@ -754,8 +754,8 @@
       "ref": "web",
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/chatAlerts.js", "export async function renderChatSection"], ["apps/web/public/webapp/lib/chatAlerts.js", "A remote machine claiming to run"], ["apps/web/public/webapp/lib/chatApproval.js", "flagship/chat-approval/v1"]] },
-        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the approval screens follow the webapp.", "anchors": [] },
-        "android": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the approval screens follow the webapp.", "anchors": [] }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ChatRequestCenter.kt", "class ChatRequestCenter"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ChatRequestScreens.kt", "fun ChatRequestsList"], ["apps/mobile/android/app/src/main/res/values/strings.xml", "A remote machine claiming to run"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ChatApproval.kt", "flagship/chat-approval/v1"]] },
+        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the approval screens follow the webapp.", "anchors": [] }
       }
     },
     {
@@ -764,8 +764,18 @@
       "ref": "web",
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/aiConsentUi.js", "export async function withAiConsent"], ["apps/web/public/webapp/views/build-git.js", "withAiConsent\\("], ["apps/web/public/webapp/lib/aiRepairConsent.js", "flagship/ai-repair-consent/v1"]] },
-        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the consent sheet follows the webapp.", "anchors": [] },
-        "android": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the consent sheet follows the webapp.", "anchors": [] }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiConsentFlow.kt", "suspend fun <T> withConsent"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AiConsentDialog.kt", "fun AiConsentDialog"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiRepairConsent.kt", "flagship/ai-repair-consent/v1"]] },
+        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the consent sheet follows the webapp.", "anchors": [] }
+      }
+    },
+    {
+      "id": "watch-boot-key",
+      "title": "Watch approval with the phone locked (option (a)): a boot-only X25519 key beside the watch delegate, a per-server owner opt-in that deposits an attested copy of the disk key (PUT/DELETE /api/boot/watch-key), and a watch Approve that opens it without the account key; 423 when the server is locked",
+      "ref": "android",
+      "surfaces": {
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/WatchBootKey.kt", "class WatchBootApprover"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/KeystoreWatchBootKeys.kt", "PURPOSE_AGREE_KEY"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/WatchQuickApproveCard.kt", "fun WatchBootServers"]] },
+        "ios": { "status": "missing", "reason": "Pending: the protocol port exists (FlagshipCore/WatchBootDelegate.swift); the Secure Enclave key and the screens are not built.", "anchors": [] },
+        "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
       }
     }
   ]

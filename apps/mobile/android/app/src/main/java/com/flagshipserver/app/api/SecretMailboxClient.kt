@@ -68,6 +68,20 @@ interface SecretMailboxClient {
         bootAuth: String,
     ): BootSuspensionPutResult = throw UnsupportedOperationException("boot suspension")
 
+    /** PUT {boot}/api/boot/watch-key — the disk key sealed to the watch's
+     *  boot-only key, attested by the account key (owner-IRK `bootAuth`). */
+    suspend fun putWatchBootKey(deposit: WatchBootDepositWire, bootAuth: String): Unit =
+        throw UnsupportedOperationException("watch boot key")
+
+    /** GET {boot}/api/boot/watch-key/:domain — signed by the watch delegate: its
+     *  own copy. 423 while the server is locked, 404 when there is none. */
+    suspend fun getWatchBootKey(serverDomain: String, bootAuth: String): WatchBootDepositWire =
+        throw UnsupportedOperationException("watch boot key")
+
+    /** DELETE {boot}/api/boot/watch-key/:domain — the owner takes every watch copy away. */
+    suspend fun deleteWatchBootKey(serverDomain: String, bootAuth: String): Unit =
+        throw UnsupportedOperationException("watch boot key")
+
     /** DELETE {boot}/api/boot/lease/:domain — revoke EVERY lease for the
      *  server (owner-IRK). Used when the dead-man switch is switched on. */
     suspend fun revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String): Unit =
@@ -358,6 +372,35 @@ data class SecretResponseBody(
     val sealed: String,           // hex
     val issuedAt: Long,
 )
+
+/** `flagship/watch-boot-delegate/v1` deposit as the boot worker takes and returns it. */
+@Serializable
+data class WatchBootDepositWire(
+    val serverDomain: String,
+    val delegatePubHex: String,
+    val decryptPubHex: String,
+    val keySha256Hex: String,
+    val issuedAt: Long,
+    val expiresAt: Long,
+    val sealedKeyHex: String,
+    val signatureHex: String,
+) {
+    fun toDeposit() = com.flagshipserver.app.core.WatchBootDelegate.Deposit(
+        com.flagshipserver.app.core.WatchBootDelegate.Attestation(serverDomain, delegatePubHex, decryptPubHex, keySha256Hex, issuedAt, expiresAt),
+        sealedKeyHex,
+        signatureHex,
+    )
+
+    companion object {
+        fun of(d: com.flagshipserver.app.core.WatchBootDelegate.Deposit) = WatchBootDepositWire(
+            d.attestation.serverDomain, d.attestation.delegatePubHex, d.attestation.decryptPubHex,
+            d.attestation.keySha256Hex, d.attestation.issuedAt, d.attestation.expiresAt, d.sealedKeyHex, d.signatureHex,
+        )
+    }
+}
+
+@Serializable
+data class WatchBootDepositBody(val deposit: WatchBootDepositWire)
 
 @Serializable
 data class SealedLuksKeyResponse(
@@ -809,6 +852,38 @@ class LiveSecretMailboxClient(
         transport.execute(
             method = "DELETE",
             url = "$bootBase/api/boot/lease/${request.serverDomain}/${request.leaseId}",
+            body = null,
+            contentType = null,
+            extraHeaders = mapOf("Authorization" to bootAuth),
+            accept = setOf(200, 204),
+        )
+    }
+
+    override suspend fun putWatchBootKey(deposit: WatchBootDepositWire, bootAuth: String) {
+        val bytes = transport.json
+            .encodeToString(WatchBootDepositBody.serializer(), WatchBootDepositBody(deposit))
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "PUT",
+            url = "$bootBase/api/boot/watch-key",
+            body = bytes,
+            contentType = "application/json",
+            extraHeaders = mapOf("Authorization" to bootAuth),
+            accept = setOf(200, 201),
+        )
+    }
+
+    override suspend fun getWatchBootKey(serverDomain: String, bootAuth: String): WatchBootDepositWire =
+        transport.getJson(
+            url = "$bootBase/api/boot/watch-key/$serverDomain",
+            responseSerializer = WatchBootDepositBody.serializer(),
+            extraHeaders = mapOf("Authorization" to bootAuth),
+        ).deposit
+
+    override suspend fun deleteWatchBootKey(serverDomain: String, bootAuth: String) {
+        transport.execute(
+            method = "DELETE",
+            url = "$bootBase/api/boot/watch-key/$serverDomain",
             body = null,
             contentType = null,
             extraHeaders = mapOf("Authorization" to bootAuth),
