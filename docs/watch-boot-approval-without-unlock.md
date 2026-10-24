@@ -31,8 +31,20 @@ c) **Keep today's behaviour and say so.** No new risk, but the feature does not 
   pinned). Revoking the delegate revokes both keys.
 - The box lists delegate keys it accepts in its own signed settings (owner opt-in per server, off by
   default, with the share-start warning the owner already sees). A request is sealed to each listed key.
-- The decryption key never leaves the secure hardware and needs user presence per use (the watch
-  gesture), so a stolen locked phone cannot answer on its own.
+- The decryption key never leaves the phone's key store and opens only a boot-unlock copy; the box
+  accepts its answer only as a boot response. **As built, it needs no user presence on the phone**
+  (2026-10-24, Security ruling): the phone is locked in a pocket and the watch tap reaches it over
+  Bluetooth, where the key store cannot check it, and the Secure Enclave has no X25519. Android keeps
+  it in the AndroidKeyStore (XDH, not exportable); iOS in the Keychain, this device only, after first
+  unlock. Presence moves to the watch: Approve works only from a visible prompt naming the server, while
+  the watch is on the wrist and unlocked, never from a background path. A stolen locked phone still
+  cannot answer on its own, because nothing on the phone starts an approval.
+- The delegate seals only to the server key the phone pinned at pairing or creation, never to a key
+  `.com` names (`/pods` included); a mismatch is refused and logged. The request nonce comes from `.com`
+  unverified for now (the box refuses a stale or foreign one); a read-token route returning the
+  box-signed request will let the delegate check it too.
+- The 7-day delegate renews silently while the app is unlocked, once it has under 2 days left, and the
+  per-server copies are deposited again with it; a lapsed one is re-enabled by the owner.
 - A lost watch: the 7-day TTL ends it, and the owner can revoke it from any admin device at once.
 - **The boot-suspension lock wins.** The boot service refuses to release anything for a suspended server
   whoever approves; a delegate approval is an approval like any other and is checked against the lock
@@ -46,6 +58,7 @@ in the unlock request, a watch and phone enrolment screen, and a real-hardware r
 Keystore user-presence behaviour cannot be proven in a simulator). Order: protocol and box first, then iOS
 and the watch, then Android and Wear OS.
 
-## Decision needed
+## Decision
 
-Pick (a), (b) or (c). Until then nothing changes and the setting keeps saying the phone must be unlocked.
+The owner chose (a) (2026-10-23). Protocol, storage and boot routes are on release/0.3; the phone
+and watch screens are on feat/UX. The presence rule above differs from the doc as first written.
