@@ -9,6 +9,7 @@ pub mod key_id;
 pub mod release;
 mod rng;
 pub mod seal;
+pub mod session;
 pub mod sig;
 pub mod trust;
 

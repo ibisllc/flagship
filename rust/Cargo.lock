@@ -973,6 +973,7 @@ dependencies = [
  "flagship-protocol",
  "getrandom 0.4.3",
  "hkdf",
+ "hmac 0.13.0",
  "ml-dsa",
  "rand_core 0.10.1",
  "serde_json",
