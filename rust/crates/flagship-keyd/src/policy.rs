@@ -32,6 +32,8 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/boot-key-binding/v1",
     "flagship/pq-key-binding/v1",
     "flagship/boot-key-binding/v2",
+    "flagship/pq-session-accept/v1",
+    "flagship/pq-session-finish/v1",
     "flagship/inject/v1",
     "flagship/sibling-hello/v1",
     "flagship/sibling-sync/v1",
@@ -118,8 +120,21 @@ pub fn check_sign(msg: &[u8], public_key_hex: &str, allowed: &[&str]) -> KeydRes
 }
 
 /// `HYBRID_ONLY_PURPOSES`: signed with both keys only (`sign.hybrid`).
-pub const HYBRID_ONLY_PURPOSES: &[&str] =
-    &["flagship/pq-key-binding/v1", "flagship/boot-key-binding/v2"];
+pub const HYBRID_ONLY_PURPOSES: &[&str] = &[
+    "flagship/pq-key-binding/v1",
+    "flagship/boot-key-binding/v2",
+    "flagship/pq-session-accept/v1",
+    "flagship/pq-session-finish/v1",
+];
+
+fn session_domain_ok(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.first()
+        .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && b.len() <= 253
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'.' | b'-'))
+}
 
 /// `checkSign` with its `hybrid` argument: the STK's ML-DSA public key when the request is
 /// `sign.hybrid`, `None` for `sign`.
@@ -156,6 +171,21 @@ pub fn check_sign_with(
         {
             return Err(KeydError::forbidden(
                 "the box binds only its own two keys, as the box",
+            ));
+        }
+    }
+    if purpose == "flagship/pq-session-accept/v1" || purpose == "flagship/pq-session-finish/v1" {
+        // tag|<server domain>|<128-hex transcript digest>
+        let text = String::from_utf8_lossy(msg);
+        let parts: Vec<&str> = text.split('|').collect();
+        let digest_ok = parts.get(2).is_some_and(|d| {
+            d.len() == 128
+                && d.bytes()
+                    .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+        });
+        if parts.len() != 3 || !parts.get(1).is_some_and(|d| session_domain_ok(d)) || !digest_ok {
+            return Err(KeydError::forbidden(
+                "a session signature names a server and one transcript digest",
             ));
         }
     }

@@ -330,6 +330,22 @@ describe("hybrid signing (architecture v2)", () => {
     expect(() => checkSign(enc("flagship/boot-key-binding/v2|home|x|1"), pub)).toThrow(/both of its keys/);
   });
 
+  it("signs a PQ session transcript with both keys only, naming one server and one digest", () => {
+    const pub = "ab".repeat(32);
+    const ml = "cd".repeat(1952);
+    const m = (s: string) => new TextEncoder().encode(s);
+    const ok = m(`flagship/pq-session-accept/v1|home.alice.flagship.services|${"0f".repeat(64)}`);
+    expect(checkSign(ok, pub, BOX_SIGN_PURPOSES, { mldsaPubHex: ml })).toBe("flagship/pq-session-accept/v1");
+    expect(() => checkSign(ok, pub, BOX_SIGN_PURPOSES)).toThrow(/both of its keys/);
+    for (const bad of [
+      `flagship/pq-session-finish/v1|home.alice.flagship.services|${"0f".repeat(63)}`,
+      `flagship/pq-session-finish/v1|Home|${"0f".repeat(64)}`,
+      `flagship/pq-session-finish/v1|home.alice.flagship.services|${"0f".repeat(64)}|extra`,
+    ]) {
+      expect(() => checkSign(m(bad), pub, BOX_SIGN_PURPOSES, { mldsaPubHex: ml })).toThrow(KeydError);
+    }
+  });
+
   it("answers not-provisioned without an ML-DSA seed", async () => {
     const k = await startInProcess();
     try {
