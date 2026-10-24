@@ -418,15 +418,23 @@ of the last check here: **not yet checked**.
   downgrade, wasmtime-wasi escape, …) patched. Shipping order: D1 0110 → `.com` (shell v166) →
   endorsed box release → iOS/Android store builds (old store builds lose the disk-key read for
   real accounts) → republish both VM appliances. None of it has run on a real box, VM or phone.
-  **Full quantum safety, milestone 1 (box pilot):** every identity role has a hybrid key binding
+  **Full quantum safety, milestones 1-2:** every identity role has a hybrid key binding
   (`flagship/pq-key-binding/v1`) and critical signatures go through one gate
-  (`verifyCriticalSignature`, TS `pqTrust.ts` + Rust `flagship-crypto::trust`, vectors
-  `test-vectors/pq-binding/`, spec `pq-suites.md` §9-§10). keyd (both backends) holds an ML-DSA-65
-  key next to the STK (`sign.hybrid`); the daemon binds it on `.com` (D1 migration **0111**,
-  `/api/server/:host/pq-key-binding`), hybrid-signs the boot-key binding (v2 beside v1) and
-  daemon-status, which `.com` gates; the webapp (shell **v167**) pins the box's ML-DSA key. No
-  policy row is strict anywhere. Milestone 2: Swift/Kotlin ports, phone-held IRK/admin/device
-  bindings, the boot client's own ML-DSA key, signed policy changes into D1.
+  (`verifyCriticalSignature`; TS `pqTrust.ts`, Rust `flagship-crypto::trust`, Swift `FlagshipCore`
+  + C target `CFlagshipPQ` (mldsa-native/mlkem-native v2.0.0), Kotlin `core/pq/` (BouncyCastle
+  1.86), webapp verify-only; vectors `pq-hybrid`, `pq-binding`, `assurance-policy`; spec
+  `pq-suites.md` §9-§11). keyd holds the box's ML-DSA key; `.com` stores box (0111) and phone
+  identity bindings (`/api/accounts/:u/pq-key-bindings`, also in the device-grant book) only under
+  the key it already trusts, first ML-DSA key per Ed25519 key wins, so a recovery cannot rebind
+  strict authority before the re-pair wait/veto. Phones hold one fresh ML-DSA seed per identity,
+  "PQ, hardware-wrapped" (iOS Secure Enclave wrap, Android Keystore biometric-or-credential);
+  iOS 26+ device keys are `SecureEnclave.MLDSA65`, "hardware PQ"; bound at create, join,
+  admin-root setup and, for old accounts, quietly at the next unlock. Owner-signed policy changes
+  chain per scope in D1 **0112** (`/api/accounts/:u/assurance-policy`, forks refused); the box
+  replays its chain itself and, once strict, refuses sensitive orders without a hybrid signature.
+  Webapp shell **v168**. No UI offers strict yet (milestone 4) and no client signs hybrid orders
+  or applies a served chain yet; the boot client's own ML-DSA key is still open. Nothing has run
+  on a device.
 
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
