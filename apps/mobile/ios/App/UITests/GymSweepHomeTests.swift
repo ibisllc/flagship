@@ -438,11 +438,12 @@ final class GymSweepHomeTests: GymSweepCase {
         }
     }
 
-    /// Sign out on the lock screen asks first: Cancel closes the question,
+    /// Sign out on the lock screen asks first (Face ID passed by
+    /// `-smoke-accept-biometric`): Cancel closes the question,
     /// Sign out anyway returns to Welcome. (Unlock itself needs the
     /// simulator's biometric, which the gym doesn't control.)
     func test_lockScreenSignOutAsksFirst() throws {
-        var app = launch(admin: true, ["-smoke-locked", "-smoke-no-recovery"])
+        var app = launch(admin: true, ["-smoke-locked", "-smoke-no-recovery", "-smoke-accept-biometric"])
         var signOut = app.buttons["lock-sign-out-btn"]
         XCTAssertTrue(signOut.waitForExistence(timeout: 20))
         XCTAssertTrue(app.buttons["lock-unlock-btn"].exists, "The lock screen offers Unlock.")
@@ -453,7 +454,7 @@ final class GymSweepHomeTests: GymSweepCase {
         cancelDialog(app)
         waitGone(anyway)
 
-        app = launch(admin: true, ["-smoke-locked", "-smoke-no-recovery"])
+        app = launch(admin: true, ["-smoke-locked", "-smoke-no-recovery", "-smoke-accept-biometric"])
         signOut = app.buttons["lock-sign-out-btn"]
         XCTAssertTrue(signOut.waitForExistence(timeout: 20))
         askToSignOut(app, button(app, "Sign out anyway"))
