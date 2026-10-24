@@ -80,12 +80,24 @@ class WatchBootKeyTest {
     private fun header(auth: String) =
         Json.parseToJsonElement(String(java.util.Base64.getUrlDecoder().decode(auth.removePrefix("Flagship-Boot-v1 ")))).jsonObject
 
+    /** The phone's recorded server keys (trust on first use). */
+    private class MemPins : ServerKeyPinStore {
+        val map = HashMap<String, String>()
+        override fun get(serverDomain: String) = map[serverDomain]
+        override fun put(serverDomain: String, stkPubHex: String) { map[serverDomain] = stkPubHex }
+        override fun remove(serverDomain: String) { map.remove(serverDomain) }
+    }
+    private val pinStore = MemPins()
+    private val pins = ServerKeyPins(pinStore)
+    /** What this phone's own server list shows for the server now. */
+    private var listedKey: String? = HexUtil.encode(stkKp.publicKey)
+
     private fun optIn(m: MockSecretMailboxClient, store: SoftStore) =
-        WatchBootOptIn(m, irk, store, pinnedStk = { stkKp.publicKey }, now = { now }, nonceGen = { ByteArray(32) { 2 } })
+        WatchBootOptIn(m, irk, store, pins, { listedKey }, now = { now }, nonceGen = { ByteArray(32) { 2 } })
 
     private fun approver(m: MockSecretMailboxClient, store: SoftStore) = WatchBootApprover(
         m, { WatchDelegateSigner(Ed25519Sign(delegateKp.privateKey), delegatePubHex) }, store,
-        ReadTokenStartUpSource(m, user), now = { now }, nonceGen = { ByteArray(32) { 4 } },
+        ReadTokenStartUpSource(m, user), pins, now = { now }, nonceGen = { ByteArray(32) { 4 } },
     )
 
     @Test fun optInDepositsAnAttestedCopyThatOutlivesNeitherTheDelegateNorAWeek() = runBlocking {
@@ -101,7 +113,8 @@ class WatchBootKeyTest {
         Ed25519Verify(irkKp.publicKey).verify(HexUtil.decode(dep.signatureHex)!!, WatchBootDelegate.canonicalBytes(dep.toDeposit().attestation))
         assertEquals("owner", header(auth)["role"]!!.jsonPrimitive.content)
         assertEquals("/api/boot/watch-key", header(auth)["path"]!!.jsonPrimitive.content)
-        assertEquals(mapOf(domain to WatchBootCopy(ends, HexUtil.encode(stkKp.publicKey))), store.copies)
+        assertEquals(mapOf(domain to WatchBootCopy(ends)), store.copies)
+        assertEquals(HexUtil.encode(stkKp.publicKey), pinStore.map[domain])
 
         val week = optIn(m, SoftStore()).enable(domain, delegatePubHex, now + 30L * 24 * 3_600_000, "reason")
         assertTrue(week - now <= WatchBootDelegate.MAX_MS)
@@ -159,7 +172,7 @@ class WatchBootKeyTest {
 
     @Test fun withoutACopyTheAccountKeyPathStillAnswers() = runBlocking {
         val m = mailbox()
-        val store = SoftStore().apply { loadOrCreate(); setCopy(domain, WatchBootCopy(now + 60_000, HexUtil.encode(stkKp.publicKey))) }
+        val store = SoftStore().apply { loadOrCreate(); setCopy(domain, WatchBootCopy(now + 60_000)) }
         assertEquals(WatchBootApprover.Outcome.NotAvailable, approver(m, store).approve(domain, null))
         assertTrue("a copy the worker doesn't hold is forgotten", store.copies.isEmpty())
         val reply = WatchApprovalResponder(
@@ -209,6 +222,51 @@ class WatchBootKeyTest {
         m.signedRequests = listOf(signed(expiresAt = now - 1))
         assertEquals(WatchBootApprover.Outcome.NotWaiting, approver(m, store).approve(domain, null))
         assertTrue(m.postedResponses.isEmpty())
+    }
+
+    /** The first key recorded stays: a different key later is refused, never adopted. */
+    @Test fun thePinIsRecordedOnceAndADifferentKeyLaterIsRefused() = runBlocking {
+        val m = mailbox()
+        val store = SoftStore()
+        optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason")
+        val first = pinStore.map[domain]
+        listedKey = HexUtil.encode(forged.publicKey)
+        val refused = runCatching { optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason") }
+        assertTrue(refused.exceptionOrNull() is ServerKeyChangedException)
+        assertEquals(first, pinStore.map[domain])
+        assertEquals(1, m.watchBootPuts.size)
+        // A box now signing with that other key is refused too.
+        m.signedRequests = listOf(signed(signer = forged))
+        assertEquals(WatchBootApprover.Outcome.KeyMismatch, approver(m, store).approve(domain, null))
+        assertTrue(m.postedResponses.isEmpty())
+        // Only an explicit re-trust lets a new key be recorded.
+        pins.forget(domain)
+        assertEquals(ServerKeyPins.Record.Recorded, pins.recordFirstSeen(domain, listedKey))
+    }
+
+    @Test fun noKeyRecordedMeansNoWatchPath() = runBlocking {
+        val m = mailbox()
+        val store = SoftStore().apply { loadOrCreate(); setCopy(domain, WatchBootCopy(now + 60_000)) }
+        assertEquals(WatchBootApprover.Outcome.NotAvailable, approver(m, store).approve(domain, null))
+        listedKey = null
+        assertTrue(runCatching { optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason") }.isFailure)
+        assertTrue(m.watchBootPuts.isEmpty())
+    }
+
+    /** A real box's key is random, so nothing on the watch path may derive one from the account key. */
+    @Test fun theWatchPathNeverDerivesAServerKey() {
+        var dir = java.io.File(".").absoluteFile
+        while (!java.io.File(dir, "app/src/main/java/com/flagshipserver/app").exists()) dir = dir.parentFile
+        val src = java.io.File(dir, "app/src/main/java/com/flagshipserver/app")
+        val watchPath = listOf(
+            "core/WatchBootKey.kt", "core/ServerKeyPins.kt", "core/WatchDelegateRenewal.kt", "core/WatchApprovalResponder.kt",
+            "keystore/WatchBootWiring.kt", "keystore/KeystoreWatchBootKeys.kt", "viewmodels/WatchBootViewModel.kt",
+            "ui/screens/WatchQuickApproveCard.kt", "companion/CompanionSurfaces.kt",
+        )
+        for (f in watchPath) assertFalse(f, java.io.File(src, f).readText().contains("deriveStk"))
+        val main = java.io.File(src, "MainActivity.kt").readText()
+        val renewal = main.substring(main.indexOf("WatchDelegateRenewal("), main.indexOf("renewal.renewIfDue()"))
+        assertFalse(renewal.contains("deriveStk"))
     }
 
     @Test fun aServerNotWaitingIsSaidSo() = runBlocking {
