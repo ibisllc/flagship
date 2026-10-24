@@ -2602,5 +2602,6 @@
   "Turn on Approve from watch in Account security first.": "Primeiro ative Aprovar pelo relógio em Segurança da conta.",
   "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "A aprovação do seu relógio terminou. Desative e ative de novo Aprovar pelo relógio em Segurança da conta.",
   "This server's key doesn't match. Approve its start-up from your phone.": "A chave deste servidor não confere. Aprove a inicialização dele pelo seu celular.",
-  "This start-up request isn't signed by your server. Approve it from your phone.": "Este pedido de inicialização não foi assinado pelo seu servidor. Aprove-o pelo seu celular."
+  "This start-up request isn't signed by your server. Approve it from your phone.": "Este pedido de inicialização não foi assinado pelo seu servidor. Aprove-o pelo seu celular.",
+  "This server's key changed since you turned this on. If you reinstalled it, turn this off and on again to trust the new key.": "A chave deste servidor mudou desde que você ativou isto. Se você o reinstalou, desative e ative de novo para confiar na nova chave."
 }

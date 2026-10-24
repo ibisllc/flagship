@@ -2602,5 +2602,6 @@
   "Turn on Approve from watch in Account security first.": "先に「アカウントのセキュリティ」で「ウォッチで承認」をオンにしてください。",
   "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "ウォッチの承認の期限が切れました。「アカウントのセキュリティ」で「ウォッチで承認」をオフにしてから、もう一度オンにしてください。",
   "This server's key doesn't match. Approve its start-up from your phone.": "このサーバーのキーが一致しません。スマートフォンから起動を承認してください。",
-  "This start-up request isn't signed by your server. Approve it from your phone.": "この起動リクエストにはサーバーの署名がありません。スマートフォンから承認してください。"
+  "This start-up request isn't signed by your server. Approve it from your phone.": "この起動リクエストにはサーバーの署名がありません。スマートフォンから承認してください。",
+  "This server's key changed since you turned this on. If you reinstalled it, turn this off and on again to trust the new key.": "オンにしたあとでこのサーバーのキーが変わりました。再インストールした場合は、オフにしてからもう一度オンにして新しいキーを信頼してください。"
 }
