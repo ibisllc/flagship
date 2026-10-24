@@ -1,4 +1,4 @@
-import { ENGINE_APT_PACKAGES } from "./engineSetup.js";
+import { stackSetup } from "./engineSetup.js";
 import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import { INSTALL_BOX_ARTIFACT_SH, VERIFY_BOX_ARTIFACT_SH } from "./boxInstallerScripts.js";
 import { createHash } from "node:crypto";
@@ -235,7 +235,7 @@ path-include=/usr/share/locale/en_US*
 path-include=/usr/share/locale/locale.alias
 DPKGCFG
 echo "[appliance-factory] installing Flagship runtime packages"
-timeout -k 15 600 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends jq curl ca-certificates cryptsetup cryptsetup-initramfs lvm2 xxd openssl gnupg cloud-guest-utils tpm2-tools ${ENGINE_APT_PACKAGES}
+timeout -k 15 600 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends jq curl ca-certificates cryptsetup cryptsetup-initramfs lvm2 xxd openssl gnupg cloud-guest-utils tpm2-tools ${stackSetup().apt}
 echo "[appliance-factory] runtime packages ready"
 case "$(dpkg --print-architecture)" in
     amd64) BOX_ARCH=amd64 ;;

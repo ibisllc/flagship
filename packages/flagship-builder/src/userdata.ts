@@ -23,7 +23,7 @@ import { INSTALL_BOX_ARTIFACT_SH, VERIFY_BOX_ARTIFACT_SH } from "./boxInstallerS
 import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import type { InstallBlob } from "@flagship/protocol";
 import { utf8ToBase64 } from "./base64.js";
-import { ENGINE_APT_PACKAGES, ENGINE_REQUIRED_COMMANDS, ENGINE_SETUP_BLOCK } from "./engineSetup.js";
+import { stackSetup } from "./engineSetup.js";
 import { APPROVED_BOOT_HOSTS, approvedBootHostName, buildUnlockPremountScript } from "./unlockPremount.js";
 
 /**
@@ -573,15 +573,15 @@ GIT_REF="${args.ref}"
 # through \`podman compose\`, which drives docker-compose over Podman's socket.
 export DEBIAN_FRONTEND=noninteractive
 if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" != "1" ]; then
-apt-get install -y --no-install-recommends jq curl ca-certificates cryptsetup lvm2 xxd openssl ${ENGINE_APT_PACKAGES}${wpaPkg}
+apt-get install -y --no-install-recommends jq curl ca-certificates cryptsetup lvm2 xxd openssl ${stackSetup().apt}${wpaPkg}
 else
     echo "[flagship-bootstrap] generalized appliance detected — packages already present"
-    for _cmd in jq curl cryptsetup openssl xxd ${ENGINE_REQUIRED_COMMANDS}; do
+    for _cmd in jq curl cryptsetup openssl xxd ${stackSetup().required}; do
         command -v "$_cmd" >/dev/null 2>&1 || { echo "[flagship-bootstrap] FATAL: appliance missing $_cmd"; exit 1; }
     done
 fi
 
-${ENGINE_SETUP_BLOCK}
+${stackSetup().block}
 # Read the install-blob fields the daemon needs.
 BLOB_JSON=/var/flagship/install-blob.json
 SERVER_DOMAIN="$(jq -r .serverDomain "$BLOB_JSON")"

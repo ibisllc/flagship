@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 #
 # The release gate's live gym: refresh the gym, take the gym lock, run EVERY live group (the 0.3 groups
-# included), let the runner tear its fleet down, release the lock, and print one summary line. Exits
-# non-zero on any failure, and 3 when nothing failed but something was skipped (inconclusive), so the
-# release script can tell "green" from "not proven".
+# included), let the runner tear its fleet down, release the lock, and print one summary line. It runs
+# twice, once per container stack (arch-v2: every group; classic: the groups covering existing boxes).
+# Exits 0 when both are green, 3 when nothing failed but something was skipped (not proven), 5 when
+# classic is green but arch-v2 is not (new boxes must be built on classic), any other code when
+# classic failed.
 #
 #   bash scripts/gym-release-run.sh [--skip-refresh] [--groups a,b] [--dry-run]
 #
@@ -64,30 +66,52 @@ if [ "$REFRESH" = 1 ]; then
   run bash scripts/gym-refresh.sh
 fi
 
-RUN_DIR="gym-results/release-$(date -u +%Y%m%dT%H%M%SZ)"
-export GYM_RUN_DIR="$RUN_DIR"
-set +e
-run npx tsx tools/live-e2e/shared-run.ts ${ONLY:+--groups "$ONLY"}
-CODE=$?
-set -e
+# Two passes (owner, 2026-10-24: the gym decides what new boxes are built on). arch-v2 runs every
+# group on boxes built like a real new box (Podman + the Rust path); classic runs the groups that
+# cover the boxes already out there (Docker + TS), which this release updates in place.
+STACKS="${GYM_STACKS:-arch-v2 classic}"
+CLASSIC_GROUPS="${GYM_CLASSIC_GROUPS:-core,gating,invites,one-list,update,backups}"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+report() { # report <run dir> <stack>
+  local summary="$1/summary.json"
+  if [ -f "$summary" ]; then
+    node -e '
+      const s = require(process.argv[1]);
+      const groups = Object.entries(s.summary ?? {});
+      const t = groups.reduce((a, [, g]) => ({ pass: a.pass + g.pass, fail: a.fail + g.fail, skip: a.skip + g.skip }), { pass: 0, fail: 0, skip: 0 });
+      console.log(`gym release run (${process.argv[3]}) ${process.argv[2]}: ${groups.length} groups, ${t.pass} passed, ${t.fail} failed, ${t.skip} skipped`);
+      for (const [name, g] of groups) if (g.fail || g.skip) console.log(`  ${name}: ${g.pass} passed, ${g.fail} failed, ${g.skip} skipped`);
+      console.log(`left after teardown: ${s.gymServersLeft ?? "?"} servers, ${s.gymDnsLeft ?? "?"} DNS records`);
+    ' "$REPO/$summary" "$1" "$2" || true
+  else
+    echo "no summary at $summary (the runner crashed before writing it)"
+  fi
+}
+CODE_ARCH=0 CODE_CLASSIC=0
+for STACK in $STACKS; do
+  RUN_DIR="gym-results/release-$STAMP-$STACK"
+  export GYM_RUN_DIR="$RUN_DIR" GYM_BOX_STACK="$STACK"
+  GROUPS_ARG="$ONLY"
+  [ "$STACK" = classic ] && [ -z "$ONLY" ] && GROUPS_ARG="$CLASSIC_GROUPS"
+  echo "── pass: $STACK${GROUPS_ARG:+ (groups $GROUPS_ARG)}"
+  set +e
+  run npx tsx tools/live-e2e/shared-run.ts ${GROUPS_ARG:+--groups "$GROUPS_ARG"}
+  c=$?
+  set -e
+  [ "$DRY" = 1 ] && continue
+  report "$RUN_DIR" "$STACK"
+  if [ "$STACK" = classic ]; then CODE_CLASSIC=$c; else CODE_ARCH=$c; fi
+done
 [ "$DRY" = 1 ] && { echo "dry run: nothing ran"; exit 0; }
 
-SUMMARY="$RUN_DIR/summary.json"
-if [ -f "$SUMMARY" ]; then
-  node -e '
-    const s = require(process.argv[1]);
-    const groups = Object.entries(s.summary ?? {});
-    const t = groups.reduce((a, [, g]) => ({ pass: a.pass + g.pass, fail: a.fail + g.fail, skip: a.skip + g.skip }), { pass: 0, fail: 0, skip: 0 });
-    console.log(`gym release run ${process.argv[2]}: ${groups.length} groups, ${t.pass} passed, ${t.fail} failed, ${t.skip} skipped`);
-    for (const [name, g] of groups) if (g.fail || g.skip) console.log(`  ${name}: ${g.pass} passed, ${g.fail} failed, ${g.skip} skipped`);
-    console.log(`left after teardown: ${s.gymServersLeft ?? "?"} servers, ${s.gymDnsLeft ?? "?"} DNS records`);
-  ' "$REPO/$SUMMARY" "$RUN_DIR" || true
-else
-  echo "no summary at $SUMMARY (the runner crashed before writing it)"
+# 0 both green · 3 nothing failed but something skipped · 5 classic green, arch-v2 not (build new
+# boxes on classic) · anything else: classic failed, the release is blocked.
+if [ "$CODE_CLASSIC" != 0 ] && [ "$CODE_CLASSIC" != 3 ]; then
+  echo "✗ the classic stack failed (exit $CODE_CLASSIC): boxes already out there would break"; exit "$CODE_CLASSIC"
 fi
-case "$CODE" in
-  0) echo "✓ every live check passed ($RUN_DIR)" ;;
-  3) echo "· nothing failed, but something was skipped: not proven ($RUN_DIR)" ;;
-  *) echo "✗ the live gym failed (exit $CODE, $RUN_DIR)" ;;
-esac
-exit "$CODE"
+if [ "$CODE_ARCH" != 0 ] && [ "$CODE_ARCH" != 3 ]; then
+  echo "✗ the arch-v2 stack failed (exit $CODE_ARCH); classic is green: new boxes must be built on classic"; exit 5
+fi
+if [ "$CODE_ARCH" = 3 ] || [ "$CODE_CLASSIC" = 3 ]; then echo "· nothing failed, but something was skipped: not proven"; exit 3; fi
+echo "✓ every live check passed on both stacks"
+exit 0

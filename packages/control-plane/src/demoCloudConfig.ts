@@ -1,5 +1,6 @@
 import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import type { InstallBlob } from "@flagship/protocol";
+import { ENGINE_APT_PACKAGES, ENGINE_SETUP_BLOCK, type BoxStack } from "./boxStack.js";
 import { INSTALL_BOX_ARTIFACT_SH, VERIFY_BOX_ARTIFACT_SH } from "./boxInstallerScripts.js";
 import { bytesToHex } from "./hex.js";
 
@@ -76,6 +77,12 @@ export function buildCloudConfigUserData(args: {
    */
   selfMintEntitlements?: boolean;
   /**
+   * The container stack (protocol boxStack.ts): "arch-v2" (Podman + the Rust path) or "classic"
+   * (Docker + TS). Default: the release's `newBoxStack`, so gym boxes are built like real new ones;
+   * the release gym runs both.
+   */
+  stack?: BoxStack;
+  /**
    * GYM ONLY: the box's sealing key (SWK) instead of a random one. A migration's
    * new box must hold the old box's SWK to open its backup; a real phone derives
    * both from the account (deriveSWK), so the gym passes the same derived value
@@ -134,6 +141,22 @@ export function buildCloudConfigUserData(args: {
   // NOT expand its $vars at template time — they expand on the VPS.
   // Variables we want resolved at TEMPLATE time (only the git-ref)
   // are inlined directly via JS interpolation.
+  const stack: BoxStack = args.stack ?? BOX_RELEASE.newBoxStack;
+  const engineBlock =
+    stack === "classic"
+      ? `apt-get install -y --no-install-recommends docker.io docker-compose apparmor \\
+    || echo "[flagship-bootstrap] WARNING: docker install failed; apps won't run"
+command -v docker >/dev/null 2>&1 || apt-get install -y --no-install-recommends docker-cli \\
+    || echo "[flagship-bootstrap] WARNING: no docker CLI; apps won't run"
+# apparmor provides apparmor_parser — Debian enables AppArmor, and without the
+# parser \`docker run\` fails to load the docker-default profile (exit 127), so
+# NO container ever starts. (Surfaced installing a real service on a gym box.)
+systemctl enable --now docker.service 2>/dev/null || echo "[flagship-bootstrap] WARNING: docker enable failed"`
+      : `# Architecture v2, as on a real new box (protocol boxStack.ts): Podman and the Rust path.
+apt-get install -y --no-install-recommends ${ENGINE_APT_PACKAGES} apparmor \\
+    || echo "[flagship-bootstrap] WARNING: podman install failed; apps won't run"
+${ENGINE_SETUP_BLOCK}systemctl daemon-reload 2>/dev/null || true
+systemctl enable --now podman.socket 2>/dev/null || echo "[flagship-bootstrap] WARNING: podman socket enable failed"`;
   const bootstrap = `#!/bin/bash
 # Flagship cloud-init-direct bootstrap (W13).
 #
@@ -170,14 +193,7 @@ apt-get install -y --no-install-recommends \\
 # whole apt invocation. Debian 12's docker.io bundles the CLI; Debian 13 splits it into
 # docker-cli (only a Recommends, so --no-install-recommends drops it, and without it the
 # daemon's broker never answers). It goes on its own line: on 12 the name does not exist.
-apt-get install -y --no-install-recommends docker.io docker-compose apparmor \\
-    || echo "[flagship-bootstrap] WARNING: docker install failed; apps won't run"
-command -v docker >/dev/null 2>&1 || apt-get install -y --no-install-recommends docker-cli \\
-    || echo "[flagship-bootstrap] WARNING: no docker CLI; apps won't run"
-# apparmor provides apparmor_parser — Debian enables AppArmor, and without the
-# parser \`docker run\` fails to load the docker-default profile (exit 127), so
-# NO container ever starts. (Surfaced installing a real service on a gym box.)
-systemctl enable --now docker.service 2>/dev/null || echo "[flagship-bootstrap] WARNING: docker enable failed"
+${engineBlock}
 
 # Node ships inside the signed box release (SEC-NODE-001); no NodeSource repository.
 apt-get install -y --no-install-recommends xxd openssl \\

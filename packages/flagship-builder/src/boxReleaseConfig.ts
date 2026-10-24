@@ -17,4 +17,6 @@ export const BOX_RELEASE = {
   pqInstallerArgs: "",
   /** The lowest Node a box may run. */
   nodeFloor: "24.22.1",
+  /** What a new box is built on: Podman + the Rust path, or Docker + TS (the release gym decides). */
+  newBoxStack: "arch-v2" as "arch-v2" | "classic",
 } as const;

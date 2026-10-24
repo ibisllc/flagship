@@ -7,7 +7,10 @@
 # its own artifacts without touching production's. For the gym branch's tip this:
 #
 #   1. plans     skips when the tip already is its release commit (scripts/gym-box-release.mjs)
-#   2. builds    tools/box-artifact/build.ts build, per architecture, from a clean `git archive`
+#   2. builds    in GitHub Actions (box-artifact.yml, Linux, with the Rust keyd/broker/core a box on
+#                the arch-v2 stack runs), after pushing the gym branch; --local builds here instead,
+#                without the Rust binaries (such a box falls back to the TS path, so the arch-v2
+#                gym pass would not test the Rust stack)
 #   3. signs     tools/box-artifact/build.ts sign with the gym key, then verifies against the trust file
 #   4. uploads   to the gym's artifact bucket (flagship-iso-gym), served at gym.flagshipserver.com/build/iso
 #   5. records   writes release/box-release.json, regenerates the compiled constants, commits on the gym
@@ -16,7 +19,7 @@
 #                catalog-{targets,snapshot,timestamp}.json; before the build, the gym branch pins the gym's
 #                own root in release/catalog-root.json so the artifact carries it
 #
-# Usage: bash scripts/gym-box-artifact.sh --worktree <gym worktree> [--arch amd64,arm64] [--dry-run] [--no-push]
+# Usage: bash scripts/gym-box-artifact.sh --worktree <gym worktree> [--arch amd64,arm64] [--dry-run] [--no-push] [--local]
 #
 # Env: GYM_ARTIFACT_KEY_FILE  hex Ed25519 seed (default ~/.config/flagship/gym-artifact-key, mode 600).
 #                             Created on first use; its public key goes into the gym branch's trust file.
@@ -30,13 +33,14 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 
-WT="" ARCHES="amd64" DRY=0 PUSH=1
+WT="" ARCHES="amd64" DRY=0 PUSH=1 LOCAL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --worktree) WT="$2"; shift 2 ;;
     --arch) ARCHES="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --no-push) PUSH=0; shift ;;
+    --local) LOCAL=1; shift ;;
     -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -98,12 +102,29 @@ fi
 
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
+if [ "$LOCAL" = "0" ] && [ "$DRY" != "1" ]; then
+  # The workflow builds a pushed commit; it builds both architectures.
+  [ "$PUSH" = "1" ] || die "a CI build needs the gym branch pushed: drop --no-push, or build here with --local"
+  (cd "$WT" && git push --force-with-lease origin HEAD:gym >/dev/null) || die "could not push the gym branch for the CI build"
+  (cd "$WT" && gh workflow run box-artifact.yml --ref gym -f commit="$COMMIT" -f sequence="$SEQ") || die "could not start box-artifact.yml"
+  sleep 10
+  RUN="$(cd "$WT" && gh run list --workflow box-artifact.yml --branch gym --limit 1 --json databaseId --jq '.[0].databaseId')"
+  say "waiting for box-artifact.yml run $RUN (Linux build, Rust included)"
+  (cd "$WT" && gh run watch "$RUN" --exit-status >/dev/null) || die "box-artifact.yml run $RUN failed"
+  DL="$(mktemp -d)"
+  (cd "$WT" && gh run download "$RUN" -D "$DL") || die "could not download run $RUN"
+  find "$DL" -type f -name 'flagship-box-*' -exec mv {} "$OUT"/ \;
+  rm -rf "$DL"
+fi
 for ARCH in ${ARCHES//,/ }; do
   say "build $COMMIT $ARCH (sequence $SEQ)"
   if [ "$DRY" = "1" ]; then say "DRY-RUN would: tools/box-artifact/build.ts build/sign/verify, then upload to r2://$BUCKET"; continue; fi
-  # Build from the gym worktree's own repository (the commit must exist there).
-  (cd "$WT" && npx tsx tools/box-artifact/build.ts build --commit "$COMMIT" --arch "$ARCH" --sequence "$SEQ" --out "$OUT" --repo "$WT") || die "build failed for $ARCH"
   NAME="flagship-box-${COMMIT:0:12}-$ARCH"
+  if [ "$LOCAL" = "1" ]; then
+    # Built here, from the gym worktree's own repository, without Linux Rust binaries.
+    (cd "$WT" && npx tsx tools/box-artifact/build.ts build --commit "$COMMIT" --arch "$ARCH" --sequence "$SEQ" --out "$OUT" --repo "$WT" --no-rust) || die "build failed for $ARCH"
+  fi
+  [ -f "$OUT/$NAME.manifest.unsigned.json" ] || die "no $NAME artifact from the build"
   (cd "$WT" && npx tsx tools/box-artifact/build.ts sign --manifest "$OUT/$NAME.manifest.unsigned.json" --out "$OUT/$NAME.manifest.json" --key-file "$KEY_FILE") || die "signing failed for $ARCH"
   (cd "$WT" && npx tsx tools/box-artifact/build.ts verify --manifest "$OUT/$NAME.manifest.json" --artifact "$OUT/$NAME.tar.gz" --commit "$COMMIT" --arch "$ARCH" --trust release/box-artifact-trust.json) || die "the signed manifest does not verify against the gym trust file"
   rm -f "$OUT/$NAME.manifest.unsigned.json"

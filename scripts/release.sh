@@ -1369,7 +1369,10 @@ run_secrets() {
 
 run_gym() {
   ensure_wt
-  say "  The gym proves this commit live before prod: every live group (the 0.3 groups included:"
+  say "  The gym proves this commit live before prod, on both container stacks: arch-v2 (Podman + Rust,"
+  say "  what new boxes are built on) runs every group, classic (Docker + TS, the boxes already out there)"
+  say "  runs the groups covering them. arch-v2 not green: new boxes are built on classic. Every group"
+  say "  (the 0.3 groups included:"
   say "  first contact, app-name certificates, cross-owner chat, passkey recovery, origin generations,"
   say "  the release catalog, the policed browser, upstream sync, keyd custody) on real UpCloud boxes."
   say "  It takes the gym lock, so no other live run may be in progress (the gym and prod share the"
@@ -1382,11 +1385,19 @@ run_gym() {
     printf '%s+ (cd %s && bash scripts/gym-release-run.sh)%s\n' "$C_D" "$WT" "$C_0"
     ( cd "$WT" && GYM_BASE_REF="${GYM_BASE_REF:-origin/main}" bash scripts/gym-release-run.sh ) || rc=$?
     case "$rc" in
-      0) ok "every live group is green on $(short "$PIN")" ;;
+      0) ok "every live group is green on both stacks on $(short "$PIN"): new boxes are built on $(json_field newBoxStack < "$WT/release/box-release.json")" ;;
       3) warn "nothing failed, but some groups were skipped (see the summary above)"
          [ "$(ask_word "Type  accept-skips  if every skip is an owner item you accept for this release")" = accept-skips ] || fail "gym inconclusive" ;;
       4) fail "the gym lock is held by another session: wait for it, then run this step again" ;;
-      *) fail "the gym run failed (exit $rc): fix on main, run this step again" ;;
+      5) warn "classic is green, arch-v2 is not: new boxes must be built on classic for this release"
+         confirm "Build new boxes on classic (Docker + the TS path) and push that to main?" || fail "the release needs a stack the gym proved"
+         WX node scripts/set-new-box-stack.mjs classic
+         local changed; changed=$(wt_git status --porcelain | awk '{print $2}')
+         # shellcheck disable=SC2086
+         commit_paths "Build new boxes on the classic stack (the release gym did not prove arch-v2)" $changed
+         land_commits || return $?
+         warn "the box artifacts and the gym ran on the previous pin: run this step again on the new one" ;;
+      *) fail "the gym run failed on the classic stack (exit $rc): fix on main, run this step again" ;;
     esac
   else
     say "  Run it yourself, in another terminal:  (cd $WT && bash scripts/gym-release-run.sh)"

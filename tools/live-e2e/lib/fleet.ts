@@ -267,6 +267,8 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
       irkPrivHex: bytesToHex(irk.privateKey),
       adminRootPrivHex: bytesToHex(adminRoot.privateKey),
       ownerAidPubHex: bytesToHex(aid.publicKey),
+      // The release gym runs every group on both container stacks (GYM_BOX_STACK=arch-v2|classic).
+      ...(process.env.GYM_BOX_STACK ? { stack: process.env.GYM_BOX_STACK } : {}),
       ...(opts.provisionExtras ?? {}),
     },
     adminHeaders(),

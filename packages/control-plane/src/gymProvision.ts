@@ -89,6 +89,8 @@ export interface GymProvisionBody {
   swkHex?: unknown;
   /** False: the key above only proves ownership here; the box asks the phone for its blessing (first contact). */
   selfMintEntitlements?: unknown;
+  /** "arch-v2" or "classic": the container stack to build the box on (default: the release's). */
+  stack?: unknown;
   /** FLAGSHIP_BACKUP_INTERVAL_MS for the box (≥ 60000). */
   backupIntervalMs?: unknown;
 }
@@ -396,6 +398,7 @@ export async function handleGymProvision(
     ...(typeof body.swkHex === "string" ? { swkHex: body.swkHex } : {}),
     ...(typeof body.backupIntervalMs === "number" ? { backupIntervalMs: body.backupIntervalMs } : {}),
     ...(body.selfMintEntitlements === false ? { selfMintEntitlements: false } : {}),
+    ...(body.stack === "classic" || body.stack === "arch-v2" ? { stack: body.stack } : {}),
   });
 
   // 7. Provision the box — mirrors the demo create path, INCLUDING the SSH

@@ -191,6 +191,7 @@ describe("buildCloudConfigUserData", () => {
       installBlobJson: "{}",
       installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       demoUserIrkPrivHex: DEMO_IRK_PRIV,
+      stack: "classic",
     });
     // The bootstrap is the SECOND base64 content block.
     const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
@@ -313,5 +314,21 @@ describe("buildCloudConfigUserData", () => {
     const m = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
     const bootstrap = Buffer.from(m[1]![1]!, "base64").toString("utf8");
     expect(bootstrap).toContain(`GIT_REF="${sha}"`);
+  });
+});
+
+describe("the container stack a demo or gym box is built on", () => {
+  const base = { installBlobJson: "{}", installerGitRef: "a".repeat(40), demoUserIrkPrivHex: "11".repeat(32) };
+  const bootstrapOf = (ud: string) => Buffer.from([...ud.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)][1]![1]!, "base64").toString("utf8");
+  it("arch-v2 installs Podman and writes the box switch, like a real new box", () => {
+    const b = bootstrapOf(buildCloudConfigUserData({ ...base, stack: "arch-v2" }));
+    expect(b).toContain("podman netavark");
+    expect(b).toContain("/var/lib/flagship/arch-v2.json");
+    expect(b).not.toContain("docker.io docker-compose");
+  });
+  it("classic installs Docker and writes no switch", () => {
+    const b = bootstrapOf(buildCloudConfigUserData({ ...base, stack: "classic" }));
+    expect(b).toContain("docker.io docker-compose");
+    expect(b).not.toContain("/var/lib/flagship/arch-v2.json");
   });
 });

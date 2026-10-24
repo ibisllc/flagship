@@ -1,9 +1,15 @@
 /**
- * What a new box installs and writes for the architecture v2 path
- * (docs/architecture-v2/engine-and-rust-path.md): Podman in place of Docker, and the box switch
- * with the Rust path on. The daemon reads the switch at every start (server-daemon
- * engine/engine.ts); an existing box has no switch file and keeps what it had.
+ * What a new box installs and writes for its container stack. `release/box-release.json`
+ * `newBoxStack` picks it per release (the release gym decides, owner 2026-10-24):
+ *   arch-v2  Podman in place of Docker and the box switch with the Rust path on
+ *            (docs/architecture-v2/engine-and-rust-path.md);
+ *   classic  Docker and the TS keyd/privd, as boxes ran before architecture v2.
+ * The daemon reads the switch at every start (server-daemon engine/engine.ts); an existing box
+ * has no switch file and keeps what it had.
  */
+import { BOX_RELEASE } from "./boxReleaseConfig.js";
+
+export type BoxStack = "arch-v2" | "classic";
 
 /** Debian 13 packages for the engine. docker-compose is only the `podman compose` provider. */
 export const ENGINE_APT_PACKAGES = "podman netavark aardvark-dns crun conmon catatonit docker-compose nftables zstd";
@@ -30,3 +36,22 @@ FLAGSHIP_COMPOSE
 mkdir -p /etc/systemd/system/sockets.target.wants
 ln -sf /usr/lib/systemd/system/podman.socket /etc/systemd/system/sockets.target.wants/podman.socket
 `;
+
+/** Debian packages for the classic engine. Debian 13 splits the CLI out of docker.io. */
+export const CLASSIC_APT_PACKAGES = "docker.io docker-cli docker-compose apparmor";
+
+export const CLASSIC_REQUIRED_COMMANDS = "docker";
+
+export const CLASSIC_SETUP_BLOCK = `# Classic stack: Docker runs the apps, keyd/privd run from the release's TS. No arch-v2 switch file.
+mkdir -p /etc/systemd/system/multi-user.target.wants
+ln -sf /usr/lib/systemd/system/docker.service /etc/systemd/system/multi-user.target.wants/docker.service
+ln -sf /usr/lib/systemd/system/containerd.service /etc/systemd/system/multi-user.target.wants/containerd.service
+`;
+
+export const NEW_BOX_STACK: BoxStack = BOX_RELEASE.newBoxStack;
+
+export function stackSetup(stack: BoxStack = NEW_BOX_STACK): { apt: string; required: string; block: string } {
+  return stack === "classic"
+    ? { apt: CLASSIC_APT_PACKAGES, required: CLASSIC_REQUIRED_COMMANDS, block: CLASSIC_SETUP_BLOCK }
+    : { apt: ENGINE_APT_PACKAGES, required: ENGINE_REQUIRED_COMMANDS, block: ENGINE_SETUP_BLOCK };
+}
