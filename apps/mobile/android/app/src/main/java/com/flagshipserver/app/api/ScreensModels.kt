@@ -407,8 +407,62 @@ data class AccessAlertsSetting(val enabled: Boolean, val ok: Boolean? = null)
 data class ScreensEvent(val type: String, val serviceId: String? = null) {
     companion object {
         const val ACCESS_REQUEST = "access-request"
+        const val CHAT_REQUEST = "chat-request"
     }
 }
+
+// ---------- App chat between owners (chat/approvals.ts) ------------------
+
+/** An app as the chat harness names it: `<author>/<slug>`. For another
+ *  owner's app this is only what the remote machine claims. */
+@Serializable
+data class ChatAppIdentity(val author: String = "", val slug: String = "")
+
+/** One held request in `GET /api/screens/chat/requests`. `incoming`: a remote
+ *  machine wants to start a chat with [receiverApp]; `outgoing`: this box's
+ *  [claimedSender] wants to reach another owner's [receiverApp]. */
+@Serializable
+data class ChatRequestWire(
+    val requestId: String = "",
+    val kind: String = "",
+    val claimedSender: ChatAppIdentity? = null,
+    val receiverApp: ChatAppIdentity? = null,
+    val phrase: String? = null,
+    val count: Int = 1,
+    val at: Long = 0,
+)
+
+@Serializable
+data class ChatRequestsResponse(
+    val requests: List<ChatRequestWire> = emptyList(),
+    /** Each standing Always allow: one claimed sending app to one app here. */
+    val always: List<ChatAlwaysWire> = emptyList(),
+)
+
+/** One Always allow: [claimedSender] (from one sending account) may start a chat
+ *  with [receiverApp] without asking. */
+@Serializable
+data class ChatAlwaysWire(
+    val receiverApp: ChatAppIdentity? = null,
+    val claimedSender: ChatAppIdentity? = null,
+)
+
+/** `POST /api/screens/chat/answer`: an owner-signed `flagship/chat-approval/v1`. */
+@Serializable
+data class ChatAnswerBody(
+    val requestId: String,
+    val kind: String,
+    val decision: String,
+    val issuedAt: Long,
+    val signature: String,
+)
+
+/** End an Always allow to the app `author/slug`: from [sender] only, or every one when null. */
+@Serializable
+data class ChatAlwaysRevokeBody(val author: String, val slug: String, val sender: ChatAppIdentity? = null)
+
+@Serializable
+data class ChatAlwaysRevokeResponse(val ended: Int = 0)
 
 @Serializable
 data class RecentInstallEvent(

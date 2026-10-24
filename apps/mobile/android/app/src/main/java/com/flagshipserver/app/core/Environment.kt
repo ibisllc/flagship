@@ -61,6 +61,7 @@ val LocalDeepLinker = staticCompositionLocalOf<DeepLinker> { DeepLinker() }
 /** Internet-access alerts across every box the phone manages (§3a). Null in
  *  previews, tests and mock mode: no dialogs. */
 val LocalAccessRequestCenter = staticCompositionLocalOf<AccessRequestCenter?> { null }
+val LocalChatRequestCenter = staticCompositionLocalOf<ChatRequestCenter?> { null }
 
 /** Settings → Push notifications. Null on previews. */
 val LocalPushNotificationsSwitch = staticCompositionLocalOf<PushNotificationsSwitch?> { null }

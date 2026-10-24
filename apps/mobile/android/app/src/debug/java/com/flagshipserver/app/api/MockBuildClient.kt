@@ -30,7 +30,19 @@ class MockBuildClient(
         entryFailStatus?.let { throw ScreensError.Http(it, """{"error":"not found"}""") }
     }
     private fun now(): Long = System.currentTimeMillis()
-    private fun mintBuildId(): String = "bld-${UUID.randomUUID().toString().take(8).lowercase()}"
+    private fun mintBuildId(): String =
+        if (consentRequired) UUID.randomUUID().toString().replace("-", "").take(16)
+        else "bld-${UUID.randomUUID().toString().take(8).lowercase()}"
+
+    /** The box asks for the owner's signed consent before an AI run (N12): a 428
+     *  with the estimate until an adapt carries a consent that covers it. */
+    var consentRequired: Boolean = false
+    var consentEstimate: String =
+        """{"provider":"anthropic","source":"byok","operation":"adapt","lowTokens":14000,"highTokens":84000,"unit":"tokens"}"""
+    /** The FQDN a consent must name. */
+    var fqdn: String = "home.bright-maple.flagship.services"
+
+    override suspend fun boxFqdn(): String = fqdn
     private fun mintKey(): String = (1..32).joinToString("") {
         "%02x".format(kotlin.random.Random.nextInt(0, 256))
     }
@@ -97,6 +109,21 @@ class MockBuildClient(
         tick()
         adaptStartCalls.add(buildId to req)
         adaptStartError?.let { throw it }
+        if (consentRequired) {
+            val c = req.consent
+                ?: throw ScreensError.Http(428, """{"error":"consent-required","code":"ai-consent","estimate":$consentEstimate}""")
+            val est = com.flagshipserver.app.core.AiConsent.estimate(
+                ScreensError.Http(428, """{"code":"ai-consent","estimate":$consentEstimate}"""),
+            )!!
+            MockSignatures.requireAdmin(
+                "ai-repair-consent",
+                com.flagshipserver.app.core.AiRepairConsent.canonicalBytes(fqdn, buildId, est.operation, c.provider, est.source, c.highTokens, c.issuedAt),
+                c.signature,
+            )
+            if (c.highTokens < est.highTokens) {
+                throw ScreensError.Http(403, """{"error":"the estimate grew since you agreed","code":"ai-consent","estimate":$consentEstimate}""")
+            }
+        }
         if (adaptNotConfigured) throw ScreensError.Http(503, """{"error":"AI adapt not configured"}""")
         return BuildAdaptReply(ok = true, started = true)
     }

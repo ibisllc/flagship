@@ -747,6 +747,36 @@
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/VoiciName.swift", "flagship/voici-name/v1"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/VoiciLinkViewModel.swift", "static func message"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/VoiciLinkField.swift", "struct VoiciLinkField"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/LinkFieldViewModel.kt", "object LinkField"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/VoiciName.kt", "flagship/voici-name/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/LinkFieldSection.kt", "fun LinkFieldSection"]] }
       }
+    },
+    {
+      "id": "chat-approvals",
+      "title": "App chat between owners (N08): held chat requests ask in a sheet and wait under Activity with Allow / Always allow (incoming only) / Deny, each a signed flagship/chat-approval/v1; the sender is shown as a claim; Ask me each time ends an Always allow",
+      "ref": "android",
+      "surfaces": {
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ChatRequestCenter.kt", "class ChatRequestCenter"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ChatRequestScreens.kt", "fun ChatRequestsList"], ["apps/mobile/android/app/src/main/res/values/strings.xml", "A remote machine claiming to run"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ChatApproval.kt", "flagship/chat-approval/v1"]] },
+        "web": { "status": "missing", "reason": "Built on branch ux-web-screens (shell v171); not merged into this branch yet.", "anchors": [] },
+        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the approval screens follow the webapp.", "anchors": [] }
+      }
+    },
+    {
+      "id": "ai-run-consent",
+      "title": "AI-run consent (N12): an adapt the box answers 428 ai-consent shows the token range, provider and who pays; Continue resends it with a signed flagship/ai-repair-consent/v1, Cancel sends nothing",
+      "ref": "android",
+      "surfaces": {
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiConsentFlow.kt", "suspend fun <T> withConsent"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AiConsentDialog.kt", "fun AiConsentDialog"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiRepairConsent.kt", "flagship/ai-repair-consent/v1"]] },
+        "web": { "status": "missing", "reason": "Built on branch ux-web-screens (shell v171); not merged into this branch yet.", "anchors": [] },
+        "ios": { "status": "missing", "reason": "Pending: the wire port and vectors exist; the consent sheet follows the webapp.", "anchors": [] }
+      }
+    },
+    {
+      "id": "watch-boot-key",
+      "title": "Watch approval with the phone locked (option (a)): a boot-only X25519 key beside the watch delegate, a per-server owner opt-in that deposits an attested copy of the disk key (PUT/DELETE /api/boot/watch-key), and a watch Approve that opens it without the account key; 423 when the server is locked",
+      "ref": "android",
+      "surfaces": {
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/WatchBootKey.kt", "class WatchBootApprover"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/KeystoreWatchBootKeys.kt", "PURPOSE_AGREE_KEY"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/WatchQuickApproveCard.kt", "fun WatchBootServers"]] },
+        "ios": { "status": "missing", "reason": "Pending: the protocol port exists (FlagshipCore/WatchBootDelegate.swift); the Secure Enclave key and the screens are not built.", "anchors": [] },
+        "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
+      }
     }
   ]
 }
