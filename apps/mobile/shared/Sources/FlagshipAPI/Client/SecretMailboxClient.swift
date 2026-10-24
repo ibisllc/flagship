@@ -131,6 +131,10 @@ public protocol SecretMailboxClient: Sendable {
     func fetchWatchBootKey(serverDomain: String, bootAuth: String) async throws -> WatchBootDepositWire
     /// DELETE {boot}/api/boot/watch-key/:domain — owner header: every watch copy for the server goes.
     func revokeWatchBootKeys(serverDomain: String, bootAuth: String) async throws
+    /// GET /api/users/:u/secret-requests — account read token, like `/pods`: the pending requests with the
+    /// box's own signature, for a device without the IRK (a locked phone answering for its watch). Verify
+    /// each under the STK this phone pinned, never the `stkPub` returned here.
+    func fetchSignedSecretRequests(username: String) async throws -> [SignedSecretRequestWire]
 }
 
 public extension SecretMailboxClient {
@@ -155,9 +159,33 @@ public extension SecretMailboxClient {
     func revokeWatchBootKeys(serverDomain: String, bootAuth: String) async throws {
         throw ScreensClientError.notImplemented("watch boot key")
     }
+    func fetchSignedSecretRequests(username: String) async throws -> [SignedSecretRequestWire] {
+        throw ScreensClientError.notImplemented("signed secret requests")
+    }
 }
 
 /// The boot worker's lock record for a server (`GET /api/boot/suspension/:domain`).
+public struct SignedSecretRequestWire: Codable, Equatable, Sendable {
+    public let serverDomain: String
+    public let requestNonceHex: String
+    public let stkPub: String
+    public let purpose: String
+    public let issuedAt: Int64
+    public let requestSignature: String
+    public let expiresAt: Int64
+
+    public init(serverDomain: String, requestNonceHex: String, stkPub: String, purpose: String, issuedAt: Int64,
+                requestSignature: String, expiresAt: Int64) {
+        self.serverDomain = serverDomain
+        self.requestNonceHex = requestNonceHex
+        self.stkPub = stkPub
+        self.purpose = purpose
+        self.issuedAt = issuedAt
+        self.requestSignature = requestSignature
+        self.expiresAt = expiresAt
+    }
+}
+
 /// One watch's copy of a server's disk key, as the boot worker stores it (`flagship/watch-boot-delegate/v1`).
 public struct WatchBootDepositWire: Codable, Equatable, Sendable {
     public let serverDomain: String
@@ -1047,6 +1075,21 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return try JSONDecoder().decode(Reply.self, from: data).deposit
     }
 
+    public func fetchSignedSecretRequests(username: String) async throws -> [SignedSecretRequestWire] {
+        struct Reply: Decodable { let requests: [SignedSecretRequestWire] }
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/secret-requests"))
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await urlSession.gatedData(for: $0)
+        }
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(Reply.self, from: data).requests
+    }
+
     public func revokeWatchBootKeys(serverDomain: String, bootAuth: String) async throws {
         try await sendBoot("DELETE", "/api/boot/watch-key/\(serverDomain)", body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
     }
@@ -1405,6 +1448,17 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
             throw ScreensClientError.http(status: 404, message: #"{"error":"no copy for this watch"}"#)
         }
         return d
+    }
+
+    /// What `.com`'s read-token route returns; defaults to `pending`. Tests replace it to lie.
+    public var signedRequestsOverride: [SignedSecretRequestWire]?
+
+    public func fetchSignedSecretRequests(username: String) async throws -> [SignedSecretRequestWire] {
+        signedRequestsOverride ?? pending.map {
+            SignedSecretRequestWire(serverDomain: $0.serverDomain, requestNonceHex: $0.requestNonceHex, stkPub: $0.stkPub,
+                                    purpose: $0.purpose, issuedAt: $0.issuedAt, requestSignature: $0.requestSignature,
+                                    expiresAt: $0.expiresAt)
+        }
     }
 
     public func revokeWatchBootKeys(serverDomain: String, bootAuth: String) async throws {

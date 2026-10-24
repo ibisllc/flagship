@@ -152,16 +152,19 @@ public struct WatchBootApprover {
         case approved
         /// The owner locked the server: only the phone, with the account key, can start it.
         case locked
-        /// No copy for this watch (not turned on for this server, or it ended).
+        /// No copy for this watch (not turned on for this server, or it ended), or nothing this phone pinned.
         case noCopy
-        /// The server isn't waiting any more, or isn't in the directory.
+        /// The server isn't waiting any more, or the request ended.
         case gone
-        /// The directory names a box key other than the one this phone pinned: nothing was sealed.
+        /// `.com` names a box key other than the one this phone pinned: nothing was sealed.
         case keyMismatch
+        /// The request isn't signed by the pinned box key: nothing was sealed.
+        case badSignature
         case failed(String)
     }
 
     public static let keyMismatchCode = "watch-boot-stk-mismatch"
+    public static let badSignatureCode = "watch-boot-request-signature"
 
     let mailbox: SecretMailboxClient
     let username: String
@@ -169,9 +172,6 @@ public struct WatchBootApprover {
     let bootKey: () -> Curve25519.KeyAgreement.PrivateKey?
     /// The box key this phone pinned for a server when it made or paired it (what the account-key path trusts).
     let pinnedStk: (String) -> Data?
-    /// Seam for the box-signed request (a read-token route to come). Until then the nonce `.com` relays is
-    /// taken as is: a box refuses a stale or foreign one.
-    let verifyRequest: (_ serverDomain: String, _ nonce: Data) async -> Bool
     let now: () -> Int64
     let nonceGen: () -> Data
 
@@ -181,7 +181,6 @@ public struct WatchBootApprover {
         delegateKey: @escaping () -> Curve25519.Signing.PrivateKey?,
         bootKey: @escaping () -> Curve25519.KeyAgreement.PrivateKey?,
         pinnedStk: @escaping (String) -> Data?,
-        verifyRequest: @escaping (_ serverDomain: String, _ nonce: Data) async -> Bool = { _, _ in true },
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         nonceGen: @escaping () -> Data = { BootAuth.randomNonce() }
     ) {
@@ -190,7 +189,6 @@ public struct WatchBootApprover {
         self.delegateKey = delegateKey
         self.bootKey = bootKey
         self.pinnedStk = pinnedStk
-        self.verifyRequest = verifyRequest
         self.now = now
         self.nonceGen = nonceGen
     }
@@ -206,16 +204,31 @@ public struct WatchBootApprover {
         guard let (domain, nonce) = Self.parse(requestId: requestId) else { return .gone }
         guard let delegate = delegateKey(), let boot = bootKey() else { return .noCopy }
         // Without a pinned key there is nothing this phone trusts to seal to: the account-key path decides.
-        guard let stk = pinnedStk(domain), stk.count == 32 else { return .noCopy }
-        guard await verifyRequest(domain, nonce) else { return .gone }
+        guard let stk = pinnedStk(domain), stk.count == 32,
+              let stkPub = try? Curve25519.Signing.PublicKey(rawRepresentation: stk) else { return .noCopy }
         do {
-            // `.com`'s directory only cross-checks the pin; a different key there means something is wrong.
-            let directory = try? await mailbox.fetchPods(username: username)
-            if let listed = directory?.identityPubKey(forServerDomain: domain),
-               HexUtil.decode(listed) != stk {
+            // The box's own signed request, read with the account read token (no IRK): `.com` only relays it.
+            let requests: [SignedSecretRequestWire]
+            do {
+                requests = try await mailbox.fetchSignedSecretRequests(username: username)
+            } catch {
+                return .noCopy
+            }
+            let nonceHex = HexUtil.encode(nonce)
+            guard let row = requests.first(where: {
+                $0.serverDomain.lowercased() == domain && $0.requestNonceHex.lowercased() == nonceHex && $0.purpose == SecretPurpose.unlockKey.rawValue
+            }) else { return .gone }
+            guard row.expiresAt > now() else { return .gone }
+            guard HexUtil.decode(row.stkPub) == stk else {
                 DiagnosticsLog.shared.record(code: Self.keyMismatchCode, host: domain)
                 return .keyMismatch
             }
+            let request = SecretRequest(serverDomain: row.serverDomain, stkPub: stk, purpose: .unlockKey, nonce: nonce, issuedAt: row.issuedAt)
+            guard let sig = HexUtil.decode(row.requestSignature), SecretRequest.verify(request, signature: sig, stkPub: stkPub) else {
+                DiagnosticsLog.shared.record(code: Self.badSignatureCode, host: domain)
+                return .badSignature
+            }
+
             let getAuth = try BootAuth.delegateHeader(serverDomain: domain, method: "GET", path: "/api/boot/watch-key/\(domain)",
                                                       delegateKey: delegate, now: now(), nonce: nonceGen())
             let wire: WatchBootDepositWire
@@ -237,13 +250,11 @@ public struct WatchBootApprover {
                 sealedKeyHex: wire.sealedKeyHex, signatureHex: wire.signatureHex)
             let diskKey = try deposit.openKey(decryptPriv: boot.rawRepresentation)
 
-            let serverDomain = directory?.pods.first { $0.serverDomain.lowercased() == domain }?.serverDomain ?? domain
-            let request = SecretRequest(serverDomain: serverDomain, stkPub: stk, purpose: .unlockKey, nonce: nonce, issuedAt: 0)
             let sealed = try SealedSecretResponse.build(secret: diskKey, request: request, now: now)
-            let body = SecretResponseBody(serverDomain: serverDomain, requestNonceHex: HexUtil.encode(nonce),
+            let body = SecretResponseBody(serverDomain: row.serverDomain, requestNonceHex: nonceHex,
                                           purpose: SecretPurpose.unlockKey.rawValue, sealed: HexUtil.encode(sealed.sealed),
                                           issuedAt: now())
-            let postAuth = try BootAuth.delegateHeader(serverDomain: serverDomain, method: "POST", path: "/api/boot/response",
+            let postAuth = try BootAuth.delegateHeader(serverDomain: row.serverDomain, method: "POST", path: "/api/boot/response",
                                                        delegateKey: delegate, now: now(), nonce: nonceGen())
             do {
                 try await mailbox.postResponse(response: body, bootAuth: postAuth)
