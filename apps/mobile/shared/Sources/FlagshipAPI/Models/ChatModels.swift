@@ -44,12 +44,38 @@ public struct ChatRequest: Codable, Equatable, Identifiable, Sendable {
     public var isIncoming: Bool { kind == "incoming" }
 }
 
+/// One standing Always allow: a sending account's claimed app may reach an app here without asking.
+public struct ChatAlwaysAllow: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public let receiverApp: ChatAppIdentity
+    public let claimedSender: ChatAppIdentity
+
+    public init(receiverApp: ChatAppIdentity, claimedSender: ChatAppIdentity) {
+        self.receiverApp = receiverApp
+        self.claimedSender = claimedSender
+    }
+
+    public var id: String { "\(claimedSender.label)>\(receiverApp.label)" }
+}
+
+/// The body of `POST /api/screens/chat/always/revoke`. No sender ends every Always allow to that app.
+public struct ChatRevokeRequest: Codable, Equatable, Sendable {
+    public let author: String
+    public let slug: String
+    public let sender: ChatAppIdentity?
+
+    public init(receiverApp: ChatAppIdentity, sender: ChatAppIdentity?) {
+        self.author = receiverApp.author
+        self.slug = receiverApp.slug
+        self.sender = sender
+    }
+}
+
 public struct ChatRequestsResponse: Codable, Equatable, Sendable {
     public let requests: [ChatRequest]
-    /// The apps here that take chats from other owners' apps without asking.
-    public let always: [ChatAppIdentity]
+    /// Each claimed sender that may reach an app here without asking.
+    public let always: [ChatAlwaysAllow]
 
-    public init(requests: [ChatRequest] = [], always: [ChatAppIdentity] = []) {
+    public init(requests: [ChatRequest] = [], always: [ChatAlwaysAllow] = []) {
         self.requests = requests
         self.always = always
     }

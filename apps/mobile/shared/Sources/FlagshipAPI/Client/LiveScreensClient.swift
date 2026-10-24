@@ -559,9 +559,9 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func chatAnswer(_ answer: ChatAnswerRequest) async throws {
         _ = try await requestData("/api/screens/chat/answer", method: "POST", body: try JSONEncoder().encode(answer), timeout: 30)
     }
-    public func chatRevokeAlways(_ app: ChatAppIdentity) async throws -> Int {
+    public func chatRevokeAlways(_ revoke: ChatRevokeRequest) async throws -> Int {
         struct Ended: Decodable { let ended: Int? }
-        let r: Ended = try await request("/api/screens/chat/always/revoke", method: "POST", body: try JSONEncoder().encode(app))
+        let r: Ended = try await request("/api/screens/chat/always/revoke", method: "POST", body: try JSONEncoder().encode(revoke))
         return r.ended ?? 0
     }
 

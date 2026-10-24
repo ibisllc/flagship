@@ -127,7 +127,7 @@ struct ChatRequestsCard: View {
                                 row(r, controller: controller, c: c)
                             }
                             if !controller.always.isEmpty {
-                                ForEach(controller.always, id: \.label) { app in
+                                ForEach(controller.always) { app in
                                     HStack(alignment: .top, spacing: FS.space.s2) {
                                         Text(ChatCopy.alwaysRow(app))
                                             .font(FS.font.bodySm()).foregroundColor(c.text)
@@ -137,7 +137,7 @@ struct ChatRequestsCard: View {
                                             .font(FS.font.bodySm())
                                             .foregroundColor(c.danger)
                                             .disabled(controller.busy != nil)
-                                            .accessibilityIdentifier("sd-chat-revoke-\(app.slug)")
+                                            .accessibilityIdentifier("sd-chat-revoke-\(app.claimedSender.slug)-\(app.receiverApp.slug)")
                                     }
                                 }
                             }

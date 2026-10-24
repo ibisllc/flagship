@@ -24,25 +24,25 @@ public enum ChatCopy {
     }
 
     public static func alwaysNote(_ r: ChatRequest) -> String {
-        String(localized: "Always allow lets any remote machine reach \(r.receiverApp.slug) without asking. You can revoke it on this server's page.")
+        String(localized: "Always allow lets \(r.claimedSender.label) reach \(r.receiverApp.slug) again without asking. You can revoke it on this server's page.")
     }
 
     public static func answered(_ r: ChatRequest, decision: ChatApproval.Decision) -> String {
         switch (decision, r.isIncoming) {
         case (.deny, true): return String(localized: "Denied. Nothing from \(r.claimedSender.label) reaches \(r.receiverApp.slug).")
         case (.deny, false): return String(localized: "Denied. \(r.claimedSender.slug) won't talk to \(r.receiverApp.label).")
-        case (.always, _): return String(localized: "\(r.receiverApp.slug) now takes chats from other owners' apps without asking.")
+        case (.always, _): return String(localized: "\(r.receiverApp.slug) now takes chats from \(r.claimedSender.label) without asking.")
         case (.allow, true): return String(localized: "Allowed. \(r.claimedSender.label) can talk to \(r.receiverApp.slug).")
         case (.allow, false): return String(localized: "Allowed. \(r.claimedSender.slug) can talk to \(r.receiverApp.label).")
         }
     }
 
-    public static func alwaysRow(_ app: ChatAppIdentity) -> String {
-        String(localized: "\(app.slug) takes chats from other owners' apps without asking.")
+    public static func alwaysRow(_ a: ChatAlwaysAllow) -> String {
+        String(localized: "\(a.claimedSender.label) → \(a.receiverApp.slug), without asking")
     }
 
-    public static func revoked(_ app: ChatAppIdentity) -> String {
-        String(localized: "\(app.slug) asks you again from now on.")
+    public static func revoked(_ a: ChatAlwaysAllow) -> String {
+        String(localized: "\(a.receiverApp.slug) asks you again before \(a.claimedSender.label) can talk to it.")
     }
 
     public static func reason(_ r: ChatRequest) -> String {
@@ -210,7 +210,7 @@ public final class ChatRequestCenter {
 @MainActor
 public final class ChatRequestsController {
     public private(set) var requests: [ChatRequest] = []
-    public private(set) var always: [ChatAppIdentity] = []
+    public private(set) var always: [ChatAlwaysAllow] = []
     /// False until the box answered once (an older box has no chat screens: the card stays hidden).
     public private(set) var loaded = false
     public private(set) var busy: String?
@@ -252,15 +252,15 @@ public final class ChatRequestsController {
     }
 
     /// Withdrawing an Always allow only narrows what is open, so it needs no signature.
-    public func revoke(_ app: ChatAppIdentity) async {
+    public func revoke(_ a: ChatAlwaysAllow) async {
         guard busy == nil else { return }
-        busy = app.label
+        busy = a.id
         error = nil
         note = nil
         defer { busy = nil }
         do {
-            _ = try await client.chatRevokeAlways(app)
-            note = ChatCopy.revoked(app)
+            _ = try await client.chatRevokeAlways(ChatRevokeRequest(receiverApp: a.receiverApp, sender: a.claimedSender))
+            note = ChatCopy.revoked(a)
         } catch {
             self.error = ChatCopy.message(for: error)
         }

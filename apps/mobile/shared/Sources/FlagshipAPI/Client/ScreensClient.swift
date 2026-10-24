@@ -136,7 +136,7 @@ public protocol ScreensClient: Sendable {
     /// `POST /api/screens/chat/always/revoke`: the app asks again from now on. Returns how many
     /// conversations that Always allow had let in were ended.
     @discardableResult
-    func chatRevokeAlways(_ app: ChatAppIdentity) async throws -> Int
+    func chatRevokeAlways(_ revoke: ChatRevokeRequest) async throws -> Int
     /// `POST /api/screens/server-order` (docs/server-order.md): hand the box
     /// the owner's signed server order; it answers with the one it now holds.
     /// An older box answers 404 and gets the order from `.com` instead.
@@ -533,7 +533,7 @@ public extension ScreensClient {
     func chatAnswer(_ answer: ChatAnswerRequest) async throws {
         throw ScreensClientError.notImplemented("app chat")
     }
-    func chatRevokeAlways(_ app: ChatAppIdentity) async throws -> Int {
+    func chatRevokeAlways(_ revoke: ChatRevokeRequest) async throws -> Int {
         throw ScreensClientError.notImplemented("app chat")
     }
     func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
