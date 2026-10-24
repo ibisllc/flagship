@@ -5,7 +5,7 @@
  * possession of each. `.com` stores it under the registered STK; clients verify it under the
  * STK they pinned and pin the ML-DSA key too.
  */
-import { signPqKeyBinding, verifyPqKeyBinding, type HybridMsgSigner } from "@flagship/protocol";
+import { signPqKeyBinding, verifyPqKeyBinding, type HybridMsgSigner, type VerifiedPqKeyBinding } from "@flagship/protocol";
 
 export async function ensureStkPqBinding(args: {
   serverDomain: string;
@@ -16,7 +16,7 @@ export async function ensureStkPqBinding(args: {
   controlPlaneBaseUrl: string;
   now?: () => number;
   fetch?: typeof fetch;
-}): Promise<"ok" | "bound"> {
+}): Promise<{ status: "ok" | "bound"; binding: VerifiedPqKeyBinding }> {
   const f = args.fetch ?? fetch;
   const now = (args.now ?? Date.now)();
   const domain = args.serverDomain.toLowerCase();
@@ -25,8 +25,7 @@ export async function ensureStkPqBinding(args: {
   const res = await f(url, { headers: { accept: "application/json" } });
   if (res.ok) {
     try {
-      verifyPqKeyBinding(await res.json(), expect);
-      return "ok";
+      return { status: "ok", binding: verifyPqKeyBinding(await res.json(), expect) };
     } catch {
       // `.com` holds none for these keys (or a broken one): sign a fresh one below.
     }
@@ -39,5 +38,5 @@ export async function ensureStkPqBinding(args: {
   );
   const put = await f(url, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(wire) });
   if (!put.ok) throw new Error(`pq key binding refused: HTTP ${put.status}`);
-  return "bound";
+  return { status: "bound", binding: verifyPqKeyBinding(wire, expect) };
 }

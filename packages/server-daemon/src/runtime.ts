@@ -581,6 +581,13 @@ export interface DaemonRuntime {
    */
   addHandler(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
   /**
+   * A check that runs before every handler (the PQ strict guard, pqChannel.ts): the first
+   * non-null response wins and no handler sees the request.
+   */
+  addGuard(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
+  /** Runs a request through the guards and the handler chain (the PQ channel's inner requests). */
+  dispatchHttp(req: HttpRequest): Promise<HttpResponse>;
+  /**
    * Append a gate that fronts the PER-APP reverse proxy (the SNI-routed
    * `<urlLabel>.<serverFqdn>` path). Gates are tried in registration order;
    * the first non-null response is returned INSTEAD of proxying to the
@@ -936,7 +943,12 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // pushes here, the onUpgrade closure consults this list before
   // falling through to the built-in sibling-handshake path.
   const extraUpgrades: Array<(args: UpgradeRequest) => boolean> = [];
+  const guards: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [];
   const handleHttp: (req: HttpRequest) => Promise<HttpResponse> = async (req) => {
+    for (const g of guards) {
+      const r = await g(req);
+      if (r) return r;
+    }
     for (const h of extras) {
       const r = await h(req);
       if (r) return r;
@@ -1827,6 +1839,10 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     addHandler(h) {
       extras.push(h);
     },
+    addGuard(h) {
+      guards.push(h);
+    },
+    dispatchHttp: (req) => handleHttp(req),
     addAppGate(h) {
       appGates.push(h);
     },
