@@ -758,6 +758,8 @@ class AppState(
     }
 
     fun signOut() {
+        // Architecture v2: no PQ session or strict view outlives the account on this phone.
+        com.flagshipserver.app.keystore.QuantumSafetyService.forget(currentUser.value)
         _isPaired.value = false
         _currentUser.value = null
         clearServerOrder()

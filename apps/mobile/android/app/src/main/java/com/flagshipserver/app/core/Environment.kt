@@ -114,6 +114,11 @@ fun rememberServerOrderSaver(): ServerOrderSaver {
             post = { u, wire -> mailbox.postServerOrder(u, wire) },
             fetchOrder = { u -> mailbox.fetchPods(u).serverOrder },
             signer = { reason -> com.flagshipserver.app.keystore.Keystore.adminSigningKey(reason) },
+            pqSigner = { canonical, key ->
+                val u = app.currentUser.value.orEmpty()
+                if (!com.flagshipserver.app.keystore.QuantumSafetyService.anyStrict(u)) null
+                else com.flagshipserver.app.keystore.QuantumSafetyService.pqSignature(u, "admin-root", canonical, key, com.flagshipserver.app.keystore.Keystore.adminRootPubHex().orEmpty())
+            },
             isDemo = { app.isDemoAccountNow() },
             screensFor = podClients::screens,
         )

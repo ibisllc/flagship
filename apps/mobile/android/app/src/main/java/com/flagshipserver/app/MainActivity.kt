@@ -337,11 +337,14 @@ class MainActivity : FragmentActivity() {
         // Architecture v2: bind this phone's identities to ML-DSA-65 keys ("PQ, hardware-wrapped")
         // at account creation, after a join or admin-root change, and after each unlock. Never
         // prompts; anything unfinished waits for the next unlock.
+        val pqKeyStore = com.flagshipserver.app.keystore.PqKeyStore(
+            com.flagshipserver.app.keystore.PqKeyPrefs(applicationContext),
+            com.flagshipserver.app.keystore.KeystorePqSeedWrapper(),
+        )
+        // Milestone 4: the servers this phone holds as strict, and the PQ tunnel to them.
+        com.flagshipserver.app.keystore.QuantumSafetyService.attach(applicationContext, pqKeyStore, com.flagshipserver.app.core.BoxKeyPins.shared)
         com.flagshipserver.app.keystore.PqIdentityUpgrade.binder = com.flagshipserver.app.core.pq.PqIdentityBinder(
-            store = com.flagshipserver.app.keystore.PqKeyStore(
-                com.flagshipserver.app.keystore.PqKeyPrefs(applicationContext),
-                com.flagshipserver.app.keystore.KeystorePqSeedWrapper(),
-            ),
+            store = pqKeyStore,
             client = com.flagshipserver.app.core.pq.LivePqKeyBindingClient(
                 OkHttpJsonTransport(okHttp), { com.flagshipserver.app.core.Endpoints.controlBaseUrl },
             ),
@@ -356,7 +359,10 @@ class MainActivity : FragmentActivity() {
                 isDemo = com.flagshipserver.app.core.AppState.isDemoAccount(p, appState.pods.value),
             )
         }
-        BiometricAuthority.onSessionUnlocked = { com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger() }
+        BiometricAuthority.onSessionUnlocked = {
+            com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
+            com.flagshipserver.app.keystore.QuantumSafetyService.activate(appState.currentUser.value, appState.activeProfile?.deviceId)
+        }
 
         // Push-token registration is inherently a real-backend operation
         // (registering an FCM token + X25519 push key against .com), so it

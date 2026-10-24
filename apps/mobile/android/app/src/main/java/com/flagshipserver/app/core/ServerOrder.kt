@@ -24,7 +24,12 @@ data class ServerOrder(
 
 /** A signed order as it travels: `/pods`, `POST /api/accounts/<u>/server-order`. */
 @Serializable
-data class ServerOrderWire(val order: ServerOrder, val signature: String)
+data class ServerOrderWire(
+    val order: ServerOrder,
+    val signature: String,
+    /** Architecture v2: the admin root's hybrid signature, required by a strict server. */
+    val pqSignature: com.flagshipserver.app.api.PqSignatureWire? = null,
+)
 
 object ServerOrderProtocol {
     const val TAG = "flagship/server-order/v1"

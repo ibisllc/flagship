@@ -200,6 +200,8 @@ data class UpdateDepositBody(
     val deposit: Deposit,
     val order: Order,
     val signature: String,   // hex (64 bytes) — admin authority over the order canonical bytes
+    /** Architecture v2: the same authority's hybrid signature, required by a strict server. */
+    val pqSignature: PqSignatureWire? = null,
 ) {
     @Serializable
     data class Deposit(
@@ -1179,3 +1181,7 @@ class LiveSecretMailboxClient(
 }
 
 // MARK: - Mock
+
+/** A hybrid signature beside an order's classical one (`{suite, signature}`, lowercase hex). */
+@Serializable
+data class PqSignatureWire(val suite: String, val signature: String)

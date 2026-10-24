@@ -153,7 +153,7 @@ class UpdateServerViewModel(
             val irk = signer(reason)
             val pub = irkPubHex()
             val orderKey = orderSigner(reason)
-            val body = ServerUpdateDeposit.buildDeposit(
+            val built = ServerUpdateDeposit.buildDeposit(
                 username = username,
                 serverDomain = serverFqdn,
                 targetCommit = target,
@@ -163,6 +163,19 @@ class UpdateServerViewModel(
                 orderKey = orderKey,
                 now = issuedAt,
             )
+            // A strict server applies the order only with its signer's hybrid signature too.
+            val canonical = com.flagshipserver.app.core.ServerUpdateOrder.canonicalBytes(
+                built.order.serverDomain, built.order.targetCommit, built.order.fromCommit, built.order.nonce, built.order.issuedAt,
+            )
+            val pq = if (!com.flagshipserver.app.keystore.QuantumSafetyService.anyStrict(username)) {
+                null
+            } else if (orderKey != null) {
+                com.flagshipserver.app.keystore.QuantumSafetyService.pqSignature(username, "admin-root", canonical, orderKey,
+                    com.flagshipserver.app.keystore.Keystore.adminRootPubHex().orEmpty())
+            } else {
+                com.flagshipserver.app.keystore.QuantumSafetyService.pqSignature(username, "account-irk", canonical, irk, pub)
+            }
+            val body = built.copy(pqSignature = pq)
             _phase.value = Phase.Posting
             mailbox.depositUpdate(serverFqdn, body)
             val sent = PendingUpdate(

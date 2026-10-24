@@ -26,6 +26,8 @@ class ServerOrderSaver(
     private val fetchOrder: suspend (username: String) -> ServerOrderWire?,
     /** The sensitive-order key (admin root when held, else the IRK). */
     private val signer: suspend (reason: String) -> Ed25519Sign,
+    /** Architecture v2: the signer's hybrid signature over the canonical order, when a server is strict. */
+    private val pqSigner: suspend (canonical: ByteArray, key: Ed25519Sign) -> com.flagshipserver.app.api.PqSignatureWire? = { _, _ -> null },
     private val isDemo: () -> Boolean,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val randomBytes: (Int) -> ByteArray = { n -> ByteArray(n).also(SecureRandom()::nextBytes) },
@@ -79,8 +81,9 @@ class ServerOrderSaver(
             return Outcome.Local
         }
         return try {
-            val signature = ServerOrderProtocol.sign(order, signer(REASON))
-            val wire = ServerOrderWire(order, signature)
+            val key = signer(REASON)
+            val signature = ServerOrderProtocol.sign(order, key)
+            val wire = ServerOrderWire(order, signature, pqSigner(ServerOrderProtocol.canonicalBytes(order), key))
             post(username, wire)
             app.makeLeaderCurrent()
             deliveryScope.launch { deliver(wire) }

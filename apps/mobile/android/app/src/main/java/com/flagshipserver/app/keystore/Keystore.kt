@@ -81,11 +81,17 @@ object Keystore {
     private val rng = SecureRandom()
     @Volatile private var prefs: SharedPreferences? = null
     @Volatile private var activeProfileId: String? = null
+    /** The PQ identity keys' entries (PqKeyPrefs) and the held assurance policy (QuantumSafetyStore). */
+    @Volatile private var pqPrefs: List<SharedPreferences> = emptyList()
 
     /** Wire up the encrypted-prefs file. Idempotent. App init calls
      *  this from MainActivity.onCreate. */
     fun attach(context: Context) {
         if (prefs != null) return
+        pqPrefs = listOf(
+            context.getSharedPreferences("flagship.pqkeys.v1", Context.MODE_PRIVATE),
+            context.getSharedPreferences("flagship.assurance.v1", Context.MODE_PRIVATE),
+        )
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
@@ -814,6 +820,22 @@ object Keystore {
             if (key.startsWith(seedCachePrefix)) editor.remove(key)
         }
         editor.apply()
+        wipePq(activeProfileId ?: "-")
+    }
+
+    /**
+     * Architecture v2: the PQ halves of a profile's identities (wrapped ML-DSA seeds) and the
+     * assurance policy this phone held for it go with its account keys. `null` = every profile.
+     */
+    fun wipePq(profile: String?) {
+        for (pp in pqPrefs) {
+            val e = pp.edit()
+            for (key in pp.all.keys) {
+                val mine = profile == null || key.startsWith("pq.mldsa.v1.$profile.") || key.startsWith("assurance.v1.$profile|")
+                if (mine) e.remove(key)
+            }
+            e.apply()
+        }
     }
 
     /**
@@ -845,6 +867,7 @@ object Keystore {
         }
         editor.apply()
         activeProfileId = null
+        wipePq(null)
     }
 
     // ---- HKDF-SHA256 ----------------------------------------------------
