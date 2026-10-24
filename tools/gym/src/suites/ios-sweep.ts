@@ -1171,10 +1171,10 @@ const SECURITY_03: readonly Scenario[] = [
   ),
   sweep(
     "ios-sweep-chat-always-revoke",
-    "Always allow from the chat sheet; the server page lists it with Revoke, which ends it; the request put off with Not now is denied from the page.",
+    "Always allow from the chat sheet; the server page lists 'ana/chess → plants' with its own Revoke, which ends it; the request put off with Not now is denied from the page.",
     "GymSecurityScreensTests/test_chatAlwaysAllowThenRevokeOnServerPage",
-    ["chat-alert-always", "chat-alert-close", "chat-alert-not-now", "sd-chat-revoke-plants", "sd-chat-deny"],
-    ["chat always revoked bright-maple/plants", "sd-chat-note"],
+    ["chat-alert-always", "chat-alert-close", "chat-alert-not-now", "sd-chat-revoke-chess-plants", "sd-chat-deny"],
+    ["chat always revoked ana/chess>bright-maple/plants", "sd-chat-note"],
     "D5",
   ),
   sweep(

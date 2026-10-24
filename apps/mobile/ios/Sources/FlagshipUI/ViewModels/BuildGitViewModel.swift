@@ -432,12 +432,12 @@ public enum AiConsentCopy {
     public static let agree = String(localized: "Agree and run the AI")
     public static let agreeing = String(localized: "Starting…")
     public static let signReason = String(localized: "Agree to what this AI run may cost")
-    public static let note = String(localized: "This is an estimate, not a promise. Nothing runs until you agree, and your answer covers this one run only.")
+    public static let note = String(localized: "Nothing runs until you agree, and your answer covers this one run only.")
     public static let notAgreed = String(localized: "You didn't agree, so nothing ran.")
     public static let cantSign = String(localized: "Couldn't sign your answer. Nothing ran.")
 
     public static func tokens(_ e: AiCostEstimate) -> String {
-        String(localized: "It may use \(e.lowTokens.formatted()) to \(e.highTokens.formatted()) tokens.")
+        String(localized: "It may use up to about \(e.highTokens.formatted()) tokens; the run stops there.")
     }
 
     public static func payer(_ e: AiCostEstimate) -> String {

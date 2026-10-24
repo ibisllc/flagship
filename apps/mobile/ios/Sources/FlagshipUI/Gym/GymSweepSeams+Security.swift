@@ -25,7 +25,8 @@ extension GymSweepSeams {
             mocks.screens.mockChatRequests = [chatIncoming, chatOutgoing]
         }
         if args.contains("-smoke-chat-always") {
-            mocks.screens.mockChatAlways = [ChatAppIdentity(author: "bright-maple", slug: "board")]
+            mocks.screens.mockChatAlways = [ChatAlwaysAllow(receiverApp: ChatAppIdentity(author: "bright-maple", slug: "board"),
+                                                            claimedSender: ChatAppIdentity(author: "ana", slug: "chess"))]
         }
         if args.contains("-smoke-ai-consent") {
             mocks.screens.buildAdaptConsentEstimate = AiCostEstimate(

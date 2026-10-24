@@ -762,7 +762,7 @@ extension GymSweepBuildTests {
         app.buttons["build-key-confirm-active"].tap()
         let title = app.staticTexts["build-git-consent-title"]
         XCTAssertTrue(title.waitForExistence(timeout: 15), "The box asks for consent first.")
-        XCTAssertEqual(app.staticTexts["build-git-consent-tokens"].label, "It may use 12,000 to 72,000 tokens.")
+        XCTAssertEqual(app.staticTexts["build-git-consent-tokens"].label, "It may use up to about 72,000 tokens; the run stops there.")
         XCTAssertEqual(app.staticTexts["build-git-consent-payer"].label, "It runs on your own openai key, so openai bills you for it.")
         expectProbe(app, "adapt consent asked")
         expectNoProbe(app, "adapt started")
@@ -841,7 +841,7 @@ final class GymSecurityScreensTests: GymSweepCase {
         app.buttons["chat-alert-always"].tap()
         let done = app.staticTexts["chat-alert-done"]
         XCTAssertTrue(done.waitForExistence(timeout: 15))
-        XCTAssertEqual(done.label, "plants now takes chats from other owners' apps without asking.")
+        XCTAssertEqual(done.label, "plants now takes chats from ana/chess without asking.")
         expectProbe(app, "chat always incoming ana/chess")
         app.buttons["chat-alert-close"].tap()
         XCTAssertTrue(title.waitForExistence(timeout: 15))
@@ -849,15 +849,15 @@ final class GymSecurityScreensTests: GymSweepCase {
         XCTAssertFalse(title.waitForExistence(timeout: 3))
 
         openServerPage(app, named: "Home")
-        let revoke = app.buttons["sd-chat-revoke-plants"]
+        let revoke = app.buttons["sd-chat-revoke-chess-plants"]
         XCTAssertTrue(reveal(app, revoke, tries: 16), "The server page lists the Always allow with Revoke.")
         shot(app, "chat-server-card")
         bringToMiddle(app, revoke)
         revoke.tap()
         let note = app.staticTexts["sd-chat-note"]
         XCTAssertTrue(note.waitForExistence(timeout: 15))
-        XCTAssertEqual(note.label, "plants asks you again from now on.")
-        expectProbe(app, "chat always revoked bright-maple/plants")
+        XCTAssertEqual(note.label, "plants asks you again before ana/chess can talk to it.")
+        expectProbe(app, "chat always revoked ana/chess>bright-maple/plants")
         waitGone(revoke)
 
         let deny = app.buttons["sd-chat-deny"]
