@@ -27,6 +27,12 @@ class ServerOrderSaver(
     private val signer: suspend (reason: String) -> Ed25519Sign,
     /** Architecture v2: the signer's hybrid signature over the canonical order, when a server is strict. */
     private val pqSigner: suspend (canonical: ByteArray, key: Ed25519Sign) -> com.flagshipserver.app.api.PqSignatureWire? = { _, _ -> null },
+    /**
+     * Architecture v2 (pq-suites.md §16): the hybrid key id of [PodInfo]'s PQ binding as this
+     * phone pinned it, or null; named in the order while any server is strict ([strict]).
+     */
+    private val pqKeyIdFor: (username: String, pod: PodInfo) -> String? = { _, _ -> null },
+    private val strict: (username: String) -> Boolean = { false },
     private val isDemo: () -> Boolean,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val randomBytes: (Int) -> ByteArray = { n -> ByteArray(n).also(SecureRandom()::nextBytes) },
@@ -71,7 +77,11 @@ class ServerOrderSaver(
         if (stks == current) return Outcome.Unchanged
 
         val (previous, previousIssuedAt) = app.serverOrderSnapshot()
-        val order = ServerOrder(username, stks, now(), HexUtil.encode(randomBytes(32)))
+        val plain = ServerOrder(username, stks, now(), HexUtil.encode(randomBytes(32)))
+        // A strict box pins its siblings through this order: name each server's PQ key as pinned.
+        val order = if (!strict(username)) plain else ServerOrderProtocol.withPqKeyIds(plain) { stk ->
+            named.firstOrNull { it.identityPubKeyHex.lowercase() == stk }?.let { pqKeyIdFor(username, it) }
+        }
         app.setServerOrder(stks, order.issuedAt)
         if (isDemo()) {
             // A demo order never leaves the phone: no box will acknowledge it.

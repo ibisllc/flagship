@@ -110,6 +110,12 @@ fun rememberServerOrderSaver(): ServerOrderSaver {
                 if (!com.flagshipserver.app.keystore.QuantumSafetyService.anyStrict(u)) null
                 else com.flagshipserver.app.keystore.QuantumSafetyService.pqSignature(u, "admin-root", canonical, key, com.flagshipserver.app.keystore.Keystore.adminRootPubHex().orEmpty())
             },
+            pqKeyIdFor = { u, pod ->
+                val stk = pod.identityPubKeyHex.lowercase()
+                com.flagshipserver.app.core.BoxKeyPins.shared.verifiedBoxPqBinding(u, pod.fqdn)
+                    ?.takeIf { it.ed25519PubHex == stk }?.keyIdHex
+            },
+            strict = { u -> com.flagshipserver.app.keystore.QuantumSafetyService.anyStrict(u) },
             isDemo = { app.isDemoAccountNow() },
             screensFor = podClients::screens,
         )
