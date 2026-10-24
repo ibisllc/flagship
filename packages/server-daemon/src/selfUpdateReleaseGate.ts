@@ -6,6 +6,7 @@ import type { ReleaseEndorsement } from "@ibisllc/maintainers";
 import {
   MAINTAINER_PINNED_MANDATE_HASH,
   maintainerPinConfigured,
+  type ReleasePqPin,
 } from "@flagship/protocol";
 import {
   verifyEndorsementChainAgainstGit,
@@ -63,6 +64,8 @@ export interface MaintainersReleaseGateOptions {
   refCandidates?: string[];
   /** Baked pin override (tests). Empty string ⇒ fail closed, never a bypass. */
   pinnedMandateHash?: string;
+  /** Release PQ pin override (tests); defaults to the baked `RELEASE_PQ_PIN`. */
+  releasePqPin?: ReleasePqPin;
   /** Test seam — replace the worktree `.maintainers/` read+verify. */
   statusForWorktree?: () => ReleaseStatus | null;
   /** Test seam — replace the per-ref `.maintainers/` extraction+verify. */
@@ -92,6 +95,7 @@ export function buildMaintainersReleaseGate(
         return verifyMaintainersFolder({
           gitRepoPath: opts.repoPath,
           pinnedMandateHash: pin,
+          ...(opts.releasePqPin ? { releasePqPin: opts.releasePqPin } : {}),
         });
       } catch {
         return null;
@@ -106,6 +110,7 @@ export function buildMaintainersReleaseGate(
         ref,
         pinnedMandateHash: pin,
         gitBinary: git,
+        ...(opts.releasePqPin ? { releasePqPin: opts.releasePqPin } : {}),
       }));
 
   const verifyWalk =
@@ -188,6 +193,7 @@ export function maintainersStatusFromRef(args: {
   repoPath: string;
   ref: string;
   pinnedMandateHash?: string;
+  releasePqPin?: ReleasePqPin;
   gitBinary?: string;
 }): ReleaseStatus | null {
   const git = args.gitBinary ?? "git";
@@ -228,6 +234,7 @@ export function maintainersStatusFromRef(args: {
       ...(args.pinnedMandateHash !== undefined
         ? { pinnedMandateHash: args.pinnedMandateHash }
         : {}),
+      ...(args.releasePqPin ? { releasePqPin: args.releasePqPin } : {}),
     });
   } catch {
     return null;

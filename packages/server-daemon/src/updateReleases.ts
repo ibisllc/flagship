@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ReleaseEndorsement } from "@ibisllc/maintainers";
-import { MAINTAINER_PINNED_MANDATE_HASH } from "@flagship/protocol";
+import { MAINTAINER_PINNED_MANDATE_HASH, type ReleasePqPin } from "@flagship/protocol";
 import { verifyEndorsementChainAgainstGit, verifyMaintainersFolder, type ReleaseStatus } from "./releaseVerifier.js";
 import { maintainersStatusFromRef } from "./selfUpdateReleaseGate.js";
 
@@ -41,6 +41,8 @@ type Git = (args: string[], timeoutMs?: number) => Promise<{ ok: boolean; stdout
 export interface ReleaseCatalogOptions {
   repoPath: string;
   pinnedMandateHash?: string;
+  /** Release PQ pin override (tests); defaults to the baked `RELEASE_PQ_PIN`. */
+  releasePqPin?: ReleasePqPin;
   /** How long a catalog is reused before the next fetch. */
   maxAgeMs?: number;
   now?: () => number;
@@ -77,12 +79,21 @@ export function buildReleaseCatalog(opts: ReleaseCatalogOptions): ReleaseCatalog
     });
   const statusForRef =
     opts.statusForRef ??
-    ((ref: string) => maintainersStatusFromRef({ repoPath: opts.repoPath, ref, pinnedMandateHash: pin }));
+    ((ref: string) => maintainersStatusFromRef({
+      repoPath: opts.repoPath,
+      ref,
+      pinnedMandateHash: pin,
+      ...(opts.releasePqPin ? { releasePqPin: opts.releasePqPin } : {}),
+    }));
   const statusForWorktree =
     opts.statusForWorktree ??
     (() => {
       try {
-        return verifyMaintainersFolder({ gitRepoPath: opts.repoPath, pinnedMandateHash: pin });
+        return verifyMaintainersFolder({
+          gitRepoPath: opts.repoPath,
+          pinnedMandateHash: pin,
+          ...(opts.releasePqPin ? { releasePqPin: opts.releasePqPin } : {}),
+        });
       } catch {
         return null;
       }
