@@ -881,17 +881,21 @@ public struct MaintainerBlessing: Sendable, Equatable {
     public let caPubkey: String
     public let mandates: [Mandate]
     public let caEndorsements: [CaEndorsement]
+    /// The leases' PQ companions and bindings (`caLeasePq`) as raw JSON, for `CaLeasePq.gate`.
+    public let caLeasePqJSON: String?
 
     public init(
         pinnedMandateHash: String,
         caPubkey: String,
         mandates: [Mandate],
-        caEndorsements: [CaEndorsement]
+        caEndorsements: [CaEndorsement],
+        caLeasePqJSON: String? = nil
     ) {
         self.pinnedMandateHash = pinnedMandateHash
         self.caPubkey = caPubkey
         self.mandates = mandates
         self.caEndorsements = caEndorsements
+        self.caLeasePqJSON = caLeasePqJSON
     }
 }
 
@@ -919,8 +923,14 @@ extension MaintainersTrust {
         let chain = MaintainersVerifier.verifyMandateChainFromPin(
             pinnedHash: pin, mandates: blessing.mandates
         )
+        // Once the CA lease PQ pin names a key, a lease without its verified hybrid companion
+        // gives no authority (pq-suites.md §16.3).
+        let material = blessing.caLeasePqJSON.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) } as? [String: Any]
+        let leases = CaLeasePq.gate(blessing.caEndorsements, bindings: material?["bindings"] as? [Any] ?? [],
+                                    endorsements: material?["endorsements"] as? [Any] ?? [],
+                                    now: Int64(now.timeIntervalSince1970 * 1000))
         let keys = MaintainersCaVerifier.authorizedCaKeys(
-            blessing.caEndorsements, caChain: chain, now: now
+            leases, caChain: chain, now: now
         )
         return keys.contains(blessing.caPubkey)
     }

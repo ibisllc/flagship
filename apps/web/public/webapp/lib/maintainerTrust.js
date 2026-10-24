@@ -23,6 +23,8 @@
 // crypto.subtle.digest. Everything is async because pin-hashing the mandate
 // log is async under WebCrypto.
 
+import { hybridVerify, verifyPqKeyBinding } from "./pqBinding.js";
+
 const SEP = "|";
 const TAG_PREFIX = "maintainers";
 
@@ -499,7 +501,10 @@ export async function verifyComBlessing(blessing, nowMs, pinnedMandateHash) {
 
   let keys;
   try {
-    keys = await authorizedCaKeys(blessing.caEndorsements ?? [], chain, nowMs);
+    // Once the CA lease PQ pin names a key, a lease without its verified hybrid companion gives
+    // no authority (pq-suites.md §16.3).
+    const leases = await gateCaLeasesPq(blessing.caEndorsements ?? [], blessing.caLeasePq, CA_LEASE_PQ_PIN, nowMs);
+    keys = await authorizedCaKeys(leases, chain, nowMs);
   } catch {
     return { trusted: false, caPubkey: servedKey, reason: "endorsement-error" };
   }
@@ -510,6 +515,62 @@ export async function verifyComBlessing(blessing, nowMs, pinnedMandateHash) {
     return { trusted: false, caPubkey: servedKey, reason: "served-key-not-authorized" };
   }
   return { trusted: true, caPubkey: servedKey, reason: "ok" };
+}
+
+// ── the CA lease's PQ half (packages/protocol/src/caLeasePq.ts; vectors test-vectors/ca-lease-pq) ──
+
+/** Mirrors `CA_LEASE_PQ_PIN` in caLeasePq.ts (a test keeps them equal). Empty: every lease counts. */
+export const CA_LEASE_PQ_PIN = Object.freeze({ version: 1, keyIds: Object.freeze([]), legacyLeases: Object.freeze([]) });
+const TAG_CA_LEASE_V2 = "flagship/ca-lease/v2";
+
+async function hybridKeyIdHex(pk) {
+  const tag = new TextEncoder().encode("flagship/pq-key-id/v1");
+  const input = new Uint8Array(1 + tag.length + 4 + pk.length);
+  input[0] = tag.length;
+  input.set(tag, 1);
+  input.set([0x00, 0x02, pk.length >> 8, pk.length & 0xff], 1 + tag.length);
+  input.set(pk, 5 + tag.length);
+  return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-512", input)).subarray(0, 32));
+}
+
+/** The leases that may give authority; the classical checks still run on them after. */
+export async function gateCaLeasesPq(leases, material, pin, nowMs) {
+  if (!pin || !Array.isArray(pin.keyIds) || pin.keyIds.length === 0) return leases;
+  const pinned = new Set(pin.keyIds.map((k) => String(k).toLowerCase()));
+  const bindings = new Map();
+  for (const raw of Array.isArray(material?.bindings) ? material.bindings : []) {
+    try {
+      const b = verifyPqKeyBinding(raw, { role: "release-key", subjectId: "flagship-ca-track", ed25519PubHex: raw.ed25519PubHex, now: nowMs });
+      const id = await hybridKeyIdHex(b.hybridPublicKey);
+      if (pinned.has(id)) bindings.set(id, b);
+    } catch {
+      // a binding that does not verify simply does not count
+    }
+  }
+  const companions = Array.isArray(material?.endorsements) ? material.endorsements : [];
+  const out = [];
+  for (const e of leases) {
+    let digest;
+    try {
+      digest = await sha256Hex(canonicalCaEndorsement(e));
+    } catch {
+      continue;
+    }
+    if ((pin.legacyLeases ?? []).includes(digest)) {
+      out.push(e);
+      continue;
+    }
+    const ok = companions.some((w) => {
+      if (!w || w.kind !== "CaEndorsementPq" || w.version !== 2 || w.endorsementId !== e.endorsementId || w.v1Digest !== digest) return false;
+      if (w.suite !== "hybrid-ed25519-mldsa65/v1" || typeof w.keyId !== "string" || typeof w.signature !== "string" || !/^(?:[0-9a-f]{2})+$/.test(w.signature)) return false;
+      const b = bindings.get(w.keyId);
+      if (!b || b.ed25519PubHex !== String(e.signedBy).toLowerCase()) return false;
+      const msg = new TextEncoder().encode([TAG_CA_LEASE_V2, e.endorsementId, digest, String(e.signedBy).toLowerCase(), w.keyId].join("|"));
+      return hybridVerify(b.hybridPublicKey, TAG_CA_LEASE_V2, msg, hexToBytes(w.signature));
+    });
+    if (ok) out.push(e);
+  }
+  return out;
 }
 
 export const _internal = { hexToBytes, bytesToHex, sha256Hex, canonicalError: CanonicalError };

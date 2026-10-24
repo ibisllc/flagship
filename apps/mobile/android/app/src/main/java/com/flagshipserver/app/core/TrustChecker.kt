@@ -74,6 +74,7 @@ class TrustChecker(
         val caPubkey: String,
         val mandates: List<MandateJson>,
         val caEndorsements: List<CaEndorsementJson>,
+        val caLeasePq: kotlinx.serialization.json.JsonElement? = null,
     )
 
     private fun toMandate(j: MandateJson) = Mandate(
@@ -115,6 +116,7 @@ class TrustChecker(
                 caPubkey = j.caPubkey,
                 mandates = j.mandates.map(::toMandate),
                 caEndorsements = j.caEndorsements.map(::toEndorsement),
+                caLeasePq = j.caLeasePq,
             )
         } catch (_: Throwable) {
             return Outcome.NoVerdict // network/parse/non-2xx → no verdict

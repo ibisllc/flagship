@@ -76,6 +76,11 @@ function requestCard(req, firstBootMap = {}) {
       <p class="faint-sm mt-1">
         Is this the machine in front of you? Only approve if you recognise it.
       </p>
+      ${
+        req.quantumSafeRequest
+          ? `<p class="faint-sm mt-1">This server asks for a quantum-safe unlock. If its quantum-safe protection is on, approve it in the Flagship app on your phone: a browser cannot sign one.</p>`
+          : ""
+      }
       ${action}
     </div>
   `;
