@@ -83,6 +83,7 @@ export * from "./appRelease.js";
 export * from "./nameDibs.js";
 export * from "./voiciName.js";
 export * from "./assurancePolicy.js";
+export * from "./strictReentry.js";
 export * from "./pqHybrid.js";
 export * from "./pqTrust.js";
 export * from "./pqSession.js";

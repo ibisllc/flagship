@@ -123,11 +123,12 @@ public enum QuantumSafety {
     /// The change that turns strict on. `browsersAllowed` is the owner's explicit answer; there
     /// is no default, so the caller cannot build the change before it is given.
     public static func strictChange(account: String, scope: PolicyScope, from state: PolicyState, browsersAllowed: Bool,
-                                    peers: [String], signerKind: PolicySignerKind, signerKeyId: String, now: Int64) -> AssurancePolicyChange {
+                                    peers: [String], signerKind: PolicySignerKind, signerKeyId: String, now: Int64,
+                                    reentry: StrictReentryEvidence? = nil) -> AssurancePolicyChange {
         AssurancePolicyChange(account: account.lowercased(), scope: scope, prior: state.profile, next: .strict,
                               generation: state.generation + 1, prevDigest: state.headDigest,
                               affectedPeersDigest: affectedPeersDigest(peers),
-                              acknowledgedLoss: browsersAllowed ? [browserLoss] : [], reentry: nil,
+                              acknowledgedLoss: browsersAllowed ? [browserLoss] : [], reentry: reentry,
                               signerKind: signerKind, signerKeyId: signerKeyId.lowercased(), suite: .hybrid, issuedAt: now)
     }
 

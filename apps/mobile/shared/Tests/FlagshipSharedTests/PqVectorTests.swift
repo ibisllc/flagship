@@ -285,4 +285,46 @@ final class PqVectorTests: XCTestCase {
             XCTAssertEqual(try AssurancePolicy.digest(change), c["digest"] as? String)
         }
     }
+
+    // MARK: strict-reentry
+
+    func testStrictReentryVectors() throws {
+        let v = try load("test-vectors/strict-reentry/vectors.json")
+        XCTAssertEqual(v["tag"] as? String, StrictReentry.tag)
+        func binding(_ o: Any?) -> StrictReentry.Binding? {
+            guard let d = o as? [String: Any] else { return nil }
+            return StrictReentry.Binding(role: d["role"] as! String, subjectId: d["subjectId"] as! String,
+                                         ed25519PubHex: d["ed25519PubHex"] as! String, mldsaPubHex: d["mldsaPubHex"] as! String)
+        }
+        func inputs(_ d: [String: Any]) -> StrictReentry.Inputs {
+            let scope = d["scope"] as! [String: Any]
+            return StrictReentry.Inputs(
+                account: d["account"] as! String,
+                scope: PolicyScope(kind: PolicyScopeKind(rawValue: scope["kind"] as! String)!, id: scope["id"] as! String),
+                leftStrictAt: (d["leftStrictAt"] as! NSNumber).int64Value,
+                devices: (d["devices"] as! [Any]).compactMap(binding),
+                deviceCount: (d["deviceCount"] as! NSNumber).intValue,
+                adminRoot: binding(d["adminRoot"]),
+                server: binding(d["server"])!,
+                recoveryChecked: d["recoveryChecked"] as! Bool,
+                recoveryCheckedAt: (d["recoveryCheckedAt"] as? NSNumber)?.int64Value,
+                nonceHex: d["nonceHex"] as! String,
+                checkedAt: (d["checkedAt"] as! NSNumber).int64Value)
+        }
+        for c in v["cases"] as! [[String: Any]] {
+            let i = inputs(c["inputs"] as! [String: Any])
+            XCTAssertEqual(try StrictReentry.texts(i), c["texts"] as? [String])
+            let e = try StrictReentry.evidence(i)
+            let want = c["evidence"] as! [String: String]
+            XCTAssertEqual(e.verifierChecksDigest, want["verifierChecksDigest"])
+            XCTAssertEqual(e.enrollmentDigest, want["enrollmentDigest"])
+            XCTAssertEqual(e.rekeyReceiptDigest, want["rekeyReceiptDigest"])
+            XCTAssertEqual(e.recoveryTestDigest, want["recoveryTestDigest"])
+        }
+        for r in v["refusals"] as! [[String: Any]] {
+            XCTAssertThrowsError(try StrictReentry.evidence(inputs(r["inputs"] as! [String: Any]))) { e in
+                XCTAssertEqual((e as? StrictReentry.Refusal)?.code, r["code"] as? String)
+            }
+        }
+    }
 }
