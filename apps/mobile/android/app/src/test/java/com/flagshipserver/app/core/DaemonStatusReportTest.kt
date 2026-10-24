@@ -125,7 +125,7 @@ class DaemonStatusReportTest {
     }
 
     @Test fun rejectsASignatureFromADifferentKey() {
-        val otherStkSeed = ServerKeys.deriveStkSeed(
+        val otherStkSeed = TestStk.seed(
             ByteArray(32) { 0x08 }, DaemonStatusVector.SERVER_ID,
         )
         val sig = com.google.crypto.tink.subtle.Ed25519Sign(otherStkSeed)

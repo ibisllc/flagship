@@ -2695,5 +2695,13 @@
   "chat_always_ended_sender": "bb10c207f62c",
   "chat_request_now_always_sender": "b219341e523a",
   "ai_consent_cap": "0b345f21f9e9",
-  "watch_boot_key_mismatch": "2c9ab06ba835"
+  "watch_boot_key_mismatch": "2c9ab06ba835",
+  "server_key_changed": "7c9e511ae346",
+  "server_not_from_your_recipe": "ee9cb39d920b",
+  "server_code_on_monitor": "786dc3ecec1a",
+  "server_code_confirmed_by_studio": "2d0e1b0ac17b",
+  "server_code_check_first": "2f4569de06ab",
+  "server_first_approval_on_phone": "2d636c6f0cca",
+  "server_key_not_pinned": "e38764db3094",
+  "let_server_hold_app_names": "60fad7dc3a29"
 }

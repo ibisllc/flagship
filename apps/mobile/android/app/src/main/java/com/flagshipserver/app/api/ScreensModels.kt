@@ -973,7 +973,13 @@ data class ProvisionStatusRecord(
     val updatedAt: Long,
     /** Append-only history of every phase report, oldest first. */
     val history: List<ProvisionStatusEntry> = emptyList(),
+    /** Studio's reports of the keys it read on the VM's console (docs/first-contact.md), up to 4,
+     *  newest last, each MACed under the studio confirm key. Unverified until checked. */
+    val serverSeen: List<ServerSeenWire> = emptyList(),
 )
+
+@Serializable
+data class ServerSeenWire(val stkPubHex: String, val macHex: String, val at: Long? = null)
 
 // ---------- P1.17 / P1.18 url-controller -------------------------------
 

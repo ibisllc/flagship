@@ -5,9 +5,10 @@
 // Populated from `/pods` responses: each pod may carry the box's STK-signed
 // daemon-status report relayed VERBATIM (`signedStatus`). A pin is recorded
 // for the box FQDN only when ALL of these hold:
-//   - the STK pubkey derived LOCALLY from the phone's UMK
-//     (ServerKeys.deriveStkPub — `.com`'s identityPubKey echo is NOT a trust
-//     input) verifies the report signature,
+//   - the server key THIS device pinned at the server's first blessing
+//     (ServerKeyPins.pinnedStk, docs/first-contact.md — `.com`'s
+//     identityPubKey is NOT a trust input) verifies the report signature;
+//     a server with no pin yet gets no fresh pin,
 //   - the report's serverDomain matches the pod's domain,
 //   - the report is fresh (issuedAt within MAX_REPORT_AGE_MS),
 //   - the report carries a well-formed certSha256 (64 hex).
@@ -100,7 +101,8 @@ class CertPinRegistry {
      */
     fun update(
         pods: List<PodDirectoryEntry>,
-        umkSeed: ByteArray,
+        /** The pinned key for a server, or null when this device hasn't pinned it. */
+        pinnedStk: (serverDomain: String) -> ByteArray? = ServerKeyPins.shared::pinnedStk,
         nowMs: Long = System.currentTimeMillis(),
     ) {
         synchronized(pins) {
@@ -117,7 +119,7 @@ class CertPinRegistry {
                 }
 
                 val fresh = try {
-                    verifiedPinFor(pod, umkSeed, nowMs)
+                    verifiedPinFor(pod, pinnedStk, nowMs)
                 } catch (_: Throwable) {
                     null
                 }
@@ -142,7 +144,7 @@ class CertPinRegistry {
         }
     }
 
-    private fun verifiedPinFor(pod: PodDirectoryEntry, umkSeed: ByteArray, nowMs: Long): String? {
+    private fun verifiedPinFor(pod: PodDirectoryEntry, pinnedStk: (String) -> ByteArray?, nowMs: Long): String? {
         val signed = pod.signedStatus ?: return null
         val wire = signed.report ?: return null
         val sig = HexUtil.decode(signed.signatureHex) ?: return null
@@ -158,8 +160,8 @@ class CertPinRegistry {
             nonce = wire.nonce,
             issuedAt = wire.issuedAt,
         )
-        // Trust anchor: the STK derived from the phone's own UMK.
-        val stkPub = ServerKeys.deriveStkPub(umkSeed, pod.serverDomain)
+        // Trust anchor: the server key this device pinned. No pin, no fresh cert pin.
+        val stkPub = pinnedStk(pod.serverDomain) ?: return null
         if (!DaemonStatusReport.verify(report, sig, stkPub)) return null
         if (nowMs - report.issuedAt > DaemonStatusReport.MAX_REPORT_AGE_MS) return null
         val pin = report.certSha256?.lowercase() ?: return null

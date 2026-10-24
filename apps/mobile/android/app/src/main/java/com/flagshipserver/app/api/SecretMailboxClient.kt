@@ -362,6 +362,9 @@ data class DeviceInfoHint(
     val region: String? = null,
     val os: String? = null,
     val hostname: String? = null,
+    /** First contact (docs/first-contact.md): the box's HMAC under the recipe's enrollment secret,
+     *  on its first entitlement request. Checked only by the device holding that secret. */
+    val enrollmentProof: String? = null,
 )
 
 @Serializable

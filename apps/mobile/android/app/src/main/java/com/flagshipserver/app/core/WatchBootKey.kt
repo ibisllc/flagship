@@ -4,7 +4,7 @@
 // a copy of the disk key sealed to it (`flagship/watch-boot-delegate/v1`, attested by the account
 // key) with the boot worker. A watch Approve then needs no account key: learn the server's waiting
 // start-up, fetch this watch's copy, open it with the boot-only key, seal it for the PINNED STK
-// only (ServerKeyPins.pinnedStk, never a key `.com` names) and post the answer signed by the
+// only (ServerKeyPins.pinnedStk, pinned at the first blessing, never a key `.com` names) and post the answer signed by the
 // delegate. The waiting request is read with the account read token and must carry the box's
 // signature under that pinned STK. The boot worker
 // refuses both reads and answers with 423 while the server is locked: a locked server is started
@@ -74,19 +74,13 @@ class WatchBootOptIn(
     private val irk: IrkAccess,
     private val store: WatchBootKeyStore,
     private val pins: ServerKeyPins,
-    /** The key this phone sees for the server now (its own list), offered as the first-seen pin. */
-    private val currentServerKey: suspend (serverDomain: String) -> String?,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val nonceGen: () -> ByteArray = { SecretRequestCoordinator.randomNonce() },
 ) {
     /** Deposit a copy for [delegatePubHex], lasting no longer than the delegate. Returns its end. */
     suspend fun enable(serverDomain: String, delegatePubHex: String, delegateExpiresAt: Long, reason: String): Long {
-        // Interim trust on first use (pending the owner's decision): record the key now if none is.
-        when (pins.recordFirstSeen(serverDomain, currentServerKey(serverDomain.lowercase()))) {
-            ServerKeyPins.Record.Mismatch -> throw ServerKeyChangedException()
-            ServerKeyPins.Record.Unknown -> error("this server's key isn't known yet")
-            else -> Unit
-        }
+        // The key is pinned at the server's first blessing (docs/first-contact.md); this only reads it.
+        pins.pinnedStk(serverDomain) ?: throw ServerKeyNotPinnedException()
         val key = store.loadOrCreate()
         val material = irk.resolve(reason)
         val sealed = HexUtil.decode(mailbox.fetchSealedLuksKey(serverDomain).sealedKey)?.takeIf { it.isNotEmpty() }

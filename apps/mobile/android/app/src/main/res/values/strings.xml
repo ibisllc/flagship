@@ -2750,4 +2750,12 @@
     <string name="chat_request_now_always_sender">%1$s/%2$s can now start a chat with %3$s without asking</string>
     <string name="ai_consent_cap">This run can use up to about %1$s tokens. The run stops there.</string>
     <string name="watch_boot_key_mismatch">This server\'s key doesn\'t match. Approve its start-up from your phone.</string>
+    <string name="server_key_changed">This server\'s key changed. If you did not rebuild it, do not approve anything for it.</string>
+    <string name="server_not_from_your_recipe">This server was not built from your recipe. Do not approve it.</string>
+    <string name="server_code_on_monitor">If your machine has a monitor, it is showing this code: %1$s</string>
+    <string name="server_code_confirmed_by_studio">Confirmed by Studio</string>
+    <string name="server_code_check_first">Check this server\'s code before you approve it.</string>
+    <string name="server_first_approval_on_phone">Approve this server\'s first start-up on your phone, where you can check its code.</string>
+    <string name="server_key_not_pinned">This phone hasn\'t checked this server\'s key yet. Approve its next start-up on this phone first.</string>
+    <string name="let_server_hold_app_names">Let your server answer for your apps\' names</string>
 </resources>

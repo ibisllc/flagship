@@ -4,8 +4,8 @@
 // Each box independently verifies the ServiceBlessing it is handed by the
 // `.services` hub; that verdict is genuinely per-box. The daemon signs this
 // tuple with its STK (Ed25519); `.com` relays it VERBATIM on `/pods`
-// (`trustStatus: { report, signatureHex }`). A phone that derives the box STK
-// locally (ServerKeys.deriveStkPub — NOT `.com`'s echo) re-verifies it
+// (`trustStatus: { report, signatureHex }`). A phone holding the box STK it
+// pinned (ServerKeyPins, docs/first-contact.md — NOT `.com`'s echo) re-verifies it
 // end-to-end, so a rogue `.com` can DROP a report but cannot FORGE one: the
 // per-server warning a client renders is the box's own word.
 //

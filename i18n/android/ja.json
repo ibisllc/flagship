@@ -2743,5 +2743,13 @@
   "chat_always_ended_sender": "%1$s/%2$s は %3$s とのチャットを始める前に再び確認が必要です",
   "chat_request_now_always_sender": "%1$s/%2$s は確認なしで %3$s とのチャットを始められるようになりました",
   "ai_consent_cap": "この実行で使えるのは最大約 %1$s トークンです。そこで実行は止まります。",
-  "watch_boot_key_mismatch": "このサーバーの鍵が一致しません。起動はスマートフォンから承認してください。"
+  "watch_boot_key_mismatch": "このサーバーの鍵が一致しません。起動はスマートフォンから承認してください。",
+  "server_key_changed": "このサーバーの鍵が変わりました。再構築していない場合は、このサーバーへの承認を一切しないでください。",
+  "server_not_from_your_recipe": "このサーバーはあなたのレシピから作られたものではありません。承認しないでください。",
+  "server_code_on_monitor": "マシンにモニターがあれば、このコードが表示されています：%1$s",
+  "server_code_confirmed_by_studio": "Studio で確認済み",
+  "server_code_check_first": "承認する前に、このサーバーのコードを確認してください。",
+  "server_first_approval_on_phone": "このサーバーの最初の起動は、コードを確認できるスマートフォンで承認してください。",
+  "server_key_not_pinned": "このスマートフォンはまだこのサーバーの鍵を確認していません。先にこのスマートフォンで次の起動を承認してください。",
+  "let_server_hold_app_names": "サーバーがアプリの名前に応答できるようにする"
 }

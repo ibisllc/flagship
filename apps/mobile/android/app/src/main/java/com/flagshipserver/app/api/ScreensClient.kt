@@ -233,6 +233,16 @@ interface ScreensClient {
     suspend fun deliverServerOrder(wire: com.flagshipserver.app.core.ServerOrderWire): ServerOrderDeliveryResponse =
         throw ScreensError.NotImplemented("server order")
 
+    /** `GET /api/screens/server-wildcard-grant` (docs/first-contact.md): whether the box holds the
+     *  admin's app-name certificate grant. A box from before answers 404. */
+    suspend fun serverWildcardGrantGranted(): Boolean =
+        throw ScreensError.NotImplemented("server wildcard grant")
+
+    /** `POST /api/screens/server-wildcard-grant` `{issuedAt, signature}`: the signed grant over the
+     *  pinned key. 403 when the box can't verify it. */
+    suspend fun postServerWildcardGrant(issuedAt: Long, signatureHex: String): Unit =
+        throw ScreensError.NotImplemented("server wildcard grant")
+
     /** `POST /api/screens/debug-access` with `{grant, signatureHex}` (the JSON
      *  string from DebugAccess.envelopeJson). A refusal carries the box's
      *  sentence (`boxError()`); a box from before answers 404. */

@@ -80,7 +80,7 @@ class WatchBootKeyTest {
     private fun header(auth: String) =
         Json.parseToJsonElement(String(java.util.Base64.getUrlDecoder().decode(auth.removePrefix("Flagship-Boot-v1 ")))).jsonObject
 
-    /** The phone's recorded server keys (trust on first use). */
+    /** The phone's pinned server keys (docs/first-contact.md). */
     private class MemPins : ServerKeyPinStore {
         val map = HashMap<String, String>()
         override fun get(serverDomain: String) = map[serverDomain]
@@ -89,11 +89,14 @@ class WatchBootKeyTest {
     }
     private val pinStore = MemPins()
     private val pins = ServerKeyPins(pinStore)
-    /** What this phone's own server list shows for the server now. */
-    private var listedKey: String? = HexUtil.encode(stkKp.publicKey)
+    /** The key the server's first blessing pinned on this phone (null: never blessed here). */
+    private var blessedKey: String? = HexUtil.encode(stkKp.publicKey)
 
-    private fun optIn(m: MockSecretMailboxClient, store: SoftStore) =
-        WatchBootOptIn(m, irk, store, pins, { listedKey }, now = { now }, nonceGen = { ByteArray(32) { 2 } })
+    /** The switch only reads the pin; the first blessing (an approval) records it. */
+    private fun optIn(m: MockSecretMailboxClient, store: SoftStore): WatchBootOptIn {
+        blessedKey?.let { pins.recordFirstSeen(domain, it) }
+        return WatchBootOptIn(m, irk, store, pins, now = { now }, nonceGen = { ByteArray(32) { 2 } })
+    }
 
     private fun approver(m: MockSecretMailboxClient, store: SoftStore) = WatchBootApprover(
         m, { WatchDelegateSigner(Ed25519Sign(delegateKp.privateKey), delegatePubHex) }, store,
@@ -225,32 +228,33 @@ class WatchBootKeyTest {
         assertTrue(m.postedResponses.isEmpty())
     }
 
-    /** The first key recorded stays: a different key later is refused, never adopted. */
+    /** The pinned key stays: a different key later is refused, never adopted. */
     @Test fun thePinIsRecordedOnceAndADifferentKeyLaterIsRefused() = runBlocking {
         val m = mailbox()
         val store = SoftStore()
         optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason")
         val first = pinStore.map[domain]
-        listedKey = HexUtil.encode(forged.publicKey)
-        val refused = runCatching { optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason") }
-        assertTrue(refused.exceptionOrNull() is ServerKeyChangedException)
+        blessedKey = HexUtil.encode(forged.publicKey)
+        assertEquals(ServerKeyPins.Record.Mismatch, pins.recordFirstSeen(domain, blessedKey))
+        optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason")
         assertEquals(first, pinStore.map[domain])
-        assertEquals(1, m.watchBootPuts.size)
-        // A box now signing with that other key is refused too.
+        assertEquals("the copy is still made for the pinned server", 2, m.watchBootPuts.size)
+        // A box now signing with that other key is refused.
         m.signedRequests = listOf(signed(signer = forged))
         assertEquals(WatchBootApprover.Outcome.KeyMismatch, approver(m, store).approve(domain, null))
         assertTrue(m.postedResponses.isEmpty())
         // Only an explicit re-trust lets a new key be recorded.
         pins.forget(domain)
-        assertEquals(ServerKeyPins.Record.Recorded, pins.recordFirstSeen(domain, listedKey))
+        assertEquals(ServerKeyPins.Record.Recorded, pins.recordFirstSeen(domain, blessedKey))
     }
 
     @Test fun noKeyRecordedMeansNoWatchPath() = runBlocking {
         val m = mailbox()
         val store = SoftStore().apply { loadOrCreate(); setCopy(domain, WatchBootCopy(now + 60_000)) }
         assertEquals(WatchBootApprover.Outcome.NotAvailable, approver(m, store).approve(domain, null))
-        listedKey = null
-        assertTrue(runCatching { optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason") }.isFailure)
+        blessedKey = null
+        val refused = runCatching { optIn(m, store).enable(domain, delegatePubHex, now + 7L * 24 * 3_600_000, "reason") }
+        assertTrue(refused.exceptionOrNull() is ServerKeyNotPinnedException)
         assertTrue(m.watchBootPuts.isEmpty())
     }
 

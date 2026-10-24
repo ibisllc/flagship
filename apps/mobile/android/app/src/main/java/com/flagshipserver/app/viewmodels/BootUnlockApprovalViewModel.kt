@@ -28,10 +28,11 @@ interface ApprovalSource {
      *  the live unlock-key request for [serverDomain] and respond, all under a
      *  SINGLE biometric. Returns the deposited lease id (auto mode) or null.
      *  Throws when no live request is waiting. */
-    suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean): String?
+    suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean, acceptFirstSightKey: String? = null): String?
     /** One-tap approval for the directory-driven ENTITLEMENT card (serve-auth) —
-     *  fetch + verify the live `entitlement` request and respond. */
-    suspend fun approvePendingEntitlement(serverDomain: String): String?
+     *  fetch + verify the live `entitlement` request and respond. [acceptFirstSightKey]:
+     *  the key whose code the owner was shown at a first sight (docs/first-contact.md). */
+    suspend fun approvePendingEntitlement(serverDomain: String, acceptFirstSightKey: String? = null): String?
 }
 
 /** [SecretRequestCoordinator] already IS the production approval source — this
@@ -39,10 +40,10 @@ interface ApprovalSource {
 class CoordinatorApprovalSource(
     private val coordinator: SecretRequestCoordinator,
 ) : ApprovalSource {
-    override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean): String? =
-        coordinator.approvePendingUnlock(serverDomain, depositAutoLease)
-    override suspend fun approvePendingEntitlement(serverDomain: String): String? =
-        coordinator.approvePendingEntitlement(serverDomain)
+    override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean, acceptFirstSightKey: String?): String? =
+        coordinator.approvePendingUnlock(serverDomain, depositAutoLease, acceptFirstSightKey)
+    override suspend fun approvePendingEntitlement(serverDomain: String, acceptFirstSightKey: String?): String? =
+        coordinator.approvePendingEntitlement(serverDomain, acceptFirstSightKey)
 }
 
 class BootUnlockApprovalViewModel(
@@ -69,6 +70,10 @@ class BootUnlockApprovalViewModel(
          *  biometric has fired (or will, until the owner taps Approve). */
         data object RequestPending : State
 
+        /** First sight (docs/first-contact.md): the code computed here from the key the box named,
+         *  shown above Approve. Approving pins that key. */
+        data class ConfirmCode(val look: com.flagshipserver.app.core.FirstLook) : State
+
         /** Approval crypto + POST in flight (the one biometric happened here). */
         data object Approving : State
 
@@ -92,7 +97,7 @@ class BootUnlockApprovalViewModel(
      *  gave up) clears it. Never disturbs an in-flight or terminal approve. */
     fun setAwaitingUnlock(awaiting: Boolean) {
         when (_state.value) {
-            is State.Approving, is State.Approved -> return
+            is State.Approving, is State.Approved, is State.ConfirmCode -> return
             is State.Failed -> {
                 // Keep a failure visible until the user acts; but if the box is
                 // no longer waiting, the failure is moot — clear it.
@@ -114,7 +119,15 @@ class BootUnlockApprovalViewModel(
 
     /** Owner tapped Approve. ONE biometric ceremony: fetch + verify the live
      *  request, unseal the key, respond, and (auto mode) deposit the lease. */
-    suspend fun approve() {
+    suspend fun approve() = approveWith(acceptKey = null)
+
+    /** The owner saw the code (or Studio's confirmation) and approves that very key. */
+    suspend fun approveShownKey() {
+        val look = (_state.value as? State.ConfirmCode)?.look ?: return
+        approveWith(acceptKey = look.stkPubHex)
+    }
+
+    private suspend fun approveWith(acceptKey: String?) {
         val source = makeSource()
         if (source == null) {
             _state.value = State.Failed(FSStrings.get(R.string.sign_in_to_approve_this_server))
@@ -123,10 +136,14 @@ class BootUnlockApprovalViewModel(
         _state.value = State.Approving
         _state.value = try {
             when (purpose) {
-                SecretPurpose.UNLOCK_KEY -> source.approvePendingUnlock(serverDomain, depositAutoLease())
-                SecretPurpose.ENTITLEMENT -> source.approvePendingEntitlement(serverDomain)
+                SecretPurpose.UNLOCK_KEY -> source.approvePendingUnlock(serverDomain, depositAutoLease(), acceptKey)
+                SecretPurpose.ENTITLEMENT -> source.approvePendingEntitlement(serverDomain, acceptKey)
             }
             State.Approved
+        } catch (e: SecretRequestCoordinator.CoordinatorException.FirstLookRequired) {
+            State.ConfirmCode(e.look)
+        } catch (e: SecretRequestCoordinator.CoordinatorException.Refused) {
+            State.Failed(e.reason.message())
         } catch (t: Throwable) {
             State.Failed(UserErrorText.of(t, FSStrings.get(R.string.approval_failed_try_again)))
         }

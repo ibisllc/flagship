@@ -58,6 +58,7 @@ class WatchApprovalTest {
     }
 
     private fun coordinator(mock: MockSecretMailboxClient, delegate: Boolean = true) = SecretRequestCoordinator(
+        firstContact = firstContactPinned(domain to stkPubHex),
         mailbox = mock,
         username = user,
         irk = irkAccess,
@@ -206,6 +207,7 @@ class WatchApprovalTest {
     @Test fun thePhonesOwnApproveStaysOwnerSigned() = runBlocking {
         val mock = mailbox()
         val coord = SecretRequestCoordinator(
+        firstContact = firstContactPinned(domain to stkPubHex),
             mailbox = mock, username = user, irk = irkAccess,
             now = { issuedAt }, nonceGen = { ByteArray(32) { 1 } },
         )

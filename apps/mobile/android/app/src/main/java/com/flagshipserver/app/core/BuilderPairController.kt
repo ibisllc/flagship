@@ -30,7 +30,13 @@ class BuilderPairController(
     /** Produces the on-wire recipe JSON + its server domain + serial. */
     private val mint: suspend () -> MintedRecipe,
 ) {
-    data class MintedRecipe(val json: String, val serverDomain: String, val serial: String)
+    data class MintedRecipe(
+        val json: String,
+        val serverDomain: String,
+        val serial: String,
+        /** First contact: sent BESIDE the recipe in the deliver frame, never inside the recipe. */
+        val studioConfirmKeyHex: String? = null,
+    )
 
     sealed interface Phase {
         data object Scan : Phase
@@ -137,7 +143,11 @@ class BuilderPairController(
             lastDeliveredSerial = minted.serial
             deliveredDomain = minted.serverDomain
             val sealed = s.seal(minted.json.toByteArray())
-            client.send(BuilderOutbound.Deliver(sealed.ciphertextB64u, sealed.nonceB64u))
+            // First contact (docs/first-contact.md): the Studio confirm key rides beside the recipe in
+            // the same frame, sealed with the same SAS-verified session key under its own nonce, so
+            // Studio can vouch for the key it reads on the VM's console.
+            val beside = minted.studioConfirmKeyHex?.let(HexUtil::decode)?.takeIf { it.size == 32 }?.let { s.seal(it) }
+            client.send(BuilderOutbound.Deliver(sealed.ciphertextB64u, sealed.nonceB64u, beside?.ciphertextB64u, beside?.nonceB64u))
             receiptTimeoutJob?.cancel()
             receiptTimeoutJob = scope.launch {
                 delay(20_000)

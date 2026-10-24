@@ -25,8 +25,8 @@ import javax.net.ssl.SSLPeerUnverifiedException
 class LanDirectTest {
     private val box = "home.alice.flagship.services"
     private val umk = ByteArray(32) { 3 }
-    private val stkPub = ServerKeys.deriveStkPub(umk, box)
-    private val signer = Ed25519Sign(ServerKeys.deriveStkSeed(umk, box))
+    private val stkPub = TestStk.pub(umk, box)
+    private val signer = Ed25519Sign(TestStk.seed(umk, box))
     private val pin = "cd".repeat(32)
     private var now = 1_000_000L
 

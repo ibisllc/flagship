@@ -43,8 +43,16 @@ class CertPinRegistryTest {
         signedStatus = signedStatus,
     )
 
+    /** The pinned key per server: the shared vector's key for its server (made the retired way). */
+    private fun pinsFrom(umk: ByteArray): (String) -> ByteArray? = { TestStk.pub(umk, it) }
+
+    @Test fun noPinnedKeyMeansNoFreshPin() {
+        val reg = CertPinRegistry().apply { update(listOf(pod()), { null }, now) }
+        assertNull(reg.pinFor(DaemonStatusVector.SERVER_ID))
+    }
+
     private fun registryWith(vararg pods: PodDirectoryEntry, nowMs: Long = now): CertPinRegistry =
-        CertPinRegistry().apply { update(pods.toList(), DaemonStatusVector.UMK_SEED, nowMs) }
+        CertPinRegistry().apply { update(pods.toList(), pinsFrom(DaemonStatusVector.UMK_SEED), nowMs) }
 
     @Test fun verifiedReportInstallsThePin() {
         val reg = registryWith(pod())
@@ -130,7 +138,7 @@ class CertPinRegistryTest {
     @Test fun revokeDropsAPreviouslyVerifiedPin() {
         val reg = registryWith(pod())
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
-        reg.update(listOf(pod(revokedAt = now)), DaemonStatusVector.UMK_SEED, now)
+        reg.update(listOf(pod(revokedAt = now)), pinsFrom(DaemonStatusVector.UMK_SEED), now)
         assertNull(reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
@@ -148,7 +156,7 @@ class CertPinRegistryTest {
 
     @Test fun wrongUmkInstallsNoPin() {
         val reg = CertPinRegistry()
-        reg.update(listOf(pod()), ByteArray(32) { 0x08 }, now)
+        reg.update(listOf(pod()), pinsFrom(ByteArray(32) { 0x08 }), now)
         assertNull(reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
@@ -159,7 +167,7 @@ class CertPinRegistryTest {
     @Test fun missingReportRetainsThePreviousPin() {
         val reg = registryWith(pod())
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
-        reg.update(listOf(pod(signedStatus = null)), DaemonStatusVector.UMK_SEED, now)
+        reg.update(listOf(pod(signedStatus = null)), pinsFrom(DaemonStatusVector.UMK_SEED), now)
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
@@ -169,7 +177,7 @@ class CertPinRegistryTest {
             report = wireReport(),
             signatureHex = "00" + DaemonStatusVector.SIG_HEX.drop(2),
         )
-        reg.update(listOf(pod(signedStatus = tampered)), DaemonStatusVector.UMK_SEED, now)
+        reg.update(listOf(pod(signedStatus = tampered)), pinsFrom(DaemonStatusVector.UMK_SEED), now)
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
@@ -179,7 +187,7 @@ class CertPinRegistryTest {
             report = wireReport().copy(certSha256 = "ab".repeat(32)),
             signatureHex = DaemonStatusVector.SIG_HEX,
         )
-        reg.update(listOf(pod(signedStatus = swapped)), DaemonStatusVector.UMK_SEED, now)
+        reg.update(listOf(pod(signedStatus = swapped)), pinsFrom(DaemonStatusVector.UMK_SEED), now)
         // Retain the last-known-good — NOT the unverified swapped fingerprint.
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
@@ -187,7 +195,7 @@ class CertPinRegistryTest {
     @Test fun staleReportRetainsThePreviousPin() {
         val reg = registryWith(pod())
         val staleNow = DaemonStatusVector.REPORT.issuedAt + DaemonStatusReport.MAX_REPORT_AGE_MS + 1
-        reg.update(listOf(pod()), DaemonStatusVector.UMK_SEED, staleNow)
+        reg.update(listOf(pod()), pinsFrom(DaemonStatusVector.UMK_SEED), staleNow)
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
@@ -197,7 +205,7 @@ class CertPinRegistryTest {
     private fun renewedSignedPod(newPin: String, issuedAt: Long): PodDirectoryEntry {
         val report = DaemonStatusVector.REPORT.copy(certSha256 = newPin, issuedAt = issuedAt)
         val sig = com.google.crypto.tink.subtle.Ed25519Sign(
-            ServerKeys.deriveStkSeed(DaemonStatusVector.UMK_SEED, DaemonStatusVector.SERVER_ID),
+            TestStk.seed(DaemonStatusVector.UMK_SEED, DaemonStatusVector.SERVER_ID),
         ).sign(DaemonStatusReport.canonicalBytes(report))
         return pod(
             signedStatus = SignedDaemonStatus(
@@ -224,7 +232,7 @@ class CertPinRegistryTest {
         // A verified report with a NEW fingerprint replaces the pin.
         val renewedPin = "cd".repeat(32)
         val renewed = renewedSignedPod(renewedPin, DaemonStatusVector.REPORT.issuedAt + 1_000)
-        reg.update(listOf(renewed), DaemonStatusVector.UMK_SEED, now + 2_000)
+        reg.update(listOf(renewed), pinsFrom(DaemonStatusVector.UMK_SEED), now + 2_000)
         assertEquals(renewedPin, reg.pinFor(DaemonStatusVector.SERVER_ID))
 
         // Migration framing of the same reconcile: yet another box behind the
@@ -233,9 +241,9 @@ class CertPinRegistryTest {
         // refresh does NOT downgrade it.
         val migratedPin = "6d".repeat(32)
         val migrated = renewedSignedPod(migratedPin, DaemonStatusVector.REPORT.issuedAt + 2_000)
-        reg.update(listOf(migrated), DaemonStatusVector.UMK_SEED, now + 3_000)
+        reg.update(listOf(migrated), pinsFrom(DaemonStatusVector.UMK_SEED), now + 3_000)
         assertEquals(migratedPin, reg.pinFor(DaemonStatusVector.SERVER_ID))
-        reg.update(listOf(pod(signedStatus = null)), DaemonStatusVector.UMK_SEED, now + 4_000)
+        reg.update(listOf(pod(signedStatus = null)), pinsFrom(DaemonStatusVector.UMK_SEED), now + 4_000)
         assertEquals(migratedPin, reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
@@ -248,7 +256,7 @@ class CertPinRegistryTest {
 
     @Test fun domainAbsentFromTheDirectoryIsUnpinned() {
         val reg = registryWith(pod())
-        reg.update(emptyList(), DaemonStatusVector.UMK_SEED, now)
+        reg.update(emptyList(), pinsFrom(DaemonStatusVector.UMK_SEED), now)
         assertNull(reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
@@ -262,7 +270,7 @@ class CertPinRegistryTest {
         val reg = CertPinRegistry()
         reg.update(
             listOf(pod(serverDomain = ""), pod()),
-            DaemonStatusVector.UMK_SEED,
+            pinsFrom(DaemonStatusVector.UMK_SEED),
             now,
         )
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))

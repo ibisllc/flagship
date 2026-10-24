@@ -25,13 +25,19 @@ class BootUnlockApprovalViewModelTest {
         val approveCalls = mutableListOf<Pair<String, Boolean>>()
         val entitlementCalls = mutableListOf<String>()
 
-        override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean): String? {
+        /** The key a first sight names; approving another (or none) is answered with its look. */
+        var firstSight: com.flagshipserver.app.core.FirstLook? = null
+        val acceptedKeys = mutableListOf<String?>()
+
+        override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean, acceptFirstSightKey: String?): String? {
+            acceptedKeys += acceptFirstSightKey
+            firstSight?.let { if (it.stkPubHex != acceptFirstSightKey) throw com.flagshipserver.app.core.SecretRequestCoordinator.CoordinatorException.FirstLookRequired(it) }
             approveError?.let { throw it }
             approveCalls.add(serverDomain to depositAutoLease)
             return leaseId
         }
 
-        override suspend fun approvePendingEntitlement(serverDomain: String): String? {
+        override suspend fun approvePendingEntitlement(serverDomain: String, acceptFirstSightKey: String?): String? {
             approveError?.let { throw it }
             entitlementCalls.add(serverDomain)
             return null
@@ -76,6 +82,37 @@ class BootUnlockApprovalViewModelTest {
         assertEquals(BootUnlockApprovalViewModel.State.Approved, m.state.value)
         assertEquals(listOf(domain), source.entitlementCalls)
         assertTrue("entitlement must NOT take the unlock path", source.approveCalls.isEmpty())
+    }
+
+    // ---- First contact (docs/first-contact.md) --------------------------
+
+    /** A first sight shows the code computed on the phone, and Approve then pins that very key. */
+    @Test fun firstSight_showsTheCodeThenApprovesThatKey() = runTest {
+        val key = "ab".repeat(32)
+        val look = com.flagshipserver.app.core.FirstLook(domain, key, com.flagshipserver.app.core.Enrollment.serverCode(key)!!, studioConfirmed = false, proven = false)
+        val source = FakeSource().apply { firstSight = look }
+        val m = vm(source)
+        m.setAwaitingUnlock(true)
+        m.approve()
+        assertEquals(BootUnlockApprovalViewModel.State.ConfirmCode(look), m.state.value)
+        assertTrue(source.approveCalls.isEmpty())
+        m.setAwaitingUnlock(true)
+        assertEquals("the code stays up while the box waits", BootUnlockApprovalViewModel.State.ConfirmCode(look), m.state.value)
+        m.approveShownKey()
+        assertEquals(BootUnlockApprovalViewModel.State.Approved, m.state.value)
+        assertEquals(listOf(null, key), source.acceptedKeys)
+    }
+
+    @Test fun refusal_isShownInItsOwnWords() = runTest {
+        val source = FakeSource().apply {
+            approveError = com.flagshipserver.app.core.SecretRequestCoordinator.CoordinatorException.Refused(com.flagshipserver.app.core.FirstContactRefusal.KEY_CHANGED)
+        }
+        val m = vm(source)
+        m.approve()
+        assertEquals(
+            BootUnlockApprovalViewModel.State.Failed("This server's key changed. If you did not rebuild it, do not approve anything for it."),
+            m.state.value,
+        )
     }
 
     // ---- approve() — one ceremony ---------------------------------------

@@ -83,6 +83,8 @@ class SwkDepositTest {
          *  warm session; the cold-session test passes false to prove the deposit
          *  DEFERS instead of prompting. */
         hasSession: Boolean = true,
+        /** The key this phone pinned for the server (docs/first-contact.md); null = not blessed yet. */
+        pinned: String? = boxPubHex,
     ) =
         SwkDepositCoordinator(
             username = "alice",
@@ -97,7 +99,22 @@ class SwkDepositTest {
             deriveCgkHex = { HexUtil.encode(cgk) },
             resolveMigrationSwk = { resolution },
             hasSessionKey = { hasSession },
+            pinnedStk = { d -> if (d == serverDomain) pinned?.let(HexUtil::decode) else null },
         )
+
+    @Test
+    fun nothingIsSealedBeforeThePinOrToAKeyOtherThanThePin() = runBlocking {
+        val store = freshStore()
+        store.markPending(serverDomain)
+        val mailbox = MockSecretMailboxClient()
+        coordinator(store, mailbox, pinned = null).depositIfNeeded(serverDomain, boxPubHex)
+        assertTrue("no pin yet: nothing sealed", mailbox.swkDeposits.isEmpty())
+        coordinator(store, mailbox).depositIfNeeded(serverDomain, "ee".repeat(32))
+        assertTrue("the list names another key: nothing sealed", mailbox.swkDeposits.isEmpty())
+        assertTrue(store.isPending(serverDomain))
+        coordinator(store, mailbox).depositIfNeeded(serverDomain, boxPubHex)
+        assertEquals(1, mailbox.swkDeposits.size)
+    }
 
     @Test
     fun noOpWhenNothingOwed() = runBlocking {

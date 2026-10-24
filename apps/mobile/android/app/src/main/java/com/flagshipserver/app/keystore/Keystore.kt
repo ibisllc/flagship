@@ -542,7 +542,7 @@ object Keystore {
             if (parts.size == 2) parts[0] to parts[1] else null
         }?.toMap().orEmpty()
 
-    /** The server key this phone first recorded for [serverDomain] (ServerKeyPins). */
+    /** The server key this device pinned for [serverDomain] at its first blessing (ServerKeyPins). */
     fun serverKeyPin(serverDomain: String): String? = serverKeyPins()[serverDomain]
 
     fun setServerKeyPin(serverDomain: String, stkPubHex: String?) {
@@ -550,6 +550,30 @@ object Keystore {
         if (stkPubHex == null) next.remove(serverDomain) else next[serverDomain] = stkPubHex
         val e = requirePrefs().edit()
         if (next.isEmpty()) e.remove(serverKeyPinsKey()) else e.putString(serverKeyPinsKey(), next.entries.joinToString("\n") { "${it.key} ${it.value}" })
+        e.apply()
+    }
+
+    // ---- First contact (docs/first-contact.md) --------------------------
+    //
+    // Per-server records kept in these encrypted preferences (a Keystore-wrapped key; the app
+    // opts out of backup): the enrollment secret and Studio confirm key of a server this device
+    // created, and signed app-name grants waiting for their box. One line per server,
+    // "<domain> <value>", where a value never holds a space or a newline.
+
+    private fun deviceLocalLines(name: String): Map<String, String> =
+        requirePrefs().getString(pkey(name), null)?.split('\n')?.mapNotNull { line ->
+            val i = line.indexOf(' ')
+            if (i > 0) line.substring(0, i) to line.substring(i + 1) else null
+        }?.toMap().orEmpty()
+
+    fun deviceLocalValue(name: String, serverDomain: String): String? = deviceLocalLines(name)[serverDomain.lowercase()]
+
+    fun setDeviceLocalValue(name: String, serverDomain: String, value: String?) {
+        require(value == null || (' ' !in value && '\n' !in value)) { "value" }
+        val next = deviceLocalLines(name).toMutableMap()
+        if (value == null) next.remove(serverDomain.lowercase()) else next[serverDomain.lowercase()] = value
+        val e = requirePrefs().edit()
+        if (next.isEmpty()) e.remove(pkey(name)) else e.putString(pkey(name), next.entries.joinToString("\n") { "${it.key} ${it.value}" })
         e.apply()
     }
 

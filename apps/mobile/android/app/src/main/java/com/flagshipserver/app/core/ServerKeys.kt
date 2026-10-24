@@ -1,17 +1,11 @@
-// Kotlin mirror of the phone-side server-key derivation in
-// packages/protocol/src/keys.ts (deriveSWK / deriveSTK). The phone holds the
-// UMK, so it can derive any of its boxes' STK pubkeys LOCALLY — this is what
-// makes the STK-signed daemon-status report verifiable end-to-end without
-// trusting `.com`'s identityPubKey echo (cert-model A′, phase 4 pinning).
+// Kotlin mirror of the phone-side key derivations in packages/protocol/src/keys.ts
+// (deriveSWK, the IRK, the account and per-app ids, the household key).
 //
-// MUST stay byte-identical to the TS implementation:
-//   SWK      = HKDF-SHA256(ikm = UMK seed, salt = empty,
-//                          info = "flagship.swk.v1|<serverId>", 32)
-//   STK seed = HKDF-SHA256(ikm = SWK, salt = empty,
-//                          info = "flagship.stk.v1", 32)
-//   STK      = Ed25519 keypair from that seed
-// The pinned cross-platform vector in DaemonStatusReportTest (UMK 07×32 →
-// STK pub 0a1eaaad…0d47) locks this in.
+//   SWK = HKDF-SHA256(ikm = UMK seed, salt = empty, info = "flagship.swk.v1|<serverId>", 32)
+//
+// A server's identity key (STK) is NOT derived here or anywhere on the phone: every box
+// makes a random one at install, and the phone pins it at the server's first blessing
+// (ServerKeyPins, docs/first-contact.md). ServerKeyPinsSourceScanTest keeps it that way.
 
 package com.flagshipserver.app.core
 
@@ -19,7 +13,6 @@ import com.google.crypto.tink.subtle.Ed25519Sign
 
 object ServerKeys {
     private const val INFO_SWK = "flagship.swk.v1"
-    private const val INFO_STK = "flagship.stk.v1"
     private const val INFO_IRK = "flagship.irk.v1"
     private const val INFO_ACCOUNT_ID = "flagship/account-id/v1"
     private const val INFO_APP_ID = "flagship/app-aid/v1"
@@ -109,14 +102,6 @@ object ServerKeys {
      *  `flagship/<purpose>/v1` key under a server key uses (peer backup's PBK
      *  and root key). */
     fun hkdf32(ikm: ByteArray, info: String): ByteArray = hkdfSha256(ikm, info.toByteArray(Charsets.UTF_8))
-
-    fun deriveStkSeed(umkSeed: ByteArray, serverId: String): ByteArray =
-        hkdfSha256(deriveSwk(umkSeed, serverId), INFO_STK.toByteArray(Charsets.UTF_8))
-
-    /** The box's STK Ed25519 PUBLIC key (32 bytes), derived from the phone's
-     *  own UMK — the trust anchor for verifying STK-signed reports. */
-    fun deriveStkPub(umkSeed: ByteArray, serverId: String): ByteArray =
-        Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveStkSeed(umkSeed, serverId)).publicKey
 
     /**
      * RFC 5869 HKDF-SHA256 with an EMPTY salt — the TS protocol passes
