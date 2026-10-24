@@ -3691,6 +3691,47 @@
         }
       }
     },
+    "Approve from watch": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprobar desde el reloj"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuver depuis la montre"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per Uhr genehmigen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovar pelo relógio"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ウォッチで承認"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过手表批准"
+          }
+        }
+      }
+    },
     "Makes a new admin key and removes admin from every other device. They stay signed in as members but can't wipe, transfer or decommission your servers until they recover. Use it if a device is lost or stolen, or to cut off another admin. Servers switch on their next check-in.": {
       "extractionState": "manual",
       "localizations": {
@@ -9919,6 +9960,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "只有管理员设备才能更改此应用的数据。"
+          }
+        }
+      }
+    },
+    "Only an admin device can turn on Approve from watch.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo de administrador puede activar Aprobar desde el reloj."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur peut activer Approuver depuis la montre."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät kann „Per Uhr genehmigen“ einschalten."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente um dispositivo administrador pode ativar Aprovar pelo relógio."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「ウォッチで承認」をオンにできるのは、管理者デバイスだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有管理员设备才能开启“通过手表批准”。"
           }
         }
       }
@@ -28332,6 +28414,252 @@
         }
       }
     },
+    "App": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用"
+          }
+        }
+      }
+    },
+    "For": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durante"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendant"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Por"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "期間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "时长"
+          }
+        }
+      }
+    },
+    "30 minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 minutos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 minutes"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 Minuten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 minutos"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 分"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 分钟"
+          }
+        }
+      }
+    },
+    "1 hour": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 hora"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 heure"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Stunde"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 hora"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 小时"
+          }
+        }
+      }
+    },
+    "4 hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4 horas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4 heures"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4 Stunden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4 horas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4 時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4 小时"
+          }
+        }
+      }
+    },
+    "24 hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "24 horas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "24 heures"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "24 Stunden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "24 horas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "24 時間"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "24 小时"
+          }
+        }
+      }
+    },
     "Remote": {
       "extractionState": "manual",
       "localizations": {
@@ -34519,47 +34847,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "开启"
-          }
-        }
-      }
-    },
-    "For": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Durante"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pendant"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Für"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Por"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "期間"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "时长"
           }
         }
       }
@@ -59615,6 +59902,88 @@
         }
       }
     },
+    "Approve the permissions restored for %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprobar los permisos restaurados de %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuver les autorisations restaurées pour %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die wiederhergestellten Berechtigungen für %@ genehmigen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovar as permissões restauradas de %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ の復元されたアクセス許可を承認"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "批准 %@ 已恢复的权限"
+          }
+        }
+      }
+    },
+    "Let a browser change %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dejar que un navegador cambie %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permettre à un navigateur de modifier %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einen Browser %@ ändern lassen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deixar um navegador alterar %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブラウザに %@ の変更を許可"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许浏览器更改 %@"
+          }
+        }
+      }
+    },
     "Old key %@ → new key %@": {
       "extractionState": "manual",
       "localizations": {
@@ -62481,6 +62850,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@：已恢复"
+          }
+        }
+      }
+    },
+    "%@: restored. %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: restaurada. %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : restaurée. %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: wiederhergestellt. %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: restaurado. %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@：復元しました。%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@：已恢复。%@"
           }
         }
       }
@@ -78844,47 +79254,6 @@
         }
       }
     },
-    "App": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "App"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "App"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "App"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "App"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "アプリ"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "应用"
-          }
-        }
-      }
-    },
     "Privacy": {
       "extractionState": "manual",
       "localizations": {
@@ -89832,6 +90201,47 @@
         }
       }
     },
+    "None of your servers runs this app yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguno de tus servidores ejecuta esta aplicación todavía"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun de vos serveurs n’exécute encore cette application"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keiner deiner Server führt diese App aus"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum dos seus servidores executa este app ainda"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアプリを実行しているサーバーはまだありません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的服务器还都没有运行此应用"
+          }
+        }
+      }
+    },
     "Couldn't save. Try again.": {
       "extractionState": "manual",
       "localizations": {
@@ -92825,6 +93235,47 @@
         }
       }
     },
+    "no publisher": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sin editor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aucun éditeur"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kein Herausgeber"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sem editor"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "発行元なし"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无发布者"
+          }
+        }
+      }
+    },
     "Debug access needs an SSH public key.": {
       "extractionState": "manual",
       "localizations": {
@@ -95080,6 +95531,826 @@
         }
       }
     },
+    "Restored permissions": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permisos restaurados"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisations restaurées"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiederhergestellte Berechtigungen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permissões restauradas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "復元されたアクセス許可"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已恢复的权限"
+          }
+        }
+      }
+    },
+    "This app came back from a backup. Until an admin approves, nobody from the old list can open it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta aplicación volvió desde una copia de seguridad. Hasta que un administrador lo apruebe, nadie de la lista anterior puede abrirla."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette application a été restaurée depuis une sauvegarde. Tant qu’un administrateur n’a pas approuvé, personne de l’ancienne liste ne peut l’ouvrir."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese App wurde aus einem Backup wiederhergestellt. Bis ein Admin zustimmt, kann niemand von der alten Liste sie öffnen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este app voltou de um backup. Até um administrador aprovar, ninguém da lista antiga pode abri-lo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアプリはバックアップから復元されました。管理者が承認するまで、以前のリストの人は誰も開けません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此应用已从备份恢复。在管理员批准之前，旧名单中的任何人都无法打开它。"
+          }
+        }
+      }
+    },
+    "Approve this list": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprobar esta lista"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approuver cette liste"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Liste genehmigen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aprovar esta lista"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このリストを承認"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "批准此名单"
+          }
+        }
+      }
+    },
+    "Discard it": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descartarla"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La supprimer"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwerfen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descartar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "破棄する"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "丢弃"
+          }
+        }
+      }
+    },
+    "Only an admin device can approve restored permissions.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo de administrador puede aprobar los permisos restaurados."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur peut approuver les autorisations restaurées."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät kann wiederhergestellte Berechtigungen genehmigen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente um dispositivo administrador pode aprovar as permissões restauradas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "復元されたアクセス許可を承認できるのは、管理者デバイスだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有管理员设备才能批准已恢复的权限。"
+          }
+        }
+      }
+    },
+    "Ask me each time": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preguntarme cada vez"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me demander à chaque fois"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jedes Mal fragen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perguntar sempre"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "毎回確認する"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次询问我"
+          }
+        }
+      }
+    },
+    "Wait a week, then update": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esperar una semana y luego actualizar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attendre une semaine, puis mettre à jour"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Woche warten, dann aktualisieren"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esperar uma semana e depois atualizar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 週間待ってからアップデート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待一周后再更新"
+          }
+        }
+      }
+    },
+    "Update automatically": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar automáticamente"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettre à jour automatiquement"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch aktualisieren"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atualizar automaticamente"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動でアップデート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动更新"
+          }
+        }
+      }
+    },
+    "Never update": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No actualizar nunca"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ne jamais mettre à jour"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nie aktualisieren"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nunca atualizar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アップデートしない"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从不更新"
+          }
+        }
+      }
+    },
+    "You approve every update.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tú apruebas cada actualización."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous approuvez chaque mise à jour."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du genehmigst jedes Update."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você aprova cada atualização."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのアップデートをあなたが承認します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次更新都由你批准。"
+          }
+        }
+      }
+    },
+    "A verified update from the same publisher is held for a week, then goes in. Anything that asks for more access still waits for you.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una actualización verificada del mismo editor se retiene una semana y luego se instala. Todo lo que pida más acceso sigue esperándote."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une mise à jour vérifiée du même éditeur est retenue une semaine, puis installée. Tout ce qui demande plus d’accès vous attend toujours."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein verifiziertes Update desselben Herausgebers wird eine Woche zurückgehalten und dann installiert. Alles, was mehr Zugriff verlangt, wartet weiterhin auf dich."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma atualização verificada do mesmo editor fica retida por uma semana e depois é instalada. Tudo o que pedir mais acesso continua esperando por você."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同じ発行元からの検証済みアップデートは 1 週間保留されてから適用されます。より多くのアクセスを求めるものは、引き続きあなたの承認を待ちます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来自同一发布者的已验证更新会保留一周，然后安装。任何要求更多访问权限的更新仍会等待你批准。"
+          }
+        }
+      }
+    },
+    "A verified update from the same publisher goes in at once. Anything that asks for more access still waits for you.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una actualización verificada del mismo editor se instala al momento. Todo lo que pida más acceso sigue esperándote."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une mise à jour vérifiée du même éditeur est installée aussitôt. Tout ce qui demande plus d’accès vous attend toujours."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein verifiziertes Update desselben Herausgebers wird sofort installiert. Alles, was mehr Zugriff verlangt, wartet weiterhin auf dich."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma atualização verificada do mesmo editor é instalada na hora. Tudo o que pedir mais acesso continua esperando por você."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同じ発行元からの検証済みアップデートはすぐに適用されます。より多くのアクセスを求めるものは、引き続きあなたの承認を待ちます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来自同一发布者的已验证更新会立即安装。任何要求更多访问权限的更新仍会等待你批准。"
+          }
+        }
+      }
+    },
+    "This app stays on the version it is on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta app se queda en la versión que tiene."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette app reste sur sa version actuelle."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese App bleibt auf ihrer aktuellen Version."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este app permanece na versão atual."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアプリは現在のバージョンのままになります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此应用保持当前版本。"
+          }
+        }
+      }
+    },
+    "Let it build…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dejar que compile…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lui permettre de compiler…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bauen lassen…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deixar compilar…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ビルドを許可…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许构建…"
+          }
+        }
+      }
+    },
+    "Let this browser build an app": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dejar que este navegador compile una app"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permettre à ce navigateur de compiler une app"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Browser eine App bauen lassen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deixar este navegador compilar um app"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このブラウザにアプリのビルドを許可"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许此浏览器构建应用"
+          }
+        }
+      }
+    },
+    "A browser docked through Remote can only look. This lets it change one app you pick, for a short time. It ends on its own, or when you end it, or when the session ends.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un navegador conectado mediante Remoto solo puede mirar. Esto le permite cambiar una app que elijas, durante poco tiempo. Termina solo, cuando lo terminas tú o cuando termina la sesión."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un navigateur connecté via À distance peut seulement regarder. Ceci lui permet de modifier une app de votre choix, pour peu de temps. Cela s’arrête tout seul, quand vous y mettez fin ou quand la session se termine."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein über Remote verbundener Browser kann nur ansehen. Hiermit darf er eine App deiner Wahl für kurze Zeit ändern. Das endet von selbst, wenn du es beendest oder wenn die Sitzung endet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um navegador conectado pelo Remoto só pode olhar. Isto permite que ele altere um app que você escolher, por pouco tempo. Termina sozinho, quando você encerrar ou quando a sessão terminar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リモートで接続したブラウザは閲覧しかできません。これにより、選んだアプリ 1 つを短時間だけ変更できるようになります。時間切れ、あなたが終了したとき、またはセッションが終わったときに終了します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过远程连接的浏览器只能查看。此操作让它可以在短时间内更改你选择的一个应用。它会自动结束，或在你结束它时、会话结束时结束。"
+          }
+        }
+      }
+    },
+    "Change the app (build)": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiar la app (compilar)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier l’app (compiler)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App ändern (bauen)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alterar o app (compilar)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリを変更（ビルド）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改应用（构建）"
+          }
+        }
+      }
+    },
+    "Put changes live (deploy)": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publicar los cambios (desplegar)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettre les changements en ligne (déployer)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Änderungen live schalten (bereitstellen)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publicar as alterações (implantar)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "変更を公開（デプロイ）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "让更改上线（部署）"
+          }
+        }
+      }
+    },
+    "End it": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Y mettre fin"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beenden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encerrar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "終了"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "结束"
+          }
+        }
+      }
+    },
+    "Only an admin device can let a browser build.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo un dispositivo de administrador puede dejar que un navegador compile."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un appareil administrateur peut permettre à un navigateur de compiler."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ein Admin-Gerät kann einen Browser bauen lassen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente um dispositivo administrador pode deixar um navegador compilar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブラウザにビルドを許可できるのは管理者デバイスだけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有管理员设备才能允许浏览器构建。"
+          }
+        }
+      }
+    },
     "Trust this new key for this service": {
       "extractionState": "manual",
       "localizations": {
@@ -95363,6 +96634,293 @@
           "stringUnit": {
             "state": "translated",
             "value": "剩余 %@"
+          }
+        }
+      }
+    },
+    "overdue by %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "con %@ de retraso"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en retard de %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "seit %@ überfällig"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "atrasado há %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@超過"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已逾期 %@"
+          }
+        }
+      }
+    },
+    "%lld day": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld día"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld jour"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tag"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld dia"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld日"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 天"
+          }
+        }
+      }
+    },
+    "%lld days": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld días"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld jours"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tage"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld dias"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld日"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 天"
+          }
+        }
+      }
+    },
+    "%lld minute": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld minuto"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld minute"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Minute"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld minuto"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld分"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 分钟"
+          }
+        }
+      }
+    },
+    "Waiting for an admin: %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esperando a un administrador: %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En attente d’un administrateur : %@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wartet auf einen Administrator: %@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aguardando um administrador: %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理者を待っています：%@。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在等待管理员：%@。"
+          }
+        }
+      }
+    },
+    "Set up again: %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar de nuevo: %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À reconfigurer : %@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu einrichten: %@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar de novo: %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再設定が必要：%@。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要重新设置：%@。"
+          }
+        }
+      }
+    },
+    "Note: %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nota: %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remarque : %@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hinweis: %@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Observação: %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "注意：%@。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "注意：%@。"
           }
         }
       }
@@ -102132,6 +103690,47 @@
         }
       }
     },
+    "Turn on Approve from watch in Flagship on your iPhone first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primero activa Aprobar desde el reloj en Flagship, en tu iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activez d’abord Approuver depuis la montre dans Flagship, sur votre iPhone."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schalte zuerst „Per Uhr genehmigen“ in Flagship auf deinem iPhone ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Primeiro ative Aprovar pelo relógio no Flagship, no seu iPhone."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まず、iPhone の Flagship で「ウォッチで承認」をオンにしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在 iPhone 上的 Flagship 中开启“通过手表批准”。"
+          }
+        }
+      }
+    },
     "Unlock Flagship on your iPhone once, then approve again.": {
       "extractionState": "manual",
       "localizations": {
@@ -102911,330 +104510,248 @@
         }
       }
     },
-    "%lld day": {
+    "%lld person on the old list.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld día"
+            "value": "%lld persona en la lista anterior."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld jour"
+            "value": "%lld personne sur l’ancienne liste."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld Tag"
+            "value": "%lld Person auf der alten Liste."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld dia"
+            "value": "%lld pessoa na lista antiga."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld日"
+            "value": "以前のリストに %lld 人。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld 天"
+            "value": "旧名单中有 %lld 人。"
           }
         }
       }
     },
-    "%lld days": {
+    "%lld people on the old list.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld días"
+            "value": "%lld personas en la lista anterior."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld jours"
+            "value": "%lld personnes sur l’ancienne liste."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld Tage"
+            "value": "%lld Personen auf der alten Liste."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld dias"
+            "value": "%lld pessoas na lista antiga."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld日"
+            "value": "以前のリストに %lld 人。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld 天"
+            "value": "旧名单中有 %lld 人。"
           }
         }
       }
     },
-    "%lld minute": {
+    "The app was open to all.": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld minuto"
+            "value": "La aplicación estaba abierta a todos."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld minute"
+            "value": "L’application était ouverte à tous."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld Minute"
+            "value": "Die App war für alle offen."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld minuto"
+            "value": "O app estava aberto a todos."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld分"
+            "value": "このアプリは全員に公開されていました。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld 分钟"
+            "value": "此应用曾对所有人开放。"
           }
         }
       }
     },
-    "overdue by %@": {
+    "May build and deploy %@": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "con %@ de retraso"
+            "value": "Puede compilar y desplegar %@"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "en retard de %@"
+            "value": "Peut compiler et déployer %@"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "seit %@ überfällig"
+            "value": "Darf %@ bauen und bereitstellen"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "atrasado há %@"
+            "value": "Pode compilar e implantar %@"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@超過"
+            "value": "%@ のビルドとデプロイが可能"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已逾期 %@"
+            "value": "可以构建和部署 %@"
           }
         }
       }
     },
-    "None of your servers runs this app yet": {
+    "May deploy %@": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ninguno de tus servidores ejecuta esta aplicación todavía"
+            "value": "Puede desplegar %@"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun de vos serveurs n’exécute encore cette application"
+            "value": "Peut déployer %@"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Noch keiner deiner Server führt diese App aus"
+            "value": "Darf %@ bereitstellen"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nenhum dos seus servidores executa este app ainda"
+            "value": "Pode implantar %@"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このアプリを実行しているサーバーはまだありません"
+            "value": "%@ のデプロイが可能"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "你的服务器还都没有运行此应用"
+            "value": "可以部署 %@"
           }
         }
       }
     },
-    "Approve from watch": {
+    "May build %@": {
       "extractionState": "manual",
       "localizations": {
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aprobar desde el reloj"
+            "value": "Puede compilar %@"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Approuver depuis la montre"
+            "value": "Peut compiler %@"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Per Uhr genehmigen"
+            "value": "Darf %@ bauen"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aprovar pelo relógio"
+            "value": "Pode compilar %@"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ウォッチで承認"
+            "value": "%@ のビルドが可能"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "通过手表批准"
-          }
-        }
-      }
-    },
-    "Only an admin device can turn on Approve from watch.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Solo un dispositivo de administrador puede activar Aprobar desde el reloj."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seul un appareil administrateur peut activer Approuver depuis la montre."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nur ein Admin-Gerät kann „Per Uhr genehmigen“ einschalten."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Somente um dispositivo administrador pode ativar Aprovar pelo relógio."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "「ウォッチで承認」をオンにできるのは、管理者デバイスだけです。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "只有管理员设备才能开启“通过手表批准”。"
-          }
-        }
-      }
-    },
-    "Turn on Approve from watch in Flagship on your iPhone first.": {
-      "extractionState": "manual",
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Primero activa Aprobar desde el reloj en Flagship, en tu iPhone."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Activez d’abord Approuver depuis la montre dans Flagship, sur votre iPhone."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Schalte zuerst „Per Uhr genehmigen“ in Flagship auf deinem iPhone ein."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Primeiro ative Aprovar pelo relógio no Flagship, no seu iPhone."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "まず、iPhone の Flagship で「ウォッチで承認」をオンにしてください。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请先在 iPhone 上的 Flagship 中开启“通过手表批准”。"
+            "value": "可以构建 %@"
           }
         }
       }

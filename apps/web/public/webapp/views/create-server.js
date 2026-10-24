@@ -91,7 +91,7 @@ function genSerial() {
 }
 
 async function genEd25519() {
-  const kp = await crypto.subtle.generateKey({ name: tr("Ed25519") }, true, ["sign", "verify"]);
+  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
   const pub = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
   return { keypair: kp, publicKey: pub };
 }

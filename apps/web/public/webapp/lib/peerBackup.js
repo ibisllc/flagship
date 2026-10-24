@@ -40,7 +40,7 @@ export async function openSealedRoot(sealed, pbkHex, serverId) {
   let plain;
   try {
     plain = await crypto.subtle.decrypt(
-      { name: tr("AES-GCM"), iv: hexToBytes(sealed.nonceHex), additionalData: enc.encode(`${INFO_ROOT}|${serverId}`) },
+      { name: "AES-GCM", iv: hexToBytes(sealed.nonceHex), additionalData: enc.encode(`${INFO_ROOT}|${serverId}`) },
       key,
       hexToBytes(sealed.ciphertextHex),
     );

@@ -197,7 +197,7 @@ export async function deviceRequestHeaders({ umk, accountId, deviceId, path }, d
     issuedAt: (deps.now ?? Date.now)(),
   };
   const signature = new Uint8Array(await crypto.subtle.sign(
-    { name: tr("Ed25519") },
+    { name: "Ed25519" },
     key.privateKey,
     canonicalDirectoryRequest(request),
   ));

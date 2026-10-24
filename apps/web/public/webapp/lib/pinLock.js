@@ -118,14 +118,14 @@ async function wrapSeed(pin, seed, pepper) {
   const salt = randomBytes(PIN_SALT_BYTES);
   const nonce = randomBytes(AES_NONCE_BYTES);
   const key = await pinWrapKey(pin, salt, pepper);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: tr("AES-GCM"), iv: nonce }, key, seed));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, seed));
   return { v: 1, salt: bytesToHex(salt), nonce: bytesToHex(nonce), ct: bytesToHex(ct) };
 }
 
 async function unwrapSeed(pin, blob, pepper) {
   const key = await pinWrapKey(pin, hexToBytes(blob.salt), pepper);
   const pt = await crypto.subtle.decrypt(
-    { name: tr("AES-GCM"), iv: hexToBytes(blob.nonce) },
+    { name: "AES-GCM", iv: hexToBytes(blob.nonce) },
     key,
     hexToBytes(blob.ct),
   );

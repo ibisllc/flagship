@@ -15,8 +15,11 @@ struct RestoredAccessSection: View {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         Text(SecurityControlWords.restoredIntro).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                        Text("\(d.people) \(d.people == 1 ? "person" : "people") on the old list.\(d.mode == "open" ? " The app was open to all." : "")")
+                        Text(d.people == 1 ? String(localized: "\(d.people) person on the old list.") : String(localized: "\(d.people) people on the old list."))
                             .font(FS.font.bodySm()).foregroundColor(c.text)
+                        if d.mode == "open" {
+                            Text("The app was open to all.").font(FS.font.bodySm()).foregroundColor(c.text)
+                        }
                         if canApprove {
                             FSPrimaryButton(SecurityControlWords.restoredApprove, block: true) { Task { await controller.approve() } }
                                 .accessibilityIdentifier("restored-access-approve")

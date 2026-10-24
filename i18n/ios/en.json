@@ -2841,10 +2841,6 @@
     "en": "Invite link",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CoInviteSection.swift:189"
   },
-  "May %@ %@": {
-    "en": "May %@ %@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDelegationView.swift:26"
-  },
   "App": {
     "en": "App",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDelegationView.swift:38"
@@ -5979,10 +5975,6 @@
   "Let a browser change %@": {
     "en": "Let a browser change %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/SecurityControlsControllers.swift:130"
-  },
-  "%lld %@ on the old list.%@": {
-    "en": "%lld %@ on the old list.%@",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecurityControlsSections.swift:18"
   },
   "Old key %@ → new key %@": {
     "en": "Old key %@ → new key %@",
@@ -11204,5 +11196,29 @@
     "en": "A server shared with you is asking you to unlock it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "%lld person on the old list.": {
+    "en": "%lld person on the old list.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecurityControlsSections.swift:18"
+  },
+  "%lld people on the old list.": {
+    "en": "%lld people on the old list.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecurityControlsSections.swift:18"
+  },
+  "The app was open to all.": {
+    "en": "The app was open to all.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/SecurityControlsSections.swift:21"
+  },
+  "May build and deploy %@": {
+    "en": "May build and deploy %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDelegationView.swift:26"
+  },
+  "May deploy %@": {
+    "en": "May deploy %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDelegationView.swift:26"
+  },
+  "May build %@": {
+    "en": "May build %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDelegationView.swift:26"
   }
 }

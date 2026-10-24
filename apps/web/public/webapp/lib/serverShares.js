@@ -936,8 +936,8 @@ const PKCS8_ED25519 = [0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2
 
 async function signRaw(seed, bytes) {
   const pkcs8 = new Uint8Array([...PKCS8_ED25519, ...seed]);
-  const key = await crypto.subtle.importKey("pkcs8", pkcs8, { name: tr("Ed25519") }, false, ["sign"]);
-  return new Uint8Array(await crypto.subtle.sign({ name: tr("Ed25519") }, key, bytes));
+  const key = await crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, key, bytes));
 }
 
 /** A `signWithIrk`-shaped signer over B's member key, for the envelopes B
@@ -956,8 +956,8 @@ async function verifyRequest(r, stkPubHex) {
       nonceHex: r.request.nonce,
       issuedAt: r.request.issuedAt,
     });
-    const key = await crypto.subtle.importKey("raw", hexToBytes(stkPubHex), { name: tr("Ed25519") }, false, ["verify"]);
-    return await crypto.subtle.verify({ name: tr("Ed25519") }, key, hexToBytes(r.signature), bytes);
+    const key = await crypto.subtle.importKey("raw", hexToBytes(stkPubHex), { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, hexToBytes(r.signature), bytes);
   } catch {
     return false;
   }
