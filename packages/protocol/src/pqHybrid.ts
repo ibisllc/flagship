@@ -509,6 +509,14 @@ export function hybridSigKeygen(edSeed: Bytes, mldsaSeed: Bytes): { publicKey: B
   return { publicKey, secretKey: concat(edSeed, mldsaSeed) };
 }
 
+/** The ML-DSA-65 public key (1952 bytes) for a `KeyGen_internal` seed; the expanded secret is wiped. */
+export function mldsa65PublicKey(mldsaSeed: Bytes): Bytes {
+  if (mldsaSeed.length !== 32) fail("bad-secret-key");
+  const ml = ml_dsa65.keygen(mldsaSeed);
+  ml.secretKey.fill(0);
+  return ml.publicKey;
+}
+
 /** The signed message representative M' (§5.2). */
 export function hybridSigMessage(publicKey: Bytes, purpose: string, payload: Bytes): Bytes {
   if (!validatePurposeTag(purpose)) fail("bad-purpose");

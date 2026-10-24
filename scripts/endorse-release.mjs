@@ -18,11 +18,17 @@
 //     signature and NO write — a real dry-run the `endorsement` verb lacks;
 //   * only with --sign does it invoke the real CLI (YubiKey tap) and stage the
 //     written endorsement.
+//   * once a release PQ key exists (docs/runbooks/pq-release-key.md) it also
+//     signs the hybrid companion, flagship/release-endorsement/v2: the ML-DSA-65
+//     seed is decrypted with a YubiKey (PIN + touch), the YubiKey signs the
+//     Ed25519 half, and the result goes to .maintainers/release-pq/endorsements/.
+//     Once RELEASE_PQ_PIN names the key, boxes refuse a release without it.
 //
 // Usage:
 //   node scripts/endorse-release.mjs --to <ref|sha> [--from <ref|sha>] \
 //        [--tag vX.Y.Z] [--signing-key <src>] [--track ca] [--path .maintainers] \
-//        [--sign]
+//        [--sign] [--no-pq] [--key-file <f>] [--identity <stubs>]
+//   node scripts/endorse-release.mjs --pq-only <releaseId|file> [--signing-key <src>] [--sign]
 //
 //   --to          target commit to endorse (default: HEAD). Resolved to a full
 //                 40-hex sha.
@@ -39,6 +45,14 @@
 //   --path        maintainers folder (default: .maintainers).
 //   --sign        actually sign (YubiKey tap / file key) and write. Omit for a
 //                 dry-run preview.
+//   --no-pq       skip the PQ companion (refused once RELEASE_PQ_PIN is set).
+//   --pq-only     sign only the PQ companion for an endorsement already
+//                 committed (e.g. the last classical-only release).
+//   --key-file    the YubiKey-encrypted ML-DSA seed (default
+//                 ~/.flagship-release/pq-release-key.age).
+//   --identity    age-plugin-yubikey identity stubs (default
+//                 ~/.flagship-release/yubikey-identities.txt).
+//   --fake-yubikey <dir>  TEST MODE (see pq-release-key.mjs).
 //
 // Exit codes: 0 ok, 1 error, 2 usage.
 
@@ -47,22 +61,40 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { intermediateMerkleRoot } from "@ibisllc/maintainers";
-// loadSignerBoundPubKey lives in the CLI (a private workspace pkg whose `main`
-// is TS source); import its built dist directly so plain node can load it.
-const { loadSignerBoundPubKey } = await import(
-  new URL("../maintainers/packages/cli/dist/lib/keysource.js", import.meta.url).pathname
-);
+import { releasePqPinConfigured } from "@flagship/protocol";
+import {
+  DEFAULT_KEY_FILE,
+  loadEd25519Signer,
+  loadMaintainersCli,
+  readBindings,
+  signReleaseCompanion,
+  vaultFromFlags,
+} from "./pq-release-key.mjs";
 
-const CLI = new URL(
-  "../maintainers/packages/cli/bin/maintainers",
-  import.meta.url,
-).pathname;
+const CLI_DIR =
+  process.env.FLAGSHIP_MAINTAINERS_DIR ?? new URL("../maintainers", import.meta.url).pathname;
+const CLI = path.join(CLI_DIR, "packages", "cli", "bin", "maintainers");
+
+// loadSignerBoundPubKey lives in the CLI (a private workspace pkg whose `main`
+// is TS source); its built dist is loaded on demand so --pq-only and the tests
+// run without it.
+async function loadSignerBoundPubKey(source) {
+  if (source.startsWith("file:")) return (await loadEd25519Signer(source)).pubHex;
+  const lib = await loadMaintainersCli();
+  if (!lib) throw new Error("maintainers CLI not found (set FLAGSHIP_MAINTAINERS_DIR to its clone, built)");
+  return lib.keysource.loadSignerBoundPubKey(source);
+}
 
 function parseArgs(argv) {
   const out = { sign: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--sign") out.sign = true;
+    else if (a === "--no-pq") out.noPq = true;
+    else if (a === "--pq-only") out.pqOnly = argv[++i];
+    else if (a === "--key-file") out.keyFile = argv[++i];
+    else if (a === "--identity") (out.identities ??= []).push(argv[++i]);
+    else if (a === "--fake-yubikey") out.fakeYubikey = path.resolve(argv[++i]);
     else if (a === "--to") out.to = argv[++i];
     else if (a === "--from") out.from = argv[++i];
     else if (a === "--tag") out.tag = argv[++i];
@@ -129,13 +161,17 @@ function firstParentList(range) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
-    process.stdout.write(fs.readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(1, 46).join("\n") + "\n");
+    const src = fs.readFileSync(new URL(import.meta.url), "utf8").split("\n");
+    process.stdout.write(src.slice(1, src.findIndex((l, i) => i > 2 && !l.startsWith("//"))).join("\n") + "\n");
     return 0;
   }
 
   const rootDir = args.path ?? ".maintainers";
   const track = args.track ?? "ca";
   const signingKey = args.signingKey ?? "yubikey-piv:slot=9c";
+  const pq = pqPlan(args, rootDir);
+  if (pq.error) fail(pq.error);
+  if (args.pqOnly) return pqOnly(args, rootDir, signingKey);
   const target = resolveSha(args.to ?? "HEAD");
   const from = args.from ? resolveSha(args.from) : null;
 
@@ -212,6 +248,7 @@ async function main() {
   process.stdout.write(`  semver tag:       ${tag}\n`);
   process.stdout.write(`  signing key:      ${signingKey}\n`);
   process.stdout.write(`  signer pubkey:    ${boundPub ?? `(could not read: ${boundPubErr})`}\n`);
+  process.stdout.write(`  PQ companion:     ${pq.describe}\n`);
   if (holder) {
     const match = boundPub && boundPub === holder;
     process.stdout.write(
@@ -278,15 +315,83 @@ async function main() {
     }
   }
 
+  if (pq.sign) {
+    const written = latestEndorsement(rootDir);
+    if (!written || written.commitHash.toLowerCase() !== target) {
+      fail("the maintainers CLI did not leave an endorsement for the target; no PQ companion signed");
+    }
+    try {
+      await writeCompanion(args, rootDir, signingKey, written);
+    } catch (e) {
+      fail(
+        `the v1 endorsement was written but the PQ companion failed: ${e instanceof Error ? e.message : String(e)}. ` +
+          `Fix it and run: node scripts/endorse-release.mjs --pq-only ${written.releaseId} --sign`,
+      );
+    }
+  }
+
   // Stage the freshly-written endorsement so the operator only has to commit.
   try {
     execFileSync("git", ["add", path.join(rootDir, "endorsements")], { stdio: "inherit" });
+    if (pq.sign) execFileSync("git", ["add", path.join(rootDir, "release-pq", "endorsements")], { stdio: "inherit" });
   } catch {
     /* the operator can add it manually */
   }
   process.stdout.write(
     `\nDone. Review + commit the new endorsement under ${rootDir}/endorsements/, then push so the box can fetch it.\n`,
   );
+  return 0;
+}
+
+/** Whether this run signs the PQ companion, and why. */
+function pqPlan(args, rootDir) {
+  const pinned = releasePqPinConfigured();
+  const bound = readBindings(rootDir).length > 0;
+  if (args.noPq) {
+    if (pinned) return { error: "--no-pq: RELEASE_PQ_PIN names a release key, so boxes would refuse a release without the PQ companion" };
+    return { sign: false, describe: "skipped (--no-pq)" };
+  }
+  if (pinned && !bound) return { error: `RELEASE_PQ_PIN is set but ${rootDir}/release-pq/bindings/ holds no binding` };
+  if (pinned) return { sign: true, describe: "REQUIRED (the pin names the release key); signed after the v1 endorsement" };
+  if (bound) return { sign: true, describe: "signed (a release-key binding exists; the pin is not set yet, so boxes don't need it)" };
+  return { sign: false, describe: "none (no release PQ key yet: docs/runbooks/pq-release-key.md)" };
+}
+
+async function writeCompanion(args, rootDir, signingKey, endorsement) {
+  const { file, keyId } = await signReleaseCompanion({
+    root: rootDir,
+    endorsement,
+    signingKey,
+    vault: vaultFromFlags(args),
+    keyFile: path.resolve(args.keyFile ?? DEFAULT_KEY_FILE),
+    out: (s) => process.stdout.write(s + "\n"),
+  });
+  process.stdout.write(`PQ companion (key ${keyId.slice(0, 16)}) written to ${file}\n`);
+  return file;
+}
+
+async function pqOnly(args, rootDir, signingKey) {
+  let e = null;
+  if (fs.existsSync(args.pqOnly) && fs.statSync(args.pqOnly).isFile()) e = JSON.parse(fs.readFileSync(args.pqOnly, "utf8"));
+  else {
+    const dir = path.join(rootDir, "endorsements");
+    for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+      if (!f.endsWith(".json")) continue;
+      try {
+        const x = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+        if (x?.releaseId === args.pqOnly) e = x;
+      } catch {
+        /* skip */
+      }
+    }
+  }
+  if (!e || e.kind !== "ReleaseEndorsement") fail(`no ReleaseEndorsement "${args.pqOnly}"`);
+  process.stdout.write(`\n=== endorse-release --pq-only ===\n  release:  ${e.semverTag} (${e.releaseId})\n  commit:   ${e.commitHash}\n  signedBy: ${e.signedBy}\n\n`);
+  if (!args.sign) {
+    process.stdout.write("DRY RUN: nothing signed, nothing written. Re-run with --sign.\n\n");
+    return 0;
+  }
+  await writeCompanion(args, rootDir, signingKey, e);
   return 0;
 }
 

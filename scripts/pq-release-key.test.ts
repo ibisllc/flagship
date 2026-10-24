@@ -1,0 +1,156 @@
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { classifyReleaseEndorsements, type ReleasePqPin } from "@flagship/protocol";
+import * as K from "./pq-release-key.mjs";
+
+const REPO = path.resolve(import.meta.dirname, "..");
+const V = JSON.parse(fs.readFileSync(path.join(REPO, "packages/protocol/test-vectors/release-endorsement-v2/vectors.json"), "utf8")) as {
+  keys: Record<string, { edSeedHex: string }>;
+  endorsements: Record<string, Record<string, unknown> & { releaseId: string; commitHash: string; semverTag: string }>;
+};
+
+let tmp = "";
+const p = (...x: string[]) => path.join(tmp, ...x);
+const run = (script: string, args: string[], opts: { input?: string; env?: Record<string, string> } = {}) =>
+  spawnSync("node", [path.join(REPO, "scripts", script), ...args], {
+    cwd: REPO,
+    input: opts.input ?? "",
+    encoding: "utf8",
+    env: { ...process.env, FLAGSHIP_PQ_FAKE_PIN: "123456", ...opts.env },
+  });
+const fake = () => ["--fake-yubikey", p("yk")];
+const rowsOf = (stdout: string) => stdout.split("\n").filter((l) => /^ {4}[0-9A-Z]{5}( [0-9A-Z]{5}){3} {2}[0-9A-Z]{2}$/.test(l)).map((l) => l.trim());
+
+beforeAll(() => {
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "flagship-pqkey-"));
+  K.createFakeYubikeys(p("yk"));
+  fs.writeFileSync(p("ed.hex"), V.keys.release!.edSeedHex + "\n");
+  fs.mkdirSync(p(".maintainers", "endorsements"), { recursive: true });
+  for (const n of ["A", "B", "C", "D"]) fs.writeFileSync(p(".maintainers", "endorsements", `${n}.json`), JSON.stringify(V.endorsements[n]));
+});
+afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+describe("paper code", () => {
+  const seed = Uint8Array.from({ length: 32 }, (_, i) => i * 7);
+  it("round-trips, forgives O/I/L and spacing, and finds the row with a typo", () => {
+    const rows: string[] = K.paperRows(seed);
+    expect(rows).toHaveLength(3);
+    expect(Buffer.from(K.seedFromPaper(rows))).toEqual(Buffer.from(seed));
+    expect(Buffer.from(K.seedFromPaper(rows.map((r) => r.toLowerCase().replace(/ /g, "-"))))).toEqual(Buffer.from(seed));
+    const bad = [...rows];
+    bad[1] = (bad[1]![0] === "A" ? "B" : "A") + bad[1]!.slice(1);
+    expect(() => K.seedFromPaper(bad)).toThrow(/row 2 has a typo/);
+  });
+});
+
+describe("pq-release-key ceremony (fake YubiKeys)", () => {
+  let keyId = "";
+  let paper: string[] = [];
+
+  it("refuses test mode against the real .maintainers folder", () => {
+    const r = run("pq-release-key.mjs", ["init", "--recipient", "fake-yubikey:yk-a", "--recipient", "fake-yubikey:yk-b", "--out", p("x.age"), "--signing-key", `file:${p("ed.hex")}`, ...fake()]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/must not write into the real \.maintainers/);
+  });
+
+  it("init: one recipient is not enough", () => {
+    const r = run("pq-release-key.mjs", ["init", "--recipient", "fake-yubikey:yk-a", "--out", p("x.age"), "--signing-key", `file:${p("ed.hex")}`, "--path", p(".maintainers"), ...fake()]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/two distinct --recipient/);
+  });
+
+  it("init: encrypts to both YubiKeys, binds the key and prints the paper backup, never writing the seed", () => {
+    const r = run("pq-release-key.mjs", [
+      "init", "--recipient", "fake-yubikey:yk-a", "--recipient", "fake-yubikey:yk-b",
+      "--out", p("key.age"), "--signing-key", `file:${p("ed.hex")}`, "--path", p(".maintainers"), ...fake(),
+    ]);
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+    keyId = /Release key id: ([0-9a-f]{64})/.exec(r.stdout)![1]!;
+    paper = rowsOf(r.stdout);
+    expect(paper).toHaveLength(3);
+    const seedHex = Buffer.from(K.seedFromPaper(paper)).toString("hex");
+    const files = fs.readdirSync(tmp, { recursive: true, withFileTypes: true }).filter((d) => d.isFile());
+    for (const f of files) {
+      const body = fs.readFileSync(path.join(f.parentPath, f.name));
+      expect(body.includes(Buffer.from(seedHex, "hex"))).toBe(false);
+      expect(body.toString("utf8").includes(seedHex)).toBe(false);
+    }
+    expect(fs.statSync(p("key.age")).mode & 0o077).toBe(0);
+    const again = run("pq-release-key.mjs", ["init", "--recipient", "fake-yubikey:yk-a", "--recipient", "fake-yubikey:yk-b", "--out", p("key.age"), "--signing-key", `file:${p("ed.hex")}`, "--path", p(".maintainers"), ...fake()]);
+    expect(again.status).toBe(2);
+  });
+
+  it("verify-yubikey: each YubiKey opens it with its PIN; a wrong PIN does not", () => {
+    for (const yk of ["yk-a", "yk-b"]) {
+      const r = run("pq-release-key.mjs", ["verify-yubikey", "--key-file", p("key.age"), "--path", p(".maintainers"), ...fake()], { env: { FLAGSHIP_PQ_FAKE_INSERTED: yk } });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain(keyId.slice(0, 16));
+    }
+    const bad = run("pq-release-key.mjs", ["verify-yubikey", "--key-file", p("key.age"), "--path", p(".maintainers"), ...fake()], { env: { FLAGSHIP_PQ_FAKE_PIN: "000000" } });
+    expect(bad.status).toBe(1);
+    expect(bad.stderr).toMatch(/wrong PIN/);
+  });
+
+  it("paper-backup prints the same code init printed", () => {
+    const r = run("pq-release-key.mjs", ["paper-backup", "--key-file", p("key.age"), "--path", p(".maintainers"), ...fake()]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(rowsOf(r.stdout)).toEqual(paper);
+  });
+
+  it("restore-from-paper re-encrypts the same key to new YubiKeys and refuses a typo", () => {
+    K.createFakeYubikeys(p("yk"), ["yk-c", "yk-d"], "654321");
+    const args = ["restore-from-paper", "--recipient", "fake-yubikey:yk-c", "--recipient", "fake-yubikey:yk-d", "--out", p("restored.age"), "--path", p(".maintainers"), ...fake()];
+    const typo = [...paper];
+    typo[2] = (typo[2]![0] === "A" ? "B" : "A") + typo[2]!.slice(1);
+    expect(run("pq-release-key.mjs", args, { input: typo.join("\n") + "\n" }).status).toBe(2);
+    const r = run("pq-release-key.mjs", args, { input: paper.join("\n") + "\n" });
+    expect(r.status, r.stderr).toBe(0);
+    const v = run("pq-release-key.mjs", ["verify-yubikey", "--key-file", p("restored.age"), "--path", p(".maintainers"), ...fake()], {
+      env: { FLAGSHIP_PQ_FAKE_INSERTED: "yk-d", FLAGSHIP_PQ_FAKE_PIN: "654321" },
+    });
+    expect(v.status, v.stderr).toBe(0);
+    expect(v.stdout).toContain(keyId.slice(0, 16));
+  });
+
+  it("show-pub lists the bound key as not pinned yet", () => {
+    const r = run("pq-release-key.mjs", ["show-pub", "--path", p(".maintainers")]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(`key id:         ${keyId}  (NOT pinned)`);
+    expect(r.stdout).toContain("YubiKey-encrypted at rest");
+  });
+
+  it("pin writes the key id and the newest endorsement as the marker", () => {
+    const pinFile = p("releasePqPin.ts");
+    fs.copyFileSync(path.join(REPO, "packages/protocol/src/releasePqPin.ts"), pinFile);
+    const pin = K.cmdPin({ keyId, path: p(".maintainers") }, () => {}, { pinFile, current: { version: 1, keyIds: [], requirePqAfter: null } });
+    expect(pin.requirePqAfter).toEqual({ releaseId: V.endorsements.D!.releaseId, commitHash: V.endorsements.D!.commitHash });
+    const src = fs.readFileSync(pinFile, "utf8");
+    expect(src).toContain(`keyIds: Object.freeze(["${keyId}"])`);
+    expect(src).toContain(`releaseId: "${V.endorsements.D!.releaseId}"`);
+    expect(() => K.cmdPin({ keyId: "ab".repeat(32), path: p(".maintainers") }, () => {}, { pinFile })).toThrow(/no binding/);
+  });
+
+  it("endorse-release --pq-only signs a companion that the box's rule accepts", () => {
+    const C = V.endorsements.C!;
+    const r = run("endorse-release.mjs", ["--pq-only", C.releaseId, "--sign", "--signing-key", `file:${p("ed.hex")}`, "--path", p(".maintainers"), "--key-file", p("key.age"), ...fake()]);
+    expect(r.status, r.stderr).toBe(0);
+    const companion = JSON.parse(fs.readFileSync(p(".maintainers", "release-pq", "endorsements", `${C.semverTag}.json`), "utf8"));
+    const binding = JSON.parse(fs.readFileSync(p(".maintainers", "release-pq", "bindings", `${keyId.slice(0, 16)}.json`), "utf8"));
+    const pin: ReleasePqPin = { version: 1, keyIds: [keyId], requirePqAfter: { releaseId: V.endorsements.B!.releaseId, commitHash: V.endorsements.B!.commitHash } };
+    const all = ["A", "B", "C", "D"].map((n) => V.endorsements[n]!) as unknown as Parameters<typeof classifyReleaseEndorsements>[0];
+    const out = classifyReleaseEndorsements(all, [companion], [binding], { pin, now: Date.now() });
+    expect(out.eligible.map((e) => e.releaseId)).toEqual([C.releaseId]);
+    expect(out.lineageOnly.map((e) => e.releaseId)).toEqual([V.endorsements.A!.releaseId, V.endorsements.B!.releaseId]);
+  });
+
+  it("endorse-release refuses to sign a companion with a key that did not sign the endorsement", () => {
+    fs.writeFileSync(p("other.hex"), "77".repeat(32));
+    const r = run("endorse-release.mjs", ["--pq-only", V.endorsements.D!.releaseId, "--sign", "--signing-key", `file:${p("other.hex")}`, "--path", p(".maintainers"), "--key-file", p("key.age"), ...fake()]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/did not sign endorsement/);
+  });
+});
