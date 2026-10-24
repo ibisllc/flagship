@@ -81,4 +81,5 @@ export * from "./pqSession.js";
 export * from "./releaseEndorsementPq.js";
 export * from "./releasePqPin.js";
 export * from "./caLeasePq.js";
+export * from "./bootUnlockV2.js";
 export * from "./signedTime.js";
