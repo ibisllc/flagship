@@ -8,9 +8,6 @@
 
 package com.flagshipserver.app.ui.shell
 
-import com.flagshipserver.app.core.FSStrings
-import androidx.compose.ui.res.stringResource
-import com.flagshipserver.app.R
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -117,12 +114,12 @@ fun BiometricLockScreen() {
                 modifier = Modifier.size(64.dp),
             )
             Text(
-                stringResource(R.string.flagship_is_locked),
+                "Flagship is locked",
                 color = FS.colors.text,
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
             )
             Text(
-                stringResource(R.string.unlock_with_biometrics_to_continue),
+                "Unlock with biometrics to continue.",
                 color = FS.colors.textMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -153,12 +150,12 @@ fun BiometricLockScreen() {
             // the same key comes back via passkey recovery (instant re-pair,
             // no rotation). Confirm copy adapts on cloud recovery.
             FSActionFooter(
-                primary = if (status == Status.Authenticating) stringResource(R.string.authenticating) else stringResource(R.string.unlock_2),
+                primary = if (status == Status.Authenticating) "Authenticating…" else "Unlock",
                 primaryTag = "biometric-unlock-btn",
                 primaryEnabled = status != Status.Authenticating,
                 onPrimary = {
                     if (activity == null) {
-                        status = Status.Failed(FSStrings.get(R.string.lost_activity_context_restart_the_app))
+                        status = Status.Failed("Lost activity context. Restart the app to try again.")
                     } else {
                         scope.launch { tryUnlock(activity) { newStatus ->
                             status = newStatus
@@ -166,24 +163,10 @@ fun BiometricLockScreen() {
                         } }
                     }
                 },
-                secondary = stringResource(R.string.sign_out_2),
+                secondary = "Sign out",
                 secondaryTag = "lock-sign-out-btn",
-                onSecondary = {
-                    // Biometric or device PIN before the dialog opens, as on
-                    // iOS, so both platforms ask alike.
-                    if (activity == null) {
-                        status = Status.Failed(FSStrings.get(R.string.lost_activity_context_restart_the_app))
-                    } else {
-                        scope.launch {
-                            when (val r = authenticateForSignOut(activity)) {
-                                SignOutAuth.Ok -> showSignOut = true
-                                SignOutAuth.Cancelled -> {}
-                                is SignOutAuth.Failed -> status = Status.Failed(r.message)
-                            }
-                        }
-                    }
-                },
-                secondaryDescription = stringResource(R.string.sign_out_erases_this_devices_account),
+                onSecondary = { showSignOut = true },
+                secondaryDescription = "Sign out. Erases this device's account key and returns to the start.",
             )
         }
     }
@@ -197,32 +180,35 @@ fun BiometricLockScreen() {
                     // Keystore profiles (the locked user can't choose one)
                     // — the UMK / IRK that survive an app reinstall — then
                     // drop to Welcome. No server-side revoke; the same key
-                    // returns via passkey recovery. Already authenticated
-                    // before this dialog opened.
+                    // returns via passkey recovery.
                     Keystore.wipeAllProfiles()
                     app.signOut()
                 }) {
                     Text(
-                        if (hasRecovery) stringResource(R.string.sign_out_2) else stringResource(R.string.sign_out_anyway),
+                        if (hasRecovery) "Sign out" else "Sign out anyway",
                         color = FS.colors.danger,
                     )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showSignOut = false }) { Text(stringResource(R.string.cancel)) }
+                TextButton(onClick = { showSignOut = false }) { Text("Cancel") }
             },
             title = {
                 Text(
-                    if (hasRecovery) stringResource(R.string.sign_out_of_this_device)
-                    else stringResource(R.string.sign_out_without_recovery),
+                    if (hasRecovery) "Sign out of this device?"
+                    else "Sign out without recovery?",
                 )
             },
             text = {
                 Text(
                     if (hasRecovery)
-                        stringResource(R.string.this_erases_this_devices_account_key_2)
+                        "This erases this device's account key from the Keystore and returns " +
+                            "you to the start. Sign back in with your recovery passkey to " +
+                            "restore it — your account and servers stay put."
                     else
-                        stringResource(R.string.you_have_no_cloud_recovery_set),
+                        "You have no cloud recovery set up. Erasing this device's key with " +
+                            "no backup means there's no way to sign back in — your account " +
+                            "access is lost for good.",
                 )
             },
         )
@@ -254,14 +240,14 @@ private suspend fun tryUnlock(
 ) {
     setStatus(Status.Authenticating)
     try {
-        BiometricGate.evaluate(activity, title = FSStrings.get(R.string.unlock_flagship), subtitle = FSStrings.get(R.string.use_biometrics_to_continue))
+        BiometricGate.evaluateUnlockingPq(activity, title = "Unlock Flagship", subtitle = "Use biometrics to continue")
         BiometricAuthority.current()?.markFresh()
         setStatus(Status.Idle)
     } catch (_: BiometricCancelled) {
-        setStatus(Status.Failed(FSStrings.get(R.string.cancelled_tap_below_to_try_again)))
+        setStatus(Status.Failed("Cancelled. Tap below to try again."))
     } catch (e: kotlinx.coroutines.CancellationException) {
         // The screen went away mid-request: back to idle, never a spinner.
-        setStatus(Status.Failed(FSStrings.get(R.string.tap_below_to_unlock)))
+        setStatus(Status.Failed("Tap below to unlock."))
         throw e
     } catch (e: Throwable) {
         // UX-B — never leak the raw exception text to the user.
