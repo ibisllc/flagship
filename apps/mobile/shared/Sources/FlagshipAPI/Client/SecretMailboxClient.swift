@@ -320,13 +320,22 @@ public struct UpdateDepositBody: Encodable, Equatable, Sendable {
     public let deposit: Deposit
     public let order: Order
     public let signature: String   // hex (64 bytes) — admin authority over the order canonical bytes
+    /// Architecture v2: the same authority's hybrid signature, required by a strict server.
+    public var pqSignature: PqSignatureWire?
     public init(
         auth: MailboxAuthEnvelope.Auth, authSignature: String,
-        deposit: Deposit, order: Order, signature: String
+        deposit: Deposit, order: Order, signature: String, pqSignature: PqSignatureWire? = nil
     ) {
         self.auth = auth; self.authSignature = authSignature
-        self.deposit = deposit; self.order = order; self.signature = signature
+        self.deposit = deposit; self.order = order; self.signature = signature; self.pqSignature = pqSignature
     }
+}
+
+/// A hybrid signature beside an order's classical one (`{suite, signature}`, lowercase hex).
+public struct PqSignatureWire: Codable, Equatable, Sendable {
+    public let suite: String
+    public let signature: String
+    public init(suite: String, signature: String) { self.suite = suite; self.signature = signature }
 }
 
 /// The owner's signed server order as it travels (docs/server-order.md):
@@ -344,8 +353,10 @@ public struct SignedServerOrderWire: Codable, Equatable, Sendable {
     }
     public let order: Order
     public let signature: String
-    public init(order: Order, signature: String) {
-        self.order = order; self.signature = signature
+    /// Architecture v2: the admin root's hybrid signature, required by a strict server.
+    public var pqSignature: PqSignatureWire?
+    public init(order: Order, signature: String, pqSignature: PqSignatureWire? = nil) {
+        self.order = order; self.signature = signature; self.pqSignature = pqSignature
     }
 }
 
