@@ -3,7 +3,7 @@
 // --list, --dry-run, --status and the phase-order refusal, all of which run with
 // shims for every network tool on PATH that record any call.
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -82,14 +82,14 @@ describe("release.sh", () => {
     const r = run(env, ["--list"]);
     expect(r.code).toBe(0);
     const steps = planSteps(r.out);
-    expect(steps).toHaveLength(27);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 27 }, (_, i) => i + 1));
+    expect(steps).toHaveLength(35);
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 35 }, (_, i) => i + 1));
     const phases = [...r.out.matchAll(/^ {4}phase ([AB]) \|/gm)].map((m) => m[1]);
-    expect(phases).toHaveLength(27);
-    expect(phases.slice(0, 16).every((p) => p === "A")).toBe(true);
-    expect(phases.slice(16).every((p) => p === "B")).toBe(true);
-    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(27);
-    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(27);
+    expect(phases).toHaveLength(35);
+    expect(phases.slice(0, 22).every((p) => p === "A")).toBe(true);
+    expect(phases.slice(22).every((p) => p === "B")).toBe(true);
+    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(35);
+    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(35);
     expect(calls(env)).toBe("");
   });
 
@@ -102,8 +102,8 @@ describe("release.sh", () => {
     // | 8 .services FIRST | 6a DNS wildcard (before .com: the new .com writes no per-box records)
     // | 7 .com (+ zone-health post-check) | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
     expect(sections).toEqual([
-      "0", "1", "2", "3", "9", "5", "6", "1b", "4", "8", "6a", "7", "14", "9", "9", "9",
-      "12", "12", "12", "12", "10", "10", "9", "7", "11", "11", "13",
+      "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "9", "5", "6", "1b", "4", "8", "7a", "6a", "7", "14", "9", "9", "9",
+      "12", "12", "12", "12", "10", "10", "9", "7", "11c", "11", "11", "11b", "13",
     ]);
     // every referenced heading exists verbatim in the runbook
     for (const m of r.out.matchAll(/runbook: (.+)$/gm)) {
@@ -121,14 +121,22 @@ describe("release.sh", () => {
     expect(idx("Deploy .com")).toBeLessThan(idx("Pre-GA scrub"));
     expect(idx("Pre-GA scrub")).toBeLessThan(idx("Reap orphaned"));
     expect(idx("Reap orphaned")).toBeLessThan(idx("Land chore/delete-wipe-tooling"));
-    expect(idx("Write DEPLOYED-FINAL")).toBe(16);
+    expect(idx("Bump the product version")).toBeLessThan(idx("Endorse"));
+    expect(idx("Release catalog keys")).toBeLessThan(idx("Build, sign and publish the box artifacts"));
+    expect(idx("Endorse")).toBeLessThan(idx("Build, sign and publish the box artifacts"));
+    expect(idx("Build, sign and publish the box artifacts")).toBeLessThan(idx("Sign and publish the release catalog"));
+    expect(idx("Deploy the DNS broker")).toBeLessThan(idx("Deploy .com"));
+    expect(idx("Gym gate")).toBeLessThan(idx("Deploy the DNS broker"));
+    expect(idx("hall of fame")).toBeGreaterThan(idx("Redeploy .com"));
+    expect(idx("PQ release key")).toBeLessThan(idx("Endorse"));
+    expect(idx("Write DEPLOYED-FINAL")).toBe(22);
   });
 
   it("--list --phase B lists only phase B", () => {
     const r = run(sandbox(), ["--list", "--short", "--phase", "B"]);
     const steps = planSteps(r.out);
-    expect(steps[0]!.n).toBe(17);
-    expect(steps).toHaveLength(11);
+    expect(steps[0]!.n).toBe(23);
+    expect(steps).toHaveLength(13);
   });
 
   it("--dry-run --from 1 prints every command of phase A and runs no tool", () => {
@@ -137,8 +145,11 @@ describe("release.sh", () => {
     expect(r.code, r.err).toBe(0);
     expect(r.out).toContain("[dry-run]");
     const steps = planSteps(r.out);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 16 }, (_, i) => i + 1));
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 22 }, (_, i) => i + 1));
     expect(r.out).toContain("npm run deploy");
+    expect(r.out).toContain("bash scripts/gym-release-run.sh");
+    expect(r.out).toContain("node scripts/check-versions.mjs --write");
+    expect(r.out).toContain("--signer-cmd");
     expect(r.out).toContain("flyctl deploy --remote-only --strategy=rolling --yes -a flagship-services");
     expect(r.out).toContain("endorse-release.mjs --to <PIN> --from <endorsed> --sign");
     expect(r.out).toContain("wrangler tail flagship-com --format json");
@@ -193,7 +204,7 @@ echo "open=$(phase_open A | wc -w | tr -d ' ')"`;
       encoding: "utf8",
       env: { PATH: process.env.PATH ?? "", HOME: env.home, FLAGSHIP_RELEASE_HOME: home },
     });
-    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=15"]);
+    expect(r.stdout.trim().split("\n")).toEqual(["done=2 pinned=abc", "has2", "no1", "open=21"]);
     expect(JSON.parse(readFileSync(join(home, "state.json"), "utf8")).done).toEqual(["2"]);
   });
 
@@ -424,14 +435,19 @@ describe("release.sh parsers against captured tool output", () => {
     expect(r.out).toMatch(/^0107_boot_suspensions\.sql$/m);
     expect(r.out).toMatch(/^0108_re_pair_veto\.sql$/m);
     expect(r.out).toMatch(/^0109_recovery_record_v2\.sql$/m);
-    expect(r.out).toMatch(/^0110_server_boot_keys\.sql$/m);
-    expect(r.out).toMatch(/^0111_pq_key_bindings\.sql$/m);
-    expect(r.out).toMatch(/^0112_assurance_policy_changes\.sql$/m);
-    expect(r.out).toMatch(/^0113_server_order_pq_signature\.sql$/m);
-    expect(r.out).toMatch(/^0114_boot_unlock_v2\.sql$/m);
-    expect(r.out.split("\n")).toHaveLength(10);
+    expect(r.out).toMatch(/^0110_watch_boot_keys\.sql$/m);
+    expect(r.out).toMatch(/^0111_voici_names\.sql$/m);
+    expect(r.out).toMatch(/^0112_recovery_passkey_key\.sql$/m);
+    expect(r.out).toMatch(/^0113_adapter_attestations\.sql$/m);
+    expect(r.out).toMatch(/^0114_server_boot_keys\.sql$/m);
+    expect(r.out).toMatch(/^0115_pq_key_bindings\.sql$/m);
+    expect(r.out).toMatch(/^0116_assurance_policy_changes\.sql$/m);
+    expect(r.out).toMatch(/^0117_server_order_pq_signature\.sql$/m);
+    expect(r.out).toMatch(/^0118_boot_unlock_v2\.sql$/m);
+    // Feature branches park their own migrations below the ledger's end (0090-0094, 0099): only the ones after it count here.
+    expect(r.out.split("\n").filter((f) => f >= "0105")).toEqual(readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f) && f >= "0105").sort());
     // a ledger that has everything -> nothing pending
-    const all = JSON.stringify([{ results: ["0105", "0106", "0107", "0108", "0109", "0110", "0111", "0112", "0113", "0114", ...JSON.parse(fx("wrangler-d1-ledger.synthetic.json"))[0].results.map((x: { version: string }) => x.version)].map((version) => ({ version })) }]);
+    const all = JSON.stringify([{ results: readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f)).map((f) => ({ version: f.slice(0, 4) })) }]);
     expect(sh(`pending_migrations ${dir}`, all).out).toBe("");
   });
 

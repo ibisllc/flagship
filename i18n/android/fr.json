@@ -2751,5 +2751,10 @@
   "server_code_check_first": "Vérifiez le code de ce serveur avant de l’approuver.",
   "server_first_approval_on_phone": "Approuvez le premier démarrage de ce serveur sur votre téléphone, où vous pouvez vérifier son code.",
   "server_key_not_pinned": "Ce téléphone n’a pas encore vérifié la clé de ce serveur. Approuvez d’abord son prochain démarrage sur ce téléphone.",
-  "let_server_hold_app_names": "Autorisez votre serveur à répondre pour les noms de vos apps"
+  "let_server_hold_app_names": "Autorisez votre serveur à répondre pour les noms de vos apps",
+  "quantum_safe_approve_on_device_with_pq_key": "Ce serveur est protégé contre l’ordinateur quantique. Approuvez-le sur un appareil qui détient la moitié post-quantique de la clé de votre compte (Réglages, Protection post-quantique).",
+  "quantum_safe_no_unlock_key_published": "Ce serveur est protégé contre l’ordinateur quantique, mais il n’a pas publié sa clé de déverrouillage post-quantique. Mettez le serveur à jour ou désactivez sa protection post-quantique.",
+  "post_quantum_key": "Clé post-quantique : %1$s",
+  "trust_the_new_key_of": "Faire confiance à la nouvelle clé de %1$s",
+  "couldnt_confirm_try_again": "Impossible de confirmer. Réessayez."
 }

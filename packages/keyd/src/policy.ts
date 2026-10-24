@@ -60,6 +60,8 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/pb-filler-fetch/v1",
   "flagship/pb-filler-proof/v1",
   "flagship/pb-root-deposit/v1",
+  // Cross-owner app chat: the box's signature on a frame it carries (packages/server-daemon/src/chat/wire.ts).
+  "flagship/chat-wire/v1",
   // Older peer-backup messages that predate the tag convention.
   "pb-put",
   "pb-resp",

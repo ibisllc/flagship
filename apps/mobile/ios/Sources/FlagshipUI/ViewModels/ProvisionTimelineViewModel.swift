@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import FlagshipAPI
+import FlagshipCore
 
 /// Polls flagshipserver.com `GET /api/order/<serial>/status` (~every 3s)
 /// for a pending pod's auth-code serial and surfaces the latest

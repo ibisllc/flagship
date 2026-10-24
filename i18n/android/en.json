@@ -11407,5 +11407,25 @@
   "let_server_hold_app_names": {
     "en": "Let your server answer for your apps' names",
     "ctx": "MainActivity.kt biometric reason (app-name certificate grant)"
+  },
+  "quantum_safe_approve_on_device_with_pq_key": {
+    "en": "This server is quantum-safe. Approve it on a device that holds your account key's quantum-resistant half (Settings, Quantum-safe protection).",
+    "ctx": "boot approval refusal (quantum-safe server)"
+  },
+  "quantum_safe_no_unlock_key_published": {
+    "en": "This server is quantum-safe, but it hasn't published its quantum-resistant unlock key. Update the server, or turn quantum-safe protection off for it.",
+    "ctx": "boot approval refusal (quantum-safe server)"
+  },
+  "post_quantum_key": {
+    "en": "Post-quantum key: %1$s",
+    "ctx": "trusted devices: a device key line"
+  },
+  "trust_the_new_key_of": {
+    "en": "Trust the new key of %1$s",
+    "ctx": "biometric prompt title when re-trusting a server key"
+  },
+  "couldnt_confirm_try_again": {
+    "en": "Couldn't confirm. Try again.",
+    "ctx": "biometric prompt failed"
   }
 }

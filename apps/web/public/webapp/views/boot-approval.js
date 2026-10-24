@@ -23,7 +23,7 @@ import {
 } from "../lib/bootApproval.js";
 import { fetchFirstBootMap } from "../lib/boxInbox.js";
 import { codeBoxHtml, refusalHtml } from "../lib/firstContact.js";
-import { repinBoxKey } from "../lib/boxKeyPins.js";
+import { KEY_CHANGED_CODE, retrustServer } from "../lib/serverPins.js";
 import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 
 import { tr } from "../lib/i18n.js";
@@ -81,7 +81,7 @@ function requestCard(req, firstBootMap = {}) {
       </p>
       ${
         req.quantumSafeRequest
-          ? `<p class="faint-sm mt-1">This server asks for a quantum-safe unlock. If its quantum-safe protection is on, approve it in the Flagship app on your phone: a browser cannot sign one.</p>`
+          ? `<p class="faint-sm mt-1">${tr("This server asks for a quantum-safe unlock. If its quantum-safe protection is on, approve it in the Flagship app on your phone: a browser cannot sign one.")}</p>`
           : ""
       }
       ${action}
@@ -185,7 +185,7 @@ function bindCards(root, verified, firstBootMap) {
       } catch (e) {
         if (isAlreadyAnswered(e)) {
           answered = true; // someone answered it already: done, no error
-        } else if (e?.code === "box-key-changed") {
+        } else if (e?.code === KEY_CHANGED_CODE) {
           await offerTrustNewKey(e);
         } else {
           console.error("approval failed", e);
@@ -206,19 +206,22 @@ function bindCards(root, verified, firstBootMap) {
   }
 }
 
-/** The pinned box key differs from `.com`'s: say so, and re-pin only on a fresh unlock. */
+/**
+ * The key differs from this device's pin: say so, and on a fresh unlock forget the pin, so the
+ * server's next request goes through first contact again (its code above Approve).
+ */
 async function offerTrustNewKey(e) {
   const r = await confirmFreshUnlock({
-    title: "This server's key changed",
+    title: tr("This server's key changed"),
     message: e.message,
-    okLabel: "Trust its new key",
+    okLabel: tr("Trust its new key"),
   });
   if (!r.ok) {
     if (r.error) toast(r.error, "err");
     return;
   }
-  repinBoxKey(getSession().username, e.serverDomain, e.reportedHex);
-  toast(`This device now trusts ${e.serverDomain}'s new key. Approve it again.`);
+  retrustServer(e.serverDomain);
+  toast(tr("Check the code {0} shows on its next request, then approve it again.", e.serverDomain));
 }
 
 function startPoll() {

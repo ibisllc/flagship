@@ -145,6 +145,15 @@ class MockShareWorld(
     private val apiTransport = transport(seedFirst = true)
     private val seedTransport = transport(seedFirst = false)
 
+    /** Each owner's phone pinned its own servers at their first blessing. */
+    private val ownerPins = ServerKeyPins(InMemoryServerKeyPinStore()).apply {
+        recordFirstSeen(homeDomain, homeStkPubHex)
+        recordFirstSeen(MockServerShares.GARAGE_DOMAIN, garageStkPubHex)
+        recordFirstSeen(MockServerShares.CABIN_DOMAIN, HexUtil.encode(jordan.irkPub))
+        recordFirstSeen(MockServerShares.PHOTOS_DOMAIN, HexUtil.encode(mina.irkPub))
+        recordFirstSeen(MockServerShares.STUDIO_DOMAIN, HexUtil.encode(mina.irkPub))
+    }
+
     fun client(keys: MockShareKeys, seeding: Boolean = false, random: ((Int) -> ByteArray)? = null) = ServerShareClient(
         apex = if (seeding) seedTransport else apiTransport,
         box = if (seeding) seedTransport else apiTransport,
@@ -153,6 +162,7 @@ class MockShareWorld(
         // An emulator has no push registration: a fixed token lets the notices switch work.
         pushToken = { "fcm" to "gym-push-token-${keys.username}" },
         random = random ?: { n -> ByteArray(n).also(java.security.SecureRandom()::nextBytes) },
+        pins = BoxKeyPins(ownerPins),
     )
 
     private suspend fun seedOnce() {

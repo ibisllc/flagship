@@ -78,6 +78,7 @@ class FirstContactCoordinatorTest {
         },
         adminSigner = { Ed25519Sign(adminKp.privateKey) },
         firstContact = FirstContact(pins, secrets) { emptyList() },
+        pins = BoxKeyPins(pins),
         now = { issuedAt },
         nonceGen = { ByteArray(32) { 1 } },
     )

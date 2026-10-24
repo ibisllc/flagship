@@ -11353,5 +11353,81 @@
   "Trusted {0}.": {
     "en": "Trusted {0}.",
     "ctx": "webapp/lib/serverKeyCard.js:90"
+  },
+  "This browser holds no post-quantum key, so it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.": {
+    "en": "This browser holds no post-quantum key, so it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.",
+    "ctx": "webapp/views/quantum-safety.js:25"
+  },
+  "Checked on this browser.": {
+    "en": "Checked on this browser.",
+    "ctx": "webapp/views/quantum-safety.js:30"
+  },
+  "As reported by flagshipserver.com; this browser could not check it.": {
+    "en": "As reported by flagshipserver.com; this browser could not check it.",
+    "ctx": "webapp/views/quantum-safety.js:30"
+  },
+  "Compatibility. {0}": {
+    "en": "Compatibility. {0}",
+    "ctx": "webapp/views/quantum-safety.js:31"
+  },
+  "Browsers can still reach it (post-quantum key exchange, classical certificate).": {
+    "en": "Browsers can still reach it (post-quantum key exchange, classical certificate).",
+    "ctx": "webapp/views/quantum-safety.js:33"
+  },
+  "Only the Flagship app reaches it; this browser is refused.": {
+    "en": "Only the Flagship app reaches it; this browser is refused.",
+    "ctx": "webapp/views/quantum-safety.js:34"
+  },
+  "Strict. {0} {1}": {
+    "en": "Strict. {0} {1}",
+    "ctx": "webapp/views/quantum-safety.js:35"
+  },
+  " (as reported by flagshipserver.com)": {
+    "en": " (as reported by flagshipserver.com)",
+    "ctx": "webapp/views/quantum-safety.js:65"
+  },
+  "only the Flagship app; browsers are refused{0}": {
+    "en": "only the Flagship app; browsers are refused{0}",
+    "ctx": "webapp/views/quantum-safety.js:66"
+  },
+  "browsers may reach it{0}": {
+    "en": "browsers may reach it{0}",
+    "ctx": "webapp/views/quantum-safety.js:66"
+  },
+  "These protections are new and pending an external review.": {
+    "en": "These protections are new and pending an external review.",
+    "ctx": "webapp/views/quantum-safety.js:96"
+  },
+  "Apps on this server (set from the Flagship app):": {
+    "en": "Apps on this server (set from the Flagship app):",
+    "ctx": "webapp/views/quantum-safety.js:121"
+  },
+  "You have no servers yet.": {
+    "en": "You have no servers yet.",
+    "ctx": "webapp/views/quantum-safety.js:125"
+  },
+  "This server asks for a quantum-safe unlock. If its quantum-safe protection is on, approve it in the Flagship app on your phone: a browser cannot sign one.": {
+    "en": "This server asks for a quantum-safe unlock. If its quantum-safe protection is on, approve it in the Flagship app on your phone: a browser cannot sign one.",
+    "ctx": "webapp/views/boot-approval.js:84"
+  },
+  "This server's key changed": {
+    "en": "This server's key changed",
+    "ctx": "webapp/views/boot-approval.js:215"
+  },
+  "Trust its new key": {
+    "en": "Trust its new key",
+    "ctx": "webapp/views/boot-approval.js:217"
+  },
+  "Check the code {0} shows on its next request, then approve it again.": {
+    "en": "Check the code {0} shows on its next request, then approve it again.",
+    "ctx": "webapp/views/boot-approval.js:224"
+  },
+  "Quantum-safe protection": {
+    "en": "Quantum-safe protection",
+    "ctx": "webapp/index.html"
+  },
+  "QUANTUM-SAFE PROTECTION": {
+    "en": "QUANTUM-SAFE PROTECTION",
+    "ctx": "webapp/index.html"
   }
 }

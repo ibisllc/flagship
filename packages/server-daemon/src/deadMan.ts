@@ -1,5 +1,6 @@
 import { brokerActive, brokerCall } from "./rustStack/brokerClient.js";
 import { execFile } from "node:child_process";
+import { privd, runsUnprivileged } from "./privileged.js";
 import {
   verifyDeadManAffirmation,
   verifySetDeadManPolicy,
@@ -87,6 +88,7 @@ export class SystemctlPowerRunner implements HostPowerRunner {
         console.warn(`[dead-man] the broker did not ${verb} the box (${(e as Error).message}); doing it directly`);
       }
     }
+    if (runsUnprivileged()) return privd().power(verb).then(() => {});
     return await new Promise<void>((resolve, reject) => {
       execFile("systemctl", [verb], (err) => {
         if (err) reject(err);

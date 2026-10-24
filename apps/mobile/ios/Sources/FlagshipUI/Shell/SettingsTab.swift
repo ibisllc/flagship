@@ -99,12 +99,12 @@ public struct SettingsTab: View {
         guard let user = app.currentUser?.lowercased(), let client = PqIdentityBindingService.client else { return }
         var out: [String: String] = [:]
         if let bindings = try? await client.fetch(username: user) {
-            for b in bindings.devices { out[b.subjectId] = "Post-quantum key registered" }
+            for b in bindings.devices { out[b.subjectId] = String(localized: "Post-quantum key registered") }
         }
         if let deviceId = app.activeProfile?.deviceId.lowercased(),
            let key = Keystore.sessionAccountDeviceKey(accountId: user, deviceId: deviceId),
            let custody = PqKeyStore.shared.custody(for: PqIdentity(role: .device, subjectId: deviceId, edKey: key)) {
-            out[deviceId] = "Post-quantum key: \(custody.label)"
+            out[deviceId] = String(localized: "Post-quantum key: \(custody.label)")
         }
         pqLabels = out
     }
@@ -223,7 +223,7 @@ public struct SettingsTab: View {
                         await pushRegistrar?.revoke()
                         await MainActor.run {
                             QuantumSafetyService.forget(username: app.currentUser)
-                        Keystore.wipe()
+                            Keystore.wipe()
                             app.signOut()
                         }
                     },

@@ -2754,4 +2754,9 @@
     <string name="server_first_approval_on_phone">このサーバーの最初の起動は、コードを確認できるスマートフォンで承認してください。</string>
     <string name="server_key_not_pinned">このスマートフォンはまだこのサーバーの鍵を確認していません。先にこのスマートフォンで次の起動を承認してください。</string>
     <string name="let_server_hold_app_names">サーバーがアプリの名前に応答できるようにする</string>
+    <string name="quantum_safe_approve_on_device_with_pq_key">このサーバーは耐量子保護されています。アカウント鍵の耐量子の半分を持つデバイスで承認してください（設定 &gt; 耐量子保護）。</string>
+    <string name="quantum_safe_no_unlock_key_published">このサーバーは耐量子保護されていますが、耐量子のロック解除鍵を公開していません。サーバーを更新するか、このサーバーの耐量子保護をオフにしてください。</string>
+    <string name="post_quantum_key">耐量子鍵：%1$s</string>
+    <string name="trust_the_new_key_of">%1$s の新しい鍵を信頼する</string>
+    <string name="couldnt_confirm_try_again">確認できませんでした。もう一度お試しください。</string>
 </resources>

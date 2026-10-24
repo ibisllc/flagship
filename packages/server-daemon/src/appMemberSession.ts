@@ -49,8 +49,11 @@ export function buildAppSessionResolver(opts: AppSessionResolverOptions): Sessio
     const identity = hexToBytes(opts.access.appIdentityKey(sess.aid));
     const role = p ? opts.access.accountRank(app.serviceId, p) : invitedRole(sess.aid);
     if (!role) return null;
+    // Someone outside the owner's own devices (an invited person, a co-manager) also needs a current
+    // freshness checkpoint; a device of the owner's account never does.
+    const external = !p || p.kind === "co-manager";
     const masterEvidence = role === "master" && p ? opts.access.masterEvidence?.(app.serviceId, p) ?? null : null;
-    return { memberPub: identity, stableId: app.membership.stableIdFor(identity), role, ...(masterEvidence ? { masterEvidence } : {}) };
+    return { memberPub: identity, stableId: app.membership.stableIdFor(identity), role, ...(external ? { external: true } : {}), ...(masterEvidence ? { masterEvidence } : {}) };
 
     // An invited person's rank is what an admin's verified order set for them, else Member: the
     // legacy membership store and the manifest's `default_role` never raise it.

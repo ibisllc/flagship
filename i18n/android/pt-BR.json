@@ -2751,5 +2751,10 @@
   "server_code_check_first": "Confira o código deste servidor antes de aprová-lo.",
   "server_first_approval_on_phone": "Aprove a primeira inicialização deste servidor no seu celular, onde você pode conferir o código dele.",
   "server_key_not_pinned": "Este celular ainda não conferiu a chave deste servidor. Aprove primeiro a próxima inicialização dele neste celular.",
-  "let_server_hold_app_names": "Permita que seu servidor responda pelos nomes dos seus apps"
+  "let_server_hold_app_names": "Permita que seu servidor responda pelos nomes dos seus apps",
+  "quantum_safe_approve_on_device_with_pq_key": "Este servidor tem proteção pós-quântica. Aprove em um dispositivo que tenha a metade pós-quântica da chave da sua conta (Configurações, Proteção pós-quântica).",
+  "quantum_safe_no_unlock_key_published": "Este servidor tem proteção pós-quântica, mas não publicou a chave de desbloqueio pós-quântica. Atualize o servidor ou desligue a proteção pós-quântica dele.",
+  "post_quantum_key": "Chave pós-quântica: %1$s",
+  "trust_the_new_key_of": "Confiar na nova chave de %1$s",
+  "couldnt_confirm_try_again": "Não foi possível confirmar. Tente de novo."
 }

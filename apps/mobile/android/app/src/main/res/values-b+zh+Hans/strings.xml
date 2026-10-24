@@ -2754,4 +2754,9 @@
     <string name="server_first_approval_on_phone">请在手机上批准此服务器的首次启动，在那里可以核对它的代码。</string>
     <string name="server_key_not_pinned">此手机尚未核对此服务器的密钥。请先在此手机上批准它的下一次启动。</string>
     <string name="let_server_hold_app_names">允许你的服务器为你的应用名称作答</string>
+    <string name="quantum_safe_approve_on_device_with_pq_key">此服务器受抗量子保护。请在持有账户密钥抗量子部分的设备上批准它（设置 &gt; 抗量子保护）。</string>
+    <string name="quantum_safe_no_unlock_key_published">此服务器受抗量子保护，但尚未发布它的抗量子解锁密钥。请更新服务器，或为它关闭抗量子保护。</string>
+    <string name="post_quantum_key">抗量子密钥：%1$s</string>
+    <string name="trust_the_new_key_of">信任 %1$s 的新密钥</string>
+    <string name="couldnt_confirm_try_again">无法确认。请重试。</string>
 </resources>

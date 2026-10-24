@@ -95,7 +95,7 @@ class WatchBootKeyTest {
     /** The switch only reads the pin; the first blessing (an approval) records it. */
     private fun optIn(m: MockSecretMailboxClient, store: SoftStore): WatchBootOptIn {
         blessedKey?.let { pins.recordFirstSeen(domain, it) }
-        return WatchBootOptIn(m, irk, store, pins, now = { now }, nonceGen = { ByteArray(32) { 2 } })
+        return WatchBootOptIn(m, irk, store, pins, { "alice" }, now = { now }, nonceGen = { ByteArray(32) { 2 } })
     }
 
     private fun approver(m: MockSecretMailboxClient, store: SoftStore) = WatchBootApprover(

@@ -84,7 +84,8 @@ class BootKeyTest {
         return BootKeyBindingWire(BootKeyBindingWire.Binding(domain, boot, at), HexUtil.encode(sig))
     }
 
-    private fun pinned() = BoxKeyPins().apply { repin(user, domain, stkPubHex) }
+    private fun pinned(store: ServerKeyPins = ServerKeyPins(InMemoryServerKeyPinStore())) =
+        BoxKeyPins(store).apply { repin(user, domain, stkPubHex) }
 
     @Test fun bootKeyForAdoptsOnlyWhatThePinnedStkBound() = runBlocking {
         val pins = pinned()
@@ -94,7 +95,7 @@ class BootKeyTest {
         assertEquals(bootPubHex, BootKey.bootKeyFor(user, domain, { binding() }, pins))
         assertEquals("kept when .com is down", bootPubHex, BootKey.bootKeyFor(user, domain, { throw java.io.IOException("down") }, pins))
         assertEquals("a forged one never replaces it", bootPubHex, BootKey.bootKeyFor(user, domain, { binding(signer = otherSeed, boot = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(otherSeed).publicKey)) }, pins))
-        assertNull("no pin, no adoption", BootKey.bootKeyFor(user, domain, { binding() }, BoxKeyPins()))
+        assertNull("no pin, no adoption", BootKey.bootKeyFor(user, domain, { binding() }, BoxKeyPins(ServerKeyPins(InMemoryServerKeyPinStore()))))
     }
 
     @Test fun sharedBootKeyForChecksTheOffersStk() = runBlocking {
@@ -131,11 +132,16 @@ class BootKeyTest {
             IrkMaterial(Ed25519Sign(irkKp.privateKey), irkSeed, HexUtil.encode(irkKp.publicKey))
     }
 
-    private fun coordinator(mailbox: SecretMailboxClient) = SecretRequestCoordinator(
-        mailbox = mailbox, username = user, irk = irkAccess,
-        now = { issuedAt }, nonceGen = { ByteArray(32) { 1 } },
-        leaseRetryDelaysMs = listOf(0L, 0L), pins = pinned(),
-    )
+    private fun coordinator(mailbox: SecretMailboxClient, pin: Boolean = true): SecretRequestCoordinator {
+        val store = ServerKeyPins(InMemoryServerKeyPinStore())
+        val pins = if (pin) pinned(store) else BoxKeyPins(store)
+        return SecretRequestCoordinator(
+            mailbox = mailbox, username = user, irk = irkAccess,
+            now = { issuedAt }, nonceGen = { ByteArray(32) { 1 } },
+            leaseRetryDelaysMs = listOf(0L, 0L), pins = pins,
+            firstContact = FirstContact(store, null),
+        )
+    }
 
     private fun opensTo(sealed: ByteArray, seed: ByteArray): ByteArray? =
         runCatching { SecretSeal.openWithEd25519Seed(sealed, seed) }.getOrNull()
@@ -146,7 +152,7 @@ class BootKeyTest {
         val leaseId = runBlocking {
             val req = c.fetchVerifiedRequests().single()
             assertEquals(bootPubHex, req.recipientPubHex)
-            assertEquals(stkPubHex, req.directoryStkPubHex)
+            assertEquals(stkPubHex, req.stkPubHex)
             c.confirmAndRespond(req, depositAutoLease = true)
         }
         assertNotNull(leaseId)
@@ -162,6 +168,25 @@ class BootKeyTest {
         // The serve authorization stays bound to the STK.
         val ent = mock.entitlementDeposits.single().second.deposit
         assertEquals(stkPubHex, ent.stkPub)
+    }
+
+    @Test fun aFirstSightUnlockByTheBootKeyPinsTheStkOnApproveAndSealsToTheBootKey() {
+        val mock = world(request(bootSeed))
+        val c = coordinator(withBinding(mock, binding()), pin = false)
+        runBlocking {
+            val req = c.fetchRequests().single()
+            assertEquals("the code is the STK's", stkPubHex, req.firstLook?.stkPubHex)
+            assertEquals(bootPubHex, req.recipientPubHex)
+            assertTrue(c.fetchVerifiedRequests().isEmpty())
+            c.confirmAndRespond(req)
+        }
+        val reply = HexUtil.decode(mock.postedResponses.single().first.sealed)!!
+        assertArrayEquals(luksKey, opensTo(reply, bootSeed)!!.takeLast(64).toByteArray())
+    }
+
+    @Test fun anUnpinnedServerNeverTakesABootKeyItsListedStkDidNotBind() = runBlocking {
+        val req = coordinator(withBinding(world(request(bootSeed)), binding(signer = otherSeed)), pin = false).fetchRequests().single()
+        assertEquals("a first sight of the signing key itself, never the listed STK", bootPubHex, req.firstLook?.stkPubHex)
     }
 
     @Test fun aBootKeyRequestWithoutAValidBindingIsDropped() = runBlocking {

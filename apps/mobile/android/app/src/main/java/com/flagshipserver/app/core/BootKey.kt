@@ -117,6 +117,20 @@ object BootKey {
         }
     }
 
+    /**
+     * The STK `.com` lists for [serverDomain]. Only a candidate, for a server this phone has not
+     * pinned yet whose disk unlock is signed by a boot key: the boot key must be bound by it, and
+     * the owner checks its code before Approve pins it (docs/first-contact.md).
+     */
+    suspend fun listedStk(mailbox: com.flagshipserver.app.api.SecretMailboxClient, username: String, serverDomain: String): String? =
+        try {
+            mailbox.fetchPods(username).identityPubKey(serverDomain)?.lowercase()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
+
     /** For a shared server: the boot key the STK pinned in the owner's offer vouches for, or null. */
     suspend fun sharedBootKeyFor(
         serverDomain: String,

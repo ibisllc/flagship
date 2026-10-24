@@ -14,8 +14,8 @@ object WatchBootWiring {
     /** The one pin store (docs/first-contact.md), recorded at a server's first blessing. */
     val pins: ServerKeyPins get() = ServerKeyPins.shared
 
-    fun optIn(mailbox: SecretMailboxClient, irk: IrkAccess) =
-        WatchBootOptIn(mailbox, irk, KeystoreWatchBootKeys(), pins)
+    fun optIn(mailbox: SecretMailboxClient, irk: IrkAccess, username: () -> String?) =
+        WatchBootOptIn(mailbox, irk, KeystoreWatchBootKeys(), pins, username)
 
     fun approver(mailbox: SecretMailboxClient, username: String) = WatchBootApprover(
         mailbox = mailbox,

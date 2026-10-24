@@ -2754,4 +2754,9 @@
     <string name="server_first_approval_on_phone">Aprove a primeira inicialização deste servidor no seu celular, onde você pode conferir o código dele.</string>
     <string name="server_key_not_pinned">Este celular ainda não conferiu a chave deste servidor. Aprove primeiro a próxima inicialização dele neste celular.</string>
     <string name="let_server_hold_app_names">Permita que seu servidor responda pelos nomes dos seus apps</string>
+    <string name="quantum_safe_approve_on_device_with_pq_key">Este servidor tem proteção pós-quântica. Aprove em um dispositivo que tenha a metade pós-quântica da chave da sua conta (Configurações, Proteção pós-quântica).</string>
+    <string name="quantum_safe_no_unlock_key_published">Este servidor tem proteção pós-quântica, mas não publicou a chave de desbloqueio pós-quântica. Atualize o servidor ou desligue a proteção pós-quântica dele.</string>
+    <string name="post_quantum_key">Chave pós-quântica: %1$s</string>
+    <string name="trust_the_new_key_of">Confiar na nova chave de %1$s</string>
+    <string name="couldnt_confirm_try_again">Não foi possível confirmar. Tente de novo.</string>
 </resources>

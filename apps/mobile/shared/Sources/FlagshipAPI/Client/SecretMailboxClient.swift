@@ -135,6 +135,7 @@ public protocol SecretMailboxClient: Sendable {
     /// box's own signature, for a device without the IRK (a locked phone answering for its watch). Verify
     /// each under the STK this phone pinned, never the `stkPub` returned here.
     func fetchSignedSecretRequests(username: String) async throws -> [SignedSecretRequestWire]
+
     /// GET {com}/api/server/:domain/boot-key — the box's STK-signed boot-key
     /// binding (public), or nil when the box has none (404).
     func fetchBootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire?

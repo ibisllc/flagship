@@ -57,9 +57,39 @@ export function onServerPinsChanged(fn) {
 export function pinnedStk(domain) {
   const d = norm(domain);
   if (!d) return null;
-  const entry = readMap(PINS_KEY)[d];
-  const stk = hex(entry?.stk ?? memPins.get(d));
-  return HEX64.test(stk) ? stk : null;
+  return pinRecord(d)?.stk ?? null;
+}
+
+function pinRecord(d) {
+  const entry = readMap(PINS_KEY)[d] ?? memPins.get(d);
+  const stk = hex(entry?.stk);
+  return HEX64.test(stk) ? { ...entry, stk } : null;
+}
+
+/**
+ * The whole pin for `domain`: `{ stk, how, at }` plus what the pinned STK vouched for since
+ * (architecture v2: `mldsa`/`mldsaIssuedAt`, `boot`/`bootIssuedAt`; lib/boxKeyPins.js). Null when unpinned.
+ */
+export function serverPinRecord(domain) {
+  return pinRecord(norm(domain));
+}
+
+/**
+ * Add what the pinned STK vouched for to its pin. Only while `stkHex` is still the pin, so a
+ * re-trust in between drops it. Returns whether it was kept.
+ */
+export function updateServerPin(domain, stkHex, fields) {
+  const d = norm(domain);
+  const have = pinRecord(d);
+  if (!have || have.stk !== hex(stkHex)) return false;
+  const { stk: _stk, how: _how, at: _at, ...extra } = fields ?? {};
+  const next = { ...have, ...extra };
+  memPins.set(d, next);
+  const map = readMap(PINS_KEY);
+  map[d] = next;
+  writeMap(PINS_KEY, map);
+  emit();
+  return true;
 }
 
 /**
@@ -70,11 +100,12 @@ export function pinServerKey(domain, stkHex, how = "first-sight") {
   const d = norm(domain);
   const stk = hex(stkHex);
   if (!d || !HEX64.test(stk)) throw new Error("not a server key");
-  const have = pinnedStk(d);
-  if (have && have !== stk) throw keyChangedError(d);
-  memPins.set(d, stk);
+  const have = pinRecord(d);
+  if (have && have.stk !== stk) throw keyChangedError(d);
+  const rec = have ?? { stk, how, at: Date.now() };
+  memPins.set(d, rec);
   const map = readMap(PINS_KEY);
-  map[d] = { stk, how, at: Date.now() };
+  map[d] = rec;
   writeMap(PINS_KEY, map);
   changed.delete(d);
   emit();

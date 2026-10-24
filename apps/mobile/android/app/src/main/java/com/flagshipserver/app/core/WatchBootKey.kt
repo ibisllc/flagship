@@ -74,6 +74,8 @@ class WatchBootOptIn(
     private val irk: IrkAccess,
     private val store: WatchBootKeyStore,
     private val pins: ServerKeyPins,
+    /** The signed-in account: `.com` hands the sealed disk key only to its own devices. */
+    private val username: () -> String?,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val nonceGen: () -> ByteArray = { SecretRequestCoordinator.randomNonce() },
 ) {
@@ -83,7 +85,8 @@ class WatchBootOptIn(
         pins.pinnedStk(serverDomain) ?: throw ServerKeyNotPinnedException()
         val key = store.loadOrCreate()
         val material = irk.resolve(reason)
-        val sealed = HexUtil.decode(mailbox.fetchSealedLuksKey(serverDomain).sealedKey)?.takeIf { it.isNotEmpty() }
+        val user = username() ?: throw IllegalStateException(FSStrings.get(com.flagshipserver.app.R.string.sign_in_to_approve_this_server))
+        val sealed = HexUtil.decode(mailbox.fetchSealedLuksKey(serverDomain, user).sealedKey)?.takeIf { it.isNotEmpty() }
             ?: throw SecretRequestCoordinator.CoordinatorException.NoSealedLuksKey
         val diskKey = try {
             SecretSeal.openWithEd25519Seed(sealed, material.seed)

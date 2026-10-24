@@ -94,9 +94,9 @@ st_get() { if [ -f "$STATE" ]; then st get "$1"; fi; }
 
 # ---------------------------------------------------------------- the plan
 
-STEP_IDS=(preflight version plan lease catalogkeys endorse artifacts catalog kickoff secrets gym backup migrations services dnsbroker dns com cpu publish redeployA status
+STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog kickoff secrets gym backup migrations services dnsbroker dns com cpu publish redeployA status
           notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android hof final)
-LAST_A=21   # the last step of phase A (status)
+LAST_A=22   # the last step of phase A (status)
 
 step_id()    { echo "${STEP_IDS[$(($1 - 1))]}"; }
 step_count() { echo "${#STEP_IDS[@]}"; }
@@ -107,7 +107,7 @@ phase_last()  { if [ "$1" = A ]; then echo "$LAST_A"; else step_count; fi; }
 TITLE=""; WHAT=""; RUNBOOK=""; CMDS=""; GATE=""; ROLLBACK=""; REQUIRED=0; OUTWARD=1
 
 meta_version() {
-  TITLE="Bump the product version (one version on every surface)"
+  TITLE="Bump the product version (one version on every surface), and open name dibs on release day"
   RUNBOOK="0b. Bump the product version"
   WHAT="Asks for the new product version (0.3 for this release) and the store numbers, which must climb, writes release/version.json, regenerates every surface's copy with check-versions --write, commits and pushes to main, then re-pins. A run that keeps the version skips it."
   read -r -d '' CMDS <<'EOF' || true
@@ -134,6 +134,22 @@ git add -- release/catalog-root.json && git commit -m "Pin the release catalog r
 EOF
   GATE="release/catalog-root.json is on origin/main and pinned; gh secret list shows RELEASE_CATALOG_TIMESTAMP_KEY; both key files are in the offline folder and nowhere else."
   ROLLBACK="Before any catalog is published, delete the commit's file and the secret and start again. After, rotate with a root signed by the old one (catalog.ts root --version 2 --sign <old key>)."
+}
+meta_pqkeys() {
+  TITLE="PQ release key ceremony (once): two YubiKeys, paper backup, the three pins"
+  RUNBOOK="2c. PQ release key (once)"
+  WHAT="Skipped once release/box-artifact-trust.json names a PQ key. Otherwise makes the ML-DSA-65 half of the release key, encrypts it with age to your two YubiKeys, prints the paper backup, proves each YubiKey opens it, then pins it for release endorsements, CA leases and box artifacts (each with its cut-over: what is already signed stays valid), commits the pins and the binding, and re-pins. From then on endorsements, leases and artifacts carry a PQ companion and boxes need it."
+  read -r -d '' CMDS <<'EOF' || true
+brew install age age-plugin-yubikey          (once)
+age-plugin-yubikey --generate --name flagship-release --pin-policy always --touch-policy always   (each YubiKey; recipients and stubs to ~/.flagship-release/)
+node scripts/pq-release-key.mjs init --recipient <yubikey-1> --recipient <yubikey-2>       (PIN + touch; prints the paper code)
+node scripts/pq-release-key.mjs verify-yubikey      (each YubiKey in turn)
+node scripts/pq-release-key.mjs pin --key-id <id> --require-pq-after auto --ca-lease --box-artifact --legacy-manifest <published manifest>...
+node scripts/gen-box-release.mjs --write && npx tsc -b
+git add -- packages/protocol/src/releasePqPin.ts packages/protocol/src/caLeasePq.ts release/box-artifact-trust.json <client pin files> .maintainers/release-pq && git commit -m "Pin the PQ release key" && git push origin HEAD:main
+EOF
+  GATE="show-pub lists the key as pinned; the paper code is written down and stored apart from both YubiKeys; both YubiKeys opened the key file."
+  ROLLBACK="Before anything is signed with it: revert the pin commit. After: a lost or leaked key is replaced with init and a new pin (docs/runbooks/pq-release-key.md, Losing things)."
 }
 meta_artifacts() {
   TITLE="Build, sign and publish the box artifacts (+ gVisor mirror, box release, pins)"
@@ -1064,10 +1080,15 @@ run_lease() {
   confirm "Sign it now? (YubiKey PIN and touch; the tool asks you to type CA-LEASE)" || return 10
   with_maintainers XA "$WT" node "$cli" ca-endorsement --ca-pubkey "$pk" --scope flagship/directory-attestation --duration "$dur" --track ca --signing-key yubikey-piv:slot=9c --path "$WT/.maintainers"
   regen_bundle
+  if pq_pinned; then
+    local newest; newest=$(ls -t "$WT/.maintainers/ca-endorsements/"*.json | grep -v bundle.json | head -1)
+    say "  PQ companion for the new lease (YubiKey PIN + touch):"
+    with_maintainers XA "$WT" node scripts/pq-release-key.mjs sign-ca-lease --endorsement "$newest" --key-file "$PQ_KEY_FILE" --signing-key yubikey-piv:slot=9c --path "$WT/.maintainers"
+  fi
   XA "$WT" node scripts/rotate-ca.mjs status
   read -r days na pk < <(lease_days)
   say "  the lease now ends $na ($days days)"
-  commit_paths "Renew the production CA lease" .maintainers/ca-endorsements
+  commit_paths "Renew the production CA lease" .maintainers/ca-endorsements $( [ -d "$WT/.maintainers/ca-pq" ] && echo .maintainers/ca-pq)
   land_commits || return $?
 }
 
@@ -1099,13 +1120,27 @@ run_endorse() {
   if [ "$now" = "$endorsed" ]; then ok "latest-endorsed-release prints $(short "$now")"; else warn "latest-endorsed-release prints '${now:-nothing}', expected $(short "$endorsed")"; fi
 }
 
+set_dibs_window() { # set_dibs_window YYYY-MM-DD: name dibs open that day for six months
+  node -e 'const fs=require("fs");const [f,d]=process.argv.slice(1);const s=new Date(d+"T00:00:00Z");if(isNaN(s))process.exit(2);const e=new Date(s);e.setUTCMonth(e.getUTCMonth()+6);let t=fs.readFileSync(f,"utf8");t=t.replace(/DIBS_WINDOW_START = "[^"]*"/,`DIBS_WINDOW_START = "${s.toISOString().slice(0,19)}Z"`).replace(/DIBS_WINDOW_END = "[^"]*"/,`DIBS_WINDOW_END = "${e.toISOString().slice(0,19)}Z"`);fs.writeFileSync(f,t)' "$WT/apps/com/wrangler.toml" "$1"
+}
+
 run_version() {
   ensure_wt
+  local day; day=$(ask_word "Release day, when name dibs open for six months (YYYY-MM-DD; Enter keeps $(grep -o 'DIBS_WINDOW_START = "[^"]*"' "$WT/apps/com/wrangler.toml" | cut -d'"' -f2))")
+  if [ -n "$day" ] && [ "$DRY" != 1 ]; then
+    set_dibs_window "$day" || fail "not a date: $day"
+    grep -E 'DIBS_WINDOW_(START|END)' "$WT/apps/com/wrangler.toml" | sed 's/^/    /'
+    commit_paths "Open name dibs on release day ($day)" apps/com/wrangler.toml
+  fi
   local f="$WT/release/version.json" cur
   cur=$(json_field product < "$f")
   say "  now: product $cur ($(json_field label < "$f")), iOS $(json_field iosVersion < "$f") build $(json_field iosBuild < "$f"), Android code $(json_field androidVersionCode < "$f"), Studio $(json_field studio < "$f")"
   local v; v=$(ask_word "New product version (e.g. 0.3), or  keep")
-  if [ -z "$v" ] || [ "$v" = keep ] || [ "$v" = "$cur" ]; then ok "version unchanged ($cur)"; return 0; fi
+  if [ -z "$v" ] || [ "$v" = keep ] || [ "$v" = "$cur" ]; then
+    ok "version unchanged ($cur)"
+    if [ -n "$day" ] && [ "$DRY" != 1 ]; then land_commits || return $?; fi
+    return 0
+  fi
   local label ios build code studio
   label=$(ask_word "Label (now $(json_field label < "$f"); Enter keeps it)"); [ -n "$label" ] || label=$(json_field label < "$f")
   ios=$(ask_word "iOS marketing version (now $(json_field iosVersion < "$f"); must climb)")
@@ -1152,6 +1187,36 @@ run_catalogkeys() {
   st_w set catalogKeyDir "$dir"
 }
 
+
+PQ_KEY_FILE="${FLAGSHIP_PQ_KEY_FILE:-$HOME/.flagship-release/pq-release-key.age}"
+pq_pinned() { node -e 'const t=require(process.argv[1]);process.exit((t.pq?.keyIds?.length??0)>0?0:1)' "$WT/release/box-artifact-trust.json"; }
+
+run_pqkeys() {
+  ensure_wt
+  if pq_pinned; then ok "the PQ release key is pinned"; XA "$WT" node scripts/pq-release-key.mjs show-pub; return 0; fi
+  command -v age >/dev/null && command -v age-plugin-yubikey >/dev/null || fail "install age and age-plugin-yubikey first (brew install age age-plugin-yubikey)"
+  say "  docs/runbooks/pq-release-key.md walks through this. You need both YubiKeys, paper and a pen."
+  local r1 r2; r1=$(ask_word "age recipient of YubiKey 1 (age1yubikey1...)"); r2=$(ask_word "age recipient of YubiKey 2")
+  case "$r1$r2" in *age1yubikey1*age1yubikey1*) ;; *) fail "both recipients must be age1yubikey1... values" ;; esac
+  confirm "Make the PQ release key now (PIN + touch; the paper code prints once: write it down)?" || return 10
+  with_maintainers XA "$WT" node scripts/pq-release-key.mjs init --recipient "$r1" --recipient "$r2" --signing-key yubikey-piv:slot=9c
+  say "  Prove each YubiKey opens the key file: insert YubiKey 1, then YubiKey 2."
+  XA "$WT" node scripts/pq-release-key.mjs verify-yubikey
+  XA "$WT" node scripts/pq-release-key.mjs verify-yubikey
+  [ "$(ask_word "Type  written  once the paper code is written down and stored apart from both YubiKeys")" = written ] || fail "the paper backup is required"
+  local id; id=$(cd "$WT" && node scripts/pq-release-key.mjs show-pub | sed -n 's/.*key id:* *\([0-9a-f]\{64\}\).*/\1/p' | head -1)
+  [ -n "$id" ] || id=$(ask_word "The key id show-pub printed (64 hex)")
+  local legacy=() f
+  for f in $(find "$ARTIFACTS" -name 'flagship-box-*.manifest.json' 2>/dev/null); do legacy+=(--legacy-manifest "$f"); done
+  XA "$WT" node scripts/pq-release-key.mjs pin --key-id "$id" --require-pq-after auto --ca-lease --box-artifact "${legacy[@]}"
+  WX node scripts/gen-box-release.mjs --write
+  WX npx tsc -b
+  local changed; changed=$(wt_git status --porcelain | awk '{print $2}')
+  # shellcheck disable=SC2086
+  commit_paths "Pin the PQ release key for endorsements, CA leases and box artifacts" $changed
+  land_commits || return $?
+}
+
 run_artifacts() {
   ensure_wt
   local last seq; last=$(json_field sequence < "$WT/release/box-release.json")
@@ -1174,6 +1239,10 @@ run_artifacts() {
     [ -f "$out/$name.manifest.unsigned.json" ] && [ -f "$out/$name.tar.gz" ] || fail "the run has no $name artifact"
     say "  sign $name (YubiKey PIN + touch):"
     with_maintainers XA "$WT" npx tsx tools/box-artifact/build.ts sign --manifest "$out/$name.manifest.unsigned.json" --out "$out/$name.manifest.json" --signer-cmd "node $WT/scripts/yubikey-sign.mjs"
+    if pq_pinned; then
+      say "  PQ companion for $name (YubiKey PIN + touch to open the key):"
+      with_maintainers XA "$WT" node scripts/pq-release-key.mjs sign-box-artifact --manifest "$out/$name.manifest.json" --out "$out/$name.manifest.json" --key-file "$PQ_KEY_FILE" --signing-key yubikey-piv:slot=9c
+    fi
     XA "$WT" npx tsx tools/box-artifact/build.ts verify --manifest "$out/$name.manifest.json" --artifact "$out/$name.tar.gz" --commit "$PIN" --arch "$arch"
     rm -f "$out/$name.manifest.unsigned.json"
   done

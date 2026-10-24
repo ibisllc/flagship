@@ -1,7 +1,7 @@
-// The browser pins each server's box key the first time it learns it and
-// refuses to seal anything to another key `.com` later lists for that server
-// (lib/boxKeyPins.js; shared vectors in packages/protocol/test-vectors/box-key-pin).
-import { describe, expect, it, vi } from "vitest";
+// The browser seals only to the key it pinned at first contact (lib/serverPins.js, the one pin
+// store) and refuses another key `.com` later lists for that server; nothing pins a key because
+// `.com` lists it (lib/boxKeyPins.js; shared vectors in packages/protocol/test-vectors/box-key-pin).
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +19,7 @@ import {
   verifyBootKeyBinding,
 } from "../public/webapp/lib/boxKeyPins.js";
 import { enableLongLived } from "../public/webapp/lib/leases.js";
+import { _test as pinsTest, pinServerKey, pinnedStk, serverKeyChanged } from "../public/webapp/lib/serverPins.js";
 
 const v = JSON.parse(readFileSync(join(__dirname, "../../../packages/protocol/test-vectors/box-key-pin/vectors.json"), "utf8"));
 const U = "plucky-avocet";
@@ -47,52 +48,70 @@ describe("box key pins: shared vectors", () => {
 });
 
 describe("box key pins", () => {
-  it("pins on first sight, passes the same key, refuses a substituted one", () => {
-    const deps = { pinStorage: memStorage() };
-    expect(requirePinnedBoxKey(U, D, v.stkPubHex, deps)).toBe(v.stkPubHex);
-    expect(requirePinnedBoxKey(U, D.toUpperCase(), v.stkPubHex.toUpperCase(), deps)).toBe(v.stkPubHex);
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", memStorage());
+    pinsTest.reset();
+  });
+
+  it("never pins on first sight: an unpinned server gets nothing sealed", () => {
     let caught: unknown;
-    try { requirePinnedBoxKey(U, D, v.otherPubHex, deps); } catch (e) { caught = e; }
+    try { requirePinnedBoxKey(U, D, v.stkPubHex); } catch (e) { caught = e; }
+    expect((caught as { code?: string }).code).toBe("server-not-pinned");
+    expect(pinnedBoxKey(U, D)).toBeNull();
+    expect(pinnedStk(D)).toBeNull();
+  });
+
+  it("passes the key first contact pinned and refuses a substituted one", () => {
+    pinServerKey(D, v.stkPubHex, "proof");
+    expect(requirePinnedBoxKey(U, D, v.stkPubHex)).toBe(v.stkPubHex);
+    expect(requirePinnedBoxKey(U, D.toUpperCase(), v.stkPubHex.toUpperCase())).toBe(v.stkPubHex);
+    let caught: unknown;
+    try { requirePinnedBoxKey(U, D, v.otherPubHex); } catch (e) { caught = e; }
     expect(caught).toBeInstanceOf(BoxKeyChangedError);
-    expect((caught as Error).message).toMatch(/identity key changed/);
-    expect(pinnedBoxKey(U, D, deps)).toBe(v.stkPubHex);
+    expect((caught as Error).message).toBe("This server's key changed. If you did not rebuild it, do not approve anything for it.");
+    expect(serverKeyChanged(D)).toBe(true);
+    expect(pinnedBoxKey(U, D)).toBe(v.stkPubHex);
   });
 
-  it("re-pinning (a reinstall here, or Trust its new key) moves the pin and drops the old boot key", async () => {
-    const deps = { pinStorage: memStorage() };
-    requirePinnedBoxKey(U, D, v.stkPubHex, deps);
+  it("re-pinning (the owner's explicit re-trust) moves the pin and drops the old boot key", async () => {
+    pinServerKey(D, v.stkPubHex, "proof");
     const b = v.bootKeyBinding;
-    expect(await acceptBootKeyBinding(U, D, b.binding, b.signatureHex, deps)).toBe(b.binding.bootPubHex);
-    repinBoxKey(U, D, v.otherPubHex, deps);
-    expect(requirePinnedBoxKey(U, D, v.otherPubHex, deps)).toBe(v.otherPubHex);
-    expect(() => requirePinnedBoxKey(U, D, v.stkPubHex, deps)).toThrow(BoxKeyChangedError);
-    expect(pinnedBootKey(U, D, deps)).toBeNull();
+    expect(await acceptBootKeyBinding(U, D, b.binding, b.signatureHex)).toBe(b.binding.bootPubHex);
+    expect(pinnedBootKey(U, D)).toBe(b.binding.bootPubHex);
+    repinBoxKey(U, D, v.otherPubHex);
+    expect(requirePinnedBoxKey(U, D, v.otherPubHex)).toBe(v.otherPubHex);
+    expect(() => requirePinnedBoxKey(U, D, v.stkPubHex)).toThrow(BoxKeyChangedError);
+    expect(pinnedBootKey(U, D)).toBeNull();
   });
 
-  it("takes a boot key only from a binding the pinned STK signed", async () => {
-    const deps = { pinStorage: memStorage() };
+  it("takes a boot key only from a binding the pinned STK signed, kept in the one pin store", async () => {
     const b = v.bootKeyBinding;
-    expect(await acceptBootKeyBinding(U, D, b.binding, b.signatureHex, deps)).toBeNull();
-    requirePinnedBoxKey(U, D, v.stkPubHex, deps);
-    expect(await acceptBootKeyBinding(U, D, b.binding, b.signedByOtherKeyHex, deps)).toBeNull();
-    expect(pinnedBootKey(U, D, deps)).toBeNull();
-    expect(await acceptBootKeyBinding(U, D, b.binding, b.signatureHex, deps)).toBe(b.binding.bootPubHex);
+    expect(await acceptBootKeyBinding(U, D, b.binding, b.signatureHex)).toBeNull();
+    pinServerKey(D, v.stkPubHex, "proof");
+    expect(await acceptBootKeyBinding(U, D, b.binding, b.signedByOtherKeyHex)).toBeNull();
+    expect(pinnedBootKey(U, D)).toBeNull();
+    expect(await acceptBootKeyBinding(U, D, b.binding, b.signatureHex)).toBe(b.binding.bootPubHex);
+    const stored = JSON.parse(localStorage.getItem("flagship.serverPins.v1")!);
+    expect(stored[D.toLowerCase()]).toMatchObject({ stk: v.stkPubHex, boot: b.binding.bootPubHex });
+    pinServerKey(D, v.stkPubHex, "proof");
+    expect(pinnedBootKey(U, D)).toBe(b.binding.bootPubHex);
   });
 
-  it("observing /pods pins new servers but never moves an existing pin", () => {
-    const deps = { pinStorage: memStorage() };
-    observePods(U, [{ serverDomain: D, identityPubKey: v.stkPubHex }], deps);
-    observePods(U, [{ serverDomain: D, identityPubKey: v.otherPubHex }], deps);
-    expect(pinnedBoxKey(U, D, deps)).toBe(v.stkPubHex);
+  it("observing /pods never pins, and notes a key that differs from the pin", () => {
+    observePods(U, [{ serverDomain: D, identityPubKey: v.stkPubHex }]);
+    expect(pinnedBoxKey(U, D)).toBeNull();
+    pinServerKey(D, v.stkPubHex, "proof");
+    observePods(U, [{ serverDomain: D, identityPubKey: v.otherPubHex }]);
+    expect(pinnedBoxKey(U, D)).toBe(v.stkPubHex);
+    expect(serverKeyChanged(D)).toBe(true);
   });
 
   it("an auto-unlock lease is never sealed to a substituted key", async () => {
-    const pinStorage = memStorage();
     const umkSeed = new Uint8Array(32).fill(7);
     const irk = deriveIRK({ seed: umkSeed });
     const real = deriveSTK(new Uint8Array(32).fill(9));
     const rogue = deriveSTK(new Uint8Array(32).fill(10));
-    repinBoxKey(U, D, hex(real.publicKey), { pinStorage });
+    pinServerKey(D, hex(real.publicKey), "proof");
     const fetch = vi.fn(async (url: string) => {
       if (url.endsWith("/sealed-luks-key")) {
         return new Response(JSON.stringify({ sealedKey: hex(sealForEd25519Recipient(new Uint8Array(32).fill(1), irk.publicKey)) }), { status: 200 });
@@ -103,7 +122,6 @@ describe("box key pins", () => {
       enableLongLived(D, 1000, {
         session: { umk: umkSeed, username: U },
         fetch,
-        pinStorage,
         signWithIrk: async (_u: Uint8Array, bytes: Uint8Array) => ed25519.sign(bytes, irk.privateKey),
         boxStk: async () => hex(rogue.publicKey),
         readSuspension: async () => ({ suspended: false, epoch: 0, seq: 0 }),

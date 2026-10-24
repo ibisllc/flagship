@@ -19,7 +19,7 @@ class KnownBoxPinTest {
             domains.map { d ->
                 PodDirectoryEntry(serverDomain = d, identityPubKey = "00".repeat(32), revokedAt = if (d in revoked) 1L else null)
             },
-            ByteArray(32),
+            { ByteArray(32) },
         )
         return reg
     }
@@ -48,7 +48,7 @@ class KnownBoxPinTest {
         val reg = registryWith(domain, "home2.alice.flagship.services", revoked = setOf("home2.alice.flagship.services"))
         assertTrue(reg.isKnownBox(domain))
         assertFalse(reg.isKnownBox("home2.alice.flagship.services"))
-        reg.update(emptyList(), ByteArray(32))
+        reg.update(emptyList(), { ByteArray(32) })
         assertFalse(reg.isKnownBox(domain))
     }
 
@@ -70,7 +70,7 @@ class KnownBoxPinTest {
             override fun save(pins: Map<String, String>, known: Set<String>) { this.pins = pins; this.known = known }
         }
         val first = CertPinRegistry().also { it.attach(store) }
-        first.update(listOf(PodDirectoryEntry(serverDomain = domain, identityPubKey = "00".repeat(32))), ByteArray(32))
+        first.update(listOf(PodDirectoryEntry(serverDomain = domain, identityPubKey = "00".repeat(32))), { ByteArray(32) })
         assertEquals(setOf(domain), store.known)
         val second = CertPinRegistry().also { it.attach(store) }
         assertTrue("a cold start already knows the box", second.isKnownBox(domain))

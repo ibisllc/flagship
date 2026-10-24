@@ -23,8 +23,8 @@ class BuilderDeliverFrameTest {
         phone.pair(QrSession.fresh().phonePubKey)
         val sealed = phone.seal(ByteArray(32) { 0x51 })
         // AES-256-GCM: ciphertext || 16-byte tag, under a fresh 12-byte nonce.
-        assertEquals(48, Base64URL.decode(sealed.ciphertextB64u).size)
-        assertEquals(12, Base64URL.decode(sealed.nonceB64u).size)
+        assertEquals(48, Base64URL.decode(sealed.ciphertextB64u)!!.size)
+        assertEquals(12, Base64URL.decode(sealed.nonceB64u)!!.size)
         assertFalse(sealed.nonceB64u == phone.seal(ByteArray(32)).nonceB64u)
     }
 }

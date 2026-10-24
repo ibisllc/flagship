@@ -2703,5 +2703,10 @@
   "server_code_check_first": "2f4569de06ab",
   "server_first_approval_on_phone": "2d636c6f0cca",
   "server_key_not_pinned": "e38764db3094",
-  "let_server_hold_app_names": "60fad7dc3a29"
+  "let_server_hold_app_names": "60fad7dc3a29",
+  "quantum_safe_approve_on_device_with_pq_key": "d5d0a2aa7db6",
+  "quantum_safe_no_unlock_key_published": "e7576574e81b",
+  "post_quantum_key": "26fc088741ba",
+  "trust_the_new_key_of": "b63864fe0f03",
+  "couldnt_confirm_try_again": "b7c128626ad3"
 }

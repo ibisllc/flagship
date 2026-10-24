@@ -209,10 +209,11 @@ Before=flagship-tlsd.service
 Environment=FLAGSHIP_TLS_UPSTREAM=${TLS_UPSTREAM_SOCKET}
 Environment=FLAGSHIP_TLS_FRONTEND_PORT=${TLSD_PORT}
 Environment=FLAGSHIP_TLS_SOCKET_GROUP=${KEYD_CLIENT_GROUP}
-# The directory the upstream socket lives in: the daemon creates it, the frontend's group may enter it.
+# The directory the upstream socket lives in. The daemon gives it the frontend's group when it
+# opens the socket (tlsUpstream.ts): systemd resets a RuntimeDirectory's owner before every
+# Exec command, so an ExecStartPre chgrp would not last.
 RuntimeDirectory=flagship-tls
 RuntimeDirectoryMode=0750
-ExecStartPre=+/bin/chgrp ${KEYD_CLIENT_GROUP} /run/flagship-tls
 `;
 }
 

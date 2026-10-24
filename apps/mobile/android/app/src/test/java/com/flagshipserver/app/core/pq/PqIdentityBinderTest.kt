@@ -161,8 +161,10 @@ class PqIdentityBinderTest {
         val wire = v["bindings"]!!.jsonObject["valid"]!!.jsonArray.map { it.jsonObject }
             .first { it["name"]!!.jsonPrimitive.content == "box-stk" }["wire"]!!
         val w = PqTrust.pqKeyBindingFromWire(wire)
-        val pins = BoxKeyPins(now = { w.issuedAt })
+        val store = com.flagshipserver.app.core.ServerKeyPins(com.flagshipserver.app.core.InMemoryServerKeyPinStore())
+        val pins = BoxKeyPins(store, now = { w.issuedAt })
         assertNull(pins.acceptStkPqBinding("alice", w.subjectId, wire))
+        store.recordFirstSeen(w.subjectId, w.ed25519PubHex)
         pins.require("alice", w.subjectId, w.ed25519PubHex)
         assertEquals(w.mldsaPubHex, pins.acceptStkPqBinding("alice", w.subjectId, wire))
         assertEquals(w.mldsaPubHex, pins.pinnedBoxPqKey("alice", w.subjectId))

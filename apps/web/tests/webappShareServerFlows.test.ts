@@ -15,6 +15,7 @@ import {
   verifyServerShareUpdate,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
+import { pinServerKey } from "../public/webapp/lib/serverPins.js";
 import {
   deriveDemoAdminRoot,
   handleDemoShareAccept,
@@ -191,6 +192,8 @@ async function world() {
 type World = Awaited<ReturnType<typeof world>>;
 
 async function offerTo(w: World, over: Record<string, unknown> = {}) {
+  // Only a key this device pinned at first contact goes into an offer.
+  pinServerKey(S, hex(stk.publicKey), "proof");
   return shares.createShareOffer(
     { serverDomain: S, serverName: "home", stkPubHex: hex(stk.publicKey), label: "Sam", level: "manage", unlockAtBoot: true, seeAppData: false, ...over },
     w.depsA,

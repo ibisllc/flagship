@@ -89,7 +89,8 @@ TPM; TPM keys are classical, the PQ protection is the hybrid seal around them); 
 seal v2 replies and v3 leases; phones and webapp need the CA lease PQ half once pinned (shell v171);
 keyd signs master only with the owner's evidence for that sign-in key; signing tools produce the
 artifact and lease PQ companions; Windows TPM and GPU test notes. Drill: before-reboot half
-24/24 on UpCloud `94.237.30.127` (VM left up for the release manager); after-reboot half unconfirmed.
+24/24 on UpCloud, then 3/3 after a real reboot (`drills/m6-upcloud.md`); the drill VM was deleted on
+2026-10-24.
 
 ## 3. Not done yet (all required for this release)
 
@@ -122,9 +123,11 @@ recovery test from clients; age file around the release key is classical (keep i
 
 1. **Finish first.** Owner rule: all objectives in §3 are part of the release. Decide with the
    owner whether to merge now and continue on the merged line, or finish on the branch first.
-2. **Merge, don't rebase.** The branch is pushed and other work refers to its shas. Merge
-   `origin/release/0.3` into `feat/architecture` (or the reverse), resolve, run the gates, then
-   fast-forward the release.
+2. **Done 2026-10-24, by rebase (owner decision: linear history on the isolated 0.3 commit).** The
+   architecture commits were replayed onto 0.3 + UX with the old 0.3 copy (29248cbb1) dropped; the
+   branch's old tip is `backup/feat-architecture-pre-integration-2026-10-24` (44910d943), so shas cited
+   in these docs resolve there. Files both lines changed were reconciled once, as a three-way merge,
+   in the commit "Integrate the architecture work with 0.3 and UX".
 3. **D1 migration numbers collide.** Both sides have `0107_boot_suspensions`, `0108_re_pair_veto`,
    `0109_recovery_record_v2` (identical names; check the contents match). Then:
    release `0110_watch_boot_keys`, `0112_recovery_passkey_key`, `0113_adapter_attestations`;
@@ -133,7 +136,9 @@ recovery test from clients; age file around the release key is classical (keep i
    already be applied somewhere) and renumber the branch's five to the next free numbers after the
    release's highest, in the same order, updating every reference (`git grep -n "011[0-4]_"`,
    migration drift guard in `scripts/predeploy-com.sh`, tests). Prod's D1 ledger read 0105 on
-   2026-10-18; check which numbers the gym has applied before renumbering.
+   2026-10-18; check which numbers the gym has applied before renumbering. Done: the branch's five
+   are now `0114_server_boot_keys`, `0115_pq_key_bindings`, `0116_assurance_policy_changes`,
+   `0117_server_order_pq_signature`, `0118_boot_unlock_v2`.
 4. **Webapp shell number.** Release is v169, branch v171. Take a number above both for the merge
    result and move `release/compatibility.json` webapp-shell current/minimumSecurity/preferred and
    the tests' pins to match (the compat-matrix test checks it).
@@ -176,8 +181,7 @@ recovery test from clients; age file around the release key is classical (keep i
 - **Hardware receipts the owner must run:** every device before release; TPM unlock on the Windows
   machine by native USB boot; NVIDIA GPU there by native USB boot; iOS 26 Secure Enclave ML-DSA on a
   real iPhone; Android StrongBox; a real box's boot unlock v2.
-- **Cleanup:** tear down UpCloud `94.237.30.127` (m6 drill) once its after-reboot half is done or
-  dropped; confirm only `playstore-test-0725` remains.
+- **Cleanup:** done 2026-10-24: the m6 drill VM is deleted; only `playstore-test-0725` remains.
 
 ## 6. Acceptance checklist (what the owner's audit will check after the merge)
 

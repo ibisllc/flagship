@@ -48,7 +48,7 @@ final class BootKeyVectorTests: XCTestCase {
         var got = await BootKey.forServer(username: "alice", serverDomain: domain, mailbox: mailbox, pins: pins)
         XCTAssertNil(got, "nothing pinned yet")
 
-        try pins.require(username: "alice", serverDomain: domain, reportedHex: v["otherStkPubHex"] as! String)
+        pins.repin(username: "alice", serverDomain: domain, stkHex: v["otherStkPubHex"] as! String)
         got = await BootKey.forServer(username: "alice", serverDomain: domain, mailbox: mailbox, pins: pins)
         XCTAssertNil(got, "signed by a key other than the pinned STK")
 
@@ -120,6 +120,7 @@ final class BootKeyCoordinatorTests: XCTestCase {
             irkProvider: { try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x07, count: 32)) },
             unsealSeedProvider: { _ in [self.unsealSeed] },
             now: { 1_700_000_000_500 },
+            firstContactSecrets: InMemoryFirstContactSecrets(),
             pins: BoxKeyPins(defaults: nil))
         return (mailbox, coord)
     }

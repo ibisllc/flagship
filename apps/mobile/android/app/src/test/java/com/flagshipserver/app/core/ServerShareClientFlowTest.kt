@@ -322,6 +322,7 @@ class ServerShareClientFlowTest {
             pushStore = pushStore,
             pushToken = { pushToken },
             account = { ShareAccount(if (keys === ownerKeys) "alice" else "bob", isDemo = demo) },
+            pins = BoxKeyPins(ServerKeyPins(InMemoryServerKeyPinStore()).apply { recordFirstSeen(domain, HexUtil.encode(stkPub)) }),
         )
     }
 

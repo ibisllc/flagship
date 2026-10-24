@@ -1,5 +1,6 @@
 import { engineArgv } from "./engine/engine.js";
 import { spawn } from "node:child_process";
+import { routePrivileged } from "./privileged.js";
 import { checkBuildContextDockerfile } from "./buildmodes/dockerfilePolicy.js";
 import { prepareRuntimeContext } from "./runtimes/buildContext.js";
 import { appSandboxRunArgs } from "./appSandbox/state.js";
@@ -55,7 +56,7 @@ export function filesMountArgs(volume: string, opts: { readonly?: boolean } = {}
 const FILES_MOUNT_RE = /^type=volume,src=([^,]+),dst=\/data(,readonly)?$/;
 // The egress gateway's resolver file for a sandbox bridge (egress/gateway.ts):
 // daemon-written, outside /var/flagship, mounted read-only over resolv.conf.
-const RESOLV_MOUNT_RE = /^type=bind,src=\/run\/flagship-resolv-[a-z0-9-]+\.conf,dst=\/etc\/resolv\.conf,readonly$/;
+const RESOLV_MOUNT_RE = /^type=bind,src=\/run\/(?:flagship-daemon\/)?flagship-resolv-[a-z0-9-]+\.conf,dst=\/etc\/resolv\.conf,readonly$/;
 
 export interface CommandRunnerOpts {
   /**
@@ -261,7 +262,22 @@ function armTimeout(
   return timer;
 }
 
+/** As root, the command runs here; without root, what needs the host goes to the broker (privileged.ts). */
 export const realCommandRunner: CommandRunner = {
+  async run(cmd, args, opts) {
+    const routed = await routePrivileged(cmd, args, { ...(opts?.env ? { env: opts.env } : {}) });
+    if (routed) return;
+    return localCommandRunner.run(cmd, args, opts);
+  },
+  async capture(cmd, args, opts) {
+    const routed = await routePrivileged(cmd, args, { ...(opts?.input !== undefined ? { input: opts.input } : {}), ...(opts?.env ? { env: opts.env } : {}) });
+    if (routed) return routed;
+    return localCommandRunner.capture!(cmd, args, opts);
+  },
+};
+
+/** Spawn here, whatever the daemon's privileges. */
+export const localCommandRunner: CommandRunner = {
   run(cmd0, args0, opts) {
     return new Promise((resolve, reject) => {
       const [cmd, args] = engineArgv(cmd0, args0);

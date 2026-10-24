@@ -51,6 +51,7 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/pb-filler-fetch/v1",
     "flagship/pb-filler-proof/v1",
     "flagship/pb-root-deposit/v1",
+    "flagship/chat-wire/v1",
     "pb-put",
     "pb-resp",
     "pb/request-peers/v1",

@@ -6,21 +6,18 @@ import FlagshipAPI
 /// packages/protocol/test-vectors/box-key-pin/).
 ///
 /// Everything this device seals for a server (the disk-key reply, an
-/// auto-unlock lease, the SWK / CGK / pairing deposits) goes to the box key
-/// `.com`'s `/pods` lists. The device pins that key per server the first time
-/// it learns it and refuses to seal to any other afterwards, so a `.com` that
-/// turns hostile can't swap in its own key and collect the disk key. A key
-/// changes legitimately only when the server is reinstalled, replaced or
-/// moved: the device that does it re-pins, and any other device asks its
-/// owner first ("Trust its new key").
+/// auto-unlock lease, the SWK / CGK / pairing deposits) goes to the key this
+/// device pinned for it, so a `.com` that turns hostile can't swap in its own
+/// key and collect the disk key. The pin lives in `ServerKeyPins`, the one pin
+/// store, and is made only by first contact (docs/first-contact.md): the first
+/// blessing, with the server code shown above Approve, or an explicit re-trust
+/// by the owner. Nothing here pins a key because `.com` lists it.
 public enum BoxKeyPinVerdict: String, Equatable, Sendable {
     case first, match, mismatch, invalid
 }
 
 public struct BoxKeyChangedError: Error, LocalizedError, Equatable, Sendable {
-    public static let message =
-        "This server's identity key changed since this device first saw it, so Flagship won't send it your disk key. "
-        + "If you reinstalled, replaced or moved this server, choose Trust its new key. If you didn't, someone may be impersonating it."
+    public static var message: String { FirstContact.keyChangedText }
 
     public let username: String
     public let serverDomain: String
@@ -30,30 +27,32 @@ public struct BoxKeyChangedError: Error, LocalizedError, Equatable, Sendable {
     public var errorDescription: String? { Self.message }
 }
 
+/// This device has not pinned the server yet, so nothing is sealed to it.
+public struct BoxKeyNotPinnedError: Error, LocalizedError, Equatable, Sendable {
+    public let serverDomain: String
+    public var errorDescription: String? {
+        String(localized: "Check this server's code before you approve it. Open Server approvals in Activity.")
+    }
+}
+
 public final class BoxKeyPins: @unchecked Sendable {
     public static let shared = BoxKeyPins()
 
-    struct Pin: Codable, Equatable {
-        var stk: String
-        var pinnedAt: Int64
-        var boot: String?
-        var bootIssuedAt: Int64?
-        /// Architecture v2: the ML-DSA-65 key the pinned STK bound (`box-stk` binding), and that
-        /// binding's issuedAt. Once set, a boot-key binding needs the STK's hybrid signature too.
-        var mldsa: String?
-        var mldsaIssuedAt: Int64?
-    }
-
-    private let defaults: UserDefaults?
+    /// The one pin store this reads and writes.
+    public let serverKeys: ServerKeyPins
     private let lock = NSLock()
-    private var memory: [String: [String: Pin]] = [:]
     private let now: () -> Int64
 
-    /// `defaults == nil` keeps pins in memory only (tests).
-    public init(defaults: UserDefaults? = .standard,
+    public init(serverKeys: ServerKeyPins,
                 now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
-        self.defaults = defaults
+        self.serverKeys = serverKeys
         self.now = now
+    }
+
+    /// `defaults == nil` keeps pins in memory only (tests).
+    public convenience init(defaults: UserDefaults? = .standard,
+                            now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+        self.init(serverKeys: defaults.map { ServerKeyPins(defaults: $0) } ?? .volatile(), now: now)
     }
 
     public static func decide(pinned: String?, reported: String) -> BoxKeyPinVerdict {
@@ -64,58 +63,56 @@ public final class BoxKeyPins: @unchecked Sendable {
     }
 
     public func pinned(username: String, serverDomain: String) -> String? {
-        withPins(username) { $0[serverDomain.lowercased()]?.stk }
+        serverKeys.pinnedStkHex(serverDomain)
     }
 
     public func pinnedBootKey(username: String, serverDomain: String) -> String? {
-        withPins(username) { $0[serverDomain.lowercased()]?.boot }
+        serverKeys.record(serverDomain)?.boot
     }
 
-    /// The key this device may seal to: pins `reportedHex` the first time,
-    /// returns it while it matches, throws `BoxKeyChangedError` when it differs.
+    /// The key this device may seal to: the pin, while `reportedHex` matches it. Throws
+    /// `BoxKeyChangedError` when it differs and `BoxKeyNotPinnedError` before a pin: a first
+    /// sight is never pinned here, only by first contact.
     @discardableResult
     public func require(username: String, serverDomain: String, reportedHex: String) throws -> String {
         let domain = serverDomain.lowercased()
         let reported = reportedHex.lowercased()
-        return try withPins(username) { pins in
-            switch Self.decide(pinned: pins[domain]?.stk, reported: reported) {
-            case .invalid:
-                throw BoxKeyChangedError(username: username.lowercased(), serverDomain: domain, pinnedHex: pins[domain]?.stk ?? "", reportedHex: reported)
-            case .mismatch:
-                throw BoxKeyChangedError(username: username.lowercased(), serverDomain: domain, pinnedHex: pins[domain]!.stk, reportedHex: reported)
-            case .first:
-                pins[domain] = Pin(stk: reported, pinnedAt: now())
-            case .match:
-                break
-            }
+        let pin = serverKeys.pinnedStkHex(domain)
+        switch Self.decide(pinned: pin, reported: reported) {
+        case .invalid, .mismatch:
+            throw BoxKeyChangedError(username: username.lowercased(), serverDomain: domain, pinnedHex: pin ?? "", reportedHex: reported)
+        case .first:
+            throw BoxKeyNotPinnedError(serverDomain: domain)
+        case .match:
             return reported
         }
     }
 
-    /// Pin every listed server not pinned yet, so the pin predates any request.
-    public func observe(username: String, pods: [PodDirectoryEntryLike]) {
-        withPins(username) { pins in
-            for p in pods where p.revoked == false {
-                let domain = p.domain.lowercased()
-                let stk = p.stkHex.lowercased()
-                guard !domain.isEmpty, pins[domain] == nil, Self.isHex32(stk) else { continue }
-                pins[domain] = Pin(stk: stk, pinnedAt: now())
-            }
+    /// The listed servers whose key differs from this device's pin. Never pins.
+    @discardableResult
+    public func observe(username: String, pods: [PodDirectoryEntryLike]) -> [String] {
+        pods.compactMap { p in
+            let domain = p.domain.lowercased()
+            let stk = p.stkHex.lowercased()
+            guard !p.revoked, Self.isHex32(stk), let pin = serverKeys.pinnedStkHex(domain), pin != stk else { return nil }
+            return domain
         }
     }
 
-    /// Replace the pin: only for a change the owner made or confirmed here
-    /// ("Trust its new key", or this device moved the server). Drops any boot
-    /// key the old STK had bound.
+    /// The owner's explicit re-pin (this device reinstalled or moved the server). Drops the old
+    /// pin and anything its STK had bound.
     public func repin(username: String, serverDomain: String, stkHex: String) {
         let stk = stkHex.lowercased()
-        guard Self.isHex32(stk) else { return }
-        withPins(username) { $0[serverDomain.lowercased()] = Pin(stk: stk, pinnedAt: now()) }
+        guard Self.isHex32(stk), let data = HexUtil.decode(stk) else { return }
+        lock.lock(); defer { lock.unlock() }
+        serverKeys.forget(serverDomain)
+        serverKeys.pin(data, for: serverDomain)
     }
 
-    /// This device is (re)creating `serverDomain`: pin its next registered key fresh.
+    /// The explicit re-trust: the next blessing pins whatever key the server then has.
     public func forget(username: String, serverDomain: String) {
-        withPins(username) { _ = $0.removeValue(forKey: serverDomain.lowercased()) }
+        lock.lock(); defer { lock.unlock() }
+        serverKeys.forget(serverDomain)
     }
 
     // MARK: Boot-only key
@@ -144,25 +141,25 @@ public final class BoxKeyPins: @unchecked Sendable {
     public func acceptBootKeyBinding(username: String, serverDomain: String, bootPubHex: String,
                                      issuedAt: Int64, signatureHex: String, hybridSignatureHex: String? = nil) -> String? {
         let domain = serverDomain.lowercased()
-        return withPins(username) { pins -> String? in
-            guard var pin = pins[domain],
-                  let stk = HexUtil.decode(pin.stk), let sig = HexUtil.decode(signatureHex),
-                  Self.verifyBootKeyBinding(serverDomain: domain, bootPubHex: bootPubHex, issuedAt: issuedAt,
-                                            signature: sig, pinnedStkPub: stk, forServer: domain),
-                  (pin.bootIssuedAt ?? -1) <= issuedAt
-            else { return nil }
-            // Once this server's ML-DSA key is pinned, the boot key needs the STK's hybrid
-            // signature too, so stripping it cannot downgrade the server back to classical.
-            if let mldsa = pin.mldsa,
-               !Self.verifyBootKeyBindingV2(serverDomain: domain, bootPubHex: bootPubHex, issuedAt: issuedAt,
-                                            hybridSignatureHex: hybridSignatureHex, stkHex: pin.stk, mldsaPubHex: mldsa) {
-                return nil
-            }
-            pin.boot = bootPubHex
-            pin.bootIssuedAt = issuedAt
-            pins[domain] = pin
-            return bootPubHex
+        lock.lock(); defer { lock.unlock() }
+        guard let pin = serverKeys.record(domain),
+              let stk = pin.stk, let sig = HexUtil.decode(signatureHex),
+              Self.verifyBootKeyBinding(serverDomain: domain, bootPubHex: bootPubHex, issuedAt: issuedAt,
+                                        signature: sig, pinnedStkPub: stk, forServer: domain),
+              (pin.bootIssuedAt ?? -1) <= issuedAt
+        else { return nil }
+        // Once this server's ML-DSA key is pinned, the boot key needs the STK's hybrid
+        // signature too, so stripping it cannot downgrade the server back to classical.
+        if let mldsa = pin.mldsa,
+           !Self.verifyBootKeyBindingV2(serverDomain: domain, bootPubHex: bootPubHex, issuedAt: issuedAt,
+                                        hybridSignatureHex: hybridSignatureHex, stkHex: pin.stkHex, mldsaPubHex: mldsa) {
+            return nil
         }
+        let kept = serverKeys.update(domain, stkHex: pin.stkHex) {
+            $0.boot = bootPubHex
+            $0.bootIssuedAt = issuedAt
+        }
+        return kept ? bootPubHex : nil
     }
 
     // MARK: Architecture v2: the box's ML-DSA key
@@ -201,41 +198,48 @@ public final class BoxKeyPins: @unchecked Sendable {
     @discardableResult
     public func acceptStkPqBinding(username: String, serverDomain: String, wire: Any?) throws -> String? {
         let domain = serverDomain.lowercased()
-        return try withPins(username) { pins -> String? in
-            guard var pin = pins[domain] else { return nil }
-            switch Self.decideBoxPqKeyPin(stkHex: pin.stk, mldsaPubHex: pin.mldsa, minIssuedAt: pin.mldsaIssuedAt,
-                                          serverDomain: domain, wire: wire, now: now()) {
-            case .first(let k, let at), .match(let k, let at):
-                if pin.mldsa != k || pin.mldsaIssuedAt != at {
-                    pin.mldsa = k
-                    pin.mldsaIssuedAt = at
-                    pins[domain] = pin
-                }
-                if let b = try? PqTrust.verifyPqKeyBinding(wire, PqBindingExpectation(role: "box-stk", subjectId: domain, ed25519PubHex: pin.stk,
-                                                                                   mldsaPubHex: k, now: Int64.max / 2)) {
-                    verifiedPq["\(username.lowercased())|\(domain)"] = b
-                }
-                return k
-            case .mismatch:
-                let reported = ((wire as? [String: Any])?["mldsaPubHex"] as? String) ?? ""
-                throw BoxKeyChangedError(username: username.lowercased(), serverDomain: domain, pinnedHex: pin.mldsa ?? "", reportedHex: reported)
-            case .invalid:
-                return nil
+        lock.lock(); defer { lock.unlock() }
+        guard let pin = serverKeys.record(domain) else { return nil }
+        switch Self.decideBoxPqKeyPin(stkHex: pin.stkHex, mldsaPubHex: pin.mldsa, minIssuedAt: pin.mldsaIssuedAt,
+                                      serverDomain: domain, wire: wire, now: now()) {
+        case .first(let k, let at), .match(let k, let at):
+            if pin.mldsa != k || pin.mldsaIssuedAt != at {
+                guard serverKeys.update(domain, stkHex: pin.stkHex, {
+                    $0.mldsa = k
+                    $0.mldsaIssuedAt = at
+                }) else { return nil }
             }
+            if let b = try? PqTrust.verifyPqKeyBinding(wire, PqBindingExpectation(role: "box-stk", subjectId: domain, ed25519PubHex: pin.stkHex,
+                                                                               mldsaPubHex: k, now: Int64.max / 2)) {
+                Self.verifiedPqLock.lock()
+                Self.verifiedPq[domain] = (pin.stkHex, k, b)
+                Self.verifiedPqLock.unlock()
+            }
+            return k
+        case .mismatch:
+            let reported = ((wire as? [String: Any])?["mldsaPubHex"] as? String) ?? ""
+            throw BoxKeyChangedError(username: username.lowercased(), serverDomain: domain, pinnedHex: pin.mldsa ?? "", reportedHex: reported)
+        case .invalid:
+            return nil
         }
     }
 
-    private var verifiedPq: [String: VerifiedPqKeyBinding] = [:]
+    /// Shared by every view of the one pin store; an entry counts only while its keys are still the pin.
+    nonisolated(unsafe) private static var verifiedPq: [String: (stk: String, mldsa: String, binding: VerifiedPqKeyBinding)] = [:]
+    private static let verifiedPqLock = NSLock()
 
     /// The box's verified `box-stk` binding under the pinned keys, once `acceptStkPqBinding` saw
     /// one this launch: what the PQ session pins the box to.
     public func verifiedBoxPqBinding(username: String, serverDomain: String) -> VerifiedPqKeyBinding? {
-        lock.lock(); defer { lock.unlock() }
-        return verifiedPq["\(username.lowercased())|\(serverDomain.lowercased())"]
+        let domain = serverDomain.lowercased()
+        guard let pin = serverKeys.record(domain), let mldsa = pin.mldsa else { return nil }
+        Self.verifiedPqLock.lock(); defer { Self.verifiedPqLock.unlock() }
+        guard let v = Self.verifiedPq[domain], v.stk == pin.stkHex, v.mldsa == mldsa else { return nil }
+        return v.binding
     }
 
     public func pinnedBoxPqKey(username: String, serverDomain: String) -> String? {
-        withPins(username) { $0[serverDomain.lowercased()]?.mldsa }
+        serverKeys.record(serverDomain)?.mldsa
     }
 
     /// The STK's v2 hybrid signature over a boot-key binding, under the pinned STK + ML-DSA keys.
@@ -249,34 +253,8 @@ public final class BoxKeyPins: @unchecked Sendable {
         return (try? PqHybrid.hybridVerify(publicKey: pk, purpose: bootKeyBindingV2Tag, payload: msg, signature: sig)) != nil
     }
 
-    // MARK: Storage
-
     private static func isHex32(_ s: String) -> Bool {
         s.count == 64 && s.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
-    }
-
-    private func key(_ username: String) -> String { "flagship.boxKeyPins.v1:\(username.lowercased())" }
-
-    private func withPins<T>(_ username: String, _ body: (inout [String: Pin]) throws -> T) rethrows -> T {
-        lock.lock()
-        defer { lock.unlock() }
-        let k = key(username)
-        var pins: [String: Pin]
-        if let defaults {
-            pins = (defaults.data(forKey: k)).flatMap { try? JSONDecoder().decode([String: Pin].self, from: $0) } ?? [:]
-        } else {
-            pins = memory[k] ?? [:]
-        }
-        let before = pins
-        let out = try body(&pins)
-        if pins != before {
-            if let defaults {
-                if let data = try? JSONEncoder().encode(pins) { defaults.set(data, forKey: k) }
-            } else {
-                memory[k] = pins
-            }
-        }
-        return out
     }
 }
 
@@ -291,7 +269,8 @@ public struct PodDirectoryEntryLike: Sendable {
 }
 
 extension BoxKeyPins {
-    public func observe(username: String, pods: [PodDirectoryEntry]) {
+    @discardableResult
+    public func observe(username: String, pods: [PodDirectoryEntry]) -> [String] {
         observe(username: username, pods: pods.map {
             PodDirectoryEntryLike(domain: $0.serverDomain, stkHex: $0.identityPubKey, revoked: $0.revokedAt != nil)
         })

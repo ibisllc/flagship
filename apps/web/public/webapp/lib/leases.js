@@ -25,6 +25,7 @@ import { bootKeyFor } from "./bootKey.js";
 import { fetchSealedDiskKey } from "./bootApproval.js";
 import { boundedLeaseTtl, cachedDeadManView, readSuspension, retryPendingLocks } from "./bootSuspension.js";
 
+import { tr } from "./i18n.js";
 export const TAG_AUTO_UNLOCK_LEASE_V2 = "flagship/auto-unlock-lease/v2";
 export const TAG_AUTO_UNLOCK_LEASE_REVOKE = "flagship/auto-unlock-lease-revoke/v1";
 
@@ -99,10 +100,11 @@ export async function enableLongLived(serverFqdn, ttlMs = DEFAULT_LONG_TTL_MS, d
   ttlMs = boundedLeaseTtl(ttlMs, deadMan, now);
   if (ttlMs <= 0) throw new Error("the dead-man switch has lapsed: keep this server unlocked first, then turn auto-unlock on");
 
-  // 1. The box's STK, from the directory: the only key the lease may seal for.
+  // 1. The box's pinned STK (docs/first-contact.md): the only key the lease may seal for. The
+  // directory must still list the server, and a different key there is refused.
   const listedStk = await (deps.boxStk || directoryStk)(serverFqdn, session, { fetch: f, comBase });
   if (!listedStk) throw new Error(`${serverFqdn} isn't in your account's server list`);
-  const pinnedStkHex = requirePinnedBoxKey(session.username, serverFqdn, listedStk, deps);
+  const pinnedStkHex = requirePinnedBoxKey(session.username, serverFqdn, listedStk);
   // The box opens its lease before its disk is open, with its boot key; a box
   // without one (installed before boot keys) still holds its STK on /boot.
   const bootHex = await (deps.bootKey || bootKeyFor)(session.username, serverFqdn, { fetch: f, comBase, ...deps });

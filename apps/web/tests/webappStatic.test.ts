@@ -28,13 +28,25 @@ describe("/webapp PWA static surface", () => {
     const r = await app.inject({ method: "GET", url: "/webapp/" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain('rel="manifest"');
-    expect(r.body).toContain('<script src="/lib/swRegister.js"></script>');
+    // a module: it imports lib/i18n.js, and a classic <script> with an import never runs (no service worker at all)
+    expect(r.body).toContain('<script type="module" src="/lib/swRegister.js"></script>');
     // Root-relative service-worker registration; scope is "/" on the new origin.
     const sw = await app.inject({ method: "GET", url: "/webapp/lib/swRegister.js" });
     expect(sw.statusCode).toBe(200);
     expect(sw.body).toContain('register("/service-worker.js"');
     expect(sw.body).not.toContain("/webapp/service-worker.js");
     expect(sw.body).toContain('scope: "/"');
+  });
+
+  it("loads every script that uses import as a module", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const root = join(__dirname, "..", "public", "webapp");
+    const html = readFileSync(join(root, "index.html"), "utf8");
+    for (const m of html.matchAll(/<script\b([^>]*)\bsrc="\/([^"]+)"[^>]*><\/script>/g)) {
+      const src = readFileSync(join(root, m[2]), "utf8");
+      if (/^\s*(import|export)\b/m.test(src)) expect([m[2], /type="module"/.test(m[1])]).toEqual([m[2], true]);
+    }
   });
 
   it("serves /webapp/service-worker.js with root-scoped SHELL list", async () => {
@@ -372,7 +384,7 @@ describe("/webapp PWA static surface", () => {
     // v56 picks each new app's server, lists a server's apps and copies apps between servers.
     // v57 titles a server's page with its name.
     // v58 shows one status pill per app across its servers, and each server's state on the app page.
-    expect(r.body).toContain('SHELL_VERSION = "v171"');
+    expect(r.body).toContain('SHELL_VERSION = "v176"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

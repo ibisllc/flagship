@@ -193,3 +193,35 @@ describe("pq-release-key ceremony (fake YubiKeys)", () => {
     expect(r.stderr).toMatch(/did not sign endorsement/);
   });
 });
+
+describe("pin --ca-lease and --box-artifact", () => {
+  const KEY = "ab".repeat(32);
+  it("pins the key for CA leases and lists every committed lease as signed before the cut-over", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pq-ca-pin-"));
+    const pinFile = path.join(dir, "caLeasePq.ts");
+    fs.copyFileSync(path.join(REPO, "packages/protocol/src/caLeasePq.ts"), pinFile);
+    const lines: string[] = [];
+    K.pinCaLease(path.join(REPO, ".maintainers"), KEY, (m: string) => lines.push(m), pinFile);
+    const src = fs.readFileSync(pinFile, "utf8");
+    const leases = fs.readdirSync(path.join(REPO, ".maintainers/ca-endorsements")).filter((f) => f.endsWith(".json") && f !== "bundle.json");
+    expect(src).toContain(`keyIds: Object.freeze(["${KEY}"])`);
+    expect(src.match(/legacyLeases: Object\.freeze\(\[([^\]]*)\]\)/)![1]!.match(/[0-9a-f]{64}/g)).toHaveLength(leases.length);
+    K.pinCaLease(path.join(REPO, ".maintainers"), KEY, () => {}, pinFile);
+    expect(fs.readFileSync(pinFile, "utf8")).toBe(src);
+  });
+
+  it("pins the key for box artifacts and lists the given published manifests by digest", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pq-box-pin-"));
+    const trust = path.join(dir, "box-artifact-trust.json");
+    fs.copyFileSync(path.join(REPO, "release/box-artifact-trust.json"), trust);
+    const v = JSON.parse(fs.readFileSync(path.join(REPO, "packages/protocol/test-vectors/box-artifact/vectors.json"), "utf8"));
+    const manifest = v.manifest ?? v.valid?.manifest ?? (v.cases ?? v.vectors)[0].manifest;
+    const mf = path.join(dir, "m.manifest.json");
+    fs.writeFileSync(mf, JSON.stringify({ manifest, signatures: [signBoxArtifact(manifest, new Uint8Array(32).fill(7))] }));
+    K.pinBoxArtifact(KEY, [mf], () => {}, trust);
+    const t = JSON.parse(fs.readFileSync(trust, "utf8"));
+    expect(t.pq.keyIds).toEqual([KEY]);
+    expect(t.pq.legacyManifests).toHaveLength(1);
+    expect(t.pq.legacyManifests[0]).toMatch(/^[0-9a-f]{64}$/);
+  });
+});

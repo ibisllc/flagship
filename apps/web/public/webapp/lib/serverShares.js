@@ -8,6 +8,7 @@
 // apex, boot, sensitiveSign(bytes), accountSign(bytes), boxFetch(fqdn, path,
 // init) (A's own session on the box) and openDiskKey(serverDomain).
 
+import { noteKeyChanged, pinnedStk } from "./serverPins.js";
 import * as ss from "./serverShare.js";
 import * as si from "./serviceInvite.js";
 import { controlApex, bootOrigin } from "./apex.js";
@@ -15,42 +16,43 @@ import { getSession } from "./state.js";
 import { boxClient, ScreensError } from "./api.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { _internal as bootSeal, fetchSealedDiskKey } from "./bootApproval.js";
-import { requirePinnedBoxKey } from "./boxKeyPins.js";
+import { BoxKeyChangedError, requirePinnedBoxKey } from "./boxKeyPins.js";
 import { sharedBootKeyFor } from "./bootKey.js";
 import { humanError } from "./humanError.js";
 import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes, adminRootPubHex } from "../keystore.js";
 import { confirmFreshUnlock } from "./freshUnlock.js";
 import { getActiveProfile } from "./profiles.js";
 
-export const LEVEL_TEXT = Object.freeze({ view: "Can view", manage: "Can manage" });
+import { tr, trn } from "./i18n.js";
+export const LEVEL_TEXT = Object.freeze({ view: tr("Can view"), manage: tr("Can manage") });
 export const LEVEL_LINE = Object.freeze({
-  view: "See the server's status, monitoring and apps.",
-  manage: "Also build apps with AI, accept app updates, update the server and change what apps can reach on the internet.",
+  view: tr("See the server's status, monitoring and apps."),
+  manage: tr("Also build apps with AI, accept app updates, update the server and change what apps can reach on the internet."),
 });
-export const UNLOCK_TITLE = "Can approve this server's start-up";
-export const UNLOCK_LINE = "Their phone gets a copy of the disk key.";
+export const UNLOCK_TITLE = tr("Can approve this server's start-up");
+export const UNLOCK_LINE = tr("Their phone gets a copy of the disk key.");
 export const UNLOCK_WARNING =
-  "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one.";
-export const NOTIFY_TITLE = "Notify this device when it needs to start";
+  tr("Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one.");
+export const NOTIFY_TITLE = tr("Notify this device when it needs to start");
 export const NOTIFY_LINE =
-  "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server.";
-export const NOTIFY_NOT_ALLOWED = "The owner hasn't let you approve this server's start-up.";
+  tr("Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server.");
+export const NOTIFY_NOT_ALLOWED = tr("The owner hasn't let you approve this server's start-up.");
 // A share makes its holder a co-manager, Manager in every app of the server
 // (accessPrincipals.ts), so a members-only app still opens for them.
-export const MEMBERS_ONLY_HINT = "Members only. As a co-manager you can open it.";
-export const DATA_TITLE = "Can see app data";
-export const DATA_LINE = "They can open each app's Database section.";
-export const SHARED_DB_OPEN = "Database";
+export const MEMBERS_ONLY_HINT = tr("Members only. As a co-manager you can open it.");
+export const DATA_TITLE = tr("Can see app data");
+export const DATA_LINE = tr("They can open each app's Database section.");
+export const SHARED_DB_OPEN = tr("Database");
 // The words iOS uses (ShareServerScreens "Leave this server").
-export const LEAVE_LABEL = "Leave this server";
-export const LEAVE_TITLE = "Leave this server?";
-export const LEAVE_MESSAGE = "You lose access at once. The owner would have to share it with you again.";
-export const SHARED_DB_WRITE_REFUSED = "Only someone who can manage this server can change its apps' data. You can read it.";
+export const LEAVE_LABEL = tr("Leave this server");
+export const LEAVE_TITLE = tr("Leave this server?");
+export const LEAVE_MESSAGE = tr("You lose access at once. The owner would have to share it with you again.");
+export const SHARED_DB_WRITE_REFUSED = tr("Only someone who can manage this server can change its apps' data. You can read it.");
 // Only an admin device of the joining account accepts (owner rule 2026-10-16,
 // docs/share-a-server.md §5.1): the shared server checks it.
-export const SHARE_ACCEPT_ADMIN_ONLY = "Only an admin device of your account can accept a co-manage invitation.";
-export const SHARE_ACCEPT_UNLOCK_TITLE = "Accept this share?";
-export const SHARE_ACCEPT_UNLOCK_MESSAGE = "Your account's admin key signs that you accept.";
+export const SHARE_ACCEPT_ADMIN_ONLY = tr("Only an admin device of your account can accept a co-manage invitation.");
+export const SHARE_ACCEPT_UNLOCK_TITLE = tr("Accept this share?");
+export const SHARE_ACCEPT_UNLOCK_MESSAGE = tr("Your account's admin key signs that you accept.");
 // The box's refusals of a first grant (acceptAdmin.ts) carry a sentence for the owner.
 const ACCEPT_REFUSAL_CODES = new Set(["accept-not-admin", "accept-signature", "accept-stale", "accept-unverifiable"]);
 
@@ -89,7 +91,7 @@ function ctx(deps = {}) {
 }
 
 function needUmk(d) {
-  if (!(d.umk instanceof Uint8Array)) throw new ShareError("Unlock the webapp first", "locked");
+  if (!(d.umk instanceof Uint8Array)) throw new ShareError(tr("Unlock the webapp first"), "locked");
 }
 
 async function call(d, url, init = {}) {
@@ -108,7 +110,7 @@ async function call(d, url, init = {}) {
 function errText(res, fallback) {
   const reason = res.body && typeof res.body === "object" && typeof res.body.error === "string" ? res.body.error : "";
   if (reason) console.warn(`[shares] ${res.status} ${reason}`);
-  if (res.status === 403 && /stale/.test(reason)) return "This device's clock is off. Fix the clock and try again.";
+  if (res.status === 403 && /stale/.test(reason)) return tr("This device's clock is off. Fix the clock and try again.");
   return fallback;
 }
 
@@ -127,15 +129,23 @@ const lower = (s) => String(s ?? "").trim().toLowerCase();
 export async function createShareOffer(args, deps = {}) {
   const d = ctx(deps);
   needUmk(d);
-  if (!d.username) throw new ShareError("Sign in first", "no-account");
+  if (!d.username) throw new ShareError(tr("Sign in first"), "no-account");
   const label = ss.normalizeShareLabel(args.label);
-  if (!label) throw new ShareError("Give them a name of up to 64 characters, without |.", "bad-label");
-  if (args.level !== "view" && args.level !== "manage") throw new ShareError("Pick what they can do.", "bad-level");
+  if (!label) throw new ShareError(tr("Give them a name of up to 64 characters, without |."), "bad-label");
+  if (args.level !== "view" && args.level !== "manage") throw new ShareError(tr("Pick what they can do."), "bad-level");
   const listedStk = lower(args.stkPubHex);
-  if (!/^[0-9a-f]{64}$/.test(listedStk)) throw new ShareError("This server hasn't published its key yet. Try again once it's online.", "no-stk");
+  if (!/^[0-9a-f]{64}$/.test(listedStk)) throw new ShareError(tr("This server hasn't published its key yet. Try again once it's online."), "no-stk");
   const serverDomain = lower(args.serverDomain);
-  // The offer pins this key for the person it's shared with, so it must be the one this device pinned.
-  const stkPubHex = requirePinnedBoxKey(d.username, serverDomain, listedStk, deps);
+  // The offer pins this key for the person it's shared with, so it must be the one this device
+  // pinned (docs/first-contact.md); `.com`'s word alone never goes into an offer.
+  let stkPubHex;
+  try {
+    stkPubHex = requirePinnedBoxKey(d.username, serverDomain, listedStk);
+  } catch (e) {
+    if (e instanceof BoxKeyChangedError) throw new ShareError(e.message, "key-changed");
+    if (e?.code === "server-not-pinned") throw new ShareError(e.message, "not-pinned");
+    throw e;
+  }
   const unlockAtBoot = !!args.unlockAtBoot;
   const seeAppData = !!args.seeAppData;
   const now = d.now();
@@ -179,7 +189,7 @@ export async function createShareOffer(args, deps = {}) {
     offerHex,
     ownerHex,
   });
-  if (!res.ok) throw new ShareError(errText(res, "Couldn't create the link. Try again."), "create-failed", res.status);
+  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't create the link. Try again.")), "create-failed", res.status);
   return { shareId, secretHex, expiresAt, label, link: ss.buildShareLink(d.apex, shareId, secret) };
 }
 
@@ -193,7 +203,7 @@ async function listComShares(d) {
   const list = { username: d.username, issuedAt: d.now() };
   const signature = await sigHex(ss.signServerShareList(list, d.accountSign));
   const res = await postJson(d, `${d.apex}/api/users/${encodeURIComponent(d.username)}/server-shares/list`, { list, signature });
-  if (!res.ok) throw new ShareError(errText(res, "Couldn't load your share links."), "list-failed", res.status);
+  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't load your share links.")), "list-failed", res.status);
   return Array.isArray(res.body?.shares) ? res.body.shares : [];
 }
 
@@ -234,7 +244,7 @@ export async function loadOwnerShares(serverDomain, deps = {}) {
   const domain = lower(serverDomain);
   const [boxSide, comSide] = await Promise.allSettled([
     d.boxFetch(domain, "/api/screens/shares"),
-    d.umk && d.username ? listComShares(d) : Promise.reject(new ShareError("Unlock the webapp first", "locked")),
+    d.umk && d.username ? listComShares(d) : Promise.reject(new ShareError(tr("Unlock the webapp first"), "locked")),
   ]);
   const boxShares = boxSide.status === "fulfilled" && Array.isArray(boxSide.value?.shares) ? boxSide.value.shares : [];
   const boxEnded = boxSide.status === "fulfilled" && Array.isArray(boxSide.value?.ended) ? boxSide.value.ended : [];
@@ -334,7 +344,7 @@ function grantOf(serverDomain, s, now) {
 export async function confirmShare(serverDomain, awaiting, deps = {}) {
   const d = ctx(deps);
   needUmk(d);
-  if (!awaiting?.accept) throw new ShareError("This acceptance didn't check out.", "bad-acceptance");
+  if (!awaiting?.accept) throw new ShareError(tr("This acceptance didn't check out."), "bad-acceptance");
   const grant = grantOf(serverDomain, awaiting, d.now());
   const signature = await sigHex(ss.signServerShareGrant(grant, d.sensitiveSign));
   try {
@@ -371,7 +381,7 @@ export async function changeShare(serverDomain, active, changes, deps = {}) {
   const d = ctx(deps);
   needUmk(d);
   const next = { ...active, ...changes };
-  if (next.level !== "view" && next.level !== "manage") throw new ShareError("Pick what they can do.", "bad-level");
+  if (next.level !== "view" && next.level !== "manage") throw new ShareError(tr("Pick what they can do."), "bad-level");
   const grant = grantOf(serverDomain, next, Math.max(d.now(), (active.issuedAt ?? 0) + 1));
   const signature = await sigHex(ss.signServerShareGrant(grant, d.sensitiveSign));
   await d.boxFetch(lower(serverDomain), "/api/screens/shares", { method: "POST", body: JSON.stringify({ grant, signature }) });
@@ -394,7 +404,7 @@ async function comRevoke(d, body) {
     body,
   );
   if (res.ok || res.status === 404) return true;
-  throw new ShareError(errText(res, "Couldn't end the share link."), "revoke-failed", res.status);
+  throw new ShareError(errText(res, tr("Couldn't end the share link.")), "revoke-failed", res.status);
 }
 
 /** Remove: the box ends it now; `.com` ends the row so the box's poll agrees. */
@@ -423,12 +433,12 @@ async function defaultOpenDiskKey(d, serverDomain) {
   let parsed = null;
   try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
   const res = { status: r.status, ok: r.ok, body: parsed };
-  if (res.status === 404) throw new ShareError("This server has no disk key on file, so there's no start-up to approve.", "no-disk-key", 404);
-  if (!res.ok || typeof res.body?.sealedKey !== "string") throw new ShareError("Couldn't read this server's disk key.", "disk-key", res.status);
+  if (res.status === 404) throw new ShareError(tr("This server has no disk key on file, so there's no start-up to approve."), "no-disk-key", 404);
+  if (!res.ok || typeof res.body?.sealedKey !== "string") throw new ShareError(tr("Couldn't read this server's disk key."), "disk-key", res.status);
   try {
     return await bootSeal.openSealedWithEd25519Seed(hexToBytes(res.body.sealedKey), await bootSeal.deriveIrkSeed(d.umk));
   } catch {
-    throw new ShareError("This browser's account key can't open this server's disk key.", "disk-key");
+    throw new ShareError(tr("This browser's account key can't open this server's disk key."), "disk-key");
   }
 }
 
@@ -455,28 +465,28 @@ export async function setUnlockDeposit(serverDomain, { shareId, memberPubHex, on
     `${d.apex}/api/users/${encodeURIComponent(d.username)}/server-shares/${shareId}/unlock`,
     { unlock, signature, ...(sealedKey ? { sealedKey } : {}) },
   );
-  if (!res.ok) throw new ShareError(errText(res, "Couldn't update start-up approval."), "unlock-failed", res.status);
+  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't update start-up approval.")), "unlock-failed", res.status);
   return { on: !!on };
 }
 
 const ACTION_TEXT = {
   "share.signed-in": () => "signed in",
-  "share.granted": (t) => `shared this server with ${t || "someone"}`,
-  "share.changed": (t) => `changed what ${t || "someone"} can do`,
-  "share.revoked": (t) => `removed ${t || "someone"}`,
+  "share.granted": (t) => tr("shared this server with {0}", t || "someone"),
+  "share.changed": (t) => tr("changed what {0} can do", t || "someone"),
+  "share.revoked": (t) => tr("removed {0}", t || "someone"),
   "share.left": () => "left",
-  "ai.start": () => "started building an app with AI",
-  "ai.reply": () => "answered the AI",
-  "app.access.edit": (t) => `changed ${t || "an app"}'s internet access`,
-  "app.access.dismiss": (t) => `dismissed an internet request from ${t || "an app"}`,
-  "app.update.accept": (t) => `accepted an update to ${t || "an app"}`,
-  "db.write": (t) => `changed data in ${t || "an app"}`,
-  "db.read": (t) => `read data in ${t || "an app"}`,
+  "ai.start": () => tr("started building an app with AI"),
+  "ai.reply": () => tr("answered the AI"),
+  "app.access.edit": (t) => tr("changed {0}'s internet access", t || "an app"),
+  "app.access.dismiss": (t) => tr("dismissed an internet request from {0}", t || "an app"),
+  "app.update.accept": (t) => tr("accepted an update to {0}", t || "an app"),
+  "db.write": (t) => tr("changed data in {0}", t || "an app"),
+  "db.read": (t) => tr("read data in {0}", t || "an app"),
 };
 
 /** One activity entry as a line: "<label> · <what>" (A's own lines say "You"). */
 export function activityLine(e) {
-  const who = e?.actor?.kind === "share" ? String(e.actor.label || "Someone") : "You";
+  const who = e?.actor?.kind === "share" ? String(e.actor.label || tr("Someone")) : "You";
   const action = String(e?.action ?? "");
   const what = ACTION_TEXT[action]?.(e?.target) ?? (e?.target ? `${action} · ${e.target}` : action);
   return `${who} · ${what}${e?.ok === false ? " (refused)" : ""}`;
@@ -553,12 +563,12 @@ async function openOffer(shareId, secretHex, offerHex) {
 export async function openShareLink({ shareId, secretHex }, deps = {}) {
   const d = ctx(deps);
   const { res, token } = await readShareRow(d, shareId, secretHex);
-  if (res.status === 404) throw new ShareError("This link doesn't work. Ask the owner to send it again.", "bad-link", 404);
-  if (res.status === 410) throw new ShareError("This link has expired. Ask the owner for a new one.", "expired", 410);
-  if (!res.ok) throw new ShareError(errText(res, "Couldn't open this link. Try again."), "open-failed", res.status);
+  if (res.status === 404) throw new ShareError(tr("This link doesn't work. Ask the owner to send it again."), "bad-link", 404);
+  if (res.status === 410) throw new ShareError(tr("This link has expired. Ask the owner for a new one."), "expired", 410);
+  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't open this link. Try again.")), "open-failed", res.status);
   const offer = typeof res.body?.offer === "string" ? await openOffer(shareId, secretHex, res.body.offer) : null;
-  if (!offer) throw new ShareError("This link doesn't work. Ask the owner to send it again.", "bad-link");
-  if (res.body.state === "ended") throw new ShareError("The owner has ended this share.", "ended");
+  if (!offer) throw new ShareError(tr("This link doesn't work. Ask the owner to send it again."), "bad-link");
+  if (res.body.state === "ended") throw new ShareError(tr("The owner has ended this share."), "ended");
   let acceptedByMe = false;
   if (res.body.state === "accepted" && typeof res.body.acceptance === "string" && d.umk instanceof Uint8Array) {
     const mine = await memberKey(d, shareId);
@@ -592,18 +602,18 @@ async function adminProof(d, accept) {
     const unlocked = await d.freshUnlock({
       title: SHARE_ACCEPT_UNLOCK_TITLE,
       message: SHARE_ACCEPT_UNLOCK_MESSAGE,
-      okLabel: "Accept",
+      okLabel: tr("Accept"),
     });
-    if (!unlocked.ok) throw new ShareError(unlocked.error ?? "Not accepted.", unlocked.cancelled ? "cancelled" : "unlock");
+    if (!unlocked.ok) throw new ShareError(unlocked.error ?? tr("Not accepted."), unlocked.cancelled ? "cancelled" : "unlock");
   }
   const res = await call(d, `${d.apex}/api/users/${encodeURIComponent(d.username)}/account-key-attestation`);
   const attestation = res.ok ? ss.parseAccountKeyAttestation(res.body?.attestation) : null;
-  if (!attestation) throw new ShareError(errText(res, "Couldn't accept. Try again."), "attestation", res.status);
+  if (!attestation) throw new ShareError(errText(res, tr("Couldn't accept. Try again.")), "attestation", res.status);
   const admit = { ...accept, keyKind: attestation.keyKind, keyPubHex: attestation.keyPubHex };
   let signature;
   if (isDemo) {
     const r = await postJson(d, `${d.apex}/api/dev/sample-user/${encodeURIComponent(d.username)}/share-accept`, { admit });
-    if (!r.ok || typeof r.body?.signature !== "string") throw new ShareError(errText(r, "Couldn't accept. Try again."), "accept-failed", r.status);
+    if (!r.ok || typeof r.body?.signature !== "string") throw new ShareError(errText(r, tr("Couldn't accept. Try again.")), "accept-failed", r.status);
     signature = r.body.signature;
   } else if (attestation.keyKind === "admin-root") {
     // This device's admin root must be the one the account pins now.
@@ -628,7 +638,7 @@ export async function acceptShare(opened, deps = {}) {
   const secret = hexToBytes(secretHex);
   const acceptedAt = d.now();
   if (!opened.acceptedByMe) {
-    if (opened.state === "accepted") throw new ShareError("Someone else already used this link. Ask the owner for a new one.", "taken", 409);
+    if (opened.state === "accepted") throw new ShareError(tr("Someone else already used this link. Ask the owner for a new one."), "taken", 409);
     const accept = { serverDomain: offer.serverDomain, shareId, memberPubHex: member.pubHex, acceptedAt };
     const admin = await adminProof(d, accept);
     const signature = await sigHex(ss.signServerShareAccept(accept, member.seed));
@@ -641,9 +651,9 @@ export async function acceptShare(opened, deps = {}) {
     const res = await postJson(d, `${d.apex}/api/server-shares/${shareId}/accept`, { acceptance }, {
       "x-flagship-share-token": opened.token,
     });
-    if (res.status === 409) throw new ShareError("Someone else already used this link. Ask the owner for a new one.", "taken", 409);
-    if (res.status === 410) throw new ShareError("This link has expired. Ask the owner for a new one.", "expired", 410);
-    if (!res.ok) throw new ShareError(errText(res, "Couldn't accept. Try again."), "accept-failed", res.status);
+    if (res.status === 409) throw new ShareError(tr("Someone else already used this link. Ask the owner for a new one."), "taken", 409);
+    if (res.status === 410) throw new ShareError(tr("This link has expired. Ask the owner for a new one."), "expired", 410);
+    if (!res.ok) throw new ShareError(errText(res, tr("Couldn't accept. Try again.")), "accept-failed", res.status);
   }
   const entry = { shareId, secretHex, serverDomain: offer.serverDomain, serverName: offer.serverName, acceptedAt };
   let saved = null;
@@ -673,7 +683,7 @@ async function inboxCall(d, op, entryId, ct) {
   };
   const signature = await sigHex(ss.signShareInboxRequest(request, key.seed));
   const res = await postJson(d, `${d.apex}/api/share-inbox`, { request, signature, ...(ct ? { ct } : {}) });
-  if (!res.ok) throw new ShareError(errText(res, "Couldn't reach your shared servers list."), "inbox", res.status);
+  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't reach your shared servers list.")), "inbox", res.status);
   return res.body;
 }
 
@@ -768,7 +778,7 @@ export async function signInToShare(entry, deps = {}, { force = false } = {}) {
   const member = await memberKey(d, entry.shareId);
   const n = await call(d, boxUrl(entry.serverDomain, "/api/shares/nonce"));
   if (!n.ok || typeof n.body?.nonce !== "string") {
-    throw new ShareError(errText(n, "Couldn't reach this server."), "unreachable", n.status);
+    throw new ShareError(errText(n, tr("Couldn't reach this server.")), "unreachable", n.status);
   }
   const session = {
     serverDomain: lower(entry.serverDomain),
@@ -780,14 +790,14 @@ export async function signInToShare(entry, deps = {}, { force = false } = {}) {
   const signature = await sigHex(ss.signServerShareSession(session, member.seed));
   const res = await postJson(d, boxUrl(entry.serverDomain, "/api/shares/session"), { session, signature });
   if (res.status === 403 && (res.body?.code === "not-shared" || res.body?.error === "not-shared")) {
-    throw new ShareError("The owner hasn't confirmed yet.", "not-shared", 403);
+    throw new ShareError(tr("The owner hasn't confirmed yet."), "not-shared", 403);
   }
   if (res.status === 403 && (res.body?.code === "share-ended" || res.body?.error === "share-ended")) {
     forgetShareSession(entry.shareId);
-    throw new ShareError("This server isn't shared with you anymore.", "share-ended", 403);
+    throw new ShareError(tr("This server isn't shared with you anymore."), "share-ended", 403);
   }
   if (!res.ok || typeof res.body?.token !== "string") {
-    throw new ShareError(errText(res, "Couldn't sign in to this server."), "sign-in", res.status);
+    throw new ShareError(errText(res, tr("Couldn't sign in to this server.")), "sign-in", res.status);
   }
   const s = {
     token: res.body.token,
@@ -853,7 +863,7 @@ export async function readSharedOffer(entry, deps = {}) {
   const d = ctx(deps);
   const { res } = await readShareRow(d, entry.shareId, entry.secretHex);
   if (res.status === 404 || res.status === 410) return { state: "ended", offer: pinnedOffers.get(entry.shareId) ?? null, unlock: false };
-  if (!res.ok) throw new ShareError(errText(res, "Couldn't reach flagshipserver.com."), "com", res.status);
+  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't reach flagshipserver.com.")), "com", res.status);
   const offer = typeof res.body?.offer === "string" ? await openOffer(entry.shareId, entry.secretHex, res.body.offer) : null;
   if (offer) pinnedOffers.set(entry.shareId, offer);
   return { state: res.body.state, offer, unlock: !!res.body.unlock };
@@ -915,7 +925,7 @@ export async function leaveShare(entry, deps = {}) {
   ]);
   const boxOk = boxSide.status === "fulfilled" && boxSide.value.ok;
   const comOk = comSide.status === "fulfilled" && (comSide.value.ok || comSide.value.status === 404);
-  if (!boxOk && !comOk) throw new ShareError("Couldn't leave right now. Check your connection and try again.", "leave-failed");
+  if (!boxOk && !comOk) throw new ShareError(tr("Couldn't leave right now. Check your connection and try again."), "leave-failed");
   forgetShareSession(entry.shareId);
   forgetSharePush(entry.shareId, deps.storage === undefined ? defaultStorage() : deps.storage);
   if (entry.entryId) await deleteInboxEntry(entry.entryId, deps).catch(() => {});
@@ -982,7 +992,7 @@ export async function fetchShareStartups(entry, deps = {}) {
   const path = `/api/boot/share/pending/${lower(entry.serverDomain)}`;
   const res = await call(d, `${d.boot}${path}`, { headers: { authorization: await shareBootHeader(d, member, entry.serverDomain, "GET", path) } });
   if (res.status === 403 || res.status === 404) return [];
-  if (!res.ok) throw new ShareError(errText(res, "Couldn't check whether this server is starting."), "boot", res.status);
+  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't check whether this server is starting.")), "boot", res.status);
   const out = [];
   for (const r of Array.isArray(res.body?.requests) ? res.body.requests : []) {
     if (!r?.request || r.request.purpose !== "unlock-key") continue;
@@ -1005,14 +1015,19 @@ export async function fetchShareStartups(entry, deps = {}) {
 export async function approveShareStartup(entry, req, deps = {}) {
   const d = ctx(deps);
   const offer = pinnedOffers.get(entry.shareId) ?? (await readSharedOffer(entry, deps)).offer;
-  if (!offer) throw new ShareError("Couldn't confirm which server this is.", "no-offer");
+  if (!offer) throw new ShareError(tr("Couldn't confirm which server this is."), "no-offer");
   let recipient = offer.stkPubHex;
   if (lower(req?.stkPub) !== offer.stkPubHex) {
     const boot = await sharedBootKeyFor(entry.serverDomain, offer.stkPubHex, { fetch: d.fetch, comBase: d.apex });
     if (!boot || lower(req?.stkPub) !== boot) {
-      throw new ShareError("This start-up request doesn't come from the server that was shared with you.", "wrong-stk");
+      throw new ShareError(tr("This start-up request doesn't come from the server that was shared with you."), "wrong-stk");
     }
     recipient = boot;
+  }
+  const pin = pinnedStk(entry.serverDomain);
+  if (pin && pin !== offer.stkPubHex) {
+    noteKeyChanged(entry.serverDomain, offer.stkPubHex);
+    throw new ShareError(tr("This server's key changed. If you did not rebuild it, do not approve anything for it."), "key-changed");
   }
   const member = await memberKey(d, entry.shareId);
   const keyPath = `/api/boot/share/key/${lower(entry.serverDomain)}`;
@@ -1020,13 +1035,13 @@ export async function approveShareStartup(entry, req, deps = {}) {
     headers: { authorization: await shareBootHeader(d, member, entry.serverDomain, "GET", keyPath) },
   });
   if (!k.ok || typeof k.body?.sealedKey !== "string") {
-    throw new ShareError(errText(k, "The owner hasn't let you approve start-ups."), "no-copy", k.status);
+    throw new ShareError(errText(k, tr("The owner hasn't let you approve start-ups.")), "no-copy", k.status);
   }
   let diskKey;
   try {
     diskKey = await bootSeal.openSealedWithEd25519Seed(hexToBytes(k.body.sealedKey), member.seed);
   } catch {
-    throw new ShareError("Couldn't open your copy of the disk key.", "copy");
+    throw new ShareError(tr("Couldn't open your copy of the disk key."), "copy");
   }
   const sealed = await bootSeal.buildSealedResponse(diskKey, {
     stkEdPub: hexToBytes(recipient),
@@ -1048,7 +1063,7 @@ export async function approveShareStartup(entry, req, deps = {}) {
     },
     { authorization: await shareBootHeader(d, member, entry.serverDomain, "POST", path) },
   );
-  if (!res.ok) throw new ShareError(errText(res, "Couldn't approve the start-up."), "approve-failed", res.status);
+  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't approve the start-up.")), "approve-failed", res.status);
   return { ok: true };
 }
 
@@ -1101,7 +1116,7 @@ export async function setSharePush(entry, on, deps = {}) {
     try {
       providerToken = await get();
     } catch (e) {
-      throw new ShareError(`This browser can't show notifications: ${humanError(e)}`, "no-push");
+      throw new ShareError(tr("This browser can't show notifications: {0}", humanError(e)), "no-push");
     }
     tokenSha256 = await ss.shareSha256Hex(providerToken);
   } else {
@@ -1129,14 +1144,14 @@ export async function setSharePush(entry, on, deps = {}) {
   if (!on) {
     forgetSharePush(entry.shareId, storage);
     if (!res.ok && res.status !== 404 && res.status !== 410) {
-      throw new ShareError(errText(res, "Couldn't turn notices off. Try again."), "push-failed", res.status);
+      throw new ShareError(errText(res, tr("Couldn't turn notices off. Try again.")), "push-failed", res.status);
     }
     return { ok: true, on: false };
   }
   if (res.status === 403 && res.body?.code === "unlock-not-shared") {
     throw new ShareError(NOTIFY_NOT_ALLOWED, "unlock-not-shared", 403);
   }
-  if (!res.ok) throw new ShareError(errText(res, "Couldn't turn notices on. Try again."), "push-failed", res.status);
+  if (!res.ok) throw new ShareError(errText(res, tr("Couldn't turn notices on. Try again.")), "push-failed", res.status);
   try {
     storage?.setItem(PUSH_KEY(entry.shareId), JSON.stringify({ platform, tokenSha256 }));
   } catch {
@@ -1148,11 +1163,11 @@ export async function setSharePush(entry, on, deps = {}) {
 // ── Server updates (B at manage level) ────────────────────────────────
 
 const UPDATE_ERRORS = {
-  busy: "An update is already underway.",
-  "pending-verify": "An update is already underway.",
-  "from-commit-mismatch": "The server changed version. Refresh and try again.",
-  "manage-only": "Only someone who can manage this server can update it.",
-  stale: "Your device's clock looks off. Check it and try again.",
+  busy: tr("An update is already underway."),
+  "pending-verify": tr("An update is already underway."),
+  "from-commit-mismatch": tr("The server changed version. Refresh and try again."),
+  "manage-only": tr("Only someone who can manage this server can update it."),
+  stale: tr("Your device's clock looks off. Check it and try again."),
 };
 
 /**
@@ -1178,7 +1193,7 @@ export async function orderShareUpdate(entry, { targetCommit, fromCommit }, deps
   try {
     signature = await sigHex(ss.signServerShareUpdate(update, member.seed));
   } catch {
-    throw new ShareError("This server hasn't reported its version yet. Refresh and try again.", "bad-order");
+    throw new ShareError(tr("This server hasn't reported its version yet. Refresh and try again."), "bad-order");
   }
   const client = deps.client ?? shareBoxClient(entry, deps);
   try {
@@ -1199,26 +1214,26 @@ export async function orderShareUpdate(entry, { targetCommit, fromCommit }, deps
 // under B's share-invite bundle key, so only B's devices read them.
 // ──────────────────────────────────────────────────────────────────────
 
-export const CO_INVITE_OPEN = "Invite people";
-export const CO_INVITE_LINE = "People you invite join as Member. You can withdraw your own invites.";
-export const CO_INVITE_NAME_HINT = "Only your devices see it.";
-export const CO_INVITE_LINK_LINE = "Send the link over a private channel. Whoever opens it joins as Member.";
-export const CO_INVITE_YOURS = "Your invites";
-export const CO_INVITE_NONE = "You haven't invited anyone to this app yet.";
-export const CO_INVITE_WITHDRAW = "Withdraw";
-export const CO_INVITE_WITHDRAW_TITLE = "Withdraw this invite?";
-export const CO_INVITE_UNNAMED = "Someone";
+export const CO_INVITE_OPEN = tr("Invite people");
+export const CO_INVITE_LINE = tr("People you invite join as Member. You can withdraw your own invites.");
+export const CO_INVITE_NAME_HINT = tr("Only your devices see it.");
+export const CO_INVITE_LINK_LINE = tr("Send the link over a private channel. Whoever opens it joins as Member.");
+export const CO_INVITE_YOURS = tr("Your invites");
+export const CO_INVITE_NONE = tr("You haven't invited anyone to this app yet.");
+export const CO_INVITE_WITHDRAW = tr("Withdraw");
+export const CO_INVITE_WITHDRAW_TITLE = tr("Withdraw this invite?");
+export const CO_INVITE_UNNAMED = tr("Someone");
 /** Why B can't invite (the box sends the same sentence as `whyText`; this is the fallback). */
 export const CO_INVITE_WHY = Object.freeze({
-  "not-shared": "This server isn't shared with you anymore.",
-  "view-only": "You can view this server but not manage it, so you can't invite people to its apps.",
-  demoted: "An admin made you a Member of this app, so you can't invite people to it.",
-  refused: "An admin turned off your access to this app.",
-  "catching-up": "This server is catching up with the app's other servers. Try again in a moment.",
+  "not-shared": tr("This server isn't shared with you anymore."),
+  "view-only": tr("You can view this server but not manage it, so you can't invite people to its apps."),
+  demoted: tr("An admin made you a Member of this app, so you can't invite people to it."),
+  refused: tr("An admin turned off your access to this app."),
+  "catching-up": tr("This server is catching up with the app's other servers. Try again in a moment."),
 });
 
 export function coInviteWithdrawMessage(appName) {
-  return `The link stops working, and anyone who joined through it loses access to ${appName}.`;
+  return tr("The link stops working, and anyone who joined through it loses access to {0}.", appName);
 }
 
 /** "Not opened yet", "1 person joined", "3 of 10 joined", "3 joined" (a group with no limit). */
@@ -1226,7 +1241,7 @@ export function coInviteStatusText(inv, nowMs = Date.now()) {
   const n = Number.isInteger(inv?.joined) ? inv.joined : 0;
   let text;
   if (inv?.maxRedemptions === null || inv?.maxRedemptions === undefined) {
-    text = n === 0 ? "Not opened yet" : n === 1 ? "1 person joined" : `${n} people joined`;
+    text = n === 0 ? tr("Not opened yet") : trn(n, "{0} person joined", "{0} people joined");
   } else {
     text = inv.maxRedemptions === 0 ? `${n} joined` : `${n} of ${inv.maxRedemptions} joined`;
   }
@@ -1257,7 +1272,7 @@ export async function fetchShareInvites(entry, serviceRef, deps = {}) {
   try {
     body = await client.fetch(`/api/shares/invites?service=${encodeURIComponent(serviceRef)}`);
   } catch (e) {
-    throw new ShareError(boxErrorText(e, "Couldn't read your invites from this server."), e?.body?.code ?? "invites", e?.status);
+    throw new ShareError(boxErrorText(e, tr("Couldn't read your invites from this server.")), e?.body?.code ?? "invites", e?.status);
   }
   const key = await ss.deriveShareInviteBundleKey(d.umk, entry.shareId);
   const invites = [];
@@ -1299,8 +1314,8 @@ export async function createShareInvite(entry, { serviceRef, ownerAid, name, gro
   const d = ctx(deps);
   const member = await memberKey(d, entry.shareId);
   const label = String(name ?? "").trim();
-  if (!label) throw new ShareError(group ? "Give the group a name." : "Give them a name.", "no-name");
-  if (!/^[0-9a-f]{64}$/.test(String(ownerAid ?? ""))) throw new ShareError("This server can't take invites yet.", "no-owner");
+  if (!label) throw new ShareError(group ? tr("Give the group a name.") : tr("Give them a name."), "no-name");
+  if (!/^[0-9a-f]{64}$/.test(String(ownerAid ?? ""))) throw new ShareError(tr("This server can't take invites yet."), "no-owner");
   const random = deps.random ?? ((n) => crypto.getRandomValues(new Uint8Array(n)));
   const secret = random(32);
   const inviteId = bytesToHex(random(32));
@@ -1323,7 +1338,7 @@ export async function createShareInvite(entry, { serviceRef, ownerAid, name, gro
       body: JSON.stringify({ request: { ...create, authorAID: ownerAid }, signature }),
     });
   } catch (e) {
-    throw new ShareError(boxErrorText(e, "Couldn't create the invite. Try again."), e?.body?.code ?? "invite-failed", e?.status);
+    throw new ShareError(boxErrorText(e, tr("Couldn't create the invite. Try again.")), e?.body?.code ?? "invite-failed", e?.status);
   }
   return {
     inviteId,
@@ -1341,6 +1356,6 @@ export async function withdrawShareInvite(entry, inviteId, deps = {}) {
   try {
     return await client.fetch("/api/shares/invites/withdraw", { method: "POST", body: JSON.stringify({ revoke, signature }) });
   } catch (e) {
-    throw new ShareError(boxErrorText(e, "Couldn't withdraw the invite. Try again."), e?.body?.code ?? "withdraw-failed", e?.status);
+    throw new ShareError(boxErrorText(e, tr("Couldn't withdraw the invite. Try again.")), e?.body?.code ?? "withdraw-failed", e?.status);
   }
 }

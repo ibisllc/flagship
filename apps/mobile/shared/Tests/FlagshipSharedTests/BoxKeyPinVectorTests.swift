@@ -53,12 +53,18 @@ final class BoxKeyPinVectorTests: XCTestCase {
         XCTAssertEqual(check(sig, stk, expect["otherServerDomain"] as! String), expect["signatureForOtherServer"] as? Bool)
     }
 
-    func testFirstSightPinsAndASubstitutedKeyIsRefused() throws {
+    func testFirstSightNeverPinsAndASubstitutedKeyIsRefused() throws {
         let v = try vectors()
         let pins = BoxKeyPins(defaults: nil)
         let domain = v["serverDomain"] as! String
         let stk = v["stkPubHex"] as! String
         let other = v["otherPubHex"] as! String
+        XCTAssertThrowsError(try pins.require(username: user, serverDomain: domain, reportedHex: stk)) {
+            XCTAssertTrue($0 is BoxKeyNotPinnedError)
+        }
+        XCTAssertTrue(pins.observe(username: user, pods: [PodDirectoryEntryLike(domain: domain, stkHex: stk, revoked: false)]).isEmpty)
+        XCTAssertNil(pins.pinned(username: user, serverDomain: domain), "a listed key is never pinned")
+        XCTAssertTrue(pins.serverKeys.pin(try XCTUnwrap(HexUtil.decode(stk)), for: domain))
         XCTAssertEqual(try pins.require(username: user, serverDomain: domain, reportedHex: stk), stk)
         XCTAssertEqual(try pins.require(username: user, serverDomain: domain.uppercased(), reportedHex: stk.uppercased()), stk)
         XCTAssertThrowsError(try pins.require(username: user, serverDomain: domain, reportedHex: other)) { e in
@@ -66,10 +72,33 @@ final class BoxKeyPinVectorTests: XCTestCase {
             XCTAssertEqual(changed?.reportedHex, other)
             XCTAssertEqual(changed?.pinnedHex, stk)
             XCTAssertEqual(changed?.username, self.user)
-            XCTAssertTrue((changed?.errorDescription ?? "").contains("identity key changed"))
+            XCTAssertEqual(changed?.errorDescription, FirstContact.keyChangedText)
         }
-        pins.observe(username: user, pods: [PodDirectoryEntryLike(domain: domain, stkHex: other, revoked: false)])
+        XCTAssertEqual(pins.observe(username: user, pods: [PodDirectoryEntryLike(domain: domain, stkHex: other, revoked: false)]), [domain])
         XCTAssertEqual(pins.pinned(username: user, serverDomain: domain), stk)
+    }
+
+    func testTheBootKeyLivesInTheOnePinStore() throws {
+        let v = try vectors()
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "flagship.boxKeyPins.test.\(UUID().uuidString)"))
+        let domain = v["serverDomain"] as! String
+        let stk = v["stkPubHex"] as! String
+        defaults.set([domain: stk], forKey: "flagship.serverKeyPins.v1")
+        let serverKeys = ServerKeyPins(defaults: defaults)
+        let pins = BoxKeyPins(serverKeys: serverKeys)
+        XCTAssertEqual(pins.pinned(username: user, serverDomain: domain), stk, "a pin kept before reads the same")
+        let b = try XCTUnwrap(v["bootKeyBinding"] as? [String: Any])
+        let binding = try XCTUnwrap(b["binding"] as? [String: Any])
+        let boot = binding["bootPubHex"] as! String
+        XCTAssertEqual(pins.acceptBootKeyBinding(username: user, serverDomain: domain, bootPubHex: boot,
+                                                 issuedAt: (binding["issuedAt"] as! NSNumber).int64Value,
+                                                 signatureHex: b["signatureHex"] as! String), boot)
+        XCTAssertEqual(ServerKeyPins(defaults: defaults).record(domain)?.boot, boot)
+        XCTAssertTrue(serverKeys.pin(try XCTUnwrap(HexUtil.decode(stk)), for: domain))
+        XCTAssertEqual(pins.pinnedBootKey(username: user, serverDomain: domain), boot, "pinning the same key keeps it")
+        serverKeys.forget(domain)
+        XCTAssertFalse(serverKeys.update(domain, stkHex: stk) { $0.boot = boot })
+        XCTAssertNil(pins.pinnedBootKey(username: user, serverDomain: domain))
     }
 
     func testRepinAfterAReinstallMovesThePinAndDropsTheBootKey() throws {
@@ -82,7 +111,7 @@ final class BoxKeyPinVectorTests: XCTestCase {
         let issuedAt = (binding["issuedAt"] as! NSNumber).int64Value
         XCTAssertNil(pins.acceptBootKeyBinding(username: user, serverDomain: domain, bootPubHex: boot,
                                                issuedAt: issuedAt, signatureHex: b["signatureHex"] as! String))
-        try pins.require(username: user, serverDomain: domain, reportedHex: v["stkPubHex"] as! String)
+        pins.repin(username: user, serverDomain: domain, stkHex: v["stkPubHex"] as! String)
         XCTAssertNil(pins.acceptBootKeyBinding(username: user, serverDomain: domain, bootPubHex: boot,
                                                issuedAt: issuedAt, signatureHex: b["signedByOtherKeyHex"] as! String))
         XCTAssertEqual(pins.acceptBootKeyBinding(username: user, serverDomain: domain, bootPubHex: boot,
@@ -92,7 +121,9 @@ final class BoxKeyPinVectorTests: XCTestCase {
         XCTAssertNoThrow(try pins.require(username: user, serverDomain: domain, reportedHex: v["otherPubHex"] as! String))
         XCTAssertThrowsError(try pins.require(username: user, serverDomain: domain, reportedHex: v["stkPubHex"] as! String))
         pins.forget(username: user, serverDomain: domain)
-        XCTAssertNoThrow(try pins.require(username: user, serverDomain: domain, reportedHex: v["stkPubHex"] as! String))
+        XCTAssertThrowsError(try pins.require(username: user, serverDomain: domain, reportedHex: v["stkPubHex"] as! String)) {
+            XCTAssertTrue($0 is BoxKeyNotPinnedError)
+        }
     }
 }
 
@@ -104,7 +135,7 @@ final class BoxKeyPinCoordinatorTests: XCTestCase {
         let real = String(repeating: "ab", count: 32)
         let rogue = String(repeating: "cd", count: 32)
         let pins = BoxKeyPins(defaults: nil)
-        try pins.require(username: "plucky-avocet", serverDomain: domain, reportedHex: real)
+        pins.repin(username: "plucky-avocet", serverDomain: domain, stkHex: real)
         let mailbox = MockSecretMailboxClient()
         mailbox.sealedLuksKeyHex = "00"
         var prompted = false
@@ -119,12 +150,12 @@ final class BoxKeyPinCoordinatorTests: XCTestCase {
             purpose: "unlock-key", issuedAt: 1, requestSignature: String(repeating: "22", count: 64),
             deviceInfo: nil, postedAt: 1, expiresAt: .max
         )
-        let verified = SecretRequestCoordinator.VerifiedRequest(pending: pending, directoryStkPubHex: rogue)
+        let verified = SecretRequestCoordinator.VerifiedRequest(pending: pending, stkPubHex: rogue)
         do {
             try await coord.confirmAndRespond(verified)
             XCTFail("sealed to a substituted key")
-        } catch let e as BoxKeyChangedError {
-            XCTAssertEqual(e.reportedHex, rogue)
+        } catch let e as SecretRequestCoordinator.CoordinatorError {
+            XCTAssertEqual(e, .keyChanged(domain))
         }
         XCTAssertFalse(prompted)
         XCTAssertTrue(mailbox.postedResponses.isEmpty)

@@ -17,21 +17,22 @@ import { replayPolicyChain, strictInForce, TAG_ASSURANCE_POLICY } from "../lib/a
 import { verifyCriticalSignature, verifyPqKeyBinding } from "../lib/pqBinding.js";
 import { adminRootPubHex } from "../keystore.js";
 
+import { tr } from "../lib/i18n.js";
 registerView("view-quantum-safety");
 
 export const BROWSER_LOSS = "browser-without-pq-authentication";
 export const WEB_CANNOT_CHANGE =
-  "This browser holds no post-quantum key, so it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.";
+  tr("This browser holds no post-quantum key, so it can't turn strict protection on or off. Use the Flagship app on an admin phone or tablet.");
 
 /** What a row says about one server's policy. Exported for tests. */
 export function describePolicy(state, headLoss, verified) {
   const strict = !!state && strictInForce(state);
-  const source = verified ? "Checked on this browser." : "As reported by flagshipserver.com; this browser could not check it.";
-  if (!strict) return { strict, line: `Compatibility. ${source}` };
+  const source = verified ? tr("Checked on this browser.") : tr("As reported by flagshipserver.com; this browser could not check it.");
+  if (!strict) return { strict, line: tr("Compatibility. {0}", source) };
   const browsers = (headLoss ?? []).includes(BROWSER_LOSS)
-    ? "Browsers can still reach it (post-quantum key exchange, classical certificate)."
-    : "Only the Flagship app reaches it; this browser is refused.";
-  return { strict, line: `Strict. ${browsers} ${source}` };
+    ? tr("Browsers can still reach it (post-quantum key exchange, classical certificate).")
+    : tr("Only the Flagship app reaches it; this browser is refused.");
+  return { strict, line: tr("Strict. {0} {1}", browsers, source) };
 }
 
 /** Replays a served chain under the admin root's verified binding (null when none). */
@@ -61,8 +62,8 @@ export function appIdsOf(pod) {
 
 /** One app's own scope (`<server>:<service id>`): strict there means browsers are refused. Exported for tests. */
 export function describeApp(state, verified) {
-  const source = verified ? "" : " (as reported by flagshipserver.com)";
-  return state && strictInForce(state) ? `only the Flagship app; browsers are refused${source}` : `browsers may reach it${source}`;
+  const source = verified ? "" : tr(" (as reported by flagshipserver.com)");
+  return state && strictInForce(state) ? tr("only the Flagship app; browsers are refused{0}", source) : tr("browsers may reach it{0}", source);
 }
 
 async function appLines(base, user, fqdn, ids, rootHex, adminBinding) {
@@ -89,10 +90,10 @@ async function render() {
   const s = getSession();
   const user = (s?.username ?? "").toLowerCase();
   if (!user) {
-    host.innerHTML = `<p class="note">Sign in first.</p>`;
+    host.innerHTML = `<p class="note">${tr("Sign in first.")}</p>`;
     return;
   }
-  host.innerHTML = `<p class="note">${escapeHtml(WEB_CANNOT_CHANGE)}</p><p class="note">These protections are new and pending an external review.</p><div id="qs-rows"><p class="note">Loading…</p></div>`;
+  host.innerHTML = `<p class="note">${escapeHtml(WEB_CANNOT_CHANGE)}</p><p class="note">${tr("These protections are new and pending an external review.")}</p><div id="qs-rows"><p class="note">${tr("Loading…")}</p></div>`;
   const base = controlApex();
   const rootHex = s?.adminRootSeed ? (await adminRootPubHex(s.adminRootSeed)).toLowerCase() : null;
   const grants = await getJson(`${base}/api/users/${encodeURIComponent(user)}/device-grants`).catch(() => null);
@@ -117,11 +118,11 @@ async function render() {
     const d = verified ? describePolicy(mine.state, mine.headLoss, true) : describePolicy(served?.state, chain.at(-1)?.change?.acknowledgedLoss, false);
     const apps = d.strict ? await appLines(base, user, fqdn, appIdsOf(p), rootHex, adminBinding) : [];
     const appHtml = apps.length
-      ? `<p class="note">Apps on this server (set from the Flagship app):</p><ul class="qs-apps">${apps.map((a) => `<li data-service="${escapeHtml(a.id)}">${escapeHtml(a.id)}: ${escapeHtml(a.line)}</li>`).join("")}</ul>`
+      ? `<p class="note">${tr("Apps on this server (set from the Flagship app):")}</p><ul class="qs-apps">${apps.map((a) => `<li data-service="${escapeHtml(a.id)}">${escapeHtml(a.id)}: ${escapeHtml(a.line)}</li>`).join("")}</ul>`
       : "";
     rows.push(`<div class="fs-card qs-row" data-fqdn="${escapeHtml(fqdn)}"><p class="fs-row-title">${escapeHtml(p.name ?? fqdn)}</p><p class="note">${escapeHtml(d.line)}</p>${appHtml}</div>`);
   }
-  $("qs-rows").innerHTML = rows.length ? rows.join("") : `<p class="note">You have no servers yet.</p>`;
+  $("qs-rows").innerHTML = rows.length ? rows.join("") : `<p class="note">${tr("You have no servers yet.")}</p>`;
 }
 
 export function initQuantumSafetyView() {

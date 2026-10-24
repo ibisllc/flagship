@@ -62,13 +62,3 @@ export async function serverCode(stkPubHex) {
   return String(n % 1_000_000).padStart(6, "0");
 }
 
-export const SERVER_CODE_SEEN_TAG = "flagship/server-code-seen/v1";
-
-/** Studio's report of the key it saw on a hosted VM's console: HMAC-SHA256(studioConfirmKey,
- *  `flagship/server-code-seen/v1|<serverDomain lowercase>|<stkPubHex>`), lowercase hex. */
-export async function serverSeenMacHex(keyHex, serverDomain, stkPubHex) {
-  if (!HEX64.test(keyHex) || !HEX64.test(stkPubHex) || String(serverDomain).includes("|")) return null;
-  const key = await crypto.subtle.importKey("raw", Uint8Array.from(keyHex.match(/../g), (h) => parseInt(h, 16)), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const msg = new TextEncoder().encode([SERVER_CODE_SEEN_TAG, String(serverDomain).toLowerCase(), stkPubHex].join("|"));
-  return toHex(await crypto.subtle.sign("HMAC", key, msg));
-}

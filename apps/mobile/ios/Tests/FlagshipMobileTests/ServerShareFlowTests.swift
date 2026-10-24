@@ -377,11 +377,14 @@ final class ServerShareFlowTests: XCTestCase {
         let sensitive = ownerSensitive
         let irk = ownerIrk
         let household = ServiceInvite.deriveHouseholdKey(umkSeed: ownerUmk)!
+        // The owner's device pinned the server at its first blessing; an offer names only that key.
+        let pins = BoxKeyPins(defaults: nil)
+        pins.serverKeys.pin(stk.publicKey.rawRepresentation, for: domain)
         owner = ServerShareOwnerFlow(
             client: backend.client(), username: "alice",
             keys: ShareOwnerKeys(sensitive: { _ in sensitive }, account: { irk }, household: { household },
                                  diskKeySeeds: { _ in [irk.rawRepresentation] }),
-            apexOrigin: { "https://flagshipserver.com" })
+            apexOrigin: { "https://flagshipserver.com" }, pins: pins)
         let seed = memberUmk
         backend.joinAdminPub = memberAdmin.publicKey.rawRepresentation
         member = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed }, admin: adminKeys(memberAdmin))

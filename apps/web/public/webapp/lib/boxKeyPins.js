@@ -2,37 +2,40 @@
 // packages/protocol/test-vectors/box-key-pin/).
 //
 // Everything this browser seals for a server (the disk-key reply, an
-// auto-unlock lease, the SWK / CGK / pairing deposits) goes to the box key
-// `.com`'s /pods lists. This browser pins that key per server the first time
-// it learns it and refuses to seal to any other afterwards, so a `.com` that
-// turns hostile can't swap in its own key and collect the disk key. A key
-// changes legitimately only when the server is reinstalled, replaced or
-// moved: the device that does it re-pins (`repinBoxKey`), and any other
-// device asks its owner first ("Trust its new key").
-//
-// Pins are public keys, kept in localStorage per account.
+// auto-unlock lease, the SWK / CGK / pairing deposits) goes to the key this
+// device pinned for it, so a `.com` that turns hostile can't swap in its own
+// key and collect the disk key. The pin itself lives in lib/serverPins.js, the
+// one pin store, and is made only by first contact (docs/first-contact.md):
+// the first blessing, with the code shown above Approve, or an explicit
+// re-trust by the owner. Nothing here pins a key because `.com` lists it.
 //
 // Architecture v2: a box's STK also binds an ML-DSA-65 key (lib/pqBinding.js). The browser
-// accepts that binding only under the pinned STK, pins the ML-DSA key the first time
-// (`mldsa`), refuses a different one later, and from then on requires the boot-key binding's
+// accepts that binding only under the pinned STK, keeps the ML-DSA key with the pin the first
+// time (`mldsa`), refuses a different one later, and from then on requires the boot-key binding's
 // hybrid signature too, so stripping it cannot downgrade this server back to classical.
 
 import { verifyBootKeyBindingV2, verifyPqKeyBinding } from "./pqBinding.js";
 import { strictInForce } from "./assurancePolicy.js";
+import {
+  KEY_CHANGED_CODE,
+  noteKeyChanged,
+  pinServerKey,
+  pinnedStk,
+  retrustServer,
+  serverPinRecord,
+  updateServerPin,
+} from "./serverPins.js";
+import { tr } from "./i18n.js";
 
 const TAG_BOOT_KEY_BINDING = "flagship/boot-key-binding/v1";
 const HEX32 = /^[0-9a-f]{64}$/;
-const memory = new Map();
-
-export const BOX_KEY_CHANGED_MESSAGE =
-  "This server's identity key changed since this device first saw it, so Flagship won't send it your disk key. " +
-  "If you reinstalled, replaced or moved this server, choose Trust its new key. If you didn't, someone may be impersonating it.";
+const lower = (s) => String(s ?? "").trim().toLowerCase();
 
 export class BoxKeyChangedError extends Error {
   constructor(serverDomain, pinnedHex, reportedHex) {
-    super(BOX_KEY_CHANGED_MESSAGE);
+    super(tr("This server's key changed. If you did not rebuild it, do not approve anything for it."));
     this.name = "BoxKeyChangedError";
-    this.code = "box-key-changed";
+    this.code = KEY_CHANGED_CODE;
     this.serverDomain = serverDomain;
     this.pinnedHex = pinnedHex;
     this.reportedHex = reportedHex;
@@ -47,88 +50,60 @@ export function decideBoxKeyPin(pinnedHex, reportedHex) {
   return String(pinnedHex).toLowerCase() === reported ? "match" : "mismatch";
 }
 
-function storageOf(deps) {
-  if (deps.pinStorage) return deps.pinStorage;
-  try {
-    if (typeof localStorage !== "undefined") return localStorage;
-  } catch { /* storage blocked */ }
-  return { getItem: (k) => memory.get(k) ?? null, setItem: (k, v) => void memory.set(k, v) };
-}
-
-const keyFor = (username) => `flagship.boxKeyPins.v1:${String(username).toLowerCase()}`;
-
-function load(username, deps) {
-  try {
-    const raw = storageOf(deps).getItem(keyFor(username));
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function save(username, pins, deps) {
-  try { storageOf(deps).setItem(keyFor(username), JSON.stringify(pins)); } catch { /* best effort */ }
-}
-
-export function pinnedBoxKey(username, serverDomain, deps = {}) {
-  return load(username, deps)[String(serverDomain).toLowerCase()]?.stk ?? null;
+export function pinnedBoxKey(_username, serverDomain) {
+  return pinnedStk(serverDomain);
 }
 
 /**
- * The key this browser may seal to for `serverDomain`: pins `reportedHex` the
- * first time, returns it while it matches, and throws `BoxKeyChangedError`
- * when it differs from the pin.
+ * The key this browser may seal to for `serverDomain`: the pin, while `reportedHex` matches it.
+ * Throws `BoxKeyChangedError` when it differs, and a `server-not-pinned` error when this device
+ * has not pinned the server yet ("first" never pins here).
  */
-export function requirePinnedBoxKey(username, serverDomain, reportedHex, deps = {}) {
-  const domain = String(serverDomain).toLowerCase();
-  const pins = load(username, deps);
-  const reported = String(reportedHex ?? "").toLowerCase();
-  const verdict = decideBoxKeyPin(pins[domain]?.stk, reported);
+export function requirePinnedBoxKey(_username, serverDomain, reportedHex) {
+  const domain = lower(serverDomain);
+  const pin = pinnedStk(domain);
+  const reported = lower(reportedHex);
+  const verdict = decideBoxKeyPin(pin, reported);
   if (verdict === "invalid") throw new Error(`${domain} has no valid box key on file`);
-  if (verdict === "mismatch") throw new BoxKeyChangedError(domain, pins[domain].stk, reported);
-  if (verdict === "first") {
-    pins[domain] = { stk: reported, pinnedAt: (deps.now || Date.now)() };
-    save(username, pins, deps);
+  if (verdict === "mismatch") {
+    noteKeyChanged(domain, reported);
+    throw new BoxKeyChangedError(domain, pin, reported);
   }
-  return reported;
+  if (verdict === "first") {
+    throw Object.assign(new Error(tr("This device hasn't checked this server's key yet.")), {
+      code: "server-not-pinned",
+      serverDomain: domain,
+    });
+  }
+  return pin;
 }
 
-/** Pin every listed server this browser hasn't pinned yet, so the pin predates any request. */
-export function observePods(username, pods, deps = {}) {
-  if (!username || !Array.isArray(pods)) return;
-  const pins = load(username, deps);
-  let changed = false;
+/** Note every listed server whose key differs from this device's pin. Never pins. */
+export function observePods(_username, pods) {
+  if (!Array.isArray(pods)) return;
   for (const p of pods) {
-    const domain = String(p?.serverDomain ?? "").toLowerCase();
-    const stk = String(p?.identityPubKey ?? "").toLowerCase();
-    if (!domain || p?.revokedAt != null || pins[domain] || !HEX32.test(stk)) continue;
-    pins[domain] = { stk, pinnedAt: (deps.now || Date.now)() };
-    changed = true;
+    const domain = lower(p?.serverDomain);
+    const stk = lower(p?.identityPubKey);
+    if (!domain || p?.revokedAt != null || !HEX32.test(stk)) continue;
+    const pin = pinnedStk(domain);
+    if (pin && pin !== stk) noteKeyChanged(domain, stk);
   }
-  if (changed) save(username, pins, deps);
 }
 
 /**
- * Replace the pin: only for a change the owner made or confirmed here (this
- * device created or reinstalled the server, moved it, or the owner chose
- * "Trust its new key"). Drops any boot key the old STK had bound.
+ * The owner's explicit re-pin (this device created or reinstalled the server, or the owner
+ * chose to trust a new key after a fresh unlock). Drops the old pin and anything its STK bound.
  */
-export function repinBoxKey(username, serverDomain, stkHex, deps = {}) {
-  const stk = String(stkHex ?? "").toLowerCase();
+export function repinBoxKey(_username, serverDomain, stkHex) {
+  const stk = lower(stkHex);
   if (!HEX32.test(stk)) throw new Error("not a box key");
-  const pins = load(username, deps);
-  pins[String(serverDomain).toLowerCase()] = { stk, pinnedAt: (deps.now || Date.now)() };
-  save(username, pins, deps);
+  retrustServer(serverDomain);
+  pinServerKey(serverDomain, stk, "owner");
 }
 
-/** This device is about to (re)create `serverDomain`: its next registered key is pinned fresh. */
-export function forgetBoxKeyPin(username, serverDomain, deps = {}) {
-  const pins = load(username, deps);
-  const domain = String(serverDomain).toLowerCase();
-  if (!(domain in pins)) return;
-  delete pins[domain];
-  save(username, pins, deps);
+/** This device is about to (re)create `serverDomain`: its next key is pinned by first contact. */
+export function forgetBoxKeyPin(_username, serverDomain) {
+  if (pinnedStk(serverDomain)) retrustServer(serverDomain);
 }
 
 export function canonicalBootKeyBinding({ serverDomain, bootPubHex, issuedAt }) {
@@ -154,9 +129,8 @@ export async function verifyBootKeyBinding(binding, signature, pinnedStkPub, ser
  * never because `.com` lists it. Returns the boot key, or null when refused.
  */
 export async function acceptBootKeyBinding(username, serverDomain, binding, signatureHex, deps = {}, hybridSignatureHex = undefined) {
-  const domain = String(serverDomain).toLowerCase();
-  const pins = load(username, deps);
-  const pin = pins[domain];
+  const domain = lower(serverDomain);
+  const pin = serverPinRecord(domain);
   if (!pin) return null;
   const ok = await verifyBootKeyBinding(binding, hexBytes(signatureHex), hexBytes(pin.stk), domain);
   if (!ok || (pin.bootIssuedAt ?? -1) > binding.issuedAt) return null;
@@ -165,8 +139,7 @@ export async function acceptBootKeyBinding(username, serverDomain, binding, sign
   // A server whose owner turned strict on (deps.policy, replayed by lib/assurancePolicy.js) needs
   // it even before this browser has pinned an ML-DSA key.
   if (!pin.mldsa && strictInForce(deps.policy)) return null;
-  pins[domain] = { ...pin, boot: binding.bootPubHex, bootIssuedAt: binding.issuedAt };
-  save(username, pins, deps);
+  if (!updateServerPin(domain, pin.stk, { boot: binding.bootPubHex, bootIssuedAt: binding.issuedAt })) return null;
   return binding.bootPubHex;
 }
 
@@ -176,9 +149,8 @@ export async function acceptBootKeyBinding(username, serverDomain, binding, sign
  * A binding naming another ML-DSA key than the pinned one throws BoxKeyChangedError.
  */
 export function acceptStkPqBinding(username, serverDomain, wire, deps = {}) {
-  const domain = String(serverDomain).toLowerCase();
-  const pins = load(username, deps);
-  const pin = pins[domain];
+  const domain = lower(serverDomain);
+  const pin = serverPinRecord(domain);
   if (!pin) return null;
   let b;
   try {
@@ -195,18 +167,17 @@ export function acceptStkPqBinding(username, serverDomain, wire, deps = {}) {
     return null;
   }
   if (pin.mldsa !== b.mldsaPubHex || pin.mldsaIssuedAt !== b.issuedAt) {
-    pins[domain] = { ...pin, mldsa: b.mldsaPubHex, mldsaIssuedAt: b.issuedAt };
-    save(username, pins, deps);
+    if (!updateServerPin(domain, pin.stk, { mldsa: b.mldsaPubHex, mldsaIssuedAt: b.issuedAt })) return null;
   }
   return b.mldsaPubHex;
 }
 
-export function pinnedBoxPqKey(username, serverDomain, deps = {}) {
-  return load(username, deps)[String(serverDomain).toLowerCase()]?.mldsa ?? null;
+export function pinnedBoxPqKey(_username, serverDomain) {
+  return serverPinRecord(serverDomain)?.mldsa ?? null;
 }
 
-export function pinnedBootKey(username, serverDomain, deps = {}) {
-  return load(username, deps)[String(serverDomain).toLowerCase()]?.boot ?? null;
+export function pinnedBootKey(_username, serverDomain) {
+  return serverPinRecord(serverDomain)?.boot ?? null;
 }
 
 function hexBytes(hex) {

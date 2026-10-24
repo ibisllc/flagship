@@ -18,6 +18,11 @@
 //   node scripts/pq-release-key.mjs restore-from-paper --recipient ... --recipient ... [--out <file>] [--force]
 //   node scripts/pq-release-key.mjs show-pub           [--path .maintainers]
 //   node scripts/pq-release-key.mjs pin --key-id <hex> [--require-pq-after <releaseId>|auto|none]
+//        [--ca-lease] [--box-artifact [--legacy-manifest <manifest.json> ...]]
+//                      --ca-lease also pins the key for CA leases (CA_LEASE_PQ_PIN), listing every lease
+//                      already in <path>/ca-endorsements as signed before the cut-over; --box-artifact
+//                      pins it for box artifacts (release/box-artifact-trust.json "pq"), listing the given
+//                      manifests (already published, still installable) the same way
 //   node scripts/pq-release-key.mjs fake-yubikeys --fake-yubikey <dir>     (test mode only)
 //   node scripts/pq-release-key.mjs sign-ca-lease --endorsement <file> [--key-file] [--signing-key] [--path .maintainers]
 //   node scripts/pq-release-key.mjs sign-box-artifact --manifest <in.json> --out <out.json> [--key-file] [--signing-key]
@@ -55,6 +60,9 @@ import * as tty from "node:tty";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import {
+  boxArtifactV1Digest,
+  caLeaseV1Digest,
+  canonicalBoxArtifact,
   mldsa65PublicKey,
   pqKeyBindingFromWire,
   RELEASE_PQ_LABEL,
@@ -653,8 +661,66 @@ export function cmdPin(args, out, { pinFile = PIN_FILE, current = RELEASE_PQ_PIN
   fs.writeFileSync(pinFile, src.replace(re, renderPin(pin)));
   if (pinFile === PIN_FILE) writeClientPins(pin.keyIds);
   out(`Pin written to ${pinFile}: ${pin.keyIds.length} key(s); require PQ after ${requirePqAfter ? requirePqAfter.releaseId : "every endorsement"}.`);
+  if (args.caLease) pinCaLease(root, keyId, out);
+  if (args.boxArtifact) pinBoxArtifact(keyId, args.legacyManifests ?? [], out);
   out("Rebuild (npx tsc -b), run the tests, commit the pin and the binding together. From the next release a box needs both signatures.");
   return pin;
+}
+
+export const CA_LEASE_PIN_FILE = path.join(REPO, "packages", "protocol", "src", "caLeasePq.ts");
+export const BOX_ARTIFACT_TRUST_FILE = path.join(REPO, "release", "box-artifact-trust.json");
+
+/** CA_LEASE_PQ_PIN: this key, and every lease already committed counted as signed before the cut-over. */
+export function pinCaLease(root, keyId, out, pinFile = CA_LEASE_PIN_FILE) {
+  const dir = path.join(root, "ca-endorsements");
+  const legacy = new Set();
+  for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    if (!f.endsWith(".json") || f === "bundle.json") continue;
+    let e;
+    try {
+      e = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+    } catch {
+      continue;
+    }
+    const d = e && caLeaseV1Digest(e);
+    if (d) legacy.add(d);
+  }
+  const src = fs.readFileSync(pinFile, "utf8");
+  const re = /\/\/ BEGIN CA_LEASE_PQ_PIN \(generated\)[\s\S]*?\/\/ END CA_LEASE_PQ_PIN/;
+  const cur = /keyIds: Object\.freeze\(\[([^\]]*)\]\)/.exec(src.match(re)?.[0] ?? "");
+  if (!cur) throw new Error(`${pinFile} has no generated CA_LEASE_PQ_PIN block`);
+  const keyIds = [...new Set([...(cur[1].match(/[0-9a-f]{64}/g) ?? []), keyId])];
+  const list = (xs) => xs.map((x) => `"${x}"`).join(", ");
+  fs.writeFileSync(
+    pinFile,
+    src.replace(
+      re,
+      [
+        "// BEGIN CA_LEASE_PQ_PIN (generated)",
+        "export const CA_LEASE_PQ_PIN: CaLeasePqPin = Object.freeze({",
+        "  version: 1,",
+        `  keyIds: Object.freeze([${list(keyIds)}]) as readonly string[],`,
+        `  legacyLeases: Object.freeze([${list([...legacy].sort())}]) as readonly string[],`,
+        "});",
+        "// END CA_LEASE_PQ_PIN",
+      ].join("\n"),
+    ),
+  );
+  out(`CA lease pin written: ${keyIds.length} key(s), ${legacy.size} lease(s) signed before the cut-over. Sign each new lease's companion with sign-ca-lease.`);
+}
+
+/** release/box-artifact-trust.json "pq": this key, and the given published manifests as signed before the cut-over. */
+export function pinBoxArtifact(keyId, legacyManifestFiles, out, trustFile = BOX_ARTIFACT_TRUST_FILE) {
+  const t = JSON.parse(fs.readFileSync(trustFile, "utf8"));
+  const pq = t.pq ?? { keyIds: [], legacyManifests: [] };
+  const legacy = new Set(pq.legacyManifests ?? []);
+  for (const f of legacyManifestFiles) {
+    const doc = JSON.parse(fs.readFileSync(f, "utf8"));
+    legacy.add(boxArtifactV1Digest(canonicalBoxArtifact(doc.manifest)));
+  }
+  t.pq = { keyIds: [...new Set([...(pq.keyIds ?? []), keyId])], legacyManifests: [...legacy].sort() };
+  fs.writeFileSync(trustFile, JSON.stringify(t, null, 2) + "\n");
+  out(`Box artifact pin written to ${trustFile}: ${t.pq.keyIds.length} key(s), ${t.pq.legacyManifests.length} legacy manifest(s). Run node scripts/gen-box-release.mjs --write.`);
 }
 
 // ── argv ────────────────────────────────────────────────────────────────────
@@ -682,6 +748,9 @@ export function parseArgs(argv) {
     else if (a === "--manifest") out.manifest = val();
     else if (a === "--require-pq-after") out.requirePqAfter = val();
     else if (a === "--no-paper") out.noPaper = true;
+    else if (a === "--ca-lease") out.caLease = true;
+    else if (a === "--box-artifact") out.boxArtifact = true;
+    else if (a === "--legacy-manifest") (out.legacyManifests ??= []).push(val());
     else if (a === "--force") out.force = true;
     else if (a === "-h" || a === "--help") out.help = true;
     else throw new UsageError(`unknown argument: ${a}`);

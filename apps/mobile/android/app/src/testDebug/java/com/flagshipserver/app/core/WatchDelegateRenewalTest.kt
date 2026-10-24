@@ -54,7 +54,7 @@ class WatchDelegateRenewalTest {
             override fun remove(serverDomain: String) { m.remove(serverDomain) }
         })
         pins.recordFirstSeen(domain, "51".repeat(32))
-        val optIn = WatchBootOptIn(mailbox, irk, store, pins, now = { now })
+        val optIn = WatchBootOptIn(mailbox, irk, store, pins, { user }, now = { now })
         val renewal = WatchDelegateRenewal(
             server, { user }, { pub }, {}, { if (silent) Ed25519Sign(irkKp.privateKey) else null }, optIn, now = { now }, grantIdGen = { "g2" },
         )

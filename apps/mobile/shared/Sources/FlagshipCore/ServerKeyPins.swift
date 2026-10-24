@@ -34,8 +34,43 @@ public struct ServerKeyPins: @unchecked Sendable {
         ServerKeyPins(defaults: UserDefaults(suiteName: "flagship.serverKeyPins.volatile.\(UUID().uuidString)") ?? .standard)
     }
 
-    private var all: [String: String] {
-        get { defaults.dictionary(forKey: Self.key) as? [String: String] ?? [:] }
+    /// One pin: the STK, plus what that STK vouched for since (architecture v2, `BoxKeyPins`): the
+    /// ML-DSA-65 key its `box-stk` binding names and the boot-only key its boot-key binding names.
+    public struct Record: Equatable, Sendable {
+        public let stkHex: String
+        public var mldsa: String?
+        public var mldsaIssuedAt: Int64?
+        public var boot: String?
+        public var bootIssuedAt: Int64?
+
+        public var stk: Data? { HexUtil.decode(stkHex).flatMap { $0.count == 32 ? $0 : nil } }
+
+        init?(_ value: Any?) {
+            let fields = value as? [String: Any]
+            guard let hex = ((value as? String) ?? (fields?["stk"] as? String))?.lowercased(),
+                  let raw = HexUtil.decode(hex), raw.count == 32
+            else { return nil }
+            stkHex = hex
+            mldsa = fields?["mldsa"] as? String
+            mldsaIssuedAt = (fields?["mldsaIssuedAt"] as? NSNumber)?.int64Value
+            boot = fields?["boot"] as? String
+            bootIssuedAt = (fields?["bootIssuedAt"] as? NSNumber)?.int64Value
+        }
+
+        /// A bare hex string while the STK has vouched for nothing, as pins were kept before.
+        var stored: Any {
+            guard mldsa != nil || boot != nil else { return stkHex }
+            var d: [String: Any] = ["stk": stkHex]
+            if let mldsa { d["mldsa"] = mldsa }
+            if let mldsaIssuedAt { d["mldsaIssuedAt"] = NSNumber(value: mldsaIssuedAt) }
+            if let boot { d["boot"] = boot }
+            if let bootIssuedAt { d["bootIssuedAt"] = NSNumber(value: bootIssuedAt) }
+            return d
+        }
+    }
+
+    private var all: [String: Any] {
+        get { defaults.dictionary(forKey: Self.key) ?? [:] }
         nonmutating set { defaults.set(newValue, forKey: Self.key) }
     }
 
@@ -47,7 +82,25 @@ public struct ServerKeyPins: @unchecked Sendable {
 
     /// The pinned key for a server, or nil when this device has not blessed it yet.
     public func pinnedStk(_ serverDomain: String) -> Data? {
-        all[Self.normalize(serverDomain)].flatMap(HexUtil.decode).flatMap { $0.count == 32 ? $0 : nil }
+        record(serverDomain)?.stk
+    }
+
+    /// The whole pin for a server, or nil when this device has not blessed it yet.
+    public func record(_ serverDomain: String) -> Record? {
+        Record(all[Self.normalize(serverDomain)])
+    }
+
+    /// Add what the pinned STK vouched for to its pin, only while `stkHex` is still the pin (a
+    /// re-trust in between drops the update). False when it was dropped.
+    @discardableResult
+    public func update(_ serverDomain: String, stkHex: String, _ change: (inout Record) -> Void) -> Bool {
+        let d = Self.normalize(serverDomain)
+        guard var r = record(d), r.stkHex == stkHex.lowercased() else { return false }
+        change(&r)
+        var m = all
+        m[d] = r.stored
+        all = m
+        return true
     }
 
     public func pinnedStkHex(_ serverDomain: String) -> String? {

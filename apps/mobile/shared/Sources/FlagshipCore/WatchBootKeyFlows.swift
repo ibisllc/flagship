@@ -124,7 +124,7 @@ public struct WatchBootKeyEnroller {
         guard HexUtil.decode(listedHex) == pinned else { throw Failure.keyChanged }
         let sealed: SealedLuksKeyResponse
         do {
-            sealed = try await mailbox.fetchSealedLuksKey(serverDomain: serverDomain)
+            sealed = try await mailbox.fetchSealedLuksKey(serverDomain: serverDomain, username: username)
         } catch ScreensClientError.http(let status, _) where status == 404 {
             throw SecretRequestCoordinator.CoordinatorError.noSealedLuksKey
         }

@@ -2751,5 +2751,10 @@
   "server_code_check_first": "Prüfe den Code dieses Servers, bevor du ihn genehmigst.",
   "server_first_approval_on_phone": "Genehmige den ersten Start dieses Servers auf deinem Telefon, wo du seinen Code prüfen kannst.",
   "server_key_not_pinned": "Dieses Telefon hat den Schlüssel dieses Servers noch nicht geprüft. Genehmige zuerst seinen nächsten Start auf diesem Telefon.",
-  "let_server_hold_app_names": "Erlaube deinem Server, für die Namen deiner Apps zu antworten"
+  "let_server_hold_app_names": "Erlaube deinem Server, für die Namen deiner Apps zu antworten",
+  "quantum_safe_approve_on_device_with_pq_key": "Dieser Server ist post-quantensicher. Genehmige ihn auf einem Gerät, das die Post-Quanten-Hälfte deines Kontoschlüssels hat (Einstellungen, Post-Quanten-Schutz).",
+  "quantum_safe_no_unlock_key_published": "Dieser Server ist post-quantensicher, hat seinen Post-Quanten-Entsperrschlüssel aber nicht veröffentlicht. Aktualisiere den Server oder schalte seinen Post-Quanten-Schutz aus.",
+  "post_quantum_key": "Post-Quanten-Schlüssel: %1$s",
+  "trust_the_new_key_of": "Dem neuen Schlüssel von %1$s vertrauen",
+  "couldnt_confirm_try_again": "Bestätigung fehlgeschlagen. Versuche es erneut."
 }

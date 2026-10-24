@@ -94,6 +94,10 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func pairedSessionsList() async throws -> PairedSessionsListResponse {
         try await real.pairedSessionsList()
     }
+    func serverWildcardGrantStatus() async throws -> Bool { try await real.serverWildcardGrantStatus() }
+    func deliverServerWildcardGrant(issuedAt: Int64, signatureHex: String) async throws {
+        try await real.deliverServerWildcardGrant(issuedAt: issuedAt, signatureHex: signatureHex)
+    }
     func revokePairedSession(tokenPrefix: String) async throws {
         try await real.revokePairedSession(tokenPrefix: tokenPrefix)
     }

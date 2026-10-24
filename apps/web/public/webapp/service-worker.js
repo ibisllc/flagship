@@ -358,6 +358,25 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v171: app chat requests from other owners' apps wait under Activity and ask in a sheet (Allow,
+//       Always allow, Deny, each owner-signed; Ask me each time ends an Always allow: lib/chatAlerts.js),
+//       and an AI adapt that spends a key or credits shows its estimate first and runs only on a signed
+//       Continue (lib/aiConsentUi.js). First contact (docs/first-contact.md): each device pins a
+//       server's own key at its first blessing (lib/serverPins.js); the recipe carries a one-time
+//       enrollment secret whose proof the first blessing checks, the code shows above Approve, a
+//       changed key is refused, and the app-name certificate grant is signed with it
+//       (lib/firstContact.js, lib/enrollment.js, lib/serverWildcardGrant.js, lib/serverKeyCard.js,
+//       lib/studioConfirm.js).
+//  v170: feat/UX: the webapp in six languages (lib/i18n.js tr/trn, lib/i18nLocales.js; each catalog
+//       i18n/<lang>.json?v=<hash> is fetched per language; Traditional-Chinese and English-first browsers
+//       stay English; swRegister.js loads as a module so the worker registers), named links (the .com
+//       domain proof and custom voi.ci names), and the owner UI round (Home, Activity's no-server card,
+//       compact AI API keys, Cloud recovery help, "Scan a code or enter a link" replaces Process URL).
+//  v169: Remove app offers Back up first; Lock and restart says restarting; the restored-permissions sentence is split.
+//  v168: a restored app says what it still needs; the Home recovery card finalizes only this device's own replacement.
+//  v167: let one browser session build or deploy one app, on an admin device's signature.
+//  v166: how an app takes updates (ask each time, wait a week, automatic).
+//  v165: restored permissions wait for an admin (approve the exact list or discard it).
 //  v170: Quantum-safe protection lists each strict server's apps with their own browser answer (view only).
 //  v171: CA leases need their PQ companion once the pin names a key; a quantum-safe unlock request says to use the phone.
 //  v169: Settings, Quantum-safe protection shows each server's policy (view only: the browser holds no PQ key); security notices need the release key's PQ half once its pin is set (lib/releasePqPin.js).
@@ -373,7 +392,10 @@
 //  v159: an offline recipe signs a commitment to its workload key (offline-secrets).
 //  v158: an admin sees a pending recovery and can reject it (re-pair veto).
 //  v157: Backups on other servers are no longer offered at create time or in Backups; the notice lock lets the two boot-unlock writes through.
-const SHELL_VERSION = "v171";
+//  v176: release 0.3 (one shell for the security release, UX and architecture v2): first contact is the
+//       only way a server's key is pinned (one pin store, never on first sight); the PQ and strict checks
+//       read the same pins; everything earlier in this list from v157 on ships together here.
+const SHELL_VERSION = "v176";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -402,6 +424,8 @@ const ESSENTIAL_PATHS = [
 // network (and then cache whatever it gets). Keeps the webapp's
 // offline launch path resilient while a deploy rolls forward.
 const OPTIONAL_SHELL = [
+  "/lib/i18n.js",
+  "/lib/i18nLocales.js",
   "/providers.js",
   "/qrScanner.js",
   "/lib/util.js",
@@ -420,6 +444,8 @@ const OPTIONAL_SHELL = [
   "/vendor/noble-hashes/crypto.js",
   "/lib/push.js",
   "/lib/icons.js",
+  "/lib/flagshipLinkInput.js",
+  "/lib/noServerCard.js",
   "/lib/auditLog.js",
   "/lib/accountRead.js",
   "/lib/serverOrder.js",
@@ -448,6 +474,10 @@ const OPTIONAL_SHELL = [
   "/lib/aiRelay.js",
   "/lib/appAccess.js",
   "/lib/accessAlerts.js",
+  "/lib/chatAlerts.js",
+  "/lib/chatApproval.js",
+  "/lib/aiConsentUi.js",
+  "/lib/aiRepairConsent.js",
   "/lib/pushSetting.js",
   "/lib/appApiKeys.js",
   "/lib/freeAi.js",
@@ -456,6 +486,9 @@ const OPTIONAL_SHELL = [
   "/lib/vibeTranscript.js",
   "/lib/appDb.js",
   "/lib/permissions.js",
+  "/lib/restoredAccess.js",
+  "/lib/updateMode.js",
+  "/lib/companionDelegation.js",
   "/lib/knockIdentity.js",
   "/lib/appPlacement.js",
   "/lib/serverMonitoring.js",
@@ -510,6 +543,10 @@ const OPTIONAL_SHELL = [
   "/lib/loginTakeover.js",
   "/lib/maintainerTrust.js",
   "/lib/modal.js",
+  "/lib/nameDibs.js",
+  "/lib/voiciName.js",
+  "/lib/linkField.js",
+  "/views/name-dibs.js",
   "/lib/lockSweep.js",
   "/lib/accountGone.js",
   "/lib/accountGoneUi.js",
@@ -548,6 +585,12 @@ const OPTIONAL_SHELL = [
   "/lib/serverTransfer.js",
   "/lib/serverTrust.js",
   "/lib/serverUpdate.js",
+  "/lib/serverPins.js",
+  "/lib/serverKeyCard.js",
+  "/lib/serverWildcardGrant.js",
+  "/lib/firstContact.js",
+  "/lib/enrollment.js",
+  "/lib/studioConfirm.js",
   "/lib/serviceInvite.js",
   "/lib/sessionTiers.js",
   "/lib/swkDeposit.js",

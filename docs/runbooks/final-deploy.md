@@ -24,9 +24,9 @@ force-pushes and keeps its progress in `~/.flagship-release/state.json` so a fai
 run resumes at the failed step. The commands below stay as the reference it follows.
 
 ```sh
-bash scripts/release.sh --list                # the 34 steps, with phase, commands, gate, rollback
-bash scripts/release.sh --phase A             # deploy the real state (steps 1-21), before the Windows test
-bash scripts/release.sh --phase B             # after the Windows results (steps 22-34)
+bash scripts/release.sh --list                # the 35 steps, with phase, commands, gate, rollback
+bash scripts/release.sh --phase A             # deploy the real state (steps 1-22), before the Windows test
+bash scripts/release.sh --phase B             # after the Windows results (steps 23-35)
 bash scripts/release.sh --dry-run --phase A   # print every command, run nothing
 bash scripts/release.sh --status              # pinned sha, finished steps, next step
 bash scripts/release.sh --from 10             # resume at, or --only 10 to run only, one step
@@ -61,6 +61,7 @@ The script stops and asks at each of these; nothing else needs you.
 
 | When | What you do | Step |
 |---|---|---|
+| once | the PQ release key ceremony: two YubiKeys, the paper backup, the three pins | 2c |
 | once | make the two release catalog keys on an offline stick; the script pins the root and sets `RELEASE_CATALOG_TIMESTAMP_KEY` | 2b |
 | every release | the product version and the store numbers (they must climb) | 0b |
 | every release | YubiKey PIN + touch: the CA lease, the release endorsement, both box artifacts | 2, 3, 3b |
@@ -118,6 +119,9 @@ Known state at the time of writing (re-check, do not trust):
   `main` run is the one named in step 9.
 
 ## 0b. Bump the product version
+
+It also asks for the release day and opens name dibs then, for six months
+(`DIBS_WINDOW_START`/`END` in `apps/com/wrangler.toml`, shipped by the `.com` deploy).
 
 One product version on every surface (`release/version.json`, the only file to edit). The script asks
 for the new `product` (0.3 for this release), the label, the iOS marketing version and build, the
@@ -287,6 +291,24 @@ The timestamp key is the only online one: `.github/workflows/release-catalog-tim
 update, never stops what runs). A new root (rotating a key) is signed by the old root and published as
 `catalog-root-<v>.json` beside `catalog-root.json`; boxes walk the chain. Losing the root key means
 re-pinning a root in a release every box must reach by an owner order.
+
+## 2c. PQ release key (once)
+
+The release key becomes a hybrid pair: the YubiKey's Ed25519 key and an ML-DSA-65 key made here,
+encrypted with age to both YubiKeys and kept on paper (`docs/runbooks/pq-release-key.md`). Skipped once
+`release/box-artifact-trust.json` names a PQ key. The script runs `init` (PIN + touch; the paper code
+prints once), `verify-yubikey` with each YubiKey, then
+
+```sh
+node scripts/pq-release-key.mjs pin --key-id <id> --require-pq-after auto --ca-lease --box-artifact \
+  --legacy-manifest <each published box manifest>
+```
+
+which pins the key for release endorsements (`RELEASE_PQ_PIN` and the client copies), CA leases
+(`CA_LEASE_PQ_PIN`, every lease already committed listed as signed before the cut-over) and box artifacts
+(`release/box-artifact-trust.json` `pq`), then `gen-box-release.mjs --write`, commits and re-pins. From then
+on the endorsement step adds the v2 companion by itself, the lease step signs `sign-ca-lease`, and the
+artifact step `sign-box-artifact` for each architecture. Every PQ claim stays "pending external review".
 
 ## 3. Endorse a server release (only if the box code changed)
 
