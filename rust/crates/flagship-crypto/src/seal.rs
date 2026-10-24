@@ -85,6 +85,10 @@ impl HybridSealPublicKey {
     pub const fn key_id(&self) -> [u8; KEY_ID_LEN] {
         self.id
     }
+
+    pub(crate) const fn ek(&self) -> &EncapsulationKey {
+        &self.ek
+    }
 }
 
 // A clamped scalar is a multiple of 8 and below 8 * l, so X25519 with it

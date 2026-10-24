@@ -17,6 +17,7 @@ x25519-dalek = { version = "=3.0.0", default-features = false, features = ["stat
 ml-dsa = { version = "=0.1.1", default-features = false, features = ["alloc", "rand_core", "zeroize"] }
 ed25519-dalek = { version = "=3.0.0", default-features = false, features = ["fast", "zeroize"] }
 hkdf = { version = "=0.13.0", default-features = false }
+hmac = { version = "=0.13.0", default-features = false }
 sha2 = { version = "=0.11.0", default-features = false }
 aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes", "zeroize"] }
 zeroize = { version = "=1.9.1", default-features = false }
