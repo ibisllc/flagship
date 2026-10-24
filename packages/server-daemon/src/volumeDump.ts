@@ -1,9 +1,9 @@
+import { engineArgv } from "./engine/engine.js";
 import { spawn } from "node:child_process";
 import { createWriteStream, createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { isProdFilesVolume } from "./dataLayer/naming.js";
-import { routePrivileged } from "./privileged.js";
 import { assertNoHostPathInDockerArgs, filesMountArgs } from "./serviceRunner.js";
 
 /**
@@ -66,10 +66,9 @@ export interface VolumeDumpRunner {
 const DEFAULT_TIMEOUT_MS = 20 * 60_000; // dumps of a large store can be slow
 
 export const realVolumeDumpRunner: VolumeDumpRunner = {
-  async run(cmd, args) {
-    if (await routePrivileged(cmd, args)) return;
+  run(cmd, args) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
+      const p = spawn(...engineArgv(cmd, args), { stdio: ["ignore", "inherit", "inherit"] });
       const t = armTimeout(p, reject);
       p.on("error", (e) => {
         clearTimeout(t);
@@ -81,11 +80,9 @@ export const realVolumeDumpRunner: VolumeDumpRunner = {
       });
     });
   },
-  async capture(cmd, args) {
-    const routed = await routePrivileged(cmd, args);
-    if (routed) return { stdout: routed.stdout };
+  capture(cmd, args) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+      const p = spawn(...engineArgv(cmd, args), { stdio: ["ignore", "pipe", "pipe"] });
       let stdout = "";
       let stderr = "";
       const t = armTimeout(p, reject);
@@ -105,29 +102,25 @@ export const realVolumeDumpRunner: VolumeDumpRunner = {
   async runToFile(cmd, args, outPath) {
     await mkdir(dirname(outPath), { recursive: true, mode: 0o700 });
     const tmp = `${outPath}.partial`;
-    await rm(tmp, { force: true });
-    await (async () => {
-      if (await routePrivileged(cmd, args, { stdoutPath: tmp })) return;
-      await new Promise<void>((resolve, reject) => {
-        const out = createWriteStream(tmp, { mode: 0o600 });
-        const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
-        let stderr = "";
-        const t = armTimeout(p, reject);
-        p.stderr?.on("data", (d) => (stderr += d.toString()));
-        p.stdout?.pipe(out);
-        p.on("error", (e) => {
-          clearTimeout(t);
-          reject(e);
-        });
-        p.on("exit", (code) => {
-          clearTimeout(t);
-          out.end(() => {
-            if (code === 0) return resolve();
-            reject(new Error(`${cmd} exited with code ${code}: ${stderr.slice(-400)}`));
-          });
+    await new Promise<void>((resolve, reject) => {
+      const out = createWriteStream(tmp, { mode: 0o600 });
+      const p = spawn(...engineArgv(cmd, args), { stdio: ["ignore", "pipe", "pipe"] });
+      let stderr = "";
+      const t = armTimeout(p, reject);
+      p.stderr?.on("data", (d) => (stderr += d.toString()));
+      p.stdout?.pipe(out);
+      p.on("error", (e) => {
+        clearTimeout(t);
+        reject(e);
+      });
+      p.on("exit", (code) => {
+        clearTimeout(t);
+        out.end(() => {
+          if (code === 0) return resolve();
+          reject(new Error(`${cmd} exited with code ${code}: ${stderr.slice(-400)}`));
         });
       });
-    })().then(
+    }).then(
       () => rename(tmp, outPath),
       async (e) => {
         await rm(tmp, { force: true });
@@ -135,10 +128,9 @@ export const realVolumeDumpRunner: VolumeDumpRunner = {
       },
     );
   },
-  async runFromFile(cmd, args, inPath) {
-    if (await routePrivileged(cmd, args, { stdinPath: inPath })) return;
+  runFromFile(cmd, args, inPath) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: ["pipe", "inherit", "pipe"] });
+      const p = spawn(...engineArgv(cmd, args), { stdio: ["pipe", "inherit", "pipe"] });
       let stderr = "";
       const t = armTimeout(p, reject);
       p.stderr?.on("data", (d) => (stderr += d.toString()));

@@ -1,3 +1,4 @@
+import { engineArgv } from "../engine/engine.js";
 /**
  * The Docker and Postgres work a copy needs (docs/app-placement.md §5), behind
  * one interface so the copy logic is tested without a real box.
@@ -82,7 +83,7 @@ async function exec(cmd: string, args: string[], o: SpawnOpts = {}): Promise<str
 
 function localExec(cmd: string, args: string[], o: SpawnOpts): Promise<string> {
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, {
+    const p = spawn(...engineArgv(cmd, args), {
       stdio: [o.stdinFrom ? "pipe" : "ignore", "pipe", "pipe"],
       env: o.env ? { ...process.env, ...o.env } : process.env,
     });

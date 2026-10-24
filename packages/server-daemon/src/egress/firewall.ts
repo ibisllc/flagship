@@ -15,9 +15,9 @@
  * restart, so while the gateway is down the bridges fail closed.
  */
 import { writeFile } from "node:fs/promises";
-import { runDir } from "../privileged.js";
 import type { CommandRunner } from "../serviceRunner.js";
 import type { EgressNetworkKind } from "./policy.js";
+import { activeEngine, type EngineKind } from "../engine/engine.js";
 
 export interface FirewallBridge {
   bridge: string;
@@ -50,6 +50,42 @@ export const HOOKS: ReadonlyArray<{ bin: "iptables" | "ip6tables"; table: string
   { bin: "ip6tables", table: "filter", parent: "FORWARD", chain: CHAIN_V6 },
   { bin: "ip6tables", table: "filter", parent: "INPUT", chain: CHAIN_V6 },
 ];
+
+/**
+ * Under Podman there is no DOCKER-USER: our forward chain hangs off FORWARD itself, ahead of
+ * netavark's own rules (iptables or nftables driver, either way a separate accept that cannot
+ * override our reject).
+ */
+export function hooksFor(engine: EngineKind): typeof HOOKS {
+  if (engine === "docker") return HOOKS;
+  return HOOKS.map((h) => (h.parent === "DOCKER-USER" ? { ...h, parent: "FORWARD" } : h));
+}
+
+/** The nft table that keeps containers on one bridge from reaching each other (Docker's enable_icc=false). */
+export const ICC_TABLE = "flagship_icc";
+
+/**
+ * Podman has no enable_icc. Frames forwarded port to port on a sandbox bridge are dropped in the
+ * bridge family's forward hook; traffic to the gateway (the bridge's own address) is delivered
+ * locally and never passes this hook, so the egress gateway stays reachable.
+ */
+export function renderIccTable(bridges: readonly FirewallBridge[]): string {
+  for (const b of bridges) {
+    if (!IFACE.test(b.bridge)) throw new Error(`bad bridge interface name ${JSON.stringify(b.bridge)}`);
+  }
+  const rules = bridges.map((b) => `    meta ibrname "${b.bridge}" meta obrname "${b.bridge}" counter drop`);
+  return [
+    `table bridge ${ICC_TABLE}`,
+    `delete table bridge ${ICC_TABLE}`,
+    `table bridge ${ICC_TABLE} {`,
+    "  chain forward {",
+    "    type filter hook forward priority -100; policy accept;",
+    ...rules,
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+}
 
 const IFACE = /^[a-zA-Z0-9_.-]{1,15}$/;
 
@@ -126,6 +162,7 @@ export interface InstallFirewallOptions {
   /** Where to stage the restore payloads (tmpfs). */
   rulesDir?: string;
   log?: (m: string) => void;
+  engine?: EngineKind;
 }
 
 /**
@@ -134,15 +171,17 @@ export interface InstallFirewallOptions {
  * IPv6 forwarding to fence).
  */
 export async function installFirewall(cmd: CommandRunner, plan: FirewallPlan, opts: InstallFirewallOptions = {}): Promise<void> {
-  const dir = opts.rulesDir ?? runDir();
+  const dir = opts.rulesDir ?? "/run";
+  const engine = opts.engine ?? activeEngine();
+  const hooks = hooksFor(engine);
   const { v4, v6 } = renderFirewall(plan);
   // DOCKER-USER exists once dockerd has started; create it if we're first
   // (dockerd keeps an existing DOCKER-USER and only adds its FORWARD jump).
-  await ok(cmd, "iptables", ["-t", "filter", "-N", "DOCKER-USER"]);
+  if (engine === "docker") await ok(cmd, "iptables", ["-t", "filter", "-N", "DOCKER-USER"]);
   const v4Path = `${dir}/flagship-egress.v4.rules`;
   await writeFile(v4Path, v4, { mode: 0o600 });
   await cmd.run("iptables-restore", ["-w", "--noflush", v4Path]);
-  for (const h of HOOKS.filter((x) => x.bin === "iptables")) {
+  for (const h of hooks.filter((x) => x.bin === "iptables")) {
     if (!(await ok(cmd, h.bin, ["-t", h.table, "-C", h.parent, "-j", h.chain]))) {
       await cmd.run(h.bin, ["-w", "-t", h.table, "-I", h.parent, "1", "-j", h.chain]);
     }
@@ -151,7 +190,7 @@ export async function installFirewall(cmd: CommandRunner, plan: FirewallPlan, op
   try {
     await writeFile(v6Path, v6, { mode: 0o600 });
     await cmd.run("ip6tables-restore", ["-w", "--noflush", v6Path]);
-    for (const h of HOOKS.filter((x) => x.bin === "ip6tables")) {
+    for (const h of hooks.filter((x) => x.bin === "ip6tables")) {
       if (!(await ok(cmd, h.bin, ["-t", h.table, "-C", h.parent, "-j", h.chain]))) {
         await cmd.run(h.bin, ["-w", "-t", h.table, "-I", h.parent, "1", "-j", h.chain]);
       }
@@ -159,11 +198,20 @@ export async function installFirewall(cmd: CommandRunner, plan: FirewallPlan, op
   } catch (e) {
     opts.log?.(`[egress] IPv6 rules not installed (${(e as Error).message}); the bridges are IPv4-only`);
   }
+  // Fail closed like the IPv4 rules: without this table containers could reach each other.
+  if (engine === "podman") await installIccIsolation(cmd, plan.bridges, dir);
+}
+
+/** Podman only (Docker's bridges carry enable_icc=false themselves). Throws when nft refuses. */
+export async function installIccIsolation(cmd: CommandRunner, bridges: readonly FirewallBridge[], dir = "/run"): Promise<void> {
+  const iccPath = `${dir}/flagship-icc.nft`;
+  await writeFile(iccPath, renderIccTable(bridges), { mode: 0o600 });
+  await cmd.run("nft", ["-f", iccPath]);
 }
 
 /** Remove every hook and chain. Safe to run when nothing is installed. */
-export async function removeFirewall(cmd: CommandRunner): Promise<void> {
-  for (const h of HOOKS) {
+export async function removeFirewall(cmd: CommandRunner, engine: EngineKind = activeEngine()): Promise<void> {
+  for (const h of hooksFor(engine)) {
     for (let i = 0; i < 8; i++) {
       if (!(await ok(cmd, h.bin, ["-t", h.table, "-D", h.parent, "-j", h.chain]))) break;
     }

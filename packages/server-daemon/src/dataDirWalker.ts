@@ -1,3 +1,4 @@
+import { engineArgv } from "./engine/engine.js";
 import { promises as fs } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -155,7 +156,7 @@ export async function quiesceDataServices(
   const run =
     runner ??
     (async (cmd: string, args: string[]) => {
-      await execFileP(cmd, args, { timeout: 120_000 });
+      await execFileP(...engineArgv(cmd, args), { timeout: 120_000 });
     });
   const composePath = opts?.composePath ?? "/opt/flagship/installer/data-services/docker-compose.yml";
   const envFile = opts?.envFile ?? "/var/flagship/data-services.env";
