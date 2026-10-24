@@ -189,12 +189,17 @@ final class ChatAndConsentWireTests: XCTestCase {
     }
 
     func testChatRequestsDecodeTheBoxsShape() throws {
-        let json = #"{"requests":[{"requestId":"r1","kind":"incoming","claimedSender":{"author":"ana","slug":"chess"},"receiverApp":{"author":"me","slug":"club"},"phrase":"hi","count":3,"at":7}],"always":[{"author":"me","slug":"board"}]}"#
+        let json = #"{"requests":[{"requestId":"r1","kind":"incoming","claimedSender":{"author":"ana","slug":"chess"},"receiverApp":{"author":"me","slug":"club"},"phrase":"hi","count":3,"at":7}],"always":[{"receiverApp":{"author":"me","slug":"board"},"claimedSender":{"author":"ana","slug":"chess"}}]}"#
         let r = try JSONDecoder().decode(ChatRequestsResponse.self, from: Data(json.utf8))
         XCTAssertEqual(r.requests.first?.claimedSender.label, "ana/chess")
         XCTAssertEqual(r.requests.first?.count, 3)
         XCTAssertTrue(r.requests.first?.isIncoming == true)
-        XCTAssertEqual(r.always, [ChatAppIdentity(author: "me", slug: "board")])
+        XCTAssertEqual(r.always, [ChatAlwaysAllow(receiverApp: ChatAppIdentity(author: "me", slug: "board"),
+                                                  claimedSender: ChatAppIdentity(author: "ana", slug: "chess"))])
+        let revoke = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            ChatRevokeRequest(receiverApp: ChatAppIdentity(author: "me", slug: "board"), sender: nil))) as? [String: Any]
+        XCTAssertEqual(revoke?["slug"] as? String, "board")
+        XCTAssertNil(revoke?["sender"], "No sender ends every Always allow to the app.")
         XCTAssertTrue(ChatRequestEvents.isRequestFrame(Data(#"{"type":"chat-request","kind":"incoming"}"#.utf8)))
         XCTAssertFalse(ChatRequestEvents.isRequestFrame(Data(#"{"type":"access-request"}"#.utf8)))
     }
