@@ -164,7 +164,7 @@ function validateDeviceCapabilityGrantFields(g: DeviceCapabilityGrant): void {
  * stability — a future scope name would otherwise re-shuffle the order
  * and invalidate every prior audit vector.
  */
-function canonicalDeviceCapabilityGrant(g: DeviceCapabilityGrant): Bytes {
+export function canonicalDeviceCapabilityGrant(g: DeviceCapabilityGrant): Bytes {
   validateDeviceCapabilityGrantFields(g);
   const sortedScopes = [...g.scopes]
     .sort((a, b) => (DEVICE_SCOPE_INDEX.get(a) ?? 0) - (DEVICE_SCOPE_INDEX.get(b) ?? 0))

@@ -83,6 +83,11 @@ export interface BoxSigner {
   boxPublicKey(): Bytes;
   /** Ed25519-sign arbitrary canonical bytes with the box identity seed. */
   signAsBox(msg: Bytes): Bytes;
+  /**
+   * Sign a `master` identity assertion with the owner's evidence (keyd checks it itself:
+   * identityAssertion.ts checkMasterEvidence). Absent: the custodian has no separate key holder.
+   */
+  signMasterIdentity?(msg: Bytes, evidence: { appId: string; identityPubHex: string; statement: string; signatureHex: string }): Bytes;
   /** Open a blob sealed TO the box identity (X25519 via the birational map). */
   unsealToBox(blob: Bytes): Bytes;
   /** Open a pairing order sealed to the box; refuses anything else that was sealed to it. */

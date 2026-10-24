@@ -26,6 +26,18 @@ pub fn hkdf32(ikm: &[u8], salt: &[u8], info: &[u8]) -> Key32 {
     out
 }
 
+/// `deriveServiceMemberStableId(deriveServiceSecret(swk, app), identity)` (protocol keys.ts): the
+/// per-app member id an identity assertion names, 16 bytes as hex.
+#[must_use]
+pub fn member_stable_id(swk: &[u8; 32], app: &str, identity: &[u8; 32]) -> String {
+    let secret = hkdf32(swk, app.as_bytes(), b"flagship.app-secret.v1");
+    let mut out = [0u8; 16];
+    // 16 bytes is always within HKDF-SHA256's limit.
+    let _ = Hkdf::<Sha256>::new(Some(identity), secret.as_ref())
+        .expand(b"flagship.app-member.v1", &mut out);
+    out.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// HMAC-SHA256: HKDF-Extract is HMAC(salt, ikm), so the key goes in as the salt.
 pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
     let (prk, _) = Hkdf::<Sha256>::extract(Some(key), msg);

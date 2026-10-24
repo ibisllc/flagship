@@ -525,6 +525,16 @@ export class ServiceAccessStore {
     return accountRank(this.byService.get(serviceRef)?.roles.ranks[rankKey(p)]);
   }
 
+  /**
+   * The evidence keyd needs before it signs `master` for this principal: the owner's grant for an
+   * admin device that holds master by default. Null otherwise (an admin's order made it master, or
+   * no grant is in the book): the box then asserts no more than manager.
+   */
+  masterEvidence(serviceRef: string, p: Principal): { statement: string; signatureHex: string } | null {
+    if (p.kind !== "device" || p.tier !== "admin" || this.rankOverride(serviceRef, p)) return null;
+    return this.principals?.grantStatementFor?.(p.pub) ?? null;
+  }
+
   /** An account device's or co-manager's rank in an app: the override, else the default; null when refused. */
   accountRank(serviceRef: string, p: Principal): MemberRole | null {
     const set = this.rankOverride(serviceRef, p);

@@ -130,6 +130,17 @@ pub fn load_owner_anchor(state: &Path) -> Option<String> {
     .then(|| k.to_owned())
 }
 
+/// The admin root in `owner.json` (`adminRootPubHex`), lowercase hex, or `None`.
+pub fn load_admin_root_anchor(state: &Path) -> Option<String> {
+    let text = fs::read_to_string(state.join("owner.json")).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let k = v.get("adminRootPubHex")?.as_str()?;
+    (k.len() == 64
+        && k.bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)))
+    .then(|| k.to_owned())
+}
+
 /// `CEREMONY_TOKEN_FILE` and `CEREMONY_WINDOW_MS` (migrate.ts).
 pub const CEREMONY_TOKEN_FILE: &str = "provision-ceremony.token";
 pub const CEREMONY_WINDOW_MS: i64 = 10 * 60_000;

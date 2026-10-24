@@ -52,6 +52,8 @@ export interface SessionInfo {
    * Their access also needs a current freshness checkpoint (N07); the owner's never does.
    */
   external?: boolean;
+  /** For `master`: the owner's signed evidence keyd checks before it signs that rank. */
+  masterEvidence?: { statement: string; signatureHex: string };
 }
 
 /**
@@ -244,12 +246,39 @@ export async function prepareAppRequest(
   if (checkIdentityAssertion(fields.join("|")) !== null) {
     return respond(403, { error: "this visitor's rank could not be established" });
   }
-  const sig = deps.injector.signAsBox(new TextEncoder().encode(fields.join("|")));
+  let sig: Bytes;
+  if (role === "master" && deps.injector.signMasterIdentity) {
+    // keyd signs master only with the owner's evidence for this sign-in key; without it (or if
+    // keyd refuses it) the box asserts manager, the most it signs on its own word.
+    const ev = session?.masterEvidence;
+    let signed: Bytes | null = null;
+    if (ev && session) {
+      try {
+        signed = deps.injector.signMasterIdentity(new TextEncoder().encode(fields.join("|")), {
+          appId: app.serviceId,
+          identityPubHex: bytesToHex(session.memberPub),
+          statement: ev.statement,
+          signatureHex: ev.signatureHex,
+        });
+      } catch {
+        signed = null;
+      }
+    }
+    if (signed) {
+      sig = signed;
+    } else {
+      fields[3] = "manager";
+      sig = deps.injector.signAsBox(new TextEncoder().encode(fields.join("|")));
+    }
+  } else {
+    sig = deps.injector.signAsBox(new TextEncoder().encode(fields.join("|")));
+  }
+  const assertedRole = fields[3]!;
   forwardHeaders["x-flagship-app-id"] = app.serviceId;
   forwardHeaders["x-flagship-visitor"] = visitor;
   if (visitor !== "anonymous") {
     forwardHeaders["x-flagship-user"] = user;
-    forwardHeaders["x-flagship-role"] = role;
+    forwardHeaders["x-flagship-role"] = assertedRole;
   }
   if (apiKey) forwardHeaders["x-flagship-api-scope"] = apiKey.scope;
   forwardHeaders["x-flagship-timestamp"] = ts;

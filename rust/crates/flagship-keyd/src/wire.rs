@@ -13,6 +13,7 @@ pub const OPS: &[&str] = &[
     "hello",
     "status",
     "sign",
+    "sign.identity",
     "sign.hybrid",
     "pq.status",
     "unseal",

@@ -21,6 +21,7 @@
 import { readFile } from "node:fs/promises";
 import { writeFileDurable } from "./durableFile.js";
 import {
+  canonicalDeviceCapabilityGrant,
   DEVICE_SCOPES,
   PqTrustError,
   verifyDeviceCapabilityGrant,
@@ -54,6 +55,8 @@ export interface PrincipalResolver {
   coManagers(): Extract<Principal, { kind: "co-manager" }>[];
   /** The owner AID, hex: every account device shows to an app as this one person. */
   ownerAidHex(): string | null;
+  /** The owner's signed grant for an account device key (master evidence for keyd). */
+  grantStatementFor?(pubHex: string): { statement: string; signatureHex: string } | null;
 }
 
 /** One grant as `.com` lists it (and the book keeps it on disk). */
@@ -178,6 +181,21 @@ export class AccountDeviceBook {
       return { kind: "device", pub, deviceId: null, tier: this.pinned() ? "member" : "admin", legacy: true };
     }
     return null;
+  }
+
+  /**
+   * The owner's signed grant for an account device key, as keyd checks it before it signs `master`
+   * for that key (identityAssertion.ts checkMasterEvidence); null when the book holds none.
+   */
+  grantStatementFor(pubHex: string): { statement: string; signatureHex: string } | null {
+    const d = this.byPub.get(pubHex.toLowerCase());
+    const g = d ? toGrant(d.grant) : null;
+    if (!d || !g) return null;
+    try {
+      return { statement: new TextDecoder().decode(canonicalDeviceCapabilityGrant(g)), signatureHex: d.grant.signatureHex.toLowerCase() };
+    } catch {
+      return null;
+    }
   }
 
   devices(): Extract<Principal, { kind: "device" }>[] {

@@ -34,7 +34,9 @@ describe("the identity the box asserts to its apps", () => {
   it("signs only a member's rank, an anonymous visitor or an API key, in their one shape", () => {
     for (const c of vectors.cases.filter((v) => v.expect !== "not-an-assertion")) {
       const run = () => checkSign(enc(c.msg), hex(PUB));
-      if (c.expect === null) expect(run(), c.msg).toBe(c.msg.split("|")[0]);
+      const master = c.expect === null && c.msg.split("|")[c.msg.startsWith("flagship/inject/v1") ? 3 : 2] === "master";
+      if (master) expect(run, c.msg).toThrow("master needs sign.identity with the owner's evidence");
+      else if (c.expect === null) expect(run(), c.msg).toBe(c.msg.split("|")[0]);
       else expect(run, c.msg).toThrow(`the box asserts only a member, anonymous or an API key (${c.expect})`);
     }
   });
@@ -441,5 +443,31 @@ describe("the owner key root keyd pins at the boot ceremony", () => {
     writeOwnerAnchorFromConfig({ serverJson: cfg, installBlob: blob }, state);
     expect(loadOwnerAnchor(state)).toEqual({ irkPubHex: "cd".repeat(32) });
     expect(JSON.parse(read(join(state, "owner.json"), "utf8"))).toEqual({ irkPubHex: "cd".repeat(32) });
+  });
+});
+
+describe("sign.identity: master only with the owner's evidence", () => {
+  const MV = JSON.parse(readFileSync(join(import.meta.dirname, "../../protocol/test-vectors/identity-assertion/master-evidence.json"), "utf8"));
+  it("matches every vector, and plain sign refuses master", async () => {
+    const { KeydService } = await import("../src/service.js");
+    for (const c of MV.cases) {
+      const svc = new KeydService({
+        identitySeed: SEED,
+        swk: Uint8Array.from(Buffer.from(MV.swk, "hex")),
+        owner: { irkPubHex: c.anchors.irkPubHex, serverFqdn: "home.john.flagship.services", adminRootPubHex: c.anchors.adminRootPubHex ?? null },
+        now: () => MV.now,
+      });
+      const msg = Buffer.from(c.msg).toString("hex");
+      const run = () => svc.handle({ op: "sign.identity", args: { msg, ...c.ev } } as never);
+      if (c.expect === "ok") {
+        const r = run();
+        expect(ed.verify(Buffer.from(r.result.sig as string, "hex"), Buffer.from(c.msg), ed.getPublicKey(SEED)), c.name).toBe(true);
+        expect(() => svc.handle({ op: "sign", args: { msg } } as never), c.name).toThrow("master needs sign.identity");
+      } else if (c.expect === "not-master") {
+        expect(run, c.name).toThrow("sign.identity is for master assertions only");
+      } else {
+        expect(run, c.name).toThrow(`(${c.expect})`);
+      }
+    }
   });
 });

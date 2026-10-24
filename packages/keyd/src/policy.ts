@@ -1,4 +1,4 @@
-import { checkIdentityAssertion, TAG_IDENTITY_HEADER, TAG_INJECT } from "@flagship/protocol";
+import { assertedIdentity, checkIdentityAssertion, TAG_IDENTITY_HEADER, TAG_INJECT } from "@flagship/protocol";
 import { KeydError } from "./wire.js";
 
 /**
@@ -132,8 +132,9 @@ export function checkSign(
   msg: Uint8Array,
   publicKeyHex: string,
   allowed: ReadonlySet<string> = BOX_SIGN_PURPOSES,
-  hybrid?: { mldsaPubHex: string },
+  opts?: { mldsaPubHex?: string; masterEvidence?: boolean },
 ): string {
+  const hybrid = opts?.mldsaPubHex ? { mldsaPubHex: opts.mldsaPubHex } : undefined;
   if (msg.length === 0 || msg.length > MAX_SIGN_BYTES) throw new KeydError("bad-request", "message size out of range");
   const purpose = purposeOf(msg);
   if (!allowed.has(purpose)) throw new KeydError("forbidden", `the box does not sign ${purpose.slice(0, 64)}`);
@@ -158,6 +159,10 @@ export function checkSign(
     // anonymous visitor or a key.
     const refused = checkIdentityAssertion(msg);
     if (refused) throw new KeydError("forbidden", `the box asserts only a member, anonymous or an API key (${refused})`);
+    // Master is asserted only through sign.identity, with the owner's evidence keyd checks itself.
+    const isMaster = assertedIdentity(new TextDecoder().decode(msg))?.role === "master";
+    if (isMaster && !opts?.masterEvidence) throw new KeydError("forbidden", "master needs sign.identity with the owner's evidence");
+    if (!isMaster && opts?.masterEvidence) throw new KeydError("forbidden", "sign.identity is for master assertions only");
   }
   if (purpose === "flagship/boot-suspension/v1" || purpose === "flagship/boot-auth/v1") {
     const parts = new TextDecoder().decode(msg).split("|");

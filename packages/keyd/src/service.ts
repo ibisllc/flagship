@@ -1,7 +1,9 @@
 import { hkdfSync } from "node:crypto";
 import {
+  checkMasterEvidence,
   decryptChunk,
   deriveBackupManifestKey,
+  deriveServiceMemberStableId,
   deriveServiceSecret,
   ed,
   encryptChunk,
@@ -50,7 +52,7 @@ export interface KeydServiceInit {
    * this box's name, pinned in keyd's state by root at the boot ceremony (`owner.json`, written by
    * `migrate`). Absent: no sealed delivery is accepted.
    */
-  owner?: { irkPubHex: string; serverFqdn: string } | null;
+  owner?: { irkPubHex: string; serverFqdn: string; adminRootPubHex?: string | null } | null;
   /**
    * The boot ceremony's one-time token (root wrote it beside keyd's state at this start) and
    * until when it lets a raw key in. Absent: no raw key is accepted over the socket.
@@ -76,7 +78,7 @@ export class KeydService {
   readonly #purposes: ReadonlySet<string>;
   readonly #tls: TlsKeys | null;
   readonly #acme: AcmeAccount | null;
-  readonly #owner: { irkPub: Uint8Array; serverFqdn: string } | null;
+  readonly #owner: { irkPub: Uint8Array; serverFqdn: string; adminRootPubHex: string | null } | null;
   #ceremony: { token: Uint8Array; notAfter: number } | null;
   readonly #now: () => number;
 
@@ -96,7 +98,11 @@ export class KeydService {
     this.#acme = init.acme ?? null;
     this.#owner =
       init.owner && /^[0-9a-f]{64}$/.test(init.owner.irkPubHex) && init.owner.serverFqdn
-        ? { irkPub: Uint8Array.from(Buffer.from(init.owner.irkPubHex, "hex")), serverFqdn: init.owner.serverFqdn.toLowerCase() }
+        ? {
+            irkPub: Uint8Array.from(Buffer.from(init.owner.irkPubHex, "hex")),
+            serverFqdn: init.owner.serverFqdn.toLowerCase(),
+            adminRootPubHex: init.owner.adminRootPubHex && /^[0-9a-f]{64}$/.test(init.owner.adminRootPubHex) ? init.owner.adminRootPubHex : null,
+          }
         : null;
     this.#ceremony = init.ceremony && init.ceremony.token.length === 32 ? { token: init.ceremony.token.slice(), notAfter: init.ceremony.notAfter } : null;
     this.#now = init.now ?? Date.now;
@@ -135,6 +141,39 @@ export class KeydService {
         noExtraArgs(a, ["msg"]);
         const msg = hexArg(a, "msg", { min: 1 });
         const purpose = checkSign(msg, this.#pubHex, this.#purposes);
+        return { result: { sig: toHex(ed.sign(msg, this.#seed)) }, purpose };
+      }
+      case "sign.identity": {
+        // A `master` identity assertion (identityAssertion.ts checkMasterEvidence): signed only with
+        // the owner's evidence for that very sign-in key, checked here against owner.json and the
+        // SWK, never on the daemon's word.
+        noExtraArgs(a, ["msg", "appId", "identityPubHex", "statement", "signatureHex"]);
+        const msg = hexArg(a, "msg", { min: 1, max: 4096 });
+        const purpose = checkSign(msg, this.#pubHex, this.#purposes, { masterEvidence: true });
+        if (!this.#owner) throw new KeydError("forbidden", "no owner key is pinned for this box");
+        const swk = this.#swkOrThrow();
+        const ev = {
+          appId: strArg(a, "appId", 128),
+          identityPubHex: strArg(a, "identityPubHex", 64),
+          statement: strArg(a, "statement", 4096),
+          signatureHex: strArg(a, "signatureHex", 128),
+        };
+        if (!isServiceId(ev.appId)) throw new KeydError("bad-request", "appId must be <creator>--<slug> or <slug>");
+        const refused = checkMasterEvidence(
+          new TextDecoder().decode(msg),
+          ev,
+          { irkPubHex: toHex(this.#owner.irkPub), adminRootPubHex: this.#owner.adminRootPubHex },
+          this.#now(),
+          (app, pub) => deriveServiceMemberStableId(deriveServiceSecret(swk, app), pub),
+          (sig, m, pub) => {
+            try {
+              return ed.verify(Buffer.from(sig, "hex"), m, Buffer.from(pub, "hex"));
+            } catch {
+              return false;
+            }
+          },
+        );
+        if (refused) throw new KeydError("forbidden", `master needs the owner's evidence for this key (${refused})`);
         return { result: { sig: toHex(ed.sign(msg, this.#seed)) }, purpose };
       }
       case "pq.status":

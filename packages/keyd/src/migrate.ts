@@ -125,6 +125,8 @@ export function legacyTlsFiles(legacyDir: string, fqdn: string): { keyPath: stri
 /** The owner key root keyd checks a sealed SWK/CGK delivery against (`owner.json`). */
 export interface KeydOwnerAnchor {
   irkPubHex: string;
+  /** The admin root from the box's config (`adminRootPubHex`), when the account has one. */
+  adminRootPubHex?: string;
 }
 
 /**
@@ -149,8 +151,9 @@ export function writeOwnerAnchorFromConfig(
   const blob = read(sources.installBlob);
   const irk = hex32(cfg?.irkPublicKey) ?? hex32((blob?.authCode as Record<string, unknown> | undefined)?.userPubKey);
   if (!irk) return null;
+  const root = hex32(cfg?.adminRootPubHex) ?? hex32((blob?.authCode as Record<string, unknown> | undefined)?.adminRootPubHex);
   const target = join(keydDir, "owner.json");
-  const anchor: KeydOwnerAnchor = { irkPubHex: irk };
+  const anchor: KeydOwnerAnchor = root ? { irkPubHex: irk, adminRootPubHex: root } : { irkPubHex: irk };
   if (existsSync(target) && readFileSync(target, "utf8") === JSON.stringify(anchor)) return anchor;
   mkdirSync(keydDir, { recursive: true, mode: 0o700 });
   writeFileSync(`${target}.tmp`, JSON.stringify(anchor), { mode: 0o400 });
@@ -163,7 +166,10 @@ export function loadOwnerAnchor(keydDir: string): KeydOwnerAnchor | null {
   if (!existsSync(target)) return null;
   try {
     const p = JSON.parse(readFileSync(target, "utf8")) as Partial<KeydOwnerAnchor>;
-    return typeof p.irkPubHex === "string" && /^[0-9a-f]{64}$/.test(p.irkPubHex) ? { irkPubHex: p.irkPubHex } : null;
+    if (typeof p.irkPubHex !== "string" || !/^[0-9a-f]{64}$/.test(p.irkPubHex)) return null;
+    return typeof p.adminRootPubHex === "string" && /^[0-9a-f]{64}$/.test(p.adminRootPubHex)
+      ? { irkPubHex: p.irkPubHex, adminRootPubHex: p.adminRootPubHex }
+      : { irkPubHex: p.irkPubHex };
   } catch {
     return null;
   }
