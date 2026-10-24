@@ -20,7 +20,24 @@ final class WatchBootKeyFlowsTests: XCTestCase {
         let sealed = try SecretSeal.sealForEd25519Recipient(plaintext: diskKey, recipientEd25519Pub: ownerSeed.publicKey.rawRepresentation)
         m.sealedLuksKeyHex = HexUtil.encode(sealed)
         m.directory = [PodDirectoryEntry(serverDomain: domain, identityPubKey: HexUtil.encode(stk.publicKey.rawRepresentation))]
+        m.pending = [try signedRequest()]
         return m
+    }
+
+    /// The box's request for `requestId`, signed by its STK, as `.com` relays it.
+    private func signedRequest(signer: Curve25519.Signing.PrivateKey? = nil, expiresAt: Int64? = nil) throws -> PendingSecretRequest {
+        let r = requestId
+        let req = SecretRequest(serverDomain: domain, stkPub: stk.publicKey.rawRepresentation, purpose: .unlockKey, nonce: r.nonce, issuedAt: now - 1000)
+        let sig = try (signer ?? stk).signature(for: req.canonicalBytes())
+        return PendingSecretRequest(serverDomain: domain, requestNonceHex: HexUtil.encode(r.nonce),
+                                    stkPub: HexUtil.encode(stk.publicKey.rawRepresentation), purpose: "unlock-key",
+                                    issuedAt: now - 1000, requestSignature: HexUtil.encode(sig), deviceInfo: nil,
+                                    postedAt: now - 1000, expiresAt: expiresAt ?? now + 600_000)
+    }
+
+    private func wire(_ p: PendingSecretRequest, stkPub: String? = nil) -> SignedSecretRequestWire {
+        SignedSecretRequestWire(serverDomain: p.serverDomain, requestNonceHex: p.requestNonceHex, stkPub: stkPub ?? p.stkPub,
+                                purpose: p.purpose, issuedAt: p.issuedAt, requestSignature: p.requestSignature, expiresAt: p.expiresAt)
     }
 
     private func enroller(_ m: MockSecretMailboxClient, delegatePub: Data? = nil) -> WatchBootKeyEnroller {
@@ -91,26 +108,33 @@ final class WatchBootKeyFlowsTests: XCTestCase {
                                                                 recipientEd25519Seed: ownerSeed.rawRepresentation))
     }
 
-    func testADirectoryKeyOtherThanThePinnedOneIsRefusedAndNothingIsSealedOrPosted() async throws {
+    func testARequestNamingAnotherBoxKeyIsRefusedAndNothingIsSealedOrPosted() async throws {
         let m = try mailbox()
         try await enroller(m).turnOn(serverDomain: domain, delegateExpiresAt: now + 86_400_000)
-        m.directory = [PodDirectoryEntry(serverDomain: domain,
-                                         identityPubKey: HexUtil.encode(Curve25519.Signing.PrivateKey().publicKey.rawRepresentation))]
+        let other = Curve25519.Signing.PrivateKey()
+        m.signedRequestsOverride = [wire(try signedRequest(signer: other), stkPub: HexUtil.encode(other.publicKey.rawRepresentation))]
         let outcome = await approver(m).approve(requestId: requestId.id)
         XCTAssertEqual(outcome, .keyMismatch)
         XCTAssertTrue(m.postedResponses.isEmpty)
         XCTAssertTrue(DiagnosticsLog.shared.recent().contains { $0.code == WatchBootApprover.keyMismatchCode && $0.host == domain })
     }
 
-    func testItSealsToThePinnedKeyEvenWhenTheDirectoryIsDown() async throws {
+    func testARequestNotSignedByThePinnedKeyIsRefusedAndNothingIsSealedOrPosted() async throws {
         let m = try mailbox()
         try await enroller(m).turnOn(serverDomain: domain, delegateExpiresAt: now + 86_400_000)
-        m.podsError = URLError(.notConnectedToInternet)
+        m.signedRequestsOverride = [wire(try signedRequest(signer: Curve25519.Signing.PrivateKey()))]
         let outcome = await approver(m).approve(requestId: requestId.id)
-        XCTAssertEqual(outcome, .approved)
-        let posted = try XCTUnwrap(m.postedResponses.last)
-        let opened = try SecretSeal.openWithEd25519Seed(blob: HexUtil.decode(posted.response.sealed)!, recipientEd25519Seed: stk.rawRepresentation)
-        XCTAssertEqual(opened.suffix(32), diskKey)
+        XCTAssertEqual(outcome, .badSignature)
+        XCTAssertTrue(m.postedResponses.isEmpty)
+    }
+
+    func testAnExpiredRequestIsRefusedAndNothingIsSealedOrPosted() async throws {
+        let m = try mailbox()
+        try await enroller(m).turnOn(serverDomain: domain, delegateExpiresAt: now + 86_400_000)
+        m.signedRequestsOverride = [wire(try signedRequest(expiresAt: now))]
+        let outcome = await approver(m).approve(requestId: requestId.id)
+        XCTAssertEqual(outcome, .gone)
+        XCTAssertTrue(m.postedResponses.isEmpty)
     }
 
     func testWithoutAPinnedKeyTheWatchLeavesItToThePhone() async throws {

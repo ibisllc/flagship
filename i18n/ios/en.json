@@ -11412,5 +11412,9 @@
   "This server's key doesn't match. Approve its start-up from your phone.": {
     "en": "This server's key doesn't match. Approve its start-up from your phone.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift:44"
+  },
+  "This start-up request isn't signed by your server. Approve it from your phone.": {
+    "en": "This start-up request isn't signed by your server. Approve it from your phone.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift:47"
   }
 }
