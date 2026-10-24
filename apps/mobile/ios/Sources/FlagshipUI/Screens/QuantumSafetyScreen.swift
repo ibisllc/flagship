@@ -79,9 +79,32 @@ public struct QuantumSafetyScreen: View {
              ? "Browsers can still reach it. A browser uses post-quantum key exchange, but the server's identity is proven with a classical certificate."
              : "Only the Flagship app reaches it. Browsers are refused.")
             .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
+        if !s.apps.isEmpty {
+            Text("Apps on this server").font(FS.font.bodySm()).foregroundColor(c.text).padding(.top, FS.space.s2)
+            Text("Choose for each app whether browsers may reach it. A browser's connection is quantum-safe, but the server's identity is proven with a classical certificate.")
+                .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
+            ForEach(s.apps) { a in appRow(s.fqdn, a, c: c) }
+        }
         Button("Turn off…", role: .destructive) { confirmLeave = s.fqdn }
             .disabled(viewModel.busy)
             .accessibilityIdentifier("qs-turn-off-\(s.fqdn)")
+    }
+
+    @ViewBuilder
+    private func appRow(_ fqdn: String, _ a: QuantumSafetyViewModel.AppChoice, c: FSColors) -> some View {
+        HStack {
+            Text(a.name).font(FS.font.caption()).foregroundColor(c.text)
+            Spacer()
+            Picker(a.name, selection: Binding(get: { a.appOnly }, set: { appOnly in
+                Task { _ = await viewModel.setAppBrowsers(server: fqdn, serviceId: a.serviceId, allowed: !appOnly) }
+            })) {
+                Text("Only the Flagship app").tag(true)
+                Text("Also browsers").tag(false)
+            }
+            .pickerStyle(.menu)
+            .disabled(viewModel.busy)
+            .accessibilityIdentifier("qs-app-\(fqdn)-\(a.serviceId)")
+        }
     }
 
     @ViewBuilder
