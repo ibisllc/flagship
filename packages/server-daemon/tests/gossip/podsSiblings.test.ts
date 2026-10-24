@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildGossipLoop } from "../../src/gossip/gossipLoop.js";
 import { SiblingView, type ViewMember } from "../../src/gossip/siblingView.js";
 import type { RouteClaimer } from "../../src/gossip/routeClaimer.js";
-import { buildPodsPeers } from "../../src/accessPeers.js";
+import { buildPodsPeers, peerSiblings } from "../../src/accessPeers.js";
+import { composeServiceId, deriveUrlFragment } from "@flagship/protocol";
 
 class Claimer implements RouteClaimer {
   held = new Set<string>();
@@ -78,5 +79,63 @@ describe("PodsPeers.peerRunners", () => {
     });
     await p.refresh();
     expect(p.peerRunners()).toEqual([{ domain: OTHER, stkHex: "aa", apps: ["alice--club"] }]);
+  });
+});
+
+describe("the canonical address follows the running server (named-links live group, home then home2)", () => {
+  const label = (ref: string) => {
+    const [creator, slug] = ref.split("--") as [string, string];
+    return deriveUrlFragment(composeServiceId(creator, slug), "alice");
+  };
+
+  function home2With(homeRuns: () => Set<string>, apps: string[]) {
+    const peers = buildPodsPeers({
+      selfFqdn: SELF,
+      fetchPods: async () => [
+        { serverDomain: OTHER, identityPubKey: "aa", liveness: "live" },
+        { serverDomain: SELF, identityPubKey: "bb", liveness: "live" },
+      ],
+      rankOf: rank,
+      apps: () => apps,
+      probe: async (peer, ref) => peer === OTHER && homeRuns().has(ref),
+    });
+    const c = new Claimer();
+    const loop = buildGossipLoop({
+      cgk: new Uint8Array(32).fill(7),
+      view: new SiblingView(1000),
+      claimer: c,
+      broadcastUrl: "https://broadcast--alice.flagship.services",
+      fetchImpl: silent,
+      rankOf: rank,
+      extraSiblings: () => peerSiblings(peers.peerRunners(), label, rank),
+      readSelf: () => ({ user: "alice", name: SELF, birthAuthHex: "bb", birthDate: 900, order: null, services: apps.map(label) }),
+    });
+    return { peers, loop, c };
+  }
+
+  it("home leads while it runs the app; home2 leads after the next refresh once home uninstalls it", async () => {
+    const homeApps = new Set(["alice--linkdemo"]);
+    const { peers, loop, c } = home2With(() => homeApps, ["alice--linkdemo"]);
+    await peers.refresh();
+    await loop.tick();
+    expect(loop.leadsSnapshot()["linkdemo"]?.leaderFqdn).toBe(OTHER);
+    expect(c.holds("linkdemo")).toBe(false);
+
+    homeApps.delete("alice--linkdemo");
+    await peers.refresh();
+    await loop.tick();
+    expect(loop.leadsSnapshot()["linkdemo"]?.leaderFqdn).toBe(SELF);
+    expect(c.holds("linkdemo")).toBe(true);
+  });
+
+  it("another author's app is one service on both sides (its canonical label, slug--author)", async () => {
+    const homeApps = new Set(["bob--club"]);
+    const { peers, loop, c } = home2With(() => homeApps, ["bob--club"]);
+    await peers.refresh();
+    await loop.tick();
+    const snap = loop.leadsSnapshot();
+    expect(Object.keys(snap)).toEqual(["club--bob"]);
+    expect(snap["club--bob"]?.leaderFqdn).toBe(OTHER);
+    expect(c.holds("club--bob")).toBe(false);
   });
 });
