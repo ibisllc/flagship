@@ -23,6 +23,8 @@ function fakeTpm(pcrs: Map<number, string>): TpmRunner {
     async run(cmd, args, input) {
       const ok = (s = "") => ({ code: 0, stdout: Buffer.from(s), stderr: "" });
       switch (cmd) {
+        case "tpm2_flushcontext":
+          return ok();
         case "tpm2_getcap":
           return ok("TPM2_PT_FAMILY_INDICATOR:\n  raw: 0x322E3000\n");
         case "tpm2_pcrread": {

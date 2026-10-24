@@ -1684,7 +1684,7 @@ for _f in flagship-boot-mldsa.key flagship-owner-pq.pub flagship-unlock-policy f
   [ ! -s "/boot/$_f" ] || { cp "/boot/$_f" "\${DESTDIR}/boot/$_f"; chmod 600 "\${DESTDIR}/boot/$_f"; }
 done
 [ ! -d /boot/flagship-lease-kem.tpm ] || cp -r /boot/flagship-lease-kem.tpm "\${DESTDIR}/boot/flagship-lease-kem.tpm"
-for _t in tpm2_createprimary tpm2_load tpm2_unseal; do
+for _t in tpm2_createprimary tpm2_load tpm2_unseal tpm2_flushcontext; do
   _tp="$(command -v "$_t" 2>/dev/null || true)"
   [ -z "$_tp" ] || copy_exec "$_tp" "/bin/$_t"
 done

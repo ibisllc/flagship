@@ -79,6 +79,16 @@ export async function choosePcrs(r: TpmRunner = systemTpmRunner): Promise<{ sele
   return measured.length > 0 ? { selection: `sha256:${measured.join(",")}`, measured: [...measured] } : null;
 }
 
+/**
+ * Flush transient objects and sessions: without a resource manager (`/dev/tpm0`, swtpm's socket)
+ * loaded objects stay in the TPM's few slots and the next createprimary fails.
+ */
+async function flush(r: TpmRunner): Promise<void> {
+  await r.run("tpm2_flushcontext", ["-t"]).catch(() => undefined);
+  await r.run("tpm2_flushcontext", ["-l"]).catch(() => undefined);
+  await r.run("tpm2_flushcontext", ["-s"]).catch(() => undefined);
+}
+
 /** Seals `seedHex` under the current values of `selection` into `dir` (written whole, then renamed). */
 export async function sealToTpm(dir: string, seedHex: string, selection: string, r: TpmRunner = systemTpmRunner): Promise<void> {
   if (!/^[0-9a-f]{64}$/.test(seedHex) || !/^sha256:\d{1,2}(,\d{1,2})*$/.test(selection)) throw new Error("bad seal input");
@@ -103,6 +113,7 @@ export async function sealToTpm(dir: string, seedHex: string, selection: string,
     await mkdir(dirname(dir), { recursive: true });
     await rename(staged, dir);
   } finally {
+    await flush(r);
     await rm(work, { recursive: true, force: true });
     await rm(staged, { recursive: true, force: true });
   }
@@ -122,6 +133,7 @@ export async function unsealFromTpm(dir: string, r: TpmRunner = systemTpmRunner)
     if (!/^[0-9a-f]{64}$/.test(seed)) throw new Error("the sealed seed is not 32 bytes of hex");
     return seed;
   } finally {
+    await flush(r);
     await rm(work, { recursive: true, force: true });
   }
 }
