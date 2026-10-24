@@ -83,6 +83,7 @@ export const ROUTE_FAMILIES: Readonly<Record<string, { owner: "session" | "signe
   "/api/browser": { owner: "session", note: "app browser; off" },
   "/api/phone": { owner: "signed-order", note: "phone orders" },
   "/api/access-sync": { owner: "signed-order", note: "box to box MAC" },
+  "/api/pq-session": { owner: "public", note: "PQ session handshake and sealed calls; each inner request carries its own session or signature" },
   "/api/orders-from-user": { owner: "signed-order", note: "signed phone orders" },
   "/api/front-page": { owner: "public", note: "landing data" },
   "/api/deadman": { owner: "session", note: "dead-man view and affirm" },
