@@ -15,4 +15,8 @@
     <string name="approval_failed">Falha na aprovação.</string>
     <string name="approve">Aprovar</string>
     <string name="this_server_isnt_waiting_any_more">Este servidor não está mais aguardando.</string>
+    <string name="open_the_approve_page_on_this_watch">Abra a página Aprovar neste relógio para aprovar.</string>
+    <string name="set_a_screen_lock_on_this_watch">Defina um bloqueio de tela neste relógio para aprovar por ele.</string>
+    <string name="unlock_this_watch_to_approve">Desbloqueie este relógio para aprovar.</string>
+    <string name="put_this_watch_on_your_wrist">Coloque este relógio no pulso para aprovar.</string>
 </resources>

@@ -45,7 +45,7 @@ class WearAppTest {
         val asked = mutableListOf<PendingApproval>()
         compose.setContent {
             androidx.wear.compose.material.MaterialTheme {
-                WearApp(sync = {}, approve = { _, a -> asked += a; ApproveReply(a.serverFqdn, ok = true) })
+                WearApp(sync = {}, approve = { _, a -> asked += a; ApproveReply(a.serverFqdn, ok = true) }, presence = { _, _ -> null })
             }
         }
         compose.onNodeWithTag("watch-approval-cabin.harry.flagship.services").performClick()
@@ -59,7 +59,7 @@ class WearAppTest {
     fun aRefusalShowsThePhonesMessage() {
         compose.setContent {
             androidx.wear.compose.material.MaterialTheme {
-                WearApp(sync = {}, approve = { _, a -> ApproveReply(a.serverFqdn, ok = false, errorMessage = "Unlock Flagship on your phone first.") })
+                WearApp(sync = {}, approve = { _, a -> ApproveReply(a.serverFqdn, ok = false, errorMessage = "Unlock Flagship on your phone first.") }, presence = { _, _ -> null })
             }
         }
         compose.onNodeWithTag("watch-approval-cabin.harry.flagship.services").performClick()
@@ -68,6 +68,34 @@ class WearAppTest {
             compose.onAllNodes(androidx.compose.ui.test.hasText("Unlock Flagship on your phone first.")).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("watch-approve").assertExists()
+    }
+
+    /** Off the wrist, locked or without a screen lock, Approve asks the phone for nothing. */
+    @Test
+    fun approveNeedsTheWatchOnTheWristAndUnlocked() {
+        val asked = mutableListOf<PendingApproval>()
+        val refusal = WatchPresence.refusal(visible = true, screenLockSet = true, locked = false, onBody = false)!!
+        compose.setContent {
+            androidx.wear.compose.material.MaterialTheme {
+                WearApp(sync = {}, approve = { _, a -> asked += a; ApproveReply(a.serverFqdn, ok = true) }, presence = { _, _ -> refusal })
+            }
+        }
+        compose.onNodeWithTag("watch-approval-cabin.harry.flagship.services").performClick()
+        compose.onNodeWithTag("watch-approve").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(androidx.compose.ui.test.hasText(refusal)).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(emptyList<PendingApproval>(), asked)
+    }
+
+    @Test
+    fun presenceRulesInOrder() {
+        assertEquals("Open the Approve page on this watch to approve.", WatchPresence.refusal(false, true, false, true))
+        assertEquals("Set a screen lock on this watch to approve from it.", WatchPresence.refusal(true, false, false, true))
+        assertEquals("Unlock this watch to approve.", WatchPresence.refusal(true, true, true, true))
+        assertEquals("Put this watch on your wrist to approve.", WatchPresence.refusal(true, true, false, false))
+        assertEquals(null, WatchPresence.refusal(true, true, false, null))
+        assertEquals(null, WatchPresence.refusal(true, true, false, true))
     }
 
     @Test

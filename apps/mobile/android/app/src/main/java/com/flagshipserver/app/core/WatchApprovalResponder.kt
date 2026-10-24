@@ -57,6 +57,8 @@ class WatchApprovalResponder(
         val UNSUPPORTED get() = FSStrings.get(R.string.the_watch_asked_for_something_this)
         /** The boot worker refuses a watch's approval while the server is locked. */
         val LOCKED get() = FSStrings.get(R.string.watch_boot_server_locked)
+        /** The key named for the box isn't the one this phone pinned for it. */
+        val KEY_MISMATCH get() = FSStrings.get(R.string.watch_boot_key_mismatch)
     }
 
     suspend fun respond(cmd: ApproveCommand): ApproveReply {
@@ -79,6 +81,7 @@ class WatchApprovalResponder(
             when (out) {
                 WatchBootApprover.Outcome.Approved -> return ApproveReply(cmd.serverFqdn, ok = true)
                 WatchBootApprover.Outcome.Locked -> return fail(LOCKED)
+                WatchBootApprover.Outcome.KeyMismatch -> return fail(KEY_MISMATCH)
                 WatchBootApprover.Outcome.NotWaiting -> return fail(GONE)
                 // No usable copy, or a failure: the account-key path below may still answer.
                 WatchBootApprover.Outcome.NotAvailable, is WatchBootApprover.Outcome.Failed -> Unit

@@ -1998,7 +1998,7 @@
     <string name="build_logs">ビルドログ</string>
     <string name="interrupt_with_a_follow_up">追加メッセージで中断</string>
     <string name="quick_approve_from_watch">ウォッチで承認</string>
-    <string name="approve_a_server_boot_from_your">このスマートフォンで Flagship のロックが解除されている間、Wear OS ウォッチからサーバーの起動を承認できます。その他の操作（サーバーの取り消し、消去して再開、デバイスの置き換え）には常にスマートフォンが必要です。デフォルトはオフです。</string>
+    <string name="approve_a_server_boot_from_your">このスマートフォンで Flagship のロックが解除されている間、または下でオンにしたサーバーについてはこのスマートフォンがロック中でも、Wear OS ウォッチからサーバーの起動を承認できます。その他の操作（サーバーの取り消し、消去して再開、デバイスの置き換え）には常にスマートフォンが必要です。デフォルトはオフです。</string>
     <string name="active_renews_by">有効 — %1$s までに更新</string>
     <string name="your_stuff_on">あなたのデータを、\n</string>
     <string name="your_hardware">あなたのハードウェアで。</string>
@@ -2745,4 +2745,5 @@
     <string name="chat_always_ended_sender">%1$s/%2$s は %3$s とのチャットを始める前に再び確認が必要です</string>
     <string name="chat_request_now_always_sender">%1$s/%2$s は確認なしで %3$s とのチャットを始められるようになりました</string>
     <string name="ai_consent_cap">この実行で使えるのは最大約 %1$s トークンです。そこで実行は止まります。</string>
+    <string name="watch_boot_key_mismatch">このサーバーの鍵が一致しません。起動はスマートフォンから承認してください。</string>
 </resources>

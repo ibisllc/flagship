@@ -11,6 +11,7 @@ package com.flagshipserver.app.keystore
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.flagshipserver.app.core.BootDecryptKey
+import com.flagshipserver.app.core.WatchBootCopy
 import com.flagshipserver.app.core.WatchBootKeyStore
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -44,9 +45,9 @@ class KeystoreWatchBootKeys : WatchBootKeyStore {
         return Hardware(pair.private, rawX25519(pair.public.encoded))
     }
 
-    override fun copies(): Map<String, Long> = Keystore.watchBootCopies()
+    override fun copies(): Map<String, WatchBootCopy> = Keystore.watchBootCopies()
 
-    override fun setCopy(serverDomain: String, expiresAt: Long?) = Keystore.setWatchBootCopy(serverDomain, expiresAt)
+    override fun setCopy(serverDomain: String, copy: WatchBootCopy?) = Keystore.setWatchBootCopy(serverDomain, copy)
 
     override fun clear() {
         runCatching { keyStore().deleteEntry(alias) }

@@ -1998,7 +1998,7 @@
     <string name="build_logs">Journaux de création</string>
     <string name="interrupt_with_a_follow_up">Interrompre avec un message complémentaire</string>
     <string name="quick_approve_from_watch">Approuver depuis la montre</string>
-    <string name="approve_a_server_boot_from_your">Approuvez le démarrage d’un serveur depuis votre montre Wear OS tant que Flagship est déverrouillé sur ce téléphone. Les autres actions (révoquer le serveur, effacer et redémarrer, remplacer l’appareil) nécessitent toujours votre téléphone. Désactivé par défaut.</string>
+    <string name="approve_a_server_boot_from_your">Approuvez le démarrage d’un serveur depuis votre montre Wear OS lorsque Flagship est déverrouillé sur ce téléphone ou, pour les serveurs que vous activez ci-dessous, lorsque ce téléphone est verrouillé. Les autres actions (révoquer le serveur, effacer et redémarrer, remplacer l’appareil) nécessitent toujours votre téléphone. Désactivé par défaut.</string>
     <string name="active_renews_by">Actif — se renouvelle d’ici le %1$s</string>
     <string name="your_stuff_on">Vos affaires,\nsur\u0020</string>
     <string name="your_hardware">votre matériel.</string>
@@ -2745,4 +2745,5 @@
     <string name="chat_always_ended_sender">%1$s/%2$s devra de nouveau demander avant de démarrer une discussion avec %3$s</string>
     <string name="chat_request_now_always_sender">%1$s/%2$s peut désormais démarrer une discussion avec %3$s sans demander</string>
     <string name="ai_consent_cap">Cette exécution peut utiliser jusqu’à environ %1$s jetons. Elle s’arrête là.</string>
+    <string name="watch_boot_key_mismatch">La clé de ce serveur ne correspond pas. Approuvez son démarrage depuis votre téléphone.</string>
 </resources>
