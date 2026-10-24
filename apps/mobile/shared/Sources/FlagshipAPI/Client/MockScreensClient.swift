@@ -1876,6 +1876,11 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func setBackupPolicy(_ req: BackupPolicyRequest) async throws -> BackupPolicyView {
         try await tick()
         let o = req.order
+        // The box's FLAGSHIP_PEER_BACKUP gate (off at GA): a server not already on Peer can't choose it.
+        if policyCurrent.policy != "peer", o.policy == "peer", !BackupFeatures.peerBackup {
+            GymProbe.note("refused backup-policy peer")
+            throw Self.refusal(409, "Backups on other servers aren't available yet. Choose another policy.", code: "peer-backup-not-available")
+        }
         let valid = ["phone", "peer", "none"].contains(o.policy) && !o.serverDomain.isEmpty
             && (o.policy == "phone" ? o.phoneReserveBytes > 0 : o.phoneReserveBytes == 0) && o.issuedAt >= 0
         if valid, let limit = limitBytes(BackupPolicyCurrent(policy: o.policy, phoneReserveBytes: o.phoneReserveBytes)),
