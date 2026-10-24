@@ -349,6 +349,10 @@ struct ContentView: View {
         if inFront, let prefs = pushPrefs {
             Task { await prefs.resync() }
         }
+        if inFront && app.isUnlocked {
+            let server = serverClient, mailbox = self.mailbox, user = app.currentUser
+            Task { await WatchDelegateRenewal.runIfDue(server: server, mailbox: mailbox, username: user) }
+        }
         if inFront && !app.isRestrictedDevice && AdminOrderGate.allows(app) && privacy.pushNotificationsEnabled {
             let chats = chatAlerts
             Task {
