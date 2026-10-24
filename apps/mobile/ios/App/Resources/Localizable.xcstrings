@@ -106682,6 +106682,47 @@
           }
         }
       }
+    },
+    "This server's key doesn't match. Approve its start-up from your phone.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clave de este servidor no coincide. Aprueba su arranque desde tu teléfono."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La clé de ce serveur ne correspond pas. Approuvez son démarrage depuis votre téléphone."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Schlüssel dieses Servers stimmt nicht überein. Genehmige seinen Start auf deinem Telefon."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A chave deste servidor não confere. Aprove a inicialização dele pelo seu celular."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーのキーが一致しません。スマートフォンから起動を承認してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器的密钥不匹配。请从你的手机批准其启动。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -1,5 +1,6 @@
 import Foundation
 import WatchConnectivity
+import WatchKit
 import FlagshipCore
 #if canImport(WidgetKit)
 import WidgetKit
@@ -134,6 +135,9 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
     }
 
     func approve(_ approval: WatchProtocol.PendingApproval) async {
+        // Presence lives on the watch: only from the prompt the wearer has open, never from a background path.
+        // A watch taken off the wrist (Wrist Detection) or not yet unlocked runs no app in front.
+        guard WKApplication.shared().applicationState == .active else { return }
         guard WCSession.default.isReachable else {
             lastError = "iPhone not reachable. Bring it nearby and try again."
             return

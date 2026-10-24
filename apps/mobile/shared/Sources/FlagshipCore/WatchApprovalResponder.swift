@@ -40,6 +40,8 @@ public struct WatchApprovalResponder {
     public static let updateRequired = String(localized: "Update Flagship on your iPhone first. Approving is paused until you do.")
     /// The owner locked the server (SEC-LOCK-001): a watch can't start it.
     public static let serverLocked = String(localized: "This server is locked. Approve its start-up from your iPhone.")
+    /// The directory's box key differs from the one this phone pinned: nothing was sent.
+    public static let keyMismatch = String(localized: "This server's key doesn't match. Approve its start-up from your phone.")
 
     let delegateEnrolled: () -> Bool
     let hasSessionKey: () -> Bool
@@ -83,6 +85,7 @@ public struct WatchApprovalResponder {
             case .approved: return WatchProtocol.ApproveReply(requestId: cmd.requestId, ok: true)
             case .locked: return fail(Self.serverLocked)
             case .gone: return fail(Self.gone)
+            case .keyMismatch: return fail(Self.keyMismatch)
             case .failed(let message): copyFailure = message
             case .noCopy: break
             }
