@@ -515,9 +515,9 @@ object Keystore {
         val raw = requirePrefs().getString(watchBootCopiesKey(), null) ?: return emptyMap()
         return raw.split('\n').mapNotNull { line ->
             val parts = line.split(' ')
-            if (parts.size != 3) return@mapNotNull null
+            if (parts.size < 2) return@mapNotNull null
             val ends = parts[1].toLongOrNull() ?: return@mapNotNull null
-            parts[0] to com.flagshipserver.app.core.WatchBootCopy(ends, parts[2])
+            parts[0] to com.flagshipserver.app.core.WatchBootCopy(ends)
         }.toMap()
     }
 
@@ -526,12 +526,31 @@ object Keystore {
         if (copy == null) next.remove(serverDomain) else next[serverDomain] = copy
         val e = requirePrefs().edit()
         if (next.isEmpty()) e.remove(watchBootCopiesKey())
-        else e.putString(watchBootCopiesKey(), next.entries.joinToString("\n") { "${it.key} ${it.value.expiresAt} ${it.value.stkPubHex}" })
+        else e.putString(watchBootCopiesKey(), next.entries.joinToString("\n") { "${it.key} ${it.value.expiresAt}" })
         e.apply()
     }
 
     fun clearWatchBootCopies() {
         requirePrefs().edit().remove(watchBootCopiesKey()).apply()
+    }
+
+    private fun serverKeyPinsKey() = pkey("server.key.pins")
+
+    private fun serverKeyPins(): Map<String, String> =
+        requirePrefs().getString(serverKeyPinsKey(), null)?.split('\n')?.mapNotNull { line ->
+            val parts = line.split(' ')
+            if (parts.size == 2) parts[0] to parts[1] else null
+        }?.toMap().orEmpty()
+
+    /** The server key this phone first recorded for [serverDomain] (ServerKeyPins). */
+    fun serverKeyPin(serverDomain: String): String? = serverKeyPins()[serverDomain]
+
+    fun setServerKeyPin(serverDomain: String, stkPubHex: String?) {
+        val next = serverKeyPins().toMutableMap()
+        if (stkPubHex == null) next.remove(serverDomain) else next[serverDomain] = stkPubHex
+        val e = requirePrefs().edit()
+        if (next.isEmpty()) e.remove(serverKeyPinsKey()) else e.putString(serverKeyPinsKey(), next.entries.joinToString("\n") { "${it.key} ${it.value}" })
+        e.apply()
     }
 
     // ---- Admin master root (Slice D device-admin tier) -----------------
@@ -752,6 +771,7 @@ object Keystore {
         editor.remove(watchDelegateSeedKey())
         editor.remove(watchDelegateGrantIdKey())
         editor.remove(watchBootCopiesKey())
+        editor.remove(serverKeyPinsKey())
         runCatching { KeystoreWatchBootKeys().clear() }
         editor.remove(acmeAccountKeyScalarKey())
         // Slice D — drop the admin master root so a removed device retains NO
