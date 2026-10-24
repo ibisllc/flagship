@@ -40,10 +40,12 @@ final class WatchBootKeyFlowsTests: XCTestCase {
                                 purpose: p.purpose, issuedAt: p.issuedAt, requestSignature: p.requestSignature, expiresAt: p.expiresAt)
     }
 
+    private lazy var pins = WatchBootStkPins(defaults: UserDefaults(suiteName: "WatchBootStkPins-\(UUID().uuidString)")!)
+
     private func enroller(_ m: MockSecretMailboxClient, delegatePub: Data? = nil) -> WatchBootKeyEnroller {
         let irk = self.irk, seed = ownerSeed.rawRepresentation, boot = self.boot, now = self.now
         let pub = delegatePub ?? delegate.publicKey.rawRepresentation
-        return WatchBootKeyEnroller(mailbox: m, irk: { irk }, unsealSeeds: { _ in [seed] },
+        return WatchBootKeyEnroller(mailbox: m, username: username, pins: pins, irk: { irk }, unsealSeeds: { _ in [seed] },
                                     delegatePub: { pub }, bootPub: { boot.publicKey.rawRepresentation }, now: { now })
     }
 
@@ -76,7 +78,7 @@ final class WatchBootKeyFlowsTests: XCTestCase {
 
     func testOnWithoutAWatchDelegateDepositsNothing() async throws {
         let m = try mailbox()
-        let e = WatchBootKeyEnroller(mailbox: m, irk: { self.irk }, unsealSeeds: { _ in [] }, delegatePub: { nil },
+        let e = WatchBootKeyEnroller(mailbox: m, username: username, irk: { self.irk }, unsealSeeds: { _ in [] }, delegatePub: { nil },
                                      bootPub: { Data() }, now: { self.now })
         do {
             try await e.turnOn(serverDomain: domain, delegateExpiresAt: now + 1000)
@@ -175,6 +177,26 @@ final class WatchBootKeyFlowsTests: XCTestCase {
             .turnOn(serverDomain: domain, delegateExpiresAt: now + 86_400_000)
         let outcome = await approver(m).approve(requestId: requestId.id)
         XCTAssertEqual(outcome, .noCopy)
+    }
+
+    func testTheFirstServerKeySeenIsRecordedAndADifferentOneLaterIsRefused() async throws {
+        let m = try mailbox()
+        try await enroller(m).turnOn(serverDomain: domain, delegateExpiresAt: now + 86_400_000)
+        XCTAssertEqual(pins.pinnedStk(domain), stk.publicKey.rawRepresentation, "Recorded on first use.")
+        let other = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        m.directory = [PodDirectoryEntry(serverDomain: domain, identityPubKey: HexUtil.encode(other))]
+        m.watchBootKeys = [:]
+        do {
+            try await enroller(m).turnOn(serverDomain: domain, delegateExpiresAt: now + 86_400_000)
+            XCTFail("a changed key must be refused")
+        } catch {
+            XCTAssertEqual(error as? WatchBootKeyEnroller.Failure, .keyChanged)
+        }
+        XCTAssertNil(m.watchBootKeys[domain], "Nothing deposited for the changed key.")
+        XCTAssertEqual(pins.pinnedStk(domain), stk.publicKey.rawRepresentation, "Never replaced silently.")
+        XCTAssertFalse(pins.record(other, for: domain))
+        pins.forget(domain)
+        XCTAssertTrue(pins.record(other, for: domain), "Re-trust is explicit.")
     }
 
     func testRequestIdsParse() {

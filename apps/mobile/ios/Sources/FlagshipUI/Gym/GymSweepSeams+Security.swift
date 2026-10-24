@@ -34,6 +34,7 @@ extension GymSweepSeams {
         }
         // The watch's boot key: every launch starts with no copies and no delegate on this device.
         WatchBootKeyStore().clear()
+        UserDefaults.standard.removeObject(forKey: "flagship.watchBootKeys.pinnedStk")
         Keystore.clearWatchDelegate()
         if args.contains("-smoke-watch-delegate") {
             _ = try? Keystore.loadOrCreateWatchDelegateKey()

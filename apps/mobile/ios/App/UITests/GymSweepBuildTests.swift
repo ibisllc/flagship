@@ -871,7 +871,8 @@ final class GymSecurityScreensTests: GymSweepCase {
     /// With Approve from watch on this device (`-smoke-watch-delegate`), the server page turns on a watch
     /// copy of the disk key after a warning, says until when, and turns it off again.
     func test_watchBootKeyOnThenOff() throws {
-        let app = launch(tab: "home", ["-smoke-watch-delegate"])
+        // `-smoke-server-directory`: .com lists the server's key, which the first turn-on records.
+        let app = launch(tab: "home", ["-smoke-watch-delegate", "-smoke-server-directory"])
         openServerPage(app, named: "Home")
         let toggle = app.switches["sd-watch-boot-toggle"]
         XCTAssertTrue(reveal(app, toggle, tries: 16), "An admin device with Approve from watch can turn it on per server.")
