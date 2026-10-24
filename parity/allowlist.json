@@ -193,6 +193,16 @@
     },
     {
       "check": "signed-tags",
+      "key": "ios:flagship/server-code-seen/v1",
+      "reason": "Studio's \"Confirmed by Studio\" MAC (docs/first-contact.md item 4): the webapp verifies it behind its seam; the native ports and shared vectors land with the release/0.3 Studio hand-off."
+    },
+    {
+      "check": "signed-tags",
+      "key": "android:flagship/server-code-seen/v1",
+      "reason": "Studio's \"Confirmed by Studio\" MAC (docs/first-contact.md item 4): the webapp verifies it behind its seam; the native ports and shared vectors land with the release/0.3 Studio hand-off."
+    },
+    {
+      "check": "signed-tags",
       "key": "web:flagship/box-artifact/v1",
       "reason": "The webapp never builds or installs a box; the tag appears in Android only inside the embedded preseed engine."
     },

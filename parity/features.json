@@ -778,6 +778,16 @@
         "watch": { "status": "present", "reason": "The watch asks; the iPhone answers from the watch's own copy without the account key.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift", "lockedApprove"], ["apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift", "struct WatchBootApprover"]] },
         "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
       }
+    },
+    {
+      "id": "first-contact",
+      "title": "First contact (docs/first-contact.md): one per-device pin of each server's own key (pinnedStk); the recipe carries a one-time enrollment secret whose proof the first blessing checks, the code computed from the key shows above Approve, a key other than the pin is refused, sealing goes only to the pin, and the app-name grant (flagship/server-wildcard-grant/v1) is signed at the blessing and kept up",
+      "ref": "web",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverPins.js", "export function pinnedStk"], ["apps/web/public/webapp/lib/firstContact.js", "export async function classifyFirstContact"], ["apps/web/public/webapp/lib/firstContact.js", "export async function upkeepWildcardGrant"], ["apps/web/public/webapp/views/create-server.js", "recipe\\.enrollmentKeyHex = "]] },
+        "android": { "status": "missing", "reason": "Pending (branch ux-fc-android).", "anchors": [] },
+        "ios": { "status": "missing", "reason": "Pending (branch ux-fc-ios).", "anchors": [] }
+      }
     }
   ]
 }

@@ -327,4 +327,62 @@ export const WEB_UX: readonly Scenario[] = [
       dimension: "D4",
     },
   ),
+  webTotal(
+    "web-ux-first-contact-proof",
+    "First contact: the device that made the recipe checks the box's enrollment proof, shows the code it computes from the key directly above Approve, pins the key on Approve, mints the entitlement for it and posts an admin-signed flagship/server-wildcard-grant/v1 over the pinned key.",
+    "gym ux first contact a good proof shows the code above Approve, pins the key and sends the app-name grant",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on an admin device that kept the recipe's enrollment secret; a new box asks for its entitlement with a good proof." },
+        { kind: "tap", describe: "Yes, this is my box.", handle: "[data-approve-id]" },
+      ],
+      assertions: [{ describe: "Code box", handle: "[data-server-code]", expect: "present" }],
+      screenshots: [shot("first-contact-code-box", "The code above Approve.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-first-contact-bad-proof",
+    "A first request whose enrollment proof is wrong or missing reads \"This server was not built from your recipe. Do not approve it.\" with no Approve, and nothing is pinned or answered.",
+    "gym ux first contact a wrong or missing proof is refused and nothing is pinned",
+    {
+      steps: [{ kind: "launch", describe: "Two new boxes ask: one with a wrong proof, one with none." }],
+      assertions: [{ describe: "Refusal", handle: "[data-first-contact-refusal=not-your-recipe]", expect: "present" }],
+      screenshots: [shot("first-contact-not-your-recipe", "Both requests refused.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-first-contact-key-changed",
+    "After the pin, a request under another key reads \"This server's key changed. If you did not rebuild it, do not approve anything for it.\" with no Approve, and Home's card says the same.",
+    "gym ux first contact a request under a key other than the pin is refused, and Home says so",
+    {
+      steps: [{ kind: "launch", describe: "The server is pinned; a start-up request arrives under another key." }],
+      assertions: [{ describe: "Refusal", handle: "[data-first-contact-refusal=key-changed]", expect: "present" }],
+      screenshots: [shot("first-contact-key-changed", "The refused request.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-first-contact-first-sight",
+    "A device without the recipe's secret shows the same code box and pins the key on first sight, then sends the app-name grant.",
+    "gym ux first contact a device without the recipe's secret pins on first sight with the code box",
+    {
+      steps: [{ kind: "tap", describe: "Yes, this is my box.", handle: "[data-approve-id]" }],
+      assertions: [{ describe: "Code box", handle: "[data-server-code]", expect: "present" }],
+      screenshots: [shot("first-contact-first-sight", "The code on first sight.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-first-contact-silent-grant",
+    "On a pinned server's page an admin device that reads granted:false signs the app-name grant silently over the pinned key.",
+    "gym ux first contact the server page signs the app-name grant silently when the server has none",
+    {
+      steps: [{ kind: "launch", describe: "Open a pinned server's page; the server holds no grant." }],
+      assertions: [{ describe: "No key card", handle: "#server-key-card", expect: "absent" }],
+      screenshots: [shot("first-contact-silent-grant", "The server page after the silent grant.")],
+      dimension: "D4",
+    },
+  ),
 ];
