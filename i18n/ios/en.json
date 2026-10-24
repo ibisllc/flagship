@@ -366,10 +366,6 @@
     "en": "Turn on code protection",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:145"
   },
-  "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.": {
-    "en": "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.",
-    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:190"
-  },
   "Active — renews by %@": {
     "en": "Active — renews by %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:196"
@@ -11220,5 +11216,197 @@
   "May build %@": {
     "en": "May build %@",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDelegationView.swift:26"
+  },
+  "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. To approve one while this iPhone is locked, turn on Start from your watch on that server's page. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.": {
+    "en": "Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. To approve one while this iPhone is locked, turn on Start from your watch on that server's page. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift:191"
+  },
+  "The estimate changed since you agreed. Check it and agree again.": {
+    "en": "The estimate changed since you agreed. Check it and agree again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:452"
+  },
+  "The AI provider changed since you agreed. Check it and agree again.": {
+    "en": "The AI provider changed since you agreed. Check it and agree again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:453"
+  },
+  "Your answer took too long to reach the server. Agree again.": {
+    "en": "Your answer took too long to reach the server. Agree again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:454"
+  },
+  "The server didn't accept your answer. Check the estimate and agree again.": {
+    "en": "The server didn't accept your answer. Check the estimate and agree again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:455"
+  },
+  "Before the AI starts": {
+    "en": "Before the AI starts",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:431"
+  },
+  "Agree and run the AI": {
+    "en": "Agree and run the AI",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:432"
+  },
+  "Agree to what this AI run may cost": {
+    "en": "Agree to what this AI run may cost",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:434"
+  },
+  "This is an estimate, not a promise. Nothing runs until you agree, and your answer covers this one run only.": {
+    "en": "This is an estimate, not a promise. Nothing runs until you agree, and your answer covers this one run only.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:435"
+  },
+  "You didn't agree, so nothing ran.": {
+    "en": "You didn't agree, so nothing ran.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:436"
+  },
+  "Couldn't sign your answer. Nothing ran.": {
+    "en": "Couldn't sign your answer. Nothing ran.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:437"
+  },
+  "It may use %@ to %@ tokens.": {
+    "en": "It may use %@ to %@ tokens.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:440"
+  },
+  "It runs on Flagship Inference and comes out of your free credits.": {
+    "en": "It runs on Flagship Inference and comes out of your free credits.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:445"
+  },
+  "It runs on your own %@ key, so %@ bills you for it.": {
+    "en": "It runs on your own %@ key, so %@ bills you for it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift:447"
+  },
+  "App chats": {
+    "en": "App chats",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:11"
+  },
+  "A remote machine claiming to run %@ wants to talk to your app %@.": {
+    "en": "A remote machine claiming to run %@ wants to talk to your app %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:15"
+  },
+  "Your app %@ wants to talk to %@, an app on another owner's server.": {
+    "en": "Your app %@ wants to talk to %@, an app on another owner's server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:17"
+  },
+  "Its note, written by the remote machine: “%@”": {
+    "en": "Its note, written by the remote machine: “%@”",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:20"
+  },
+  "It has asked %lld times.": {
+    "en": "It has asked %lld times.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:23"
+  },
+  "Always allow lets any remote machine reach %@ without asking. You can revoke it on this server's page.": {
+    "en": "Always allow lets any remote machine reach %@ without asking. You can revoke it on this server's page.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:27"
+  },
+  "Denied. Nothing from %@ reaches %@.": {
+    "en": "Denied. Nothing from %@ reaches %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:32"
+  },
+  "Denied. %@ won't talk to %@.": {
+    "en": "Denied. %@ won't talk to %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:33"
+  },
+  "%@ now takes chats from other owners' apps without asking.": {
+    "en": "%@ now takes chats from other owners' apps without asking.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:34"
+  },
+  "Allowed. %@ can talk to %@.": {
+    "en": "Allowed. %@ can talk to %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:35"
+  },
+  "%@ takes chats from other owners' apps without asking.": {
+    "en": "%@ takes chats from other owners' apps without asking.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:41"
+  },
+  "%@ asks you again from now on.": {
+    "en": "%@ asks you again from now on.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:45"
+  },
+  "Answer a chat request for %@": {
+    "en": "Answer a chat request for %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:49"
+  },
+  "Answer %@'s chat request": {
+    "en": "Answer %@'s chat request",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:50"
+  },
+  "Nothing was answered.": {
+    "en": "Nothing was answered.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:55"
+  },
+  "The server didn't accept your signature. Only an admin device of this account can answer.": {
+    "en": "The server didn't accept your signature. Only an admin device of this account can answer.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:62"
+  },
+  "This request isn't waiting any more.": {
+    "en": "This request isn't waiting any more.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:63"
+  },
+  "This request was already answered.": {
+    "en": "This request was already answered.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift:64"
+  },
+  "Always allow": {
+    "en": "Always allow",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ChatRequestScreens.swift:51"
+  },
+  "Let your watch start this server?": {
+    "en": "Let your watch start this server?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift:33"
+  },
+  "Start from your watch": {
+    "en": "Start from your watch",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift:18"
+  },
+  "For up to 7 days your watch can approve this server's start-up, even while your iPhone is locked. Anyone wearing your unlocked watch could do it too. If you lock the server, only your iPhone can start it.": {
+    "en": "For up to 7 days your watch can approve this server's start-up, even while your iPhone is locked. Anyone wearing your unlocked watch could do it too. If you lock the server, only your iPhone can start it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift:38"
+  },
+  "Off. Your watch can approve this server's start-up only while Flagship is unlocked on this iPhone.": {
+    "en": "Off. Your watch can approve this server's start-up only while Flagship is unlocked on this iPhone.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift:64"
+  },
+  "On until %@. Turn it on again after that.": {
+    "en": "On until %@. Turn it on again after that.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift:59"
+  },
+  "Turn on Approve from watch in Account security to let your watch start this server while your iPhone is locked.": {
+    "en": "Turn on Approve from watch in Account security to let your watch start this server while your iPhone is locked.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift:70"
+  },
+  "Approve from watch while iPhone is locked": {
+    "en": "Approve from watch while iPhone is locked",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift:52"
+  },
+  "Let your watch start %@": {
+    "en": "Let your watch start %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/WatchBootKeyViewModel.swift:43"
+  },
+  "Nothing was turned on.": {
+    "en": "Nothing was turned on.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/WatchBootKeyViewModel.swift:101"
+  },
+  "Nothing was turned off.": {
+    "en": "Nothing was turned off.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/WatchBootKeyViewModel.swift:101"
+  },
+  "Your watch's approval isn't active any more. Turn Approve from watch off and on again in Account security.": {
+    "en": "Your watch's approval isn't active any more. Turn Approve from watch off and on again in Account security.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/WatchBootKeyViewModel.swift:105"
+  },
+  "This server isn't registered to your account.": {
+    "en": "This server isn't registered to your account.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/WatchBootKeyViewModel.swift:106"
+  },
+  "This server is locked. Approve its start-up from your iPhone.": {
+    "en": "This server is locked. Approve its start-up from your iPhone.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift:42"
+  },
+  "Turn on Approve from watch in Account security first.": {
+    "en": "Turn on Approve from watch in Account security first.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift:61"
+  },
+  "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": {
+    "en": "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift:62"
   }
 }
