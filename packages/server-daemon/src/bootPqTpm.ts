@@ -129,6 +129,8 @@ export async function unsealFromTpm(dir: string, r: TpmRunner = systemTpmRunner)
     const obj = join(work, "seal.ctx");
     await must(r, "tpm2_createprimary", [...PRIMARY_ARGS, "-c", primary]);
     await must(r, "tpm2_load", ["-C", primary, "-u", join(dir, "seal.pub"), "-r", join(dir, "seal.priv"), "-c", obj]);
+    // The object's context is saved in `obj`; free the slots before unseal loads it again.
+    await r.run("tpm2_flushcontext", ["-t"]).catch(() => undefined);
     const seed = (await must(r, "tpm2_unseal", ["-c", obj, "-p", `pcr:${selection}`])).toString("utf8").trim();
     if (!/^[0-9a-f]{64}$/.test(seed)) throw new Error("the sealed seed is not 32 bytes of hex");
     return seed;

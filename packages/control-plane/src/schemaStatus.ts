@@ -87,6 +87,7 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0112",
   // The owner's hybrid signature beside the server order's classical one.
   "0113",
+  "0114",
 ];
 
 export interface SchemaStatusDeps {
