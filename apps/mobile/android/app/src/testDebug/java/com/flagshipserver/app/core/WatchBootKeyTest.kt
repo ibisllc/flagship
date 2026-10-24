@@ -173,6 +173,7 @@ class WatchBootKeyTest {
     @Test fun withoutACopyTheAccountKeyPathStillAnswers() = runBlocking {
         val m = mailbox()
         val store = SoftStore().apply { loadOrCreate(); setCopy(domain, WatchBootCopy(now + 60_000)) }
+        pins.recordFirstSeen(domain, HexUtil.encode(stkKp.publicKey))
         assertEquals(WatchBootApprover.Outcome.NotAvailable, approver(m, store).approve(domain, null))
         assertTrue("a copy the worker doesn't hold is forgotten", store.copies.isEmpty())
         val reply = WatchApprovalResponder(
