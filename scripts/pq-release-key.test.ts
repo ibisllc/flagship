@@ -3,7 +3,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { classifyReleaseEndorsements, type ReleasePqPin } from "@flagship/protocol";
+import { canonicalCaEndorsement } from "@ibisllc/maintainers";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { classifyReleaseEndorsements, gateCaLeasesPq, signBoxArtifact, verifyBoxArtifact, type ReleasePqPin } from "@flagship/protocol";
 import * as K from "./pq-release-key.mjs";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -145,6 +147,43 @@ describe("pq-release-key ceremony (fake YubiKeys)", () => {
     const out = classifyReleaseEndorsements(all, [companion], [binding], { pin, now: Date.now() });
     expect(out.eligible.map((e) => e.releaseId)).toEqual([C.releaseId]);
     expect(out.lineageOnly.map((e) => e.releaseId)).toEqual([V.endorsements.A!.releaseId, V.endorsements.B!.releaseId]);
+  });
+
+  it("sign-ca-lease writes the CA lease's companion, the ca-track binding and the Worker bundle", () => {
+    const seed = Buffer.from(V.keys.release!.edSeedHex, "hex");
+    const pub = Buffer.from(ed25519.getPublicKey(seed)).toString("hex");
+    const e = {
+      kind: "CaEndorsement" as const, version: 1 as const, endorsementId: "6f1c2d3e-0000-4000-8000-0000000000aa", track: "ca",
+      caPubkey: "a".repeat(64), scope: "flagship/directory-attestation", notBefore: "2026-10-19T01:36:06.489Z",
+      notAfter: "2027-01-17T01:36:06.489Z", issuedAt: "2026-10-19T01:36:06.489Z", signedBy: pub,
+    };
+    const lease = { ...e, signatures: [{ pubkey: pub, sig: Buffer.from(ed25519.sign(canonicalCaEndorsement(e), seed)).toString("hex") }] };
+    fs.writeFileSync(p("lease.json"), JSON.stringify(lease));
+    const r = run("pq-release-key.mjs", ["sign-ca-lease", "--endorsement", p("lease.json"), "--signing-key", `file:${p("ed.hex")}`, "--path", p(".maintainers"), "--key-file", p("key.age"), ...fake()]);
+    expect(r.status, r.stderr).toBe(0);
+    const bundle = JSON.parse(fs.readFileSync(p(".maintainers", "ca-pq", "bundle.json"), "utf8"));
+    expect(bundle.bindings[0].subjectId).toBe("flagship-ca-track");
+    const pin = { version: 1 as const, keyIds: [keyId], legacyLeases: [] };
+    expect(gateCaLeasesPq([lease] as never, bundle, { pin, now: Date.now() }).accepted).toHaveLength(1);
+    expect(gateCaLeasesPq([lease] as never, { bindings: bundle.bindings, endorsements: [] }, { pin, now: Date.now() }).accepted).toHaveLength(0);
+  });
+
+  it("sign-box-artifact adds the companion and binding a pinned verifier needs", () => {
+    const BA = JSON.parse(fs.readFileSync(path.join(REPO, "packages/protocol/test-vectors/box-artifact/pq-vectors.json"), "utf8"));
+    const seed = Buffer.from(V.keys.release!.edSeedHex, "hex");
+    const pub = Buffer.from(ed25519.getPublicKey(seed)).toString("hex");
+    fs.writeFileSync(p("manifest.json"), JSON.stringify({ manifest: BA.manifest, signatures: [signBoxArtifact(BA.manifest, seed)] }));
+    const r = run("pq-release-key.mjs", ["sign-box-artifact", "--manifest", p("manifest.json"), "--out", p("manifest.pq.json"), "--signing-key", `file:${p("ed.hex")}`, "--key-file", p("key.age"), ...fake()]);
+    expect(r.status, r.stderr).toBe(0);
+    const doc = JSON.parse(fs.readFileSync(p("manifest.pq.json"), "utf8"));
+    const opts = {
+      trust: { keys: [pub], threshold: 1 }, expectedCommit: BA.manifest.commit, expectedArch: BA.manifest.arch,
+      measuredSha256: BA.manifest.artifactSha256, measuredBytes: BA.manifest.artifactBytes, verifierVersion: 1,
+      pqPin: { version: 1 as const, keyIds: [keyId], legacyManifests: [] }, now: Date.now(),
+    };
+    expect(verifyBoxArtifact(doc.manifest, doc.signatures, { ...opts, pqBindings: doc.pqBindings } as never)).toMatchObject({ ok: true });
+    const stripped = doc.signatures.map(({ pq: _pq, ...s }: { pq?: unknown }) => s);
+    expect(verifyBoxArtifact(doc.manifest, stripped, { ...opts, pqBindings: doc.pqBindings } as never)).toMatchObject({ ok: false, code: "pq-signature-required" });
   });
 
   it("endorse-release refuses to sign a companion with a key that did not sign the endorsement", () => {
