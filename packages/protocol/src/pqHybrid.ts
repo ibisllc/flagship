@@ -546,6 +546,39 @@ export function hybridSign(
   }
 }
 
+/**
+ * Signs with an Ed25519 key held elsewhere (a YubiKey) and an ML-DSA-65 seed held in memory.
+ * `publicKey` is the hybrid key the two halves must form; the result is checked with
+ * `hybridVerify` before it is returned, so a wrong token or seed never yields a signature.
+ */
+export async function hybridSignExternal(
+  publicKey: Bytes,
+  purpose: string,
+  payload: Bytes,
+  ed25519Sign: (m: Bytes) => Promise<Bytes>,
+  mldsaSeed: Bytes,
+  opts: { deterministic?: boolean } = {},
+): Promise<Bytes> {
+  parseHybridSigPublicKey(publicKey);
+  if (mldsaSeed.length !== 32) fail("bad-secret-key");
+  const m = hybridSigMessage(publicKey, purpose, payload);
+  const ml = ml_dsa65.keygen(mldsaSeed);
+  try {
+    if (!equalBytes(ml.publicKey, publicKey.subarray(ED_PK_LEN))) fail("bad-secret-key");
+    const mlSig = ml_dsa65.sign(m, ml.secretKey, {
+      context: utf8(TAG_HYBRID_SIG_ED25519_MLDSA65_V1),
+      ...(opts.deterministic ? { extraEntropy: false as const } : {}),
+    });
+    const edSig = await ed25519Sign(m);
+    if (edSig.length !== ED_SIG_LEN) fail("bad-signature");
+    const sig = concat(edSig, mlSig);
+    hybridVerify(publicKey, purpose, payload, sig);
+    return sig;
+  } finally {
+    ml.secretKey.fill(0);
+  }
+}
+
 /** Throws unless BOTH components verify over M'. */
 export function hybridVerify(publicKey: Bytes, purpose: string, payload: Bytes, signature: Bytes): void {
   parseHybridSigPublicKey(publicKey);
