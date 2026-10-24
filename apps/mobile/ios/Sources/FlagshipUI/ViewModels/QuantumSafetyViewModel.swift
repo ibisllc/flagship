@@ -16,8 +16,20 @@ public final class QuantumSafetyViewModel {
         public let name: String
         public var replayed: QuantumSafety.Replayed?
         public var readiness: QuantumSafety.Readiness?
+        /// This server's apps and each one's browser answer (strict servers only).
+        public var apps: [AppChoice] = []
         public var id: String { fqdn }
         public var strict: Bool { replayed.map { AssurancePolicy.strictInForce($0.state) } ?? false }
+    }
+
+    /// One app's own scope (`<server>:<service id>`): strict there means only the Flagship app
+    /// reaches it; otherwise browsers may (pq-suites.md §13.6, the box's app gate).
+    public struct AppChoice: Identifiable, Equatable {
+        public let serviceId: String
+        public let name: String
+        public var replayed: QuantumSafety.Replayed?
+        public var id: String { serviceId }
+        public var appOnly: Bool { replayed.map { AssurancePolicy.strictInForce($0.state) } ?? false }
     }
 
     public enum Phase: Equatable { case idle, loading, loaded, failed(String) }
@@ -31,9 +43,13 @@ public final class QuantumSafetyViewModel {
 
     private let app: AppState
     private let now: () -> Int64
+    private let clients: PodScreensClientFactory?
+    /// What load() verified, kept for the re-entry evidence a later turnOn signs.
+    private var verified: (devices: [StrictReentry.Binding], deviceCount: Int, adminRoot: StrictReentry.Binding?, recovery: [String: Bool]) = ([], 0, nil, [:])
 
-    public init(app: AppState, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+    public init(app: AppState, clients: PodScreensClientFactory? = nil, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.app = app
+        self.clients = clients
         self.now = now
     }
 
@@ -74,10 +90,89 @@ public final class QuantumSafetyViewModel {
                 row.readiness = QuantumSafety.Readiness(devicesBound: counts?.bound ?? 0, devices: counts?.devices ?? 0, thisDeviceBound: thisBound,
                                                         thisDeviceIsAdmin: Keystore.hasAdminRoot, recoveryChecked: served.recoveryChecked, serverBound: serverBound)
             }
+            verified.recovery[host] = row.readiness?.recoveryChecked ?? false
+            if row.strict, let clients { row.apps = await loadApps(host: host, clients: clients, root: root, myPub: myPub, rootBinding: rootBinding, myBinding: myBinding) }
             rows.append(row)
         }
+        // Every device binding verified under its own registered key: the enrollment the
+        // re-entry evidence commits to (the device list itself comes from .com's device book).
+        let deviceBindings = (bindings?.devices ?? []).compactMap { w in
+            (try? PqTrust.verifyPqKeyBinding(w, PqBindingExpectation(role: "device", subjectId: w.subjectId, ed25519PubHex: w.ed25519PubHex, now: now()))).map(StrictReentry.Binding.init)
+        }
+        verified.devices = deviceBindings
+        verified.deviceCount = counts?.devices ?? 0
+        verified.adminRoot = rootBinding.map(StrictReentry.Binding.init)
         servers = rows
         phase = .loaded
+    }
+
+    private func loadApps(host: String, clients: PodScreensClientFactory, root: String?, myPub: String?,
+                          rootBinding: VerifiedPqKeyBinding?, myBinding: VerifiedPqKeyBinding?) async -> [AppChoice] {
+        guard let client = PqIdentityBindingService.client,
+              let list = try? await clients.client(forFqdn: host).appsList().apps else { return [] }
+        var out: [AppChoice] = []
+        for a in list {
+            let scope = QuantumSafety.serviceScope(server: host, service: a.serviceId)
+            var choice = AppChoice(serviceId: a.serviceId, name: a.urlLabel.isEmpty ? a.slug : a.urlLabel,
+                                   replayed: QuantumSafetyService.store.replayed(account: user, scope: scope))
+            if let served = try? await client.fetchPolicy(username: user, scope: scope),
+               let r = try? QuantumSafety.replay(scope: scope, account: user, chain: served.chain, current: choice.replayed?.state,
+                                                 adminRootHex: root, isAdminDevice: { $0 == myPub },
+                                                 bindingFor: { $0 == root ? rootBinding : ($0 == myPub ? myBinding : nil) }) {
+                try? QuantumSafetyService.store.adopt(account: user, r)
+                choice.replayed = r
+            }
+            out.append(choice)
+        }
+        return out
+    }
+
+    /// The re-entry evidence for a scope that was strict before (assurancePolicy.ts): what this
+    /// device verified in load(), the server's PQ key it holds pinned, and a fresh nonce.
+    private func reentryEvidence(scope: PolicyScope, server fqdn: String) async throws -> StrictReentryEvidence {
+        guard let client = PqIdentityBindingService.client,
+              let head = try? await client.fetchPolicy(username: user, scope: scope).chain.last?.change else {
+            throw QuantumSafetyRefusal("Couldn't read this server's protection history. Check your connection and try again.")
+        }
+        guard let box = BoxKeyPins.shared.verifiedBoxPqBinding(username: user, serverDomain: fqdn) else {
+            throw QuantumSafetyRefusal("This device hasn't checked the server's post-quantum key yet. Open the server once, then try again.")
+        }
+        let t = now()
+        let inputs = StrictReentry.Inputs(account: user, scope: scope, leftStrictAt: head.issuedAt, devices: verified.devices,
+                                          deviceCount: verified.deviceCount, adminRoot: verified.adminRoot, server: StrictReentry.Binding(box),
+                                          recoveryChecked: verified.recovery[fqdn] ?? false, recoveryCheckedAt: t,
+                                          nonceHex: StrictReentry.freshNonce(), checkedAt: t)
+        do { return try StrictReentry.evidence(inputs) } catch let r as StrictReentry.Refusal { throw QuantumSafetyRefusal(r.sentence) }
+    }
+
+    /// One app's browser answer on a strict server: "only the Flagship app" signs the app's own
+    /// scope to strict; "also browsers" signs it back to compatibility, naming the loss.
+    public func setAppBrowsers(server fqdn: String, serviceId: String, allowed: Bool) async -> Bool {
+        guard let row = servers.first(where: { $0.fqdn == fqdn }), let a = row.apps.first(where: { $0.serviceId == serviceId }) else { return false }
+        guard a.appOnly == allowed else { return true }
+        busy = true; defer { busy = false }
+        do {
+            let s = try await signer(reason: allowed ? "Let browsers reach \(a.name)" : "Keep browsers away from \(a.name)")
+            let pub = QSHex.hex([UInt8](s.edKey.publicKey.rawRepresentation))
+            let scope = QuantumSafety.serviceScope(server: fqdn, service: serviceId)
+            let state = a.replayed?.state ?? AssurancePolicy.legacyState(scope)
+            let change: AssurancePolicyChange
+            if allowed {
+                change = QuantumSafety.compatibilityChange(account: user, scope: scope, from: state, loss: [QuantumSafety.browserLoss],
+                                                           peers: [fqdn], signerKind: s.kind, signerKeyId: pub, now: now())
+            } else {
+                let reentry = state.enforcedEver ? try await reentryEvidence(scope: scope, server: fqdn) : nil
+                change = QuantumSafety.strictChange(account: user, scope: scope, from: state, browsersAllowed: false, peers: [fqdn],
+                                                    signerKind: s.kind, signerKeyId: pub, now: now(), reentry: reentry)
+            }
+            try await signAndPost(change, s)
+            message = allowed ? "Browsers can reach \(a.name) again, within 15 minutes." : "Only the Flagship app reaches \(a.name) now, within 15 minutes."
+            await load()
+            return true
+        } catch {
+            message = (error as? QuantumSafetyRefusal)?.sentence ?? "\(a.name) wasn't changed."
+            return false
+        }
     }
 
     /// The admin root and its PQ half when this device bound it, else this admin device's key.
@@ -112,14 +207,17 @@ public final class QuantumSafetyViewModel {
             let pub = QSHex.hex([UInt8](s.edKey.publicKey.rawRepresentation))
             let scope = PolicyScope(kind: .installation, id: fqdn)
             let state = row.replayed?.state ?? AssurancePolicy.legacyState(scope)
+            // Back to strict after a compatibility period: sign what this device re-checked.
+            let reentry = state.enforcedEver ? try await reentryEvidence(scope: scope, server: fqdn) : nil
             try await signAndPost(QuantumSafety.strictChange(account: user, scope: scope, from: state, browsersAllowed: browsersAllowed, peers: [fqdn],
-                                                             signerKind: s.kind, signerKeyId: pub, now: now()), s)
+                                                             signerKind: s.kind, signerKeyId: pub, now: now(), reentry: reentry), s)
             for c in connectors where c.needsChoice && blocked.contains(c.id) {
                 let cs = QuantumSafety.connectorScope(server: fqdn, connector: c.id)
                 let held = QuantumSafetyService.store.replayed(account: user, scope: cs)?.state ?? AssurancePolicy.legacyState(cs)
                 guard !AssurancePolicy.strictInForce(held) else { continue }
+                let connectorReentry = held.enforcedEver ? try await reentryEvidence(scope: cs, server: fqdn) : nil
                 try await signAndPost(QuantumSafety.strictChange(account: user, scope: cs, from: held, browsersAllowed: false, peers: [fqdn],
-                                                                 signerKind: s.kind, signerKeyId: pub, now: now()), s)
+                                                                 signerKind: s.kind, signerKeyId: pub, now: now(), reentry: connectorReentry), s)
             }
             message = "Quantum-safe protection is on for \(row.name). It takes effect when the server next checks in, within 15 minutes."
             await load()

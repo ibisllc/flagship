@@ -5,6 +5,7 @@ import FlagshipCore
 import FlagshipAPI
 
 public struct SettingsTab: View {
+    @Environment(\.podScreensClients) private var podClients
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.pairingRelayClient) private var pairingRelay
@@ -425,7 +426,7 @@ public struct SettingsTab: View {
         case .accountSecurity:
             AccountSecurityContainer()
         case .quantumSafety:
-            QuantumSafetyScreen(viewModel: QuantumSafetyViewModel(app: app))
+            QuantumSafetyScreen(viewModel: QuantumSafetyViewModel(app: app, clients: podClients))
         case .keyfileBackup:
             KeyfileExportScreen(
                 vm: KeyfileExportViewModel(username: app.currentUser ?? "")
