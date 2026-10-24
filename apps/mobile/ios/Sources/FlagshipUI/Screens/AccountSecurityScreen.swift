@@ -11,6 +11,7 @@ import FlagshipCore
 /// in AccountSecurityEnableSheet — this is just the badge + toggle.
 public struct AccountSecurityScreen: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.secretMailboxClient) private var mailbox
     @State private var showEnableSheet = false
     @State private var showDisableSheet = false
     @State private var disableCode: String = ""
@@ -53,7 +54,7 @@ public struct AccountSecurityScreen: View {
         .navigationTitle("Account security")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if watchVM == nil { watchVM = viewModel.makeWatchDelegateViewModel() }
+            if watchVM == nil { watchVM = viewModel.makeWatchDelegateViewModel(mailbox: mailbox) }
             if rotateVM == nil { rotateVM = viewModel.makeRotateAdminRootViewModel() }
             await viewModel.load()
             await watchVM?.load()
@@ -187,7 +188,7 @@ public struct AccountSecurityScreen: View {
                         .accessibilityIdentifier("watch-delegate-admin-only")
                 }
 
-                Text("Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.")
+                Text("Approve server starts on your Apple Watch while Flagship is unlocked on this iPhone. To approve one while this iPhone is locked, turn on Start from your watch on that server's page. Everything else (revoke a server, wipe & restart, replace a device) still needs the iPhone. Off by default.")
                     .accessibilityIdentifier("watch-delegate-note")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)

@@ -82,6 +82,17 @@ final class WatchBridge: NSObject {
                         },
                         watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
                     )
+                },
+                // Option (a): this watch's own copy of the server's disk key answers without the
+                // account key, so the iPhone can stay locked.
+                lockedApprove: { requestId in
+                    guard let username = currentUser(), !username.isEmpty else { return .noCopy }
+                    return await WatchBootApprover(
+                        mailbox: mailbox,
+                        username: username,
+                        delegateKey: { Keystore.watchDelegateKey() },
+                        bootKey: { Keystore.watchBootKey() }
+                    ).approve(requestId: requestId)
                 }
             )
         }
