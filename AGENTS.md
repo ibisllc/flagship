@@ -432,9 +432,7 @@ of the last check here: **not yet checked**.
   admin-root setup and, for old accounts, quietly at the next unlock. Owner-signed policy changes
   chain per scope in D1 **0112** (`/api/accounts/:u/assurance-policy`, forks refused); the box
   replays its chain itself and, once strict, refuses sensitive orders without a hybrid signature.
-  Webapp shell **v168**. No UI offers strict yet (milestone 4) and no client signs hybrid orders
-  or applies a served chain yet; the boot client's own ML-DSA key is still open. Nothing has run
-  on a device.
+  The boot client's own ML-DSA key is still open.
   **Milestone 3, release endorsements:** a release also needs a hybrid companion
   (`flagship/release-endorsement/v2`, `pq-suites.md` §12; TS `releaseEndorsementPq.ts`, Rust
   `flagship_crypto::release`, vectors `release-endorsement-v2`) once `RELEASE_PQ_PIN`
@@ -444,7 +442,20 @@ of the last check here: **not yet checked**.
   release signature (software key, YubiKey-encrypted at rest)", made by
   `scripts/pq-release-key.mjs` (age to two YubiKeys + paper; runbook
   `docs/runbooks/pq-release-key.md`) and signed by `endorse-release.mjs`. Ceremony not run;
-  security notices and the 0.3 box artifact are still classical.
+  the 0.3 box artifact is still classical.
+  **Milestone 4, transport and the opt-in** (`pq-suites.md` §13-§15): `flagship/pq-session/v1`
+  (X-Wing + hybrid-signed handshake, TS/Rust/Swift/Kotlin, vectors `pq-session`); the box serves
+  it (`pqChannel.ts`) and, while strict, refuses paired-session and access-sync requests that did
+  not come over it (browsers only if the owner's signed change allowed them); access sync to the
+  other servers goes over it. iOS and Android tunnel strict servers, replay served chains with
+  anti-rollback, sign update and server orders hybrid (D1 **0113** keeps the server order's), and
+  offer Settings, Quantum-safe protection (readiness, browser question, connector choices,
+  leave-strict losses, custody labels); the webapp is view only (shell **v169**). The box gates
+  AI providers the owner blocked and apps kept away from browsers. Notices need the release key's
+  PQ half once pinned (four verifiers, vectors `security-notice/pq-vectors.json`). Wipe, sign out
+  and Remove this device erase the PQ seeds. `.com` rate-limits the binding PUTs and policy POSTs.
+  Open: external review of the session, a per-app screen, re-entry evidence, Android admin-device
+  signing, any device run. Nothing is strict in production.
 
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
