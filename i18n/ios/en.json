@@ -11408,5 +11408,9 @@
   "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": {
     "en": "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.",
     "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift:62"
+  },
+  "This server's key doesn't match. Approve its start-up from your phone.": {
+    "en": "This server's key doesn't match. Approve its start-up from your phone.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift:44"
   }
 }

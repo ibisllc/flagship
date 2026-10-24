@@ -2600,5 +2600,6 @@
   "This server isn't registered to your account.": "此服务器未注册到你的账户。",
   "This server is locked. Approve its start-up from your iPhone.": "此服务器已锁定。请从你的 iPhone 批准其启动。",
   "Turn on Approve from watch in Account security first.": "请先在“账户安全”中开启“通过手表批准”。",
-  "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "你手表的批准已过期。请在“账户安全”中关闭并重新开启“通过手表批准”。"
+  "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "你手表的批准已过期。请在“账户安全”中关闭并重新开启“通过手表批准”。",
+  "This server's key doesn't match. Approve its start-up from your phone.": "此服务器的密钥不匹配。请从你的手机批准其启动。"
 }
