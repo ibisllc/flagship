@@ -162,7 +162,10 @@ dependencies {
     implementation("com.google.crypto.tink:tink-android:1.13.0")
     // argon2id KDF for the `.flagshipkey` account backup (Argon2BytesGenerator).
     // Byte-compatible with the TS @noble/hashes argon2id + iOS Argon2Kit.
-    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    // Also the architecture-v2 hybrid suites (core/pq/): ML-DSA-65, ML-KEM-768,
+    // SHA3/SHAKE, X25519 and strict Ed25519 point checks. Pinned exactly: 1.79+
+    // carries the final FIPS 203/204 (context strings, seed-format keys).
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
 
     // Networking
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
