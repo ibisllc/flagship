@@ -134,6 +134,7 @@ import { initBootApprovalView } from "./views/boot-approval.js";
 import { initPendingServerView, enterPendingServer } from "./views/pending-server.js";
 import { initTrustedDevicesView } from "./views/trusted-devices.js";
 import { initAccountSecurityView } from "./views/account-security.js";
+import { initQuantumSafetyView } from "./views/quantum-safety.js";
 import { initAddDeviceView } from "./views/add-device.js";
 import { initJoinView, enterJoin } from "./views/join.js";
 import { initProfilesView, enterProfiles, renderProfiles, setProfileSwitchHandler } from "./views/profiles.js";
@@ -187,6 +188,7 @@ const SUB_VIEW_TABS = {
   "view-account-audit": "activity",
   "view-settings": "settings",
   "view-account-security": "settings",
+  "view-quantum-safety": "settings",
   "view-add-device": "settings",
   "view-recovery": "settings",
   "view-post-recovery": "settings",
@@ -322,6 +324,7 @@ function wireSettingsTabEntries() {
   });
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
   wire("settings-tab-account-security", () => show("view-account-security"));
+  wire("settings-tab-quantum-safety", () => show("view-quantum-safety"));
   wire("settings-tab-join-account", async () => {
     const { openScanOrLink } = await import("./views/join.js");
     await openScanOrLink();
@@ -555,6 +558,7 @@ async function boot() {
   initCompanionRequestsView();
   initTrustedDevicesView();
   initAccountSecurityView();
+  initQuantumSafetyView();
   initAddDeviceView();
   initJoinView();
   initVibeCodeView();
