@@ -664,3 +664,101 @@ and the webapp (`pq-hybrid` with the X-Wing KATs, `pq-binding`,
 17. `recoveryChecked` is `.com`'s claim; it can only enable strict. Should
     the box require its own evidence of a tested recovery?
 
+
+## 12. Milestone 3: release endorsements (`flagship/release-endorsement/v2`)
+
+Code: TS `packages/protocol/src/releaseEndorsementPq.ts` (pin in
+`releasePqPin.ts`), Rust `rust/crates/flagship-crypto/src/release.rs`;
+vectors `test-vectors/release-endorsement-v2/vectors.json`
+(`npx tsx tools/release-pq-vectors.ts [--check]`); ceremony and signing
+`scripts/pq-release-key.mjs`, `scripts/endorse-release.mjs`; runbook
+`docs/runbooks/pq-release-key.md`.
+
+### 12.1 Keys
+
+The release key is a hybrid pair: the existing Ed25519 release key (YubiKey
+PIV slot 9c, the ca-track holder that signs v1 endorsements) and a fresh
+ML-DSA-65 key. The ML-DSA seed is 32 bytes from the OS RNG, kept only
+encrypted with age to two YubiKeys (age-plugin-yubikey, PIN and touch) and on
+paper. Label, exactly: **"PQ release signature (software key,
+YubiKey-encrypted at rest)"**. The age file's own protection is classical
+(the YubiKeys' P-256 key agreement), so the file stays private on the owner's
+Mac: published, it would reduce the PQ half to classical security.
+
+The two keys are bound with `flagship/pq-key-binding/v1` (§9), role
+`release-key`, subject `flagship-release`; the YubiKey signs the Ed25519 half
+of `M'` and the in-memory seed the ML-DSA half (`hybridSignExternal`). The
+binding lives in `.maintainers/release-pq/bindings/`. What the verifiers trust
+is the **pin**, a code constant (`RELEASE_PQ_PIN`): the binding's hybrid key id
+(`keyId(0x0002, ed25519 || mldsa65)`) and the cutover marker. It is code, like
+`MAINTAINER_PINNED_MANDATE_HASH`, because the update gate reads `.maintainers/`
+from fetched refs that nothing has verified yet.
+
+### 12.2 Statement and wire
+
+```
+statement = "flagship/release-endorsement/v2|<releaseId>|<semverTag>|<commitHash>|<previousReleaseId>|<previousCommitHash>|<intermediateMerkleRoot>|<v1Digest>|<signedBy>|<keyId>"
+v1Digest  = hex(SHA-256(maintainers v1 canonical bytes, "maintainers/release/v1|..."))
+signature = hybrid-sig(purpose = "flagship/release-endorsement/v2", payload = statement)
+wire      = { kind: "ReleaseEndorsementPq", version: 2, releaseId, commitHash, v1Digest, keyId, suite, signature }
+```
+
+Absent previous fields are empty. The wire has exactly those eight keys; it
+sits beside the v1 file in `.maintainers/release-pq/endorsements/`. The v1
+endorsement is unchanged, so old boxes keep verifying it.
+
+### 12.3 Verification, in order (TS and Rust agree on every code)
+
+1. No companion: `pq-missing`. Wire shape: `pq-malformed`.
+2. `releaseId`, `commitHash` or `v1Digest` differ from the v1 endorsement's:
+   `pq-mismatch`. A v1 that cannot be encoded: `v1-malformed`.
+3. `keyId` not in the pin: `pq-key-not-pinned`. No verified binding with
+   that key id: `no-binding`.
+4. The v1 `signedBy` is not the binding's Ed25519 key:
+   `binding-key-mismatch`. The v1 signature by `signedBy` fails strict
+   Ed25519: `v1-signature`.
+5. The gate (§10) over the statement under a fixed strict, enforced policy:
+   `strict-requires-hybrid` for a suite relabelled classical,
+   `unknown-suite`, `bad-signature` for either half stripped or zeroed.
+
+A binding is considered only if its key id is pinned
+(`pq-key-not-pinned` otherwise), then verified as §9.2 with its own Ed25519
+key as the trusted one (the pin fixes both halves).
+
+### 12.4 The rule
+
+- Pin empty (today): every v1 endorsement that passes the maintainers chain
+  check is a target, exactly as before.
+- Pin names a key: an endorsement is a target only when its v1 signature AND a
+  companion verify. Endorsements on the chain that ends at the pin's
+  `requirePqAfter` (`releaseId` and `commitHash`, followed back through
+  `previousReleaseId`) stay valid as predecessors but are never offered or
+  applied. The marker is fixed by the pin rather than by a date, so a forger
+  of the classical signature cannot backdate a new endorsement into the
+  legacy set. Everything else without a companion is refused
+  (`pq-signature-required` in the box's `endorsementErrors`).
+- Where it runs: the box's `verifyStore` (`releaseVerifier.ts`), which feeds
+  the update gate (`buildMaintainersReleaseGate`, used by
+  `applyEndorsedUpdate` for owner orders, share updates and first-boot
+  update), the box's release list (`updateReleases.ts`) and
+  `scripts/latest-endorsed-release.mjs` (the appliance build); `.com`'s
+  `/api/releases` catalog, which offers only eligible releases; Rust
+  `flagship_crypto::release` for the future Rust updater and boot client.
+  Native clients and the webapp verify no release endorsements, so they have
+  no port. The 0.3 signed box artifact (`boxArtifact.ts`) is a separate,
+  k-of-n classical signature and is not covered yet.
+
+### 12.5 Open questions for the Q01 reviewer (additions)
+
+18. The ML-DSA release key is a software key whose at-rest protection is the
+    YubiKeys' classical P-256 key agreement plus physical custody of the
+    file and the paper. Is that acceptable until PQ-capable signing hardware
+    is procured (Q04), or must the ciphertext also be hybrid-sealed (for
+    example age's ML-KEM recipients next to the YubiKey ones)?
+19. The companion is a second signature beside the unchanged v1 one rather
+    than a single hybrid signature replacing it, so old boxes keep working.
+    Is binding the v1 digest into the hybrid statement sufficient to make
+    the pair an AND-signature over the same release?
+20. Security notices (`flagship/security-notice/v1`) are signed by the same
+    YubiKey and are still classical only; clients would need the pin baked
+    into four ports to require a PQ half.
