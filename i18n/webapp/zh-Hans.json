@@ -2750,5 +2750,11 @@
   "No chat requests are waiting.": "没有等待处理的聊天请求。",
   "Apps that take chats without asking": "无需询问即可接受聊天的应用",
   "{0} asks you again before taking a chat": "{0} 在接受聊天前会再次询问你",
-  "App chat requests": "应用聊天请求"
+  "App chat requests": "应用聊天请求",
+  "This run can use up to about {0} tokens. The run stops there.": "本次运行最多可使用约 {0} 个令牌，到达后即停止。",
+  "Always allow lets a machine claiming to run {0}/{1} start chats with {2} without asking you again. You can stop this under Activity.": "“始终允许”会让声称运行 {0}/{1} 的机器无需再次询问即可与 {2} 发起聊天。你可以在“活动”中停止。",
+  "A machine claiming to run {0}/{1} can start chats with {2} without asking you.": "声称运行 {0}/{1} 的机器无需询问即可与 {2} 发起聊天。",
+  "{0} now accepts chats from {1}/{2} without asking": "{0} 现在无需询问即可接受来自 {1}/{2} 的聊天",
+  "{0} asks you again before taking a chat from {1}/{2}": "{0} 在接受来自 {1}/{2} 的聊天前会再次询问你",
+  "Chats your apps take without asking": "你的应用无需询问即可接受的聊天"
 }
