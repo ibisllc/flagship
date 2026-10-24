@@ -1668,6 +1668,24 @@ for _f in flagship-boot-key.pem server-domain flagship-boot-host flagship-boot-u
   cp "/boot/$_f" "\${DESTDIR}/boot/$_f"
 done
 chmod 600 "\${DESTDIR}/boot/flagship-boot-key.pem"
+# Boot unlock v2 (pq-suites.md §19): the boot key's ML-DSA half, the owner's
+# hybrid key, the unlock policy and the lease key (a file, or a TPM-sealed
+# object plus the tpm2-tools and TCTI to open it). All optional: a box without
+# them unlocks as v1. The premount prefers the live /boot copies.
+for _f in flagship-boot-mldsa.key flagship-owner-pq.pub flagship-unlock-policy flagship-lease-kem.key; do
+  [ ! -s "/boot/$_f" ] || { cp "/boot/$_f" "\${DESTDIR}/boot/$_f"; chmod 600 "\${DESTDIR}/boot/$_f"; }
+done
+[ ! -d /boot/flagship-lease-kem.tpm ] || cp -r /boot/flagship-lease-kem.tpm "\${DESTDIR}/boot/flagship-lease-kem.tpm"
+for _t in tpm2_createprimary tpm2_load tpm2_unseal; do
+  _tp="$(command -v "$_t" 2>/dev/null || true)"
+  [ -z "$_tp" ] || copy_exec "$_tp" "/bin/$_t"
+done
+for _tl in /usr/lib/*-linux-gnu*/libtss2-tcti-device.so*; do
+  [ ! -e "$_tl" ] || copy_exec "$_tl"
+done
+for _tm in tpm_crb tpm_tis tpm_tis_core; do
+  manual_add_modules "$_tm" 2>/dev/null || true
+done
 cp /boot/control-plane-url "\${DESTDIR}/boot/control-plane-url" 2>/dev/null || true
 [ ! -f /boot/flagship-debug-mode ] || cp /boot/flagship-debug-mode "\${DESTDIR}/boot/flagship-debug-mode"
 for _f in bin/flagship-unseal bin/openssl bin/curl bin/xxd etc/ssl/certs/ca-certificates.crt boot/flagship-boot-key.pem; do
