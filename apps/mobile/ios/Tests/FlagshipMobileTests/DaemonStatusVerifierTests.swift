@@ -61,12 +61,12 @@ final class DaemonStatusVerifierTests: XCTestCase {
     // MARK: - Key derivation (ServerKeys mirror)
 
     func testPhoneSideStkDerivationReproducesPinnedPubkey() {
-        let pub = ServerKeys.deriveStkPub(umkSeed: umkSeed, serverId: Self.report.serverDomain)
+        let pub = TestServerKeys.deriveStkPub(umkSeed: umkSeed, serverId: Self.report.serverDomain)
         XCTAssertEqual(pub.map { HexUtil.encode($0) }, Self.stkPubHex)
     }
 
     func testStkDerivationRejectsBadSeedLength() {
-        XCTAssertNil(ServerKeys.deriveStkPub(umkSeed: Data([7, 7, 7]), serverId: "x"))
+        XCTAssertNil(TestServerKeys.deriveStkPub(umkSeed: Data([7, 7, 7]), serverId: "x"))
         XCTAssertNil(ServerKeys.deriveSwk(umkSeed: Data(), serverId: "x"))
     }
 
@@ -158,7 +158,7 @@ final class DaemonStatusVerifierTests: XCTestCase {
         // pinned pubkey — and the pinned signature fails under ITS pubkey
         // only if swapped; here we check the pinned sig against the wrong key.
         let otherSeed = HexUtil.decode(String(repeating: "08", count: 32))!
-        let otherPub = ServerKeys.deriveStkPub(umkSeed: otherSeed, serverId: Self.report.serverDomain)!
+        let otherPub = TestServerKeys.deriveStkPub(umkSeed: otherSeed, serverId: Self.report.serverDomain)!
         XCTAssertNotEqual(HexUtil.encode(otherPub), Self.stkPubHex)
         XCTAssertFalse(DaemonStatus.verify(Self.report, signatureHex: Self.sigHex, stkPub: otherPub))
     }

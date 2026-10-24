@@ -171,7 +171,9 @@ public final class DeleteServerViewModel {
                 username: username,
                 irk: irk,
                 orderKey: k.orderKey,
-                retiredStkPubHex: identityPubKeyHex,
+                // Names the key to retire: the pinned one when this phone blessed the
+                // server. The box acts only on an order naming its own key.
+                retiredStkPubHex: ServerKeyPins().pinnedStkHex(serverFqdn) ?? identityPubKeyHex,
                 finalBackup: false,
                 disposition: .wipeNow,
                 issuedAt: now(),

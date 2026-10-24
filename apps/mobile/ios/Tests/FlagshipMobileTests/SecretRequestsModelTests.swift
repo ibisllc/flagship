@@ -15,7 +15,7 @@ final class SecretRequestsModelTests: XCTestCase {
                 serverDomain: domain, requestNonceHex: nonce, stkPub: "00", purpose: "unlock-key",
                 issuedAt: 1, requestSignature: "00", deviceInfo: nil, postedAt: 1, expiresAt: 2
             ),
-            directoryStkPubHex: "00"
+            stkPubHex: "00"
         )
     }
 
@@ -37,9 +37,9 @@ final class SecretRequestsModelTests: XCTestCase {
             return "lease"
         }
         @discardableResult
-        func approvePendingUnlock(serverDomain: String, depositAutoLease: Bool) async throws -> String? { nil }
+        func approvePendingUnlock(serverDomain: String, depositAutoLease: Bool, expectedStkPubHex: String?) async throws -> String? { nil }
         @discardableResult
-        func approvePendingEntitlement(serverDomain: String) async throws -> String? { nil }
+        func approvePendingEntitlement(serverDomain: String, expectedStkPubHex: String?) async throws -> String? { nil }
     }
 
     private func model(_ source: Source?) -> SecretRequestsModel {

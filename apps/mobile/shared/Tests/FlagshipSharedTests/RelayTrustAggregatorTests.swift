@@ -43,12 +43,26 @@ final class RelayTrustAggregatorTests: XCTestCase {
         )
     }
 
+    /// The phone pinned each listed box's key at its first blessing.
+    private func agg(_ pods: [PodDirectoryEntry]) -> [RelayCertFailure] {
+        RelayTrustAggregator.aggregate(pods: pods, pinnedStk: { d in
+            pods.first { $0.serverDomain == d }.flatMap { HexUtil.decode($0.identityPubKey) }
+        })
+    }
+
+    func testAVerdictFromAServerThisDeviceHasNotPinnedIsDropped() {
+        let pods = [signedPod("a.x", verdict: .untrusted, failingCertHash: Self.certA)]
+        XCTAssertTrue(RelayTrustAggregator.aggregate(pods: pods, pinnedStk: { _ in nil }).isEmpty,
+                      "The key .com lists is never the trust anchor.")
+        XCTAssertTrue(RelayTrustAggregator.aggregate(pods: pods, pinnedStk: { _ in Data(repeating: 9, count: 32) }).isEmpty)
+    }
+
     func testTwoPodsSameCertHashAggregateToOneEntrySpanningBothServers() {
         let pods = [
             signedPod("a.harry1.flagship.services", verdict: .untrusted, failingCertHash: Self.certA),
             signedPod("b.harry1.flagship.services", verdict: .untrusted, failingCertHash: Self.certA),
         ]
-        let out = RelayTrustAggregator.aggregate(pods: pods)
+        let out = agg(pods)
         XCTAssertEqual(out.count, 1)
         XCTAssertEqual(out[0].certHash, Self.certA)
         XCTAssertEqual(out[0].serverCount, 2)
@@ -62,7 +76,7 @@ final class RelayTrustAggregatorTests: XCTestCase {
             signedPod("a.x", verdict: .untrusted, failingCertHash: Self.certA),
             signedPod("b.x", verdict: .untrusted, failingCertHash: Self.certB),
         ]
-        let out = RelayTrustAggregator.aggregate(pods: pods)
+        let out = agg(pods)
         XCTAssertEqual(out.map(\.certHash), [Self.certA, Self.certB])
     }
 
@@ -72,7 +86,7 @@ final class RelayTrustAggregatorTests: XCTestCase {
         let pods = [
             signedPod("a.x", verdict: .untrusted, failingCertHash: Self.certA, covering: Self.certA),
         ]
-        let out = RelayTrustAggregator.aggregate(pods: pods)
+        let out = agg(pods)
         XCTAssertEqual(out.count, 1)
         XCTAssertTrue(out[0].overridden)
     }
@@ -81,7 +95,7 @@ final class RelayTrustAggregatorTests: XCTestCase {
         let pods = [
             signedPod("a.x", verdict: .untrusted, failingCertHash: Self.certA, tamper: true),
         ]
-        XCTAssertTrue(RelayTrustAggregator.aggregate(pods: pods).isEmpty)
+        XCTAssertTrue(agg(pods).isEmpty)
     }
 
     func testTrustedAndUnknownVerdictsAndMissingTrustStatusAreIgnored() {
@@ -90,6 +104,6 @@ final class RelayTrustAggregatorTests: XCTestCase {
             signedPod("b.x", verdict: .unknown, failingCertHash: nil),
             PodDirectoryEntry(serverDomain: "c.x", identityPubKey: String(repeating: "cc", count: 32)),
         ]
-        XCTAssertTrue(RelayTrustAggregator.aggregate(pods: pods).isEmpty)
+        XCTAssertTrue(agg(pods).isEmpty)
     }
 }

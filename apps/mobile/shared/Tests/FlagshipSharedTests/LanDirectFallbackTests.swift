@@ -31,11 +31,11 @@ final class LanDirectFallbackTests: XCTestCase {
     func envelope(_ eps: [LanHint.Endpoint]) -> LanHint.Envelope {
         let h = LanHint.Hint(serverDomain: box, certSha256: pin, endpoints: eps,
                              issuedAt: start, expiresAt: start + 3_600_000)
-        let key = try! Curve25519.Signing.PrivateKey(rawRepresentation: ServerKeys.deriveStkSeed(umkSeed: umk, serverId: box)!)
+        let key = try! Curve25519.Signing.PrivateKey(rawRepresentation: TestServerKeys.deriveStkSeed(umkSeed: umk, serverId: box)!)
         let sig = try! key.signature(for: LanHint.canonical(h))
         return .init(hint: h, signatureHex: sig.map { String(format: "%02x", $0) }.joined())
     }
-    var stkPub: Data { ServerKeys.deriveStkPub(umkSeed: umk, serverId: box)! }
+    var stkPub: Data { TestServerKeys.deriveStkPub(umkSeed: umk, serverId: box)! }
 
     func testARequestNeverWaitsForTheProbe() async {
         let prober = CountingProber(["192.168.1.20"])

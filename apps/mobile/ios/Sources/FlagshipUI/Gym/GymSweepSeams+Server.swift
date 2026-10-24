@@ -66,6 +66,10 @@ extension GymSweepSeams {
         // servers with their STKs and peer-backup is on, so Migrate can start.
         if args.contains("-smoke-server-directory") {
             let now = Int64(Date().timeIntervalSince1970 * 1000)
+            // This phone blessed them earlier, so it holds the same keys as pins.
+            for pod in app.pods where pod.status == .online {
+                if let stk = HexUtil.decode(stkHex(pod.fqdn)) { ServerKeyPins().pin(stk, for: pod.fqdn) }
+            }
             mocks.mailbox.directory = app.pods.filter { $0.status == .online }.map {
                 PodDirectoryEntry(serverDomain: $0.fqdn, identityPubKey: stkHex($0.fqdn), lastReported: now,
                                   registeredAt: now - 86_400_000, hasCert: true, liveness: "live", lastSeenMsAgo: 0)
@@ -272,7 +276,11 @@ final class GymBuilderPairClient: BuilderPairClient, @unchecked Sendable {
     }
 
     func send(_ frame: BuilderOutbound) async throws {
-        if case .deliver = frame {
+        switch frame {
+        case .deliver, .deliverWithConfirmKey: break
+        default: return
+        }
+        do {
             GymProbe.note("recipe delivered to the builder")
             continuation?.yield(.recipeAccepted)
         }

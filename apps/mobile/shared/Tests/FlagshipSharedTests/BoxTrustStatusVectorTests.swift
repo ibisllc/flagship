@@ -61,7 +61,7 @@ final class BoxTrustStatusVectorTests: XCTestCase {
     var stkPub: Data { HexUtil.decode(Self.stkPubHex)! }
 
     func testPhoneSideStkDerivationReproducesPinnedPubkey() {
-        let pub = ServerKeys.deriveStkPub(umkSeed: umkSeed, serverId: Self.report.serverDomain)
+        let pub = TestServerKeys.deriveStkPub(umkSeed: umkSeed, serverId: Self.report.serverDomain)
         XCTAssertEqual(pub.map { HexUtil.encode($0) }, Self.stkPubHex)
     }
 

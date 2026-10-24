@@ -142,6 +142,12 @@ public protocol ScreensClient: Sendable {
     /// An older box answers 404 and gets the order from `.com` instead.
     @discardableResult
     func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck
+    /// `GET /api/screens/server-wildcard-grant` (docs/first-contact.md): whether
+    /// the box holds the admin's app-name certificate grant.
+    func serverWildcardGrantStatus() async throws -> Bool
+    /// `POST /api/screens/server-wildcard-grant {issuedAt, signature}`: hand the
+    /// box the signed grant. A refusal is `.http` with the box's `{error}`.
+    func deliverServerWildcardGrant(issuedAt: Int64, signatureHex: String) async throws
     /// `POST /api/screens/debug-access {grant, signatureHex}`: turn debug
     /// access on or renew it. `body` is `DebugAccess.envelopeJSON`. A refusal
     /// is `.http` with the box's `{error}` sentence.

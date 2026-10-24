@@ -25,12 +25,12 @@ public final class WatchBootKeyViewModel {
 
     private let enroller: WatchBootKeyEnroller
     private let store: WatchBootKeyStore
-    private let pins: WatchBootStkPins
+    private let pins: ServerKeyPins
     private let delegateReady: () -> Bool
     private let now: () -> Int64
 
     public init(serverDomain: String, enroller: WatchBootKeyEnroller, store: WatchBootKeyStore = WatchBootKeyStore(),
-                pins: WatchBootStkPins = WatchBootStkPins(), delegateReady: @escaping () -> Bool, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+                pins: ServerKeyPins = ServerKeyPins(), delegateReady: @escaping () -> Bool, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.serverDomain = serverDomain
         self.enroller = enroller
         self.store = store
@@ -90,8 +90,6 @@ public final class WatchBootKeyViewModel {
         do {
             try await enroller.turnOff(serverDomain: serverDomain)
             store.set(nil, for: serverDomain)
-            // Turning it off is the owner's re-trust: the next time on records the key the server then has.
-            pins.forget(serverDomain)
             expiresAt = nil
             phase = .idle
         } catch {

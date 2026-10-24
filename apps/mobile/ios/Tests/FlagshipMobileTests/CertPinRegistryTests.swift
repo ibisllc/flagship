@@ -62,19 +62,19 @@ final class CertPinRegistryTests: XCTestCase {
         XCTAssertNil(reg.pinFor(host: "evil-" + domain))
     }
 
-    // MARK: - The STK-pub cache (iOS biometric twist)
+    // MARK: - The server-key pin (docs/first-contact.md)
 
-    func testNoCachedStkPubMeansNoPin() {
+    func testNoPinnedServerKeyMeansNoPin() {
         let reg = CertPinRegistry(persistingIn: nil)
         // Seedless update with an empty cache: nothing to verify against.
         reg.update(pods: [makePod()], nowMs: now)
         XCTAssertNil(reg.pinFor(host: domain))
     }
 
-    func testRegisteredStkPubEnablesSeedlessUpdate() {
+    func testAPinnedServerKeyVerifiesTheReport() {
         let reg = CertPinRegistry(persistingIn: nil)
         let stkPub = HexUtil.decode(DaemonStatusVerifierTests.stkPubHex)!
-        reg.registerBoxStk(domain: domain, stkPub: stkPub)
+        reg.serverKeys.pin(stkPub, for: domain)
         reg.update(pods: [makePod()], nowMs: now)
         XCTAssertEqual(reg.pinFor(host: domain), pinHex)
     }
@@ -193,7 +193,7 @@ final class CertPinRegistryTests: XCTestCase {
             nonce: "ffeeddccbbaa99887766554433221100",
             issuedAt: issuedAt
         )
-        let stkSeed = ServerKeys.deriveStkSeed(umkSeed: umkSeed, serverId: domain)!
+        let stkSeed = TestServerKeys.deriveStkSeed(umkSeed: umkSeed, serverId: domain)!
         let priv = try! Curve25519.Signing.PrivateKey(rawRepresentation: stkSeed)
         let sig = try! priv.signature(for: DaemonStatus.canonicalBytes(report))
         let pod = makePod(report: report, signatureHex: HexUtil.encode(sig))
@@ -269,7 +269,7 @@ final class CertPinRegistryTests: XCTestCase {
             certValidUntil: 1_900_000_000_000, certIssuer: "C=US, O=Let's Encrypt, CN=YR1",
             appsServed: [other], nonce: "00ff00ff00ff00ff00ff00ff00ff00ff", issuedAt: now
         )
-        let otherSeed = ServerKeys.deriveStkSeed(umkSeed: umkSeed, serverId: other)!
+        let otherSeed = TestServerKeys.deriveStkSeed(umkSeed: umkSeed, serverId: other)!
         let otherSig = try! Curve25519.Signing.PrivateKey(rawRepresentation: otherSeed)
             .signature(for: DaemonStatus.canonicalBytes(otherReport))
         let otherPod = makePod(
@@ -291,7 +291,7 @@ final class CertPinRegistryTests: XCTestCase {
         reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: now)
         reg.clear()
         XCTAssertNil(reg.pinFor(host: domain))
-        // The STK-pub cache went with it: a seedless re-update can't re-pin.
+        // The server-key pins went with it: a refresh alone can't re-pin.
         reg.update(pods: [makePod()], nowMs: now)
         XCTAssertNil(reg.pinFor(host: domain))
     }
@@ -306,6 +306,19 @@ final class CertPinRegistryTests: XCTestCase {
         )
         reg.update(pods: [mockEntry], umkSeed: umkSeed, nowMs: now)
         XCTAssertNil(reg.pinFor(host: "home.demo.flagship.services"))
+    }
+}
+
+extension CertPinRegistry {
+    /// Test shorthand: this device pinned each pod's (fixture) key at its first blessing, then the
+    /// `/pods` refresh reconciles. A malformed seed pins nothing.
+    func update(pods: [PodDirectoryEntry], umkSeed: Data, nowMs: Int64) {
+        for pod in pods {
+            if let pub = TestServerKeys.deriveStkPub(umkSeed: umkSeed, serverId: pod.serverDomain) {
+                serverKeys.pin(pub, for: pod.serverDomain)
+            }
+        }
+        update(pods: pods, nowMs: nowMs)
     }
 }
 

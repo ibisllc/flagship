@@ -101,7 +101,8 @@ struct ShareServerCard: View {
             let fqdn = serverDomain.lowercased()
             let demo = ServerShareDemo.isOn && !ServerShareDemo.flowsOn
             let gym = ServerShareDemo.flowsOn
-            let stk = pod?.identityPubKeyHex ?? ""
+            // The key this phone pinned at the server's first blessing, never `.com`'s.
+            let stk = ServerKeyPins().pinnedStkHex(fqdn) ?? ""
             model = ShareServerCardModel(
                 serverDomain: fqdn,
                 serverName: pod?.name ?? ServerShareNames.serverLabel(fromDomain: fqdn),

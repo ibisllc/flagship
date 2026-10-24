@@ -196,8 +196,15 @@ public final class BuilderPairViewModel: Identifiable {
             deliveredDomain = blob.blob.serverDomain
             let payload = try JSONEncoder().encode(blob.onWire())
             let sealed = try QrRelay.seal(payload: payload, with: key)
-            try await client.send(.deliver(ciphertextB64: sealed.ciphertextBase64Url,
-                                           nonceB64: sealed.nonceBase64Url))
+            if let confirm = keepStudioConfirmKey(serverDomain: blob.blob.serverDomain) {
+                let sealedKey = try QrRelay.seal(payload: confirm, with: key)
+                try await client.send(.deliverWithConfirmKey(
+                    ciphertextB64: sealed.ciphertextBase64Url, nonceB64: sealed.nonceBase64Url,
+                    confirmKeyCiphertextB64: sealedKey.ciphertextBase64Url, confirmKeyNonceB64: sealedKey.nonceBase64Url))
+            } else {
+                try await client.send(.deliver(ciphertextB64: sealed.ciphertextBase64Url,
+                                               nonceB64: sealed.nonceBase64Url))
+            }
             receiptTimeoutTask?.cancel()
             receiptTimeoutTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 20_000_000_000)
@@ -208,6 +215,18 @@ public final class BuilderPairViewModel: Identifiable {
         } catch {
             await fail(UserErrorText.of(error))
         }
+    }
+
+    /// A fresh per-server key Studio confirms the server code with (docs/first-contact.md 4). This
+    /// device keeps its copy with the enrollment secret until the server is pinned; Studio's
+    /// `serverSeen` MAC on the order status is checked with it. nil when no secret was kept.
+    private func keepStudioConfirmKey(serverDomain: String) -> Data? {
+        let store = minter.firstContactSecrets
+        guard var kept = store.secret(for: serverDomain) else { return nil }
+        let confirmKey = Enrollment.newSecret()
+        kept.studioConfirmKeyHex = HexUtil.encode(confirmKey)
+        store.save(kept, for: serverDomain)
+        return confirmKey
     }
 
     public func cancel() async {

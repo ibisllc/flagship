@@ -92,7 +92,7 @@ final class WatchBridge: NSObject {
                         username: username,
                         delegateKey: { Keystore.watchDelegateKey() },
                         bootKey: { Keystore.watchBootKey() },
-                        pinnedStk: { WatchBootStkPins().pinnedStk($0) }
+                        pinnedStk: { ServerKeyPins().pinnedStk($0) }
                     ).approve(requestId: requestId)
                 }
             )

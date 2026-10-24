@@ -956,6 +956,19 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public private(set) var deliveredServerOrders: [SignedServerOrderWire] = []
     public var deliverServerOrderError: Error?
 
+    /// The app-name grant this mock box holds (`issuedAt`, signature hex), nil for none.
+    public var serverWildcardGrant: (issuedAt: Int64, signatureHex: String)?
+    public func serverWildcardGrantStatus() async throws -> Bool {
+        try await tick()
+        GymProbe.note("read app-name grant")
+        return serverWildcardGrant != nil
+    }
+    public func deliverServerWildcardGrant(issuedAt: Int64, signatureHex: String) async throws {
+        try await tick()
+        serverWildcardGrant = (issuedAt, signatureHex)
+        GymProbe.note("app-name grant delivered")
+    }
+
     @discardableResult
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         try await tick()

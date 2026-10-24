@@ -1236,6 +1236,19 @@ public struct ProvisionStatus: Codable, Equatable, Sendable {
     public let updatedAt: Int64
     /// Append-only history of every phase report, oldest first.
     public let history: [ProvisionStatusEntry]
+    /// First contact (docs/first-contact.md 4): the keys Studio read on a hosted VM's console (up to
+    /// four, newest last), each with its MAC under the confirm key the phone gave Studio. Unverified
+    /// until the phone checks it.
+    public let serverSeen: [ServerSeen]?
+
+    public struct ServerSeen: Codable, Equatable, Sendable {
+        public let stkPubHex: String
+        public let macHex: String
+        public let at: Int64?
+        public init(stkPubHex: String, macHex: String, at: Int64? = nil) {
+            self.stkPubHex = stkPubHex; self.macHex = macHex; self.at = at
+        }
+    }
 
     public init(
         serial: String,
@@ -1243,8 +1256,10 @@ public struct ProvisionStatus: Codable, Equatable, Sendable {
         phase: ProvisionStatusPhase,
         detail: String? = nil,
         updatedAt: Int64,
-        history: [ProvisionStatusEntry]
+        history: [ProvisionStatusEntry],
+        serverSeen: [ServerSeen]? = nil
     ) {
+        self.serverSeen = serverSeen
         self.serial = serial
         self.serverDomain = serverDomain
         self.phase = phase

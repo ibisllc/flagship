@@ -22,19 +22,22 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
         var leaseId: String? = "lease-1"
         private(set) var approveCalls: [(serverDomain: String, depositAutoLease: Bool)] = []
         private(set) var entitlementCalls: [String] = []
+        private(set) var expectedKeys: [String?] = []
 
         func verifiedRequests() async throws -> [SecretRequestCoordinator.VerifiedRequest] { [] }
         @discardableResult
         func approve(_ request: SecretRequestCoordinator.VerifiedRequest, depositAutoLease: Bool) async throws -> String? { nil }
         @discardableResult
-        func approvePendingUnlock(serverDomain: String, depositAutoLease: Bool) async throws -> String? {
+        func approvePendingUnlock(serverDomain: String, depositAutoLease: Bool, expectedStkPubHex: String?) async throws -> String? {
             if let approveError { throw approveError }
+            expectedKeys.append(expectedStkPubHex)
             approveCalls.append((serverDomain, depositAutoLease))
             return leaseId
         }
         @discardableResult
-        func approvePendingEntitlement(serverDomain: String) async throws -> String? {
+        func approvePendingEntitlement(serverDomain: String, expectedStkPubHex: String?) async throws -> String? {
             if let approveError { throw approveError }
+            expectedKeys.append(expectedStkPubHex)
             entitlementCalls.append(serverDomain)
             return nil
         }
@@ -185,5 +188,36 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
         guard case .failed = vm.state else { return XCTFail("expected .failed") }
         vm.retry()
         XCTAssertEqual(vm.state, .requestPending)
+    }
+
+    // MARK: - First contact (docs/first-contact.md)
+
+    private let listed = String(repeating: "ab", count: 32)
+
+    func testAServerWithoutAPinShowsTheCodeOfTheListedKeyAndApprovesOnlyThatKey() async {
+        let source = FakeSource()
+        let vm = BootUnlockApprovalViewModel(serverDomain: domain, purpose: .entitlement, makeCoordinator: { source },
+                                             initialAwaiting: true, listedStkPubHex: listed,
+                                             serverKeys: .volatile(), studioSeen: StudioSeenStore(secrets: { InMemoryFirstContactSecrets() }))
+        XCTAssertEqual(vm.keyNote, .code(Enrollment.serverCode(stkPubHex: listed)!))
+        await vm.approve()
+        XCTAssertEqual(vm.state, .approved)
+        XCTAssertEqual(source.expectedKeys, [listed], "The coordinator refuses any other key.")
+    }
+
+    func testAPinnedServerShowsNoCodeAndAChangedKeyIsRefusedWithoutAsking() async {
+        let pins = ServerKeyPins.volatile()
+        pins.pin(HexUtil.decode(listed)!, for: domain)
+        let source = FakeSource()
+        let same = BootUnlockApprovalViewModel(serverDomain: domain, makeCoordinator: { source }, initialAwaiting: true,
+                                               listedStkPubHex: listed, serverKeys: pins)
+        XCTAssertEqual(same.keyNote, .none)
+
+        let changed = BootUnlockApprovalViewModel(serverDomain: domain, makeCoordinator: { source }, initialAwaiting: true,
+                                                  listedStkPubHex: String(repeating: "cd", count: 32), serverKeys: pins)
+        XCTAssertEqual(changed.keyNote, .keyChanged)
+        await changed.approve()
+        XCTAssertEqual(changed.state, .failed(FirstContact.keyChangedText))
+        XCTAssertTrue(source.approveCalls.isEmpty, "Nothing is asked of the box.")
     }
 }

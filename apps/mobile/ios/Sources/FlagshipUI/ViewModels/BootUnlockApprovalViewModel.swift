@@ -23,12 +23,12 @@ public protocol ApprovalSource {
     /// told the UI a request is pending. Throws `.noPendingRequest` if the box
     /// gave up between the directory refresh and the tap.
     @discardableResult
-    func approvePendingUnlock(serverDomain: String, depositAutoLease: Bool) async throws -> String?
+    func approvePendingUnlock(serverDomain: String, depositAutoLease: Bool, expectedStkPubHex: String?) async throws -> String?
     /// One-tap approval for the directory-driven ENTITLEMENT card (serve-auth) —
     /// fetch+verify the live `entitlement` request for `serverDomain` and respond
     /// under a single biometric. Satisfied directly by the coordinator's method.
     @discardableResult
-    func approvePendingEntitlement(serverDomain: String) async throws -> String?
+    func approvePendingEntitlement(serverDomain: String, expectedStkPubHex: String?) async throws -> String?
 }
 
 /// `SecretRequestCoordinator` already IS the production approval source —
@@ -71,6 +71,43 @@ public final class BootUnlockApprovalViewModel {
 
     public private(set) var state: State = .idle
 
+    /// What the card shows about the server's key above Approve (docs/first-contact.md).
+    public enum KeyNote: Equatable, Sendable {
+        /// The key the card expects is pinned: nothing to show.
+        case none
+        /// No pin yet: the code computed here from the key the server is listed with.
+        case code(String)
+        /// Studio read that same key on the server's console.
+        case confirmedByStudio
+        /// The server is listed with a key other than the pinned one: refused.
+        case keyChanged
+    }
+    public private(set) var keyNote: KeyNote
+    private var expectedStkPubHex: String?
+    private let serverKeys: ServerKeyPins
+    private let studioSeen: StudioSeenStore
+
+    static func note(serverDomain: String, listed: String?, serverKeys: ServerKeyPins,
+                     studioSeen: StudioSeenStore) -> (KeyNote, String?) {
+        let hex = listed?.lowercased() ?? ""
+        guard let stk = HexUtil.decode(hex), stk.count == 32, let code = Enrollment.serverCode(stkPubHex: hex) else {
+            return (.none, nil)
+        }
+        switch serverKeys.check(stk, for: serverDomain) {
+        case .matches: return (.none, hex)
+        case .changed: return (.keyChanged, hex)
+        case .unpinned:
+            return (studioSeen.confirmed(serverDomain: serverDomain, stkPubHex: hex) ? .confirmedByStudio : .code(code), hex)
+        }
+    }
+
+    /// The directory listed the server under a (new) key: show its code, or refuse a changed one.
+    public func setListedStk(_ listed: String?) {
+        guard state != .approving else { return }
+        (keyNote, expectedStkPubHex) = Self.note(serverDomain: serverDomain, listed: listed,
+                                                 serverKeys: serverKeys, studioSeen: studioSeen)
+    }
+
     private let serverDomain: String
     /// Which inbox request this card approves: `.unlockKey` (release the disk
     /// key) or `.entitlement` (authorize the box to serve). The detection flag
@@ -91,8 +128,15 @@ public final class BootUnlockApprovalViewModel {
         purpose: SecretPurpose = .unlockKey,
         makeCoordinator: @escaping () -> ApprovalSource?,
         store: BootUnlockStore = BootUnlockStore(),
-        initialAwaiting: Bool = false
+        initialAwaiting: Bool = false,
+        listedStkPubHex: String? = nil,
+        serverKeys: ServerKeyPins = ServerKeyPins(),
+        studioSeen: StudioSeenStore = .shared
     ) {
+        (keyNote, expectedStkPubHex) = Self.note(serverDomain: serverDomain, listed: listedStkPubHex,
+                                                  serverKeys: serverKeys, studioSeen: studioSeen)
+        self.serverKeys = serverKeys
+        self.studioSeen = studioSeen
         self.serverDomain = serverDomain
         self.purpose = purpose
         self.makeCoordinator = makeCoordinator
@@ -134,6 +178,10 @@ public final class BootUnlockApprovalViewModel {
     /// request, unseal the key, respond, and (auto mode) deposit the lease —
     /// all under a single Face ID via the memoized coordinator.
     public func approve() async {
+        if keyNote == .keyChanged {
+            state = .failed(FirstContact.keyChangedText)
+            return
+        }
         guard let coord = makeCoordinator() else {
             state = .failed(String(localized: "Sign in to approve this server."))
             return
@@ -144,9 +192,10 @@ public final class BootUnlockApprovalViewModel {
             case .unlockKey:
                 // "auto" servers also get a box-sealed self-unlock lease.
                 let depositLease = store.effectiveMode(for: serverDomain) == .auto
-                _ = try await coord.approvePendingUnlock(serverDomain: serverDomain, depositAutoLease: depositLease)
+                _ = try await coord.approvePendingUnlock(serverDomain: serverDomain, depositAutoLease: depositLease,
+                                                         expectedStkPubHex: expectedStkPubHex)
             case .entitlement:
-                _ = try await coord.approvePendingEntitlement(serverDomain: serverDomain)
+                _ = try await coord.approvePendingEntitlement(serverDomain: serverDomain, expectedStkPubHex: expectedStkPubHex)
             }
             state = .approved
         } catch {

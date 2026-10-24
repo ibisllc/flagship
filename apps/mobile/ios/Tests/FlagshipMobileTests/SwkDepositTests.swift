@@ -160,6 +160,7 @@ final class SwkDepositCoordinatorTests: XCTestCase {
     // A fixed 32-byte SWK for the test (the production path derives via Keystore).
     private let swk = Data(repeating: 0x33, count: 32)
 
+
     private func freshCgkStore() -> PendingCgkDepositStore {
         let suite = "flagship.cgkDeposit.tests.\(UUID().uuidString)"
         let d = UserDefaults(suiteName: suite)!; d.removePersistentDomain(forName: suite)
@@ -176,7 +177,8 @@ final class SwkDepositCoordinatorTests: XCTestCase {
             cgkStore: freshCgkStore(),
             hasSessionKey: { hasSession },
             deriveIrkAndSwk: { _, _ in (irk, swkHex) },
-            deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) }
+            deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) },
+            serverKeys: testPins(boxIdentityPubHex(), [serverDomain])
         )
     }
 
@@ -280,7 +282,8 @@ final class SwkDepositCoordinatorTests: XCTestCase {
             username: "alice", mailbox: mailbox, store: swkStore, cgkStore: cgkStore,
             hasSessionKey: { true },
             deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(self.swk)) },
-            deriveCgkHex: { _ in HexUtil.encode(cgk) }
+            deriveCgkHex: { _ in HexUtil.encode(cgk) },
+            serverKeys: testPins(boxIdentityPubHex(), [serverDomain])
         )
         await coord.depositIfNeeded(serverDomain: serverDomain, identityPubKeyHex: boxIdentityPubHex())
 
@@ -323,7 +326,7 @@ final class SwkDepositCoordinatorTests: XCTestCase {
 /// Server-migration SWK contract (docs/server-migration.md invariant 4): the
 /// coordinator consults the migration resolver BEFORE deriving, so a
 /// migration's provisional new pod gets the MIGRATING domain's SWK (DOTS
-/// `flagship.swk.v1|<migrating domain>` — the deriveIRKBoxStkAndSwk path) and
+/// `flagship.swk.v1|<migrating domain>` — the deriveIRKAndBoxSwk path) and
 /// an ambiguous pod (live migration, no attached box yet) DEFERS instead of
 /// depositing a wrong-name SWK that would poison the restore.
 @MainActor
@@ -371,7 +374,8 @@ final class SwkDepositMigrationContractTests: XCTestCase {
                 return (irk, HexUtil.encode(Data(repeating: 0x33, count: 32)))
             },
             deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) },
-            resolveMigrationSwk: { _ in resolution }
+            resolveMigrationSwk: { _ in resolution },
+            serverKeys: testPins(boxIdentityPubHex(), [provisionalDomain, migratingDomain])
         )
     }
 
@@ -430,7 +434,8 @@ final class SwkDepositMigrationContractTests: XCTestCase {
             hasSessionKey: { true },
             deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(Data(repeating: 0x33, count: 32))) },
             deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) },
-            resolveMigrationSwk: { _ in .deferDeposit }
+            resolveMigrationSwk: { _ in .deferDeposit },
+            serverKeys: testPins(boxIdentityPubHex(), [provisionalDomain])
         )
         await coord.depositIfNeeded(serverDomain: provisionalDomain, identityPubKeyHex: boxIdentityPubHex())
 
@@ -497,7 +502,8 @@ final class PairingDepositCoordinatorTests: XCTestCase {
         return SwkDepositCoordinator(
             username: "alice", mailbox: mailbox, store: swk, pairingStore: pairing,
             hasSessionKey: { true },
-            deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(Data(repeating: 0x33, count: 32))) }
+            deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(Data(repeating: 0x33, count: 32))) },
+            serverKeys: testPins(boxIdentityPubHex(), [serverDomain])
         )
     }
 
@@ -548,4 +554,52 @@ final class PairingDepositCoordinatorTests: XCTestCase {
 
 private extension String {
     func repeated(_ n: Int) -> String { String(repeating: self, count: n) }
+}
+
+/// This phone pinned the box's key at its first blessing (docs/first-contact.md): deposits seal to it.
+func testPins(_ pubHex: String, _ domains: [String]) -> ServerKeyPins {
+    let pins = ServerKeyPins.volatile()
+    for d in domains { pins.pin(HexUtil.decode(pubHex)!, for: d) }
+    return pins
+}
+
+/// Deposits seal only to the pinned key (docs/first-contact.md "After the pin").
+@MainActor
+final class SwkDepositPinTests: XCTestCase {
+    private let domain = "kitchen.alice.flagship.services"
+    private let box = try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x09, count: 32))
+
+    private func coordinator(_ mailbox: MockSecretMailboxClient, pins: ServerKeyPins) -> SwkDepositCoordinator {
+        let suite = "flagship.swkPin.tests.\(UUID().uuidString)"
+        let store = PendingSwkDepositStore(defaults: UserDefaults(suiteName: suite)!)
+        store.markPending(for: domain)
+        let irk = try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x07, count: 32))
+        return SwkDepositCoordinator(
+            username: "alice", mailbox: mailbox, store: store,
+            cgkStore: PendingCgkDepositStore(defaults: UserDefaults(suiteName: suite + ".cgk")!),
+            hasSessionKey: { true },
+            deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(Data(repeating: 0x33, count: 32))) },
+            deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) },
+            serverKeys: pins
+        )
+    }
+
+    func test_beforeThePinNothingIsSealedToTheKeyComLists() async {
+        let mailbox = MockSecretMailboxClient()
+        await coordinator(mailbox, pins: .volatile())
+            .depositIfNeeded(serverDomain: domain, identityPubKeyHex: HexUtil.encode(box.publicKey.rawRepresentation))
+        XCTAssertTrue(mailbox.swkDeposits.isEmpty)
+    }
+
+    func test_aDirectoryNamingAnotherKeyIsRefused() async {
+        let mailbox = MockSecretMailboxClient()
+        let pins = testPins(HexUtil.encode(box.publicKey.rawRepresentation), [domain])
+        await coordinator(mailbox, pins: pins)
+            .depositIfNeeded(serverDomain: domain, identityPubKeyHex: String(repeating: "cd", count: 32))
+        XCTAssertTrue(mailbox.swkDeposits.isEmpty)
+        await coordinator(mailbox, pins: pins)
+            .depositIfNeeded(serverDomain: domain, identityPubKeyHex: HexUtil.encode(box.publicKey.rawRepresentation))
+        XCTAssertEqual(mailbox.swkDeposits.count, 1)
+        XCTAssertEqual(mailbox.swkDeposits[0].body.deposit.stkPub, HexUtil.encode(box.publicKey.rawRepresentation))
+    }
 }

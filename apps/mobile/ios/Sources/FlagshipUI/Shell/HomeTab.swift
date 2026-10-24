@@ -1093,22 +1093,11 @@ struct ServerDetailContainer: View {
     private func refreshDirectoryAndRepairAppKey(allowAuthentication: Bool) async {
         guard let username = app.currentUser, !username.isEmpty else { return }
         guard let directory = try? await mailbox.fetchPods(username: username) else { return }
-        // A reinstall/profile restore can preserve the account UMK while losing
-        // this app-local cache of each box's derived STK public key. A seedless
-        // /pods refresh can then fetch a perfectly valid signed daemon report
-        // but has no local authority with which to verify it, leaving the TLS
-        // card stuck on "No certificate yet" forever. Rebuild the public-key
-        // cache whenever the owner explicitly refreshes, or silently when the
-        // current unlocked session already holds the UMK. Background refreshes
-        // with a cold session remain biometric-free.
-        if allowAuthentication || Keystore.hasSessionKey(),
-           let umk = try? await Keystore.currentUMK(reason: String(localized: "Verify your servers")) {
-            let seed = umk.withUnsafeBytes { Data($0) }
-            CertPinRegistry.shared.update(pods: directory.pods, umkSeed: seed)
-        } else {
-            CertPinRegistry.shared.update(pods: directory.pods)
-        }
+        // Status reports verify under the key this device pinned at the server's
+        // first blessing (docs/first-contact.md); nothing is derived here.
+        CertPinRegistry.shared.update(pods: directory.pods)
         LanDirectRegistry.shared.refreshActive()
+        await FirstContactUpkeep.run(app: app)
 
         guard let fqdn = pod?.fqdn, !fqdn.isEmpty else { return }
         let store = PendingSwkDepositStore()

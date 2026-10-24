@@ -35,7 +35,7 @@ final class KnownBoxPinTests: XCTestCase {
     func testRegistryKnowsABoxAndEverythingUnderItsWildcard() {
         let reg = CertPinRegistry(persistingIn: nil)
         XCTAssertFalse(reg.isKnownBox(host: domain))
-        reg.registerBoxStk(domain: domain, stkPub: Data(repeating: 7, count: 32))
+        reg.serverKeys.pin(Data(repeating: 7, count: 32), for: domain)
         XCTAssertTrue(reg.isKnownBox(host: domain))
         XCTAssertTrue(reg.isKnownBox(host: "Chess.\(domain)."))
         XCTAssertFalse(reg.isKnownBox(host: "evil\(domain)"))
@@ -45,13 +45,13 @@ final class KnownBoxPinTests: XCTestCase {
 
     func testEnrollmentIsOneNamedHostForAShortTime() {
         let reg = CertPinRegistry(persistingIn: nil)
-        reg.registerBoxStk(domain: domain, stkPub: Data(repeating: 7, count: 32))
+        reg.serverKeys.pin(Data(repeating: 7, count: 32), for: domain)
         reg.allowUnpinnedEnrollment(host: domain, forSeconds: 60)
         XCTAssertFalse(reg.isKnownBox(host: domain), "inside the window the exchange may proceed")
         reg.allowUnpinnedEnrollment(host: domain, forSeconds: -1)
         XCTAssertTrue(reg.isKnownBox(host: domain), "a window that has passed no longer applies")
         // Another box is not covered.
-        reg.registerBoxStk(domain: "home2.alice.flagship.services", stkPub: Data(repeating: 8, count: 32))
+        reg.serverKeys.pin(Data(repeating: 8, count: 32), for: "home2.alice.flagship.services")
         reg.allowUnpinnedEnrollment(host: domain, forSeconds: 60)
         XCTAssertTrue(reg.isKnownBox(host: "home2.alice.flagship.services"))
     }
