@@ -805,7 +805,11 @@ struct BootUnlockApprovalCard: View {
             // resolved from the SAME memoized cache as the IRK so the whole
             // ceremony stays a single Face ID. nil ⇒ legacy ⇒ IRK-signed.
             orderKeyProvider: { try await keys.adminRoot() },
-            watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
+            watchDelegateKeyProvider: { Keystore.watchDelegateKey() },
+            // Boot unlock v2: seal hybrid and sign with the account key's PQ half when the box
+            // publishes v2 material; a strict server takes nothing else.
+            ownerPqProvider: { irk in await QuantumSafetyService.ownerPqSigner(irk: irk, username: username) },
+            strictFor: { QuantumSafetyService.isStrict(username: username, serverDomain: $0) }
         )
     }
 }

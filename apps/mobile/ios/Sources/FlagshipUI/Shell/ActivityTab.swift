@@ -170,7 +170,11 @@ extension ActivityTab {
             },
             // "Quick approve from Apple Watch": a plain unlock approval signs the
             // boot-response with the delegate key (role="delegate"), no biometric.
-            watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
+            watchDelegateKeyProvider: { Keystore.watchDelegateKey() },
+            // Boot unlock v2: seal hybrid and sign with the account key's PQ half when the box
+            // publishes v2 material; a strict server takes nothing else.
+            ownerPqProvider: { irk in await QuantumSafetyService.ownerPqSigner(irk: irk, username: username) },
+            strictFor: { QuantumSafetyService.isStrict(username: username, serverDomain: $0) }
         )
     }
 }
