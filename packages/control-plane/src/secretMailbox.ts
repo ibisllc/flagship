@@ -48,6 +48,7 @@ import type {
   SecretMailboxStorage,
   ServerStorage,
   UsernameStorage,
+  PqTrustStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
@@ -65,6 +66,8 @@ export interface SecretMailboxDeps {
    *  update order deposit). Optional: absent ⇒ only the bare admin root
    *  satisfies the open gate. */
   grants?: DeviceCapabilityGrantStorage;
+  /** Boot unlock v2: the parked request's `pq` extension, listed for the phone. */
+  pqTrust?: Pick<PqTrustStorage, "getRequestPq">;
   /**
    * Push fan-out for the "your box is finishing setup — open the app"
    * notification. Same closure shape the legacy /consume path uses
@@ -294,11 +297,18 @@ export async function handleGetSecretRequests(
 
   const now = deps.now ?? (() => Date.now());
   const rows = await deps.secretMailbox.listPendingForUser(auth.username, now());
+  const pqs = await Promise.all(
+    rows.map((row) =>
+      row.purpose === "unlock-key" && deps.pqTrust?.getRequestPq
+        ? deps.pqTrust.getRequestPq(row.serverDomain, row.requestNonceHex, now()).catch(() => null)
+        : Promise.resolve(null),
+    ),
+  );
   return {
     status: 200,
     body: {
       username: auth.username,
-      requests: rows.map((row) => ({
+      requests: rows.map((row, i) => ({
         serverDomain: row.serverDomain,
         requestNonceHex: row.requestNonceHex,
         stkPub: row.stkPubHex,
@@ -308,6 +318,7 @@ export async function handleGetSecretRequests(
         deviceInfo: row.deviceInfoJson ? safeParse(row.deviceInfoJson) : null,
         postedAt: row.postedAt,
         expiresAt: row.expiresAt,
+        ...(pqs[i] ? { pq: safeParse(pqs[i]!) } : {}),
       })),
     },
   };

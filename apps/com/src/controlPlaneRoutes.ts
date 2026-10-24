@@ -943,6 +943,9 @@ export async function tryBootHost(
     directory,
     notify,
     gate: { directory, nonces: new D1NonceStore(env.DB) },
+    ...(storage.pqTrust?.putRequestPq
+      ? { requestPq: { put: (d: string, n: string, j: string, e: number) => storage.pqTrust!.putRequestPq!(d, n, j, e) } }
+      : {}),
   };
 
   const authHeader = request.headers.get(AUTH_HEADER);
@@ -1759,6 +1762,7 @@ export async function tryControlPlane(
         boxSealedLeases: storage.boxSealedLeases,
         serverBootKeys: storage.serverBootKeys,
         grants: storage.deviceCapabilityGrants,
+        ...(storage.pqTrust ? { pqTrust: storage.pqTrust } : {}),
         ...(forwarder
           ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder, env.CONTROL_APEX) }
           : {}),

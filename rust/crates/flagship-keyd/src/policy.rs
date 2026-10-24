@@ -32,6 +32,7 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/boot-key-binding/v1",
     "flagship/pq-key-binding/v1",
     "flagship/boot-key-binding/v2",
+    "flagship/boot-key-binding/v3",
     "flagship/pq-session-accept/v1",
     "flagship/pq-session-finish/v1",
     "flagship/inject/v1",
@@ -123,6 +124,7 @@ pub fn check_sign(msg: &[u8], public_key_hex: &str, allowed: &[&str]) -> KeydRes
 pub const HYBRID_ONLY_PURPOSES: &[&str] = &[
     "flagship/pq-key-binding/v1",
     "flagship/boot-key-binding/v2",
+    "flagship/boot-key-binding/v3",
     "flagship/pq-session-accept/v1",
     "flagship/pq-session-finish/v1",
 ];

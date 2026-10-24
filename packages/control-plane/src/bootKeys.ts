@@ -1,4 +1,4 @@
-import { bootKeyBindingFromWire, bootKeyBindingToWire, verifiedBootKey, verifiedBootKeyGated } from "@flagship/protocol";
+import { BootUnlockV2Error, bootKeyBindingFromWire, bootKeyBindingToWire, verifiedBootKey, verifiedBootKeyGated, verifyBootPq } from "@flagship/protocol";
 import type { PqTrustStorage, ServerBootKeyStorage, ServerStorage } from "@flagship/storage";
 import { installationPolicy, verifiedStoredStkBinding } from "./pqKeyBindings.js";
 import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
@@ -19,6 +19,12 @@ import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js
  * critical-signature gate: a hybrid signature that is present must verify under
  * the stored STK binding, and a strict installation needs it. The GET serves it
  * beside the v1 signature while it matches the stored v1 binding.
+ *
+ * Boot unlock v2 (pq-suites.md §19): the body may also carry `pq`, the boot key's ML-DSA half,
+ * the X-Wing lease key and the custody label, vouched for by the STK's hybrid key
+ * (`flagship/boot-key-binding/v3`). It is stored only when it verifies under the stored box-stk
+ * binding and names the boot key just verified, and served beside the binding while both still
+ * name the current STK and boot key.
  */
 export interface BootKeyDeps {
   servers: ServerStorage;
@@ -49,6 +55,18 @@ export async function handlePutBootKey(deps: BootKeyDeps, host: string, body: un
     if (!gated) return forbidden("the binding's quantum-resistant signature is missing or does not verify");
     if (gated.hybrid) hybridSignatureHex = String((body as { hybridSignature: string }).hybridSignature);
   }
+  const pqWire = (body as { pq?: unknown }).pq;
+  if (pqWire !== undefined) {
+    if (!deps.pqTrust?.putBootPq) return forbidden("this service does not take boot v2 material");
+    const pq = await deps.pqTrust.forServer(host);
+    const stkBinding = verifiedStoredStkBinding(pq.stkBinding, host, reg.identityPubKeyHex, now());
+    if (!stkBinding) return forbidden("the server's quantum-resistant key is not on file");
+    try {
+      verifyBootPq(pqWire, { serverDomain: host.toLowerCase(), bootPubHex: bootKeyPubHex, stkBinding, now: now() });
+    } catch (e) {
+      return forbidden(`the boot v2 material does not verify: ${e instanceof BootUnlockV2Error ? e.code : "malformed"}`);
+    }
+  }
   const wire = bootKeyBindingToWire(parsed.binding, parsed.signature);
   const put = await deps.serverBootKeys.putIfNewer({
     serverDomain: host.toLowerCase(),
@@ -58,7 +76,19 @@ export async function handlePutBootKey(deps: BootKeyDeps, host: string, body: un
     signatureHex: wire.signature,
     storedAt: now(),
   });
-  if (!put.ok) return { status: 409, body: { error: put.reason } };
+  if (!put.ok && pqWire === undefined) return { status: 409, body: { error: put.reason } };
+  if (pqWire !== undefined && deps.pqTrust?.putBootPq) {
+    const cur = await deps.serverBootKeys.get(host);
+    if (!cur || cur.bootKeyPubHex !== bootKeyPubHex) return { status: 409, body: { error: "the boot key on file is another one" } };
+    await deps.pqTrust.putBootPq({
+      serverDomain: host.toLowerCase(),
+      stkPubHex: reg.identityPubKeyHex.toLowerCase(),
+      bootKeyPubHex,
+      issuedAt: (pqWire as { issuedAt: number }).issuedAt,
+      wireJson: JSON.stringify(pqWire),
+      storedAt: now(),
+    });
+  }
   if (deps.pqTrust && hybridSignatureHex) {
     await deps.pqTrust.putBootHybrid({
       serverDomain: host.toLowerCase(),
@@ -84,10 +114,13 @@ export async function currentBootKeyBinding(
   if (rec.stkPubHex !== reg.identityPubKeyHex.toLowerCase()) return null;
   const hy = deps.pqTrust ? await deps.pqTrust.getBootHybrid(host) : null;
   const hybridMatches = hy && hy.stkPubHex === rec.stkPubHex && hy.bootKeyPubHex === rec.bootKeyPubHex && hy.issuedAt === rec.issuedAt;
+  const bootPq = deps.pqTrust?.getBootPq ? await deps.pqTrust.getBootPq(host) : null;
+  const pqMatches = bootPq && bootPq.stkPubHex === rec.stkPubHex && bootPq.bootKeyPubHex === rec.bootKeyPubHex;
   const wire = {
     binding: { serverDomain: rec.serverDomain, bootPubHex: rec.bootKeyPubHex, issuedAt: rec.issuedAt },
     signature: rec.signatureHex,
     ...(hybridMatches ? { hybridSignature: hy.hybridSignatureHex } : {}),
+    ...(pqMatches ? { pq: JSON.parse(bootPq.wireJson) as unknown } : {}),
   };
   const bootKeyPubHex = verifiedBootKey(wire, { serverDomain: host, stkPubHex: reg.identityPubKeyHex });
   return bootKeyPubHex ? { wire, bootKeyPubHex, stkPubHex: reg.identityPubKeyHex.toLowerCase() } : null;

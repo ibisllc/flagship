@@ -38,6 +38,8 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   // Signed with both keys only (`sign.hybrid`; HYBRID_ONLY_PURPOSES).
   "flagship/pq-key-binding/v1",
   "flagship/boot-key-binding/v2",
+  // Boot unlock v2 (pq-suites.md §19): the STK vouching for the boot key's ML-DSA half and lease key.
+  "flagship/boot-key-binding/v3",
   // The PQ session (pq-suites.md §13): the box answers as the responder, and opens box-to-box
   // sessions (access sync) as the initiator. Hybrid only, naming this box.
   "flagship/pq-session-accept/v1",
@@ -68,6 +70,7 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
 export const HYBRID_ONLY_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/pq-key-binding/v1",
   "flagship/boot-key-binding/v2",
+  "flagship/boot-key-binding/v3",
   "flagship/pq-session-accept/v1",
   "flagship/pq-session-finish/v1",
 ]);
