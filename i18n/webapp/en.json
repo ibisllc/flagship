@@ -11201,5 +11201,105 @@
   "May build {0}": {
     "en": "May build {0}",
     "ctx": "webapp/views/paired-sessions.js:39"
+  },
+  "This uses AI that costs money": {
+    "en": "This uses AI that costs money",
+    "ctx": "webapp/lib/aiConsentUi.js:44"
+  },
+  "This run could use about {0} to {1} tokens. This is an estimate, not a limit.": {
+    "en": "This run could use about {0} to {1} tokens. This is an estimate, not a limit.",
+    "ctx": "webapp/lib/aiConsentUi.js:45"
+  },
+  "Flagship Inference runs it, and it is paid from your free Flagship Inference credits.": {
+    "en": "Flagship Inference runs it, and it is paid from your free Flagship Inference credits.",
+    "ctx": "webapp/lib/aiConsentUi.js:48"
+  },
+  "{0} runs it with your own API key, so {0} bills you for it.": {
+    "en": "{0} runs it with your own API key, so {0} bills you for it.",
+    "ctx": "webapp/lib/aiConsentUi.js:49"
+  },
+  "You are agreeing to this one run only. Nothing starts until you continue.": {
+    "en": "You are agreeing to this one run only. Nothing starts until you continue.",
+    "ctx": "webapp/lib/aiConsentUi.js:50"
+  },
+  "A remote machine claiming to run {0}/{1} wants to start a chat with your app {2}.": {
+    "en": "A remote machine claiming to run {0}/{1} wants to start a chat with your app {2}.",
+    "ctx": "webapp/lib/chatAlerts.js:78"
+  },
+  "Your app {0} wants to start a chat with {1}/{2}, an app on another owner's server.": {
+    "en": "Your app {0} wants to start a chat with {1}/{2}, an app on another owner's server.",
+    "ctx": "webapp/lib/chatAlerts.js:79"
+  },
+  "Flagship can't confirm who runs that machine. Only allow it if you expected this app to get in touch.": {
+    "en": "Flagship can't confirm who runs that machine. Only allow it if you expected this app to get in touch.",
+    "ctx": "webapp/lib/chatAlerts.js:85"
+  },
+  "Allowing it lets your app send messages to that app and read its answers.": {
+    "en": "Allowing it lets your app send messages to that app and read its answers.",
+    "ctx": "webapp/lib/chatAlerts.js:86"
+  },
+  "The sender's recognition phrase: {0}": {
+    "en": "The sender's recognition phrase: {0}",
+    "ctx": "webapp/lib/chatAlerts.js:87"
+  },
+  "It asked {0} time.": {
+    "en": "It asked {0} time.",
+    "ctx": "webapp/lib/chatAlerts.js:88"
+  },
+  "It asked {0} times.": {
+    "en": "It asked {0} times.",
+    "ctx": "webapp/lib/chatAlerts.js:88"
+  },
+  "Always allow lets any remote machine start a chat with {0} without asking you. You can stop this under Activity.": {
+    "en": "Always allow lets any remote machine start a chat with {0} without asking you. You can stop this under Activity.",
+    "ctx": "webapp/lib/chatAlerts.js:92"
+  },
+  "Any remote machine can start a chat with {0} without asking you.": {
+    "en": "Any remote machine can start a chat with {0} without asking you.",
+    "ctx": "webapp/lib/chatAlerts.js:93"
+  },
+  "Chat request denied": {
+    "en": "Chat request denied",
+    "ctx": "webapp/lib/chatAlerts.js:96"
+  },
+  "{0} now accepts chats without asking": {
+    "en": "{0} now accepts chats without asking",
+    "ctx": "webapp/lib/chatAlerts.js:97"
+  },
+  "Chat request allowed": {
+    "en": "Chat request allowed",
+    "ctx": "webapp/lib/chatAlerts.js:98"
+  },
+  "That request is no longer waiting.": {
+    "en": "That request is no longer waiting.",
+    "ctx": "webapp/lib/chatAlerts.js:118"
+  },
+  "That request was already answered.": {
+    "en": "That request was already answered.",
+    "ctx": "webapp/lib/chatAlerts.js:119"
+  },
+  "Only an admin device can answer chat requests.": {
+    "en": "Only an admin device can answer chat requests.",
+    "ctx": "webapp/lib/chatAlerts.js:120"
+  },
+  "Always allow": {
+    "en": "Always allow",
+    "ctx": "webapp/lib/chatAlerts.js:167"
+  },
+  "No chat requests are waiting.": {
+    "en": "No chat requests are waiting.",
+    "ctx": "webapp/lib/chatAlerts.js:220"
+  },
+  "Apps that take chats without asking": {
+    "en": "Apps that take chats without asking",
+    "ctx": "webapp/lib/chatAlerts.js:221"
+  },
+  "{0} asks you again before taking a chat": {
+    "en": "{0} asks you again before taking a chat",
+    "ctx": "webapp/lib/chatAlerts.js:246"
+  },
+  "App chat requests": {
+    "en": "App chat requests",
+    "ctx": "webapp/index.html"
   }
 }
