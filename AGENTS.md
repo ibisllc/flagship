@@ -339,7 +339,14 @@ of the last check here: **not yet checked**.
   device / Delete account, plain Lock). Also on the branch: the website no longer scroll-snaps on phones; the
   hall of fame has its own page (`/security/hall-of-fame`); `npm run store-assets` renders every App Store /
   Play image in seven languages (`docs/store-assets/README.md`; webapp stand-ins are marked not-for-upload until
-  the native captures in `docs/store-assets/capture-plan.md` exist). Webapp shell **v170**. Dibs window
+  the native captures in `docs/store-assets/capture-plan.md` exist). **0.3's client screens** (built here,
+  2026-10-24, all three apps): app chat requests from other owners (Allow / Always allow per claimed sender /
+  Deny, signed `chat-approval/v1`, revoke per sender), the AI-run consent sheet before an adapt spends a key or
+  credits (the signed token amount is a hard stop on the box), and start-up approval from the watch with the
+  phone locked (option (a), `docs/watch-boot-approval-without-unlock.md`: a boot-only X25519 key, a per-server
+  copy at the boot service, the watch path checks the box-signed request and seals only to the server key the
+  phone pinned on first use, behind one `pinnedStk(domain)`; Android also enforces wrist + unlock on Wear).
+  Webapp shell **v171**. Dibs window
   2026-10-25 to 2027-04-25 (`apps/com/wrangler.toml`). Verified here: `tsc -b`, the core vitest suites, the web
   tests, `npm run i18n`, Android compile + unit tests (debug, release, Wear, gym tests compile), the iOS app
   builds with Xcode 27.1 RC (the old `ContentView.swift:149` failure does not reproduce). The voi.ci upkeep cron
@@ -364,7 +371,18 @@ of the last check here: **not yet checked**.
   8. English wording worth a decision (each makes six translations stale): "restore" means both un-revoke and
      restore-a-backup; "box" and "server" both name the user's machine; some thrown messages reach the screen
      through `toast(e.message)` in English; old terms ("Recovery merge-back", "Pair with the builder", "pod").
-  9. Known gaps: the account-leader election from `.com`'s server list only sees peers that share an app with
+  9. Live gym on this branch (2026-10-24, release/0.3 21e1b7120): core 28/28, languages 7/7, named-links 8/9.
+     Blocked on 0.3 (Security owns): under keyd, gossip never gets the CGK (`wireGossip` still reads the deleted
+     `cgk.hex`), so no canonical-address lead and no box-to-box access sync; `<app>.<user>` names get no
+     certificate while keyd holds the TLS key. Rerun named-links after both.
+  10. **Decide (owner): the source of a phone's server-key pin.** Real boxes have random server keys; the
+     derived pin (`deriveStkPub`) matches none, which breaks 0.3's native cert pinning (Security's fix) and the
+     watch path. Security proposes trust on first use; the watch path uses it now, marked pending. Also: iOS
+     admin devices can't renew the watch delegate silently (the admin root is never held open), and iOS has no
+     on-wrist check (only the foreground watch app approves).
+  11. Not run yet: the full iOS mock gym after these screens (a run hung; rerun per class with a timeout), the
+     Android mock gym for the new scenarios (no emulator under this load), any real watch or phone.
+  12. Known gaps: the account-leader election from `.com`'s server list only sees peers that share an app with
      the box (`accessPeers.ts` `peerRunners`); iOS's gone-account "Remove" without a held rescue key erases the
      key without asking for biometrics (by design so far, review it).
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
@@ -1477,7 +1495,7 @@ Not compiled since the rebase: the iOS and Android code on any branch.
 - **Branch order since 2026-10-23 (owner):** `release/0.3` → `feat/UX` (multilingual + named links +
   lock-screen sign-out + the UI round, folded) → `feat/marketplace` → `feat/custom-names` /
   `feat/custom-domains` / `feat/outbound-proxy`. When `release/0.3` moves, rebase `feat/UX` onto it, then
-  the children. A child that changes the webapp takes a shell number above `feat/UX`'s v170.
+  the children. A child that changes the webapp takes a shell number above `feat/UX`'s v171.
 - **`feat/marketplace`** (+ Pro payments, vouchers). Also a Pro option:
   **a separate access list on each server** per app (2026-10-15,
   `docs/service-access-gating.md` "Separate lists per server (Pro)": an
