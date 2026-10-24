@@ -259,7 +259,13 @@ public struct ServerDetailScreen: View {
                     if !offline {
                         MonitoringPane(health: health, metrics: metrics, cert: certificate(d))
                     }
+                    if AdminOrderGate.allows(app) {
+                        ChatRequestsCard(serverDomain: d.serverFqdn)
+                    }
                     BootUnlockCard(serverDomain: d.serverFqdn)
+                    if AdminOrderGate.allows(app) {
+                        WatchBootKeyCard(serverDomain: d.serverFqdn)
+                    }
                     ServerOrderCard(serverDomain: d.serverFqdn)
                     ShareServerCard(serverDomain: d.serverFqdn)
                     FrontPageCard(serverDomain: d.serverFqdn)

@@ -81,8 +81,8 @@ public final class AccountSecurityViewModel {
     /// screen can host the toggle without the app layer wiring a second
     /// dependency graph. Keystore-backed crypto/local-store use their
     /// defaults (this runs on a real device / the sim Keychain fallback).
-    public func makeWatchDelegateViewModel() -> WatchDelegateViewModel {
-        WatchDelegateViewModel(server: server, username: username)
+    public func makeWatchDelegateViewModel(mailbox: SecretMailboxClient? = nil) -> WatchDelegateViewModel {
+        WatchDelegateViewModel(server: server, username: username, mailbox: mailbox)
     }
 
     /// Slice D §5 — build the "Rotate admin key" VM off the same server +
