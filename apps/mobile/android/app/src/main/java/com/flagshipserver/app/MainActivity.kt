@@ -334,6 +334,30 @@ class MainActivity : FragmentActivity() {
             isDemo = { com.flagshipserver.app.core.AppState.isDemoAccount(appState.activeProfile, appState.pods.value) },
         )
 
+        // Architecture v2: bind this phone's identities to ML-DSA-65 keys ("PQ, hardware-wrapped")
+        // at account creation, after a join or admin-root change, and after each unlock. Never
+        // prompts; anything unfinished waits for the next unlock.
+        com.flagshipserver.app.keystore.PqIdentityUpgrade.binder = com.flagshipserver.app.core.pq.PqIdentityBinder(
+            store = com.flagshipserver.app.keystore.PqKeyStore(
+                com.flagshipserver.app.keystore.PqKeyPrefs(applicationContext),
+                com.flagshipserver.app.keystore.KeystorePqSeedWrapper(),
+            ),
+            client = com.flagshipserver.app.core.pq.LivePqKeyBindingClient(
+                OkHttpJsonTransport(okHttp), { com.flagshipserver.app.core.Endpoints.controlBaseUrl },
+            ),
+        )
+        com.flagshipserver.app.keystore.PqIdentityUpgrade.account = {
+            val p = appState.activeProfile
+            val user = appState.currentUser.value
+            if (p == null || user == null) null
+            else com.flagshipserver.app.keystore.PqIdentityUpgrade.Account(
+                username = user,
+                deviceId = p.deviceId.ifEmpty { null },
+                isDemo = com.flagshipserver.app.core.AppState.isDemoAccount(p, appState.pods.value),
+            )
+        }
+        BiometricAuthority.onSessionUnlocked = { com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger() }
+
         // Push-token registration is inherently a real-backend operation
         // (registering an FCM token + X25519 push key against .com), so it
         // always uses the live client; without a session it no-ops.

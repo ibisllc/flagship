@@ -319,6 +319,8 @@ class JoinDeviceViewModel(
                 setActive = true,
             )
 
+            // Bind this device's new key (and the admin root, if it came along) to ML-DSA-65.
+            com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
             _phase.value = JoinDevicePhase.Joined(resp.quarantineUntil)
         } catch (t: Throwable) {
             _phase.value = JoinDevicePhase.Failed(humanize(t))

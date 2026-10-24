@@ -148,6 +148,8 @@ class RotateAdminRootViewModel(
             storeNewRoot(newSeed)
 
             // The rotation is committed from here on — nothing below may fail it.
+            // The new admin root gets its own ML-DSA-65 binding.
+            com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
             val enrolled = runCatching { recoveryEnrolled() }.getOrDefault(false)
             if (enrolled) {
                 pendingNewSeed = newSeed

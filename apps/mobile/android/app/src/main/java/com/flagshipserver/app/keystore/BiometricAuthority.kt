@@ -71,6 +71,7 @@ class BiometricAuthority internal constructor(
             com.flagshipserver.app.core.ErrorLog.step("biometric", "passed")
             fresh = true
         }
+        notifyUnlocked()
     }
 
     /**
@@ -84,6 +85,7 @@ class BiometricAuthority internal constructor(
             p.prompt(title, subtitle)
             fresh = true
         }
+        notifyUnlocked()
     }
 
     /**
@@ -99,6 +101,11 @@ class BiometricAuthority internal constructor(
      *  opens the session too (iOS keeps the account key from that unlock). */
     fun markFresh() {
         fresh = true
+        notifyUnlocked()
+    }
+
+    private fun notifyUnlocked() {
+        runCatching { onSessionUnlocked?.invoke() }
     }
 
     /** Clear the session freshness latch. Wired to isUnlocked -> false (lock /
@@ -108,6 +115,10 @@ class BiometricAuthority internal constructor(
     }
 
     companion object {
+        /** Called after each successful authentication (never on its own prompt). Background
+         *  work that needs the unlocked session (the PQ identity upgrade) hangs off this. */
+        @Volatile var onSessionUnlocked: (() -> Unit)? = null
+
         @Volatile private var current: BiometricAuthority? = null
         fun set(authority: BiometricAuthority?) { current = authority }
         fun current(): BiometricAuthority? = current
