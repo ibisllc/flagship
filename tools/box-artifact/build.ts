@@ -97,6 +97,9 @@ function arg(argv: string[], name: string): string | undefined {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : undefined;
 }
+/** The Rust binaries every box artifact carries (rustStack/units.ts names them the same way). */
+export const RUST_BINARIES = ["flagship-keyd", "flagship-broker", "flagship-core"] as const;
+
 function need(argv: string[], name: string): string {
   const v = arg(argv, name);
   if (!v) throw new Error(`missing --${name}`);
@@ -176,19 +179,64 @@ async function build(argv: string[]): Promise<void> {
     }
 
     const epoch = Number(git(repo, "show", "-s", "--format=%ct", commit));
+
+    // The Rust keyd, broker and core (engine-and-rust-path.md §5): the toolchain pinned by
+    // rust/rust-toolchain.toml, the committed Cargo.lock (--locked), paths remapped and the
+    // commit's time as SOURCE_DATE_EPOCH, so two builders get the same bytes. Their SHA-256s go
+    // into installer/rust/PINS.json and BUILD-INFO.json, both inside the signed artifact; the box
+    // runs a binary only when its hash matches PINS.json (rustStack/units.ts).
+    const rustPrebuilt = arg(argv, "rust-bin-dir");
+    let rust: BuildInfo["rust"];
+    let rustBinaries: Record<string, string> | undefined;
+    let rustPinsJson: string | undefined;
+    if (!argv.includes("--no-rust")) {
+      let binDir = rustPrebuilt;
+      let rustc = "prebuilt";
+      if (!binDir) {
+        const targetDir = join(work, "cargo-target");
+        const home = process.env["CARGO_HOME"] ?? join(process.env["HOME"] ?? "/root", ".cargo");
+        rustc = execFileSync("rustc", ["--version"], { cwd: join(src, "rust"), encoding: "utf8" }).trim();
+        execFileSync("cargo", ["build", "--release", "--locked", "-p", "flagship-keyd", "-p", "flagship-broker", "-p", "flagship-core"], {
+          cwd: join(src, "rust"),
+          stdio: "inherit",
+          env: {
+            ...process.env,
+            CARGO_TARGET_DIR: targetDir,
+            SOURCE_DATE_EPOCH: String(epoch),
+            CARGO_INCREMENTAL: "0",
+            RUSTFLAGS: `--remap-path-prefix=${src}=/flagship --remap-path-prefix=${home}=/cargo -C link-arg=-Wl,--build-id=none`,
+          },
+        });
+        binDir = join(targetDir, "release");
+      }
+      rustBinaries = {};
+      const hashes: Record<string, string> = {};
+      for (const name of RUST_BINARIES) {
+        const p = join(binDir, name);
+        rustBinaries[name] = p;
+        hashes[name] = sha256(readFileSync(p));
+      }
+      const cargoLockSha256 = sha256(readFileSync(join(src, "rust/Cargo.lock")));
+      rust = { rustc, cargoLockSha256, binaries: hashes };
+      rustPinsJson = JSON.stringify({ schema: 1, commit, arch, rustc, cargoLockSha256, binaries: hashes }, null, 2) + "\n";
+    }
+
     const info: BuildInfo = {
       schema: 1, commit, arch, nodeVersion: pins.node.version, nodeSha256: pin.sha256,
-      lockSha256: sha256(lockText), sourceDateEpoch: epoch,
+      lockSha256: sha256(lockText), sourceDateEpoch: epoch, ...(rust ? { rust } : {}),
     };
-    const art = assembleArtifact({ appDir: src, nodeBinary: join(nodeDir, "bin/node"), nodeLicense: join(nodeDir, "LICENSE"), unsealBinary, tlsdBinary, info });
+    const art = assembleArtifact({
+      appDir: src, nodeBinary: join(nodeDir, "bin/node"), nodeLicense: join(nodeDir, "LICENSE"), unsealBinary, tlsdBinary,
+      ...(rustBinaries ? { rustBinaries, rustPinsJson } : {}), info,
+    });
 
     const sbomText = JSON.stringify(sbom, null, 2) + "\n";
     const provenance = JSON.stringify({
       schema: 1, commit, arch, sourceDateEpoch: epoch,
       builder: { ci: process.env["GITHUB_ACTIONS"] === "true", runId: process.env["GITHUB_RUN_ID"] ?? null, workflow: process.env["GITHUB_WORKFLOW_REF"] ?? null, runner: process.env["RUNNER_NAME"] ?? null },
       tools: { node: process.version, npm: execFileSync("npm", ["--version"], { encoding: "utf8" }).trim(), go: goVersion },
-      inputs: { lockSha256: info.lockSha256, nodeSha256: pin.sha256, nodeVersion: pins.node.version },
-      steps: ["git archive", "verify node archive", "npm ci --ignore-scripts", "tsc -b packages/server-daemon", "go build installer/unseal-helper", "go build installer/tls-frontend", "assemble deterministic tar.gz"],
+      inputs: { lockSha256: info.lockSha256, nodeSha256: pin.sha256, nodeVersion: pins.node.version, ...(rust ? { rust } : {}) },
+      steps: ["git archive", "verify node archive", "npm ci --ignore-scripts", "tsc -b packages/server-daemon", "go build installer/unseal-helper", "go build installer/tls-frontend", ...(rust ? ["cargo build --release --locked (keyd, broker, core)"] : []), "assemble deterministic tar.gz"],
     }, null, 2) + "\n";
 
     const name = `flagship-box-${commit.slice(0, 12)}-${arch}`;

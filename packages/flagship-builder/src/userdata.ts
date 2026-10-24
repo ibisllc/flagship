@@ -23,6 +23,7 @@ import { INSTALL_BOX_ARTIFACT_SH, VERIFY_BOX_ARTIFACT_SH } from "./boxInstallerS
 import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import type { InstallBlob } from "@flagship/protocol";
 import { utf8ToBase64 } from "./base64.js";
+import { ENGINE_APT_PACKAGES, ENGINE_REQUIRED_COMMANDS, ENGINE_SETUP_BLOCK } from "./engineSetup.js";
 import { APPROVED_BOOT_HOSTS, approvedBootHostName, buildUnlockPremountScript } from "./unlockPremount.js";
 
 /**
@@ -559,23 +560,20 @@ GIT_REF="${args.ref}"
 # npm or a compiler. Do NOT assume the installer's packages: list ran — a missing jq
 # once parsed the recipe into empty values and mis-sealed the LUKS key.
 #
-# docker.io/docker-cli/docker-compose: the daemon runs every marketplace app as
-# a hardened container and brings up the data-layer (postgres/forgejo/...)
-# via compose, so docker is REQUIRED — without it the daemon's ensureNetwork
-# (\`docker network create\`) used to crash the process at startup. docker-cli is
-# listed explicitly because --no-install-recommends drops it (it's only a
-# Recommends of docker.io); docker-compose ships the \`docker compose\` subcommand
-# the data-services init.sh calls.
+# The container engine (Podman, engineSetup.ts): the daemon runs every app as a
+# hardened container under gVisor and brings up the data layer (postgres/forgejo/...)
+# through \`podman compose\`, which drives docker-compose over Podman's socket.
 export DEBIAN_FRONTEND=noninteractive
 if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" != "1" ]; then
-apt-get install -y --no-install-recommends jq curl ca-certificates cryptsetup lvm2 xxd openssl docker.io docker-cli docker-compose${wpaPkg}
+apt-get install -y --no-install-recommends jq curl ca-certificates cryptsetup lvm2 xxd openssl ${ENGINE_APT_PACKAGES}${wpaPkg}
 else
     echo "[flagship-bootstrap] generalized appliance detected — packages already present"
-    for _cmd in jq curl cryptsetup openssl docker xxd; do
+    for _cmd in jq curl cryptsetup openssl xxd ${ENGINE_REQUIRED_COMMANDS}; do
         command -v "$_cmd" >/dev/null 2>&1 || { echo "[flagship-bootstrap] FATAL: appliance missing $_cmd"; exit 1; }
     done
 fi
 
+${ENGINE_SETUP_BLOCK}
 # Read the install-blob fields the daemon needs.
 BLOB_JSON=/var/flagship/install-blob.json
 SERVER_DOMAIN="$(jq -r .serverDomain "$BLOB_JSON")"
@@ -896,8 +894,8 @@ chmod 600 /etc/flagship-bootstrap.env
 cat > /etc/systemd/system/flagship-data-services.service <<'UNIT'
 [Unit]
 Description=Flagship data-layer (postgres/forgejo/chromium)
-After=docker.service network-online.target
-Wants=docker.service network-online.target
+After=docker.service podman.socket network-online.target
+Wants=network-online.target
 StartLimitIntervalSec=2h
 StartLimitBurst=40
 
@@ -918,10 +916,7 @@ UNIT
 # enable symlinks are what matter and they persist into the booted
 # system. Do NOT \`systemctl start\` — systemd isn't the init here.
 systemctl daemon-reload 2>/dev/null || true
-# docker.io's postinst already enables docker/containerd, but enable again
-# explicitly so a recommends-stripped or partial install still comes up.
-systemctl enable docker.service containerd.service 2>/dev/null || \\
-    echo "[flagship-bootstrap] WARNING: could not enable docker (daemon will retry network setup on boot)"
+# Podman has no daemon to enable; its API socket (for compose) was linked above.
 systemctl enable flagship-daemon.service flagship-first-boot-register.service flagship-data-services.service || \\
     echo "[flagship-bootstrap] WARNING: systemctl enable failed (will retry would be needed on real boot)"
 # ── FIRST-BOOT AUTOSTART: enable the units DETERMINISTICALLY. ────────────────

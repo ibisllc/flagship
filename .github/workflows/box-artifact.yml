@@ -2,7 +2,9 @@ name: box-artifact
 
 # Builds the box release artifact for ONE exact commit (SEC-REL-001). The build is
 # clean-room: exact lockfile with lifecycle scripts off, the Node archive checked
-# against a pinned SHA-256, the unseal helper compiled with a pinned Go. The output
+# against a pinned SHA-256, the unseal helper compiled with a pinned Go, and the Rust
+# keyd/broker/core built --locked with the pinned toolchain (their SHA-256s land in
+# installer/rust/PINS.json inside the artifact). The output
 # is an UNSIGNED manifest plus the artifact: release keys are held offline and sign
 # with `tools/box-artifact/build.ts sign`, then `release-index.ts` publishes the index.
 # Run it twice on the same commit and the digests match (reproducible).
@@ -49,6 +51,12 @@ jobs:
           # The newer of the two Go modules: flagship-tlsd needs Go 1.25 (crypto.MessageSigner).
           go-version-file: installer/tls-frontend/go.mod
           cache: false
+      - name: Rust toolchain from rust/rust-toolchain.toml (keyd, broker, core)
+        working-directory: rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" show active-toolchain || "$HOME/.cargo/bin/rustup" toolchain install
       - name: Install build tooling (exact lockfile, no scripts)
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Build the artifact
