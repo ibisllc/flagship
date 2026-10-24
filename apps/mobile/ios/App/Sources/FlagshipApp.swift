@@ -87,6 +87,11 @@ struct FlagshipApp: App {
         )
         self.readTokens = readTokens
         ServerShareServices.readTokens.set(readTokens)
+        var pqLive = true
+        #if DEBUG
+        pqLive = !GymLaunch.usesMocks
+        #endif
+        if pqLive { PqIdentityBindingService.configure(client: LivePqKeyBindingClient(readTokens: readTokens)) }
         // Every LIVE /pods response feeds the cert-pin registry (verify the
         // STK-signed daemon-status per pod → install/clear that box's
         // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -195,6 +200,9 @@ struct FlagshipApp: App {
                 guard !state.isDemoAccount, let user = state.currentUser,
                       let deviceId = state.activeProfile?.deviceId else { return }
                 AccountReadCredentials.keystore.keepDeviceKey(umk: umk, username: user, deviceId: deviceId)
+                // Architecture v2: bind this session's identities' ML-DSA keys on `.com`
+                // (accounts made before PQ keys upgrade here), never prompting.
+                PqIdentityBindingService.upgradeAtUnlock(username: user, deviceId: deviceId)
             }
         }
         appState.retryAccountRead = {

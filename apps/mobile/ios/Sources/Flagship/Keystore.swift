@@ -102,8 +102,21 @@ public struct Keystore {
     /// background / sign-out) so the in-memory key never outlives the unlocked
     /// session; also called on a profile switch and on a full wipe.
     public static func clearSessionKeyCache() {
-        sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
+        sessionUmkLock.lock()
         _sessionUmk.removeAll()
+        _sessionContext = nil
+        sessionUmkLock.unlock()
+        PqKeyStore.shared.clearSession()
+    }
+
+    /// The context the user authenticated at the app lock this session, kept so work that needs
+    /// a Secure Enclave key (a PQ key, the admin root) can use it without a second prompt.
+    /// Dropped with the session cache.
+    private static var _sessionContext: LAContext?
+
+    static var sessionAuthContext: LAContext? {
+        sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
+        return _sessionContext
     }
 
     // Synchronous cache read/write helpers — the NSLock is acquired and released
@@ -1256,8 +1269,51 @@ public struct Keystore {
               let ephemeralPub = try? P256.KeyAgreement.PublicKey(x963Representation: ephemeralRaw),
               let wrapper = try? WrappingKeypair.load(context: context)
         else { return }
+        sessionUmkLock.lock()
+        _sessionContext = context
+        sessionUmkLock.unlock()
         _ = try? unwrapUMK(wrapped: wrapped, ephemeralPub: ephemeralPub, wrapper: wrapper, profile: profile)
     }
+
+    /// The admin root without a prompt: only through the context the app lock authenticated
+    /// this session, else nil.
+    public static func sessionAdminRoot() -> Curve25519.Signing.PrivateKey? {
+        #if DEBUG
+        if let gym = gymAdminRoot() { return gym }
+        #endif
+        guard hasAdminRoot, let ctx = sessionAuthContext else { return nil }
+        return try? adminRootKey(authenticatedBy: ctx)
+    }
+
+    // MARK: - PQ seed wrapping (architecture v2, PqKeyStore)
+
+    /// HKDF info for the AES-GCM key that seals a software ML-DSA seed. The seed is sealed to the
+    /// Secure Enclave wrapping key's PUBLIC half (ECIES), so making a key never prompts; opening it
+    /// is one Secure Enclave ECDH, gated like the UMK.
+    static let pqSeedWrapInfo = "flagship/pq-seed-wrap/v1"
+
+    static func pqSealSeed(_ seed: Data, aad: Data) throws -> (sealed: Data, ephemeralPub: Data) {
+        let sePub = try WrappingKeypair.publicKey()
+        let eph = P256.KeyAgreement.PrivateKey()
+        let shared = try eph.sharedSecretFromKeyAgreement(with: sePub).withUnsafeBytes { Data($0) }
+        let box = try AES.GCM.seal(seed, using: hkdf(from: shared, info: pqSeedWrapInfo), authenticating: aad)
+        guard let combined = box.combined else { throw KeystoreError.wrapFailed("pq seed: no combined representation") }
+        return (combined, eph.publicKey.x963Representation)
+    }
+
+    static func pqOpenSeed(_ sealed: Data, ephemeralPub: Data, aad: Data, context: LAContext) throws -> Data {
+        let eph = try P256.KeyAgreement.PublicKey(x963Representation: ephemeralPub)
+        let shared = try WrappingKeypair.load(context: context).ecdh(ephemeralPublic: eph)
+        do {
+            return try AES.GCM.open(AES.GCM.SealedBox(combined: sealed), using: hkdf(from: shared, info: pqSeedWrapInfo), authenticating: aad)
+        } catch {
+            throw KeystoreError.unwrapFailed("pq seed: \(error)")
+        }
+    }
+
+    static func pqRecordRead(_ base: String) -> Data? { keychainRead(account: account(base)) }
+    static func pqRecordWrite(_ base: String, _ data: Data) throws { try keychainWrite(account: account(base), data: data, sync: .deviceLocal) }
+    static func pqRecordDelete(_ base: String) { keychainDelete(account: account(base)) }
 
     private static func unwrapUMK(
         wrapped: Data,
@@ -1563,6 +1619,31 @@ fileprivate struct WrappingKeypair {
         #else
         _ = simAccount
         return try secureEnclaveKeypair(context: context, tag: Data(seTag.utf8))
+        #endif
+    }
+
+    /// The wrapping key's public half, without a prompt (sealing to it needs no private-key use).
+    static func publicKey() throws -> P256.KeyAgreement.PublicKey {
+        let simAccount = Keystore.profileScopedSimWrapAccount()
+        let seTag = Keystore.profileScopedSEKeyTag()
+        #if targetEnvironment(simulator)
+        _ = seTag
+        guard let raw = Keystore.keychainRead(account: simAccount) else { throw Keystore.KeystoreError.keyNotFound }
+        return try P256.KeyAgreement.PrivateKey(rawRepresentation: raw).publicKey
+        #else
+        _ = simAccount
+        let lookup: [String: Any] = [
+            kSecClass as String: kSecClassKey,
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrApplicationTag as String: Data(seTag.utf8),
+            kSecReturnRef as String: true
+        ]
+        var existing: AnyObject?
+        guard SecItemCopyMatching(lookup as CFDictionary, &existing) == errSecSuccess, let ref = existing,
+              let pub = SecKeyCopyPublicKey(ref as! SecKey),
+              let x963 = SecKeyCopyExternalRepresentation(pub, nil) as Data?
+        else { throw Keystore.KeystoreError.keyNotFound }
+        return try P256.KeyAgreement.PublicKey(x963Representation: x963)
         #endif
     }
 

@@ -348,6 +348,12 @@ public final class JoinAccountViewModel {
             return
         }
 
+        var pqIdentities = [PqIdentity(role: .device, subjectId: deviceId, edKey: pushSigningKey)]
+        if becameAdmin, let seed = bundle.wrappedAdminRoot.flatMap(HexUtil.decode),
+           let root = try? Curve25519.Signing.PrivateKey(rawRepresentation: seed) {
+            pqIdentities.append(PqIdentity(role: .adminRoot, subjectId: account, edKey: root))
+        }
+        PqIdentityBindingService.bindInBackground(username: account, identities: pqIdentities)
         admittedProfile = AdmittedProfile(
             cloudName: account,
             deviceId: deviceId,
