@@ -134,6 +134,8 @@ class GymActivityTest : GymBase() {
         launch(tab = "activity", username = "bright-maple", adminRoot = true)
         waitUntilExists("activity-title", 20_000)
         val domain = "kitchen.bright-maple.flagship.services"
+        // A fresh key each run: this phone has never blessed it (docs/first-contact.md).
+        com.flagshipserver.app.core.ServerKeyPins.shared.forget(domain)
         val issuedAt = System.currentTimeMillis()
         val irk = kotlinx.coroutines.runBlocking { com.flagshipserver.app.keystore.KeystoreIrkAccess().resolve("gym") }
         val stk = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
@@ -160,9 +162,12 @@ class GymActivityTest : GymBase() {
         openSection("approvals")
         waitUntilExists("secret-request-card", 20_000)
         gymShot("approvals-card")
+        // First sight: the code computed on the phone sits above Approve, and Approve pins the key.
+        waitUntilExists("server-code", 15_000)
         assertTrue("No lease yet: a restart would ask the phone", !mailboxMock.secondBoot(domain))
         tap("secret-request-approve", 15_000)
         eventually(20_000, "the boot worker took the lease") { mailboxMock.secondBoot(domain) }
+        assertEquals(stkHex, com.flagshipserver.app.core.ServerKeyPins.shared.pinnedHex(domain))
         // The card is gone and nothing raw showed.
         composeRule.waitUntil(15_000) { composeRule.onAllNodesWithTag("secret-request-card").fetchSemanticsNodes().isEmpty() }
         assertTrue(textCount("HTTP 4") == 0 && textCount("already answered") == 0 && textCount("invalid lease signature") == 0)

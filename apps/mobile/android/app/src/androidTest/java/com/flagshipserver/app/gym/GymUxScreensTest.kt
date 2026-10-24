@@ -11,6 +11,7 @@ package com.flagshipserver.app.gym
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -137,6 +138,9 @@ class GymUxScreensTest : GymBase() {
     @Test
     fun watchBootKeyPerServerOnAndOff() {
         launch(tab = "settings", adminRoot = true)
+        // The switch only reads the key this phone pinned at the server's first blessing.
+        com.flagshipserver.app.core.ServerKeyPins.shared.forget("home.smoketest.flagship.services")
+        com.flagshipserver.app.core.ServerKeyPins.shared.recordFirstSeen("home.smoketest.flagship.services", "51".repeat(32))
         // The disk key `.com` keeps for this phone, sealed to its account key as an install does.
         mailboxMock.sealedLuksKeyFor = {
             val irkPub = com.flagshipserver.app.core.HexUtil.decode(com.flagshipserver.app.keystore.Keystore.irkPubHex())!!
@@ -161,6 +165,99 @@ class GymUxScreensTest : GymBase() {
         waitGone("watch-boot-until-home", 15_000)
         assertEquals("home.smoketest.flagship.services", mailboxMock.watchBootDeletes.single().first)
         assertTrue(mailboxMock.watchBootKeys.isEmpty())
+    }
+
+    // ---- First contact (docs/first-contact.md) --------------------------
+
+    private val fcDomain = "lab.bright-maple.flagship.services"
+    private val fcSecret = ByteArray(32) { 0x77 }
+    private val fcSerial = "AC-GYM-0001"
+
+    /** The box's signed entitlement request, with its enrollment proof when [proof]. */
+    private fun firstRequest(stk: com.google.crypto.tink.subtle.Ed25519Sign.KeyPair, proof: Boolean) {
+        val stkHex = com.flagshipserver.app.core.HexUtil.encode(stk.publicKey)
+        val issuedAt = System.currentTimeMillis()
+        val nonce = "ef".repeat(32)
+        val sig = com.flagshipserver.app.core.HexUtil.encode(
+            com.google.crypto.tink.subtle.Ed25519Sign(stk.privateKey).sign(
+                com.flagshipserver.app.core.SecretRequest.canonicalBytes(fcDomain, stkHex, com.flagshipserver.app.core.SecretPurpose.ENTITLEMENT, nonce, issuedAt),
+            ),
+        )
+        mailboxMock.pending = listOf(
+            com.flagshipserver.app.api.PendingSecretRequest(
+                serverDomain = fcDomain, requestNonceHex = nonce, stkPub = stkHex, purpose = "entitlement",
+                issuedAt = issuedAt, requestSignature = sig, postedAt = issuedAt, expiresAt = issuedAt + 600_000,
+                deviceInfo = com.flagshipserver.app.api.DeviceInfoHint(
+                    enrollmentProof = if (proof) com.flagshipserver.app.core.Enrollment.proofHex(fcSecret, fcDomain, stkHex, fcSerial) else null,
+                ),
+            ),
+        )
+    }
+
+    private fun openApprovals() {
+        tapText("Refresh", 15_000)
+        tap("activity-section-approvals", 15_000)
+        waitUntilExists("secret-request-card", 20_000)
+    }
+
+    /** A server this phone created: the box proves its key with the recipe's secret, the code
+     *  computed here sits above Approve, Approve pins the key and signs the app-name grant. */
+    @Test
+    fun firstContactShowsTheCodeThenPinsAndSignsTheGrant() {
+        launch(tab = "activity", username = "bright-maple", adminRoot = true)
+        waitUntilExists("activity-title", 20_000)
+        val pins = com.flagshipserver.app.core.ServerKeyPins.shared
+        pins.forget(fcDomain)
+        com.flagshipserver.app.core.WildcardGrants.outbox.remove(fcDomain)
+        com.flagshipserver.app.core.FirstContact.shared.put(fcDomain, com.flagshipserver.app.core.EnrollmentRecord(com.flagshipserver.app.core.HexUtil.encode(fcSecret), fcSerial))
+        val stk = com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair()
+        val stkHex = com.flagshipserver.app.core.HexUtil.encode(stk.publicKey)
+        firstRequest(stk, proof = true)
+        openApprovals()
+        val code = com.flagshipserver.app.core.Enrollment.serverCode(stkHex)!!
+        assertEquals("If your machine has a monitor, it is showing this code: ${code.take(3)} ${code.drop(3)}", textOfTag("server-code"))
+        gymShot("first-contact-code")
+        tap("secret-request-approve", 15_000)
+        eventually(20_000, "the entitlement was answered") { mailboxMock.postedResponses.isNotEmpty() }
+        assertEquals(stkHex, pins.pinnedHex(fcDomain))
+        assertNull("the enrollment secret is gone", com.flagshipserver.app.core.FirstContact.shared.get(fcDomain))
+        // The grant over the pinned key: sent to the box, or waiting for it.
+        val waiting = com.flagshipserver.app.core.WildcardGrants.outbox.get(fcDomain)
+        assertTrue(waiting != null || screensMock.wildcardGrantPosts.isNotEmpty())
+        waiting?.let { assertEquals(stkHex, it.stkPubHex) }
+        if (waiting == null) assertSigned("server-wildcard-grant", "admin")
+    }
+
+    /** Without its proof, a server this phone created is refused: no Approve, nothing pinned. */
+    @Test
+    fun firstContactRefusesAServerNotBuiltFromTheRecipe() {
+        launch(tab = "activity", username = "bright-maple", adminRoot = true)
+        waitUntilExists("activity-title", 20_000)
+        com.flagshipserver.app.core.ServerKeyPins.shared.forget(fcDomain)
+        com.flagshipserver.app.core.FirstContact.shared.put(fcDomain, com.flagshipserver.app.core.EnrollmentRecord(com.flagshipserver.app.core.HexUtil.encode(fcSecret), fcSerial))
+        firstRequest(com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair(), proof = false)
+        openApprovals()
+        assertEquals("This server was not built from your recipe. Do not approve it.", textOfTag("first-contact-refusal"))
+        gymShot("first-contact-refused")
+        assertEquals(0, composeRule.onAllNodesWithTag("secret-request-approve").fetchSemanticsNodes().size)
+        assertNull(com.flagshipserver.app.core.ServerKeyPins.shared.pinnedHex(fcDomain))
+        com.flagshipserver.app.core.FirstContact.shared.remove(fcDomain)
+    }
+
+    /** After the pin, a request naming another key is refused in so many words. */
+    @Test
+    fun firstContactRefusesAChangedKey() {
+        launch(tab = "activity", username = "bright-maple", adminRoot = true)
+        waitUntilExists("activity-title", 20_000)
+        val pins = com.flagshipserver.app.core.ServerKeyPins.shared
+        pins.forget(fcDomain)
+        pins.recordFirstSeen(fcDomain, "51".repeat(32))
+        firstRequest(com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPair(), proof = false)
+        openApprovals()
+        assertEquals("This server's key changed. If you did not rebuild it, do not approve anything for it.", textOfTag("first-contact-refusal"))
+        gymShot("first-contact-key-changed")
+        assertEquals("51".repeat(32), pins.pinnedHex(fcDomain))
+        pins.forget(fcDomain)
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.performClick2() {

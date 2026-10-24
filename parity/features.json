@@ -781,12 +781,12 @@
     },
     {
       "id": "first-contact",
-      "title": "First contact (docs/first-contact.md): one per-device pin of each server's own key (pinnedStk); the recipe carries a one-time enrollment secret whose proof the first blessing checks, the code computed from the key shows above Approve, a key other than the pin is refused, sealing goes only to the pin, and the app-name grant (flagship/server-wildcard-grant/v1) is signed at the blessing and kept up",
+      "title": "First contact (docs/first-contact.md): a fresh enrollmentKeyHex in every recipe, kept device-local until the pin; one pin store (pinnedStk) replacing every derived or .com-listed server key; the first blessing checks the enrollment proof (refused: 'This server was not built from your recipe. Do not approve it.'), shows the code computed locally above Approve (or 'Confirmed by Studio'), pins, and signs flagship/server-wildcard-grant/v1 over the pinned key; any other key is refused ('This server's key changed …'); grant upkeep on granted:false",
       "ref": "web",
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverPins.js", "export function pinnedStk"], ["apps/web/public/webapp/lib/firstContact.js", "export async function classifyFirstContact"], ["apps/web/public/webapp/lib/firstContact.js", "export async function upkeepWildcardGrant"], ["apps/web/public/webapp/views/create-server.js", "recipe\\.enrollmentKeyHex = "]] },
-        "android": { "status": "missing", "reason": "Pending (branch ux-fc-android).", "anchors": [] },
-        "ios": { "status": "missing", "reason": "Pending (branch ux-fc-ios).", "anchors": [] }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/FirstContact.kt", "class FirstContact"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerKeyPins.kt", "fun pinnedStk"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/FirstContactViews.kt", "fun ServerCodeBox"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/WildcardGrantUpkeep.kt", "class WildcardGrantUpkeep"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/InstallBlobWire.kt", "val enrollmentKeyHex"]] },
+        "ios": { "status": "missing", "reason": "Pending (iOS first-contact work, being committed).", "anchors": [] }
       }
     }
   ]
