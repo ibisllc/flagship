@@ -25,6 +25,10 @@
  *   6. Pipe the seed via stdin to `npx wrangler secret put
  *      FLAGSHIP_CA_PRIV_HEX` in `apps/com`. Confirm with the user
  *      first (the only step that touches Cloudflare).
+ *   5b. With --pq: sign the lease's PQ companion (pq-suites.md §16.3) with the release
+ *      ML-DSA key (scripts/pq-release-key.mjs sign-ca-lease: PIN + touch), into
+ *      `.maintainers/ca-pq/`. Needed once CA_LEASE_PQ_PIN names a key; before that a
+ *      companion is harmless.
  *   7. Optional post-swap check: GET `/api/users/<--verify-user>/
  *      pubkey-cert` and verify under the new pubkey.
  *
@@ -217,6 +221,8 @@ export function resolveOpts(flags, repoRoot) {
     verbose: Boolean(flags.verbose || flags.v),
     dryRun: Boolean(flags["dry-run"]),
     yes: Boolean(flags.yes),
+    pq: Boolean(flags.pq),
+    pqKeyFile: flags["pq-key-file"] ? String(flags["pq-key-file"]) : null,
   };
 }
 
@@ -377,6 +383,8 @@ Flags:
   --dry-run                   CLI --dry-run + skip wrangler PUT; the
                               wrangler-AUTH probe still runs.
   --yes                       skip pre-swap confirmation
+  --pq                        also sign the lease's PQ companion (release ML-DSA key)
+  --pq-key-file FILE          the encrypted release ML-DSA key (default ~/.flagship-release/pq-release-key.age)
 
 The maintainer YubiKey signs the CaEndorsement in-process (stdio is
 inherited from this script — typed CA-LEASE + PIN + tap appear here).
@@ -509,6 +517,26 @@ async function main() {
   const bundlePath = path.join(opts.maintainersDir, "ca-endorsements", "bundle.json");
   fs.writeFileSync(bundlePath, bundleContent + "\n");
   p(C.g(`  ✓ bundle.json regenerated (${JSON.parse(bundleContent).length} endorsement(s))\n`));
+
+  // ---- Step 5b: the lease's PQ companion (pq-suites.md §16.3)
+  if (opts.pq) {
+    p(C.b("▶ Step 5b — sign the lease's PQ companion\n"));
+    const K = await import("./pq-release-key.mjs");
+    try {
+      const r = await K.signCaLeaseCompanion({
+        root: opts.maintainersDir,
+        endorsement: live,
+        signingKey: opts.signingKey,
+        vault: K.vaultFromFlags({}),
+        keyFile: opts.pqKeyFile ?? K.DEFAULT_KEY_FILE,
+        out: (m) => p(C.dim(`  ${m}`)),
+      });
+      p(C.g(`  ✓ PQ companion written (${path.relative(opts.maintainersDir, r.file)}, key id ${r.keyId.slice(0, 16)}…)\n`));
+    } catch (e) {
+      p(C.r(`  ✗ PQ companion not signed: ${e.message}. Cloudflare untouched; re-run with --pq when the key is at hand.`));
+      return 1;
+    }
+  }
 
   // ---- Step 6: swap Cloudflare worker secret (the point of no return)
   p(C.b("▶ Step 6 — swap the Cloudflare Worker secret FLAGSHIP_CA_PRIV_HEX\n"));

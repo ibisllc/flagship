@@ -19,6 +19,16 @@
 //   node scripts/pq-release-key.mjs show-pub           [--path .maintainers]
 //   node scripts/pq-release-key.mjs pin --key-id <hex> [--require-pq-after <releaseId>|auto|none]
 //   node scripts/pq-release-key.mjs fake-yubikeys --fake-yubikey <dir>     (test mode only)
+//   node scripts/pq-release-key.mjs sign-ca-lease --endorsement <file> [--key-file] [--signing-key] [--path .maintainers]
+//   node scripts/pq-release-key.mjs sign-box-artifact --manifest <in.json> --out <out.json> [--key-file] [--signing-key]
+//
+//   sign-ca-lease      writes the CA lease's PQ companion (pq-suites.md §16.3) to
+//                      <path>/ca-pq/endorsements/<endorsementId>.json, the ca-track binding
+//                      (subject flagship-ca-track) to <path>/ca-pq/bindings/ when it is missing,
+//                      and regenerates <path>/ca-pq/bundle.json for the Worker
+//   sign-box-artifact  adds the signer's PQ companion (pq-suites.md §16.2) to its signature in a
+//                      box artifact manifest file, and its binding (subject flagship-box-artifact)
+//                      to the file's pqBindings
 //
 //   --recipient     an age-plugin-yubikey recipient (age1yubikey1...); at least two, one per YubiKey
 //   --identity      age-plugin-yubikey identity stubs (not secret; default
@@ -668,6 +678,8 @@ export function parseArgs(argv) {
     else if (a === "--path") out.path = val();
     else if (a === "--fake-yubikey") out.fakeYubikey = path.resolve(val());
     else if (a === "--key-id") out.keyId = val();
+    else if (a === "--endorsement") out.endorsement = val();
+    else if (a === "--manifest") out.manifest = val();
     else if (a === "--require-pq-after") out.requirePqAfter = val();
     else if (a === "--no-paper") out.noPaper = true;
     else if (a === "--force") out.force = true;
@@ -699,6 +711,30 @@ async function main() {
     "restore-from-paper": () => cmdRestoreFromPaper(args, out),
     "show-pub": () => cmdShowPub(args, out),
     pin: () => cmdPin(args, out),
+    "sign-ca-lease": async () => {
+      if (!args.endorsement) throw new UsageError("sign-ca-lease needs --endorsement <file>");
+      const r = await signCaLeaseCompanion({
+        root: rootFor(args),
+        endorsement: JSON.parse(fs.readFileSync(args.endorsement, "utf8")),
+        signingKey: args.signingKey ?? "yubikey-piv:slot=9c",
+        vault: vaultFor(args),
+        keyFile: args.keyFile ?? DEFAULT_KEY_FILE,
+        out,
+      });
+      out(`wrote ${r.file} (key id ${r.keyId})`);
+    },
+    "sign-box-artifact": async () => {
+      if (!args.manifest || !args.out) throw new UsageError("sign-box-artifact needs --manifest <in> and --out <out>");
+      const doc = await signBoxArtifactCompanion({
+        doc: JSON.parse(fs.readFileSync(args.manifest, "utf8")),
+        signingKey: args.signingKey ?? "yubikey-piv:slot=9c",
+        vault: vaultFor(args),
+        keyFile: args.keyFile ?? DEFAULT_KEY_FILE,
+        out,
+      });
+      fs.writeFileSync(args.out, JSON.stringify(doc, null, 2) + "\n");
+      out(`wrote ${args.out}`);
+    },
     "fake-yubikeys": () => {
       if (!args.fakeYubikey) throw new UsageError("fake-yubikeys needs --fake-yubikey <dir>");
       for (const r of createFakeYubikeys(args.fakeYubikey)) out(r);
@@ -764,4 +800,103 @@ export async function signReleaseCompanion({ root, endorsement, signingKey, vaul
 
 export function vaultFromFlags({ fakeYubikey, identities = [] }) {
   return fakeYubikey ? fakeVault({ dir: fakeYubikey }) : ageVault({ identities: identities.length ? identities : [DEFAULT_IDENTITIES] });
+}
+
+// ── the box artifact's and CA leases' PQ companions (pq-suites.md §16.2, §16.3) ───────────
+
+/**
+ * The `release-key` binding of the release key for another subject (the CA track, the box
+ * artifact): the same Ed25519 token and ML-DSA seed, a statement naming that subject.
+ */
+export async function signSubjectBinding(subjectId, ed, seed, issuedAt = Date.now()) {
+  const { canonicalPqKeyBinding, hybridSignExternal, pqBindingPublicKey } = await import("@flagship/protocol");
+  const s = {
+    role: "release-key",
+    subjectId,
+    ed25519PubHex: ed.pubHex,
+    mldsaPubHex: Buffer.from(mldsa65PublicKey(seed)).toString("hex"),
+    issuedAt,
+  };
+  const sig = await hybridSignExternal(pqBindingPublicKey(s), "flagship/pq-key-binding/v1", canonicalPqKeyBinding(s), ed.sign, seed);
+  return { v: 1, ...s, signature: Buffer.from(sig).toString("hex") };
+}
+
+function caPqDir(root, sub) {
+  return path.join(root, "ca-pq", sub);
+}
+
+/** The Worker's `.maintainers/ca-pq/bundle.json`: every binding and companion, filename-sorted. */
+export function writeCaPqBundle(root) {
+  const read = (sub) => {
+    const dir = caPqDir(root, sub);
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir).filter((f) => f.endsWith(".json")).sort().map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
+  };
+  const file = path.join(root, "ca-pq", "bundle.json");
+  fs.writeFileSync(file, JSON.stringify({ bindings: read("bindings"), endorsements: read("endorsements") }, null, 2) + "\n");
+  return file;
+}
+
+/**
+ * Signs and writes a CA lease's companion: the lease must be signed by the same Ed25519 key, the
+ * result is checked with the gate boxes and the Worker run (under a pin naming this key).
+ */
+export async function signCaLeaseCompanion({ root, endorsement, signingKey, vault, keyFile, out = () => {}, now = Date.now() }) {
+  const { CA_LEASE_PQ_BINDING_SUBJECT, gateCaLeasesPq, signCaLeasePq } = await import("@flagship/protocol");
+  const ed = await loadEd25519Signer(signingKey);
+  if (ed.pubHex !== String(endorsement.signedBy).toLowerCase()) {
+    throw new Error(`the signing key ${ed.pubHex.slice(0, 16)} did not sign lease ${endorsement.endorsementId}`);
+  }
+  out("Opening the release ML-DSA key: PIN and touch on a YubiKey.");
+  return withSeed(vault, keyFile, async (seed) => {
+    const mldsaPubHex = Buffer.from(mldsa65PublicKey(seed)).toString("hex");
+    const bdir = caPqDir(root, "bindings");
+    fs.mkdirSync(bdir, { recursive: true });
+    const have = fs.readdirSync(bdir).filter((f) => f.endsWith(".json"))
+      .map((f) => JSON.parse(fs.readFileSync(path.join(bdir, f), "utf8")))
+      .find((b) => b.ed25519PubHex === ed.pubHex && b.mldsaPubHex === mldsaPubHex && b.subjectId === CA_LEASE_PQ_BINDING_SUBJECT);
+    out("Signing the PQ companion: approve on the YubiKey (PIN, then touch).");
+    const binding = have ?? (await signSubjectBinding(CA_LEASE_PQ_BINDING_SUBJECT, ed, seed, now));
+    const wire = await signCaLeasePq(endorsement, { ed25519PubHex: ed.pubHex, mldsaPubHex }, ed.sign, seed);
+    const pin = { version: 1, keyIds: [wire.keyId], legacyLeases: [] };
+    const ok = gateCaLeasesPq([endorsement], { bindings: [binding], endorsements: [wire] }, { pin, now }).accepted.length === 1;
+    if (!ok) throw new Error("the new companion does not pass the CA lease gate; nothing written");
+    if (!have) fs.writeFileSync(path.join(bdir, `${ed.pubHex.slice(0, 16)}-${mldsaPubHex.slice(0, 16)}.json`), JSON.stringify(binding, null, 2) + "\n");
+    const file = path.join(caPqDir(root, "endorsements"), `${endorsement.endorsementId}.json`);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(wire, null, 2) + "\n");
+    writeCaPqBundle(root);
+    return { file, keyId: wire.keyId, wire, binding };
+  });
+}
+
+/**
+ * Adds the PQ companion to the signer's signature in a box artifact manifest file
+ * (`{ manifest, signatures, pqBindings? }`), checked with the verifier boxes and the installer run.
+ */
+export async function signBoxArtifactCompanion({ doc, signingKey, vault, keyFile, out = () => {}, now = Date.now() }) {
+  const p = await import("@flagship/protocol");
+  const ed = await loadEd25519Signer(signingKey);
+  const sigEntry = (doc.signatures ?? []).find((s) => String(s.keyHex).toLowerCase() === ed.pubHex);
+  if (!sigEntry) throw new Error(`the manifest has no Ed25519 signature by ${ed.pubHex.slice(0, 16)}; sign it first (tools/box-artifact/build.ts sign)`);
+  const canonical = p.canonicalBoxArtifact(doc.manifest);
+  out("Opening the release ML-DSA key: PIN and touch on a YubiKey.");
+  return withSeed(vault, keyFile, async (seed) => {
+    const mldsaPubHex = Buffer.from(mldsa65PublicKey(seed)).toString("hex");
+    const pk = p.pqBindingPublicKey({ ed25519PubHex: ed.pubHex, mldsaPubHex });
+    const keyId = Buffer.from(p.pqKeyId(p.SUITE_HYBRID_SIG_ED25519_MLDSA65_V1, pk)).toString("hex");
+    out("Signing the PQ companion: approve on the YubiKey (PIN, then touch).");
+    const sig = await p.hybridSignExternal(pk, p.TAG_BOX_ARTIFACT_V2, p.canonicalBoxArtifactV2(canonical, ed.pubHex, keyId), ed.sign, seed);
+    const existing = (doc.pqBindings ?? []).find((b) => b.ed25519PubHex === ed.pubHex && b.mldsaPubHex === mldsaPubHex && b.subjectId === p.BOX_ARTIFACT_PQ_BINDING_SUBJECT);
+    const binding = existing ?? (await signSubjectBinding(p.BOX_ARTIFACT_PQ_BINDING_SUBJECT, ed, seed, now));
+    const next = {
+      ...doc,
+      signatures: doc.signatures.map((s) => (String(s.keyHex).toLowerCase() === ed.pubHex ? { ...s, pq: { keyId, signatureHex: Buffer.from(sig).toString("hex") } } : s)),
+      pqBindings: [...(doc.pqBindings ?? []).filter((b) => b !== existing), binding],
+    };
+    const bindings = p.verifiedBoxArtifactBindings(next.pqBindings, { version: 1, keyIds: [keyId], legacyManifests: [] }, now);
+    const entry = next.signatures.find((s) => String(s.keyHex).toLowerCase() === ed.pubHex);
+    if (!p.verifyBoxArtifactPq(canonical, ed.pubHex, entry.pq, bindings)) throw new Error("the new companion does not verify; nothing written");
+    return next;
+  });
 }
