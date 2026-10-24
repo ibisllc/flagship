@@ -374,6 +374,37 @@
       }
     },
     {
+      "id": "chat-approvals",
+      "title": "App chat between owners: 'a remote machine claiming to run <author>/<app>' with Allow / Always allow / Deny (chat-approval/v1), Always allows with Revoke",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatRequestCenter.swift", "A remote machine claiming to run"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ChatRequestScreens.swift", "struct ChatRequestsCard"], ["apps/mobile/shared/Sources/FlagshipCore/ChatApproval.swift", "flagship/chat-approval/v1"]] },
+        "android": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] },
+        "web": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] }
+      }
+    },
+    {
+      "id": "ai-run-consent",
+      "title": "AI run consent: the box's 428 estimate (token range, provider, who pays), signed ai-repair-consent/v1 resend, Cancel runs nothing",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildGitViewModel.swift", "func agreeToConsent"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/ChatModels.swift", "struct AiConsentRequired"]] },
+        "android": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] },
+        "web": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] }
+      }
+    },
+    {
+      "id": "watch-boot-locked",
+      "title": "Watch: start a server with the phone locked (boot-only key, per-server copy, watch-boot-delegate/v1; 423 when the server is locked)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/WatchBootKeyCard.swift", "struct WatchBootKeyCard"], ["apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift", "struct WatchBootEnroller|struct WatchBootKeyEnroller"]] },
+        "watch": { "status": "present", "reason": "The watch asks; the iPhone answers from the watch's own copy without the account key.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift", "lockedApprove"], ["apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift", "struct WatchBootApprover"]] },
+        "android": { "status": "missing", "reason": "Built in parallel on its own branch; not on this one yet.", "anchors": [] },
+        "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
+      }
+    },
+    {
       "id": "push-secret-request",
       "title": "Push: secret-request (boot/unlock approval) tap opens Activity with the Server approvals section open and the request in it",
       "ref": "ios",
