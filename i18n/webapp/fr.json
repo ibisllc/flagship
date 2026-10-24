@@ -2750,5 +2750,11 @@
   "No chat requests are waiting.": "Aucune demande de discussion en attente.",
   "Apps that take chats without asking": "Apps qui acceptent les discussions sans demander",
   "{0} asks you again before taking a chat": "{0} vous demandera de nouveau avant d’accepter une discussion",
-  "App chat requests": "Demandes de discussion des apps"
+  "App chat requests": "Demandes de discussion des apps",
+  "This run can use up to about {0} tokens. The run stops there.": "Cette exécution peut utiliser jusqu’à environ {0} tokens. Elle s’arrête là.",
+  "Always allow lets a machine claiming to run {0}/{1} start chats with {2} without asking you again. You can stop this under Activity.": "Toujours autoriser permet à une machine qui prétend exécuter {0}/{1} de lancer des discussions avec {2} sans vous redemander. Vous pouvez l’arrêter dans Activité.",
+  "A machine claiming to run {0}/{1} can start chats with {2} without asking you.": "Une machine qui prétend exécuter {0}/{1} peut lancer des discussions avec {2} sans vous demander.",
+  "{0} now accepts chats from {1}/{2} without asking": "{0} accepte désormais les discussions de {1}/{2} sans demander",
+  "{0} asks you again before taking a chat from {1}/{2}": "{0} vous redemandera avant d’accepter une discussion de {1}/{2}",
+  "Chats your apps take without asking": "Discussions que vos apps acceptent sans demander"
 }

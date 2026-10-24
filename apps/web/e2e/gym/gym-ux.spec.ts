@@ -616,7 +616,7 @@ const SW_GENERIC = () => navigator.serviceWorker.dispatchEvent(new MessageEvent(
 type ChatReq = { requestId: string; kind: "incoming" | "outgoing"; claimedSender: { author: string; slug: string }; receiverApp: { author: string; slug: string }; phrase?: string; count: number; at: number };
 
 /** The box's chat screens (chat/approvals.ts): the list, a signed answer that removes the request, and the Always allow revoke. */
-function chatBox(m: Mock, page: Page, keys: Keys, state: { requests: ChatReq[]; always: Array<{ author: string; slug: string }> }): Mock {
+function chatBox(m: Mock, page: Page, keys: Keys, state: { requests: ChatReq[]; always: Array<{ receiverApp: { author: string; slug: string }; claimedSender: { author: string; slug: string } }> }): Mock {
   m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
   m.get(box(HOME, "/api/screens/chat/requests"), () => ({ json: { requests: state.requests, always: state.always } }));
   m.post(
@@ -630,13 +630,13 @@ function chatBox(m: Mock, page: Page, keys: Keys, state: { requests: ChatReq[]; 
         const r = state.requests.find((q) => q.requestId === c.body.requestId);
         if (!r) return { status: 404, json: { error: "that request is no longer waiting" } };
         state.requests = state.requests.filter((q) => q !== r);
-        if (c.body.decision === "always") state.always.push(r.receiverApp);
+        if (c.body.decision === "always") state.always.push({ receiverApp: r.receiverApp, claimedSender: r.claimedSender });
         return { json: { ok: true } };
       },
     ),
   );
   m.post(box(HOME, "/api/screens/chat/always/revoke"), (c: Call) => {
-    state.always = state.always.filter((a) => !(a.author === c.body.author && a.slug === c.body.slug));
+    state.always = state.always.filter((a) => !(a.receiverApp.author === c.body.author && a.receiverApp.slug === c.body.slug && (!c.body.sender || (a.claimedSender.author === c.body.sender.author && a.claimedSender.slug === c.body.sender.slug))));
     return { json: { ended: 1 } };
   });
   return m;
@@ -652,7 +652,7 @@ test.describe("gym ux chat requests", () => {
         { ...incoming("r1", "alice"), phrase: "blue fox", count: 3 },
         { requestId: "r2", kind: "outgoing" as const, claimedSender: { author: "smoketest", slug: "notes" }, receiverApp: { author: "bob", slug: "board" }, count: 1, at: Date.now() },
       ],
-      always: [] as Array<{ author: string; slug: string }>,
+      always: [] as Array<{ receiverApp: { author: string; slug: string }; claimedSender: { author: string; slug: string } }>,
     };
     const m = chatBox(await mock(page), page, keys, state);
     await page.evaluate(SW_GENERIC);
@@ -698,24 +698,24 @@ test.describe("gym ux chat requests", () => {
 
   test("gym ux chat requests Always allow is listed under Activity and Ask me each time ends it", async ({ page }, testInfo) => {
     const keys = await reachHome(page, { kind: "admin" });
-    const state = { requests: [incoming("r1", "alice")], always: [] as Array<{ author: string; slug: string }> };
+    const state = { requests: [incoming("r1", "alice")], always: [] as Array<{ receiverApp: { author: string; slug: string }; claimedSender: { author: string; slug: string } }> };
     const m = chatBox(await mock(page), page, keys, state);
     await page.evaluate(SW_GENERIC);
     const sheet = page.locator(".modal-overlay", { has: page.locator("[data-chat-sheet]") });
-    await expect(sheet).toContainText("Always allow lets any remote machine start a chat with notes without asking you.", { timeout: 10_000 });
+    await expect(sheet).toContainText("Always allow lets a machine claiming to run alice/chess start chats with notes without asking you again.", { timeout: 10_000 });
     await sheet.locator('[data-choice="always"]').click();
     const always = await m.waitFor("/api/screens/chat/answer");
     expect(always.body).toMatchObject({ requestId: "r1", kind: "incoming", decision: "always" });
     expect(await signer(page, keys, CHAT_CANON, { serverDomain: HOME, ...always.body }, always.body.signature)).toBe("admin");
 
     await page.click('[data-tab-target="activity"]');
-    const row = page.locator('#activity-chat [data-chat-always="smoketest/notes"]');
-    await expect(row).toHaveText(/Any remote machine can start a chat with notes without asking you\./, { timeout: 10_000 });
+    const row = page.locator('#activity-chat [data-chat-always="alice/chess>smoketest/notes"]');
+    await expect(row).toHaveText(/A machine claiming to run alice\/chess can start chats with notes without asking you\./, { timeout: 10_000 });
     await expect(page.locator("#activity-chat")).toContainText("No chat requests are waiting.");
     await shot(page, testInfo, "chat-always-listed");
     await row.locator("[data-chat-revoke]").click();
     const revoke = await m.waitFor("/api/screens/chat/always/revoke");
-    expect(revoke.body).toEqual({ author: "smoketest", slug: "notes" });
+    expect(revoke.body).toEqual({ author: "smoketest", slug: "notes", sender: { author: "alice", slug: "chess" } });
     await expect(page.locator("#activity-chat")).toBeHidden({ timeout: 10_000 });
   });
 });
@@ -770,7 +770,7 @@ test.describe("gym ux ai consent", () => {
     await page.click("#build-git-adapt");
     const consent = page.locator(".modal-overlay", { has: page.locator("[data-ai-consent]") });
     await expect(consent.locator("[data-ai-consent]")).toHaveText("This uses AI that costs money", { timeout: 10_000 });
-    await expect(consent.locator("[data-ai-consent-range]")).toHaveText("This run could use about 12,000 to 72,000 tokens. This is an estimate, not a limit.");
+    await expect(consent.locator("[data-ai-consent-range]")).toHaveText("This run can use up to about 72,000 tokens. The run stops there.");
     await expect(consent.locator("[data-ai-consent-payer]")).toHaveText("Flagship Inference runs it, and it is paid from your free Flagship Inference credits.");
     await shot(page, testInfo, "ai-consent-sheet");
     expect(m.sent(`/api/build/sessions/${GIT_ID}/adapt`)).toHaveLength(1);
