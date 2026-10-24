@@ -25,6 +25,8 @@
 #      GYM_SECRETS_FILE  (default <main checkout>/.gym-secrets.env)
 #      GYM_UPCLOUD_TOKEN_FILE (default ~/.config/flagship/upcloud-token)
 #      GYM_BASE_REF      rebase the gym branch onto this ref instead of origin/main (never pushed)
+#      GYM_START_REF     start the gym worktree from this ref instead of origin/gym, e.g. a pushed
+#                        `gym-ux` that already is a feature branch plus the gym seams (never pushed)
 #      GYM_INSTALLER_GIT_REF  the ref new gym boxes clone (a pushed branch; default gym: only that branch
 #                         carries the gym trust pin, so a box on main can't check
 #                         anything the gym CA signed, e.g. a share's account-key attestation)
@@ -97,8 +99,10 @@ else
     say "created worktree $WT"
   fi
   [ -z "$(git -C "$WT" status --porcelain)" ] || die "$WT has uncommitted changes; commit or discard them first"
+  START="${GYM_START_REF:-origin/gym}"
+  [ "$START" = "origin/gym" ] || git -C "$REPO" fetch -q origin "${START#origin/}"
   old_gym="$(git -C "$WT" rev-parse origin/gym)"
-  git -C "$WT" checkout -q --detach origin/gym
+  git -C "$WT" checkout -q --detach "$START"
   if git -C "$WT" merge-base --is-ancestor "$BASE" HEAD; then
     say "gym already contains $BASE ($(git -C "$WT" rev-parse --short "$BASE"))"
   else
