@@ -16,6 +16,10 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.core.pq.PqHex
+import com.flagshipserver.app.core.pq.PqHybrid
+import com.flagshipserver.app.core.pq.PqTrust
+import com.flagshipserver.app.core.pq.PqTrustException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -216,6 +220,7 @@ object SecurityNoticeProtocol {
         } catch (_: SecurityNoticeException) {
             return null
         }
+        if (!pqShapeOk(r["pq"])) return null
         // canonical() accepted every field, so each of these reads is total.
         return SecurityNotice(
             seq = uint(r["seq"])!!,
@@ -235,8 +240,29 @@ object SecurityNoticeProtocol {
         )
     }
 
+    /**
+     * The release PQ pin's key ids (packages/protocol/src/releasePqPin.ts), written by
+     * `node scripts/pq-release-key.mjs pin`; a test checks they match. Empty: no release PQ key yet.
+     */
+    // BEGIN RELEASE_PQ_KEY_IDS (generated)
+    val RELEASE_PQ_KEY_IDS: List<String> = listOf()
+    // END RELEASE_PQ_KEY_IDS
+
+    private fun pqShapeOk(e: JsonElement?): Boolean {
+        if (e == null) return true
+        val o = e as? JsonObject ?: return false
+        if (o.keys.sorted() != listOf("binding", "signature")) return false
+        val sig = str(o["signature"]) ?: return false
+        if (sig.length != 6746 || PqHex.decode(sig) == null) return false
+        return try {
+            PqTrust.pqKeyBindingFromWire(o["binding"]); true
+        } catch (_: PqTrustException) {
+            false
+        }
+    }
+
     /** Is the signature good, and is the signer one of [authorityKeys]? Null when yes, else the reason. */
-    fun verify(n: SecurityNotice, authorityKeys: List<String>): String? {
+    fun verify(n: SecurityNotice, authorityKeys: List<String>, pqKeyIds: List<String> = RELEASE_PQ_KEY_IDS): String? {
         val bytes = try {
             canonical(n.raw, n.signedBy)
         } catch (_: SecurityNoticeException) {
@@ -244,7 +270,28 @@ object SecurityNoticeProtocol {
         }
         if (!HEX128.matches(n.signature)) return "malformed"
         if (n.signedBy !in authorityKeys) return "unauthorized-signer"
-        return if (MaintainersEd25519.verify(n.signature, bytes, n.signedBy)) null else "signature-invalid"
+        if (!MaintainersEd25519.verify(n.signature, bytes, n.signedBy)) return "signature-invalid"
+        return verifyPq(n, bytes, pqKeyIds)
+    }
+
+    /**
+     * The PQ half (docs/architecture-v2/pq-suites.md §14). With the pin empty a notice without it
+     * passes as before; one that carries it must still verify. With the pin set it is required,
+     * under a pinned key bound to signedBy.
+     */
+    private fun verifyPq(n: SecurityNotice, bytes: ByteArray, pqKeyIds: List<String>): String? {
+        val q = n.raw["pq"] as? JsonObject ?: return if (pqKeyIds.isEmpty()) null else "pq-missing"
+        return try {
+            val w = PqTrust.pqKeyBindingFromWire(q["binding"])
+            val pk = PqHex.decode(w.ed25519PubHex + w.mldsaPubHex)!!
+            val keyId = PqHex.encode(PqHybrid.pqKeyId(PqHybrid.SUITE_HYBRID_SIG_ED25519_MLDSA65_V1, pk))
+            if (pqKeyIds.isNotEmpty() && keyId !in pqKeyIds) return "pq-key-not-pinned"
+            val vb = PqTrust.verifyPqKeyBinding(q["binding"], PqTrust.Expectation("release-key", "flagship-release", n.signedBy, now = Long.MAX_VALUE / 2))
+            PqHybrid.hybridVerify(vb.hybridPublicKey, TAG, bytes, PqHex.decode(str(q["signature"]) ?: "")!!)
+            null
+        } catch (_: Exception) {
+            "pq-signature-invalid"
+        }
     }
 
     /** Is this client below the notice's minimum for its platform? (false when the platform isn't listed.) */
@@ -277,10 +324,10 @@ object SecurityNoticeProtocol {
      * unsigned by the authority, or not newer than the highest seq verified is
      * dropped and the store stays as it was.
      */
-    fun accept(store: NoticeStore, candidate: JsonElement?, authorityKeys: List<String>): NoticeAccept {
+    fun accept(store: NoticeStore, candidate: JsonElement?, authorityKeys: List<String>, pqKeyIds: List<String> = RELEASE_PQ_KEY_IDS): NoticeAccept {
         if (candidate == null || candidate is JsonNull) return NoticeAccept(store, null)
         val n = parse(candidate) ?: return NoticeAccept(store, "malformed")
-        verify(n, authorityKeys)?.let { return NoticeAccept(store, it) }
+        verify(n, authorityKeys, pqKeyIds)?.let { return NoticeAccept(store, it) }
         if (n.seq <= store.highestSeq) return NoticeAccept(store, "stale")
         return NoticeAccept(NoticeStore(n.seq, n), null)
     }

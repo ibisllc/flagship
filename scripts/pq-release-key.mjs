@@ -591,6 +591,22 @@ export function renderPin(pin) {
   ].join("\n");
 }
 
+/** The client copies of the pin's key ids (security notices' PQ half, pq-suites.md §14). */
+export const CLIENT_PIN_FILES = [
+  { file: path.join(REPO, "apps/web/public/webapp/lib/releasePqPin.js"), render: (ids) => `export const RELEASE_PQ_KEY_IDS = Object.freeze([${ids.map((k) => `"${k}"`).join(", ")}]);` },
+  { file: path.join(REPO, "apps/mobile/shared/Sources/FlagshipCore/SecurityNotice.swift"), render: (ids) => `    public static let keyIds: [String] = [${ids.map((k) => `"${k}"`).join(", ")}]` },
+  { file: path.join(REPO, "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/SecurityNotice.kt"), render: (ids) => `    val RELEASE_PQ_KEY_IDS: List<String> = listOf(${ids.map((k) => `"${k}"`).join(", ")})` },
+];
+
+export function writeClientPins(keyIds, files = CLIENT_PIN_FILES) {
+  const re = /(\/\/ BEGIN RELEASE_PQ_KEY_IDS \(generated\)\n)[\s\S]*?(\n\s*\/\/ END RELEASE_PQ_KEY_IDS)/;
+  for (const { file, render } of files) {
+    const src = fs.readFileSync(file, "utf8");
+    if (!re.test(src)) throw new Error(`${file} has no generated RELEASE_PQ_KEY_IDS block`);
+    fs.writeFileSync(file, src.replace(re, (_, a, b) => a + render(keyIds) + b));
+  }
+}
+
 export function cmdPin(args, out, { pinFile = PIN_FILE, current = RELEASE_PQ_PIN } = {}) {
   const root = path.resolve(args.path ?? ".maintainers");
   const keyId = String(args.keyId ?? "").toLowerCase();
@@ -625,6 +641,7 @@ export function cmdPin(args, out, { pinFile = PIN_FILE, current = RELEASE_PQ_PIN
   const re = /\/\/ BEGIN RELEASE_PQ_PIN \(generated\)[\s\S]*?\/\/ END RELEASE_PQ_PIN/;
   if (!re.test(src)) throw new Error(`${pinFile} has no generated pin block`);
   fs.writeFileSync(pinFile, src.replace(re, renderPin(pin)));
+  if (pinFile === PIN_FILE) writeClientPins(pin.keyIds);
   out(`Pin written to ${pinFile}: ${pin.keyIds.length} key(s); require PQ after ${requirePqAfter ? requirePqAfter.releaseId : "every endorsement"}.`);
   out("Rebuild (npx tsc -b), run the tests, commit the pin and the binding together. From the next release a box needs both signatures.");
   return pin;

@@ -74,6 +74,9 @@ public struct SecurityNotice: Equatable, Sendable {
     public var signedBy: String
     /// lower-hex Ed25519 signature over the canonical bytes.
     public var signature: String
+    /// The PQ half (docs/architecture-v2/pq-suites.md §14): the release key's hybrid signature
+    /// over the same bytes and its binding to `signedBy`. Required once the release pin is set.
+    public var pq: SecurityNoticePq?
 
     public var seq: Int64 { body.seq }
     public var kind: String { body.kind }
@@ -86,11 +89,34 @@ public struct SecurityNotice: Equatable, Sendable {
     public var reason: String { body.reason }
     public var message: String { body.message }
 
-    public init(body: SecurityNoticeBody, signedBy: String, signature: String) {
+    public init(body: SecurityNoticeBody, signedBy: String, signature: String, pq: SecurityNoticePq? = nil) {
         self.body = body
         self.signedBy = signedBy
         self.signature = signature
+        self.pq = pq
     }
+}
+
+public struct SecurityNoticePq: Equatable, Sendable {
+    public var binding: PqKeyBindingWire
+    /// lower-hex hybrid signature, 3373 bytes.
+    public var signature: String
+
+    static func parse(_ v: Any?) -> SecurityNoticePq?? {
+        guard let v, !(v is NSNull) else { return .some(nil) }
+        guard let o = v as? [String: Any], o.keys.sorted() == ["binding", "signature"],
+              let sig = o["signature"] as? String, sig.count == 6746, PqBin.unhex(sig) != nil,
+              let b = try? PqTrust.pqKeyBindingFromWire(o["binding"]) else { return nil }
+        return .some(SecurityNoticePq(binding: b, signature: sig))
+    }
+}
+
+/// The release PQ pin's key ids (packages/protocol/src/releasePqPin.ts), written by
+/// `node scripts/pq-release-key.mjs pin`; a test checks they match. Empty: no release PQ key yet.
+public enum ReleasePqPin {
+    // BEGIN RELEASE_PQ_KEY_IDS (generated)
+    public static let keyIds: [String] = []
+    // END RELEASE_PQ_KEY_IDS
 }
 
 public enum SecurityNoticeRules {
@@ -252,14 +278,15 @@ extension SecurityNotice {
         guard r["kind"] is String, r["advisoryId"] is String, r["reason"] is String, r["message"] is String else { return nil }
         guard let body = body(fromJSON: r) else { return nil }
         do { _ = try SecurityNoticeRules.canonical(body, signedBy: signedBy) } catch { return nil }
-        return SecurityNotice(body: body, signedBy: signedBy, signature: signature)
+        guard let pq = SecurityNoticePq.parse(r["pq"]) else { return nil }
+        return SecurityNotice(body: body, signedBy: signedBy, signature: signature, pq: pq)
     }
 
     /// The wire JSON of this notice (stored with the mandate log it came with).
     public func json() -> [String: Any] {
         var platforms: [String: Any] = [:]
         for (name, m) in body.platforms { platforms[name] = ["minBuild": m.minBuild, "minProtocol": m.minProtocol] }
-        return [
+        var out: [String: Any] = [
             "type": "SecurityNotice", "version": 1,
             "seq": body.seq, "kind": body.kind,
             "validFrom": body.validFrom, "validUntil": body.validUntil,
@@ -269,6 +296,8 @@ extension SecurityNotice {
             "reason": body.reason, "message": body.message,
             "signedBy": signedBy, "signature": signature,
         ]
+        if let pq { out["pq"] = ["binding": pq.binding.jsonObject, "signature": pq.signature] }
+        return out
     }
 
     /// `{date}` replaced by the caller's rendering of `eventAt`.
@@ -292,18 +321,39 @@ public enum SecurityNoticeVerifier {
         case malformed
         case unauthorizedSigner = "unauthorized-signer"
         case signatureInvalid = "signature-invalid"
+        case pqMissing = "pq-missing"
+        case pqKeyNotPinned = "pq-key-not-pinned"
+        case pqSignatureInvalid = "pq-signature-invalid"
         case stale
     }
 
     /// Is the signature good, and is the signer one of `authorityKeys` (the
     /// ca-track authority at the verifier's clock)? Time windows are judged
     /// separately by `outcome`.
-    public static func verify(_ n: SecurityNotice, authorityKeys: [String]) -> Rejection? {
+    public static func verify(_ n: SecurityNotice, authorityKeys: [String], pqKeyIds: [String] = ReleasePqPin.keyIds) -> Rejection? {
         let bytes: Data
         do { bytes = try SecurityNoticeRules.canonical(n.body, signedBy: n.signedBy) } catch { return .malformed }
         guard SecurityNoticeRules.isHex128(n.signature) else { return .malformed }
         guard authorityKeys.contains(n.signedBy) else { return .unauthorizedSigner }
-        return MaintainersEd25519.verify(sigHex: n.signature, message: bytes, pubKeyHex: n.signedBy) ? nil : .signatureInvalid
+        guard MaintainersEd25519.verify(sigHex: n.signature, message: bytes, pubKeyHex: n.signedBy) else { return .signatureInvalid }
+        return verifyPq(n, Array(bytes), pqKeyIds)
+    }
+
+    /// With the pin empty a notice without the PQ half passes as before; one that carries it
+    /// must still verify. With the pin set it is required, under a pinned key bound to `signedBy`.
+    static func verifyPq(_ n: SecurityNotice, _ bytes: [UInt8], _ pqKeyIds: [String]) -> Rejection? {
+        guard let pq = n.pq else { return pqKeyIds.isEmpty ? nil : .pqMissing }
+        let pk = PqTrust.pqBindingPublicKey(ed25519PubHex: pq.binding.ed25519PubHex, mldsaPubHex: pq.binding.mldsaPubHex)
+        let keyId = PqBin.hex(PqHybrid.pqKeyId(suite: PqHybrid.suiteHybridSigEd25519MlDsa65V1, publicKey: pk))
+        if !pqKeyIds.isEmpty && !pqKeyIds.contains(keyId) { return .pqKeyNotPinned }
+        do {
+            let vb = try PqTrust.verifyPqKeyBinding(pq.binding, PqBindingExpectation(role: "release-key", subjectId: "flagship-release",
+                                                                                     ed25519PubHex: n.signedBy, now: Int64.max / 2))
+            try PqHybrid.hybridVerify(publicKey: vb.hybridPublicKey, purpose: SecurityNoticeRules.tag, payload: bytes, signature: PqBin.unhex(pq.signature) ?? [])
+            return nil
+        } catch {
+            return .pqSignatureInvalid
+        }
     }
 }
 

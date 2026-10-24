@@ -41,6 +41,14 @@
 //   --signing-key <src>       default yubikey-piv:slot=9c (for a drill: file:/path/to/priv-hex)
 //   --path <dir>              maintainers folder (default .maintainers)
 //   --sign                    actually sign and write; omit for a preview
+//   --no-pq                   skip the PQ half (refused once RELEASE_PQ_PIN names a key: apps would
+//                             refuse the notice). With a release-key binding in <path>/release-pq/
+//                             the notice also gets the hybrid half (pq-suites.md §14): the ML-DSA
+//                             seed is opened from --key-file (PIN + touch) and the YubiKey signs
+//                             the Ed25519 half of M'.
+//   --key-file <f>            the age-encrypted release ML-DSA seed (default ~/.flagship-release/pq-release-key.age)
+//   --identity <f>            age-plugin-yubikey identity stubs (repeatable)
+//   --fake-yubikey <dir>      TEST MODE (see pq-release-key.mjs)
 //
 // <time> is ISO 8601 with a Z or offset, a date (UTC midnight), "now" or +30m / +6h / +7d.
 //
@@ -61,8 +69,11 @@ import {
   canonicalSecurityNotice,
   securityNoticeOutcome,
   securityNoticeText,
+  releasePqPinConfigured,
+  signSecurityNoticePq,
   verifySecurityNotice,
 } from "@flagship/protocol";
+import { DEFAULT_KEY_FILE, loadEd25519Signer, readBindings, vaultFromFlags, withSeed } from "./pq-release-key.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..");
@@ -81,12 +92,12 @@ export class UsageError extends Error {}
 
 const VALUE_FLAGS = new Set([
   "message", "event", "from", "until", "platform", "lock-at", "deprecate-protocol",
-  "advisory", "security-reason", "seq", "signing-key", "path",
+  "advisory", "security-reason", "seq", "signing-key", "path", "key-file", "identity", "fake-yubikey",
 ]);
-const BOOL_FLAGS = new Set(["sign", "supersede-lock", "allow-unshipped", "help"]);
+const BOOL_FLAGS = new Set(["sign", "supersede-lock", "allow-unshipped", "help", "no-pq"]);
 
 export function parseArgs(argv) {
-  const out = { verb: null, platform: [], sign: false, supersedeLock: false, allowUnshipped: false, help: false };
+  const out = { verb: null, platform: [], identities: [], sign: false, supersedeLock: false, allowUnshipped: false, help: false, noPq: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (!a.startsWith("--")) {
@@ -110,6 +121,7 @@ export function parseArgs(argv) {
         if (value === undefined) throw new UsageError(`--${name} needs a value`);
       }
       if (name === "platform") out.platform.push(value);
+      else if (name === "identity") out.identities.push(value);
       else out[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = value;
     } else {
       throw new UsageError(`unknown flag: --${name}`);
@@ -404,15 +416,28 @@ export function describeImpact(body, now) {
 
 // ---- signing + writing -------------------------------------------------------------------
 
+/** Whether this run adds the PQ half, and why (pq-suites.md §14). */
+export function noticePqPlan({ noPq, root, signerPub, pinned = releasePqPinConfigured() }) {
+  const binding = readBindings(root).find((b) => b.role === "release-key" && b.ed25519PubHex === signerPub) ?? null;
+  if (noPq) {
+    if (pinned) return { error: "--no-pq: RELEASE_PQ_PIN names a release key, so every app would refuse a notice without the PQ half" };
+    return { binding: null, describe: "skipped (--no-pq)" };
+  }
+  if (pinned && !binding) return { error: `RELEASE_PQ_PIN is set but ${root}/release-pq/bindings/ holds no binding for the signing key` };
+  if (binding) return { binding, describe: pinned ? "REQUIRED (the pin names the release key)" : "signed (a release-key binding exists; the pin is not set yet)" };
+  return { binding: null, describe: "none (no release PQ key yet: docs/runbooks/pq-release-key.md)" };
+}
+
 /**
  * Sign `body` with `signer` ({ pubKey, sign(bytes) -> hex }), check the
  * result the way an app will, and write current.json + history/<seq>.json.
  */
-export async function signAndWrite({ body, signer, root, authorityKeys }) {
+export async function signAndWrite({ body, signer, root, authorityKeys, addPq = null, pqKeyIds }) {
   const bytes = canonicalOrExplain(body, signer.pubKey);
   const signature = await signer.sign(bytes);
-  const notice = assembleSecurityNotice(body, signer.pubKey, signature);
-  const v = verifySecurityNotice(notice, authorityKeys);
+  let notice = assembleSecurityNotice(body, signer.pubKey, signature);
+  if (addPq) notice = await addPq(notice);
+  const v = verifySecurityNotice(notice, authorityKeys, pqKeyIds);
   if (!v.ok) throw new Error(`the signed notice does not verify as the ca-track authority's (${v.reason}); nothing was written`);
   const dir = noticesDir(root);
   fs.mkdirSync(path.join(dir, "history"), { recursive: true });
@@ -503,6 +528,9 @@ async function main() {
   if (body.reason) out(`  security reason:  ${body.reason}`);
   if (body.message) out(`  message:          ${securityNoticeText(body, (ms) => new Date(ms).toUTCString())}`);
   out(`  signing key:      ${signingKey}`);
+  const pqPlan = noticePqPlan({ noPq: args.noPq, root, signerPub });
+  if (pqPlan.error) errors.push(pqPlan.error);
+  out(`  PQ half:          ${pqPlan.describe ?? "(refused)"}`);
   out(`  signer pubkey:    ${signerPub ?? `(could not read: ${signerNote})`}`);
   out(`  ca authority now: ${authorityKeys.length ? authorityKeys.join(", ") : "(none: the apps would reject every notice)"}`);
   if (signerPub && authorityKeys.length) {
@@ -546,7 +574,19 @@ async function main() {
     pivTransport: lib.cli.defaultEnv.pivTransport,
     pivPin: lib.cli.defaultEnv.pivPin,
   });
-  const notice = await signAndWrite({ body, signer, root, authorityKeys });
+  let addPq = null;
+  if (pqPlan.binding) {
+    const b = pqPlan.binding;
+    addPq = async (n) => {
+      const edSigner = await loadEd25519Signer(signingKey);
+      out("Opening the release ML-DSA key: PIN and touch on a YubiKey.");
+      return withSeed(vaultFromFlags({ fakeYubikey: args.fakeYubikey, identities: args.identities }), path.resolve(args.keyFile ?? DEFAULT_KEY_FILE), (seed) => {
+        out("Signing the PQ half: approve on the YubiKey (PIN, then touch).");
+        return signSecurityNoticePq(n, b, edSigner.sign, seed);
+      });
+    };
+  }
+  const notice = await signAndWrite({ body, signer, root, authorityKeys, addPq });
   try {
     execFileSync("git", ["add", path.join(root, "notices")], { stdio: "inherit" });
   } catch {

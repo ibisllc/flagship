@@ -13,6 +13,8 @@
 // the app decides locally whether the notice is about it.
 
 import { currentAuthority, edVerify, verifyMandateChainFromPin } from "./maintainerTrust.js";
+import { hybridVerify, verifyPqKeyBinding } from "./pqBinding.js";
+import { RELEASE_PQ_KEY_IDS } from "./releasePqPin.js";
 import { BAKED_PIN } from "./serverTrust.js";
 import { controlApex } from "./apex.js";
 import { clientIdentity } from "./buildInfo.js";
@@ -159,6 +161,9 @@ export function parseSecurityNotice(v) {
   } catch {
     return null;
   }
+  const parsedPq = parsePq(v.pq);
+  if (!parsedPq.ok) return null;
+  const pq = parsedPq.pq;
   const platforms = {};
   for (const [n, m] of platformEntries(v.platforms)) platforms[n] = m;
   return {
@@ -177,11 +182,60 @@ export function parseSecurityNotice(v) {
     message: v.message,
     signedBy: v.signedBy,
     signature: v.signature,
+    ...(pq ? { pq } : {}),
   };
 }
 
-/** @returns {Promise<{ok:true}|{ok:false, reason:"malformed"|"unauthorized-signer"|"signature-invalid"}>} */
-export async function verifySecurityNotice(n, authorityKeys) {
+const PQ_SIG_HEX = /^[0-9a-f]{6746}$/;
+
+// The PQ half's shape (pq-suites.md §14): { binding, signature }, nothing else.
+function parsePq(q) {
+  if (q === undefined) return { ok: true, pq: undefined };
+  if (!q || typeof q !== "object" || Array.isArray(q) || Object.keys(q).sort().join(",") !== "binding,signature") return { ok: false };
+  if (typeof q.signature !== "string" || !PQ_SIG_HEX.test(q.signature)) return { ok: false };
+  const b = q.binding;
+  if (!b || typeof b !== "object" || Array.isArray(b)) return { ok: false };
+  if (Object.keys(b).sort().join(",") !== "ed25519PubHex,issuedAt,mldsaPubHex,role,signature,subjectId,v" || b.v !== 1) return { ok: false };
+  for (const k of ["ed25519PubHex", "mldsaPubHex", "role", "signature", "subjectId"]) if (typeof b[k] !== "string") return { ok: false };
+  if (!/^[0-9a-f]{64}$/.test(b.ed25519PubHex) || !/^[0-9a-f]{3904}$/.test(b.mldsaPubHex) || !Number.isSafeInteger(b.issuedAt) || b.issuedAt < 0) return { ok: false };
+  return { ok: true, pq: { binding: { ...b }, signature: q.signature } };
+}
+
+function hexOf(b) {
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+async function releaseKeyId(edHex, mlHex) {
+  const pk = Uint8Array.from((edHex + mlHex).match(/../g).map((h) => parseInt(h, 16)));
+  const tag = new TextEncoder().encode("flagship/pq-key-id/v1");
+  const input = new Uint8Array(1 + tag.length + 4 + pk.length);
+  input[0] = tag.length;
+  input.set(tag, 1);
+  input.set([0x00, 0x02, (pk.length >> 8) & 0xff, pk.length & 0xff], 1 + tag.length);
+  input.set(pk, 1 + tag.length + 4);
+  return hexOf(new Uint8Array(await crypto.subtle.digest("SHA-512", input)).subarray(0, 32));
+}
+
+// With the pin empty a notice without the PQ half passes as before; one that carries it must
+// still verify. With the pin set it is required, under a pinned key bound to signedBy.
+async function verifyNoticePq(n, bytes, pqKeyIds) {
+  if (!n.pq) return pqKeyIds.length ? { ok: false, reason: "pq-missing" } : { ok: true };
+  const b = n.pq.binding;
+  if (pqKeyIds.length && !pqKeyIds.includes(await releaseKeyId(b.ed25519PubHex, b.mldsaPubHex))) {
+    return { ok: false, reason: "pq-key-not-pinned" };
+  }
+  try {
+    const vb = verifyPqKeyBinding(b, { role: "release-key", subjectId: "flagship-release", ed25519PubHex: n.signedBy, now: Number.MAX_SAFE_INTEGER });
+    const sig = Uint8Array.from(n.pq.signature.match(/../g).map((h) => parseInt(h, 16)));
+    if (hybridVerify(vb.hybridPublicKey, TAG_SECURITY_NOTICE, bytes, sig)) return { ok: true };
+  } catch {
+    /* falls through */
+  }
+  return { ok: false, reason: "pq-signature-invalid" };
+}
+
+/** @returns {Promise<{ok:true}|{ok:false, reason:"malformed"|"unauthorized-signer"|"signature-invalid"|"pq-missing"|"pq-key-not-pinned"|"pq-signature-invalid"}>} */
+export async function verifySecurityNotice(n, authorityKeys, pqKeyIds = RELEASE_PQ_KEY_IDS) {
   let bytes;
   try {
     bytes = canonicalSecurityNotice(n, n.signedBy);
@@ -192,9 +246,8 @@ export async function verifySecurityNotice(n, authorityKeys) {
   if (!Array.isArray(authorityKeys) || !authorityKeys.includes(n.signedBy)) {
     return { ok: false, reason: "unauthorized-signer" };
   }
-  return (await edVerify(n.signature, bytes, n.signedBy))
-    ? { ok: true }
-    : { ok: false, reason: "signature-invalid" };
+  if (!(await edVerify(n.signature, bytes, n.signedBy))) return { ok: false, reason: "signature-invalid" };
+  return verifyNoticePq(n, bytes, pqKeyIds);
 }
 
 /** Is this client below the notice's minimum for its platform? (false when the platform isn't listed.) */
@@ -229,11 +282,11 @@ export function securityNoticeOutcome(n, c, now) {
  * malformed, not signed by the authority, or not newer than the highest seq
  * verified is dropped and the store is returned unchanged.
  */
-export async function acceptSecurityNotice(store, candidate, authorityKeys) {
+export async function acceptSecurityNotice(store, candidate, authorityKeys, pqKeyIds = RELEASE_PQ_KEY_IDS) {
   if (candidate === null || candidate === undefined) return { store, refused: null };
   const n = parseSecurityNotice(candidate);
   if (!n) return { store, refused: "malformed" };
-  const v = await verifySecurityNotice(n, authorityKeys);
+  const v = await verifySecurityNotice(n, authorityKeys, pqKeyIds);
   if (!v.ok) return { store, refused: v.reason };
   if (n.seq <= store.highestSeq) return { store, refused: "stale" };
   return { store: { highestSeq: n.seq, notice: n }, refused: null };
