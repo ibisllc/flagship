@@ -12,6 +12,7 @@
 import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signServerOrder, signUninstallService, signVoiciNameOrder, type ServerOrder, type UninstallServiceRequest, type VoiciNameOrder } from "@flagship/protocol";
+import { depositCgk, waitGossiping } from "../lib/cgk.js";
 import { pair, pods } from "../lib/fleet.js";
 import { CONTROL, SERVICES, assert, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import { installWhoami } from "./gating.js";
@@ -105,6 +106,13 @@ export const namedLinks: Group = {
     });
 
     // ---- the canonical address ----
+    // The election runs in each box's gossip loop, which needs the cloud gossip key.
+    const gossiping = await rec.check("both boxes get the cloud gossip key", async () => {
+      await depositCgk(A, [b1, b2]);
+      assert(await waitGossiping([b1, b2]), "a box never answered /api/leads with gossipActive:true");
+      return "gossipActive on both";
+    });
+    if (!gossiping) return;
     const stkOf = async (fqdn: string) => String((await pods(A.username)).find((p) => p.serverDomain === fqdn)?.identityPubKey ?? "").toLowerCase();
     const [s1, s2] = [await pair(A, b1), await pair(A, b2)];
     void s1;

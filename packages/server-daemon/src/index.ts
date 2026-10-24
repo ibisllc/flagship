@@ -335,7 +335,7 @@ import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { AccessJournal } from "./accessJournal.js";
 import { buildAccessSync, type AccessPeers, type AccessSync } from "./accessSync.js";
-import { buildPodsPeers, type PodsPeers } from "./accessPeers.js";
+import { buildPodsPeers, peerSiblings, type PodsPeers } from "./accessPeers.js";
 import { BoxReadToken } from "./boxReadToken.js";
 
 /**
@@ -2141,6 +2141,9 @@ async function main(): Promise<void> {
   const gossipLoop = await (async () => {
     if (!cfg) return null;
     try {
+      // The name the relay routes and the box resolves (`slug`, or `slug--author` for another
+      // author's app). Siblings must be labelled the same way or the election splits one app in two.
+      const canonicalLabel = (a: { creator: string; slug: string }) => deriveUrlFragment(composeServiceId(a.creator, a.slug), cfg.userId);
       const selfStkHex = bytesToHexLocal(identityKeypair.publicKey);
       // Cert pre-warm seam: when this box becomes the route lead for a tier-2
       // `<slug>.<user>` meta-URL (gossip election round AND the route-nudge
@@ -2160,28 +2163,16 @@ async function main(): Promise<void> {
         birthDate: (await readAuthCodeBirthDate()) ?? Date.now(),
         urlController: runtime.urlController,
         ...(certPrewarm ? { certPrewarm } : {}),
-        // The canonical label (`slug`, or `slug--author` for another author's app): the name the relay
-        // routes and the box resolves, so the box that claims it is the one that serves the app.
-        listServiceSlugs: () =>
-          servicePlatformRefForServer.current?.list().map((a) => deriveUrlFragment(composeServiceId(a.creator, a.slug), cfg.userId)) ?? [],
+        listServiceSlugs: () => servicePlatformRefForServer.current?.list().map(canonicalLabel) ?? [],
         ...(serverOrder ? { serverOrder } : {}),
         // Gossip frames have never reached a sibling live, so the other
         // servers are also read from .com's list and asked directly: the same
         // view the one-list-per-app sync already leads by.
         extraSiblings: () => {
           const peers = podsPeersRef.current;
-          const apps = servicePlatformRefForServer.current?.list() ?? [];
           if (!peers) return [];
-          const slugOf = new Map(apps.map((a) => [a.serviceId, a.slug]));
-          return peers.peerRunners().map((r) => ({
-            id: r.domain,
-            domain: r.domain,
-            stkHex: r.stkHex,
-            birthDate: 0,
-            orderRank: serverOrder?.rankOf(r.stkHex) ?? null,
-            liveness: "live" as const,
-            services: r.apps.map((id) => slugOf.get(id)).filter((x): x is string => !!x),
-          }));
+          const labels = new Map((servicePlatformRefForServer.current?.list() ?? []).map((a) => [a.serviceId, canonicalLabel(a)]));
+          return peerSiblings(peers.peerRunners(), (id) => labels.get(id), (stk) => serverOrder?.rankOf(stk) ?? null);
         },
         // The zone this box lives in (`<server>.<user>.<apex>`): the gym's
         // boxes are under gym.flagship.services, so broadcast and the
