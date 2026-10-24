@@ -6,7 +6,8 @@
 // writes what it read on stdin to a file so the test can compare it: on a box
 // the key only ever passes through the pipe.
 import { execFileSync, spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { accessSync, chmodSync, constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:https";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -37,16 +38,55 @@ const owner = kp(0x07);
 const stranger = kp(0x0c);
 const LUKS_KEY = Uint8Array.from({ length: 64 }, (_, i) => (i * 13 + 5) & 0xff);
 
+/**
+ * The first of `names` that runs, as an absolute path: the stubs put their own directory first
+ * on PATH, so a stub that exec'd a bare `openssl` would exec itself forever (the Linux hang: on
+ * a Mac the Homebrew path came first and hid it).
+ */
 function findTool(names: string[]): string {
   for (const c of names) {
+    const abs = c.includes("/")
+      ? c
+      : (process.env.PATH ?? "").split(":").map((d) => join(d, c)).find((p) => {
+          try {
+            accessSync(p, constants.X_OK);
+            return true;
+          } catch {
+            return false;
+          }
+        });
+    if (!abs) continue;
     try {
-      execFileSync(c, ["version"], { stdio: "ignore" });
-      return c;
+      execFileSync(abs, ["version"], { stdio: "ignore" });
+      return abs;
     } catch {
       /* next */
     }
   }
   throw new Error(`none of ${names.join(", ")} found`);
+}
+
+/**
+ * The Go helper, built once per source tree: the build is the slow part of this file's setup
+ * (tens of seconds on a loaded machine), and its output depends only on the helper's sources.
+ */
+function cachedHelper(go: string, into: string): void {
+  const src = join(repoRoot, "installer", "unseal-helper");
+  const h = createHash("sha256");
+  for (const f of readdirSync(src).sort()) {
+    if (!/\.(go|mod|sum)$/.test(f)) continue;
+    h.update(f).update(readFileSync(join(src, f)));
+  }
+  h.update(execFileSync(go, ["version"], { encoding: "utf8" }));
+  const dir = join(repoRoot, "node_modules", ".cache", "flagship-unseal-test");
+  const cached = join(dir, h.digest("hex").slice(0, 24));
+  if (!existsSync(cached)) {
+    mkdirSync(dir, { recursive: true });
+    execFileSync(go, ["build", "-o", `${cached}.tmp`, "."], { cwd: src, stdio: "pipe", env: { ...process.env, CGO_ENABLED: "0" } });
+    renameSync(`${cached}.tmp`, cached);
+  }
+  copyFileSync(cached, into);
+  chmodSync(into, 0o755);
 }
 
 let work: string;
@@ -93,11 +133,7 @@ beforeAll(async () => {
   opensslBin = findTool(["/opt/homebrew/opt/openssl@3/bin/openssl", "openssl"]);
   work = mkdtempSync(join(tmpdir(), "flagship-premount-"));
   helperBin = join(work, "flagship-unseal.real");
-  execFileSync(go, ["build", "-o", helperBin, "."], {
-    cwd: join(repoRoot, "installer", "unseal-helper"),
-    stdio: "pipe",
-    env: { ...process.env, CGO_ENABLED: "0" },
-  });
+  cachedHelper(go, helperBin);
   const certDir = join(work, "tls");
   mkdirSync(certDir);
   execFileSync(opensslBin, [
