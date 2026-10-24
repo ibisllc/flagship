@@ -74,6 +74,7 @@ public enum GymSweepSeams {
         settings(args, app, mocks)
         build(args, app, operations, mocks)
         share(args, app, mocks)
+        security(args, app, mocks)
         onboarding(args, app, mocks)
     }
 
