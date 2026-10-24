@@ -470,5 +470,10 @@
   "sefe57fd6f9": "Las primeras publicaciones llegarán junto con el lanzamiento de la Beta 0.2. Hasta entonces, la fuente de verdad sobre lo que construimos es la <1>documentación</1>, el <2>modelo de seguridad</2> y la página de <3>código abierto</3>.",
   "s8f7b9ab588": "Borradores",
   "seb2f4750ac": "Publicamos cuando tenemos algo concreto que decir. Sigue el feed RSS.",
-  "sba026addff": "Los investigadores que nos informaron de una vulnerabilidad, y los commits que cerraron cada informe, están en el <1>cuadro de honor</1>."
+  "sba026addff": "Los investigadores que nos informaron de una vulnerabilidad, y los commits que cerraron cada informe, están en el <1>cuadro de honor</1>.",
+  "s1cf830b48e": "Buscar en el directorio",
+  "s8f7ae3923b": "Cada adaptación publicada actualmente, por proyecto: dónde está, su licencia, el resumen (digest) de cada adaptador, el commit original sobre el que se hizo y un estado honesto (<1>publicada</1>, o <2>disputada</2> cuando fallaron más instalaciones de las que se confirmaron). Es el archivo <3><4>directory.json</4></3> del repositorio público. No hay recuentos de instalaciones ni nada sobre quién envió o instaló una, y un estado es un registro, no una garantía de seguridad. Los mantenedores pueden hacer innecesaria una adaptación publicando su propio <5>flagship.app.json</5>.",
+  "sf885433e9b": "Buscar en el directorio de adaptadores",
+  "s69437d5481": "Proyecto, host o licencia",
+  "s8897545066": "Cargando el directorio…"
 }

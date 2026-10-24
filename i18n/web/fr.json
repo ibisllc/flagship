@@ -470,5 +470,10 @@
   "sefe57fd6f9": "Les premiers articles arriveront avec le lancement de la bêta 0.2. D’ici là, la source de vérité sur ce que nous construisons, ce sont les <1>docs</1>, le <2>modèle de sécurité</2> et la page <3>open source</3>.",
   "s8f7b9ab588": "Brouillons",
   "seb2f4750ac": "Nous publions quand nous avons quelque chose de concret à dire. Suivez le flux RSS.",
-  "sba026addff": "Les chercheurs qui nous ont signalé une vulnérabilité, et les commits qui ont corrigé chaque signalement, figurent au <1>tableau d’honneur</1>."
+  "sba026addff": "Les chercheurs qui nous ont signalé une vulnérabilité, et les commits qui ont corrigé chaque signalement, figurent au <1>tableau d’honneur</1>.",
+  "s1cf830b48e": "Rechercher dans l'annuaire",
+  "s8f7ae3923b": "Chaque adaptation publiée actuellement, par projet : où elle se trouve, sa licence, l'empreinte (digest) de chaque adaptateur, le commit amont sur lequel elle a été faite et un statut honnête (<1>publiée</1>, ou <2>contestée</2> quand plus d'installations ont échoué qu'elles n'ont été confirmées). C'est le fichier <3><4>directory.json</4></3> du dépôt public. Il n'y a aucun nombre d'installations ni rien sur qui en a envoyé ou installé une, et un statut est un constat, pas une garantie de sécurité. Les mainteneurs peuvent rendre une adaptation inutile en publiant leur propre <5>flagship.app.json</5>.",
+  "sf885433e9b": "Rechercher dans l'annuaire des adaptateurs",
+  "s69437d5481": "Projet, hôte ou licence",
+  "s8897545066": "Chargement de l'annuaire…"
 }
