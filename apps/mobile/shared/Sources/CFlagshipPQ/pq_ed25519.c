@@ -108,16 +108,6 @@ static void M(gf o, const gf a, const gf b) {
 
 static void S(gf o, const gf a) { M(o, a, a); }
 
-static void inv25519(gf o, const gf i) {
-  gf c;
-  set25519(c, i);
-  for (int a = 253; a >= 0; a--) {
-    S(c, c);
-    if (a != 2 && a != 4) M(c, c, i);
-  }
-  set25519(o, c);
-}
-
 static void pow2523(gf o, const gf i) {
   gf c;
   set25519(c, i);
