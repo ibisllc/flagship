@@ -47,6 +47,8 @@ import { tr } from "./i18n.js";
 /** The screens socket the box sends `access-request` events on. */
 export const ACCESS_EVENTS_PATH = "/api/screens/events";
 export const ACCESS_EVENT = "access-request";
+/** The DOM event other screens-socket events are passed on as (`detail.type`). */
+export const SCREENS_EVENT = "flagship:screens-event";
 /** A request put off with Not now (or one that failed) comes back after this. */
 export const ACCESS_SNOOZE_MS = 24 * 60 * 60 * 1000;
 /** Focus and navigation re-check at most this often; pushes and socket
@@ -93,6 +95,7 @@ export function createAccessAlertController({
   now = Date.now,
   snoozeMs = ACCESS_SNOOZE_MS,
   minIntervalMs = ACCESS_RECHECK_MS,
+  keyOf = accessRequestKey,
 }) {
   const snoozed = new Map();
   let running = false;
@@ -109,7 +112,7 @@ export function createAccessAlertController({
     }
     for (const r of requests) {
       if (!isActive()) return;
-      const key = accessRequestKey(r);
+      const key = keyOf(r);
       const until = snoozed.get(key);
       if (until !== undefined && until > now()) continue;
       const outcome = await handle(r);
@@ -191,6 +194,8 @@ export function createAccessEventSocket({
   maxFailures = 3,
   // Turns the stable address `url()` names into the one-time address to connect to (a ticket).
   resolveUrl = null,
+  // Any other event type the box sends on the same socket (e.g. `chat-request`).
+  onOther = () => {},
 }) {
   let ws = null;
   let opening = false;
@@ -244,7 +249,9 @@ export function createAccessEventSocket({
       failures = 0;
     });
     s.addEventListener("message", (ev) => {
-      if (socketEventType(ev.data) === ACCESS_EVENT) onEvent();
+      const type = socketEventType(ev.data);
+      if (type === ACCESS_EVENT) onEvent();
+      else if (type) onOther(type);
     });
     s.addEventListener("close", () => {
       if (ws !== s) return;
@@ -454,6 +461,7 @@ export function startAccessAlerts({ isUnlocked }) {
     url: () => (isActive() ? screensSocketUrl() : null),
     resolveUrl: () => wsTicketUrl(ACCESS_EVENTS_PATH),
     onEvent: () => void controller.check({ force: true }),
+    onOther: (type) => document.dispatchEvent(new CustomEvent(SCREENS_EVENT, { detail: { type } })),
   });
   const poke = (force = false) => {
     socket.ensure();

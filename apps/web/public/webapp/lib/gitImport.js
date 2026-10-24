@@ -113,7 +113,8 @@ export function adaptAlreadyRunning(e) {
  * `follow()` polls a background run (see `followAdapt`). An older box answers
  * with the finished result; a 409 means the box already started the AI
  * itself (a shared adaptation crashed and it had a key), so follow that run.
- * Other failures (a 503 included) are thrown for the caller.
+ * A `start()` that resolves `{cancelled: true}` (the owner declined the AI
+ * cost) ends here with nothing running. Other failures (a 503 included) are thrown for the caller.
  */
 export async function startAndFollowAdapt({ start, follow }) {
   let r;
@@ -124,6 +125,7 @@ export async function startAndFollowAdapt({ start, follow }) {
     if (adaptAlreadyRunning(e)) return follow();
     throw e;
   }
+  if (r?.cancelled === true) return { phase: "cancelled", cancelled: true };
   return r?.started === true ? follow() : adaptFinished(r || {});
 }
 

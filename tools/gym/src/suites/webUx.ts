@@ -271,4 +271,60 @@ export const WEB_UX: readonly Scenario[] = [
       dimension: "D3",
     },
   ),
+  webTotal(
+    "web-ux-chat-request-answer",
+    "A held app chat request shows in a sheet (the sender is a claim, with its phrase and count) and under Activity; Allow and Deny are owner-signed flagship/chat-approval/v1 answers, an outgoing request offers no Always allow, and Not now leaves it waiting in Activity.",
+    "gym ux chat requests a request shows in a sheet and under Activity, and Allow and Deny send signed answers",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on an admin device; the box holds an incoming and an outgoing chat request." },
+        { kind: "tap", describe: "Allow the incoming one, Deny the outgoing one; a socket event brings a third: Not now, then Deny it in Activity.", handle: "[data-chat-sheet]" },
+      ],
+      assertions: [
+        { describe: "Sheet", handle: "[data-chat-sheet]", expect: "present" },
+        { describe: "Activity heading", handle: "#activity-chat-heading", expect: "text", text: "App chat requests" },
+      ],
+      screenshots: [shot("chat-request-sheet", "The chat request sheet."), shot("chat-request-activity", "A waiting request under Activity.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-chat-always-revoke",
+    "Always allow (signed) says it lets any remote machine in; Activity lists the app under Apps that take chats without asking, and Ask me each time ends it.",
+    "gym ux chat requests Always allow is listed under Activity and Ask me each time ends it",
+    {
+      steps: [
+        { kind: "tap", describe: "Always allow in the sheet.", handle: "[data-choice=always]" },
+        { kind: "tap", describe: "Activity, then Ask me each time.", handle: "[data-chat-revoke]" },
+      ],
+      assertions: [{ describe: "Always row", handle: "[data-chat-always]", expect: "present" }],
+      screenshots: [shot("chat-always-listed", "An Always allow under Activity.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-ai-consent-continue",
+    "An AI adapt answered 428 ai-consent shows the token range and who pays before anything runs; Continue resends it once with a signed flagship/ai-repair-consent/v1 covering the estimate.",
+    "gym ux ai consent an adapt shows the estimate first and Continue resends it with a signed consent",
+    {
+      steps: [
+        { kind: "tap", describe: "Reopen a not-fit git build and tap Use AI to adapt and deploy.", handle: "#build-git-adapt" },
+        { kind: "tap", describe: "Continue.", handle: "[data-choice=continue]" },
+      ],
+      assertions: [{ describe: "Consent sheet", handle: "[data-ai-consent]", expect: "text", text: "This uses AI that costs money" }],
+      screenshots: [shot("ai-consent-sheet", "The AI cost estimate.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-ai-consent-cancel",
+    "Cancel on the AI cost estimate sends nothing more and follows nothing; the adapt stays on offer.",
+    "gym ux ai consent Cancel sends nothing more and offers the adapt again",
+    {
+      steps: [{ kind: "tap", describe: "Use AI to adapt and deploy, then Cancel.", handle: "[data-choice=cancel]" }],
+      assertions: [{ describe: "Adapt offered", handle: "#build-git-adapt", expect: "present" }],
+      screenshots: [shot("ai-consent-cancelled", "The verdict after Cancel.")],
+      dimension: "D4",
+    },
+  ),
 ];
