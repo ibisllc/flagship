@@ -109,6 +109,7 @@ import { KeydClient } from "@flagship/keyd";
 import { keydTlsKeyd } from "./keydAsync.js";
 import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
+import { bootArchV2, rustPathHealthy } from "./archV2Boot.js";
 
 /** Either custodian: the keys in this process, or in flagship-keyd. */
 import { AuthorityHub, GrantIndex, OperationLedger, TokenFamily } from "./authority/index.js";
@@ -705,6 +706,16 @@ async function main(): Promise<void> {
     console.log(`[daemon] keys are held by flagship-keyd (box key ${Buffer.from(keyd.boxPublicKey()).toString("hex").slice(0, 16)}…)`);
   }
 
+  // ---- Architecture v2 path (engine-and-rust-path.md): engine, then the Rust units ----
+  // Before anything starts a container: the engine is chosen (and Docker moved to Podman once,
+  // when the box's switch asks for it), then keyd/broker/core are put on the Rust binaries.
+  const archV2 = await bootArchV2({
+    repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+    cmd: realCommandRunnerStatic,
+    run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+    log: (m) => console.log(m),
+  });
+
   // The TLS frontend goes in once keyd is answering and this release carries it.
   if (keyd && !process.env.FLAGSHIP_TLS_UPSTREAM) {
     const t = await installTlsd({
@@ -911,7 +922,8 @@ async function main(): Promise<void> {
     swapper: selfUpdateSwapper,
     // Generous window: first boot after an update does a full ACME + tunnel
     // bring-up; a transient network outage shouldn't burn a boot attempt.
-    awaitHealthy: () => selfUpdateHealth.whenHealthy(10 * 60_000),
+    // A release whose Rust binaries no longer run (keyd/broker/core fell back) is not healthy.
+    awaitHealthy: async () => (await selfUpdateHealth.whenHealthy(10 * 60_000)) && (await rustPathHealthy(archV2.config, (m) => console.log(m))),
     requestRestart: () => {
       console.log("[self-update] restarting (health gate)");
       process.exit(0);

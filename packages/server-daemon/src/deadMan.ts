@@ -1,3 +1,4 @@
+import { brokerActive, brokerCall } from "./rustStack/brokerClient.js";
 import { execFile } from "node:child_process";
 import {
   verifyDeadManAffirmation,
@@ -74,9 +75,19 @@ export class BootUnlockModeSuppressor implements AutoUnlockSuppressor {
 
 /** Default power runner: spawn systemctl. NEVER used in tests. */
 export class SystemctlPowerRunner implements HostPowerRunner {
-  power(mode: "off" | "restart"): Promise<void> {
+  async power(mode: "off" | "restart"): Promise<void> {
     const verb = mode === "off" ? "poweroff" : "reboot";
-    return new Promise<void>((resolve, reject) => {
+    // On the Rust path the broker owns host power; if it cannot be reached the daemon (still
+    // root) does it itself, so a lock or dead-man lapse never fails for want of the broker.
+    if (brokerActive()) {
+      try {
+        await brokerCall("power", { action: verb });
+        return;
+      } catch (e) {
+        console.warn(`[dead-man] the broker did not ${verb} the box (${(e as Error).message}); doing it directly`);
+      }
+    }
+    return await new Promise<void>((resolve, reject) => {
       execFile("systemctl", [verb], (err) => {
         if (err) reject(err);
         else resolve();
