@@ -51,6 +51,45 @@ public struct WatchBootKeyStore {
     }
 }
 
+/// The one source of the box key the watch path trusts for a server: trust on first use. A real box's
+/// key is random (`install-helper gen-identity`), so nothing on the phone can derive it; the key `.com`'s
+/// directory lists when the owner first turns a server's watch start-up on is recorded here and never
+/// replaced silently. A different key later is refused until the owner turns the switch off (which forgets
+/// it) and on again. Interim, pending the owner's decision on where server keys are pinned.
+public struct WatchBootStkPins {
+    private static let key = "flagship.watchBootKeys.pinnedStk"
+    private let defaults: UserDefaults
+
+    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+
+    private var all: [String: String] {
+        get { defaults.dictionary(forKey: Self.key) as? [String: String] ?? [:] }
+        nonmutating set { defaults.set(newValue, forKey: Self.key) }
+    }
+
+    public func pinnedStk(_ serverDomain: String) -> Data? {
+        all[serverDomain.lowercased()].flatMap(HexUtil.decode).flatMap { $0.count == 32 ? $0 : nil }
+    }
+
+    /// Record the first key seen for the server. False when a different key is already recorded.
+    @discardableResult
+    public func record(_ stk: Data, for serverDomain: String) -> Bool {
+        guard stk.count == 32 else { return false }
+        if let pinned = pinnedStk(serverDomain) { return pinned == stk }
+        var m = all
+        m[serverDomain.lowercased()] = HexUtil.encode(stk)
+        all = m
+        return true
+    }
+
+    /// The owner's explicit re-trust: the next first use records whatever key the server then has.
+    public func forget(_ serverDomain: String) {
+        var m = all
+        m[serverDomain.lowercased()] = nil
+        all = m
+    }
+}
+
 /// Owner side of option (a): put a copy of one server's disk key on the boot worker, sealed to the watch's
 /// boot-only key and attested by the account key, or take every copy for the server away.
 @MainActor
@@ -58,16 +97,23 @@ public struct WatchBootKeyEnroller {
     public enum Failure: Error, Equatable, LocalizedError {
         case notEnrolled
         case delegateExpired
+        /// The directory lists a different key than the one recorded for this server.
+        case keyChanged
+        case notListed
 
         public var errorDescription: String? {
             switch self {
             case .notEnrolled: return String(localized: "Turn on Approve from watch in Account security first.")
             case .delegateExpired: return String(localized: "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.")
+            case .keyChanged: return String(localized: "This server's key changed since you turned this on. If you reinstalled it, turn this off and on again to trust the new key.")
+            case .notListed: return String(localized: "This server isn't registered to your account.")
             }
         }
     }
 
     let mailbox: SecretMailboxClient
+    let username: String
+    let pins: WatchBootStkPins
     let irk: () async throws -> Curve25519.Signing.PrivateKey
     let unsealSeeds: (String) async throws -> [Data]
     let delegatePub: () -> Data?
@@ -77,6 +123,8 @@ public struct WatchBootKeyEnroller {
 
     public init(
         mailbox: SecretMailboxClient,
+        username: String,
+        pins: WatchBootStkPins = WatchBootStkPins(),
         irk: @escaping () async throws -> Curve25519.Signing.PrivateKey,
         unsealSeeds: @escaping (String) async throws -> [Data],
         delegatePub: @escaping () -> Data?,
@@ -85,6 +133,8 @@ public struct WatchBootKeyEnroller {
         nonceGen: @escaping () -> Data = { BootAuth.randomNonce() }
     ) {
         self.mailbox = mailbox
+        self.username = username
+        self.pins = pins
         self.irk = irk
         self.unsealSeeds = unsealSeeds
         self.delegatePub = delegatePub
@@ -102,6 +152,11 @@ public struct WatchBootKeyEnroller {
         let expiresAt = min(delegateExpiresAt, issuedAt + WatchBootDelegate.maxMs)
         guard expiresAt > issuedAt else { throw Failure.delegateExpired }
         let decrypt = try bootPub()
+        // Trust on first use: the key listed now is recorded, and a later different one is refused.
+        let directory = try await mailbox.fetchPods(username: username)
+        guard let listedHex = directory.identityPubKey(forServerDomain: serverDomain),
+              let listed = HexUtil.decode(listedHex), listed.count == 32 else { throw Failure.notListed }
+        guard pins.record(listed, for: serverDomain) else { throw Failure.keyChanged }
         let sealed: SealedLuksKeyResponse
         do {
             sealed = try await mailbox.fetchSealedLuksKey(serverDomain: serverDomain)

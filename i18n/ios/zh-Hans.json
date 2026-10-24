@@ -2602,5 +2602,6 @@
   "Turn on Approve from watch in Account security first.": "请先在“账户安全”中开启“通过手表批准”。",
   "Your watch's approval has ended. Turn Approve from watch off and on again in Account security.": "你手表的批准已过期。请在“账户安全”中关闭并重新开启“通过手表批准”。",
   "This server's key doesn't match. Approve its start-up from your phone.": "此服务器的密钥不匹配。请从你的手机批准其启动。",
-  "This start-up request isn't signed by your server. Approve it from your phone.": "此启动请求未经你的服务器签名。请从你的手机批准。"
+  "This start-up request isn't signed by your server. Approve it from your phone.": "此启动请求未经你的服务器签名。请从你的手机批准。",
+  "This server's key changed since you turned this on. If you reinstalled it, turn this off and on again to trust the new key.": "自你开启此项以来，此服务器的密钥已更改。如果你重新安装了它，请关闭后再开启，以信任新密钥。"
 }
