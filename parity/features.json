@@ -778,6 +778,16 @@
         "watch": { "status": "present", "reason": "The watch asks; the iPhone answers from the watch's own copy without the account key.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/WatchApprovalResponder.swift", "lockedApprove"], ["apps/mobile/shared/Sources/FlagshipCore/WatchBootKeyFlows.swift", "struct WatchBootApprover"]] },
         "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
       }
+    },
+    {
+      "id": "first-contact",
+      "title": "First contact (docs/first-contact.md): a fresh enrollmentKeyHex in every recipe, kept device-local until the pin; one pin store (pinnedStk) replacing every derived or .com-listed server key; the first blessing checks the enrollment proof (refused: 'This server was not built from your recipe. Do not approve it.'), shows the code computed locally above Approve (or 'Confirmed by Studio'), pins, and signs flagship/server-wildcard-grant/v1 over the pinned key; any other key is refused ('This server's key changed …'); grant upkeep on granted:false",
+      "ref": "android",
+      "surfaces": {
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/FirstContact.kt", "class FirstContact"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerKeyPins.kt", "fun pinnedStk"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/FirstContactViews.kt", "fun ServerCodeBox"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/WildcardGrantUpkeep.kt", "class WildcardGrantUpkeep"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/InstallBlobWire.kt", "val enrollmentKeyHex"]] },
+        "ios": { "status": "missing", "reason": "Built on its own branch (ux-fc-ios).", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/Enrollment.swift", "func serverCode"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerCodeBox.swift", "struct ServerCodeBox"]] },
+        "web": { "status": "missing", "reason": "Built on its own branch (ux-fc-web).", "anchors": [["apps/web/public/webapp/lib/enrollment.js", "serverCode"], ["apps/web/public/webapp/lib/firstContact.js", "pinnedStk"]] }
+      }
     }
   ]
 }

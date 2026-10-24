@@ -1,6 +1,7 @@
 /**
  * Android gym scenarios: the 0.3 security screens. App chat requests (N08), AI-run consent (N12)
- * and the watch boot key (option (a), docs/watch-boot-approval-without-unlock.md). Each `harness`
+ * the watch boot key (option (a), docs/watch-boot-approval-without-unlock.md) and first contact
+ * (docs/first-contact.md). Each `harness`
  * is a method of GymUxScreensTest (apps/mobile/android/app/src/androidTest). NO BACKEND: the mock
  * box and `.com` check every signature the way the real ones do on an admin-pinned account.
  */
@@ -91,6 +92,47 @@ export const ANDROID_UX: readonly Scenario[] = [
       ],
       assertions: [{ describe: "Off again", handle: "watch-boot-until-home", expect: "absent" }],
       screenshots: [shot("watch-boot-off", "The per-server switches."), shot("watch-boot-on", "Home on.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-first-contact-code",
+    "First contact: a server this phone created sends its entitlement request with the recipe's enrollment proof; Activity → Server approvals shows the six-digit code computed on the phone from that key directly above Approve ('If your machine has a monitor, it is showing this code: …'); Approve pins the key, deletes the secret and signs flagship/server-wildcard-grant/v1 over the pinned key with the admin root.",
+    `${PKG}.GymUxScreensTest#firstContactShowsTheCodeThenPinsAndSignsTheGrant`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=activity as an admin device; the mock .com holds a signed entitlement request with a valid proof." },
+        { kind: "tap", describe: "Open Server approvals.", handle: "activity-section-approvals" },
+        { kind: "assert", describe: "The code box above Approve.", handle: "server-code" },
+        { kind: "tap", describe: "Approve.", handle: "secret-request-approve" },
+      ],
+      assertions: [{ describe: "The code sentence", handle: "server-code", expect: "text", text: "If your machine has a monitor, it is showing this code:" }],
+      screenshots: [shot("first-contact-code", "The code box above Approve.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-first-contact-not-from-recipe",
+    "First contact refused: a server whose first request lacks the enrollment proof, on the phone holding the recipe's secret, shows 'This server was not built from your recipe. Do not approve it.' and no Approve; nothing is pinned.",
+    `${PKG}.GymUxScreensTest#firstContactRefusesAServerNotBuiltFromTheRecipe`,
+    {
+      steps: [{ kind: "tap", describe: "Open Server approvals.", handle: "activity-section-approvals" }],
+      assertions: [
+        { describe: "The refusal", handle: "first-contact-refusal", expect: "text", text: "This server was not built from your recipe. Do not approve it." },
+        { describe: "No Approve", handle: "secret-request-approve", expect: "absent" },
+      ],
+      screenshots: [shot("first-contact-refused", "The refused request.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-first-contact-key-changed",
+    "After the pin: a request naming another key than the pinned one is refused and shown: 'This server's key changed. If you did not rebuild it, do not approve anything for it.' The pin stays.",
+    `${PKG}.GymUxScreensTest#firstContactRefusesAChangedKey`,
+    {
+      steps: [{ kind: "tap", describe: "Open Server approvals.", handle: "activity-section-approvals" }],
+      assertions: [{ describe: "The refusal", handle: "first-contact-refusal", expect: "text", text: "This server's key changed." }],
+      screenshots: [shot("first-contact-key-changed", "The changed key, refused.")],
       dimension: "D3",
     },
   ),

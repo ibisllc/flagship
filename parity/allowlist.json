@@ -33,6 +33,16 @@
     },
     {
       "check": "signed-tags",
+      "key": "ios:flagship/server-code-seen/v1",
+      "reason": "First contact's Studio confirmation (docs/first-contact.md): the Swift port lands on its own branch (ux-fc-ios) with the release/0.3 vectors; drop this entry then."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/server-code-seen/v1",
+      "reason": "First contact's Studio confirmation: the webapp port lands on its own branch (ux-fc-web) with the release/0.3 vectors; drop this entry then."
+    },
+    {
+      "check": "signed-tags",
       "key": "android:flagship/umk-wrap/v1",
       "reason": "iOS Secure Enclave keystore wrapping, local storage only and never on the wire; Android wraps in the Android Keystore."
     },
