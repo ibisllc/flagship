@@ -11301,5 +11301,29 @@
   "App chat requests": {
     "en": "App chat requests",
     "ctx": "webapp/index.html"
+  },
+  "This run can use up to about {0} tokens. The run stops there.": {
+    "en": "This run can use up to about {0} tokens. The run stops there.",
+    "ctx": "webapp/lib/aiConsentUi.js:45"
+  },
+  "Always allow lets a machine claiming to run {0}/{1} start chats with {2} without asking you again. You can stop this under Activity.": {
+    "en": "Always allow lets a machine claiming to run {0}/{1} start chats with {2} without asking you again. You can stop this under Activity.",
+    "ctx": "webapp/lib/chatAlerts.js:94"
+  },
+  "A machine claiming to run {0}/{1} can start chats with {2} without asking you.": {
+    "en": "A machine claiming to run {0}/{1} can start chats with {2} without asking you.",
+    "ctx": "webapp/lib/chatAlerts.js:95"
+  },
+  "{0} now accepts chats from {1}/{2} without asking": {
+    "en": "{0} now accepts chats from {1}/{2} without asking",
+    "ctx": "webapp/lib/chatAlerts.js:99"
+  },
+  "Chats your apps take without asking": {
+    "en": "Chats your apps take without asking",
+    "ctx": "webapp/lib/chatAlerts.js:224"
+  },
+  "{0} asks you again before taking a chat from {1}/{2}": {
+    "en": "{0} asks you again before taking a chat from {1}/{2}",
+    "ctx": "webapp/lib/chatAlerts.js:249"
   }
 }

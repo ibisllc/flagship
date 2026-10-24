@@ -27,11 +27,11 @@ describe("AI-run consent", () => {
     expect(consentEstimate(new ScreensError("x", 428, { code: "ai-consent", estimate: { ...ESTIMATE, source: "free" } }))).toBeNull();
   });
 
-  it("says who pays and that the range is an estimate", async () => {
+  it("says who pays and that the run stops at the agreed amount", async () => {
     const { consentText } = await load("lib/aiConsentUi.js");
     const byok = consentText(ESTIMATE);
     expect(byok.payer).toBe("OpenAI runs it with your own API key, so OpenAI bills you for it.");
-    expect(byok.range).toContain("not a limit");
+    expect(byok.range).toMatch(/^This run can use up to about [\d,]+ tokens\. The run stops there\.$/);
     expect(consentText({ ...ESTIMATE, provider: "flagship", source: "promo" }).payer).toContain("free Flagship Inference credits");
   });
 
@@ -94,14 +94,18 @@ describe("app chat requests", () => {
       { requestId: "r2", kind: "outgoing", claimedSender: { author: "smoketest", slug: "notes" }, receiverApp: { author: "bob", slug: "board" }, count: 1, at: 6 },
       { requestId: "", kind: "incoming", claimedSender: { author: "x", slug: "y" }, receiverApp: { author: "a", slug: "b" } },
     ],
-    always: [{ author: "smoketest", slug: "notes" }, { author: "bad|name", slug: "x" }],
+    always: [
+      { receiverApp: { author: "smoketest", slug: "notes" }, claimedSender: { author: "alice", slug: "chess" } },
+      { receiverApp: { author: "bad|name", slug: "x" }, claimedSender: { author: "alice", slug: "chess" } },
+      { receiverApp: { author: "smoketest", slug: "notes" } },
+    ],
   };
 
   it("keeps well-formed requests and Always allows", async () => {
     const { readChatRequests } = await load("lib/chatAlerts.js");
     const { requests, always } = readChatRequests(BODY);
     expect(requests.map((r: { requestId: string }) => r.requestId)).toEqual(["r1", "r2"]);
-    expect(always).toEqual([{ author: "smoketest", slug: "notes" }]);
+    expect(always).toEqual([{ receiverApp: { author: "smoketest", slug: "notes" }, claimedSender: { author: "alice", slug: "chess" } }]);
   });
 
   it("says the sender's name is a claim", async () => {
@@ -123,6 +127,6 @@ describe("app chat requests", () => {
       { fqdn: "office.x", fetchJson: async () => { throw new Error("down"); } },
     ]);
     expect(r.requests.map((q: { serverDomain: string }) => q.serverDomain)).toEqual(["home.x", "home.x"]);
-    expect(r.always[0]).toMatchObject({ serverDomain: "home.x", slug: "notes" });
+    expect(r.always[0]).toMatchObject({ serverDomain: "home.x", receiverApp: { slug: "notes" }, claimedSender: { slug: "chess" } });
   });
 });

@@ -49,7 +49,10 @@ export function readChatRequests(body) {
       };
     })
     .filter(Boolean);
-  const always = (Array.isArray(body?.always) ? body.always : []).map(app).filter((a) => a && NAME.test(a.author) && NAME.test(a.slug));
+  const ok = (a) => a && NAME.test(a.author) && NAME.test(a.slug);
+  const always = (Array.isArray(body?.always) ? body.always : [])
+    .map((a) => ({ receiverApp: app(a?.receiverApp), claimedSender: app(a?.claimedSender) }))
+    .filter((a) => ok(a.receiverApp) && ok(a.claimedSender));
   return { requests, always };
 }
 
@@ -88,12 +91,12 @@ export function chatRequestNotes(r) {
   return out;
 }
 
-export const CHAT_ALWAYS_NOTE = (slug) => tr("Always allow lets any remote machine start a chat with {0} without asking you. You can stop this under Activity.", slug);
-export const CHAT_ALWAYS_LINE = (slug) => tr("Any remote machine can start a chat with {0} without asking you.", slug);
+export const CHAT_ALWAYS_NOTE = (s, slug) => tr("Always allow lets a machine claiming to run {0}/{1} start chats with {2} without asking you again. You can stop this under Activity.", s.author, s.slug, slug);
+export const CHAT_ALWAYS_LINE = (s, slug) => tr("A machine claiming to run {0}/{1} can start chats with {2} without asking you.", s.author, s.slug, slug);
 
 export function chatAnsweredText(r, decision) {
   if (decision === "deny") return tr("Chat request denied");
-  if (decision === "always") return tr("{0} now accepts chats without asking", r.receiverApp.slug);
+  if (decision === "always") return tr("{0} now accepts chats from {1}/{2} without asking", r.receiverApp.slug, r.claimedSender.author, r.claimedSender.slug);
   return tr("Chat request allowed");
 }
 
@@ -107,9 +110,10 @@ export async function answerChatRequest(r, decision, { client = boxClient(r.serv
   return client.fetch(CHAT_ANSWER_PATH, { method: "POST", body: JSON.stringify(body) });
 }
 
-/** End an Always allow for one of this server's apps. */
+/** End one Always allow: the claimed sender `a.claimedSender` reaching this server's app `a.receiverApp`. */
 export async function revokeChatAlways(a, { client = boxClient(a.serverDomain || "") } = {}) {
-  return client.fetch(CHAT_REVOKE_PATH, { method: "POST", body: JSON.stringify({ author: a.author, slug: a.slug }) });
+  const body = { author: a.receiverApp.author, slug: a.receiverApp.slug, sender: { author: a.claimedSender.author, slug: a.claimedSender.slug } };
+  return client.fetch(CHAT_REVOKE_PATH, { method: "POST", body: JSON.stringify(body) });
 }
 
 function chatError(e) {
@@ -158,7 +162,7 @@ export function showChatRequestSheet(r) {
   return openSheet(`
     <h3 class="modal-title" data-chat-sheet>${escapeHtml(chatRequestTitle(r))}</h3>
     ${notes}
-    ${r.kind === "incoming" ? `<p class="note">${escapeHtml(CHAT_ALWAYS_NOTE(r.receiverApp.slug))}</p>` : ""}
+    ${r.kind === "incoming" ? `<p class="note">${escapeHtml(CHAT_ALWAYS_NOTE(r.claimedSender, r.receiverApp.slug))}</p>` : ""}
     <div class="row-2 mt-3">
       <button class="secondary" data-choice="deny">${escapeHtml(tr("Deny"))}</button>
       <button data-choice="allow">${escapeHtml(tr("Allow"))}</button>
@@ -187,8 +191,8 @@ function requestCardHtml(r, i, canAnswer, multi) {
 }
 
 function alwaysCardHtml(a, i, multi) {
-  return `<div class="card" data-chat-always="${escapeHtml(`${a.author}/${a.slug}`)}">
-    <p class="value">${escapeHtml(CHAT_ALWAYS_LINE(a.slug))}</p>
+  return `<div class="card" data-chat-always="${escapeHtml(`${a.claimedSender.author}/${a.claimedSender.slug}>${a.receiverApp.author}/${a.receiverApp.slug}`)}">
+    <p class="value">${escapeHtml(CHAT_ALWAYS_LINE(a.claimedSender, a.receiverApp.slug))}</p>
     ${multi ? `<p class="note small">${escapeHtml(podShortName(a.serverDomain))}</p>` : ""}
     <button class="secondary full-width mt-2" data-chat-revoke="${i}">${escapeHtml(tr("Ask me each time"))}</button>
   </div>`;
@@ -217,7 +221,7 @@ export async function renderChatSection({ section = document.getElementById("act
   const canAnswer = canSignAdminOrders();
   content.innerHTML = `
     ${requests.length ? requests.map((r, i) => requestCardHtml(r, i, canAnswer, multi)).join("") : `<div class="card placeholder">${escapeHtml(tr("No chat requests are waiting."))}</div>`}
-    ${always.length ? `<h3 class="mt-3" id="activity-chat-always-heading">${escapeHtml(tr("Apps that take chats without asking"))}</h3>${always.map((a, i) => alwaysCardHtml(a, i, multi)).join("")}` : ""}
+    ${always.length ? `<h3 class="mt-3" id="activity-chat-always-heading">${escapeHtml(tr("Chats your apps take without asking"))}</h3>${always.map((a, i) => alwaysCardHtml(a, i, multi)).join("")}` : ""}
   `;
   section.hidden = false;
   content.querySelectorAll("[data-chat-answer]").forEach((b) =>
@@ -242,7 +246,7 @@ export async function renderChatSection({ section = document.getElementById("act
       b.disabled = true;
       try {
         await revokeChatAlways(a);
-        toast(tr("{0} asks you again before taking a chat", a.slug), "ok");
+        toast(tr("{0} asks you again before taking a chat from {1}/{2}", a.receiverApp.slug, a.claimedSender.author, a.claimedSender.slug), "ok");
       } catch (e) {
         toast(chatError(e), "err");
       }

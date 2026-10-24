@@ -42,7 +42,7 @@ export function consentText(est) {
   const provider = providerDisplayName(est.provider);
   return {
     title: tr("This uses AI that costs money"),
-    range: tr("This run could use about {0} to {1} tokens. This is an estimate, not a limit.", fmtNum(est.lowTokens), fmtNum(est.highTokens)),
+    range: tr("This run can use up to about {0} tokens. The run stops there.", fmtNum(est.highTokens)),
     payer:
       est.source === "promo"
         ? tr("Flagship Inference runs it, and it is paid from your free Flagship Inference credits.")
