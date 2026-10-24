@@ -38,6 +38,14 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     /// `sendPreferringLan`, trying again with a short backoff while the name
     /// won't resolve; other failures pass straight through.
     private func sendWithNameRetry(_ req: URLRequest, host: String?) async throws -> (Data, URLResponse) {
+        // A strict server takes private requests over the PQ channel only (pq-suites.md §13).
+        if let host, let tunnel = PqBoxTunnelRegistry.current, tunnel.carries(host: host) {
+            return try await tunnel.send(req, host: host) { [self] outer in try await self.sendRaw(outer, host: host) }
+        }
+        return try await sendRaw(req, host: host)
+    }
+
+    private func sendRaw(_ req: URLRequest, host: String?) async throws -> (Data, URLResponse) {
         var attempt = 0
         var triedRelay = false
         while true {
