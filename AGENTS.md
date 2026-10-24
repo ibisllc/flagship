@@ -435,6 +435,16 @@ of the last check here: **not yet checked**.
   Webapp shell **v168**. No UI offers strict yet (milestone 4) and no client signs hybrid orders
   or applies a served chain yet; the boot client's own ML-DSA key is still open. Nothing has run
   on a device.
+  **Milestone 3, release endorsements:** a release also needs a hybrid companion
+  (`flagship/release-endorsement/v2`, `pq-suites.md` §12; TS `releaseEndorsementPq.ts`, Rust
+  `flagship_crypto::release`, vectors `release-endorsement-v2`) once `RELEASE_PQ_PIN`
+  (`packages/protocol/src/releasePqPin.ts`, **empty today**) names a key: the box gate, release
+  list, first-boot update, `latest-endorsed-release.mjs` and `.com` `/api/releases` then accept
+  only v1 AND PQ; endorsements up to the pin's marker stay lineage only. The ML-DSA key is "PQ
+  release signature (software key, YubiKey-encrypted at rest)", made by
+  `scripts/pq-release-key.mjs` (age to two YubiKeys + paper; runbook
+  `docs/runbooks/pq-release-key.md`) and signed by `endorse-release.mjs`. Ceremony not run;
+  security notices and the 0.3 box artifact are still classical.
 
 - **Final-round device test fixes (2026-10-19; on `origin/main`).**
   The Windows device test (`device-results/FINAL-ROUND-windows-2026-10-19.md` on
