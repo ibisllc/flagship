@@ -160,6 +160,8 @@ final class GymSweepServerTests: GymSweepCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         XCTAssertEqual(value(toggle), "0", "Lock-down starts off.")
         toggle.tap()
+        // Release 0.3 (SEC-DEADMAN-001): switching the lock on first revokes every auto-unlock lease on the boot worker.
+        expectProbe(app, "revoked all leases home.")
         expectProbe(app, "signed deadman-policy by admin-root")
         let window = app.segmentedControls["deadman-window-picker"]
         XCTAssertTrue(window.waitForExistence(timeout: 10), "On shows the window.")
@@ -854,14 +856,16 @@ final class GymSweepServerTests: GymSweepCase {
         XCTAssertTrue(phone.waitForExistence(timeout: 10), "The create form offers the backup policies.")
         XCTAssertTrue(text(app, containing: "Where should this server's backups go?").exists)
         XCTAssertTrue(text(app, containing: "You can change it any time in the server's Backups section.").exists)
-        for id in ["none", "phone-only", "peer"] {
+        for id in ["none", "phone-only"] {
             XCTAssertFalse(any(app, "cs-backup-policy-\(id)").isSelected, "Nothing is preselected (\(id)).")
         }
         XCTAssertFalse(app.buttons["cs-continue-button"].isEnabled, "Continue waits for a choice.")
         XCTAssertFalse(any(app, "cs-backup-policy-reserve").exists, "The reserve shows only once phone is picked.")
-        // The options read No backup, On my phone, On other servers.
-        let noBackup = any(app, "cs-backup-policy-none"), peer = any(app, "cs-backup-policy-peer")
-        XCTAssertTrue(noBackup.frame.minY < phone.frame.minY && phone.frame.minY < peer.frame.minY, "Options are in order.")
+        // The options read No backup, On my phone; On other servers is off at GA (BackupFeatures.peerBackup).
+        let noBackup = any(app, "cs-backup-policy-none")
+        XCTAssertTrue(noBackup.frame.minY < phone.frame.minY, "Options are in order.")
+        XCTAssertFalse(any(app, "cs-backup-policy-peer").exists, "Peer is not offered while peer backup is off.")
+        XCTAssertFalse(text(app, containing: "Encrypted pieces are kept on other Flagship servers").exists)
         phone.tap()
         XCTAssertTrue(text(app, containing: "An encrypted copy is kept on this phone.").exists)
         XCTAssertTrue(app.buttons["cs-continue-button"].isEnabled)
@@ -873,8 +877,9 @@ final class GymSweepServerTests: GymSweepCase {
         shot(app, "create-backup-policy")
     }
 
-    // 8a. Policy: Phone → Peer is a signed POST.
-    func test_changePolicyPhoneToPeerIsSigned() throws {
+    // 8a. Policy: Phone → No backup is a signed POST; Peer is not offered while peer backup is off
+    // (GA), and the mock box refuses it like the real one (409 peer-backup-not-available).
+    func test_changePolicyPhoneToNoneIsSigned() throws {
         let app = launch(tab: "home", admin: true, ["-smoke-backups-ready"])
         openBackups(app, "-smoke-backups-ready")
         let policy = any(app, "sd-backups-policy")
@@ -884,17 +889,21 @@ final class GymSweepServerTests: GymSweepCase {
         let change = app.buttons["sd-backups-policy-change"]
         XCTAssertTrue(reveal(app, change))
         change.tap()
-        let peer = any(app, "backup-policy-peer")
-        if !peer.waitForExistence(timeout: 5) {
+        let none = any(app, "backup-policy-none")
+        if !none.waitForExistence(timeout: 5) {
             XCTAssertTrue(reveal(app, change))
             change.tap()
         }
-        XCTAssertTrue(peer.waitForExistence(timeout: 10))
-        peer.tap()
+        XCTAssertTrue(none.waitForExistence(timeout: 10))
+        XCTAssertTrue(any(app, "backup-policy-phone-only").exists)
+        XCTAssertFalse(any(app, "backup-policy-peer").exists, "Peer is not offered while peer backup is off.")
+        none.tap()
         app.buttons["backup-policy-save"].tap()
         expectProbe(app, "signed backup-policy by admin-root")
-        expectProbe(app, "set backup-policy peer 0")
-        wait(any(app, "sd-backups-policy"), "label BEGINSWITH 'Backup policy: On other servers'", timeout: 10)
+        expectProbe(app, "set backup-policy none 0")
+        wait(any(app, "sd-backups-policy"), "label == 'Backup policy: No backup'", timeout: 10)
+        expectNoProbe(app, "refused backup-policy peer")
+        shot(app, "backups-policy-none")
     }
 
     // 8b. Over the limit, peer status, and a refused change with the box's sentence.
