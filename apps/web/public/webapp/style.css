@@ -1228,6 +1228,16 @@ section:not(.hidden) {
 .ok-text { margin: 0; color: var(--ok); font-size: 14px; }
 .warn-text { margin: 0 0 12px; color: var(--warn); font-size: 14px; line-height: 1.45; }
 
+/* First contact: the server's six-digit code, directly above Approve. */
+.server-code-box {
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+  padding: var(--space-3, 12px);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Two-column equal-width row of buttons / inputs (the common
  * "Refresh + Back" footer at the bottom of every detail view). */
 .row-2 {

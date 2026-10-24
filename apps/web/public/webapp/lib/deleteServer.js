@@ -14,6 +14,7 @@
 // home.js.
 
 import { depositDecommission, resolveReplacementContext } from "./serverReplacement.js";
+import { pinnedStk, retrustServer } from "./serverPins.js";
 import { releaseServerName } from "./releaseServer.js";
 import { REVOCATION_REASONS } from "./revokeServer.js";
 import { escapeHtml } from "./util.js";
@@ -106,6 +107,8 @@ export async function deleteServer(args, deps = {}) {
       || (async () => (await resolveReplacementContext({ serverDomain, username }, deps)).retiredStkPubHex);
     stk = await resolve().catch(() => null);
   }
+  // The order names the key this device pinned, whatever `.com` lists now.
+  stk = pinnedStk(serverDomain) ?? stk;
 
   let depositOk = null;
   if (typeof stk === "string" && HEX64.test(stk)) {
@@ -140,6 +143,7 @@ export async function deleteServer(args, deps = {}) {
 /** Drop a deleted server from this tab's lists. */
 export function finishDelete(serverDomain, deps = {}) {
   markRecentlyDeleted(serverDomain, (deps.now || Date.now)());
+  retrustServer(serverDomain);
 }
 
 /**

@@ -16,6 +16,7 @@
 //
 // State per server FQDN in localStorage: "deposited" (idempotency marker) or absent.
 
+import { sealingStk } from "./serverPins.js";
 import { getSession } from "./state.js";
 import { deriveCgkFromSeed } from "../keystore.js";
 import { depositCgk } from "./bootApproval.js";
@@ -66,6 +67,8 @@ export async function depositCgkIfNeeded(args, deps = {}) {
   const { serverDomain, identityPubKeyHex } = args;
   if (!serverDomain || !identityPubKeyHex) return;
   if (isCgkDeposited(serverDomain)) return;
+  // Sealed only to the key this device pinned at the server's first blessing (docs/first-contact.md).
+  if (!sealingStk(serverDomain, identityPubKeyHex)) return;
   const session = getSession();
   if (!session?.umk || !session?.username) return; // locked / signed out
 

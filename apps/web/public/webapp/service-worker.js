@@ -361,7 +361,12 @@
 //  v171: app chat requests from other owners' apps wait under Activity and ask in a sheet (Allow,
 //       Always allow, Deny, each owner-signed; Ask me each time ends an Always allow: lib/chatAlerts.js),
 //       and an AI adapt that spends a key or credits shows its estimate first and runs only on a signed
-//       Continue (lib/aiConsentUi.js).
+//       Continue (lib/aiConsentUi.js). First contact (docs/first-contact.md): each device pins a
+//       server's own key at its first blessing (lib/serverPins.js); the recipe carries a one-time
+//       enrollment secret whose proof the first blessing checks, the code shows above Approve, a
+//       changed key is refused, and the app-name certificate grant is signed with it
+//       (lib/firstContact.js, lib/enrollment.js, lib/serverWildcardGrant.js, lib/serverKeyCard.js,
+//       lib/studioConfirm.js).
 //  v170: feat/UX: the webapp in six languages (lib/i18n.js tr/trn, lib/i18nLocales.js; each catalog
 //       i18n/<lang>.json?v=<hash> is fetched per language; Traditional-Chinese and English-first browsers
 //       stay English; swRegister.js loads as a module so the worker registers), named links (the .com
@@ -564,6 +569,12 @@ const OPTIONAL_SHELL = [
   "/lib/serverTransfer.js",
   "/lib/serverTrust.js",
   "/lib/serverUpdate.js",
+  "/lib/serverPins.js",
+  "/lib/serverKeyCard.js",
+  "/lib/serverWildcardGrant.js",
+  "/lib/firstContact.js",
+  "/lib/enrollment.js",
+  "/lib/studioConfirm.js",
   "/lib/serviceInvite.js",
   "/lib/sessionTiers.js",
   "/lib/swkDeposit.js",

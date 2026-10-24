@@ -20,6 +20,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { depositEntitlement, satisfy } from "../public/webapp/lib/bootApproval.js";
 import { getSession, lockSession } from "../public/webapp/lib/state.js";
+import { pinServerKey } from "../public/webapp/lib/serverPins.js";
 import {
   adminRootPubHex,
   deriveIrkFromSeed,
@@ -32,6 +33,8 @@ const td = new TextDecoder("utf-8", { fatal: true });
 
 const SERVER_DOMAIN = "foo.alice.flagship.services";
 const STK_PUB_HEX = "ab".repeat(32);
+// The entitlement is minted only for the key this device pinned (docs/first-contact.md).
+pinServerKey(SERVER_DOMAIN, STK_PUB_HEX);
 
 function canonicalRootEntitlement(username: string, podPubKey: string, podCanonical: string, issuedAt: number) {
   return te(["flagship/root-entitlement/v1", username, podPubKey, podCanonical, issuedAt].join("|"));

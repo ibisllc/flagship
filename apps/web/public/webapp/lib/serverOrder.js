@@ -15,6 +15,7 @@
 //
 // Must pass packages/protocol/test-vectors/server-order/vectors.json.
 
+import { podStk } from "./serverPins.js";
 import { getSession } from "./state.js";
 import { bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "./adminRoot.js";
@@ -259,7 +260,7 @@ export function rankByServerOrder(rows, stks, key = (r) => r) {
 /** `/pods` rows ranked by the order. */
 export function rankPods(pods, stks) {
   return rankByServerOrder(pods, stks, (p) => ({
-    stk: p?.identityPubKey ?? "",
+    stk: podStk(p),
     birthDate: p?.registeredAt ?? 0,
     domain: String(p?.serverDomain ?? p?.fqdn ?? "").toLowerCase(),
   }));

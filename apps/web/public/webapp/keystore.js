@@ -502,6 +502,26 @@ async function loadAccountDeviceSeed(umkSeed, accountId, deviceId) {
   }
 }
 
+/** Wrap a small device-local secret under an account-key-derived AES-GCM key (`info` picks the key,
+ *  `recordKey` binds the ciphertext to where it is kept). Never synced: the record stays here. */
+export async function sealDeviceSecret(umkSeed, info, recordKey, plaintext) {
+  const kek = await crypto.subtle.importKey("raw", await hkdf32(umkSeed, info), { name: "AES-GCM" }, false, ["encrypt"]);
+  const nonce = randomBytes(AES_NONCE_BYTES);
+  const ct = new Uint8Array(await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce, additionalData: new TextEncoder().encode(recordKey) }, kek, plaintext,
+  ));
+  return { version: 1, nonce: bytesToHex(nonce), ciphertext: bytesToHex(ct) };
+}
+
+export async function openDeviceSecret(umkSeed, info, recordKey, blob) {
+  const kek = await crypto.subtle.importKey("raw", await hkdf32(umkSeed, info), { name: "AES-GCM" }, false, ["decrypt"]);
+  return new Uint8Array(await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: hexToBytes(blob.nonce), additionalData: new TextEncoder().encode(recordKey) },
+    kek,
+    hexToBytes(blob.ciphertext),
+  ));
+}
+
 /** Sign canonical-bytes with this device's account device key. */
 export async function signWithAccountDeviceKey(umkSeed, accountId, deviceId, canonicalBytes) {
   const key = await deriveAccountDeviceKeyFromSeed(umkSeed, accountId, deviceId);

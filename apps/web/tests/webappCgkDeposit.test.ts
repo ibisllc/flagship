@@ -130,6 +130,8 @@ describe("webapp depositCgk — deposit body + carrier round-trip", () => {
       return { ok: true, json: async () => ({ ok: true }) } as unknown as Response;
     });
 
+    // Sealed only to the key this device pinned (docs/first-contact.md).
+    (await import(pathToFileURL(resolve(__dirname, "../public/webapp/lib/serverPins.js")).href)).pinServerKey(serverDomain, toHex(boxPub));
     await depositCgk(
       { serverDomain, stkPubHex: toHex(boxPub), cgkHex },
       { fetch: fetchMock as unknown as typeof fetch, comBase: "https://com", now: () => 1_750_000_000_000 },

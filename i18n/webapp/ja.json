@@ -2756,5 +2756,12 @@
   "A machine claiming to run {0}/{1} can start chats with {2} without asking you.": "{0}/{1} を実行していると称するマシンは、確認なしで {2} とのチャットを開始できます。",
   "{0} now accepts chats from {1}/{2} without asking": "{0} は今後、{1}/{2} からのチャットを確認なしで受け付けます",
   "{0} asks you again before taking a chat from {1}/{2}": "{0} は {1}/{2} からのチャットを受け付ける前に、再び確認します",
-  "Chats your apps take without asking": "アプリが確認なしで受け付けるチャット"
+  "Chats your apps take without asking": "アプリが確認なしで受け付けるチャット",
+  "This server's key changed. If you did not rebuild it, do not approve anything for it.": "このサーバーのキーが変わりました。再インストールしていない場合は、このサーバーについて何も承認しないでください。",
+  "This server was not built from your recipe. Do not approve it.": "このサーバーはあなたのレシピから作られたものではありません。承認しないでください。",
+  "Confirmed by Studio": "Studio で確認済み",
+  "If your machine has a monitor, it is showing this code: {0}": "マシンにモニターがある場合、このコードが表示されています: {0}",
+  "This device hasn't checked this server's key yet.": "このデバイスはまだこのサーバーのキーを確認していません。",
+  "Trust this server": "このサーバーを信頼する",
+  "Trusted {0}.": "{0} を信頼しました。"
 }

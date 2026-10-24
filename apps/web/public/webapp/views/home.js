@@ -1,3 +1,5 @@
+import { pinnedStk, podStk } from "../lib/serverPins.js";
+import { sendPendingWildcardGrants } from "../lib/firstContact.js";
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { decorateHomeGrid, serverIcon, alertCircleIcon, keyIcon } from "../lib/icons.js";
@@ -545,6 +547,10 @@ export function renderServerCard(server, pod, opts = {}) {
   const approveUnlock = c.kind === "waiting-for-approval"
     ? `<div class="row mt-2"><button class="full-width js-approve-unlock">${tr("Approve unlock")}</button></div>`
     : "";
+  // A `/pods` row naming a key other than the one this device pinned (docs/first-contact.md).
+  const keyChanged = pod && !podStk(pod) && pinnedStk(server.serverId)
+    ? `<p class="err-text mt-2" data-first-contact-refusal="key-changed">${escapeHtml(tr("This server's key changed. If you did not rebuild it, do not approve anything for it."))}</p>`
+    : "";
   const row = listRow({
     // The status lives in the pill; the leading column is the drag handle.
     leading: { kind: "html", html: orderControlsHtml(server, opts.order) },
@@ -564,6 +570,7 @@ export function renderServerCard(server, pod, opts = {}) {
     ${deadDelete}
     ${awaitingBackup}
     ${approveUnlock}
+    ${keyChanged}
   `;
 }
 
@@ -943,14 +950,14 @@ let suppressCardClickUntil = 0;
 
 function orderKey(r) {
   return {
-    stk: r.pod?.identityPubKey ?? "",
+    stk: r.pod ? podStk(r.pod) : "",
     birthDate: r.pod?.registeredAt ?? 0,
     domain: String(r.server.serverId ?? "").toLowerCase(),
   };
 }
 
 function rowStk(r) {
-  return String(r.pod?.identityPubKey ?? "").toLowerCase();
+  return r.pod ? podStk(r.pod) : "";
 }
 
 function isRevokedRow(r) {
@@ -1655,6 +1662,8 @@ export async function renderHome() {
         });
       }
     }
+    // Signed app-name grants a server couldn't take at its first start-up (it wasn't up yet).
+    void sendPendingWildcardGrants(registered.filter((r) => r.bucket === "online").map((r) => String(r.server.serverId))).catch(() => {});
     homeRegistered = rankByServerOrder(registered, currentServerOrder(), orderKey);
     homePods = [...podStatusByDomain.values()];
     homeDemo = serverSource.kind === "demo";
@@ -1732,7 +1741,7 @@ async function fetchAwaitingApprovalSet() {
     const reqs = await fetchVerifiedRequests();
     return new Set(
       (reqs ?? [])
-        .filter((r) => r.purpose === "unlock-key")
+        .filter((r) => r.purpose === "unlock-key" && !r.firstContact?.refusal)
         .map((r) => String(r.serverDomain ?? "").toLowerCase()),
     );
   } catch {

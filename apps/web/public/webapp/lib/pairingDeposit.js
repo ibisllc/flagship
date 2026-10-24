@@ -13,6 +13,7 @@
 //   "<pairingOrderJson>" -> owed: the stashed plaintext order to seal + deposit.
 //   "deposited"         -> done: the order was accepted by `.com` (idempotency).
 
+import { sealingStk } from "./serverPins.js";
 import { getSession } from "./state.js";
 import { depositPairingOrder } from "./bootApproval.js";
 
@@ -84,6 +85,8 @@ export async function depositPairingIfNeeded(args, deps = {}) {
   if (!serverDomain || !identityPubKeyHex) return;
   const pairingOrderJson = pendingPairingOrder(serverDomain);
   if (!pairingOrderJson) return;
+  // Sealed only to the key this device pinned at the server's first blessing (docs/first-contact.md).
+  if (!sealingStk(serverDomain, identityPubKeyHex)) return;
   const session = getSession();
   if (!session?.umk || !session?.username) return; // locked / signed out
 

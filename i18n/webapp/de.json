@@ -2756,5 +2756,12 @@
   "A machine claiming to run {0}/{1} can start chats with {2} without asking you.": "Eine Maschine, die angibt, {0}/{1} auszuführen, kann Chats mit {2} starten, ohne Sie zu fragen.",
   "{0} now accepts chats from {1}/{2} without asking": "{0} nimmt Chats von {1}/{2} jetzt ohne Nachfrage an",
   "{0} asks you again before taking a chat from {1}/{2}": "{0} fragt Sie wieder, bevor es einen Chat von {1}/{2} annimmt",
-  "Chats your apps take without asking": "Chats, die Ihre Apps ohne Nachfrage annehmen"
+  "Chats your apps take without asking": "Chats, die Ihre Apps ohne Nachfrage annehmen",
+  "This server's key changed. If you did not rebuild it, do not approve anything for it.": "Der Schlüssel dieses Servers hat sich geändert. Wenn du ihn nicht neu aufgesetzt hast, genehmige nichts für ihn.",
+  "This server was not built from your recipe. Do not approve it.": "Dieser Server wurde nicht aus deinem Rezept erstellt. Genehmige ihn nicht.",
+  "Confirmed by Studio": "Von Studio bestätigt",
+  "If your machine has a monitor, it is showing this code: {0}": "Wenn deine Maschine einen Bildschirm hat, zeigt sie diesen Code: {0}",
+  "This device hasn't checked this server's key yet.": "Dieses Gerät hat den Schlüssel dieses Servers noch nicht geprüft.",
+  "Trust this server": "Diesem Server vertrauen",
+  "Trusted {0}.": "{0} wird vertraut."
 }

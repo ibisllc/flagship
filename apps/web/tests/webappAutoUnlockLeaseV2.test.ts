@@ -12,6 +12,7 @@ import {
   verifyAutoUnlockLeaseV2,
   verifyLeaseRevocation,
 } from "@flagship/protocol";
+import { pinServerKey } from "../public/webapp/lib/serverPins.js";
 import { readFileSync } from "node:fs";
 import {
   canonicalLeaseV2Bytes,
@@ -25,6 +26,8 @@ const DOMAIN = "home.plucky-avocet.flagship.services";
 const umkSeed = new Uint8Array(32).fill(7);
 const irk = deriveIRK({ seed: umkSeed });
 const stk = deriveSTK(new Uint8Array(32).fill(9));
+// A lease is sealed only to the key this device pinned (docs/first-contact.md).
+pinServerKey(DOMAIN, Array.from(stk.publicKey, (b) => b.toString(16).padStart(2, "0")).join(""));
 const luksKey = new Uint8Array(32).map((_, i) => i + 1);
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 const unhex = (h: string) => new Uint8Array(h.match(/../g)!.map((x) => parseInt(x, 16)));
