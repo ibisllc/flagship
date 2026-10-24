@@ -59,18 +59,19 @@ export PATH="$HOME/.cargo/bin:$PATH"
 (cd rust && cargo build --release --locked -p flagship-boot -p flagship-keyd)
 install -m 0755 rust/target/release/flagship-boot /usr/local/lib/flagship-boot-rust
 
-log "swtpm as a unit (state in /var/lib/flagship-m6/tpm survives a reboot)"
+ls -l /dev/tpm* 2>/dev/null || echo "no vTPM device on this VM (UpCloud offers none); the drill uses swtpm"
+log "swtpm behind the kernel vTPM proxy as a unit (/dev/tpmrm0; state in /var/lib/flagship-m6/tpm survives a reboot)"
 mkdir -p /var/lib/flagship-m6/tpm
 cat > /etc/systemd/system/flagship-m6-swtpm.service <<'UNIT'
 [Unit]
-Description=swtpm for the milestone 6 drill
+Description=swtpm for the milestone 6 drill (kernel vTPM proxy: /dev/tpmrm0)
 [Service]
-ExecStart=/usr/bin/swtpm socket --tpm2 --tpmstate dir=/var/lib/flagship-m6/tpm --server type=tcp,port=2321 --ctrl type=tcp,port=2322 --flags not-need-init,startup-clear
+ExecStartPre=/sbin/modprobe tpm_vtpm_proxy
+ExecStart=/usr/bin/swtpm chardev --vtpm-proxy --tpm2 --tpmstate dir=/var/lib/flagship-m6/tpm --flags startup-clear
 Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
 systemctl enable --now flagship-m6-swtpm.service
-ls -l /dev/tpm* 2>/dev/null || echo "no vTPM device on this VM (UpCloud offers none); the drill uses swtpm"
 log "done: $(git -C "$REL/app" rev-parse HEAD 2>/dev/null || echo "$COMMIT")"
