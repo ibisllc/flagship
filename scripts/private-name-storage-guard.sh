@@ -84,6 +84,12 @@ check_block '/interface DeviceIdentityRecord/,/^}/p' "$TYPES" '\b(label|displayN
 while IFS= read -r migration; do
   case "$(basename "$migration")" in
     0017_push_token_label.sql|0027_demo_users.sql|0031_device_capability_grants.sql|0044_name_claims.sql) continue ;;
+    # voici_names.display is a public voi.ci link as its owner spelled it (voi.ci/halloween-party),
+    # shown to anyone who opens the link: not a person's or a device's name. Everything else
+    # is still checked in this file.
+    0111_voici_names.sql)
+      check '\b(device_label|device_name|display_name|companion_label)\b|\blabel[[:space:]]+TEXT\b' "$migration"
+      continue ;;
   esac
   check '\b(device_label|device_name|display_name|companion_label)\b|\b(display|label)[[:space:]]+TEXT\b' "$migration"
 done < <(find packages/storage/migrations -maxdepth 1 -type f -name '*.sql' -print | sort)
