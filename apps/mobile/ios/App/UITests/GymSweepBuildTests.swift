@@ -747,3 +747,165 @@ final class GymSweepBuildTests: GymSweepCase {
         }
     }
 }
+
+// MARK: - AI-run consent (N12)
+
+extension GymSweepBuildTests {
+    /// The box asks before an AI run spends the owner's key (`-smoke-ai-consent`): the card shows the
+    /// token range, the provider and who pays; Agree signs the consent and the adapt runs with it.
+    func test_gitAdaptConsentAgreeSignsAndRuns() throws {
+        let app = launch(tab: "apps", ["-smoke-chat", "-smoke-ai-consent"])
+        checkRepo(app, url: "https://github.com/someone/notes-app")
+        let adapt = app.buttons["build-git-adapt"]
+        XCTAssertTrue(reveal(app, adapt))
+        adapt.tap()
+        app.buttons["build-key-confirm-active"].tap()
+        let title = app.staticTexts["build-git-consent-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 15), "The box asks for consent first.")
+        XCTAssertEqual(app.staticTexts["build-git-consent-tokens"].label, "It may use 12,000 to 72,000 tokens.")
+        XCTAssertEqual(app.staticTexts["build-git-consent-payer"].label, "It runs on your own openai key, so openai bills you for it.")
+        expectProbe(app, "adapt consent asked")
+        expectNoProbe(app, "adapt started")
+        shot(app, "git-consent")
+        dismissKeyboard(app)
+        let agree = app.buttons["build-git-consent-agree"]
+        XCTAssertTrue(reveal(app, agree))
+        bringToMiddle(app, agree)
+        agree.tap()
+        expectProbe(app, "signed ai-consent by admin-root")
+        expectProbe(app, "adapt consented high=72000")
+        expectProbe(app, "adapt started share=true provider=openai")
+        XCTAssertTrue(app.staticTexts["Adapted"].waitForExistence(timeout: 20), "The AI ran once the owner agreed.")
+    }
+
+    /// Cancel on the consent card runs nothing and goes back to the not-ready card.
+    func test_gitAdaptConsentCancelRunsNothing() throws {
+        let app = launch(tab: "apps", ["-smoke-chat", "-smoke-ai-consent"])
+        checkRepo(app, url: "https://github.com/someone/notes-app")
+        let adapt = app.buttons["build-git-adapt"]
+        XCTAssertTrue(reveal(app, adapt))
+        adapt.tap()
+        app.buttons["build-key-confirm-active"].tap()
+        let cancel = app.buttons["build-git-consent-cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 15))
+        dismissKeyboard(app)
+        XCTAssertTrue(reveal(app, cancel))
+        bringToMiddle(app, cancel)
+        cancel.tap()
+        waitGone(app.staticTexts["build-git-consent-title"])
+        XCTAssertTrue(app.buttons["build-git-adapt"].waitForExistence(timeout: 10), "Back to the not-ready card.")
+        expectNoProbe(app, "adapt started")
+        expectNoProbe(app, "signed ai-consent")
+    }
+}
+
+/// GYM iOS mock tier for release 0.3's client screens: app chat approvals (N08) and starting a server from
+/// the watch with the iPhone locked (option (a), docs/watch-boot-approval-without-unlock.md).
+final class GymSecurityScreensTests: GymSweepCase {
+
+    /// Two chat requests wait (`-smoke-chat-requests`): the incoming one names the sender only as a claim;
+    /// Allow signs the answer. The outgoing one has no Always allow; Deny signs too.
+    func test_chatRequestAllowThenDeny() throws {
+        let app = launch(tab: "home", ["-smoke-chat-requests"])
+        let title = app.staticTexts["chat-alert-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 20), "A waiting chat request opens the sheet.")
+        XCTAssertEqual(title.label, "A remote machine claiming to run ana/chess wants to talk to your app plants.")
+        XCTAssertTrue(app.staticTexts["It has asked 2 times."].exists)
+        shot(app, "chat-alert-incoming")
+        app.buttons["chat-alert-allow"].tap()
+        let done = app.staticTexts["chat-alert-done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 15))
+        XCTAssertEqual(done.label, "Allowed. ana/chess can talk to plants.")
+        expectProbe(app, "signed chat-approval by admin-root")
+        expectProbe(app, "chat allow incoming ana/chess")
+        app.buttons["chat-alert-close"].tap()
+
+        XCTAssertTrue(title.waitForExistence(timeout: 15), "The outgoing request is asked next.")
+        XCTAssertEqual(title.label, "Your app wiki wants to talk to ana/notes, an app on another owner's server.")
+        XCTAssertFalse(app.buttons["chat-alert-always"].exists, "Always allow is for incoming requests only.")
+        app.buttons["chat-alert-deny"].tap()
+        XCTAssertTrue(done.waitForExistence(timeout: 15))
+        XCTAssertEqual(done.label, "Denied. wiki won't talk to ana/notes.")
+        expectProbe(app, "chat deny outgoing bright-maple/wiki")
+        app.buttons["chat-alert-close"].tap()
+        XCTAssertFalse(title.waitForExistence(timeout: 3), "Nothing is left to ask about.")
+        XCTAssertTrue(app.buttons["home-add-server"].isHittable)
+    }
+
+    /// Always allow from the sheet, then the server page lists the app with Revoke, which ends it; the
+    /// request put off with Not now waits on the same page and is answered there.
+    func test_chatAlwaysAllowThenRevokeOnServerPage() throws {
+        let app = launch(tab: "home", ["-smoke-chat-requests"])
+        let title = app.staticTexts["chat-alert-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 20))
+        app.buttons["chat-alert-always"].tap()
+        let done = app.staticTexts["chat-alert-done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 15))
+        XCTAssertEqual(done.label, "plants now takes chats from other owners' apps without asking.")
+        expectProbe(app, "chat always incoming ana/chess")
+        app.buttons["chat-alert-close"].tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 15))
+        app.buttons["chat-alert-not-now"].tap()
+        XCTAssertFalse(title.waitForExistence(timeout: 3))
+
+        openServerPage(app, named: "Home")
+        let revoke = app.buttons["sd-chat-revoke-plants"]
+        XCTAssertTrue(reveal(app, revoke, tries: 16), "The server page lists the Always allow with Revoke.")
+        shot(app, "chat-server-card")
+        bringToMiddle(app, revoke)
+        revoke.tap()
+        let note = app.staticTexts["sd-chat-note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 15))
+        XCTAssertEqual(note.label, "plants asks you again from now on.")
+        expectProbe(app, "chat always revoked bright-maple/plants")
+        waitGone(revoke)
+
+        let deny = app.buttons["sd-chat-deny"]
+        XCTAssertTrue(reveal(app, deny), "The request put off with Not now waits on the server page.")
+        bringToMiddle(app, deny)
+        deny.tap()
+        wait(note, #"label == "Denied. wiki won't talk to ana/notes.""#)
+        expectProbe(app, "chat deny outgoing bright-maple/wiki")
+    }
+
+    /// With Approve from watch on this device (`-smoke-watch-delegate`), the server page turns on a watch
+    /// copy of the disk key after a warning, says until when, and turns it off again.
+    func test_watchBootKeyOnThenOff() throws {
+        let app = launch(tab: "home", ["-smoke-watch-delegate"])
+        openServerPage(app, named: "Home")
+        let toggle = app.switches["sd-watch-boot-toggle"]
+        XCTAssertTrue(reveal(app, toggle, tries: 16), "An admin device with Approve from watch can turn it on per server.")
+        XCTAssertEqual(toggle.value as? String, "0", "Off by default.")
+        bringToMiddle(app, toggle)
+        tapSwitch(toggle)
+        let turnOn = app.alerts.buttons["Turn on"].firstMatch
+        XCTAssertTrue(turnOn.waitForExistence(timeout: 10), "Turning it on warns first.")
+        shot(app, "watch-boot-warning")
+        turnOn.tap()
+        let until = app.staticTexts["sd-watch-boot-until"]
+        XCTAssertTrue(until.waitForExistence(timeout: 15))
+        XCTAssertTrue(until.label.hasPrefix("On until "), "Got: \(until.label)")
+        expectProbe(app, "watch boot key deposited home.bright-maple.flagship.services")
+        wait(toggle, "value == '1'")
+        shot(app, "watch-boot-on")
+
+        tapSwitch(toggle)
+        XCTAssertTrue(app.staticTexts["sd-watch-boot-off"].waitForExistence(timeout: 15))
+        expectProbe(app, "watch boot key removed home.bright-maple.flagship.services")
+        wait(toggle, "value == '0'")
+    }
+
+    private func tapSwitch(_ toggle: XCUIElement) {
+        let inner = toggle.switches.firstMatch
+        if inner.exists { inner.tap() } else { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap() }
+    }
+
+    /// Without Approve from watch on this device, the card says where to turn it on and offers no switch.
+    func test_watchBootKeyNeedsApproveFromWatchFirst() throws {
+        let app = launch(tab: "home")
+        openServerPage(app, named: "Home")
+        let note = app.staticTexts["sd-watch-boot-not-ready"]
+        XCTAssertTrue(reveal(app, note, tries: 16))
+        XCTAssertFalse(app.switches["sd-watch-boot-toggle"].exists)
+    }
+}

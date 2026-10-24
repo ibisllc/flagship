@@ -1143,4 +1143,56 @@ const SERVER: readonly Scenario[] = [
   ),
 ];
 
-export const IOS_SWEEP_SCENARIOS: readonly Scenario[] = [...BUILD, ...IPAD, ...ONBOARDING, ...APPS, ...HOME, ...SHARE, ...SETTINGS, ...SERVER, ...BACKUPS];
+// Release 0.3's client screens: app chat approvals (N08), AI-run consent (N12), the watch's boot key.
+const SECURITY_03: readonly Scenario[] = [
+  sweep(
+    "ios-sweep-git-consent-agree",
+    "The box asks before an AI run spends the owner's key (-smoke-ai-consent): token range, provider and who pays; Agree signs ai-consent and the adapt runs with it.",
+    "GymSweepBuildTests/test_gitAdaptConsentAgreeSignsAndRuns",
+    ["build-git-adapt", "build-key-confirm-active", "build-git-consent-agree"],
+    ["build-git-consent-tokens", "signed ai-consent by admin-root", "adapt consented high=72000", "Adapted"],
+    "D2",
+  ),
+  sweep(
+    "ios-sweep-git-consent-cancel",
+    "Cancel on the AI-run consent card runs nothing and goes back to the not-ready card.",
+    "GymSweepBuildTests/test_gitAdaptConsentCancelRunsNothing",
+    ["build-git-adapt", "build-key-confirm-active", "build-git-consent-cancel"],
+    ["build-git-adapt"],
+    "D2",
+  ),
+  sweep(
+    "ios-sweep-chat-allow-deny",
+    "App chat requests (-smoke-chat-requests): 'A remote machine claiming to run ana/chess…' Allow signs chat-approval; the outgoing one has no Always allow and Deny signs too.",
+    "GymSecurityScreensTests/test_chatRequestAllowThenDeny",
+    ["chat-alert-allow", "chat-alert-close", "chat-alert-deny", "chat-alert-close"],
+    ["signed chat-approval by admin-root", "chat allow incoming ana/chess", "chat deny outgoing bright-maple/wiki"],
+    "D5",
+  ),
+  sweep(
+    "ios-sweep-chat-always-revoke",
+    "Always allow from the chat sheet; the server page lists it with Revoke, which ends it; the request put off with Not now is denied from the page.",
+    "GymSecurityScreensTests/test_chatAlwaysAllowThenRevokeOnServerPage",
+    ["chat-alert-always", "chat-alert-close", "chat-alert-not-now", "sd-chat-revoke-plants", "sd-chat-deny"],
+    ["chat always revoked bright-maple/plants", "sd-chat-note"],
+    "D5",
+  ),
+  sweep(
+    "ios-sweep-watch-boot-key",
+    "Start from your watch (-smoke-watch-delegate): the server page warns, deposits the watch copy of the disk key, says until when, and removes it again.",
+    "GymSecurityScreensTests/test_watchBootKeyOnThenOff",
+    ["sd-watch-boot-toggle", "Turn on", "sd-watch-boot-toggle"],
+    ["watch boot key deposited home.bright-maple.flagship.services", "watch boot key removed home.bright-maple.flagship.services", "sd-watch-boot-off"],
+    "D5",
+  ),
+  sweep(
+    "ios-sweep-watch-boot-not-ready",
+    "Without Approve from watch on this device, the server page says where to turn it on and shows no switch.",
+    "GymSecurityScreensTests/test_watchBootKeyNeedsApproveFromWatchFirst",
+    [],
+    ["sd-watch-boot-not-ready"],
+    "D5",
+  ),
+];
+
+export const IOS_SWEEP_SCENARIOS: readonly Scenario[] = [...BUILD, ...IPAD, ...ONBOARDING, ...APPS, ...HOME, ...SHARE, ...SETTINGS, ...SERVER, ...BACKUPS, ...SECURITY_03];
