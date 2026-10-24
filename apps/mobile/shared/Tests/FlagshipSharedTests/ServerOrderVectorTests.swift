@@ -7,10 +7,10 @@ import FlagshipAPI
 /// CryptoKit's Ed25519 signatures are randomized, so the pinned signature is
 /// checked by verifying it, and our own by verifying it too.
 final class ServerOrderVectorTests: XCTestCase {
-    private func vectors() throws -> [String: Any] {
+    private func vectors(_ name: String = "vectors.json") throws -> [String: Any] {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         for _ in 0..<14 {
-            let url = dir.appendingPathComponent("packages/protocol/test-vectors/server-order/vectors.json")
+            let url = dir.appendingPathComponent("packages/protocol/test-vectors/server-order/\(name)")
             if FileManager.default.fileExists(atPath: url.path) {
                 return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
             }
@@ -26,8 +26,25 @@ final class ServerOrderVectorTests: XCTestCase {
             user: f["user"] as! String,
             stks: f["stks"] as! [String],
             issuedAt: (f["issuedAt"] as! NSNumber).int64Value,
-            nonce: f["nonce"] as! String
+            nonce: f["nonce"] as! String,
+            pqKeyIds: f["pqKeyIds"] as? [String]
         )
+    }
+
+    func testNamesEachServersPqKeyIdInTheSignedBytes() throws {
+        let key = try irk(try vectors())
+        let p = try vectors("pq-vectors.json")
+        let o = try XCTUnwrap(p["order"] as? [String: Any])
+        let order = order(try XCTUnwrap(o["fields"] as? [String: Any]))
+        XCTAssertEqual(String(decoding: try order.canonicalBytes(), as: UTF8.self), o["canonical"] as? String)
+        XCTAssertTrue(order.verify(signatureHex: o["signatureHex"] as! String, publicKey: key.publicKey))
+        let stripped = ServerOrder(user: order.user, stks: order.stks, issuedAt: order.issuedAt, nonce: order.nonce)
+        XCTAssertFalse(stripped.verify(signatureHex: o["signatureHex"] as! String, publicKey: key.publicKey))
+        for r in try XCTUnwrap(p["refuse"] as? [[String: Any]]) {
+            XCTAssertThrowsError(try self.order(r["fields"] as! [String: Any]).canonicalBytes(), r["why"] as? String ?? "")
+        }
+        let named = stripped.withPqKeyIds { $0 == order.stks[0] ? String(repeating: "11", count: 32) : nil }
+        XCTAssertEqual(named.pqKeyIds, [String(repeating: "11", count: 32), "-", "-"])
     }
 
     private func irk(_ v: [String: Any]) throws -> Curve25519.Signing.PrivateKey {

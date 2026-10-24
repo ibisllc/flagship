@@ -19,6 +19,7 @@ public struct ServerOrder: Equatable, Sendable {
         case badNonce
         case badIssuedAt
         case badUser
+        case badPqKeyIds
     }
 
     public let user: String
@@ -27,12 +28,17 @@ public struct ServerOrder: Equatable, Sendable {
     public let issuedAt: Int64
     /// 32 random bytes, lowercase hex.
     public let nonce: String
+    /// Architecture v2 (pq-suites.md §16): per server in `stks`, the hybrid key id of the box PQ
+    /// binding this phone pinned, or `-`. Signed with the order so boxes pin their siblings
+    /// through the account instead of `.com`. nil: the v1 canonical bytes.
+    public let pqKeyIds: [String]?
 
-    public init(user: String, stks: [String], issuedAt: Int64, nonce: String) {
+    public init(user: String, stks: [String], issuedAt: Int64, nonce: String, pqKeyIds: [String]? = nil) {
         self.user = user
         self.stks = stks
         self.issuedAt = issuedAt
         self.nonce = nonce
+        self.pqKeyIds = pqKeyIds
     }
 
     public func canonicalBytes() throws -> Data {
@@ -47,7 +53,11 @@ public struct ServerOrder: Equatable, Sendable {
         }
         guard Self.isLowerHex(nonce, bytes: 32) else { throw OrderError.badNonce }
         guard issuedAt > 0 else { throw OrderError.badIssuedAt }
-        let parts = [Self.tag, user.lowercased(), stks.joined(separator: ","), String(issuedAt), nonce]
+        var parts = [Self.tag, user.lowercased(), stks.joined(separator: ","), String(issuedAt), nonce]
+        if let ids = pqKeyIds {
+            guard ids.count == stks.count, ids.allSatisfy({ $0 == "-" || Self.isLowerHex($0, bytes: 32) }) else { throw OrderError.badPqKeyIds }
+            parts.append("pq=" + ids.joined(separator: ","))
+        }
         return Data(parts.joined(separator: "|").utf8)
     }
 
@@ -82,7 +92,13 @@ public struct ServerOrder: Equatable, Sendable {
     }
 
     public var wire: SignedServerOrderWire.Order {
-        .init(user: user, stks: stks, issuedAt: issuedAt, nonce: nonce)
+        .init(user: user, stks: stks, issuedAt: issuedAt, nonce: nonce, pqKeyIds: pqKeyIds)
+    }
+
+    /// The same order naming each server's pinned PQ key id (`-` where none is pinned).
+    public func withPqKeyIds(_ keyIdFor: (String) -> String?) -> ServerOrder {
+        ServerOrder(user: user, stks: stks, issuedAt: issuedAt, nonce: nonce,
+                    pqKeyIds: stks.map { stk in keyIdFor(stk).flatMap { Self.isLowerHex($0, bytes: 32) ? $0 : nil } ?? "-" })
     }
 
     static func isLowerHex(_ s: String, bytes: Int) -> Bool {
