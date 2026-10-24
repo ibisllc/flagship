@@ -78,6 +78,12 @@ interface SecretMailboxClient {
     suspend fun getWatchBootKey(serverDomain: String, bootAuth: String): WatchBootDepositWire =
         throw UnsupportedOperationException("watch boot key")
 
+    /** GET /api/users/:u/secret-requests — the pending requests with the box's own signature,
+     *  read with the account read token (no IRK), for the watch path. Verify each under the STK
+     *  this phone pinned, never the `stkPub` it carries. */
+    suspend fun readSecretRequests(username: String): SignedSecretRequestsResponse =
+        throw UnsupportedOperationException("secret requests")
+
     /** DELETE {boot}/api/boot/watch-key/:domain — the owner takes every watch copy away. */
     suspend fun deleteWatchBootKey(serverDomain: String, bootAuth: String): Unit =
         throw UnsupportedOperationException("watch boot key")
@@ -401,6 +407,21 @@ data class WatchBootDepositWire(
 
 @Serializable
 data class WatchBootDepositBody(val deposit: WatchBootDepositWire)
+
+/** One pending request from GET /api/users/:u/secret-requests, signed by the box. */
+@Serializable
+data class SignedSecretRequest(
+    val serverDomain: String,
+    val requestNonceHex: String,
+    val stkPub: String,
+    val purpose: String,
+    val issuedAt: Long,
+    val requestSignature: String,
+    val expiresAt: Long,
+)
+
+@Serializable
+data class SignedSecretRequestsResponse(val requests: List<SignedSecretRequest> = emptyList())
 
 @Serializable
 data class SealedLuksKeyResponse(
@@ -871,6 +892,17 @@ class LiveSecretMailboxClient(
             extraHeaders = mapOf("Authorization" to bootAuth),
             accept = setOf(200, 201),
         )
+    }
+
+    override suspend fun readSecretRequests(username: String): SignedSecretRequestsResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return AccountReadTokens.authorize(username) { auth ->
+            transport.getJson(
+                "$base/api/users/$encoded/secret-requests",
+                responseSerializer = SignedSecretRequestsResponse.serializer(),
+                extraHeaders = auth,
+            )
+        }
     }
 
     override suspend fun getWatchBootKey(serverDomain: String, bootAuth: String): WatchBootDepositWire =

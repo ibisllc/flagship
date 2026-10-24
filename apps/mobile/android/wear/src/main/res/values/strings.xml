@@ -17,4 +17,8 @@
     <string name="approval_failed">Approval failed.</string>
     <string name="approve">Approve</string>
     <string name="this_server_isnt_waiting_any_more">This server isn\'t waiting any more.</string>
+    <string name="open_the_approve_page_on_this_watch">Open the Approve page on this watch to approve.</string>
+    <string name="set_a_screen_lock_on_this_watch">Set a screen lock on this watch to approve from it.</string>
+    <string name="unlock_this_watch_to_approve">Unlock this watch to approve.</string>
+    <string name="put_this_watch_on_your_wrist">Put this watch on your wrist to approve.</string>
 </resources>

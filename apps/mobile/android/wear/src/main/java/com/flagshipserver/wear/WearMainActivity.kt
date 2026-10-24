@@ -73,6 +73,8 @@ internal fun WearApp(
     sync: suspend (android.content.Context) -> Unit = { WatchStore.sync(it) },
     approve: suspend (android.content.Context, PendingApproval) -> com.flagshipserver.companion.ApproveReply =
         { c, a -> PhoneApprover.approve(c, a) },
+    /** Why Approve can't be sent from here now (not on screen, not on the wrist, locked), or null. */
+    presence: suspend (android.content.Context, Boolean) -> String? = { c, visible -> WatchPresence.refusal(c, visible) },
 ) {
     val ctx = LocalContext.current
     val nav = rememberSwipeDismissableNavController()
@@ -87,7 +89,7 @@ internal fun WearApp(
             var shown by remember { mutableStateOf<PendingApproval?>(null) }
             WatchProjection.approvals(data).firstOrNull { it.id == id }?.let { shown = it }
             val approval = shown
-            if (approval == null) Gone() else Approve(approval, approve) { nav.popBackStack() }
+            if (approval == null) Gone() else Approve(approval, approve, presence) { nav.popBackStack() }
         }
     }
 }
@@ -175,9 +177,11 @@ private fun StatusDot(statusRaw: String) {
 private fun Approve(
     approval: PendingApproval,
     approve: suspend (android.content.Context, PendingApproval) -> com.flagshipserver.companion.ApproveReply,
+    presence: suspend (android.content.Context, Boolean) -> String?,
     onDone: () -> Unit,
 ) {
     val ctx = LocalContext.current
+    val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var approved by remember { mutableStateOf(false) }
@@ -204,6 +208,12 @@ private fun Approve(
                         busy = true
                         error = null
                         scope.launch {
+                            val visible = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+                            presence(ctx, visible)?.let {
+                                busy = false
+                                error = it
+                                return@launch
+                            }
                             val reply = approve(ctx, approval)
                             busy = false
                             if (reply.ok) approved = true else error = reply.errorMessage ?: FSStrings.get(R.string.approval_failed)
