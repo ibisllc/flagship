@@ -4004,6 +4004,50 @@
       "adapters.html"
     ]
   },
+  "s1cf830b48e": {
+    "en": "Search the directory",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s8f7ae3923b": {
+    "en": "Every adaptation that is currently published, by project: where it lives, its license, the digest of each adapter, the upstream commit it was made against and an honest status (<1>published</1>, or <2>disputed</2> when more installs failed than were confirmed). It is the file <3><4>directory.json</4></3> in the public repository. There are no install counts and nothing about who sent or installed one, and a status is a record, not a safety claim. Maintainers can make an adaptation unnecessary by committing their own <5>flagship.app.json</5>.",
+    "kind": "text",
+    "ctx": "p",
+    "verbatim": [
+      "directory.json",
+      "flagship.app.json"
+    ],
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "sf885433e9b": {
+    "en": "Search the adapter directory",
+    "kind": "attr",
+    "ctx": "input[aria-label]",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s69437d5481": {
+    "en": "Project, host or license",
+    "kind": "attr",
+    "ctx": "input[placeholder]",
+    "pages": [
+      "adapters.html"
+    ]
+  },
+  "s8897545066": {
+    "en": "Loading the directory…",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "adapters.html"
+    ]
+  },
   "sfbf6b69d4f": {
     "en": "When an adaptation breaks",
     "kind": "text",
