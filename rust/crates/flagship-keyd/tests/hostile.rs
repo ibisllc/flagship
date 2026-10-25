@@ -308,7 +308,11 @@ fn linux_peercred_refuses_another_uid() {
     });
     std::fs::set_permissions(&k.dir, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     std::fs::set_permissions(&k.sock, std::os::unix::fs::PermissionsExt::from_mode(0o666)).unwrap();
-    let status = std::process::Command::new(std::env::current_exe().unwrap())
+    // nobody may not be able to reach the build tree (a 0750 home), so it runs a copy beside the socket.
+    let exe = k.dir.join("hostile-child");
+    std::fs::copy(std::env::current_exe().unwrap(), &exe).unwrap();
+    std::fs::set_permissions(&exe, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let status = std::process::Command::new(&exe)
         .args([
             "--exact",
             "linux_peercred_refuses_another_uid",
