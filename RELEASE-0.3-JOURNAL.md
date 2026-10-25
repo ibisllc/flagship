@@ -68,8 +68,8 @@ AI01/AI02 local AI) and 8 (V01 adversarial suite + assessment package, V02 canar
 - Full suite on a throwaway UpCloud VM (~1 h, deletes itself):
   `bash scripts/full-test-vm.sh --commit <sha>` (token `~/.config/flagship/upcloud-token`; logs in
   `gym-results/full-test-<stamp>/`). crypto-graph fails by design (known Q05/Q08/Q09 classical bypasses).
-- CI: only runs on `main`/`release/**`; dispatch on this branch:
-  `gh workflow run ci.yml --ref integrate/0.3-arch` and `rust.yml`.
+- CI: runs on every push to `main`/`release/**` (so on release/0.3); to rerun by hand:
+  `gh workflow run ci.yml --ref release/0.3` and `rust.yml`.
 - Release gym (two passes, arch-v2 then classic): `bash scripts/gym-release-run.sh`. Exit 0 green,
   3 skips, 4 lock held, 5 arch-v2 failed but classic green (→ set classic), 6 only browser-grants failed
   (→ app browser off).
@@ -179,7 +179,7 @@ Running when this was written (subagents; if this session is gone, they are gone
   regenerated with xcodegen) and force-pushed (`8a29461dd`; old tip `backup/gym-pre-0.3-2026-10-25`).
   Gym worktree: `~/.cache/flagship/gym-worktree`. Live release gym started:
   `bash scripts/gym-release-run.sh` → `scratchpad/gym-release.log`. Act on its exit code (Commands).
-  If `integrate/0.3-arch` moves before the run, `gym` must be rebased onto it again (not onto main).
+  If `release/0.3` (was integrate/0.3-arch) moves before a gym run, rebase `gym` onto it again (not onto main).
 - 2026-10-25: **main has one extra commit `4c54f723c`** (adds only `.github/workflows/box-artifact.yml`;
   its parent `386e29c84` is the old main). GitHub dispatches a workflow only if its file is on the
   default branch, and gym-box-artifact.sh needs box-artifact.yml. Resetting main back by force-push
