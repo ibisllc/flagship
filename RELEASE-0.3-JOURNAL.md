@@ -264,3 +264,15 @@ Running when this was written (subagents; if this session is gone, they are gone
   (`18c99d77e`); every branch checked for containment (merge-tree + line-level absorption); 271 refs
   and 4 worktree WIP snapshots archived under refs/archive/2026-10-25/ then deleted; manifest
   `7e27bca89`. Worktrees left: main checkout (on main), flagship-0.3 (release/0.3), gym worktree.
+- 2026-10-25: cause 2 found on a debug box: writeFileDurable's mode went through the daemon's
+  UMask=0077, so the Rust launchers (flagship-rust-exec/select) landed 0700 and keyd/core (own users)
+  could not exec them → keyd down → daemon never started → no cert. Same bug made the engine marker
+  unreadable to the daemon user (falls back to Docker). Fixed `c0f191aba` (fchmod; test
+  durableFileMode). Verified by hand on the box: tunnel up, cert, HTTPS 200. Debug box destroyed.
+  gym rebased onto release/0.3 (`78f9fa308`); release gym run 2 started → scratchpad/gym-release-2.log.
+- 2026-10-25: feature branches being rebased onto release/0.3 by two agents in worktrees
+  /Users/harrywinner/flagship-feat-a (marketplace, custom-names, custom-domains, outbound-proxy from the
+  ux-* copies; branches rebased/*) and /Users/harrywinner/flagship-feat-b (retail, browser-extension,
+  phone-usb-burn, other-os-installers, data-sovereignty, alpine). After review: move feat/* to
+  rebased/*, push, archive+delete ux-*, remove the two worktrees. rust/target was deleted (cache).
+  Asked Harry: outbound proxy (a) free in 0.3 without the marketplace, or (b) with payments.
