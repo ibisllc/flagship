@@ -1306,6 +1306,30 @@
    "evidence": [
     "packages/server-daemon/src/publisherPins.ts:1"
    ]
+  },
+  {
+   "id": "eff.stack-switch",
+   "kind": "effect",
+   "label": "Box moved between the classic stack and arch-v2 (root installs packages)",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "packages/server-daemon/src/archV2Switch.ts:181"
+   ]
+  },
+  {
+   "id": "eff.gpu-allocation",
+   "kind": "effect",
+   "label": "An app given a GPU by flagship-gpud",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (Rust/platform)",
+   "evidence": [
+    "rust/crates/flagship-gpu/src/owner_approval.rs:182"
+   ]
   }
  ],
  "edges": [
@@ -2159,6 +2183,46 @@
    ],
    "notes": "Studio pairing transfers signing authority for recipes; SAS is the only MITM check.",
    "inferred": true
+  },
+  {
+   "from": "key.admin-root",
+   "to": "eff.stack-switch",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/archV2Switch.ts:14"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "eff.stack-switch",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/archV2Switch.ts:151"
+   ]
+  },
+  {
+   "from": "eff.stack-switch",
+   "to": "eff.box-code",
+   "type": "executes",
+   "evidence": [
+    "packages/server-daemon/src/archV2Switch.ts:181"
+   ]
+  },
+  {
+   "from": "key.admin-root",
+   "to": "eff.gpu-allocation",
+   "type": "authorizes",
+   "evidence": [
+    "packages/protocol/src/gpuApproval.ts:8"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "eff.gpu-allocation",
+   "type": "authorizes",
+   "evidence": [
+    "rust/crates/flagship-gpu/src/owner_approval.rs:116"
+   ]
   }
  ],
  "targets": [
