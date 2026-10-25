@@ -190,3 +190,13 @@ Running when this was written (subagents; if this session is gone, they are gone
   release gym with `GYM_BASE_REF=origin/gym` (else gym-refresh rebases gym onto main). Gym secrets:
   `set -a; . /Users/harrywinner/flagship/.gym-secrets.env; set +a` before the gym scripts. Gym
   artifact build: box-artifact.yml run 40167399457 on gym `73fc5eb6e`.
+- 2026-10-25: main reset to `386e29c84` with Harry's approval (fast-forward possible again; the
+  earlier "main has one extra commit" note is resolved). Harry: the gym must not depend on GitHub CI.
+  So the gym builds its box artifact on a throwaway UpCloud VM (`scripts/box-artifact-vm.sh`, shared
+  `scripts/lib/upcloud-vm.sh`, `645540751`; amd64 only). Also fixed `62cbea0f3`: the artifact
+  assembler refused `flagship-wasi-worker` (every artifact since M7 failed). gym rebased to
+  `e760e65c7`; release gym restarted.
+- 2026-10-25: the Android gym-fix agent was stopped by the harness (auto-mode verdicts unavailable)
+  partway. Its partial edits are uncommitted in the worktree (GymBase.kt, GymUpdateResultsTest.kt,
+  SmokeMode.kt, KeystoreWatchBootKeys.kt, ActivityScreen.kt, BrowserGrantScreens.kt, ...): review,
+  finish and re-run the 7 Android tests before committing them.
