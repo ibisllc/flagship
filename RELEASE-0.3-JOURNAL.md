@@ -102,7 +102,7 @@ Running when this was written (subagents; if this session is gone, they are gone
        crypto-graph.
 3. [x] (`5e6a71249`) iOS string harvest (Xcode build with `SWIFT_EMIT_LOC_STRINGS=YES`, then `scripts/i18n-ios.mjs`),
        then `npm run i18n`.
-4. [ ] (iOS done `75e9a4a80`; Android running) Native mock gyms on the tip: iOS UI tests (GymRelease03Tests and the rest), Android emulator gym.
+4. [x] (iOS `75e9a4a80`, Android `86e474641`) Native mock gyms on the tip: iOS UI tests (GymRelease03Tests and the rest), Android emulator gym.
 5. [ ] Update `AGENTS.md` "Current status" and `SECURITY-0.3-PROGRESS.md` for the merged release.
 6. [ ] (running since 2026-10-25, see Log) Live release gym `bash scripts/gym-release-run.sh` (needs `scripts/gym-refresh.sh` first, the
        gym branch rebased onto this tip, box artifact built by `box-artifact.yml`); act on its exit code
@@ -200,3 +200,12 @@ Running when this was written (subagents; if this session is gone, they are gone
   partway. Its partial edits are uncommitted in the worktree (GymBase.kt, GymUpdateResultsTest.kt,
   SmokeMode.kt, KeystoreWatchBootKeys.kt, ActivityScreen.kt, BrowserGrantScreens.kt, ...): review,
   finish and re-run the 7 Android tests before committing them.
+- 2026-10-25: Android gym fixed `86e474641` (2 real bugs: watch start-up key used
+  NamedParameterSpec, which Android Keystore refuses; browser-grant reload/toast lost when the last
+  request's list left; plus gym pins, share seed, keyboard wait, update-result check). 231/232 of the
+  gym package green; the one left (GymDeviceBugsTest Samsung Pass: the text moved into "How this works")
+  and the same lost-toast pattern in ChatRequestsList are being fixed (uncommitted, verifying). iOS to
+  check later: Allow/Withdraw on an app's page still reload grants and toast when the last card goes;
+  the share demo seed must not be cut short by a leaving view.
+- 2026-10-25: release-gym VM build needed `--no-same-owner` and GnuPG (`scripts/lib/upcloud-vm.sh`);
+  gym at `61c2d1005`; live release gym running again.
