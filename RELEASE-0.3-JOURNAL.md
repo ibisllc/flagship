@@ -100,9 +100,9 @@ own control plane (next release; notes in docs/data-sovereignty.md).
 ### A. Land the remaining code on release/0.3
 - [ ] A1 Boot-chain refresh (agent building it in the release worktree since 2026-10-25): review,
       commit by explicit paths. It lets 0.3 boxes take initramfs/unlock changes via updates.
-- [ ] A2 Fast-forward release/0.3 onto feat/phone-usb-burn (13 commits, already on the tip; rebase
+- [x] A2 (`a03887d5c` incl. A3; branch deleted, tip archived under refs/archive/2026-10-25/landed/) Fast-forward release/0.3 onto feat/phone-usb-burn (13 commits, already on the tip; rebase
       it first if the release moved), delete the feat branch (archive ref first).
-- [ ] A3 Merge feat/data-sovereignty's box half (8 commits) the same way.
+- [x] A3 (landed with A2; combined stack: tsc, 3,019 tests, i18n, parity green) Merge feat/data-sovereignty's box half (8 commits) the same way.
 - [ ] A4 Build the sovereignty PHONE side (iOS reference, then Android; webapp gets only the
       vector ports — a browser can't do LAN rescue): Swift/Kotlin ports of rescue + keyfile v2 vectors;
       Bonjour (iOS NWBrowser, Info.plist NSBonjourServices `_flagship._tcp`) / Android NsdManager
@@ -356,3 +356,6 @@ own control plane (next release; notes in docs/data-sovereignty.md).
   (Harry wants USB burn IN 0.3), delete that branch, then USB-burn owner steps: rebuild the seed for the
   release's Debian pin (sha pin is 13.6.0), publish it, set FLAGSHIP_ISO_SEED, test OTG write on a real
   phone + stick; plus a gym lane for a burned stick. Update the AGENTS.md branch list.
+- 2026-10-25: Harry's mandate recorded (Mandate + Master plan above). USB burn (13) and data
+  sovereignty box half (8) landed on release/0.3 at `a03887d5c` (tested together first in a scratch
+  worktree /Users/harrywinner/flagship-tmp, which can be reused for side work or removed).
