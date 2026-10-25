@@ -161,11 +161,24 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       boot-chain refresh, rescue, PINS re-pin, box artifact + endorsement, appliances, Studios,
       stores, website); `--dry-run` clean; docs/runbooks/0.3-deploy-sheet.md (what Harry needs ready:
       YubiKeys, PQ ceremony 2c, catalog keys 2b, secrets list, store accounts).
-- [ ] F3 Store assets: REAL native screenshots (iOS/Android gym captures, 7 languages, every device
+- [ ] F3 (texts done `68b32b475`: store/listings/<lang>.json + scripts/store-assets/listings.mjs; screenshots still to do) Store assets: REAL native screenshots (iOS/Android gym captures, 7 languages, every device
       class) via the store/ pipeline (no webapp stand-ins), new feature graphic, new App Store / Play
       texts and "What's new" covering the whole 0.3 range, in 7 languages; contact sheet for Harry.
-- [ ] F4 Website: landing + features + security + /studio + release notes/changelog for 0.3, pricing
+- [x] F4 (`68b32b475`: blog/flagship-0-3, landing/FAQ/help/security/how-it-works, 7 languages; deploys with .com) Website: landing + features + security + /studio + release notes/changelog for 0.3, pricing
       unchanged (free), i18n built; deployed with .com.
+- [ ] F4b Before launch, resolve every `TODO-RM <tag>` in docs/release-notes/0.3.md,
+      store/listings/*.json and apps/web/public (grep TODO-RM): offline-control (keep only if A4
+      landed, and the strict-PQ caveat is gone), usb-burn (seed published + hardware-tested),
+      app-browser (gym verdict), new-box-stack (gym verdict: "Podman + Rust", "own database server"
+      are arch-v2 only), canary (catalog root pinned in the release run), findings wording, store
+      name. Also fix what the texts agent flagged: landing "iOS soon / Android soon" (pinned by
+      marketingPages.test.ts), security.html "a stolen server cannot self-unlock" vs opt-in
+      Auto-unlock, Raspberry Pi answers say x86_64 only (arm64 appliances exist), docs/index.html
+      "Phone pairing" section outdated, docs/data-sovereignty.md header still says parked; pick one
+      word for "box" per language (glossary vs site) for the native reviewers.
+- [ ] F4c Bump the product version to 0.3: release/version.json then `node scripts/check-versions.mjs
+      --write` (homepage badge, webapp, iOS, Android, Studios); store build numbers climb (iOS 1.1→
+      next, Android versionCode > highest uploaded, Studio 0.3.0).
 - [ ] F5 OWNER runs scripts/release.sh phases A and B (I watch logs, fix, re-run); merge release/0.3
       to main (fast-forward); canary; store submissions (iOS + watch, Android + Wear), Studios.
 - [ ] F6 After launch: hall of fame (hof-jay), translation review request, hardware receipts, the
@@ -366,3 +379,5 @@ own control plane (next release; notes in docs/data-sovereignty.md).
 - 2026-10-25: F3/F4 texts started early: an agent drafts docs/release-notes/0.3.md, store listings
   (7 languages) and the website pages in the release worktree (uncommitted until it reports; native
   screenshots come later). Live release gym run 2 still running (scratchpad/gym-release-2.log).
+- 2026-10-25: texts landed `68b32b475` (release notes, store listings ×7 with limits check, website +
+  blog post). TODO-RM markers to resolve before launch: see F4b. Product version still 0.2: see F4c.
