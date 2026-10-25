@@ -5635,6 +5635,19 @@ export class D1NameChangeStorage implements NameChangeStorage {
     const cols = ((await this.db.prepare("PRAGMA table_info(usernames)").all<{ name: string }>()).results ?? [])
       .map((r) => r.name);
     if (!cols.includes("username")) return { ok: false, reason: "usernames schema unreadable" };
+    // Quantum-safe trust names the account inside signed bytes (the account-irk and
+    // admin-root key bindings, every assurance-policy change), so those rows can't be
+    // rewritten; moving the account without them would drop its protection.
+    const pqHeld = async (sql: string): Promise<boolean> =>
+      !!(await this.db.prepare(sql).bind(oldName).first<{ hit: number }>());
+    if (
+      (tables.has("pq_key_bindings") &&
+        (await pqHeld("SELECT 1 AS hit FROM pq_key_bindings WHERE role IN ('account-irk', 'admin-root') AND subject_id = ?1 LIMIT 1"))) ||
+      (tables.has("assurance_policy_changes") &&
+        (await pqHeld("SELECT 1 AS hit FROM assurance_policy_changes WHERE account = ?1 LIMIT 1")))
+    ) {
+      return { ok: false, reason: "renaming an account with quantum-safe protection isn't available yet" };
+    }
     const others = cols.filter((c) => c !== "username");
     const present = RENAMED_ACCOUNT_COLUMNS.filter(([t]) => tables.has(t));
 
