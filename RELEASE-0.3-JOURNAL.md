@@ -98,9 +98,9 @@ Running when this was written (subagents; if this session is gone, they are gone
 
 1. [x] Land AI01/AI02 (`2045eef9b`; parity fixed `059251d5d`): review the uncommitted diff, `npx tsc -b`, targeted vitest, `npm run i18n`,
        Android unit tests, iOS build; commit by explicit paths; push.
-2. [ ] Re-run `full-test-vm.sh` on the new tip and CI (`ci.yml`, `rust.yml`); fix everything but
+2. [x] (VM run on `2045eef9b` green but crypto-graph; CI 40153988658 green; Rust 40156714426 green) Re-run `full-test-vm.sh` on the new tip and CI (`ci.yml`, `rust.yml`); fix everything but
        crypto-graph.
-3. [ ] iOS string harvest (Xcode build with `SWIFT_EMIT_LOC_STRINGS=YES`, then `scripts/i18n-ios.mjs`),
+3. [x] (`5e6a71249`) iOS string harvest (Xcode build with `SWIFT_EMIT_LOC_STRINGS=YES`, then `scripts/i18n-ios.mjs`),
        then `npm run i18n`.
 4. [ ] Native mock gyms on the tip: iOS UI tests (GymRelease03Tests and the rest), Android emulator gym.
 5. [ ] Update `AGENTS.md` "Current status" and `SECURITY-0.3-PROGRESS.md` for the merged release.
@@ -154,3 +154,9 @@ Running when this was written (subagents; if this session is gone, they are gone
   Started: full VM run on `2045eef9b` (log `scratchpad/full-test-3.log`), iOS build with
   SWIFT_EMIT_LOC_STRINGS into `scratchpad/ios-dd` for the harvest (4 BrowserGrantCenter strings
   pending). Disk had 5.8 GB free.
+- 2026-10-25: full VM on `2045eef9b`: vitest 14,439/0 failed, all Rust/Go/tsc OK; crypto-graph fails
+  by design (16/16 strict targets reachable via classical keys until the PQ ceremony). CI green.
+  Rust CI needed: gVisor registered on the runner (pinned tarball + SHA-512 from appSandbox/gvisor.ts),
+  `--no-fail-fast`, and the peercred child run from a copy in /tmp (`hostile.rs`); green on run
+  40156714426. iOS harvest + 3 browser-grant translations `5e6a71249`. iOS mock gym running
+  (`scratchpad/gym-ios.log`); Android mock gym next.
