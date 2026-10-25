@@ -78,7 +78,7 @@ vm_send_commit() { # vm_send_commit <repo> <40-hex commit>
   git init -q "$shallow"
   git -C "$shallow" fetch -q --depth 1 --upload-pack="git -c uploadpack.allowAnySHA1InWant=true upload-pack" "file://$repo" "$commit"
   git -C "$shallow" -c advice.detachedHead=false checkout -q "$commit"
-  tar -C "$shallow" -czf - . | "${VM_SSH[@]}" 'mkdir -p /root/fs && tar -xzf - -C /root/fs'
+  tar -C "$shallow" -czf - . | "${VM_SSH[@]}" 'mkdir -p /root/fs && tar --no-same-owner -xzf - -C /root/fs'
   rm -rf "$shallow"
 }
 
