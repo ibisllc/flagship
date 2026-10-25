@@ -33,16 +33,6 @@
     },
     {
       "check": "signed-tags",
-      "key": "ios:flagship/server-code-seen/v1",
-      "reason": "First contact's Studio confirmation (docs/first-contact.md): the Swift port lands on its own branch (ux-fc-ios) with the release/0.3 vectors; drop this entry then."
-    },
-    {
-      "check": "signed-tags",
-      "key": "web:flagship/server-code-seen/v1",
-      "reason": "First contact's Studio confirmation: the webapp port lands on its own branch (ux-fc-web) with the release/0.3 vectors; drop this entry then."
-    },
-    {
-      "check": "signed-tags",
       "key": "android:flagship/umk-wrap/v1",
       "reason": "iOS Secure Enclave keystore wrapping, local storage only and never on the wire; Android wraps in the Android Keystore."
     },
@@ -200,16 +190,6 @@
       "check": "signed-tags",
       "key": "ios:flagship/box-artifact/v1",
       "reason": "The box artifact is verified by the install scripts on the box and by Studio's burn path; the iOS app never installs a box. Android carries the tag only inside the embedded preseed engine it shares with the builder."
-    },
-    {
-      "check": "signed-tags",
-      "key": "ios:flagship/server-code-seen/v1",
-      "reason": "Studio's \"Confirmed by Studio\" MAC (docs/first-contact.md item 4): the webapp verifies it behind its seam; the native ports and shared vectors land with the release/0.3 Studio hand-off."
-    },
-    {
-      "check": "signed-tags",
-      "key": "android:flagship/server-code-seen/v1",
-      "reason": "Studio's \"Confirmed by Studio\" MAC (docs/first-contact.md item 4): the webapp verifies it behind its seam; the native ports and shared vectors land with the release/0.3 Studio hand-off."
     },
     {
       "check": "signed-tags",
@@ -380,6 +360,46 @@
       "check": "signed-tags",
       "key": "web:flagship/pq-seed-wrap/v2",
       "reason": "The session KEK wrapping is Android's own storage format for its PQ seeds (pq-suites.md §18); iOS opens its seeds with the session's LAContext and the webapp holds no PQ seeds. Nothing is exchanged in this format."
+    },
+    {
+      "check": "push-categories",
+      "key": "ios:none",
+      "reason": "Not a push category: adapterVetting.ts's review verdict says category \"none\" for an adapter with no finding, and no push is sent for it."
+    },
+    {
+      "check": "push-categories",
+      "key": "android:none",
+      "reason": "Not a push category: adapterVetting.ts's review verdict says category \"none\" for an adapter with no finding, and no push is sent for it."
+    },
+    {
+      "check": "push-categories",
+      "key": "web:none",
+      "reason": "Not a push category: adapterVetting.ts's review verdict says category \"none\" for an adapter with no finding, and no push is sent for it."
+    },
+    {
+      "check": "signed-tags",
+      "key": "ios:flagship/box-artifact/v2",
+      "reason": "Box artifacts are verified by the box and Studio's preseed engine (bundled into Android only as the shared engine); the iOS app and the webapp never handle a box artifact."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-artifact/v2",
+      "reason": "Box artifacts are verified by the box and Studio's preseed engine (bundled into Android only as the shared engine); the iOS app and the webapp never handle a box artifact."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:adapter-attestation",
+      "reason": "Adapter attestations are signed by .com and checked by the box before it runs an adapter; no client app handles one."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:adapter-attestation",
+      "reason": "Adapter attestations are signed by .com and checked by the box before it runs an adapter; no client app handles one."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:adapter-attestation",
+      "reason": "Adapter attestations are signed by .com and checked by the box before it runs an adapter; no client app handles one."
     }
   ]
 }
