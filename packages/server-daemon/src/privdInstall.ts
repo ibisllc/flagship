@@ -5,13 +5,22 @@ import { PrivdClient } from "@flagship/privd";
 import {
   DAEMON_USER,
   PRIVD_DAEMON_DROPIN_PATH,
-  PRIVD_SOCKET,
+  PRIVD_HELPER,
   PRIVD_UNIT_PATH,
   daemonPrivdDropIn,
   privdSetupScript,
   privdUnit,
+  type PrivilegedHelper,
 } from "@flagship/privd/unit";
 import { writeFileDurable } from "./durableFile.js";
+import { BROKER_V1_SOCKET, RUST_RUN_DIR } from "./rustStack/units.js";
+
+/**
+ * On an architecture v2 box the Rust broker is the daemon's privileged helper: its privd v1
+ * socket speaks the same contract (packages/privd/tests/vectors), and when its binary fails three
+ * times in a row the same unit runs the TS privd on that socket instead (rustStack/units.ts).
+ */
+export const BROKER_HELPER: PrivilegedHelper = { unit: "flagship-broker.service", socket: BROKER_V1_SOCKET };
 
 /**
  * Take this daemon off root (SECURITY-HARDENING-PLAN.md SEC-DAEMON-001), the way keyd went in
@@ -24,6 +33,8 @@ export type PrivdInstallOutcome = "switched" | "skipped-no-systemd" | "skipped-n
 
 export interface PrivdInstallOptions {
   repoPath: string;
+  /** "broker" on an architecture v2 box whose Rust units are in (archV2Boot.ts privilegedHelperFor). */
+  helper?: "privd" | "broker";
   run: (cmd: string, args: string[]) => Promise<unknown>;
   hasSystemd?: () => boolean;
   fileExists?: (path: string) => boolean;
@@ -33,6 +44,8 @@ export interface PrivdInstallOptions {
   brokerAnswers?: (socket: string, timeoutMs: number) => Promise<boolean>;
   /** Gives the daemon's state to its account (handOverState; tests stub it). */
   handOver?: () => Promise<void>;
+  /** The Rust path's status folder (tests). */
+  runDir?: string;
   onLog?: (m: string) => void;
 }
 
@@ -42,6 +55,7 @@ export async function installPrivd(o: PrivdInstallOptions): Promise<PrivdInstall
   if (!(o.hasSystemd ?? (() => existsSync("/run/systemd/system")))()) return "skipped-no-systemd";
   const entry = join(o.repoPath, "packages/privd/dist/main.js");
   if (!exists(entry) || !exists(join(o.repoPath, "packages/server-daemon/dist/setup.js"))) return "skipped-no-build";
+  const helper = o.helper === "broker" ? BROKER_HELPER : PRIVD_HELPER;
   const read = o.read ?? (async (p) => await readFile(p, "utf8").catch(() => null));
   const write =
     o.write ??
@@ -51,19 +65,30 @@ export async function installPrivd(o: PrivdInstallOptions): Promise<PrivdInstall
     });
   try {
     for (const line of privdSetupScript().trim().split("\n")) await o.run("sh", ["-c", line]);
-    const unit = privdUnit(entry);
-    if ((await read(PRIVD_UNIT_PATH)) !== unit) await write(PRIVD_UNIT_PATH, unit, 0o644);
-    await o.run("systemctl", ["daemon-reload"]);
-    await o.run("systemctl", ["enable", "flagship-privd.service"]);
-    await o.run("systemctl", ["restart", "flagship-privd.service"]);
-    if (!(await (o.brokerAnswers ?? brokerAnswers)(PRIVD_SOCKET, 30_000))) {
-      log("[privd] installed but not answering; the daemon keeps running as root until it does");
+    if (helper === PRIVD_HELPER) {
+      const unit = privdUnit(entry);
+      if ((await read(PRIVD_UNIT_PATH)) !== unit) await write(PRIVD_UNIT_PATH, unit, 0o644);
+      await o.run("systemctl", ["daemon-reload"]);
+      await o.run("systemctl", ["enable", "flagship-privd.service"]);
+    } else if ((await read(PRIVD_UNIT_PATH)) !== null) {
+      // One helper per box: the broker's socket replaces flagship-privd's.
+      await o.run("systemctl", ["disable", "--now", "flagship-privd.service"]).catch(() => {});
+    }
+    // A restart reads the daemon's account afresh: the Rust broker admits it by its uid and group.
+    await o.run("systemctl", ["restart", helper.unit]);
+    if (!(await (o.brokerAnswers ?? brokerAnswers)(helper.socket, 30_000))) {
+      log(`[privd] ${helper.unit} installed but not answering; the daemon keeps running as root until it does`);
       return "failed";
     }
     await (o.handOver ?? (() => handOverState({ log })))();
-    await write(PRIVD_DAEMON_DROPIN_PATH, daemonPrivdDropIn(), 0o644);
+    await write(PRIVD_DAEMON_DROPIN_PATH, daemonPrivdDropIn(helper), 0o644);
     await o.run("systemctl", ["daemon-reload"]);
-    log(`[privd] installed and answering; the daemon restarts as ${DAEMON_USER}`);
+    // The Rust keyd admits callers by uid (SO_PEERCRED), and the daemon's new uid joins its list
+    // only when keyd selects again; keyd's restart restarts this daemon too, which is what follows.
+    if (helper !== PRIVD_HELPER && (await read(join(o.runDir ?? RUST_RUN_DIR, "keyd.choice")))?.trim() === "rust") {
+      await o.run("systemctl", ["restart", "--no-block", "flagship-keyd.service"]);
+    }
+    log(`[privd] ${helper.unit} answering; the daemon restarts as ${DAEMON_USER}`);
     return "switched";
   } catch (e) {
     log(`[privd] could not install: ${(e as Error).message}; the daemon keeps running as root`);

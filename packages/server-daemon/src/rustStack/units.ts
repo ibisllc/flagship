@@ -4,8 +4,9 @@
  * Three components, each a systemd unit whose ExecStart is a small launcher:
  *
  *   keyd    the Rust keyd serves the same socket and state as the TS keyd (wire v1); TS fallback
- *   broker  root; privd v1 socket for the daemon, typed v2 socket for core; fallback: idle (the
- *           daemon, still root, does those operations itself, as before)
+ *   broker  root; privd v1 socket for the daemon (the full privd contract: the daemon's privileged
+ *           helper once it runs as `flagship`), typed v2 socket for core; fallback: the TS privd
+ *           on the same v1 socket
  *   core    unprivileged; the controller in shadow mode against the broker; fallback: idle
  *
  * `flagship-rust-select` (root, ExecStartPre) picks Rust only when the box's switch is on, the
@@ -52,6 +53,10 @@ export interface RustScriptPaths {
   stateDir?: string;
   runDir?: string;
 }
+
+/** The daemon's account once it gives up root (packages/privd unit.ts DAEMON_USER). */
+export const DAEMON_ACCOUNT = "flagship";
+export const BROKER_AUDIT_LOG = "/var/lib/flagship-broker/audit.log";
 
 export function rustSelectScript(opts: RustScriptPaths = {}): string {
   const release = opts.releasePath ?? "/opt/flagship";
@@ -117,15 +122,25 @@ select)
     fi
     : > "$run/$comp.env"
     if [ "$choice" = rust ]; then
+        # The daemon's own account, once it runs without root: the Rust components admit callers
+        # by the uid the kernel reports, which never carries a supplementary group.
+        daemon_uid=$(id -u ${DAEMON_ACCOUNT} 2>/dev/null || true)
+        [[ "$daemon_uid" =~ ^[0-9]+$ ]] || daemon_uid=""
         case "$comp" in
         keyd)
             gid=$(getent group flagship-keyd-clients | cut -d: -f3)
-            { echo "FLAGSHIP_KEYD_ALLOW_UIDS=0"; [ -n "$gid" ] && echo "FLAGSHIP_KEYD_ALLOW_GIDS=$gid"; } > "$run/$comp.env" ;;
+            { echo "FLAGSHIP_KEYD_ALLOW_UIDS=0\${daemon_uid:+,$daemon_uid}"; [ -n "$gid" ] && echo "FLAGSHIP_KEYD_ALLOW_GIDS=$gid"; } > "$run/$comp.env" ;;
         broker)
             engine=$(cat '${engineActive}' 2>/dev/null | tr -cd 'a-z')
             [ "$engine" = podman ] || engine=docker
             core_uid=$(id -u ${CORE_USER} 2>/dev/null || true)
-            { echo "FLAGSHIP_BROKER_ENGINE=$engine"; echo "FLAGSHIP_BROKER_V1_UIDS=0"; [ -n "$core_uid" ] && echo "FLAGSHIP_BROKER_TYPED_UIDS=$core_uid"; } > "$run/$comp.env" ;;
+            {
+                echo "FLAGSHIP_BROKER_ENGINE=$engine"
+                echo "FLAGSHIP_BROKER_ENGINE_FILE=${engineActive}"
+                echo "FLAGSHIP_BROKER_V1_UIDS=0\${daemon_uid:+,$daemon_uid}"
+                getent group ${DAEMON_ACCOUNT} >/dev/null && echo "FLAGSHIP_BROKER_V1_GROUP=${DAEMON_ACCOUNT}"
+                [ -n "$core_uid" ] && echo "FLAGSHIP_BROKER_TYPED_UIDS=$core_uid"
+            } > "$run/$comp.env" ;;
         esac
     fi
     chmod 0644 "$run/$comp.env"
@@ -208,16 +223,27 @@ ExecStopPost=+${RUST_SELECT_PATH} stopped keyd
 `;
 }
 
-export function brokerServiceUnit(): string {
+/**
+ * The broker unit. Its fallback is the TS privd on the same v1 socket, so the daemon's privileged
+ * helper stays up whichever binary runs. Hardened like privd's own unit (packages/privd unit.ts):
+ * it acts on the host's mount table and network (loop mounts the engine must see, the host's
+ * firewall), so it has no private mount or network namespace, and Podman runs as its child, so
+ * nothing that would also bind every container (no SUID/SGID filter, no address-family list).
+ */
+export function brokerServiceUnit(opts: { nodePath?: string; privdEntry?: string } = {}): string {
+  const node = opts.nodePath ?? "/usr/local/bin/node";
+  const privd = opts.privdEntry ?? "/opt/flagship/packages/privd/dist/main.js";
+  for (const p of [node, privd]) if (!SAFE_PATH.test(p)) throw new Error(`unsafe path ${p}`);
   return `[Unit]
 Description=Flagship privileged broker (architecture v2)
+After=docker.service
 Before=flagship-daemon.service flagship-core.service
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStartPre=+${RUST_SELECT_PATH} select broker
-ExecStart=${RUST_EXEC_PATH} broker serve --
+ExecStart=${RUST_EXEC_PATH} broker serve -- ${node} ${privd} --socket ${BROKER_V1_SOCKET} --audit ${BROKER_AUDIT_LOG} --socket-group ${DAEMON_ACCOUNT}
 ExecStartPost=+${RUST_SELECT_PATH} confirm broker ${BROKER_V1_SOCKET}
 ExecStopPost=+${RUST_SELECT_PATH} stopped broker
 Restart=always
@@ -229,20 +255,13 @@ StateDirectoryMode=0700
 Environment=FLAGSHIP_BROKER_V1_SOCKET=${BROKER_V1_SOCKET}
 Environment=FLAGSHIP_BROKER_SOCKET=${BROKER_TYPED_SOCKET}
 Environment=FLAGSHIP_BROKER_STATE=/var/lib/flagship-broker
-# Root, because it runs the engine, systemctl and nft for its callers; the rest is fenced.
+User=root
 NoNewPrivileges=yes
-ProtectHome=yes
-PrivateTmp=yes
-ProtectKernelModules=yes
-ProtectKernelLogs=yes
-ProtectClock=yes
-ProtectHostname=yes
 RestrictRealtime=yes
-RestrictSUIDSGID=yes
 LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+SystemCallArchitectures=native
 LimitCORE=0
-UMask=0077
+UMask=0022
 
 [Install]
 WantedBy=multi-user.target

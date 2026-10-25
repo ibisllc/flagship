@@ -120,7 +120,8 @@ import { KeydClient } from "@flagship/keyd";
 import { keydTlsKeyd } from "./keydAsync.js";
 import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
-import { bootArchV2, rustPathHealthy } from "./archV2Boot.js";
+import { bootArchV2, privilegedHelperFor, rustPathHealthy } from "./archV2Boot.js";
+import { BROKER_V1_SOCKET } from "./rustStack/units.js";
 
 /** Either custodian: the keys in this process, or in flagship-keyd. */
 import { CompanionDelegations } from "./authority/companionDelegations.js";
@@ -770,11 +771,13 @@ async function main(): Promise<void> {
   // Once keyd holds the keys this process gives up root: flagship-privd does the few host operations
   // it needs, and the daemon runs as `flagship`. Until privd answers it runs as root, as before.
   if (runsUnprivileged()) {
-    console.log("[daemon] running as flagship; host operations go through flagship-privd");
+    const viaBroker = process.env.FLAGSHIP_PRIVD_SOCKET === BROKER_V1_SOCKET;
+    console.log(`[daemon] running as flagship; host operations go through flagship-privd${viaBroker ? `'s contract on ${BROKER_V1_SOCKET} (the Rust broker, TS privd as its fallback)` : ""}`);
   } else if (process.getuid?.() === 0) {
     if (keyd) {
       const p = await installPrivd({
         repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+        helper: privilegedHelperFor(archV2),
         run: (cmd, args) => realUpdateCommandRunner(cmd, args),
         onLog: (m) => console.log(m),
       });

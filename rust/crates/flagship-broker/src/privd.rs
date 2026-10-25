@@ -3,13 +3,14 @@
 
 use crate::audit::Audit;
 use crate::js;
-use crate::policy::{docker_exec, nft_exec, power_exec, restart_exec};
+use crate::podman::EngineKind;
+use crate::policy::{PolicyContext, PrivExec, ReleaseTrust, validate_request};
+use crate::runner::V1Runner;
 use crate::server::{Connection, ConnectionFactory, Reply};
 use crate::wire::{
     ErrorCode, PRIVD_PROTOCOL_VERSION, PrivdError, Request, Response, ResultBody, echo_id,
     encode_frame, parse_request,
 };
-use flagship_runtime::exec::{Exec, Executor};
 use serde_json::{Map, Value};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -29,8 +30,41 @@ impl Default for V1Limits {
     }
 }
 
+/// What a request is checked against besides its arguments, read for each request.
+pub trait V1Environment: Send + Sync {
+    fn engine(&self) -> EngineKind;
+    fn mounts(&self) -> String;
+    fn trust(&self) -> &ReleaseTrust;
+    fn arch(&self) -> &str;
+}
+
+/// A fixed environment (tests, and the conformance check).
+#[derive(Debug, Clone)]
+pub struct FixedEnvironment {
+    pub engine: EngineKind,
+    pub mounts: String,
+    pub trust: ReleaseTrust,
+    pub arch: String,
+}
+
+impl V1Environment for FixedEnvironment {
+    fn engine(&self) -> EngineKind {
+        self.engine
+    }
+    fn mounts(&self) -> String {
+        self.mounts.clone()
+    }
+    fn trust(&self) -> &ReleaseTrust {
+        &self.trust
+    }
+    fn arch(&self) -> &str {
+        &self.arch
+    }
+}
+
 pub struct V1Factory {
-    pub executor: Arc<dyn Executor>,
+    pub runner: Arc<dyn V1Runner>,
+    pub env: Arc<dyn V1Environment>,
     pub audit: Arc<Audit>,
     pub limits: V1Limits,
 }
@@ -46,7 +80,8 @@ impl std::fmt::Debug for V1Factory {
 impl ConnectionFactory for V1Factory {
     fn open(&self, _peer: crate::peer::Peer) -> Box<dyn Connection> {
         Box::new(V1Connection {
-            executor: Arc::clone(&self.executor),
+            runner: Arc::clone(&self.runner),
+            env: Arc::clone(&self.env),
             audit: Arc::clone(&self.audit),
             limits: self.limits,
             hello: false,
@@ -64,7 +99,8 @@ impl std::fmt::Debug for V1Connection {
 }
 
 pub struct V1Connection {
-    executor: Arc<dyn Executor>,
+    runner: Arc<dyn V1Runner>,
+    env: Arc<dyn V1Environment>,
     audit: Arc<Audit>,
     limits: V1Limits,
     hello: bool,
@@ -75,37 +111,68 @@ fn frame(r: &Response) -> Vec<u8> {
     encode_frame(r).unwrap_or_default()
 }
 
-/// Map a request to the one argv it may run.
-pub fn validate(req: &Request) -> Result<Exec, PrivdError> {
-    match req.op {
-        "power" => power_exec(&req.args),
-        "systemd.restart" => restart_exec(&req.args),
-        "docker" => docker_exec(&req.args),
-        _ => nft_exec(&req.args),
-    }
+/// Map a request to the one command it may run.
+pub fn validate(req: &Request, env: &dyn V1Environment) -> Result<PrivExec, PrivdError> {
+    let mounts = || env.mounts();
+    let ctx = PolicyContext {
+        engine: env.engine(),
+        mounts: &mounts,
+        trust: env.trust(),
+        arch: env.arch(),
+    };
+    validate_request(req.op, &req.args, &ctx)
 }
 
-/// `summary`: what was asked, never the bodies or secrets that came with it.
-fn summary(req: &Request) -> String {
-    if req.op == "docker"
-        && let Some(argv) = req.args.get("argv").and_then(Value::as_array)
-    {
-        return argv
-            .iter()
-            .take(3)
-            .map(|v| v.as_str().unwrap_or_default())
-            .collect::<Vec<_>>()
-            .join(" ");
+/// `summary`: what was asked, never the bodies or secrets that came with it. A request whose
+/// argv is not a list says only that, since its other fields may carry stdin or a password.
+pub fn summary(req: &Request) -> String {
+    let argv: Option<Vec<String>> = req.args.get("argv").and_then(Value::as_array).map(|a| {
+        a.iter()
+            .map(|v| match v {
+                Value::String(s) => s.clone(),
+                other => serde_json::to_string(other).unwrap_or_default(),
+            })
+            .collect()
+    });
+    match req.op {
+        "docker" | "docker.file" | "systemctl" => argv.map_or_else(
+            || "malformed request".to_owned(),
+            |a| {
+                a.iter()
+                    .take(3)
+                    .map(|x| {
+                        if x.starts_with("PGPASSWORD=") {
+                            "PGPASSWORD=…".to_owned()
+                        } else {
+                            x.clone()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            },
+        ),
+        "host" => match (argv, req.args.get("file").and_then(Value::as_str)) {
+            (Some(a), Some(file)) => format!(
+                "{file} {}",
+                a.iter().take(2).cloned().collect::<Vec<_>>().join(" ")
+            ),
+            _ => "malformed request".to_owned(),
+        },
+        "nft.apply" | "iptables.restore" => "firewall rules".to_owned(),
+        _ => {
+            let text = serde_json::to_string(&req.args).unwrap_or_default();
+            js::slice_units(&text, 120).to_owned()
+        }
     }
-    if req.op == "nft.apply" {
-        return "nft script".to_owned();
-    }
-    let text = serde_json::to_string(&req.args).unwrap_or_default();
-    js::slice_units(&text, 120).to_owned()
 }
 
 /// Execute a validated request and shape the answer as privd does.
-pub fn handle(executor: &dyn Executor, audit: &Audit, req: &Request) -> Response {
+pub fn handle(
+    runner: &dyn V1Runner,
+    env: &dyn V1Environment,
+    audit: &Audit,
+    req: &Request,
+) -> Response {
     let audit_line = |ok: bool, extra: &[(&str, Value)]| {
         let mut m = Map::new();
         m.insert("op".into(), Value::from(req.op));
@@ -116,14 +183,14 @@ pub fn handle(executor: &dyn Executor, audit: &Audit, req: &Request) -> Response
         m.insert("what".into(), Value::from(summary(req)));
         audit.record(m);
     };
-    let exec = match validate(req) {
+    let exec = match validate(req, env) {
         Ok(e) => e,
         Err(e) => {
             audit_line(false, &[("code", Value::from(e.code.as_str()))]);
             return Response::err(req.id.into(), e);
         }
     };
-    let r = executor.run(&exec);
+    let r = runner.run(&exec);
     audit_line(
         r.code == Some(0),
         &[
@@ -208,6 +275,11 @@ impl Connection for V1Connection {
                 PrivdError::new(ErrorCode::NotHello, "say hello first"),
             )));
         }
-        Reply::Send(frame(&handle(self.executor.as_ref(), &self.audit, &req)))
+        Reply::Send(frame(&handle(
+            self.runner.as_ref(),
+            self.env.as_ref(),
+            &self.audit,
+            &req,
+        )))
     }
 }

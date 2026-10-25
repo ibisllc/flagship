@@ -3,7 +3,8 @@
  * argv for a fixed binary or throws `PrivdError`. Nothing is passed to a shell, and a value the
  * validator does not recognise is a refusal, not a pass-through.
  */
-import { PrivdError } from "./wire.js";
+import { ENGINE_BINARY, podmanArgv, validatePodmanArgs, type EngineKind } from "./podman.js";
+import { PrivdError, type Op } from "./wire.js";
 
 export interface Exec {
   file: string;
@@ -33,7 +34,7 @@ const UNITS = new Set(["flagship-daemon.service", "docker.service", "flagship-da
 /** Where the unprivileged daemon keeps files the broker may read or write for it. */
 export const DAEMON_TRANSFER_ROOTS = ["/var/flagship/", "/var/tmp/.flagship-"];
 /** Never under any of the roots above, whatever a path says. */
-const NEVER = [/^\/var\/flagship\/identity(\/|$)/, /^\/var\/flagship\/keyd(\/|$)/, /^\/var\/flagship\/.*\.(hex|pem|key)$/];
+const NEVER = [/^\/var\/flagship\/identity(\/|$)/, /^\/var\/flagship\/keyd(\/|$)/, /^\/var\/flagship\/.*\.(hex|pem|key)$/s];
 
 /** The daemon's own runtime folder (RuntimeDirectory=flagship-daemon). */
 export const DAEMON_RUNTIME_DIR = "/run/flagship-daemon";
@@ -84,7 +85,19 @@ const BUILD_FLAGS = new Set(["--network", "--add-host", "--memory", "--cpu-perio
 /** A bind volume is only ever an app's own disk image (appQuota/loopVolumes.ts createBindVolume). */
 const BIND_DEVICE = /^device=\/var\/lib\/flagship-files\/(flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128})\/data$/;
 
-export function dockerExec(args: Record<string, unknown>): Exec {
+/**
+ * The engine's binary and argv for a checked docker-form request: Docker as written, or Podman's
+ * translation held to the docker rules again (when `dockerRules`) and to Podman's own.
+ */
+function forEngine(a: string[], engine: EngineKind, dockerRules: boolean): { file: string; args: string[] } {
+  if (engine !== "podman") return { file: ENGINE_BINARY.docker, args: a };
+  const mapped = podmanArgv(a);
+  if (dockerRules) validateDockerArgs(mapped);
+  validatePodmanArgs(mapped);
+  return { file: ENGINE_BINARY.podman, args: mapped };
+}
+
+export function dockerExec(args: Record<string, unknown>, engine: EngineKind = "docker"): Exec {
   noExtra(args, ["argv", "stdin", "env"]);
   const argv = args.argv;
   if (!Array.isArray(argv) || argv.length === 0 || argv.length > 256 || !argv.every((a) => typeof a === "string" && a.length <= 4096 && !a.includes("\u0000"))) {
@@ -92,21 +105,25 @@ export function dockerExec(args: Record<string, unknown>): Exec {
   }
   const a = argv as string[];
   const sub = a[0]!;
-  if (sub === "compose") return composeExec(a);
-  if (SUB_SUBCOMMANDS[sub]) {
-    if (!SUB_SUBCOMMANDS[sub]!.has(a[1] ?? "")) throw new PrivdError("forbidden", `docker ${sub} ${a[1] ?? ""} is not allowed`);
+  if (sub === "compose") {
+    const c = composeExec(a);
+    return { ...c, ...forEngine(c.args, engine, false) };
+  }
+  const subs = Object.hasOwn(SUB_SUBCOMMANDS, sub) ? SUB_SUBCOMMANDS[sub] : undefined;
+  if (subs) {
+    if (!subs.has(a[1] ?? "")) throw new PrivdError("forbidden", `docker ${sub} ${a[1] ?? ""} is not allowed`);
   } else if (!SIMPLE_SUBCOMMANDS.has(sub)) {
     throw new PrivdError("forbidden", `docker ${sub} is not allowed`);
   }
   if (sub === "exec") validateDockerExec(a);
   if (sub === "build") validateDockerBuild(a);
   if (sub === "volume" && a[1] === "create") validateVolumeCreate(a);
+  if (sub === "network" && a[1] === "create") validateNetworkCreate(a);
   validateDockerArgs(a);
   const input = typeof args.stdin === "string" ? args.stdin : undefined;
   const env = clientEnv(args.env);
   return {
-    file: "/usr/bin/docker",
-    args: a,
+    ...forEngine(a, engine, true),
     timeoutMs: sub === "build" ? 20 * 60_000 : 5 * 60_000,
     ...(input !== undefined ? { input } : {}),
     ...(Object.keys(env).length ? { env } : {}),
@@ -159,6 +176,44 @@ function validateVolumeCreate(a: readonly string[]): void {
   if (!ok) throw new PrivdError("forbidden", "a volume binds only its own app's disk image");
 }
 
+const NETWORK_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
+const NETWORK_OPTS = /^com\.docker\.network\.bridge\.(?:name=fs-[a-z0-9-]{1,12}|enable_icc=(?:true|false))$/;
+
+/**
+ * A network is a plain bridge, optionally internal, on one of the box's own `fs-` bridges: never a
+ * driver (macvlan, ipvlan) or an existing host bridge that would put a container on the host's LAN
+ * past the egress fence (networkCreateArgs in the daemon).
+ */
+function validateNetworkCreate(a: readonly string[]): void {
+  let name: string | null = null;
+  for (let i = 2; i < a.length; i++) {
+    const f = a[i]!;
+    const eq = f.indexOf("=");
+    const flag = f.startsWith("-") ? (eq > 0 ? f.slice(0, eq) : f) : null;
+    const value = () => (eq > 0 ? f.slice(eq + 1) : a[++i] ?? "");
+    if (f === "--internal") continue;
+    if (flag === "--driver" || flag === "-d") {
+      if (value() !== "bridge") throw new PrivdError("forbidden", "a network uses the bridge driver");
+      continue;
+    }
+    if (f === "-o" || f === "--opt") {
+      const v = a[++i] ?? "";
+      if (!NETWORK_OPTS.test(v)) throw new PrivdError("forbidden", `network option ${v} is not allowed`);
+      continue;
+    }
+    if (flag === "--label") {
+      value();
+      continue;
+    }
+    if (flag === null && name === null && NETWORK_NAME.test(f)) {
+      name = f;
+      continue;
+    }
+    throw new PrivdError("forbidden", `network create argument ${f} is not allowed`);
+  }
+  if (name === null) throw new PrivdError("forbidden", "name the network");
+}
+
 /**
  * `docker exec` only into the box's own data services, only a dump/restore/query tool, never as root and
  * never privileged: what the daemon's backups and app copies run there.
@@ -184,7 +239,7 @@ function validateDockerExec(a: readonly string[]): void {
  * one, `load` reads one, and a dump or archive (`exec`, a helper `run`) goes to or comes from one.
  * The broker opens the files itself (`openForBroker`), so a path is never handed to docker.
  */
-export function dockerFileExec(args: Record<string, unknown>): Exec {
+export function dockerFileExec(args: Record<string, unknown>, engine: EngineKind = "docker"): Exec {
   noExtra(args, ["argv", "stdinPath", "stdoutPath", "env"]);
   const argv = args.argv;
   if (!Array.isArray(argv) || argv.length === 0 || argv.length > 256 || !argv.every((a) => typeof a === "string" && a.length <= 4096 && !a.includes("\u0000"))) {
@@ -202,8 +257,7 @@ export function dockerFileExec(args: Record<string, unknown>): Exec {
   if (a[0] === "load" && !stdinPath) throw new PrivdError("bad-request", "load needs stdinPath");
   const env = clientEnv(args.env);
   return {
-    file: "/usr/bin/docker",
-    args: a,
+    ...forEngine(a, engine, true),
     timeoutMs: 60 * 60_000,
     ...(stdinPath ? { stdinFile: stdinPath } : {}),
     ...(stdoutPath ? { stdoutFile: stdoutPath } : {}),
@@ -389,13 +443,36 @@ const IMAGE_BALLAST = new RegExp(`^${FILES_IMAGE_ROOT}/${VOL}/\\.flagship-ballas
 const ORPHAN_DIR = `${FILES_IMAGE_ROOT}/orphaned`;
 const ORPHAN_FILE = new RegExp(`^${ORPHAN_DIR}/${VOL}\\.[0-9]{1,16}\\.img$`);
 const MKFS_ARGS = ["-q", "-F", "-b", "4096", "-T", "default", "-m", "0", "-E", "lazy_itable_init=1,lazy_journal_init=1,nodiscard"];
-const DOCKER_VOLUME_DATA = new RegExp(`^/var/lib/docker/volumes/${VOL}/_data$`);
+/** An app's files volume's own folder, where Docker or Podman keeps it. */
+const DOCKER_VOLUME_DATA = new RegExp(`^/var/lib/(?:docker/volumes|containers/storage/volumes)/${VOL}/_data$`);
 const MOUNT_OPTS = "loop,nodev,nosuid,discard,noinit_itable";
 const LOOP_DEVICE = /^\/dev\/loop[0-9]{1,4}$/;
 /** The daemon's folder fingerprint (appQuota/loopVolumes.ts FOLDER_FINGERPRINT_SCRIPT), byte for byte. */
 export const FOLDER_FINGERPRINT_SCRIPT =
   `find "$1" \\( -type f -printf 'f %m %s %P\\n' \\) -o \\( -type d -printf 'd %m %P\\n' \\) -o \\( -printf '%y %P\\n' \\) | LC_ALL=C sort | sha256sum | cut -d' ' -f1`;
 const EGRESS_CHAIN = /^FLAGSHIP-EGRESS(?:6|-NAT|-FWD|-IN)$/;
+/** The sandbox bridges the daemon owns under Podman (egress/networks.ts ensureHostBridge). */
+const BOX_BRIDGE = /^fs-[a-z0-9-]{1,12}$/;
+const PRIVATE_CIDR = /^(?:10\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])|172\.(?:1[6-9]|2[0-9]|3[01])|192\.168)(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){2}\/(?:[89]|[12][0-9]|3[0-2])$/;
+const IFACE = /^[a-zA-Z0-9_.-]{1,15}$/;
+
+/**
+ * The nft table that keeps containers on one bridge from reaching each other under Podman
+ * (egress/firewall.ts renderIccTable in the daemon, byte for byte; a daemon test keeps them equal).
+ */
+export function iccTable(bridges: readonly string[]): string {
+  return [
+    "table bridge flagship_icc",
+    "delete table bridge flagship_icc",
+    "table bridge flagship_icc {",
+    "  chain forward {",
+    "    type filter hook forward priority -100; policy accept;",
+    ...bridges.map((b) => `    meta ibrname "${b}" meta obrname "${b}" counter drop`),
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+}
 const EGRESS_PARENTS = new Set(["PREROUTING", "DOCKER-USER", "INPUT", "FORWARD"]);
 
 /** A loop device the broker can see mounted at one of the box's image folders (its own mount table). */
@@ -477,6 +554,24 @@ export function hostExec(args: Record<string, unknown>, mounts: MountsReader): E
     case "networkctl":
       if (a.length === 1 && a[0] === "reload") return { file: "/usr/bin/networkctl", args: a, timeoutMs: 30_000 };
       break;
+    // Under Podman the daemon owns the sandbox bridges: made, addressed and brought up here.
+    case "ip":
+      if (
+        (a.length === 5 && a[0] === "link" && a[1] === "add" && BOX_BRIDGE.test(a[2]!) && a[3] === "type" && a[4] === "bridge") ||
+        (a.length === 5 && a[0] === "addr" && a[1] === "add" && PRIVATE_CIDR.test(a[2]!) && a[3] === "dev" && BOX_BRIDGE.test(a[4]!)) ||
+        (a.length === 4 && a[0] === "link" && a[1] === "set" && BOX_BRIDGE.test(a[2]!) && a[3] === "up")
+      ) {
+        return { file: "/usr/sbin/ip", args: a, timeoutMs: 30_000 };
+      }
+      break;
+    case "sysctl": {
+      const m = a.length === 3 && a[0] === "-q" && a[1] === "-w" ? /^net\.ipv6\.conf\.([^.=]+)\.disable_ipv6=1$/.exec(a[2]!) : null;
+      if (m && BOX_BRIDGE.test(m[1]!)) return { file: "/usr/sbin/sysctl", args: a, timeoutMs: 30_000 };
+      break;
+    }
+    case "icc":
+      if (a.length <= 8 && a.every((b) => IFACE.test(b))) return { file: "/usr/sbin/nft", args: ["-f", "-"], timeoutMs: 30_000, input: iccTable(a) };
+      break;
     case "iptables":
     case "ip6tables":
       return iptablesExec(file, a);
@@ -528,7 +623,17 @@ export const RELEASE_REPO = "/opt/flagship";
  * against the trust the RUNNING release pins, never anything the daemon says) or roll back to one already
  * on disk. The staging folder is derived from the commit; the daemon only downloads into it.
  */
-export function releaseExec(args: Record<string, unknown>, trust: { keys: readonly string[]; threshold: number; nodeFloor: string; minSequence: number }, arch: string): Exec {
+export interface ReleaseTrust {
+  keys: readonly string[];
+  threshold: number;
+  nodeFloor: string;
+  minSequence: number;
+  /** The hybrid PQ pin (release/box-artifact-trust.json `pq`); empty until it names a key. */
+  pqKeyIds?: readonly string[];
+  legacyManifests?: readonly string[];
+}
+
+export function releaseExec(args: Record<string, unknown>, trust: ReleaseTrust, arch: string): Exec {
   noExtra(args, ["action", "commit", "sha256"]);
   if (typeof args.commit !== "string" || !COMMIT.test(args.commit)) throw new PrivdError("bad-request", "commit must be 40 hex");
   if (args.action === "restore") return { file: "/usr/bin/bash", args: [`${RELEASE_REPO}/installer/rollback-box-artifact.sh`, args.commit], timeoutMs: 20 * 60_000 };
@@ -556,6 +661,9 @@ export function releaseExec(args: Record<string, unknown>, trust: { keys: readon
       "--arch", arch,
       "--node-floor", trust.nodeFloor,
       "--min-sequence", String(trust.minSequence),
+      // The same PQ pin the root daemon passes (artifactUpdate.ts): once it names a key, every signer
+      // needs its hybrid companion here too.
+      ...(trust.pqKeyIds?.length ? ["--pq-key-ids", trust.pqKeyIds.join(","), ...(trust.legacyManifests?.length ? ["--legacy-manifests", trust.legacyManifests.join(",")] : [])] : []),
     ],
     timeoutMs: 30 * 60_000,
   };
@@ -569,7 +677,7 @@ export function wipeExec(args: Record<string, unknown>): Exec {
 }
 
 /** The root steps the release does for the daemon (packages/server-daemon/src/setup.ts), by name only. */
-export const SETUP_STEPS = ["gvisor", "health-reporter", "update-guard", "container-links", "data-unit", "debug-access", "debug-access-close", "system-repair", "server-code"] as const;
+export const SETUP_STEPS = ["gvisor", "health-reporter", "update-guard", "container-links", "data-unit", "debug-access", "debug-access-close", "system-repair", "server-code", "rust-stack"] as const;
 
 export function setupExec(args: Record<string, unknown>): Exec {
   noExtra(args, ["step"]);
@@ -605,6 +713,44 @@ export function nftExec(args: Record<string, unknown>): Exec {
     if (/\b(include|jump to|exec|import|define|flush ruleset|delete table (?!inet flagship_egress))\b/.test(line)) throw new PrivdError("forbidden", "nft line has a word that is not allowed");
   }
   return { file: "/usr/sbin/nft", args: ["-f", "-"], timeoutMs: 30_000, input: script };
+}
+
+/** What a request is checked against besides its arguments. */
+export interface PolicyContext {
+  engine: EngineKind;
+  mounts: MountsReader;
+  trust: ReleaseTrust;
+  arch: string;
+}
+
+/** The one exact command a request may run, or a refusal: every op the broker answers besides hello. */
+export function validateRequest(op: Op, args: Record<string, unknown>, ctx: PolicyContext): Exec {
+  switch (op) {
+    case "power":
+      return powerExec(args);
+    case "systemd.restart":
+      return restartExec(args);
+    case "systemctl":
+      return systemctlExec(args);
+    case "docker":
+      return dockerExec(args, ctx.engine);
+    case "docker.file":
+      return dockerFileExec(args, ctx.engine);
+    case "host":
+      return hostExec(args, ctx.mounts);
+    case "iptables.restore":
+      return iptablesRestoreExec(args);
+    case "nft.apply":
+      return nftExec(args);
+    case "release":
+      return releaseExec(args, ctx.trust, ctx.arch);
+    case "wipe":
+      return wipeExec(args);
+    case "setup":
+      return setupExec(args);
+    default:
+      throw new PrivdError("unknown-op", "unknown operation");
+  }
 }
 
 function noExtra(args: Record<string, unknown>, allowed: readonly string[]): void {

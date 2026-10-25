@@ -15,7 +15,7 @@
  * restart, so while the gateway is down the bridges fail closed.
  */
 import { writeFile } from "node:fs/promises";
-import { runDir } from "../privileged.js";
+import { privd, runDir, runsUnprivileged } from "../privileged.js";
 import type { CommandRunner } from "../serviceRunner.js";
 import type { EgressNetworkKind } from "./policy.js";
 import { activeEngine, type EngineKind } from "../engine/engine.js";
@@ -205,6 +205,12 @@ export async function installFirewall(cmd: CommandRunner, plan: FirewallPlan, op
 
 /** Podman only (Docker's bridges carry enable_icc=false themselves). Throws when nft refuses. */
 export async function installIccIsolation(cmd: CommandRunner, bridges: readonly FirewallBridge[], dir = "/run"): Promise<void> {
+  // Unprivileged, the broker renders this same table from the bridge names alone (privd iccTable).
+  if (runsUnprivileged()) {
+    for (const b of bridges) if (!IFACE.test(b.bridge)) throw new Error(`bad bridge interface name ${JSON.stringify(b.bridge)}`);
+    await privd().host("icc", bridges.map((b) => b.bridge));
+    return;
+  }
   const iccPath = `${dir}/flagship-icc.nft`;
   await writeFile(iccPath, renderIccTable(bridges), { mode: 0o600 });
   await cmd.run("nft", ["-f", iccPath]);

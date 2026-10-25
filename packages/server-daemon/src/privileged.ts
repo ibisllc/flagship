@@ -41,8 +41,8 @@ export function privd(): PrivdClient {
 
 /** A host binary the broker runs, by the name the daemon's code calls it. */
 const HOST_FILES = new Set(["mount", "umount", "chattr", "losetup", "resize2fs", "cp", "chmod", "networkctl", "iptables", "ip6tables", "mkfs.ext4", "fallocate"]);
-/** Folders whose sizes need root to read (app-owned files, Docker's volumes). */
-const ROOT_READ = [/^\/var\/lib\/flagship-files\//, /^\/var\/lib\/docker\/volumes\//];
+/** Folders whose sizes need root to read (app-owned files, the engine's volumes). */
+const ROOT_READ = [/^\/var\/lib\/flagship-files\//, /^\/var\/lib\/docker\/volumes\//, /^\/var\/lib\/containers\/storage\/volumes\//];
 
 export interface RouteOptions {
   input?: string | Buffer;
@@ -100,6 +100,12 @@ export async function routePrivileged(cmd: string, args: readonly string[], o: R
       }
       throw new Error("bash is not available to the unprivileged daemon");
     }
+    // Under Podman the daemon owns the sandbox bridges (egress/networks.ts); reading them needs no root.
+    case "ip":
+      if (a[0] === "-o") return null;
+      return done(await privd().host("ip", a));
+    case "sysctl":
+      return done(await privd().host("sysctl", a));
     case "rm":
       if (a.length === 2 && a[0] === "-rf" && a[1] === "/var/flagship/data") {
         await privd().wipeData();

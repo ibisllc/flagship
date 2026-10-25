@@ -8,6 +8,10 @@
 )]
 
 use flagship_broker::peer::{Peer, PeerAuthenticator};
+use flagship_broker::podman::EngineKind;
+use flagship_broker::policy::{PrivExec, ReleaseTrust};
+use flagship_broker::privd::FixedEnvironment;
+use flagship_broker::runner::V1Runner;
 use flagship_broker::wire::{FrameReader, encode_frame};
 use flagship_runtime::exec::{Exec, ExecOutput, Executor};
 use serde_json::Value;
@@ -45,6 +49,45 @@ impl Executor for Recorder {
             stderr: String::new(),
             timed_out: false,
         })
+    }
+}
+
+/// Records what the v1 broker would run, and answers as told (default: exit 0, "done").
+#[derive(Default)]
+pub struct V1Recorder {
+    pub ran: Mutex<Vec<PrivExec>>,
+    pub answer: Mutex<Option<ExecOutput>>,
+}
+
+impl V1Runner for V1Recorder {
+    fn run(&self, exec: &PrivExec) -> ExecOutput {
+        self.ran.lock().unwrap().push(exec.clone());
+        self.answer.lock().unwrap().clone().unwrap_or(ExecOutput {
+            code: Some(0),
+            stdout: "done".into(),
+            stderr: String::new(),
+            timed_out: false,
+        })
+    }
+}
+
+pub fn test_trust() -> ReleaseTrust {
+    ReleaseTrust {
+        keys: vec!["a".repeat(64)],
+        threshold: 1,
+        node_floor: "24.0.0".into(),
+        min_sequence: 3,
+        pq_key_ids: Vec::new(),
+        legacy_manifests: Vec::new(),
+    }
+}
+
+pub fn fixed_env(engine: EngineKind) -> FixedEnvironment {
+    FixedEnvironment {
+        engine,
+        mounts: String::new(),
+        trust: test_trust(),
+        arch: "arm64".into(),
     }
 }
 

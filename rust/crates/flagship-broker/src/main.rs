@@ -2,29 +2,37 @@
 //! core, under systemd (`flagship-broker.service`, written by the daemon's rustStack module).
 //!
 //! Environment (all optional; defaults are the box's paths):
-//! - `FLAGSHIP_BROKER_V1_SOCKET` (`/run/flagship-broker/privd.sock`), `FLAGSHIP_BROKER_V1_UIDS` (`0`)
+//! - `FLAGSHIP_BROKER_V1_SOCKET` (`/run/flagship-broker/privd.sock`), `FLAGSHIP_BROKER_V1_UIDS` (`0`),
+//!   `FLAGSHIP_BROKER_V1_GROUP` (the daemon's group: the socket becomes `root:<group>` 0660)
 //! - `FLAGSHIP_BROKER_SOCKET` (`/run/flagship-broker/broker.sock`), `FLAGSHIP_BROKER_TYPED_UIDS`
 //!   (none: the typed socket refuses everyone until core's uid is listed)
 //! - `FLAGSHIP_BROKER_STATE` (`/var/lib/flagship-broker`), `FLAGSHIP_BROKER_FILES_ROOT`
 //!   (`/var/lib/flagship-files`)
-//! - `FLAGSHIP_BROKER_ENGINE`: `podman` or `docker` (default `docker`)
+//! - `FLAGSHIP_BROKER_ENGINE_FILE` (`/var/lib/flagship/engine-active`), read for every v1 request;
+//!   `FLAGSHIP_BROKER_ENGINE` (`podman` or `docker`, default `docker`) only while that file is absent
+//!
+//! `flagship-broker check-v1` reads v1 requests as JSON lines on stdin and prints each verdict
+//! (the shared-vector shape, conformance.rs); it executes nothing.
 //! - `FLAGSHIP_BROKER_AUTHORITY_KEYS`: `keyId:hex32,…`, the pinned capability authorities. With
 //!   none, every capability-bearing operation is refused; the read-only ones still answer.
 
 use flagship_broker::audit::Audit;
 use flagship_broker::capability::Ed25519Authority;
+use flagship_broker::conformance;
 use flagship_broker::peer::{KernelPeerCredentials, PeerPolicy};
-use flagship_broker::privd::{V1Factory, V1Limits};
+use flagship_broker::podman::{ENGINE_ACTIVE_FILE, EngineKind, read_active_engine};
+use flagship_broker::policy::ReleaseTrust;
+use flagship_broker::privd::{V1Environment, V1Factory, V1Limits};
+use flagship_broker::release::{embedded_trust, host_arch};
+use flagship_broker::runner::{SystemRunner, group_id};
 use flagship_broker::server::{ServerLimits, serve};
 use flagship_broker::state::BrokerState;
 use flagship_broker::typed::{
     BrokerConfig, Parts, SandboxNetwork, SecretStore, SystemClock, TypedBroker, TypedFactory,
 };
 use flagship_runtime::workload::SandboxDns;
-use flagship_runtime::{
-    Engine, Exec, ExecOutput, Executor, InstallationId, OciCli, SecretHandle, SystemExecutor,
-};
-use std::io::Write;
+use flagship_runtime::{Engine, InstallationId, OciCli, SecretHandle, SystemExecutor};
+use std::io::{BufRead, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
@@ -76,22 +84,45 @@ fn authority() -> Result<Ed25519Authority, String> {
     Ok(a)
 }
 
-/// The v1 `docker` op names `/usr/bin/docker`; on a Podman box the same validated argv runs
-/// under Podman. Nothing else is rewritten.
-#[derive(Debug, Clone, Copy)]
-struct EngineExecutor {
-    podman: bool,
+/// The box as the v1 policy sees it: the engine the box runs now (read for every request, so a
+/// move to Podman after the broker started is followed), the host's mount table, and the
+/// release trust compiled into this binary.
+#[derive(Debug)]
+struct BoxEnvironment {
+    engine_file: PathBuf,
+    engine_fallback: EngineKind,
+    trust: ReleaseTrust,
 }
 
-impl Executor for EngineExecutor {
-    fn run(&self, exec: &Exec) -> ExecOutput {
-        if self.podman && exec.file == "/usr/bin/docker" {
-            let mut e = exec.clone();
-            e.file = "/usr/bin/podman";
-            return SystemExecutor.run(&e);
-        }
-        SystemExecutor.run(exec)
+impl V1Environment for BoxEnvironment {
+    fn engine(&self) -> EngineKind {
+        read_active_engine(&self.engine_file, self.engine_fallback)
     }
+    fn mounts(&self) -> String {
+        std::fs::read_to_string("/proc/self/mounts").unwrap_or_default()
+    }
+    fn trust(&self) -> &ReleaseTrust {
+        &self.trust
+    }
+    fn arch(&self) -> &str {
+        host_arch()
+    }
+}
+
+/// `check-v1`: one verdict per request line; nothing runs.
+fn check_v1() -> Result<(), String> {
+    let trust = embedded_trust()?;
+    let mut out = std::io::stdout().lock();
+    for line in std::io::stdin().lock().lines() {
+        let line = line.map_err(|e| e.to_string())?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let req: serde_json::Value = serde_json::from_str(&line).map_err(|e| e.to_string())?;
+        let v = conformance::check(&req, &trust);
+        writeln!(out, "{v}").map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// No secrets are handed to the broker yet (core's effect port is not written).
@@ -112,7 +143,7 @@ impl SandboxNetwork for NoSandbox {
     }
 }
 
-fn listen(path: &Path, mode: u32) -> Result<UnixListener, String> {
+fn listen(path: &Path, mode: u32, group: Option<u32>) -> Result<UnixListener, String> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
@@ -126,6 +157,14 @@ fn listen(path: &Path, mode: u32) -> Result<UnixListener, String> {
     // typed socket is connectable by anyone so core's own uid can reach it without a group.
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))
         .map_err(|e| format!("{}: {e}", path.display()))?;
+    if let Some(gid) = group {
+        rustix::fs::chown(
+            path,
+            Some(rustix::fs::Uid::ROOT),
+            Some(rustix::fs::Gid::from_raw(gid)),
+        )
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    }
     Ok(l)
 }
 
@@ -141,6 +180,9 @@ fn run() -> Result<(), String> {
         );
         return Ok(());
     }
+    if cmd == "check-v1" {
+        return check_v1();
+    }
     if cmd != "serve" {
         return Err(format!("unknown command {cmd}"));
     }
@@ -151,8 +193,22 @@ fn run() -> Result<(), String> {
     let typed_path = env_path("FLAGSHIP_BROKER_SOCKET", "/run/flagship-broker/broker.sock");
     let state_dir = env_path("FLAGSHIP_BROKER_STATE", "/var/lib/flagship-broker");
     let files_root = env_path("FLAGSHIP_BROKER_FILES_ROOT", "/var/lib/flagship-files");
-    let podman = std::env::var("FLAGSHIP_BROKER_ENGINE").as_deref() == Ok("podman");
+    let engine_file = env_path("FLAGSHIP_BROKER_ENGINE_FILE", ENGINE_ACTIVE_FILE);
+    let engine_fallback = if std::env::var("FLAGSHIP_BROKER_ENGINE").as_deref() == Ok("podman") {
+        EngineKind::Podman
+    } else {
+        EngineKind::Docker
+    };
+    let podman = read_active_engine(&engine_file, engine_fallback) == EngineKind::Podman;
     let v1_uids = id_list("FLAGSHIP_BROKER_V1_UIDS", &[0])?;
+    // The daemon's group may open the v1 socket; the kernel's uid check still admits each caller.
+    let v1_group = match std::env::var("FLAGSHIP_BROKER_V1_GROUP") {
+        Ok(name) if !name.is_empty() => {
+            Some(group_id(&name, Path::new("/etc/group")).ok_or(format!("no group {name}"))?)
+        }
+        _ => None,
+    };
+    let trust = embedded_trust()?;
     let typed_uids = id_list("FLAGSHIP_BROKER_TYPED_UIDS", &[])?;
 
     std::fs::create_dir_all(&state_dir).map_err(|e| format!("{}: {e}", state_dir.display()))?;
@@ -181,8 +237,12 @@ fn run() -> Result<(), String> {
     ));
 
     let stop = Arc::new(AtomicBool::new(false));
-    let v1 = listen(&v1_path, 0o600)?;
-    let typed = listen(&typed_path, 0o666)?;
+    let v1 = listen(
+        &v1_path,
+        if v1_group.is_some() { 0o660 } else { 0o600 },
+        v1_group,
+    )?;
+    let typed = listen(&typed_path, 0o666, None)?;
     let auth: Arc<KernelPeerCredentials> = Arc::new(KernelPeerCredentials);
 
     let (stop2, audit2, auth2) = (Arc::clone(&stop), Arc::clone(&audit), Arc::clone(&auth));
@@ -218,7 +278,12 @@ fn run() -> Result<(), String> {
         auth,
         PeerPolicy::uids(v1_uids),
         Arc::new(V1Factory {
-            executor: Arc::new(EngineExecutor { podman }),
+            runner: Arc::new(SystemRunner::default()),
+            env: Arc::new(BoxEnvironment {
+                engine_file,
+                engine_fallback,
+                trust,
+            }),
             audit: Arc::clone(&audit),
             limits: V1Limits::default(),
         }),

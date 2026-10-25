@@ -697,6 +697,35 @@ mod tests {
     }
 
     #[test]
+    fn a_box_may_ask_for_the_accounts_wildcard_and_nothing_wider() {
+        let fqdn = "home.alice.flagship.services";
+        let names = crate::files::names_for(fqdn);
+        assert_eq!(
+            names,
+            vec![
+                fqdn.to_owned(),
+                format!("*.{fqdn}"),
+                "*.alice.flagship.services".to_owned()
+            ]
+        );
+        let mut t = TlsKeys::new(names, None, system_clock());
+        assert!(
+            t.create_key(&[format!("*.{fqdn}"), "*.alice.flagship.services".into()])
+                .is_ok()
+        );
+        for wider in [
+            "*.flagship.services",
+            "*.bob.flagship.services",
+            "x.alice.flagship.services",
+        ] {
+            assert_eq!(
+                t.create_key(&[wider.into()]).unwrap_err().code,
+                crate::wire::ErrorCode::Forbidden
+            );
+        }
+    }
+
+    #[test]
     fn csr_is_signed_and_lists_exactly_the_names() {
         let fqdn = "home.alice.flagship.services";
         let mut t = TlsKeys::new(vec![fqdn.into(), format!("*.{fqdn}")], None, system_clock());

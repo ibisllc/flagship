@@ -557,6 +557,53 @@ async fn refuses_a_name_the_certificate_does_not_cover() {
     assert_eq!(kd.signs(), 0, "keyd signed for a refused name");
 }
 
+/// A box an admin granted the account's app names holds `[*.<server>.<user>, *.<user>]`
+/// (server-daemon runtime.ts `boxCertSans`): its own name is answered under the account's wildcard.
+#[tokio::test(flavor = "multi_thread")]
+async fn serves_the_box_and_its_apps_under_the_accounts_wildcard() {
+    let fc = fake_cert(
+        "h1",
+        &[
+            "*.home.alice.flagship.services",
+            "*.alice.flagship.services",
+        ],
+    );
+    let kd = FakeKeyd::start(Some(fc.clone()));
+    let up = start_upstream().await;
+    let ing = start_ingress(
+        &kd,
+        &up,
+        test_limits(),
+        KxPolicy::PreferHybrid,
+        Duration::from_secs(1),
+    )
+    .await;
+    for sni in [
+        HOME,
+        "chess.alice.flagship.services",
+        "notes.home.alice.flagship.services",
+    ] {
+        assert!(
+            connect(ing.addr, sni, &fc.ca, ClientOpts::default())
+                .await
+                .is_ok(),
+            "no handshake for {sni}"
+        );
+    }
+    for sni in [
+        "alice.flagship.services",
+        "chess.bob.flagship.services",
+        "a.chess.alice.flagship.services",
+    ] {
+        assert!(
+            connect(ing.addr, sni, &fc.ca, ClientOpts::default())
+                .await
+                .is_err(),
+            "handshake for {sni} succeeded"
+        );
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn refuses_acme_tls_alpn() {
     let fc = fake_cert("h1", &[HOME]);

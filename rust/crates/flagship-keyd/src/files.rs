@@ -114,9 +114,12 @@ pub fn load_policy(state: &Path) -> std::io::Result<Option<String>> {
         .map(str::to_owned))
 }
 
-/// `namesFor`: the names a box may have a certificate for.
+/// `namesFor` (migrate.ts): the names a box may have a certificate for. The last is the
+/// account's wildcard `*.<user>.<apex>`, which a box asks for once an admin grants it the
+/// account's app names (server-daemon runtime.ts `boxCertSans`).
 pub fn names_for(fqdn: &str) -> Vec<String> {
-    vec![fqdn.to_owned(), format!("*.{fqdn}")]
+    let account = fqdn.split_once('.').map_or("", |(_, rest)| rest);
+    vec![fqdn.to_owned(), format!("*.{fqdn}"), format!("*.{account}")]
 }
 
 /// `loadOwnerAnchor` (migrate.ts): the owner key root in `owner.json`, lowercase hex, or `None`.

@@ -37,7 +37,7 @@ import {
   canonicalPqKeyBinding,
   verifyPqKeyBinding,
 } from "@flagship/protocol";
-import { AcmeAccount, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydServer, KeydService, KeydSyncClient, LETS_ENCRYPT_HOSTS, TlsKeys, encodeFrame, readKeyFile, tls12ServerSignedMessage, tls13ServerSignedMessage } from "../src/index.js";
+import { AcmeAccount, FrameReader, KEYD_PROTOCOL_VERSION, KeydClient, KeydServer, KeydService, KeydSyncClient, LETS_ENCRYPT_HOSTS, TlsKeys, encodeFrame, namesFor, readKeyFile, tls12ServerSignedMessage, tls13ServerSignedMessage } from "../src/index.js";
 import { KeydAcmeIssuer } from "../../server-daemon/src/acme/keydAcme.js";
 import { keydAcmeApi } from "../../server-daemon/src/keydAsync.js";
 import { MockAcme } from "../../server-daemon/tests/helpers/mockAcme.js";
@@ -52,7 +52,7 @@ const IDENTITY_VECTORS = (
 if (!HAVE_BIN) console.warn(`rustBackend.test.ts: skipped, no Rust keyd at ${BIN} (run \`cargo build -p flagship-keyd\` in rust/ or set FLAGSHIP_KEYD_RUST_BIN)`);
 
 const FQDN = "home.alice.flagship.services";
-const ALLOWED = new Set([FQDN, `*.${FQDN}`]);
+const ALLOWED = new Set(namesFor(FQDN));
 const OPEN_LIMITS = { "*": { perSecond: 100000, burst: 100000 } };
 const enc = (s: string) => new TextEncoder().encode(s);
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -525,6 +525,8 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["tls.createKey", { names: FQDN }, true], ["tls.createKey", { names: [1] }, true], ["tls.createKey", { names: [] }, true], ["tls.createKey", { names: ["evil.example.com"] }, true],
         ["tls.createKey", { names: ["not a name"] }, true], ["tls.createKey", { names: Array(9).fill(FQDN) }, true], ["tls.createKey", { names: [`x.${FQDN}`] }, true],
         ["tls.createKey", { names: [FQDN.toUpperCase()] }, false],
+        // The account's wildcard (boxCertSans with an admin's grant), and nothing wider.
+        ["tls.createKey", { names: ["*.alice.flagship.services", `*.${FQDN}`] }, false], ["tls.createKey", { names: ["*.flagship.services"] }, true],
         ["tls.csr", { handle: "nope" }, true], ["tls.csr", { handle: blob(16) }, true], ["tls.csr", {}, true],
         ["tls.install", { handle: blob(16), chain: "not pem!" }, true], ["tls.install", { handle: blob(16), chain: "abc" }, true], ["tls.install", { handle: "x", chain: "abc" }, true],
         ["tls.activate", { handle: blob(16) }, true], ["tls.sign", { handle: blob(16), digest: blob(31) }, true], ["tls.sign", { handle: blob(16), digest: blob(32) }, true],
@@ -591,7 +593,8 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       await c.call("tls.activate", { handle: created.handle });
       const listed = await c.call("tls.list");
       expect(JSON.stringify(listed)).not.toMatch(/priv/i);
-      expect(listed.allowedNames).toEqual([FQDN, `*.${FQDN}`]);
+      // The account's wildcard too (namesFor): without it a granted box failed before its first ACME call.
+      expect(listed.allowedNames).toEqual(namesFor(FQDN));
       expect((await c.call("tls.active")).active).toMatchObject({ handle: created.handle, names: [FQDN, `*.${FQDN}`].sort(), legacy: false });
       await expect(c.call("tls.createKey", { names: ["evil.example.com"] })).rejects.toMatchObject({ code: "forbidden" });
       // The bare digest form is gone: keyd signs only the TLS inputs it builds itself.

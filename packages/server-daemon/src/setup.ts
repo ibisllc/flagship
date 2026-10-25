@@ -20,7 +20,9 @@ import { DATA_UNIT_FILE } from "./dataLayer/stack.js";
 import { buildDebugSystem, realDebugCommandRunner } from "./debugAccessGate.js";
 import { writeFileDurable } from "./durableFile.js";
 import { showServerCode } from "./enrollment.js";
+import { loadArchV2Config } from "./engine/engine.js";
 import { installHealthReporter } from "./healthReporter.js";
+import { installRustStack } from "./rustStack/install.js";
 import { SERVER_CODE_REQUEST } from "./privileged.js";
 import { localCommandRunner, type CommandRunner } from "./serviceRunner.js";
 import { repairSystemPackages } from "./systemRepair.js";
@@ -148,6 +150,8 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
   },
   "system-repair": () => repairSystemPackages({ cmd, log }),
   "server-code": serverCode,
+  // The Rust path's units, for a daemon that no longer runs as root (archV2Boot.ts).
+  "rust-stack": () => installRustStack({ repoPath: REPO, config: loadArchV2Config(), run, onLog: log }),
 };
 
 // Real paths: /opt/flagship is a link to the running release, and Node reports a module by its real path.

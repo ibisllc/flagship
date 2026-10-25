@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { PRIVD_DAEMON_DROPIN_PATH, PRIVD_HELPER, PRIVD_UNIT_PATH, daemonPrivdDropIn, privdSetupScript, privdUnit } from "@flagship/privd/unit";
 import { writeFileDurable } from "../durableFile.js";
 import type { ArchV2Config } from "../engine/engine.js";
 import {
@@ -154,11 +155,26 @@ export async function installRustStack(deps: RustStackDeps): Promise<RustStackOu
     if (deps.config.rust !== "on") {
       const had = (await f.read(KEYD_RUST_DROPIN_PATH)) !== null || f.exists(BROKER_UNIT_PATH) || f.exists(CORE_UNIT_PATH);
       if (!had) return { action: "unchanged", restarted: [] };
-      await deps.run("systemctl", ["disable", "--now", "flagship-core.service", "flagship-broker.service"]).catch(() => {});
+      // A daemon that gave up root with the broker as its helper gets flagship-privd back first, so
+      // it is never without one. Run through that helper (the rust-stack step is the broker's own
+      // child), the broker is stopped last: stopping it ends this step.
+      const handBack = (await f.read(PRIVD_DAEMON_DROPIN_PATH))?.includes("flagship-broker.service") === true;
+      if (handBack) {
+        await f.write(PRIVD_UNIT_PATH, privdUnit(join(deps.repoPath, "packages/privd/dist/main.js")), 0o644);
+        await f.write(PRIVD_DAEMON_DROPIN_PATH, daemonPrivdDropIn(PRIVD_HELPER), 0o644);
+        await deps.run("systemctl", ["daemon-reload"]);
+        await deps.run("systemctl", ["enable", "--now", "flagship-privd.service"]);
+        log("[rust-path] the daemon's privileged helper is flagship-privd again");
+      }
+      await deps.run("systemctl", ["disable", ...(handBack ? [] : ["--now"]), "flagship-core.service", "flagship-broker.service"]).catch(() => {});
       for (const p of [KEYD_RUST_DROPIN_PATH, BROKER_UNIT_PATH, CORE_UNIT_PATH]) await f.remove(p);
       await deps.run("systemctl", ["daemon-reload"]);
       log("[rust-path] switched off: keyd back on TypeScript, broker and core removed");
       await deps.run("systemctl", ["restart", "--no-block", "flagship-keyd.service"]).catch(() => {});
+      if (handBack) {
+        await deps.run("systemctl", ["restart", "--no-block", "flagship-daemon.service"]).catch(() => {});
+        await deps.run("systemctl", ["stop", "--no-block", "flagship-core.service", "flagship-broker.service"]).catch(() => {});
+      }
       return { action: "removed", restarted: ["keyd"] };
     }
     if (!f.exists(join(deps.repoPath, RUST_PINS_REL))) {
@@ -166,10 +182,13 @@ export async function installRustStack(deps: RustStackDeps): Promise<RustStackOu
       return { action: "skipped", reason: "this release carries no pinned Rust binaries" };
     }
     await deps.run("sh", ["-c", coreSetupScript()]);
+    // The daemon's account exists before the broker first selects: its TS fallback serves the v1
+    // socket to that group, and the Rust units admit that uid.
+    for (const line of privdSetupScript().trim().split("\n")) await deps.run("sh", ["-c", line]);
     const files: Array<[string, string, number]> = [
       [RUST_SELECT_PATH, rustSelectScript({ releasePath: deps.repoPath }), 0o755],
       [RUST_EXEC_PATH, rustExecScript(deps.repoPath), 0o755],
-      [BROKER_UNIT_PATH, brokerServiceUnit(), 0o644],
+      [BROKER_UNIT_PATH, brokerServiceUnit({ privdEntry: join(deps.repoPath, "packages/privd/dist/main.js") }), 0o644],
       [CORE_UNIT_PATH, coreServiceUnit(), 0o644],
     ];
     const keydThere = f.exists("/etc/systemd/system/flagship-keyd.service");
@@ -200,13 +219,14 @@ export async function installRustStack(deps: RustStackDeps): Promise<RustStackOu
       const unitChanged = changed.some((p) => p.includes(`flagship-${c}`) || (c === "keyd" && p === KEYD_RUST_DROPIN_PATH));
       if (stale || unitChanged) restart.push(c);
     }
-    for (const c of restart.filter((x) => x !== "keyd")) {
-      await deps.run("systemctl", ["restart", "--no-block", `flagship-${c}.service`]);
-    }
+    // The broker goes last: run as root by the daemon's privileged helper (the rust-stack step),
+    // this step is the broker's own child, and the broker's restart ends it.
+    if (restart.includes("core")) await deps.run("systemctl", ["restart", "--no-block", "flagship-core.service"]);
     if (restart.includes("keyd")) {
       log("[rust-path] restarting keyd on this release's binary (the daemon restarts with it)");
       await deps.run("systemctl", ["restart", "--no-block", "flagship-keyd.service"]);
     }
+    if (restart.includes("broker")) await deps.run("systemctl", ["restart", "--no-block", "flagship-broker.service"]);
     if (changed.length > 0) log(`[rust-path] installed (${changed.length} file(s) changed)`);
     return { action: changed.length > 0 ? "installed" : restart.length > 0 ? "restarted" : "unchanged", restarted: restart };
   } catch (e) {

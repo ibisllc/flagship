@@ -12,7 +12,8 @@ pub fn trim(s: &str) -> &str {
     s.trim_matches(is_js_space)
 }
 
-fn is_js_space(c: char) -> bool {
+/// ECMAScript `\s`: WhiteSpace and LineTerminator.
+pub fn is_js_space(c: char) -> bool {
     matches!(
         c,
         '\u{0009}'

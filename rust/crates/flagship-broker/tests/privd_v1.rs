@@ -9,10 +9,11 @@
 
 mod common;
 
-use common::{Client, FixedPeer, Recorder, tempdir};
+use common::{Client, FixedPeer, V1Recorder, fixed_env, tempdir};
 use flagship_broker::audit::Audit;
 use flagship_broker::peer::PeerPolicy;
-use flagship_broker::policy::{docker_exec, nft_exec, power_exec, restart_exec};
+use flagship_broker::podman::EngineKind;
+use flagship_broker::policy::{PrivExec, docker_exec, nft_exec, power_exec, restart_exec};
 use flagship_broker::privd::{V1Factory, V1Limits};
 use flagship_broker::server::{ServerLimits, serve};
 use flagship_broker::wire::{ErrorCode, PrivdError};
@@ -26,8 +27,8 @@ fn args(v: Value) -> Map<String, Value> {
     v.as_object().unwrap().clone()
 }
 
-fn docker(argv: &[&str]) -> Result<flagship_runtime::exec::Exec, PrivdError> {
-    docker_exec(&args(json!({ "argv": argv })))
+fn docker(argv: &[&str]) -> Result<PrivExec, PrivdError> {
+    docker_exec(&args(json!({ "argv": argv })), EngineKind::Docker)
 }
 
 fn refused<T: std::fmt::Debug>(r: Result<T, PrivdError>, re: Option<&str>) {
@@ -279,22 +280,43 @@ fn compose_manages_only_the_boxs_data_services() {
 
 #[test]
 fn malformed_docker_requests_are_refused_before_anything_is_built() {
-    refused(docker_exec(&args(json!({ "argv": [] }))), None);
-    refused(docker_exec(&args(json!({ "argv": "run img" }))), None);
-    refused(docker_exec(&args(json!({ "argv": ["run", 5] }))), None);
     refused(
-        docker_exec(&args(json!({ "argv": ["run", "a\u{0000}b"] }))),
+        docker_exec(&args(json!({ "argv": [] })), EngineKind::Docker),
         None,
     );
     refused(
-        docker_exec(&args(json!({ "argv": ["ps"], "shell": "true" }))),
+        docker_exec(&args(json!({ "argv": "run img" })), EngineKind::Docker),
+        None,
+    );
+    refused(
+        docker_exec(&args(json!({ "argv": ["run", 5] })), EngineKind::Docker),
+        None,
+    );
+    refused(
+        docker_exec(
+            &args(json!({ "argv": ["run", "a\u{0000}b"] })),
+            EngineKind::Docker,
+        ),
+        None,
+    );
+    refused(
+        docker_exec(
+            &args(json!({ "argv": ["ps"], "shell": "true" })),
+            EngineKind::Docker,
+        ),
         None,
     );
     let long = "x".repeat(4097);
-    refused(docker_exec(&args(json!({ "argv": ["ps", long] }))), None);
+    refused(
+        docker_exec(&args(json!({ "argv": ["ps", long] })), EngineKind::Docker),
+        None,
+    );
     // JS counts UTF-16 units: 2049 astral characters are 4098 units.
     let astral = "😀".repeat(2049);
-    refused(docker_exec(&args(json!({ "argv": ["ps", astral] }))), None);
+    refused(
+        docker_exec(&args(json!({ "argv": ["ps", astral] })), EngineKind::Docker),
+        None,
+    );
 }
 
 #[test]
@@ -343,7 +365,9 @@ fn refusal_codes_and_messages_match_privd() {
         (ErrorCode::Forbidden, "--privileged is not allowed")
     );
     let e = docker(&["exec", "c"]).unwrap_err();
-    assert_eq!(e.message, "docker exec is not allowed");
+    assert_eq!(e.message, "exec reaches only the box's data services");
+    let e = docker(&["plugin", "install", "x"]).unwrap_err();
+    assert_eq!(e.message, "docker plugin is not allowed");
     let e = docker(&["image", "build"]).unwrap_err();
     assert_eq!(e.message, "docker image build is not allowed");
     let e = docker(&[
@@ -364,7 +388,7 @@ struct Rig {
     path: std::path::PathBuf,
     audit: std::path::PathBuf,
     stop: Arc<AtomicBool>,
-    rec: Arc<Recorder>,
+    rec: Arc<V1Recorder>,
 }
 
 impl Drop for Rig {
@@ -378,11 +402,12 @@ fn rig(answer: Option<ExecOutput>, limits: V1Limits) -> Rig {
     let path = dir.join("p.sock");
     let audit = dir.join("audit.log");
     let listener = UnixListener::bind(&path).unwrap();
-    let rec = Arc::new(Recorder::default());
+    let rec = Arc::new(V1Recorder::default());
     *rec.answer.lock().unwrap() = answer;
     let stop = Arc::new(AtomicBool::new(false));
     let factory = Arc::new(V1Factory {
-        executor: rec.clone(),
+        runner: rec.clone(),
+        env: Arc::new(fixed_env(EngineKind::Docker)),
         audit: Arc::new(Audit::new(Some(audit.clone()))),
         limits,
     });
@@ -541,10 +566,11 @@ fn a_peer_outside_the_policy_is_dropped_before_any_frame() {
     let dir = tempdir("privd-peer");
     let path = dir.join("p.sock");
     let listener = UnixListener::bind(&path).unwrap();
-    let rec = Arc::new(Recorder::default());
+    let rec = Arc::new(V1Recorder::default());
     let stop = Arc::new(AtomicBool::new(false));
     let factory = Arc::new(V1Factory {
-        executor: rec.clone(),
+        runner: rec.clone(),
+        env: Arc::new(fixed_env(EngineKind::Docker)),
         audit: Arc::new(Audit::new(None)),
         limits: V1Limits::default(),
     });

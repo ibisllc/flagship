@@ -45,11 +45,18 @@ WantedBy=multi-user.target
 `;
 }
 
-/** The daemon's drop-in once privd answers: its own account, the groups it needs, one capability. */
-export function daemonPrivdDropIn(): string {
+/** The privileged helper the daemon hands host operations to: flagship-privd, or the Rust broker's privd v1 socket. */
+export interface PrivilegedHelper {
+  unit: string;
+  socket: string;
+}
+export const PRIVD_HELPER: PrivilegedHelper = { unit: "flagship-privd.service", socket: PRIVD_SOCKET };
+
+/** The daemon's drop-in once its helper answers: its own account, the groups it needs, one capability. */
+export function daemonPrivdDropIn(helper: PrivilegedHelper = PRIVD_HELPER): string {
   return `[Unit]
-Wants=flagship-privd.service
-After=flagship-privd.service
+Wants=${helper.unit}
+After=${helper.unit}
 
 [Service]
 User=${DAEMON_USER}
@@ -61,7 +68,7 @@ NoNewPrivileges=yes
 RuntimeDirectory=flagship-daemon
 RuntimeDirectoryMode=0755
 Environment=FLAGSHIP_DAEMON_UNPRIVILEGED=1
-Environment=FLAGSHIP_PRIVD_SOCKET=${PRIVD_SOCKET}
+Environment=FLAGSHIP_PRIVD_SOCKET=${helper.socket}
 `;
 }
 

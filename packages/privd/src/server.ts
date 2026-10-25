@@ -3,22 +3,8 @@ import { appendFileSync, chmodSync, chownSync, closeSync, constants, existsSync,
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 import { BOX_RELEASE } from "@flagship/protocol";
-import {
-  DAEMON_TRANSFER_ROOTS,
-  dockerExec,
-  dockerFileExec,
-  hostExec,
-  iptablesRestoreExec,
-  nftExec,
-  powerExec,
-  releaseExec,
-  restartExec,
-  setupExec,
-  systemctlExec,
-  transferPath,
-  wipeExec,
-  type Exec,
-} from "./policy.js";
+import { DAEMON_TRANSFER_ROOTS, transferPath, validateRequest, type Exec, type ReleaseTrust } from "./policy.js";
+import { readActiveEngine, type EngineKind } from "./podman.js";
 import { FrameReader, PRIVD_PROTOCOL_VERSION, PrivdError, encodeFrame, parseRequest, type PrivdRequest, type PrivdResponse } from "./wire.js";
 
 export interface RunResult {
@@ -29,6 +15,20 @@ export interface RunResult {
 }
 
 export type Runner = (e: Exec) => Promise<RunResult>;
+
+/** The trust the running release pins (release/box-artifact-trust.json through BOX_RELEASE). */
+export const THIS_RELEASE_TRUST: ReleaseTrust = {
+  keys: BOX_RELEASE.trust.keys,
+  threshold: BOX_RELEASE.trust.threshold,
+  nodeFloor: BOX_RELEASE.nodeFloor,
+  minSequence: BOX_RELEASE.minSequence,
+  pqKeyIds: BOX_RELEASE.trust.pq.keyIds,
+  legacyManifests: BOX_RELEASE.trust.pq.legacyManifests,
+};
+
+export function hostArch(): string {
+  return process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "amd64" : process.arch;
+}
 
 const MAX_OUTPUT = 256 * 1024;
 
@@ -94,6 +94,20 @@ export function openTransferFds(e: Exec, account: DaemonAccount | null): { stdin
       if (!under(dir) || statSync(dir).uid !== account!.uid) throw new PrivdError("forbidden", "the broker writes only into the daemon's own folders");
       stdout = openSync(p, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
       fds.push(stdout);
+      // The folder may have been swapped for a link between the check above and the open: the file
+      // is handed to the daemon only if it really landed in one of its folders (an empty root-owned
+      // file left elsewhere is removed).
+      if (existsSync("/proc/self/fd")) {
+        const landed = realpathSync(`/proc/self/fd/${stdout}`);
+        if (!under(dirname(landed)) || statSync(dirname(landed)).uid !== account!.uid) {
+          try {
+            unlinkSync(landed);
+          } catch {
+            /* already gone */
+          }
+          throw new PrivdError("forbidden", "the broker writes only into the daemon's own folders");
+        }
+      }
       fchownSync(stdout, account!.uid, account!.gid);
     }
     return { ...(stdin !== undefined ? { stdin } : {}), ...(stdout !== undefined ? { stdout } : {}), close };
@@ -199,6 +213,10 @@ export interface PrivdServerOptions {
   arch?: string;
   /** The group whose members may open the socket (the daemon's). */
   socketGroup?: string;
+  /** The box's container engine, read for each request (default: the box's engine-active record). */
+  engine?: () => EngineKind;
+  /** The release trust a release install is checked against (tests). Default: this release's own. */
+  trust?: ReleaseTrust;
   helloTimeoutMs?: number;
 }
 
@@ -309,32 +327,12 @@ export class PrivdServer {
   }
 
   private validate(req: PrivdRequest): Exec {
-    switch (req.op) {
-      case "power":
-        return powerExec(req.args);
-      case "systemd.restart":
-        return restartExec(req.args);
-      case "systemctl":
-        return systemctlExec(req.args);
-      case "docker":
-        return dockerExec(req.args);
-      case "docker.file":
-        return dockerFileExec(req.args);
-      case "host":
-        return hostExec(req.args, this.o.mounts ?? (() => readFileSync("/proc/self/mounts", "utf8")));
-      case "iptables.restore":
-        return iptablesRestoreExec(req.args);
-      case "nft.apply":
-        return nftExec(req.args);
-      case "release":
-        return releaseExec(req.args, { keys: BOX_RELEASE.trust.keys, threshold: BOX_RELEASE.trust.threshold, nodeFloor: BOX_RELEASE.nodeFloor, minSequence: BOX_RELEASE.minSequence }, this.o.arch ?? (process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "amd64" : process.arch));
-      case "wipe":
-        return wipeExec(req.args);
-      case "setup":
-        return setupExec(req.args);
-      default:
-        throw new PrivdError("unknown-op", "unknown operation");
-    }
+    return validateRequest(req.op, req.args, {
+      engine: (this.o.engine ?? readActiveEngine)(),
+      mounts: this.o.mounts ?? (() => readFileSync("/proc/self/mounts", "utf8")),
+      trust: this.o.trust ?? THIS_RELEASE_TRUST,
+      arch: this.o.arch ?? hostArch(),
+    });
   }
 
   private async handle(req: PrivdRequest): Promise<PrivdResponse> {
@@ -354,12 +352,16 @@ export class PrivdServer {
   }
 }
 
-/** A line for the audit log: what was asked, never the bodies or secrets that came with it. */
-function summary(req: PrivdRequest): string {
-  if ((req.op === "docker" || req.op === "docker.file" || req.op === "systemctl") && Array.isArray(req.args.argv)) {
-    return (req.args.argv as string[]).slice(0, 3).map((a) => (String(a).startsWith("PGPASSWORD=") ? "PGPASSWORD=…" : String(a))).join(" ");
+/**
+ * A line for the audit log: what was asked, never the bodies or secrets that came with it. A request
+ * whose argv is not a list says only that, since its other fields may carry stdin or a password.
+ */
+export function summary(req: PrivdRequest): string {
+  const argv = Array.isArray(req.args.argv) ? (req.args.argv as unknown[]).map((a) => (typeof a === "string" ? a : JSON.stringify(a) ?? "")) : null;
+  if (req.op === "docker" || req.op === "docker.file" || req.op === "systemctl") {
+    return argv ? argv.slice(0, 3).map((a) => (a.startsWith("PGPASSWORD=") ? "PGPASSWORD=…" : a)).join(" ") : "malformed request";
   }
-  if (req.op === "host" && Array.isArray(req.args.argv)) return `${String(req.args.file)} ${(req.args.argv as string[]).slice(0, 2).join(" ")}`;
+  if (req.op === "host") return argv && typeof req.args.file === "string" ? `${req.args.file} ${argv.slice(0, 2).join(" ")}` : "malformed request";
   if (req.op === "nft.apply" || req.op === "iptables.restore") return "firewall rules";
   return JSON.stringify(req.args).slice(0, 120);
 }

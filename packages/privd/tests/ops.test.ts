@@ -2,6 +2,7 @@
  * The operations the daemon needs once it runs without root (SEC-DAEMON-001): each allowed form, and
  * the refusals that keep the broker from being a way back to root.
  */
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,8 @@ import {
   PrivdServer,
   copyInFiles,
   dockerExec,
+  openTransferFds,
+  readActiveEngine,
   dockerFileExec,
   hostExec,
   iptablesRestoreExec,
@@ -244,5 +247,68 @@ describe("over the socket", () => {
     expect(ran.length).toBe(1);
     c.close();
     await server.stop();
+  });
+});
+
+describe("on an architecture v2 box", () => {
+  it("runs a docker request on the engine the box records, read for each request", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "privd-engine-"));
+    const active = join(dir, "engine-active");
+    expect(readActiveEngine(active)).toBe("docker");
+    await writeFile(active, "podman\n");
+    expect(readActiveEngine(active)).toBe("podman");
+    const ran: Exec[] = [];
+    const server = new PrivdServer({
+      socketPath: join(dir, "p.sock"),
+      engine: () => readActiveEngine(active),
+      run: async (e): Promise<RunResult> => {
+        ran.push(e);
+        return { code: 0, stdout: "", stderr: "", timedOut: false };
+      },
+    });
+    await server.start();
+    const c = new PrivdClient(join(dir, "p.sock"));
+    await c.docker(["version", "--format", "{{.Server.Version}}"]);
+    await expect(c.docker(["run", "--rootfs", "/", "img"])).rejects.toMatchObject({ code: "forbidden" });
+    await writeFile(active, "docker\n");
+    await c.docker(["ps"]);
+    expect(ran.map((e) => `${e.file} ${e.args.join(" ")}`)).toEqual(["/usr/bin/podman version --format {{.Client.Version}}", "/usr/bin/docker ps"]);
+    c.close();
+    await server.stop();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("passes the release's PQ pin to the installer, as the root daemon does", () => {
+    const trust = { keys: ["a".repeat(64)], threshold: 1, nodeFloor: "24.0.0", minSequence: 3, pqKeyIds: ["d".repeat(64)], legacyManifests: ["e".repeat(64)] };
+    const e = releaseExec({ action: "install", commit: "b".repeat(40), sha256: "c".repeat(64) }, trust, "amd64");
+    expect(e.args.slice(-4)).toEqual(["--pq-key-ids", "d".repeat(64), "--legacy-manifests", "e".repeat(64)]);
+    expect(releaseExec({ action: "install", commit: "b".repeat(40), sha256: "c".repeat(64) }, { ...trust, pqKeyIds: [] }, "amd64").args).not.toContain("--pq-key-ids");
+  });
+
+  it("never audits the body of a request whose argv is not a list", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "privd-"));
+    const server = new PrivdServer({ socketPath: join(dir, "p.sock"), auditPath: join(dir, "audit.log"), run: async () => ({ code: 0, stdout: "", stderr: "", timedOut: false }) });
+    await server.start();
+    const c = new PrivdClient(join(dir, "p.sock"));
+    await expect(c.call("docker", { argv: "ps", stdin: "body-text", env: { PGPASSWORD: "hunter2" } })).rejects.toMatchObject({ code: "bad-request" });
+    await expect(c.call("host", { file: { x: "hunter2" }, argv: ["x"] })).rejects.toMatchObject({ code: "unknown-op" });
+    const audit = await readFile(join(dir, "audit.log"), "utf8");
+    expect(audit).not.toMatch(/hunter2|body-text/);
+    expect(audit).toContain("malformed request");
+    c.close();
+    await server.stop();
+  });
+
+  it.skipIf(!existsSync("/proc/self/fd"))("hands over an output file only where it really landed", async () => {
+    const dir = await mkdtemp("/var/tmp/.flagship-privd-out-");
+    const me = { uid: process.getuid!(), gid: process.getgid!() };
+    try {
+      const ok = openTransferFds({ file: "/usr/bin/docker", args: [], timeoutMs: 1, stdoutFile: join(dir, "a.tar") } as Exec, me);
+      ok.close();
+      expect(() => openTransferFds({ file: "/usr/bin/docker", args: [], timeoutMs: 1, stdoutFile: join(dir, "a.tar") } as Exec, me)).toThrow();
+      expect(() => openTransferFds({ file: "/usr/bin/docker", args: [], timeoutMs: 1, stdoutFile: join(dir, "b.tar") } as Exec, { uid: me.uid + 1, gid: me.gid })).toThrow(/daemon's own folders/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

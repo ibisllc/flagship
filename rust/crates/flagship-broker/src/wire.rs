@@ -7,7 +7,20 @@ use std::fmt;
 
 pub const PRIVD_PROTOCOL_VERSION: u64 = 1;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
-pub const OPS: &[&str] = &["hello", "power", "systemd.restart", "docker", "nft.apply"];
+pub const OPS: &[&str] = &[
+    "hello",
+    "power",
+    "systemd.restart",
+    "systemctl",
+    "docker",
+    "docker.file",
+    "host",
+    "iptables.restore",
+    "nft.apply",
+    "release",
+    "wipe",
+    "setup",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ErrorCode {

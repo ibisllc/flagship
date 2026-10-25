@@ -9,6 +9,7 @@ import { dirname } from "node:path";
 import { writeFileDurable } from "./durableFile.js";
 import { loadArchV2Config, setActiveEngine, type ArchV2Config, type EngineKind } from "./engine/engine.js";
 import { migrateDockerToPodman, readMigrationMarker, rollbackToDocker } from "./engine/migrate.js";
+import { runSetupStep, runsUnprivileged } from "./privileged.js";
 import { installRustStack, rustStackRegressions, type RustStackOutcome } from "./rustStack/install.js";
 import { CORE_CHECKPOINT, CORE_DIR } from "./rustStack/units.js";
 import type { CommandRunner } from "./serviceRunner.js";
@@ -26,6 +27,7 @@ export async function bootArchV2(o: {
   cmd: CommandRunner;
   run: (cmd: string, args: string[]) => Promise<unknown>;
   log?: (m: string) => void;
+  installRust?: (d: Parameters<typeof installRustStack>[0]) => Promise<RustStackOutcome>;
 }): Promise<ArchV2BootResult> {
   const log = o.log ?? (() => {});
   const config = loadArchV2Config();
@@ -49,8 +51,30 @@ export async function bootArchV2(o: {
   }
   setActiveEngine(engine);
   log(`[engine] apps run on ${engine === "podman" ? "Podman" : "Docker"}`);
-  const rust = await installRustStack({ repoPath: o.repoPath, config, run: o.run, onLog: log });
+  const rust = await (o.installRust ?? (runsUnprivileged() ? rustStackAsRoot : installRustStack))({ repoPath: o.repoPath, config, run: o.run, onLog: log });
   return { config, engine, ...(engineNote ? { engineNote } : {}), rust };
+}
+
+/**
+ * Without root the daemon cannot write units or restart them: the release's own `rust-stack` step
+ * does it through the privileged helper, so an update still moves keyd, broker and core onto the
+ * new release's binaries. A step that restarts the broker it runs under loses its answer; the next
+ * start finds the units current.
+ */
+export async function rustStackAsRoot(d: { onLog?: (m: string) => void }): Promise<RustStackOutcome> {
+  try {
+    const r = await runSetupStep<RustStackOutcome>("rust-stack");
+    return r ?? { action: "failed", reason: "the rust-stack step gave no result" };
+  } catch (e) {
+    d.onLog?.(`[rust-path] the privileged helper could not update the Rust units: ${(e as Error).message}`);
+    return { action: "failed", reason: (e as Error).message };
+  }
+}
+
+/** Which privileged helper the daemon hands host operations to once it gives up root. */
+export function privilegedHelperFor(r: Pick<ArchV2BootResult, "config" | "rust">): "broker" | "privd" {
+  if (r.config.rust !== "on") return "privd";
+  return r.rust.action === "installed" || r.rust.action === "unchanged" || r.rust.action === "restarted" ? "broker" : "privd";
 }
 
 /** For the update gate: true when no Rust component regressed to its fallback on this release. */
