@@ -246,3 +246,10 @@ Running when this was written (subagents; if this session is gone, they are gone
   the GPU card doesn't refresh on the gpu-approval-request event/push; stack switch never run on a
   real classic box and has no gym group. gym is behind the tip (rebase onto integrate before the next
   release-gym run; the current run uses `61c2d1005`).
+- 2026-10-25: **live release gym run 1 (gym `61c2d1005`): every fleet box failed** on both stacks
+  (arch-v2: 119 passed / 9 failed / 42 skipped, all failures in `fleet`; classic: fleet 6 failed, the
+  rest skipped). Demo-flow boxes register but get no cert; gym-provisioned ones stay at order phase
+  "installing". Not LE rate limits (acme-budget-cli: room). browser verdict: skip. Harry approved a
+  per-box debug SSH key (`0da1bf58c`: gym/provision `debugSshPublicKey`, fleet env
+  `GYM_DEBUG_SSH_PUBKEY`; demo/prod boxes unchanged). Debug run: gym refreshed to `0a997184d`, core
+  group with key `scratchpad/gymdbg` (throwaway) → `scratchpad/gym-core-dbg.log`; SSH root@<box ip>.
