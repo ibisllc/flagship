@@ -53,6 +53,8 @@ AI01/AI02 local AI) and 8 (V01 adversarial suite + assessment package, V02 canar
 
 - Commits: imperative subject, body says why, end with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and the session line. No Codex trailer.
+- zsh: write `${var}` before a `:` (`"${c}:refs/heads/x"`); `$c:r...` is a zsh modifier and silently breaks
+  refspecs (it caused two failed pushes on 2026-10-25).
 - Stage explicit paths. Subagents share the worktree and never run git; I stage their work.
 - Every user-facing string goes through i18n: webapp `node scripts/i18n-pwa.mjs extract|build`;
   Android add to `i18n/android/en.json` then `node scripts/i18n-android.mjs build` (never edit
@@ -287,3 +289,11 @@ Running when this was written (subagents; if this session is gone, they are gone
   to handle LAN networks (static IP, 802.1X, captive portals, VLANs, IPv6-only) and headless servers.
   Phone USB burn: Harry wants it IN this release. Outbound proxy: asked free vs Pro (recommended free
   BYO-proxy; paid = Flagship-run exit/WireGuard/second relay), gated on the initramfs OHTTP piece.
+- 2026-10-25: marketplace family rebased (9/17/16/16 commits over the release; shells v181-v184);
+  feat/{marketplace,custom-names,custom-domains,outbound-proxy} force-pushed onto it, old tips and the
+  ux-* copies archived under refs/archive/2026-10-25/pre-rebase/, ux-* deleted. Agent fixes on those
+  branches: custom-names refuses a rename while the account holds PQ bindings/assurance changes;
+  outbound-proxy's root health timer no longer feeds the daemon-written curlrc to curl -K (privilege
+  escalation under 0.3's unprivileged daemon). Open on custom-names: recovery record v2 names the
+  account, so a rename needs a re-signed record before the paid name change launches. iOS strings for
+  custom-domains/outbound-proxy wrapped but not harvested.

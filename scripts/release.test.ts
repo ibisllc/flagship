@@ -561,7 +561,7 @@ describe("the app browser ships on only if the release gym proves it (owner deci
     const r = spawnSync("bash", [GYM_RUN, "--skip-refresh"], {
       cwd: ROOT,
       encoding: "utf8",
-      env: { PATH: `${bin}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: dir, GYM_SECRETS_FILE: secrets, FLAGSHIP_GYM_LOCK: join(dir, "gym.lock") },
+      env: { PATH: `${bin}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: dir, GYM_SECRETS_FILE: secrets, FLAGSHIP_GYM_LOCK: join(dir, "gym.lock"), GYM_INSTALLER_GIT_REF: "a".repeat(40) },
       timeout: 60_000,
     });
     const out = `${r.stdout}${r.stderr}`;
