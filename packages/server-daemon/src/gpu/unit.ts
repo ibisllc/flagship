@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { KEYD_STATE_DIR } from "@flagship/keyd/unit";
 import { GVISOR_RELEASE } from "../appSandbox/gvisor.js";
 import { GPUD_SOCKET } from "./client.js";
 
@@ -62,6 +63,8 @@ export function gpudUnit(opts: { releasePath: string; engine: string; tools: Gpu
     ...(opts.daemonUid !== undefined && Number.isSafeInteger(opts.daemonUid) && opts.daemonUid > 0 ? ["--allow-uid", String(opts.daemonUid)] : []),
     "--catalog", join(opts.releasePath, GPU_CATALOG_REL),
     "--trust", join(opts.releasePath, GPU_TRUST_REL),
+    // An app's GPU approval must be signed by the owner key keyd's root-written owner.json pins.
+    "--keyd-state", KEYD_STATE_DIR,
     "--engine", opts.engine,
     ...flag("nvidia-smi", opts.tools.nvidiaSmi, SAFE),
     ...flag("nvidia-ctk", opts.tools.nvidiaCtk, SAFE),

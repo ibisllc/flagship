@@ -55,6 +55,16 @@ export interface GpuApprovalWire {
   ownerConsent: string | null;
 }
 
+/**
+ * The owner's signature over the approval (`flagship/gpu-approval/v1`, @flagship/protocol
+ * gpuApproval.ts), which gpud checks itself against keyd's pinned owner key. Only the box's own
+ * local AI, exclusive and secret, is admitted without one.
+ */
+export interface GpuApprovalProof {
+  issuedAt: number;
+  signature: string;
+}
+
 export interface ShareLimits {
   computePercent: number;
   memoryMib: number;
@@ -68,6 +78,7 @@ export interface ClaimRequest {
   operationId: string;
   requirement: AcceleratorRequirementWire;
   approval: GpuApprovalWire;
+  approvalProof?: GpuApprovalProof;
   maxRuntimeMs?: number;
   share?: ShareLimits;
   /** A catalog image purpose (`cuda-13.0-runtime`); the first approved one when unset. */
@@ -282,6 +293,7 @@ export interface AppAcceleratorRequest {
   installation: AppInstallation;
   requirement: AcceleratorRequirementWire;
   approval: GpuApprovalWire;
+  approvalProof?: GpuApprovalProof;
   share?: ShareLimits;
   /** How long a deploy waits in the queue before it gives up. */
   queueWaitMs?: number;
@@ -340,6 +352,7 @@ export class AppAccelerators {
         operationId: `deploy-${serviceId}`,
         requirement: req.requirement,
         approval: req.approval,
+        ...(req.approvalProof ? { approvalProof: req.approvalProof } : {}),
         ...(req.share ? { share: req.share } : {}),
       });
     } catch (e) {

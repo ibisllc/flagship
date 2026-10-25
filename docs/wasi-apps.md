@@ -110,6 +110,10 @@ matches (`wasi/install.ts`). Without systemd, the pin or the binary, WASI is una
 - install/update/restore/uninstall go through `ServicePlatform` like any app (`appRuntimes.ts`
   routes by kind); an update can change the module; the start check waits for the worker to answer
   and reports its last log lines when it doesn't; uninstall removes the unit's folder.
+- an app's log lines are its worker unit's journal; an unprivileged daemon reads them only through
+  the broker's `wasi.logs {instance, lines}` (privd and `flagship-broker`, same verdicts), which runs
+  `journalctl -u flagship-wasi@<instance>.service -n <1..5000> --no-pager -o cat` and nothing wider,
+  the way a container app's lines come from `docker logs` through the broker.
 - backups hold the worker still with the cgroup freezer while the files folder and databases are
   read; whole-server backups carry the module itself (`module.wasm`, checked against the digest on
   restore).

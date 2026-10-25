@@ -40,6 +40,7 @@ export { ed, edVerifyFast } from "./edSync.js";
 export { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
 export * from "./repoAdapter.js";
 export * from "./appEgress.js";
+export * from "./gpuApproval.js";
 export * from "./appAccess.js";
 export * from "./appDbWrite.js";
 export * from "./appMemberRole.js";

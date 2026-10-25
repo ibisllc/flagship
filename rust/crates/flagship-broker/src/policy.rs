@@ -55,6 +55,8 @@ pub const SETUP_STEPS: &[&str] = &[
     "rust-stack",
     "wasi-runtime",
     "gpu-broker",
+    "arch-v2-switch",
+    "arch-v2-settle",
 ];
 
 fn forbidden(m: impl Into<String>) -> PrivdError {
@@ -1724,6 +1726,29 @@ pub fn wasi_unit_exec(args: &Args) -> Result<PrivExec, PrivdError> {
     })
 }
 
+/// `wasiLogsExec`: the last lines one WASI app's worker wrote, from that one unit's journal.
+pub fn wasi_logs_exec(args: &Args) -> Result<PrivExec, PrivdError> {
+    no_extra(args, &["instance", "lines"])?;
+    let instance = match args.get("instance").and_then(Value::as_str) {
+        Some(x) if WASI_INSTANCE.is_match(x) => x,
+        _ => return Err(bad("instance is 16 lowercase hex")),
+    };
+    let lines = int_in(args.get("lines"), 1, 5000, "lines")?;
+    Ok(exec(
+        "/usr/bin/journalctl",
+        vec![
+            "-u".into(),
+            format!("flagship-wasi@{instance}.service"),
+            "-n".into(),
+            lines.to_string(),
+            "--no-pager".into(),
+            "-o".into(),
+            "cat".into(),
+        ],
+        30_000,
+    ))
+}
+
 // ── host operations ───────────────────────────────────────────────────────
 
 static IMAGE_MOUNT: LazyLock<Regex> = LazyLock::new(|| re(&format!("^{FILES_IMAGE_ROOT}/{VOL}$")));
@@ -2393,6 +2418,7 @@ pub fn validate_request(
         "wipe" => wipe_exec(args),
         "setup" => setup_exec(args),
         "wasi.unit" => wasi_unit_exec(args),
+        "wasi.logs" => wasi_logs_exec(args),
         _ => Err(PrivdError::new(ErrorCode::UnknownOp, "unknown operation")),
     }
 }

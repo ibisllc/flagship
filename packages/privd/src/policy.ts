@@ -865,6 +865,17 @@ export function wasiUnitExec(args: Record<string, unknown>): Exec {
   return { file: "/usr/bin/install", args: ["-D", "-m", "0644", "/dev/stdin", `${dir}/50-app.conf`], timeoutMs: 30_000, input: renderWasiDropIn(fields) };
 }
 
+/**
+ * The last lines one WASI app's worker wrote (what `docker logs` is for a container app): that one
+ * unit's journal, plain messages only, so the daemon never reads the box's journal itself.
+ */
+export function wasiLogsExec(args: Record<string, unknown>): Exec {
+  noExtra(args, ["instance", "lines"]);
+  if (typeof args.instance !== "string" || !/^[0-9a-f]{16}$/.test(args.instance)) throw new PrivdError("bad-request", "instance is 16 lowercase hex");
+  const lines = intIn(args.lines, 1, 5000, "lines");
+  return { file: "/usr/bin/journalctl", args: ["-u", `flagship-wasi@${args.instance}.service`, "-n", String(lines), "--no-pager", "-o", "cat"], timeoutMs: 30_000 };
+}
+
 // ── host operations (per-app disk images, volume folders, the egress chains) ─
 
 /** Per-app files images (appQuota/loopVolumes.ts in the daemon). */
@@ -1157,7 +1168,7 @@ export function wipeExec(args: Record<string, unknown>): Exec {
 }
 
 /** The root steps the release does for the daemon (packages/server-daemon/src/setup.ts), by name only. */
-export const SETUP_STEPS = ["gvisor", "health-reporter", "update-guard", "container-links", "data-unit", "debug-access", "debug-access-close", "system-repair", "server-code", "rust-stack", "wasi-runtime", "gpu-broker"] as const;
+export const SETUP_STEPS = ["gvisor", "health-reporter", "update-guard", "container-links", "data-unit", "debug-access", "debug-access-close", "system-repair", "server-code", "rust-stack", "wasi-runtime", "gpu-broker", "arch-v2-switch", "arch-v2-settle"] as const;
 
 export function setupExec(args: Record<string, unknown>): Exec {
   noExtra(args, ["step"]);
@@ -1232,6 +1243,8 @@ export function validateRequest(op: Op, args: Record<string, unknown>, ctx: Poli
       return setupExec(args);
     case "wasi.unit":
       return wasiUnitExec(args);
+    case "wasi.logs":
+      return wasiLogsExec(args);
     default:
       throw new PrivdError("unknown-op", "unknown operation");
   }

@@ -14,7 +14,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::device::{DeviceRecord, PciAddress};
 
@@ -44,9 +44,9 @@ pub struct PassthroughQualification {
     pub dma_type: String,
 }
 
-/// What `bind` changed, so `release` can put it back.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+/// What `bind` changed, so `release` can put it back (kept in gpud's journal across a restart).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VfioBinding {
     pub group: u32,
     pub functions: Vec<(PciAddress, Option<String>)>,

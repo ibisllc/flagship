@@ -15506,7 +15506,92 @@
    }
   },
   {
-   "name": "docker-645",
+   "name": "setup-645",
+   "op": "setup",
+   "args": {
+    "step": "arch-v2-switch"
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/local/bin/node",
+     "args": [
+      "/opt/flagship/packages/server-daemon/dist/setup.js",
+      "arch-v2-switch"
+     ],
+     "timeoutMs": 1800000
+    }
+   }
+  },
+  {
+   "name": "setup-646",
+   "op": "setup",
+   "args": {
+    "step": "arch-v2-settle"
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/local/bin/node",
+     "args": [
+      "/opt/flagship/packages/server-daemon/dist/setup.js",
+      "arch-v2-settle"
+     ],
+     "timeoutMs": 1800000
+    }
+   }
+  },
+  {
+   "name": "setup-647",
+   "op": "setup",
+   "args": {
+    "step": "arch-v2-switch",
+    "target": "arch-v2"
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "unknown field target"
+   }
+  },
+  {
+   "name": "setup-648",
+   "op": "setup",
+   "args": {
+    "step": "arch-v2"
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "unknown setup step"
+   }
+  },
+  {
+   "name": "setup-649",
+   "op": "setup",
+   "args": {
+    "step": "arch-v2-switch "
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "unknown setup step"
+   }
+  },
+  {
+   "name": "setup-650",
+   "op": "setup",
+   "args": {
+    "step": "arch-v2-revert"
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "unknown setup step"
+   }
+  },
+  {
+   "name": "docker-651",
    "op": "docker",
    "args": {
     "argv": [
@@ -15591,7 +15676,7 @@
    }
   },
   {
-   "name": "docker-646",
+   "name": "docker-652",
    "op": "docker",
    "args": {
     "argv": [
@@ -15678,7 +15763,7 @@
    }
   },
   {
-   "name": "docker-647",
+   "name": "docker-653",
    "op": "docker",
    "args": {
     "argv": [
@@ -15761,7 +15846,7 @@
    }
   },
   {
-   "name": "docker-648",
+   "name": "docker-654",
    "op": "docker",
    "args": {
     "argv": [
@@ -15865,7 +15950,7 @@
    }
   },
   {
-   "name": "docker-649",
+   "name": "docker-655",
    "op": "docker",
    "args": {
     "argv": [
@@ -15914,7 +15999,7 @@
    }
   },
   {
-   "name": "docker-650",
+   "name": "docker-656",
    "op": "docker",
    "args": {
     "argv": [
@@ -15961,7 +16046,7 @@
    }
   },
   {
-   "name": "docker-651",
+   "name": "docker-657",
    "op": "docker",
    "args": {
     "argv": [
@@ -16008,7 +16093,7 @@
    }
   },
   {
-   "name": "docker-652",
+   "name": "docker-658",
    "op": "docker",
    "args": {
     "argv": [
@@ -16055,7 +16140,7 @@
    }
   },
   {
-   "name": "docker-653",
+   "name": "docker-659",
    "op": "docker",
    "args": {
     "argv": [
@@ -16102,7 +16187,7 @@
    }
   },
   {
-   "name": "docker-654",
+   "name": "docker-660",
    "op": "docker",
    "args": {
     "argv": [
@@ -16149,7 +16234,7 @@
    }
   },
   {
-   "name": "docker-655",
+   "name": "docker-661",
    "op": "docker",
    "args": {
     "argv": [
@@ -16196,7 +16281,7 @@
    }
   },
   {
-   "name": "docker-656",
+   "name": "docker-662",
    "op": "docker",
    "args": {
     "argv": [
@@ -16242,7 +16327,7 @@
    }
   },
   {
-   "name": "docker-657",
+   "name": "docker-663",
    "op": "docker",
    "args": {
     "argv": [
@@ -16289,7 +16374,7 @@
    }
   },
   {
-   "name": "docker-658",
+   "name": "docker-664",
    "op": "docker",
    "args": {
     "argv": [
@@ -16338,7 +16423,7 @@
    }
   },
   {
-   "name": "docker-659",
+   "name": "docker-665",
    "op": "docker",
    "args": {
     "argv": [
@@ -16387,7 +16472,7 @@
    }
   },
   {
-   "name": "docker-660",
+   "name": "docker-666",
    "op": "docker",
    "args": {
     "argv": [
@@ -16436,7 +16521,7 @@
    }
   },
   {
-   "name": "docker-661",
+   "name": "docker-667",
    "op": "docker",
    "args": {
     "argv": [
@@ -16484,7 +16569,7 @@
    }
   },
   {
-   "name": "docker-662",
+   "name": "docker-668",
    "op": "docker",
    "args": {
     "argv": [
@@ -16532,7 +16617,7 @@
    }
   },
   {
-   "name": "docker-663",
+   "name": "docker-669",
    "op": "docker",
    "args": {
     "argv": [
@@ -16580,7 +16665,7 @@
    }
   },
   {
-   "name": "docker-664",
+   "name": "docker-670",
    "op": "docker",
    "args": {
     "argv": [
@@ -16630,7 +16715,7 @@
    }
   },
   {
-   "name": "docker-665",
+   "name": "docker-671",
    "op": "docker",
    "args": {
     "argv": [
@@ -16676,7 +16761,7 @@
    }
   },
   {
-   "name": "docker-666",
+   "name": "docker-672",
    "op": "docker",
    "args": {
     "argv": [
@@ -16722,7 +16807,7 @@
    }
   },
   {
-   "name": "docker-667",
+   "name": "docker-673",
    "op": "docker",
    "args": {
     "argv": [
@@ -16770,7 +16855,7 @@
    }
   },
   {
-   "name": "docker-668",
+   "name": "docker-674",
    "op": "docker",
    "args": {
     "argv": [
@@ -16818,7 +16903,7 @@
    }
   },
   {
-   "name": "docker-669",
+   "name": "docker-675",
    "op": "docker",
    "args": {
     "argv": [
@@ -16880,7 +16965,7 @@
    }
   },
   {
-   "name": "host-670",
+   "name": "host-676",
    "op": "host",
    "args": {
     "file": "localai",
@@ -16913,7 +16998,7 @@
    }
   },
   {
-   "name": "host-671",
+   "name": "host-677",
    "op": "host",
    "args": {
     "file": "localai",
@@ -16946,7 +17031,7 @@
    }
   },
   {
-   "name": "host-672",
+   "name": "host-678",
    "op": "host",
    "args": {
     "file": "localai",
@@ -16970,7 +17055,7 @@
    }
   },
   {
-   "name": "host-673",
+   "name": "host-679",
    "op": "host",
    "args": {
     "file": "localai",
@@ -16994,7 +17079,7 @@
    }
   },
   {
-   "name": "host-674",
+   "name": "host-680",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17011,7 +17096,7 @@
    }
   },
   {
-   "name": "host-675",
+   "name": "host-681",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17028,7 +17113,7 @@
    }
   },
   {
-   "name": "host-676",
+   "name": "host-682",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17045,7 +17130,7 @@
    }
   },
   {
-   "name": "host-677",
+   "name": "host-683",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17062,7 +17147,7 @@
    }
   },
   {
-   "name": "host-678",
+   "name": "host-684",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17079,7 +17164,7 @@
    }
   },
   {
-   "name": "host-679",
+   "name": "host-685",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17096,7 +17181,7 @@
    }
   },
   {
-   "name": "host-680",
+   "name": "host-686",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17113,7 +17198,7 @@
    }
   },
   {
-   "name": "host-681",
+   "name": "host-687",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17130,7 +17215,7 @@
    }
   },
   {
-   "name": "host-682",
+   "name": "host-688",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17147,7 +17232,7 @@
    }
   },
   {
-   "name": "host-683",
+   "name": "host-689",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17164,7 +17249,7 @@
    }
   },
   {
-   "name": "host-684",
+   "name": "host-690",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17181,7 +17266,7 @@
    }
   },
   {
-   "name": "host-685",
+   "name": "host-691",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17197,7 +17282,7 @@
    }
   },
   {
-   "name": "host-686",
+   "name": "host-692",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17211,6 +17296,341 @@
     "ok": false,
     "code": "forbidden",
     "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "wasi.logs-693",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": 15
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/journalctl",
+     "args": [
+      "-u",
+      "flagship-wasi@0123456789abcdef.service",
+      "-n",
+      "15",
+      "--no-pager",
+      "-o",
+      "cat"
+     ],
+     "timeoutMs": 30000
+    }
+   }
+  },
+  {
+   "name": "wasi.logs-694",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "fedcba9876543210",
+    "lines": 5000
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/journalctl",
+     "args": [
+      "-u",
+      "flagship-wasi@fedcba9876543210.service",
+      "-n",
+      "5000",
+      "--no-pager",
+      "-o",
+      "cat"
+     ],
+     "timeoutMs": 30000
+    }
+   }
+  },
+  {
+   "name": "wasi.logs-695",
+   "op": "wasi.logs",
+   "args": {
+    "lines": 1,
+    "instance": "0123456789abcdef"
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/journalctl",
+     "args": [
+      "-u",
+      "flagship-wasi@0123456789abcdef.service",
+      "-n",
+      "1",
+      "--no-pager",
+      "-o",
+      "cat"
+     ],
+     "timeoutMs": 30000
+    }
+   }
+  },
+  {
+   "name": "wasi.logs-696",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": 0
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "lines must be a whole number from 1 to 5000"
+   }
+  },
+  {
+   "name": "wasi.logs-697",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": 5001
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "lines must be a whole number from 1 to 5000"
+   }
+  },
+  {
+   "name": "wasi.logs-698",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": 1.5
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "lines must be a whole number from 1 to 5000"
+   }
+  },
+  {
+   "name": "wasi.logs-699",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": "15"
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "lines must be a whole number from 1 to 5000"
+   }
+  },
+  {
+   "name": "wasi.logs-700",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": -1
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "lines must be a whole number from 1 to 5000"
+   }
+  },
+  {
+   "name": "wasi.logs-701",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": 1000000000
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "lines must be a whole number from 1 to 5000"
+   }
+  },
+  {
+   "name": "wasi.logs-702",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef"
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "lines must be a whole number from 1 to 5000"
+   }
+  },
+  {
+   "name": "wasi.logs-703",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789ABCDEF",
+    "lines": 15
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "instance is 16 lowercase hex"
+   }
+  },
+  {
+   "name": "wasi.logs-704",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcde",
+    "lines": 15
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "instance is 16 lowercase hex"
+   }
+  },
+  {
+   "name": "wasi.logs-705",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef0",
+    "lines": 15
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "instance is 16 lowercase hex"
+   }
+  },
+  {
+   "name": "wasi.logs-706",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "../../../var/log",
+    "lines": 15
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "instance is 16 lowercase hex"
+   }
+  },
+  {
+   "name": "wasi.logs-707",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef\n",
+    "lines": 15
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "instance is 16 lowercase hex"
+   }
+  },
+  {
+   "name": "wasi.logs-708",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "flagship-daemon",
+    "lines": 15
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "instance is 16 lowercase hex"
+   }
+  },
+  {
+   "name": "wasi.logs-709",
+   "op": "wasi.logs",
+   "args": {
+    "instance": 5,
+    "lines": 15
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "instance is 16 lowercase hex"
+   }
+  },
+  {
+   "name": "wasi.logs-710",
+   "op": "wasi.logs",
+   "args": {
+    "lines": 15
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "instance is 16 lowercase hex"
+   }
+  },
+  {
+   "name": "wasi.logs-711",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": 15,
+    "unit": "flagship-keyd.service"
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "unknown field unit"
+   }
+  },
+  {
+   "name": "wasi.logs-712",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": 15,
+    "argv": [
+     "-u",
+     "ssh.service"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "unknown field argv"
+   }
+  },
+  {
+   "name": "wasi.logs-713",
+   "op": "wasi.logs",
+   "args": {
+    "instance": "0123456789abcdef",
+    "lines": 15,
+    "since": "1970-01-01"
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "unknown field since"
+   }
+  },
+  {
+   "name": "wasi.logs-714",
+   "op": "wasi.logs",
+   "args": {},
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "instance is 16 lowercase hex"
+   }
+  },
+  {
+   "name": "wasi.logs-715",
+   "op": "wasi.logs",
+   "args": {
+    "__proto__": {
+     "instance": "0123456789abcdef"
+    },
+    "lines": 15
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "unknown field __proto__"
    }
   },
   {
@@ -28242,7 +28662,7 @@
    }
   },
   {
-   "name": "docker-645-podman",
+   "name": "docker-651-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28328,7 +28748,7 @@
    }
   },
   {
-   "name": "docker-646-podman",
+   "name": "docker-652-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28416,7 +28836,7 @@
    }
   },
   {
-   "name": "docker-647-podman",
+   "name": "docker-653-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28500,7 +28920,7 @@
    }
   },
   {
-   "name": "docker-648-podman",
+   "name": "docker-654-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28605,7 +29025,7 @@
    }
   },
   {
-   "name": "docker-649-podman",
+   "name": "docker-655-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28655,7 +29075,7 @@
    }
   },
   {
-   "name": "docker-650-podman",
+   "name": "docker-656-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28703,7 +29123,7 @@
    }
   },
   {
-   "name": "docker-651-podman",
+   "name": "docker-657-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28751,7 +29171,7 @@
    }
   },
   {
-   "name": "docker-652-podman",
+   "name": "docker-658-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28799,7 +29219,7 @@
    }
   },
   {
-   "name": "docker-653-podman",
+   "name": "docker-659-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28847,7 +29267,7 @@
    }
   },
   {
-   "name": "docker-654-podman",
+   "name": "docker-660-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28895,7 +29315,7 @@
    }
   },
   {
-   "name": "docker-655-podman",
+   "name": "docker-661-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28943,7 +29363,7 @@
    }
   },
   {
-   "name": "docker-656-podman",
+   "name": "docker-662-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28990,7 +29410,7 @@
    }
   },
   {
-   "name": "docker-657-podman",
+   "name": "docker-663-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29038,7 +29458,7 @@
    }
   },
   {
-   "name": "docker-658-podman",
+   "name": "docker-664-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29088,7 +29508,7 @@
    }
   },
   {
-   "name": "docker-659-podman",
+   "name": "docker-665-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29138,7 +29558,7 @@
    }
   },
   {
-   "name": "docker-660-podman",
+   "name": "docker-666-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29188,7 +29608,7 @@
    }
   },
   {
-   "name": "docker-661-podman",
+   "name": "docker-667-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29237,7 +29657,7 @@
    }
   },
   {
-   "name": "docker-662-podman",
+   "name": "docker-668-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29286,7 +29706,7 @@
    }
   },
   {
-   "name": "docker-663-podman",
+   "name": "docker-669-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29335,7 +29755,7 @@
    }
   },
   {
-   "name": "docker-664-podman",
+   "name": "docker-670-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29386,7 +29806,7 @@
    }
   },
   {
-   "name": "docker-665-podman",
+   "name": "docker-671-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29433,7 +29853,7 @@
    }
   },
   {
-   "name": "docker-666-podman",
+   "name": "docker-672-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29480,7 +29900,7 @@
    }
   },
   {
-   "name": "docker-667-podman",
+   "name": "docker-673-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29529,7 +29949,7 @@
    }
   },
   {
-   "name": "docker-668-podman",
+   "name": "docker-674-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29578,7 +29998,7 @@
    }
   },
   {
-   "name": "docker-669-podman",
+   "name": "docker-675-podman",
    "op": "docker",
    "args": {
     "argv": [

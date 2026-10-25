@@ -25,6 +25,7 @@ pub mod media;
 pub mod mig;
 pub mod numerics;
 pub mod observe;
+pub mod owner_approval;
 pub mod podman_check;
 pub mod policy;
 pub mod provider;

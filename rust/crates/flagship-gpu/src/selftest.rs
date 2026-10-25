@@ -21,6 +21,7 @@ use crate::maintenance::{
     DriverMaintenance, HostPackages, MaintState, MaintenanceStore, PostBoot, Proposal,
 };
 use crate::media::{Codec, GraphicsApi, RenderSpec, TranscodeSpec, VideoOp};
+use crate::owner_approval::OwnerAnchorSource;
 use crate::policy::{AllocationId, AllocationPolicy};
 use crate::provider::{DeviceProvider, IsolationProfile, ToolProgram};
 use crate::request::{GpuApproval, GpuRequest};
@@ -28,7 +29,7 @@ use crate::safetensors::FormatError;
 use crate::service::{CatalogSource, GpuService, ServiceConfig, ServiceParts};
 use crate::sim::{SimDrivers, SimGpu, SimHost, SimRuntime};
 use crate::testkit::{
-    TestSigner, app, approval, envelope, sim_host_facts, sim_payload, trust_json,
+    TestOwner, TestSigner, app, approval, envelope, sim_host_facts, sim_payload, trust_json,
 };
 use crate::topology::GangRequirement;
 use crate::training::{
@@ -37,6 +38,9 @@ use crate::training::{
 };
 
 type Group = fn(&mut T, &Path) -> Result<(), String>;
+
+/// The simulated owner whose key the matrix's services pin.
+const OWNER_SEED: u8 = 0x0a;
 
 pub const SELFTEST_SCHEMA: &str = "flagship/gpu-selftest/v1";
 
@@ -137,6 +141,7 @@ fn rig(dir: &Path, gpus: Vec<SimGpu>, catalog: Option<VerifiedCatalog>) -> Resul
     cfg.rocm_version = Some(d.rocm.clone());
     cfg.level_zero_version = Some(d.level_zero.clone());
     cfg.coop_window_ms = 1_000;
+    cfg.owner_anchor = OwnerAnchorSource::Fixed(TestOwner::new(OWNER_SEED).anchor());
     let svc = GpuService::new(cfg, parts)?;
     Ok(Rig { host, rt, svc })
 }
@@ -166,6 +171,7 @@ fn reopen(dir: &Path, r: Rig) -> Result<Rig, String> {
     cfg.run_claims_path = dir.join("run-claims.json");
     cfg.rocm_version = Some(d.rocm.clone());
     cfg.level_zero_version = Some(d.level_zero.clone());
+    cfg.owner_anchor = OwnerAnchorSource::Fixed(TestOwner::new(OWNER_SEED).anchor());
     let svc = GpuService::new(cfg, parts)?;
     Ok(Rig { host, rt, svc })
 }
@@ -240,7 +246,7 @@ fn claim(svc: &mut GpuService, o: &ClaimOpts<'_>) -> Result<Value, String> {
     if let (Some(s), Some(m)) = (&o.share, args.as_object_mut()) {
         m.insert("share".into(), s.clone());
     }
-    svc.handle("gpu.claim", &args)
+    svc.handle("gpu.claim", &TestOwner::new(OWNER_SEED).sign_claim(&args))
         .map_err(|e| format!("{}: {}", e.code, e.message))
 }
 
@@ -565,11 +571,11 @@ fn lifecycle_checks(t: &mut T, dir: &Path) -> Result<(), String> {
         state(&x) != "reserved",
         format!("{x:?}"),
     );
-    let unapproved = r.svc.handle("gpu.claim", &json!({
+    let unapproved = r.svc.handle("gpu.claim", &TestOwner::new(OWNER_SEED).sign_claim(&json!({
         "allocationId": "u1", "app": app("app-u", 1), "operationId": "op", "container": "flagship-app-u",
         "requirement": requirement(Backend::NvidiaCuda, 1, 1024, &["compute", "graphics"], "exclusive", "any"),
         "approval": approval(app("app-u", 1), Backend::NvidiaCuda, IsolationProfile::GvisorNvproxy, &[Capability::Compute], false, None),
-    }));
+    })));
     t.ok(
         g,
         "graphics without a graphics approval is refused",

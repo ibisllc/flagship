@@ -14,6 +14,8 @@ import { installPrivd } from "../src/privdInstall.js";
 import { dockerBuildArgs } from "../src/serviceRunner.js";
 import { verifiedDebugGrant } from "../src/setup.js";
 import { FILES_HELPER_IMAGE, filesArchiveDockerArgs, filesSizeDockerArgs } from "../src/volumeDump.js";
+import { WasiRunner } from "../src/wasi/runner.js";
+import { wasiUnitName } from "../src/wasi/unit.js";
 
 describe("the broker accepts what the daemon really runs", () => {
   it("pins the same helper image and folder fingerprint", () => {
@@ -92,6 +94,26 @@ describe("routing a command", () => {
     await expect(routePrivileged("sh", ["-c", "id"])).rejects.toThrow(/not available/);
     await expect(routePrivileged("bash", ["/tmp/x.sh"])).rejects.toThrow(/not available/);
     await expect(routePrivileged("docker", ["run", "--privileged", "img"])).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it.skipIf(process.getuid?.() === 0)("reads a WASI app's output through the broker, like docker logs, and nothing else of the journal", async () => {
+    process.env[UNPRIVILEGED_ENV] = "1";
+    ran.length = 0;
+    const unit = wasiUnitName("alice--chess");
+    const runner = new WasiRunner({
+      cmd: { run: async () => {}, capture: async (c, a) => (await routePrivileged(c, a)) ?? { stdout: "local", stderr: "" } },
+      modules: {} as never,
+      broker: {} as never,
+      available: () => true,
+    });
+    expect(await runner.logs("alice--chess", 15)).toEqual({ stdout: "ran", stderr: "" });
+    expect(ran).toEqual([{ file: "/usr/bin/journalctl", args: ["-u", unit, "-n", "15", "--no-pager", "-o", "cat"], timeoutMs: 30_000 }]);
+    await expect(routePrivileged("journalctl", ["-u", unit, "-n", "15", "--no-pager", "-o", "json"])).rejects.toThrow(/own output/);
+    await expect(routePrivileged("journalctl", ["-u", unit, "-u", "flagship-keyd.service", "-n", "15", "--no-pager", "-o", "cat"])).rejects.toThrow(/own output/);
+    await expect(routePrivileged("journalctl", ["-u", "flagship-wasi@0123456789ABCDEF.service", "-n", "15", "--no-pager", "-o", "cat"])).rejects.toThrow(/own output/);
+    await expect(routePrivileged("journalctl", ["-u", unit, "-n", "9000", "--no-pager", "-o", "cat"])).rejects.toMatchObject({ code: "bad-request" });
+    expect(ran).toHaveLength(1);
+    expect(await routePrivileged("journalctl", ["-u", "docker.service", "-b", "--no-pager", "-o", "cat", "-n", "300"])).toBeNull();
   });
 });
 

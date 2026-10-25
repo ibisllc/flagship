@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS topology (
     fingerprint TEXT NOT NULL
 );
 INSERT OR IGNORE INTO topology (k, generation, reconciled, fingerprint) VALUES (1, 0, 0, '');
+CREATE TABLE IF NOT EXISTS allocation_terms (
+    allocation_id TEXT PRIMARY KEY REFERENCES allocations(id),
+    terms TEXT NOT NULL
+);
 ";
 
 #[derive(Debug)]
@@ -149,6 +153,56 @@ impl SqliteJournal {
     fn begin(conn: &mut Connection) -> Result<Transaction<'_>, JournalError> {
         conn.transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(storage)
+    }
+
+    /// Write what the service holds an allocation to besides its journal record (share limits,
+    /// runtime limit, start time, VFIO bindings, cooperative standing), as opaque text, in one
+    /// transaction. The allocation must exist.
+    pub fn put_terms(&self, rows: &[(&AllocationId, String)]) -> Result<(), JournalError> {
+        let mut c = self.lock()?;
+        let tx = Self::begin(&mut c)?;
+        for (id, text) in rows {
+            tx.execute(
+                "INSERT INTO allocation_terms (allocation_id, terms) VALUES (?1, ?2)
+                 ON CONFLICT(allocation_id) DO UPDATE SET terms = excluded.terms",
+                params![id.as_str(), text],
+            )
+            .map_err(storage)?;
+        }
+        tx.commit().map_err(storage)
+    }
+
+    pub fn delete_terms(&self, id: &AllocationId) -> Result<(), JournalError> {
+        let mut c = self.lock()?;
+        let tx = Self::begin(&mut c)?;
+        tx.execute(
+            "DELETE FROM allocation_terms WHERE allocation_id = ?1",
+            [id.as_str()],
+        )
+        .map_err(storage)?;
+        tx.commit().map_err(storage)
+    }
+
+    /// Every stored row as written: the caller parses each one, so one bad row stops only its
+    /// own allocation.
+    pub fn all_terms(&self) -> Result<Vec<(String, String)>, JournalError> {
+        let c = self.lock()?;
+        let mut st = c
+            .prepare("SELECT allocation_id, terms FROM allocation_terms ORDER BY allocation_id")
+            .map_err(storage)?;
+        let rows = st
+            .query_map([], |r| {
+                let text = |i: usize| -> rusqlite::Result<String> {
+                    Ok(r.get_ref(i)?.as_str().unwrap_or_default().to_owned())
+                };
+                Ok((text(0)?, text(1)?))
+            })
+            .map_err(storage)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(storage)?);
+        }
+        Ok(out)
     }
 }
 

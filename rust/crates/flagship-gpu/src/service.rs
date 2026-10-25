@@ -1,10 +1,11 @@
 //! `flagship-gpud`'s operations: the allocator as the box's runtime layer
 //! and the AI tool broker reach it. One JSON request, one JSON answer; the
-//! socket, framing and peer check live in the binary. Owner authority (a
-//! maintenance order, an approval) is verified by the daemon before it
-//! calls, as for privd v1; this service re-checks everything it can check
-//! itself (catalog, qualification, CDI, journal rules, IOMMU) and never
-//! takes an app's word for sharing, secrecy or capabilities.
+//! socket, framing and peer check live in the binary. An app's GPU approval
+//! must carry the owner's signature, checked here against keyd's pinned owner
+//! key (`owner_approval.rs`); a maintenance order is still verified by the
+//! daemon before it calls, as for privd v1. This service re-checks everything
+//! it can check itself (catalog, qualification, CDI, journal rules, IOMMU)
+//! and never takes an app's word for sharing, secrecy or capabilities.
 //!
 //! | op | does |
 //! |---|---|
@@ -27,7 +28,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::attach::{Engine, RuntimeNames, ShareEnv, engine_args};
@@ -37,8 +38,9 @@ use crate::cdi_gen::{
     WrittenSpec, generate_and_write, nvidia_policy, render_nodes, validate_written,
 };
 use crate::coop::{
-    CoopDecision, CoopLedger, PidOwner, ShareLimits, attribute, parse_pmon, shares_fit,
+    CoopAccount, CoopDecision, CoopLedger, PidOwner, ShareLimits, attribute, parse_pmon, shares_fit,
 };
+use crate::device::PciAddress;
 use crate::device::{Backend, Capability, DeviceRecord, PartitionMode};
 use crate::ids::{LocalDeviceId, LocalIdKey};
 use crate::journal::{AllocationRecord, AllocationState, DeviceClaim, JournalStore};
@@ -50,6 +52,9 @@ use crate::manager::{DeviceManager, ManagerError, Settle, WorkloadRuntime};
 use crate::mig::{apply as mig_apply, parse_lgip, plan as mig_plan};
 use crate::numerics::{VectorAddReport, verify_vector_add};
 use crate::observe::ObserverRoots;
+use crate::owner_approval::{
+    ApprovalProof, OwnerAnchorSource, box_local, verify as verify_approval,
+};
 use crate::policy::{AllocationId, PolicyKind};
 use crate::provider::{DeviceProvider, IsolationProfile, Tool, ToolRunner};
 use crate::request::{AcceleratorRequirement, AppInstallation, GpuApproval, GpuRequest};
@@ -110,6 +115,8 @@ pub struct ServiceConfig {
     pub run_claims_path: PathBuf,
     /// Off for a one-shot probe, which must not overwrite a running gpud's claims.
     pub publish_claims: bool,
+    /// Whose signature an app's GPU approval needs (`owner_approval.rs`).
+    pub owner_anchor: OwnerAnchorSource,
 }
 
 impl ServiceConfig {
@@ -137,6 +144,7 @@ impl ServiceConfig {
             coop_window_ms: 60_000,
             run_claims_path: "/run/flagship-gpu/run-claims.json".into(),
             publish_claims: true,
+            owner_anchor: OwnerAnchorSource::KeydState("/var/lib/flagship-keyd".into()),
         }
     }
 }
@@ -220,6 +228,44 @@ struct Extra {
 /// The schema of `run-claims.json`, which privd and the Rust broker read (their `GpuRunClaim`).
 pub const RUN_CLAIMS_SCHEMA: &str = "flagship/gpu-run-claims/v1";
 
+const TERMS_VERSION: u8 = 1;
+
+/// An allocation's [`Extra`] as gpud's journal keeps it (`allocation_terms`), so a restarted gpud
+/// still holds a sharer to its budgets, a job to its maximum runtime, and gives VFIO groups back.
+/// The run claim is never kept: nothing new is run after a restart without a fresh attach.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Terms {
+    v: u8,
+    share: Option<ShareLimits>,
+    max_runtime_ms: Option<u64>,
+    started_ms: Option<u64>,
+    vfio: Vec<VfioBinding>,
+    container: Option<String>,
+    coop: Option<CoopAccount>,
+}
+
+fn parse_terms(text: &str) -> Result<Terms, String> {
+    let t: Terms = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    if t.v != TERMS_VERSION {
+        return Err(format!("version {}", t.v));
+    }
+    if let Some(s) = &t.share {
+        s.check().map_err(str::to_owned)?;
+    }
+    if t.container.as_deref().is_some_and(|c| !container_ok(c)) {
+        return Err("a container name that isn't one".into());
+    }
+    let pci_ok = |a: &PciAddress| PciAddress::parse(a.as_str()).as_ref() == Some(a);
+    if t.vfio
+        .iter()
+        .any(|b| b.functions.iter().any(|(f, _)| !pci_ok(f)))
+    {
+        return Err("a PCI address that isn't one".into());
+    }
+    Ok(t)
+}
+
 fn write_public(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(d) = path.parent() {
         fs::create_dir_all(d)?;
@@ -255,6 +301,8 @@ pub struct GpuService {
     ledger: CoopLedger,
     last_tick_ms: Option<u64>,
     maintenance: Option<DriverMaintenance<SharedPackages>>,
+    /// Allocations stopped at start because their kept terms were missing or unreadable.
+    stopped_at_start: Vec<(AllocationId, String)>,
 }
 
 impl std::fmt::Debug for GpuService {
@@ -344,6 +392,7 @@ impl GpuService {
             ledger,
             last_tick_ms: None,
             maintenance,
+            stopped_at_start: Vec::new(),
         };
         if let Some(m) = &s.maintenance {
             s.manager
@@ -353,9 +402,120 @@ impl GpuService {
         s.manager
             .reconcile(s.parts.runtime.as_ref())
             .map_err(|e| e.to_string())?;
+        s.restore_terms()?;
         // Nothing is attached after a restart until a claim attaches again.
         let _ = s.publish();
         Ok(s)
+    }
+
+    /// Take back each open allocation's kept terms. One whose terms are missing or unreadable
+    /// is stopped rather than left running or queued without its limits; rows of allocations
+    /// that are closed go.
+    fn restore_terms(&mut self) -> Result<(), String> {
+        let mut stored: BTreeMap<String, String> = self
+            .manager
+            .store()
+            .all_terms()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .collect();
+        let open = self.manager.open_allocations().map_err(|e| e.to_string())?;
+        let mut lost = Vec::new();
+        for rec in &open {
+            let needs = matches!(
+                rec.state,
+                AllocationState::Admitted
+                    | AllocationState::Reserved
+                    | AllocationState::Attached
+                    | AllocationState::Running
+            );
+            match stored.remove(rec.id.as_str()).map(|t| parse_terms(&t)) {
+                Some(Ok(t)) => {
+                    let cooperative = rec.request.policy.kind() == PolicyKind::Cooperative;
+                    if needs && cooperative && t.share.is_none() {
+                        lost.push((rec.id.clone(), "its share limits were not kept".to_owned()));
+                    } else if rec.state == AllocationState::Running
+                        && t.max_runtime_ms.is_some()
+                        && t.started_ms.is_none()
+                    {
+                        lost.push((rec.id.clone(), "its start time was not kept".to_owned()));
+                    }
+                    if let Some(a) = t.coop {
+                        self.ledger.restore(rec.id.clone(), a);
+                    }
+                    self.extras.insert(
+                        rec.id.clone(),
+                        Extra {
+                            share: t.share,
+                            max_runtime_ms: t.max_runtime_ms,
+                            started_ms: t.started_ms,
+                            vfio: t.vfio,
+                            container: t.container,
+                            run_claim: None,
+                        },
+                    );
+                }
+                Some(Err(why)) => {
+                    lost.push((
+                        rec.id.clone(),
+                        format!("its kept terms are unreadable ({why})"),
+                    ));
+                }
+                None if needs => {
+                    lost.push((rec.id.clone(), "its terms were not kept".to_owned()));
+                }
+                None => {}
+            }
+        }
+        for id in stored.keys().filter_map(|k| AllocationId::new(k)) {
+            let _ = self.manager.store().delete_terms(&id);
+        }
+        for (id, why) in lost {
+            let why =
+                format!("gpud restarted and {why}; stopped rather than run without its limits");
+            let _ = self.release(&id, &why);
+            let _ = self.manager.store().delete_terms(&id);
+            self.stopped_at_start.push((id, why));
+        }
+        Ok(())
+    }
+
+    fn terms_text(&self, id: &AllocationId) -> Option<String> {
+        let e = self.extras.get(id)?;
+        serde_json::to_string(&Terms {
+            v: TERMS_VERSION,
+            share: e.share,
+            max_runtime_ms: e.max_runtime_ms,
+            started_ms: e.started_ms,
+            vfio: e.vfio.clone(),
+            container: e.container.clone(),
+            coop: self.ledger.account(id),
+        })
+        .ok()
+    }
+
+    /// Write these allocations' terms to the journal, all or none.
+    fn keep_terms(&self, ids: &[&AllocationId]) -> Result<(), ServiceError> {
+        let rows: Vec<(&AllocationId, String)> = ids
+            .iter()
+            .filter_map(|id| Some((*id, self.terms_text(id)?)))
+            .collect();
+        if rows.is_empty() {
+            return Ok(());
+        }
+        self.manager.store().put_terms(&rows).map_err(|e| {
+            err(
+                "failed",
+                format!("the GPU claim's terms could not be kept: {e}"),
+            )
+        })
+    }
+
+    fn drop_extra(&mut self, id: &AllocationId) -> Option<Extra> {
+        let e = self.extras.remove(id);
+        self.ledger.forget(id);
+        let _ = self.manager.store().delete_terms(id);
+        e
     }
 
     pub fn manager(&self) -> &DeviceManager<SqliteJournal> {
@@ -474,7 +634,8 @@ impl GpuService {
                 let x: Timed = args(a)?;
                 let id = alloc_id(&x.allocation_id)?;
                 let rec = self.manager.started(&id).map_err(from_manager)?;
-                self.extras.entry(id).or_default().started_ms = Some(x.now_ms);
+                self.extras.entry(id.clone()).or_default().started_ms = Some(x.now_ms);
+                self.keep_terms(&[&id])?;
                 Ok(json!({"state": rec.state.as_str()}))
             }
             "gpu.heartbeat" => {
@@ -675,6 +836,7 @@ impl GpuService {
             "allocations": open.iter().map(Self::view).collect::<Vec<_>>(),
             "queue": queue,
             "admissionPaused": self.manager.admission_paused(),
+            "stoppedAtStart": self.stopped_at_start.iter().map(|(id, why)| json!({"allocationId": id.as_str(), "why": why})).collect::<Vec<_>>(),
         }))
     }
 
@@ -694,11 +856,31 @@ impl GpuService {
             #[serde(default)]
             share: Option<ShareLimits>,
             container: String,
+            #[serde(default)]
+            approval_proof: Option<ApprovalProof>,
         }
         let x: A = args(a)?;
         let id = alloc_id(&x.allocation_id)?;
         if !container_ok(&x.container) {
             return Err(bad("container names are 1 to 128 of [A-Za-z0-9_.-]"));
+        }
+        if !box_local(&x.approval, &x.container) {
+            let proof = x
+                .approval_proof
+                .as_ref()
+                .ok_or_else(|| err("forbidden", "this GPU approval carries no owner signature"))?;
+            let anchor = self.config.owner_anchor.load().map_err(|why| {
+                err(
+                    "forbidden",
+                    format!("there is no owner key to check a GPU approval against: {why}"),
+                )
+            })?;
+            verify_approval(&anchor, &x.approval, proof).map_err(|why| {
+                err(
+                    "forbidden",
+                    format!("the owner's GPU approval does not verify: {why}"),
+                )
+            })?;
         }
         let mut req =
             GpuRequest::from_manifest(x.app, &x.operation_id, &x.requirement, &x.approval);
@@ -725,12 +907,18 @@ impl GpuService {
                 ..Extra::default()
             },
         );
-        if let Err(e) = self.manager.enqueue(&id) {
-            let _ = self
-                .manager
-                .cancel(&id, self.parts.runtime.as_ref(), "the GPU queue is full");
-            self.extras.remove(&id);
-            return Err(from_manager(e));
+        let queued = self
+            .keep_terms(&[&id])
+            .map_err(|e| (e, "its terms could not be kept"))
+            .and_then(|()| {
+                self.manager
+                    .enqueue(&id)
+                    .map_err(|e| (from_manager(e), "the GPU queue is full"))
+            });
+        if let Err((e, why)) = queued {
+            let _ = self.manager.cancel(&id, self.parts.runtime.as_ref(), why);
+            self.drop_extra(&id);
+            return Err(e);
         }
         self.manager.pump().map_err(from_manager)?;
         let rec = self
@@ -915,13 +1103,17 @@ impl GpuService {
             .collect();
         let e = self.extras.entry(id.clone()).or_default();
         e.vfio = bindings;
-        e.run_claim = Some(json!({
+        let claim = json!({
             "allocationId": id.as_str(),
             "appId": rec.request.app.app_id,
             "container": e.container.clone().unwrap_or_default(),
             "runtime": runtime,
             "devices": devices,
-        }));
+        });
+        self.keep_terms(&[&id])?;
+        if let Some(e) = self.extras.get_mut(&id) {
+            e.run_claim = Some(claim);
+        }
         self.publish().map_err(|why| {
             err(
                 "failed",
@@ -970,9 +1162,8 @@ impl GpuService {
             Settle::Held(r) => format!("held: {r}"),
         };
         if !matches!(s, Settle::Held(_))
-            && let Some(e) = self.extras.remove(id)
+            && let Some(e) = self.drop_extra(id)
         {
-            self.ledger.forget(id);
             self.release_bindings(&e.vfio);
             let _ = self.publish();
         }
@@ -985,7 +1176,7 @@ impl GpuService {
             .cancel(id, self.parts.runtime.as_ref(), reason)
             .map_err(from_manager)?;
         let settle = if rec.state.is_terminal() {
-            if let Some(e) = self.extras.remove(id) {
+            if let Some(e) = self.drop_extra(id) {
                 self.release_bindings(&e.vfio);
                 let _ = self.publish();
             }
@@ -1194,6 +1385,13 @@ impl GpuService {
         self.last_tick_ms = Some(now_ms);
         let reserved = self.manager.pump().map_err(from_manager)?;
         let mut stopped = Vec::new();
+        for id in &reserved {
+            let rec = self.manager.store().get(id).ok().flatten();
+            if let Some(Err(why)) = rec.as_ref().and_then(|r| self.share_fits(r)) {
+                let _ = self.release(id, why);
+                stopped.push(json!({"allocationId": id.as_str(), "why": why}));
+            }
+        }
         let open = self.manager.open_allocations().map_err(from_manager)?;
         for rec in &open {
             let over = self.extras.get(&rec.id).is_some_and(|e| {
@@ -1211,7 +1409,14 @@ impl GpuService {
                 let _ = self.settle(&rec.id);
             }
         }
-        for (id, why) in self.coop_sample(now_ms, elapsed) {
+        let (revoked, sampled) = self.coop_sample(now_ms, elapsed);
+        let still: Vec<&AllocationId> = sampled
+            .iter()
+            .filter(|id| !revoked.iter().any(|(r, _)| r == *id))
+            .collect();
+        // Losing a write here costs at most the standing since the last one; the budgets hold now.
+        let _ = self.keep_terms(&still);
+        for (id, why) in revoked {
             let _ = self.release(&id, &why);
             stopped.push(json!({"allocationId": id.as_str(), "why": why}));
         }
@@ -1221,7 +1426,12 @@ impl GpuService {
         }))
     }
 
-    fn coop_sample(&mut self, now_ms: u64, elapsed_ms: u64) -> Vec<(AllocationId, String)> {
+    /// The sharers to revoke, and every sharer whose standing this sample changed.
+    fn coop_sample(
+        &mut self,
+        now_ms: u64,
+        elapsed_ms: u64,
+    ) -> (Vec<(AllocationId, String)>, Vec<AllocationId>) {
         let sharers: Vec<(AllocationRecord, ShareLimits)> = self
             .manager
             .open_allocations()
@@ -1237,7 +1447,7 @@ impl GpuService {
             })
             .collect();
         if sharers.is_empty() {
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         }
         let pmon = self
             .parts
@@ -1252,9 +1462,10 @@ impl GpuService {
             .ok()
             .and_then(|t| parse_compute_apps(&t).ok());
         let (Some(pmon), Some(apps)) = (pmon, apps) else {
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         };
         let mut out = Vec::new();
+        let mut sampled = Vec::new();
         for (rec, limits) in sharers {
             let Some(d) = rec
                 .claims
@@ -1276,7 +1487,8 @@ impl GpuService {
             {
                 out.push((rec.id.clone(), format!("cooperative share exceeded: {why}")));
             }
+            sampled.push(rec.id.clone());
         }
-        out
+        (out, sampled)
     }
 }

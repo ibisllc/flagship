@@ -70,7 +70,7 @@ describe("the shared v1 policy vectors", () => {
 
   it("cover every op, both engines, allowed and refused", () => {
     const ops = new Set(computed.map((c) => c.op));
-    for (const op of ["power", "systemd.restart", "systemctl", "docker", "docker.file", "host", "iptables.restore", "nft.apply", "release", "wipe", "setup", "wasi.unit"]) {
+    for (const op of ["power", "systemd.restart", "systemctl", "docker", "docker.file", "host", "iptables.restore", "nft.apply", "release", "wipe", "setup", "wasi.unit", "wasi.logs"]) {
       expect(computed.some((c) => c.op === op && c.expect.ok), `${op} allowed`).toBe(true);
       expect(computed.some((c) => c.op === op && !c.expect.ok), `${op} refused`).toBe(true);
       expect(ops.has(op)).toBe(true);

@@ -153,19 +153,22 @@ pub enum CoopDecision {
     Revoke(String),
 }
 
-#[derive(Clone, Debug, Default)]
-struct Account {
-    window_start_ms: u64,
-    busy_ms: u64,
-    memory_strikes: u32,
-    time_strikes: u32,
+/// One sharer's standing in the current window. gpud keeps it in its journal, so a restart
+/// neither forgives strikes nor restarts a window.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CoopAccount {
+    pub window_start_ms: u64,
+    pub busy_ms: u64,
+    pub memory_strikes: u32,
+    pub time_strikes: u32,
 }
 
 /// Per-sharer accounting over fixed windows.
 #[derive(Debug)]
 pub struct CoopLedger {
     window_ms: u64,
-    accounts: BTreeMap<AllocationId, Account>,
+    accounts: BTreeMap<AllocationId, CoopAccount>,
 }
 
 impl CoopLedger {
@@ -180,6 +183,14 @@ impl CoopLedger {
         self.accounts.remove(id);
     }
 
+    pub fn account(&self, id: &AllocationId) -> Option<CoopAccount> {
+        self.accounts.get(id).copied()
+    }
+
+    pub fn restore(&mut self, id: AllocationId, account: CoopAccount) {
+        self.accounts.insert(id, account);
+    }
+
     /// Record one sample that covered `elapsed_ms`.
     pub fn record(
         &mut self,
@@ -190,10 +201,13 @@ impl CoopLedger {
         elapsed_ms: u64,
     ) -> CoopDecision {
         let window = self.window_ms;
-        let a = self.accounts.entry(id.clone()).or_insert_with(|| Account {
-            window_start_ms: now_ms,
-            ..Account::default()
-        });
+        let a = self
+            .accounts
+            .entry(id.clone())
+            .or_insert_with(|| CoopAccount {
+                window_start_ms: now_ms,
+                ..CoopAccount::default()
+            });
         if usage.used_mib > limits.memory_mib {
             a.memory_strikes = a.memory_strikes.saturating_add(1);
             let why = format!(

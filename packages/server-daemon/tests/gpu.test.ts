@@ -133,6 +133,9 @@ describe("the gpud client", () => {
   });
 });
 
+/** The owner's signature reaches gpud as given: gpud, not the daemon, checks it. */
+const PROOF = { issuedAt: 1_800_000_000_000, signature: "ab".repeat(64) };
+
 function appReq(over: Partial<AppAcceleratorRequest> = {}): AppAcceleratorRequest {
   const approval = approvalForApp(APP, ACC, "sandbox", { secrecy: true });
   if ("refused" in approval) throw new Error("test approval refused");
@@ -147,6 +150,7 @@ describe("the AppRunner hook", () => {
       if (op === "gpu.inventory") return { ok: true, result: inventory(true) };
       if (op === "gpu.claim") {
         expect(args.container).toBe("flagship-alice-llm");
+        expect(args.approvalProof).toEqual(PROOF);
         return { ok: true, result: { allocationId: args.allocationId, state: "reserved", queuePosition: null } };
       }
       if (op === "gpu.attach") return { ok: true, result: { allocation: args.allocationId, args: GPU_ARGS, cdiSpecDigest: "sha256:x", image: "r/i@sha256:aa" } };
@@ -158,7 +162,7 @@ describe("the AppRunner hook", () => {
     const ran: string[][] = [];
     const cmd: CommandRunner = { run: async (_c, a) => void ran.push(a) };
     const runner = new AppRunner(cmd);
-    await runner.deploy({ serviceId: "alice-llm", image: "img:1", accelerator: appReq() });
+    await runner.deploy({ serviceId: "alice-llm", image: "img:1", accelerator: appReq({ approvalProof: PROOF }) });
     const run = ran.find((a) => a[0] === "run")!;
     expect(run).toEqual(expect.arrayContaining(["--runtime=runsc-nvproxy", "--device", "nvidia.com/gpu=0"]));
     expect(run.filter((a) => a.startsWith("--runtime=")).length).toBe(1);
@@ -276,6 +280,7 @@ describe("installing flagship-gpud", () => {
     expect(unit).toContain("--nvidia-smi /usr/bin/nvidia-smi");
     expect(unit).toContain('--runsc-version "20260921.0"');
     expect(unit).toContain("--trust /opt/flagship/release/box-artifact-trust.json");
+    expect(unit).toContain("--keyd-state /var/lib/flagship-keyd");
     expect((await installGpud(deps(files))).action).toBe("unchanged");
   });
   it("refuses unsafe paths in the unit", () => {

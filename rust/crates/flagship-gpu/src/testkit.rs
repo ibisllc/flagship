@@ -17,6 +17,7 @@ use crate::catalog::{
 use crate::catalog_trust::CATALOG_BINDING_SUBJECT;
 use crate::device::{Backend, Capability};
 use crate::media::{Codec, GraphicsApi};
+use crate::owner_approval::{self, ApprovalProof, OwnerAnchor};
 use crate::policy::PolicyKind;
 use crate::provider::IsolationProfile;
 use crate::request::{AppInstallation, GpuApproval};
@@ -306,5 +307,65 @@ pub fn approval(
         secrecy,
         trust_domain: domain.map(str::to_owned),
         owner_consent: domain.map(|d| format!("consent-{d}")),
+    }
+}
+
+/// The box name test anchors pin.
+pub const TEST_SERVER: &str = "home.alice.flagship.services";
+
+/// The owner's sensitive-order key in tests and the simulated matrix.
+pub struct TestOwner {
+    key: ed25519_dalek::SigningKey,
+}
+
+impl std::fmt::Debug for TestOwner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestOwner").finish_non_exhaustive()
+    }
+}
+
+impl TestOwner {
+    pub fn new(seed: u8) -> Self {
+        Self {
+            key: ed25519_dalek::SigningKey::from_bytes(&[seed; 32]),
+        }
+    }
+
+    pub fn anchor(&self) -> OwnerAnchor {
+        OwnerAnchor {
+            server: TEST_SERVER.into(),
+            signer_hex: hex(&self.key.verifying_key().to_bytes()),
+        }
+    }
+
+    /// The proof for `a` on [`TEST_SERVER`]; an approval that can't be signed gets an empty one.
+    pub fn prove(&self, a: &GpuApproval, issued_at: u64) -> ApprovalProof {
+        self.prove_for(TEST_SERVER, a, issued_at)
+    }
+
+    pub fn prove_for(&self, server: &str, a: &GpuApproval, issued_at: u64) -> ApprovalProof {
+        let signature = owner_approval::canonical(server, a, issued_at)
+            .map(|m| hex(&self.key.sign(m.as_bytes()).to_bytes()))
+            .unwrap_or_default();
+        ApprovalProof {
+            issued_at,
+            signature,
+        }
+    }
+
+    /// `claim` with `approvalProof` set from its own `approval`.
+    pub fn sign_claim(&self, claim: &serde_json::Value) -> serde_json::Value {
+        let mut c = claim.clone();
+        if let Some(a) = c
+            .get("approval")
+            .and_then(|a| serde_json::from_value::<GpuApproval>(a.clone()).ok())
+            && let Some(m) = c.as_object_mut()
+        {
+            m.insert(
+                "approvalProof".into(),
+                serde_json::to_value(self.prove(&a, 1_800_000_000_000)).unwrap_or_default(),
+            );
+        }
+        c
     }
 }

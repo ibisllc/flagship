@@ -17,13 +17,15 @@ use flagship_gpu::jobs::{JobBook, JobKind, JobSpec, JobState};
 use flagship_gpu::maintenance::{
     DriverMaintenance, MaintError, MaintState, MaintenanceStore, PostBoot, Proposal,
 };
+use flagship_gpu::manager::{Presence, WorkloadRuntime};
+use flagship_gpu::owner_approval::OwnerAnchorSource;
 use flagship_gpu::policy::{AllocationId, AllocationPolicy};
 use flagship_gpu::provider::IsolationProfile;
 use flagship_gpu::request::GpuRequest;
 use flagship_gpu::service::{CatalogSource, GpuService, ServiceConfig, ServiceParts};
 use flagship_gpu::sim::{SimDrivers, SimGpu, SimHost, SimRuntime};
 use flagship_gpu::testkit::{
-    TestSigner, app, approval, envelope, sim_host_facts, sim_payload, trust_json,
+    TestOwner, TestSigner, app, approval, envelope, sim_host_facts, sim_payload, trust_json,
 };
 use flagship_gpu::topology::GangRequirement;
 use serde_json::json;
@@ -52,11 +54,21 @@ fn svc(
     cat: CatalogSource,
 ) -> (SimHost, Arc<SimRuntime>, GpuService) {
     let host = SimHost::new(dir.join("h"), gpus).unwrap();
-    let d = host.drivers();
     let rt = host.runtime();
+    let s = open_svc(dir, &host, cat).unwrap();
+    (host, rt, s)
+}
+
+/// gpud (again) on a host whose devices and workloads carry on: what a restart looks like.
+fn open_svc(
+    dir: &std::path::Path,
+    host: &SimHost,
+    cat: CatalogSource,
+) -> Result<GpuService, String> {
+    let d = host.drivers();
     let parts = ServiceParts {
         tools: host.tools(),
-        runtime: rt.clone(),
+        runtime: host.runtime(),
         scrub: host.scrubber(),
         sysfs_writer: host.sysfs_writer(),
         packages: None,
@@ -69,19 +81,24 @@ fn svc(
     c.enforce_root_owned_cdi = false;
     c.run_claims_path = dir.join("run-claims.json");
     c.rocm_version = Some(d.rocm.clone());
-    let s = GpuService::new(c, parts).unwrap();
-    (host, rt, s)
+    c.owner_anchor = OwnerAnchorSource::Fixed(owner().anchor());
+    GpuService::new(c, parts)
 }
 
+fn owner() -> TestOwner {
+    TestOwner::new(0x0a)
+}
+
+/// An app's claim, its approval signed by the owner.
 fn claim_args(id: &str, app_name: &str) -> serde_json::Value {
-    json!({
+    owner().sign_claim(&json!({
         "allocationId": id,
         "app": app(app_name, 1),
         "operationId": "op",
         "container": format!("flagship-{app_name}"),
         "requirement": {"backend": "nvidia-cuda", "capabilities": ["compute"], "minimumMemoryMiB": 1024},
         "approval": approval(app(app_name, 1), Backend::NvidiaCuda, IsolationProfile::GvisorNvproxy, &[Capability::Compute], false, None),
-    })
+    }))
 }
 
 #[test]
@@ -149,6 +166,7 @@ fn the_json_surface_is_strict() {
     );
     let mut other_app = claim_args("b", "app");
     other_app["approval"]["app"]["appId"] = json!("someone-else");
+    let other_app = owner().sign_claim(&other_app);
     assert_eq!(
         s.handle("gpu.claim", &other_app).unwrap_err().code,
         "forbidden"
@@ -514,6 +532,7 @@ fn driver_maintenance_through_the_gpud_operations() {
         c.cdi_dir = host.cdi_dir();
         c.enforce_root_owned_cdi = false;
         c.run_claims_path = dir.path().join("run-claims.json");
+        c.owner_anchor = OwnerAnchorSource::Fixed(owner().anchor());
         GpuService::new(c, parts).unwrap()
     };
     let mut s = mk(parts.clone());
@@ -608,6 +627,7 @@ fn attached_claims_are_published_for_the_brokers() {
         None,
     ))
     .unwrap();
+    let vm = owner().sign_claim(&vm);
     assert_eq!(s.handle("gpu.claim", &vm).unwrap()["state"], "reserved");
     let att = s
         .handle(
@@ -725,5 +745,212 @@ fn local_ai_claims_share_the_one_fair_queue_with_apps() {
         state_of("aitrain-1111111111111111").as_deref(),
         Some("admitted"),
         "{st}"
+    );
+}
+
+fn coop_args(id: &str, app_name: &str, pct: u8, mem: u64) -> serde_json::Value {
+    let mut a = claim_args(id, app_name);
+    a["requirement"]["sharing"] = json!("cooperative");
+    a["approval"] = serde_json::to_value(approval(
+        app(app_name, 1),
+        Backend::NvidiaCuda,
+        IsolationProfile::GvisorNvproxy,
+        &[Capability::Compute],
+        false,
+        Some("family"),
+    ))
+    .unwrap();
+    a["share"] = json!({"computePercent": pct, "memoryMib": mem});
+    owner().sign_claim(&a)
+}
+
+fn run(s: &mut GpuService, h: &SimHost, id: &str, now: u64) {
+    s.handle(
+        "gpu.attach",
+        &json!({"allocationId": id, "engine": "podman"}),
+    )
+    .unwrap();
+    let pci = s.manager().inventory()[0].pci.clone();
+    h.launch(&AllocationId::new(id).unwrap(), &[(pci, None)], 2048, 10)
+        .unwrap();
+    s.handle("gpu.started", &json!({"allocationId": id, "nowMs": now}))
+        .unwrap();
+}
+
+fn open_ids(s: &GpuService) -> Vec<String> {
+    s.status().unwrap()["allocations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["allocationId"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn set_terms(dir: &std::path::Path, id: &str, text: Option<&str>) {
+    let c = rusqlite::Connection::open(dir.join("state/journal.db")).unwrap();
+    match text {
+        Some(t) => c
+            .execute(
+                "UPDATE allocation_terms SET terms = ?2 WHERE allocation_id = ?1",
+                rusqlite::params![id, t],
+            )
+            .unwrap(),
+        None => c
+            .execute(
+                "DELETE FROM allocation_terms WHERE allocation_id = ?1",
+                [id],
+            )
+            .unwrap(),
+    };
+}
+
+#[test]
+fn a_restarted_gpud_still_holds_sharers_to_their_budgets() {
+    let dir = tempfile::tempdir().unwrap();
+    let cat = || CatalogSource::Loaded(catalog(&SimDrivers::default(), &[], false));
+    let (h, _r, mut s) = svc(dir.path(), vec![SimGpu::rtx4090(1)], cat());
+    for (id, app_name, pct) in [("c1", "app-a", 50), ("c2", "app-b", 40)] {
+        let r = s
+            .handle("gpu.claim", &coop_args(id, app_name, pct, 8000))
+            .unwrap();
+        assert_eq!(r["state"], "reserved");
+        run(&mut s, &h, id, NOW);
+    }
+    let c1 = AllocationId::new("c1").unwrap();
+    h.set_usage(&c1, 12_000, 50);
+    let t = s.tick(NOW).unwrap();
+    assert!(
+        t["stopped"].as_array().unwrap().is_empty(),
+        "one strike: {t}"
+    );
+    drop(s);
+
+    let mut s = open_svc(dir.path(), &h, cat()).unwrap();
+    assert_eq!(open_ids(&s), ["c1", "c2"], "both sharers were adopted");
+    assert_eq!(
+        s.status().unwrap()["stoppedAtStart"],
+        json!([]),
+        "nothing lost"
+    );
+    let r = s.handle("gpu.claim", &coop_args("c3", "app-c", 30, 2000));
+    assert_eq!(
+        r.unwrap_err().code,
+        "conflict",
+        "the kept shares still fill the device's compute"
+    );
+    let t = s.tick(NOW + 100).unwrap();
+    assert_eq!(
+        t["stopped"][0]["allocationId"], "c1",
+        "the strike from before the restart counts: {t}"
+    );
+    assert_eq!(open_ids(&s), ["c2"]);
+}
+
+#[test]
+fn a_restarted_gpud_still_ends_a_job_at_its_maximum_runtime() {
+    let dir = tempfile::tempdir().unwrap();
+    let cat = || CatalogSource::Loaded(catalog(&SimDrivers::default(), &[], false));
+    let (h, _r, mut s) = svc(dir.path(), vec![SimGpu::rtx4090(1)], cat());
+    let mut a = claim_args("a", "app");
+    a["maxRuntimeMs"] = json!(1000);
+    s.handle("gpu.claim", &a).unwrap();
+    run(&mut s, &h, "a", 10_000);
+    drop(s);
+    let mut s = open_svc(dir.path(), &h, cat()).unwrap();
+    assert_eq!(open_ids(&s), ["a"]);
+    assert!(
+        s.tick(10_500).unwrap()["stopped"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(s.tick(12_000).unwrap()["stopped"][0]["why"], "max-runtime");
+    assert!(open_ids(&s).is_empty());
+}
+
+#[test]
+fn lost_or_tampered_terms_stop_the_allocation_instead_of_freeing_it() {
+    let hostile: [(&str, Option<&str>); 6] = [
+        ("corrupt", Some("{\"v\":1,\"share\":")),
+        ("deleted", None),
+        (
+            "unknown field",
+            Some(
+                r#"{"v":1,"share":{"computePercent":50,"memoryMib":8000},"maxRuntimeMs":null,"startedMs":1,"vfio":[],"container":"flagship-app-a","coop":null,"approved":true}"#,
+            ),
+        ),
+        (
+            "no share",
+            Some(
+                r#"{"v":1,"share":null,"maxRuntimeMs":null,"startedMs":1,"vfio":[],"container":"flagship-app-a","coop":null}"#,
+            ),
+        ),
+        (
+            "a share past the device",
+            Some(
+                r#"{"v":1,"share":{"computePercent":0,"memoryMib":8000},"maxRuntimeMs":null,"startedMs":1,"vfio":[],"container":"flagship-app-a","coop":null}"#,
+            ),
+        ),
+        (
+            "a forged VFIO function",
+            Some(
+                r#"{"v":1,"share":{"computePercent":50,"memoryMib":8000},"maxRuntimeMs":null,"startedMs":1,"vfio":[{"group":3,"functions":[["../../../../etc","nvidia"]]}],"container":"flagship-app-a","coop":null}"#,
+            ),
+        ),
+    ];
+    for (what, text) in hostile {
+        let dir = tempfile::tempdir().unwrap();
+        let cat = || CatalogSource::Loaded(catalog(&SimDrivers::default(), &[], false));
+        let (h, _r, mut s) = svc(dir.path(), vec![SimGpu::rtx4090(1)], cat());
+        s.handle("gpu.claim", &coop_args("c1", "app-a", 50, 8000))
+            .unwrap();
+        run(&mut s, &h, "c1", NOW);
+        drop(s);
+        set_terms(dir.path(), "c1", text);
+        let mut s = open_svc(dir.path(), &h, cat()).unwrap();
+        let st = s.status().unwrap();
+        assert_eq!(
+            st["stoppedAtStart"][0]["allocationId"], "c1",
+            "{what}: {st}"
+        );
+        assert!(
+            !open_ids(&s).contains(&"c1".to_owned()) || st["allocations"][0]["state"] != "running",
+            "{what}: never left running without its limits: {st}"
+        );
+        assert_ne!(
+            h.runtime().presence(&AllocationId::new("c1").unwrap()),
+            Presence::Present,
+            "{what}: the workload was stopped"
+        );
+        let _ = s.tick(NOW + 1);
+        assert!(!open_ids(&s).contains(&"c1".to_owned()), "{what}: settled");
+    }
+}
+
+#[test]
+fn a_queued_sharer_reserved_later_still_has_to_fit() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_h, _r, mut s) = svc(
+        dir.path(),
+        vec![SimGpu::rtx4090(1)],
+        CatalogSource::Loaded(catalog(&SimDrivers::default(), &[], false)),
+    );
+    assert_eq!(
+        s.handle("gpu.claim", &claim_args("x", "app-x")).unwrap()["state"],
+        "reserved"
+    );
+    for (id, app_name, pct) in [("c1", "app-a", 50), ("c2", "app-b", 60)] {
+        let r = s
+            .handle("gpu.claim", &coop_args(id, app_name, pct, 4000))
+            .unwrap();
+        assert_eq!(r["state"], "admitted", "queued behind the exclusive holder");
+    }
+    s.handle("gpu.release", &json!({"allocationId": "x"}))
+        .unwrap();
+    let t = s.tick(NOW).unwrap();
+    let ids = open_ids(&s);
+    assert!(
+        !(ids.contains(&"c1".to_owned()) && ids.contains(&"c2".to_owned())),
+        "110 percent of the device's compute is never handed out: {t} {ids:?}"
     );
 }

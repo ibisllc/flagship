@@ -439,6 +439,10 @@ for (const bad of [
 ]) wu(bad);
 add("setup", { step: "wasi-runtime" });
 add("setup", { step: "gpu-broker" });
+// The owner's stack switch (server-daemon archV2Switch.ts): root checks the signed order itself; no arguments pass.
+add("setup", { step: "arch-v2-switch" });
+add("setup", { step: "arch-v2-settle" });
+for (const bad of [{ step: "arch-v2-switch", target: "arch-v2" }, { step: "arch-v2" }, { step: "arch-v2-switch " }, { step: "arch-v2-revert" }]) add("setup", bad);
 // Local AI (packages/server-daemon/src/localAi/containers.ts): the model server and fine-tuning runs, pinned
 // images only, the models volume read-only, a job's own output volume, an app's STAGED sample data read-only.
 const AI_SERVER = "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd";
@@ -502,6 +506,19 @@ for (const bad of [
   ["model-remove", SHA, "/"], ["model-remove", "*", MODELS_DIR], ["out-prepare", AI_HEX, `/var/lib/docker/volumes/flagship-aitrain-${"f".repeat(16)}/_data`],
   ["out-prepare", AI_HEX, "/var/flagship"], ["out-prepare", "../x", "/var/lib/docker/volumes/flagship-aitrain-../_data"], ["model-install", SHA], ["serve", SHA, MODELS_DIR],
 ]) host("localai", bad);
+// A WASI app's own output (what `docker logs` is for a container app): one worker unit's journal, never another unit's.
+const wl = (args: unknown) => add("wasi.logs", args);
+wl({ instance: "0123456789abcdef", lines: 15 });
+wl({ instance: "fedcba9876543210", lines: 5000 });
+wl({ lines: 1, instance: "0123456789abcdef" });
+for (const bad of [
+  { instance: "0123456789abcdef", lines: 0 }, { instance: "0123456789abcdef", lines: 5001 }, { instance: "0123456789abcdef", lines: 1.5 }, { instance: "0123456789abcdef", lines: "15" },
+  { instance: "0123456789abcdef", lines: -1 }, { instance: "0123456789abcdef", lines: 1e9 }, { instance: "0123456789abcdef" }, { instance: "0123456789ABCDEF", lines: 15 },
+  { instance: "0123456789abcde", lines: 15 }, { instance: "0123456789abcdef0", lines: 15 }, { instance: "../../../var/log", lines: 15 }, { instance: "0123456789abcdef\n", lines: 15 },
+  { instance: "flagship-daemon", lines: 15 }, { instance: 5, lines: 15 }, { lines: 15 }, { instance: "0123456789abcdef", lines: 15, unit: "flagship-keyd.service" },
+  { instance: "0123456789abcdef", lines: 15, argv: ["-u", "ssh.service"] }, { instance: "0123456789abcdef", lines: 15, since: "1970-01-01" }, {},
+  JSON.parse('{"__proto__": {"instance": "0123456789abcdef"}, "lines": 15}'),
+]) wl(bad);
 
 /** Every docker and docker.file case again, under Podman. */
 export const CORPUS: CorpusCase[] = [

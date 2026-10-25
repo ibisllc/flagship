@@ -64,8 +64,8 @@ gpud ops (`service.rs`), all JSON, unknown fields refused:
 | op | args | answer |
 |---|---|---|
 | `gpu.inventory` | | devices (local id, vendor, backend, model, memory, capabilities, display, partitions, qualified profiles or reasons, passthrough verdict, quarantine, holders), unavailable backends, topology links, generation, admission pause, catalog status, CDI status |
-| `gpu.status` | | open allocations, the fair queue per app, admission pause |
-| `gpu.claim` | `allocationId, app{appId,installationId,generation}, operationId, container` (the one container it may run in), `requirement` (manifest `accelerator`), `approval` (owner-resolved), optional `maxRuntimeMs, share{computePercent,memoryMib}, userspace` | `state` (`reserved` or `admitted` = queued), queue position |
+| `gpu.status` | | open allocations, the fair queue per app, admission pause, `stoppedAtStart` (allocations a restart stopped because their kept terms were missing or unreadable) |
+| `gpu.claim` | `allocationId, app{appId,installationId,generation}, operationId, container` (the one container it may run in), `requirement` (manifest `accelerator`), `approval`, `approvalProof{issuedAt, signature}` (the owner's `flagship/gpu-approval/v1`, §5), optional `maxRuntimeMs, share{computePercent,memoryMib}, userspace` | `state` (`reserved` or `admitted` = queued), queue position |
 | `gpu.attach` | `allocationId, engine` | `{allocation, args, cdiSpecDigest, image}` |
 | `gpu.started` / `gpu.heartbeat` | `allocationId, nowMs` | |
 | `gpu.release` | `allocationId[, reason]` | settle: `released`, `quarantined: …`, `held: …` |
@@ -179,13 +179,35 @@ gym group `gpu-real` runs them over SSH on a GPU host (`GYM_GPU_SSH`) or an UpCl
 
 ## 5. What is still open (software)
 
-- **Approvals:** gpud trusts the daemon's resolved `GpuApproval` (peer-authenticated, like privd v1).
-  When the core's capability issuer exists (R02), a signed GPU capability should replace it.
+- **Approvals (2026-10-25):** gpud no longer takes the daemon's word. An app's `GpuApproval` must
+  come with the owner's Ed25519 signature over `flagship/gpu-approval/v1|<server>|<appId>|
+  <installationId>|<generation>|<backend>|<maxCount>|<capabilities>|<policies>|<isolation>|
+  <secrecy>|<trustDomain>|<ownerConsent>|<issuedAt>` (`owner_approval.rs`; TS
+  `packages/protocol/src/gpuApproval.ts`; vectors `test-vectors/gpu-approval/`, both ports), checked
+  through `flagship-crypto`'s critical-signature gate against the key keyd's root-written
+  `owner.json` pins (the admin root, else the IRK) for the box `policy.json` names, re-read on every
+  claim (`--keyd-state`, default `/var/lib/flagship-keyd`). The one unsigned shape is the box's own
+  local AI (`flagship-local-ai`/`box`, one device, compute, exclusive, secret, in a
+  `flagship-localai-`/`flagship-aitrain-<16 hex>` container). This is the minimal verifiable form;
+  R02's capability issuer (not built) should replace it with short-lived capabilities. Still open:
+  no client signs `flagship/gpu-approval/v1` yet (no client has a GPU approval screen, and no app
+  deploy path sets `AppSpec.accelerator`), so every app GPU claim is refused until one does; the
+  strict-mode PQ half is not required (the gate runs under the legacy policy, as keyd's master
+  evidence does); withdrawal still comes from the daemon (`gpu.revokeApp`), so a daemon that
+  withholds it keeps a signed approval usable for that app generation; maintenance orders
+  (`maintenanceRef`) are still the daemon's word.
 - **Owner UI:** the screen API exists; no client renders it yet (the AI02 job UI is the natural
   home). Strings will need `tr()` / `String(localized:)` / `i18n/android` like every screen.
-- **Cooperative sharing state** (share limits, started times) is in gpud's memory: after a gpud
-  restart a running sharer keeps its device but its budgets are not enforced until it is claimed
-  again.
+- **Kept across a gpud restart (2026-10-25):** each open allocation's terms (share limits, maximum
+  runtime, start time, VFIO bindings, container, and the cooperative ledger's window and strikes)
+  are written to `journal.db` (`allocation_terms`, `synchronous=FULL`) when claimed, started,
+  attached and after each cooperative sample, and taken back at start. An allocation whose terms
+  are missing or unreadable (bad JSON, unknown fields, a share that doesn't check, a forged PCI
+  address) is stopped and settled, never left running or queued without its limits, and listed in
+  `gpu.status` `stoppedAtStart`. Run claims are not kept: nothing new runs without a fresh attach.
+  A sharer the fair queue reserves later is held to the device's compute total like one reserved
+  at claim time. If the terms of a VM job are lost, gpud can't give its VFIO groups back to their
+  host driver; the job is still stopped and its device settled or quarantined.
 - **VM jobs** run through Kata's VFIO support; the Kata release itself is not pinned or installed by
   the box yet (the catalog's `vmRuntimes` and `--vm-runtime-version` carry it once chosen).
 - The NVIDIA hook allowlist is per generator version; the first H1 receipt fixes the exact hook set

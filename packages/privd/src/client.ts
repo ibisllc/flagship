@@ -118,6 +118,11 @@ export class PrivdClient {
     return this.call("wasi.unit", args as unknown as Record<string, unknown>);
   }
 
+  /** The last `lines` lines one WASI app's worker wrote (its unit's journal). */
+  wasiLogs(instance: string, lines: number): Promise<{ stdout?: string; stderr?: string }> {
+    return this.call("wasi.logs", { instance, lines });
+  }
+
   setup(step: string): Promise<{ stdout?: string; stderr?: string }> {
     return this.call("setup", { step });
   }

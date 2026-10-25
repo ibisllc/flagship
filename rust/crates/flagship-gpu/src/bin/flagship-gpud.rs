@@ -5,7 +5,7 @@
 //! first).
 //!
 //! ```text
-//! flagship-gpud serve --state <dir> --socket <path> [--allow-uid <n>]... [host flags]
+//! flagship-gpud serve --state <dir> --socket <path> [--allow-uid <n>]... [--keyd-state <dir>] [host flags]
 //! flagship-gpud probe [host flags]            inventory of this host, no state kept
 //! flagship-gpud self-test [--podman <path>]   the simulated-device matrix
 //! flagship-gpud verify-catalog --catalog <file> --trust <file> [--min-serial <n>]
@@ -173,6 +173,9 @@ fn service(f: &Flags, state: PathBuf) -> Result<GpuService, String> {
     cfg.names = names;
     cfg.rocm_version = f.one("rocm-version");
     cfg.level_zero_version = f.one("level-zero-version");
+    if let Some(d) = f.path("keyd-state") {
+        cfg.owner_anchor = flagship_gpu::owner_approval::OwnerAnchorSource::KeydState(d);
+    }
     GpuService::new(cfg, parts)
 }
 

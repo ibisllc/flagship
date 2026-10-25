@@ -1,0 +1,512 @@
+{
+  "about": "flagship/gpu-approval/v1: the owner's GPU approval for one app installation on one box, signed by the admin root (else the IRK); flagship-gpud verifies it against keyd's owner.json and policy.json.",
+  "anchor": {
+    "server": "home.alice.flagship.services",
+    "signerHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+  },
+  "keys": {
+    "adminRootPubHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "irkPubHex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "strangerPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+  },
+  "cases": [
+    {
+      "name": "exclusive, secret, in gVisor",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+      },
+      "canonical": "flagship/gpu-approval/v1|home.alice.flagship.services|alice--render|inst-7f3a|3|nvidia-cuda|1|compute|exclusive|gvisor-nvproxy|1|||1800000000000",
+      "expect": true
+    },
+    {
+      "name": "cooperative in a trust domain; sets are sorted and deduplicated",
+      "approval": {
+        "app": {
+          "appId": "alice--photos",
+          "installationId": "inst-01",
+          "generation": 1
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "video-encode",
+          "compute",
+          "compute"
+        ],
+        "policies": [
+          "cooperative",
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": false,
+        "trustDomain": "family",
+        "ownerConsent": "consent-2026-10-25"
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "adec13d8f2db662af853fdfd24c4dafa8d3f71e532329f1ad004af7476cf90484b2dd5a868dcbc8bfaf014282776595a197481fa4fa00680e60683e0fd951604"
+      },
+      "canonical": "flagship/gpu-approval/v1|home.alice.flagship.services|alice--photos|inst-01|1|nvidia-cuda|1|compute,video-encode|cooperative,exclusive|gvisor-nvproxy|0|family|consent-2026-10-25|1800000000000",
+      "expect": true
+    },
+    {
+      "name": "a dedicated VM with four AMD devices",
+      "approval": {
+        "app": {
+          "appId": "alice--train",
+          "installationId": "inst-9",
+          "generation": 12
+        },
+        "backend": "amd-rocm",
+        "maxCount": 4,
+        "capabilities": [
+          "compute",
+          "graphics"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "vm-passthrough",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "e92768df1853663c1b63b6e84c0bfb90a8457bb72cda3e9ee71d2b3f85af7fffb42563372f7f7b6b42bc8f0c63738b19fa1218042a35061761e5f59cff95eb06"
+      },
+      "canonical": "flagship/gpu-approval/v1|home.alice.flagship.services|alice--train|inst-9|12|amd-rocm|4|compute,graphics|exclusive|vm-passthrough|1|||1800000000000",
+      "expect": true
+    },
+    {
+      "name": "signed by the IRK while the account pins an admin root",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "23d846ba5ff5c74c9eed63364ec2fc6aaa3a1f3a8cae3a55efb5b6bb7e0d60d9306b9dd7dda263b7155696c22ab58914748b7d64247aa2771bd6f0e0d3e4050b"
+      },
+      "expect": false
+    },
+    {
+      "name": "signed by a stranger",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "e5381d46fdc5fec332f1e3473ff270b538cd54c36e2d06e662202ad8c39bdb073806c83151ea3b3338648795b24b678f062621ce14b3460c20c2de86178b2d0b"
+      },
+      "expect": false
+    },
+    {
+      "name": "signed for another server",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "24c277d554ba5a31789d1b142d07bf230763498fe766a062511deeca1ab5a42c1569c051b8b9dcd85179a2233aa4d0762a96e0d65ad489a35468d13a3146cf02"
+      },
+      "expect": false
+    },
+    {
+      "name": "secrecy dropped after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": false,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+      },
+      "expect": false
+    },
+    {
+      "name": "cooperative sharing added after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive",
+          "cooperative"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+      },
+      "expect": false
+    },
+    {
+      "name": "graphics added after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute",
+          "graphics"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+      },
+      "expect": false
+    },
+    {
+      "name": "more devices after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 2,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+      },
+      "expect": false
+    },
+    {
+      "name": "another trust domain after signing",
+      "approval": {
+        "app": {
+          "appId": "alice--photos",
+          "installationId": "inst-01",
+          "generation": 1
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "video-encode",
+          "compute",
+          "compute"
+        ],
+        "policies": [
+          "cooperative",
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": false,
+        "trustDomain": "work",
+        "ownerConsent": "consent-2026-10-25"
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "adec13d8f2db662af853fdfd24c4dafa8d3f71e532329f1ad004af7476cf90484b2dd5a868dcbc8bfaf014282776595a197481fa4fa00680e60683e0fd951604"
+      },
+      "expect": false
+    },
+    {
+      "name": "another app generation",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 4
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+      },
+      "expect": false
+    },
+    {
+      "name": "another app",
+      "approval": {
+        "app": {
+          "appId": "bob--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+      },
+      "expect": false
+    },
+    {
+      "name": "the container sandbox swapped for a VM",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "vm-passthrough",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+      },
+      "expect": false
+    },
+    {
+      "name": "another issuedAt",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000001,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d20c"
+      },
+      "expect": false
+    },
+    {
+      "name": "an upper-case signature",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3A0508D53709AC60043DC274497DD6CB820E30E90CD14DF10F89C2EAF876652760436650F351A0E193D2E996AC19D420451EE9D0B0A1FC039740211CC499D20C"
+      },
+      "expect": false
+    },
+    {
+      "name": "a truncated signature",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": "3a0508d53709ac60043dc274497dd6cb820e30e90cd14df10f89c2eaf876652760436650f351a0e193d2e996ac19d420451ee9d0b0a1fc039740211cc499d2"
+      },
+      "expect": false
+    },
+    {
+      "name": "no signature",
+      "approval": {
+        "app": {
+          "appId": "alice--render",
+          "installationId": "inst-7f3a",
+          "generation": 3
+        },
+        "backend": "nvidia-cuda",
+        "maxCount": 1,
+        "capabilities": [
+          "compute"
+        ],
+        "policies": [
+          "exclusive"
+        ],
+        "isolation": "gvisor-nvproxy",
+        "secrecy": true,
+        "trustDomain": null,
+        "ownerConsent": null
+      },
+      "proof": {
+        "issuedAt": 1800000000000,
+        "signature": ""
+      },
+      "expect": false
+    }
+  ]
+}

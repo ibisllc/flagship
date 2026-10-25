@@ -75,6 +75,13 @@ export async function routePrivileged(cmd: string, args: readonly string[], o: R
     case "systemctl":
       if (a.length === 1 && (a[0] === "poweroff" || a[0] === "reboot")) return done((await privd().power(a[0])) as { stdout?: string });
       return done(await privd().systemctl(a));
+    case "journalctl": {
+      // A WASI app's own output goes through the broker, like `docker logs` for a container app.
+      if (!a.some((x) => x.startsWith("flagship-wasi@"))) return null;
+      const wasi = a.length === 7 && a[0] === "-u" && a[2] === "-n" && a[4] === "--no-pager" && a[5] === "-o" && a[6] === "cat" ? /^flagship-wasi@([0-9a-f]{16})\.service$/.exec(a[1]!) : null;
+      if (!wasi || !/^[1-9][0-9]{0,3}$/.test(a[3]!)) throw new Error("only a WebAssembly app's own output can be read");
+      return done(await privd().wasiLogs(wasi[1]!, Number(a[3])));
+    }
     case "iptables-restore":
     case "ip6tables-restore": {
       const path = a[a.length - 1]!;
