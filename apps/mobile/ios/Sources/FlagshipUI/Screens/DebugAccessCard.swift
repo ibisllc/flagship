@@ -47,6 +47,7 @@ struct DebugAccessCard: View {
                 .font(.system(size: 12, weight: .semibold))
                 .tracking(1)
                 .foregroundColor(c.textMuted)
+                .accessibilityIdentifier("sd-debug-access")
             FSCard {
                 if let vm {
                     content(vm, c: c)
@@ -55,7 +56,6 @@ struct DebugAccessCard: View {
                 }
             }
         }
-        .accessibilityIdentifier("sd-debug-access")
         .task(id: serverDomain) {
             vm = DebugAccessViewModel(serverDomain: serverDomain, view: view, client: client, onChanged: onChanged)
         }
