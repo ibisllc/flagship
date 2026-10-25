@@ -98,7 +98,7 @@ own control plane (next release; notes in docs/data-sovereignty.md).
 ## Master plan (tick as done; add the commit/run id)
 
 ### A. Land the remaining code on release/0.3
-- [ ] A1 Boot-chain refresh (agent building it in the release worktree since 2026-10-25): review,
+- [x] A1 (`8b41f8ff6`; docs/boot-chain-refresh.md; drilled BIOS+UEFI, tools/boot-chain-drill) Boot-chain refresh (agent building it in the release worktree since 2026-10-25): review,
       commit by explicit paths. It lets 0.3 boxes take initramfs/unlock changes via updates.
 - [x] A2 (`a03887d5c` incl. A3; branch deleted, tip archived under refs/archive/2026-10-25/landed/) Fast-forward release/0.3 onto feat/phone-usb-burn (13 commits, already on the tip; rebase
       it first if the release moved), delete the feat branch (archive ref first).
@@ -122,6 +122,12 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       lane (burned stick boots, installs from the signed artifact, comes online).
 
 ### B. Acceptance (security first)
+- [ ] B0 Check on a real gym box (live gym or debug box) the premount bug the boot-chain agent
+      suspects: FLAGSHIP_BOOT's early mount wrote no log until ext4 was preloaded (amd64) / busybox
+      present (arm64), so the unlock log, the lock-once marker and the live owner-key read may never
+      work on real boxes. If confirmed, fix in packages/boot-chain (ship via the refresh) and gym it.
+      Also from A1: drill the full promotion on a real LUKS box with phone approval (live gym lane
+      "boot-chain refresh across an update + reboot", D2).
 - [ ] B1 Adversarial suite (tools/adversarial) extended for every new surface: rescue route + mDNS
       (no identity leak on the LAN, stranger can't open a session, replay, downgrade to classical
       under strict, cert-hash binding), offline-control orders (forged/stale/IRK on pinned box),
@@ -381,3 +387,5 @@ own control plane (next release; notes in docs/data-sovereignty.md).
   screenshots come later). Live release gym run 2 still running (scratchpad/gym-release-2.log).
 - 2026-10-25: texts landed `68b32b475` (release notes, store listings ×7 with limits check, website +
   blog post). TODO-RM markers to resolve before launch: see F4b. Product version still 0.2: see F4c.
+- 2026-10-25: A1 landed `8b41f8ff6` (shell v181; compatibility.json pinned to 181). The feature
+  branches feat/marketplace (v181…v184) must renumber above 181 at their next rebase.
