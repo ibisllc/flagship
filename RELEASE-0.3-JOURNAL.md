@@ -359,3 +359,7 @@ own control plane (next release; notes in docs/data-sovereignty.md).
 - 2026-10-25: Harry's mandate recorded (Mandate + Master plan above). USB burn (13) and data
   sovereignty box half (8) landed on release/0.3 at `a03887d5c` (tested together first in a scratch
   worktree /Users/harrywinner/flagship-tmp, which can be reused for side work or removed).
+- 2026-10-25: A4 started: an agent builds the sovereignty phone side + basic offline control on branch
+  `work/sovereignty-phone` in /Users/harrywinner/flagship-tmp (commits there, not pushed). If this
+  session ends: check that branch's log, finish the A4 list, test, then merge into release/0.3
+  (rebase onto it first). A1 (boot-chain refresh) is still uncommitted work in the release worktree.
