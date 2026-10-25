@@ -81,55 +81,95 @@ AI01/AI02 local AI) and 8 (V01 adversarial suite + assessment package, V02 canar
   iOS: project `apps/mobile/ios/App/FlagshipApp.xcodeproj`, scheme `FlagshipApp`, Xcode RC at
   `/Applications/Xcode-27.1.0-Release.Candidate.app`. Disk is tight: clear DerivedData first.
 
-## State at 2026-10-25 ~02:15 UTC
+## Mandate (Harry, 2026-10-25) — read this first
 
-Tip `28b213c73`. Last full VM run (on `a44fc2208`): vitest 14,337 passed / 2 failed, both fixed in
-`135829c9d`; Rust fmt/clippy/test failures fixed in `90edead1e`. Not yet re-run on the tip.
+"Resume the 0.3 release" means: continue this plan from the first unchecked box, to the very end,
+without asking unless a step is marked OWNER. The release ships everything already on release/0.3
+PLUS phone USB burn and data sovereignty (box AND phone side: basic offline control of your own box
+over the LAN, stopping short of bypassing the Flagship ecosystem — no self-hosted control plane, no
+account creation/recovery/transfer offline, boot unlock still via .com), then acceptance with a
+heavy security focus on everything new, then the four release stages, until the apps are live in
+the stores with new graphics, texts and descriptions of the whole range of improvements, and the
+website is updated. Record every step in this file's Log as you go (commit + push it each time).
+Not in 0.3 (decided): outbound proxy (later, recommended free BYO-proxy), marketplace/payments,
+custom names/domains, retail, browser extension, other-OS installers, alpine, offline boot unlock /
+own control plane (next release; notes in docs/data-sovereignty.md).
 
-Running when this was written (subagents; if this session is gone, they are gone too):
-- (done, see Log) **AI01/AI02 local AI** (`packages/protocol/src/localAi.ts`, `packages/server-daemon/src/localAi/`,
-  protocol manifest edits, webapp/Android/iOS Local AI screens and model menu changes). Its edits are
-  **uncommitted in the worktree** (`git status`). If it died: review the diff, finish it (tests, i18n,
-  privd allowances for any new host op), commit.
-- **iOS Local AI screens** (same feature, iOS files listed in `git status`).
-- CI runs 40150736028 (ci.yml) and 40150738064 (rust.yml) on `90edead1e`; expected to show only the
-  two failures `135829c9d` fixed.
+## Master plan (tick as done; add the commit/run id)
 
-## Plan (tick as done)
+### A. Land the remaining code on release/0.3
+- [ ] A1 Boot-chain refresh (agent building it in the release worktree since 2026-10-25): review,
+      commit by explicit paths. It lets 0.3 boxes take initramfs/unlock changes via updates.
+- [ ] A2 Fast-forward release/0.3 onto feat/phone-usb-burn (13 commits, already on the tip; rebase
+      it first if the release moved), delete the feat branch (archive ref first).
+- [ ] A3 Merge feat/data-sovereignty's box half (8 commits) the same way.
+- [ ] A4 Build the sovereignty PHONE side (iOS reference, then Android; webapp gets only the
+      vector ports — a browser can't do LAN rescue): Swift/Kotlin ports of rescue + keyfile v2 vectors;
+      Bonjour (iOS NWBrowser, Info.plist NSBonjourServices `_flagship._tcp`) / Android NsdManager
+      discovery by the opaque rescueDiscoveryId; key-bound TLS (trust the pinned box key, not DNS/CA);
+      the rescue session (admin-signed, hybrid PQ signature so it works under the strict profile —
+      add the PQ half to the rescue order on box + phones); "Rescue my data" (backup over LAN,
+      progress, resume) and BASIC OFFLINE CONTROL over LAN-direct when .com/relay are unreachable:
+      server status, apps list, start/stop/restart an app, restart/shut down the server, make and
+      download a backup — every action an owner-signed order the box verifies, nothing that needs
+      .com (no account changes, no device adds, no recovery). Settings entry always present; the
+      account-gone screen's rescue button. Box fixes from docs/data-sovereignty.md §7 that the
+      promise needs (restore treats a backup's apps as the new host's own; self-delete freshness;
+      BoxReadToken timeout). i18n drafts in 6 languages; parity rows; mock-gym scenarios
+      (found, not found, wrong key, expired cert, interrupted download resumes, offline controls).
+- [ ] A5 USB burn finish: seed rebuilt for the release's Debian pin (sha pin is 13.6.0; check
+      FLAGSHIP_ISO_MANIFEST), seed publish path + FLAGSHIP_ISO_SEED wiring in release.sh, a QEMU gym
+      lane (burned stick boots, installs from the signed artifact, comes online).
 
-1. [x] Land AI01/AI02 (`2045eef9b`; parity fixed `059251d5d`): review the uncommitted diff, `npx tsc -b`, targeted vitest, `npm run i18n`,
-       Android unit tests, iOS build; commit by explicit paths; push.
-2. [x] (VM run on `2045eef9b` green but crypto-graph; CI 40153988658 green; Rust 40156714426 green) Re-run `full-test-vm.sh` on the new tip and CI (`ci.yml`, `rust.yml`); fix everything but
-       crypto-graph.
-3. [x] (`5e6a71249`) iOS string harvest (Xcode build with `SWIFT_EMIT_LOC_STRINGS=YES`, then `scripts/i18n-ios.mjs`),
-       then `npm run i18n`.
-4. [x] (iOS `75e9a4a80`, Android `86e474641`) Native mock gyms on the tip: iOS UI tests (GymRelease03Tests and the rest), Android emulator gym.
-5. [ ] Update `AGENTS.md` "Current status" and `SECURITY-0.3-PROGRESS.md` for the merged release.
-6. [ ] (running since 2026-10-25, see Log) Live release gym `bash scripts/gym-release-run.sh` (needs `scripts/gym-refresh.sh` first, the
-       gym branch rebased onto this tip, box artifact built by `box-artifact.yml`); act on its exit code
-       (set `newBoxStack` / `appBrowser`, commit the regenerated files).
-7. [ ] M7 VM drills (WASI, app groups, dedicated DBs, GPU sim) and arch drills per `HANDOVER.md`.
-8. [x] (`dcdb763f3` `521ce5955` `d894a516c` `1554f7947` `e271dfa8c`) Close the smaller gaps or record them as known in AGENTS.md: gpud share state lost on restart;
-       gpud trusts the daemon's approval until R02; no owner UI for accelerators; WASI journal logs not
-       through privd; journalHttp still accepts the IRK; Swift/Kotlin ExportAuthorization scope; a
-       classic box can't later migrate to arch-v2; peer backups skip dedicated databases.
-9. [ ] (release/0.3 fast-forwarded and branches cleaned 2026-10-25) Rebase every descendant branch onto it and
-       report conflicts: `feat/marketplace` → `feat/custom-names`, `feat/custom-domains`,
-       `feat/outbound-proxy` (start from the `ux-*` children), `gym`/`gym-ux`, `feat/retail`,
-       `feat/browser-extension`, `feat/phone-usb-burn`, `feat/other-os-installers`,
-       `feat/data-sovereignty`, `alpine`, `feat/multilingual` (already contained? check). Use
-       `scripts/rebase-features.sh`.
-10. [ ] Owner steps (ask Harry): PQ key ceremony (release step 2c) and catalog keys (2b); YubiKey
-        endorsement of the box release; secrets `FLAGSHIP_RECOVERY_PROOF_SECRET`, `FLAGSHIP_TOTP_KEK`,
-        `ADAPTER_ATTESTATION_SIGNING_KEY`, `ADAPTER_COMPLAINT_SALT`, `ADAPTER_REVIEW_ANTHROPIC_KEY`;
-        `GYM_SYNC_REPO`; PSL request; `FLAGSHIP_UPDATE_RECEIPTS` on maintainer/gym boxes + a rollback
-        drill; the older AGENTS.md owner items (wildcard DNS step, D1 backup bucket/secrets).
-11. [ ] Merge to `main` (fast-forward of `release/0.3`), then `bash scripts/release.sh --phase A`,
-        `--phase B`: D1 migrations, `.com` (`cd apps/com && npm run deploy`), `.services` (rolling),
-        shim, endorsed box release, VM appliances, Studios, store builds (iOS/Android, with real
-        screenshots: old ones are in `~/Desktop/flagship-builds/appstore-screenshots/` and
-        `~/Desktop/flagship-play-store-assets/`), canary (step 23).
-12. [ ] After launch: hall-of-fame publish (branch `hof-jay`), translation review, hardware receipts.
+### B. Acceptance (security first)
+- [ ] B1 Adversarial suite (tools/adversarial) extended for every new surface: rescue route + mDNS
+      (no identity leak on the LAN, stranger can't open a session, replay, downgrade to classical
+      under strict, cert-hash binding), offline-control orders (forged/stale/IRK on pinned box),
+      boot-chain refresh (daemon-writable source refused, broken initrd falls back), USB seed
+      (tampered seed/preseed refused, LUKS key per install), GPU approvals, stack switch, local AI,
+      journal admin-only. Fix every finding; 0 it.fails.
+- [ ] B2 Independent security review pass by a fresh agent over the 0.3 diff since main (focus: new
+      additions); fix findings; record them in SECURITY-0.3-PROGRESS.md.
+- [ ] B3 crypto-graph: add nodes for every new order (rescue session, offline orders); schema ok.
+
+### C. Stage 1 — code tests on the frozen tip
+- [ ] C1 `bash scripts/full-test-vm.sh --commit <tip>` all green except crypto-graph strict (known,
+      until the PQ ceremony); CI + Rust CI green on release/0.3.
+- [ ] C2 `npm run ready` (branch drift, tsc, vitest, e2e, parity) and the iOS string harvest.
+
+### D. Stage 2 — gyms
+- [ ] D1 Mock gyms on the frozen tip: web (`npm run gym:locked -- --surface web`), iOS, Android
+      (one native build at a time); fix failures.
+- [ ] D2 Live release gym (rebase `gym` onto release/0.3 first; load gym secrets; see Commands):
+      act on its exit code — set newBoxStack (scripts/set-new-box-stack.mjs) and appBrowser
+      (scripts/set-app-browser.mjs) and commit. Add live lanes: sovereignty (cut a box off .com,
+      rescue + offline control over its private network, import into account B), local-ai, the M7
+      drills (WASI, app groups, dedicated DBs, GPU sim), stack switch classic→arch-v2, boot-chain
+      refresh across an update + reboot.
+- [ ] D3 Live gym green twice in a row; record run ids.
+
+### E. Stage 3 — hardware (OWNER hands; I prepare checklists and drive what I can)
+- [ ] E1 Write docs/runbooks/0.3-hardware-acceptance.md: iPhone + Android dev builds (pair, unlock,
+      offline control + rescue on home Wi-Fi with internet cut, GPU card read-only, local AI CPU),
+      USB burn from a real Android phone to a stick + metal boot, Mac Studio hosting, Windows/Linux
+      Studio (device-test agent runbook), Watch/Wear basics. Ask Harry to run it; record results.
+
+### F. Stage 4 — deploy (a script Harry runs) and launch
+- [ ] F1 Update AGENTS.md "Current status" + SECURITY-0.3-PROGRESS.md for the merged release; the
+      branch list (USB burn and sovereignty now in; marketplace family etc. still branches).
+- [ ] F2 scripts/release.sh updated for everything new (migrations 0110-0119+, secrets, seed,
+      boot-chain refresh, rescue, PINS re-pin, box artifact + endorsement, appliances, Studios,
+      stores, website); `--dry-run` clean; docs/runbooks/0.3-deploy-sheet.md (what Harry needs ready:
+      YubiKeys, PQ ceremony 2c, catalog keys 2b, secrets list, store accounts).
+- [ ] F3 Store assets: REAL native screenshots (iOS/Android gym captures, 7 languages, every device
+      class) via the store/ pipeline (no webapp stand-ins), new feature graphic, new App Store / Play
+      texts and "What's new" covering the whole 0.3 range, in 7 languages; contact sheet for Harry.
+- [ ] F4 Website: landing + features + security + /studio + release notes/changelog for 0.3, pricing
+      unchanged (free), i18n built; deployed with .com.
+- [ ] F5 OWNER runs scripts/release.sh phases A and B (I watch logs, fix, re-run); merge release/0.3
+      to main (fast-forward); canary; store submissions (iOS + watch, Android + Wear), Studios.
+- [ ] F6 After launch: hall of fame (hof-jay), translation review request, hardware receipts, the
+      weekly rate-limit check; rebase the feature branches onto main.
 
 ## Log
 
