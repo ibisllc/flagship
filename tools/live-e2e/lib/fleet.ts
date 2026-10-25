@@ -269,6 +269,7 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
       ownerAidPubHex: bytesToHex(aid.publicKey),
       // The release gym runs every group on both container stacks (GYM_BOX_STACK=arch-v2|classic).
       ...(process.env.GYM_BOX_STACK ? { stack: process.env.GYM_BOX_STACK } : {}),
+      ...(process.env.GYM_DEBUG_SSH_PUBKEY ? { debugSshPublicKey: process.env.GYM_DEBUG_SSH_PUBKEY } : {}),
       ...(opts.provisionExtras ?? {}),
     },
     adminHeaders(),

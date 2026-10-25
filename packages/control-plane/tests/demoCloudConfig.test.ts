@@ -9,6 +9,21 @@ const code = (s: string): string =>
 const DEMO_IRK_PRIV = "11".repeat(32);
 
 describe("buildCloudConfigUserData", () => {
+  it("adds a gym debug SSH key to root's authorized_keys only when asked", () => {
+    const base = {
+      installBlobJson: JSON.stringify({ serverDomain: "home.alice.flagship.services" }),
+      installerGitRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
+    };
+    expect(buildCloudConfigUserData(base)).not.toContain("authorized_keys");
+    const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl gym-debug";
+    const yaml = buildCloudConfigUserData({ ...base, debugSshPublicKey: key });
+    const entry = yaml.split("  - path: /root/.ssh/authorized_keys\n")[1]!.split("  - path:")[0]!;
+    expect(entry).toContain("append: true");
+    expect(entry).toContain("permissions: '0600'");
+    expect(Buffer.from(entry.match(/content: (\S+)/)![1]!, "base64").toString()).toBe(key + "\n");
+  });
+
   it("renders #cloud-config with all write_files entries + runcmd", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: JSON.stringify({ serverDomain: "home.alice.flagship.services" }),

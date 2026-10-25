@@ -91,6 +91,8 @@ export interface GymProvisionBody {
   selfMintEntitlements?: unknown;
   /** "arch-v2" or "classic": the container stack to build the box on (default: the release's). */
   stack?: unknown;
+  /** An ssh-ed25519 public key for root on this one box (diagnosing a box that never comes up). */
+  debugSshPublicKey?: unknown;
   /** FLAGSHIP_BACKUP_INTERVAL_MS for the box (≥ 60000). */
   backupIntervalMs?: unknown;
 }
@@ -399,6 +401,9 @@ export async function handleGymProvision(
     ...(typeof body.backupIntervalMs === "number" ? { backupIntervalMs: body.backupIntervalMs } : {}),
     ...(body.selfMintEntitlements === false ? { selfMintEntitlements: false } : {}),
     ...(body.stack === "classic" || body.stack === "arch-v2" ? { stack: body.stack } : {}),
+    ...(typeof body.debugSshPublicKey === "string" && /^ssh-ed25519 [A-Za-z0-9+/]+={0,2}( [\x21-\x7e]{1,64})?$/.test(body.debugSshPublicKey)
+      ? { debugSshPublicKey: body.debugSshPublicKey }
+      : {}),
   });
 
   // 7. Provision the box — mirrors the demo create path, INCLUDING the SSH

@@ -83,6 +83,11 @@ export function buildCloudConfigUserData(args: {
    */
   stack?: BoxStack;
   /**
+   * GYM ONLY: an SSH public key added to root's authorized_keys, so a gym box that never comes up can
+   * still be read (its daemon log is otherwise only reachable over the HTTPS it failed to get).
+   */
+  debugSshPublicKey?: string;
+  /**
    * GYM ONLY: the box's sealing key (SWK) instead of a random one. A migration's
    * new box must hold the old box's SWK to open its backup; a real phone derives
    * both from the account (deriveSWK), so the gym passes the same derived value
@@ -592,7 +597,13 @@ write_files:
     owner: root:root
     encoding: b64
     content: ${bootstrapB64}
-${selfMint ? `  - path: /run/flagship-demo-irk.hex
+${args.debugSshPublicKey ? `  - path: /root/.ssh/authorized_keys
+    permissions: '0600'
+    owner: root:root
+    append: true
+    encoding: b64
+    content: ${b64Utf8(args.debugSshPublicKey.trim() + "\n")}
+` : ""}${selfMint ? `  - path: /run/flagship-demo-irk.hex
     permissions: '0600'
     owner: root:root
     encoding: b64
