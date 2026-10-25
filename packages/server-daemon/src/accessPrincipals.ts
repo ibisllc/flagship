@@ -20,6 +20,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { writeFileDurable } from "./durableFile.js";
+import type { DeviceRevocations } from "./deviceRevocations.js";
 import {
   canonicalDeviceCapabilityGrant,
   DEVICE_SCOPES,
@@ -101,6 +102,8 @@ export interface AccountDeviceBookOptions {
   ownerIrkPub: () => Uint8Array;
   adminRootPub: () => Uint8Array | undefined;
   ownerAidHex?: string;
+  /** Grants the box was told, by the admin root, to treat as revoked (deviceRevocations.ts). `.com` cannot bring them back. */
+  isRevoked?: (grantId: string) => boolean;
   /** `.com`'s list of the account's grants (`{grants:[…]}`), or null when unreachable.
    *  `live` is set when a person is waiting on the answer (an unknown key signed,
    *  the members screen): that read must not be satisfied by the doorbell's
@@ -171,6 +174,24 @@ export class AccountDeviceBook {
     if (this.byPub.has(pub) || pub === this.opts.ownerAidHex?.toLowerCase()) return;
     if (this.now() - this.lastRefresh < (this.opts.minRefreshMs ?? 30_000)) return;
     await this.refresh({ live: true });
+  }
+
+  /** Drop a device now (its grant was revoked): no refresh needed, none can bring it back. */
+  async dropGrant(grantId: string): Promise<void> {
+    let changed = false;
+    for (const [pub, d] of this.byPub) {
+      if (d.grant.grantId === grantId) {
+        this.byPub.delete(pub);
+        changed = true;
+      }
+    }
+    if (changed) await this.persist().catch(() => {});
+  }
+
+  /** The grant (id, device id, when it was issued) behind a device key, for the admin gate and the rescue log. */
+  grantOf(pubHex: string): { grantId: string; deviceId: string; issuedAt: number; tier: DeviceTier } | null {
+    const d = this.byPub.get(pubHex.toLowerCase());
+    return d ? { grantId: d.grant.grantId, deviceId: d.deviceId, issuedAt: d.grant.issuedAt, tier: d.tier } : null;
   }
 
   classify(pubHex: string): Extract<Principal, { kind: "device" }> | null {
@@ -249,6 +270,7 @@ export class AccountDeviceBook {
       for (const r of raw) {
         const listed = parseListed(r);
         if (!listed || listed.username.toLowerCase() !== this.opts.username.toLowerCase()) continue;
+        if (this.opts.isRevoked?.(listed.grantId)) continue;
         const tier = this.verify(listed);
         if (!tier) continue;
         const prev = next.get(listed.devicePubHex);
@@ -325,6 +347,8 @@ export interface ShareView {
  */
 export class AccessPrincipals implements PrincipalResolver {
   book: AccountDeviceBook | null = null;
+  /** Device revocations the admin root delivered to this box (deviceRevocations.ts). */
+  revocations: DeviceRevocations | null = null;
   shares: (() => ShareView[]) | null = null;
 
   constructor(private readonly ownerAid: string | null = null) {}
