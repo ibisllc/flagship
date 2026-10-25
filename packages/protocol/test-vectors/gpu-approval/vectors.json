@@ -508,5 +508,85 @@
       },
       "expect": false
     }
+  ],
+  "withdraw": [
+    {
+      "name": "withdrawn by the admin root",
+      "withdraw": {
+        "appId": "alice--render",
+        "installationId": "inst-7f3a",
+        "generation": 3,
+        "issuedAt": 1800000060000
+      },
+      "signature": "9642a2cc459b2f790b221a3920d062d3979e55cccf4cd080d965f44cc59b35b86bb6286858e4b0fc5c0c1f476f9c4c541ee18a81330cbeb38ce3798804eb020f",
+      "canonical": "flagship/gpu-approval-withdraw/v1|home.alice.flagship.services|alice--render|inst-7f3a|3|1800000060000",
+      "expect": true
+    },
+    {
+      "name": "withdrawn by the IRK while the account pins an admin root",
+      "withdraw": {
+        "appId": "alice--render",
+        "installationId": "inst-7f3a",
+        "generation": 3,
+        "issuedAt": 1800000060000
+      },
+      "signature": "e4ac30ef66cd5b423e42e35e8e86f0079b81e18efd5c121e994f4bf7b3b37d12f314aad2f69504b940aabe978630515da4753e6ab92e51d6e760cfcc85ff6705",
+      "expect": false
+    },
+    {
+      "name": "withdrawn by a stranger",
+      "withdraw": {
+        "appId": "alice--render",
+        "installationId": "inst-7f3a",
+        "generation": 3,
+        "issuedAt": 1800000060000
+      },
+      "signature": "f54655c1db3937b25ddd72e5001f1cbeca1b4b7b1dc3f572409019a6676075b56f8c21af41fbac3a7288cb27fbf4a65ee5a0f0e15b3e770b857ae9d8166dd701",
+      "expect": false
+    },
+    {
+      "name": "signed for another server",
+      "withdraw": {
+        "appId": "alice--render",
+        "installationId": "inst-7f3a",
+        "generation": 3,
+        "issuedAt": 1800000060000
+      },
+      "signature": "1b9f246052106a2766dd44ae11d476baab1e421a24a63c9f7e3e6385d31640eba23d88e206721cd7a20caba8921cac27fbfd1f3f0cf2c5679f7fa4db4db9e408",
+      "expect": false
+    },
+    {
+      "name": "another generation",
+      "withdraw": {
+        "appId": "alice--render",
+        "installationId": "inst-7f3a",
+        "generation": 4,
+        "issuedAt": 1800000060000
+      },
+      "signature": "9642a2cc459b2f790b221a3920d062d3979e55cccf4cd080d965f44cc59b35b86bb6286858e4b0fc5c0c1f476f9c4c541ee18a81330cbeb38ce3798804eb020f",
+      "expect": false
+    },
+    {
+      "name": "another installation",
+      "withdraw": {
+        "appId": "alice--render",
+        "installationId": "inst-other",
+        "generation": 3,
+        "issuedAt": 1800000060000
+      },
+      "signature": "9642a2cc459b2f790b221a3920d062d3979e55cccf4cd080d965f44cc59b35b86bb6286858e4b0fc5c0c1f476f9c4c541ee18a81330cbeb38ce3798804eb020f",
+      "expect": false
+    },
+    {
+      "name": "another issuedAt",
+      "withdraw": {
+        "appId": "alice--render",
+        "installationId": "inst-7f3a",
+        "generation": 3,
+        "issuedAt": 1800000060001
+      },
+      "signature": "9642a2cc459b2f790b221a3920d062d3979e55cccf4cd080d965f44cc59b35b86bb6286858e4b0fc5c0c1f476f9c4c541ee18a81330cbeb38ce3798804eb020f",
+      "expect": false
+    }
   ]
 }

@@ -8,7 +8,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bytesToHex } from "@noble/hashes/utils";
 import { ed } from "../src/edSync.js";
-import { gpuApprovalCanonicalBytes, signGpuApproval, type GpuApprovalTerms } from "../src/gpuApproval.js";
+import {
+  gpuApprovalCanonicalBytes,
+  gpuApprovalWithdrawCanonicalBytes,
+  signGpuApproval,
+  signGpuApprovalWithdraw,
+  type GpuApprovalTerms,
+  type GpuApprovalWithdraw,
+} from "../src/gpuApproval.js";
 
 export const VECTORS_PATH = join(dirname(fileURLToPath(import.meta.url)), "../test-vectors/gpu-approval/vectors.json");
 
@@ -64,6 +71,10 @@ export function buildGpuApprovalVectors(): unknown {
     expect: true,
   });
   const bad = (name: string, approval: GpuApprovalTerms, signature: string, issuedAt = ISSUED) => ({ name, approval, proof: { issuedAt, signature }, expect: false });
+  const kp = (by: Uint8Array) => ({ privateKey: by, publicKey: ed.getPublicKey(by) });
+  const w: GpuApprovalWithdraw = { appId: exclusive.app.appId, installationId: exclusive.app.installationId, generation: exclusive.app.generation, issuedAt: ISSUED + 60_000 };
+  const wsig = (x: GpuApprovalWithdraw, by: Uint8Array, server = SERVER) => bytesToHex(signGpuApprovalWithdraw(server, x, kp(by)));
+  const wbad = (name: string, withdraw: GpuApprovalWithdraw, signature: string) => ({ name, withdraw, signature, expect: false });
   return {
     about: "flagship/gpu-approval/v1: the owner's GPU approval for one app installation on one box, signed by the admin root (else the IRK); flagship-gpud verifies it against keyd's owner.json and policy.json.",
     anchor: { server: SERVER, signerHex: pub(adminRoot) },
@@ -87,6 +98,15 @@ export function buildGpuApprovalVectors(): unknown {
       bad("an upper-case signature", exclusive, sig(exclusive, adminRoot).toUpperCase()),
       bad("a truncated signature", exclusive, sig(exclusive, adminRoot).slice(0, 126)),
       bad("no signature", exclusive, ""),
+    ],
+    withdraw: [
+      { name: "withdrawn by the admin root", withdraw: w, signature: wsig(w, adminRoot), canonical: new TextDecoder().decode(gpuApprovalWithdrawCanonicalBytes(SERVER, w)), expect: true },
+      wbad("withdrawn by the IRK while the account pins an admin root", w, wsig(w, irk)),
+      wbad("withdrawn by a stranger", w, wsig(w, stranger)),
+      wbad("signed for another server", w, wsig(w, adminRoot, "home2.alice.flagship.services")),
+      wbad("another generation", { ...w, generation: 4 }, wsig(w, adminRoot)),
+      wbad("another installation", { ...w, installationId: "inst-other" }, wsig(w, adminRoot)),
+      wbad("another issuedAt", { ...w, issuedAt: w.issuedAt + 1 }, wsig(w, adminRoot)),
     ],
   };
 }

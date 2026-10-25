@@ -88,3 +88,37 @@ export function verifyGpuApproval(serverDomain: string, a: GpuApprovalTerms, iss
     return false;
   }
 }
+
+/**
+ * The owner withdraws a GPU approval, `flagship/gpu-approval-withdraw/v1`, signed by the same key:
+ *   flagship/gpu-approval-withdraw/v1|<serverDomain>|<appId>|<installationId>|<generation>|<issuedAt>
+ */
+export const TAG_GPU_APPROVAL_WITHDRAW = "flagship/gpu-approval-withdraw/v1";
+
+export interface GpuApprovalWithdraw {
+  appId: string;
+  installationId: string;
+  generation: number;
+  issuedAt: number;
+}
+
+export function gpuApprovalWithdrawCanonicalBytes(serverDomain: string, w: GpuApprovalWithdraw): Bytes {
+  if (!SERVER.test(serverDomain)) throw new Error("gpu-approval-withdraw: bad serverDomain");
+  if (!FIELD.test(w.appId) || !FIELD.test(w.installationId)) throw new Error("gpu-approval-withdraw: bad app installation");
+  if (!Number.isSafeInteger(w.generation) || w.generation < 0) throw new Error("gpu-approval-withdraw: bad generation");
+  if (!Number.isSafeInteger(w.issuedAt) || w.issuedAt < 0) throw new Error("gpu-approval-withdraw: bad issuedAt");
+  return new TextEncoder().encode([TAG_GPU_APPROVAL_WITHDRAW, serverDomain, w.appId, w.installationId, String(w.generation), String(w.issuedAt)].join("|"));
+}
+
+export function signGpuApprovalWithdraw(serverDomain: string, w: GpuApprovalWithdraw, signer: MsgSigner): Bytes {
+  return resolveMsgSigner(signer)(gpuApprovalWithdrawCanonicalBytes(serverDomain, w));
+}
+
+/** Never throws: a malformed withdrawal simply fails. */
+export function verifyGpuApprovalWithdraw(serverDomain: string, w: GpuApprovalWithdraw, sig: Bytes, pub: Bytes): boolean {
+  try {
+    return ed.verify(sig, gpuApprovalWithdrawCanonicalBytes(serverDomain, w), pub);
+  } catch {
+    return false;
+  }
+}

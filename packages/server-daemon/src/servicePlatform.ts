@@ -58,6 +58,7 @@ import { digestOf, runOrderOperation } from "./authority/orderOperation.js";
 import type { AppPullState, AppPullStateStore, UpdatePolicy } from "./updateClient.js";
 import type { BoxRuntimeCapabilities, NormalizedApp } from "@flagship/protocol";
 import { parseAppManifest, runtimeExtras, type ParsedApp } from "./appModel.js";
+import { acceleratorRequestFor, gpuApprovals } from "./gpu/approvals.js";
 import { localAiEnvFor } from "./localAi/appEnv.js";
 
 /** Restoring what was installed never re-judges admission: an app the box can no longer run stays listed and says why it won't start. */
@@ -875,6 +876,8 @@ export class ServicePlatform {
       appImage: a.manifest.runtime.image,
       ...(this.deps.linkPorts ? { linkPortFor: (k: string) => this.deps.linkPorts!.portFor(k) } : {}),
     });
+    // Manifest v2 `accelerator`: claimed at deploy only with the owner's signed approval (gpu/approvals.ts).
+    const accelerator = await acceleratorRequestFor(a.serviceId, a.app);
     return {
       serviceId: a.serviceId,
       image: a.manifest.runtime.image,
@@ -883,6 +886,7 @@ export class ServicePlatform {
       containerPort,
       ...(filesVolume ? { filesVolume } : {}),
       ...extras,
+      ...(accelerator ? { accelerator } : {}),
     };
   }
 
@@ -1054,7 +1058,9 @@ export class ServicePlatform {
   }): Promise<UninstallResult> {
     const res = await this.uninstallNow(args);
     if (res.ok && !res.alreadyGone) {
-      this.notifyApp("app.removed", ServicePlatform.serviceId(args.request.creator, args.request.slug));
+      const id = ServicePlatform.serviceId(args.request.creator, args.request.slug);
+      this.notifyApp("app.removed", id);
+      await gpuApprovals()?.forget(id).catch(() => {});
     }
     return res;
   }

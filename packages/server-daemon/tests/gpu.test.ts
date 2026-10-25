@@ -139,7 +139,7 @@ const PROOF = { issuedAt: 1_800_000_000_000, signature: "ab".repeat(64) };
 function appReq(over: Partial<AppAcceleratorRequest> = {}): AppAcceleratorRequest {
   const approval = approvalForApp(APP, ACC, "sandbox", { secrecy: true });
   if ("refused" in approval) throw new Error("test approval refused");
-  return { installation: APP, requirement: requirementFromManifest(ACC), approval, ...over };
+  return { installation: APP, requirement: requirementFromManifest(ACC), approval, approvalProof: PROOF, ...over };
 }
 
 describe("the AppRunner hook", () => {

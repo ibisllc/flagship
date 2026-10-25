@@ -136,7 +136,8 @@ import {
   type RootSwitchDeps,
 } from "./archV2Switch.js";
 import { activeEngine, loadArchV2Config } from "./engine/engine.js";
-import { installGpudAsRoot, installGpudFromRelease, startAccelerators } from "./gpu/wire.js";
+import { installGpudAsRoot, installGpudFromRelease, startAccelerators, startGpuApprovals } from "./gpu/wire.js";
+import { gpuApprovals } from "./gpu/approvals.js";
 import { localInferenceFor, startLocalAi } from "./localAi/wire.js";
 import { denyCompanionWrite } from "./screens/companion.js";
 import type { LocalAi } from "./localAi/index.js";
@@ -906,6 +907,14 @@ async function main(): Promise<void> {
   onUpdateOutcome((r) => {
     const line = updateOutcomeActivity(r);
     activityLog.note(line.kind, line.detail, line.ok ? {} : { ok: false });
+  });
+  // The owner's GPU approvals (gpu/approvals.ts), before any app is deployed.
+  startGpuApprovals({
+    dataDir,
+    serverDomain: () => (env.serverFqdn ?? "").toLowerCase(),
+    keys: () => ({ irkPub: cfg?.irkPublicKey ?? null, adminRootPub: cfg?.adminRootPub ?? null }),
+    note: (kind, detail, opts) => activityLog.note(kind, detail, opts),
+    log: (m) => console.warn(m),
   });
 
   // Transfer-a-box re-home (docs/account-deletion-and-name-reclaim.md §4, Layer
@@ -3767,6 +3776,25 @@ async function wireRuntimeSurfaces(deps: {
     }),
     log: (m) => console.warn(m),
   });
+  // A GPU approval waiting for the owner: the same socket and content-free wake; a grant restarts the app onto its GPU.
+  gpuApprovals()?.setSinks(() => ({
+    emit: (e) => screensEvents.publish(e),
+    alertsEnabled: () => accessAlertSetting.enabled(),
+    ...(accessPushCfg
+      ? {
+          push: () =>
+            sendPushRelay({
+              category: "generic",
+              targetUsername: accessPushCfg.userId,
+              signer: custodian,
+              controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+              logTag: "[gpu] approval request push",
+              log: (l) => console.log(l),
+            }),
+        }
+      : {}),
+  }));
+  gpuApprovals()?.setEffects({ granted: (id) => void runtime.servicePlatform?.restartService(id).catch(() => {}) });
 
   // App chat: a held request reaches an open owner app on the screens socket and wakes the phone
   // through the push relay, content-free, like an internet-access request. The admin's answer is

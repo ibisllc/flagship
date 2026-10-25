@@ -294,6 +294,8 @@ export interface AppAcceleratorRequest {
   requirement: AcceleratorRequirementWire;
   approval: GpuApprovalWire;
   approvalProof?: GpuApprovalProof;
+  /** Why there is no proof yet (gpu/approvals.ts): the deploy never claims without one. */
+  pendingReason?: string;
   share?: ShareLimits;
   /** How long a deploy waits in the queue before it gives up. */
   queueWaitMs?: number;
@@ -338,6 +340,7 @@ export class AppAccelerators {
     if (held[serviceId]) await this.afterStop(serviceId);
     const cpu = (why: string): AppAcceleratorOutcome =>
       req.requirement.fallback === "cpu-if-supported" ? { kind: "cpu", reason: why } : { kind: "refused", reason: why };
+    if (!req.approvalProof) return cpu(req.pendingReason ?? "This app needs your approval to use a GPU. Approve it on this server's page, then start the app again.");
     const inv = await this.broker.inventory();
     if (!inv.available || !inv.devices.some((d) => d.backend === req.requirement.backend && !d.displayOwned)) {
       return cpu("This server has no GPU this app can use.");

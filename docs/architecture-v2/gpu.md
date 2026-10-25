@@ -91,7 +91,30 @@ Daemon side (`packages/server-daemon/src/gpu/`):
 - Owner screen API: `GET /api/screens/accelerators` (devices with state free/in-use/quarantined/
   unqualified/display and holder app ids, the queue per app, admission pause, catalog status),
   `POST /api/screens/accelerators/stop {allocationId}`, `POST /api/screens/accelerators/self-test`
-  (companions refused for both POSTs).
+  (companions refused for every POST).
+- The owner's GPU approvals (`gpu/approvals.ts`, 2026-10-25). A manifest v2 `accelerator` becomes
+  `AppSpec.accelerator` at every deploy (`servicePlatform.ts` containerSpec). Each such app has an
+  installation here (random 16-hex id; a generation that moves when its capability digest or
+  isolation does, and moves back on a rollback to the approved one; uninstall forgets it). Without
+  the owner's approval for exactly that installation and generation the AppRunner hook never claims
+  (CPU only if the manifest allows it), and the app is listed:
+  `GET /api/screens/accelerators` adds `pendingApprovals: [{server, appId, installationId,
+  generation, backend, maxCount, caps, policies, isolation, secrecy, trustDomain, ownerConsent}]`
+  (what the owner signs, minus `issuedAt`; `secrecy`, `trustDomain` and `ownerConsent` are the owner's
+  to set when signing, cooperative needs both) and `approvals` (the same plus `issuedAt`). A new
+  pending generation is announced once: screens event `{type: "gpu-approval-request", appId}`,
+  Activity `gpu.approval.pending`, a content-free `generic` push (owner's alerts switch, 5 an hour).
+  `POST /api/screens/accelerators/approvals` takes those fields plus `issuedAt` and `signature`
+  (`flagship/gpu-approval/v1`); `POST /api/screens/accelerators/approvals/withdraw` takes
+  `{appId, installationId, generation, issuedAt, signature}`
+  (`flagship/gpu-approval-withdraw/v1|<server>|<appId>|<installationId>|<generation>|<issuedAt>`).
+  Both: signed by the admin root on a box that pins one, else the IRK; at most 10 minutes old; newer
+  than the last withdrawal of that generation (a grant also newer than the one it replaces; a
+  withdrawal newer than the grant it removes). Refusals are `{error, code}` with codes `bad-request`,
+  `other-server`, `stale-installation`, `terms-mismatch`, `needs-trust-domain`, `no-safe-isolation`,
+  `stale`, `replayed`, `admin-only`, `bad-signature`, `no-owner-key`, `not-approved`. A grant restarts
+  the app onto its GPU; a withdrawal calls `gpu.revokeApp`. Kept in `<dataDir>/gpu-approvals.json`;
+  an unreadable file is set aside (Activity `server.state.corrupt`) and every GPU app waits again.
 - `installGpud`: on a box with an NVIDIA/AMD/Intel display or accelerator function, copies the
   release's `installer/rust/flagship-gpud` when its SHA-256 equals PINS.json's, writes
   `flagship-gpud.service` with the host's tool paths and measured versions, enables it. The box
@@ -190,8 +213,8 @@ gym group `gpu-real` runs them over SSH on a GPU host (`GYM_GPU_SSH`) or an UpCl
   local AI (`flagship-local-ai`/`box`, one device, compute, exclusive, secret, in a
   `flagship-localai-`/`flagship-aitrain-<16 hex>` container). This is the minimal verifiable form;
   R02's capability issuer (not built) should replace it with short-lived capabilities. Still open:
-  no client signs `flagship/gpu-approval/v1` yet (no client has a GPU approval screen, and no app
-  deploy path sets `AppSpec.accelerator`), so every app GPU claim is refused until one does; the
+  the box takes and stores the owner's signed approvals (§2, daemon side), and the clients' approval
+  screens are being built against that contract; the
   strict-mode PQ half is not required (the gate runs under the legacy policy, as keyd's master
   evidence does); withdrawal still comes from the daemon (`gpu.revokeApp`), so a daemon that
   withholds it keeps a signed approval usable for that app generation; maintenance orders
