@@ -226,3 +226,10 @@ Running when this was written (subagents; if this session is gone, they are gone
   Still known after this: revocation and maintenance orders come from the daemon's word; strict-PQ
   half of the approval not required; daemon keeps SupplementaryGroups=systemd-journal (journalHttp,
   dockerHealth read the journal); a VM job whose kept terms are lost can't return its VFIO groups.
+- 2026-10-25: daemon gaps committed `521ce5955` (journal admin-root only on pinned boxes; volumeDump
+  dumps dedicated DBs; classic→arch-v2 switch order + root step + trial/rollback; its privd setup
+  steps landed in `dcdb763f3`). Handed to the apps agent: native journal signing (iOS
+  JournalViewModel → sensitiveOrderKey, Android → adminSigningKey; else 403 on pinned boxes), stack
+  switch UI + Activity labels, besides accelerators/GPU approvals/ExportAuthorization/iOS checks.
+  Still open for the switch: no run on a real classic box (apt without lists, volume move, arm64),
+  no gym group, no crypto-graph node for flagship/arch-v2-switch/v1 (nor gpu-approval).
