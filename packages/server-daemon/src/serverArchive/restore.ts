@@ -27,7 +27,7 @@ import { pipeline } from "node:stream/promises";
 import tar from "tar-stream";
 import {
   egressSuggestions,
-  parseManifest,
+  parseAnyManifest,
   parseServiceId,
   verifyInstallService,
   type InstallServiceRequest,
@@ -43,11 +43,12 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { openDataFile, ArchiveError } from "./format.js";
 import { ArchiveLimits } from "./limits.js";
+import { WasiModuleStore } from "../wasi/moduleStore.js";
 import { auditDumpToc, describeExecutable, ownerChanged, pinnedImageRef } from "./restoreAudit.js";
 import type { ArchiveAppMeta, ArchiveManifest } from "./build.js";
 
 const IMAGE_RE = /^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$/;
-const ENTRY_RE = /^(manifest\.json|apps\/[a-z0-9][a-z0-9-]*--[a-z0-9][a-z0-9-]*\/(meta\.json|files\.tar|source\.json|db-\d{1,3}\.dump))$/;
+const ENTRY_RE = /^(manifest\.json|apps\/[a-z0-9][a-z0-9-]*--[a-z0-9][a-z0-9-]*\/(meta\.json|files\.tar|source\.json|module\.wasm|db-\d{1,3}\.dump))$/;
 
 export type RestoreAppState = "waiting" | "restoring" | "done" | "skipped" | "failed";
 
@@ -88,7 +89,9 @@ export interface ArchiveRestoreDeps {
   workDir: string;
   /** Build an app's image from its tree (deployArtifact.buildAppImage: the box
    *  writes the Dockerfile from the manifest's runtime, then `docker build`). */
-  buildImage: (a: { contextDir: string; files: Record<string, string>; binaries: Record<string, Buffer>; image: string }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+  buildImage: (a: { contextDir: string; files: Record<string, string>; binaries: Record<string, Buffer>; image: string }) => Promise<{ ok: true; wasiDigest?: string } | { ok: false; reason: string }>;
+  /** Where a WASI app's carried module goes (wasi/moduleStore.ts); default the box's store. */
+  wasiModules?: { put(bytes: Uint8Array): Promise<string> } | null;
   /** `docker pull` a public image an app was installed from. */
   pullImage: (image: string) => Promise<void>;
   /** The server's front page: set from the backup when this server has none. */
@@ -156,16 +159,19 @@ function validMeta(v: unknown, serviceId: string): ArchiveAppMeta {
   } catch {
     bad("manifest");
   }
-  const parsed = parseManifest(manifest);
+  const parsed = parseAnyManifest(manifest);
   if (!parsed.ok) bad(`manifest: ${parsed.errors.join("; ")}`);
-  if (!IMAGE_RE.test(String((manifest as { runtime?: { image?: unknown } }).runtime?.image ?? ""))) bad("image name");
-  if (m!.rebuild !== "source" && m!.rebuild !== "pull") bad("rebuild");
+  const wasi = parsed.ok ? parsed.app.wasi : undefined;
+  if (!wasi && !IMAGE_RE.test(String((manifest as { runtime?: { image?: unknown } }).runtime?.image ?? ""))) bad("image name");
+  if (m!.rebuild !== "source" && m!.rebuild !== "pull" && m!.rebuild !== "module") bad("rebuild");
+  if ((m!.rebuild === "module") !== !!wasi?.digest) bad("a WebAssembly app carries its module");
+  if (m!.rebuild === "module" && !(Array.isArray(m!.parts) && m!.parts.some((p) => p?.name === "module"))) bad("no module");
   if (m!.imageDigest !== undefined && !/^sha256:[0-9a-f]{64}$/.test(String(m!.imageDigest))) bad("image digest");
   if (!Array.isArray(m!.parts)) bad("parts");
   if (m!.rebuild === "source" && !m!.parts!.some((p) => p?.name === "source")) bad("no source to rebuild from");
   for (const p of m!.parts!) {
     if (typeof p?.name !== "string" || typeof p.file !== "string") bad("part");
-    if (!/^(files|source|db:[A-Za-z0-9_-]{1,63})$/.test(p.name)) bad("part name");
+    if (!/^(files|source|module|db:[A-Za-z0-9_-]{1,63})$/.test(p.name)) bad("part name");
     if (!p.file.startsWith(`apps/${serviceId}/`) || !ENTRY_RE.test(p.file)) bad("part file");
     if (typeof p.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(p.sha256)) bad("part hash");
   }
@@ -345,9 +351,17 @@ async function installOne(
     return p ? join(dir, p.file) : undefined;
   };
   try {
-    const manifest = JSON.parse(meta.manifestJson) as { runtime: { image: string }; network?: Parameters<typeof egressSuggestions>[0] };
+    const manifest = JSON.parse(meta.manifestJson) as { runtime: { image: string; kind?: string; digest?: string }; network?: Parameters<typeof egressSuggestions>[0] };
     let image = manifest.runtime.image;
-    if (meta.rebuild === "source") {
+    let wasiDigest: string | null = null;
+    if (meta.rebuild === "module") {
+      // The module goes back by its digest, and only if the bytes are the ones the manifest names.
+      const bytes = await readFile(path("module")!);
+      const digest = await (deps.wasiModules ?? new WasiModuleStore()).put(bytes);
+      if (digest !== manifest.runtime.digest) throw new Error("its module doesn't match the digest it was installed with");
+      wasiDigest = digest;
+      summary.code = "its WebAssembly module, as approved";
+    } else if (meta.rebuild === "source") {
       if (!deps.sourceDir) throw new Error("this server can't rebuild apps (no working-tree folder)");
       const tree = await readTree(path("source")!);
       image = `flagship-vibe-${sid}:${now()}`.toLowerCase();
@@ -355,6 +369,7 @@ async function installOne(
       held.image = image;
       const built = await deps.buildImage({ contextDir: held.tree, files: tree.files, binaries: tree.binaries, image });
       if (!built.ok) throw new Error(`rebuilding it here failed: ${built.reason}`);
+      if (built.wasiDigest) wasiDigest = built.wasiDigest;
     } else {
       // Run exactly the code that was backed up: a tag is never allowed to resolve to new code.
       const pinned = pinnedImageRef(image, meta.imageDigest);
@@ -365,9 +380,11 @@ async function installOne(
         await deps.pullImage(image);
       }
     }
-    if (!(await deps.ops.imageExists(image))) throw new Error(`its image ${image} isn't here after ${meta.rebuild === "source" ? "the build" : "the pull"}`);
-    summary.code = meta.rebuild === "source" ? "rebuilt here from its saved source" : `pinned image ${image.slice(-71)}`;
-    const manifestJson = JSON.stringify({ ...(JSON.parse(meta.manifestJson) as object), runtime: { ...manifest.runtime, image } });
+    if (!wasiDigest && !(await deps.ops.imageExists(image))) throw new Error(`its image ${image} isn't here after ${meta.rebuild === "source" ? "the build" : "the pull"}`);
+    if (meta.rebuild !== "module") summary.code = meta.rebuild === "source" ? "rebuilt here from its saved source" : `pinned image ${image.slice(-71)}`;
+    const manifestJson = wasiDigest
+      ? JSON.stringify({ ...(JSON.parse(meta.manifestJson) as object), runtime: { ...manifest.runtime, digest: wasiDigest } })
+      : JSON.stringify({ ...(JSON.parse(meta.manifestJson) as object), runtime: { ...manifest.runtime, image } });
 
     if (Object.keys(meta.env).length > 0) {
       if (!deps.envStore || changed) {

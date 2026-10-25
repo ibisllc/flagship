@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "threshold": 1,
+  "keys": [
+    "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12"
+  ],
+  "pq": {
+    "keyIds": [
+      "80b89432c8bcb52cc3c46e06778c3271a674b76148b5a3eab900fa97e9543833"
+    ],
+    "legacyManifests": []
+  }
+}

@@ -29,6 +29,39 @@ export interface AppSpec {
    * mounted read-write at `/data` while the rest of the root stays read-only.
    */
   filesVolume?: string;
+  /** Container name; default `flagship-<serviceId>`. An app group's component has its own (appGroups/names.ts). */
+  containerName?: string;
+  /** The command after the image (a group component's `start`), as argv: no shell. */
+  command?: string[];
+  /** Extra `/etc/hosts` entries, name → IPv4: a group's members on the apps gateway. */
+  addHosts?: Record<string, string>;
+  /** This app's own limits (manifest v2 `resources`), clamped to the box's ceilings. */
+  limits?: Partial<Pick<ContainerLimits, "memory" | "cpus" | "pidsLimit">>;
+  /** A WASI app: run by the WASI worker, not a container (wasi/runner.ts). */
+  wasi?: import("./wasi/runner.js").WasiAppSpec;
+  /** An app made of several processes (appGroups/runner.ts). */
+  group?: import("./appGroups/runner.js").GroupSpec;
+  /** An approved manifest v2 `accelerator`: claimed from flagship-gpud at deploy (gpu/broker.ts). */
+  accelerator?: import("./gpu/broker.js").AppAcceleratorRequest;
+}
+
+/** The GPU allocator's deploy/stop hook (gpu/wire.ts). Unset in tests, tools and on boxes without one. */
+let acceleratorHook: import("./gpu/broker.js").AppAccelerators | null = null;
+export function setAcceleratorHook(hook: import("./gpu/broker.js").AppAccelerators | null): void {
+  acceleratorHook = hook;
+}
+
+/** The most one app may ask for through manifest v2 `resources`. */
+export const APP_LIMIT_CEILINGS = { memoryMiB: 2048, cpus: 2, pids: 1024 } as const;
+
+/** Manifest v2 `resources` as container limits, never above APP_LIMIT_CEILINGS. */
+export function limitsFromResources(r: { cpuMillis?: number; memoryMiB?: number; pids?: number } | undefined): AppSpec["limits"] {
+  if (!r) return undefined;
+  const out: NonNullable<AppSpec["limits"]> = {};
+  if (r.memoryMiB !== undefined) out.memory = `${Math.min(r.memoryMiB, APP_LIMIT_CEILINGS.memoryMiB)}m`;
+  if (r.cpuMillis !== undefined) out.cpus = (Math.min(r.cpuMillis, APP_LIMIT_CEILINGS.cpus * 1000) / 1000).toFixed(2);
+  if (r.pids !== undefined) out.pidsLimit = Math.min(r.pids, APP_LIMIT_CEILINGS.pids);
+  return Object.keys(out).length ? out : undefined;
 }
 
 /**
@@ -39,6 +72,11 @@ export interface AppSpec {
 let filesVolumeGuard: ((volume: string) => Promise<unknown>) | null = null;
 export function setFilesVolumeGuard(guard: ((volume: string) => Promise<unknown>) | null): void {
   filesVolumeGuard = guard;
+}
+
+/** Run the files-volume guard for a runtime that isn't a container (a WASI app's worker). */
+export async function prepareFilesVolume(volume: string): Promise<void> {
+  await filesVolumeGuard?.(volume);
 }
 
 /** Watches the disk while a `docker build` runs (appQuota/buildGuard.ts). Unset in tests and tools. */
@@ -54,6 +92,10 @@ export function filesMountArgs(volume: string, opts: { readonly?: boolean } = {}
 }
 
 const FILES_MOUNT_RE = /^type=volume,src=([^,]+),dst=\/data(,readonly)?$/;
+/** A dedicated database's data volume (dataLayer/dedicated.ts), on its Postgres container only. */
+const PGDATA_MOUNT_RE = /^type=volume,src=flagship-pgdata-[a-z0-9]{24},dst=\/var\/lib\/postgresql$/;
+/** Its Unix-socket folder, shared with that app's migration sandbox only (migrationSandbox.ts). */
+const PGSOCK_MOUNT_RE = /^type=volume,src=flagship-pgsock-[a-z0-9]{24},dst=\/var\/run\/postgresql(,readonly)?$/;
 // The egress gateway's resolver file for a sandbox bridge (egress/gateway.ts):
 // daemon-written, outside /var/flagship, mounted read-only over resolv.conf.
 const RESOLV_MOUNT_RE = /^type=bind,src=\/run\/(?:flagship-daemon\/)?flagship-resolv-[a-z0-9-]+\.conf,dst=\/etc\/resolv\.conf,readonly$/;
@@ -121,6 +163,10 @@ export function assertNoHostPathInDockerArgs(args: readonly string[]): void {
     // "named volume only", so they are refused outright. Data stores reach
     // containers over the host-gateway alias, not a mount.
     if (a === "--mount" && args[0] === "run" && RESOLV_MOUNT_RE.test(args[i + 1] ?? "")) {
+      i++;
+      continue;
+    }
+    if (a === "--mount" && args[0] === "run" && (PGDATA_MOUNT_RE.test(args[i + 1] ?? "") || PGSOCK_MOUNT_RE.test(args[i + 1] ?? ""))) {
       i++;
       continue;
     }
@@ -584,19 +630,31 @@ export class AppRunner {
   }
 
   async deploy(spec: AppSpec): Promise<string[]> {
+    for (const [name, ip] of Object.entries(spec.addHosts ?? {})) {
+      if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name) || !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) throw new Error(`refusing host entry ${JSON.stringify(`${name}:${ip}`)}`);
+    }
     if (spec.filesVolume) await filesVolumeGuard?.(spec.filesVolume);
+    // A GPU app runs under the GPU runtime gpud attached it to (gVisor nvproxy or a Kata VM), with
+    // exactly its reserved devices; without a GPU it runs only if its manifest has a CPU path.
+    const gpu = spec.accelerator
+      ? await (acceleratorHook ?? { beforeRun: async () => ({ kind: "refused" as const, reason: "This server has no GPU service." }) }).beforeRun(spec.serviceId, spec.accelerator, spec.containerName ?? this.containerName(spec.serviceId))
+      : null;
+    if (gpu?.kind === "refused" || (gpu?.kind === "cpu" && spec.accelerator?.requirement.fallback !== "cpu-if-supported")) throw new Error(gpu.reason);
+    if (gpu?.kind === "gpu") (await import("./gpu/broker.js")).checkGpuArgs(gpu.runArgs);
     const args = [
       "run",
       "-d",
       "--name",
-      this.containerName(spec.serviceId),
+      spec.containerName ?? this.containerName(spec.serviceId),
       // gVisor (docs/app-runtimes.md §5.1); throws while it isn't usable.
-      ...(await appSandboxRunArgs()),
-      ...this.hardeningArgs(),
+      ...(gpu?.kind === "gpu" ? [...gpu.runArgs, ...(await appSandboxRunArgs()).filter((x) => !x.startsWith("--runtime="))] : await appSandboxRunArgs()),
+      ...this.hardeningArgs(spec.limits),
+      ...Object.entries(spec.addHosts ?? {}).flatMap(([name, ip]) => ["--add-host", `${name}:${ip}`]),
       ...this.envArgs(spec.env),
       ...this.portArgs(spec.port, spec.containerPort),
       ...(spec.filesVolume ? filesMountArgs(spec.filesVolume) : []),
       spec.image,
+      ...(spec.command ?? []),
     ];
     // Regression insurance: a runtime container must never bind-mount a host
     // path or the docker socket either (/var/flagship stays off every mount).
@@ -604,6 +662,10 @@ export class AppRunner {
     await notifyContainersChanged();
     try {
       await this.cmd.run("docker", args);
+      if (gpu?.kind === "gpu") await acceleratorHook?.afterRun(spec.serviceId, true);
+    } catch (e) {
+      if (gpu?.kind === "gpu") await acceleratorHook?.afterRun(spec.serviceId, false).catch(() => {});
+      throw e;
     } finally {
       await notifyContainersChanged();
     }
@@ -615,6 +677,7 @@ export class AppRunner {
       await this.cmd.run("docker", ["stop", this.containerName(serviceId)]);
       await this.cmd.run("docker", ["rm", this.containerName(serviceId)]);
     } finally {
+      await acceleratorHook?.afterStop(serviceId).catch(() => {});
       await notifyContainersChanged();
     }
   }
@@ -677,7 +740,8 @@ export class AppRunner {
    * dedicated app bridge (see the ContainerLimits doc for the network
    * boundary rationale).
    */
-  private hardeningArgs(): string[] {
+  private hardeningArgs(own?: AppSpec["limits"]): string[] {
+    const limits = { ...this.limits, ...(own ?? {}) };
     const out: string[] = [
       "--cap-drop=ALL",
       "--security-opt=no-new-privileges",
@@ -688,11 +752,11 @@ export class AppRunner {
         `${this.limits.dataHostAlias}:host-gateway`,
       ]),
       "--memory",
-      this.limits.memory,
+      limits.memory,
       "--cpus",
-      this.limits.cpus,
+      limits.cpus,
       "--pids-limit",
-      String(this.limits.pidsLimit),
+      String(limits.pidsLimit),
     ];
     for (const cap of this.limits.capAdd) {
       out.push("--cap-add", cap);

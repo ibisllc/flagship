@@ -5,7 +5,7 @@
  * builds the screens-API handler. FLAGSHIP_EGRESS=off turns it all off and
  * removes the firewall rules (the old, unfenced behaviour).
  */
-import type { AdminGrantView, EgressSuggestion } from "@flagship/protocol";
+import type { AccessRule, AdminGrantView, EgressSuggestion } from "@flagship/protocol";
 import type { CommandRunner } from "../serviceRunner.js";
 import type { SwkOps } from "../keyCustodian.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
@@ -24,6 +24,20 @@ import { setContainersChangedHook } from "./sandboxNetworking.js";
 
 export interface EgressRuntime {
   status(): EgressStatus;
+  /**
+   * Ports on the apps gateway that forward to one app's own services (app
+   * groups' members, dedicated databases; gateway.ts forwardOwnedPort). The
+   * gateway address is null while the fence isn't enforcing.
+   */
+  ownedPorts: {
+    gateway(): string | null;
+    link(port: number, target: { host: string; port: number }, owner: string): Promise<boolean>;
+    unlink(port: number): Promise<void>;
+  };
+  /** An installed app's owner-signed access rules (a WASI app's host calls are judged by them too). */
+  accessRules(serviceId: string): readonly AccessRule[];
+  /** A host an app declared but its list doesn't mention: the owner gets the same access request. */
+  onUnmatched(serviceId: string, host: string): void;
   /** FLAGSHIP_EGRESS=off: the operator turned the fence off on purpose. */
   disabled: boolean;
   /** For the screens API: the signed endpoints and the views the apps list and detail carry. */
@@ -94,6 +108,9 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
     return {
       status: () => ({ enforced: false, reason: "FLAGSHIP_EGRESS=off" }),
       disabled: true,
+      ownedPorts: { gateway: () => null, link: async () => false, unlink: async () => {} },
+      accessRules: () => [],
+      onUnmatched: () => {},
       appEgress: null,
       pruneUninstalled: async () => {},
       noteInstalled: async () => {},
@@ -187,6 +204,13 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
   return {
     status: () => (dockerDown && !gateway.status().enforced ? { enforced: false, reason: "docker is not available" } : gateway.status()),
     disabled: false,
+    ownedPorts: {
+      gateway: () => gateway.appsGateway(),
+      link: (port, target, owner) => gateway.forwardOwnedPort(port, target, owner),
+      unlink: (port) => gateway.unforwardOwnedPort(port),
+    },
+    accessRules: (id) => (opts.app(id) ? store.rules(id) : []),
+    onUnmatched: (id, host) => recorder.onUnmatched(id, host),
     appEgress,
     pruneUninstalled: async () => {
       for (const id of store.serviceIds()) {

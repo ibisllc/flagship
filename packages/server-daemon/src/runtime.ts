@@ -25,6 +25,8 @@ import {
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
 import { fileUsedNonceStore } from "./updateConsumer.js";
 import { AppRunner, buildStartCheck, realCommandRunner, setBuildDiskWatch, setFilesVolumeGuard, type CommandRunner } from "./serviceRunner.js";
+import { RuntimeRouter } from "./appRuntimes.js";
+import { wireAppRuntimes, type AppRuntimes } from "./appRuntimeWiring.js";
 import { runSetupStep, runsUnprivileged } from "./privileged.js";
 import { ensureGvisor, gvisorMirrorBases, type GvisorResult } from "./appSandbox/gvisor.js";
 import { keepAppSandbox, setEgressFence } from "./appSandbox/state.js";
@@ -529,6 +531,8 @@ export interface DaemonRuntime {
    * tunnel-only / cert-only test profiles.
    */
   appRunner: AppRunner;
+  /** WASI apps, app groups and dedicated databases (appRuntimeWiring.ts, P04/P05). */
+  appRuntimes: AppRuntimes;
   dataProvisioner: DataProvisioner | null;
   /** Per-app disk limits (appQuota/manager.ts): budgets and events are wired by index.ts. */
   appQuota: AppQuotaManager;
@@ -1424,7 +1428,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // don't use the data layer can still deploy); DataProvisioner is
   // wired only if the data-services env file is supplied + readable;
   // ServicePlatform is wired only when host IRK + SWK are supplied.
-  const appRunner = new AppRunner();
+  // One runner for container apps, app groups and WASI apps (appRuntimes.ts, P04/P05).
+  const appRunner = new RuntimeRouter(realCommandRunner, {}, { onLog: (m) => console.warn(m) });
   const serviceActivity = new ServiceActivity();
   if (runsUnprivileged()) await runSetupStep("container-links").catch((e: Error) => console.warn(`[runtime] container links: ${e.message}`));
   else await ensureContainerLinksUnmanaged(realCommandRunner, { log: (m) => console.warn(m) });
@@ -1543,12 +1548,21 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     new RealFilesAdmin(realCommandRunner, loopVolumes),
   );
   dataStack?.start();
+  const appRuntimes = await wireAppRuntimes({
+    router: appRunner,
+    egress,
+    loopVolumes,
+    dataProvisioner,
+    ...(opts.dataDir ? { dataDir: opts.dataDir } : {}),
+    platform: () => servicePlatformRef.current,
+  });
   const appQuota = new AppQuotaManager({
     apps: () =>
       (servicePlatformRef.current?.list() ?? []).map((a) => ({
         serviceId: a.serviceId,
         files: a.data?.files,
-        postgres: Object.values(a.data?.postgres ?? {}).map((p) => ({ database: p.database, role: p.role })),
+        // A dedicated instance is held to its own disk image (dataLayer/dedicated.ts), not the shared quota.
+        postgres: Object.values(a.data?.postgres ?? {}).filter((p) => p.profile !== "dedicated").map((p) => ({ database: p.database, role: p.role })),
       })),
     budgets: () => null,
     files: loopVolumes,
@@ -1605,7 +1619,10 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       ...(apOpts.hostIrk ? { hostIdentityPub: apOpts.hostIrk.publicKey } : {}),
       swk: apOpts.swk,
       appRunner,
-      startCheck: buildStartCheck(realCommandRunner),
+      startCheck: appRunner.startCheck(buildStartCheck(realCommandRunner)),
+      runtimeCapabilities: () => appRuntimes.capabilities(),
+      linkPorts: appRuntimes.ports,
+      onAppForgotten: (id) => appRunner.forget(id),
       dataProvisioner,
       appAuthTokens: apOpts.appAuthTokens ?? null,
       domainGate: apOpts.domainGate ?? null,
@@ -1632,7 +1649,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
             : null,
       onLog: (m) => console.warn(m),
       // Creator SQL runs in a one-shot sandbox, never in this process (SEC-MIG-002).
-      runSql: dataProvisioner ? sandboxedRunSql(realCommandRunner) : null,
+      runSql: dataProvisioner ? sandboxedRunSql(realCommandRunner, undefined, (port) => appRuntimes.dedicated?.socketForPort(port) ?? Promise.resolve(null)) : null,
       activity: serviceActivity,
     });
     void servicePlatformRef.current.restore().then(({ restored, failed }) => {
@@ -1648,7 +1665,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       if (loopVolumes) {
         const sweep = () => {
           const keep = new Set((servicePlatformRef.current?.list() ?? []).flatMap((a) => (a.data?.files ? [a.data.files.volume] : [])));
-          void loopVolumes.sweepOrphans({ keep }).catch((e: Error) => console.warn(`[app-quota] orphan sweep skipped: ${e.message}`));
+          // Dedicated databases' images are theirs too (dataLayer/dedicated.ts).
+          void (appRuntimes.dedicated?.volumes() ?? Promise.resolve([]))
+            .then((vs) => {
+              for (const v of vs) keep.add(v);
+              return loopVolumes.sweepOrphans({ keep });
+            })
+            .catch((e: Error) => console.warn(`[app-quota] orphan sweep skipped: ${e.message}`));
         };
         sweep();
         setInterval(sweep, 24 * 60 * 60_000).unref();
@@ -1857,6 +1880,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     certManager,
     chat: chatHarness,
     appRunner,
+    appRuntimes,
     dataProvisioner,
     appQuota,
     servicePlatform: servicePlatformRef.current,

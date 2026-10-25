@@ -1,0 +1,11 @@
+# Build: podman build --build-arg BASE=<debian or cuda runtime image>@sha256:<digest> -t render-check .
+ARG BASE
+FROM ${BASE} AS build
+RUN apt-get update -q && apt-get install -y -q --no-install-recommends gcc libc6-dev libegl-dev libgles-dev && rm -rf /var/lib/apt/lists/*
+COPY render.c /src/
+RUN gcc -O2 -o /render-check /src/render.c -lEGL -lGLESv2
+FROM ${BASE}
+RUN apt-get update -q && apt-get install -y -q --no-install-recommends libegl1 libgles2 && rm -rf /var/lib/apt/lists/*
+COPY --from=build /render-check /render-check
+USER 10001
+ENTRYPOINT ["/render-check", "640", "480"]

@@ -122,6 +122,7 @@ export function buildAppCopySource(opts: AppCopySourceOptions) {
       parts.push({ name, bytes: (await stat(path)).size, sha256: await sha256File(path), ...(gz ? { encoding: "gzip" as const } : {}) });
       s.files.set(name, path);
     };
+    if (app.app?.wasi) throw new Error("a WebAssembly app can't be copied to another server yet; back the server up and restore it instead");
     const image = join(s.dir, "image.tar");
     await opts.ops.saveImage(app.manifest.runtime.image, image);
     await add("image", image);
@@ -155,7 +156,8 @@ export function buildAppCopySource(opts: AppCopySourceOptions) {
       serviceId: app.serviceId,
       creator: app.creator,
       slug: app.slug,
-      manifestJson: JSON.stringify(app.manifest),
+      // Schema 2 as signed (an app group's members come along).
+      manifestJson: app.manifestSource ?? JSON.stringify(app.manifest),
       appliedMigrations: [...(app.appliedMigrations ?? [])],
       parts,
       access: opts.access?.exportEntry(app.serviceId) ?? null,

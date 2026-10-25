@@ -1,0 +1,9 @@
+# Build: podman build --build-arg BASE=nvcr.io/nvidia/cuda@sha256:<devel digest> -t vector-add .
+ARG BASE
+FROM ${BASE} AS build
+COPY vector_add.cu /src/
+RUN nvcc -O2 -o /vector-add /src/vector_add.cu
+FROM ${BASE}
+COPY --from=build /vector-add /vector-add
+USER 10001
+ENTRYPOINT ["/vector-add"]

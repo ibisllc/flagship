@@ -38,10 +38,17 @@ import {
 } from "./policy.js";
 import { startProxyServer, startTcpForwarder, type ProxyServerHandle } from "./proxy.js";
 import { setSandboxNetworking } from "./sandboxNetworking.js";
+import { owningServiceId } from "../appGroups/names.js";
 
 export const DEFAULT_EGRESS_PORTS: FirewallPorts = { tls: 15443, http: 15080, dns: 15053 };
 /** Host data services an app or staging copy may reach (Postgres). */
 export const DEFAULT_DATA_PORTS = [5432];
+/**
+ * Ports on the apps gateway that each forward to one app's own loopback
+ * service: its dedicated database (dataLayer/dedicated.ts) or a member of its
+ * app group (appGroups/). Only that app's containers get through.
+ */
+export const OWNED_PORT_RANGE = { from: 15400, to: 15999 } as const;
 
 export interface EgressGatewayOptions {
   cmd: CommandRunner;
@@ -84,6 +91,7 @@ export class EgressGateway {
   private lastRefresh = 0;
   private readonly deniedAt = new Map<string, number>();
   private readonly live = new Set<{ src: string; host: string; close: () => void }>();
+  private readonly owned = new Map<number, { owner: string; target: { host: string; port: number }; handle: ProxyServerHandle }>();
 
   constructor(private readonly opts: EgressGatewayOptions) {
     this.ports = opts.ports ?? DEFAULT_EGRESS_PORTS;
@@ -112,6 +120,7 @@ export class EgressGateway {
           bridges: infos.map(({ kind, info }) => ({ kind, bridge: info.bridge })),
           ports: this.ports,
           dataPorts: this.opts.dataPorts ?? DEFAULT_DATA_PORTS,
+          ownedPorts: OWNED_PORT_RANGE,
         },
         { rulesDir: this.opts.rulesDir, log: this.log },
       );
@@ -197,8 +206,50 @@ export class EgressGateway {
     return this.refreshing;
   }
 
+  /** The apps bridge's gateway address, when the gateway enforces (owned ports listen there). */
+  appsGateway(): string | null {
+    return this.state.enforced ? (this.gateways.apps ?? null) : null;
+  }
+
+  /**
+   * Forward `<apps gateway>:port` to `target` on the host's loopback, for the
+   * containers of `owner` only (its main process and its group members):
+   * every other source is cut before a byte is forwarded. False when the
+   * gateway doesn't enforce or the port is outside OWNED_PORT_RANGE or held
+   * by another app.
+   */
+  async forwardOwnedPort(port: number, target: { host: string; port: number }, owner: string): Promise<boolean> {
+    const gw = this.appsGateway();
+    if (!gw || !Number.isInteger(port) || port < OWNED_PORT_RANGE.from || port > OWNED_PORT_RANGE.to) return false;
+    if (target.host !== "127.0.0.1") return false;
+    const held = this.owned.get(port);
+    if (held) {
+      if (held.owner !== owner) return false;
+      held.target = target;
+      return true;
+    }
+    const entry = { owner, target, handle: null as unknown as ProxyServerHandle };
+    entry.handle = await startTcpForwarder(gw, port, () => entry.target, (src) => this.ownedBy(src) === owner);
+    this.owned.set(port, entry);
+    return true;
+  }
+
+  async unforwardOwnedPort(port: number): Promise<void> {
+    const held = this.owned.get(port);
+    if (!held) return;
+    this.owned.delete(port);
+    await held.handle.close().catch(() => {});
+  }
+
+  /** The app a source address on the apps bridge belongs to. */
+  private ownedBy(src: string): string | null {
+    if (!this.fromBridge("apps", src)) return null;
+    return this.appByIp.get(src) ?? null;
+  }
+
   async stop(): Promise<void> {
     setSandboxNetworking(null);
+    for (const port of [...this.owned.keys()]) await this.unforwardOwnedPort(port);
     const hs = this.handles;
     this.handles = [];
     await Promise.all(hs.map((h) => h.close().catch(() => {})));
@@ -249,7 +300,8 @@ export class EgressGateway {
     const idOf = this.opts.serviceIdOf ?? ((n: string) => (n.startsWith(APPS_PREFIX) ? n.slice(APPS_PREFIX.length) : null));
     for (const c of info.containers) {
       const id = idOf(c.name);
-      if (id && c.ipv4) next.set(c.ipv4, id);
+      // A group member (`<serviceId>.<component>`) is its app: same approvals, same database.
+      if (id && c.ipv4) next.set(c.ipv4, owningServiceId(id));
     }
     this.appByIp = next;
   }

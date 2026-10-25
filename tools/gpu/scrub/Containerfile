@@ -1,0 +1,9 @@
+# Build: podman build --build-arg BASE=nvcr.io/nvidia/cuda@sha256:<devel digest> -t gpu-scrub .
+ARG BASE
+FROM ${BASE} AS build
+COPY scrub.cu /src/
+RUN nvcc -O2 -o /gpu-scrub /src/scrub.cu
+FROM ${BASE}
+COPY --from=build /gpu-scrub /gpu-scrub
+USER 10001
+ENTRYPOINT ["/gpu-scrub"]

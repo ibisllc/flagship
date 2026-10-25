@@ -1,6 +1,6 @@
 [package]
 name = "flagship-gpu"
-description = "Accelerator inventory, CDI validation and the device allocation journal."
+description = "Accelerator inventory, signed compatibility catalog, CDI validation, the device allocation journal and the GPU service (flagship-gpud)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,9 +11,12 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+flagship-crypto = { path = "../flagship-crypto" }
+ed25519-dalek = { version = "=3.0.0", default-features = false, features = ["fast", "zeroize"] }
 hmac = "=0.13.0"
 roxmltree = "=0.21.1"
 rusqlite = { version = "=0.40.2", features = ["bundled"] }
+rustix = { version = "=1.1.4", features = ["fs", "net", "process"] }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.11.0"
@@ -21,3 +24,7 @@ thiserror = "=2.0.20"
 
 [dev-dependencies]
 tempfile = "=3.23.0"
+
+[[bin]]
+name = "flagship-gpud"
+path = "src/bin/flagship-gpud.rs"

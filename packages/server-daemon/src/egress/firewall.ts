@@ -36,6 +36,12 @@ export interface FirewallPlan {
   ports: FirewallPorts;
   /** Host data-service ports apps and staging may reach (Postgres). */
   dataPorts: readonly number[];
+  /**
+   * Ports on the apps gateway that each forward to one app's own service (a
+   * dedicated database, an app group's member); the gateway admits only that
+   * app's containers on each (gateway.ts forwardOwnedPort).
+   */
+  ownedPorts?: { from: number; to: number };
 }
 
 export const CHAIN_NAT = "FLAGSHIP-EGRESS-NAT";
@@ -123,6 +129,7 @@ export function renderFirewall(plan: FirewallPlan): { v4: string; v6: string } {
       `-A ${CHAIN_IN} -i ${b} -p udp --dport ${dns} -j ACCEPT`,
     );
     if (reachesData) inp.push(`-A ${CHAIN_IN} -i ${b} -p tcp -m multiport --dports ${data} -j ACCEPT`);
+    if (kind === "apps" && plan.ownedPorts) inp.push(`-A ${CHAIN_IN} -i ${b} -p tcp --dport ${plan.ownedPorts.from}:${plan.ownedPorts.to} -j ACCEPT`);
     inp.push(
       `-A ${CHAIN_IN} -i ${b} -p tcp -j REJECT --reject-with tcp-reset`,
       `-A ${CHAIN_IN} -i ${b} -j REJECT --reject-with icmp-admin-prohibited`,

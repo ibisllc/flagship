@@ -71,6 +71,12 @@ export interface AppWasi {
   /** The .wasm file inside the app; the box compiles it itself and never loads precompiled code. */
   module: string;
   world: WasiWorld;
+  /**
+   * `sha256:<hex>` of the module's bytes. The box's deploy fills it in before it signs the install
+   * order, so the order names the exact code that runs (docs/wasi-apps.md); an install without it
+   * is refused.
+   */
+  digest?: string;
 }
 
 /** One more process in the app's own trust boundary: internal only, no route of its own. */
@@ -142,10 +148,11 @@ export function parseAnyManifest(input: unknown): AnyManifestParseResult {
       rt.image = extras.wasi?.module ?? "invalid.wasm";
       delete rt.module;
       delete rt.world;
+      delete rt.digest;
     } else if (kind !== "oci") {
       e('runtime.kind must be "oci" or "wasi"');
-    } else if (rt.module !== undefined || rt.world !== undefined) {
-      e("runtime.module and runtime.world are only for a wasi runtime");
+    } else if (rt.module !== undefined || rt.world !== undefined || rt.digest !== undefined) {
+      e("runtime.module, runtime.world and runtime.digest are only for a wasi runtime");
     }
     projection.runtime = rt;
   }
@@ -214,7 +221,12 @@ function parseWasi(rt: Record<string, unknown>, e: (m: string) => void): AppWasi
     e(`runtime.world must be one of ${WASI_WORLDS.join(", ")}`);
     ok = false;
   }
-  return ok ? { module: mod as string, world: world as WasiWorld } : undefined;
+  const digest = rt.digest;
+  if (digest !== undefined && (typeof digest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(digest))) {
+    e("runtime.digest must be sha256:<64 lowercase hex>");
+    ok = false;
+  }
+  return ok ? { module: mod as string, world: world as WasiWorld, ...(typeof digest === "string" ? { digest } : {}) } : undefined;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {

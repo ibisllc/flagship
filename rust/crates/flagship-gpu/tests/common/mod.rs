@@ -12,8 +12,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use flagship_gpu::catalog::{
-    ApprovedImage, CATALOG_SCHEMA, CatalogEntry, CatalogEnvelope, CatalogPayload, CatalogVerifier,
-    HostFacts, VerifiedCatalog, signing_bytes,
+    ApprovedImage, CATALOG_SCHEMA, CatalogEntry, CatalogEnvelope, CatalogPayload, CatalogSignature,
+    CatalogVerifier, CleanupProcedure, DriverPackage, HostFacts, Receipt, VerifiedCatalog,
+    signing_bytes,
 };
 use flagship_gpu::device::{
     Backend, Capability, DeviceRecord, PartitionId, PartitionMode, PartitionRecord, PciAddress,
@@ -35,6 +36,7 @@ pub const KERNEL: &str = "6.12.48+deb13-amd64";
 pub const DRIVER: &str = "580.95.05";
 pub const RUNSC: &str = "20260921.0";
 pub const NVCTK: &str = "nvidia-ctk 1.18.0";
+pub const KATA: &str = "kata 3.21.0";
 pub const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 pub fn fixture(name: &str) -> String {
@@ -50,17 +52,25 @@ pub fn key() -> LocalIdKey {
     LocalIdKey::new([7; 32])
 }
 
-/// Test signer: the "signature" is SHA-256 of the message under key "test".
+pub const TEST_KEY: &str = "7e57000000000000000000000000000000000000000000000000000000000000";
+
+/// Test signer: the "signature" is SHA-256 of the message under key TEST_KEY.
 #[derive(Debug)]
 pub struct TestVerifier;
 
 impl CatalogVerifier for TestVerifier {
-    fn verify(&self, key_id: &str, message: &[u8], signature: &[u8]) -> Result<(), String> {
-        if key_id != "test" {
-            return Err("unknown key".into());
-        }
-        if Sha256::digest(message).as_slice() != signature {
-            return Err("bad signature".into());
+    fn verify(&self, env: &CatalogEnvelope) -> Result<(), String> {
+        for s in &env.signatures {
+            if s.key_hex != TEST_KEY {
+                return Err("unknown key".into());
+            }
+            let want: String = Sha256::digest(signing_bytes(&s.key_hex, env.serial, &env.payload))
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect();
+            if want != s.signature_hex {
+                return Err("bad signature".into());
+            }
         }
         Ok(())
     }
@@ -68,13 +78,17 @@ impl CatalogVerifier for TestVerifier {
 
 pub fn sign(payload: &CatalogPayload) -> CatalogEnvelope {
     let text = serde_json::to_string(payload).unwrap();
-    let sig = Sha256::digest(signing_bytes("test", payload.serial, &text));
+    let sig = Sha256::digest(signing_bytes(TEST_KEY, payload.serial, &text));
     CatalogEnvelope {
         schema: CATALOG_SCHEMA.into(),
-        key_id: "test".into(),
         serial: payload.serial,
         payload: text,
-        signature: sig.iter().map(|b| format!("{b:02x}")).collect(),
+        signatures: vec![CatalogSignature {
+            key_hex: TEST_KEY.into(),
+            signature_hex: sig.iter().map(|b| format!("{b:02x}")).collect(),
+            pq: None,
+        }],
+        pq_bindings: Vec::new(),
     }
 }
 
@@ -91,6 +105,7 @@ pub fn entry(id: &str, backend: Backend, pci_ids: &[&str], toolkit: &str) -> Cat
         toolkits: vec![toolkit.into()],
         cdi_generators: vec![NVCTK.into()],
         runsc: if nvidia { vec![RUNSC.into()] } else { vec![] },
+        vm_runtimes: vec![KATA.into()],
         isolation: if nvidia {
             vec![
                 IsolationProfile::GvisorNvproxy,
@@ -100,11 +115,24 @@ pub fn entry(id: &str, backend: Backend, pci_ids: &[&str], toolkit: &str) -> Cat
             vec![IsolationProfile::VmPassthrough]
         },
         capabilities: vec![Capability::Compute],
+        graphics_apis: Vec::new(),
+        video_codecs: Vec::new(),
         partitioning: nvidia,
         cooperative_sharing: true,
         images: vec![ApprovedImage {
             purpose: "runtime".into(),
             reference: format!("registry.example/{id}@sha256:{DIGEST}"),
+        }],
+        driver_packages: vec![DriverPackage {
+            name: "nvidia-driver".into(),
+            version: DRIVER.into(),
+            arch: "amd64".into(),
+            sha256: DIGEST.into(),
+        }],
+        cleanup: CleanupProcedure::default(),
+        receipts: vec![Receipt {
+            id: format!("TEST-{id}"),
+            sha256: DIGEST.into(),
         }],
     }
 }
@@ -119,6 +147,7 @@ pub fn catalog() -> VerifiedCatalog {
             entry("a100", Backend::NvidiaCuda, &["0x20b0"], "13.0"),
             entry("mi210", Backend::AmdRocm, &["0x740f"], "6.4.3"),
         ],
+        advisories: Vec::new(),
     };
     VerifiedCatalog::open(&sign(&payload), &TestVerifier, 0).unwrap()
 }
@@ -129,6 +158,7 @@ pub fn host() -> HostFacts {
         module_signing_enforced: true,
         runsc: Some(RUNSC.into()),
         cdi_generator: Some(NVCTK.into()),
+        vm_runtime: Some(KATA.into()),
     }
 }
 

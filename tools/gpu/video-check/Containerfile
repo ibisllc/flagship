@@ -1,0 +1,6 @@
+# Build: podman build --build-arg BASE=<ffmpeg image with the vendor's codecs>@sha256:<digest> -t video-check .
+ARG BASE
+FROM ${BASE}
+COPY transcode.sh /transcode.sh
+USER 10001
+ENTRYPOINT ["/transcode.sh"]

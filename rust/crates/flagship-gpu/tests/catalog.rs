@@ -25,6 +25,7 @@ fn payload(serial: u64) -> CatalogPayload {
             entry("h100", Backend::NvidiaCuda, &["0x2330"], "13.0"),
             entry("mi210", Backend::AmdRocm, &["0x740f"], "6.4.3"),
         ],
+        advisories: Vec::new(),
     }
 }
 
@@ -39,7 +40,7 @@ fn verifies_before_parsing_and_refuses_tampering() {
         Err(CatalogError::BadSignature(_))
     ));
     let mut other_key = env.clone();
-    other_key.key_id = "attacker".into();
+    other_key.signatures[0].key_hex = "a77ac4e2".repeat(8);
     assert!(matches!(
         VerifiedCatalog::open(&other_key, &TestVerifier, 0),
         Err(CatalogError::BadSignature(_))

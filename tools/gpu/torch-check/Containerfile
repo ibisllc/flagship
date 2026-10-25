@@ -1,0 +1,6 @@
+# Build: podman build --build-arg BASE=<pytorch image>@sha256:<digest> -t torch-check .
+ARG BASE
+FROM ${BASE}
+COPY torch_check.py /torch_check.py
+USER 10001
+ENTRYPOINT ["python3", "/torch_check.py"]

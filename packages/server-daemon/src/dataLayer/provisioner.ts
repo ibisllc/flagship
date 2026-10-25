@@ -31,6 +31,10 @@ export interface PostgresStore {
   url: string;
   database: string;
   role: string;
+  /** "dedicated": in the app's own instance (dataLayer/dedicated.ts); absent: the shared one. */
+  profile?: "dedicated";
+  /** The instance's container (dumps and restores run there). Absent: the shared `flagship-postgres`. */
+  container?: string;
 }
 export interface FilesStore {
   /** The Docker named volume mounted at `/data`. */
@@ -75,6 +79,15 @@ export interface DataProvisionerOptions {
   filesSizeBytes?: (volume: string) => number | undefined | Promise<number | undefined>;
   /** Database size limits (appQuota/pgQuota.ts), set with the Postgres admin. */
   pgQuota?: PgQuotaAdmin;
+  /**
+   * The dedicated database profile (dataLayer/dedicated.ts): a prod app the
+   * box gives its own instance gets its databases there.
+   */
+  dedicated?: {
+    profileFor(creator: string, slug: string): "shared" | "dedicated";
+    forApp(creator: string, slug: string, opts?: { diskBytes?: number }): Promise<{ admin: PostgresAdmin; port: number; container: string }>;
+    dropApp(creator: string, slug: string): Promise<void>;
+  };
 }
 
 /** The Postgres store names a spec asks for (an older `kv` asks for the default one). */
@@ -104,6 +117,13 @@ export class DataProvisioner {
    */
   attach(admins: Pick<DataProvisionerOptions, "postgres" | "files" | "endpoints" | "nameKey" | "pgQuota">): void {
     this.opts = { ...this.opts, ...admins };
+  }
+
+  /** The dedicated database profile (dataLayer/dedicated.ts), once the box can offer it. */
+  setDedicated(d: DataProvisionerOptions["dedicated"] | null): void {
+    const { dedicated: _old, ...rest } = this.opts;
+    void _old;
+    this.opts = d ? { ...rest, dedicated: d } : rest;
   }
 
   /** Set how big a new files folder may be (the runtime, once its quota manager exists). */
@@ -139,6 +159,11 @@ export class DataProvisioner {
     return !!this.opts.files;
   }
 
+  private nameKey(): string {
+    if (!this.opts.nameKey) throw new Error("the data layer's name key isn't set up on this server");
+    return this.opts.nameKey;
+  }
+
   private pgAdmin(): { admin: PostgresAdmin; nameKey: string } {
     if (!this.opts.postgres) throw new Error("postgres admin not configured");
     if (!this.opts.nameKey) throw new Error("the data layer's name key isn't set up on this server");
@@ -151,6 +176,8 @@ export class DataProvisioner {
     stores: AppDataStores;
     /** "prod" (default) or the disjoint "dev" dataspace a staging copy uses. */
     space?: "dev" | "prod";
+    /** The disk a dedicated instance gets (manifest v2 `resources.diskMiB`). */
+    dedicatedDiskBytes?: number;
   }): Promise<AppDataCredentials> {
     const { creator, slug, stores } = args;
     const space = args.space ?? "prod";
@@ -161,10 +188,16 @@ export class DataProvisioner {
     const files = wantsFiles(stores);
     if (files && !this.opts.files) throw new Error("files admin not configured");
 
+    let dedicatedAdmin: PostgresAdmin | null = null;
     try {
       if (pgStores.length > 0) {
-        await this.opts.ready?.();
-        const { admin, nameKey } = this.pgAdmin();
+        const dedicated = space === "prod" && this.opts.dedicated?.profileFor(creator, slug) === "dedicated"
+          ? await this.opts.dedicated.forApp(creator, slug, args.dedicatedDiskBytes !== undefined ? { diskBytes: args.dedicatedDiskBytes } : {})
+          : null;
+        if (!dedicated) await this.opts.ready?.();
+        dedicatedAdmin = dedicated?.admin ?? null;
+        const shared = dedicated ? { admin: dedicated.admin, nameKey: this.nameKey() } : this.pgAdmin();
+        const { admin, nameKey } = shared;
         out.postgresSingleton = isSingletonStore(stores.postgres) || normalizeStoreFlag(stores.postgres).length === 0;
         out.postgres = {};
         for (const storeName of pgStores) {
@@ -174,11 +207,12 @@ export class DataProvisioner {
           const password = secret();
           await admin.createRoleAndDb({ db, role, password, extensions: APP_PG_EXTENSIONS });
           const host = ep.postgresHost ?? "127.0.0.1";
-          const port = ep.postgresPort ?? 5432;
+          const port = dedicated ? dedicated.port : (ep.postgresPort ?? 5432);
           out.postgres[storeName] = {
             url: `postgresql://${role}:${encodeURIComponent(password)}@${host}:${port}/${db}`,
             database: db,
             role,
+            ...(dedicated ? { profile: "dedicated" as const, container: dedicated.container } : {}),
           };
         }
       }
@@ -193,7 +227,11 @@ export class DataProvisioner {
         out.files = { volume };
       }
     } catch (e) {
-      // Leave nothing half-made behind.
+      // Leave nothing half-made behind; an app's own instance keeps the databases it already had.
+      if (dedicatedAdmin) {
+        for (const s of Object.values(out.postgres ?? {})) await dedicatedAdmin.dropRoleAndDb({ db: s.database, role: s.role }).catch(() => {});
+        out.postgres = {};
+      }
       await this.dropCredentials(out).catch(() => {});
       throw e;
     }
@@ -206,7 +244,10 @@ export class DataProvisioner {
    * loses exactly what it had.
    */
   async dropCredentials(creds: AppDataCredentials): Promise<void> {
-    const pg = Object.values(creds.postgres ?? {});
+    const all = Object.values(creds.postgres ?? {});
+    // A dedicated instance holds only this app's databases: it goes whole.
+    if (all.some((s) => s.profile === "dedicated") && this.opts.dedicated) await this.opts.dedicated.dropApp(creds.creator, creds.slug);
+    const pg = all.filter((s) => s.profile !== "dedicated");
     if (pg.length > 0 && this.opts.postgres) {
       await this.opts.ready?.();
       for (const s of pg) await this.opts.postgres.dropRoleAndDb({ db: s.database, role: s.role });

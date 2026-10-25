@@ -25,13 +25,15 @@ import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { InstalledService } from "../servicePlatform.js";
 import type { AppCopyOps } from "../appCopy/ops.js";
 import { readCarriedBinaries, readServiceSource } from "../llm/serviceSource.js";
+import { WasiModuleStore } from "../wasi/moduleStore.js";
 import type { CopyAccessEntry, CopySourceTree } from "../appCopy/wire.js";
 import type { ArchivedApiKey } from "../appApiKeys.js";
 import { sealDataFile } from "./format.js";
 import { createHash } from "node:crypto";
 
 /** How an importing box gets an app's image without the backup carrying it. */
-export type ArchiveRebuild = "source" | "pull";
+/** source: rebuilt from its saved tree; pull: its pinned public image; module: a WASI app's own module, carried in the archive. */
+export type ArchiveRebuild = "source" | "pull" | "module";
 
 /** Images the box made itself are named `flagship-*` and exist only there. */
 export function pullableImage(image: string): boolean {
@@ -117,6 +119,8 @@ export interface ArchiveBuildDeps {
   apiKeys?: { exportService(serviceId: string): ArchivedApiKey[] } | null;
   /** The front page's url label, or null. */
   frontPage?: (() => string | null) | null;
+  /** A WASI app's module, by digest (wasi/moduleStore.ts); default the box's store. */
+  wasiModules?: { read(digest: string): Promise<Buffer> } | null;
   /** Scratch folder; one app's files at a time. */
   workDir: string;
   now?: () => number;
@@ -141,7 +145,9 @@ async function planApps(deps: ArchiveBuildDeps): Promise<{
   const left: Array<{ serviceId: string; name: string; reason: string }> = [];
   for (const app of deps.apps()) {
     const hasSource = deps.sourceDir ? (await readServiceSource(deps.sourceDir, app.serviceId)).ok : false;
-    if (hasSource) take.push({ app, rebuild: "source" });
+    // A WASI app carries its exact module: what comes back is the code the owner approved.
+    if (app.app?.wasi?.digest) take.push({ app, rebuild: "module" });
+    else if (hasSource) take.push({ app, rebuild: "source" });
     else if (pullableImage(app.manifest.runtime.image)) take.push({ app, rebuild: "pull" });
     else left.push({ serviceId: app.serviceId, name: appName(app), reason: NOT_PORTABLE_REASON });
   }
@@ -294,7 +300,11 @@ export async function buildServerArchive(
         let n = 0;
         // N09: an app with both a database and files is paused for both, so they are one moment of
         // the app, not two. An app with only one of them needs no pause beyond what that part takes.
-        const both = Object.keys(app.data?.postgres ?? {}).length > 0 && !!app.data?.files;
+        // An app group's members and a WASI app's worker are held still whatever stores they have:
+        // the main container's pause alone wouldn't stop them writing.
+        const both =
+          (Object.keys(app.data?.postgres ?? {}).length > 0 && !!app.data?.files) ||
+          ((!!app.app?.wasi || (app.app?.components.length ?? 0) > 0) && (!!app.data?.files || Object.keys(app.data?.postgres ?? {}).length > 0));
         const resume = both ? await deps.ops.quiesce?.(deps.containerName(app.serviceId)) : undefined;
         try {
           for (const [store, cred] of Object.entries(app.data?.postgres ?? {})) {
@@ -309,6 +319,12 @@ export async function buildServerArchive(
           }
         } finally {
           await resume?.();
+        }
+        if (app.app?.wasi?.digest) {
+          const out = join(dir, "module.wasm");
+          const modules = deps.wasiModules ?? new WasiModuleStore();
+          await writeFile(out, await modules.read(app.app.wasi.digest), { mode: 0o600 });
+          await stage("module", "module.wasm", out);
         }
         if (deps.sourceDir) {
           const tree = await readServiceSource(deps.sourceDir, app.serviceId);
@@ -334,7 +350,8 @@ export async function buildServerArchive(
           creator: app.creator,
           slug: app.slug,
           name: appName(app),
-          manifestJson: JSON.stringify(app.manifest),
+          // Schema 2 is kept as signed (a WASI app's module digest, a group's members).
+          manifestJson: app.manifestSource ?? JSON.stringify(app.manifest),
           rebuild: rebuildOf.get(app.serviceId) ?? "pull",
           ...(imageDigest ? { imageDigest } : {}),
           appliedMigrations: [...(app.appliedMigrations ?? [])],

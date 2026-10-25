@@ -29,7 +29,7 @@ import {
   egressSuggestions,
   isLanAddress,
   parseAppCopyGrant,
-  parseManifest,
+  parseAnyManifest,
   parseServiceId,
   verifyAppCopyGrant,
   verifyInstallService,
@@ -239,8 +239,9 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
     } catch {
       bad("manifest");
     }
-    const parsed = parseManifest(manifest);
+    const parsed = parseAnyManifest(manifest);
     if (!parsed.ok) bad(`manifest: ${parsed.errors.join("; ")}`);
+    if (parsed.ok && parsed.app.wasi) bad("a WebAssembly app can't be copied yet");
     if (!IMAGE_RE.test(String((manifest as { runtime?: { image?: unknown } }).runtime?.image ?? ""))) bad("image name");
     if (!Array.isArray(m!.parts)) bad("parts");
     const seen = new Set<string>();

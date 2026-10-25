@@ -30,6 +30,23 @@ import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import { migrationFiles, resolveDeployTarget, type NameHolders } from "../llm/serviceName.js";
 import { writeSourceTree } from "../llm/serviceSource.js";
 import { whileDeploying, type DeployingTracker } from "../serviceActivity.js";
+import { WasiModuleStore } from "../wasi/moduleStore.js";
+import { readFile } from "node:fs/promises";
+
+/** The module a WASI manifest names (`runtime.kind: "wasi"`), or null for any other app. */
+export function wasiModulePath(manifestJson: string | undefined): string | null {
+  if (!manifestJson) return null;
+  try {
+    const m = JSON.parse(manifestJson) as { runtime?: { kind?: unknown; module?: unknown } };
+    if (m.runtime?.kind !== "wasi") return null;
+    const p = m.runtime.module;
+    return typeof p === "string" && /^[A-Za-z0-9._-][A-Za-z0-9._/-]{0,199}\.wasm$/.test(p) && !p.split("/").includes("..") ? p : "";
+  } catch {
+    return null;
+  }
+}
+
+let defaultModules: { put(bytes: Uint8Array): Promise<string> } | null = null;
 
 export interface DeployArtifactDeps {
   servicePlatform: ServicePlatform;
@@ -85,8 +102,16 @@ export interface InstallArtifactArgs extends DeployArtifactArgs {
  */
 export async function buildAppImage(
   cmd: CommandRunner,
-  a: { contextDir: string; files: Record<string, string>; binaries?: Record<string, Buffer>; keepBinaries?: boolean; image: string },
-): Promise<{ ok: true } | { ok: false; reason: string }> {
+  a: {
+    contextDir: string;
+    files: Record<string, string>;
+    binaries?: Record<string, Buffer>;
+    keepBinaries?: boolean;
+    image: string;
+    /** Where a WASI app's module goes (wasi/moduleStore.ts); default the box's store. */
+    wasiModules?: { put(bytes: Uint8Array): Promise<string> };
+  },
+): Promise<{ ok: true; wasiDigest?: string } | { ok: false; reason: string }> {
   try {
     const w = await writeSourceTree(a.contextDir, a.files, {
       ...(a.binaries ? { binaries: a.binaries } : {}),
@@ -95,6 +120,23 @@ export async function buildAppImage(
     if (!w.ok) return { ok: false, reason: `unsafe path in artifact files: ${w.unsafePath}` };
   } catch (e) {
     return { ok: false, reason: `failed to write source tree: ${(e as Error).message}` };
+  }
+  // A WebAssembly app has no image: its module goes to the box's store and the install names its digest (docs/wasi-apps.md).
+  const wasm = wasiModulePath(a.files["flagship.app.json"]);
+  if (wasm !== null) {
+    if (wasm === "") return { ok: false, reason: "runtime.module must be a .wasm file inside the app" };
+    let bytes: Buffer;
+    try {
+      bytes = a.binaries?.[wasm] ?? (await readFile(join(a.contextDir, wasm)));
+    } catch {
+      return { ok: false, reason: `the app has no ${wasm}: build it for wasm32-wasip1 and include it` };
+    }
+    try {
+      defaultModules ??= new WasiModuleStore();
+      return { ok: true, wasiDigest: await (a.wasiModules ?? defaultModules).put(bytes) };
+    } catch (e) {
+      return { ok: false, reason: (e as Error).message };
+    }
   }
   try {
     await runDockerBuild(cmd, a.image, a.contextDir);
@@ -184,6 +226,10 @@ export function buildArtifactPipeline(deps: DeployArtifactDeps) {
     // The service's working tree (what an edit later starts from), and the
     // image: built from it now, or the one already built and tested.
     let image: string;
+    let wasiDigest: string | undefined;
+    if (prebuilt && wasiModulePath(manifestJson) !== null) {
+      return { ok: false, reason: "a WebAssembly app can't go live from an AI test copy yet; deploy it from its files" };
+    }
     if (prebuilt) {
       image = prebuilt;
       try {
@@ -210,12 +256,15 @@ export function buildArtifactPipeline(deps: DeployArtifactDeps) {
         if (/^docker build failed/.test(built.reason)) await note(buildId, mode, "error", built.reason);
         return { ok: false, reason: built.reason };
       }
+      wasiDigest = built.wasiDigest;
     }
 
     // Patch the manifest's runtime.image to our local tag, then sign + install.
     const patchedManifestJson = JSON.stringify({
       ...manifest,
-      runtime: { ...((manifest as { runtime?: object }).runtime ?? {}), image },
+      runtime: wasiDigest
+        ? { ...((manifest as { runtime?: object }).runtime ?? {}), digest: wasiDigest }
+        : { ...((manifest as { runtime?: object }).runtime ?? {}), image },
     });
     const request: InstallServiceRequest = {
       serverId: serverFqdn,

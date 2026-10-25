@@ -72,6 +72,18 @@ impl FairQueue {
             .collect()
     }
 
+    /// Every app's queue, in rotation order.
+    pub fn snapshot(&self) -> Vec<(String, Vec<AllocationId>)> {
+        self.rotation
+            .iter()
+            .filter_map(|a| {
+                self.queues
+                    .get(a)
+                    .map(|q| (a.clone(), q.iter().cloned().collect()))
+            })
+            .collect()
+    }
+
     /// Take `id` off the queue. If it was an app's head, that app moves to
     /// the back of the rotation.
     pub fn remove(&mut self, id: &AllocationId) -> bool {

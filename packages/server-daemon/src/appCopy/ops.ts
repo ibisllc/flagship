@@ -180,8 +180,27 @@ function credsOf(store: PostgresStore): { role: string; password: string } {
   return { role: decodeURIComponent(u.username) || store.role, password: decodeURIComponent(u.password) };
 }
 
+/**
+ * How an app that isn't one container is held still (appRuntimes.ts quiesce):
+ * every member of an app group, or a WASI app's worker. Undefined: not such
+ * an app, pause the container as before.
+ */
+type QuiesceHook = (serviceId: string) => Promise<(() => Promise<void>) | undefined | null>;
+let quiesceHook: QuiesceHook | null = null;
+export function setAppQuiesceHook(hook: QuiesceHook | null): void {
+  quiesceHook = hook;
+}
+
+/** Where a store's dumps and restores run: its own instance when it has one (dataLayer/dedicated.ts). */
+export function pgContainerFor(store: PostgresStore, shared = "flagship-postgres"): string {
+  if (store.container !== undefined && !/^flagship-pgd-[0-9a-f]{24}$/.test(store.container)) throw new Error("not a database container");
+  return store.container ?? shared;
+}
+
 export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?: string } = {}): AppCopyOps {
-  const pg = opts.postgresContainer ?? "flagship-postgres";
+  const shared = opts.postgresContainer ?? "flagship-postgres";
+  // An app with its own database instance (dataLayer/dedicated.ts) is dumped and restored there.
+  const pgOf = (store: PostgresStore) => pgContainerFor(store, shared);
   const pgArgs = (role: string, db: string) => ["-h", "127.0.0.1", "-U", role, "-d", db];
   return {
     saveImage: (image, outPath) => docker(() => execToFile("docker", ["save", image], outPath)),
@@ -199,7 +218,7 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
     },
     listDump: async (store, inPath) => {
       const { role, password } = credsOf(store);
-      return exec("docker", ["exec", "-i", "-e", "PGPASSWORD", pg, "pg_restore", ...pgArgs(role, store.database), "-l"], {
+      return exec("docker", ["exec", "-i", "-e", "PGPASSWORD", pgOf(store), "pg_restore", ...pgArgs(role, store.database), "-l"], {
         stdinFrom: inPath,
         env: { PGPASSWORD: password },
       });
@@ -221,7 +240,7 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
           "exec",
           "-e",
           "PGPASSWORD",
-          pg,
+          pgOf(store),
           "pg_dump",
           ...pgArgs(role, store.database),
           "-Fc",
@@ -242,7 +261,7 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
           "-i",
           "-e",
           "PGPASSWORD",
-          pg,
+          pgOf(store),
           "pg_restore",
           ...pgArgs(role, store.database),
           "--no-owner",
@@ -255,6 +274,10 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
       );
     },
     quiesce: async (container) => {
+      if (quiesceHook && container.startsWith("flagship-")) {
+        const held = await quiesceHook(container.slice("flagship-".length));
+        if (held) return held;
+      }
       const running = (await exec("docker", ["ps", "-q", "--filter", `name=^${container}$`, "--filter", "status=running"])).trim() !== "";
       if (!running) return undefined;
       await exec("docker", ["pause", container]);
@@ -279,7 +302,7 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
       const { role, password } = credsOf(store);
       const out = await exec(
         "docker",
-        ["exec", "-e", "PGPASSWORD", pg, "psql", ...pgArgs(role, store.database), "-tAc", "SELECT pg_database_size(current_database())"],
+        ["exec", "-e", "PGPASSWORD", pgOf(store), "psql", ...pgArgs(role, store.database), "-tAc", "SELECT pg_database_size(current_database())"],
         { env: { PGPASSWORD: password } },
       );
       return bytesFrom(out, "a database");

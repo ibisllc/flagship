@@ -611,7 +611,8 @@ export class LoopVolumes {
 }
 
 function assertVolume(volume: string): void {
-  if (!isFilesVolume(volume)) throw new Error(`not a files volume name ${JSON.stringify(volume)}`);
+  // A dedicated database's data (dataLayer/dedicated.ts) lives in a quota image too.
+  if (!isFilesVolume(volume) && !/^flagship-pgdata-[0-9a-f]{24}$/.test(volume)) throw new Error(`not a files volume name ${JSON.stringify(volume)}`);
 }
 
 function parseLabels(json: string): Record<string, string> {

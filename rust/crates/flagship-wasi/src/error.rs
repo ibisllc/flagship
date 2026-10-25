@@ -44,6 +44,15 @@ pub enum WorkerError {
     ComponentRefused,
     #[error("refused: module imports {module}.{name}, which this worker does not grant")]
     ImportNotGranted { module: String, name: String },
+    #[error(
+        "refused: module imports flagship_v1.{call}, and its manifest does not declare {capability}"
+    )]
+    CapabilityNotDeclared {
+        call: &'static str,
+        capability: &'static str,
+    },
+    #[error("refused: this compiled module belongs to another app, digest or worker")]
+    ModuleNotForThisApp,
     #[error("refused: module has no _start export")]
     NoEntryPoint,
     #[error("compile failed: {0}")]

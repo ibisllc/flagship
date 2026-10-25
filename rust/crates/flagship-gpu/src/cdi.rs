@@ -169,7 +169,7 @@ pub struct ValidatedCdi {
 }
 
 /// Nodes that grant management or display control, never per-workload.
-fn is_management_node(p: &str) -> bool {
+pub(crate) fn is_management_node(p: &str) -> bool {
     matches!(
         p,
         "/dev/nvidia-modeset" | "/dev/nvidia-uvm-tools" | "/dev/mem" | "/dev/kmem" | "/dev/port"
@@ -221,6 +221,34 @@ impl CdiSpec {
     pub fn without_all(mut self) -> Self {
         self.devices.retain(|d| d.name != "all");
         self
+    }
+
+    /// Also drops what Flagship never grants a workload: display and
+    /// management device nodes (`/dev/dri/card*`, `nvidia-modeset`, ...) and
+    /// the hooks that link them. Headless rendering needs render nodes only.
+    #[must_use]
+    pub fn sanitized(self) -> Self {
+        fn strip(e: &mut ContainerEdits) {
+            e.device_nodes.retain(|n| {
+                !is_management_node(&n.path)
+                    && !n.host_path.as_deref().is_some_and(is_management_node)
+            });
+            e.hooks.retain(|h| {
+                !h.args.iter().any(|a| {
+                    a.split_once("::").is_some_and(|(from, _)| {
+                        from.rsplit('/')
+                            .next()
+                            .is_some_and(|n| n.starts_with("card"))
+                    })
+                })
+            });
+        }
+        let mut s = self.without_all();
+        strip(&mut s.container_edits);
+        for d in &mut s.devices {
+            strip(&mut d.container_edits);
+        }
+        s
     }
 }
 
@@ -365,20 +393,31 @@ pub fn validate(
     if !v.is_empty() {
         return Err(v);
     }
-    let canonical = serde_json::to_vec(spec).unwrap_or_default();
-    let digest = Sha256::digest(&canonical);
-    let mut spec_digest = String::from("sha256:");
-    for b in digest.iter() {
-        spec_digest.push_str(&format!("{b:02x}"));
-    }
     Ok(ValidatedCdi {
         devices: claim
             .device_names
             .iter()
             .map(|n| format!("{}={n}", spec.kind))
             .collect(),
-        spec_digest,
+        spec_digest: spec_digest(spec),
     })
+}
+
+/// `sha256:` of the spec's canonical JSON (the parsed form re-serialised),
+/// so the runtime can refuse a file that changed after validation.
+pub fn spec_digest(spec: &CdiSpec) -> String {
+    let canonical = serde_json::to_vec(spec).unwrap_or_default();
+    let digest = Sha256::digest(&canonical);
+    let mut out = String::from("sha256:");
+    for b in digest.iter() {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
+}
+
+/// Re-read a spec file and check it is still the one that was validated.
+pub fn spec_file_matches(text: &str, expected_digest: &str) -> bool {
+    serde_json::from_str::<CdiSpec>(text).is_ok_and(|s| spec_digest(&s) == expected_digest)
 }
 
 /// The spec file and its directory must be root-owned, not group- or

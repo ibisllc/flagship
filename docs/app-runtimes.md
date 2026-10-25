@@ -262,6 +262,36 @@ real box, under gVisor) hasn't run yet.
 
 `/tmp` stays a 64 MB tmpfs.
 
+### 5.4 Database profiles (P05)
+
+An app's Postgres lives in one of two profiles; the box chooses, a manifest
+can't (`dataLayer/dedicated.ts`, `appRuntimeWiring.ts`):
+
+- **dedicated** (new arch-v2/Podman boxes, for new apps): the app's own
+  instance of the pinned Postgres image, in its own container with its own
+  memory (256 MiB), CPU (half a core), process (128), connection (20),
+  temp-file and WAL limits, its data in its own quota image allocated up
+  front (manifest v2 `resources.diskMiB`, default 512 MiB; refused when the
+  disk would keep less than 2 GiB or a tenth free). Filling it ends in ENOSPC
+  inside that image; a memory or connection storm stays in its cgroup. The
+  app reaches it at the same `host.flagship.internal` address, on a port the
+  apps gateway forwards for that app's containers only (`OWNED_PORT_RANGE`
+  15400-15999); migrations reach it through its Unix socket with no network;
+  dumps and restores run inside it; uninstall drops it whole. Passwords are
+  required on the socket too (`--auth-local=scram-sha-256`).
+- **shared** (existing apps, older boxes, a box whose egress gateway isn't
+  enforcing): every app is a database and role in `flagship-postgres`, held
+  by the role limits and the block/stop limiter above.
+
+`<dataDir>/data/database-profile.json` (`{"default": "shared"|"dedicated",
+"apps": {"<creator>--<slug>": …}}`) overrides the choice; there is no owner
+screen for it yet. The quota limiter skips dedicated databases (their image is
+their limit). Peer backups (`volumeDump.ts`) still dump only the shared
+instance; whole-server backups and app copies dump each app's own.
+
+WebAssembly apps (`runtime.kind: "wasi"`) are in `docs/wasi-apps.md`; apps
+made of several processes (`components`) in `docs/app-groups.md`.
+
 ## 6. Builds
 
 ### 6.1 The manifest

@@ -14,7 +14,6 @@
  */
 
 import {
-  parseManifest,
   isSingletonStore,
   wantsFiles,
   type AppDataStores,
@@ -57,6 +56,16 @@ import type { TabRegistry } from "./browser/tabRegistry.js";
 import type { AuthorityHub } from "./authority/hub.js";
 import { digestOf, runOrderOperation } from "./authority/orderOperation.js";
 import type { AppPullState, AppPullStateStore, UpdatePolicy } from "./updateClient.js";
+import type { BoxRuntimeCapabilities, NormalizedApp } from "@flagship/protocol";
+import { parseAppManifest, runtimeExtras, type ParsedApp } from "./appModel.js";
+
+/** Restoring what was installed never re-judges admission: an app the box can no longer run stays listed and says why it won't start. */
+const RESTORE_CAPABILITIES: BoxRuntimeCapabilities = {
+  accelerators: [{ backend: "nvidia-cuda", devices: 8, capabilities: ["compute", "graphics", "video-encode", "video-decode"], sharing: ["exclusive", "partition", "cooperative"] }, { backend: "amd-rocm", devices: 8, capabilities: ["compute", "graphics", "video-encode", "video-decode"], sharing: ["exclusive", "partition", "cooperative"] }, { backend: "intel-level-zero", devices: 8, capabilities: ["compute", "graphics", "video-encode", "video-decode"], sharing: ["exclusive", "partition", "cooperative"] }],
+  isolation: ["sandbox", "vm"],
+  wasiWorlds: ["command", "http-proxy"],
+  appGroups: true,
+};
 
 export interface InstalledService {
   creator: string;
@@ -76,6 +85,10 @@ export interface InstalledService {
   installedAt: number;
   /** SQL migrations already run against its database, by filename. */
   appliedMigrations?: string[];
+  /** Manifest schema 2: the normalized app (runtime kind, resources, components). */
+  app?: NormalizedApp;
+  /** Manifest schema 2: the manifest as signed, kept so a restart restores it whole. */
+  manifestSource?: string;
 }
 
 /** A schema migration shipped with a version of an app (`migrations/*.sql`). */
@@ -228,6 +241,12 @@ export interface ServicePlatformDeps {
   runSql?: ((a: { pgUrl: string; sql: string }) => Promise<void>) | null;
   /** Marks a service as deploying while an install or redeploy of it runs (its status pill). */
   activity?: DeployingTracker | null;
+  /** What this box can run (manifest v2 admission); absent: release 0.3's container-only set. */
+  runtimeCapabilities?: () => BoxRuntimeCapabilities;
+  /** Owned gateway ports for app groups' member links (appGroups/portBook.ts). */
+  linkPorts?: { portFor(key: string): Promise<number>; release(prefix: string): Promise<number[]> } | null;
+  /** Uninstall: what a runtime keeps per app goes too (appRuntimes.ts forget). */
+  onAppForgotten?: ((serviceId: string) => Promise<void>) | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -243,6 +262,15 @@ export class ServicePlatform {
   private admitNewApp: (() => string | null) | null = null;
 
   private readonly envNonces: UsedNonceStore;
+
+  private parse(json: string, restoring = false): ParsedApp {
+    return parseAppManifest(json, restoring ? RESTORE_CAPABILITIES : this.deps.runtimeCapabilities?.());
+  }
+
+  /** The v2 fields an installed app carries (none for a v1 manifest). */
+  private static v2Fields(p: { app: NormalizedApp; source: string }): Pick<InstalledService, "app" | "manifestSource"> {
+    return p.app.schemaVersion === 2 ? { app: p.app, manifestSource: p.source } : {};
+  }
 
   constructor(private readonly deps: ServicePlatformDeps) {
     this.maxAgeMs = deps.maxAgeMs ?? 5 * 60_000;
@@ -369,7 +397,7 @@ export class ServicePlatform {
       // the signature against the host's IRK so this is defense-in-depth.
     }
 
-    const parsed = parseManifest(safeJsonParse(r.manifestJson));
+    const parsed = this.parse(r.manifestJson);
     if (!parsed.ok) {
       return { ok: false, reason: `manifest invalid: ${parsed.errors.join("; ")}` };
     }
@@ -401,6 +429,7 @@ export class ServicePlatform {
           creator: r.creator,
           slug: r.slug,
           stores: stores ?? {},
+          ...(parsed.app.resources?.diskMiB !== undefined ? { dedicatedDiskBytes: parsed.app.resources.diskMiB * 1024 * 1024 } : {}),
         });
       } catch (e) {
         return { ok: false, reason: `data provisioning failed: ${(e as Error).message}` };
@@ -434,6 +463,7 @@ export class ServicePlatform {
       creator: r.creator,
       slug: r.slug,
       manifest: parsed.manifest,
+      app: parsed.app,
       data,
       apiToken,
       hostPort: port,
@@ -484,6 +514,7 @@ export class ServicePlatform {
       data,
       installedAt: this.now(),
       appliedMigrations: migrated.ok ? migrated.applied : [],
+      ...ServicePlatform.v2Fields(parsed),
     };
     this.apps.set(serviceId, installed);
     this.byUrlLabel.set(urlLabel.toLowerCase(), installed);
@@ -629,7 +660,7 @@ export class ServicePlatform {
     if (!app) return { ok: false, reason: "not installed" };
     const apiToken = this.deps.appAuthTokens ? await this.deps.appAuthTokens.tokenForApp(serviceId).catch(() => null) : null;
     try {
-      const spec = await this.containerSpec({ serviceId, creator: app.creator, slug: app.slug, manifest: app.manifest, data: app.data, apiToken, hostPort: app.containerPort });
+      const spec = await this.containerSpec({ serviceId, creator: app.creator, slug: app.slug, manifest: app.manifest, app: app.app, data: app.data, apiToken, hostPort: app.containerPort });
       await this.deps.appRunner.restart(spec);
       await this.assertStarted(spec);
       return { ok: true };
@@ -649,7 +680,7 @@ export class ServicePlatform {
     const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
     const old = this.apps.get(serviceId);
     if (!old) return { ok: false, reason: `app ${serviceId} is not installed` };
-    const parsed = parseManifest(safeJsonParse(r.manifestJson));
+    const parsed = this.parse(r.manifestJson);
     if (!parsed.ok) {
       return { ok: false, reason: `manifest invalid: ${parsed.errors.join("; ")}` };
     }
@@ -678,7 +709,12 @@ export class ServicePlatform {
       }
       let fresh: AppDataCredentials;
       try {
-        fresh = await this.deps.dataProvisioner.provisionApp({ creator: r.creator, slug: r.slug, stores: added });
+        fresh = await this.deps.dataProvisioner.provisionApp({
+          creator: r.creator,
+          slug: r.slug,
+          stores: added,
+          ...(parsed.app.resources?.diskMiB !== undefined ? { dedicatedDiskBytes: parsed.app.resources.diskMiB * 1024 * 1024 } : {}),
+        });
       } catch (e) {
         return { ok: false, reason: `data provisioning failed: ${(e as Error).message}` };
       }
@@ -697,7 +733,7 @@ export class ServicePlatform {
       ? await this.deps.appAuthTokens.tokenForApp(serviceId).catch(() => null)
       : null;
     const base = { serviceId, creator: r.creator, slug: r.slug, apiToken, hostPort: old.containerPort };
-    const spec = await this.containerSpec({ ...base, manifest, data });
+    const spec = await this.containerSpec({ ...base, manifest, app: parsed.app, data });
     const migrated = await this.migrate(serviceId, data, old.appliedMigrations ?? [], args.migrations);
     if (!migrated.ok) {
       // Each file runs in its own transaction: the failed one left nothing
@@ -714,7 +750,8 @@ export class ServicePlatform {
     } catch (e) {
       const reason = (e as Error).message;
       try {
-        await this.deps.appRunner.restart(await this.containerSpec({ ...base, manifest: old.manifest, data: old.data }));
+        await this.deps.appRunner.restart(await this.containerSpec({ ...base, manifest: old.manifest, app: old.app, data: old.data }));
+        this.deps.onLog?.(`[service-platform] ${serviceId}: the new version didn't start; every process of the previous version is back`);
       } catch (back) {
         this.deps.onLog?.(`[service-platform] ${serviceId}: new version failed and the previous one didn't come back: ${(back as Error).message}`);
       }
@@ -727,7 +764,10 @@ export class ServicePlatform {
       return { ok: false, reason: `the new version didn't start: ${reason}` };
     }
 
-    const updated: InstalledService = { ...old, manifest, data, appliedMigrations: migrated.applied };
+    const { app: _oldApp, manifestSource: _oldSource, ...oldBase } = old;
+    void _oldApp;
+    void _oldSource;
+    const updated: InstalledService = { ...oldBase, manifest, data, appliedMigrations: migrated.applied, ...ServicePlatform.v2Fields(parsed) };
     this.apps.set(serviceId, updated);
     this.byUrlLabel.set(updated.urlLabel.toLowerCase(), updated);
     if (this.deps.domainGate) {
@@ -796,6 +836,8 @@ export class ServicePlatform {
     creator: string;
     slug: string;
     manifest: AppManifest;
+    /** Manifest schema 2: how it runs (WASI, an app group, its own limits). */
+    app?: NormalizedApp | undefined;
     data: AppDataCredentials | null;
     apiToken: string | null;
     hostPort: number;
@@ -823,6 +865,13 @@ export class ServicePlatform {
     // `port` = allocated host-loopback port the proxy dials; `containerPort`
     // = the app's manifest listen port. Publish maps host→container.
     const filesVolume = filesVolumeOf(a.data);
+    const extras = await runtimeExtras({
+      serviceId: a.serviceId,
+      app: a.app,
+      data: a.data,
+      appImage: a.manifest.runtime.image,
+      ...(this.deps.linkPorts ? { linkPortFor: (k: string) => this.deps.linkPorts!.portFor(k) } : {}),
+    });
     return {
       serviceId: a.serviceId,
       image: a.manifest.runtime.image,
@@ -830,6 +879,7 @@ export class ServicePlatform {
       port: a.hostPort,
       containerPort,
       ...(filesVolume ? { filesVolume } : {}),
+      ...extras,
     };
   }
 
@@ -844,7 +894,7 @@ export class ServicePlatform {
       creator: a.creator,
       slug: a.slug,
       serviceId: a.serviceId,
-      manifestJson: JSON.stringify(a.manifest),
+      manifestJson: a.manifestSource ?? JSON.stringify(a.manifest),
       urlLabel: a.urlLabel,
       hostPort: a.containerPort,
       data: a.data,
@@ -902,7 +952,7 @@ export class ServicePlatform {
     const pending: { app: InstalledService; spec: AppSpec }[] = [];
     for (const p of saved) {
       if (this.apps.has(p.serviceId)) continue;
-      const parsed = parseManifest(safeJsonParse(p.manifestJson));
+      const parsed = this.parse(p.manifestJson, true);
       if (!parsed.ok) {
         this.deps.onLog?.(`[service-platform] skipping saved ${p.serviceId}: manifest no longer valid (${parsed.errors.join("; ")})`);
         continue;
@@ -920,6 +970,7 @@ export class ServicePlatform {
         data: p.data,
         installedAt: p.installedAt,
         appliedMigrations: p.appliedMigrations ?? [],
+        ...ServicePlatform.v2Fields(parsed),
       };
       this.apps.set(app.serviceId, app);
       this.byUrlLabel.set(app.urlLabel.toLowerCase(), app);
@@ -936,6 +987,7 @@ export class ServicePlatform {
           creator: app.creator,
           slug: app.slug,
           manifest: app.manifest,
+          app: app.app,
           data: app.data,
           apiToken,
           hostPort: app.containerPort,
@@ -1067,6 +1119,8 @@ export class ServicePlatform {
     } catch {
       // container may already be gone
     }
+    await this.deps.onAppForgotten?.(serviceId).catch(() => {});
+    await this.deps.linkPorts?.release(`group:${serviceId}:`).catch(() => {});
     // Drop data stores: every one it holds (its databases and its files
     // folder), including any a later version's manifest stopped declaring
     // (redeploy keeps those rather than lose data).
@@ -1237,6 +1291,10 @@ export function buildServiceHttpHandlers(deps: ServiceHttpDeps) {
     if (envM && req.method === "POST") {
       return changeServiceEnv(deps, decodeURIComponent(envM[1]!), req);
     }
+    // An owner-signed update in place (the same signed install request, for an app already
+    // installed): a new manifest and code, transactional, every process rolled back on failure.
+    const putM = /^\/api\/services\/([^/]+)$/.exec(req.path);
+    if (putM && req.method === "PUT") return updateService(deps, decodeURIComponent(putM[1]!), req);
     if (req.path.startsWith("/api/services/") && req.method === "DELETE") {
       const serviceId = req.path.slice("/api/services/".length);
       return uninstallService(deps, serviceId, req);
@@ -1257,6 +1315,39 @@ function listServices(deps: ServiceHttpDeps): HttpResponse {
     version: a.manifest.version,
   }));
   return { status: 200, headers: J, body: JSON.stringify({ apps }) };
+}
+
+async function updateService(deps: ServiceHttpDeps, serviceId: string, req: HttpRequest): Promise<HttpResponse> {
+  const body = safeJsonParse(req.body.toString("utf8")) as { request?: Record<string, unknown>; signature?: string } | null;
+  const r = body?.request ?? {};
+  if (
+    !body ||
+    typeof body.signature !== "string" ||
+    typeof r.serverId !== "string" ||
+    typeof r.creator !== "string" ||
+    typeof r.slug !== "string" ||
+    typeof r.manifestJson !== "string" ||
+    typeof r.addOwnerToMembership !== "boolean" ||
+    typeof r.issuedAt !== "number"
+  ) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "malformed request" }) };
+  }
+  if (ServicePlatform.serviceId(r.creator, r.slug) !== serviceId) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "the request names another app" }) };
+  }
+  let signature: Uint8Array;
+  try {
+    signature = hexToBytes(body.signature);
+  } catch {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "invalid hex" }) };
+  }
+  const res = await deps.platform.redeploy({
+    request: { serverId: r.serverId, creator: r.creator, slug: r.slug, manifestJson: r.manifestJson, addOwnerToMembership: r.addOwnerToMembership, issuedAt: r.issuedAt },
+    signature,
+    verify: verifyInstallService,
+  });
+  if (!res.ok) return { status: 400, headers: J, body: JSON.stringify({ error: res.reason }) };
+  return { status: 200, headers: J, body: JSON.stringify({ ok: true, serviceId, addedStores: res.addedStores }) };
 }
 
 async function installService(deps: ServiceHttpDeps, req: HttpRequest): Promise<HttpResponse> {

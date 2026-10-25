@@ -110,6 +110,9 @@ pub struct DeviceManager<S: JournalStore> {
     topology: Topology,
     generation: u64,
     queue: FairQueue,
+    /// Why admission is paused (driver maintenance, an advisory); CPU apps
+    /// are unaffected.
+    admission_paused: Option<String>,
 }
 
 impl<S: JournalStore> fmt::Debug for DeviceManager<S> {
@@ -159,7 +162,121 @@ impl<S: JournalStore> DeviceManager<S> {
             topology: Topology::new(),
             generation: 0,
             queue: FairQueue::new(queue_per_app, queue_total),
+            admission_paused: None,
         }
+    }
+
+    pub fn catalog(&self) -> &VerifiedCatalog {
+        &self.catalog
+    }
+
+    /// A newer verified catalog (the caller enforced the serial floor).
+    pub fn set_catalog(&mut self, catalog: VerifiedCatalog) {
+        self.catalog = catalog;
+    }
+
+    pub fn host(&self) -> &HostFacts {
+        &self.host
+    }
+
+    pub fn set_host(&mut self, host: HostFacts) {
+        self.host = host;
+    }
+
+    pub fn topology(&self) -> &Topology {
+        &self.topology
+    }
+
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Pause or resume admission. While paused nothing is reserved; queued
+    /// work waits and running work is untouched.
+    pub fn set_admission_paused(&mut self, reason: Option<String>) {
+        self.admission_paused = reason;
+    }
+
+    pub fn admission_paused(&self) -> Option<&str> {
+        self.admission_paused.as_deref()
+    }
+
+    /// Queued allocations, app by app, in the order each app's run.
+    pub fn queue_snapshot(&self) -> Vec<(String, Vec<AllocationId>)> {
+        self.queue.snapshot()
+    }
+
+    /// Enumerate every provider and take the topology from their tools.
+    pub fn refresh_inventory_with_provider_topology(
+        &mut self,
+        pci: &[PciDevice],
+    ) -> Result<InventoryReport, ManagerError> {
+        let mut report = self.refresh_inventory(pci, Topology::new())?;
+        let mut topo = Topology::new();
+        for p in &self.providers {
+            let devs: Vec<DeviceRecord> = self
+                .inventory
+                .iter()
+                .filter(|d| d.backend == p.backend())
+                .cloned()
+                .collect();
+            topo.merge(&p.topology(&devs));
+        }
+        self.topology = topo;
+        report.devices = self.inventory.len();
+        Ok(report)
+    }
+
+    /// The catalog entry that qualifies this device for this request.
+    pub fn entry_for(&self, device: &LocalDeviceId, req: &GpuRequest) -> Option<&CatalogEntry> {
+        let d = self.device(device)?;
+        self.validate(d, req).ok()
+    }
+
+    pub fn device_record(&self, id: &LocalDeviceId) -> Option<&DeviceRecord> {
+        self.device(id)
+    }
+
+    /// Stop one allocation wherever it is: a queued or admitted one closes,
+    /// a held one drains (its devices stay held until settle).
+    pub fn cancel(
+        &mut self,
+        id: &AllocationId,
+        runtime: &dyn WorkloadRuntime,
+        reason: &str,
+    ) -> Result<AllocationRecord, ManagerError> {
+        let rec = self.get(id)?;
+        self.queue.remove(id);
+        match rec.state {
+            AllocationState::Requested | AllocationState::Admitted => {
+                self.store
+                    .transition(id, rec.state, AllocationState::Failed, Some(reason))?;
+                Ok(self
+                    .store
+                    .finish(id, AllocationState::Failed, &Finish::Released)?)
+            }
+            AllocationState::Released | AllocationState::Quarantined => Ok(rec),
+            _ => self.drain(id, runtime, reason),
+        }
+    }
+
+    /// Drain every open allocation (driver maintenance, a withdrawn driver).
+    pub fn drain_all(
+        &mut self,
+        runtime: &dyn WorkloadRuntime,
+        reason: &str,
+    ) -> Result<Vec<AllocationId>, ManagerError> {
+        let mut out = Vec::new();
+        for rec in self.store.list_open()? {
+            self.cancel(&rec.id, runtime, reason)?;
+            out.push(rec.id);
+        }
+        Ok(out)
+    }
+
+    /// Every allocation not yet released or quarantined.
+    pub fn open_allocations(&self) -> Result<Vec<AllocationRecord>, ManagerError> {
+        Ok(self.store.list_open()?)
     }
 
     pub fn store(&self) -> &S {
@@ -405,6 +522,11 @@ impl<S: JournalStore> DeviceManager<S> {
                 actual: rec.state,
             }
             .into());
+        }
+        if let Some(why) = &self.admission_paused {
+            return Ok(ReserveOutcome::NoCapacity(vec![format!(
+                "GPU admission is paused: {why}"
+            )]));
         }
         let quarantined: BTreeSet<LocalDeviceId> = self
             .store
@@ -737,6 +859,20 @@ impl<S: JournalStore> DeviceManager<S> {
                     "runtime cannot confirm the workload is gone".into(),
                 ));
             }
+        }
+        // A cooperative sharer leaving a device its trust domain still uses:
+        // the device can't go idle and residue within one owner-consented
+        // domain is accepted, so only its own holding goes. The last sharer
+        // out settles the device in full below.
+        if rec.request.policy.kind() == PolicyKind::Cooperative
+            && rec.claims.iter().all(|c| {
+                self.holdings(&c.device)
+                    .iter()
+                    .any(|h| h.allocation != rec.id)
+            })
+        {
+            self.store.finish(id, rec.state, &Finish::Released)?;
+            return Ok(Settle::Released);
         }
         for c in &rec.claims {
             match self.observe(c) {

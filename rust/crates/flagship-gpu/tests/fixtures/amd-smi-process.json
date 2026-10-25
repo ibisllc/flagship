@@ -1,0 +1,24 @@
+[
+    {
+        "gpu": 0,
+        "process_list": [
+            {
+                "process_info": {
+                    "name": "python3",
+                    "pid": 48211,
+                    "memory_usage": {
+                        "gtt_mem": {"value": 2097152, "unit": "B"},
+                        "cpu_mem": {"value": 0, "unit": "B"},
+                        "vram_mem": {"value": 1073741824, "unit": "B"}
+                    },
+                    "mem_usage": {"value": 1075838976, "unit": "B"},
+                    "usage": {"gfx": {"value": 0, "unit": "ns"}, "enc": {"value": 0, "unit": "ns"}}
+                }
+            }
+        ]
+    },
+    {
+        "gpu": 1,
+        "process_list": [{"process_info": "No running processes detected"}]
+    }
+]

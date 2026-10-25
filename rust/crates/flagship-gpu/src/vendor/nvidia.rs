@@ -13,6 +13,7 @@ use crate::provider::{
     NoQualifiedCleanup, ProviderError, Tool, ToolRunner, enrich, leading_u64, parse_err,
 };
 use crate::sysfs::PciDevice;
+use crate::topology::Topology;
 
 const TOOL: &str = "nvidia-smi";
 const MAX_XML: usize = 8 * 1024 * 1024;
@@ -290,4 +291,45 @@ impl DeviceProvider for NvidiaProvider {
             IsolationProfile::VmPassthrough,
         ]
     }
+
+    fn topology(&self, devices: &[DeviceRecord]) -> Topology {
+        self.tools
+            .output(&Tool::NvidiaSmiTopo)
+            .map(|t| Topology::from_nvidia_topo(&t, devices))
+            .unwrap_or_default()
+    }
+}
+
+/// One row of `nvidia-smi --query-compute-apps=pid,gpu_bus_id,used_memory
+/// --format=csv,noheader,nounits`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComputeApp {
+    pub pid: u32,
+    pub bus: PciAddress,
+    pub used_mib: u64,
+}
+
+pub fn parse_compute_apps(csv: &str) -> Result<Vec<ComputeApp>, ProviderError> {
+    let mut out = Vec::new();
+    for line in csv.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        if line.starts_with("No running") {
+            continue;
+        }
+        let mut f = line.split(',').map(str::trim);
+        let (Some(pid), Some(bus), Some(mem)) = (f.next(), f.next(), f.next()) else {
+            return Err(parse_err(
+                TOOL,
+                "compute-apps row needs pid, bus and memory",
+            ));
+        };
+        out.push(ComputeApp {
+            pid: pid
+                .parse()
+                .map_err(|_| parse_err(TOOL, "compute-apps pid"))?,
+            bus: PciAddress::parse(bus).ok_or_else(|| parse_err(TOOL, "compute-apps bus"))?,
+            // `[N/A]` under MIG without accounting: counted as unknown memory, 0.
+            used_mib: mem.parse().unwrap_or(0),
+        });
+    }
+    Ok(out)
 }

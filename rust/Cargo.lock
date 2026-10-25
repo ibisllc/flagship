@@ -989,9 +989,12 @@ dependencies = [
 name = "flagship-gpu"
 version = "0.3.0"
 dependencies = [
+ "ed25519-dalek",
+ "flagship-crypto",
  "hmac 0.13.0",
  "roxmltree",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "sha2 0.11.0",

@@ -184,7 +184,7 @@ export async function startProxyServer(
 export async function startTcpForwarder(
   host: string,
   port: number,
-  target: { host: string; port: number },
+  target: { host: string; port: number } | (() => { host: string; port: number }),
   allowSrc: (srcIp: string) => boolean,
 ): Promise<ProxyServerHandle> {
   const server: Server = createServer((client) => {
@@ -194,7 +194,7 @@ export async function startTcpForwarder(
       client.destroy();
       return;
     }
-    const up = connect(target);
+    const up = connect(typeof target === "function" ? target() : target);
     up.on("error", () => client.destroy());
     client.on("close", () => up.destroy());
     up.on("close", () => client.destroy());

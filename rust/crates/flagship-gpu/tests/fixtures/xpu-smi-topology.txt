@@ -1,0 +1,5 @@
+                     GPU 0/0        GPU 0/1        GPU 1/0        GPU 1/1        CPU Affinity
+GPU 0/0              S              MDF            XL24           XL8            0-23,48-71
+GPU 0/1              MDF            S              XL8            XL24           0-23,48-71
+GPU 1/0              XL24           XL8            S              MDF            0-23,48-71
+GPU 1/1              XL8            XL24           MDF            S              0-23,48-71

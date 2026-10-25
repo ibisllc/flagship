@@ -1,0 +1,39 @@
+[
+    {
+        "gpu": 0,
+        "asic": {
+            "market_name": "AMD Instinct MI210",
+            "vendor_id": "0x1002",
+            "vendor_name": "Advanced Micro Devices Inc. [AMD/ATI]",
+            "subvendor_id": "0x1002",
+            "device_id": "0x740f",
+            "subsystem_id": "0x0c34",
+            "rev_id": "0x02",
+            "asic_serial": "0x1F2E3D4C5B6A7980",
+            "oam_id": "N/A",
+            "num_compute_units": 104,
+            "target_graphics_version": "gfx90a"
+        },
+        "bus": {
+            "bdf": "0000:03:00.0",
+            "max_pcie_width": 16,
+            "max_pcie_speed": {"value": 16, "unit": "GT/s"},
+            "pcie_interface_version": "Gen 4",
+            "slot_type": "PCIE"
+        },
+        "vram": {
+            "type": "HBM",
+            "vendor": "N/A",
+            "size": {"value": 65536, "unit": "MB"},
+            "bit_width": 4096
+        },
+        "driver": {"name": "amdgpu", "version": "6.12.48+deb13-amd64"}
+    },
+    {
+        "gpu": 1,
+        "asic": {"market_name": "AMD Instinct MI210", "vendor_id": "0x1002", "device_id": "0x740f"},
+        "bus": {"bdf": "0000:43:00.0"},
+        "vram": {"type": "HBM", "size": {"value": 64, "unit": "GB"}},
+        "driver": {"name": "amdgpu", "version": "6.12.48+deb13-amd64"}
+    }
+]

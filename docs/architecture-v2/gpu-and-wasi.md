@@ -19,6 +19,11 @@ cargo test -p flagship-gpu -p flagship-wasi     # 45 GPU tests, 19 WASI tests
 
 ## 1. `flagship-gpu`
 
+> **Superseded for the GPU half by [`gpu.md`](gpu.md)** (milestone 7, 2026-10-24: signed catalog
+> trust, CDI write path, driver maintenance, attachment, residue scrub, AMD/Intel adapters, VFIO,
+> MIG, cooperative limits, media and training jobs, flagship-gpud, the simulated host and the
+> hardware runbooks). The text below is the milestone-6 snapshot.
+
 Only the broker links this crate. Apps never see it, and nothing in it talks
 to the network.
 
@@ -285,8 +290,9 @@ plus `module.digest`, `args`, `env`, `data.scratch` (`/scratch`) and
 `stdoutBytes`, `stderrBytes`). `WasiGrant::admit` checks the manifest
 against the approved digest and the platform `Ceilings`. It refuses rather
 than drops: unknown fields, `FLAGSHIP_*` env, bad env names, limits above
-ceilings, Postgres (a WASI app has no sockets) and egress (brokered egress
-isn't built).
+ceilings. Postgres and egress (a WASI app has no sockets) become the
+brokered host calls `db_query` and `http_fetch` (P04, 2026-10-24; see
+`docs/wasi-apps.md`).
 
 ### 2.4 Tests (`rust/crates/flagship-wasi/tests/worker.rs`, WAT fixtures)
 
@@ -376,12 +382,15 @@ entries until these exist.
 
 ## 5. Software gaps on this branch
 
-- WASI:
+- WASI (P04 integration landed 2026-10-24, `docs/wasi-apps.md`; box drill
+  `drills/m7-runtime.md` not run yet):
   - no component model or WASI p2/p3; core p1 modules only. The pinned
-    WASI version is preview1.
-  - no brokered egress or secret capability yet (refused);
-  - no backup, update or health integration (the runtime's lifecycle
-    integration point in P04).
+    WASI version is preview1; HTTP apps use the Flagship CGI profile.
+  - brokered egress (`http_fetch`) and database (`db_query`) host calls are
+    built; secrets reach the worker over its socket at start;
+  - lifecycle (install, update, stop, uninstall, crash restart), backup
+    (freezer + module part) and the start check are built; no AI-built WASI
+    apps and no app copies of one yet.
 - GPU:
   - `amd-smi` is not parsed;
   - AMD and Intel topology are not parsed;

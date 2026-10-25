@@ -44,6 +44,21 @@ impl Topology {
         self.links.insert(Self::key(a, b), link);
     }
 
+    /// Add another backend's links.
+    pub fn merge(&mut self, other: &Topology) {
+        for (k, v) in &other.links {
+            self.links.insert(k.clone(), *v);
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.links.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.links.is_empty()
+    }
+
     pub fn link(&self, a: &LocalDeviceId, b: &LocalDeviceId) -> Option<Link> {
         self.links.get(&Self::key(a, b)).copied()
     }

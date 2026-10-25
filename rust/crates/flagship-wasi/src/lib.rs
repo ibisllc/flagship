@@ -10,16 +10,30 @@
 //! deadline that also cancels host calls blocked inside WASI, and a bound on
 //! how many runs (and so host calls) the worker serves at once.
 
+mod cgi;
+mod config;
 mod error;
+mod hostcalls;
 mod limits;
 mod manifest;
+mod server;
 mod worker;
+
+pub use cgi::{CgiError, HttpRequest, HttpResponse, cgi_env, parse_cgi_output};
+pub use config::{ConfigError, Prepared, UnixSocketBroker, WORKER_CONFIG_SCHEMA, WorkerFileConfig};
+pub use hostcalls::{
+    BrokerError, CapabilityBroker, MAX_CALLS_PER_RUN, MAX_HOST_REQUEST, MAX_HOST_RESPONSE,
+    fetch_host, status,
+};
+pub use server::{AppServer, HttpError, ServerLimits, read_request, write_response};
 
 pub use error::{LimitKind, WorkerError};
 pub use limits::{Ceilings, Limits};
 pub use manifest::{
-    DataSection, DataStores, EgressHost, FILES_GUEST_PATH, MANIFEST_SCHEMA, ManifestError,
-    ModuleRef, NetworkSection, PostgresStores, Preopen, PreopenPerms, SCRATCH_GUEST_PATH,
-    WasiCapabilityManifest, WasiGrant,
+    DataSection, DataStores, EgressHost, FILES_GUEST_PATH, HostCall, MANIFEST_SCHEMA,
+    ManifestError, ModuleRef, NetworkSection, PostgresStores, Preopen, PreopenPerms,
+    SCRATCH_GUEST_PATH, WasiCapabilityManifest, WasiGrant, WasiWorld,
 };
-pub use worker::{Exit, ModuleSource, RunOutcome, Worker, WorkerConfig, sha256_digest};
+pub use worker::{
+    CompiledModule, Exit, ModuleSource, RunInput, RunOutcome, Worker, WorkerConfig, sha256_digest,
+};

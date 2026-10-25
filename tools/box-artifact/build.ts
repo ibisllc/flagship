@@ -98,7 +98,7 @@ function arg(argv: string[], name: string): string | undefined {
   return i >= 0 ? argv[i + 1] : undefined;
 }
 /** The Rust binaries every box artifact carries (rustStack/units.ts names them the same way). */
-export const RUST_BINARIES = ["flagship-keyd", "flagship-broker", "flagship-core"] as const;
+export const RUST_BINARIES = ["flagship-keyd", "flagship-broker", "flagship-core", "flagship-wasi-worker", "flagship-gpud"] as const;
 
 function need(argv: string[], name: string): string {
   const v = arg(argv, name);
@@ -209,7 +209,7 @@ async function build(argv: string[]): Promise<void> {
         const targetDir = join(work, "cargo-target");
         const home = process.env["CARGO_HOME"] ?? join(process.env["HOME"] ?? "/root", ".cargo");
         rustc = execFileSync("rustc", ["--version"], { cwd: join(src, "rust"), encoding: "utf8" }).trim();
-        execFileSync("cargo", ["build", "--release", "--locked", "-p", "flagship-keyd", "-p", "flagship-broker", "-p", "flagship-core"], {
+        execFileSync("cargo", ["build", "--release", "--locked", "-p", "flagship-keyd", "-p", "flagship-broker", "-p", "flagship-core", "-p", "flagship-wasi", "-p", "flagship-gpu"], {
           cwd: join(src, "rust"),
           stdio: "inherit",
           env: {

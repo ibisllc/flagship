@@ -52,7 +52,8 @@ impl Default for Ceilings {
                 table_elements: 100_000,
                 fuel: 100_000_000_000,
                 wall_time_ms: 15 * 60 * 1000,
-                stdout_bytes: 1024 * 1024,
+                // An http-proxy app's whole response is its stdout.
+                stdout_bytes: 16 * 1024 * 1024,
                 stderr_bytes: 1024 * 1024,
             },
         }

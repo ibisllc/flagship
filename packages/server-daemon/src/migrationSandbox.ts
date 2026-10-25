@@ -78,6 +78,11 @@ export function buildSandboxPlan(args: {
   containerName?: string;
   /** Minimal PATH for the docker client itself. */
   clientPath?: string;
+  /**
+   * A dedicated database (dataLayer/dedicated.ts): its Unix-socket volume. The sandbox then has no
+   * network at all and reaches only that instance's socket.
+   */
+  socketVolume?: string;
 }): SandboxPlan {
   const l = { ...DEFAULT_MIGRATION_LIMITS, ...(args.limits ?? {}) };
   const t = args.target;
@@ -86,14 +91,17 @@ export function buildSandboxPlan(args: {
   const uid = args.appUid ?? 10001;
   const name = args.containerName ?? `flagship-migrate-${randomBytes(6).toString("hex")}`;
   const pgOptions = `-c statement_timeout=${l.statementTimeoutMs} -c lock_timeout=${l.lockTimeoutMs} -c idle_in_transaction_session_timeout=${l.idleInTransactionMs}`;
+  if (args.socketVolume !== undefined && !/^flagship-pgsock-[0-9a-f]{24}$/.test(args.socketVolume)) throw new Error("not a dedicated database's socket volume");
+  const reach = args.socketVolume
+    ? { net: ["--network=none", "--mount", `type=volume,src=${args.socketVolume},dst=/var/run/postgresql,readonly`], host: ["-h", "/var/run/postgresql", "-p", "5432"] }
+    : { net: [`--network=${MIGRATION_NETWORK}`, "--add-host", `${DATA_HOST_ALIAS}:host-gateway`], host: ["-h", DATA_HOST_ALIAS, "-p", String(t.port)] };
   const dockerArgs = [
     "run",
     "--rm",
     "-i",
     "--name", name,
     `--runtime=${GVISOR_RUNTIME}`,
-    `--network=${MIGRATION_NETWORK}`,
-    "--add-host", `${DATA_HOST_ALIAS}:host-gateway`,
+    ...reach.net,
     "--user", `${uid}:${uid}`,
     "--read-only",
     "--cap-drop=ALL",
@@ -108,8 +116,7 @@ export function buildSandboxPlan(args: {
     "-e", "PGOPTIONS",
     "--entrypoint", "psql",
     args.image ?? MIGRATION_PSQL_IMAGE,
-    "-h", DATA_HOST_ALIAS,
-    "-p", String(t.port),
+    ...reach.host,
     "-U", t.user,
     "-d", t.database,
     "-1",
@@ -152,6 +159,8 @@ export interface RunSandboxedSqlOptions {
   limits?: Partial<MigrationLimits>;
   appUid?: number;
   image?: string;
+  /** The dedicated instance's socket volume, when the target is one. */
+  socketVolume?: string;
 }
 
 /**
@@ -161,10 +170,16 @@ export interface RunSandboxedSqlOptions {
 export async function runSandboxedSql(o: RunSandboxedSqlOptions): Promise<void> {
   if (!o.cmd.capture) throw new MigrationFailedError("this box cannot run a migration sandbox", "unavailable");
   const l = { ...DEFAULT_MIGRATION_LIMITS, ...(o.limits ?? {}) };
-  const plan = buildSandboxPlan({ target: o.target, ...(o.appUid !== undefined ? { appUid: o.appUid } : {}), limits: l, ...(o.image ? { image: o.image } : {}) });
+  const plan = buildSandboxPlan({
+    target: o.target,
+    ...(o.appUid !== undefined ? { appUid: o.appUid } : {}),
+    limits: l,
+    ...(o.image ? { image: o.image } : {}),
+    ...(o.socketVolume ? { socketVolume: o.socketVolume } : {}),
+  });
   const secrets = [o.target.password, encodeURIComponent(o.target.password)];
   // The no-internet bridge normally exists from boot; make sure of it (a duplicate create is harmless).
-  await ensureDockerNetwork(o.cmd, MIGRATION_NETWORK);
+  if (!o.socketVolume) await ensureDockerNetwork(o.cmd, MIGRATION_NETWORK);
   try {
     await o.cmd.capture("docker", plan.args, { timeoutMs: l.wallClockMs, input: o.sql, env: plan.env });
   } catch (e) {
@@ -194,6 +209,15 @@ export function targetFromPgUrl(pgUrl: string): MigrationTarget {
  * The runner every creator-supplied or generated SQL goes through: `(pgUrl, sql)` in, one sandboxed
  * container out. There is no fallback to running it on the host; with no sandbox the migration fails.
  */
-export function sandboxedRunSql(cmd: CommandRunner, limits?: Partial<MigrationLimits>): (a: { pgUrl: string; sql: string }) => Promise<void> {
-  return (a) => runSandboxedSql({ cmd, target: targetFromPgUrl(a.pgUrl), sql: a.sql, ...(limits ? { limits } : {}) });
+export function sandboxedRunSql(
+  cmd: CommandRunner,
+  limits?: Partial<MigrationLimits>,
+  /** The socket volume of the dedicated instance on a port, if one is there (dataLayer/dedicated.ts). */
+  socketForPort?: (port: number) => Promise<string | null>,
+): (a: { pgUrl: string; sql: string }) => Promise<void> {
+  return async (a) => {
+    const target = targetFromPgUrl(a.pgUrl);
+    const socketVolume = (await socketForPort?.(target.port)) ?? null;
+    return runSandboxedSql({ cmd, target, sql: a.sql, ...(limits ? { limits } : {}), ...(socketVolume ? { socketVolume } : {}) });
+  };
 }

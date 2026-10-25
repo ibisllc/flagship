@@ -299,7 +299,9 @@ fn malformed_tool_output_is_an_error_not_a_guess() {
 fn pinned_tools_refuse_relative_paths_and_missing_tools() {
     let t = PinnedTools {
         nvidia_smi: Some("nvidia-smi".into()),
+        nvidia_ctk: None,
         rocm_smi: None,
+        amd_smi: None,
         xpu_smi: None,
         timeout: std::time::Duration::from_secs(1),
     };

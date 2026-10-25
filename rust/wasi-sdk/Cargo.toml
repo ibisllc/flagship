@@ -1,0 +1,31 @@
+# The guest side of Flagship's WASI apps: CGI request/response helpers for the
+# http-proxy world and safe wrappers for the flagship_v1 host calls.
+# Its own workspace (it targets wasm32-wasip1, not the box), no dependencies.
+[workspace]
+
+[package]
+name = "flagship-wasi-sdk"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.99"
+license = "BUSL-1.1"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[example]]
+name = "wasi-fixture"
+path = "examples/wasi-fixture.rs"
+
+[[example]]
+name = "wasi-hostcalls"
+path = "examples/wasi-hostcalls.rs"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
