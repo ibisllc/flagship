@@ -253,3 +253,10 @@ Running when this was written (subagents; if this session is gone, they are gone
   per-box debug SSH key (`0da1bf58c`: gym/provision `debugSshPublicKey`, fleet env
   `GYM_DEBUG_SSH_PUBKEY`; demo/prod boxes unchanged). Debug run: gym refreshed to `0a997184d`, core
   group with key `scratchpad/gymdbg` (throwaway) → `scratchpad/gym-core-dbg.log`; SSH root@<box ip>.
+- 2026-10-25: cause 1 found on a debug box: gym-provisioned boxes asked for the artifact of THIS
+  checkout's release/box-release.json commit (main's 386e29c84), which the gym never builds → 404 →
+  "FATAL: could not download". Fixed `gym-release-run.sh` (exports GYM_INSTALLER_GIT_REF from the gym
+  worktree's box release). Demo-flow boxes (right commit via the Worker's DEMO_INSTALLER_GIT_REF)
+  registered but got no cert: still to diagnose. Debug box dbg2.uxdbg03871 (UpCloud
+  00a49686-94bc-449d-9220-a200e9594eee) provisioned with the gym commit 0a997184d; destroy it with
+  `fleet-cli.ts destroy <id> <fqdn>` when done. Note: gym boxes are Debian 12 (bookworm).
