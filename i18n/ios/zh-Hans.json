@@ -515,7 +515,6 @@
   "Allow once": "允许一次",
   "Allow for this session": "在此会话中允许",
   "Always allow": "始终允许",
-  "Allowed. %@ can use the browser as asked.": "已允许。%@ 可以按请求使用浏览器。",
   "Denied. %@ can't use the browser for this.": "已拒绝。%@ 不能为此使用浏览器。",
   "Allow %@ to use the browser": "允许 %@ 使用浏览器",
   "Allowed by you": "你已允许",
@@ -2810,5 +2809,8 @@
   "The model stopped.": "模型已停止。",
   "Fine-tuning is queued. It runs only on this server.": "微调已加入队列，只在此服务器上运行。",
   "%@ can use this server's AI model.": "%@ 可以使用此服务器的 AI 模型。",
-  "%@ can no longer use this server's AI model.": "%@ 不能再使用此服务器的 AI 模型。"
+  "%@ can no longer use this server's AI model.": "%@ 不能再使用此服务器的 AI 模型。",
+  "Allowed. %@ can use the browser for one visit.": "已允许。%@ 可在一次访问中使用浏览器。",
+  "Allowed. %@ can use the browser until this browser session ends.": "已允许。%@ 可使用浏览器，直到此浏览器会话结束。",
+  "Allowed. %@ can use the browser until you remove it.": "已允许。%@ 可使用浏览器，直到你将其移除。"
 }

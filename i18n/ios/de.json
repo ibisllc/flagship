@@ -515,7 +515,6 @@
   "Allow once": "Einmal erlauben",
   "Allow for this session": "Für diese Sitzung erlauben",
   "Always allow": "Immer erlauben",
-  "Allowed. %@ can use the browser as asked.": "Erlaubt. %@ kann den Browser wie angefragt verwenden.",
   "Denied. %@ can't use the browser for this.": "Abgelehnt. %@ kann den Browser dafür nicht verwenden.",
   "Allow %@ to use the browser": "%@ erlauben, den Browser zu verwenden",
   "Allowed by you": "Von dir erlaubt",
@@ -2810,5 +2809,8 @@
   "The model stopped.": "Das Modell wurde angehalten.",
   "Fine-tuning is queued. It runs only on this server.": "Die Feinabstimmung steht in der Warteschlange. Sie läuft nur auf diesem Server.",
   "%@ can use this server's AI model.": "%@ darf das KI-Modell dieses Servers verwenden.",
-  "%@ can no longer use this server's AI model.": "%@ darf das KI-Modell dieses Servers nicht mehr verwenden."
+  "%@ can no longer use this server's AI model.": "%@ darf das KI-Modell dieses Servers nicht mehr verwenden.",
+  "Allowed. %@ can use the browser for one visit.": "Erlaubt. %@ darf den Browser für einen Besuch verwenden.",
+  "Allowed. %@ can use the browser until this browser session ends.": "Erlaubt. %@ darf den Browser verwenden, bis diese Browsersitzung endet.",
+  "Allowed. %@ can use the browser until you remove it.": "Erlaubt. %@ darf den Browser verwenden, bis du es entfernst."
 }

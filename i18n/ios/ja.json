@@ -515,7 +515,6 @@
   "Allow once": "1回だけ許可",
   "Allow for this session": "このセッション中は許可",
   "Always allow": "常に許可",
-  "Allowed. %@ can use the browser as asked.": "許可しました。%@ は依頼どおりにブラウザーを使えます。",
   "Denied. %@ can't use the browser for this.": "拒否しました。%@ はこの用途でブラウザーを使えません。",
   "Allow %@ to use the browser": "%@ にブラウザーの使用を許可",
   "Allowed by you": "あなたが許可したもの",
@@ -2810,5 +2809,8 @@
   "The model stopped.": "モデルを停止しました。",
   "Fine-tuning is queued. It runs only on this server.": "ファインチューニングを順番待ちに追加しました。このサーバー上だけで実行されます。",
   "%@ can use this server's AI model.": "%@ はこのサーバーのAIモデルを使用できます。",
-  "%@ can no longer use this server's AI model.": "%@ はこのサーバーのAIモデルを使用できなくなりました。"
+  "%@ can no longer use this server's AI model.": "%@ はこのサーバーのAIモデルを使用できなくなりました。",
+  "Allowed. %@ can use the browser for one visit.": "許可しました。%@ は 1 回の訪問に限りブラウザーを使えます。",
+  "Allowed. %@ can use the browser until this browser session ends.": "許可しました。%@ はこのブラウザーセッションが終わるまでブラウザーを使えます。",
+  "Allowed. %@ can use the browser until you remove it.": "許可しました。%@ はあなたが削除するまでブラウザーを使えます。"
 }

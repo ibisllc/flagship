@@ -515,7 +515,6 @@
   "Allow once": "Permitir una vez",
   "Allow for this session": "Permitir durante esta sesión",
   "Always allow": "Permitir siempre",
-  "Allowed. %@ can use the browser as asked.": "Permitido. %@ puede usar el navegador como pidió.",
   "Denied. %@ can't use the browser for this.": "Rechazado. %@ no puede usar el navegador para esto.",
   "Allow %@ to use the browser": "Permitir que %@ use el navegador",
   "Allowed by you": "Permitido por ti",
@@ -2810,5 +2809,8 @@
   "The model stopped.": "El modelo se ha detenido.",
   "Fine-tuning is queued. It runs only on this server.": "El ajuste fino está en cola. Se ejecuta solo en este servidor.",
   "%@ can use this server's AI model.": "%@ puede usar el modelo de IA de este servidor.",
-  "%@ can no longer use this server's AI model.": "%@ ya no puede usar el modelo de IA de este servidor."
+  "%@ can no longer use this server's AI model.": "%@ ya no puede usar el modelo de IA de este servidor.",
+  "Allowed. %@ can use the browser for one visit.": "Permitido. %@ puede usar el navegador durante una visita.",
+  "Allowed. %@ can use the browser until this browser session ends.": "Permitido. %@ puede usar el navegador hasta que termine esta sesión del navegador.",
+  "Allowed. %@ can use the browser until you remove it.": "Permitido. %@ puede usar el navegador hasta que lo quites."
 }
