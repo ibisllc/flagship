@@ -203,13 +203,27 @@ object AssurancePolicy {
         throw PolicyException("upgrade-required", "no signature suite in common")
     }
 
-    data class ExportAuthorization(val subjectDigest: String, val generation: Long)
+    /**
+     * The owner's permission to export one subject ([subjectDigest]) from one strict [scope] into
+     * compatibility, under that scope's policy [generation] at the time: a later change voids it.
+     */
+    data class ExportAuthorization(val subjectDigest: String, val scope: Scope, val generation: Long)
 
-    /** Two scopes over a classical-only channel: the stricter side decides. */
-    fun classicalExchangeAllowed(a: PolicyState, b: PolicyState, subjectDigest: String, auth: ExportAuthorization?): Boolean {
-        if (!strictInForce(a) && !strictInForce(b)) return true
-        return auth != null && auth.subjectDigest == subjectDigest && HEX64.matches(subjectDigest)
+    /**
+     * Two scopes over a classical-only channel: the stricter side decides. Each strict scope refuses
+     * unless one authorization names this exact subject, that scope and the generation now in force
+     * (test-vectors/assurance-policy/classical-exchange.json).
+     */
+    fun classicalExchangeAllowed(a: PolicyState, b: PolicyState, subjectDigest: String, auths: List<ExportAuthorization>): Boolean {
+        if (!HEX64.matches(subjectDigest) && (strictInForce(a) || strictInForce(b))) return false
+        fun covered(s: PolicyState) = !strictInForce(s) || auths.any {
+            it.subjectDigest == subjectDigest && it.scope.kind == s.scope.kind && it.scope.id == s.scope.id && it.generation == s.generation
+        }
+        return covered(a) && covered(b)
     }
+
+    fun classicalExchangeAllowed(a: PolicyState, b: PolicyState, subjectDigest: String, auth: ExportAuthorization?): Boolean =
+        classicalExchangeAllowed(a, b, subjectDigest, listOfNotNull(auth))
 
     /** One served chain entry: the change and its signature envelope. */
     data class SignedChange(val change: Change, val signature: PqTrust.SignatureEnvelope)

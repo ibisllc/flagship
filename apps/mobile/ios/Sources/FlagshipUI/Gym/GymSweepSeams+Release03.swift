@@ -67,6 +67,11 @@ extension GymSweepSeams {
             mocks.screens.mockBrowserGrants = [browserGranted]
             mocks.screens.mockBrowserDomains["bright-maple--plants"] = ["shop.example.com"]
         }
+        // An app that names no browser sites of its own and asks once: answering it and then withdrawing
+        // the grant each take the section's last card away.
+        if args.contains("-smoke-browser-grant-alone") {
+            mocks.screens.mockBrowserGrantRequests = [browserOnce]
+        }
         if args.contains("-smoke-browser-grant-app") {
             mocks.screens.mockBrowserGrantRequests = [browserService]
             mocks.screens.mockBrowserDomains["bright-maple--plants"] = ["shop.example.com"]

@@ -98,6 +98,34 @@ final class GymSweepShareTests: GymSweepCase {
         shot(app, "share-owner-confirmed")
     }
 
+    /// The share world is made once per launch, not by a view: leaving the server page while its
+    /// Shared with card loads and coming back lists Sam once and Alex's code once, and Home lists the
+    /// second account's servers once each.
+    func test_shareWorldSeedsOnceAcrossALeftPage() throws {
+        let app = launchShares()
+        openServerPage(app, named: "Home")
+        app.serverPageBackButton(named: "Home").tap()
+        XCTAssertTrue(podRow(app, named: "Home").waitForExistence(timeout: 15), "Back on Home.")
+        openOwnerCard(app)
+        let rows = { (id: String) in app.descendants(matching: .any).matching(identifier: id).count }
+        XCTAssertEqual(rows("share-row-\(sam)"), 1, "Sam is listed once.")
+        let show = app.buttons["share-show-invitations"]
+        XCTAssertTrue(reveal(app, show))
+        show.tap()
+        XCTAssertTrue(reveal(app, any(app, "share-sas-\(alex)")), "Alex's code shows.")
+        XCTAssertEqual(rows("share-sas-\(alex)"), 1, "Alex's acceptance is listed once.")
+        XCTAssertEqual(rows("share-row-\(alex)"), 1)
+        let back = app.serverPageBackButton(named: "Home")
+        if !back.isHittable { for _ in 0..<12 where !back.isHittable { app.swipeDown() } }
+        back.tap()
+        let garageRow = app.buttons["home-shared-\(garage)"]
+        XCTAssertTrue(reveal(app, garageRow), "Home lists the shared servers.")
+        let homeRows = { (id: String) in app.buttons.matching(identifier: id).count }
+        XCTAssertEqual(homeRows("home-shared-\(garage)"), 1, "Garage is listed once.")
+        XCTAssertEqual(homeRows("home-shared-\(photos)"), 1, "Photos is listed once.")
+        shot(app, "share-world-once")
+    }
+
     /// Sam's level, start-up approval and app data each sign a new grant
     /// (and the start-up copy follows the opt-in); Remove asks first, Cancel
     /// does nothing, Remove revokes on the box and on `.com`.

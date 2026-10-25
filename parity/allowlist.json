@@ -297,21 +297,6 @@
       "reason": "Release endorsements are verified only where an update is decided: the box (releaseVerifier.ts), .com's /api/releases catalog, the release scripts and Rust flagship-crypto::release, which read these vectors. Phones and the webapp never verify a release endorsement (pq-suites.md §12.4)."
     },
     {
-      "check": "test-vectors",
-      "key": "swift:gpu-approval",
-      "reason": "flagship-gpud (Rust owner_approval.rs) verifies flagship/gpu-approval/v1 and the TS port signs it; no client signs one yet because no client has a GPU approval screen (gpu.md §5). The client that adds that screen reads these vectors and drops this entry."
-    },
-    {
-      "check": "test-vectors",
-      "key": "kotlin:gpu-approval",
-      "reason": "flagship-gpud (Rust owner_approval.rs) verifies flagship/gpu-approval/v1 and the TS port signs it; no client signs one yet because no client has a GPU approval screen (gpu.md §5). The client that adds that screen reads these vectors and drops this entry."
-    },
-    {
-      "check": "test-vectors",
-      "key": "web:gpu-approval",
-      "reason": "flagship-gpud (Rust owner_approval.rs) verifies flagship/gpu-approval/v1 and the TS port signs it; no client signs one yet because no client has a GPU approval screen (gpu.md §5). The client that adds that screen reads these vectors and drops this entry."
-    },
-    {
       "check": "signed-tags",
       "key": "web:flagship/auto-unlock-lease/v3",
       "reason": "Boot unlock v2 (pq-suites.md §19) needs the owner's hybrid signature, and the keyless-web rule keeps PQ private keys out of website JavaScript, so the webapp answers a v2 request classically (it tells the owner to use the phone); a strict box refuses that reply itself. iOS and Android sign v2."

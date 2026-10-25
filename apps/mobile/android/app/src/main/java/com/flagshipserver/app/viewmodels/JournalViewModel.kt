@@ -31,9 +31,9 @@ sealed interface JournalPhase {
 
 class JournalViewModel(
     private val serverDomain: String,
-    /** Biometric-gated owner-IRK signer; the SAME key the daemon's /api/journal
-     *  pins. Tests inject a fixed key. */
-    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    /** The sensitive-order key the daemon's /api/journal checks: the admin root on an
+     *  admin-pinned box (the IRK only when none is pinned). Tests inject a fixed key. */
+    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     private val client: LockPowerClient = LockPowerClient(),
     private val now: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {

@@ -19,6 +19,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     /// The mock box's Local AI (MockScreensClient+LocalAi.swift).
     public let localAiMock = MockLocalAi()
+    /// The mock box's GPUs (MockScreensClient+Accelerators.swift).
+    public let acceleratorsMock = MockAccelerators()
+    /// The mock box's container stack (MockScreensClient+Stack.swift).
+    public let stackMock = MockStack()
 
     private func tick() async throws {
         if simulatedLatency > 0 {

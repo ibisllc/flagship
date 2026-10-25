@@ -126,7 +126,7 @@ final class GymSweepServerTests: GymSweepCase {
         fetch.tap()
         XCTAssertTrue(text(app, containing: "gym: flagship-daemon started").waitForExistence(timeout: 15),
                       "View journal shows the box's lines.")
-        expectProbe(app, "signed journal by irk")
+        expectProbe(app, "signed journal by admin-root")
         app.segmentedControls["sd-journal-unit"].buttons["flagship-data-services"].tap()
         fetch.tap()
         let lines = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "gym: serving 2 apps"))

@@ -425,4 +425,211 @@ final class GymRelease03Tests: GymSweepCase {
         XCTAssertFalse(start.isEnabled, "Start needs a downloaded model.")
         shot(app, "local-ai-empty")
     }
+
+    // MARK: - GPUs (packages/server-daemon/src/gpu/http.ts)
+
+    private func openAccelerators(_ app: XCUIApplication) -> XCUIElement {
+        openServerPage(app, named: "Home")
+        let card = any(app, "accelerators-card")
+        XCTAssertTrue(reveal(app, card, tries: 20), "The server page has a GPUs card.")
+        let holder = any(app, "accelerator-holder-0")
+        XCTAssertTrue(reveal(app, holder, tries: 6))
+        bringToMiddle(app, holder)
+        return holder
+    }
+
+    /// Each GPU with its model, memory and state; the app that holds it; the apps waiting.
+    func test_acceleratorsShowWhoHoldsEachGpu() throws {
+        let app = launch(tab: "home", ["-smoke-accelerators", "-smoke-accelerators-paused"])
+        let holder = openAccelerators(app)
+        XCTAssertEqual(any(app, "accelerator-name-0").label, "GPU 0: NVIDIA GeForce RTX 4090")
+        XCTAssertEqual(holder.label, "Used by Plants")
+        XCTAssertTrue(any(app, "accelerator-state-0").label.hasSuffix("In use"), any(app, "accelerator-state-0").label)
+        XCTAssertTrue(any(app, "accelerator-state-1").label.hasSuffix("Free"))
+        XCTAssertTrue(any(app, "accelerator-state-2").label.hasSuffix("Set aside after a fault"))
+        XCTAssertTrue(app.buttons["accelerator-stop-app-bright-maple--plants-k1"].exists, "The holder can be stopped.")
+        XCTAssertFalse(any(app, "accelerator-holder-1").exists, "A free GPU has no holder.")
+        let queue = any(app, "accelerator-queue-bright-maple--wiki")
+        XCTAssertTrue(reveal(app, queue, tries: 6))
+        XCTAssertEqual(queue.label, "Wiki is waiting")
+        XCTAssertTrue(any(app, "accelerators-paused").exists, "Paused admission says so.")
+        shot(app, "accelerators-card")
+    }
+
+    /// Stop asks first; Cancel sends nothing; Stop frees the GPU and the app waiting gets it.
+    func test_acceleratorStopAsksThenFreesTheGpu() throws {
+        let app = launch(tab: "home", ["-smoke-accelerators"])
+        _ = openAccelerators(app)
+        let stop = app.buttons["accelerator-stop-app-bright-maple--plants-k1"]
+        XCTAssertEqual(stop.label, "Stop")
+        stop.tap()
+        XCTAssertTrue(app.staticTexts["Stop Plants using the GPU?"].waitForExistence(timeout: 10), "Stop asks first.")
+        cancelDialog(app)
+        XCTAssertFalse(probe(app).contains("accelerator stop"), "Cancel sends nothing.")
+        stop.tap()
+        let confirm = app.buttons.matching(NSPredicate(
+            format: "identifier == 'accelerator-stop-confirm' OR (label == 'Stop' AND NOT (identifier BEGINSWITH 'accelerator-stop-app'))")).firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.tap()
+        expectProbe(app, "accelerator stop app-bright-maple--plants-k1")
+        let notice = any(app, "accelerators-notice")
+        XCTAssertTrue(notice.waitForExistence(timeout: 15))
+        XCTAssertEqual(notice.label, "Plants no longer has the GPU.")
+        wait(any(app, "accelerator-holder-0"), "label == 'Starting for Wiki'", timeout: 15)
+        waitGone(any(app, "accelerator-queue-bright-maple--wiki"))
+        shot(app, "accelerators-stopped")
+    }
+
+    /// A box with no GPU (or no GPU service) shows no card.
+    func test_noGpuShowsNoCard() throws {
+        let app = launch(tab: "home", ["-smoke-accelerators-none"])
+        openServerPage(app, named: "Home")
+        XCTAssertTrue(reveal(app, app.buttons["local-ai-open"], tries: 20), "The page has loaded to Local AI.")
+        for _ in 0..<4 { app.swipeUp() }
+        XCTAssertFalse(any(app, "accelerators-card").exists, "No GPU: no card.")
+        shot(app, "accelerators-none")
+    }
+
+    // MARK: - GPU approvals (flagship/gpu-approval/v1)
+
+    private func tapRevealed(_ app: XCUIApplication, _ el: XCUIElement) {
+        XCTAssertTrue(reveal(app, el, tries: 20), "\(el) is on the page.")
+        bringToMiddle(app, el)
+        el.tap()
+    }
+
+    /// Render asks with its exact terms; Approve signs the approval with the admin root and Render moves to
+    /// the approved list; Decline on Train hides it and sends nothing; Stream's sharing request is approved
+    /// with a trust domain and consent; Withdraw on Photos signs flagship/gpu-approval-withdraw/v1.
+    func test_gpuApprovalApproveDeclineWithdraw() throws {
+        let app = launch(tab: "home", ["-smoke-accelerators", "-smoke-gpu-approvals"])
+        openServerPage(app, named: "Home")
+        let ask = any(app, "gpu-approval-ask-bright-maple--render")
+        XCTAssertTrue(reveal(app, ask, tries: 20), "Render's request is on the GPUs card.")
+        XCTAssertEqual(ask.label, "Render asks to use the GPU: 1 × NVIDIA GPU, computing, a GPU of its own, in the app sandbox, kept apart from other apps")
+        XCTAssertEqual(any(app, "gpu-approval-ask-bright-maple--train").label,
+                       "Train asks to use the GPU: 4 × AMD GPU, computing, graphics, a GPU of its own, in its own virtual machine, kept apart from other apps")
+        shot(app, "gpu-approval-pending")
+        tapRevealed(app, app.buttons["gpu-approval-approve-bright-maple--render"])
+        expectProbe(app, "signed gpu-approval by admin-root")
+        expectProbe(app, "gpu approval bright-maple--render")
+        wait(any(app, "accelerators-notice"), "label == 'Render can use the GPU.'", timeout: 15)
+        XCTAssertTrue(any(app, "gpu-approval-allowed-bright-maple--render").waitForExistence(timeout: 10), "Render is approved now.")
+        waitGone(any(app, "gpu-approval-ask-bright-maple--render"))
+
+        // Decline sends nothing (the box keeps no refusal: an app not approved gets no GPU) and hides the ask.
+        tapRevealed(app, app.buttons["gpu-approval-decline-bright-maple--train"])
+        wait(any(app, "accelerators-notice"), "label == \"Train won't get a GPU.\"", timeout: 15)
+        waitGone(any(app, "gpu-approval-ask-bright-maple--train"))
+        XCTAssertFalse(probe(app).contains("gpu approval withdrawn bright-maple--train"), "Decline signs nothing.")
+
+        // Sharing a GPU: the owner's approval names the trust domain and consent the box requires.
+        tapRevealed(app, app.buttons["gpu-approval-approve-bright-maple--stream"])
+        expectProbe(app, "gpu approval bright-maple--stream")
+        wait(any(app, "accelerators-notice"), "label == 'Stream can use the GPU.'", timeout: 15)
+
+        let photos = any(app, "gpu-approval-allowed-bright-maple--photos")
+        XCTAssertTrue(photos.label.hasPrefix("Photos may use the GPU: 1 × NVIDIA GPU, computing, video encoding, a GPU shared with trusted apps"), photos.label)
+        tapRevealed(app, app.buttons["gpu-approval-withdraw-bright-maple--photos"])
+        expectProbe(app, "gpu approval withdrawn bright-maple--photos")
+        wait(any(app, "accelerators-notice"), "label == 'Photos can no longer use the GPU.'", timeout: 15)
+        waitGone(any(app, "gpu-approval-allowed-bright-maple--photos"))
+        shot(app, "gpu-approval-answered")
+    }
+
+    /// A device without the admin root sees the requests and approvals with the admin-only line, and no buttons.
+    func test_gpuApprovalReadOnlyOnANonAdminDevice() throws {
+        let app = launch(tab: "home", admin: false, ["-smoke-accelerators", "-smoke-gpu-approvals"])
+        openServerPage(app, named: "Home")
+        XCTAssertTrue(reveal(app, any(app, "gpu-approval-ask-bright-maple--render"), tries: 20))
+        XCTAssertTrue(reveal(app, any(app, "gpu-approval-admin-only"), tries: 6))
+        XCTAssertFalse(app.buttons["gpu-approval-approve-bright-maple--render"].exists)
+        XCTAssertFalse(app.buttons["gpu-approval-withdraw-bright-maple--photos"].exists)
+        shot(app, "gpu-approval-read-only")
+    }
+
+    // MARK: - Container stack (flagship/arch-v2-switch/v1)
+
+    /// The classic box: Move to the new stack signs once with the admin root and dry-runs the order (the
+    /// box's plan shows); Move now sends the same order; the card follows the move to its trial.
+    func test_stackMoveDryRunThenMove() throws {
+        let app = launch(tab: "home", ["-smoke-stack"])
+        openServerPage(app, named: "Home")
+        let current = any(app, "stack-current")
+        XCTAssertTrue(reveal(app, current, tries: 20), "The server page has the Container stack card.")
+        XCTAssertEqual(current.label, "This server runs the classic stack (Docker).")
+        tapRevealed(app, app.buttons["stack-move"])
+        expectProbe(app, "signed arch-v2-switch by admin-root")
+        expectProbe(app, "stack dry-run arch-v2")
+        XCTAssertTrue(any(app, "stack-step-0").waitForExistence(timeout: 10), "The dry run's plan is shown.")
+        XCTAssertTrue(any(app, "stack-room").label.hasPrefix("Needs about"))
+        shot(app, "stack-plan")
+        tapRevealed(app, app.buttons["stack-move-now"])
+        expectProbe(app, "stack switch arch-v2")
+        wait(any(app, "stack-notice"), "label == 'The server is restarting for the move. This card shows how it goes.'", timeout: 15)
+        let record = any(app, "stack-record")
+        wait(record, "label BEGINSWITH 'On trial until'", timeout: 30)
+        XCTAssertEqual(any(app, "stack-current").label, "This server runs the new stack (Podman and the Rust services).")
+        shot(app, "stack-trial")
+    }
+
+    /// Without room for the move the dry run says so in the box's words and Move now stays off.
+    func test_stackMoveBlockedSaysWhy() throws {
+        let app = launch(tab: "home", ["-smoke-stack-blocked"])
+        openServerPage(app, named: "Home")
+        tapRevealed(app, app.buttons["stack-move"])
+        let blocker = any(app, "stack-blocker-0")
+        XCTAssertTrue(blocker.waitForExistence(timeout: 15))
+        XCTAssertEqual(blocker.label, "Moving the apps needs about 6.0 GB free on this server; it has 3.0 GB.")
+        XCTAssertFalse(app.buttons["stack-move-now"].isEnabled)
+        XCTAssertFalse(probe(app).contains("stack switch arch-v2"))
+        shot(app, "stack-blocked")
+    }
+
+    /// A device without the admin root has no Container stack card.
+    func test_stackCardIsAdminOnly() throws {
+        let app = launch(tab: "home", admin: false, ["-smoke-stack"])
+        openServerPage(app, named: "Home")
+        XCTAssertTrue(reveal(app, app.buttons["local-ai-open"], tries: 20))
+        for _ in 0..<4 { app.swipeUp() }
+        XCTAssertFalse(any(app, "stack-card").exists)
+        shot(app, "stack-admin-only")
+    }
+
+    // MARK: - Browser access, the last card going
+
+    /// An app with no browser sites of its own and one request: Allow takes the request card away, the
+    /// grant reloads under Allowed by you and the note stays; Withdraw takes the last grant away and
+    /// the note still says so.
+    func test_browserAccessLastRequestThenLastGrant() throws {
+        let app = launch(tab: "apps", ["-smoke-browser-grant-alone"])
+        let notNow = app.buttons["browser-grant-not-now"]
+        XCTAssertTrue(notNow.waitForExistence(timeout: 25), "The inbox asks too.")
+        notNow.tap()
+        waitGone(notNow)
+        openApp(app, named: "Plants")
+        let allow = app.buttons["app-browser-allow"]
+        XCTAssertTrue(reveal(app, allow, tries: 16), "The request waits on the app page.")
+        XCTAssertFalse(any(app, "app-browser-manifest").exists, "This app names no sites of its own.")
+        XCTAssertEqual(allow.label, "Allow once")
+        bringToMiddle(app, allow)
+        allow.tap()
+        expectProbe(app, "browser grant allow bright-maple--plants once")
+        let note = app.staticTexts["app-browser-note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 15), "The answer is confirmed after its card goes.")
+        waitGone(app.buttons["app-browser-allow"])
+        let heading = app.staticTexts["app-browser-granted-title"]
+        XCTAssertTrue(reveal(app, heading, tries: 6), "The grants reload: the new one is under Allowed by you.")
+        XCTAssertTrue(app.staticTexts["news.example.com"].exists)
+        shot(app, "browser-access-last-request")
+        let withdraw = app.buttons["app-browser-withdraw"]
+        XCTAssertTrue(reveal(app, withdraw, tries: 6))
+        bringToMiddle(app, withdraw)
+        withdraw.tap()
+        expectProbe(app, "browser grant withdrawn bright-maple--plants")
+        waitGone(app.buttons["app-browser-withdraw"])
+        wait(note, "label == 'Browser access withdrawn'", timeout: 15)
+        XCTAssertFalse(app.staticTexts["news.example.com"].exists, "The grant is gone.")
+        shot(app, "browser-access-last-grant")
+    }
 }

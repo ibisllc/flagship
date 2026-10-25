@@ -1,0 +1,541 @@
+{
+  "tag": "flagship/assurance-policy/v1",
+  "note": "classicalExchangeAllowed: a strict scope in force (profile strict, rollout enforced or retired) refuses a classical-only exchange unless one authorization names this exact subjectDigest (64 lower-case hex), that scope's kind and id, and the generation now in force. Each strict side needs its own.",
+  "cases": [
+    {
+      "name": "neither side strict",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [],
+      "allowed": true
+    },
+    {
+      "name": "neither side strict, subject not hex",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "subjectDigest": "not-a-digest",
+      "auths": [],
+      "allowed": true
+    },
+    {
+      "name": "strict but only prepared is not in force",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "prepared",
+        "generation": 1,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [],
+      "allowed": true
+    },
+    {
+      "name": "strict side, no authorization",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [],
+      "allowed": false
+    },
+    {
+      "name": "strict side authorized",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "installation",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 2
+        }
+      ],
+      "allowed": true
+    },
+    {
+      "name": "retired strict side authorized",
+      "a": {
+        "scope": {
+          "kind": "service",
+          "id": "plucky-avocet--notes"
+        },
+        "profile": "strict",
+        "rollout": "retired",
+        "generation": 5,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "service",
+            "id": "plucky-avocet--notes"
+          },
+          "generation": 5
+        }
+      ],
+      "allowed": true
+    },
+    {
+      "name": "other subject",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "scope": {
+            "kind": "installation",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 2
+        }
+      ],
+      "allowed": false
+    },
+    {
+      "name": "subject not hex even when authorized",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "subjectDigest": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+      "auths": [
+        {
+          "subjectDigest": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "scope": {
+            "kind": "installation",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 2
+        }
+      ],
+      "allowed": false
+    },
+    {
+      "name": "later policy generation voids it",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 3,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "installation",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 2
+        }
+      ],
+      "allowed": false
+    },
+    {
+      "name": "earlier generation",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "installation",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 1
+        }
+      ],
+      "allowed": false
+    },
+    {
+      "name": "same id, other scope kind",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "service",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 2
+        }
+      ],
+      "allowed": false
+    },
+    {
+      "name": "same kind, other scope id",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "compatibility",
+        "rollout": "legacy",
+        "generation": 0,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": false
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "installation",
+            "id": "other.plucky-avocet"
+          },
+          "generation": 2
+        }
+      ],
+      "allowed": false
+    },
+    {
+      "name": "both strict, one authorization",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 3,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "installation",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 2
+        }
+      ],
+      "allowed": false
+    },
+    {
+      "name": "both strict, each authorized",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 3,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "installation",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 2
+        },
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "installation",
+            "id": "other.plucky-avocet"
+          },
+          "generation": 3
+        }
+      ],
+      "allowed": true
+    },
+    {
+      "name": "both strict, both authorizations name one scope",
+      "a": {
+        "scope": {
+          "kind": "installation",
+          "id": "home.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 2,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "b": {
+        "scope": {
+          "kind": "installation",
+          "id": "other.plucky-avocet"
+        },
+        "profile": "strict",
+        "rollout": "enforced",
+        "generation": 3,
+        "headDigest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "enforcedEver": true
+      },
+      "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "auths": [
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "installation",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 2
+        },
+        {
+          "subjectDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "scope": {
+            "kind": "installation",
+            "id": "home.plucky-avocet"
+          },
+          "generation": 2
+        }
+      ],
+      "allowed": false
+    }
+  ]
+}

@@ -92,9 +92,18 @@ public struct RolloutEvidence: Sendable {
     }
 }
 
-public struct ExportAuthorization: Sendable {
+/// The owner's permission to export one subject from one strict scope into compatibility. It holds
+/// only under the policy generation it names: a later policy change voids it.
+public struct ExportAuthorization: Codable, Equatable, Sendable {
+    /// Digest of the exact data or workflow the owner allowed into compatibility.
     public var subjectDigest: String
+    /// The strict scope that allowed the export.
+    public var scope: PolicyScope
+    /// That scope's policy generation at the time.
     public var generation: Int
+    public init(subjectDigest: String, scope: PolicyScope, generation: Int) {
+        self.subjectDigest = subjectDigest; self.scope = scope; self.generation = generation
+    }
 }
 
 public enum AssurancePolicy {
@@ -238,11 +247,21 @@ public enum AssurancePolicy {
         throw PolicyError("upgrade-required", "no signature suite in common")
     }
 
-    /// Two scopes exchanging data over a classical-only channel: the stricter side decides.
+    /// Two scopes exchanging data over a classical-only channel: the stricter side decides. Each
+    /// strict scope refuses unless one authorization names this exact subject, that scope and the
+    /// policy generation now in force (test-vectors/assurance-policy/classical-exchange.json).
+    public static func classicalExchangeAllowed(_ a: PolicyState, _ b: PolicyState, subjectDigest: String, auths: [ExportAuthorization]) -> Bool {
+        if !isHex64(subjectDigest) && (strictInForce(a) || strictInForce(b)) { return false }
+        func covered(_ s: PolicyState) -> Bool {
+            !strictInForce(s) || auths.contains { x in
+                x.subjectDigest == subjectDigest && x.scope.kind == s.scope.kind && x.scope.id == s.scope.id && x.generation == s.generation
+            }
+        }
+        return covered(a) && covered(b)
+    }
+
     public static func classicalExchangeAllowed(_ a: PolicyState, _ b: PolicyState, subjectDigest: String, auth: ExportAuthorization?) -> Bool {
-        if !strictInForce(a) && !strictInForce(b) { return true }
-        guard let auth else { return false }
-        return auth.subjectDigest == subjectDigest && isHex64(subjectDigest)
+        classicalExchangeAllowed(a, b, subjectDigest: subjectDigest, auths: auth.map { [$0] } ?? [])
     }
 
     // MARK: Served chains

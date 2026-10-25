@@ -14,6 +14,7 @@ import {
   selectSignatureSuite,
   strictInForce,
   type AssurancePolicyChange,
+  type ExportAuthorization,
   type PolicySignatureCheck,
   type PolicyState,
 } from "../src/assurancePolicy.js";
@@ -180,6 +181,14 @@ describe("negotiation", () => {
     const other: PolicyState = { ...strict, scope: { kind: "installation", id: "other" }, generation: 3 };
     expect(classicalExchangeAllowed(strict, other, D("c"), auth)).toBe(false);
     expect(classicalExchangeAllowed(strict, other, D("c"), [auth, { subjectDigest: D("c"), scope: other.scope, generation: 3 }])).toBe(true);
+  });
+
+  it("matches the shared classical-exchange vectors (Swift and Kotlin read the same file)", () => {
+    const v = JSON.parse(readFileSync(new URL("../test-vectors/assurance-policy/classical-exchange.json", import.meta.url), "utf8")) as {
+      cases: Array<{ name: string; a: PolicyState; b: PolicyState; subjectDigest: string; auths: ExportAuthorization[]; allowed: boolean }>;
+    };
+    expect(v.cases.length).toBeGreaterThan(10);
+    for (const c of v.cases) expect(classicalExchangeAllowed(c.a, c.b, c.subjectDigest, c.auths), c.name).toBe(c.allowed);
   });
 });
 

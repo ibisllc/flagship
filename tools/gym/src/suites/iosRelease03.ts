@@ -226,4 +226,127 @@ export const IOS_RELEASE03: readonly Scenario[] = [
       dimension: "D4",
     },
   ),
+  iosTotal(
+    "ios-total-gpus-card",
+    "The server page's GPUs card lists each GPU with its model, memory and state (in use, free, set aside after a fault), the app that holds it with Stop, the apps waiting, and says when new GPU work is paused.",
+    N + "test_acceleratorsShowWhoHoldsEachGpu",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-accelerators -smoke-accelerators-paused; open Home's server page." },
+        { kind: "assert", describe: "Read the GPUs card." },
+      ],
+      assertions: [
+        { describe: "The holder", handle: "accelerator-holder-0", expect: "text", text: "Used by Plants" },
+        { describe: "The queue", handle: "accelerator-queue-bright-maple--wiki", expect: "text", text: "Wiki is waiting" },
+      ],
+      screenshots: [shot("accelerators-card", "The GPUs card.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-total-gpus-stop",
+    "Stop asks first; Cancel sends nothing; Stop posts the allocation to /api/screens/accelerators/stop, says the app no longer has the GPU, reloads, and the app waiting gets it.",
+    N + "test_acceleratorStopAsksThenFreesTheGpu",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-accelerators; open Home's server page." },
+        { kind: "tap", describe: "Stop, Cancel, Stop, then Stop in the dialog." },
+      ],
+      assertions: [
+        { describe: "Notice", handle: "accelerators-notice", expect: "text", text: "Plants no longer has the GPU." },
+        { describe: "Wiki gets it", handle: "accelerator-holder-0", expect: "text", text: "Starting for Wiki" },
+      ],
+      screenshots: [shot("accelerators-stopped", "After Stop.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-total-gpus-none",
+    "A box with no GPU (no GPU service) shows no GPUs card.",
+    N + "test_noGpuShowsNoCard",
+    {
+      steps: [{ kind: "launch", describe: "Launch -smoke-accelerators-none; open Home's server page and scroll it." }],
+      assertions: [{ describe: "No card", handle: "accelerators-card", expect: "absent" }],
+      screenshots: [shot("accelerators-none", "The server page with no GPUs card.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-total-browser-access-last-card",
+    "An app with no browser sites of its own: Allow on its only request takes the card away, the grants reload under Allowed by you and the note stays; Withdraw on the last grant takes that card away and the note says Browser access withdrawn.",
+    N + "test_browserAccessLastRequestThenLastGrant",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-browser-grant-alone on Apps; put off the inbox; open Plants." },
+        { kind: "tap", describe: "Allow once, then Withdraw." },
+      ],
+      assertions: [
+        { describe: "Reloaded grant", handle: "app-browser-granted-title", expect: "text", text: "Allowed by you" },
+        { describe: "Withdrawn", handle: "app-browser-note", expect: "text", text: "Browser access withdrawn" },
+      ],
+      screenshots: [shot("browser-access-last-request", "The grant after the last request."), shot("browser-access-last-grant", "The note after the last grant.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-total-gpus-approve",
+    "Apps asking to use a GPU show their exact terms; Approve signs flagship/gpu-approval/v1 with the admin root; Decline hides the ask and sends nothing; a sharing request is approved with a trust domain and consent; Withdraw signs flagship/gpu-approval-withdraw/v1.",
+    N + "test_gpuApprovalApproveDeclineWithdraw",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-accelerators -smoke-gpu-approvals; open Home's server page." },
+        { kind: "tap", describe: "Approve Render, Decline Train, Approve Stream, Withdraw Photos." },
+      ],
+      assertions: [{ describe: "Withdrawn", handle: "accelerators-notice", expect: "text", text: "Photos can no longer use the GPU." }],
+      screenshots: [shot("gpu-approval-pending", "Requests with their terms."), shot("gpu-approval-answered", "After the answers.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-total-gpus-approve-read-only",
+    "A device without the admin root sees GPU requests and approvals read-only with the admin-only line.",
+    N + "test_gpuApprovalReadOnlyOnANonAdminDevice",
+    {
+      steps: [{ kind: "launch", describe: "Launch without the admin root, -smoke-accelerators -smoke-gpu-approvals." }],
+      assertions: [{ describe: "Admin-only line", handle: "gpu-approval-admin-only", expect: "present" }],
+      screenshots: [shot("gpu-approval-read-only", "Read-only requests.")],
+      dimension: "D6",
+    },
+  ),
+  iosTotal(
+    "ios-total-stack-move",
+    "Container stack: Move to the new stack signs flagship/arch-v2-switch/v1 with the admin root and dry-runs it (the box's plan); Move now sends it; the card follows the move to its trial.",
+    N + "test_stackMoveDryRunThenMove",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-stack; open Home's server page." },
+        { kind: "tap", describe: "Move to the new stack, then Move now." },
+      ],
+      assertions: [{ describe: "On the new stack", handle: "stack-current", expect: "text", text: "This server runs the new stack (Podman and the Rust services)." }],
+      screenshots: [shot("stack-plan", "The dry run's plan."), shot("stack-trial", "The trial.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-total-stack-blocked",
+    "Container stack: a plan without room shows the box's sentence and Move now stays off.",
+    N + "test_stackMoveBlockedSaysWhy",
+    {
+      steps: [{ kind: "launch", describe: "Launch -smoke-stack-blocked; Move to the new stack." }],
+      assertions: [{ describe: "Blocker", handle: "stack-blocker-0", expect: "present" }],
+      screenshots: [shot("stack-blocked", "The refusal.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-total-stack-admin-only",
+    "A device without the admin root has no Container stack card.",
+    N + "test_stackCardIsAdminOnly",
+    {
+      steps: [{ kind: "launch", describe: "Launch without the admin root, -smoke-stack." }],
+      assertions: [{ describe: "No card", handle: "stack-card", expect: "absent" }],
+      screenshots: [shot("stack-admin-only", "No card.")],
+      dimension: "D6",
+    },
+  ),
 ];

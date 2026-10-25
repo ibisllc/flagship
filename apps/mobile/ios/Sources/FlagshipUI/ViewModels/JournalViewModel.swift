@@ -39,7 +39,8 @@ public final class JournalViewModel {
         self.client = client
         self.serverDomain = serverDomain
         self.now = now
-        self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        // The box takes a journal read only under the admin root on an admin-pinned box (the IRK only unpinned).
+        self.signer = signer ?? { reason in try await ServerOrderSaver.sensitiveOrderKey(reason: reason) }
     }
 
     public func load(unit: String, lines: Int64) async {

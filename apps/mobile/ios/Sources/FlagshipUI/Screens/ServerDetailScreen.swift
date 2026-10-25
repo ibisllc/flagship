@@ -279,6 +279,12 @@ public struct ServerDetailScreen: View {
                     ServerBackupsSection(serverDomain: d.serverFqdn)
                     // AI02: models, the job queue and fine-tuning on this server only.
                     LocalAiCard(serverDomain: d.serverFqdn)
+                    // The box's GPUs: who holds or waits for each, and Stop (gpu/http.ts).
+                    AcceleratorsCard(serverDomain: d.serverFqdn)
+                    if AdminOrderGate.allows(app) {
+                        // Classic → new stack (archV2Switch.ts): a signed dry run, then the move.
+                        StackSwitchCard(serverDomain: d.serverFqdn)
+                    }
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
                     // An older box doesn't report debug access and can't take a grant.
                     if d.debugAccess != nil {

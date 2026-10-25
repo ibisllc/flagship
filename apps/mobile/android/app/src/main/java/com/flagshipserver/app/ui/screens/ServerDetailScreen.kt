@@ -440,6 +440,12 @@ fun ServerDetailScreen(
             JournalCard(serverDomain = d.value.serverFqdn)
             debugVm?.let { vm -> DebugAccessCard(vm = vm, onChanged = { detailVm?.load() }) }
             onOpenLocalAi?.let { LocalAiCard(onOpen = it) }
+            // The box's GPUs: who holds or waits for each, and Stop (gpu/http.ts).
+            client?.let { AcceleratorsCard(serverDomain = d.value.serverFqdn, client = it) }
+            // Classic → new stack (archV2Switch.ts), admin devices only: a signed dry run, then the move.
+            if (com.flagshipserver.app.core.AdminOrderGate.allows(appState)) {
+                client?.let { StackSwitchCard(serverDomain = d.value.serverFqdn, client = it) }
+            }
             ServerBackupsSection(serverDomain = d.value.serverFqdn)
             BackupMigrateCard(serverDomain = d.value.serverFqdn)
             UpdateServerCard(

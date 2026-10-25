@@ -414,7 +414,14 @@
 //       size, memory and speed, the job queue and its GPU holders, fine-tuning on an app's staged sample
 //       data (signed flagship/local-ai-train/v1) with its checkpoints, app access with daily quotas
 //       (signed flagship/local-ai-app-grant/v1); the build menu and the AI-key step offer "On this server".
-const SHELL_VERSION = "v179";
+//  v180: GPUs on the server page (views/accelerators.js, lib/accelerators.js): each GPU, the app that holds
+//       it with Stop (asks first, POST /api/screens/accelerators/stop), and the apps waiting for one; apps
+//       asking to use a GPU with Approve (signed flagship/gpu-approval/v1, lib/gpuApproval.js) and Decline,
+//       and the approvals in force with Withdraw (signed flagship/gpu-approval-withdraw/v1). Container stack
+//       (views/stack-switch.js, lib/stackSwitch.js, admin devices): a signed flagship/arch-v2-switch/v1
+//       dry run shows the box's plan, Move now sends it, the card follows the move. Journal reads and
+//       these orders sign with the admin root (lib/adminRoot.js SENSITIVE_TAGS).
+const SHELL_VERSION = "v180";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -508,6 +515,9 @@ const OPTIONAL_SHELL = [
   "/lib/freeAi.js",
   "/lib/modelMenu.js",
   "/lib/modelGroups.js",
+  "/lib/accelerators.js",
+  "/lib/gpuApproval.js",
+  "/lib/stackSwitch.js",
   "/lib/localAi.js",
   "/lib/localAiOrders.js",
   "/lib/vibeTranscript.js",
@@ -638,6 +648,8 @@ const OPTIONAL_SHELL = [
   "/views/server-sharing.js",
   "/views/server-backups.js",
   "/views/debug-access.js",
+  "/views/accelerators.js",
+  "/views/stack-switch.js",
   "/views/local-ai.js",
   "/views/shared-server.js",
   "/views/share-accept.js",

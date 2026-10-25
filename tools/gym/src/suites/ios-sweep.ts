@@ -781,6 +781,14 @@ const SHARE: readonly Scenario[] = [
     "D3",
   ),
   sweep(
+    "ios-sweep-share-world-once",
+    "The share world is made once per launch, not by a view: leaving the server page while Shared with loads and coming back lists Sam once and Alex's code once; Home lists Garage and Photos once each.",
+    SH + "test_shareWorldSeedsOnceAcrossALeftPage",
+    ["Home", "share-show-invitations"],
+    ["share-row-<sam>", "share-sas-<alex>", "home-shared-<garage>"],
+    "D3",
+  ),
+  sweep(
     "ios-sweep-share-owner-change-remove",
     "Owner: Sam's level, start-up approval (off then on) and app data each sign a new grant (admin root); Remove asks, Cancel keeps him, Remove revokes on the box and .com.",
     SH + "test_ownerChangesAccessAndRemoves",
@@ -968,10 +976,10 @@ const SERVER: readonly Scenario[] = [
   ),
   sweep(
     "ios-sweep-server-journal",
-    "Diagnostics: View journal shows the box's lines (IRK-signed read) for both units.",
+    "Diagnostics: View journal shows the box's lines (a read signed by the admin root on a pinned box) for both units.",
     SV + "test_journalFetchesBothUnits",
     ["sd-journal-fetch", "sd-journal-unit"],
-    ["signed journal by irk"],
+    ["signed journal by admin-root"],
   ),
   sweep(
     "ios-sweep-server-power",

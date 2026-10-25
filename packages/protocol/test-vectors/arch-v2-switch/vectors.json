@@ -1,0 +1,145 @@
+{
+  "about": "flagship/arch-v2-switch/v1: the owner's order to move one box between its container stacks, signed by the admin root (else the IRK on a box that pins none). Canonical: tag|serverDomain lower-cased|target|nonce|issuedAt.",
+  "signerHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+  "irkPubHex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+  "cases": [
+    {
+      "name": "move to the new stack",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "arch-v2",
+        "nonce": "0123456789abcdef0123456789abcdef",
+        "issuedAt": 1800000000000
+      },
+      "canonical": "flagship/arch-v2-switch/v1|home.alice.flagship.services|arch-v2|0123456789abcdef0123456789abcdef|1800000000000",
+      "signature": "b0992d359d6aa097b5599e39bd1e2a910a8dc9f82038ac787dd0cdf316a9ae5a9bfa3d7af151d8704b74353e1ce05b0071a4d0d06af01b3f1c7e0a71c447a406",
+      "expect": true
+    },
+    {
+      "name": "go back to the classic stack",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "classic",
+        "nonce": "fedcba9876543210fedcba9876543210",
+        "issuedAt": 1800000000000
+      },
+      "canonical": "flagship/arch-v2-switch/v1|home.alice.flagship.services|classic|fedcba9876543210fedcba9876543210|1800000000000",
+      "signature": "6e76a1bfe9971b8bd0d2333723f4894dba390f213abb0bc5b90da352aca8299a118517643289537f0e044611d6f109ff476f9b12fcb2bdc20a474a2e2e34a70b",
+      "expect": true
+    },
+    {
+      "name": "the server name is lower-cased",
+      "order": {
+        "serverDomain": "Home.Alice.Flagship.Services",
+        "target": "arch-v2",
+        "nonce": "0123456789abcdef0123456789abcdef",
+        "issuedAt": 1800000000000
+      },
+      "canonical": "flagship/arch-v2-switch/v1|home.alice.flagship.services|arch-v2|0123456789abcdef0123456789abcdef|1800000000000",
+      "signature": "b0992d359d6aa097b5599e39bd1e2a910a8dc9f82038ac787dd0cdf316a9ae5a9bfa3d7af151d8704b74353e1ce05b0071a4d0d06af01b3f1c7e0a71c447a406",
+      "expect": true
+    },
+    {
+      "name": "signed by the IRK while the box pins an admin root",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "arch-v2",
+        "nonce": "0123456789abcdef0123456789abcdef",
+        "issuedAt": 1800000000000
+      },
+      "signature": "a346294e9f70f91994d8133a5a28311af79ac2d80384165ee124783336691ce4bceeeb6c54dde24ce444c4bcc947e1017a3ea7f8bf530efc7f391b9de1894709",
+      "expect": false
+    },
+    {
+      "name": "the target changed after signing",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "classic",
+        "nonce": "0123456789abcdef0123456789abcdef",
+        "issuedAt": 1800000000000
+      },
+      "signature": "b0992d359d6aa097b5599e39bd1e2a910a8dc9f82038ac787dd0cdf316a9ae5a9bfa3d7af151d8704b74353e1ce05b0071a4d0d06af01b3f1c7e0a71c447a406",
+      "expect": false
+    },
+    {
+      "name": "the nonce changed after signing",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "arch-v2",
+        "nonce": "00000000000000000000000000000000",
+        "issuedAt": 1800000000000
+      },
+      "signature": "b0992d359d6aa097b5599e39bd1e2a910a8dc9f82038ac787dd0cdf316a9ae5a9bfa3d7af151d8704b74353e1ce05b0071a4d0d06af01b3f1c7e0a71c447a406",
+      "expect": false
+    },
+    {
+      "name": "another server",
+      "order": {
+        "serverDomain": "office.alice.flagship.services",
+        "target": "arch-v2",
+        "nonce": "0123456789abcdef0123456789abcdef",
+        "issuedAt": 1800000000000
+      },
+      "signature": "b0992d359d6aa097b5599e39bd1e2a910a8dc9f82038ac787dd0cdf316a9ae5a9bfa3d7af151d8704b74353e1ce05b0071a4d0d06af01b3f1c7e0a71c447a406",
+      "expect": false
+    },
+    {
+      "name": "another issuedAt",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "arch-v2",
+        "nonce": "0123456789abcdef0123456789abcdef",
+        "issuedAt": 1800000000001
+      },
+      "signature": "b0992d359d6aa097b5599e39bd1e2a910a8dc9f82038ac787dd0cdf316a9ae5a9bfa3d7af151d8704b74353e1ce05b0071a4d0d06af01b3f1c7e0a71c447a406",
+      "expect": false
+    }
+  ],
+  "refused": [
+    {
+      "name": "an upper-case nonce",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "arch-v2",
+        "nonce": "0123456789ABCDEF0123456789ABCDEF",
+        "issuedAt": 1800000000000
+      }
+    },
+    {
+      "name": "a short nonce",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "arch-v2",
+        "nonce": "0123",
+        "issuedAt": 1800000000000
+      }
+    },
+    {
+      "name": "an unknown target",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "docker",
+        "nonce": "0123456789abcdef0123456789abcdef",
+        "issuedAt": 1800000000000
+      }
+    },
+    {
+      "name": "a separator in the server name",
+      "order": {
+        "serverDomain": "home|alice",
+        "target": "arch-v2",
+        "nonce": "0123456789abcdef0123456789abcdef",
+        "issuedAt": 1800000000000
+      }
+    },
+    {
+      "name": "a negative issuedAt",
+      "order": {
+        "serverDomain": "home.alice.flagship.services",
+        "target": "arch-v2",
+        "nonce": "0123456789abcdef0123456789abcdef",
+        "issuedAt": -1
+      }
+    }
+  ]
+}

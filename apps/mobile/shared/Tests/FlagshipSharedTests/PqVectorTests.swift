@@ -286,6 +286,23 @@ final class PqVectorTests: XCTestCase {
         }
     }
 
+    func testClassicalExchangeVectors() throws {
+        let v = try load("test-vectors/assurance-policy/classical-exchange.json")
+        XCTAssertEqual(v["tag"] as? String, AssurancePolicy.tag)
+        let cases = v["cases"] as! [[String: Any]]
+        XCTAssertGreaterThan(cases.count, 10)
+        func decode<T: Decodable>(_ t: T.Type, _ o: Any?) throws -> T {
+            try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: try XCTUnwrap(o)))
+        }
+        for c in cases {
+            let name = c["name"] as? String ?? "?"
+            let auths = try decode([ExportAuthorization].self, c["auths"])
+            let got = AssurancePolicy.classicalExchangeAllowed(try decode(PolicyState.self, c["a"]), try decode(PolicyState.self, c["b"]),
+                                                               subjectDigest: c["subjectDigest"] as! String, auths: auths)
+            XCTAssertEqual(got, c["allowed"] as? Bool, name)
+        }
+    }
+
     // MARK: strict-reentry
 
     func testStrictReentryVectors() throws {

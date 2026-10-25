@@ -70,6 +70,10 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/server-wildcard-grant/v1", //  a server may hold the account's app-name certificate
   "flagship/local-ai-app-grant/v1", //     let an app call the server's own AI model (localAi/orders.ts)
   "flagship/local-ai-train/v1", //         fine-tune a model on one app's staged sample data
+  "flagship/gpu-approval/v1", //           let one app installation use a GPU on these terms (gpu/approvals.ts)
+  "flagship/gpu-approval-withdraw/v1", //  withdraw that approval and stop its GPU work
+  "flagship/journal-read/v1", //           read a unit's journal (the IRK only on an unpinned box)
+  "flagship/arch-v2-switch/v1", //         move a classic box to the new stack (archV2Switch.ts)
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion

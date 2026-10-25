@@ -276,6 +276,28 @@ interface ScreensClient {
     suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         throw ScreensError.NotImplemented("debug access")
 
+    // ---- Container stack (packages/server-daemon/src/archV2Switch.ts) --------------------------
+
+    /** `GET /api/stack`: the stack, the switch record and the plan for the other stack. */
+    suspend fun stackStatus(): StackStatus = throw ScreensError.NotImplemented("stack")
+
+    /** `POST /api/stack/switch` `{order, signature, dryRun?}`; a refusal is Http(409) with `{error, code, plan}`. */
+    suspend fun stackSwitch(body: StackSwitchBody): StackSwitchReply = throw ScreensError.NotImplemented("stack")
+
+    // ---- Accelerators (packages/server-daemon/src/gpu/http.ts) ---------------------------------
+
+    /** `GET /api/screens/accelerators`: the server's GPUs, who holds or waits for each. */
+    suspend fun accelerators(): AcceleratorsView = throw ScreensError.NotImplemented("accelerators")
+
+    /** `POST /api/screens/accelerators/stop {allocationId}`: take a GPU back from the app holding it. */
+    suspend fun stopAccelerator(allocationId: String): Unit = throw ScreensError.NotImplemented("accelerators")
+
+    /** `POST /api/screens/accelerators/approvals`: the owner's signed flagship/gpu-approval/v1. */
+    suspend fun approveGpu(body: GpuApprovalBody): Unit = throw ScreensError.NotImplemented("accelerators")
+
+    /** `POST /api/screens/accelerators/approvals/withdraw`: the signed flagship/gpu-approval-withdraw/v1. */
+    suspend fun withdrawGpuApproval(body: GpuApprovalWithdrawBody): Unit = throw ScreensError.NotImplemented("accelerators")
+
     // ---- Local AI (docs/architecture-v2/local-ai.md §4) ----------------------------------------
 
     /** `GET /api/screens/local-ai`: models, the job queue, the GPUs and the app grants. */

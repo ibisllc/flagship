@@ -16,7 +16,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 // The Kotlin half of packages/protocol/test-vectors/pq-binding/vectors.json (5 valid bindings,
-// 31 refusals, 27 gate cases) and test-vectors/assurance-policy/vectors.json.
+// 31 refusals, 27 gate cases), test-vectors/assurance-policy/vectors.json and its classical-exchange.json.
 class PqTrustVectorsTest {
     private val v = PqVectors.load("packages/protocol/test-vectors/pq-binding/vectors.json")
     private val policyVectors = PqVectors.load("packages/protocol/test-vectors/assurance-policy/vectors.json")
@@ -148,6 +148,31 @@ class PqTrustVectorsTest {
             assertEquals(c.s("name"), c.s("canonical"), String(AssurancePolicy.canonical(change), Charsets.UTF_8))
             assertEquals(c.s("name"), c.s("digest"), AssurancePolicy.digest(change))
             assertEquals(c["change"], AssurancePolicyWire.changeToJson(change))
+        }
+    }
+
+    private fun scope(o: JsonObject) = AssurancePolicy.Scope(o.s("kind"), o.s("id"))
+
+    private fun state(o: JsonObject) = AssurancePolicy.PolicyState(
+        scope = scope(o["scope"]!!.jsonObject),
+        profile = o.s("profile"),
+        rollout = o.s("rollout"),
+        generation = o["generation"]!!.jsonPrimitive.long,
+        headDigest = o.s("headDigest"),
+        enforcedEver = o["enforcedEver"]!!.jsonPrimitive.boolean,
+    )
+
+    @Test
+    fun classicalExchangeMatchesTheSharedVectors() {
+        val ex = PqVectors.load("packages/protocol/test-vectors/assurance-policy/classical-exchange.json")
+        val cases = ex["cases"]!!.jsonArray.map { it.jsonObject }
+        assertTrue(cases.size > 10)
+        for (c in cases) {
+            val auths = c["auths"]!!.jsonArray.map { it.jsonObject }.map {
+                AssurancePolicy.ExportAuthorization(it.s("subjectDigest"), scope(it["scope"]!!.jsonObject), it["generation"]!!.jsonPrimitive.long)
+            }
+            val got = AssurancePolicy.classicalExchangeAllowed(state(c["a"]!!.jsonObject), state(c["b"]!!.jsonObject), c.s("subjectDigest"), auths)
+            assertEquals(c.s("name"), c["allowed"]!!.jsonPrimitive.boolean, got)
         }
     }
 }

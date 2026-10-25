@@ -153,6 +153,8 @@ import { SERVER_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
 import { debugAccessBannerHtml, debugAccessCardHtml, wireDebugAccess } from "./debug-access.js";
 import { localAiEntryHtml, wireLocalAiEntry } from "./local-ai.js";
+import { acceleratorsSlotHtml, wireAccelerators } from "./accelerators.js";
+import { stackSlotHtml, wireStackSwitch } from "./stack-switch.js";
 
 import { tr, trn, dateLocale } from "../lib/i18n.js";
 registerView("view-server-detail");
@@ -588,6 +590,8 @@ export async function renderServerDetail() {
       </div>
       ${debugAccessCardHtml(body.debugAccess, { isAdmin: isAdminDevice(session), fqdn: body.serverFqdn })}
       ${localAiEntryHtml()}
+      ${acceleratorsSlotHtml(body.serverFqdn)}
+      ${canSignAdminOrders() ? stackSlotHtml(body.serverFqdn) : ""}
       <h2 class="mt-4">${tr("Diagnostics")}</h2>
       <div class="card" id="journal-card">
         <label class="caption">${tr("Unit")}</label>
@@ -654,6 +658,8 @@ export async function renderServerDetail() {
     wireJournal(body);
     wireDebugAccess(body);
     wireLocalAiEntry(body.serverFqdn);
+    void wireAccelerators(body.serverFqdn).catch(() => {});
+    if (canSignAdminOrders()) void wireStackSwitch(body.serverFqdn).catch(() => {});
     wireMakeLeader(body);
     wireServerSharing(body);
     wireServerApps(body.serverFqdn);

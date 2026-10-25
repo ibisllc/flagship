@@ -409,6 +409,28 @@ class LiveScreensClient(
     override suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         request("/api/screens/debug-access", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
 
+    override suspend fun stackStatus(): StackStatus = request("/api/stack", StackStatus.serializer())
+
+    override suspend fun stackSwitch(body: StackSwitchBody): StackSwitchReply =
+        request("/api/stack/switch", StackSwitchReply.serializer(), "POST", json.encodeToString(StackSwitchBody.serializer(), body).toByteArray())
+
+    override suspend fun accelerators(): AcceleratorsView = request("/api/screens/accelerators", AcceleratorsView.serializer())
+
+    override suspend fun stopAccelerator(allocationId: String) {
+        val body = kotlinx.serialization.json.buildJsonObject { put("allocationId", kotlinx.serialization.json.JsonPrimitive(allocationId)) }
+        request<Unit>("/api/screens/accelerators/stop", null, "POST", body.toString().toByteArray())
+    }
+
+    override suspend fun approveGpu(body: GpuApprovalBody) {
+        // trustDomain and ownerConsent go as null, never left out: the box reads the exact terms it listed.
+        val withNulls = kotlinx.serialization.json.Json { encodeDefaults = true }
+        request<Unit>("/api/screens/accelerators/approvals", null, "POST", withNulls.encodeToString(GpuApprovalBody.serializer(), body).toByteArray())
+    }
+
+    override suspend fun withdrawGpuApproval(body: GpuApprovalWithdrawBody) {
+        request<Unit>("/api/screens/accelerators/approvals/withdraw", null, "POST", json.encodeToString(GpuApprovalWithdrawBody.serializer(), body).toByteArray())
+    }
+
     override suspend fun localAi(): LocalAiView = request("/api/screens/local-ai", LocalAiView.serializer())
 
     override suspend fun localAiJob(jobId: String): LocalAiJobDetail =

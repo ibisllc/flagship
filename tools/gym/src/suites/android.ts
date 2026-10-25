@@ -1364,6 +1364,30 @@ const ARCHIVE_SWEEP: readonly Scenario[] = [
     ["Don't approve"], ["no approval on the mock box"], ["approve-download"]),
 ];
 
+const gpus = sweep("GymAcceleratorsTest", "D3");
+const GPUS_SWEEP: readonly Scenario[] = [
+  gpus("gpus-card", "The server page's GPUs card: each GPU's model, memory and state, the app that holds it with Stop, the apps waiting, paused admission.", "gpusCardShowsWhoHoldsEachGpu",
+    ["Living-room mini-PC"], ["accelerators-card", "accelerator-holder-0", "accelerator-queue-alice--wiki", "accelerators-paused"], ["gpus-card"]),
+  gpus("gpus-stop", "Stop asks first; Cancel sends nothing; Stop posts the allocation, says the app no longer has the GPU, and the app waiting gets it.", "gpuStopAsksThenFreesTheGpu",
+    ["accelerator-stop-<allocation>", "accelerator-stop-cancel", "accelerator-stop-confirm"], ["accelerators-notice", "the mock box saw accelerator stop"], ["gpus-stop-ask", "gpus-stopped"]),
+  gpus("gpus-none", "A box with no GPU, or an older box without the GPU screen, shows no GPUs card.", "noGpuShowsNoCard",
+    ["Living-room mini-PC"], ["no accelerators-card"], ["gpus-none"]),
+  gpus("gpus-approve", "Approve signs flagship/gpu-approval/v1 with the admin root; Decline hides the ask and sends nothing; a sharing request carries a trust domain and consent; Withdraw signs flagship/gpu-approval-withdraw/v1.", "gpuApprovalApproveDeclineWithdraw",
+    ["gpu-approval-approve-alice--render", "gpu-approval-decline-alice--train", "gpu-approval-approve-alice--stream", "gpu-approval-withdraw-alice--photos"], ["gpu-approval:admin", "gpu-approval-withdraw:admin"], ["gpu-approval-pending", "gpu-approval-answered"]),
+  gpus("gpus-approve-read-only", "Without the admin root GPU requests show read-only with the admin-only line.", "gpuApprovalReadOnlyOnANonAdminDevice",
+    ["Living-room mini-PC"], ["gpu-approval-admin-only"], ["gpu-approval-read-only"]),
+];
+
+const stack = sweep("GymStackSwitchTest", "D4");
+const STACK_SWEEP: readonly Scenario[] = [
+  stack("stack-move", "Container stack: a signed dry run shows the box's plan; Move now sends the same order; the card follows the move to its trial.", "stackMoveDryRunThenMove",
+    ["stack-move", "stack-move-now"], ["arch-v2-switch:admin", "stack-record"], ["stack-plan", "stack-trial"]),
+  stack("stack-blocked", "Container stack: a plan without room shows the box's sentence; Move now stays off.", "stackMoveBlockedSaysWhy",
+    ["stack-move"], ["stack-blocker-0"], ["stack-blocked"]),
+  stack("stack-admin-only", "A device without the admin root has no Container stack card.", "stackCardIsAdminOnly",
+    ["Living-room mini-PC"], ["no stack-card"], ["stack-admin-only"]),
+];
+
 const share = sweep("GymShareTest", "D3");
 const SHARE_SWEEP: readonly Scenario[] = [
   share("share-code-mismatch", "Owner: It doesn't on a code that doesn't match revokes that share.", "ownerCodeDoesNotMatchRevokes",
@@ -1522,6 +1546,8 @@ export const ANDROID_GYM_SCENARIOS: readonly Scenario[] = [
   ...SERVER_SWEEP,
   ...ARCHIVE_SWEEP,
   ...SHARE_SWEEP,
+  ...GPUS_SWEEP,
+  ...STACK_SWEEP,
   ...APPS_SWEEP,
   ...BUILD_SWEEP,
   ...SETTINGS_SWEEP,

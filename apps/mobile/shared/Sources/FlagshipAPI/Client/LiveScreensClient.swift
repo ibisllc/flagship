@@ -454,6 +454,27 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func debugAccessRevoke(body: String) async throws -> DebugAccessChange {
         try await request("/api/screens/debug-access/revoke", method: "POST", body: Data(body.utf8))
     }
+    // MARK: Container stack (packages/server-daemon/src/archV2Switch.ts)
+    public func stackStatus() async throws -> StackStatus {
+        try await request("/api/stack")
+    }
+    public func stackSwitch(body: [String: Any]) async throws -> StackSwitchReply {
+        try await request("/api/stack/switch", method: "POST", body: try JSONSerialization.data(withJSONObject: body))
+    }
+    // MARK: Accelerators (packages/server-daemon/src/gpu/http.ts)
+    public func accelerators() async throws -> AcceleratorsView {
+        try await request("/api/screens/accelerators")
+    }
+    public func stopAccelerator(allocationId: String) async throws {
+        _ = try await requestData("/api/screens/accelerators/stop", method: "POST",
+                                  body: try JSONSerialization.data(withJSONObject: ["allocationId": allocationId]))
+    }
+    public func approveGpu(body: [String: Any]) async throws {
+        _ = try await requestData("/api/screens/accelerators/approvals", method: "POST", body: try JSONSerialization.data(withJSONObject: body))
+    }
+    public func withdrawGpuApproval(body: [String: Any]) async throws {
+        _ = try await requestData("/api/screens/accelerators/approvals/withdraw", method: "POST", body: try JSONSerialization.data(withJSONObject: body))
+    }
     // MARK: Local AI (docs/architecture-v2/local-ai.md §4)
     public func localAi() async throws -> LocalAiView {
         try await request("/api/screens/local-ai")

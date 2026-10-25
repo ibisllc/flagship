@@ -498,6 +498,13 @@ struct ShareAcceptScreen: View {
     @State private var scanning = false
     @State private var badPaste = false
 
+    /// Opening a link runs to its end even when this screen goes away meanwhile: the model is made
+    /// once, so a cancelled open would leave it failed with nothing to open it again.
+    @MainActor
+    static func openToTheEnd(_ m: ShareAcceptModel, shareId: String, secretHex: String) async {
+        await Task { @MainActor in await m.open(shareId: shareId, secretHex: secretHex) }.value
+    }
+
     var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
@@ -521,8 +528,9 @@ struct ShareAcceptScreen: View {
                         client: ServerShareServices.mockClient(world), umkSeed: ServerShareServices.umkSeed,
                         admin: ServerShareServices.acceptAdminKeys(username: app.currentUser ?? "bright-maple",
                                                                    isDemoAccount: app.isDemoAccount))
-                    model = ShareAcceptModel(store: SharedWithMeStore(flow: flow), flow: flow)
-                    await model?.open(shareId: world.shareId, secretHex: HexUtil.encode(world.secret))
+                    let m = ShareAcceptModel(store: SharedWithMeStore(flow: flow), flow: flow)
+                    model = m
+                    await Self.openToTheEnd(m, shareId: world.shareId, secretHex: HexUtil.encode(world.secret))
                     return
                 }
                 #endif
@@ -532,12 +540,12 @@ struct ShareAcceptScreen: View {
                                          flow: ServerShareDemo.isOn && !ServerShareDemo.flowsOn ? store.flow
                                              : ServerShareServices.acceptFlow(username: app.currentUser, isDemoAccount: app.isDemoAccount),
                                          demo: demo)
-                if let shareId, let secretHex {
-                    await model?.open(shareId: shareId, secretHex: secretHex)
+                if let shareId, let secretHex, let m = model {
+                    await Self.openToTheEnd(m, shareId: shareId, secretHex: secretHex)
                 }
                 #if DEBUG
-                if shareId == nil || secretHex == nil, ServerShareDemo.route == "accept" {
-                    await model?.open(shareId: ServerShareDemo.invitation.shareId, secretHex: ServerShareDemo.secretHex)
+                if shareId == nil || secretHex == nil, ServerShareDemo.route == "accept", let m = model {
+                    await Self.openToTheEnd(m, shareId: ServerShareDemo.invitation.shareId, secretHex: ServerShareDemo.secretHex)
                 }
                 #endif
             }

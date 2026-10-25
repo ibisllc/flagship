@@ -12266,5 +12266,221 @@
     "en": "A server shared with you is asking you to unlock it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "GPUs": {
+    "en": "GPUs",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "New GPU work is paused on this server. Apps that already have a GPU keep it.": {
+    "en": "New GPU work is paused on this server. Apps that already have a GPU keep it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "Waiting for a GPU": {
+    "en": "Waiting for a GPU",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "The GPU service on this server didn't answer. Try again in a moment.": {
+    "en": "The GPU service on this server didn't answer. Try again in a moment.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "The app loses the GPU at once and may stop working until it is started again. The next app waiting gets the GPU.": {
+    "en": "The app loses the GPU at once and may stop working until it is started again. The next app waiting gets the GPU.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "GPU %@: %@": {
+    "en": "GPU %@: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "Drives the screen, so apps can't use it": {
+    "en": "Drives the screen, so apps can't use it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "Starting for %@": {
+    "en": "Starting for %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%@ is giving it back": {
+    "en": "%@ is giving it back",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "Used by %@": {
+    "en": "Used by %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%@ is waiting": {
+    "en": "%@ is waiting",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%@ is waiting (%lld jobs)": {
+    "en": "%@ is waiting (%lld jobs)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "Stop %@ using the GPU?": {
+    "en": "Stop %@ using the GPU?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%@ no longer has the GPU.": {
+    "en": "%@ no longer has the GPU.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "Only an admin device can approve GPU use. This device can see it.": {
+    "en": "Only an admin device can approve GPU use. This device can see it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "This request is for another server, so nothing was signed.": {
+    "en": "This request is for another server, so nothing was signed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "Let an app use this server's GPU": {
+    "en": "Let an app use this server's GPU",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "Stop an app using this server's GPU": {
+    "en": "Stop an app using this server's GPU",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "computing": {
+    "en": "computing",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "graphics": {
+    "en": "graphics",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "video encoding": {
+    "en": "video encoding",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "video decoding": {
+    "en": "video decoding",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "a GPU of its own": {
+    "en": "a GPU of its own",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "part of a GPU": {
+    "en": "part of a GPU",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "a GPU shared with trusted apps": {
+    "en": "a GPU shared with trusted apps",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%lld × %@ GPU": {
+    "en": "%lld × %@ GPU",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "in its own virtual machine": {
+    "en": "in its own virtual machine",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "in the app sandbox": {
+    "en": "in the app sandbox",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "kept apart from other apps": {
+    "en": "kept apart from other apps",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%@ asks to use the GPU: %@": {
+    "en": "%@ asks to use the GPU: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%@ may use the GPU: %@": {
+    "en": "%@ may use the GPU: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%@ can use the GPU.": {
+    "en": "%@ can use the GPU.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%@ won't get a GPU.": {
+    "en": "%@ won't get a GPU.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "%@ can no longer use the GPU.": {
+    "en": "%@ can no longer use the GPU.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AcceleratorsViewModel.swift"
+  },
+  "Container stack": {
+    "en": "Container stack",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "This server runs the classic stack (Docker).": {
+    "en": "This server runs the classic stack (Docker).",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "This server runs the new stack (Podman and the Rust services).": {
+    "en": "This server runs the new stack (Podman and the Rust services).",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Move to the new stack": {
+    "en": "Move to the new stack",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Go back to the classic stack": {
+    "en": "Go back to the classic stack",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Move this server to another stack": {
+    "en": "Move this server to another stack",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "What the move does": {
+    "en": "What the move does",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Needs about %@ free; this server has %@.": {
+    "en": "Needs about %@ free; this server has %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Move now": {
+    "en": "Move now",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Moving: the server restarts and its apps come back on the new stack.": {
+    "en": "Moving: the server restarts and its apps come back on the new stack.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "On trial until %@. If it doesn't stay healthy, the server goes back by itself.": {
+    "en": "On trial until %@. If it doesn't stay healthy, the server goes back by itself.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Moved on %@.": {
+    "en": "Moved on %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "The move was undone: %@": {
+    "en": "The move was undone: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "The server is restarting for the move. This card shows how it goes.": {
+    "en": "The server is restarting for the move. This card shows how it goes.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "An app asked to use a GPU": {
+    "en": "An app asked to use a GPU",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Approved an app's GPU use": {
+    "en": "Approved an app's GPU use",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Withdrew an app's GPU use": {
+    "en": "Withdrew an app's GPU use",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "The stack move was undone": {
+    "en": "The stack move was undone",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Started a stack move": {
+    "en": "Started a stack move",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Finished a stack move": {
+    "en": "Finished a stack move",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
   }
 }

@@ -182,6 +182,20 @@ public protocol ScreensClient: Sendable {
     func rejectPublisher(serviceId: String) async throws
     /// `POST /api/screens/debug-access/revoke {revoke, signatureHex}`.
     func debugAccessRevoke(body: String) async throws -> DebugAccessChange
+    // MARK: Container stack (packages/server-daemon/src/archV2Switch.ts)
+    /// `GET /api/stack`: the stack, the switch record and the plan for the other stack.
+    func stackStatus() async throws -> StackStatus
+    /// `POST /api/stack/switch` `{order, signature, dryRun?}`: a refusal is `.http(409)` with `{error, code, plan}`.
+    func stackSwitch(body: [String: Any]) async throws -> StackSwitchReply
+    // MARK: Accelerators (packages/server-daemon/src/gpu/http.ts)
+    /// `GET /api/screens/accelerators`: the server's GPUs, who holds or waits for each.
+    func accelerators() async throws -> AcceleratorsView
+    /// `POST /api/screens/accelerators/stop {allocationId}`: take a GPU back from the app holding it.
+    func stopAccelerator(allocationId: String) async throws
+    /// `POST /api/screens/accelerators/approvals`: the owner's signed `flagship/gpu-approval/v1` for one app installation.
+    func approveGpu(body: [String: Any]) async throws
+    /// `POST /api/screens/accelerators/approvals/withdraw`: the signed `flagship/gpu-approval-withdraw/v1`.
+    func withdrawGpuApproval(body: [String: Any]) async throws
     // MARK: Local AI (docs/architecture-v2/local-ai.md §4)
     /// `GET /api/screens/local-ai`: models, the job queue, GPUs, app access.
     func localAi() async throws -> LocalAiView
@@ -500,6 +514,12 @@ public extension ScreensClient {
     func debugAccessRevoke(body: String) async throws -> DebugAccessChange {
         throw ScreensClientError.notImplemented("debug access")
     }
+    func stackStatus() async throws -> StackStatus { throw ScreensClientError.notImplemented("stack") }
+    func stackSwitch(body: [String: Any]) async throws -> StackSwitchReply { throw ScreensClientError.notImplemented("stack") }
+    func accelerators() async throws -> AcceleratorsView { throw ScreensClientError.notImplemented("accelerators") }
+    func stopAccelerator(allocationId: String) async throws { throw ScreensClientError.notImplemented("accelerators") }
+    func approveGpu(body: [String: Any]) async throws { throw ScreensClientError.notImplemented("accelerators") }
+    func withdrawGpuApproval(body: [String: Any]) async throws { throw ScreensClientError.notImplemented("accelerators") }
     func localAi() async throws -> LocalAiView { throw ScreensClientError.notImplemented("local AI") }
     func localAiJobDetail(jobId: String) async throws -> LocalAiJobDetail { throw ScreensClientError.notImplemented("local AI") }
     func localAiSetUseGpu(_ useGpu: Bool) async throws -> LocalAiSettings { throw ScreensClientError.notImplemented("local AI") }

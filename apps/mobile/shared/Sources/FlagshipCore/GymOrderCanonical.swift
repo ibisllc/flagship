@@ -153,6 +153,20 @@ public enum GymOrderCanonical {
                                         source: source, highTokens: c.highTokens, issuedAt: c.issuedAt).canonicalBytes()
         }
         // Local AI (docs/architecture-v2/local-ai.md §4): the `order` object exactly as sent.
+        signers.registerCanonical("arch-v2-switch") { p in
+            guard let o = p as? [String: Any], let d = o["serverDomain"] as? String, let t = o["target"] as? String,
+                  let n = o["nonce"] as? String, let at = int64(o["issuedAt"]) else { return nil }
+            return try? StackSwitchOrder(serverDomain: d, target: t, nonce: n, issuedAt: at).canonicalBytes()
+        }
+        signers.registerCanonical("gpu-approval") { p in
+            guard let o = p as? [String: Any], let r = GpuApprovalOrder.request(fromBody: o), let at = int64(o["issuedAt"]) else { return nil }
+            return try? GpuApprovalOrder.canonical(server: r.server, r, issuedAt: at)
+        }
+        signers.registerCanonical("gpu-approval-withdraw") { p in
+            guard let o = p as? [String: Any], let server = o["server"] as? String, let app = o["appId"] as? String,
+                  let inst = o["installationId"] as? String, let gen = int64(o["generation"]), let at = int64(o["issuedAt"]) else { return nil }
+            return try? GpuApprovalOrder.withdrawCanonical(server: server, appId: app, installationId: inst, generation: gen, issuedAt: at)
+        }
         signers.registerCanonical("local-ai-app-grant") { p in
             guard let o = p as? [String: Any], let server = o["serverDomain"] as? String, let id = o["serviceId"] as? String,
                   let r = int64(o["requestsPerDay"]), let t = int64(o["tokensPerDay"]), let m = int64(o["maxTokensPerRequest"]),

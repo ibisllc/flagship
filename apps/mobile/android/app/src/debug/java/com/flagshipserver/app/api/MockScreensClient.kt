@@ -1963,6 +1963,169 @@ class MockScreensClient(
         val DEVICE_NAMES = mapOf(SELF_DEVICE_ID to "Pixel 9", OTHER_DEVICE_ID to "Kitchen iPad")
     }
 
+    // ---- Container stack (packages/server-daemon/src/archV2Switch.ts) --------------------------
+
+    /** The box's stack screen; null is a box without it (404: no card). */
+    var stackFixture: StackStatus? = null
+    /** The signed bodies the mock box took, newest last. */
+    val stackBodies = mutableListOf<StackSwitchBody>()
+    private var stackReads = 0
+
+    /** The classic stack with a plan that fits, or without room for the move. */
+    fun classicStack(blocked: Boolean = false): StackStatus {
+        val gib = 1_073_741_824L
+        return StackStatus(
+            stack = "classic", engine = "docker",
+            plan = StackPlan(
+                from = "classic", target = "arch-v2",
+                steps = listOf(
+                    "Install Podman and the new stack's programs from this server's release",
+                    "Move 4 app image(s) and 3 volume(s) from Docker to Podman (Docker's copy is kept)",
+                    "Restart on the new stack, then check every app comes back within 20 minutes",
+                    "Keep Docker for a 24-hour trial: if the server isn't healthy, it goes back by itself",
+                ),
+                images = 4, volumes = 3, needBytes = 6 * gib, freeBytes = if (blocked) 3 * gib else 41 * gib,
+                blockers = if (blocked) listOf(StackBlocker("no-podman-room", "Moving the apps needs about 6.0 GB free on this server; it has 3.0 GB.")) else emptyList(),
+            ),
+        )
+    }
+
+    override suspend fun stackStatus(): StackStatus {
+        tick()
+        val s = stackFixture ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        val r = s.switchRecord
+        if (r != null && r.state == "installing" && ++stackReads >= 2) {
+            stackFixture = StackStatus(
+                stack = r.target, engine = if (r.target == "arch-v2") "podman" else "docker",
+                switchRecord = r.copy(state = "trial", trialUntil = now() + 24L * 3_600_000),
+                plan = StackPlan(from = r.target, target = if (r.target == "arch-v2") "classic" else "arch-v2",
+                    blockers = listOf(StackBlocker("in-progress", "A stack switch is already under way on this server."))),
+            )
+        }
+        return stackFixture!!
+    }
+
+    override suspend fun stackSwitch(body: StackSwitchBody): StackSwitchReply {
+        tick()
+        val s = stackFixture ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        if (body.order.serverDomain.lowercase() != boxFqdn) throw ScreensError.Http(403, """{"error":"serverId mismatch"}""")
+        MockSignatures.requireAdmin("arch-v2-switch", com.flagshipserver.app.core.StackSwitchOrder.canonical(body.order), body.signature)
+        stackBodies += body
+        val plan = if (s.plan.target == body.order.target) s.plan
+        else StackPlan(s.stack, body.order.target, blockers = listOf(StackBlocker("already", "This server already runs that stack.")))
+        if (body.dryRun == true) return StackSwitchReply(ok = true, dryRun = true, plan = plan)
+        plan.blockers.firstOrNull()?.let { throw ScreensError.Http(409, """{"error":"${it.error}","code":"${it.code}"}""") }
+        stackReads = 0
+        stackFixture = s.copy(
+            switchRecord = StackSwitchRecord("installing", body.order.target, now()),
+            plan = plan.copy(blockers = listOf(StackBlocker("in-progress", "A stack switch is already under way on this server."))),
+        )
+        return StackSwitchReply(ok = true, state = "restarting", plan = plan)
+    }
+
+    // ---- Accelerators (packages/server-daemon/src/gpu/http.ts) ---------------------------------
+
+    /** The box's GPU screen; null is a box without it (it answers 404, so the page shows no card). */
+    var acceleratorsFixture: AcceleratorsView? = null
+    /** The allocations the owner stopped, newest last (the gym checks them). */
+    val acceleratorStops = mutableListOf<String>()
+
+    /** Plants holds the RTX 4090, Wiki waits, the A2000 is free and the Radeon was set aside after a fault. */
+    fun defaultAccelerators(): AcceleratorsView = AcceleratorsView(
+        available = true,
+        catalog = AcceleratorCatalog("current", 1),
+        devices = listOf(
+            AcceleratorDevice("0", "NVIDIA GeForce RTX 4090", "nvidia", 24_564, "in-use",
+                listOf(AcceleratorHolder("alice--plants", "app-alice--plants-k1", "running"))),
+            AcceleratorDevice("1", "NVIDIA RTX A2000", "nvidia", 6_138, "free"),
+            AcceleratorDevice("2", "AMD Radeon PRO W7600", "amd", 8_176, "quarantined"),
+        ),
+        queue = listOf(AcceleratorQueueEntry("alice--wiki", 1)),
+    )
+
+    /** The signed approval and withdrawal bodies the mock box took, newest last. */
+    val gpuApprovalBodies = mutableListOf<GpuApprovalBody>()
+    val gpuWithdrawBodies = mutableListOf<GpuApprovalWithdrawBody>()
+
+    /** Render, Train and Stream (sharing) ask to use a GPU; Photos may already. `server` is filled with the box's name when read. */
+    fun gpuApprovalsFixture(): Pair<List<GpuApprovalRequest>, List<GpuApprovalRequest>> = Pair(
+        listOf(
+            GpuApprovalRequest("", "alice--render", "inst-7f3a", 3, "nvidia-cuda", 1, listOf("compute"), listOf("exclusive"), "gvisor-nvproxy", true),
+            GpuApprovalRequest("", "alice--train", "inst-9", 12, "amd-rocm", 4, listOf("compute", "graphics"), listOf("exclusive"), "vm-passthrough", true),
+            GpuApprovalRequest("", "alice--stream", "inst-5", 2, "nvidia-cuda", 1, listOf("video-encode"), listOf("cooperative"), "gvisor-nvproxy", false),
+        ),
+        listOf(
+            GpuApprovalRequest("", "alice--photos", "inst-01", 1, "nvidia-cuda", 1, listOf("video-encode", "compute"), listOf("cooperative"),
+                "gvisor-nvproxy", false, "family", "consent-2026-10-25", 1_800_000_000_000),
+        ),
+    )
+
+    private val boxFqdn get() = "$podContext.bright-maple.flagship.services"
+
+    override suspend fun accelerators(): AcceleratorsView {
+        tick()
+        val v = acceleratorsFixture ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        val named = { r: GpuApprovalRequest -> if (r.server.isEmpty()) r.copy(server = boxFqdn) else r }
+        return v.copy(pendingApprovals = v.pendingApprovals.map(named), approvals = v.approvals.map(named))
+    }
+
+    /** As the box: the body's terms must be a pending request's exactly, for this box, signed by the admin root. */
+    override suspend fun approveGpu(body: GpuApprovalBody) {
+        tick()
+        val v = acceleratorsFixture ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        if (body.server != boxFqdn) throw ScreensError.Http(403, """{"error":"That approval is for another server."}""")
+        val r = com.flagshipserver.app.core.GpuApprovalOrders.request(body)
+        val i = v.pendingApprovals.indexOfFirst { it.appId == r.appId }
+        if (i < 0 || v.pendingApprovals[i].installationId != r.installationId || v.pendingApprovals[i].generation != r.generation) {
+            throw ScreensError.Http(409, """{"error":"This approval is for another installation or version of the app.","code":"stale-installation"}""")
+        }
+        val want = v.pendingApprovals[i]
+        if (want.backend != r.backend || want.maxCount != r.maxCount || want.isolation != r.isolation || want.caps.toSet() != r.caps.toSet() || want.policies.toSet() != r.policies.toSet()) {
+            throw ScreensError.Http(409, """{"error":"This approval doesn't match what the app asks for.","code":"terms-mismatch"}""")
+        }
+        if ("cooperative" in r.policies && (r.trustDomain == null || r.ownerConsent == null)) {
+            throw ScreensError.Http(400, """{"error":"Sharing a GPU between apps needs your consent and a trust domain.","code":"needs-trust-domain"}""")
+        }
+        MockSignatures.requireAdmin("gpu-approval", com.flagshipserver.app.core.GpuApprovalOrders.canonical(body.server, r, body.issuedAt), body.signature)
+        gpuApprovalBodies += body
+        val granted = r.copy(issuedAt = body.issuedAt)
+        acceleratorsFixture = v.copy(pendingApprovals = v.pendingApprovals.filterIndexed { j, _ -> j != i }, approvals = v.approvals + granted)
+    }
+
+    /** Withdraws a granted approval (a request never approved answers 404, as the box does). */
+    override suspend fun withdrawGpuApproval(body: GpuApprovalWithdrawBody) {
+        tick()
+        val v = acceleratorsFixture ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        MockSignatures.requireAdmin(
+            "gpu-approval-withdraw",
+            com.flagshipserver.app.core.GpuApprovalOrders.withdrawCanonical(boxFqdn, body.appId, body.installationId, body.generation, body.issuedAt),
+            body.signature,
+        )
+        val match = { r: GpuApprovalRequest -> r.appId == body.appId && r.installationId == body.installationId && r.generation == body.generation }
+        if (v.approvals.none(match)) throw ScreensError.Http(404, """{"error":"This app has no GPU approval to withdraw.","code":"not-approved"}""")
+        gpuWithdrawBodies += body
+        acceleratorsFixture = v.copy(approvals = v.approvals.filterNot(match))
+    }
+
+    /** Frees the device and, as the GPU service's fair queue does, hands it to the first app waiting. */
+    override suspend fun stopAccelerator(allocationId: String) {
+        tick()
+        val v = acceleratorsFixture ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        val i = v.devices.indexOfFirst { d -> d.holders.any { it.allocationId == allocationId } }
+        if (i < 0) throw ScreensError.Http(404, """{"error":"That GPU job is not running."}""")
+        acceleratorStops += allocationId
+        var queue = v.queue
+        var holders = v.devices[i].holders.filter { it.allocationId != allocationId }
+        val next = queue.firstOrNull()
+        if (holders.isEmpty() && next != null) {
+            holders = listOf(AcceleratorHolder(next.appId, "app-${next.appId}-q1", "reserved"))
+            queue = if (next.waiting > 1) listOf(next.copy(waiting = next.waiting - 1)) + queue.drop(1) else queue.drop(1)
+        }
+        val devices = v.devices.toMutableList()
+        devices[i] = devices[i].copy(holders = holders, state = if (holders.isEmpty()) "free" else "in-use")
+        acceleratorsFixture = v.copy(devices = devices, queue = queue)
+    }
+
     // ---- Local AI (docs/architecture-v2/local-ai.md §4) ----------------------------------------
 
     /** The box's Local AI screen. The gym edits it; the actions below change it like the box would. */
