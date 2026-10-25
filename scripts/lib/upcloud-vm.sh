@@ -90,7 +90,7 @@ vm_toolchains() { # vm_toolchains <repo> [log file]
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y -q git curl xz-utils build-essential pkg-config libssl-dev python3 jq openssl xxd cryptsetup
+apt-get install -y -q git curl xz-utils build-essential pkg-config libssl-dev python3 jq openssl xxd cryptsetup gnupg dirmngr
 curl -fsSL "https://nodejs.org/dist/v$1/node-v$1-linux-x64.tar.xz" | tar -xJ -C /usr/local --strip-components=1
 curl -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain none --profile minimal
 curl -fsSL "https://go.dev/dl/$2.linux-amd64.tar.gz" | tar -xz -C /usr/local
