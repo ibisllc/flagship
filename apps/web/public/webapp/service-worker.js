@@ -422,7 +422,8 @@
 //       dry run shows the box's plan, Move now sends it, the card follows the move. Journal reads and
 //       these orders sign with the admin root (lib/adminRoot.js SENSITIVE_TAGS).
 //  v181: feat/marketplace only: release/0.3's shell (v180) plus the marketplace, tier status, allowance, install, developer views and the Pro "Separate list on each server" switch (lib/listScope.js); a version above its parent's, bump past the parent's on rebase.
-const SHELL_VERSION = "v181";
+//  v184: feat/outbound-proxy only: feat/marketplace's v181 plus the outbound-proxy setting (v182 is feat/custom-domains', v183 feat/custom-names').
+const SHELL_VERSION = "v184";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
