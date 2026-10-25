@@ -102,7 +102,7 @@ Running when this was written (subagents; if this session is gone, they are gone
        crypto-graph.
 3. [x] (`5e6a71249`) iOS string harvest (Xcode build with `SWIFT_EMIT_LOC_STRINGS=YES`, then `scripts/i18n-ios.mjs`),
        then `npm run i18n`.
-4. [ ] Native mock gyms on the tip: iOS UI tests (GymRelease03Tests and the rest), Android emulator gym.
+4. [ ] (iOS done `75e9a4a80`; Android running) Native mock gyms on the tip: iOS UI tests (GymRelease03Tests and the rest), Android emulator gym.
 5. [ ] Update `AGENTS.md` "Current status" and `SECURITY-0.3-PROGRESS.md` for the merged release.
 6. [ ] Live release gym `bash scripts/gym-release-run.sh` (needs `scripts/gym-refresh.sh` first, the
        gym branch rebased onto this tip, box artifact built by `box-artifact.yml`); act on its exit code
@@ -165,3 +165,9 @@ Running when this was written (subagents; if this session is gone, they are gone
   GymSweepShareTests test_ownerCreatesALinkAndCancelsIt + test_sheetRouteCreatesALink,
   GymRelease03Tests test_updatePromptOnceThenSettingsRow + test_updateKeptInRecoveryAndShareSwitch.
   A helper agent is fixing them (uncommitted until it reports). Android mock gym after it.
+- 2026-10-25: iOS gym failures fixed `75e9a4a80` (2 real bugs: Share update results switch never
+  loaded; recovery-update sheet lost under the closing onboarding cover; share seam pins first;
+  2 test races). 8/8 + the two classes 28/28 re-run green. To mirror on Android/web: the
+  update-reports load must not hang off a view that only exists once loaded; the recovery prompt
+  must wait for a closing sign-in/onboarding screen. Android mock gym running
+  (`scratchpad/gym-android.log`).
