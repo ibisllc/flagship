@@ -276,3 +276,14 @@ Running when this was written (subagents; if this session is gone, they are gone
   phone-usb-burn, other-os-installers, data-sovereignty, alpine). After review: move feat/* to
   rebased/*, push, archive+delete ux-*, remove the two worktrees. rust/target was deleted (cache).
   Asked Harry: outbound proxy (a) free in 0.3 without the marketplace, or (b) with payments.
+- 2026-10-25: Harry: data sovereignty's core stays for the NEXT release. TODO once
+  rebased/data-sovereignty exists: add to its docs/data-sovereignty.md the 2026-10-25 discussion:
+  boot unlock tries .com then falls back to the LAN (box listens on a fixed port and tries its default
+  gateway; the reply is already owner-signed and sealed to the box key so the carrier doesn't matter;
+  LAN path limited to private/link-local addresses); phone hotspot as the "serious user" setup
+  (phone = gateway); after ~30 min without .com a running box advertises itself over mDNS/Bonjour so
+  the phone finds it with no internet ("turn off the internet and wait"); phone-only (browsers can't).
+  Open questions: giving users their own control plane ("what if they don't need us anymore?"), how
+  to handle LAN networks (static IP, 802.1X, captive portals, VLANs, IPv6-only) and headless servers.
+  Phone USB burn: Harry wants it IN this release. Outbound proxy: asked free vs Pro (recommended free
+  BYO-proxy; paid = Flagship-run exit/WireGuard/second relay), gated on the initramfs OHTTP piece.
