@@ -106,8 +106,15 @@ final class GymSweepServerTests: GymSweepCase {
         plants.tap()
         wait(save, "isEnabled == true")
         save.tap()
+        // The toast lasts 2.5 s and the tap returns only once the app idles, so look for it at once,
+        // more often than waitForExistence's 1 s polls, and before the probe (which stays).
+        let toast = text(app, containing: "Front page set to plants")
+        let deadline = Date().addingTimeInterval(10)
+        var shown = toast.exists
+        while !shown, Date() < deadline { usleep(100_000); shown = toast.exists }
+        XCTAssertTrue(shown, "Save says the front page is set.")
         expectProbe(app, "signed front-page by admin-root")
-        XCTAssertTrue(text(app, containing: "Front page set to plants").waitForExistence(timeout: 10))
+        wait(save, "isEnabled == false")
         shot(app, "front-page-saved")
     }
 

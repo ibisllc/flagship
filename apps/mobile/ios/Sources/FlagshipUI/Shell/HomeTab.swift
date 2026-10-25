@@ -324,8 +324,22 @@ public struct HomeTab: View {
               let state = try? await server.recoveryRecordState(username: user) else { return }
         app.recoveryNeedsPasskeyUpdate = state.needsPasskeyUpdate
         if recoveryUpdate == nil, RecoveryUpdatePrompt.shouldAsk(state: state, username: user) {
-            recoveryUpdate = RecoveryUpdateViewModel(username: user, client: server,
-                                                     webAuthn: RecoveryWebAuthn.provider(username: user))
+            let vm = RecoveryUpdateViewModel(username: user, client: server,
+                                             webAuthn: RecoveryWebAuthn.provider(username: user))
+            Task {
+                await Self.untilNothingCoversTheApp()
+                if recoveryUpdate == nil { recoveryUpdate = vm }
+            }
+        }
+    }
+
+    /// Right after sign-in or a restore, Home asks while the onboarding cover is still closing,
+    /// and a sheet asked for then opens on that cover and leaves with it. Wait for it to go.
+    private static func untilNothingCoversTheApp() async {
+        for _ in 0..<100 {
+            let roots = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
+            if roots.allSatisfy({ $0.presentedViewController == nil }) { return }
+            try? await Task.sleep(for: .milliseconds(100))
         }
     }
 

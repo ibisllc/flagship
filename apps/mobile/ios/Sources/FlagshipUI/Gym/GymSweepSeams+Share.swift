@@ -29,6 +29,10 @@ extension GymSweepSeams {
         ServerShareDemo.gymTransport = args.contains("-smoke-share-flows")
             ? GymShareTransport(ownerDomains: app.pods.map(\.fqdn))
             : nil
+        // This phone blessed its own servers earlier, so a new share offers the key it pinned then.
+        if args.contains("-smoke-share-flows"), let stk = HexUtil.decode(GymShareTransport.stkPubHex) {
+            for pod in app.pods where !pod.fqdn.isEmpty { ServerKeyPins().pin(stk, for: pod.fqdn) }
+        }
     }
 }
 #endif

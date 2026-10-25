@@ -1182,20 +1182,19 @@ struct UpdateReportsToggle: View {
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        Group {
+        // A stack, not a Group: a Group with nothing in it never runs its `.task`, so the switch never loaded.
+        VStack(alignment: .leading, spacing: FS.space.s1) {
             if let share {
-                VStack(alignment: .leading, spacing: FS.space.s1) {
-                    Divider().padding(.vertical, FS.space.s1)
-                    Toggle(isOn: Binding(get: { share }, set: { set($0) })) {
-                        Text(Self.title).font(FS.font.bodySm()).foregroundColor(c.text)
-                    }
-                    .tint(c.accent)
-                    .disabled(saving)
-                    .accessibilityIdentifier("sd-update-reports")
-                    Text(Self.detail).font(FS.font.caption()).foregroundColor(c.textMuted)
-                    if let failure {
-                        Text(failure).font(FS.font.caption()).foregroundColor(c.danger)
-                    }
+                Divider().padding(.vertical, FS.space.s1)
+                Toggle(isOn: Binding(get: { share }, set: { set($0) })) {
+                    Text(Self.title).font(FS.font.bodySm()).foregroundColor(c.text)
+                }
+                .tint(c.accent)
+                .disabled(saving)
+                .accessibilityIdentifier("sd-update-reports")
+                Text(Self.detail).font(FS.font.caption()).foregroundColor(c.textMuted)
+                if let failure {
+                    Text(failure).font(FS.font.caption()).foregroundColor(c.danger)
                 }
             }
         }

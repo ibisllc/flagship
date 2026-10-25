@@ -165,20 +165,27 @@ final class GymSweepSettingsTests: GymSweepCase {
         let classic = app.buttons["appicon-classic"]
         let legacy = app.buttons["appicon-legacy"]
         XCTAssertTrue(find(app, legacy))
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let ok = springboard.alerts.buttons["OK"]
         // The icon is simulator state: an earlier run cut short can leave Legacy chosen.
-        if legacy.isSelected {
-            classic.tap()
-            if ok.waitForExistence(timeout: 8) { ok.tap() }
+        if legacy.isSelected { chooseIcon(classic) }
+        wait(classic, "isSelected == true", timeout: 15)
+        chooseIcon(legacy)
+        chooseIcon(classic)
+    }
+
+    /// Picks an app icon and waits until it shows as chosen. iOS confirms the change in a
+    /// SpringBoard alert that can come late on a busy simulator (the choice lands only once
+    /// it is dismissed), and a change iOS refuses leaves the old icon chosen, so this taps OK
+    /// whenever the alert shows and asks once more if nothing changed.
+    private func chooseIcon(_ icon: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let ok = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["OK"]
+        for _ in 0..<2 where !icon.isSelected {
+            icon.tap()
+            let deadline = Date().addingTimeInterval(15)
+            while !icon.isSelected, Date() < deadline {
+                if ok.exists { ok.tap() } else { usleep(250_000) }
+            }
         }
-        wait(classic, "isSelected == true", timeout: 15)
-        legacy.tap()
-        if ok.waitForExistence(timeout: 8) { ok.tap() }
-        wait(legacy, "isSelected == true", timeout: 15)
-        classic.tap()
-        if ok.waitForExistence(timeout: 8) { ok.tap() }
-        wait(classic, "isSelected == true", timeout: 15)
+        XCTAssertTrue(icon.isSelected, "\(icon.identifier) shows as the chosen icon.", file: file, line: line)
     }
 
     /// Privacy's three switches flip and flip back (left as they were).
