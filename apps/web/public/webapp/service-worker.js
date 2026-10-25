@@ -399,7 +399,8 @@
 //       one passkey sheet and asks once to update a record from before (lib/recoveryUpdate.js); wipe &
 //       restart sends the new passkey's attestation; browser access requests beyond an app's manifest are
 //       answered under Activity and on the app's page (lib/browserGrantAlerts.js); an imported app checks
-//       its repo for updates and shows the proposal before the build (lib/upstreamSync.js).
+//       its repo for updates and shows the proposal before the build (lib/upstreamSync.js); the recovery
+//       window is opened in the webapp's language (#<mode>&lang=, lib/recovery.js).
 const SHELL_VERSION = "v177";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 

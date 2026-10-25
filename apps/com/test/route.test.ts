@@ -1675,6 +1675,19 @@ describe("recovery.flagshipserver.com — dedicated WebAuthn-PRF origin (Task #7
     expect(await r.text()).toBe("asset:/recovery/recovery.js");
   });
 
+  it("the page's translations (its own runtime and catalogs) come from /recovery/ under the same CSP", async () => {
+    for (const [path, asset] of [
+      ["/recoveryI18n.js", "/recovery/recoveryI18n.js"],
+      ["/recoveryI18nLocales.js", "/recovery/recoveryI18nLocales.js"],
+      ["/i18n/es.json?v=0123456789ab", "/recovery/i18n/es.json"],
+    ]) {
+      const r = await route(new Request(`https://recovery.flagshipserver.com${path}`), makeEnv());
+      expect(r.status).toBe(200);
+      expect(await r.text()).toBe(`asset:${asset}`);
+      expect(r.headers.get("content-security-policy")).toContain("connect-src 'self' https://flagshipserver.com");
+    }
+  });
+
   it("every response carries a strict Content-Security-Policy header", async () => {
     const r = await route(
       new Request("https://recovery.flagshipserver.com/"),

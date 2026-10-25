@@ -48,7 +48,7 @@ import { controlApex, recoveryOrigin } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 import { toast } from "./toast.js";
 
-import { tr } from "./i18n.js";
+import { tr, currentLanguage } from "./i18n.js";
 import { recoveryUpdateAsked, markRecoveryUpdateAsked } from "./recoveryUpdateFlag.js";
 const APEX = controlApex();
 
@@ -388,6 +388,11 @@ export async function hasCloudRecovery(username) {
 
 // ---- internals ----
 
+/** `https://recovery.<apex>/#recover&lang=es`: the mode, then the language the webapp shows (recovery/recoveryI18n.js). */
+export function recoveryWindowUrl(mode, lang = currentLanguage()) {
+  return `${RECOVERY_ORIGIN}/#${mode}&lang=${encodeURIComponent(lang)}`;
+}
+
 /**
  * Drive a sub-origin popup ceremony.
  *
@@ -397,7 +402,8 @@ export async function hasCloudRecovery(username) {
  * popup is closed afterwards either way.
  */
 async function runSubOriginFlow(mode, payload) {
-  const url = `${RECOVERY_ORIGIN}/#${mode}`;
+  // The window speaks the language this page shows: its own origin cannot read our saved choice.
+  const url = recoveryWindowUrl(mode);
   const popup = window.open(url, "flagship-recovery", "noopener=no,popup=yes,width=520,height=720");
   if (!popup) {
     throw new Error("recovery popup was blocked — allow pop-ups on this site");

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// i18n-pwa — localisation for the webapp (apps/web/public/webapp). Runtime: lib/i18n.js (tr / trn).
+// i18n-pwa — localisation for the webapp (apps/web/public/webapp) and the account-recovery page it opens
+// (apps/web/public/recovery, served on its own origin recovery.<apex>). Runtimes: webapp lib/i18n.js and
+// recovery/recoveryI18n.js (tr / trn). Both share one set of keys, i18n/webapp/<lang>.json.
 //
 //   node scripts/i18n-pwa.mjs extract [--dry] [file…]
 //        Reads the webapp's JavaScript with the TypeScript parser and rewrites user-facing text:
@@ -9,9 +11,11 @@
 //          * `n === 1 ? "" : "s"` plural idioms -> trn(n, "{0} app", "{0} apps")
 //        and records every English key in i18n/webapp/en.json. Static text of index.html is recorded too
 //        (lib/i18n.js translates that subtree at start-up). Idempotent: wrapped text is skipped.
-//        Skipped candidates go to /tmp/i18n-pwa-skipped.txt.
+//        Skipped candidates go to /tmp/i18n-pwa-skipped.txt. The recovery page's JavaScript and index.html follow
+//        the same rules (its static text is translated by recoveryI18n.js at start-up).
 //   node scripts/i18n-pwa.mjs build     i18n/webapp/<lang>.json -> webapp/i18n/<lang>.json (ga languages only; --drafts for all)
-//                                       and lib/i18nLocales.js
+//                                       and lib/i18nLocales.js; recovery/i18n/<lang>.json (only the keys the recovery
+//                                       page uses: that origin can load only its own files) and recovery/recoveryI18nLocales.js
 //   node scripts/i18n-pwa.mjs check     fail on drift or a ga language that lacks strings
 //   node scripts/i18n-pwa.mjs dump|merge|midx|status|lint
 
@@ -23,21 +27,27 @@ import { parse, serialize } from "parse5";
 import { ROOT, locales, targets, readEn, writeEn, readTr, runCommon, lintSurface, pluralArgProblem } from "./lib/i18n-kv.mjs";
 
 const SURFACE = "webapp";
-const WEBAPP = path.join(ROOT, "apps/web/public/webapp");
+const PUBLIC = path.join(ROOT, "apps/web/public");
+const WEBAPP = path.join(PUBLIC, "webapp");
+const RECOVERY = path.join(PUBLIC, "recovery");
 const args = process.argv.slice(2);
 const cmd = args[0];
 const dry = args.includes("--dry");
 
-const EXCLUDE = [/\/vendor\//, /\/service-worker\.js$/, /\/lib\/i18n\.js$/, /\/lib\/i18nLocales\.js$/, /\/i18n\//];
+const EXCLUDE = [/\/vendor\//, /\/service-worker\.js$/, /\/lib\/i18n\.js$/, /\/lib\/i18nLocales\.js$/, /\/recovery\/recoveryI18n(Locales)?\.js$/, /\/i18n\//];
 
-function listJs(dir = WEBAPP, out = []) {
+function listJsIn(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) listJs(p, out);
+    if (e.isDirectory()) listJsIn(p, out);
     else if (e.name.endsWith(".js") && !EXCLUDE.some((r) => r.test(p))) out.push(p);
   }
   return out.sort();
 }
+const listRecoveryJs = () => listJsIn(RECOVERY);
+/** Every file whose tr()/trn() keys go into i18n/webapp: the webapp's, then the recovery page's. */
+const listJs = () => [...listJsIn(WEBAPP), ...listRecoveryJs()];
+const isRecovery = (file) => file.startsWith(RECOVERY + path.sep);
 
 // ---- what counts as text a person reads ---------------------------------------------------------
 
@@ -110,15 +120,20 @@ const skipped = [];
 
 function transformFile(file) {
   const src = fs.readFileSync(file, "utf8");
-  const rel = path.relative(WEBAPP, file);
+  const recovery = isRecovery(file);
+  const rel = path.relative(recovery ? RECOVERY : WEBAPP, file);
+  const ctxPath = path.relative(PUBLIC, file).split(path.sep).join("/");
   const sf = ts.createSourceFile(file, src, ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
   const edits = []; // {start,end,text}
   const lineOf = (pos) => sf.getLineAndCharacterOfPosition(pos).line + 1;
   let usedTr = false, usedTrn = false;
-  const trName = /\btr\b/.test(src) && !/import \{[^}]*\btr\b[^}]*\} from "[^"]*i18n\.js"/.test(src) ? "tr_" : "tr";
+  const trName = /\btr\b/.test(src) && !/import \{[^}]*\btr\b[^}]*\} from "[^"]*[iI]18n\.js"/.test(src) ? "tr_" : "tr";
   const trnName = "trn";
 
   const addEdit = (start, end, text) => edits.push({ start, end, text });
+  // a line that ends in `// i18n: keep` holds text that stays as written (a passkey's relying-party name, a protocol reason)
+  const keepLines = new Set(src.split("\n").flatMap((l, i) => (/\/\/ i18n: keep\b/.test(l) ? [i + 1] : [])));
+  const kept = (n) => keepLines.has(lineOf(n.getStart(sf)));
 
   /** Source of [start,end) with the (maximal) edits inside it applied. */
   function renderRange(start, end) {
@@ -133,10 +148,10 @@ function transformFile(file) {
   const renderNode = (n) => renderRange(n.getStart(sf), n.getEnd());
   const alreadyEdited = (n) => edits.some((e) => e.start <= n.getStart(sf) && e.end >= n.getEnd());
 
-  const skip = (n, why) => { skipped.push(`${rel}:${lineOf(n.getStart(sf))} [${why}] ${n.getText(sf).slice(0, 100).replace(/\n/g, " ")}`); };
+  const skip = (n, why) => { skipped.push(`${ctxPath}:${lineOf(n.getStart(sf))} [${why}] ${n.getText(sf).slice(0, 100).replace(/\n/g, " ")}`); };
 
   function note(key, n) {
-    if (!(key in entries)) entries[key] = { en: key, ctx: `webapp/${rel}:${lineOf(n.getStart(sf))}` };
+    if (!(key in entries)) entries[key] = { en: key, ctx: `${ctxPath}:${lineOf(n.getStart(sf))}` };
   }
   const q = (s) => JSON.stringify(s);
 
@@ -403,6 +418,7 @@ function transformFile(file) {
 
   function visit(n) {
     ts.forEachChild(n, visit); // children first, so nested edits exist when the parent renders
+    if ((ts.isStringLiteral(n) || ts.isTemplateExpression(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isBinaryExpression(n)) && kept(n)) return;
 
     if (ts.isTemplateExpression(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
       if (alreadyWrapped(n) || alreadyEdited(n)) return;
@@ -488,9 +504,9 @@ function transformFile(file) {
   const need = [];
   if (usedTr || out.includes(`${trName}(`)) need.push(trName === "tr" ? "tr" : `tr as ${trName}`);
   if (usedTrn) need.push("trn");
-  if (!/from "[^"]*lib\/i18n\.js"|from "\.\/i18n\.js"/.test(out) && need.length) {
+  if (!/from "[^"]*lib\/i18n\.js"|from "\.\/i18n\.js"|from "\.\/recoveryI18n\.js"/.test(out) && need.length) {
     const depth = rel.split(path.sep).length - 1;
-    const spec = rel.startsWith("lib" + path.sep) ? "./i18n.js" : (depth === 0 ? "./lib/i18n.js" : "../lib/i18n.js");
+    const spec = recovery ? "./recoveryI18n.js" : rel.startsWith("lib" + path.sep) ? "./i18n.js" : (depth === 0 ? "./lib/i18n.js" : "../lib/i18n.js");
     const line = `import { ${need.join(", ")} } from "${spec}";\n`;
     const importEnds = [];
     sf.statements.forEach((s) => { if (ts.isImportDeclaration(s)) importEnds.push(s.getEnd()); });
@@ -512,8 +528,14 @@ function transformFile(file) {
 
 // ---- index.html: static text ------------------------------------------------------------------------
 
-function staticHtmlEntries() {
-  const file = path.join(WEBAPP, "index.html");
+const STATIC_PAGES = [[path.join(WEBAPP, "index.html"), "webapp/index.html"], [path.join(RECOVERY, "index.html"), "recovery/index.html"]];
+
+/** The static text of the webapp's and the recovery page's index.html (translated at start-up by their runtimes). */
+function staticEntries(pages = STATIC_PAGES) {
+  return Object.assign({}, ...pages.map(([file, ctx]) => staticHtmlEntries(file, ctx)));
+}
+
+function staticHtmlEntries(file, ctx) {
   const doc = parse(fs.readFileSync(file, "utf8"), { sourceCodeLocationInfo: true });
   const found = {};
   const inlineOnly = (el) => (el.childNodes ?? []).every((c) => c.nodeName === "#text" || c.nodeName === "#comment" || (INLINE_TAGS.has(c.nodeName) && inlineOnly(c)));
@@ -523,16 +545,16 @@ function staticHtmlEntries() {
     if (node.tagName && node.childNodes?.some((c) => INLINE_TAGS.has(c.nodeName)) && inlineOnly(node)) {
       const inner = serialize(node).replace(/\s+/g, " ").trim();
       if (lettersIn(inner.replace(/<[^>]*>/g, "")) >= 2 && !/^\{\{/.test(inner)) {
-        found[inner] = { en: inner, ctx: "webapp/index.html" };
-        for (const a of node.attrs ?? []) if (["placeholder", "title", "aria-label", "alt"].includes(a.name) && lettersIn(a.value) >= 2) found[a.value] = { en: a.value, ctx: "webapp/index.html" };
+        found[inner] = { en: inner, ctx };
+        for (const a of node.attrs ?? []) if (["placeholder", "title", "aria-label", "alt"].includes(a.name) && lettersIn(a.value) >= 2) found[a.value] = { en: a.value, ctx };
         return;
       }
     }
     if (node.nodeName === "#text") {
       const t = node.value.trim().replace(/\s+/g, " ");
-      if (lettersIn(t) >= 2 && !/^\{\{/.test(t)) found[node.value.trim()] = { en: node.value.trim(), ctx: "webapp/index.html" };
+      if (lettersIn(t) >= 2 && !/^\{\{/.test(t)) found[node.value.trim()] = { en: node.value.trim(), ctx };
     }
-    for (const a of node.attrs ?? []) if (["placeholder", "title", "aria-label", "alt"].includes(a.name) && lettersIn(a.value) >= 2) found[a.value] = { en: a.value, ctx: "webapp/index.html" };
+    for (const a of node.attrs ?? []) if (["placeholder", "title", "aria-label", "alt"].includes(a.name) && lettersIn(a.value) >= 2) found[a.value] = { en: a.value, ctx };
     for (const c of node.childNodes ?? []) walk(c);
   };
   walk(doc);
@@ -540,12 +562,12 @@ function staticHtmlEntries() {
 }
 
 /** Every literal key the code already passes to tr()/trn(), by file:line (hand-written calls included). `pairs` gets each trn(n, one, other). */
-function harvestCalls(pairs = []) {
+function harvestCalls(pairs = [], files = listJs()) {
   const found = {};
-  for (const f of listJs()) {
+  for (const f of files) {
     const text = fs.readFileSync(f, "utf8");
     const sf = ts.createSourceFile(f, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-    const rel = path.relative(WEBAPP, f);
+    const ctxPath = path.relative(PUBLIC, f).split(path.sep).join("/");
     const lit = (n) => (n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) ? n.text : null);
     const visit = (n) => {
       if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && /^(tr|tr_|trn)$/.test(n.expression.text)) {
@@ -553,7 +575,7 @@ function harvestCalls(pairs = []) {
         if (n.expression.text === "trn" && lit(n.arguments[1]) !== null && lit(n.arguments[2]) !== null) pairs.push([lit(n.arguments[1]), lit(n.arguments[2])]);
         for (const i of idx) {
           const k = lit(n.arguments[i]);
-          if (k !== null && lettersIn(k) >= 1 && !(k in found)) found[k] = { en: k, ctx: `webapp/${rel}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}` };
+          if (k !== null && lettersIn(k) >= 1 && !(k in found)) found[k] = { en: k, ctx: `${ctxPath}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}` };
         }
       }
       ts.forEachChild(n, visit);
@@ -563,23 +585,46 @@ function harvestCalls(pairs = []) {
   return found;
 }
 
-/** What `build` writes: one catalog per ga language, and lib/i18nLocales.js naming them with their content hashes. */
+/** The keys the recovery page shows: its tr()/trn() calls and the static text of its index.html. */
+function recoveryKeys() {
+  return new Set([...Object.keys(harvestCalls([], listRecoveryJs())), ...Object.keys(staticEntries([STATIC_PAGES[1]]))]);
+}
+
+/**
+ * What `build` writes: one catalog per ga language and a locales module naming them with their content hashes,
+ * for the webapp (every key) and for the recovery page (only its own keys).
+ */
 function builtOutputs(ga) {
   const en = readEn(SURFACE);
-  const catalogs = {};
-  for (const l of ga) {
-    const tr = readTr(SURFACE, l.code);
-    const o = {};
-    for (const [k, v] of Object.entries(en)) if (v.translatable !== false && tr[k]) o[k] = tr[k];
-    catalogs[l.code] = JSON.stringify(o);
-  }
-  const versions = Object.fromEntries(Object.entries(catalogs).map(([c, b]) => [c, crypto.createHash("sha256").update(b).digest("hex").slice(0, 12)]));
-  const locales = `// GENERATED by scripts/i18n-pwa.mjs from i18n/locales.json (ga languages only). Do not edit.
+  const only = recoveryKeys();
+  const webappKeys = new Set([...Object.keys(harvestCalls([], listJsIn(WEBAPP))), ...Object.keys(staticEntries([STATIC_PAGES[0]]))]);
+  const catalogsFor = (keep) => {
+    const catalogs = {};
+    for (const l of ga) {
+      const tr = readTr(SURFACE, l.code);
+      const o = {};
+      for (const [k, v] of Object.entries(en)) if (v.translatable !== false && tr[k] && keep(k)) o[k] = tr[k];
+      catalogs[l.code] = JSON.stringify(o);
+    }
+    return catalogs;
+  };
+  const localesFor = (catalogs, from) => {
+    const versions = Object.fromEntries(Object.entries(catalogs).map(([c, b]) => [c, crypto.createHash("sha256").update(b).digest("hex").slice(0, 12)]));
+    return `// GENERATED by scripts/i18n-pwa.mjs from i18n/locales.json (ga languages only)${from}. Do not edit.
 export const GA_LOCALES = [${ga.map((l) => `"${l.code}"`).join(", ")}];
 // Content hash of each i18n/<lang>.json, put in its URL so a rebuilt catalog is never answered from a stale HTTP cache.
 export const CATALOG_VERSIONS = ${JSON.stringify(versions)};
 `;
-  return { catalogs, locales };
+  };
+  // the webapp's catalogs leave out what only the recovery page shows
+  const catalogs = catalogsFor((k) => !only.has(k) || webappKeys.has(k));
+  const recoveryCatalogs = catalogsFor((k) => only.has(k));
+  return {
+    catalogs,
+    locales: localesFor(catalogs, ""),
+    recoveryCatalogs,
+    recoveryLocales: localesFor(recoveryCatalogs, " and i18n/webapp, holding only the recovery page's keys"),
+  };
 }
 
 // ---- commands ------------------------------------------------------------------------------------------
@@ -599,10 +644,11 @@ if (cmd === "extract") {
     }
   }
   const existing = readEn(SURFACE);
-  const statics = staticHtmlEntries();
-  // text that left index.html (or merged into a whole-sentence entry) is not a key any more
-  for (const [k, v] of Object.entries(existing)) if (v.ctx === "webapp/index.html" && !statics[k]) delete existing[k];
-  const merged = { ...entries, ...harvestCalls(), ...statics };
+  const statics = staticEntries();
+  const called = harvestCalls();
+  // text that left an index.html (or merged into a whole-sentence entry) is not a key any more
+  for (const [k, v] of Object.entries(existing)) if (STATIC_PAGES.some(([, ctx]) => v.ctx === ctx) && !statics[k] && !called[k] && !entries[k]) delete existing[k];
+  const merged = { ...entries, ...called, ...statics };
   for (const [k, v] of Object.entries(merged)) if (!existing[k]) existing[k] = v;
   if (!dry) writeEn(SURFACE, existing);
   fs.writeFileSync("/tmp/i18n-pwa-skipped.txt", skipped.join("\n"));
@@ -618,13 +664,21 @@ if (cmd === "extract") {
     fs.writeFileSync(path.join(outDir, `${code}.json`), body);
   }
   fs.writeFileSync(path.join(WEBAPP, "lib/i18nLocales.js"), out.locales);
-  console.log(`webapp: ${ga.length} language file(s)`);
+  const recoveryDir = path.join(RECOVERY, "i18n");
+  fs.rmSync(recoveryDir, { recursive: true, force: true });
+  for (const [code, body] of Object.entries(out.recoveryCatalogs)) {
+    fs.mkdirSync(recoveryDir, { recursive: true });
+    fs.writeFileSync(path.join(recoveryDir, `${code}.json`), body);
+  }
+  fs.writeFileSync(path.join(RECOVERY, "recoveryI18nLocales.js"), out.recoveryLocales);
+  console.log(`webapp: ${ga.length} language file(s); recovery: ${recoveryKeys().size} keys each`);
 } else if (cmd === "check") {
   const problems = lintSurface(SURFACE);
   const ga = locales.locales.filter((l) => l.status === "ga" && l.code !== locales.source);
   const en = readEn(SURFACE);
   const pairs = [];
   for (const k of Object.keys(harvestCalls(pairs))) if (!en[k]) problems.push(`not in i18n/webapp/en.json (run node scripts/i18n-pwa.mjs extract): ${k.slice(0, 70)}`);
+  for (const k of Object.keys(staticEntries([STATIC_PAGES[1]]))) if (!en[k]) problems.push(`recovery/index.html text not in i18n/webapp/en.json (run node scripts/i18n-pwa.mjs extract): ${k.slice(0, 70)}`);
   // trn(n, one, other) passes the count as {0}; each language must put its singular/plural change next to the same argument
   for (const l of targets) {
     const tr = readTr(SURFACE, l.code);
@@ -646,6 +700,15 @@ if (cmd === "extract") {
     else if (fs.readFileSync(f, "utf8") !== body) problems.push(`webapp/i18n/${code}.json is stale: run node scripts/i18n-pwa.mjs build`);
   }
   if (fs.readFileSync(path.join(WEBAPP, "lib/i18nLocales.js"), "utf8") !== out.locales) problems.push("webapp/lib/i18nLocales.js is stale: run node scripts/i18n-pwa.mjs build");
+  for (const [code, body] of Object.entries(out.recoveryCatalogs)) {
+    const f = path.join(RECOVERY, "i18n", `${code}.json`);
+    if (!fs.existsSync(f)) problems.push(`recovery/i18n/${code}.json is missing: run node scripts/i18n-pwa.mjs build`);
+    else if (fs.readFileSync(f, "utf8") !== body) problems.push(`recovery/i18n/${code}.json is stale: run node scripts/i18n-pwa.mjs build`);
+  }
+  const extra = fs.existsSync(path.join(RECOVERY, "i18n")) ? fs.readdirSync(path.join(RECOVERY, "i18n")).filter((f) => !(f.replace(/\.json$/, "") in out.recoveryCatalogs)) : [];
+  for (const f of extra) problems.push(`recovery/i18n/${f} is not a ga catalog: run node scripts/i18n-pwa.mjs build`);
+  const recLocales = path.join(RECOVERY, "recoveryI18nLocales.js");
+  if (!fs.existsSync(recLocales) || fs.readFileSync(recLocales, "utf8") !== out.recoveryLocales) problems.push("recovery/recoveryI18nLocales.js is stale: run node scripts/i18n-pwa.mjs build");
   if (problems.length) { console.error(problems.join("\n") + `\n\n${problems.length} problem(s)`); process.exit(1); }
   console.log("i18n-pwa: ok");
 } else if (!runCommon(SURFACE, args)) {
