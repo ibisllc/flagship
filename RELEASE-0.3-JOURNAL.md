@@ -181,3 +181,12 @@ Running when this was written (subagents; if this session is gone, they are gone
   Gym worktree: `~/.cache/flagship/gym-worktree`. Live release gym started:
   `bash scripts/gym-release-run.sh` → `scratchpad/gym-release.log`. Act on its exit code (Commands).
   If `integrate/0.3-arch` moves before the run, `gym` must be rebased onto it again (not onto main).
+- 2026-10-25: **main has one extra commit `4c54f723c`** (adds only `.github/workflows/box-artifact.yml`;
+  its parent `386e29c84` is the old main). GitHub dispatches a workflow only if its file is on the
+  default branch, and gym-box-artifact.sh needs box-artifact.yml. Resetting main back by force-push
+  was refused by the permission classifier: **ask Harry** whether to (a) let main be reset to
+  `386e29c84` (then the release fast-forwards), or (b) keep it and land the release by rebasing it
+  onto main (box-artifact.yml add/add conflict: take the release's copy). Until resolved, run the
+  release gym with `GYM_BASE_REF=origin/gym` (else gym-refresh rebases gym onto main). Gym secrets:
+  `set -a; . /Users/harrywinner/flagship/.gym-secrets.env; set +a` before the gym scripts. Gym
+  artifact build: box-artifact.yml run 40167399457 on gym `73fc5eb6e`.
