@@ -180,6 +180,8 @@ object Variant : AppVariant {
     }
 
     override val usesMockClients: Boolean get() = mockRun
+    override fun nfcRendezvousOverride(): com.flagshipserver.app.api.NfcRendezvousClient? =
+        if (mockRun) com.flagshipserver.app.api.MockNfcRendezvousClient() else null
     override val forceAdminRoot: Boolean get() = GymSeams.forceAdminRoot
     override val bypassBiometricGates: Boolean get() = GymSeams.bypassBiometricGates
     override val refuseBiometricGates: Boolean get() = GymSeams.refuseBiometricGates

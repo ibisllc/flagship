@@ -95,6 +95,9 @@ interface AppVariant {
     /** Gym: a stand-in for the notice fetch (null: the real, anonymous one). */
     fun noticeFetcher(): NoticeFetcher?
 
+    /** NFC tap-to-pair: a rendezvous that posts nothing on a mock run, else null (live). */
+    fun nfcRendezvousOverride(): com.flagshipserver.app.api.NfcRendezvousClient?
+
     /** The phone-to-phone pairing relay. Null only for a variant with no
      *  transport at all: the pairing screens then say it isn't available. */
     fun devicePairingRelays(): DevicePairingRelays?

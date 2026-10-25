@@ -123,6 +123,47 @@
           }
         }
       }
+    },
+    "NFCReaderUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship usa NFC para vincular un nuevo equipo Flagship al acercarle el teléfono."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship utilise le NFC pour associer un nouveau boîtier Flagship en approchant votre téléphone."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship nutzt NFC, um eine neue Flagship-Box zu koppeln, wenn du dein Telefon daranhältst."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Flagship usa NFC para parear uma nova caixa Flagship quando você encosta o telefone nela."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship は NFC を使い、スマートフォンをタッチして新しい Flagship ボックスとペアリングします。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship 使用 NFC,让你用手机触碰即可配对新的 Flagship 主机。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

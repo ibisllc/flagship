@@ -305,6 +305,10 @@ public struct SettingsScreen: View {
     /// default — the container can flip it on for a campaign without touching
     /// the screen. Kept as state so a future "dismiss" is a one-liner.
     @State private var showPromo: Bool = false
+    #if DEBUG && canImport(CoreNFC)
+    /// Retail NFC tap-to-pair (feat/retail): Debug builds only until branded boxes ship.
+    @State private var showNfcPair = false
+    #endif
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
@@ -382,6 +386,11 @@ public struct SettingsScreen: View {
         } message: {
             Text(disconnectMessage ?? "")
         }
+        #if DEBUG && canImport(CoreNFC)
+        .sheet(isPresented: $showNfcPair) {
+            NfcPairScreen(vm: NfcPairViewModel(reader: LiveNfcPairReader(), rendezvous: LiveNfcRendezvousClient()))
+        }
+        #endif
         .sheet(item: $nameEditor) { editor in
             DeviceNameEditor(
                 title: editor.title,
@@ -921,9 +930,13 @@ public struct SettingsScreen: View {
 
     /// Backup-&-peers group (spec S1 group 4).
     private func backupPeersGroup(c: FSColors) -> some View {
-        FSSettingsListSection(String(localized: "Backup & peers"), rows: [
+        var rows = [
             FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: String(localized: "Peer backup"), subtitle: String(localized: "Where the pieces of your backup are kept"), action: onOpenPeerBackup),
-        ])
+        ]
+        #if DEBUG && canImport(CoreNFC)
+        rows.append(FSSettingsRow(icon: "wave.3.right", title: String(localized: "Pair a Flagship box"), accessibilityId: "settings-nfc-pair", action: { showNfcPair = true }))
+        #endif
+        return FSSettingsListSection(String(localized: "Backup & peers"), rows: rows)
     }
 
     /// The three-tier "leave the app" cluster, ordered by increasing

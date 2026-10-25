@@ -1,14 +1,17 @@
 // C3 Wave 2 (Android) — NFC retail-tier pair screen.
 //
-// Dev-mode-only entry today (wired from DeveloperScreen). When the
-// owner has a real branded box in-hand we'll lift this onto the main
-// onboarding nav. Until then this is the surface where a developer can
+// Reached from Settings in debug builds only (developer mode is gone).
+// When the owner has a real branded box in-hand we'll lift this onto the
+// main onboarding nav. Until then this is the surface where a developer can
 // exercise the LiveNfcPairReader against a fixture tag emulated by a
 // hello-daemon build, or run through MockNfcPairReader (when no NFC
 // hardware is around).
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.core.fsString
+import com.flagshipserver.app.R
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,12 +54,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.LiveNfcRendezvousClient
-import com.flagshipserver.app.api.MockNfcRendezvousClient
 import com.flagshipserver.app.api.NfcRendezvousClient
 import com.flagshipserver.app.core.LiveNfcPairReader
-import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.NfcPairReader
 import com.flagshipserver.app.core.OkHttpJsonTransport
+import com.flagshipserver.app.core.Variant
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -68,7 +70,7 @@ import com.flagshipserver.app.viewmodels.NfcPairViewModel
 import com.flagshipserver.app.viewmodels.PairConfirmation
 
 /**
- * Dev-mode NFC pair screen. The live reader uses the host
+ * NFC pair screen (reached from Settings in debug builds until retail boxes ship). The live reader uses the host
  * ComponentActivity (MainActivity is a FragmentActivity → ComponentActivity).
  */
 @Composable
@@ -78,16 +80,11 @@ fun NfcPairScreen(
     rendezvous: NfcRendezvousClient = remember { LiveNfcRendezvousClient(OkHttpJsonTransport()) },
 ) {
     val ctx = LocalContext.current
-    val dev = LocalDeveloperSettings.current
-    val useLive = dev?.useLiveClient?.collectAsState()?.value ?: false
-
-    // Swap in a no-op rendezvous when the dev toggle is OFF so a Mock-mode
-    // tester doesn't blast the production Worker by accident. Keeps the
-    // Live reader wired for real hardware probing without forcing a code
-    // path through the production cloud.
-    val effectiveRendezvous = remember(useLive, rendezvous) {
-        if (useLive) rendezvous else MockNfcRendezvousClient()
-    }
+    // A mock run (debug gym) swaps in a rendezvous that posts nothing, so it
+    // never reaches the production Worker; every other launch is live.
+    val override = remember { Variant.nfcRendezvousOverride() }
+    val useLive = override == null
+    val effectiveRendezvous = remember(override, rendezvous) { override ?: rendezvous }
 
     val vm = remember(reader, effectiveRendezvous) {
         NfcPairViewModel(reader, effectiveRendezvous)
@@ -102,16 +99,16 @@ fun NfcPairScreen(
             .semantics { contentDescription = "nfc-pair" },
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
     ) {
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
+        FSGhostButton(label = stringResource(R.string.back_2), onClick = { nav.popBackStack() })
 
         Text(
-            "Tap to pair",
+            stringResource(R.string.tap_to_pair),
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            "Bring your phone to the back of a Flagship box to pair it. " +
-                if (useLive) "Live Worker rendezvous." else "Mock mode (no cloud post).",
+            stringResource(R.string.bring_your_phone_to_the_back) +
+                if (useLive) stringResource(R.string.live_worker_rendezvous) else stringResource(R.string.mock_mode_no_cloud_post),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 14.sp),
         )
@@ -125,9 +122,9 @@ fun NfcPairScreen(
 
             is NfcPairPhase.AskingForWifi -> AskingForWifiCard(vm = vm, confirmation = p.confirmation)
 
-            NfcPairPhase.Sealing -> SpinnerCard(label = "Sealing Wi-Fi credentials…")
+            NfcPairPhase.Sealing -> SpinnerCard(label = stringResource(R.string.sealing_wi_fi_credentials))
 
-            NfcPairPhase.Depositing -> SpinnerCard(label = "Sending to the box…")
+            NfcPairPhase.Depositing -> SpinnerCard(label = stringResource(R.string.sending_to_the_box))
 
             is NfcPairPhase.Success -> SuccessCard(message = p.message, onDone = { vm.reset() })
 
@@ -148,17 +145,16 @@ private fun IdleCard(onTap: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
-                "Tap your box",
+                stringResource(R.string.tap_your_box),
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium),
             )
             Text(
-                "Hold your phone to the back of the box. We'll read the " +
-                    "pairing tag and then ask for your Wi-Fi credentials.",
+                stringResource(R.string.hold_your_phone_to_the_back),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 14.sp),
             )
-            FSPrimaryButton(label = "Tap your box", onClick = onTap)
+            FSPrimaryButton(label = stringResource(R.string.tap_your_box), onClick = onTap)
         }
     }
 }
@@ -173,7 +169,7 @@ private fun ReadingCard() {
         ) {
             CircularProgressIndicator(color = FS.colors.primary)
             Text(
-                "Hold your phone to the box…",
+                stringResource(R.string.hold_your_phone_to_the_box),
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 16.sp),
             )
@@ -200,14 +196,12 @@ private fun AskingForWifiCard(vm: NfcPairViewModel, confirmation: PairConfirmati
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
-                "Paired with ${confirmation.boxLabel}",
+                fsString(R.string.paired_with, confirmation.boxLabel),
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium),
             )
             Text(
-                "Box ID ${confirmation.suffix6} · send your Wi-Fi within " +
-                    "30 seconds of the tap — after that the box rolls a " +
-                    "fresh pairing session.",
+                fsString(R.string.box_id_send_your_wi_fi, confirmation.suffix6),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 12.sp),
             )
@@ -215,9 +209,7 @@ private fun AskingForWifiCard(vm: NfcPairViewModel, confirmation: PairConfirmati
                 LedSasCaptureBlock(vm = vm, confirmation = confirmation)
             }
             Text(
-                "Tell the box how to reach your network. These credentials " +
-                    "are encrypted on this phone before they leave — we " +
-                    "never see them in the clear.",
+                stringResource(R.string.tell_the_box_how_to_reach),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 14.sp),
             )
@@ -225,27 +217,27 @@ private fun AskingForWifiCard(vm: NfcPairViewModel, confirmation: PairConfirmati
             FSField(
                 value = ssid,
                 onValueChange = { ssid = it; vm.ssid = it },
-                label = "Wi-Fi name (SSID)",
-                placeholder = "Home network",
+                label = stringResource(R.string.wi_fi_name_ssid),
+                placeholder = stringResource(R.string.home_network),
             )
             FSField(
                 value = psk,
                 onValueChange = { psk = it; vm.psk = it },
-                label = "Password",
-                placeholder = "Wi-Fi password",
+                label = stringResource(R.string.password),
+                placeholder = stringResource(R.string.wi_fi_password),
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardType = KeyboardType.Password,
             )
             FSField(
                 value = region,
                 onValueChange = { region = it.uppercase().take(2); vm.regulatoryRegion = region },
-                label = "Region (ISO 3166-1 alpha-2)",
+                label = stringResource(R.string.region_iso_3166_1_alpha_2),
                 placeholder = "US",
                 keyboardType = KeyboardType.Text,
-                helper = "Optional — used by the box to pick a Wi-Fi regulatory domain.",
+                helper = stringResource(R.string.optional_used_by_the_box_to),
             )
 
-            FSPrimaryButton(label = "Send", onClick = { vm.sendSealedWifi() })
+            FSPrimaryButton(label = stringResource(R.string.send), onClick = { vm.sendSealedWifi() })
         }
     }
 }
@@ -262,9 +254,7 @@ private fun LedSasCaptureBlock(vm: NfcPairViewModel, confirmation: PairConfirmat
     var working by remember { mutableStateOf("") }
 
     Text(
-        "Check the box's LED — it blinks this 3×3 pattern " +
-            "(${confirmation.sasDisplay}). Optional, but it catches a wrong " +
-            "box in a crowded room.",
+        fsString(R.string.check_the_boxs_led_it_blinks, confirmation.sasDisplay),
         color = FS.colors.textMuted,
         style = TextStyle(fontSize = 12.sp),
     )
@@ -290,33 +280,32 @@ private fun LedSasCaptureBlock(vm: NfcPairViewModel, confirmation: PairConfirmat
     when {
         cap == null -> {
             FSGhostButton(
-                label = "Verify the LED pattern",
+                label = stringResource(R.string.verify_the_led_pattern),
                 onClick = { working = ""; vm.beginLedSasCapture() },
             )
         }
         cap.verdict == LedSasCapture.Verdict.CONFIRMED -> {
             Text(
-                "✓ LED pattern matched — this is your box.",
+                stringResource(R.string.led_pattern_matched_this_is_your),
                 color = FS.colors.success,
                 style = TextStyle(fontSize = 14.sp),
             )
         }
         cap.verdict == LedSasCapture.Verdict.MISMATCH -> {
             Text(
-                "✗ That didn't match. Don't send Wi-Fi — you may be looking " +
-                    "at the wrong box.",
+                stringResource(R.string.that_didnt_match_dont_send_wi),
                 color = FS.colors.danger,
                 style = TextStyle(fontSize = 14.sp),
             )
             FSGhostButton(
-                label = "Try the LED check again",
+                label = stringResource(R.string.try_the_led_check_again),
                 onClick = { working = ""; vm.resetLedSasCapture() },
             )
         }
         else -> {
             val g = cap.currentGlance ?: 0
             Text(
-                "Glance ${g + 1} of 3 — tap the 3 colors the LED just blinked:",
+                fsString(R.string.glance_of_3_tap_the_3, g + 1),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 12.sp),
             )
@@ -380,12 +369,12 @@ private fun SuccessCard(message: String, onDone: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
-                "✓ Sent",
+                stringResource(R.string.sent_2),
                 color = FS.colors.success,
                 style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Medium),
             )
             Text(message, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
-            FSPrimaryButton(label = "Done", onClick = onDone)
+            FSPrimaryButton(label = stringResource(R.string.local_ai_job_completed), onClick = onDone)
         }
     }
 }
@@ -400,15 +389,15 @@ private fun FailureCard(
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
-                "Couldn't pair",
+                stringResource(R.string.couldnt_pair),
                 color = FS.colors.danger,
                 style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium),
             )
             Text(message, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
-            FSPrimaryButton(label = "Try again", onClick = onRetry)
+            FSPrimaryButton(label = stringResource(R.string.try_again), onClick = onRetry)
             if (fallbackAvailable) {
                 FSGhostButton(
-                    label = "Pair using the box's LED instead",
+                    label = stringResource(R.string.pair_using_the_boxs_led_instead),
                     onClick = onLedSasFallback,
                 )
             }
@@ -424,24 +413,21 @@ private fun LedSasFallbackCard(onRetry: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
-                "Pair with the box's LED",
+                stringResource(R.string.pair_with_the_boxs_led),
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium),
             )
             Text(
-                "Your phone finishes pairing over Wi-Fi and confirms the " +
-                    "box by its status-LED blink pattern.",
+                stringResource(R.string.your_phone_finishes_pairing_over_wi),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 14.sp),
             )
             Text(
-                "LED pairing isn't available in this build yet. You can " +
-                    "retry the tap, or plug a monitor into the box and pair " +
-                    "with the on-screen QR code.",
+                stringResource(R.string.led_pairing_isnt_available_in_this),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 14.sp),
             )
-            FSPrimaryButton(label = "Try the tap again", onClick = onRetry)
+            FSPrimaryButton(label = stringResource(R.string.try_the_tap_again), onClick = onRetry)
         }
     }
 }

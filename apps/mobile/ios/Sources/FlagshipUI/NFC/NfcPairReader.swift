@@ -179,8 +179,9 @@ public enum NfcPairWireParser {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// Mock — scripted result for tests + dev-mode dry runs.
+// Mock — scripted result for tests (Debug builds only).
 
+#if DEBUG
 public final class MockNfcPairReader: NfcPairReaderProtocol, @unchecked Sendable {
     private let scripted: Result<ReadPairResult, NfcPairReaderError>
     public private(set) var callCount: Int = 0
@@ -197,6 +198,7 @@ public final class MockNfcPairReader: NfcPairReaderProtocol, @unchecked Sendable
         }
     }
 }
+#endif
 
 // ────────────────────────────────────────────────────────────────────────
 // Live — Core NFC backed.
@@ -209,7 +211,7 @@ public final class LiveNfcPairReader: NSObject, NfcPairReaderProtocol, NFCTagRea
     private var session: NFCTagReaderSession?
     private var continuation: CheckedContinuation<ReadPairResult, Error>?
 
-    public init(alertMessage: String = "Hold your phone to the Flagship box.") {
+    public init(alertMessage: String = String(localized: "Hold your phone to the Flagship box.")) {
         self.alertMessage = alertMessage
     }
 
@@ -248,38 +250,38 @@ public final class LiveNfcPairReader: NSObject, NfcPairReaderProtocol, NFCTagRea
 
     public func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
         guard let first = tags.first else {
-            session.invalidate(errorMessage: "No tag detected.")
+            session.invalidate(errorMessage: String(localized: "No tag detected."))
             return
         }
         session.connect(to: first) { [weak self] err in
             guard let self else { return }
             if let err {
-                session.invalidate(errorMessage: "Couldn't connect: \(err.localizedDescription)")
+                session.invalidate(errorMessage: String(localized: "Couldn't connect: \(err.localizedDescription)"))
                 return
             }
             let ndefTag = self.asNdefTag(first)
             guard let ndefTag else {
-                session.invalidate(errorMessage: "Tag isn't NDEF.")
+                session.invalidate(errorMessage: String(localized: "Tag isn't NDEF."))
                 self.finish(.failure(.tagFormatUnrecognized))
                 return
             }
             ndefTag.queryNDEFStatus { status, _, queryErr in
                 if let queryErr {
-                    session.invalidate(errorMessage: "NDEF query failed: \(queryErr.localizedDescription)")
+                    session.invalidate(errorMessage: String(localized: "NDEF query failed: \(queryErr.localizedDescription)"))
                     return
                 }
                 if status == .notSupported {
-                    session.invalidate(errorMessage: "Tag isn't NDEF.")
+                    session.invalidate(errorMessage: String(localized: "Tag isn't NDEF."))
                     self.finish(.failure(.tagFormatUnrecognized))
                     return
                 }
                 ndefTag.readNDEF { message, readErr in
                     if let readErr {
-                        session.invalidate(errorMessage: "Couldn't read tag: \(readErr.localizedDescription)")
+                        session.invalidate(errorMessage: String(localized: "Couldn't read tag: \(readErr.localizedDescription)"))
                         return
                     }
                     guard let message else {
-                        session.invalidate(errorMessage: "Tag is empty.")
+                        session.invalidate(errorMessage: String(localized: "Tag is empty."))
                         self.finish(.failure(.tagFormatUnrecognized))
                         return
                     }
@@ -288,14 +290,14 @@ public final class LiveNfcPairReader: NSObject, NfcPairReaderProtocol, NFCTagRea
                             (type: String(data: rec.type, encoding: .utf8) ?? "", payload: rec.payload)
                         }
                         let result = try NfcPairWireParser.parse(records: records)
-                        session.alertMessage = "Box paired."
+                        session.alertMessage = String(localized: "Box paired.")
                         session.invalidate()
                         self.finish(.success(result))
                     } catch let e as NfcPairReaderError {
-                        session.invalidate(errorMessage: "Pair failed.")
+                        session.invalidate(errorMessage: String(localized: "Pair failed."))
                         self.finish(.failure(e))
                     } catch {
-                        session.invalidate(errorMessage: "Pair failed.")
+                        session.invalidate(errorMessage: String(localized: "Pair failed."))
                         self.finish(.failure(.malformedPayload(error.localizedDescription)))
                     }
                 }

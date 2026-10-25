@@ -182,7 +182,7 @@ public final class NfcPairViewModel {
         } catch {
             clearPairing()
             phase = .failure(
-                message: "Pairing failed: \(error.localizedDescription)",
+                message: String(localized: "Pairing failed: \(error.localizedDescription)"),
                 ledSasFallbackAvailable: false
             )
         }
@@ -194,14 +194,14 @@ public final class NfcPairViewModel {
     public func sendSealedWifi() async {
         guard let paired, let ephemeralPriv, let tapAtMs else {
             phase = .failure(
-                message: "No active pairing — tap the box first.",
+                message: String(localized: "No active pairing — tap the box first."),
                 ledSasFallbackAvailable: false
             )
             return
         }
         if ssid.isEmpty {
             phase = .failure(
-                message: "Wi-Fi network name (SSID) is required.",
+                message: String(localized: "Wi-Fi network name (SSID) is required."),
                 ledSasFallbackAvailable: false
             )
             return
@@ -213,7 +213,7 @@ public final class NfcPairViewModel {
         if now() - tapAtMs > PAIR_SESSION_LOCK_MS {
             clearPairing()
             phase = .failure(
-                message: "The pairing session expired — tap your box again.",
+                message: String(localized: "The pairing session expired — tap your box again."),
                 ledSasFallbackAvailable: false
             )
             return
@@ -252,7 +252,7 @@ public final class NfcPairViewModel {
             // Sealing-failure is a programming bug (wrong-size key) or
             // a CryptoKit anomaly. Don't leak crypto detail to the user.
             phase = .failure(
-                message: "Couldn't prepare the Wi-Fi blob. Try again.",
+                message: String(localized: "Couldn't prepare the Wi-Fi blob. Try again."),
                 ledSasFallbackAvailable: false
             )
             return
@@ -270,13 +270,13 @@ public final class NfcPairViewModel {
             // 5xx the safest path is to ask the user to re-tap, which
             // remints both the ephemeral key and the rendezvous slot.
             phase = .failure(
-                message: err.errorDescription ?? "Couldn't reach the server.",
+                message: err.errorDescription ?? String(localized: "Couldn't reach the server."),
                 ledSasFallbackAvailable: false
             )
             return
         } catch {
             phase = .failure(
-                message: "Couldn't reach the server: \(error.localizedDescription)",
+                message: String(localized: "Couldn't reach the server: \(error.localizedDescription)"),
                 ledSasFallbackAvailable: false
             )
             return
@@ -287,7 +287,7 @@ public final class NfcPairViewModel {
         // blob, the box will consume it, and the phone has nothing more
         // to do with this pairing.
         clearPairing()
-        phase = .success(message: "Your box is connecting to \(networkLabel).")
+        phase = .success(message: String(localized: "Your box is connecting to \(networkLabel)."))
     }
 
     /// Q2 fallback entry — only reachable from a failure that offered it.
@@ -355,19 +355,19 @@ public final class NfcPairViewModel {
     private static func userMessage(for err: NfcPairReaderError) -> String {
         switch err {
         case .sessionUnavailable:
-            return "This device doesn't support NFC tag reading."
+            return String(localized: "This device doesn't support NFC tag reading.")
         case .userCanceled:
-            return "Cancelled. Tap your box to try again."
+            return String(localized: "Cancelled. Tap your box to try again.")
         case .tagFormatUnrecognized:
-            return "That doesn't look like a Flagship tag. Hold your phone closer to the box."
+            return String(localized: "That doesn't look like a Flagship tag. Hold your phone closer to the box.")
         case .multipleRecords(let n):
-            return "Tag has \(n) records — expected 2. The box may need a firmware update."
+            return String(localized: "Tag has \(n) records — expected 2. The box may need a firmware update.")
         case .malformedPayload(let detail):
-            return "Tag is malformed (\(detail))."
+            return String(localized: "Tag is malformed (\(detail)).")
         case .signatureMismatch:
-            return "Tag signature didn't verify. Don't use this box — it may be tampered."
+            return String(localized: "Tag signature didn't verify. Don't use this box — it may be tampered.")
         case .timeout:
-            return "Timed out waiting for the box. Try again."
+            return String(localized: "Timed out waiting for the box. Try again.")
         }
     }
 

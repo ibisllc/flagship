@@ -4,8 +4,8 @@ import FlagshipCore
 
 /// C3 — minimal SwiftUI surface over `NfcPairViewModel`. Renders one
 /// of five visual states matching the view model's `Phase` cases. Not
-/// yet wired into the main onboarding flow; reachable via DeveloperScreen
-/// for hardware testing.
+/// yet wired into the main onboarding flow; Debug builds reach it from
+/// Settings for hardware testing (developer mode is gone).
 public struct NfcPairScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: NfcPairViewModel
@@ -26,13 +26,13 @@ public struct NfcPairScreen: View {
                 case .idle:
                     idleView(c: c)
                 case .readingTag:
-                    busyView(c: c, message: "Hold your phone to the box…")
+                    busyView(c: c, message: String(localized: "Hold your phone to the box…"))
                 case .askingForWifi(let confirmation):
                     wifiFormView(c: c, confirmation: confirmation)
                 case .sealing:
-                    busyView(c: c, message: "Sealing your Wi-Fi for the box…")
+                    busyView(c: c, message: String(localized: "Sealing your Wi-Fi for the box…"))
                 case .depositing:
-                    busyView(c: c, message: "Sending it to the box…")
+                    busyView(c: c, message: String(localized: "Sending it to the box…"))
                 case .success(let message):
                     successView(c: c, message: message)
                 case .failure(let message, let fallbackAvailable):
@@ -58,7 +58,7 @@ public struct NfcPairScreen: View {
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
             }
         }
-        FSPrimaryButton("Tap your box", block: true, large: true) {
+        FSPrimaryButton(String(localized: "Tap your box"), block: true, large: true) {
             Task { await vm.startTap() }
         }
     }
@@ -99,13 +99,13 @@ public struct NfcPairScreen: View {
         }
         FSField(
             value: $vm.ssid,
-            label: "Wi-Fi network (SSID)",
-            placeholder: "e.g. My Home Wi-Fi"
+            label: String(localized: "Wi-Fi network (SSID)"),
+            placeholder: String(localized: "e.g. My Home Wi-Fi")
         )
         FSField(
             value: $vm.psk,
-            label: "Wi-Fi password",
-            placeholder: "Network password",
+            label: String(localized: "Wi-Fi password"),
+            placeholder: String(localized: "Network password"),
             secure: true
         )
         FSCard {
@@ -125,14 +125,14 @@ public struct NfcPairScreen: View {
             }
         }
         FSPrimaryButton(
-            "Send to box",
+            String(localized: "Send to box"),
             enabled: !vm.ssid.isEmpty,
             block: true,
             large: true
         ) {
             Task { await vm.sendSealedWifi() }
         }
-        FSGhostButton("Cancel", block: true) {
+        FSGhostButton(String(localized: "Cancel"), block: true) {
             vm.reset()
         }
     }
@@ -169,7 +169,7 @@ public struct NfcPairScreen: View {
                 if let capture = vm.ledCapture {
                     ledCaptureProgress(c: c, capture: capture)
                 } else {
-                    FSGhostButton("Verify the LED pattern", block: true) {
+                    FSGhostButton(String(localized: "Verify the LED pattern"), block: true) {
                         vm.beginLedSasCapture()
                     }
                 }
@@ -196,7 +196,7 @@ public struct NfcPairScreen: View {
                     Text("That didn't match. Don't send Wi-Fi — you may be looking at the wrong box.")
                         .font(FS.font.bodySm()).foregroundColor(c.text)
                 }
-                FSGhostButton("Try the LED check again", block: true) {
+                FSGhostButton(String(localized: "Try the LED check again"), block: true) {
                     vm.resetLedSasCapture()
                 }
             }
@@ -274,7 +274,7 @@ public struct NfcPairScreen: View {
                 Text(message).font(FS.font.body()).foregroundColor(c.text)
             }
         }
-        FSSecondaryButton("Pair another box", block: true) {
+        FSSecondaryButton(String(localized: "Pair another box"), block: true) {
             vm.reset()
         }
     }
@@ -289,11 +289,11 @@ public struct NfcPairScreen: View {
                 Text(message).font(FS.font.body()).foregroundColor(c.text)
             }
         }
-        FSPrimaryButton("Try again", block: true, large: true) {
+        FSPrimaryButton(String(localized: "Try again"), block: true, large: true) {
             vm.reset()
         }
         if fallbackAvailable {
-            FSSecondaryButton("Pair using the box's LED instead", block: true) {
+            FSSecondaryButton(String(localized: "Pair using the box's LED instead"), block: true) {
                 vm.startLedSasFallback()
             }
         }
@@ -313,7 +313,7 @@ public struct NfcPairScreen: View {
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
             }
         }
-        FSPrimaryButton("Try the tap again", block: true, large: true) {
+        FSPrimaryButton(String(localized: "Try the tap again"), block: true, large: true) {
             vm.reset()
         }
     }

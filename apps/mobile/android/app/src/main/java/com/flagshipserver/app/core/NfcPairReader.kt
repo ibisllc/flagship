@@ -38,6 +38,7 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import android.app.Activity
 import android.nfc.NdefMessage
 import android.nfc.NdefRecord
@@ -247,7 +248,7 @@ fun parseAndVerifyPairNdef(message: NdefMessage): ReadPairResult {
     if (!verifyPair(payload, sb)) {
         throw NfcPairReaderException(
             NfcPairReaderError.SignatureMismatch,
-            "Ed25519 verifyPair returned false",
+            FSStrings.get(R.string.ed25519_verifypair_returned_false),
         )
     }
     return ReadPairResult(payload, sb)
@@ -325,26 +326,5 @@ class LiveNfcPairReader : NfcPairReader {
                 }
             }
         }
-    }
-}
-
-// ── Mock impl (tests / dev-mode) ───────────────────────────────────────
-
-/**
- * Returns a pre-baked Result on every readPair call without touching
- * any Android NFC API. The activity argument is ignored — view-model
- * tests pass an empty stand-in.
- */
-class MockNfcPairReader(
-    private val outcome: Result<ReadPairResult>,
-) : NfcPairReader {
-    /** Number of times readPair has been called. Tests use this to
-     *  confirm the VM only kicks off a read on startTap. */
-    @Volatile var callCount: Int = 0
-        private set
-
-    override suspend fun readPair(activity: ComponentActivity): Result<ReadPairResult> {
-        callCount += 1
-        return outcome
     }
 }

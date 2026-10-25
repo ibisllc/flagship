@@ -400,6 +400,26 @@
       "check": "test-vectors",
       "key": "web:adapter-attestation",
       "reason": "Adapter attestations are signed by .com and checked by the box before it runs an adapter; no client app handles one."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/box-unpair/v1",
+      "reason": "NFC tap-to-pair with a retail box (feat/retail) needs the phone's NFC reader; the webapp has no NFC path, so only iOS and Android sign these."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/pair-sas/v1",
+      "reason": "NFC tap-to-pair with a retail box (feat/retail) needs the phone's NFC reader; the webapp has no NFC path, so only iOS and Android sign these."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/pair/v1",
+      "reason": "NFC tap-to-pair with a retail box (feat/retail) needs the phone's NFC reader; the webapp has no NFC path, so only iOS and Android sign these."
+    },
+    {
+      "check": "signed-tags",
+      "key": "web:flagship/wifi-config/v1",
+      "reason": "NFC tap-to-pair with a retail box (feat/retail) needs the phone's NFC reader; the webapp has no NFC path, so only iOS and Android sign these."
     }
   ]
 }

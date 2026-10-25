@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.ScreenShare
@@ -365,6 +366,20 @@ fun SettingsScreen(nav: NavController) {
                 ),
             ),
         )
+
+        // Retail NFC tap-to-pair (feat/retail): debug builds only until branded boxes ship.
+        if (BuildConfig.DEBUG) {
+            FSSettingsGroup(
+                rows = listOf(
+                    FSSettingsRowData(
+                        icon = Icons.Outlined.Nfc,
+                        title = stringResource(R.string.tap_to_pair),
+                        onClick = { nav.navigate("nfc-pair") },
+                        testTag = "settings-nfc-pair",
+                    ),
+                ),
+            )
+        }
 
         // One switch for every push to this device (§3a).
         PushNotificationsCard()

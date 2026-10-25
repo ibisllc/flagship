@@ -12822,5 +12822,195 @@
   "activity_stack_switch_reverted": {
     "en": "The stack move was undone",
     "ctx": "core/BoxEventLabels.kt (Activity)"
+  },
+  "ed25519_verifypair_returned_false": {
+    "en": "Ed25519 verifyPair returned false",
+    "ctx": "core/NfcPairReader.kt:250 (prose)"
+  },
+  "back_2": {
+    "en": "← Back",
+    "ctx": "ui/screens/NfcPairScreen.kt:99 (label=)"
+  },
+  "tap_to_pair": {
+    "en": "Tap to pair",
+    "ctx": "ui/screens/NfcPairScreen.kt:102 (arg of Text)"
+  },
+  "bring_your_phone_to_the_back": {
+    "en": "Bring your phone to the back of a Flagship box to pair it. ",
+    "ctx": "ui/screens/NfcPairScreen.kt:107 (arg of Text)"
+  },
+  "live_worker_rendezvous": {
+    "en": "Live Worker rendezvous.",
+    "ctx": "ui/screens/NfcPairScreen.kt:108 (prose)"
+  },
+  "mock_mode_no_cloud_post": {
+    "en": "Mock mode (no cloud post).",
+    "ctx": "ui/screens/NfcPairScreen.kt:108 (prose)"
+  },
+  "sealing_wi_fi_credentials": {
+    "en": "Sealing Wi-Fi credentials…",
+    "ctx": "ui/screens/NfcPairScreen.kt:122 (label=)"
+  },
+  "sending_to_the_box": {
+    "en": "Sending to the box…",
+    "ctx": "ui/screens/NfcPairScreen.kt:124 (label=)"
+  },
+  "tap_your_box": {
+    "en": "Tap your box",
+    "ctx": "ui/screens/NfcPairScreen.kt:145 (arg of Text)"
+  },
+  "hold_your_phone_to_the_back": {
+    "en": "Hold your phone to the back of the box. We'll read the pairing tag and then ask for your Wi-Fi credentials.",
+    "ctx": "ui/screens/NfcPairScreen.kt:150 (arg of Text)"
+  },
+  "hold_your_phone_to_the_box": {
+    "en": "Hold your phone to the box…",
+    "ctx": "ui/screens/NfcPairScreen.kt:170 (arg of Text)"
+  },
+  "paired_with": {
+    "en": "Paired with %1$s",
+    "ctx": "ui/screens/NfcPairScreen.kt:197 (arg of Text)",
+    "args": 1
+  },
+  "box_id_send_your_wi_fi": {
+    "en": "Box ID %1$s · send your Wi-Fi within 30 seconds of the tap — after that the box rolls a fresh pairing session.",
+    "ctx": "ui/screens/NfcPairScreen.kt:202 (arg of Text)",
+    "args": 1
+  },
+  "tell_the_box_how_to_reach": {
+    "en": "Tell the box how to reach your network. These credentials are encrypted on this phone before they leave — we never see them in the clear.",
+    "ctx": "ui/screens/NfcPairScreen.kt:212 (arg of Text)"
+  },
+  "wi_fi_name_ssid": {
+    "en": "Wi-Fi name (SSID)",
+    "ctx": "ui/screens/NfcPairScreen.kt:222 (label=)"
+  },
+  "home_network": {
+    "en": "Home network",
+    "ctx": "ui/screens/NfcPairScreen.kt:223 (placeholder=)"
+  },
+  "password": {
+    "en": "Password",
+    "ctx": "ui/screens/NfcPairScreen.kt:228 (label=)"
+  },
+  "wi_fi_password": {
+    "en": "Wi-Fi password",
+    "ctx": "ui/screens/NfcPairScreen.kt:229 (placeholder=)"
+  },
+  "region_iso_3166_1_alpha_2": {
+    "en": "Region (ISO 3166-1 alpha-2)",
+    "ctx": "ui/screens/NfcPairScreen.kt:236 (label=)"
+  },
+  "optional_used_by_the_box_to": {
+    "en": "Optional — used by the box to pick a Wi-Fi regulatory domain.",
+    "ctx": "ui/screens/NfcPairScreen.kt:239 (helper=)"
+  },
+  "check_the_boxs_led_it_blinks": {
+    "en": "Check the box's LED — it blinks this 3×3 pattern (%1$s). Optional, but it catches a wrong box in a crowded room.",
+    "ctx": "ui/screens/NfcPairScreen.kt:259 (arg of Text)",
+    "args": 1
+  },
+  "verify_the_led_pattern": {
+    "en": "Verify the LED pattern",
+    "ctx": "ui/screens/NfcPairScreen.kt:287 (label=)"
+  },
+  "led_pattern_matched_this_is_your": {
+    "en": "✓ LED pattern matched — this is your box.",
+    "ctx": "ui/screens/NfcPairScreen.kt:293 (arg of Text)"
+  },
+  "that_didnt_match_dont_send_wi": {
+    "en": "✗ That didn't match. Don't send Wi-Fi — you may be looking at the wrong box.",
+    "ctx": "ui/screens/NfcPairScreen.kt:300 (arg of Text)"
+  },
+  "try_the_led_check_again": {
+    "en": "Try the LED check again",
+    "ctx": "ui/screens/NfcPairScreen.kt:306 (label=)"
+  },
+  "glance_of_3_tap_the_3": {
+    "en": "Glance %1$s of 3 — tap the 3 colors the LED just blinked:",
+    "ctx": "ui/screens/NfcPairScreen.kt:313 (arg of Text)",
+    "args": 1
+  },
+  "sent_2": {
+    "en": "✓ Sent",
+    "ctx": "ui/screens/NfcPairScreen.kt:377 (arg of Text)"
+  },
+  "couldnt_pair": {
+    "en": "Couldn't pair",
+    "ctx": "ui/screens/NfcPairScreen.kt:397 (arg of Text)"
+  },
+  "pair_using_the_boxs_led_instead": {
+    "en": "Pair using the box's LED instead",
+    "ctx": "ui/screens/NfcPairScreen.kt:405 (label=)"
+  },
+  "pair_with_the_boxs_led": {
+    "en": "Pair with the box's LED",
+    "ctx": "ui/screens/NfcPairScreen.kt:421 (arg of Text)"
+  },
+  "your_phone_finishes_pairing_over_wi": {
+    "en": "Your phone finishes pairing over Wi-Fi and confirms the box by its status-LED blink pattern.",
+    "ctx": "ui/screens/NfcPairScreen.kt:426 (arg of Text)"
+  },
+  "led_pairing_isnt_available_in_this": {
+    "en": "LED pairing isn't available in this build yet. You can retry the tap, or plug a monitor into the box and pair with the on-screen QR code.",
+    "ctx": "ui/screens/NfcPairScreen.kt:432 (arg of Text)"
+  },
+  "try_the_tap_again": {
+    "en": "Try the tap again",
+    "ctx": "ui/screens/NfcPairScreen.kt:438 (label=)"
+  },
+  "couldnt_generate_the_pairing_key_try": {
+    "en": "Couldn't generate the pairing key. Try again.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:218 (prose)"
+  },
+  "no_paired_tag_tap_your_box": {
+    "en": "No paired tag — tap your box first.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:242 (prose)"
+  },
+  "pairing_session_was_reset_tap_your": {
+    "en": "Pairing session was reset. Tap your box again.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:246 (prose)"
+  },
+  "wi_fi_name_is_required": {
+    "en": "Wi-Fi name is required.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:254 (prose)"
+  },
+  "the_pairing_session_expired_tap_your": {
+    "en": "The pairing session expired — tap your box again.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:265 (prose)"
+  },
+  "couldnt_seal_wi_fi_credentials_tap": {
+    "en": "Couldn't seal Wi-Fi credentials. Tap your box again.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:305 (prose)"
+  },
+  "sent_wi_fi_to_the_box": {
+    "en": "Sent Wi-Fi to %1$s. The box should join your network in a moment.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:319 (prose)",
+    "args": 1
+  },
+  "nfc_isnt_available_on_this_device": {
+    "en": "NFC isn't available on this device. You can pair from the box's LED instead.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:410 (prose)"
+  },
+  "pairing_cancelled_tap_again_when_ready": {
+    "en": "Pairing cancelled. Tap again when ready.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:412 (prose)"
+  },
+  "that_doesnt_look_like_a_flagship": {
+    "en": "That doesn't look like a Flagship box tag. Try tapping again.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:414 (prose)"
+  },
+  "couldnt_read_the_tag_try_again": {
+    "en": "Couldn't read the tag (%1$s). Try again.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:416 (prose)",
+    "args": 1
+  },
+  "the_tags_signature_didnt_check_out": {
+    "en": "The tag's signature didn't check out. This may not be a genuine box.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:418 (prose)"
+  },
+  "no_tap_detected_hold_your_phone": {
+    "en": "No tap detected. Hold your phone to the back of the box and try again.",
+    "ctx": "viewmodels/NfcPairViewModel.kt:420 (prose)"
   }
 }

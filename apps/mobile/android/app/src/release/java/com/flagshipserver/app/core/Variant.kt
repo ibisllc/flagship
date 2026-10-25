@@ -36,6 +36,7 @@ object Variant : AppVariant {
     override fun noticeLockEnabled(): Boolean = false
     override fun noticeNowMs(): Long = System.currentTimeMillis()
     override fun noticeFetcher(): NoticeFetcher? = null
+    override fun nfcRendezvousOverride(): com.flagshipserver.app.api.NfcRendezvousClient? = null
 
     private fun missing(what: String): Nothing =
         error("No $what was provided; the app provides the live one.")

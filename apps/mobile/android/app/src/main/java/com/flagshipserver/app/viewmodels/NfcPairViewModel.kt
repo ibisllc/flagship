@@ -32,6 +32,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -215,7 +217,7 @@ class NfcPairViewModel(
                 } catch (t: Throwable) {
                     wipeCaptured()
                     _phase.value = NfcPairPhase.Failure(
-                        "Couldn't generate the pairing key. Try again.",
+                        FSStrings.get(R.string.couldnt_generate_the_pairing_key_try),
                     )
                     return
                 }
@@ -239,19 +241,19 @@ class NfcPairViewModel(
      */
     fun sendSealedWifi() {
         val payload = verifiedPayload ?: run {
-            _phase.value = NfcPairPhase.Failure("No paired tag — tap your box first.")
+            _phase.value = NfcPairPhase.Failure(FSStrings.get(R.string.no_paired_tag_tap_your_box))
             return
         }
         val priv = ephemeralPriv ?: run {
-            _phase.value = NfcPairPhase.Failure("Pairing session was reset. Tap your box again.")
+            _phase.value = NfcPairPhase.Failure(FSStrings.get(R.string.pairing_session_was_reset_tap_your))
             return
         }
         val pub = ephemeralPub ?: run {
-            _phase.value = NfcPairPhase.Failure("Pairing session was reset. Tap your box again.")
+            _phase.value = NfcPairPhase.Failure(FSStrings.get(R.string.pairing_session_was_reset_tap_your))
             return
         }
         if (ssid.isBlank()) {
-            _phase.value = NfcPairPhase.Failure("Wi-Fi name is required.")
+            _phase.value = NfcPairPhase.Failure(FSStrings.get(R.string.wi_fi_name_is_required))
             return
         }
         // Session-lock window: the box latched this sessionId for 30 s
@@ -262,7 +264,7 @@ class NfcPairViewModel(
         if (tapped == null || now() - tapped > PAIR_SESSION_LOCK_MS) {
             wipeCaptured()
             _phase.value = NfcPairPhase.Failure(
-                "The pairing session expired — tap your box again.",
+                FSStrings.get(R.string.the_pairing_session_expired_tap_your),
             )
             return
         }
@@ -302,7 +304,7 @@ class NfcPairViewModel(
             // map to a generic copy + clear any captured state so retry
             // re-derives from a fresh tap.
             wipeCaptured()
-            _phase.value = NfcPairPhase.Failure("Couldn't seal Wi-Fi credentials. Tap your box again.")
+            _phase.value = NfcPairPhase.Failure(FSStrings.get(R.string.couldnt_seal_wi_fi_credentials_tap))
             return
         }
 
@@ -316,7 +318,7 @@ class NfcPairViewModel(
             onSuccess = {
                 wipeCaptured()
                 _phase.value = NfcPairPhase.Success(
-                    "Sent Wi-Fi to ${payload.hint.mdnsName}. The box should join your network in a moment.",
+                    FSStrings.get(R.string.sent_wi_fi_to_the_box, payload.hint.mdnsName),
                 )
             },
             onFailure = { t ->
@@ -407,20 +409,20 @@ class NfcPairViewModel(
         if (t is NfcPairReaderException) {
             return when (t.error) {
                 NfcPairReaderError.NfcUnavailable ->
-                    "NFC isn't available on this device. You can pair from the box's LED instead."
+                    FSStrings.get(R.string.nfc_isnt_available_on_this_device)
                 NfcPairReaderError.UserCanceled ->
-                    "Pairing cancelled. Tap again when ready."
+                    FSStrings.get(R.string.pairing_cancelled_tap_again_when_ready)
                 NfcPairReaderError.TagFormatUnrecognized ->
-                    "That doesn't look like a Flagship box tag. Try tapping again."
+                    FSStrings.get(R.string.that_doesnt_look_like_a_flagship)
                 is NfcPairReaderError.MalformedPayload ->
-                    "Couldn't read the tag (${(t.error as NfcPairReaderError.MalformedPayload).reason}). Try again."
+                    FSStrings.get(R.string.couldnt_read_the_tag_try_again, (t.error as NfcPairReaderError.MalformedPayload).reason)
                 NfcPairReaderError.SignatureMismatch ->
-                    "The tag's signature didn't check out. This may not be a genuine box."
+                    FSStrings.get(R.string.the_tags_signature_didnt_check_out)
                 NfcPairReaderError.Timeout ->
-                    "No tap detected. Hold your phone to the back of the box and try again."
+                    FSStrings.get(R.string.no_tap_detected_hold_your_phone)
             }
         }
-        return t.message ?: "Something went wrong. Try again."
+        return t.message ?: FSStrings.get(R.string.something_went_wrong_try_again)
     }
 
     /** Q2: a failed/unavailable NFC *read* degrades to the LED-SAS

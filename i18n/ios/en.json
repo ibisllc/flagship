@@ -12482,5 +12482,249 @@
   "Finished a stack move": {
     "en": "Finished a stack move",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Hold your phone to the Flagship box.": {
+    "en": "Hold your phone to the Flagship box.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/NFC/NfcPairReader.swift"
+  },
+  "No tag detected.": {
+    "en": "No tag detected.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/NFC/NfcPairReader.swift"
+  },
+  "Couldn't connect: %@": {
+    "en": "Couldn't connect: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/NFC/NfcPairReader.swift"
+  },
+  "Tag isn't NDEF.": {
+    "en": "Tag isn't NDEF.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/NFC/NfcPairReader.swift"
+  },
+  "NDEF query failed: %@": {
+    "en": "NDEF query failed: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/NFC/NfcPairReader.swift"
+  },
+  "Couldn't read tag: %@": {
+    "en": "Couldn't read tag: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/NFC/NfcPairReader.swift"
+  },
+  "Tag is empty.": {
+    "en": "Tag is empty.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/NFC/NfcPairReader.swift"
+  },
+  "Box paired.": {
+    "en": "Box paired.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/NFC/NfcPairReader.swift"
+  },
+  "Pair failed.": {
+    "en": "Pair failed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/NFC/NfcPairReader.swift"
+  },
+  "Pair a Flagship box": {
+    "en": "Pair a Flagship box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Hold your phone to the box…": {
+    "en": "Hold your phone to the box…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Sealing your Wi-Fi for the box…": {
+    "en": "Sealing your Wi-Fi for the box…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Sending it to the box…": {
+    "en": "Sending it to the box…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "NFC pair": {
+    "en": "NFC pair",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Make sure your box is plugged in but UNPAIRED. The status LED should be slowly pulsing.": {
+    "en": "Make sure your box is plugged in but UNPAIRED. The status LED should be slowly pulsing.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Tap your phone to the box's tag area (usually a sticker on the top or side) and hold for ~2 seconds.": {
+    "en": "Tap your phone to the box's tag area (usually a sticker on the top or side) and hold for ~2 seconds.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Tap your box": {
+    "en": "Tap your box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Paired with": {
+    "en": "Paired with",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Box ID %@": {
+    "en": "Box ID %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Send your Wi-Fi within 30 seconds of the tap — after that the box rolls a fresh pairing session.": {
+    "en": "Send your Wi-Fi within 30 seconds of the tap — after that the box rolls a fresh pairing session.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Wi-Fi network (SSID)": {
+    "en": "Wi-Fi network (SSID)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "e.g. My Home Wi-Fi": {
+    "en": "e.g. My Home Wi-Fi",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Wi-Fi password": {
+    "en": "Wi-Fi password",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Network password": {
+    "en": "Network password",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Regulatory region": {
+    "en": "Regulatory region",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "United States (US)": {
+    "en": "United States (US)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "European Union (DE)": {
+    "en": "European Union (DE)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "United Kingdom (GB)": {
+    "en": "United Kingdom (GB)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Japan (JP)": {
+    "en": "Japan (JP)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Canada (CA)": {
+    "en": "Canada (CA)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Australia (AU)": {
+    "en": "Australia (AU)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Tells the box which Wi-Fi channels are legal where it'll live.": {
+    "en": "Tells the box which Wi-Fi channels are legal where it'll live.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Send to box": {
+    "en": "Send to box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Check the box's LED": {
+    "en": "Check the box's LED",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "The box's status LED blinks this 3-by-3 pattern. Optional, but it catches a wrong box in a crowded room.": {
+    "en": "The box's status LED blinks this 3-by-3 pattern. Optional, but it catches a wrong box in a crowded room.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Verify the LED pattern": {
+    "en": "Verify the LED pattern",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "LED pattern matched — this is your box.": {
+    "en": "LED pattern matched — this is your box.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "That didn't match. Don't send Wi-Fi — you may be looking at the wrong box.": {
+    "en": "That didn't match. Don't send Wi-Fi — you may be looking at the wrong box.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Try the LED check again": {
+    "en": "Try the LED check again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Glance %lld of 3 — tap the 3 colors the LED just blinked:": {
+    "en": "Glance %lld of 3 — tap the 3 colors the LED just blinked:",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Pair another box": {
+    "en": "Pair another box",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Pair using the box's LED instead": {
+    "en": "Pair using the box's LED instead",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Pair with the box's LED": {
+    "en": "Pair with the box's LED",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Your phone finishes pairing over Wi-Fi and confirms the box by its status-LED blink pattern.": {
+    "en": "Your phone finishes pairing over Wi-Fi and confirms the box by its status-LED blink pattern.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "LED pairing isn't available in this build yet. You can retry the tap, or plug a monitor into the box and pair with the on-screen QR code.": {
+    "en": "LED pairing isn't available in this build yet. You can retry the tap, or plug a monitor into the box and pair with the on-screen QR code.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Try the tap again": {
+    "en": "Try the tap again",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/NfcPairScreen.swift"
+  },
+  "Pairing failed: %@": {
+    "en": "Pairing failed: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "No active pairing — tap the box first.": {
+    "en": "No active pairing — tap the box first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Wi-Fi network name (SSID) is required.": {
+    "en": "Wi-Fi network name (SSID) is required.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "The pairing session expired — tap your box again.": {
+    "en": "The pairing session expired — tap your box again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Couldn't prepare the Wi-Fi blob. Try again.": {
+    "en": "Couldn't prepare the Wi-Fi blob. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Couldn't reach the server.": {
+    "en": "Couldn't reach the server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Couldn't reach the server: %@": {
+    "en": "Couldn't reach the server: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Your box is connecting to %@.": {
+    "en": "Your box is connecting to %@.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "This device doesn't support NFC tag reading.": {
+    "en": "This device doesn't support NFC tag reading.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Cancelled. Tap your box to try again.": {
+    "en": "Cancelled. Tap your box to try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "That doesn't look like a Flagship tag. Hold your phone closer to the box.": {
+    "en": "That doesn't look like a Flagship tag. Hold your phone closer to the box.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Tag has %lld records — expected 2. The box may need a firmware update.": {
+    "en": "Tag has %lld records — expected 2. The box may need a firmware update.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Tag is malformed (%@).": {
+    "en": "Tag is malformed (%@).",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Tag signature didn't verify. Don't use this box — it may be tampered.": {
+    "en": "Tag signature didn't verify. Don't use this box — it may be tampered.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
+  },
+  "Timed out waiting for the box. Try again.": {
+    "en": "Timed out waiting for the box. Try again.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/NfcPairViewModel.swift"
   }
 }

@@ -93,6 +93,7 @@ public final class LiveNfcRendezvousClient: NfcRendezvousClient, @unchecked Send
     }
 }
 
+#if DEBUG
 // MARK: - Mock
 
 /// Scriptable mock for tests. Default behavior = success; set `behavior`
@@ -122,3 +123,4 @@ public final class MockNfcRendezvousClient: NfcRendezvousClient, @unchecked Send
         }
     }
 }
+#endif
