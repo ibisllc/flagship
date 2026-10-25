@@ -67,10 +67,12 @@ Labels such as "hardware PQ" are therefore claims about code paths, not measurem
   off when the `browser-grants` gym group fails. Its protected-host wiring (AT-EGR-09) and the other
   browser findings (AT-EGR-08, 11) are fixed in `a44fc2208`. By owner decision (2026-10-24) it may
   open other people's public Flagship apps like any public site (AT-EGR-14). The owner's standing
-  grants are kept across restarts (`browser/grantStore.ts`). Not yet proved on a box: nothing in the
-  box's data-services stack starts the Chromium container yet.
+  grants are kept across restarts (`browser/grantStore.ts`). The data-services stack starts the
+  Chromium container exactly when the release turns the browser on (`init.sh`). Not yet proved on a
+  box: the live `browser-grants` group decides it in the release gym.
 - **The A01 synthetic traffic trace** (no cloud plaintext, recorded) is not done.
-- **Clients:** the chat approval, browser grant and AI consent screens are partly built (`feat/UX`).
+- **Clients:** the chat approval, browser grant and AI consent screens are built on all three clients
+  and covered by the mock gyms; none has run on a physical device.
   (The "Share update results" switch and the refused-rollback sentence shipped 2026-10-24 on all three
   clients, and the box's own Activity line for a rollback kept in recovery has its own sentence.)
 - **Keyd** still has a generic `unseal` for the pairing order, `swk.open`/`cgk.open`, and an

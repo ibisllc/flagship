@@ -48,3 +48,30 @@ describe("the app browser's launch, ready for when the owner turns it on", () =>
     expect(overlay).not.toMatch(/^\s+ports:/m);
   });
 });
+
+describe("init.sh starts the app browser's Chromium exactly when the release turns it on", () => {
+  it("adds the overlay to every compose call only when release/box-release.json says appBrowser: true", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const { mkdtempSync, writeFileSync, mkdirSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const init = await read("../../../installer/data-services/init.sh");
+    const block = init.slice(init.indexOf('APP_BROWSER_COMPOSE="'), init.indexOf("\nfi\n", init.indexOf('APP_BROWSER_COMPOSE="')) + 4);
+    for (const engine of ["podman compose", "docker compose", "docker-compose"]) {
+      expect(init).toContain(`compose() { ${engine} -f "$COMPOSE" \${WITH_BROWSER:+-f "$APP_BROWSER_COMPOSE"} --env-file "$SECRETS_FILE" "$@"; }`);
+    }
+    const run = (appBrowser: boolean) => {
+      const root = mkdtempSync(join(tmpdir(), "init-browser-"));
+      mkdirSync(join(root, "installer/data-services"), { recursive: true });
+      mkdirSync(join(root, "release"));
+      writeFileSync(join(root, "installer/data-services/docker-compose.yml"), "services: {}\n");
+      writeFileSync(join(root, "installer/data-services/app-browser.compose.yml"), "services: {}\n");
+      writeFileSync(join(root, "release/box-release.json"), JSON.stringify({ appBrowser }));
+      const script = `COMPOSE=${join(root, "installer/data-services/docker-compose.yml")}\n${block}\nprintf '%s ' -f "$COMPOSE" \${WITH_BROWSER:+-f "$APP_BROWSER_COMPOSE"}`;
+      return execFileSync("sh", ["-c", script], { encoding: "utf8" });
+    };
+    expect(run(true)).toMatch(/-f \S+docker-compose\.yml -f \S+app-browser\.compose\.yml/);
+    expect(run(false)).not.toMatch(/app-browser/);
+  });
+});
+

@@ -122,19 +122,30 @@ if [ ! -f "$COMPOSE" ]; then
     exit 1
 fi
 
+# The app browser's Chromium (app-browser.compose.yml) joins the stack exactly when the release this box
+# runs turns the browser on (release/box-release.json `appBrowser`, the same value the daemon reads). When
+# it is off the overlay is left out, so `up --remove-orphans` below removes a Chromium left from before.
+APP_BROWSER_COMPOSE="${FLAGSHIP_APP_BROWSER_COMPOSE:-$(dirname "$COMPOSE")/app-browser.compose.yml}"
+RELEASE_JSON="${FLAGSHIP_RELEASE_JSON:-$(dirname "$COMPOSE")/../../release/box-release.json}"
+WITH_BROWSER=""
+if [ -f "$APP_BROWSER_COMPOSE" ] && [ "$(jq -r '.appBrowser // false' "$RELEASE_JSON" 2>/dev/null)" = true ]; then
+    WITH_BROWSER=1
+    echo "flagship: the app browser is on in this release; its Chromium joins the stack"
+fi
+
 # The engine the daemon chose (server-daemon engine/migrate.ts writes it): Podman on new
 # and migrated boxes, where `podman compose` drives docker-compose over Podman's socket.
 ENGINE="${FLAGSHIP_ENGINE:-$(tr -cd 'a-z' < /var/lib/flagship/engine-active 2>/dev/null || true)}"
 if [ "$ENGINE" = podman ] && command -v podman >/dev/null 2>&1; then
     docker() { podman "$@"; }
     systemctl start podman.socket >/dev/null 2>&1 || true
-    compose() { podman compose -f "$COMPOSE" --env-file "$SECRETS_FILE" "$@"; }
+    compose() { podman compose -f "$COMPOSE" ${WITH_BROWSER:+-f "$APP_BROWSER_COMPOSE"} --env-file "$SECRETS_FILE" "$@"; }
 # Debian's docker-compose package provides `docker compose`; older installs
 # may only have the standalone binary.
 elif docker compose version >/dev/null 2>&1; then
-    compose() { docker compose -f "$COMPOSE" --env-file "$SECRETS_FILE" "$@"; }
+    compose() { docker compose -f "$COMPOSE" ${WITH_BROWSER:+-f "$APP_BROWSER_COMPOSE"} --env-file "$SECRETS_FILE" "$@"; }
 elif command -v docker-compose >/dev/null 2>&1; then
-    compose() { docker-compose -f "$COMPOSE" --env-file "$SECRETS_FILE" "$@"; }
+    compose() { docker-compose -f "$COMPOSE" ${WITH_BROWSER:+-f "$APP_BROWSER_COMPOSE"} --env-file "$SECRETS_FILE" "$@"; }
 else
     echo "flagship: neither 'docker compose' nor 'docker-compose' is installed"
     exit 1
