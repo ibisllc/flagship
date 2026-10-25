@@ -1,0 +1,35 @@
+{
+  "role": "root",
+  "format": 1,
+  "version": 1,
+  "expiresAt": 2108267773179,
+  "keys": {
+    "gym-1": "8803cb43a31bf007e79f286f84da8f16c86b5ccefbbab089e3109461afa699b8"
+  },
+  "roles": {
+    "root": {
+      "keyIds": [
+        "gym-1"
+      ],
+      "threshold": 1
+    },
+    "timestamp": {
+      "keyIds": [
+        "gym-1"
+      ],
+      "threshold": 1
+    },
+    "snapshot": {
+      "keyIds": [
+        "gym-1"
+      ],
+      "threshold": 1
+    },
+    "targets": {
+      "keyIds": [
+        "gym-1"
+      ],
+      "threshold": 1
+    }
+  }
+}
