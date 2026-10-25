@@ -5,6 +5,7 @@ import { readdir, readFile, rename, rm, stat, statfs } from "node:fs/promises";
 import { onCorruptState, onNoSpace, withFileLock, writeFileDurable } from "./durableFile.js";
 import { basename, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
+import { hostname as osHostname } from "node:os";
 import { X509Certificate } from "node:crypto";
 import {
   derivePeerBackupKey,
@@ -124,6 +125,9 @@ import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
 import { bootArchV2, privilegedHelperFor, rustPathHealthy } from "./archV2Boot.js";
 import { installGpudAsRoot, installGpudFromRelease, startAccelerators } from "./gpu/wire.js";
+import { localInferenceFor, startLocalAi } from "./localAi/wire.js";
+import { denyCompanionWrite } from "./screens/companion.js";
+import type { LocalAi } from "./localAi/index.js";
 import { BROKER_V1_SOCKET } from "./rustStack/units.js";
 
 /** Either custodian: the keys in this process, or in flagship-keyd. */
@@ -3183,11 +3187,14 @@ async function wireRuntimeSurfaces(deps: {
   // themselves gated on an SWK-backed ServicePlatform.
   // Relay-on keys (the default) reach providers through the Flagship hub
   // over the tunnel, TLS end to end: the provider sees Flagship's address.
+  // AI01: the box-local model ("On this server"), filled once local AI starts below.
+  const localAiRef: { current: LocalAi | null } = { current: null };
   const llmHarness = new LlmHarness({
     swk: custodian.asSwkOps(),
     relay: providerRelay({ connector: runtime.outboundRelay }),
     // Architecture v2: an AI provider the owner blocked while this server is strict.
     connectorGate: (id) => connectorGateRef.current?.(id) ?? null,
+    localInference: localInferenceFor(localAiRef),
   });
   const llmCredentials = new FileBuildCredentialStore(
     join(dataDir, "llm-credentials"),
@@ -3203,6 +3210,7 @@ async function wireRuntimeSurfaces(deps: {
     username,
     serverFqdn: env.serverFqdn,
     extra: (runtime.servicePlatform?.list() ?? []).map((a) => a.serviceId),
+    hostname: osHostname(),
   }));
   // The tool-calling model call an AI build's staged loop drives, with the
   // build's (or chat session's) transient BYOK key opened just-in-time.
@@ -3383,6 +3391,11 @@ async function wireRuntimeSurfaces(deps: {
       store: fileBuildStore(join(dataDir, "data", "builds")),
       provenance: importProvenance,
       modelRedactor,
+      // AI01: the build's provider key is cut from anything a tool hands the model.
+      sessionSecrets: async (buildId: string) => {
+        const c = await llmCredentials.get(buildId).catch(() => null);
+        return c ? [c.apiKey] : [];
+      },
       journal: buildJournal,
       gitImporter,
       mcpKeys,
@@ -3455,6 +3468,8 @@ async function wireRuntimeSurfaces(deps: {
               }),
               costOf: (buildId) => {
                 const provider = llmCredentials.providerName(buildId);
+                // On this server: nothing to pay and nothing leaves the box, so no cost consent.
+                if (provider === "flagship-local") return null;
                 return provider ? { provider, source: llmCredentials.costSource(buildId) ?? "byok" } : null;
               },
               workspaceBytes: (buildId) => {
@@ -4103,6 +4118,36 @@ async function wireRuntimeSurfaces(deps: {
     publisherTrustKeys: () => (cfg ? [...(cfg.adminRootPub ? [cfg.adminRootPub] : [cfg.irkPublicKey])] : []),
     debugAccess,
     accelerators: startAccelerators({ dataDir: process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship", pairedSessions }).http,
+    // AI02: models, the job queue, fine-tuning and app grants (docs/architecture-v2/local-ai.md).
+    localAi: (() => {
+      const started = startLocalAi({
+        dataDir: process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship",
+        serverDomain: env.serverFqdn,
+        authority: () => ({
+          ownerIrkPub: cfg?.irkPublicKey ?? new Uint8Array(32),
+          ...(cfg?.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+          username,
+          activeGrants: deps.accessPrincipals.book?.adminGrants() ?? [],
+        }),
+        platform: () => runtime.servicePlatform ?? null,
+        sessions: {
+          samplesFor: (serviceId) => {
+            const out: Record<string, string> = {};
+            for (const m of vibeRegistry.list()) {
+              if (m.serviceId !== serviceId && m.editsServiceId !== serviceId) continue;
+              Object.assign(out, vibeRegistry.get(m.sessionId)?.sampleFiles() ?? {});
+            }
+            return out;
+          },
+        },
+        broker: startAccelerators({ dataDir: process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship", pairedSessions }).broker,
+        ownedPorts: () => (runtime.egress.ownedPorts.gateway() ? runtime.egress.ownedPorts : null),
+        portFor: (k) => runtime.appRuntimes.ports.portFor(k),
+        denyCompanion: (r) => denyCompanionWrite(pairedSessions, r),
+      });
+      localAiRef.current = started.ai;
+      return started.http;
+    })(),
     gate: sharesBundle?.gate ?? pairedSessions,
     shares: sharesBundle?.shares ?? null,
     // An unreadable access state leaves every app members-only (the store's own default).

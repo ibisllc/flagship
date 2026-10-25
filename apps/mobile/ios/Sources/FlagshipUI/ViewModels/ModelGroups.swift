@@ -12,16 +12,23 @@ import FlagshipAPI
 public enum ModelGroups {
     public static let flagshipId = SavedKeyStore.flagshipInferenceId
 
-    /// A group before its models load: Flagship Inference (`entry == nil`) or a saved key.
+    /// A group before its models load: Flagship Inference (`entry == nil`), the model on the
+    /// owner's own server (`isLocal`), or a saved key.
     public struct Spec: Equatable, Sendable {
         public let id: String
         public let title: String
         public let entry: SavedKeyStore.Entry?
-        public init(id: String, title: String, entry: SavedKeyStore.Entry?) {
-            self.id = id; self.title = title; self.entry = entry
+        public let isLocal: Bool
+        public init(id: String, title: String, entry: SavedKeyStore.Entry?, isLocal: Bool = false) {
+            self.id = id; self.title = title; self.entry = entry; self.isLocal = isLocal
         }
-        public var isFlagship: Bool { entry == nil }
+        public var isFlagship: Bool { entry == nil && !isLocal }
     }
+
+    /// "On this server" (docs/architecture-v2/local-ai.md §3): the box's own model. No credits,
+    /// nothing leaves the box, and when it can't run the box says why: nothing switches provider.
+    public static let localId = LocalAi.provider
+    public static let localSpec = Spec(id: localId, title: LocalAiCopy.onThisServer, entry: nil, isLocal: true)
 
     /// A saved key's group title.
     public static func keyTitle(_ e: SavedKeyStore.Entry) -> String { "\(e.provider) · \(e.label)" }
@@ -40,9 +47,10 @@ public enum ModelGroups {
 
     public static let flagshipSpec = Spec(id: flagshipId, title: ModelMenuText.flagshipInference, entry: nil)
 
-    /// The groups in menu order.
-    public static func specs(entries: [SavedKeyStore.Entry], includeFlagship: Bool) -> [Spec] {
+    /// The groups in menu order: Flagship Inference, On this server, then each saved key.
+    public static func specs(entries: [SavedKeyStore.Entry], includeFlagship: Bool, includeLocal: Bool = false) -> [Spec] {
         var out: [Spec] = includeFlagship ? [flagshipSpec] : []
+        if includeLocal { out.append(localSpec) }
         for e in entries where e.provider != "flagship" {
             out.append(Spec(id: e.id, title: keyTitle(e), entry: e))
         }
@@ -60,6 +68,7 @@ public enum ModelGroups {
     public static func groupId(forProvider provider: String?, in specs: [Spec]) -> String? {
         guard let provider, !provider.isEmpty else { return nil }
         if provider == "flagship" { return specs.first(where: \.isFlagship)?.id }
+        if provider == LocalAi.provider { return specs.first(where: \.isLocal)?.id }
         return specs.first { $0.entry?.provider == provider }?.id
             ?? specs.first { $0.entry.map { wireCredential($0).provider } == provider }?.id
     }
@@ -68,6 +77,7 @@ public enum ModelGroups {
     public static func groupId(forCredential c: LlmProviderCredential?, in specs: [Spec]) -> String? {
         guard let c else { return nil }
         if c.isFreeAi || c.provider == "flagship" { return specs.first(where: \.isFlagship)?.id }
+        if c.provider == LocalAi.provider { return specs.first(where: \.isLocal)?.id }
         return specs.first { $0.entry?.apiKey == c.apiKey }?.id
     }
 
@@ -105,6 +115,10 @@ public enum ModelGroups {
     public static func credential(for spec: Spec?, picked: Bool, needsCredential: Bool,
                                   starting: Bool = false) -> CredentialChoice {
         guard let spec else { return .keep }
+        if spec.isLocal {
+            guard picked || needsCredential || starting else { return .keep }
+            return .send(LocalAi.credential)
+        }
         guard let entry = spec.entry else { return .mintFlagship }
         guard picked || needsCredential || starting else { return .keep }
         return .send(wireCredential(entry))
@@ -140,6 +154,7 @@ public final class GroupedModelMenu {
     @ObservationIgnored private var ownModels: (@MainActor (LlmProviderCredential) async -> AiModelsResponse)?
     @ObservationIgnored private var flagshipUsable: (@MainActor () async -> Bool)?
     @ObservationIgnored private var checkedFlagship = false
+    @ObservationIgnored private var checkedLocal = false
     @ObservationIgnored public private(set) var isConfigured = false
 
     public init() {}
@@ -172,7 +187,7 @@ public final class GroupedModelMenu {
         self.ownModels = ownModels
         self.flagshipUsable = flagshipUsable
         let usesFlagship = provider == "flagship" || (provider == nil && freeAiSession)
-        let specs = ModelGroups.specs(entries: entries, includeFlagship: usesFlagship)
+        let specs = ModelGroups.specs(entries: entries, includeFlagship: usesFlagship, includeLocal: provider == LocalAi.provider)
         let box: String?
         if let provider, !provider.isEmpty {
             box = ModelGroups.groupId(forProvider: provider, in: specs)
@@ -188,7 +203,14 @@ public final class GroupedModelMenu {
 
     private func makeGroup(_ spec: ModelGroups.Spec, initial: ModelChoice?) -> ModelMenuGroup {
         let loader: () async -> ModelMenuModel.Source
-        if let entry = spec.entry {
+        if spec.isLocal {
+            loader = { @MainActor [weak self] in
+                guard let load = self?.ownModels else {
+                    return .own(AiModelsResponse(provider: LocalAi.provider, kind: "own", listed: false, models: [], reason: "failed"))
+                }
+                return .own(await load(LocalAi.credential))
+            }
+        } else if let entry = spec.entry {
             let cred = ModelGroups.wireCredential(entry)
             loader = { @MainActor [weak self] in
                 guard let load = self?.ownModels else {
@@ -224,6 +246,15 @@ public final class GroupedModelMenu {
             if await flagshipUsable(), !groups.contains(where: { $0.spec.isFlagship }) {
                 groups.insert(makeGroup(ModelGroups.flagshipSpec,
                                         initial: DefaultModelStore.choice(for: ModelGroups.flagshipId)), at: 0)
+            }
+        }
+        // "On this server" once the box has a model downloaded (or the chat already uses it).
+        if !checkedLocal, !groups.contains(where: { $0.spec.isLocal }), let ownModels {
+            checkedLocal = true
+            let r = await ownModels(LocalAi.credential)
+            if r.listed == true, !(r.models ?? []).isEmpty, !groups.contains(where: { $0.spec.isLocal }) {
+                let at = groups.firstIndex(where: { !$0.spec.isFlagship }) ?? groups.count
+                groups.insert(makeGroup(ModelGroups.localSpec, initial: DefaultModelStore.choice(for: ModelGroups.localId)), at: at)
             }
         }
         let menus = groups.map(\.menu)

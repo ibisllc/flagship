@@ -270,11 +270,13 @@ function enumerateEnvVars(
 export function prependFlagshipSystemPrompt(
   request: ChatRequest,
   context: LlmAppContext,
+  /** The model redactor (llm/modelPrivacy.ts): the markdown is box-written. */
+  redact: (text: string) => string = (t) => t,
 ): ChatRequest {
   return {
     ...request,
     messages: [
-      { role: "system", content: context.markdown },
+      { role: "system", content: redact(context.markdown) },
       ...request.messages,
     ],
   };

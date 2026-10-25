@@ -43,6 +43,10 @@ public struct BuildKeyScreen: View {
         self.onChosen = onChosen
     }
 
+    @Environment(\.screensClient) private var screensClient
+    /// "On this server": nil while asking the box; the models it has downloaded.
+    @State private var localModels: [ModelOption]?
+    @State private var localUnavailable = false
     @State private var confirmDelete: SavedKeyStore.Entry?
     @State private var deleteError: String?
     /// Free AI is chosen for an owner with no key at most once per visit.
@@ -56,6 +60,7 @@ public struct BuildKeyScreen: View {
                     Spacer().frame(height: FS.space.s6)
 
                     freeAiRow(c: c)
+                    localRow(c: c)
 
                     if vm.showingForm {
                         AiKeyForm(
@@ -113,6 +118,13 @@ public struct BuildKeyScreen: View {
         .onAppear {
             if vm.freeAiService == nil { vm.freeAiService = freeAiService }
             vm.reload()
+        }
+        .task {
+            if let r = try? await screensClient.aiModels(AiModelsRequest(credential: LocalAi.credential)), r.listed == true {
+                localModels = r.models ?? []
+            } else {
+                localUnavailable = true
+            }
         }
         .task {
             if vm.freeAiService == nil { vm.freeAiService = freeAiService }
@@ -175,6 +187,35 @@ public struct BuildKeyScreen: View {
         .accessibilityLabel(FreeAiCopy.providerTitle)
         .accessibilityHint(FreeAiCopy.builtInAccessibility)
         .accessibilityIdentifier(vm.freeAi.isUsable ? "build-key-free-ai" : "build-key-free-ai-blocked")
+    }
+
+    /// "On this server": the box's own model, free, nothing leaves the box. Usable once a model is
+    /// downloaded there; the box says why not otherwise, and nothing switches to another provider.
+    private func localRow(c: FSColors) -> some View {
+        FSCard {
+            HStack(spacing: FS.space.s3) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(LocalAiCopy.onThisServer).font(FS.font.body().weight(.semibold)).foregroundColor(c.text)
+                    Text(LocalAiCopy.privacy).font(FS.font.caption()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if localUnavailable {
+                        Text(LocalAiCopy.unavailable).font(FS.font.caption()).foregroundColor(c.textMuted)
+                    } else if let m = localModels, m.isEmpty {
+                        Text(LocalAiCopy.noModels).font(FS.font.caption()).foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if localModels == nil && !localUnavailable {
+                    ProgressView()
+                } else if let m = localModels, !m.isEmpty {
+                    FSPrimaryButton(String(localized: "Use this")) { onChosen(LocalAi.credential) }
+                        .accessibilityIdentifier("build-key-use-local")
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(localModels?.isEmpty == false ? "build-key-local" : "build-key-local-blocked")
     }
 
     private var freeAiStatusLine: String? {

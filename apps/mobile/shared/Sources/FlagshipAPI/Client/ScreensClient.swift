@@ -182,6 +182,27 @@ public protocol ScreensClient: Sendable {
     func rejectPublisher(serviceId: String) async throws
     /// `POST /api/screens/debug-access/revoke {revoke, signatureHex}`.
     func debugAccessRevoke(body: String) async throws -> DebugAccessChange
+    // MARK: Local AI (docs/architecture-v2/local-ai.md §4)
+    /// `GET /api/screens/local-ai`: models, the job queue, GPUs, app access.
+    func localAi() async throws -> LocalAiView
+    /// `GET /api/screens/local-ai/jobs/<jobId>`: one training job with its checkpoints.
+    func localAiJobDetail(jobId: String) async throws -> LocalAiJobDetail
+    /// `POST /api/screens/local-ai/settings {useGpu}`.
+    func localAiSetUseGpu(_ useGpu: Bool) async throws -> LocalAiSettings
+    /// `POST /api/screens/local-ai/settings {serveModel}` (nil: the box picks).
+    func localAiSetServeModel(_ modelId: String?) async throws -> LocalAiSettings
+    /// `POST /api/screens/local-ai/models/download|cancel|delete {modelId}`. A refusal is `.http` with `{error, code}`.
+    func localAiModel(_ action: LocalAiModelAction, modelId: String) async throws
+    /// `POST /api/screens/local-ai/service/start {modelId?}`.
+    func localAiServiceStart(modelId: String?) async throws -> LocalAiService
+    /// `POST /api/screens/local-ai/service/stop`.
+    func localAiServiceStop() async throws -> LocalAiService
+    /// `POST /api/screens/local-ai/train {order, signature}` (`LocalAiTrainOrder.body`).
+    func localAiTrain(body: [String: Any]) async throws -> LocalAiJob
+    /// `POST /api/screens/local-ai/jobs/cancel|resume|delete {jobId}`.
+    func localAiJob(_ action: LocalAiJobAction, jobId: String) async throws
+    /// `POST /api/screens/local-ai/apps/grant {order, signature}` (`LocalAiAppGrant.body`).
+    func localAiGrant(body: [String: Any]) async throws
     /// `GET /api/screens/settings/access-alerts`. An older box answers 404.
     func accessAlertsSetting() async throws -> AccessAlertsSetting
     /// `POST /api/screens/settings/access-alerts {enabled}` (owner session;
@@ -479,6 +500,16 @@ public extension ScreensClient {
     func debugAccessRevoke(body: String) async throws -> DebugAccessChange {
         throw ScreensClientError.notImplemented("debug access")
     }
+    func localAi() async throws -> LocalAiView { throw ScreensClientError.notImplemented("local AI") }
+    func localAiJobDetail(jobId: String) async throws -> LocalAiJobDetail { throw ScreensClientError.notImplemented("local AI") }
+    func localAiSetUseGpu(_ useGpu: Bool) async throws -> LocalAiSettings { throw ScreensClientError.notImplemented("local AI") }
+    func localAiSetServeModel(_ modelId: String?) async throws -> LocalAiSettings { throw ScreensClientError.notImplemented("local AI") }
+    func localAiModel(_ action: LocalAiModelAction, modelId: String) async throws { throw ScreensClientError.notImplemented("local AI") }
+    func localAiServiceStart(modelId: String?) async throws -> LocalAiService { throw ScreensClientError.notImplemented("local AI") }
+    func localAiServiceStop() async throws -> LocalAiService { throw ScreensClientError.notImplemented("local AI") }
+    func localAiTrain(body: [String: Any]) async throws -> LocalAiJob { throw ScreensClientError.notImplemented("local AI") }
+    func localAiJob(_ action: LocalAiJobAction, jobId: String) async throws { throw ScreensClientError.notImplemented("local AI") }
+    func localAiGrant(body: [String: Any]) async throws { throw ScreensClientError.notImplemented("local AI") }
     func appBackupFetch(fetchPath: String) async throws -> Data {
         throw ScreensClientError.notImplemented("app backup download")
     }

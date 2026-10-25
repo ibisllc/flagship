@@ -17,6 +17,9 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     public init() {}
 
+    /// The mock box's Local AI (MockScreensClient+LocalAi.swift).
+    public let localAiMock = MockLocalAi()
+
     private func tick() async throws {
         if simulatedLatency > 0 {
             try? await Task.sleep(nanoseconds: UInt64(simulatedLatency * 1_000_000_000))
@@ -133,7 +136,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public private(set) var debugAccessByPod: [String: DebugAccessView] = [:]
     public private(set) var debugAccessBodies: [String] = []
 
-    private var mockFqdn: String {
+    var mockFqdn: String {
         let podName = podContext.hasPrefix("demo-")
             ? String(podContext.split(separator: "-").dropFirst().first ?? Substring(podContext))
             : podContext
@@ -1619,6 +1622,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         aiModelsCalls += 1
         if let aiModelsFixture { return aiModelsFixture }
+        if req.credential.provider == LocalAi.provider { return localAiMock.menu() }
         if req.credential.provider == "flagship" {
             return AiModelsResponse(provider: "flagship", kind: "flagship", catalog: .mock)
         }

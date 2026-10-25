@@ -237,6 +237,13 @@ struct GroupedModelMenuPanel: View {
     private func group(_ g: ModelMenuGroup, c: FSColors) -> some View {
         let chosen = g.id == menu.selectedGroupId
         ModelMenuRows.header(g.title, c: c)
+        if g.spec.isLocal {
+            Text(LocalAiCopy.privacy)
+                .font(FS.font.caption()).foregroundColor(c.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, FS.space.s4).padding(.bottom, FS.space.s1)
+                .accessibilityIdentifier("model-menu-local-privacy")
+        }
         switch g.menu.source {
         case .idle, .loading:
             HStack(spacing: FS.space.s2) {
@@ -257,13 +264,28 @@ struct GroupedModelMenuPanel: View {
                 .accessibilityIdentifier("model-menu-\(g.id)-\(m.id)")
             }
         case .own(let r) where r.listed == true:
+            if g.spec.isLocal && g.menu.ownOptions.isEmpty {
+                Text(LocalAiCopy.noModels)
+                    .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, FS.space.s4).padding(.vertical, FS.space.s2)
+                    .accessibilityIdentifier("model-menu-local-empty")
+            }
             ForEach(g.menu.ownOptions) { o in
-                ModelMenuRows.row(title: o.label, subtitle: o.known ? nil : ModelMenuText.capabilitiesUnknown,
+                ModelMenuRows.row(title: o.label,
+                                  subtitle: g.spec.isLocal ? (o.tools == false ? String(localized: "Can't build apps (no tool calls)") : nil)
+                                      : (o.known ? nil : ModelMenuText.capabilitiesUnknown),
                                   selected: chosen && o.id == g.menu.selectedId, c: c) {
                     menu.pick(groupId: g.id, modelId: o.id)
                 }
                 .accessibilityIdentifier("model-menu-\(g.id)-\(o.id)")
             }
+        case .own where g.spec.isLocal:
+            // An older box, or one that can't run a local model: say so; never a typed model.
+            Text(LocalAiCopy.unavailable)
+                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                .padding(.horizontal, FS.space.s4).padding(.vertical, FS.space.s2)
+                .accessibilityIdentifier("model-menu-local-unavailable")
         case .own(let r):
             VStack(alignment: .leading, spacing: FS.space.s1) {
                 TextField("Model", text: Binding(get: { g.menu.customModel },

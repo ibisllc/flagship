@@ -182,6 +182,8 @@ export const DEFAULT_MODEL_BY_PROVIDER: Readonly<Record<string, string>> = {
   openrouter: "openrouter/auto",
   // Free AI credits: the shim swaps in its upstream's real model id.
   flagship: "flagship-free",
+  // On this server: the box picks the model it serves (the owner's choice, else the best one downloaded).
+  "flagship-local": "auto",
 };
 
 export function defaultModelsFromEnv(
@@ -248,7 +250,8 @@ export function buildVibeCodeStartStreaming(
     const systemMessage =
       buildUserContext({
         ...args.context,
-        appEnvNames,
+        // Names only, and an owner-chosen name may still carry who they are.
+        appEnvNames: appEnvNames.map((n) => (args.redact ?? ((t: string) => t))(n)),
       }) +
       ownerChoiceSupplement(s.preferredName, s.visibility) +
       editSupplement(session.meta.editsServiceId ? session.meta.name : undefined, session.meta.editsServiceId ? session.files() : null) +
@@ -360,7 +363,8 @@ export function buildVibeCodeResumeStreaming(
     const systemMessage =
       buildUserContext({
         ...args.context,
-        appEnvNames,
+        // Names only, and an owner-chosen name may still carry who they are.
+        appEnvNames: appEnvNames.map((n) => (args.redact ?? ((t: string) => t))(n)),
       }) +
       ownerChoiceSupplement(session.meta.editsServiceId ? undefined : session.meta.name, session.meta.visibility) +
       editSupplement(session.meta.editsServiceId ? session.meta.name : undefined, session.meta.editsServiceId ? session.files() : null) +

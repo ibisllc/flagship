@@ -1224,6 +1224,15 @@ class MockScreensClient(
         tick()
         val provider = credential?.provider ?: "flagship"
         if (provider == "flagship") return AiModelsResponse(provider = provider, kind = "flagship")
+        if (provider == "flagship-local") {
+            // The box's "On this server" menu: only what is downloaded there.
+            val installed = localAiFixture.models.filter { it.state == "installed" }
+            return AiModelsResponse(
+                provider = provider, kind = "own", listed = true,
+                defaultModel = installed.firstOrNull { it.tools }?.id ?: installed.firstOrNull()?.id,
+                models = installed.map { ModelOption(it.id, it.name, it.contextTokens, vision = false, tools = it.tools, known = true) },
+            )
+        }
         return AiModelsResponse(
             provider = provider, kind = "own", listed = true, defaultModel = "gpt-5.4-mini",
             models = listOf(
@@ -1952,5 +1961,134 @@ class MockScreensClient(
 
         /** The names the account directory would give them (decrypted on the phone). */
         val DEVICE_NAMES = mapOf(SELF_DEVICE_ID to "Pixel 9", OTHER_DEVICE_ID to "Kitchen iPad")
+    }
+
+    // ---- Local AI (docs/architecture-v2/local-ai.md §4) ----------------------------------------
+
+    /** The box's Local AI screen. The gym edits it; the actions below change it like the box would. */
+    var localAiFixture: LocalAiView = defaultLocalAi()
+    /** Signed bodies the app sent, newest last (the gym checks them). */
+    val localAiTrainBodies = mutableListOf<LocalAiTrainBody>()
+    val localAiGrantBodies = mutableListOf<LocalAiGrantBody>()
+    val localAiActions = mutableListOf<String>()
+
+    fun defaultLocalAi(): LocalAiView = LocalAiView(
+        available = true,
+        settings = LocalAiSettings(useGpu = true, serveModel = null),
+        hardware = LocalAiHardware(
+            cpus = 8, memoryMiB = 15_872, diskFreeBytes = 120_000_000_000, gpuService = true,
+            gpus = listOf(
+                LocalAiGpu("0", "NVIDIA GeForce RTX 4090", "nvidia", 24_564, "in-use", listOf(LocalAiGpuHolder("alice--render", "Render farm", "app-alice--render-k1", "running"))),
+            ),
+        ),
+        budget = LocalAiBudget(usedBytes = 98_357_920, budgetBytes = 68_719_476_736),
+        models = listOf(
+            LocalAiModelRow("qwen2.5-coder-7b-q4", "Qwen2.5 Coder 7B", "Best for building apps; wants a GPU", "7B", "Q4_K_M", 4_683_073_536,
+                LocalAiLicense("apache-2.0", "https://huggingface.co/Qwen"), 32_768, tools = true, purpose = "build", memoryNeededMiB = 5_643,
+                speed = LocalAiSpeed(32.0, measured = false, on = "gpu")),
+            LocalAiModelRow("qwen2.5-0.5b-q4", "Qwen2.5 0.5B", "Tiny; runs on any server", "0.5B", "Q4_K_M", 491_400_032,
+                LocalAiLicense("apache-2.0", "https://huggingface.co/Qwen"), 32_768, tools = true, purpose = "chat", memoryNeededMiB = 923,
+                speed = LocalAiSpeed(48.8, measured = false, on = "cpu")),
+            LocalAiModelRow("stories-15m", "TinyStories 15M", "A small model to fine-tune on an app's sample text", "15M", "F32", 98_357_920,
+                LocalAiLicense("mit", "https://github.com/karpathy/llama2.c"), 256, tools = false, purpose = "test", trainable = true,
+                state = "installed", memoryNeededMiB = 368, speed = LocalAiSpeed(212.4, measured = true, on = "cpu")),
+        ),
+        service = LocalAiServiceView(state = "stopped"),
+        jobs = listOf(
+            LocalAiJob("0123456789abcdef", "training", "alice--notes", "Notes", "stories-15m", "running", "cpu", null, null, now() - 60_000, now() - 50_000,
+                epochs = 3, epochsDone = 1, checkpoints = 1),
+            LocalAiJob("fedcba9876543210", "training", "alice--notes", "Notes", "stories-15m", "queued", null, null, queuePosition = 2, createdAt = now() - 10_000,
+                epochs = 2, epochsDone = 0, checkpoints = 0),
+        ),
+        apps = listOf(
+            LocalAiAppRow("alice--notes", "Notes", grant = null),
+            LocalAiAppRow("alice--helper", "Helper", LocalAiGrantView(serviceId = "alice--helper", requestsPerDay = 500, tokensPerDay = 200_000, maxTokensPerRequest = 1_024, issuedAt = now() - 3_600_000),
+                LocalAiUsage("2026-10-24", 12, 3_400)),
+        ),
+        datasets = listOf(LocalAiDataset("alice--notes", "Notes", hasSampleData = true), LocalAiDataset("alice--helper", "Helper", hasSampleData = false)),
+        trainableModels = listOf(LocalAiTrainable("stories-15m", "TinyStories 15M", installed = true, memoryNeededMiB = 934), LocalAiTrainable("stories-260k", "TinyStories 260K", installed = false, memoryNeededMiB = 518)),
+    )
+
+    private var localAiDownloadTicks = 0
+
+    override suspend fun localAi(): LocalAiView {
+        tick()
+        // A download moves on each look, like the box's progress.
+        if (localAiFixture.models.any { it.state == "downloading" } && ++localAiDownloadTicks >= 2) {
+            localAiFixture = localAiFixture.copy(models = localAiFixture.models.map {
+                if (it.state == "downloading") it.copy(state = "installed", progress = null) else it
+            })
+        }
+        return localAiFixture
+    }
+
+    override suspend fun localAiJob(jobId: String): LocalAiJobDetail {
+        tick()
+        val j = localAiFixture.jobs.firstOrNull { it.id == jobId } ?: throw ScreensError.Http(404, """{"error":"No such training job."}""")
+        val cps = (1..(j.checkpoints ?: 0)).map { e -> LocalAiCheckpoint(e, "a".repeat(63) + e, 98_357_920, now() - 30_000, 3.2 - e * 0.4) }
+        return LocalAiJobDetail(j, "d".repeat(64), 4_096, cps)
+    }
+
+    override suspend fun localAiSettings(useGpu: Boolean?, serveModel: String?, clearServeModel: Boolean) {
+        tick()
+        val cur = localAiFixture.settings
+        localAiFixture = localAiFixture.copy(settings = LocalAiSettings(useGpu ?: cur.useGpu, if (clearServeModel) null else serveModel ?: cur.serveModel))
+    }
+
+    override suspend fun localAiModel(action: String, modelId: String) {
+        tick()
+        localAiActions += "model:$action:$modelId"
+        val m = localAiFixture.models.firstOrNull { it.id == modelId } ?: throw ScreensError.Http(404, """{"error":"That model isn't in this server's catalog.","code":"unknown-model"}""")
+        val next = when (action) {
+            "download" -> {
+                if (m.state == "installed") throw ScreensError.Http(409, """{"error":"That model is already on this server.","code":"already-installed"}""")
+                localAiDownloadTicks = 0
+                m.copy(state = "downloading", progress = LocalAiProgress("downloading", m.sizeBytes * 2 / 5, m.sizeBytes))
+            }
+            "cancel", "delete" -> m.copy(state = "available", progress = null)
+            else -> m
+        }
+        localAiFixture = localAiFixture.copy(models = localAiFixture.models.map { if (it.id == modelId) next else it })
+    }
+
+    override suspend fun localAiService(start: Boolean, modelId: String?) {
+        tick()
+        localAiActions += if (start) "service:start" else "service:stop"
+        val installed = localAiFixture.models.filter { it.state == "installed" }
+        if (start && installed.isEmpty()) throw ScreensError.Http(503, """{"error":"No model is downloaded on this server yet. Download one under Local AI.","code":"no-model"}""")
+        localAiFixture = localAiFixture.copy(
+            service = if (start) LocalAiServiceView("running", "1111222233334444", modelId ?: installed.first().id, "cpu", startedAt = now()) else LocalAiServiceView("stopped"),
+        )
+    }
+
+    override suspend fun localAiTrain(body: LocalAiTrainBody) {
+        tick()
+        localAiTrainBodies += body
+        val o = body.order
+        val app = localAiFixture.apps.firstOrNull { it.serviceId == o.serviceId }?.name
+        val waiting = localAiFixture.jobs.count { it.state == "queued" || it.state == "running" || it.state == "preparing" }
+        localAiFixture = localAiFixture.copy(jobs = listOf(LocalAiJob(o.jobId, "training", o.serviceId, app, o.baseModel, "queued", queuePosition = waiting + 1,
+            createdAt = now(), epochs = o.epochs, epochsDone = 0, checkpoints = 0)) + localAiFixture.jobs)
+    }
+
+    override suspend fun localAiJobAction(action: String, jobId: String) {
+        tick()
+        localAiActions += "job:$action:$jobId"
+        localAiFixture = localAiFixture.copy(jobs = when (action) {
+            "delete" -> localAiFixture.jobs.filterNot { it.id == jobId }
+            "cancel" -> localAiFixture.jobs.map { if (it.id == jobId) it.copy(state = "cancelled", queuePosition = null) else it }
+            "resume" -> localAiFixture.jobs.map { if (it.id == jobId) it.copy(state = "queued", queuePosition = 1) else it }
+            else -> localAiFixture.jobs
+        })
+    }
+
+    override suspend fun localAiGrant(body: LocalAiGrantBody) {
+        tick()
+        localAiGrantBodies += body
+        val o = body.order
+        localAiFixture = localAiFixture.copy(apps = localAiFixture.apps.map {
+            if (it.serviceId != o.serviceId) it
+            else it.copy(grant = if (o.requestsPerDay == 0L) null else LocalAiGrantView(o.serverDomain, o.serviceId, o.requestsPerDay, o.tokensPerDay, o.maxTokensPerRequest, o.issuedAt))
+        })
     }
 }

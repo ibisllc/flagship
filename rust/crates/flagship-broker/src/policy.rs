@@ -967,6 +967,60 @@ const RUN_FORBIDDEN: &[&str] = &[
 static PGSOCK_RO_MOUNT_RE: LazyLock<Regex> = LazyLock::new(|| {
     re(r"^type=volume,src=flagship-pgsock-[0-9a-f]{24},dst=/var/run/postgresql,readonly$")
 });
+
+/// Local AI (packages/server-daemon/src/localAi/catalog.ts, privd `LOCAL_AI_IMAGES`): llama.cpp
+/// build b11541's server and `full` images by manifest-list digest.
+pub const LOCAL_AI_IMAGES: &[&str] = &[
+    "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+    "ghcr.io/ggml-org/llama.cpp:server-cuda-b11541@sha256:f88fa8d94d872312a4ad117acd490fa997bef81f03f161f0cfe0d74272e5b5bb",
+    "ghcr.io/ggml-org/llama.cpp:server-rocm-b11541@sha256:353312d6637cad6a1492d5ab1c0373137163a73d6bce98c821ebcb1abfebcf8c",
+    "ghcr.io/ggml-org/llama.cpp:server-intel-b11541@sha256:f74b70ab42a1715a093d67372fdc413a8af671b48bb6f8ae02eb0fb92356f94d",
+    "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+    "ghcr.io/ggml-org/llama.cpp:full-cuda-b11541@sha256:12055d1d7d97498f7563837bcb21f4eff05cc15d42c5f8b460afcf53982cdf59",
+    "ghcr.io/ggml-org/llama.cpp:full-rocm-b11541@sha256:afb1b28de45ab29a1a2e810da620908c0fb4105fdf05b96d4dd692e7db56cc9c",
+    "ghcr.io/ggml-org/llama.cpp:full-intel-b11541@sha256:72ed99a5f846170a479c41979439e61a0db4a6949cdda45422115607b8a1973d",
+];
+static LOCAL_AI_SERVICE_NAME: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^flagship-localai-[0-9a-f]{16}$"));
+static LOCAL_AI_TRAIN_NAME: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^flagship-aitrain-([0-9a-f]{16})$"));
+/// The installed models, read-only: the only mount the model server has.
+pub const LOCAL_AI_MODELS_MOUNT: &str = "type=volume,src=flagship-models,dst=/models,readonly";
+/// An app's STAGED sample data (its dev files volume), read-only: never a live app's files.
+static LOCAL_AI_DATASET_MOUNT: LazyLock<Regex> = LazyLock::new(|| {
+    re(
+        r"^type=volume,src=flagship-devfiles-[a-z0-9](?:-?[a-z0-9]){0,31}--[a-z0-9](?:-?[a-z0-9]){0,31},dst=/dataset,readonly$",
+    )
+});
+
+fn is_local_ai_name(run: &ParsedRun) -> bool {
+    run.flags.iter().any(|f| {
+        f.name == "name"
+            && (LOCAL_AI_SERVICE_NAME.is_match(&f.value) || LOCAL_AI_TRAIN_NAME.is_match(&f.value))
+    })
+}
+
+/// `localAiMount`: which local-AI mount this is for this run, or None when the run may not have it.
+fn local_ai_mount(run: &ParsedRun, value: &str) -> Option<&'static str> {
+    if !LOCAL_AI_IMAGES.contains(&run.image.as_str()) {
+        return None;
+    }
+    let names: Vec<&RunFlag> = run.flags.iter().filter(|f| f.name == "name").collect();
+    let [name] = names.as_slice() else {
+        return None;
+    };
+    let name = name.value.as_str();
+    if value == LOCAL_AI_MODELS_MOUNT
+        && (LOCAL_AI_SERVICE_NAME.is_match(name) || LOCAL_AI_TRAIN_NAME.is_match(name))
+    {
+        return Some("models");
+    }
+    let job = LOCAL_AI_TRAIN_NAME.captures(name)?.get(1)?.as_str();
+    if value == format!("type=volume,src=flagship-aitrain-{job},dst=/out") {
+        return Some("out");
+    }
+    LOCAL_AI_DATASET_MOUNT.is_match(value).then_some("dataset")
+}
 static ROOT_UID_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^[+-]?0+$"));
 const RUNTIME_MESSAGE: &str = "a container runs under gVisor (--runtime runsc)";
 const GPU_DEVICE_MESSAGE: &str = "a GPU container gets only the devices its allocation holds";
@@ -1067,6 +1121,7 @@ fn check_ordinary_run(
 ) -> Result<(), PrivdError> {
     let mut runtime = false;
     let mut devices: Vec<&str> = Vec::new();
+    let mut ai_mounts: Vec<&'static str> = Vec::new();
     for f in &run.flags {
         let (name, value) = (f.name.as_str(), f.value.as_str());
         if RUN_FORBIDDEN.contains(&name) && !(gpu.is_some() && name == "device") {
@@ -1093,7 +1148,20 @@ fn check_ordinary_run(
                 }
             }
             "mount" => {
-                if sub != "run"
+                let ai = if sub == "run" {
+                    local_ai_mount(run, value)
+                } else {
+                    None
+                };
+                if let Some(kind) = ai {
+                    if ai_mounts.contains(&kind) {
+                        return Err(forbidden(
+                            "a local-AI container mounts each of its volumes once",
+                        ));
+                    }
+                    ai_mounts.push(kind);
+                } else if (is_local_ai_name(run) && !RESOLV_MOUNT_RE.is_match(value))
+                    || sub != "run"
                     || !(FILES_MOUNT_RE.is_match(value)
                         || RESOLV_MOUNT_RE.is_match(value)
                         || PGSOCK_RO_MOUNT_RE.is_match(value))
@@ -1873,6 +1941,69 @@ fn host_command(name: &str, a: &[String], mounts: MountsReader<'_>) -> Option<Pr
             input: Some(icc_table(a)),
             ..exec("/usr/sbin/nft", owned(&["-f", "-"]), 30_000)
         }),
+        "localai" => local_ai_host(a),
+        _ => None,
+    }
+}
+
+static MODELS_VOLUME_DATA: LazyLock<Regex> = LazyLock::new(|| {
+    re(r"^/var/lib/(?:docker/volumes|containers/storage/volumes)/flagship-models/_data$")
+});
+static AITRAIN_VOLUME_DATA: LazyLock<Regex> = LazyLock::new(|| {
+    re(
+        r"^/var/lib/(?:docker/volumes|containers/storage/volumes)/flagship-aitrain-([0-9a-f]{16})/_data$",
+    )
+});
+/// Where the daemon leaves a model it downloaded and checked (localAi/modelStore.ts).
+pub const LOCAL_AI_INCOMING: &str = "/var/flagship/data/local-ai/incoming";
+/// privd's `LOCAL_AI_INSTALL_SCRIPT`, byte for byte.
+pub const LOCAL_AI_INSTALL_SCRIPT: &str = r#"set -eu; printf '%s  %s\n' "$1" "$2" | sha256sum -c --status -; install -m 0444 -o root -g root -- "$2" "$3/sha256-$1.gguf.partial"; mv -f -- "$3/sha256-$1.gguf.partial" "$3/sha256-$1.gguf""#;
+
+/// `localAiHostExec`: install or remove one model, or hand a fine-tuning job its output volume.
+fn local_ai_host(a: &[String]) -> Option<PrivExec> {
+    let [verb, id, dir] = a else {
+        return None;
+    };
+    match verb.as_str() {
+        "model-install" if is_hex(id, 64) && MODELS_VOLUME_DATA.is_match(dir) => {
+            let staged = format!("{PRIVD_STATE_DIR}/local-ai/sha256-{id}.gguf");
+            Some(PrivExec {
+                copy_in: vec![CopyIn {
+                    from: format!("{LOCAL_AI_INCOMING}/sha256-{id}.gguf"),
+                    to: staged.clone(),
+                }],
+                ..exec(
+                    "/bin/sh",
+                    vec![
+                        "-c".into(),
+                        LOCAL_AI_INSTALL_SCRIPT.into(),
+                        "_".into(),
+                        id.clone(),
+                        staged,
+                        dir.clone(),
+                    ],
+                    30 * 60_000,
+                )
+            })
+        }
+        "model-remove" if is_hex(id, 64) && MODELS_VOLUME_DATA.is_match(dir) => Some(exec(
+            "/usr/bin/rm",
+            vec!["-f".into(), "--".into(), format!("{dir}/sha256-{id}.gguf")],
+            60_000,
+        )),
+        "out-prepare"
+            if is_hex(id, 16)
+                && AITRAIN_VOLUME_DATA
+                    .captures(dir)
+                    .and_then(|c| c.get(1))
+                    .is_some_and(|m| m.as_str() == id.as_str()) =>
+        {
+            Some(exec(
+                "/usr/bin/chown",
+                vec!["10001:10001".into(), "--".into(), dir.clone()],
+                30_000,
+            ))
+        }
         _ => None,
     }
 }
@@ -1899,6 +2030,7 @@ const HOST_FILES: &[&str] = &[
     "ip",
     "sysctl",
     "icc",
+    "localai",
 ];
 
 pub fn host_exec(args: &Args, mounts: MountsReader<'_>) -> Result<PrivExec, PrivdError> {

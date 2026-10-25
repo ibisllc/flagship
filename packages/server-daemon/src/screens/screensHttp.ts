@@ -227,6 +227,8 @@ export interface ScreensHttpDeps {
   serverOrder?: Pick<ServerOrderHolder, "current" | "offer"> | null;
   /** This server's GPUs, their holders and queue (gpu/http.ts); it denies companions itself. */
   accelerators?: ((path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>) | null;
+  /** Local AI (localAi/http.ts): models, the job queue, fine-tuning, app grants. */
+  localAi?: ((path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>) | null;
   /**
    * Owner debug access (`/api/screens/debug-access`, debugAccessGate.ts): an
    * admin-signed SSH key let in until it ends. Its state rides server-detail.
@@ -617,6 +619,11 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
 
     if (deps.accelerators && path.startsWith("/api/screens/accelerators")) {
       const r = await deps.accelerators(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.localAi && path.startsWith("/api/screens/local-ai")) {
+      const r = await deps.localAi(path, method, req);
       if (r) return r;
     }
 

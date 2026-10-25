@@ -35,6 +35,7 @@ import { renderContractMarkdown } from "./contract.js";
 import { checkDockerfile } from "./dockerfilePolicy.js";
 import { noRedaction, type ModelRedactor } from "../llm/modelPrivacy.js";
 import { environmentFailureForAgent, type EnvironmentFailure } from "./environmentFailure.js";
+import { agentGrant, AiToolBroker, mcpGrant, type BrokeredToolName, type ToolGrant } from "./toolBroker.js";
 
 export interface BuildToolDeployResult {
   ok: boolean;
@@ -98,10 +99,14 @@ export interface BuildToolHostContext {
    * box-written text a model reads back. Absent ⇒ texts pass unchanged.
    */
   redact?: ModelRedactor;
+  /**
+   * The session's tool grant (toolBroker.ts), fixed by the box from what the owner did. Absent: the
+   * mode's default (an IDE over MCP gets the whole surface; the box's own loop all but the journal).
+   */
+  grant?: ToolGrant;
+  /** Exact secret values this session's box holds (the provider key): cut from every result. */
+  secrets?: () => readonly string[] | Promise<readonly string[]>;
 }
-
-/** Tools whose results are the repo's own bytes, never box-written text. */
-const REPO_CONTENT_TOOLS = new Set(["read_file", "list_files"]);
 
 /** The result of one tool call. `text` is what the model/IDE sees back. */
 export interface BuildToolResult {
@@ -278,11 +283,32 @@ export const BUILD_TOOL_SPECS: BuildToolSpec[] = [
 ];
 
 export class BuildToolHost {
-  constructor(private readonly ctx: BuildToolHostContext) {}
+  /** Every call goes through this gate: grant, argument shape, fence, secrets, redaction, revocation. */
+  readonly broker: AiToolBroker;
+
+  constructor(private readonly ctx: BuildToolHostContext) {
+    this.broker = new AiToolBroker({
+      grant: ctx.grant ?? ((ctx.mode ?? "mcp") === "mcp" ? mcpGrant(ctx.buildId) : agentGrant(ctx.buildId, { kind: "owner-session" })),
+      dispatch: (name, args) => this.dispatch(name, args),
+      ...(ctx.redact ? { redact: ctx.redact } : { redact: noRedaction }),
+      ...(ctx.secrets ? { secrets: ctx.secrets } : {}),
+      ...(ctx.sealed ? { sealed: ctx.sealed } : {}),
+    });
+  }
 
   /** The names of all tools the host exposes. */
   toolNames(): readonly BuildToolName[] {
     return BUILD_TOOL_NAMES;
+  }
+
+  /** The tools this session's grant allows (what a model is offered). */
+  allowedTools(): BrokeredToolName[] {
+    return this.broker.allowedTools();
+  }
+
+  /** The owner stopped the build or its key was withdrawn: queued and active calls end. */
+  revoke(reason: string): void {
+    this.broker.revoke(reason);
   }
 
   /**
@@ -291,10 +317,7 @@ export class BuildToolHost {
    * failure — it returns `{isError:true}` so the agent can recover.
    */
   async call(name: string, args: Record<string, unknown>): Promise<BuildToolResult> {
-    const raw = this.ctx.sealed?.()
-      ? toolErr("this build is closed: the app was handed to the box, and its tools no longer answer", `refused ${name}: sealed`)
-      : await this.dispatch(name, args);
-    const r = REPO_CONTENT_TOOLS.has(name) ? raw : { ...raw, text: (this.ctx.redact ?? noRedaction)(raw.text) };
+    const r: BuildToolResult = await this.broker.call(name, args);
     await this.ctx.journal.append(this.ctx.buildId, {
       mode: this.ctx.mode ?? "mcp",
       kind: "mcp-call",

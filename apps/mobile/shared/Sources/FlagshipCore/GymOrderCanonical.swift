@@ -152,6 +152,21 @@ public enum GymOrderCanonical {
             return try? AiRepairConsent(serverDomain: server, buildId: buildId, operation: op, provider: c.provider,
                                         source: source, highTokens: c.highTokens, issuedAt: c.issuedAt).canonicalBytes()
         }
+        // Local AI (docs/architecture-v2/local-ai.md §4): the `order` object exactly as sent.
+        signers.registerCanonical("local-ai-app-grant") { p in
+            guard let o = p as? [String: Any], let server = o["serverDomain"] as? String, let id = o["serviceId"] as? String,
+                  let r = int64(o["requestsPerDay"]), let t = int64(o["tokensPerDay"]), let m = int64(o["maxTokensPerRequest"]),
+                  let at = int64(o["issuedAt"]) else { return nil }
+            return try? LocalAiAppGrant(serverDomain: server, serviceId: id, requestsPerDay: r, tokensPerDay: t,
+                                        maxTokensPerRequest: m, issuedAt: at).canonicalBytes()
+        }
+        signers.registerCanonical("local-ai-train") { p in
+            guard let o = p as? [String: Any], let server = o["serverDomain"] as? String, let id = o["serviceId"] as? String,
+                  let job = o["jobId"] as? String, let base = o["baseModel"] as? String, let e = int64(o["epochs"]),
+                  let at = int64(o["issuedAt"]) else { return nil }
+            return try? LocalAiTrainOrder(serverDomain: server, serviceId: id, jobId: job, baseModel: base,
+                                          epochs: Int(e), issuedAt: at).canonicalBytes()
+        }
     }
 
     private static func int64(_ v: Any?) -> Int64? {

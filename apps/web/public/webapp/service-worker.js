@@ -410,7 +410,11 @@
 //       Accepting a co-manage share signs with a per-share admin key .com attests on an admin-root
 //       request (AT-LNK-10, lib/serverShares.js); the free-AI and publisher-trust encoders refuse '|'
 //       and control characters (AT-ENV-09).
-const SHELL_VERSION = "v178";
+//  v179: Local AI on the server page (views/local-ai.js, lib/localAi.js, lib/localAiOrders.js): models with
+//       size, memory and speed, the job queue and its GPU holders, fine-tuning on an app's staged sample
+//       data (signed flagship/local-ai-train/v1) with its checkpoints, app access with daily quotas
+//       (signed flagship/local-ai-app-grant/v1); the build menu and the AI-key step offer "On this server".
+const SHELL_VERSION = "v179";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -504,6 +508,8 @@ const OPTIONAL_SHELL = [
   "/lib/freeAi.js",
   "/lib/modelMenu.js",
   "/lib/modelGroups.js",
+  "/lib/localAi.js",
+  "/lib/localAiOrders.js",
   "/lib/vibeTranscript.js",
   "/lib/appDb.js",
   "/lib/permissions.js",
@@ -632,6 +638,7 @@ const OPTIONAL_SHELL = [
   "/views/server-sharing.js",
   "/views/server-backups.js",
   "/views/debug-access.js",
+  "/views/local-ai.js",
   "/views/shared-server.js",
   "/views/share-accept.js",
   "/views/services-list.js",

@@ -173,6 +173,8 @@ import java.util.Locale
 fun ServerDetailScreen(
     podId: String,
     onBack: () -> Unit,
+    /** Opens this server's Local AI screen (docs/architecture-v2/local-ai.md); null hides the card. */
+    onOpenLocalAi: (() -> Unit)? = null,
     // The directory's cheap `awaitingUnlock` flag for this box. When true the
     // box is definitely waiting for a boot-unlock approval, so the inline
     // approval card must be offered REGARDLESS of whether the daemon BFF loaded
@@ -437,6 +439,7 @@ fun ServerDetailScreen(
             DeadManCard(serverDomain = d.value.serverFqdn)
             JournalCard(serverDomain = d.value.serverFqdn)
             debugVm?.let { vm -> DebugAccessCard(vm = vm, onChanged = { detailVm?.load() }) }
+            onOpenLocalAi?.let { LocalAiCard(onOpen = it) }
             ServerBackupsSection(serverDomain = d.value.serverFqdn)
             BackupMigrateCard(serverDomain = d.value.serverFqdn)
             UpdateServerCard(

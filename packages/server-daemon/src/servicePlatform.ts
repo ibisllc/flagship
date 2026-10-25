@@ -58,6 +58,7 @@ import { digestOf, runOrderOperation } from "./authority/orderOperation.js";
 import type { AppPullState, AppPullStateStore, UpdatePolicy } from "./updateClient.js";
 import type { BoxRuntimeCapabilities, NormalizedApp } from "@flagship/protocol";
 import { parseAppManifest, runtimeExtras, type ParsedApp } from "./appModel.js";
+import { localAiEnvFor } from "./localAi/appEnv.js";
 
 /** Restoring what was installed never re-judges admission: an app the box can no longer run stays listed and says why it won't start. */
 const RESTORE_CAPABILITIES: BoxRuntimeCapabilities = {
@@ -861,6 +862,8 @@ export class ServicePlatform {
       // the manifest can't override the platform's PORT.
       PORT: String(containerPort),
       ...(a.apiToken ? { FLAGSHIP_APP_TOKEN: a.apiToken } : {}),
+      // Local AI (manifest v2 `localAi`): the app's own endpoint, answered only under the owner's grant.
+      ...(await localAiEnvFor(a.serviceId, a.app)),
     };
     // `port` = allocated host-loopback port the proxy dials; `containerPort`
     // = the app's manifest listen port. Publish maps host→container.

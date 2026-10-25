@@ -11857,5 +11857,353 @@
   "That access was already withdrawn.": {
     "en": "That access was already withdrawn.",
     "ctx": "webapp/lib/browserGrantAlerts.js:55"
+  },
+  "On this server": {
+    "en": "On this server",
+    "ctx": "webapp/lib/aiConsentUi.js:18"
+  },
+  "Runs only on this server. Nothing is sent anywhere.": {
+    "en": "Runs only on this server. Nothing is sent anywhere.",
+    "ctx": "webapp/lib/localAi.js:11"
+  },
+  "Free: runs on this server": {
+    "en": "Free: runs on this server",
+    "ctx": "webapp/lib/localAi.js:12"
+  },
+  "No model is downloaded on this server yet. Download one under Local AI.": {
+    "en": "No model is downloaded on this server yet. Download one under Local AI.",
+    "ctx": "webapp/lib/localAi.js:14"
+  },
+  "Best for building apps": {
+    "en": "Best for building apps",
+    "ctx": "webapp/lib/localAi.js:22"
+  },
+  "For app features": {
+    "en": "For app features",
+    "ctx": "webapp/lib/localAi.js:23"
+  },
+  "For tests and fine-tuning": {
+    "en": "For tests and fine-tuning",
+    "ctx": "webapp/lib/localAi.js:24"
+  },
+  "on this server's GPU": {
+    "en": "on this server's GPU",
+    "ctx": "webapp/lib/localAi.js:33"
+  },
+  "on this server's processor": {
+    "en": "on this server's processor",
+    "ctx": "webapp/lib/localAi.js:33"
+  },
+  "About {0} tokens a second {1} (measured).": {
+    "en": "About {0} tokens a second {1} (measured).",
+    "ctx": "webapp/lib/localAi.js:34"
+  },
+  "About {0} tokens a second {1} (estimate).": {
+    "en": "About {0} tokens a second {1} (estimate).",
+    "ctx": "webapp/lib/localAi.js:34"
+  },
+  "{0} download · needs {1} of memory, more than this server has": {
+    "en": "{0} download · needs {1} of memory, more than this server has",
+    "ctx": "webapp/lib/localAi.js:42"
+  },
+  "{0} download · needs {1} of memory": {
+    "en": "{0} download · needs {1} of memory",
+    "ctx": "webapp/lib/localAi.js:43"
+  },
+  "Downloading… {0}%": {
+    "en": "Downloading… {0}%",
+    "ctx": "webapp/lib/localAi.js:51"
+  },
+  "Checking the download…": {
+    "en": "Checking the download…",
+    "ctx": "webapp/lib/localAi.js:54"
+  },
+  "The download failed.": {
+    "en": "The download failed.",
+    "ctx": "webapp/lib/localAi.js:60"
+  },
+  "{0} free on this server · models use {1} of {2}": {
+    "en": "{0} free on this server · models use {1} of {2}",
+    "ctx": "webapp/lib/localAi.js:72"
+  },
+  "Models use {0} of {1}": {
+    "en": "Models use {0} of {1}",
+    "ctx": "webapp/lib/localAi.js:73"
+  },
+  "{0} processor core · {1} of memory": {
+    "en": "{0} processor core · {1} of memory",
+    "ctx": "webapp/lib/localAi.js:79"
+  },
+  "{0} processor cores · {1} of memory": {
+    "en": "{0} processor cores · {1} of memory",
+    "ctx": "webapp/lib/localAi.js:79"
+  },
+  "GPU": {
+    "en": "GPU",
+    "ctx": "webapp/lib/localAi.js:84"
+  },
+  "{0}: in use by {1}": {
+    "en": "{0}: in use by {1}",
+    "ctx": "webapp/lib/localAi.js:88"
+  },
+  "{0}: in use": {
+    "en": "{0}: in use",
+    "ctx": "webapp/lib/localAi.js:88"
+  },
+  "{0}: free": {
+    "en": "{0}: free",
+    "ctx": "webapp/lib/localAi.js:90"
+  },
+  "{0}: set aside after a fault": {
+    "en": "{0}: set aside after a fault",
+    "ctx": "webapp/lib/localAi.js:92"
+  },
+  "{0}: not qualified for apps yet": {
+    "en": "{0}: not qualified for apps yet",
+    "ctx": "webapp/lib/localAi.js:94"
+  },
+  "Waiting": {
+    "en": "Waiting",
+    "ctx": "webapp/lib/localAi.js:101"
+  },
+  "Preparing": {
+    "en": "Preparing",
+    "ctx": "webapp/lib/localAi.js:103"
+  },
+  "Stopping": {
+    "en": "Stopping",
+    "ctx": "webapp/lib/localAi.js:109"
+  },
+  "On the GPU ({0})": {
+    "en": "On the GPU ({0})",
+    "ctx": "webapp/lib/localAi.js:127"
+  },
+  "On the GPU": {
+    "en": "On the GPU",
+    "ctx": "webapp/lib/localAi.js:127"
+  },
+  "On the processor": {
+    "en": "On the processor",
+    "ctx": "webapp/lib/localAi.js:129"
+  },
+  "Next in line": {
+    "en": "Next in line",
+    "ctx": "webapp/lib/localAi.js:137"
+  },
+  "{0} job ahead": {
+    "en": "{0} job ahead",
+    "ctx": "webapp/lib/localAi.js:138"
+  },
+  "{0} jobs ahead": {
+    "en": "{0} jobs ahead",
+    "ctx": "webapp/lib/localAi.js:138"
+  },
+  "Model server: {0}": {
+    "en": "Model server: {0}",
+    "ctx": "webapp/lib/localAi.js:142"
+  },
+  "no model": {
+    "en": "no model",
+    "ctx": "webapp/lib/localAi.js:142"
+  },
+  "Fine-tune {0} on {1}": {
+    "en": "Fine-tune {0} on {1}",
+    "ctx": "webapp/lib/localAi.js:143"
+  },
+  "Epoch {0} of {1}": {
+    "en": "Epoch {0} of {1}",
+    "ctx": "webapp/lib/localAi.js:148"
+  },
+  "Not allowed to use the server's AI model.": {
+    "en": "Not allowed to use the server's AI model.",
+    "ctx": "webapp/lib/localAi.js:154"
+  },
+  "Today: {0} of {1} requests, {2} of {3} tokens": {
+    "en": "Today: {0} of {1} requests, {2} of {3} tokens",
+    "ctx": "webapp/lib/localAi.js:155"
+  },
+  "Epoch {0} · {1} · {2}… · loss {3}": {
+    "en": "Epoch {0} · {1} · {2}… · loss {3}",
+    "ctx": "webapp/lib/localAi.js:162"
+  },
+  "Epoch {0} · {1} · {2}…": {
+    "en": "Epoch {0} · {1} · {2}…",
+    "ctx": "webapp/lib/localAi.js:163"
+  },
+  "Only an admin device can change Local AI. This device can see it.": {
+    "en": "Only an admin device can change Local AI. This device can see it.",
+    "ctx": "webapp/views/local-ai.js:43"
+  },
+  "Serving": {
+    "en": "Serving",
+    "ctx": "webapp/views/local-ai.js:69"
+  },
+  "Serve this model": {
+    "en": "Serve this model",
+    "ctx": "webapp/views/local-ai.js:69"
+  },
+  "Cancel download": {
+    "en": "Cancel download",
+    "ctx": "webapp/views/local-ai.js:73"
+  },
+  "{0} parameters · {1} · license {2}": {
+    "en": "{0} parameters · {1} · license {2}",
+    "ctx": "webapp/views/local-ai.js:81"
+  },
+  "Can use tools, so it can build apps.": {
+    "en": "Can use tools, so it can build apps.",
+    "ctx": "webapp/views/local-ai.js:82"
+  },
+  "Can be fine-tuned on this server.": {
+    "en": "Can be fine-tuned on this server.",
+    "ctx": "webapp/views/local-ai.js:83"
+  },
+  "Checkpoints": {
+    "en": "Checkpoints",
+    "ctx": "webapp/views/local-ai.js:102"
+  },
+  "Allowed": {
+    "en": "Allowed",
+    "ctx": "webapp/views/local-ai.js:117"
+  },
+  "Not allowed": {
+    "en": "Not allowed",
+    "ctx": "webapp/views/local-ai.js:117"
+  },
+  "Requests a day": {
+    "en": "Requests a day",
+    "ctx": "webapp/views/local-ai.js:121"
+  },
+  "Tokens a day": {
+    "en": "Tokens a day",
+    "ctx": "webapp/views/local-ai.js:123"
+  },
+  "Most tokens in one answer": {
+    "en": "Most tokens in one answer",
+    "ctx": "webapp/views/local-ai.js:125"
+  },
+  "No app has sample data to learn from yet. Attach sample data in one of its build chats first.": {
+    "en": "No app has sample data to learn from yet. Attach sample data in one of its build chats first.",
+    "ctx": "webapp/views/local-ai.js:140"
+  },
+  "Download a model that can be fine-tuned first.": {
+    "en": "Download a model that can be fine-tuned first.",
+    "ctx": "webapp/views/local-ai.js:141"
+  },
+  "App (its staged sample data only)": {
+    "en": "App (its staged sample data only)",
+    "ctx": "webapp/views/local-ai.js:143"
+  },
+  "Base model": {
+    "en": "Base model",
+    "ctx": "webapp/views/local-ai.js:145"
+  },
+  "Epochs": {
+    "en": "Epochs",
+    "ctx": "webapp/views/local-ai.js:147"
+  },
+  "Start fine-tuning": {
+    "en": "Start fine-tuning",
+    "ctx": "webapp/views/local-ai.js:149"
+  },
+  "It learns only from the sample data you gave that app's test copy, never from the live app.": {
+    "en": "It learns only from the sample data you gave that app's test copy, never from the live app.",
+    "ctx": "webapp/views/local-ai.js:150"
+  },
+  "Local AI isn't available on this server.": {
+    "en": "Local AI isn't available on this server.",
+    "ctx": "webapp/views/local-ai.js:157"
+  },
+  "This server has no GPU it can use; models run on its processor.": {
+    "en": "This server has no GPU it can use; models run on its processor.",
+    "ctx": "webapp/views/local-ai.js:169"
+  },
+  "Model server": {
+    "en": "Model server",
+    "ctx": "webapp/views/local-ai.js:173"
+  },
+  "Use a GPU when one is free": {
+    "en": "Use a GPU when one is free",
+    "ctx": "webapp/views/local-ai.js:182"
+  },
+  "Models": {
+    "en": "Models",
+    "ctx": "webapp/views/local-ai.js:191"
+  },
+  "Jobs": {
+    "en": "Jobs",
+    "ctx": "webapp/views/local-ai.js:194"
+  },
+  "Nothing is running or waiting.": {
+    "en": "Nothing is running or waiting.",
+    "ctx": "webapp/views/local-ai.js:195"
+  },
+  "Fine-tune a model": {
+    "en": "Fine-tune a model",
+    "ctx": "webapp/views/local-ai.js:197"
+  },
+  "Apps that may use the model": {
+    "en": "Apps that may use the model",
+    "ctx": "webapp/views/local-ai.js:200"
+  },
+  "No app on this server asks to use the model.": {
+    "en": "No app on this server asks to use the model.",
+    "ctx": "webapp/views/local-ai.js:201"
+  },
+  "No checkpoints yet.": {
+    "en": "No checkpoints yet.",
+    "ctx": "webapp/views/local-ai.js:211"
+  },
+  "Download started.": {
+    "en": "Download started.",
+    "ctx": "webapp/views/local-ai.js:256"
+  },
+  "This model will serve next.": {
+    "en": "This model will serve next.",
+    "ctx": "webapp/views/local-ai.js:258"
+  },
+  "It is removed from this server. You can download it again later.": {
+    "en": "It is removed from this server. You can download it again later.",
+    "ctx": "webapp/views/local-ai.js:262"
+  },
+  "The model server is running.": {
+    "en": "The model server is running.",
+    "ctx": "webapp/views/local-ai.js:267"
+  },
+  "Resumed from the last checkpoint.": {
+    "en": "Resumed from the last checkpoint.",
+    "ctx": "webapp/views/local-ai.js:270"
+  },
+  "Fine-tuning queued.": {
+    "en": "Fine-tuning queued.",
+    "ctx": "webapp/views/local-ai.js:296"
+  },
+  "The app may use the model.": {
+    "en": "The app may use the model.",
+    "ctx": "webapp/views/local-ai.js:314"
+  },
+  "Withdraw access?": {
+    "en": "Withdraw access?",
+    "ctx": "webapp/views/local-ai.js:320"
+  },
+  "The app can no longer call this server's model.": {
+    "en": "The app can no longer call this server's model.",
+    "ctx": "webapp/views/local-ai.js:320"
+  },
+  "Access withdrawn.": {
+    "en": "Access withdrawn.",
+    "ctx": "webapp/views/local-ai.js:321"
+  },
+  "Local AI": {
+    "en": "Local AI",
+    "ctx": "webapp/views/local-ai.js:368"
+  },
+  "Models, jobs and fine-tuning": {
+    "en": "Models, jobs and fine-tuning",
+    "ctx": "webapp/views/local-ai.js:371"
+  },
+  "LOCAL AI": {
+    "en": "LOCAL AI",
+    "ctx": "webapp/index.html"
   }
 }

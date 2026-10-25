@@ -16,6 +16,7 @@ import { wasiApps } from "./wasiApps.js";
 import { appGroupsDb } from "./appGroupsDb.js";
 import { gpuReal } from "./gpuReal.js";
 import { gpuSim } from "./gpuSim.js";
+import { localAi, localAiCpu } from "./localAi.js";
 
 export const RELEASE_03_GROUPS: Group[] = [
   firstContact,
@@ -34,4 +35,6 @@ export const RELEASE_03_GROUPS: Group[] = [
   appGroupsDb,
   gpuSim,
   gpuReal,
+  localAiCpu,
+  localAi,
 ];

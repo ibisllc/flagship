@@ -26,6 +26,7 @@ import { WEB_DIALOGS } from "./webDialogs.js";
 import { WEB_NOTICES } from "./webNotices.js";
 import { WEB_GONE } from "./webGone.js";
 import { WEB_UX } from "./webUx.js";
+import { WEB_LOCAL_AI } from "./webLocalAi.js";
 
 // ───────────────────────── every-merge (fast gate) ─────────────────────────
 
@@ -2054,4 +2055,5 @@ export const WEB_GYM_SCENARIOS: readonly Scenario[] = [
   ...WEB_NOTICES,
   ...WEB_GONE,
   ...WEB_UX,
+  ...WEB_LOCAL_AI,
 ];

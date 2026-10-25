@@ -51,11 +51,16 @@ export interface Accelerators {
   http: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>;
 }
 
+let started: Accelerators | null = null;
+
+/** Once per daemon: the screen and local AI (localAi/) share the one broker. */
 export function startAccelerators(o: { dataDir: string; pairedSessions: FilePairedSessionStore | null }): Accelerators {
+  if (started) return started;
   const broker = new AcceleratorBroker(gpudClient(), { engine: activeEngine() });
   const apps = new AppAccelerators(broker, join(o.dataDir, "gpu-allocations.json"));
   setAcceleratorHook(apps);
-  return { broker, apps, http: buildAcceleratorsHttp({ broker, denyCompanion: (r) => denyCompanionWrite(o.pairedSessions, r) }) };
+  started = { broker, apps, http: buildAcceleratorsHttp({ broker, denyCompanion: (r) => denyCompanionWrite(o.pairedSessions, r) }) };
+  return started;
 }
 
 /** The engine the box runs apps on, as root sees it (the engine-active record, else the switch). */

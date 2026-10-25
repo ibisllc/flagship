@@ -162,6 +162,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
 
     fun credentialOf(g: ModelGroup): AiCredential? = when {
         g.isFlagship -> null
+        g.isLocal -> ModelGroups.localCredential()
         g.id == ModelGroups.SESSION_KEY -> BuildSessionAi.credentialFor(sessionId)
         else -> runCatching { AiKeyStore.credentialFor(g.id) }.getOrNull()
     }
@@ -172,6 +173,15 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         menus[g.id]?.let { return it }
         val m = if (g.isFlagship) {
             ModelMenu.Flagship(ModelCatalogs.inference())
+        } else if (g.isLocal) {
+            // What is downloaded on this server changes; never cached across screens.
+            try {
+                ModelMenus.from(client.aiModels(LlmProviderCredential.from(ModelGroups.localCredential())))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                ModelMenu.Own(g.provider, listed = false, options = emptyList(), defaultModel = null, reason = "failed")
+            }
         } else {
             credentialOf(g)?.let { ModelCatalogs.menuFor(it, client) }
                 ?: ModelMenu.Own(g.provider, listed = false, options = emptyList(), defaultModel = null, reason = "failed")
@@ -269,6 +279,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
             flagshipUsable = usable,
             currentProvider = provider,
             sessionKeyProvider = sessionCred?.takeIf { !it.isFreeAi && it.keyId == null }?.provider,
+            includeLocal = true,
         )
         val g = ModelGroups.initial(built, provider, sessionCred)
         val current = s.model?.takeIf { it.isNotBlank() }?.let { ModelChoice(it, s.effort) }
@@ -330,9 +341,10 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                 menus = menus,
                 groupId = groupId,
                 choice = choice,
-                notice = ModelGroups.contextNotice(
-                    groupId?.let { menus[it] }, choice, state?.model, state?.conversationTokens,
-                ),
+                notice = ModelGroups.localNotice(ModelGroups.byId(groups, groupId), groupId?.let { menus[it] })
+                    ?: ModelGroups.contextNotice(
+                        groupId?.let { menus[it] }, choice, state?.model, state?.conversationTokens,
+                    ),
                 onOpen = { groups.forEach { g -> if (menus[g.id] == null) scope.launch { loadMenu(g) } } },
                 onPick = { id, c ->
                     groupId = id

@@ -454,6 +454,54 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func debugAccessRevoke(body: String) async throws -> DebugAccessChange {
         try await request("/api/screens/debug-access/revoke", method: "POST", body: Data(body.utf8))
     }
+    // MARK: Local AI (docs/architecture-v2/local-ai.md §4)
+    public func localAi() async throws -> LocalAiView {
+        try await request("/api/screens/local-ai")
+    }
+    public func localAiJobDetail(jobId: String) async throws -> LocalAiJobDetail {
+        try await request("/api/screens/local-ai/jobs/\(Self.pathSegment(jobId))")
+    }
+    private struct LocalAiSettingsReply: Decodable { let settings: LocalAiSettings }
+    private struct LocalAiServiceReply: Decodable { let service: LocalAiService }
+    private struct LocalAiJobReply: Decodable { let job: LocalAiJob }
+    public func localAiSetUseGpu(_ useGpu: Bool) async throws -> LocalAiSettings {
+        let r: LocalAiSettingsReply = try await request("/api/screens/local-ai/settings", method: "POST",
+                                                        body: try JSONSerialization.data(withJSONObject: ["useGpu": useGpu]))
+        return r.settings
+    }
+    public func localAiSetServeModel(_ modelId: String?) async throws -> LocalAiSettings {
+        let r: LocalAiSettingsReply = try await request("/api/screens/local-ai/settings", method: "POST",
+                                                        body: try JSONSerialization.data(withJSONObject: ["serveModel": modelId.map { $0 as Any } ?? NSNull()]))
+        return r.settings
+    }
+    public func localAiModel(_ action: LocalAiModelAction, modelId: String) async throws {
+        _ = try await requestData("/api/screens/local-ai/models/\(action.rawValue)", method: "POST",
+                                  body: try JSONSerialization.data(withJSONObject: ["modelId": modelId]))
+    }
+    public func localAiServiceStart(modelId: String?) async throws -> LocalAiService {
+        let body: [String: Any] = modelId.map { ["modelId": $0] } ?? [:]
+        let r: LocalAiServiceReply = try await request("/api/screens/local-ai/service/start", method: "POST",
+                                                       body: try JSONSerialization.data(withJSONObject: body), timeout: 360)
+        return r.service
+    }
+    public func localAiServiceStop() async throws -> LocalAiService {
+        let r: LocalAiServiceReply = try await request("/api/screens/local-ai/service/stop", method: "POST",
+                                                       body: try JSONSerialization.data(withJSONObject: [String: Any]()))
+        return r.service
+    }
+    public func localAiTrain(body: [String: Any]) async throws -> LocalAiJob {
+        let r: LocalAiJobReply = try await request("/api/screens/local-ai/train", method: "POST",
+                                                   body: try JSONSerialization.data(withJSONObject: body))
+        return r.job
+    }
+    public func localAiJob(_ action: LocalAiJobAction, jobId: String) async throws {
+        _ = try await requestData("/api/screens/local-ai/jobs/\(action.rawValue)", method: "POST",
+                                  body: try JSONSerialization.data(withJSONObject: ["jobId": jobId]))
+    }
+    public func localAiGrant(body: [String: Any]) async throws {
+        _ = try await requestData("/api/screens/local-ai/apps/grant", method: "POST",
+                                  body: try JSONSerialization.data(withJSONObject: body))
+    }
     public func accessAlertsSetting() async throws -> AccessAlertsSetting {
         try await request("/api/screens/settings/access-alerts")
     }

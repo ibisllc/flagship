@@ -42,6 +42,15 @@ a PDF's text is extracted on the box. When a long conversation is summarised
 to fit the model's context, the summariser reads the redacted transcript and
 its summary is redacted again.
 
+**The tool broker (0.3, AI01).** Every tool call a model makes goes through
+`buildmodes/toolBroker.ts`: a grant the box fixes from the owner's own action, exact argument shapes,
+the staging fence, the box's secrets cut from results, redaction, revocation. Text in a repo or a
+tool result can't authorize anything. `llm/modelBoundary.ts` lists every model-facing path and how
+it is redacted; `tests/llm/redactionCoverage.test.ts` fails when a new one skips the redactor, and
+plants the owner's name, server, host name, mail, address, time zone, locale, clock and git identity
+in every channel to prove none of it reaches a model. Local inference ("On this server") keeps
+prompts on the box altogether: `docs/architecture-v2/local-ai.md`.
+
 ## 2. Staging, then live (AI create and AI edit)
 
 One step for the owner ("Use AI to adapt and deploy"); two phases on the box.

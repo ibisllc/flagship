@@ -26,6 +26,7 @@ import type { ImportProvenanceStore } from "./appProvenance.js";
 import { proposeSync, type FileTree, type SyncProposal } from "./syncProposal.js";
 import { randomBytes } from "node:crypto";
 import type { ModelRedactor } from "../llm/modelPrivacy.js";
+import { agentGrant } from "./toolBroker.js";
 import { BuildWorkspace } from "./buildWorkspace.js";
 import { GitImporter, buildAdaptPrompt } from "./gitImport.js";
 import { McpBuildServer, type JsonRpcResponse } from "./mcpServer.js";
@@ -257,6 +258,8 @@ export interface BuildOrchestratorDeps {
   serverFqdn: string;
   /** Strips the owner's identity from what the AI or IDE reads back. */
   modelRedactor?: ModelRedactor;
+  /** Exact secret values held for a build (its provider key): the tool broker cuts them from results. */
+  sessionSecrets?: (buildId: string) => Promise<readonly string[]>;
   /** Owner-set env var NAMES (never values) for the mcp request_env_var tool. */
   envNames?: () => Promise<string[]>;
   /**
@@ -769,6 +772,7 @@ export class BuildOrchestrator {
     this.states.delete(buildId);
     this.workspaces.get(buildId)?.onChange(null);
     this.workspaces.delete(buildId);
+    this.mcpServers.get(buildId)?.revoke("the owner discarded the build");
     this.mcpServers.delete(buildId);
     this.envRequests.delete(buildId);
     this.gitSources.delete(buildId);
@@ -1008,6 +1012,9 @@ export class BuildOrchestrator {
       serverFqdn: this.deps.serverFqdn,
       mode: "git",
       ...(this.deps.modelRedactor ? { redact: this.deps.modelRedactor } : {}),
+      // The owner's signed consent started this run (adaptConsent.ts); nothing the model says widens it.
+      grant: agentGrant(buildId, opts.tokenBudget != null ? { kind: "owner-consent", issuedAt: this.now() } : { kind: "owner-session" }),
+      ...(this.deps.sessionSecrets ? { secrets: () => this.deps.sessionSecrets!(buildId) } : {}),
       envNames: this.deps.envNames ?? (async () => []),
       recordEnvRequest: async (req) =>
         this.recordEnvRequest(buildId, {

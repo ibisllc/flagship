@@ -18,6 +18,8 @@ data class ModelGroup(
     val keyLabel: String? = null,
 ) {
     val isFlagship: Boolean get() = id == ModelGroups.FLAGSHIP
+    /** "On this server": the box's own model (docs/architecture-v2/local-ai.md). */
+    val isLocal: Boolean get() = id == ModelGroups.LOCAL
 }
 
 /** Which credential a chat message carries. */
@@ -32,6 +34,8 @@ enum class MessageCredential {
 
 object ModelGroups {
     const val FLAGSHIP = "flagship"
+    /** The box-local model's group; its provider name is the wire's `flagship-local`. */
+    const val LOCAL = LocalAiOrders.PROVIDER
     /** A key this chat started with that isn't saved on this phone. */
     const val SESSION_KEY = "session-key"
     val UNSAVED_KEY get() = FSStrings.get(R.string.unsaved_key)
@@ -49,15 +53,18 @@ object ModelGroups {
         flagshipUsable: Boolean,
         currentProvider: String?,
         sessionKeyProvider: String? = null,
+        includeLocal: Boolean = false,
     ): List<ModelGroup> {
         val out = mutableListOf<ModelGroup>()
         if (flagshipUsable || currentProvider == FreeAiRequest.PROVIDER) {
             out += ModelGroup(FLAGSHIP, FreeAiCopy.PROVIDER_TITLE, FreeAiRequest.PROVIDER)
         }
-        keys.filter { it.provider != FreeAiRequest.PROVIDER }.forEach {
+        // On this server: always offered; the box says when it has no model to run.
+        if (includeLocal || currentProvider == LOCAL) out += ModelGroup(LOCAL, LOCAL_TITLE, LOCAL)
+        keys.filter { it.provider != FreeAiRequest.PROVIDER && it.provider != LOCAL }.forEach {
             out += ModelGroup(it.id, keyTitle(it.provider, it.label), it.provider, it.label)
         }
-        if (sessionKeyProvider != null) {
+        if (sessionKeyProvider != null && sessionKeyProvider != LOCAL) {
             out += ModelGroup(SESSION_KEY, keyTitle(sessionKeyProvider, UNSAVED_KEY), sessionKeyProvider, UNSAVED_KEY)
         }
         return out
@@ -65,11 +72,27 @@ object ModelGroups {
 
     fun byId(groups: List<ModelGroup>, id: String?): ModelGroup? = groups.firstOrNull { it.id == id }
 
+    val LOCAL_TITLE get() = FSStrings.get(R.string.local_ai_on_this_server)
+
+    /** The credential "On this server" sends: the box ignores the key and uses its own model. */
+    fun localCredential(): AiCredential = AiCredential(provider = LOCAL, apiKey = "local", relay = false)
+
+    /**
+     * The line under the menu for "On this server": no model downloaded yet (the box's own words when
+     * it gave a reason), else the privacy line. Never a suggestion to use another provider.
+     */
+    fun localNotice(group: ModelGroup?, menu: ModelMenu?): String? {
+        if (group?.isLocal != true) return null
+        val own = menu as? ModelMenu.Own
+        return if (own != null && own.options.isEmpty()) FSStrings.get(R.string.local_ai_no_model_yet) else LocalAiCopy.PRIVACY
+    }
+
     /** The group a credential belongs to: Flagship Inference, the saved key
      *  it came from, or this chat's unsaved key. */
     fun forCredential(groups: List<ModelGroup>, credential: AiCredential?): ModelGroup? = when {
         credential == null -> null
         credential.isFreeAi || credential.provider == FreeAiRequest.PROVIDER -> byId(groups, FLAGSHIP)
+        credential.provider == LOCAL -> byId(groups, LOCAL)
         credential.keyId != null -> byId(groups, credential.keyId)
         else -> byId(groups, SESSION_KEY)
     }
@@ -79,7 +102,8 @@ object ModelGroups {
     fun forProvider(groups: List<ModelGroup>, provider: String?): ModelGroup? = when (provider) {
         null, "" -> null
         FreeAiRequest.PROVIDER -> byId(groups, FLAGSHIP)
-        else -> groups.firstOrNull { !it.isFlagship && it.provider == provider }
+        LOCAL -> byId(groups, LOCAL)
+        else -> groups.firstOrNull { !it.isFlagship && !it.isLocal && it.provider == provider }
     }
 
     /**

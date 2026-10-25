@@ -514,6 +514,10 @@ fun HomeTab() {
             com.flagshipserver.app.ui.screens.SharedAppScreen(shareId = shareId, serviceId = serviceId, onBack = { nav.popBackStack() })
         }
         composable("name-dibs") { com.flagshipserver.app.ui.screens.NameDibsScreen() }
+        composable("local-ai/{podId}") { entry ->
+            val podId = entry.arguments?.getString("podId") ?: return@composable
+            com.flagshipserver.app.ui.screens.LocalAiRouteScreen(podId = podId, onBack = { nav.popBackStack() })
+        }
         composable("server-detail/{podId}") { entry ->
             val podId = entry.arguments?.getString("podId") ?: return@composable
             val pod = pods.firstOrNull { it.podId == podId }
@@ -563,6 +567,7 @@ fun HomeTab() {
                     serverFqdn = pod.fqdn,
                     health = pod.health,
                     onBack = { nav.popBackStack() },
+                    onOpenLocalAi = { nav.navigate(com.flagshipserver.app.ui.screens.localAiRoute(podId)) },
                 )
             }
         }

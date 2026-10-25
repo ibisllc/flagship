@@ -1,0 +1,203 @@
+{
+  "about": "Local AI orders, Ed25519 over the canonical bytes, seed 0x45 repeated. flagship/local-ai-app-grant/v1|serverDomain (lowercase)|serviceId|requestsPerDay|tokensPerDay|maxTokensPerRequest|issuedAt (all three quotas 0 = withdrawn; otherwise all above 0; maxTokensPerRequest ≤ 32768, tokensPerDay ≤ 100000000, requestsPerDay ≤ 100000). flagship/local-ai-train/v1|serverDomain (lowercase)|serviceId|jobId (16 lowercase hex)|baseModel|epochs (1-20)|issuedAt. Each refused order must fail to produce canonical bytes.",
+  "seedHex": "4545454545454545454545454545454545454545454545454545454545454545",
+  "pubHex": "6355691c178a8ff91007a7478afb955ef7352c63e7b25703984cf78b26e21a56",
+  "grants": [
+    {
+      "grant": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "requestsPerDay": 500,
+        "tokensPerDay": 200000,
+        "maxTokensPerRequest": 1024,
+        "issuedAt": 1761300000000
+      },
+      "canonical": "flagship/local-ai-app-grant/v1|kitchen.alice.flagship.services|alice--notes|500|200000|1024|1761300000000",
+      "signatureHex": "0cc220320ab09ccb4e76aaf2ccaf3e8d41bc63e3a52f5909468426135f6c33dd7bc1962159935c9309b9964a057e7337b56ba8ff153ed86d7933a418781ab704"
+    },
+    {
+      "grant": {
+        "serverDomain": "kitchen.alice.flagship.services",
+        "serviceId": "bob--helper",
+        "requestsPerDay": 0,
+        "tokensPerDay": 0,
+        "maxTokensPerRequest": 0,
+        "issuedAt": 1761300000001
+      },
+      "canonical": "flagship/local-ai-app-grant/v1|kitchen.alice.flagship.services|bob--helper|0|0|0|1761300000001",
+      "signatureHex": "0fe19cb54444a5dd29fc4a0f310b6cc32d2bb24c18be36e86e08d855913bcf07d75d3968c5cc96754ec3e3f7f92fbffe3cbc94adb8825ca4d60e0b6c4725f503"
+    }
+  ],
+  "trains": [
+    {
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "jobId": "0123456789abcdef",
+        "baseModel": "stories-15m",
+        "epochs": 3,
+        "issuedAt": 1761300000000
+      },
+      "canonical": "flagship/local-ai-train/v1|kitchen.alice.flagship.services|alice--notes|0123456789abcdef|stories-15m|3|1761300000000",
+      "signatureHex": "037c686048b1553cef0b40bdc874ddb4dac09b518c45ddd7553588a73d6fc8fc78792daeda52f3249319516de1e99587eaa6867a1a015447c276b750d8561208"
+    }
+  ],
+  "refusedGrants": [
+    {
+      "name": "pipe in domain",
+      "grant": {
+        "serverDomain": "a|b",
+        "serviceId": "alice--notes",
+        "requestsPerDay": 500,
+        "tokensPerDay": 200000,
+        "maxTokensPerRequest": 1024,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "empty domain",
+      "grant": {
+        "serverDomain": "",
+        "serviceId": "alice--notes",
+        "requestsPerDay": 500,
+        "tokensPerDay": 200000,
+        "maxTokensPerRequest": 1024,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "uppercase service",
+      "grant": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "Alice--notes",
+        "requestsPerDay": 500,
+        "tokensPerDay": 200000,
+        "maxTokensPerRequest": 1024,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "half a withdrawal",
+      "grant": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "requestsPerDay": 0,
+        "tokensPerDay": 200000,
+        "maxTokensPerRequest": 1024,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "grant with a zero quota",
+      "grant": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "requestsPerDay": 500,
+        "tokensPerDay": 200000,
+        "maxTokensPerRequest": 0,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "too many tokens per request",
+      "grant": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "requestsPerDay": 500,
+        "tokensPerDay": 200000,
+        "maxTokensPerRequest": 40000,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "fractional",
+      "grant": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "requestsPerDay": 1.5,
+        "tokensPerDay": 200000,
+        "maxTokensPerRequest": 1024,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "negative issuedAt",
+      "grant": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "requestsPerDay": 500,
+        "tokensPerDay": 200000,
+        "maxTokensPerRequest": 1024,
+        "issuedAt": -1
+      }
+    }
+  ],
+  "refusedTrains": [
+    {
+      "name": "short job id",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "jobId": "0123",
+        "baseModel": "stories-15m",
+        "epochs": 3,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "uppercase job id",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "jobId": "0123456789ABCDEF",
+        "baseModel": "stories-15m",
+        "epochs": 3,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "zero epochs",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "jobId": "0123456789abcdef",
+        "baseModel": "stories-15m",
+        "epochs": 0,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "too many epochs",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "jobId": "0123456789abcdef",
+        "baseModel": "stories-15m",
+        "epochs": 21,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "model with a slash",
+      "order": {
+        "serverDomain": "Kitchen.Alice.flagship.services",
+        "serviceId": "alice--notes",
+        "jobId": "0123456789abcdef",
+        "baseModel": "../x",
+        "epochs": 3,
+        "issuedAt": 1761300000000
+      }
+    },
+    {
+      "name": "pipe in domain",
+      "order": {
+        "serverDomain": "a|b",
+        "serviceId": "alice--notes",
+        "jobId": "0123456789abcdef",
+        "baseModel": "stories-15m",
+        "epochs": 3,
+        "issuedAt": 1761300000000
+      }
+    }
+  ]
+}

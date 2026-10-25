@@ -15,6 +15,7 @@ const PROVIDER_NAMES = {
   openrouter: "OpenRouter",
   ollama: "Ollama",
   flagship: tr("Flagship Inference"),
+  "flagship-local": tr("On this server"),
 };
 
 export function providerDisplayName(provider) {

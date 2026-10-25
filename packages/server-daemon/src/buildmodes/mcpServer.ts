@@ -115,6 +115,11 @@ export class McpBuildServer {
     });
   }
 
+  /** The build was discarded or its key withdrawn: queued and active tool calls end. */
+  revoke(reason: string): void {
+    this.tools.revoke(reason);
+  }
+
   /** Dispatch one JSON-RPC message. Returns null for notifications. */
   async handle(message: unknown): Promise<JsonRpcResponse | null> {
     if (!isObject(message) || message.jsonrpc !== "2.0" || typeof message.method !== "string") {
@@ -133,8 +138,10 @@ export class McpBuildServer {
           return null; // notifications — no response
         case "ping":
           return ok(id, {});
-        case "tools/list":
-          return ok(id, { tools: TOOLS });
+        case "tools/list": {
+          const allowed = this.tools.allowedTools() as string[];
+          return ok(id, { tools: TOOLS.filter((t) => allowed.includes(t.name)) });
+        }
         case "resources/list":
           return ok(id, { resources: RESOURCES });
         case "resources/read":
@@ -146,7 +153,8 @@ export class McpBuildServer {
           return err(id, -32601, `method not found: ${req.method}`);
       }
     } catch (e) {
-      return err(id, -32603, `internal error: ${(e as Error).message}`);
+      // Box-written: the IDE's model reads it too.
+      return err(id, -32603, `internal error: ${(this.ctx.redact ?? ((t: string) => t))((e as Error).message)}`);
     }
   }
 

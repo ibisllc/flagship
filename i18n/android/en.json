@@ -12091,5 +12091,470 @@
   "turning_strict_on_again_needs_a": {
     "en": "Turning strict on again needs a fresh check of every device, a rekey and a tested recovery.",
     "ctx": "viewmodels/QuantumSafetyViewModel.kt:345 (prose)"
+  },
+  "local_ai_title": {
+    "en": "Local AI",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_privacy": {
+    "en": "Runs only on this server. Nothing is sent anywhere.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_cost_none": {
+    "en": "Free: runs on this server",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_on_this_server": {
+    "en": "On this server",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_no_model_yet": {
+    "en": "No model is downloaded on this server yet. Download one under Local AI.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_not_paired": {
+    "en": "This device isn't paired with this server.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_loading": {
+    "en": "Loading…",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_unavailable": {
+    "en": "Local AI isn't available on this server.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_this_server": {
+    "en": "This server",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_hardware_line": {
+    "en": "%1$d processors, %2$s of memory",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 2
+  },
+  "local_ai_disk_free": {
+    "en": "%1$s of disk free",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_budget": {
+    "en": "Models use %1$s of %2$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 2
+  },
+  "local_ai_use_gpu": {
+    "en": "Use a GPU when one is free",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_no_gpu": {
+    "en": "No GPU on this server. Models run on the processor.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_gpu_line": {
+    "en": "GPU %1$s: %2$s, %3$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 3
+  },
+  "local_ai_gpu_free": {
+    "en": "Free",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_gpu_quarantined": {
+    "en": "Set aside after a problem",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_gpu_unqualified": {
+    "en": "Not qualified for apps yet",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_gpu_used_by": {
+    "en": "Used by %1$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_model_server": {
+    "en": "Model server",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_service_running": {
+    "en": "Running",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_service_starting": {
+    "en": "Starting…",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_service_waiting_gpu": {
+    "en": "Waiting for a GPU",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_service_stopping": {
+    "en": "Stopping…",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_service_failed": {
+    "en": "Didn't start",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_service_stopped": {
+    "en": "Stopped",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_serving": {
+    "en": "Model: %1$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_device_gpu": {
+    "en": "On GPU %1$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_device_cpu": {
+    "en": "On the processor",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_queue_position": {
+    "en": "Number %1$d in line",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_runs_which": {
+    "en": "Which model it runs",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_automatic": {
+    "en": "Automatic",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_start": {
+    "en": "Start",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_stop": {
+    "en": "Stop",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_models": {
+    "en": "Models",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_model_facts": {
+    "en": "%1$s parameters, %2$s, %3$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 3
+  },
+  "local_ai_memory_fits": {
+    "en": "Needs %1$s of memory: fits this server",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_memory_too_big": {
+    "en": "Needs %1$s of memory: too big for this server",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_speed_estimate": {
+    "en": "About %1$s tokens a second %2$s (estimated)",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 2
+  },
+  "local_ai_speed_measured": {
+    "en": "%1$s tokens a second %2$s (measured on this server)",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 2
+  },
+  "local_ai_on_cpu": {
+    "en": "on the processor",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_on_gpu": {
+    "en": "on the GPU",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_license": {
+    "en": "License: %1$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_can_build": {
+    "en": "Can build apps",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_trainable": {
+    "en": "Can be fine-tuned here",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_state_available": {
+    "en": "Not downloaded",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_state_downloading": {
+    "en": "Downloading…",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_state_verifying": {
+    "en": "Checking…",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_state_installing": {
+    "en": "Installing…",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_state_installed": {
+    "en": "On this server",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_state_failed": {
+    "en": "Download failed",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_progress": {
+    "en": "%1$s of %2$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 2
+  },
+  "local_ai_download": {
+    "en": "Download",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_cancel": {
+    "en": "Cancel",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_delete": {
+    "en": "Delete",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_delete_title": {
+    "en": "Delete %1$s?",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_delete_body": {
+    "en": "The model is removed from this server. You can download it again later.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_model_deleted": {
+    "en": "Model deleted.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_queue": {
+    "en": "Job queue",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_queue_empty": {
+    "en": "Nothing is running or waiting.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_job_queued": {
+    "en": "Waiting",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_job_preparing": {
+    "en": "Preparing",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_job_running": {
+    "en": "Running",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_job_completed": {
+    "en": "Done",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_job_cancelled": {
+    "en": "Stopped",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_job_failed": {
+    "en": "Failed",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_job_inference_title": {
+    "en": "Model server: %1$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_job_training_title": {
+    "en": "Fine-tune for %1$s (%2$s)",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 2
+  },
+  "local_ai_epochs_progress": {
+    "en": "Epoch %1$d of %2$d",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 2
+  },
+  "local_ai_checkpoints": {
+    "en": "Checkpoints",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_no_checkpoints": {
+    "en": "No checkpoints yet.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_checkpoint_line": {
+    "en": "Epoch %1$d: %2$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 2
+  },
+  "local_ai_checkpoint_line_loss": {
+    "en": "Epoch %1$d: %2$s, loss %3$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 3
+  },
+  "local_ai_dataset_size": {
+    "en": "Sample data: %1$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_close": {
+    "en": "Close",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_resume": {
+    "en": "Resume",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_fine_tune": {
+    "en": "Fine-tune",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_fine_tune_body": {
+    "en": "Teach a small model from an app's sample data. It uses only the sample data of the app's test copy, never the app's real data.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_no_sample_data": {
+    "en": "No app has sample data yet. Attach sample data in an app's build chat first.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_no_trainable": {
+    "en": "Download a model that can be fine-tuned first.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_app": {
+    "en": "App",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_base_model": {
+    "en": "Start from",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_epochs": {
+    "en": "Epochs",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_epochs_range": {
+    "en": "Choose 1 to %1$d epochs.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_start_fine_tune": {
+    "en": "Start fine-tune",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_training_queued": {
+    "en": "Fine-tune queued.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_sign_train": {
+    "en": "Start a fine-tune on %1$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_order_invalid": {
+    "en": "That can't be sent. Check the choices.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_apps": {
+    "en": "Apps that may use it",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_no_apps": {
+    "en": "No app on this server asks to use the server's model.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_app_not_allowed": {
+    "en": "Asks to use the server's model. Not allowed.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_app_quota": {
+    "en": "Up to %1$s requests and %2$s tokens a day, %3$s tokens each",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 3
+  },
+  "local_ai_app_usage": {
+    "en": "Today: %1$s requests, %2$s tokens",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 2
+  },
+  "local_ai_allow": {
+    "en": "Allow",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_change_limits": {
+    "en": "Change limits",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_withdraw": {
+    "en": "Withdraw",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_allow_title": {
+    "en": "Let %1$s use the server's model?",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_allow_body": {
+    "en": "The app sends only its own data, and only within these daily limits.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_requests_per_day": {
+    "en": "Requests a day",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_tokens_per_day": {
+    "en": "Tokens a day",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_max_tokens_per_request": {
+    "en": "Tokens per request",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_quota_invalid": {
+    "en": "Each limit must be above 0: at most 100,000 requests and 100,000,000 tokens a day, and 32,768 tokens per request.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_sign_grant": {
+    "en": "Let an app use the model on %1$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_sign_withdraw": {
+    "en": "Stop an app using the model on %1$s",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)",
+    "args": 1
+  },
+  "local_ai_grant_saved": {
+    "en": "Saved. The app can use the server's model.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_grant_withdrawn": {
+    "en": "Withdrawn. The app can no longer use the server's model.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_not_changed": {
+    "en": "Nothing changed: you didn't confirm.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_card_body": {
+    "en": "Run AI models on this server. Nothing is sent anywhere.",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
+  },
+  "local_ai_open": {
+    "en": "Open Local AI",
+    "ctx": "ui/screens/LocalAiScreen.kt (Local AI)"
   }
 }

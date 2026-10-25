@@ -133,6 +133,10 @@ final class ModelGroupsTests: XCTestCase {
         if c.provider == "anthropic" {
             return AiModelsResponse(provider: "anthropic", kind: "own", listed: false, models: [], reason: "no-list")
         }
+        // A box with no local model lists none (On this server then stays out of the menu).
+        if c.provider == LocalAi.provider {
+            return AiModelsResponse(provider: c.provider, kind: "own", listed: false, models: [], reason: "no-list")
+        }
         return AiModelsResponse(provider: c.provider, kind: "own", listed: true, models: ModelOption.mockOwn,
                                 defaultModel: "gpt-5.4-mini")
     }

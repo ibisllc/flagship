@@ -4,9 +4,10 @@ import { google, googleStreaming } from "./providers/google.js";
 import { openrouter, openrouterStreaming } from "./providers/openrouter.js";
 import { ollama } from "./providers/ollama.js";
 import { flagship, flagshipStreaming } from "./providers/flagship.js";
+import { flagshipLocal, flagshipLocalStreaming } from "./providers/local.js";
 import type { LLMProvider, StreamingLLMProvider } from "./types.js";
 
-const builtins: LLMProvider[] = [anthropic, openai, google, openrouter, ollama, flagship];
+const builtins: LLMProvider[] = [anthropic, openai, google, openrouter, ollama, flagship, flagshipLocal];
 
 // Only providers with a real streaming adapter. Ollama is intentionally
 // excluded for now and falls back to the non-streaming `chat()` path.
@@ -16,6 +17,7 @@ const streamingBuiltins: StreamingLLMProvider[] = [
   googleStreaming,
   openrouterStreaming,
   flagshipStreaming,
+  flagshipLocalStreaming,
 ];
 
 export class ProviderRegistry {

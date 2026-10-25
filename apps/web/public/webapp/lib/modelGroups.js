@@ -21,9 +21,13 @@ import {
   withModel,
 } from "./modelMenu.js";
 import { escapeHtml } from "./util.js";
+import { LOCAL_GROUP_TITLE, NO_LOCAL_MODEL, PRIVACY_LINE } from "./localAi.js";
+import { LOCAL_AI_CREDENTIAL, LOCAL_AI_PROVIDER } from "./localAiOrders.js";
 
 import { tr } from "./i18n.js";
 export const FLAGSHIP_GROUP = "flagship";
+/** "On this server": the box's own model (docs/architecture-v2/local-ai.md §3). */
+export const LOCAL_GROUP = LOCAL_AI_PROVIDER;
 export const CONTEXT_NOTICE = tr("Older messages will be summarised to fit this model.");
 export const CHOOSE_MODEL = tr("Choose a model");
 
@@ -37,17 +41,21 @@ export function keyTitle(entry) {
  *   { id, title, kind: "flagship"|"own", entry?, menu }  (menu null until loaded)
  * `flagshipMenu` is Flagship Inference's `{kind:"flagship", catalog}`.
  */
-export function buildGroups({ entries = [], flagshipUsable = false, flagshipMenu = null, currentProvider = null, unsaved = null } = {}) {
+export function buildGroups({ entries = [], flagshipUsable = false, flagshipMenu = null, currentProvider = null, unsaved = null, localUsable = false } = {}) {
   const groups = [];
   if (flagshipUsable || currentProvider === "flagship") {
     groups.push({ id: FLAGSHIP_GROUP, title: FLAGSHIP_TITLE, kind: "flagship", menu: flagshipMenu });
   }
+  // On this server: when a model is downloaded there, or the chat already uses it.
+  if (localUsable || currentProvider === LOCAL_AI_PROVIDER) {
+    groups.push({ id: LOCAL_GROUP, title: LOCAL_GROUP_TITLE, kind: "local", menu: null });
+  }
   for (const e of entries || []) {
-    if (!e || e.provider === "flagship") continue;
+    if (!e || e.provider === "flagship" || e.provider === LOCAL_AI_PROVIDER) continue;
     groups.push({ id: e.id, title: keyTitle(e), kind: "own", entry: e, menu: null });
   }
   // A key typed for this build but not saved on the device still gets its group.
-  if (unsaved && unsaved.provider !== "flagship" && !groupForCredential(groups, unsaved)) {
+  if (unsaved && unsaved.provider !== "flagship" && unsaved.provider !== LOCAL_AI_PROVIDER && !groupForCredential(groups, unsaved)) {
     const entry = { id: UNSAVED_GROUP, provider: unsaved.provider, label: UNSAVED_LABEL, apiKey: unsaved.apiKey, relay: unsaved.relay !== false };
     if (unsaved.baseUrl) entry.baseUrl = unsaved.baseUrl;
     groups.push({ id: UNSAVED_GROUP, title: keyTitle(entry), kind: "own", entry, menu: null });
@@ -66,6 +74,7 @@ export function groupById(groups, id) {
 export function groupForCredential(groups, credential) {
   if (!credential) return null;
   if (credential.provider === "flagship") return groupById(groups, FLAGSHIP_GROUP);
+  if (credential.provider === LOCAL_AI_PROVIDER) return groupById(groups, LOCAL_GROUP);
   return (
     (groups || []).find(
       (g) =>
@@ -81,6 +90,7 @@ export function groupForCredential(groups, credential) {
 export function groupForProvider(groups, provider) {
   if (!provider) return null;
   if (provider === "flagship") return groupById(groups, FLAGSHIP_GROUP);
+  if (provider === LOCAL_AI_PROVIDER) return groupById(groups, LOCAL_GROUP);
   return (groups || []).find((g) => g.kind === "own" && g.entry.provider === provider) ?? null;
 }
 
@@ -117,6 +127,7 @@ export function contextNotice({ menu, choice, sessionModel, conversationTokens }
 export function groupedTriggerText(group, choice) {
   if (!group) return choice?.model || CHOOSE_MODEL;
   const model = group.menu ? shortName(group.menu, choice?.model) : choice?.model || group.title;
+  if (group.kind === "local") return choice?.model && group.menu ? shortName(group.menu, choice.model) : LOCAL_GROUP_TITLE;
   return group.kind === "own" ? `${model} · ${group.entry.label}` : model;
 }
 
@@ -130,6 +141,8 @@ export function groupedTriggerText(group, choice) {
 export async function credentialForMessage(group, { picked = false, needsCredential = false, starting = false, mintFlagship } = {}) {
   if (!group) return null;
   if (group.kind === "flagship") return mintFlagship ? mintFlagship() : null;
+  // The box's own model: no key, nothing to mint; the box answers for itself and never falls back.
+  if (group.kind === "local") return picked || needsCredential || starting ? { ...LOCAL_AI_CREDENTIAL } : null;
   if (picked || needsCredential || starting) return credentialFor(group.entry);
   return null;
 }
@@ -144,6 +157,7 @@ function groupRowsHtml(group, choice) {
   const mine = choice?.group === group.id ? choice : null;
   const menu = group.menu;
   if (!menu) return `<div class="mm-loading note">${tr("Loading models…")}</div>`;
+  if (group.kind === "local") return localRowsHtml(menu, mine, attrs);
   if (menu.kind === "flagship") {
     if (!menu.catalog) return `<p class="note mm-muted mm-note">${tr("The models couldn't be listed right now.")}</p>`;
     return menu.catalog.models.map((m) => rowHtml(menu, m, mine, attrs)).join("");
@@ -158,6 +172,32 @@ function groupRowsHtml(group, choice) {
       ${menu.reason === "rejected" ? `<p class="note mm-muted">${escapeHtml(REFUSED_NOTE)}</p>` : ""}`;
   }
   return menu.models.map((m) => rowHtml(menu, m, mine, attrs)).join("");
+}
+
+/**
+ * "On this server": the privacy line, then the downloaded models; the box's own sentence when it
+ * can't list them. There is no free-text model and no credit line: nothing is paid, nothing leaves.
+ */
+export function localRowsHtml(menu, mine, attrs = "") {
+  const privacy = `<p class="note mm-muted mm-note" data-mm-local-privacy>${escapeHtml(PRIVACY_LINE)}</p>`;
+  if (menu?.error) return `${privacy}<p class="note err-text mm-note" data-mm-local-error>${escapeHtml(menu.error)}</p>`;
+  const models = Array.isArray(menu?.models) ? menu.models : [];
+  if (models.length === 0) return `${privacy}<p class="note mm-muted mm-note" data-mm-local-empty>${escapeHtml(NO_LOCAL_MODEL)}</p>`;
+  return privacy + models.map((m) => rowHtml(menu, m, mine, attrs)).join("");
+}
+
+/**
+ * The box's "On this server" menu (POST /api/screens/ai/models with the local credential), never
+ * cached: models come and go as they download. A refusal keeps the box's own words.
+ */
+export async function loadLocalMenu(boxFetch) {
+  try {
+    const r = await boxFetch("/api/screens/ai/models", { method: "POST", body: JSON.stringify({ credential: LOCAL_AI_CREDENTIAL }) });
+    const models = Array.isArray(r?.models) ? r.models.filter((m) => m && typeof m.id === "string") : [];
+    return { kind: "own", local: true, listed: models.length > 0, models, ...(typeof r?.defaultModel === "string" ? { defaultModel: r.defaultModel } : {}) };
+  } catch (e) {
+    return { kind: "own", local: true, listed: false, models: [], error: typeof e?.message === "string" && e.message ? e.message : NO_LOCAL_MODEL };
+  }
 }
 
 /** The open panel: each group's title, then its models. Exported for tests. */

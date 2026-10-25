@@ -339,4 +339,90 @@ final class GymRelease03Tests: GymSweepCase {
         XCTAssertFalse(app.switches["sd-update-reports"].exists)
         shot(app, "update-refusal")
     }
+
+    // MARK: - Local AI (AI02, docs/architecture-v2/local-ai.md)
+
+    private func openLocalAi(_ app: XCUIApplication) {
+        openServerPage(app, named: "Home")
+        let open = app.buttons["local-ai-open"]
+        XCTAssertTrue(reveal(app, open, tries: 18), "The server page has a Local AI section.")
+        bringToMiddle(app, open)
+        open.tap()
+        XCTAssertTrue(app.navigationBars["Local AI"].waitForExistence(timeout: 15), "Local AI opens.")
+    }
+
+    /// The models list says where it runs and what it costs, each model's size, license, memory and
+    /// speed; Download sends the request and the row ends Downloaded.
+    func test_localAiModelsAndDownload() throws {
+        let app = launch(tab: "home", ["-smoke-local-ai"])
+        openLocalAi(app)
+        XCTAssertTrue(text(app, containing: "Runs only on this server. Nothing is sent anywhere.").waitForExistence(timeout: 10))
+        XCTAssertTrue(text(app, containing: "Free: runs on this server").exists)
+        XCTAssertTrue(text(app, containing: "of disk free").exists, "Disk and the models' allowance are shown.")
+        let download = app.buttons["local-ai-download-stories-15m"]
+        XCTAssertTrue(reveal(app, download, tries: 16), "A model that isn't downloaded offers Download.")
+        XCTAssertTrue(text(app, containing: "License: mit").exists)
+        XCTAssertTrue(text(app, containing: "tokens a second on the CPU (estimate)").exists)
+        shot(app, "local-ai-models")
+        bringToMiddle(app, download)
+        download.tap()
+        expectProbe(app, "local-ai download stories-15m")
+        let state = any(app, "local-ai-state-stories-15m")
+        wait(state, "label == 'Downloaded'", timeout: 30)
+    }
+
+    /// The queue: which app holds the GPU, an accurate place in line, a job's checkpoints.
+    func test_localAiQueueGpuHolderAndCheckpoints() throws {
+        let app = launch(tab: "home", ["-smoke-local-ai"])
+        openLocalAi(app)
+        let holder = any(app, "local-ai-gpu-holder-0")
+        XCTAssertTrue(holder.waitForExistence(timeout: 15))
+        XCTAssertEqual(holder.label, "Held by Plants")
+        let queue = any(app, "local-ai-job-queue-2222222222222222")
+        XCTAssertTrue(reveal(app, queue, tries: 18), "The waiting job shows its place in line.")
+        XCTAssertEqual(queue.label, "Number 2 in line")
+        shot(app, "local-ai-queue")
+        let open = app.buttons["local-ai-job-open-1111111111111111"]
+        XCTAssertTrue(reveal(app, open, tries: 6))
+        open.tap()
+        XCTAssertTrue(any(app, "local-ai-checkpoint-1").waitForExistence(timeout: 15), "The job's checkpoint is listed.")
+        shot(app, "local-ai-checkpoints")
+    }
+
+    /// Fine-tuning is a signed order naming the app (its sample data) and the base model; allowing an
+    /// app is a signed grant with the default quotas.
+    func test_localAiFineTuneAndAppGrantAreSigned() throws {
+        let app = launch(tab: "home", ["-smoke-local-ai"])
+        openLocalAi(app)
+        let tune = app.buttons["local-ai-finetune"]
+        XCTAssertTrue(reveal(app, tune, tries: 18))
+        bringToMiddle(app, tune)
+        tune.tap()
+        let start = app.buttons["local-ai-train-start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        shot(app, "local-ai-finetune")
+        XCTAssertTrue(start.isEnabled, "An app with sample data and a downloaded base model can be fine-tuned.")
+        start.tap()
+        let err = app.staticTexts["local-ai-train-error"]
+        if err.waitForExistence(timeout: 4) { XCTFail("The fine-tune was refused: \(err.label)") }
+        expectProbe(app, "signed local-ai-train by admin-root")
+        expectProbe(app, "local-ai train bright-maple--wiki stories-260k")
+        let allow = app.buttons["local-ai-app-allow-bright-maple--wiki"]
+        XCTAssertTrue(reveal(app, allow, tries: 18), "Wiki asks to use the model.")
+        bringToMiddle(app, allow)
+        allow.tap()
+        expectProbe(app, "signed local-ai-app-grant by admin-root")
+        expectProbe(app, "local-ai grant bright-maple--wiki 500")
+        XCTAssertTrue(app.buttons["local-ai-app-withdraw-bright-maple--wiki"].waitForExistence(timeout: 15))
+    }
+
+    /// With no model downloaded the box's own sentence shows, and nothing starts elsewhere.
+    func test_localAiStartRefusedSaysWhy() throws {
+        let app = launch(tab: "home", ["-smoke-local-ai-unavailable"])
+        openLocalAi(app)
+        let start = app.buttons["local-ai-start"]
+        XCTAssertTrue(reveal(app, start, tries: 10))
+        XCTAssertFalse(start.isEnabled, "Start needs a downloaded model.")
+        shot(app, "local-ai-empty")
+    }
 }

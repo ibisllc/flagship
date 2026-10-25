@@ -88,8 +88,11 @@ import {
   groupById,
   groupForCredential,
   groupForProvider,
+  loadLocalMenu,
   mountGroupedModelMenu,
 } from "../lib/modelGroups.js";
+import { LOCAL_AI_PATH, localUsable } from "../lib/localAi.js";
+import { LOCAL_AI_CREDENTIAL } from "../lib/localAiOrders.js";
 
 import { tr } from "../lib/i18n.js";
 registerView("view-vibe-code");
@@ -430,10 +433,12 @@ function setBuildCredential(credential) {
 /** A group's models: Flagship Inference's catalog, or the key's list from the box. */
 function loadGroupMenu(group) {
   if (group.kind === "flagship") return fetchInferenceCatalog().then((catalog) => ({ kind: "flagship", catalog }));
+  if (group.kind === "local") return loadLocalMenu(boxFetch);
   return loadModelMenu(credentialFor(group.entry), boxFetch);
 }
 
-const groupCredential = (group) => (group.kind === "flagship" ? { provider: "flagship" } : credentialFor(group.entry));
+const groupCredential = (group) =>
+  group.kind === "flagship" ? { provider: "flagship" } : group.kind === "local" ? { ...LOCAL_AI_CREDENTIAL } : credentialFor(group.entry);
 
 /** Build the grouped menu: Flagship Inference (when usable or in use), then each saved key. */
 async function refreshModelMenu() {
@@ -447,9 +452,11 @@ async function refreshModelMenu() {
       list = { entries: [] };
     }
   }
-  const [catalog, status] = await Promise.all([
+  const [catalog, status, local] = await Promise.all([
     fetchInferenceCatalog(),
     session?.umk ? fetchFreeAiStatus() : Promise.resolve(null),
+    // "On this server" is offered once a model is downloaded on the box (an older box has no Local AI).
+    boxFetch(LOCAL_AI_PATH).catch(() => null),
   ]);
   if (load !== menuLoad) return;
   const currentProvider = buildCredential?.provider ?? lastState?.provider ?? null;
@@ -459,6 +466,7 @@ async function refreshModelMenu() {
     flagshipMenu: { kind: "flagship", catalog },
     currentProvider,
     unsaved: buildCredential,
+    localUsable: localUsable(local),
   });
   const group =
     groupForCredential(groups, buildCredential) ??

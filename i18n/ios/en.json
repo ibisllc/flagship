@@ -11909,5 +11909,354 @@
     "en": "A server shared with you is asking you to unlock it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Open Local AI": {
+    "en": "Open Local AI",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:33"
+  },
+  "Delete this model from the server?": {
+    "en": "Delete this model from the server?",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:113"
+  },
+  "Delete model": {
+    "en": "Delete model",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:116"
+  },
+  "%@ will be removed from this server. You can download it again later.": {
+    "en": "%@ will be removed from this server. You can download it again later.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:119"
+  },
+  "CPUs: %lld · Memory: %@": {
+    "en": "CPUs: %lld · Memory: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:147"
+  },
+  "%@ of disk free · models use %@ of their %@": {
+    "en": "%@ of disk free · models use %@ of their %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:150"
+  },
+  "No GPU on this server: models run on the CPU.": {
+    "en": "No GPU on this server: models run on the CPU.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:156"
+  },
+  "Use a GPU when one is free": {
+    "en": "Use a GPU when one is free",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:173"
+  },
+  "GPU %@: %@, %@": {
+    "en": "GPU %@: %@, %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:161"
+  },
+  "Held by %@": {
+    "en": "Held by %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:165"
+  },
+  "Model server": {
+    "en": "Model server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:189"
+  },
+  "Model to serve": {
+    "en": "Model to serve",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:206"
+  },
+  "Stop the model": {
+    "en": "Stop the model",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:215"
+  },
+  "Start the model": {
+    "en": "Start the model",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:218"
+  },
+  "Best downloaded model": {
+    "en": "Best downloaded model",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:208"
+  },
+  "Models": {
+    "en": "Models",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:232"
+  },
+  "%@ · %@ · License: %@": {
+    "en": "%@ · %@ · License: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:243"
+  },
+  "Needs %@ of memory": {
+    "en": "Needs %@ of memory",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:247"
+  },
+  "Needs %@ of memory: more than this server has free for it": {
+    "en": "Needs %@ of memory: more than this server has free for it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:247"
+  },
+  "Can't build apps (no tool calls)": {
+    "en": "Can't build apps (no tool calls)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:251"
+  },
+  "Cancel download": {
+    "en": "Cancel download",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:274"
+  },
+  "Start with this model": {
+    "en": "Start with this model",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:278"
+  },
+  "Nothing is running or waiting.": {
+    "en": "Nothing is running or waiting.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:307"
+  },
+  "Jobs": {
+    "en": "Jobs",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:296"
+  },
+  "Fine-tune a model": {
+    "en": "Fine-tune a model",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:298"
+  },
+  "Epoch %lld of %lld · Checkpoints: %lld": {
+    "en": "Epoch %lld of %lld · Checkpoints: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:320"
+  },
+  "Fine-tuning %@ for %@": {
+    "en": "Fine-tuning %@ for %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:339"
+  },
+  "Model server: %@": {
+    "en": "Model server: %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:340"
+  },
+  "Checkpoints": {
+    "en": "Checkpoints",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:346"
+  },
+  "Apps that ask to use it": {
+    "en": "Apps that ask to use it",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:370"
+  },
+  "An app only sends its own data, and only while you allow it.": {
+    "en": "An app only sends its own data, and only while you allow it.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:371"
+  },
+  "Not allowed": {
+    "en": "Not allowed",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:388"
+  },
+  "Allow 500 requests a day": {
+    "en": "Allow 500 requests a day",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:389"
+  },
+  "Requests a day: %lld · Tokens a day: %lld · Tokens per answer: %lld": {
+    "en": "Requests a day: %lld · Tokens a day: %lld · Tokens per answer: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:379"
+  },
+  "Used today. Requests: %lld · Tokens: %lld": {
+    "en": "Used today. Requests: %lld · Tokens: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:383"
+  },
+  "Stop allowing": {
+    "en": "Stop allowing",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:385"
+  },
+  "No app has sample data yet. Attach sample data in one of its build chats first.": {
+    "en": "No app has sample data yet. Attach sample data in one of its build chats first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:416"
+  },
+  "Download a model that can be fine-tuned (TinyStories) first.": {
+    "en": "Download a model that can be fine-tuned (TinyStories) first.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:426"
+  },
+  "Base model": {
+    "en": "Base model",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:430"
+  },
+  "The model learns from the sample data you attached to the app's build chats, never from the app's live data. It runs only on this server.": {
+    "en": "The model learns from the sample data you attached to the app's build chats, never from the app's live data. It runs only on this server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:412"
+  },
+  "Epochs: %lld": {
+    "en": "Epochs: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:436"
+  },
+  "Start fine-tuning": {
+    "en": "Start fine-tuning",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:444"
+  },
+  "Sample data: %@…%@": {
+    "en": "Sample data: %@…%@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:468"
+  },
+  "No checkpoint yet.": {
+    "en": "No checkpoint yet.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:474"
+  },
+  "Epoch %lld": {
+    "en": "Epoch %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:478"
+  },
+  "%@ · %@…": {
+    "en": "%@ · %@…",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:479",
+    "translatable": false
+  },
+  "Loss %@": {
+    "en": "Loss %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/LocalAiScreens.swift:482"
+  },
+  "Local AI": {
+    "en": "Local AI",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:10"
+  },
+  "Runs only on this server. Nothing is sent anywhere.": {
+    "en": "Runs only on this server. Nothing is sent anywhere.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:12"
+  },
+  "Free: runs on this server": {
+    "en": "Free: runs on this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:13"
+  },
+  "No model downloaded yet": {
+    "en": "No model downloaded yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:14"
+  },
+  "No model is downloaded on this server yet. Download one under Local AI on the server's page.": {
+    "en": "No model is downloaded on this server yet. Download one under Local AI on the server's page.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:15"
+  },
+  "This server can't run a local model.": {
+    "en": "This server can't run a local model.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:16"
+  },
+  "Start fine-tuning on this server": {
+    "en": "Start fine-tuning on this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:18"
+  },
+  "Let an app use this server's AI model": {
+    "en": "Let an app use this server's AI model",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:19"
+  },
+  "Stop an app using this server's AI model": {
+    "en": "Stop an app using this server's AI model",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:20"
+  },
+  "%@ tokens a second on the GPU (measured)": {
+    "en": "%@ tokens a second on the GPU (measured)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:31"
+  },
+  "%@ tokens a second on the CPU (measured)": {
+    "en": "%@ tokens a second on the CPU (measured)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:31"
+  },
+  "About %@ tokens a second on the GPU (estimate)": {
+    "en": "About %@ tokens a second on the GPU (estimate)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:33"
+  },
+  "About %@ tokens a second on the CPU (estimate)": {
+    "en": "About %@ tokens a second on the CPU (estimate)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:33"
+  },
+  "GPU": {
+    "en": "GPU",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:40"
+  },
+  "GPU %@": {
+    "en": "GPU %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:40"
+  },
+  "Not placed yet": {
+    "en": "Not placed yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:42"
+  },
+  "Downloaded": {
+    "en": "Downloaded",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:48"
+  },
+  "Downloading": {
+    "en": "Downloading",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:49"
+  },
+  "Checking the download": {
+    "en": "Checking the download",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:50"
+  },
+  "Not downloaded": {
+    "en": "Not downloaded",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:53"
+  },
+  "The download failed.": {
+    "en": "The download failed.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:52"
+  },
+  "Waiting": {
+    "en": "Waiting",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:59"
+  },
+  "Preparing the sample data": {
+    "en": "Preparing the sample data",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:60"
+  },
+  "Starting": {
+    "en": "Starting",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:61"
+  },
+  "Stopping": {
+    "en": "Stopping",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:63"
+  },
+  "Finished": {
+    "en": "Finished",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:65"
+  },
+  "Next in line": {
+    "en": "Next in line",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:74"
+  },
+  "Number %lld in line": {
+    "en": "Number %lld in line",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:74"
+  },
+  "In use": {
+    "en": "In use",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:80"
+  },
+  "Set aside after a fault": {
+    "en": "Set aside after a fault",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:81"
+  },
+  "Not qualified on this server": {
+    "en": "Not qualified on this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:82"
+  },
+  "Serving %@": {
+    "en": "Serving %@",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:145"
+  },
+  "Models downloaded: %lld": {
+    "en": "Models downloaded: %lld",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:146"
+  },
+  "%@ is downloading.": {
+    "en": "%@ is downloading.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:166"
+  },
+  "%@ was deleted from this server.": {
+    "en": "%@ was deleted from this server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:180"
+  },
+  "The model is running.": {
+    "en": "The model is running.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:201"
+  },
+  "The model stopped.": {
+    "en": "The model stopped.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:208"
+  },
+  "Fine-tuning is queued. It runs only on this server.": {
+    "en": "Fine-tuning is queued. It runs only on this server.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:238"
+  },
+  "%@ can use this server's AI model.": {
+    "en": "%@ can use this server's AI model.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:273"
+  },
+  "%@ can no longer use this server's AI model.": {
+    "en": "%@ can no longer use this server's AI model.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/LocalAiViewModel.swift:273"
   }
 }

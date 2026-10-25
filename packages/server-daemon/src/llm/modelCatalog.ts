@@ -17,6 +17,7 @@ import {
   type ModelOption,
 } from "@flagship/protocol";
 import type { ModelListResult } from "@flagship/llm-providers";
+import { localModel } from "../localAi/catalog.js";
 
 const TTL_MS = 6 * 60 * 60_000;
 const RETRY_MS = 5 * 60_000;
@@ -131,6 +132,18 @@ export class ModelCatalog {
     defaultModel?: string,
   ): Promise<AiModelsResponse> {
     if (provider === "flagship") return { provider: "flagship", kind: "flagship", catalog: await this.inference() };
+    if (provider === "flagship-local") {
+      // "On this server": what is downloaded here, described by the pinned catalog, never the table.
+      const listed = await list();
+      const models: ModelOption[] = listed.ok
+        ? listed.models.map((m) => {
+            const c = localModel(m.id);
+            return { id: m.id, label: c?.name ?? m.id, ...(c ? { contextTokens: c.serveContextTokens } : {}), vision: false, tools: c?.tools ?? null, known: c !== null };
+          })
+        : [];
+      const best = models.find((m) => m.tools) ?? models[0];
+      return { provider, kind: "own", listed: listed.ok, models, ...(best ? { defaultModel: best.id } : {}), ...(listed.ok ? {} : { reason: listed.reason }) };
+    }
     const [listed, idx] = await Promise.all([list(), this.capabilities()]);
     if (!listed.ok) {
       return { provider, kind: "own", listed: false, models: [], reason: listed.reason, ...(defaultModel ? { defaultModel } : {}) };

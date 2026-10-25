@@ -434,6 +434,47 @@ const RUN_FORBIDDEN = new Set([
 /** The read-only socket folder of an app's dedicated database, its migration sandbox's one way in (migrationSandbox.ts). */
 const PGSOCK_RO_MOUNT_RE = /^type=volume,src=flagship-pgsock-[0-9a-f]{24},dst=\/var\/run\/postgresql,readonly$/;
 
+/**
+ * Local AI (packages/server-daemon/src/localAi/catalog.ts LOCAL_AI_IMAGES, byte for byte): llama.cpp
+ * build b11541's server and `full` images, by manifest-list digest. Only a run of one of these, named
+ * as a local-AI container, gets the mounts below; everything else is the ordinary run's rules.
+ */
+export const LOCAL_AI_IMAGES: readonly string[] = [
+  "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+  "ghcr.io/ggml-org/llama.cpp:server-cuda-b11541@sha256:f88fa8d94d872312a4ad117acd490fa997bef81f03f161f0cfe0d74272e5b5bb",
+  "ghcr.io/ggml-org/llama.cpp:server-rocm-b11541@sha256:353312d6637cad6a1492d5ab1c0373137163a73d6bce98c821ebcb1abfebcf8c",
+  "ghcr.io/ggml-org/llama.cpp:server-intel-b11541@sha256:f74b70ab42a1715a093d67372fdc413a8af671b48bb6f8ae02eb0fb92356f94d",
+  "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+  "ghcr.io/ggml-org/llama.cpp:full-cuda-b11541@sha256:12055d1d7d97498f7563837bcb21f4eff05cc15d42c5f8b460afcf53982cdf59",
+  "ghcr.io/ggml-org/llama.cpp:full-rocm-b11541@sha256:afb1b28de45ab29a1a2e810da620908c0fb4105fdf05b96d4dd692e7db56cc9c",
+  "ghcr.io/ggml-org/llama.cpp:full-intel-b11541@sha256:72ed99a5f846170a479c41979439e61a0db4a6949cdda45422115607b8a1973d",
+];
+/** The local model server, and a fine-tuning run (its output volume carries the same id). */
+const LOCAL_AI_SERVICE_NAME = /^flagship-localai-[0-9a-f]{16}$/;
+const LOCAL_AI_TRAIN_NAME = /^flagship-aitrain-([0-9a-f]{16})$/;
+/** The installed models, read-only: the only mount the model server has. */
+export const LOCAL_AI_MODELS_MOUNT = "type=volume,src=flagship-models,dst=/models,readonly";
+/** An app's STAGED sample data (its dev files volume), read-only: never a live app's files. */
+const LOCAL_AI_DATASET_MOUNT = /^type=volume,src=flagship-devfiles-[a-z0-9](?:-?[a-z0-9]){0,31}--[a-z0-9](?:-?[a-z0-9]){0,31},dst=\/dataset,readonly$/;
+
+function isLocalAiName(run: ParsedRun): boolean {
+  return run.flags.some((f) => f.name === "name" && (LOCAL_AI_SERVICE_NAME.test(f.value) || LOCAL_AI_TRAIN_NAME.test(f.value)));
+}
+
+/** Which local-AI mount this is for this run, or null when the run may not have it. */
+function localAiMount(run: ParsedRun, value: string): "models" | "out" | "dataset" | null {
+  if (!LOCAL_AI_IMAGES.includes(run.image)) return null;
+  const names = run.flags.filter((f) => f.name === "name");
+  if (names.length !== 1) return null;
+  const name = names[0]!.value;
+  if (value === LOCAL_AI_MODELS_MOUNT && (LOCAL_AI_SERVICE_NAME.test(name) || LOCAL_AI_TRAIN_NAME.test(name))) return "models";
+  const train = LOCAL_AI_TRAIN_NAME.exec(name);
+  if (!train) return null;
+  if (value === `type=volume,src=flagship-aitrain-${train[1]},dst=/out`) return "out";
+  if (LOCAL_AI_DATASET_MOUNT.test(value)) return "dataset";
+  return null;
+}
+
 /** Whether a `--user` value names uid 0, in any spelling the engine reads as 0. */
 function isRootUser(v: string): boolean {
   const uid = v.split(":")[0]!;
@@ -444,6 +485,7 @@ function isRootUser(v: string): boolean {
 function checkOrdinaryRun(sub: string, run: ParsedRun, gpu: GpuRunClaim | null = null): void {
   let runtime = false;
   const devices = new Set<string>();
+  const aiMounts = new Set<string>();
   for (const { name, value } of run.flags) {
     if (RUN_FORBIDDEN.has(name) && !(gpu && name === "device")) throw new PrivdError("forbidden", `--${name} is not allowed`);
     switch (name) {
@@ -462,11 +504,20 @@ function checkOrdinaryRun(sub: string, run: ParsedRun, gpu: GpuRunClaim | null =
         if (value === "host") throw new PrivdError("forbidden", "host networking is not allowed");
         if (!NETWORK_NAME.test(value)) throw new PrivdError("forbidden", "a container joins a named network only");
         break;
-      case "mount":
+      case "mount": {
+        const ai = sub === "run" ? localAiMount(run, value) : null;
+        if (ai) {
+          if (aiMounts.has(ai)) throw new PrivdError("forbidden", "a local-AI container mounts each of its volumes once");
+          aiMounts.add(ai);
+          break;
+        }
+        // A local-AI container has exactly its own mounts (and the staging resolver), never an app's files.
+        if (isLocalAiName(run) && !RESOLV_MOUNT_RE.test(value)) throw new PrivdError("forbidden", "only an app's files volume may be mounted");
         if (sub !== "run" || !(FILES_MOUNT_RE.test(value) || RESOLV_MOUNT_RE.test(value) || PGSOCK_RO_MOUNT_RE.test(value))) {
           throw new PrivdError("forbidden", "only an app's files volume may be mounted");
         }
         break;
+      }
       case "user":
         if (isRootUser(value)) throw new PrivdError("forbidden", "a container may not run as root");
         break;
@@ -961,6 +1012,8 @@ export function hostExec(args: Record<string, unknown>, mounts: MountsReader): E
     case "icc":
       if (a.length <= 8 && a.every((b) => IFACE.test(b))) return { file: "/usr/sbin/nft", args: ["-f", "-"], timeoutMs: 30_000, input: iccTable(a) };
       break;
+    case "localai":
+      return localAiHostExec(a);
     case "iptables":
     case "ip6tables":
       return iptablesExec(file, a);
@@ -968,6 +1021,44 @@ export function hostExec(args: Record<string, unknown>, mounts: MountsReader): E
       throw new PrivdError("unknown-op", "unknown host operation");
   }
   throw new PrivdError("forbidden", `${String(file)} with those arguments is not allowed`);
+}
+
+/** Where the engine keeps the models volume, and a fine-tuning job's output volume. */
+const MODELS_VOLUME_DATA = /^\/var\/lib\/(?:docker\/volumes|containers\/storage\/volumes)\/flagship-models\/_data$/;
+const AITRAIN_VOLUME_DATA = /^\/var\/lib\/(?:docker\/volumes|containers\/storage\/volumes)\/flagship-aitrain-([0-9a-f]{16})\/_data$/;
+/** Where the daemon leaves a model it downloaded and checked (localAi/modelStore.ts). */
+export const LOCAL_AI_INCOMING = "/var/flagship/data/local-ai/incoming";
+/**
+ * Installs a model: the broker's own copy must hash to the digest named, then it lands root-owned,
+ * read-only, under its digest, by an atomic rename. `$1` digest, `$2` the copy, `$3` the models folder.
+ */
+export const LOCAL_AI_INSTALL_SCRIPT =
+  'set -eu; printf \'%s  %s\\n\' "$1" "$2" | sha256sum -c --status -; install -m 0444 -o root -g root -- "$2" "$3/sha256-$1.gguf.partial"; mv -f -- "$3/sha256-$1.gguf.partial" "$3/sha256-$1.gguf"';
+
+/**
+ * Local AI's root steps (packages/server-daemon/src/localAi/containers.ts):
+ *  - `model-install <sha256> <models dir>`: copy the daemon's checked download into the broker's folder,
+ *    check its digest there, install it 0444 root into the models volume;
+ *  - `model-remove <sha256> <models dir>`: delete that one model file;
+ *  - `out-prepare <job> <job dir>`: hand a fine-tuning job's own output volume to the container user.
+ */
+function localAiHostExec(a: readonly string[]): Exec {
+  const [verb, id, dir] = a;
+  if (a.length === 3 && verb === "model-install" && /^[0-9a-f]{64}$/.test(id!) && MODELS_VOLUME_DATA.test(dir!)) {
+    const staged = `${PRIVD_STATE_DIR}/local-ai/sha256-${id}.gguf`;
+    return {
+      file: "/bin/sh",
+      args: ["-c", LOCAL_AI_INSTALL_SCRIPT, "_", id!, staged, dir!],
+      copyIn: [{ from: `${LOCAL_AI_INCOMING}/sha256-${id}.gguf`, to: staged }],
+      timeoutMs: 30 * 60_000,
+    };
+  }
+  if (a.length === 3 && verb === "model-remove" && /^[0-9a-f]{64}$/.test(id!) && MODELS_VOLUME_DATA.test(dir!)) {
+    return { file: "/usr/bin/rm", args: ["-f", "--", `${dir}/sha256-${id}.gguf`], timeoutMs: 60_000 };
+  }
+  const out = a.length === 3 && verb === "out-prepare" && /^[0-9a-f]{16}$/.test(id!) ? AITRAIN_VOLUME_DATA.exec(dir!) : null;
+  if (out && out[1] === id) return { file: "/usr/bin/chown", args: ["10001:10001", "--", dir!], timeoutMs: 30_000 };
+  throw new PrivdError("forbidden", "localai with those arguments is not allowed");
 }
 
 /** Only the box's own egress chains: create DOCKER-USER, hook, unhook, flush or delete a FLAGSHIP chain. */

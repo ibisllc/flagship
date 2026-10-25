@@ -53,6 +53,15 @@ export interface AppAccelerator {
   fallback: AcceleratorFallback;
 }
 
+/**
+ * The app asks to call the box-local model (docs/architecture-v2/local-ai.md §5). Declaring it only
+ * makes the app eligible: nothing answers until the owner signs `flagship/local-ai-app-grant/v1`
+ * with quotas, and the endpoint carries only what the app itself sends.
+ */
+export interface AppLocalAi {
+  inference: boolean;
+}
+
 export interface AppResources {
   cpuMillis?: number;
   memoryMiB?: number;
@@ -102,6 +111,7 @@ export interface NormalizedApp {
   restart?: RestartPolicy;
   isolation: IsolationProfile;
   accelerator?: AppAccelerator;
+  localAi?: AppLocalAi;
   components: AppComponent[];
   capabilities: CapabilitySetV2;
   capabilityDigest: string;
@@ -158,6 +168,7 @@ export function parseAnyManifest(input: unknown): AnyManifestParseResult {
   }
 
   if (m.accelerator !== undefined) extras.accelerator = parseAccelerator(m.accelerator, e);
+  if (m.localAi !== undefined) extras.localAi = parseLocalAi(m.localAi, e);
   if (m.resources !== undefined) extras.resources = parseResources(m.resources, "resources", e);
   if (m.health !== undefined) extras.health = parseHealth(m.health, e);
   if (m.restart !== undefined) {
@@ -177,6 +188,7 @@ export function parseAnyManifest(input: unknown): AnyManifestParseResult {
   if (extras.components?.some((c) => c.name === r.manifest.name)) e("a component cannot share the app's own name");
   if (extras.wasi && extras.accelerator) e("a wasi runtime cannot ask for an accelerator");
   if (extras.wasi && extras.isolation === "vm") e("a wasi runtime runs in the box's WASI worker, not a VM");
+  if (extras.wasi && extras.localAi?.inference) e("a wasi runtime cannot call the box-local model");
   if (errors.length > 0) return { ok: false, errors };
 
   return { ok: true, app: normalize(r.manifest, 2, extras), ...(r.notes ? { notes: r.notes } : {}) };
@@ -185,6 +197,7 @@ export function parseAnyManifest(input: unknown): AnyManifestParseResult {
 interface V2Extras {
   wasi?: AppWasi;
   accelerator?: AppAccelerator;
+  localAi?: AppLocalAi;
   resources?: AppResources;
   health?: AppHealth;
   restart?: RestartPolicy;
@@ -203,6 +216,7 @@ function normalize(manifest: AppManifest, schemaVersion: 1 | 2, x: V2Extras): No
     ...(x.restart ? { restart: x.restart } : {}),
     isolation: x.isolation ?? "sandbox",
     ...(x.accelerator ? { accelerator: x.accelerator } : {}),
+    ...(x.localAi?.inference ? { localAi: x.localAi } : {}),
     components: x.components ?? [],
   };
   const capabilities = capabilitiesOfApp(app);
@@ -227,6 +241,19 @@ function parseWasi(rt: Record<string, unknown>, e: (m: string) => void): AppWasi
     ok = false;
   }
   return ok ? { module: mod as string, world: world as WasiWorld, ...(typeof digest === "string" ? { digest } : {}) } : undefined;
+}
+
+function parseLocalAi(v: unknown, e: (m: string) => void): AppLocalAi | undefined {
+  if (!isObject(v)) {
+    e("localAi must be an object");
+    return undefined;
+  }
+  onlyKeys(v, ["inference"], "localAi", e);
+  if (typeof v.inference !== "boolean") {
+    e("localAi.inference must be true or false");
+    return undefined;
+  }
+  return { inference: v.inference };
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -419,6 +446,8 @@ function hasCycle(cs: AppComponent[]): boolean {
 /** The v1 authority plus what v2 can ask for. */
 export interface CapabilitySetV2 extends CapabilitySet {
   accelerator: string;
+  /** `inference` when the app asks to call the box-local model, else empty. */
+  localAi: string;
   isolation: IsolationProfile;
   components: string[];
   runtimeKind: "oci" | "wasi";
@@ -429,6 +458,7 @@ function capabilitiesOfApp(app: Omit<NormalizedApp, "capabilities" | "capability
   return {
     ...capabilitiesOf(app.manifest),
     accelerator: a ? `${a.backend}:${a.count}:${a.capabilities.join("+")}:${a.sharing}:${a.fallback}` : "",
+    localAi: app.localAi?.inference ? "inference" : "",
     isolation: app.isolation,
     components: app.components.map((c) => `${c.name}=${c.base ?? c.image}`).sort(),
     runtimeKind: app.runtimeKind,
@@ -436,7 +466,7 @@ function capabilitiesOfApp(app: Omit<NormalizedApp, "capabilities" | "capability
 }
 
 function asksForV2Authority(c: CapabilitySetV2): boolean {
-  return c.accelerator !== "" || c.isolation !== "sandbox" || c.components.length > 0 || c.runtimeKind !== "oci";
+  return c.accelerator !== "" || c.localAi !== "" || c.isolation !== "sandbox" || c.components.length > 0 || c.runtimeKind !== "oci";
 }
 
 /**
@@ -452,6 +482,8 @@ export function capabilityDigestV2(c: CapabilitySetV2): string {
     `isolation=${c.isolation}`,
     `components=${c.components.join(",")}`,
     `runtime=${c.runtimeKind}`,
+    // Only when asked for, so every digest made before local inference existed is unchanged.
+    ...(c.localAi ? [`localAi=${c.localAi}`] : []),
   ].join("|");
   return hex(sha256(new TextEncoder().encode(text)));
 }
@@ -463,6 +495,10 @@ export function diffCapabilitiesV2(installed: CapabilitySetV2, next: CapabilityS
   if (installed.accelerator !== next.accelerator) {
     if (next.accelerator) expanded.push({ capability: "accelerator", added: [next.accelerator], removed: installed.accelerator ? [installed.accelerator] : [] });
     else narrowed.push({ capability: "accelerator", added: [], removed: [installed.accelerator] });
+  }
+  if (installed.localAi !== next.localAi) {
+    if (next.localAi) expanded.push({ capability: "localAi", added: [next.localAi], removed: [] });
+    else narrowed.push({ capability: "localAi", added: [], removed: [installed.localAi] });
   }
   if (installed.isolation !== next.isolation) expanded.push({ capability: "isolation", added: [next.isolation], removed: [installed.isolation] });
   if (installed.runtimeKind !== next.runtimeKind) expanded.push({ capability: "runtimeKind", added: [next.runtimeKind], removed: [installed.runtimeKind] });

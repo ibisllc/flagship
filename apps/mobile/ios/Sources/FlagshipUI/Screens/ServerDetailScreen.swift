@@ -277,6 +277,8 @@ public struct ServerDetailScreen: View {
                     }
                     JournalCard(serverDomain: d.serverFqdn)
                     ServerBackupsSection(serverDomain: d.serverFqdn)
+                    // AI02: models, the job queue and fine-tuning on this server only.
+                    LocalAiCard(serverDomain: d.serverFqdn)
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
                     // An older box doesn't report debug access and can't take a grant.
                     if d.debugAccess != nil {

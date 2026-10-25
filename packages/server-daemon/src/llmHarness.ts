@@ -7,6 +7,7 @@ import {
   defaultStreamingRegistry,
   guardedFetch,
   guardedStreamingFetch,
+  LOCAL_PROVIDER_NAME,
   ProviderError,
   ProviderRegistry,
   StreamingProviderRegistry,
@@ -56,6 +57,12 @@ export interface LlmHarnessOptions {
   /** Test seam: name → addresses, for the "is this baseUrl on the LAN" check. */
   resolveHost?: (host: string) => Promise<string[]>;
   /**
+   * The box-local model server (localAi/service.ts). A `flagship-local` credential is resolved
+   * here and nowhere else: its address and key come from the box, never from a request, and when
+   * it can't run the call fails with the reason (no fallback to any other provider).
+   */
+  localInference?: LocalInferenceLease;
+  /**
    * Architecture v2 (docs/architecture-v2/pq-suites.md §13.6): the owner's connector choice
    * while the server is strict. Given `ai-<provider>` (`ai-flagship-inference` for Flagship
    * Inference), returns the sentence to refuse with when the owner blocked it, else null.
@@ -64,6 +71,16 @@ export interface LlmHarnessOptions {
 }
 
 /** The connector a credential's calls go to (its scope is `<server>:<id>`). */
+/** What the harness needs from the box-local model server. */
+export interface LocalInferenceLease {
+  lease(model?: string): Promise<{ baseUrl: string; apiKey: string; modelId: string; release(): void }>;
+  /** The models downloaded on this box (the "On this server" menu). */
+  models(): { id: string; name: string; contextTokens: number }[];
+}
+
+/** The local model server is the only endpoint: loopback, plain HTTP, nothing else. */
+const LOCAL_GUARD: BaseUrlGuardOptions = { allowHttp: true, allowPrivate: true, exclusiveHost: "127.0.0.1" };
+
 export function connectorIdFor(credential: { provider: string; source?: string }): string {
   return credential.source === "promo" ? "ai-flagship-inference" : `ai-${credential.provider.toLowerCase()}`;
 }
@@ -211,7 +228,7 @@ export type ChatStreamOutcome =
   | { ok: true }
   | {
       ok: false;
-      reason: "unknown-provider" | "unsafe-base-url" | "no-streaming" | "provider-error" | "relay-unavailable" | "connector-blocked";
+      reason: "unknown-provider" | "unsafe-base-url" | "no-streaming" | "provider-error" | "relay-unavailable" | "connector-blocked" | "local-unavailable";
       message: string;
     };
 
@@ -253,11 +270,13 @@ export class LlmHarness {
   private readonly baseUrlGuard?: BaseUrlGuardOptions;
   private readonly relay?: ProviderRelay;
   private readonly resolveHost: (host: string) => Promise<string[]>;
+  private readonly localInference?: LocalInferenceLease;
 
   constructor(opts: LlmHarnessOptions) {
     this.swk = opts.swk;
     this.relay = opts.relay;
     this.resolveHost = opts.resolveHost ?? defaultResolveHost;
+    this.localInference = opts.localInference;
     this.registry = opts.registry ?? defaultRegistry;
     this.streamingRegistry = opts.streamingRegistry ?? defaultStreamingRegistry;
     this.baseUrlGuard = opts.baseUrlGuard;
@@ -351,6 +370,10 @@ export class LlmHarness {
    * as a chat; the key is held only for this call.
    */
   async listModels(credential: LlmCredential): Promise<ModelListResult> {
+    if (credential.provider === LOCAL_PROVIDER_NAME) {
+      if (!this.localInference) return { ok: false, reason: "no-list" };
+      return { ok: true, models: this.localInference.models().map((m) => ({ id: m.id, name: m.name, contextTokens: m.contextTokens })) };
+    }
     const cfg: ProviderConfig = { apiKey: credential.apiKey };
     if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
       try {
@@ -395,6 +418,7 @@ export class LlmHarness {
     request: ChatRequest,
     onEvent: (e: ChatStreamEvent) => void,
   ): Promise<ChatStreamOutcome> {
+    if (credential.provider === LOCAL_PROVIDER_NAME) return await this.localChatStream(request, onEvent);
     const blocked = this.connectorGate?.(connectorIdFor(credential));
     if (blocked) {
       onEvent({ kind: "error", message: blocked });
@@ -456,6 +480,7 @@ export class LlmHarness {
     credential: LlmCredential,
     request: ChatRequest,
   ): Promise<ChatResponse> {
+    if (credential.provider === LOCAL_PROVIDER_NAME) return await this.localChat(request);
     if (!this.registry.has(credential.provider)) {
       throw new Error("unknown provider");
     }
@@ -480,6 +505,56 @@ export class LlmHarness {
       out.message = friendly;
       throw out;
     }
+  }
+
+  /** A lease on the local model server, or the sentence why there is none. */
+  private async localLease(model: string | undefined) {
+    if (!this.localInference) throw new LocalModelUnavailableError("This server can't run a local model.");
+    try {
+      return await this.localInference.lease(model && model.length > 0 ? model : undefined);
+    } catch (e) {
+      throw new LocalModelUnavailableError((e as Error).message || "The model on this server isn't available.");
+    }
+  }
+
+  private async localChat(request: ChatRequest): Promise<ChatResponse> {
+    const lease = await this.localLease(request.model);
+    try {
+      const fetchImpl = this.injectedFetch ?? guardedFetch({ guard: LOCAL_GUARD });
+      return await this.registry
+        .get(LOCAL_PROVIDER_NAME)
+        .chat({ ...request, model: lease.modelId }, { apiKey: lease.apiKey, baseUrl: lease.baseUrl }, fetchImpl);
+    } finally {
+      lease.release();
+    }
+  }
+
+  private async localChatStream(request: ChatRequest, onEvent: (e: ChatStreamEvent) => void): Promise<ChatStreamOutcome> {
+    let lease;
+    try {
+      lease = await this.localLease(request.model);
+    } catch (e) {
+      const message = (e as Error).message;
+      onEvent({ kind: "error", message });
+      return { ok: false, reason: "local-unavailable", message };
+    }
+    let sawError: { message: string } | null = null;
+    try {
+      const fetchImpl = this.injectedStreamingFetch ?? guardedStreamingFetch({ guard: LOCAL_GUARD });
+      await this.streamingRegistry.get(LOCAL_PROVIDER_NAME).chatStream(
+        { ...request, model: lease.modelId },
+        { apiKey: lease.apiKey, baseUrl: lease.baseUrl },
+        (e: ChatStreamEvent) => {
+          if (e.kind === "error" && !sawError) sawError = { message: e.message };
+          onEvent(e);
+        },
+        fetchImpl,
+      );
+    } finally {
+      lease.release();
+    }
+    if (sawError) return { ok: false, reason: "provider-error", message: (sawError as { message: string }).message };
+    return { ok: true };
   }
 
   /**
@@ -566,3 +641,11 @@ export class LlmHarness {
 }
 
 export type { SealedRequest, SealedResponse, SealedError };
+
+/** The box-local model can't answer; the message says why, for the owner. */
+export class LocalModelUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LocalModelUnavailableError";
+  }
+}

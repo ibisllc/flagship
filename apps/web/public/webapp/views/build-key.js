@@ -50,6 +50,10 @@ import {
   mintFreeAiCredential,
 } from "../lib/freeAi.js";
 
+import { boxClient } from "../lib/api.js";
+import { LOCAL_AI_PATH, LOCAL_GROUP_TITLE, PRIVACY_LINE, localUsable } from "../lib/localAi.js";
+import { LOCAL_AI_CREDENTIAL } from "../lib/localAiOrders.js";
+
 import { tr } from "../lib/i18n.js";
 registerView("view-build-key");
 
@@ -149,6 +153,23 @@ export function freeAiRowHtml(state, { lastUsed = false } = {}) {
       </div>`;
 }
 
+/** "On this server": the box's own model, when one is downloaded there. Exported for tests. */
+export function localRowHtml(usable) {
+  if (!usable) return "";
+  return `
+      <div class="card mt-2 build-key-row" id="build-key-local" role="group" aria-label="${escapeHtml(LOCAL_GROUP_TITLE)}">
+        <div class="build-key-row-body">
+          <strong>${escapeHtml(LOCAL_GROUP_TITLE)}</strong>
+          <span class="note">${escapeHtml(PRIVACY_LINE)}</span>
+        </div>
+        <button class="build-key-use" id="build-key-local-use" aria-label="${tr("Use {0}", escapeHtml(LOCAL_GROUP_TITLE))}">${tr("Use this")}</button>
+      </div>`;
+}
+
+function chooseLocal() {
+  if (typeof onChosenCb === "function") onChosenCb({ ...LOCAL_AI_CREDENTIAL });
+}
+
 async function confirmDelete(e) {
   const ok = await inlineConfirm({
     title: DELETE_TITLE,
@@ -184,19 +205,21 @@ async function renderSaved({ autoFreeAi = false } = {}) {
   }
   const entries = stored.entries || [];
   savedCount = entries.length;
-  const status = await fetchFreeAiStatus();
+  const [status, local] = await Promise.all([fetchFreeAiStatus(), boxClient(targetFqdn).fetch(LOCAL_AI_PATH).catch(() => null)]);
   if (autoFreeAi && shouldAutoUseFreeAi(entries, status)) {
     toast(tr("Using Flagship Inference"), "info");
     await chooseFreeAi();
     return;
   }
-  const freeRow = freeAiRowHtml(freeAiRowState(status), {
-    lastUsed: entries.length > 0 && stored.activeId === PROMO_ID,
-  });
+  const freeRow =
+    freeAiRowHtml(freeAiRowState(status), {
+      lastUsed: entries.length > 0 && stored.activeId === PROMO_ID,
+    }) + localRowHtml(localUsable(local));
   $("bk-cancel")?.classList.toggle("hidden", savedCount === 0);
   if (entries.length === 0) {
     box.innerHTML = freeRow;
     $("build-key-free-ai-use")?.addEventListener("click", () => void chooseFreeAi());
+    $("build-key-local-use")?.addEventListener("click", chooseLocal);
     if (freeAiRowState(status).kind !== "use") showForm(true);
     return;
   }
@@ -219,6 +242,7 @@ async function renderSaved({ autoFreeAi = false } = {}) {
       .join(""));
 
   $("build-key-free-ai-use")?.addEventListener("click", () => void chooseFreeAi());
+  $("build-key-local-use")?.addEventListener("click", chooseLocal);
   const byId = (id) => entries.find((e) => e.id === id);
   box.querySelectorAll("[data-use-id]").forEach((btn) => {
     btn.addEventListener("click", () => {

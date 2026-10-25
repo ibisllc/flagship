@@ -152,6 +152,7 @@ import { accountReadFetch } from "../lib/accountRead.js";
 import { SERVER_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
 import { debugAccessBannerHtml, debugAccessCardHtml, wireDebugAccess } from "./debug-access.js";
+import { localAiEntryHtml, wireLocalAiEntry } from "./local-ai.js";
 
 import { tr, trn, dateLocale } from "../lib/i18n.js";
 registerView("view-server-detail");
@@ -586,6 +587,7 @@ export async function renderServerDetail() {
         </div>
       </div>
       ${debugAccessCardHtml(body.debugAccess, { isAdmin: isAdminDevice(session), fqdn: body.serverFqdn })}
+      ${localAiEntryHtml()}
       <h2 class="mt-4">${tr("Diagnostics")}</h2>
       <div class="card" id="journal-card">
         <label class="caption">${tr("Unit")}</label>
@@ -651,6 +653,7 @@ export async function renderServerDetail() {
     wireDeadMan(body);
     wireJournal(body);
     wireDebugAccess(body);
+    wireLocalAiEntry(body.serverFqdn);
     wireMakeLeader(body);
     wireServerSharing(body);
     wireServerApps(body.serverFqdn);

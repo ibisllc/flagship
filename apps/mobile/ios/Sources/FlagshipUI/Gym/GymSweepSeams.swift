@@ -78,6 +78,7 @@ public enum GymSweepSeams {
         share(args, app, mocks)
         security(args, app, mocks)
         release03(args, app, mocks)
+        localAi(args, app, mocks)
         onboarding(args, app, mocks)
     }
 

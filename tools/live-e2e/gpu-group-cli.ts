@@ -3,6 +3,7 @@
  *
  *   npx tsx tools/live-e2e/gpu-group-cli.ts gpu-sim [out dir]
  *   npx tsx tools/live-e2e/gpu-group-cli.ts gpu-real [out dir]
+ *   npx tsx tools/live-e2e/gpu-group-cli.ts local-ai-cpu [out dir]   (local AI's images on the CPU)
  *
  * The same groups run inside `shared-run.ts --groups gpu-sim,gpu-real`.
  */
@@ -12,10 +13,11 @@ import { tmpdir } from "node:os";
 import { Recorder } from "./lib/harness.js";
 import { gpuReal } from "./groups/release03/gpuReal.js";
 import { gpuSim } from "./groups/release03/gpuSim.js";
+import { localAiCpu } from "./groups/release03/localAi.js";
 import type { GroupCtx } from "./groups/types.js";
 
 const name = process.argv[2] ?? "gpu-sim";
-const group = name === "gpu-real" ? gpuReal : gpuSim;
+const group = name === "gpu-real" ? gpuReal : name === "local-ai-cpu" ? localAiCpu : gpuSim;
 const dir = process.argv[3] ?? join(tmpdir(), `gpu-group-${Date.now()}`);
 mkdirSync(dir, { recursive: true });
 const rec = new Recorder(group.name);

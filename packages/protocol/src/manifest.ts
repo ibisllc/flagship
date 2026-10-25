@@ -841,7 +841,7 @@ export const NEVER_ALLOWED_MANIFEST_FIELDS: readonly string[] = [
   "privileged", "cap_add", "capabilities", "devices", "device_requests", "host_network", "network_mode",
   "pid", "ipc", "security_opt", "user", "userns_mode", "volumes", "mounts", "binds", "cdi", "hooks", "sysctls",
 ];
-export const V2_ONLY_MANIFEST_FIELDS: readonly string[] = ["accelerator", "gpu", "isolation", "resources", "health", "restart", "components"];
+export const V2_ONLY_MANIFEST_FIELDS: readonly string[] = ["accelerator", "gpu", "isolation", "resources", "health", "restart", "components", "localAi"];
 
 function refuseSecurityFields(o: Record<string, unknown>, prefix: string, e: (m: string) => void): void {
   for (const k of Object.keys(o)) {

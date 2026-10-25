@@ -15506,6 +15506,1714 @@
    }
   },
   {
+   "name": "docker-645",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/docker",
+     "args": [
+      "run",
+      "-d",
+      "--name",
+      "flagship-localai-0123456789abcdef",
+      "--runtime=runsc",
+      "--network",
+      "flagship-staging",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user",
+      "10001:10001",
+      "--memory",
+      "900m",
+      "--cpus",
+      "4",
+      "--pids-limit",
+      "1024",
+      "--label",
+      "flagship.role=local-ai",
+      "--mount",
+      "type=volume,src=flagship-models,dst=/models,readonly",
+      "-p",
+      "127.0.0.1:41234:8080",
+      "-e",
+      "LLAMA_API_KEY=k3y",
+      "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "-m",
+      "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+      "--jinja"
+     ],
+     "timeoutMs": 300000
+    }
+   }
+  },
+  {
+   "name": "docker-646",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/docker",
+     "args": [
+      "run",
+      "--rm",
+      "--name",
+      "flagship-aitrain-0123456789abcdef",
+      "--runtime=runsc",
+      "--network",
+      "flagship-staging",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user",
+      "10001:10001",
+      "--memory",
+      "512m",
+      "--cpus",
+      "2",
+      "--pids-limit",
+      "1024",
+      "--label",
+      "flagship.role=local-ai-train",
+      "--mount",
+      "type=volume,src=flagship-models,dst=/models,readonly",
+      "--mount",
+      "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+      "--mount",
+      "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+      "--entrypoint",
+      "/app/llama-finetune",
+      "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+      "-m",
+      "/out/ckpt-1.gguf",
+      "-f",
+      "/out/dataset.txt",
+      "-o",
+      "/out/ckpt-2.gguf"
+     ],
+     "timeoutMs": 300000
+    }
+   }
+  },
+  {
+   "name": "docker-647",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/docker",
+     "args": [
+      "run",
+      "--rm",
+      "--name",
+      "flagship-aitrain-0123456789abcdef",
+      "--runtime=runsc",
+      "--network",
+      "flagship-staging",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user",
+      "10001:10001",
+      "--memory",
+      "512m",
+      "--cpus",
+      "2",
+      "--pids-limit",
+      "1024",
+      "--label",
+      "flagship.role=local-ai-train",
+      "--mount",
+      "type=volume,src=flagship-models,dst=/models,readonly",
+      "--mount",
+      "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+      "--entrypoint",
+      "/app/llama-finetune",
+      "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+      "-m",
+      "/out/ckpt-1.gguf",
+      "-f",
+      "/out/dataset.txt",
+      "-o",
+      "/out/ckpt-2.gguf"
+     ],
+     "timeoutMs": 300000
+    }
+   }
+  },
+  {
+   "name": "docker-648",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc-nvproxy",
+     "--device",
+     "nvidia.com/gpu=0",
+     "--label",
+     "flagship.gpu.allocation=localai-0123456789abcdef",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-cuda-b11541@sha256:f88fa8d94d872312a4ad117acd490fa997bef81f03f161f0cfe0d74272e5b5bb",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "gpu": {
+    "localai-0123456789abcdef": {
+     "allocationId": "localai-0123456789abcdef",
+     "appId": "flagship-local-ai",
+     "container": "flagship-localai-0123456789abcdef",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    }
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/docker",
+     "args": [
+      "run",
+      "-d",
+      "--name",
+      "flagship-localai-0123456789abcdef",
+      "--runtime=runsc-nvproxy",
+      "--device",
+      "nvidia.com/gpu=0",
+      "--label",
+      "flagship.gpu.allocation=localai-0123456789abcdef",
+      "--network",
+      "flagship-staging",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user",
+      "10001:10001",
+      "--memory",
+      "900m",
+      "--cpus",
+      "4",
+      "--pids-limit",
+      "1024",
+      "--label",
+      "flagship.role=local-ai",
+      "--mount",
+      "type=volume,src=flagship-models,dst=/models,readonly",
+      "-p",
+      "127.0.0.1:41234:8080",
+      "-e",
+      "LLAMA_API_KEY=k3y",
+      "ghcr.io/ggml-org/llama.cpp:server-cuda-b11541@sha256:f88fa8d94d872312a4ad117acd490fa997bef81f03f161f0cfe0d74272e5b5bb",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "-m",
+      "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+      "--jinja"
+     ],
+     "timeoutMs": 300000
+    }
+   }
+  },
+  {
+   "name": "docker-649",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-650",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-651",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=bind,src=/var/flagship/data/local-ai,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "the box's state directory is never visible to a container"
+   }
+  },
+  {
+   "name": "docker-652",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-653",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-654",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--chess",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-655",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-656",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container runs under gVisor (--runtime runsc)"
+   }
+  },
+  {
+   "name": "docker-657",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container runs under gVisor (--runtime runsc)"
+   }
+  },
+  {
+   "name": "docker-658",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "--user",
+     "0",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container may not run as root"
+   }
+  },
+  {
+   "name": "docker-659",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "--network",
+     "host",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "host networking is not allowed"
+   }
+  },
+  {
+   "name": "docker-660",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a local-AI container mounts each of its volumes once"
+   }
+  },
+  {
+   "name": "docker-661",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-files-alice--notes,dst=/dataset,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-662",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-663",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/data,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-664",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+     "--mount",
+     "type=volume,src=flagship-devfiles-bob--bank,dst=/dataset,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a local-AI container mounts each of its volumes once"
+   }
+  },
+  {
+   "name": "docker-665",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-ffffffffffffffff,dst=/out",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-666",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-pgdata-0123456789abcdef01234567,dst=/out",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-667",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly,volume-subpath=..",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-668",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-alice--notes",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-669",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc-nvproxy",
+     "--device",
+     "nvidia.com/gpu=1",
+     "--label",
+     "flagship.gpu.allocation=localai-0123456789abcdef",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-cuda-b11541@sha256:f88fa8d94d872312a4ad117acd490fa997bef81f03f161f0cfe0d74272e5b5bb",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "gpu": {
+    "localai-0123456789abcdef": {
+     "allocationId": "localai-0123456789abcdef",
+     "appId": "flagship-local-ai",
+     "container": "flagship-localai-0123456789abcdef",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    }
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container gets only the devices its allocation holds"
+   }
+  },
+  {
+   "name": "host-670",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "/var/lib/docker/volumes/flagship-models/_data"
+    ]
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/bin/sh",
+     "args": [
+      "-c",
+      "set -eu; printf '%s  %s\\n' \"$1\" \"$2\" | sha256sum -c --status -; install -m 0444 -o root -g root -- \"$2\" \"$3/sha256-$1.gguf.partial\"; mv -f -- \"$3/sha256-$1.gguf.partial\" \"$3/sha256-$1.gguf\"",
+      "_",
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "/var/lib/flagship-privd/local-ai/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf",
+      "/var/lib/docker/volumes/flagship-models/_data"
+     ],
+     "timeoutMs": 1800000,
+     "copyIn": [
+      {
+       "from": "/var/flagship/data/local-ai/incoming/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf",
+       "to": "/var/lib/flagship-privd/local-ai/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "host-671",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "/var/lib/containers/storage/volumes/flagship-models/_data"
+    ]
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/bin/sh",
+     "args": [
+      "-c",
+      "set -eu; printf '%s  %s\\n' \"$1\" \"$2\" | sha256sum -c --status -; install -m 0444 -o root -g root -- \"$2\" \"$3/sha256-$1.gguf.partial\"; mv -f -- \"$3/sha256-$1.gguf.partial\" \"$3/sha256-$1.gguf\"",
+      "_",
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "/var/lib/flagship-privd/local-ai/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf",
+      "/var/lib/containers/storage/volumes/flagship-models/_data"
+     ],
+     "timeoutMs": 1800000,
+     "copyIn": [
+      {
+       "from": "/var/flagship/data/local-ai/incoming/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf",
+       "to": "/var/lib/flagship-privd/local-ai/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "host-672",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-remove",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "/var/lib/docker/volumes/flagship-models/_data"
+    ]
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/rm",
+     "args": [
+      "-f",
+      "--",
+      "/var/lib/docker/volumes/flagship-models/_data/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.gguf"
+     ],
+     "timeoutMs": 60000
+    }
+   }
+  },
+  {
+   "name": "host-673",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "out-prepare",
+     "0123456789abcdef",
+     "/var/lib/docker/volumes/flagship-aitrain-0123456789abcdef/_data"
+    ]
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/chown",
+     "args": [
+      "10001:10001",
+      "--",
+      "/var/lib/docker/volumes/flagship-aitrain-0123456789abcdef/_data"
+     ],
+     "timeoutMs": 30000
+    }
+   }
+  },
+  {
+   "name": "host-674",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+     "/var/lib/docker/volumes/flagship-models/_data"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-675",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "/var/lib/docker/volumes/flagship-models/_data"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-676",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/../x",
+     "/var/lib/docker/volumes/flagship-models/_data"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-677",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "/var/lib/docker/volumes/flagship-files-alice--chess/_data"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-678",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "/etc"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-679",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "/var/lib/docker/volumes/flagship-models/_data/.."
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-680",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-remove",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "/"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-681",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-remove",
+     "*",
+     "/var/lib/docker/volumes/flagship-models/_data"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-682",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "out-prepare",
+     "0123456789abcdef",
+     "/var/lib/docker/volumes/flagship-aitrain-ffffffffffffffff/_data"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-683",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "out-prepare",
+     "0123456789abcdef",
+     "/var/flagship"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-684",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "out-prepare",
+     "../x",
+     "/var/lib/docker/volumes/flagship-aitrain-../_data"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-685",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "model-install",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
+   "name": "host-686",
+   "op": "host",
+   "args": {
+    "file": "localai",
+    "argv": [
+     "serve",
+     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "/var/lib/docker/volumes/flagship-models/_data"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "localai with those arguments is not allowed"
+   }
+  },
+  {
    "name": "docker-14-podman",
    "op": "docker",
    "args": {
@@ -26531,6 +28239,1405 @@
     "ok": false,
     "code": "forbidden",
     "message": "--device is not allowed"
+   }
+  },
+  {
+   "name": "docker-645-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/podman",
+     "args": [
+      "run",
+      "-d",
+      "--name",
+      "flagship-localai-0123456789abcdef",
+      "--runtime=runsc",
+      "--network",
+      "flagship-staging",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user",
+      "10001:10001",
+      "--memory",
+      "900m",
+      "--cpus",
+      "4",
+      "--pids-limit",
+      "1024",
+      "--label",
+      "flagship.role=local-ai",
+      "--mount",
+      "type=volume,src=flagship-models,dst=/models,readonly",
+      "-p",
+      "127.0.0.1:41234:8080",
+      "-e",
+      "LLAMA_API_KEY=k3y",
+      "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "-m",
+      "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+      "--jinja"
+     ],
+     "timeoutMs": 300000
+    }
+   }
+  },
+  {
+   "name": "docker-646-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/podman",
+     "args": [
+      "run",
+      "--rm",
+      "--name",
+      "flagship-aitrain-0123456789abcdef",
+      "--runtime=runsc",
+      "--network",
+      "flagship-staging",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user",
+      "10001:10001",
+      "--memory",
+      "512m",
+      "--cpus",
+      "2",
+      "--pids-limit",
+      "1024",
+      "--label",
+      "flagship.role=local-ai-train",
+      "--mount",
+      "type=volume,src=flagship-models,dst=/models,readonly",
+      "--mount",
+      "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+      "--mount",
+      "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+      "--entrypoint",
+      "/app/llama-finetune",
+      "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+      "-m",
+      "/out/ckpt-1.gguf",
+      "-f",
+      "/out/dataset.txt",
+      "-o",
+      "/out/ckpt-2.gguf"
+     ],
+     "timeoutMs": 300000
+    }
+   }
+  },
+  {
+   "name": "docker-647-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/podman",
+     "args": [
+      "run",
+      "--rm",
+      "--name",
+      "flagship-aitrain-0123456789abcdef",
+      "--runtime=runsc",
+      "--network",
+      "flagship-staging",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user",
+      "10001:10001",
+      "--memory",
+      "512m",
+      "--cpus",
+      "2",
+      "--pids-limit",
+      "1024",
+      "--label",
+      "flagship.role=local-ai-train",
+      "--mount",
+      "type=volume,src=flagship-models,dst=/models,readonly",
+      "--mount",
+      "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+      "--entrypoint",
+      "/app/llama-finetune",
+      "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+      "-m",
+      "/out/ckpt-1.gguf",
+      "-f",
+      "/out/dataset.txt",
+      "-o",
+      "/out/ckpt-2.gguf"
+     ],
+     "timeoutMs": 300000
+    }
+   }
+  },
+  {
+   "name": "docker-648-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc-nvproxy",
+     "--device",
+     "nvidia.com/gpu=0",
+     "--label",
+     "flagship.gpu.allocation=localai-0123456789abcdef",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-cuda-b11541@sha256:f88fa8d94d872312a4ad117acd490fa997bef81f03f161f0cfe0d74272e5b5bb",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "gpu": {
+    "localai-0123456789abcdef": {
+     "allocationId": "localai-0123456789abcdef",
+     "appId": "flagship-local-ai",
+     "container": "flagship-localai-0123456789abcdef",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    }
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/bin/podman",
+     "args": [
+      "run",
+      "-d",
+      "--name",
+      "flagship-localai-0123456789abcdef",
+      "--runtime=runsc-nvproxy",
+      "--device",
+      "nvidia.com/gpu=0",
+      "--label",
+      "flagship.gpu.allocation=localai-0123456789abcdef",
+      "--network",
+      "flagship-staging",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--user",
+      "10001:10001",
+      "--memory",
+      "900m",
+      "--cpus",
+      "4",
+      "--pids-limit",
+      "1024",
+      "--label",
+      "flagship.role=local-ai",
+      "--mount",
+      "type=volume,src=flagship-models,dst=/models,readonly",
+      "-p",
+      "127.0.0.1:41234:8080",
+      "-e",
+      "LLAMA_API_KEY=k3y",
+      "ghcr.io/ggml-org/llama.cpp:server-cuda-b11541@sha256:f88fa8d94d872312a4ad117acd490fa997bef81f03f161f0cfe0d74272e5b5bb",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "-m",
+      "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+      "--jinja"
+     ],
+     "timeoutMs": 300000
+    }
+   }
+  },
+  {
+   "name": "docker-649-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-650-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-651-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=bind,src=/var/flagship/data/local-ai,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "the box's state directory is never visible to a container"
+   }
+  },
+  {
+   "name": "docker-652-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-653-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-654-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-alice--chess",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-655-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-656-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container runs under gVisor (--runtime runsc)"
+   }
+  },
+  {
+   "name": "docker-657-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container runs under gVisor (--runtime runsc)"
+   }
+  },
+  {
+   "name": "docker-658-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "--user",
+     "0",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a container may not run as root"
+   }
+  },
+  {
+   "name": "docker-659-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "--network",
+     "host",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "host networking is not allowed"
+   }
+  },
+  {
+   "name": "docker-660-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a local-AI container mounts each of its volumes once"
+   }
+  },
+  {
+   "name": "docker-661-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-files-alice--notes,dst=/dataset,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-662-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-663-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/data,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-664-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+     "--mount",
+     "type=volume,src=flagship-devfiles-bob--bank,dst=/dataset,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a local-AI container mounts each of its volumes once"
+   }
+  },
+  {
+   "name": "docker-665-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-ffffffffffffffff,dst=/out",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-666-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-pgdata-0123456789abcdef01234567,dst=/out",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-667-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-aitrain-0123456789abcdef",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly,volume-subpath=..",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-668-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "--rm",
+     "--name",
+     "flagship-alice--notes",
+     "--runtime=runsc",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "512m",
+     "--cpus",
+     "2",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai-train",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "--mount",
+     "type=volume,src=flagship-aitrain-0123456789abcdef,dst=/out",
+     "--mount",
+     "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly",
+     "--entrypoint",
+     "/app/llama-finetune",
+     "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd",
+     "-m",
+     "/out/ckpt-1.gguf",
+     "-f",
+     "/out/dataset.txt",
+     "-o",
+     "/out/ckpt-2.gguf"
+    ]
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-669-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc-nvproxy",
+     "--device",
+     "nvidia.com/gpu=1",
+     "--label",
+     "flagship.gpu.allocation=localai-0123456789abcdef",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "ghcr.io/ggml-org/llama.cpp:server-cuda-b11541@sha256:f88fa8d94d872312a4ad117acd490fa997bef81f03f161f0cfe0d74272e5b5bb",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "gpu": {
+    "localai-0123456789abcdef": {
+     "allocationId": "localai-0123456789abcdef",
+     "appId": "flagship-local-ai",
+     "container": "flagship-localai-0123456789abcdef",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    }
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "a GPU container gets only the devices its allocation holds"
    }
   }
  ]

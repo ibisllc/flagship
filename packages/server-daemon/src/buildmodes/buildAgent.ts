@@ -157,12 +157,11 @@ function initialUserMessage(repoFiles: string[], extra?: string, binaryFiles: st
   return steer.length > 0 ? `${base}\n\nExtra instructions from the owner: ${steer}` : base;
 }
 
-function toolSpecs(): ToolSpec[] {
+function toolSpecs(allowed: readonly string[]): ToolSpec[] {
   // The agent exposes the same surface as MCP, minus get_journal (the model
-  // doesn't need its own journal to build). Keeping the set tight reduces
-  // token cost + mis-calls.
-  const drop = new Set(["get_journal"]);
-  return BUILD_TOOL_SPECS.filter((t) => !drop.has(t.name)).map((t) => ({
+  // doesn't need its own journal to build): exactly what the session's grant
+  // allows (toolBroker.ts), so a tool it can't call is never offered.
+  return BUILD_TOOL_SPECS.filter((t) => allowed.includes(t.name)).map((t) => ({
     name: t.name,
     description: t.description,
     inputSchema: t.inputSchema,
@@ -205,7 +204,9 @@ export async function runBuildAgent(args: {
     return r;
   };
   const mode: BuildMode = args.mode ?? "git";
-  const specs = toolSpecs();
+  const specs = toolSpecs(
+    typeof args.tools.allowedTools === "function" ? args.tools.allowedTools() : BUILD_TOOL_SPECS.map((t) => t.name).filter((n) => n !== "get_journal"),
+  );
   const messages: ChatMessage[] = [
     { role: "system", content: BUILD_AGENT_SYSTEM_PROMPT },
     {

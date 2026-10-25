@@ -409,6 +409,45 @@ class LiveScreensClient(
     override suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         request("/api/screens/debug-access", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
 
+    override suspend fun localAi(): LocalAiView = request("/api/screens/local-ai", LocalAiView.serializer())
+
+    override suspend fun localAiJob(jobId: String): LocalAiJobDetail =
+        request("/api/screens/local-ai/jobs/${segment(jobId)}", LocalAiJobDetail.serializer())
+
+    override suspend fun localAiSettings(useGpu: Boolean?, serveModel: String?, clearServeModel: Boolean) {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            if (useGpu != null) put("useGpu", kotlinx.serialization.json.JsonPrimitive(useGpu))
+            if (clearServeModel) put("serveModel", kotlinx.serialization.json.JsonNull)
+            else if (serveModel != null) put("serveModel", kotlinx.serialization.json.JsonPrimitive(serveModel))
+        }
+        request<Unit>("/api/screens/local-ai/settings", null, "POST", body.toString().toByteArray())
+    }
+
+    override suspend fun localAiModel(action: String, modelId: String) {
+        require(action in setOf("download", "cancel", "delete"))
+        val body = kotlinx.serialization.json.buildJsonObject { put("modelId", kotlinx.serialization.json.JsonPrimitive(modelId)) }
+        request<Unit>("/api/screens/local-ai/models/$action", null, "POST", body.toString().toByteArray())
+    }
+
+    override suspend fun localAiService(start: Boolean, modelId: String?) {
+        val body = kotlinx.serialization.json.buildJsonObject { if (start && modelId != null) put("modelId", kotlinx.serialization.json.JsonPrimitive(modelId)) }
+        request<Unit>("/api/screens/local-ai/service/${if (start) "start" else "stop"}", null, "POST", body.toString().toByteArray())
+    }
+
+    override suspend fun localAiTrain(body: LocalAiTrainBody) {
+        request<Unit>("/api/screens/local-ai/train", null, "POST", json.encodeToString(LocalAiTrainBody.serializer(), body).toByteArray())
+    }
+
+    override suspend fun localAiJobAction(action: String, jobId: String) {
+        require(action in setOf("cancel", "resume", "delete"))
+        val body = kotlinx.serialization.json.buildJsonObject { put("jobId", kotlinx.serialization.json.JsonPrimitive(jobId)) }
+        request<Unit>("/api/screens/local-ai/jobs/$action", null, "POST", body.toString().toByteArray())
+    }
+
+    override suspend fun localAiGrant(body: LocalAiGrantBody) {
+        request<Unit>("/api/screens/local-ai/apps/grant", null, "POST", json.encodeToString(LocalAiGrantBody.serializer(), body).toByteArray())
+    }
+
     override suspend fun servicePermissions(serviceId: String): com.flagshipserver.app.core.ServicePermissions =
         request("/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/permissions", com.flagshipserver.app.core.ServicePermissions.serializer())
 

@@ -910,3 +910,44 @@ final class GymSecurityScreensTests: GymSweepCase {
         XCTAssertFalse(app.switches["sd-watch-boot-toggle"].exists)
     }
 }
+
+// MARK: - On this server (AI02, docs/architecture-v2/local-ai.md §3)
+
+extension GymSweepBuildTests {
+    /// The key step offers "On this server" once the box has a model, with its privacy line.
+    func test_keyStepOffersOnThisServer() throws {
+        let app = launch(tab: "apps", ["-smoke-chat", "-smoke-local-ai"])
+        openKeyStep(app)
+        let use = app.buttons["build-key-use-local"]
+        XCTAssertTrue(use.waitForExistence(timeout: 15), "A server with a model offers it.")
+        XCTAssertTrue(text(app, containing: "Runs only on this server. Nothing is sent anywhere.").exists)
+        shot(app, "key-step-on-this-server")
+    }
+
+    /// No model downloaded: the key step and the chat's menu say so in the box's terms; nothing is
+    /// offered in its place.
+    func test_onThisServerWithoutAModelSaysWhy() throws {
+        let app = launch(tab: "apps", ["-smoke-chat", "-smoke-local-ai-unavailable"])
+        openKeyStep(app)
+        XCTAssertTrue(any(app, "build-key-local-blocked").waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["build-key-use-local"].exists)
+        XCTAssertTrue(text(app, containing: "No model is downloaded on this server yet.").exists)
+        shot(app, "key-step-on-this-server-empty")
+    }
+
+    /// The chat's menu adds "On this server" once the box has a model: its downloaded models and
+    /// the privacy line, no credits.
+    func test_chatMenuListsOnThisServer() throws {
+        let app = launch(tab: "apps", ["-smoke-chat", "-smoke-local-ai"])
+        openChat(app, "gym-ready", title: "Ready to deploy")
+        let menu = app.buttons["vibecode-model-menu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 15))
+        menu.tap()
+        XCTAssertTrue(app.buttons["model-menu-flagship-local-qwen2.5-0.5b-q4"].waitForExistence(timeout: 15), "The downloaded model is listed.")
+        XCTAssertTrue(any(app, "model-menu-local-privacy").exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "On this server")).firstMatch.exists)
+        shot(app, "chat-menu-on-this-server")
+        closePopover(app)
+    }
+}
+

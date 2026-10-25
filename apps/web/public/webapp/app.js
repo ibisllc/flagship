@@ -137,6 +137,7 @@ import { initPendingServerView, enterPendingServer } from "./views/pending-serve
 import { initTrustedDevicesView } from "./views/trusted-devices.js";
 import { initAccountSecurityView } from "./views/account-security.js";
 import { initQuantumSafetyView } from "./views/quantum-safety.js";
+import { initLocalAiView } from "./views/local-ai.js";
 import { initAddDeviceView } from "./views/add-device.js";
 import { initJoinView, enterJoin } from "./views/join.js";
 import { initProfilesView, enterProfiles, renderProfiles, setProfileSwitchHandler } from "./views/profiles.js";
@@ -169,6 +170,7 @@ let leaderMadeCurrent = false;
 const SUB_VIEW_TABS = {
   "view-home": "home",
   "view-server-detail": "home",
+  "view-local-ai": "home",
   "view-pod-pair": "home",
   "view-create-server": "home",
   "view-services-list": "apps",
@@ -561,6 +563,7 @@ async function boot() {
   initTrustedDevicesView();
   initAccountSecurityView();
   initQuantumSafetyView();
+  initLocalAiView();
   initAddDeviceView();
   initJoinView();
   initVibeCodeView();

@@ -643,3 +643,87 @@ fn attached_claims_are_published_for_the_brokers() {
     bad["container"] = json!("../etc");
     assert_eq!(s.handle("gpu.claim", &bad).unwrap_err().code, "bad-request");
 }
+
+/// The exact claim the daemon's local AI sends (packages/server-daemon/src/localAi/devices.ts): the
+/// box's own app, exclusive and secret, with a CPU fallback. It shares the one fair queue with apps.
+fn local_ai_claim(id: &str, container: &str) -> serde_json::Value {
+    let app = json!({"appId": "flagship-local-ai", "installationId": "box", "generation": 1});
+    json!({
+        "allocationId": id,
+        "container": container,
+        "app": app,
+        "operationId": id,
+        "requirement": {"backend": "nvidia-cuda", "count": 1, "minimumMemoryMiB": 900, "capabilities": ["compute"], "sharing": "exclusive", "fallback": "cpu-if-supported"},
+        "approval": {"app": app, "backend": "nvidia-cuda", "maxCount": 1, "capabilities": ["compute"], "policies": ["exclusive"], "isolation": "gvisor-nvproxy", "secrecy": true, "trustDomain": null, "ownerConsent": null},
+    })
+}
+
+#[test]
+fn local_ai_claims_share_the_one_fair_queue_with_apps() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_h, _r, mut s) = svc(
+        dir.path(),
+        vec![SimGpu::rtx4090(1)],
+        CatalogSource::Loaded(catalog(&SimDrivers::default(), &[], false)),
+    );
+    let serve = "localai-0123456789abcdef";
+    let r = s
+        .handle(
+            "gpu.claim",
+            &local_ai_claim(serve, "flagship-localai-0123456789abcdef"),
+        )
+        .unwrap();
+    assert_eq!(r["state"], "reserved");
+    let att = s
+        .handle(
+            "gpu.attach",
+            &json!({"allocationId": serve, "engine": "docker"}),
+        )
+        .unwrap();
+    assert_eq!(att["args"][0], "--runtime=runsc-nvproxy");
+    let claims: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join("run-claims.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        claims["claims"][0]["container"],
+        "flagship-localai-0123456789abcdef"
+    );
+    // An app asks while the model server holds the only GPU: it waits, it is not given a shared device.
+    let app_claim = s.handle("gpu.claim", &claim_args("a", "app")).unwrap();
+    assert_eq!(app_claim["state"], "admitted");
+    // A fine-tuning job of the box's own queues too, behind the app (fair, in order).
+    let train = s
+        .handle(
+            "gpu.claim",
+            &local_ai_claim(
+                "aitrain-1111111111111111",
+                "flagship-aitrain-1111111111111111",
+            ),
+        )
+        .unwrap();
+    assert_eq!(train["state"], "admitted");
+    let st = s.status().unwrap();
+    assert!(st["queue"].to_string().contains("\"a\""), "{st}");
+    // The idle model server releases the GPU: the app is served next.
+    s.handle(
+        "gpu.release",
+        &json!({"allocationId": serve, "reason": "idle"}),
+    )
+    .unwrap();
+    let _ = s.tick(NOW);
+    let st = s.status().unwrap();
+    let state_of = |id: &str| {
+        st["allocations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["allocationId"] == id)
+            .map(|x| x["state"].as_str().unwrap_or_default().to_owned())
+    };
+    assert_eq!(state_of("a").as_deref(), Some("reserved"), "{st}");
+    assert_eq!(
+        state_of("aitrain-1111111111111111").as_deref(),
+        Some("admitted"),
+        "{st}"
+    );
+}

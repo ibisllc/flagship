@@ -154,6 +154,19 @@ fun AiKeyStepScreen(
             onUse = { scope.launch { useFreeAi() } },
         )
 
+        // On this server (docs/architecture-v2/local-ai.md): the box's own model, nothing paid,
+        // nothing sent anywhere. The box says if it has no model downloaded; nothing switches for it.
+        FSGroup {
+            FSRow(
+                title = com.flagshipserver.app.core.ModelGroups.LOCAL_TITLE,
+                subtitle = com.flagshipserver.app.core.LocalAiCopy.PRIVACY,
+                icon = Icons.Outlined.Lock,
+                iconTint = FS.colors.accent,
+                onClick = { onConfirm(com.flagshipserver.app.core.ModelGroups.localCredential()) },
+                modifier = Modifier.testTag("build-key-local"),
+            )
+        }
+
         if (showForm) {
             AiKeyEntryForm(
                 confirmLabel = stringResource(R.string.add_key),

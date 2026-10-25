@@ -322,6 +322,8 @@ fun GroupedModelMenuItems(
         val note = when {
             m == null -> MODELS_LOADING
             m is ModelMenu.Flagship && m.catalog == null -> MODELS_UNAVAILABLE
+            // On this server with nothing downloaded: say so; never point at another provider.
+            g.isLocal && m is ModelMenu.Own && m.options.isEmpty() -> FSStrings.get(R.string.local_ai_no_model_yet)
             else -> null
         }
         if (m == null || note != null) {
@@ -329,7 +331,7 @@ fun GroupedModelMenuItems(
                 note.orEmpty(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2),
+                modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2).testTag("model-group-note-${g.id}"),
             )
         } else {
             ModelMenuItems(m, choice.takeIf { g.id == groupId }, { onPick(g.id, it) }, onClose, "model-item-${g.id}-")

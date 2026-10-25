@@ -276,6 +276,33 @@ interface ScreensClient {
     suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
         throw ScreensError.NotImplemented("debug access")
 
+    // ---- Local AI (docs/architecture-v2/local-ai.md §4) ----------------------------------------
+
+    /** `GET /api/screens/local-ai`: models, the job queue, the GPUs and the app grants. */
+    suspend fun localAi(): LocalAiView = throw ScreensError.NotImplemented("local AI")
+
+    /** `GET /api/screens/local-ai/jobs/<jobId>`: one training job with its checkpoints. */
+    suspend fun localAiJob(jobId: String): LocalAiJobDetail = throw ScreensError.NotImplemented("local AI")
+
+    /** `POST …/settings`: [useGpu] and/or the model the box serves ([clearServeModel] sends null). */
+    suspend fun localAiSettings(useGpu: Boolean? = null, serveModel: String? = null, clearServeModel: Boolean = false): Unit =
+        throw ScreensError.NotImplemented("local AI")
+
+    /** `POST …/models/<action>` with `{modelId}`: download, cancel or delete. */
+    suspend fun localAiModel(action: String, modelId: String): Unit = throw ScreensError.NotImplemented("local AI")
+
+    /** `POST …/service/start {modelId?}` or `…/service/stop`. */
+    suspend fun localAiService(start: Boolean, modelId: String? = null): Unit = throw ScreensError.NotImplemented("local AI")
+
+    /** `POST …/train {order, signature}` (flagship/local-ai-train/v1). */
+    suspend fun localAiTrain(body: LocalAiTrainBody): Unit = throw ScreensError.NotImplemented("local AI")
+
+    /** `POST …/jobs/<action>` with `{jobId}`: cancel, resume or delete. */
+    suspend fun localAiJobAction(action: String, jobId: String): Unit = throw ScreensError.NotImplemented("local AI")
+
+    /** `POST …/apps/grant {order, signature}` (flagship/local-ai-app-grant/v1). */
+    suspend fun localAiGrant(body: LocalAiGrantBody): Unit = throw ScreensError.NotImplemented("local AI")
+
     /** `GET /api/screens/services/:id/permissions`: what can act for this app and the work under it. */
     suspend fun servicePermissions(serviceId: String): com.flagshipserver.app.core.ServicePermissions =
         throw ScreensError.NotImplemented("permissions")

@@ -439,6 +439,69 @@ for (const bad of [
 ]) wu(bad);
 add("setup", { step: "wasi-runtime" });
 add("setup", { step: "gpu-broker" });
+// Local AI (packages/server-daemon/src/localAi/containers.ts): the model server and fine-tuning runs, pinned
+// images only, the models volume read-only, a job's own output volume, an app's STAGED sample data read-only.
+const AI_SERVER = "ghcr.io/ggml-org/llama.cpp:server-b11541@sha256:bf3da52e92c083472b3d1c9f9da081f423ab9def95a87ec4bba51940382d75fd";
+const AI_SERVER_CUDA = "ghcr.io/ggml-org/llama.cpp:server-cuda-b11541@sha256:f88fa8d94d872312a4ad117acd490fa997bef81f03f161f0cfe0d74272e5b5bb";
+const AI_TRAIN = "ghcr.io/ggml-org/llama.cpp:full-b11541@sha256:bf349ede99cd7d4e2aa476323da02837a554b609ee02d40e363cf98515f4d640";
+const AI_HEX = "0123456789abcdef";
+const MODELS_MOUNT = "type=volume,src=flagship-models,dst=/models,readonly";
+const OUT_MOUNT = `type=volume,src=flagship-aitrain-${AI_HEX},dst=/out`;
+const DEV_DATA = "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly";
+const aiServe = (o: { name?: string; image?: string; mounts?: string[]; runtime?: string[]; extra?: string[] } = {}) => [
+  "run", "-d", "--name", o.name ?? `flagship-localai-${AI_HEX}`, ...(o.runtime ?? ["--runtime=runsc"]), "--network", "flagship-staging", "--read-only",
+  "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user", "10001:10001", "--memory", "900m", "--cpus", "4", "--pids-limit", "1024",
+  "--label", "flagship.role=local-ai", ...(o.mounts ?? [MODELS_MOUNT]).flatMap((m) => ["--mount", m]), "-p", "127.0.0.1:41234:8080",
+  "-e", "LLAMA_API_KEY=k3y", ...(o.extra ?? []), o.image ?? AI_SERVER, "--host", "0.0.0.0", "--port", "8080", "-m", `/models/sha256-${"a".repeat(64)}.gguf`, "--jinja",
+];
+const aiTrain = (o: { name?: string; image?: string; mounts?: string[]; extra?: string[] } = {}) => [
+  "run", "--rm", "--name", o.name ?? `flagship-aitrain-${AI_HEX}`, "--runtime=runsc", "--network", "flagship-staging", "--read-only", "--cap-drop=ALL",
+  "--security-opt=no-new-privileges", "--user", "10001:10001", "--memory", "512m", "--cpus", "2", "--pids-limit", "1024", "--label", "flagship.role=local-ai-train",
+  ...(o.mounts ?? [MODELS_MOUNT, OUT_MOUNT, DEV_DATA]).flatMap((m) => ["--mount", m]), ...(o.extra ?? []), "--entrypoint", "/app/llama-finetune", o.image ?? AI_TRAIN,
+  "-m", "/out/ckpt-1.gguf", "-f", "/out/dataset.txt", "-o", "/out/ckpt-2.gguf",
+];
+docker(...aiServe());
+docker(...aiTrain());
+docker(...aiTrain({ mounts: [MODELS_MOUNT, OUT_MOUNT] }));
+const AI_GPU: Record<string, GpuRunClaim> = {
+  [`localai-${AI_HEX}`]: { allocationId: `localai-${AI_HEX}`, appId: "flagship-local-ai", container: `flagship-localai-${AI_HEX}`, runtime: "runsc-nvproxy", devices: ["nvidia.com/gpu=0"] },
+};
+gpuDocker(aiServe({ image: AI_SERVER_CUDA, runtime: ["--runtime=runsc-nvproxy", "--device", "nvidia.com/gpu=0", "--label", `flagship.gpu.allocation=localai-${AI_HEX}`] }), AI_GPU);
+for (const bad of [
+  aiServe({ mounts: [MODELS_MOUNT, DEV_DATA] }), // the model server never sees an app's data
+  aiServe({ mounts: ["type=volume,src=flagship-models,dst=/models"] }), // models writable
+  aiServe({ mounts: ["type=bind,src=/var/flagship/data/local-ai,dst=/models,readonly"] }), // a host path
+  aiServe({ image: "ghcr.io/ggml-org/llama.cpp:server" }), // an unpinned image
+  aiServe({ image: IMG }), // another image under a local-AI name
+  aiServe({ name: "flagship-alice--chess" }), // the models volume on an app's container
+  aiServe({ name: "flagship-localai-0123" }),
+  aiServe({ runtime: [] }), // no gVisor
+  aiServe({ runtime: ["--runtime=runc"] }),
+  aiServe({ extra: ["--user", "0"] }),
+  aiServe({ extra: ["--network", "host"] }),
+  aiServe({ mounts: [MODELS_MOUNT, MODELS_MOUNT] }),
+  aiTrain({ mounts: [MODELS_MOUNT, OUT_MOUNT, "type=volume,src=flagship-files-alice--notes,dst=/dataset,readonly"] }), // a LIVE app's data
+  aiTrain({ mounts: [MODELS_MOUNT, OUT_MOUNT, "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset"] }), // dataset writable
+  aiTrain({ mounts: [MODELS_MOUNT, OUT_MOUNT, "type=volume,src=flagship-devfiles-alice--notes,dst=/data,readonly"] }),
+  aiTrain({ mounts: [MODELS_MOUNT, OUT_MOUNT, DEV_DATA, "type=volume,src=flagship-devfiles-bob--bank,dst=/dataset,readonly"] }), // two apps' data
+  aiTrain({ mounts: [MODELS_MOUNT, `type=volume,src=flagship-aitrain-${"f".repeat(16)},dst=/out`] }), // another job's output
+  aiTrain({ mounts: [MODELS_MOUNT, "type=volume,src=flagship-pgdata-0123456789abcdef01234567,dst=/out"] }),
+  aiTrain({ mounts: [MODELS_MOUNT, OUT_MOUNT, "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly,volume-subpath=.."] }),
+  aiTrain({ image: AI_SERVER, name: "flagship-alice--notes" }),
+]) docker(...bad);
+gpuDocker(aiServe({ image: AI_SERVER_CUDA, runtime: ["--runtime=runsc-nvproxy", "--device", "nvidia.com/gpu=1", "--label", `flagship.gpu.allocation=localai-${AI_HEX}`] }), AI_GPU); // a device it doesn't hold
+const MODELS_DIR = "/var/lib/docker/volumes/flagship-models/_data";
+const SHA = "b".repeat(64);
+host("localai", ["model-install", SHA, MODELS_DIR]);
+host("localai", ["model-install", SHA, "/var/lib/containers/storage/volumes/flagship-models/_data"]);
+host("localai", ["model-remove", SHA, MODELS_DIR]);
+host("localai", ["out-prepare", AI_HEX, `/var/lib/docker/volumes/flagship-aitrain-${AI_HEX}/_data`]);
+for (const bad of [
+  ["model-install", "B".repeat(64), MODELS_DIR], ["model-install", SHA.slice(1), MODELS_DIR], ["model-install", `${SHA}/../x`, MODELS_DIR],
+  ["model-install", SHA, "/var/lib/docker/volumes/flagship-files-alice--chess/_data"], ["model-install", SHA, "/etc"], ["model-install", SHA, `${MODELS_DIR}/..`],
+  ["model-remove", SHA, "/"], ["model-remove", "*", MODELS_DIR], ["out-prepare", AI_HEX, `/var/lib/docker/volumes/flagship-aitrain-${"f".repeat(16)}/_data`],
+  ["out-prepare", AI_HEX, "/var/flagship"], ["out-prepare", "../x", "/var/lib/docker/volumes/flagship-aitrain-../_data"], ["model-install", SHA], ["serve", SHA, MODELS_DIR],
+]) host("localai", bad);
 
 /** Every docker and docker.file case again, under Podman. */
 export const CORPUS: CorpusCase[] = [

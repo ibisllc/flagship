@@ -232,6 +232,16 @@ for it).
   summary (`summarised: true` on its state); the staged loop compacts in
   memory.
 
+## On this server (local inference, 0.3)
+
+A third group in the model menu, after Flagship Inference and the owner's keys: models downloaded on
+the box itself, served by a pinned llama.cpp image under gVisor (or a GPU claim through flagship-gpud).
+The apps send `credential: {provider: "flagship-local", apiKey: "local"}`; the box ignores the key
+and URL and uses its own loopback endpoint, never the relay. No credits, no cost consent (nothing is
+paid and nothing leaves the box). When the local model can't run the build fails with the reason;
+it never falls back to another provider. Models, the job queue, fine-tuning and app grants:
+`docs/architecture-v2/local-ai.md`.
+
 ## Continuing a chat (2026-10-15)
 
 An owner can carry on any recent AI build chat and switch model and

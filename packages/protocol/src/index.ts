@@ -57,6 +57,7 @@ export * from "./serverWildcardGrant.js";
 export * from "./enrollment.js";
 export * from "./browserGrant.js";
 export * from "./aiRepairConsent.js";
+export * from "./localAi.js";
 export * from "./accountReadToken.js";
 export * from "./addressPolicy.js";
 export * from "./bootSuspension.js";
