@@ -3098,4 +3098,14 @@
     <string name="activity_stack_switch_started">Empezó el cambio de arquitectura</string>
     <string name="activity_stack_switched">Terminó el cambio de arquitectura</string>
     <string name="activity_stack_switch_reverted">Se deshizo el cambio de arquitectura</string>
+    <string name="finalizing_the_install_image_do_not">Terminando la imagen de instalación; no la desconectes…</string>
+    <string name="reading_the_local_seed_image">Leyendo la imagen base local…</string>
+    <string name="couldnt_open_the_local_seed_at">No se pudo abrir la imagen base local en %1$s.</string>
+    <string name="the_local_seed_at_is_empty">La imagen base local en %1$s está vacía.</string>
+    <string name="using_local_seed_image">Usando la imagen base local (%1$s).</string>
+    <string name="developer_seed_source">Desarrollo: origen de la imagen base</string>
+    <string name="managed_manifest_download">Gestionada (descarga según el manifiesto)</string>
+    <string name="choose_local_seed">Elegir imagen base local…</string>
+    <string name="use_managed">Usar la gestionada</string>
+    <string name="finalizing">Terminando</string>
 </resources>

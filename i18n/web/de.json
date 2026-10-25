@@ -223,7 +223,7 @@
   "s254faa5618": "<1>Drei Gerätefamilien.</1> Die native iOS-App und die Android-App nutzen Secure Enclave / StrongBox: starke Schlüsselspeicherung. Die installierbare Web-App nutzt rein softwarebasiertes IndexedDB mit Passphrase: schwächer, geeignet für Tests oder Barrierefreiheit. Schlüssel teilen wir zwischen den Familien bewusst nicht: Eine Web-App-Identität und eine iOS-Identität sind unabhängige Konten, so wie Apple Pay nie zu Google Pay wechselt.",
   "s7289acbffd": "Was wir versprechen",
   "sf2a6e53eb2": "Der gesamte sicherheitskritische Code (Schlüsselableitung, Signatur, Verschlüsselung, Daemon, Boot-Pfad, mobile Clients) ist Open Source unter Apache 2.0.",
-  "s798346340b": "Das Boot-Image wird reproduzierbar gebaut: Du kannst prüfen, dass die Bytes zum Quellcode passen.",
+  "sf9fea4b86e": "Das Boot-Image wird reproduzierbar gebaut: Du kannst <1>prüfen, dass die Bytes dem unveränderten Debian entsprechen</1>.",
   "s91d0513e04": "Nur Standardprimitive: <1>Ed25519</1>, <2>X25519</2>, <3>AES-256-GCM</3>, <4>HKDF-SHA-256</4>. Keine selbstgebastelte Kryptografie.",
   "sa4b3981430": "Der Serverstart erfordert eine vom Telefon signierte Freigabe über das Netzwerk. Ein gestohlener Server kann sich nicht selbst entsperren.",
   "sf3e26c491b": "Die Authentifizierungsdomain (<1>flagshipserver.com</1>) ist von der Domain für Nutzerinhalte (<2>*.flagship.services</2>) getrennt, damit Nutzer-Apps nicht durch Subdomain-Verwechslung an Sitzungs-Cookies gelangen.",

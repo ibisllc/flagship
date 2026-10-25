@@ -3098,4 +3098,14 @@
     <string name="activity_stack_switch_started">アーキテクチャの移行を開始しました</string>
     <string name="activity_stack_switched">アーキテクチャの移行が完了しました</string>
     <string name="activity_stack_switch_reverted">アーキテクチャの移行は取り消されました</string>
+    <string name="finalizing_the_install_image_do_not">インストールイメージを仕上げています。抜かないでください…</string>
+    <string name="reading_the_local_seed_image">ローカルのシードイメージを読み込んでいます…</string>
+    <string name="couldnt_open_the_local_seed_at">%1$s のローカルシードを開けませんでした。</string>
+    <string name="the_local_seed_at_is_empty">%1$s のローカルシードは空です。</string>
+    <string name="using_local_seed_image">ローカルのシードイメージを使用しています(%1$s)。</string>
+    <string name="developer_seed_source">開発者向け: シードの取得元</string>
+    <string name="managed_manifest_download">管理対象(マニフェストからダウンロード)</string>
+    <string name="choose_local_seed">ローカルシードを選択…</string>
+    <string name="use_managed">管理対象を使う</string>
+    <string name="finalizing">仕上げ中</string>
 </resources>

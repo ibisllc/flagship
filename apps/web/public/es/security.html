@@ -66,7 +66,7 @@
         <h3>Lo que prometemos</h3>
         <ul class="bullets">
           <li>Todo el código crítico para la seguridad (derivación de claves, firma, cifrado, daemon, ruta de arranque, clientes móviles) es de código abierto bajo Apache 2.0.</li>
-          <li>La imagen de arranque se compila de forma reproducible: puedes verificar que los bytes coinciden con el código fuente.</li>
+          <li>La imagen de arranque se compila de forma reproducible: puedes <a href="/security/iso-seed.html">verificar que los bytes coinciden con Debian original</a>.</li>
           <li>Solo primitivas estándar: <code>Ed25519</code>, <code>X25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code>. Nada de criptografía casera.</li>
           <li>El arranque del servidor requiere una aprobación firmada por el teléfono a través de la red. Un servidor robado no puede desbloquearse solo.</li>
           <li>El dominio de autenticación (<code>flagshipserver.com</code>) está separado del dominio de contenido de usuario (<code>*.flagship.services</code>) para que las apps de usuario no puedan alcanzar las cookies de sesión mediante confusión de subdominios.</li>

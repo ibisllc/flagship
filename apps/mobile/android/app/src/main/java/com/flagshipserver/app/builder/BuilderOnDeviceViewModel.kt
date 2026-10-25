@@ -193,7 +193,7 @@ class BuilderOnDeviceViewModel(
                         }
                         // Seed-and-append: overwrite the seed's pre-declared FLAGSHIP region.
                         injected.placement?.let { placement ->
-                            set(Phase.Finalizing, status = "Finalizing the install image — do not unplug…")
+                            set(Phase.Finalizing, status = FSStrings.get(R.string.finalizing_the_install_image_do_not))
                             placement.place(writer, cap)
                         }
                         n
@@ -230,19 +230,19 @@ class BuilderOnDeviceViewModel(
      * progress on the Downloading/Verifying phases like the managed path.
      */
     private fun copyLocalSeed(uri: String): File {
-        set(Phase.Downloading, status = "Reading the local seed image…")
+        set(Phase.Downloading, status = FSStrings.get(R.string.reading_the_local_seed_image))
         val app = getApplication<Application>()
         val dir = File(app.cacheDir, "flagship-builder").apply { mkdirs() }
         val out = File(dir, "local-seed.iso")
         val input = if (uri.startsWith("content://")) {
             app.contentResolver.openInputStream(android.net.Uri.parse(uri))
-                ?: throw RuntimeException("Couldn't open the local seed at $uri.")
+                ?: throw RuntimeException(FSStrings.get(R.string.couldnt_open_the_local_seed_at, uri))
         } else {
             File(uri.removePrefix("file://")).inputStream()
         }
         input.use { ins -> out.outputStream().use { os -> ins.copyTo(os, 1 shl 20) } }
-        if (out.length() == 0L) throw RuntimeException("The local seed at $uri is empty.")
-        set(Phase.Verifying, progress = 1.0, status = "Using local seed image (${human(out.length())}).")
+        if (out.length() == 0L) throw RuntimeException(FSStrings.get(R.string.the_local_seed_at_is_empty, uri))
+        set(Phase.Verifying, progress = 1.0, status = FSStrings.get(R.string.using_local_seed_image, human(out.length())))
         return out
     }
 

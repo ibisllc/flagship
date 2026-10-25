@@ -3098,4 +3098,14 @@
     <string name="activity_stack_switch_started">已开始迁移架构</string>
     <string name="activity_stack_switched">架构迁移已完成</string>
     <string name="activity_stack_switch_reverted">架构迁移已撤销</string>
+    <string name="finalizing_the_install_image_do_not">正在完成安装镜像,请勿拔出…</string>
+    <string name="reading_the_local_seed_image">正在读取本地种子镜像…</string>
+    <string name="couldnt_open_the_local_seed_at">无法打开位于 %1$s 的本地种子镜像。</string>
+    <string name="the_local_seed_at_is_empty">位于 %1$s 的本地种子镜像为空。</string>
+    <string name="using_local_seed_image">正在使用本地种子镜像(%1$s)。</string>
+    <string name="developer_seed_source">开发者:种子镜像来源</string>
+    <string name="managed_manifest_download">托管(按清单下载)</string>
+    <string name="choose_local_seed">选择本地种子镜像…</string>
+    <string name="use_managed">使用托管镜像</string>
+    <string name="finalizing">正在完成</string>
 </resources>

@@ -3095,5 +3095,15 @@
   "activity_gpu_approval_withdrawn": "已撤回应用的 GPU 使用权",
   "activity_stack_switch_started": "已开始迁移架构",
   "activity_stack_switched": "架构迁移已完成",
-  "activity_stack_switch_reverted": "架构迁移已撤销"
+  "activity_stack_switch_reverted": "架构迁移已撤销",
+  "finalizing_the_install_image_do_not": "正在完成安装镜像,请勿拔出…",
+  "reading_the_local_seed_image": "正在读取本地种子镜像…",
+  "couldnt_open_the_local_seed_at": "无法打开位于 %1$s 的本地种子镜像。",
+  "the_local_seed_at_is_empty": "位于 %1$s 的本地种子镜像为空。",
+  "using_local_seed_image": "正在使用本地种子镜像(%1$s)。",
+  "developer_seed_source": "开发者:种子镜像来源",
+  "managed_manifest_download": "托管(按清单下载)",
+  "choose_local_seed": "选择本地种子镜像…",
+  "use_managed": "使用托管镜像",
+  "finalizing": "正在完成"
 }

@@ -66,7 +66,7 @@
         <h3>我们的承诺</h3>
         <ul class="bullets">
           <li>所有对安全至关重要的代码（密钥派生、签名、加密、守护进程、启动路径、移动客户端）均以 Apache 2.0 开源。</li>
-          <li>启动镜像采用可复现构建：你可以验证字节与源码一致。</li>
+          <li>启动镜像以可复现的方式构建:你可以<a href="/security/iso-seed.html">核实其字节与原版 Debian 一致</a>。</li>
           <li>只使用标准原语：<code>Ed25519</code>、<code>X25519</code>、<code>AES-256-GCM</code>、<code>HKDF-SHA-256</code>。绝无自制密码学。</li>
           <li>服务器启动需要手机通过网络签署的批准。被盗的服务器无法自行解锁。</li>
           <li>认证域名（<code>flagshipserver.com</code>）与用户内容域名（<code>*.flagship.services</code>）相互分离，因此用户应用无法通过子域名混淆获取会话 Cookie。</li>
