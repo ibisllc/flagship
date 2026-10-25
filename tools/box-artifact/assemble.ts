@@ -12,6 +12,8 @@ import { join } from "node:path";
 import { buildTar, collectTree, gzipDeterministic, sha256Hex, type TarEntry } from "./tar.js";
 
 /** The only top-level names a box needs at run time. Everything else stays out of the artifact. */
+export const isRustBinaryName = (name: string): boolean => /^flagship-[a-z]+(-[a-z]+)*$/.test(name);
+
 export const APP_TOP_LEVEL: readonly string[] = [
   "package.json",
   "package-lock.json",
@@ -109,7 +111,7 @@ export function assembleArtifact(input: AssembleInput): AssembledArtifact {
     if (!input.rustPinsJson) throw new Error("Rust binaries need their PINS.json");
     entries.push({ kind: "dir", path: `${root}/app/installer/rust` });
     for (const name of Object.keys(input.rustBinaries).sort()) {
-      if (!/^flagship-[a-z]+$/.test(name)) throw new Error(`bad Rust binary name ${name}`);
+      if (!isRustBinaryName(name)) throw new Error(`bad Rust binary name ${name}`);
       entries.push({ kind: "file", path: `${root}/app/installer/rust/${name}`, data: readFileSync(input.rustBinaries[name]!), executable: true });
     }
     entries.push({ kind: "file", path: `${root}/app/installer/rust/PINS.json`, data: new TextEncoder().encode(input.rustPinsJson), executable: false });

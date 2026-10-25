@@ -11,8 +11,8 @@ import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { afterAll, describe, expect, it } from "vitest";
 import { ed } from "../../../packages/protocol/src/edSync.js";
-import { assembleArtifact, skipInApp, type BuildInfo } from "../assemble.js";
-import { archiveDigestFromShasums, assertNodeMeetsFloor, assertTargetBinaries, loadNodePins } from "../build.js";
+import { assembleArtifact, isRustBinaryName, skipInApp, type BuildInfo } from "../assemble.js";
+import { archiveDigestFromShasums, assertNodeMeetsFloor, assertTargetBinaries, loadNodePins, RUST_BINARIES } from "../build.js";
 import { buildSbom, componentsWithoutIntegrity } from "../sbom.js";
 import { buildTar, checkArchivePath, gzipDeterministic } from "../tar.js";
 
@@ -225,5 +225,14 @@ describe("the box's platform binaries", () => {
     expect(() => assertTargetBinaries(tree("darwin-arm64"), "x64")).toThrow(/lacks @esbuild\/linux-x64/);
     expect(() => assertTargetBinaries(tree("linux-x64", "darwin-arm64"), "x64")).toThrow(/other platforms/);
     expect(() => assertTargetBinaries(tree("linux-x64"), "arm64")).toThrow(/lacks @esbuild\/linux-arm64/);
+  });
+});
+
+describe("Rust binary names", () => {
+  it("accepts every binary the build ships and refuses a path or an odd name", () => {
+    for (const name of RUST_BINARIES) expect(isRustBinaryName(name), name).toBe(true);
+    for (const bad of ["flagship-", "flagship-a/b", "../flagship-keyd", "flagship-Keyd", "keyd", "flagship--x", "flagship-x-"]) {
+      expect(isRustBinaryName(bad), bad).toBe(false);
+    }
   });
 });
