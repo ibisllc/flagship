@@ -389,3 +389,12 @@ own control plane (next release; notes in docs/data-sovereignty.md).
   blog post). TODO-RM markers to resolve before launch: see F4b. Product version still 0.2: see F4c.
 - 2026-10-25: A1 landed `8b41f8ff6` (shell v181; compatibility.json pinned to 181). The feature
   branches feat/marketplace (v181…v184) must renumber above 181 at their next rebase.
+- 2026-10-25: release gym run 2 (gym 78f9fa308): boxes come up now. arch-v2 170 pass / 55 fail / 16
+  skip (browser verdict: fail); classic 36 pass / 8 fail. Failure list:
+  scratchpad/gym2-fails.txt (also derivable from gym-results/release-20261025T170312Z-*). Main
+  clusters: app sandbox ("Docker didn't pick up the gVisor runtime" / systemctl code 5) blocking app
+  installs, AI staging fence and data layer; cert check expects old SANs; share/remote sessions refused
+  by central authorization; no endorsed releases listed; plus first-contact proof, decommission,
+  app groups, WASI pinned install, local-AI delete 500, AT-LIVE-19 signature, no Chromium, gpu-sim
+  core quota, WORKERS_PLAN=paid. A triage agent is fixing them in the release worktree
+  (uncommitted until it reports); then rebase gym onto release/0.3 and run the release gym again.
