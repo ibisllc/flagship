@@ -38,7 +38,7 @@ const SURFACES = {
 const INFOPLIST_SEED = {
   NSCameraUsageDescription: { en: "Flagship uses the camera to scan a pairing QR shown by your server.", ctx: "App/project.yml INFOPLIST_KEY_NSCameraUsageDescription" },
   NSFaceIDUsageDescription: { en: "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.", ctx: "App/project.yml INFOPLIST_KEY_NSFaceIDUsageDescription" },
-  NSLocalNetworkUsageDescription: { en: "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay.", ctx: "App/project.yml INFOPLIST_KEY_NSLocalNetworkUsageDescription" },
+  NSLocalNetworkUsageDescription: { en: "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay, and finds your server there when Flagship can't be reached.", ctx: "App/project.yml INFOPLIST_KEY_NSLocalNetworkUsageDescription" },
   CFBundleDisplayName: { en: "Flagship", ctx: "app name under the icon", translatable: false },
 };
 // Which bundle runs a source file. Package code (FlagshipUI, FlagshipCore, FlagshipAPI …) runs in the

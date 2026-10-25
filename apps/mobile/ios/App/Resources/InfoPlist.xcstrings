@@ -89,37 +89,37 @@
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship se comunica directamente con tu servidor cuando está en la misma red, lo que es más rápido que pasar por el relé."
+            "value": "Flagship se comunica directamente con tu servidor cuando está en la misma red, lo que es más rápido que pasar por el relé, y lo encuentra ahí cuando no se puede contactar con Flagship."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship communique directement avec votre serveur lorsqu’il est sur le même réseau, ce qui est plus rapide que de passer par le relais."
+            "value": "Flagship communique directement avec votre serveur lorsqu'il est sur le même réseau, ce qui est plus rapide que de passer par le relais, et l'y retrouve lorsque Flagship est injoignable."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flagship kommuniziert direkt mit deinem Server, wenn er sich im selben Netzwerk befindet, was schneller ist als der Weg über das Relay."
+            "value": "Flagship spricht direkt mit deinem Server, wenn er im selben Netzwerk ist. Das ist schneller als über das Relay, und so findet Flagship deinen Server dort auch, wenn Flagship nicht erreichbar ist."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O Flagship se comunica diretamente com o seu servidor quando ele está na mesma rede, o que é mais rápido do que passar pelo relay."
+            "value": "O Flagship se comunica diretamente com seu servidor quando ele está na mesma rede, o que é mais rápido do que passar pelo relay, e o encontra lá quando o Flagship não pode ser acessado."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "サーバーが同じネットワーク上にある場合、Flagship はサーバーと直接通信します。リレーを経由するより高速です。"
+            "value": "サーバーが同じネットワーク上にある場合、Flagship はサーバーと直接通信します。リレーを経由するより高速で、Flagship に接続できないときもそのネットワーク上でサーバーを見つけられます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "当你的服务器在同一网络时，Flagship 会直接与其通信，比经由中继更快。"
+            "value": "当服务器与手机在同一网络时，Flagship 会直接与服务器通信，比经由中继更快；在无法连接 Flagship 时，也能在该网络上找到你的服务器。"
           }
         }
       }

@@ -162,6 +162,9 @@ public enum SettingsRoute: Hashable, Sendable {
     /// "Back up your account key" — passphrase-encrypted `.flagshipkey`
     /// export of the whole UMK. Reached from Settings → Recovery.
     case keyfileBackup
+    /// Offline control (docs/data-sovereignty.md): the account's servers on this Wi-Fi when
+    /// `.com` and the relay can't be reached.
+    case offlineControl
     case about
     /// Phase 3b — ADMIN side of cross-device QR pairing. Settings →
     /// Devices → Add device. Shows a pairing QR (a `/join` universal

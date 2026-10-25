@@ -11,6 +11,8 @@ public enum AccountGoneCopy {
     public static let body = String(localized: "This account no longer exists on Flagship. This can happen after a reset.")
     public static let restoreHint = String(localized: "If you saved a backup of your servers, you can restore it into a new account.")
     public static let create = String(localized: "Create a new account")
+    /// docs/data-sovereignty.md 4.1: rescue starts from what this device holds, not from `.com`.
+    public static let saveData = String(localized: "Save my servers' data")
     public static let remove = String(localized: "Remove it from this device")
     public static func account(_ name: String) -> String { "Account: \(name)" }
     public static let failed = String(localized: "Couldn't remove it yet. Close the app and try again.")
@@ -68,6 +70,7 @@ struct AccountGoneScreen: View {
     @Environment(AccountGoneCenter.self) private var gone: AccountGoneCenter?
     @State private var pending: Pending?
     @State private var showBackup = false
+    @State private var showRescue = false
     @State private var note: String?
     @State private var failure: String?
 
@@ -100,6 +103,12 @@ struct AccountGoneScreen: View {
                         warning(pending, c: c)
                     } else {
                         VStack(spacing: FS.space.s3) {
+                            // First: the keys on this device can still take a copy of each server's
+                            // data over the local network, and both buttons below can erase them.
+                            if RescueKeyCheck.holdsRescueKey(app) {
+                                FSSecondaryButton(AccountGoneCopy.saveData, block: true, large: true) { showRescue = true }
+                                    .accessibilityIdentifier("account-gone-save")
+                            }
                             FSPrimaryButton(AccountGoneCopy.create, block: true, large: true) { ask(.create) }
                                 .accessibilityIdentifier("account-gone-create")
                             Button(AccountGoneCopy.remove) { ask(.remove) }
@@ -133,6 +142,17 @@ struct AccountGoneScreen: View {
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityIdentifier("account-gone")
+        .sheet(isPresented: $showRescue) {
+            NavigationStack {
+                OfflineControlContainer(username: name, focus: nil)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showRescue = false }
+                                .accessibilityIdentifier("account-gone-rescue-done")
+                        }
+                    }
+            }
+        }
         .sheet(isPresented: $showBackup) {
             NavigationStack {
                 KeyfileExportScreen(vm: KeyfileExportViewModel(username: name))

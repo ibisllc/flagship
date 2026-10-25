@@ -8,7 +8,7 @@
     "ctx": "App/project.yml INFOPLIST_KEY_NSFaceIDUsageDescription"
   },
   "NSLocalNetworkUsageDescription": {
-    "en": "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay.",
+    "en": "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay, and finds your server there when Flagship can't be reached.",
     "ctx": "App/project.yml INFOPLIST_KEY_NSLocalNetworkUsageDescription"
   },
   "CFBundleDisplayName": {

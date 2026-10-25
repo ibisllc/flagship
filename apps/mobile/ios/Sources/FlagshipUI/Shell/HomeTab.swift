@@ -940,6 +940,9 @@ struct ServerDetailContainer: View {
     @State private var notAnswering = false
     @State private var pairVm: PodPairViewModel?
     @State private var demoPairing = false
+    /// The server Offline control is open for (from this page while it can't be reached).
+    @State private var offlineControlFor: String?
+    private struct OfflineTarget: Identifiable { let fqdn: String; var id: String { fqdn } }
 
     private var pod: PodInfo? { app.pods.first(where: { $0.podId == podId }) }
     /// The last pod seen for this page. A delete removes the pod before the
@@ -1031,9 +1034,21 @@ struct ServerDetailContainer: View {
                     },
                     onRefreshDetail: { await detailVm.load() },
                     onPair: { Task { await pairThenReload() } },
-                    onDeleted: onDeleted
+                    onDeleted: onDeleted,
+                    onOpenOfflineControl: shownPod.flatMap { p in p.fqdn.isEmpty ? nil : { offlineControlFor = p.fqdn } }
                 )
                 .environment(\.screensClient, boxClient)
+                .sheet(item: Binding(get: { offlineControlFor.map(OfflineTarget.init) }, set: { offlineControlFor = $0?.fqdn })) { t in
+                    NavigationStack {
+                        OfflineControlContainer(username: app.currentUser ?? "", focus: t.fqdn)
+                            .toolbar {
+                                ToolbarItem(placement: .topBarTrailing) {
+                                    Button("Done") { offlineControlFor = nil }
+                                        .accessibilityIdentifier("offline-control-done")
+                                }
+                            }
+                    }
+                }
             } else {
                 ProgressView()
             }

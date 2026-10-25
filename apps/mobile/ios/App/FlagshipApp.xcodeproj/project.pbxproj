@@ -44,6 +44,7 @@
 		816E9648DA4A66666DE744FA /* FlagshipWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */; };
 		834D62D11BC2D886AD2C5EEB /* FlagshipWatchWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53CF39E90AB3F77BFED7833A /* FlagshipWatchWidgetsBundle.swift */; };
 		849CB8F58773BF750ED3DEE7 /* GymAccountGoneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0878B12FBBD0483DF4D0AA6C /* GymAccountGoneTests.swift */; };
+		5E0FC1A7D2B94C3E8A61F2D1 /* GymOfflineControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B2C3D4E5F60718293A4B5 /* GymOfflineControlTests.swift */; };
 		89B28594D2F84B2D54E04364 /* AccessControlScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B7EF1E815F642D6162D58B3 /* AccessControlScreenshotTests.swift */; };
 		8C738115140ACB707212DE1C /* FlagshipWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8CDC40B8810F689102B838D2 /* GymEveryMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */; };
@@ -148,6 +149,7 @@
 		02E103AA00FB9BA7E6BEC6AE /* shared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = shared; path = ../../shared; sourceTree = SOURCE_ROOT; };
 		052606FE5632D693E043CD9D /* FlagshipWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FlagshipWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		0878B12FBBD0483DF4D0AA6C /* GymAccountGoneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymAccountGoneTests.swift; sourceTree = "<group>"; };
+		6A1B2C3D4E5F60718293A4B5 /* GymOfflineControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymOfflineControlTests.swift; sourceTree = "<group>"; };
 		0F66E9E7FBFDA0383ECDDDF9 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRootView.swift; sourceTree = "<group>"; };
 		158DE768BE8CA676C31DE548 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -375,6 +377,7 @@
 				3B7EF1E815F642D6162D58B3 /* AccessControlScreenshotTests.swift */,
 				B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */,
 				0878B12FBBD0483DF4D0AA6C /* GymAccountGoneTests.swift */,
+				6A1B2C3D4E5F60718293A4B5 /* GymOfflineControlTests.swift */,
 				22681341998C8DBEB11CF356 /* GymDeviceBugsTests.swift */,
 				9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */,
 				1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */,
@@ -651,6 +654,7 @@
 				89B28594D2F84B2D54E04364 /* AccessControlScreenshotTests.swift in Sources */,
 				348FD2E20DDB83B215026A45 /* AppStoreScreenshotTests.swift in Sources */,
 				849CB8F58773BF750ED3DEE7 /* GymAccountGoneTests.swift in Sources */,
+				5E0FC1A7D2B94C3E8A61F2D1 /* GymOfflineControlTests.swift in Sources */,
 				4DA2B1666DDC13A3F5C0A521 /* GymDeviceBugsTests.swift in Sources */,
 				8CDC40B8810F689102B838D2 /* GymEveryMergeTests.swift in Sources */,
 				BD9630458EA132BCD16ADCA4 /* GymFeatureMirrorTests.swift in Sources */,
@@ -767,7 +771,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay, and finds your server there when Flagship can't be reached.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -975,7 +979,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay, and finds your server there when Flagship can't be reached.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

@@ -117670,6 +117670,2958 @@
           }
         }
       }
+    },
+    "Save my servers' data": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar los datos de mis servidores"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer les données de mes serveurs"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daten meiner Server sichern"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salvar os dados dos meus servidores"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーのデータを保存"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存我的服务器数据"
+          }
+        }
+      }
+    },
+    "This file also contains your server admin key, and the list of your servers, so it can save their data without Flagship.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este archivo también contiene la clave de administrador de tus servidores y su lista, para poder guardar sus datos sin Flagship."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fichier contient aussi la clé d’administration de vos serveurs et leur liste, pour pouvoir enregistrer leurs données sans Flagship."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Datei enthält auch den Admin-Schlüssel deiner Server und ihre Liste, damit sich ihre Daten ohne Flagship sichern lassen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este arquivo também contém a chave de administrador dos seus servidores e a lista deles, para salvar os dados sem o Flagship."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このファイルにはサーバーの管理者キーとサーバーの一覧も含まれるため、Flagship なしでもデータを保存できます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此文件还包含你的服务器管理员密钥和服务器列表，因此无需 Flagship 也能保存它们的数据。"
+          }
+        }
+      }
+    },
+    "Offline control": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Control sin conexión"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contrôle hors ligne"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline-Steuerung"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controle offline"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフライン操作"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "离线控制"
+          }
+        }
+      }
+    },
+    "Checked by its own key on this Wi-Fi. Flagship wasn't needed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprobado con su propia clave en esta red Wi-Fi. No hizo falta Flagship."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifié par sa propre clé sur ce Wi-Fi. Flagship n’a pas été nécessaire."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Über seinen eigenen Schlüssel in diesem WLAN geprüft. Flagship wurde nicht gebraucht."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificado pela própria chave nesta rede Wi-Fi. O Flagship não foi necessário."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この Wi-Fi 上でサーバー自身のキーで確認しました。Flagship は不要でした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已在此 Wi-Fi 上通过它自己的密钥验证。无需 Flagship。"
+          }
+        }
+      }
+    },
+    "No apps on this server.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay apps en este servidor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune app sur ce serveur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Apps auf diesem Server."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum app neste servidor."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーにはアプリがありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器上没有应用。"
+          }
+        }
+      }
+    },
+    "A restarted server needs Flagship to unlock its disk. While Flagship can't be reached, it stays locked after a restart, with your data safe on it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un servidor reiniciado necesita Flagship para desbloquear su disco. Mientras no se pueda contactar con Flagship, se queda bloqueado tras reiniciarse, con tus datos a salvo en él."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un serveur redémarré a besoin de Flagship pour déverrouiller son disque. Tant que Flagship est injoignable, il reste verrouillé après un redémarrage, vos données à l’abri dessus."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein neu gestarteter Server braucht Flagship, um seine Festplatte zu entsperren. Solange Flagship nicht erreichbar ist, bleibt er nach einem Neustart gesperrt, deine Daten sicher darauf."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um servidor reiniciado precisa do Flagship para desbloquear o disco. Enquanto o Flagship não puder ser acessado, ele fica bloqueado após reiniciar, com seus dados seguros nele."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再起動したサーバーはディスクのロック解除に Flagship が必要です。Flagship に接続できない間は再起動後もロックされたままですが、データはサーバー上で安全です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重启后的服务器需要 Flagship 才能解锁磁盘。无法连接 Flagship 时，重启后它会保持锁定，你的数据仍安全地保存在上面。"
+          }
+        }
+      }
+    },
+    "Rescue my data": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rescatar mis datos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sauver mes données"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meine Daten retten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resgatar meus dados"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "データを救出"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "抢救我的数据"
+          }
+        }
+      }
+    },
+    "Use your server without Flagship": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa tu servidor sin Flagship"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisez votre serveur sans Flagship"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deinen Server ohne Flagship nutzen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use seu servidor sem o Flagship"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship なしでサーバーを使う"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无需 Flagship 使用你的服务器"
+          }
+        }
+      }
+    },
+    "When Flagship or the relay can't be reached, this phone can still reach your server on the same Wi-Fi. It checks the server by its own key, and every action is signed by this phone and checked by the server. Adding devices, unlocking the server's disk after a restart, and changes to your account still need Flagship.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuando no se puede contactar con Flagship ni con el relé, este teléfono aún puede llegar a tu servidor en la misma red Wi-Fi. Comprueba el servidor con su propia clave, y cada acción la firma este teléfono y la comprueba el servidor. Añadir dispositivos, desbloquear el disco del servidor tras un reinicio y los cambios en tu cuenta siguen necesitando Flagship."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand Flagship ou le relais est injoignable, ce téléphone peut quand même joindre votre serveur sur le même Wi-Fi. Il vérifie le serveur par sa propre clé, et chaque action est signée par ce téléphone et vérifiée par le serveur. Ajouter des appareils, déverrouiller le disque du serveur après un redémarrage et modifier votre compte nécessitent toujours Flagship."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn Flagship oder das Relay nicht erreichbar sind, erreicht dieses Telefon deinen Server trotzdem im selben WLAN. Es prüft den Server über seinen eigenen Schlüssel, und jede Aktion wird von diesem Telefon signiert und vom Server geprüft. Geräte hinzufügen, die Festplatte des Servers nach einem Neustart entsperren und Änderungen an deinem Konto brauchen weiterhin Flagship."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quando o Flagship ou o relay não podem ser acessados, este celular ainda alcança seu servidor na mesma rede Wi-Fi. Ele verifica o servidor pela própria chave, e cada ação é assinada por este celular e verificada pelo servidor. Adicionar dispositivos, desbloquear o disco do servidor após reiniciar e alterar sua conta ainda precisam do Flagship."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship やリレーに接続できないときも、このスマートフォンは同じ Wi-Fi 上のサーバーに接続できます。サーバーはサーバー自身のキーで確認し、すべての操作はこのスマートフォンが署名してサーバーが確認します。デバイスの追加、再起動後のディスクのロック解除、アカウントの変更には引き続き Flagship が必要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连接 Flagship 或中继时，这部手机仍能在同一 Wi-Fi 上连接你的服务器。它通过服务器自己的密钥验证服务器，每个操作都由这部手机签名、由服务器验证。添加设备、重启后解锁服务器磁盘以及更改账户仍需要 Flagship。"
+          }
+        }
+      }
+    },
+    "This phone doesn't know any of your servers yet. Enter one below.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este teléfono aún no conoce ninguno de tus servidores. Introduce uno abajo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce téléphone ne connaît encore aucun de vos serveurs. Saisissez-en un ci-dessous."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Telefon kennt noch keinen deiner Server. Gib unten einen ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este celular ainda não conhece nenhum dos seus servidores. Informe um abaixo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このスマートフォンはまだあなたのサーバーを知りません。下に入力してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这部手机还不知道你的任何服务器。请在下方输入一个。"
+          }
+        }
+      }
+    },
+    "Not found? Enter its address": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿No aparece? Introduce su dirección"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introuvable ? Saisissez son adresse"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gefunden? Adresse eingeben"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não encontrou? Informe o endereço"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "見つからない場合はアドレスを入力"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没找到？输入它的地址"
+          }
+        }
+      }
+    },
+    "The server shows its local address on its own screen. Your router's list of devices has it too.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor muestra su dirección local en su propia pantalla. La lista de dispositivos de tu router también la tiene."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur affiche son adresse locale sur son propre écran. La liste des appareils de votre routeur l’indique aussi."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Server zeigt seine lokale Adresse auf seinem eigenen Bildschirm. Die Geräteliste deines Routers hat sie auch."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O servidor mostra o endereço local na própria tela. A lista de dispositivos do seu roteador também mostra."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーは自身の画面にローカルアドレスを表示します。ルーターのデバイス一覧にも表示されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器会在自己的屏幕上显示本地地址。路由器的设备列表中也有。"
+          }
+        }
+      }
+    },
+    "Server name, like home.alice.flagship.services": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre del servidor, como home.alice.flagship.services"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom du serveur, par ex. home.alice.flagship.services"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servername, z. B. home.alice.flagship.services"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome do servidor, como home.alice.flagship.services"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバー名（例: home.alice.flagship.services）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器名称，例如 home.alice.flagship.services"
+          }
+        }
+      }
+    },
+    "Address, like 192.168.1.20": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dirección, como 192.168.1.20"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adresse, par ex. 192.168.1.20"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adresse, z. B. 192.168.1.20"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endereço, como 192.168.1.20"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アドレス（例: 192.168.1.20）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地址，例如 192.168.1.20"
+          }
+        }
+      }
+    },
+    "Connect to this address": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar a esta dirección"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se connecter à cette adresse"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit dieser Adresse verbinden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar a este endereço"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアドレスに接続"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接到此地址"
+          }
+        }
+      }
+    },
+    "Stop %@?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Detener %@?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter %@ ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ beenden?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parar %@?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を停止しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止 %@？"
+          }
+        }
+      }
+    },
+    "Restart %@?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Reiniciar %@?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redémarrer %@ ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ neu starten?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reiniciar %@?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を再起動しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重启 %@？"
+          }
+        }
+      }
+    },
+    "Start %@?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Iniciar %@?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrer %@ ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ starten?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar %@?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を開始しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动 %@？"
+          }
+        }
+      }
+    },
+    "Restart the server?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Reiniciar el servidor?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redémarrer le serveur ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server neu starten?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reiniciar o servidor?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーを再起動しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重启服务器？"
+          }
+        }
+      }
+    },
+    "Shut down the server?": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Apagar el servidor?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Éteindre le serveur ?"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server herunterfahren?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desligar o servidor?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーをシャットダウンしますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭服务器？"
+          }
+        }
+      }
+    },
+    "People using it lose it until you start it again. Its data stays.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quienes lo usan lo pierden hasta que vuelvas a iniciarlo. Sus datos se conservan."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les personnes qui l’utilisent le perdent jusqu’à ce que vous le redémarriez. Ses données restent."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wer sie nutzt, verliert sie, bis du sie wieder startest. Ihre Daten bleiben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quem o usa perde o acesso até você iniciá-lo de novo. Os dados continuam."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再び開始するまで、利用者は使えなくなります。データは残ります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在你重新启动之前，使用者将无法使用。数据会保留。"
+          }
+        }
+      }
+    },
+    "It's back in a moment.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vuelve en un momento."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il revient dans un instant."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gleich wieder da."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volta em instantes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すぐに戻ります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "马上就会恢复。"
+          }
+        }
+      }
+    },
+    "While Flagship can't be reached, the server can't unlock its disk after the restart, so it and its apps stay off until Flagship is back. Your data stays safe on it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mientras no se pueda contactar con Flagship, el servidor no puede desbloquear su disco tras el reinicio, así que él y sus apps siguen apagados hasta que Flagship vuelva. Tus datos siguen a salvo en él."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tant que Flagship est injoignable, le serveur ne peut pas déverrouiller son disque après le redémarrage : lui et ses apps restent éteints jusqu’au retour de Flagship. Vos données restent à l’abri dessus."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solange Flagship nicht erreichbar ist, kann der Server seine Festplatte nach dem Neustart nicht entsperren. Er und seine Apps bleiben aus, bis Flagship zurück ist. Deine Daten bleiben sicher darauf."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enquanto o Flagship não puder ser acessado, o servidor não consegue desbloquear o disco após reiniciar, então ele e seus apps ficam desligados até o Flagship voltar. Seus dados continuam seguros nele."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flagship に接続できない間は、再起動後にサーバーがディスクのロックを解除できないため、Flagship が戻るまでサーバーとアプリは停止したままです。データはサーバー上で安全です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连接 Flagship 时，服务器重启后无法解锁磁盘，因此在 Flagship 恢复之前，它和它的应用都会保持关闭。你的数据仍安全地保存在上面。"
+          }
+        }
+      }
+    },
+    "It stays off until someone turns it on. Turning it on needs Flagship to unlock its disk.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se queda apagado hasta que alguien lo encienda. Al encenderlo necesita Flagship para desbloquear su disco."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il reste éteint jusqu’à ce que quelqu’un l’allume. À l’allumage, il a besoin de Flagship pour déverrouiller son disque."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Er bleibt aus, bis ihn jemand einschaltet. Beim Einschalten braucht er Flagship, um seine Festplatte zu entsperren."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ele fica desligado até alguém ligá-lo. Ao ligar, precisa do Flagship para desbloquear o disco."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "誰かが電源を入れるまで停止したままです。電源を入れるとディスクのロック解除に Flagship が必要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它会一直关闭，直到有人开机。开机时需要 Flagship 来解锁磁盘。"
+          }
+        }
+      }
+    },
+    "Checking %@ by its own key…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprobando %@ con su propia clave…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérification de %@ par sa propre clé…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wird über seinen eigenen Schlüssel geprüft …"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificando %@ pela própria chave…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ をサーバー自身のキーで確認中…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在通过 %@ 自己的密钥验证…"
+          }
+        }
+      }
+    },
+    "This phone never confirmed this server's own key, so it can't check it here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este teléfono nunca confirmó la clave propia de este servidor, así que no puede comprobarlo aquí."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce téléphone n’a jamais confirmé la clé propre de ce serveur, il ne peut donc pas le vérifier ici."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Telefon hat den eigenen Schlüssel dieses Servers nie bestätigt und kann ihn hier nicht prüfen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este celular nunca confirmou a chave própria deste servidor, então não pode verificá-lo aqui."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このスマートフォンはこのサーバー自身のキーを確認したことがないため、ここでは確認できません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这部手机从未确认过此服务器自己的密钥，因此无法在这里验证它。"
+          }
+        }
+      }
+    },
+    "Found on this Wi-Fi at %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encontrado en esta red Wi-Fi en %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trouvé sur ce Wi-Fi à %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In diesem WLAN gefunden unter %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encontrado nesta rede Wi-Fi em %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この Wi-Fi 上の %@ で見つかりました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已在此 Wi-Fi 上的 %@ 找到"
+          }
+        }
+      }
+    },
+    "Looking for it on this Wi-Fi…": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscándolo en esta red Wi-Fi…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recherche sur ce Wi-Fi…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird in diesem WLAN gesucht …"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Procurando nesta rede Wi-Fi…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この Wi-Fi 上で検索中…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在此 Wi-Fi 上查找…"
+          }
+        }
+      }
+    },
+    "Connected to %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectado a %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecté à %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbunden mit %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectado a %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ に接続しました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接到 %@"
+          }
+        }
+      }
+    },
+    "Make a backup of this server and save it on this phone. To bring it back, make a new account and use Add a server, Import a backup.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea una copia de seguridad de este servidor y guárdala en este teléfono. Para recuperarla, crea una cuenta nueva y usa Añadir un servidor, Importar una copia de seguridad."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créez une sauvegarde de ce serveur et enregistrez-la sur ce téléphone. Pour la restaurer, créez un nouveau compte et utilisez Ajouter un serveur, Importer une sauvegarde."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstelle ein Backup dieses Servers und speichere es auf diesem Telefon. Zum Wiederherstellen ein neues Konto anlegen und Server hinzufügen, Backup importieren wählen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faça um backup deste servidor e salve neste celular. Para restaurar, crie uma conta nova e use Adicionar um servidor, Importar um backup."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーのバックアップを作成してこのスマートフォンに保存します。復元するには、新しいアカウントを作成して「サーバーを追加」→「バックアップをインポート」を使います。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为此服务器创建备份并保存到这部手机上。要恢复，请创建新账户，然后使用“添加服务器”中的“导入备份”。"
+          }
+        }
+      }
+    },
+    "Software %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Software %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logiciel %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Software %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Software %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ソフトウェア %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "软件 %@"
+          }
+        }
+      }
+    },
+    "Disk: %@ of %@ used": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disco: %@ de %@ usados"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disque : %@ sur %@ utilisés"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Festplatte: %@ von %@ belegt"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disco: %@ de %@ usados"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ディスク: %@ / %@ 使用中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "磁盘：已用 %@，共 %@"
+          }
+        }
+      }
+    },
+    "Web certificate expired %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El certificado web caducó el %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificat web expiré le %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webzertifikat abgelaufen am %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificado web expirou em %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web 証明書の有効期限切れ: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页证书已于 %@ 过期"
+          }
+        }
+      }
+    },
+    "Web certificate valid until %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificado web válido hasta el %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificat web valide jusqu’au %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webzertifikat gültig bis %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificado web válido até %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web 証明書の有効期限: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页证书有效期至 %@"
+          }
+        }
+      }
+    },
+    "Unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconocido"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inconnu"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannt"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconhecido"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不明"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未知"
+          }
+        }
+      }
+    },
+    "Downloading… %lld %%": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargando… %lld %%"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléchargement… %lld %%"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird heruntergeladen … %lld %%"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baixando… %lld %%"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード中… %lld %%"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载… %lld%%"
+          }
+        }
+      }
+    },
+    "Resume the download": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reanudar la descarga"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprendre le téléchargement"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download fortsetzen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retomar o download"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロードを再開"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "继续下载"
+          }
+        }
+      }
+    },
+    "Your data is saved in one .flagship file. Keep it somewhere safe: Files, iCloud Drive, a USB drive, or AirDrop it to a computer. To restore it, make a new account and use Add a server, Import a backup, with its passcode.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tus datos están guardados en un archivo .flagship. Guárdalo en un lugar seguro: Archivos, iCloud Drive, una unidad USB o envíalo por AirDrop a un ordenador. Para restaurarlo, crea una cuenta nueva y usa Añadir un servidor, Importar una copia de seguridad, con su código."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos données sont enregistrées dans un fichier .flagship. Gardez-le en lieu sûr : Fichiers, iCloud Drive, une clé USB, ou envoyez-le par AirDrop à un ordinateur. Pour le restaurer, créez un nouveau compte et utilisez Ajouter un serveur, Importer une sauvegarde, avec son code d’accès."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Daten sind in einer .flagship-Datei gesichert. Bewahre sie sicher auf: in Dateien, in iCloud Drive, auf einem USB-Stick oder per AirDrop auf einem Computer. Zum Wiederherstellen ein neues Konto anlegen und Server hinzufügen, Backup importieren mit seinem Passcode wählen."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus dados estão salvos em um arquivo .flagship. Guarde em um lugar seguro: Arquivos, iCloud Drive, um pendrive ou envie por AirDrop para um computador. Para restaurar, crie uma conta nova e use Adicionar um servidor, Importar um backup, com o código."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "データは 1 つの .flagship ファイルに保存されました。安全な場所に保管してください: ファイル、iCloud Drive、USB ドライブ、または AirDrop でコンピューターへ。復元するには、新しいアカウントを作成し、パスコードを使って「サーバーを追加」→「バックアップをインポート」を使います。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的数据已保存在一个 .flagship 文件中。请将它存放在安全的地方：文件、iCloud 云盘、U 盘，或通过隔空投送发送到电脑。要恢复，请创建新账户，然后使用“添加服务器”中的“导入备份”，并输入它的密码。"
+          }
+        }
+      }
+    },
+    "Make and download the backup": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crear y descargar la copia de seguridad"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créer et télécharger la sauvegarde"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backup erstellen und herunterladen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Criar e baixar o backup"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップを作成してダウンロード"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建并下载备份"
+          }
+        }
+      }
+    },
+    "Protect this backup with your account key": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proteger esta copia de seguridad con la clave de tu cuenta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Protéger cette sauvegarde avec la clé de votre compte"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Backup mit deinem Kontoschlüssel schützen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proteger este backup com a chave da sua conta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このバックアップをアカウントキーで保護"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用你的账户密钥保护此备份"
+          }
+        }
+      }
+    },
+    "%@ didn't answer on this network. Check that this phone is on the same Wi-Fi as the server, or enter its address.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ no respondió en esta red. Comprueba que este teléfono esté en la misma red Wi-Fi que el servidor, o introduce su dirección."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ n’a pas répondu sur ce réseau. Vérifiez que ce téléphone est sur le même Wi-Fi que le serveur, ou saisissez son adresse."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hat in diesem Netzwerk nicht geantwortet. Prüfe, ob dieses Telefon im selben WLAN wie der Server ist, oder gib seine Adresse ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ não respondeu nesta rede. Verifique se este celular está na mesma rede Wi-Fi que o servidor, ou informe o endereço."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ はこのネットワークで応答しませんでした。このスマートフォンがサーバーと同じ Wi-Fi にあるか確認するか、アドレスを入力してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 在此网络上没有响应。请检查这部手机是否与服务器在同一 Wi-Fi 上，或输入它的地址。"
+          }
+        }
+      }
+    },
+    "%@ wasn't found on this Wi-Fi. Check that this phone is on the same network as the server, or enter its address.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ no se encontró en esta red Wi-Fi. Comprueba que este teléfono esté en la misma red que el servidor, o introduce su dirección."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ est introuvable sur ce Wi-Fi. Vérifiez que ce téléphone est sur le même réseau que le serveur, ou saisissez son adresse."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wurde in diesem WLAN nicht gefunden. Prüfe, ob dieses Telefon im selben Netzwerk wie der Server ist, oder gib seine Adresse ein."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ não foi encontrado nesta rede Wi-Fi. Verifique se este celular está na mesma rede que o servidor, ou informe o endereço."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この Wi-Fi で %@ が見つかりませんでした。このスマートフォンがサーバーと同じネットワークにあるか確認するか、アドレスを入力してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此 Wi-Fi 上未找到 %@。请检查这部手机是否与服务器在同一网络上，或输入它的地址。"
+          }
+        }
+      }
+    },
+    "This phone has never confirmed %@'s own key, so it can't check that the server it finds is really yours. Open it once from Home while Flagship can be reached.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este teléfono nunca ha confirmado la clave propia de %@, así que no puede comprobar que el servidor que encuentre sea realmente tuyo. Ábrelo una vez desde Inicio mientras se pueda contactar con Flagship."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce téléphone n’a jamais confirmé la clé propre de %@, il ne peut donc pas vérifier que le serveur trouvé est bien le vôtre. Ouvrez-le une fois depuis l’accueil quand Flagship est joignable."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Telefon hat den eigenen Schlüssel von %@ nie bestätigt und kann daher nicht prüfen, ob der gefundene Server wirklich deiner ist. Öffne ihn einmal über die Startseite, solange Flagship erreichbar ist."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este celular nunca confirmou a chave própria de %@, então não pode verificar se o servidor encontrado é mesmo seu. Abra-o uma vez pelo Início enquanto o Flagship puder ser acessado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このスマートフォンは %@ 自身のキーを確認したことがないため、見つかったサーバーが本当にあなたのものか確認できません。Flagship に接続できるうちに、ホームから一度開いてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这部手机从未确认过 %@ 自己的密钥，因此无法确认找到的服务器确实是你的。请在能连接 Flagship 时从首页打开它一次。"
+          }
+        }
+      }
+    },
+    "Connect to %@ on this network": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar a %@ en esta red"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se connecter à %@ sur ce réseau"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit %@ in diesem Netzwerk verbinden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar a %@ nesta rede"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このネットワークで %@ に接続"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此网络上连接到 %@"
+          }
+        }
+      }
+    },
+    "This server's web certificate isn't valid any more (it expired, or its name no longer resolves). This phone checked the server by its own key instead.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El certificado web de este servidor ya no es válido (caducó, o su nombre ya no se resuelve). Este teléfono comprobó el servidor con su propia clave en su lugar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le certificat web de ce serveur n’est plus valide (il a expiré, ou son nom ne se résout plus). Ce téléphone a vérifié le serveur par sa propre clé à la place."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Webzertifikat dieses Servers ist nicht mehr gültig (abgelaufen, oder sein Name wird nicht mehr aufgelöst). Dieses Telefon hat den Server stattdessen über seinen eigenen Schlüssel geprüft."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O certificado web deste servidor não é mais válido (expirou, ou o nome não resolve mais). Este celular verificou o servidor pela própria chave."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーの Web 証明書は無効になっています（期限切れ、または名前が解決できません）。このスマートフォンは代わりにサーバー自身のキーで確認しました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器的网页证书已失效（已过期，或其名称已无法解析）。这部手机改用服务器自己的密钥进行了验证。"
+          }
+        }
+      }
+    },
+    "This isn't your server: what answered couldn't prove it holds the key of %@. Nothing was sent to it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este no es tu servidor: lo que respondió no pudo demostrar que tiene la clave de %@. No se le envió nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce n’est pas votre serveur : ce qui a répondu n’a pas pu prouver qu’il détient la clé de %@. Rien ne lui a été envoyé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das ist nicht dein Server: Was geantwortet hat, konnte nicht beweisen, dass es den Schlüssel von %@ besitzt. Nichts wurde gesendet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este não é o seu servidor: o que respondeu não conseguiu provar que tem a chave de %@. Nada foi enviado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これはあなたのサーバーではありません。応答した相手は %@ のキーを持っていることを証明できませんでした。何も送信していません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这不是你的服务器：响应方无法证明它持有 %@ 的密钥。未向它发送任何内容。"
+          }
+        }
+      }
+    },
+    "Something between this phone and the server is changing the connection, so this phone stopped. Nothing was sent to it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Algo entre este teléfono y el servidor está alterando la conexión, así que este teléfono se detuvo. No se le envió nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelque chose entre ce téléphone et le serveur modifie la connexion, ce téléphone s’est donc arrêté. Rien ne lui a été envoyé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Etwas zwischen diesem Telefon und dem Server verändert die Verbindung, daher hat dieses Telefon abgebrochen. Nichts wurde gesendet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Algo entre este celular e o servidor está alterando a conexão, então este celular parou. Nada foi enviado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このスマートフォンとサーバーの間で何かが接続を改ざんしているため、中止しました。何も送信していません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这部手机与服务器之间有东西在篡改连接，因此这部手机已停止。未发送任何内容。"
+          }
+        }
+      }
+    },
+    "Another server answered at that address.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Respondió otro servidor en esa dirección."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un autre serveur a répondu à cette adresse."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unter dieser Adresse hat ein anderer Server geantwortet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outro servidor respondeu nesse endereço."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "そのアドレスでは別のサーバーが応答しました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该地址上响应的是另一台服务器。"
+          }
+        }
+      }
+    },
+    "The server's clock and this phone's are more than two minutes apart. Check the time on both and try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El reloj del servidor y el de este teléfono difieren en más de dos minutos. Comprueba la hora en ambos e inténtalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’horloge du serveur et celle de ce téléphone ont plus de deux minutes d’écart. Vérifiez l’heure des deux et réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Uhren des Servers und dieses Telefons weichen mehr als zwei Minuten voneinander ab. Prüfe die Uhrzeit auf beiden und versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O relógio do servidor e o deste celular estão com mais de dois minutos de diferença. Verifique a hora nos dois e tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーとこのスマートフォンの時計が 2 分以上ずれています。両方の時刻を確認してもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器和这部手机的时钟相差超过两分钟。请检查两者的时间后重试。"
+          }
+        }
+      }
+    },
+    "The server's answer didn't match this phone's question. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La respuesta del servidor no coincidía con la pregunta de este teléfono. Inténtalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La réponse du serveur ne correspondait pas à la question de ce téléphone. Réessayez."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Antwort des Servers passte nicht zur Frage dieses Telefons. Versuche es erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A resposta do servidor não correspondeu à pergunta deste celular. Tente de novo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーの応答がこのスマートフォンの問い合わせと一致しませんでした。もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器的应答与这部手机的请求不符。请重试。"
+          }
+        }
+      }
+    },
+    "This server is set to post-quantum checks only, and it didn't prove itself that way. Nothing was sent to it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor está configurado solo para comprobaciones poscuánticas, y no se identificó de esa forma. No se le envió nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce serveur est réglé sur les vérifications post-quantiques uniquement, et il ne s’est pas prouvé ainsi. Rien ne lui a été envoyé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Server ist nur auf Post-Quanten-Prüfungen eingestellt und hat sich nicht so ausgewiesen. Nichts wurde gesendet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor está configurado só para verificações pós-quânticas, e não se comprovou assim. Nada foi enviado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーは耐量子チェックのみに設定されていますが、その方法で証明しませんでした。何も送信していません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器设为仅接受抗量子验证，但它没有以这种方式证明自己。未发送任何内容。"
+          }
+        }
+      }
+    },
+    "The server's post-quantum signature didn't check out, so this phone stopped. Nothing was sent to it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La firma poscuántica del servidor no era válida, así que este teléfono se detuvo. No se le envió nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La signature post-quantique du serveur n’était pas valide, ce téléphone s’est donc arrêté. Rien ne lui a été envoyé."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Post-Quanten-Signatur des Servers war nicht gültig, daher hat dieses Telefon abgebrochen. Nichts wurde gesendet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A assinatura pós-quântica do servidor não conferiu, então este celular parou. Nada foi enviado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーの耐量子署名が確認できなかったため、中止しました。何も送信していません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器的抗量子签名验证未通过，因此这部手机已停止。未发送任何内容。"
+          }
+        }
+      }
+    },
+    "Stop %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detener %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ beenden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parar %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を停止"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止 %@"
+          }
+        }
+      }
+    },
+    "Restart %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reiniciar %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redémarrer %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ neu starten"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reiniciar %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を再起動"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重启 %@"
+          }
+        }
+      }
+    },
+    "Shut down %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apagar %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Éteindre %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ herunterfahren"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desligar %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ をシャットダウン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭 %@"
+          }
+        }
+      }
+    },
+    "%@ was started.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ se inició."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a démarré."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wurde gestartet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ foi iniciado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を開始しました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 已启动。"
+          }
+        }
+      }
+    },
+    "%@ was stopped. It starts again when you start it here, or when the server restarts.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ se detuvo. Vuelve a iniciarse cuando lo inicies aquí o cuando el servidor se reinicie."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a été arrêté. Il redémarre quand vous le démarrez ici, ou quand le serveur redémarre."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wurde beendet. Sie startet wieder, wenn du sie hier startest oder der Server neu startet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ foi parado. Ele volta quando você iniciá-lo aqui ou quando o servidor reiniciar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を停止しました。ここで開始するか、サーバーが再起動すると再び起動します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 已停止。在这里启动它或服务器重启时，它会再次启动。"
+          }
+        }
+      }
+    },
+    "%@ was restarted.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ se reinició."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a redémarré."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wurde neu gestartet."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ foi reiniciado."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ を再起動しました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 已重启。"
+          }
+        }
+      }
+    },
+    "The server is restarting. To unlock its disk it needs Flagship, so while Flagship can't be reached it stays locked after the restart.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor se está reiniciando. Para desbloquear su disco necesita Flagship, así que mientras no se pueda contactar con Flagship se queda bloqueado tras el reinicio."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur redémarre. Pour déverrouiller son disque, il a besoin de Flagship : tant que Flagship est injoignable, il reste verrouillé après le redémarrage."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Server startet neu. Zum Entsperren seiner Festplatte braucht er Flagship. Solange Flagship nicht erreichbar ist, bleibt er nach dem Neustart gesperrt."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O servidor está reiniciando. Para desbloquear o disco ele precisa do Flagship, então enquanto o Flagship não puder ser acessado ele fica bloqueado após reiniciar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーを再起動しています。ディスクのロック解除には Flagship が必要なため、Flagship に接続できない間は再起動後もロックされたままです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器正在重启。解锁磁盘需要 Flagship，因此无法连接 Flagship 时，重启后它会保持锁定。"
+          }
+        }
+      }
+    },
+    "The server is shutting down.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor se está apagando."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur s’éteint."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Server wird heruntergefahren."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O servidor está desligando."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーをシャットダウンしています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器正在关闭。"
+          }
+        }
+      }
+    },
+    "the backup couldn't be made": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no se pudo crear la copia de seguridad"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "la sauvegarde n’a pas pu être créée"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "das Backup konnte nicht erstellt werden"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "não foi possível criar o backup"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップを作成できませんでした"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法创建备份"
+          }
+        }
+      }
+    },
+    "This server's release can't hand out the backup as one file yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La versión de este servidor aún no puede entregar la copia de seguridad como un solo archivo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La version de ce serveur ne peut pas encore fournir la sauvegarde en un seul fichier."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Version dieses Servers kann das Backup noch nicht als eine Datei ausgeben."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A versão deste servidor ainda não consegue entregar o backup como um único arquivo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバーのバージョンは、まだバックアップを 1 つのファイルとして渡せません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器的版本还无法以单个文件提供备份。"
+          }
+        }
+      }
+    },
+    "The download stopped: %@ What's already here is kept; Resume picks up from there.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La descarga se detuvo: %@ Lo que ya está aquí se conserva; Reanudar sigue desde ahí."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le téléchargement s’est arrêté : %@ Ce qui est déjà là est conservé ; Reprendre continue à partir de là."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Download wurde unterbrochen: %@ Was schon hier ist, bleibt; Fortsetzen macht dort weiter."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O download parou: %@ O que já está aqui é mantido; Retomar continua de onde parou."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロードが止まりました: %@ 取得済みの分は保持され、再開するとそこから続きます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载已中断：%@ 已下载的部分会保留，继续下载将从那里接着进行。"
+          }
+        }
+      }
+    },
+    "The backup disappeared from the server.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La copia de seguridad desapareció del servidor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La sauvegarde a disparu du serveur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Backup ist vom Server verschwunden."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O backup sumiu do servidor."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップがサーバーから消えました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "备份已从服务器上消失。"
+          }
+        }
+      }
+    },
+    "The backup failed: %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La copia de seguridad falló: %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La sauvegarde a échoué : %@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Backup ist fehlgeschlagen: %@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O backup falhou: %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップに失敗しました: %@。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "备份失败：%@。"
+          }
+        }
+      }
+    },
+    "That didn't work.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No funcionó."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cela n’a pas fonctionné."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das hat nicht funktioniert."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não funcionou."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "うまくいきませんでした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作未成功。"
+          }
+        }
+      }
+    },
+    "The server didn't answer on this network. Check that this phone is on the same Wi-Fi as the server.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor no respondió en esta red. Comprueba que este teléfono esté en la misma red Wi-Fi que el servidor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur n’a pas répondu sur ce réseau. Vérifiez que ce téléphone est sur le même Wi-Fi que le serveur."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Server hat in diesem Netzwerk nicht geantwortet. Prüfe, ob dieses Telefon im selben WLAN wie der Server ist."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O servidor não respondeu nesta rede. Verifique se este celular está na mesma rede Wi-Fi que o servidor."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーはこのネットワークで応答しませんでした。このスマートフォンがサーバーと同じ Wi-Fi にあるか確認してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器在此网络上没有响应。请检查这部手机是否与服务器在同一 Wi-Fi 上。"
+          }
+        }
+      }
+    },
+    "The connection changed to another certificate partway through, so this phone stopped. Try again on a network you trust.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La conexión cambió a otro certificado a mitad de camino, así que este teléfono se detuvo. Inténtalo de nuevo en una red de confianza."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connexion est passée à un autre certificat en cours de route, ce téléphone s’est donc arrêté. Réessayez sur un réseau de confiance."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Verbindung hat mittendrin zu einem anderen Zertifikat gewechselt, daher hat dieses Telefon abgebrochen. Versuche es in einem vertrauenswürdigen Netzwerk erneut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A conexão mudou para outro certificado no meio do caminho, então este celular parou. Tente de novo em uma rede confiável."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続の途中で別の証明書に切り替わったため、中止しました。信頼できるネットワークでもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接中途切换到了另一个证书，因此这部手机已停止。请在可信的网络上重试。"
+          }
+        }
+      }
+    },
+    "The server's answer couldn't be read.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo leer la respuesta del servidor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La réponse du serveur n’a pas pu être lue."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Antwort des Servers konnte nicht gelesen werden."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível ler a resposta do servidor."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーの応答を読み取れませんでした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取服务器的应答。"
+          }
+        }
+      }
+    },
+    "Next to it? This phone can reach it on the same Wi-Fi without Flagship.": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Estás cerca? Este teléfono puede llegar a él en la misma red Wi-Fi sin Flagship."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À proximité ? Ce téléphone peut le joindre sur le même Wi-Fi sans Flagship."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Nähe? Dieses Telefon erreicht ihn im selben WLAN ohne Flagship."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Está perto? Este celular consegue acessá-lo na mesma rede Wi-Fi sem o Flagship."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "近くにありますか？このスマートフォンは同じ Wi-Fi 上で Flagship なしでも接続できます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就在附近？这部手机可以在同一 Wi-Fi 上无需 Flagship 连接它。"
+          }
+        }
+      }
+    },
+    "Reach it on this Wi-Fi": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar en esta red Wi-Fi"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le joindre sur ce Wi-Fi"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Über dieses WLAN erreichen"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acessar nesta rede Wi-Fi"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この Wi-Fi で接続"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此 Wi-Fi 上连接"
+          }
+        }
+      }
+    },
+    "Your servers on this Wi-Fi, without Flagship": {
+      "extractionState": "manual",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tus servidores en esta red Wi-Fi, sin Flagship"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos serveurs sur ce Wi-Fi, sans Flagship"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Server in diesem WLAN, ohne Flagship"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seus servidores nesta rede Wi-Fi, sem o Flagship"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この Wi-Fi 上のサーバーを Flagship なしで"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此 Wi-Fi 上无需 Flagship 访问你的服务器"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

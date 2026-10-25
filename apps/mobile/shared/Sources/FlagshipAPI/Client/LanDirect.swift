@@ -78,7 +78,11 @@ private final class ResumeOnce: @unchecked Sendable {
 
 public final class LanDirectRegistry: @unchecked Sendable {
     #if canImport(Network)
-    public static let shared = LanDirectRegistry(prober: TlsPinProber())
+    public static let shared: LanDirectRegistry = {
+        let r = LanDirectRegistry(prober: TlsPinProber())
+        r.rescueBook = .shared
+        return r
+    }()
     #endif
     public static let probeTtlMs: Int64 = 5 * 60_000
     public static let refreshIntervalMs: Int64 = 10 * 60_000
@@ -90,6 +94,8 @@ public final class LanDirectRegistry: @unchecked Sendable {
     }
 
     private let prober: LanProber
+    /// Where accepted hints are remembered for Offline control; nil keeps nothing (tests).
+    public var rescueBook: RescueServerBook?
     private let clock: @Sendable () -> Int64
     private let log: @Sendable (String) -> Void
     private let lock = NSLock()
@@ -171,6 +177,8 @@ public final class LanDirectRegistry: @unchecked Sendable {
                 expiresAt: envelope.hint.expiresAt
             )
             lock.unlock()
+            // Offline control starts from where this box was last seen (docs/data-sovereignty.md 4.9).
+            for e in envelope.hint.endpoints.reversed() { rescueBook?.saw(box, at: e.address.contains(":") ? "[\(e.address)]:\(e.port)" : "\(e.address):\(e.port)") }
         } else {
             forget(box: box)
             log("refused \(box)'s LAN hint (\(why!)); staying on the relay")

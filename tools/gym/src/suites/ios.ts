@@ -17,6 +17,7 @@ import { IOS_NOTICES } from "./iosNotices.js";
 import { IOS_GONE } from "./iosGone.js";
 import { IOS_FIRST_CONTACT } from "./iosFirstContact.js";
 import { IOS_RELEASE03 } from "./iosRelease03.js";
+import { IOS_OFFLINE } from "./iosOffline.js";
 
 // ───────────────────────── every-merge (fast gate) ─────────────────────────
 
@@ -1415,4 +1416,5 @@ export const IOS_GYM_SCENARIOS: readonly Scenario[] = [
   ...IOS_GONE,
   ...IOS_FIRST_CONTACT,
   ...IOS_RELEASE03,
+  ...IOS_OFFLINE,
 ];

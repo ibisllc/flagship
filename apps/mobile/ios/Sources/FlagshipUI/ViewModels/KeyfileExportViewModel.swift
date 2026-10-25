@@ -38,17 +38,27 @@ public final class KeyfileExportViewModel {
     /// Seam so tests can supply the UMK without piercing the Secure
     /// Enclave. Defaults to the real Keystore read (fires biometrics).
     private let readUMK: @MainActor (String) async throws -> SymmetricKey
+    /// The rest of the local account a v2 file carries (docs/data-sovereignty.md 4.11): the admin
+    /// root seed when this device holds it, and each server's name, pinned key and last-seen LAN
+    /// addresses, so a fresh install restored from the file can still reach and save its servers
+    /// with `.com` gone.
+    private let readAccount: @MainActor (String) async throws -> (adminRoot: Data?, servers: [Keyfile.Server])
 
     public init(
         username: String,
         accountId: String? = nil,
         readUMK: @escaping @MainActor (String) async throws -> SymmetricKey = { reason in
             try await Keystore.currentUMK(reason: reason)
+        },
+        readAccount: @escaping @MainActor (String) async throws -> (adminRoot: Data?, servers: [Keyfile.Server]) = { reason in
+            let admin = Keystore.hasAdminRoot ? try await Keystore.adminRootKey(reason: reason).rawRepresentation : nil
+            return (admin, KeyfileAccountServers.local())
         }
     ) {
         self.username = username
         self.accountId = accountId
         self.readUMK = readUMK
+        self.readAccount = readAccount
     }
 
     /// The user acknowledged that the file + passphrase control the account.
@@ -94,7 +104,9 @@ public final class KeyfileExportViewModel {
                 accountId: accountId,
                 createdAt: ISO8601DateFormatter.flagshipUTC.string(from: Date())
             )
-            let text = try Keyfile.wrap(umkSeed: umk, passphrase: passphrase, meta: meta)
+            let account = try await readAccount(String(localized: "Back up your Flagship account key"))
+            let text = try Keyfile.wrapAccount(umkSeed: umk.withUnsafeBytes { Data($0) }, adminRootSeed: account.adminRoot,
+                                               servers: account.servers, passphrase: passphrase, meta: meta)
             phase = .ready(text: text)
         } catch {
             phase = .failed(String(localized: "Couldn't create the backup file: \(UserErrorText.of(error))"))
@@ -115,4 +127,23 @@ extension ISO8601DateFormatter {
         f.timeZone = TimeZone(identifier: "UTC")
         return f
     }()
+}
+
+/// The server records a v2 key file carries: every server this device pinned or saw on a LAN.
+public enum KeyfileAccountServers {
+    public static func local(pins: ServerKeyPins = ServerKeyPins(), book: RescueServerBook = .shared) -> [Keyfile.Server] {
+        let names = Set(pins.domains()).union(book.entries().map(\.domain))
+        return names.sorted().map { Keyfile.Server(domain: $0, lan: book.entry($0)?.lan ?? [], stk: pins.pinnedStkHex($0)) }
+    }
+
+    /// Put a restored file's servers back: the name and addresses for Offline control, and the
+    /// pinned key where this device has none yet (never over a different one).
+    public static func restore(_ servers: [Keyfile.Server], pins: ServerKeyPins = ServerKeyPins(), book: RescueServerBook = .shared) {
+        for s in servers {
+            book.remember(s.domain, lan: s.lan)
+            if let hex = s.stk, let stk = HexUtil.decode(hex), stk.count == 32, pins.check(stk, for: s.domain) == .unpinned {
+                _ = pins.pin(stk, for: s.domain)
+            }
+        }
+    }
 }

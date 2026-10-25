@@ -188,6 +188,7 @@ public struct SettingsTab: View {
                     onOpenAiKeys: { path.append(.aiKeys) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
+                    onOpenOfflineControl: { path.append(.offlineControl) },
                     onOpenAccountSecurity: { path.append(.accountSecurity) },
                     onOpenQuantumSafety: { path.append(.quantumSafety) },
                     pqLabels: pqLabels,
@@ -456,6 +457,8 @@ public struct SettingsTab: View {
             KeyfileExportScreen(
                 vm: KeyfileExportViewModel(username: app.currentUser ?? "")
             )
+        case .offlineControl:
+            OfflineControlContainer(username: app.currentUser ?? "", focus: nil)
         case .postRecoveryProgress:
             PostRecoveryContainer()
         case .about:

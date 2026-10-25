@@ -52,6 +52,17 @@ public final class KeyfileImportViewModel {
         self.installUMK = installUMK
     }
 
+    /// Seam for tests: put the admin root seed into this device's keychain.
+    var installAdminRoot: @MainActor (Data) async throws -> Void = { seed in
+        _ = try await Keystore.importAdminRoot(seed: seed)
+    }
+
+    private func restoreAccount(_ a: Keyfile.Account) async {
+        KeyfileAccountServers.restore(a.servers)
+        guard let admin = a.adminRootSeed, !Keystore.hasAdminRoot else { return }
+        try? await installAdminRoot(admin)
+    }
+
     public var canImport: Bool {
         !passphrase.isEmpty
     }
@@ -69,8 +80,10 @@ public final class KeyfileImportViewModel {
         // 1 — Decrypt the keyfile.
         let seed: SymmetricKey
         let meta: Keyfile.Meta
+        let account: Keyfile.Account
         do {
-            (seed, meta) = try Keyfile.unwrap(fileText: fileText, passphrase: passphrase)
+            account = try Keyfile.unwrapAccount(fileText: fileText, passphrase: passphrase)
+            (seed, meta) = (account.umkSeed, account.meta)
         } catch let e as Keyfile.KeyfileError {
             phase = .failed(humanizedKeyfileError(e))
             return
@@ -92,6 +105,9 @@ public final class KeyfileImportViewModel {
             phase = .failed(String(localized: "Couldn't install your account key. \(HumanError.humanize(error))"))
             return
         }
+        // A v2 file also carries the admin key and the servers (docs/data-sovereignty.md 4.11):
+        // put them back so this device can reach and save its servers even with `.com` gone.
+        await restoreAccount(account)
 
         // 3 — Initiate the takeover re-pair. A fresh device DOES hold the
         // recovered seed (we just installed it), so it can ROTATE the IRK:

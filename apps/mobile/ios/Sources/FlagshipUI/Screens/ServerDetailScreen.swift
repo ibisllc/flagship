@@ -85,6 +85,8 @@ public struct ServerDetailScreen: View {
     /// container can pop the nav stack (this page now points at a server
     /// that no longer exists).
     var onDeleted: () -> Void = {}
+    /// Offline control for this server (docs/data-sovereignty.md): offered while it can't be reached.
+    var onOpenOfflineControl: (() -> Void)?
 
     public init(
         state: LoadingState<ServerDetailResponse>,
@@ -111,7 +113,8 @@ public struct ServerDetailScreen: View {
         onRefresh: @escaping () async -> Void = {},
         onRefreshDetail: @escaping () async -> Void = {},
         onPair: @escaping () -> Void = {},
-        onDeleted: @escaping () -> Void = {}
+        onDeleted: @escaping () -> Void = {},
+        onOpenOfflineControl: (() -> Void)? = nil
     ) {
         self.state = state
         self.metrics = metrics
@@ -138,6 +141,22 @@ public struct ServerDetailScreen: View {
         self.onRefreshDetail = onRefreshDetail
         self.onPair = onPair
         self.onDeleted = onDeleted
+        self.onOpenOfflineControl = onOpenOfflineControl
+    }
+
+    /// "Reach it on this Wi-Fi": Offline control, while this server can't be reached the usual way.
+    @ViewBuilder
+    private func offlineControlLink(c: FSColors) -> some View {
+        if let open = onOpenOfflineControl {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text("Next to it? This phone can reach it on the same Wi-Fi without Flagship.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                FSSecondaryButton(String(localized: "Reach it on this Wi-Fi"), block: true, action: open)
+                    .accessibilityIdentifier("server-detail-offline-control")
+            }
+        }
     }
 
     /// FQDN for the boot-unlock approval card: the loaded detail's own FQDN,
@@ -377,6 +396,7 @@ public struct ServerDetailScreen: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                offlineControlLink(c: c)
             }
         }
         .accessibilityIdentifier("server-detail-connecting")
@@ -453,6 +473,7 @@ public struct ServerDetailScreen: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("server-detail-offline-text")
                     }
+                    offlineControlLink(c: c)
                 }
             }
             .accessibilityElement(children: .contain)

@@ -106,6 +106,8 @@ public struct SettingsScreen: View {
     var onOpenRecovery: () -> Void = {}
     /// Open "Back up your account key" — the `.flagshipkey` export.
     var onOpenKeyfileBackup: () -> Void = {}
+    /// Open Offline control: your servers on this Wi-Fi when Flagship can't be reached.
+    var onOpenOfflineControl: () -> Void = {}
     /// v1.2 Phase 4 — open the Account-security drill-down. The
     /// container hosts AccountSecurityScreen + drives the enable /
     /// disable flows.
@@ -217,6 +219,7 @@ public struct SettingsScreen: View {
         onOpenAiKeys: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
+        onOpenOfflineControl: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
         onOpenQuantumSafety: @escaping () -> Void = {},
         pqLabels: [String: String] = [:],
@@ -272,6 +275,7 @@ public struct SettingsScreen: View {
         self.onOpenAiKeys = onOpenAiKeys
         self.onOpenRecovery = onOpenRecovery
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
+        self.onOpenOfflineControl = onOpenOfflineControl
         self.onOpenAccountSecurity = onOpenAccountSecurity
         self.onOpenQuantumSafety = onOpenQuantumSafety
         self.pqLabels = pqLabels
@@ -531,6 +535,9 @@ public struct SettingsScreen: View {
             FSSettingsRow(icon: "atom", title: String(localized: "Quantum-safe protection"), subtitle: String(localized: "Strict protection per server"),
                           accessibilityId: "settings-open-quantum-safety", action: onOpenQuantumSafety),
             FSSettingsRow(icon: "sparkles", title: String(localized: "AI API keys"), subtitle: String(localized: "Bring-your-own keys for building apps"), action: onOpenAiKeys),
+            // Always present: it works when Flagship can't be reached (docs/data-sovereignty.md).
+            FSSettingsRow(icon: "wifi", title: String(localized: "Offline control"), subtitle: String(localized: "Your servers on this Wi-Fi, without Flagship"),
+                          accessibilityId: "settings-open-offline-control", action: onOpenOfflineControl),
         ] + (isDemoAccount ? [] : [
             FSSettingsRow(icon: "key.horizontal.fill", title: String(localized: "Cloud recovery"), subtitle: String(localized: "Recover on a new device"), action: onOpenRecovery),
         ] + (recoveryNeedsUpdate ? [

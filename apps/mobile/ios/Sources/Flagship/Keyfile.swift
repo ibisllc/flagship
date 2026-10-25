@@ -170,11 +170,83 @@ public enum Keyfile {
     }
 
     /// Parse + decrypt a `.flagshipkey` file. Throws KeyfileError on
-    /// any failure (malformed / wrong-passphrase / version).
+    /// any failure (malformed / wrong-passphrase / version). A v2 account
+    /// file opens here too, as its UMK (as the TS v1 reader does).
     public static func unwrap(
         fileText: String,
         passphrase: String
     ) throws -> (umkSeed: SymmetricKey, meta: Meta) {
+        let a = try unwrapAccount(fileText: fileText, passphrase: passphrase)
+        return (a.umkSeed, a.meta)
+    }
+
+    // MARK: - v2: the whole local account (docs/data-sovereignty.md 4.11)
+
+    public static let accountVersion = 2
+
+    /// What the rescue flow needs about one server with `.com` gone.
+    public struct Server: Equatable, Sendable {
+        /// The server's FQDN: the one thing nothing else can reconstruct.
+        public let domain: String
+        /// Where it was last seen on a local network (`10.0.0.5:443`), newest first. A hint.
+        public let lan: [String]
+        /// The server key this device pinned (docs/first-contact.md), 64 hex.
+        public let stk: String?
+        public init(domain: String, lan: [String] = [], stk: String? = nil) {
+            self.domain = domain.lowercased(); self.lan = lan; self.stk = stk?.lowercased()
+        }
+    }
+
+    /// The whole local account as a v2 file carries it.
+    public struct Account {
+        public let umkSeed: SymmetricKey
+        /// The 32-byte admin root seed, when the exporting device held it.
+        public let adminRootSeed: Data?
+        public let servers: [Server]
+        public let meta: Meta
+        public let version: Int
+    }
+
+    /// Wrap the account into a v2 `.flagshipkey`: the UMK seed, the admin root seed (when this
+    /// device holds it: random, so a UMK alone never rebuilds it) and the server records.
+    public static func wrapAccount(
+        umkSeed: Data,
+        adminRootSeed: Data?,
+        servers: [Server],
+        passphrase: String,
+        meta: Meta,
+        params: ArgonParams = Keyfile.argonParams
+    ) throws -> String {
+        guard umkSeed.count == 32 else { throw KeyfileError.malformed("UMK seed must be 32 bytes") }
+        if let a = adminRootSeed, a.count != 32 { throw KeyfileError.malformed("admin root seed must be 32 bytes") }
+        guard passphrase.count >= minPassphrase else { throw KeyfileError.malformed("passphrase too short (min \(minPassphrase))") }
+        var body: [String: Any] = [
+            "umkSeedHex": HexUtil.encode(umkSeed),
+            "servers": try servers.prefix(64).map { srv -> [String: Any] in
+                guard Self.cleanDomain(srv.domain) else { throw KeyfileError.malformed("malformed server record") }
+                var r: [String: Any] = ["domain": srv.domain]
+                let lan = srv.lan.filter { $0.count <= 64 }.prefix(8)
+                if !lan.isEmpty { r["lan"] = Array(lan) }
+                if let stk = srv.stk { r["stk"] = stk }
+                return r
+            },
+        ]
+        if let a = adminRootSeed { body["adminRootSeedHex"] = HexUtil.encode(a) }
+        let plaintext = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+        var saltBytes = [UInt8](repeating: 0, count: 16)
+        _ = saltBytes.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, 16, $0.baseAddress!) }
+        let salt = Data(saltBytes)
+        let nonceData = Data((0..<12).map { _ in UInt8.random(in: 0...255) })
+        let key = try deriveKey(passphrase: passphrase, salt: salt, params: params)
+        let sealed = try AES.GCM.seal(plaintext, using: key, nonce: try AES.GCM.Nonce(data: nonceData),
+                                      authenticating: aad(version: accountVersion, username: meta.username, accountId: meta.accountId,
+                                                          createdAt: meta.createdAt, params: params))
+        return envelopeJSON(meta: meta, params: params, saltHex: HexUtil.encode(salt), nonceHex: HexUtil.encode(nonceData),
+                            ciphertextHex: HexUtil.encode(sealed.ciphertext + sealed.tag), version: accountVersion)
+    }
+
+    /// Open a v1 or v2 `.flagshipkey`. A v1 file yields the UMK and no admin root or servers.
+    public static func unwrapAccount(fileText: String, passphrase: String) throws -> Account {
         guard let data = fileText.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw KeyfileError.malformed("not valid JSON")
@@ -182,10 +254,10 @@ public enum Keyfile {
         guard (obj["magic"] as? String) == magic else {
             throw KeyfileError.malformed("not a flagship key file")
         }
-        guard let ver = obj["version"] as? Int else {
+        guard let ver = intValue(obj["version"]) else {
             throw KeyfileError.malformed("missing version")
         }
-        guard ver == version else {
+        guard ver == version || ver == accountVersion else {
             throw KeyfileError.version(ver)
         }
         guard let kdf = obj["kdf"] as? [String: Any],
@@ -211,34 +283,56 @@ public enum Keyfile {
         }
         let accountId = obj["accountId"] as? String
         let params = ArgonParams(m: m, t: t, p: p)
+        let meta = Meta(username: username, accountId: accountId, createdAt: createdAt)
 
         let key = try deriveKey(passphrase: passphrase, salt: salt, params: params)
-        let aadData = aad(
-            version: ver,
-            username: username,
-            accountId: accountId,
-            createdAt: createdAt,
-            params: params
-        )
+        let aadData = aad(version: ver, username: username, accountId: accountId, createdAt: createdAt, params: params)
         // ciphertextHex is plaintext-ciphertext + 16B tag appended.
-        let tag = ctAndTag.suffix(16)
-        let ciphertext = ctAndTag.prefix(ctAndTag.count - 16)
+        let plain: Data
         do {
             let nonce = try AES.GCM.Nonce(data: nonceData)
-            let box = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ciphertext, tag: tag)
-            let seed = try AES.GCM.open(box, using: key, authenticating: aadData)
-            guard seed.count == 32 else {
-                throw KeyfileError.malformed("decrypted seed is not 32 bytes")
-            }
-            return (
-                SymmetricKey(data: seed),
-                Meta(username: username, accountId: accountId, createdAt: createdAt)
-            )
-        } catch let e as KeyfileError {
-            throw e
+            let box = try AES.GCM.SealedBox(nonce: nonce, ciphertext: ctAndTag.prefix(ctAndTag.count - 16), tag: ctAndTag.suffix(16))
+            plain = try AES.GCM.open(box, using: key, authenticating: aadData)
         } catch {
             throw KeyfileError.badPassphrase
         }
+        if ver == version {
+            guard plain.count == 32 else { throw KeyfileError.malformed("decrypted seed is not 32 bytes") }
+            return Account(umkSeed: SymmetricKey(data: plain), adminRootSeed: nil, servers: [], meta: meta, version: ver)
+        }
+        guard let body = try? JSONSerialization.jsonObject(with: plain) as? [String: Any] else {
+            throw KeyfileError.malformed("the account inside is damaged")
+        }
+        func key32(_ v: Any?) throws -> Data {
+            guard let s = v as? String, s.utf8.count == 64, s == s.lowercased(), let d = HexUtil.decode(s), d.count == 32 else {
+                throw KeyfileError.malformed("a key inside is not 32 bytes")
+            }
+            return d
+        }
+        let umk = try key32(body["umkSeedHex"])
+        let admin = body["adminRootSeedHex"] == nil ? nil : try key32(body["adminRootSeedHex"])
+        guard let list = (body["servers"] ?? []) as? [Any], list.count <= 64 else { throw KeyfileError.malformed("malformed server list") }
+        let servers: [Server] = try list.map { item in
+            guard let r = item as? [String: Any], let domain = r["domain"] as? String, !domain.isEmpty, domain.count <= 253,
+                  Self.cleanDomain(domain) else {
+                throw KeyfileError.malformed("malformed server record")
+            }
+            var stk: String?
+            if let raw = r["stk"] {
+                guard let s = raw as? String, s.utf8.count == 64, s == s.lowercased(), HexUtil.decode(s) != nil else {
+                    throw KeyfileError.malformed("malformed server key")
+                }
+                stk = s
+            }
+            let lan = ((r["lan"] as? [Any]) ?? []).compactMap { $0 as? String }.filter { $0.count <= 64 }.prefix(8)
+            return Server(domain: domain, lan: Array(lan), stk: stk)
+        }
+        return Account(umkSeed: SymmetricKey(data: umk), adminRootSeed: admin, servers: servers, meta: meta, version: ver)
+    }
+
+    /// No separator, whitespace or control character (a name, not a sentence).
+    static func cleanDomain(_ d: String) -> Bool {
+        !d.unicodeScalars.contains { $0.value == 0x7c || $0.value <= 0x20 || $0.value == 0x7f || CharacterSet.whitespacesAndNewlines.contains($0) }
     }
 
     // MARK: - Helpers
@@ -251,7 +345,8 @@ public enum Keyfile {
         params: ArgonParams,
         saltHex: String,
         nonceHex: String,
-        ciphertextHex: String
+        ciphertextHex: String,
+        version: Int = Keyfile.version
     ) -> String {
         var root: [String: Any] = [
             "magic": magic,

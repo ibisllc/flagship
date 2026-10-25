@@ -82,9 +82,18 @@ public struct KeyfileExportScreen: View {
             HStack(alignment: .top, spacing: FS.space.s2) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(c.danger)
-                Text("Anyone with both this file and its passphrase can take over your account and lock you out.")
-                    .font(FS.font.bodySm())
-                    .foregroundColor(c.text)
+                VStack(alignment: .leading, spacing: FS.space.s1) {
+                    Text("Anyone with both this file and its passphrase can take over your account and lock you out.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.text)
+                    if RescueKeyCheck.holdsAdminRoot {
+                        // docs/data-sovereignty.md 4.11: an admin device includes the admin key by default.
+                        Text("This file also contains your server admin key, and the list of your servers, so it can save their data without Flagship.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.text)
+                            .accessibilityIdentifier("keyfile-export-admin-note")
+                    }
+                }
             }
         }
         .accessibilityIdentifier("keyfile-export-danger")
