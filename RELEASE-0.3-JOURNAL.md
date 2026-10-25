@@ -2,7 +2,7 @@
 
 **If you are a new session taking over: read this whole file, then continue the "Plan" from the first
 unchecked item.** Update this file as you go: tick items, add a dated line to the "Log", and commit it
-(explicit path, `git add RELEASE-0.3-JOURNAL.md`) on `integrate/0.3-arch`, pushing each time. When the
+(explicit path, `git add RELEASE-0.3-JOURNAL.md`) on `release/0.3`, pushing each time. When the
 release lands on `main`, fold what is still true into `AGENTS.md` "Current status" and delete this file.
 
 Owner: Harry (they/them in writing). Budget is limited: don't regenerate things that exist, don't
@@ -18,15 +18,14 @@ AI01/AI02 local AI) and 8 (V01 adversarial suite + assessment package, V02 canar
 
 ## Where things are
 
-- Worktree: `/Users/harrywinner/flagship-0.3`, branch **`integrate/0.3-arch`** (pushed to origin). All
-  release work happens here. The main checkout `/Users/harrywinner/flagship` is on `feat/multilingual`;
-  don't build there.
-- `release/0.3` is still at `cc5425c8a`; it gets fast-forwarded to the final tip (Plan step 9).
-- `integrate/0.3` (`db830ba70`) = 0.3 + UX only, kept for reference.
-- Backups of every pre-integration tip: `backup/feat-architecture-pre-integration-2026-10-24`
-  (`44910d943`), `backup/feat-UX-pre-integration-2026-10-24`, `backup/ux-fc-*`, `backup/gym-ux-*`,
-  `backup/ux-{marketplace,custom-names,custom-domains,outbound-proxy}-2026-10-24`,
-  `backup/ux-fc-ios-wip-2026-10-24`, `backup/ux-rb-wt-wip-2026-10-24`. Never delete them.
+- Worktree: `/Users/harrywinner/flagship-0.3`, branch **`release/0.3`** (pushed to origin). All
+  release work happens here. The main checkout `/Users/harrywinner/flagship` is on `main`; don't build there.
+- Since 2026-10-25 the only branches are `main`, `release/0.3`, `gym`, `hof-jay`, the unlaunched
+  feature branches, `ux-{marketplace,custom-names,custom-domains,outbound-proxy}` (UX's newer copies, to
+  fold in when those features are rebased), `device-results/windows-2026-10-17`,
+  `wip/coordination-2026-10-16`. Everything else (integrate/*, feat/UX, feat/architecture, every
+  backup/*, agent and wip branches, worktree WIP) is archived on origin under
+  `refs/archive/2026-10-25/` and listed in `docs/archive/branch-cleanup-2026-10-25.md`.
 - Arch handover detail: `docs/architecture-v2/HANDOVER.md`, `docs/architecture-v2/IMPLEMENTATION-PLAN.md`.
   Security plan: `SECURITY-HARDENING-PLAN.md`, progress `SECURITY-0.3-PROGRESS.md`.
 - Scratch logs (may vanish on reboot): `/private/tmp/claude-501/-Users-harrywinner-flagship/bf7d42bb-5736-4a9a-83e8-bcfb63f1f061/scratchpad/`.
@@ -112,7 +111,7 @@ Running when this was written (subagents; if this session is gone, they are gone
        gpud trusts the daemon's approval until R02; no owner UI for accelerators; WASI journal logs not
        through privd; journalHttp still accepts the IRK; Swift/Kotlin ExportAuthorization scope; a
        classic box can't later migrate to arch-v2; peer backups skip dedicated databases.
-9. [ ] Fast-forward `release/0.3` to the tip; push. Then rebase every descendant branch onto it and
+9. [ ] (release/0.3 fast-forwarded and branches cleaned 2026-10-25) Rebase every descendant branch onto it and
        report conflicts: `feat/marketplace` → `feat/custom-names`, `feat/custom-domains`,
        `feat/outbound-proxy` (start from the `ux-*` children), `gym`/`gym-ux`, `feat/retail`,
        `feat/browser-extension`, `feat/phone-usb-burn`, `feat/other-os-installers`,
@@ -260,3 +259,8 @@ Running when this was written (subagents; if this session is gone, they are gone
   registered but got no cert: still to diagnose. Debug box dbg2.uxdbg03871 (UpCloud
   00a49686-94bc-449d-9220-a200e9594eee) provisioned with the gym commit 0a997184d; destroy it with
   `fleet-cli.ts destroy <id> <fqdn>` when done. Note: gym boxes are Debian 12 (bookworm).
+- 2026-10-25: Harry asked to merge everything into release/0.3 and clean out branches/worktrees.
+  release/0.3 fast-forwarded to the integrated tip; PSL runbook update from the main checkout carried in
+  (`18c99d77e`); every branch checked for containment (merge-tree + line-level absorption); 271 refs
+  and 4 worktree WIP snapshots archived under refs/archive/2026-10-25/ then deleted; manifest
+  `7e27bca89`. Worktrees left: main checkout (on main), flagship-0.3 (release/0.3), gym worktree.
