@@ -110,6 +110,29 @@ describe("D1NameChangeStorage.renameAccount", () => {
     expect(rows).toEqual([{ bytes_egress: 123 }]);
   });
 
+  it("refuses while the account's quantum-safe trust names it in signed bytes, changing nothing", async () => {
+    const one = (d: NonNullable<typeof db>, sql: string) => d.raw.prepare(sql).get() as Record<string, unknown> | undefined;
+    for (const insert of [
+      `INSERT INTO pq_key_bindings (role, subject_id, ed25519_pub_hex, mldsa_pub_hex, issued_at, signature_hex, stored_at) VALUES ('admin-root', 'fresh-poppy', '${"22".repeat(32)}', 'aa', 1, 'bb', 1)`,
+      `INSERT INTO assurance_policy_changes (scope_kind, scope_id, generation, account, change_json, suite, signature_hex, digest, prev_digest, stored_at) VALUES ('device', 'd1', 1, 'fresh-poppy', '{}', 's', 'bb', 'cc', 'dd', 1)`,
+    ]) {
+      db = createSqliteD1();
+      seed(db, "fresh-poppy");
+      db.raw.exec(insert);
+      const s = new D1NameChangeStorage(db);
+      expect(await s.renameAccount({ aidPubHex: AID, oldUsername: "fresh-poppy", newUsername: "acme", at: 9 })).toEqual({
+        ok: false,
+        reason: "renaming an account with quantum-safe protection isn't available yet",
+      });
+      expect(one(db, "SELECT account_id FROM device_identities")).toEqual({ account_id: "fresh-poppy" });
+      expect(await s.history(AID)).toEqual([]);
+    }
+    db = createSqliteD1();
+    seed(db, "fresh-poppy");
+    db.raw.exec(`INSERT INTO pq_key_bindings (role, subject_id, ed25519_pub_hex, mldsa_pub_hex, issued_at, signature_hex, stored_at) VALUES ('device', 'dev-1', '${"33".repeat(32)}', 'aa', 1, 'bb', 1)`);
+    expect((await new D1NameChangeStorage(db).renameAccount({ aidPubHex: AID, oldUsername: "fresh-poppy", newUsername: "acme", at: 9 })).ok).toBe(true);
+  });
+
   it("refuses an unknown account", async () => {
     db = createSqliteD1();
     const s = new D1NameChangeStorage(db);
