@@ -104,7 +104,7 @@ Running when this was written (subagents; if this session is gone, they are gone
        then `npm run i18n`.
 4. [ ] (iOS done `75e9a4a80`; Android running) Native mock gyms on the tip: iOS UI tests (GymRelease03Tests and the rest), Android emulator gym.
 5. [ ] Update `AGENTS.md` "Current status" and `SECURITY-0.3-PROGRESS.md` for the merged release.
-6. [ ] Live release gym `bash scripts/gym-release-run.sh` (needs `scripts/gym-refresh.sh` first, the
+6. [ ] (running since 2026-10-25, see Log) Live release gym `bash scripts/gym-release-run.sh` (needs `scripts/gym-refresh.sh` first, the
        gym branch rebased onto this tip, box artifact built by `box-artifact.yml`); act on its exit code
        (set `newBoxStack` / `appBrowser`, commit the regenerated files).
 7. [ ] M7 VM drills (WASI, app groups, dedicated DBs, GPU sim) and arch drills per `HANDOVER.md`.
@@ -171,3 +171,13 @@ Running when this was written (subagents; if this session is gone, they are gone
   update-reports load must not hang off a view that only exists once loaded; the recovery prompt
   must wait for a closing sign-in/onboarding screen. Android mock gym running
   (`scratchpad/gym-android.log`).
+- 2026-10-25: Android mock gym: 195/202; 7 failing (GymOctoberTest share owner, GymServerPageTest
+  migrate, GymShareTest sheet options, GymSettingsTest delete-other-device, GymUxScreensTest watch
+  boot key, GymPasskeyBrowserSyncTest grant narrowed, GymUpdateResultsTest kept-in-recovery); a
+  helper agent is fixing them (uncommitted until it reports).
+- 2026-10-25: `gym` rebased onto `integrate/0.3-arch` (12 gym commits; caTrustChainLoader keeps the
+  0.3 PQ lease gate over the gym material; ServerKeys keeps 0.3's removal of infoSTK; pbxproj
+  regenerated with xcodegen) and force-pushed (`8a29461dd`; old tip `backup/gym-pre-0.3-2026-10-25`).
+  Gym worktree: `~/.cache/flagship/gym-worktree`. Live release gym started:
+  `bash scripts/gym-release-run.sh` → `scratchpad/gym-release.log`. Act on its exit code (Commands).
+  If `integrate/0.3-arch` moves before the run, `gym` must be rebased onto it again (not onto main).
