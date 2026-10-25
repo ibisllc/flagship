@@ -304,3 +304,15 @@ Running when this was written (subagents; if this session is gone, they are gone
   release's own builders, keep the known-good initrd, GRUB fallback, run on each applied update and
   once on first boot, Activity labels) — uncommitted until it reports. Harry's note: a serious user
   can hide from us with a VPS on their home network anyway, so no more anonymity work now.
+- 2026-10-25: all feature branches rebased onto release/0.3 and force-pushed (old tips archived under
+  refs/archive/2026-10-25/pre-rebase/): retail 6, browser-extension 1, phone-usb-burn 13,
+  other-os-installers 5, data-sovereignty 8 (restores the five reverts that parked its code; strict-PQ
+  profile blocks rescue sessions until rescue orders carry a hybrid signature; the 2026-10-25 LAN /
+  hotspot / mDNS / own-control-plane notes added to its doc), alpine 4 (still git-clone installs,
+  documented). Branches left: main, release/0.3, gym, hof-jay, the feat/* set, alpine,
+  device-results/windows-2026-10-17, wip/coordination-2026-10-16. Worktrees: main checkout,
+  flagship-0.3, gym worktree.
+- NEXT: once the boot-chain agent has committed, fast-forward release/0.3 onto feat/phone-usb-burn
+  (Harry wants USB burn IN 0.3), delete that branch, then USB-burn owner steps: rebuild the seed for the
+  release's Debian pin (sha pin is 13.6.0), publish it, set FLAGSHIP_ISO_SEED, test OTG write on a real
+  phone + stick; plus a gym lane for a burned stick. Update the AGENTS.md branch list.
