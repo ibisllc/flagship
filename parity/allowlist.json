@@ -400,6 +400,21 @@
       "check": "test-vectors",
       "key": "web:adapter-attestation",
       "reason": "Adapter attestations are signed by .com and checked by the box before it runs an adapter; no client app handles one."
+    },
+    {
+      "check": "test-vectors",
+      "key": "swift:rescue",
+      "reason": "Data sovereignty phase 2 (docs/data-sovereignty.md section 7): the phone and webapp rescue screens are not built yet, so only the box and protocol read the rescue vectors. Parked on feat/data-sovereignty."
+    },
+    {
+      "check": "test-vectors",
+      "key": "kotlin:rescue",
+      "reason": "Data sovereignty phase 2 (docs/data-sovereignty.md section 7): the phone and webapp rescue screens are not built yet, so only the box and protocol read the rescue vectors. Parked on feat/data-sovereignty."
+    },
+    {
+      "check": "test-vectors",
+      "key": "web:rescue",
+      "reason": "Data sovereignty phase 2 (docs/data-sovereignty.md section 7): the phone and webapp rescue screens are not built yet, so only the box and protocol read the rescue vectors. Parked on feat/data-sovereignty."
     }
   ]
 }
