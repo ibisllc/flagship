@@ -363,3 +363,6 @@ own control plane (next release; notes in docs/data-sovereignty.md).
   `work/sovereignty-phone` in /Users/harrywinner/flagship-tmp (commits there, not pushed). If this
   session ends: check that branch's log, finish the A4 list, test, then merge into release/0.3
   (rebase onto it first). A1 (boot-chain refresh) is still uncommitted work in the release worktree.
+- 2026-10-25: F3/F4 texts started early: an agent drafts docs/release-notes/0.3.md, store listings
+  (7 languages) and the website pages in the release worktree (uncommitted until it reports; native
+  screenshots come later). Live release gym run 2 still running (scratchpad/gym-release-2.log).
