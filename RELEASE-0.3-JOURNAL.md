@@ -209,3 +209,10 @@ Running when this was written (subagents; if this session is gone, they are gone
   the share demo seed must not be cut short by a leaving view.
 - 2026-10-25: release-gym VM build needed `--no-same-owner` and GnuPG (`scripts/lib/upcloud-vm.sh`);
   gym at `61c2d1005`; live release gym running again.
+- 2026-10-25: Android follow-ups `18ab5b7f8` (chat-request toast; Samsung Pass test). Plan step 8
+  started with three helper agents, all uncommitted until they report: (A) gpud share state persisted,
+  gpud verifying the owner's approval (R02), WASI logs through privd; (B) journalHttp refuses the IRK
+  on admin-pinned boxes, backups include dedicated databases, classic→arch-v2 box migration; (C)
+  accelerator owner card on iOS/Android/web, Swift/Kotlin ExportAuthorization scope, iOS checks
+  (browser-grant toast on app page, share demo seed). If this session ends: review `git status`,
+  finish/verify each area, commit by explicit paths.
