@@ -17,6 +17,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import {
   checkRescueHello,
   deriveIRK,
+  ed,
+  unwrapAccountFromKeyfile,
+  wrapAccountToKeyfile,
+  wrapUmkToKeyfile,
   deriveServerArchiveKey,
   deriveSTK,
   deriveSWK,
@@ -61,7 +65,8 @@ const FQDN = "home.harry.flagship.services";
 const SERVICE = "harry--notes";
 const UMK = { seed: new Uint8Array(32).fill(9) };
 const irk = deriveIRK(UMK);
-const adminRoot: Keypair = deriveIRK({ seed: new Uint8Array(32).fill(77) });
+const ADMIN_ROOT_SEED = new Uint8Array(32).fill(77);
+const adminRoot: Keypair = { privateKey: ADMIN_ROOT_SEED, publicKey: ed.getPublicKey(ADMIN_ROOT_SEED) };
 const stk = deriveSTK(deriveSWK(UMK, FQDN));
 const box = testCustodian({ identityPriv: stk.privateKey, swk: new Uint8Array(32).fill(4), cgk: new Uint8Array(32).fill(5) });
 const PASSCODE = "k7qm-2xhd-9twp-4frn-6cyb";
@@ -722,5 +727,38 @@ describe("exportNotice", () => {
     const notify = exportNotice({ alert: (a) => alerts.push(a), wake: async () => { throw new Error("com is down"); } });
     expect(() => notify({ stage: "downloaded" })).not.toThrow();
     expect(alerts).toHaveLength(1);
+  });
+});
+
+describe("a fresh install that has only the account key file", () => {
+  let rig: Rig | null = null;
+  afterEach(async () => {
+    await rig?.close();
+    rig = null;
+  });
+  const FAST = { m: 512, t: 1, p: 1 };
+  const META = { username: "harry", createdAt: "2026-10-18T00:00:00.000Z" };
+
+  it("rescues with the admin root and the server list the v2 file carried, asking nobody", async () => {
+    rig = await startBox({ adminPinned: true });
+    const file = wrapAccountToKeyfile({ umk: UMK, adminRootSeed: ADMIN_ROOT_SEED, servers: [{ domain: FQDN }] }, "correct horse battery", META, FAST);
+    const restored = unwrapAccountFromKeyfile(file, "correct horse battery");
+    const key: Keypair = { privateKey: restored.account.adminRootSeed!, publicKey: ed.getPublicKey(restored.account.adminRootSeed!) };
+    expect(restored.account.servers.map((s) => s.domain)).toEqual([FQDN]);
+    // The phone derives the box's key from the restored UMK, never asking where the box is from `.com`.
+    const stkFromFile = deriveSTK(deriveSWK(restored.umk, restored.account.servers[0]!.domain));
+    expect(Buffer.from(stkFromFile.publicKey)).toEqual(Buffer.from(stk.publicKey));
+    const { token, reply } = await openSession(rig.port, key);
+    expect(reply.status).toBe(200);
+    expect(parseBackupBundleHeader((await backUpAndDownload(rig.port, token)).subarray(0, 16), 1e9).metaLength).toBeGreaterThan(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("a v1 file (the account key alone) cannot rescue a box that pins an admin key: the IRK is refused", async () => {
+    rig = await startBox({ adminPinned: true });
+    const restored = unwrapAccountFromKeyfile(wrapUmkToKeyfile(UMK, "correct horse battery", META, FAST), "correct horse battery");
+    expect(restored.account.adminRootSeed).toBeUndefined();
+    const refused = await openSession(rig.port, deriveIRK(restored.umk));
+    expect(refused.reply.status).toBe(403);
   });
 });
