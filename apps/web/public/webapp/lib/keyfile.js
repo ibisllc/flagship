@@ -28,6 +28,10 @@ import { bytesToHex, hexToBytes } from "../keystore.js";
 import { tr } from "./i18n.js";
 export const KEYFILE_MAGIC = "flagship-key";
 export const KEYFILE_VERSION = 1;
+/** v2 wraps the whole local account: the UMK seed, the admin root seed and the server records
+ *  (docs/data-sovereignty.md 4.11). Opened here so a key file a phone exported opens in the
+ *  webapp too; the webapp itself still writes v1. */
+export const KEYFILE_VERSION_ACCOUNT = 2;
 
 /** Strong interactive default. Recorded in-file so a future version can raise
  *  it and old files still unwrap with their own recorded params. */
@@ -158,6 +162,10 @@ export async function unwrapUmkFromKeyfile(fileText, passphrase) {
   if (!env || typeof env !== "object" || env.magic !== KEYFILE_MAGIC) {
     throw new KeyfileError("not a flagship key file", "malformed");
   }
+  if (env.version === KEYFILE_VERSION_ACCOUNT) {
+    const a = await unwrapAccountFromKeyfile(fileText, passphrase);
+    return { seed: a.seed, meta: a.meta };
+  }
   if (env.version !== KEYFILE_VERSION) {
     throw new KeyfileError(`unsupported version ${env.version}`, "version");
   }
@@ -193,5 +201,67 @@ export async function unwrapUmkFromKeyfile(fileText, passphrase) {
       ...(env.accountId !== undefined ? { accountId: env.accountId } : {}),
       createdAt: env.createdAt,
     },
+  };
+}
+
+const HEX32 = /^[0-9a-f]{64}$/;
+
+function parseServers(v) {
+  if (!Array.isArray(v) || v.length > 64) throw new KeyfileError("malformed server list", "malformed");
+  return v.map((x) => {
+    if (typeof x?.domain !== "string" || x.domain.length === 0 || x.domain.length > 253 || /[|\s]/.test(x.domain)) {
+      throw new KeyfileError("malformed server record", "malformed");
+    }
+    if (x.stk !== undefined && (typeof x.stk !== "string" || !HEX32.test(x.stk))) throw new KeyfileError("malformed server key", "malformed");
+    const lan = Array.isArray(x.lan) ? x.lan.filter((a) => typeof a === "string" && a.length <= 64).slice(0, 8) : [];
+    return { domain: x.domain.toLowerCase(), ...(lan.length > 0 ? { lan } : {}), ...(typeof x.stk === "string" ? { stk: x.stk } : {}) };
+  });
+}
+
+/**
+ * Open a v1 or v2 `.flagshipkey`. A v1 file yields the UMK seed and no admin root or servers.
+ *
+ * @returns {Promise<{ seed: Uint8Array, adminRootSeed?: Uint8Array, servers: Array<{domain:string, lan?:string[], stk?:string}>, meta: {username:string, accountId?:string, createdAt:string} }>}
+ */
+export async function unwrapAccountFromKeyfile(fileText, passphrase) {
+  let env;
+  try {
+    env = JSON.parse(fileText);
+  } catch {
+    throw new KeyfileError("not valid JSON", "malformed");
+  }
+  if (!env || typeof env !== "object" || env.magic !== KEYFILE_MAGIC) throw new KeyfileError("not a flagship key file", "malformed");
+  if (env.version === KEYFILE_VERSION) {
+    const { seed, meta } = await unwrapUmkFromKeyfile(fileText, passphrase);
+    return { seed, servers: [], meta };
+  }
+  if (env.version !== KEYFILE_VERSION_ACCOUNT) throw new KeyfileError(`unsupported version ${env.version}`, "version");
+  if (!env.kdf || env.kdf.algo !== "argon2id" || env.aead !== "aes-256-gcm") throw new KeyfileError("unsupported kdf/aead", "malformed");
+  if (typeof env.kdf.saltHex !== "string" || typeof env.nonceHex !== "string" || typeof env.ciphertextHex !== "string" || typeof env.username !== "string" || typeof env.createdAt !== "string") {
+    throw new KeyfileError("missing required fields", "malformed");
+  }
+  let plain;
+  try {
+    plain = await aesGcmDecrypt(deriveKey(passphrase, hexToBytes(env.kdf.saltHex), env.kdf), hexToBytes(env.nonceHex), aadBytes(env), hexToBytes(env.ciphertextHex));
+  } catch {
+    throw new KeyfileError("wrong passphrase or corrupted/tampered file", "bad-passphrase");
+  }
+  let body;
+  try {
+    body = JSON.parse(new TextDecoder().decode(plain));
+  } catch {
+    throw new KeyfileError("the account inside is damaged", "malformed");
+  }
+  const key = (v) => {
+    if (typeof v !== "string" || !HEX32.test(v)) throw new KeyfileError("a key inside is not 32 bytes", "malformed");
+    return hexToBytes(v);
+  };
+  const seed = key(body?.umkSeedHex);
+  const adminRootSeed = body?.adminRootSeedHex === undefined ? undefined : key(body.adminRootSeedHex);
+  return {
+    seed,
+    ...(adminRootSeed ? { adminRootSeed } : {}),
+    servers: parseServers(body?.servers ?? []),
+    meta: { username: env.username, ...(env.accountId !== undefined ? { accountId: env.accountId } : {}), createdAt: env.createdAt },
   };
 }

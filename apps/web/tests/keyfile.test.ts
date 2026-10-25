@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -116,10 +117,30 @@ describe("webapp `.flagshipkey` — interop with @flagship/protocol + iOS", () =
   it("unsupported version throws code=version", async () => {
     const { unwrapUmkFromKeyfile } = await loadKeyfile();
     const env = JSON.parse(GOLDEN_FILE);
-    env.version = 2;
+    env.version = 3;
     await expect(unwrapUmkFromKeyfile(JSON.stringify(env), GOLDEN_PASSPHRASE)).rejects.toMatchObject({
       code: "version",
     });
+  });
+});
+
+// The shared key-file vectors (tools/rescue-vectors.ts): v1 and the v2 account file a phone exports
+// (admin root and server records) open here too, and every refusal matches.
+const KV = JSON.parse(readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/keyfile/vectors.json"), "utf8"));
+
+describe("keyfile vectors (packages/protocol/test-vectors/keyfile)", () => {
+  it.each(KV.open.map((c: any) => [c.name, c]))("opens %s", async (_n, c: any) => {
+    const { unwrapAccountFromKeyfile, unwrapUmkFromKeyfile } = await loadKeyfile();
+    const a = await unwrapAccountFromKeyfile(c.file, KV.passphrase);
+    expect(toHex(a.seed)).toBe(c.expect.umkSeedHex);
+    expect(a.adminRootSeed ? toHex(a.adminRootSeed) : undefined).toBe(c.expect.adminRootSeedHex);
+    expect(a.servers).toEqual(c.expect.servers);
+    expect(a.meta.username).toBe(c.expect.username);
+    expect(toHex((await unwrapUmkFromKeyfile(c.file, KV.passphrase)).seed)).toBe(c.expect.umkSeedHex);
+  });
+  it.each(KV.refuse.map((c: any) => [c.name, c]))("refuses %s", async (_n, c: any) => {
+    const { unwrapAccountFromKeyfile } = await loadKeyfile();
+    await expect(unwrapAccountFromKeyfile(c.file, c.passphrase ?? KV.passphrase)).rejects.toMatchObject({ code: c.error });
   });
 });
 
