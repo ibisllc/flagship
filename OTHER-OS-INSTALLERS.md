@@ -39,3 +39,25 @@ fixes for the BIOS speech-installer timeout and the CD apt source; none of the o
 installers here has them checked.
 
 Rebase onto `main` when it moves (`scripts/rebase-features.sh`).
+
+## Against release/0.3's install model (rebased 2026-10-25)
+
+release/0.3 installs a box only from a signed box artifact (`release/box-release.json`,
+`installer/install-box-artifact.sh`): an exact commit, threshold and PQ signatures, no git
+clone and no npm on the box.
+
+- **Ubuntu autoinstall: fits.** `buildAutoinstallUserData` runs the release's
+  `buildBootstrapScript` with `family: "ubuntu"`, so it pins an exact commit, installs the
+  signed artifact and uses the generated initramfs premount (`unlockPremount.ts`), which
+  opens any `crypto_LUKS` partition under its crypttab name; on a plain (non-LVM) root its
+  `vgchange -ay` is a no-op. The `family` default is Debian so every Debian output stays as
+  on the release. Still untested on a real Ubuntu install, as before. The autoinstall's
+  package list is the old one (no `openssl`, `tpm2-tools`, `cryptsetup-initramfs`, which
+  the Debian preseed now installs); check them before a live run.
+- **Debian netboot: does not fit.** `packages/installer-netboot/late-command.sh` is the
+  old `installer/install.sh` port: it `git clone`s `FLAGSHIP_INSTALLER_GIT_REF` (a branch
+  name is accepted) and runs `npm ci`, and its preseed installs `nodejs npm git`. Reviving
+  it means replacing that with the release bootstrap or `install-box-artifact.sh` fed from
+  the trailer (exact commit, artifact digest and the release's trust keys), and dropping
+  the branch-name refs. Kept verbatim here; its unit tests pass, but it bypasses the
+  artifact checks entirely and must not ship as is.
