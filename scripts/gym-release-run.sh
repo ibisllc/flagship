@@ -105,6 +105,14 @@ browser_verdict() { # browser_verdict <run dir>  ->  "<verdict> <other groups fa
     console.log(`${v} ${others}`);
   ' "$REPO/$1/summary.json" "$BROWSER_GROUP" "$(node -p 'require(process.argv[1]).appBrowser === true' "$REPO/release/box-release.json")"
 }
+# Boxes install the signed artifact the gym built for ITS tip (gym-refresh phase 4b), named in the gym
+# worktree's box release; this checkout's own box release names another commit with no gym artifact.
+if [ -z "${GYM_INSTALLER_GIT_REF:-}" ] && [ "$DRY" != 1 ]; then
+  GYM_RELEASE_JSON="${GYM_WORKTREE:-$HOME/.cache/flagship/gym-worktree}/release/box-release.json"
+  GYM_INSTALLER_GIT_REF="$(node -p 'require(process.argv[1]).commit' "$GYM_RELEASE_JSON" 2>/dev/null || true)"
+  [[ "$GYM_INSTALLER_GIT_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "✗ the gym box release names no exact commit ($GYM_RELEASE_JSON)"; exit 2; }
+fi
+export GYM_INSTALLER_GIT_REF
 CODE_ARCH=0 CODE_CLASSIC=0 BROWSER=not-run ARCH_OTHERS_FAILED=0
 for STACK in $STACKS; do
   RUN_DIR="gym-results/release-$STAMP-$STACK"
