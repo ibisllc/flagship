@@ -94,6 +94,9 @@ async function replaceFileOnce(path: string, data: string | Uint8Array, mode: nu
   try {
     const fh = await open(tmp, "w", mode);
     try {
+      // open()'s mode passes through the process umask (the daemon runs with 0077), which turned
+      // root-owned launchers that unprivileged units must execute into 0700.
+      await fh.chmod(mode);
       await fh.writeFile(data);
       await fh.sync();
     } finally {
