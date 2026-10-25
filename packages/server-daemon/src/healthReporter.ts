@@ -68,9 +68,18 @@ printf '%s' "$report" > "$tmp"
 sig=$(openssl pkeyutl -sign -inkey ${key} -rawin -in "$tmp" | xxd -p | tr -d '\\n')
 [ \${#sig} -eq 128 ] || exit 0
 body=$(jq -cn --arg r "$report" --arg s "$sig" '{report:$r, signature:$s}')
+# The daemon writes the proxy file and may run unprivileged, so this root script never hands the
+# file to curl as a config: it reads only the proxy and its user, re-quotes them and passes them on stdin.
+p="" u=""
+if [ -f ${curlrc} ] && [ ! -L ${curlrc} ]; then
+  p=$(sed -n 's/^proxy = \\(".*"\\)$/\\1/p' ${curlrc} | head -n 1 | jq -rs 'if length == 1 and (.[0] | type) == "string" then .[0] else empty end' 2>/dev/null)
+  u=$(sed -n 's/^proxy-user = \\(".*"\\)$/\\1/p' ${curlrc} | head -n 1 | jq -rs 'if length == 1 and (.[0] | type) == "string" then .[0] else empty end' 2>/dev/null)
+  case "$p" in socks5h://*|http://*) ;; *) p="" ;; esac
+fi
 proxy=()
-[ -r ${curlrc} ] && proxy=(-K ${curlrc})
-curl \${proxy[@]+"\${proxy[@]}"} -fsS --connect-timeout 5 --max-time 15 -X POST -H 'content-type: application/json' \\
+[ -n "$p" ] && proxy=(-K -)
+jq -rn --arg p "$p" --arg u "$u" 'if $p == "" then empty else "proxy = \\($p | tojson)", (if $u == "" then empty else "proxy-user = \\($u | tojson)" end) end' |
+  curl \${proxy[@]+"\${proxy[@]}"} -fsS --connect-timeout 5 --max-time 15 -X POST -H 'content-type: application/json' \\
   --data "$body" "${base}/api/server/${domain}/health" >/dev/null 2>&1 || true
 `;
 }
