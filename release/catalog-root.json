@@ -2,33 +2,32 @@
   "role": "root",
   "format": 1,
   "version": 1,
-  "expiresAt": 1856946242927,
+  "expiresAt": 2108267773179,
   "keys": {
-    "root-1": "fd6eac57e7fb13a11429ee6de243879a2871b247e01163bdc61c5ebe39a59df1",
-    "timestamp-1": "f6ac34b60ab5243d83eb3f7659a26d2f1cf6fc820532d4043d4d3e863f224e77"
+    "gym-1": "8803cb43a31bf007e79f286f84da8f16c86b5ccefbbab089e3109461afa699b8"
   },
   "roles": {
     "root": {
       "keyIds": [
-        "root-1"
+        "gym-1"
       ],
       "threshold": 1
     },
     "timestamp": {
       "keyIds": [
-        "timestamp-1"
+        "gym-1"
       ],
       "threshold": 1
     },
     "snapshot": {
       "keyIds": [
-        "root-1"
+        "gym-1"
       ],
       "threshold": 1
     },
     "targets": {
       "keyIds": [
-        "root-1"
+        "gym-1"
       ],
       "threshold": 1
     }
