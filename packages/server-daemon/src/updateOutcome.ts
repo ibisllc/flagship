@@ -89,6 +89,24 @@ export function parseUpdateOutcome(raw: unknown): UpdateOutcomeRecord | null {
   return out;
 }
 
+/**
+ * The box's Activity line for a verdict (docs/support/update-rollback.md §2). A rollback kept in recovery
+ * stays under the "rolled back" event older clients know, with its own sentence: the box did not go back.
+ */
+export function updateOutcomeActivity(r: UpdateOutcomeRecord): { kind: string; detail: string; ok: boolean } {
+  const to = r.targetCommit ? ` ${r.targetCommit.slice(0, 8)}` : "";
+  if (r.outcome === "applied") return { kind: "server.update.applied", detail: `Updated to${to}.`, ok: true };
+  if (r.outcome === "rolled-back" && r.rollbackRefused === true) {
+    return {
+      kind: "server.update.rolled-back",
+      detail: `The update to${to} didn't start cleanly, and the version before it is too old to go back to safely. The server stays on${to} in recovery mode until a fixed update arrives. Your apps and data are kept.`,
+      ok: false,
+    };
+  }
+  if (r.outcome === "rolled-back") return { kind: "server.update.rolled-back", detail: `The update to${to} failed its boot check and was rolled back.`, ok: false };
+  return { kind: "server.update.refused", detail: `An update order was refused${r.reason ? ` (${r.reason})` : ""}.`, ok: false };
+}
+
 let outcomeListener: ((record: UpdateOutcomeRecord) => void) | null = null;
 
 /** Called after each verdict is durably written (the activity feed); one per process. */

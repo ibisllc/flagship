@@ -125,6 +125,37 @@ export class BrowserGrants {
     return { ...g };
   }
 
+  /**
+   * Put back a grant this box gave before it restarted (grantStore.ts), under its own id. Only a
+   * standing (`service`) grant comes back, normalized exactly as {@link approve} would; anything else,
+   * or a grant that has ended, is refused (false), never widened.
+   */
+  restore(g: BrowserGrant): boolean {
+    if (g.duration !== "service" || g.revokedAt !== null || g.spentAt !== null || g.sessionId !== null) return false;
+    if (!/^bg-[0-9a-f-]{36}$/.test(g.id) || this.grants.has(g.id)) return false;
+    if (g.expiresAt !== null && !(g.expiresAt > this.now())) return false;
+    const back: BrowserGrant = {
+      id: g.id,
+      serviceId: g.serviceId,
+      capabilities: [...new Set(g.capabilities)],
+      origins: [...new Set(g.origins.map(normalizeOriginPattern))].sort(),
+      urlPrefixes: g.urlPrefixes.slice(0, 20),
+      schemes: [...new Set(g.schemes)],
+      ports: [...new Set(g.ports)].filter((p) => Number.isInteger(p) && p > 0 && p < 65536),
+      localNetwork: g.localNetwork,
+      duration: "service",
+      explanation: g.explanation.slice(0, 500),
+      sessionId: null,
+      issuedAt: g.issuedAt,
+      expiresAt: g.expiresAt,
+      revokedAt: null,
+      spentAt: null,
+    };
+    if (back.capabilities.length === 0 || (back.origins.length === 0 && !back.localNetwork) || back.schemes.length === 0) return false;
+    this.grants.set(back.id, back);
+    return true;
+  }
+
   /** Live grants for a service: not revoked, not expired, not spent, and for this session if session-scoped. */
   live(serviceId: string, sessionId?: string): BrowserGrant[] {
     const t = this.now();

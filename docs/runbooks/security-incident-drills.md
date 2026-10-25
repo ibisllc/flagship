@@ -93,8 +93,11 @@ The privileged helper (root helper on Studio, the box broker) is asked for somet
 
 An app-browser page reaches for the local network, another origin or another app's context.
 
-1. The app browser is OFF in 0.3. Confirm `appBrowserOff.test.ts` passes and the Chromium profile is
-   absent. A drill of the policy layer waits for the browser to be turned on.
+1. Whether the app browser is on is the release setting `appBrowser` in `release/box-release.json`
+   (on only when the release gym's `browser-grants` group proved it). Confirm `appBrowserOff.test.ts`
+   passes and the old shared Chromium profile is absent. With the browser off, a drill of the policy
+   layer waits for it to be turned on; with it on, withdraw the app's grants from its page and check
+   the next request is refused.
 
 ## 9. Root store and rogue certificate
 

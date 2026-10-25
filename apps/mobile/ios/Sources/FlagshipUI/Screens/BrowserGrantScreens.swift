@@ -31,8 +31,8 @@ public struct BrowserGrantSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Image(systemName: "safari").font(FS.font.scaled(34)).foregroundColor(c.warning)
-                if case .done(let allowed) = center.stage {
-                    Text(BrowserGrantCopy.answered(app: item.appName, allowed: allowed))
+                if case .done(let allowed, let duration) = center.stage {
+                    Text(BrowserGrantCopy.answered(app: item.appName, allowed: allowed, duration: duration))
                         .font(FS.font.h3()).foregroundColor(c.text)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("browser-grant-done")

@@ -40,6 +40,7 @@ describe("box release constants", () => {
       ["box-release.json", { commit: "386e29c84" }, /commit must be 40/],
       ["box-release.json", { artifactBase: "http://x.test/a" }, /https URL/],
       ["box-release.json", { artifactBase: "https://x.test/a/" }, /trailing slash/],
+      ["box-release.json", { appBrowser: "yes" }, /appBrowser must be true or false/],
       ["box-artifact-trust.json", { threshold: 0 }, /threshold/],
       ["box-artifact-trust.json", { keys: ["zz"] }, /64-hex/],
     ] as Array<[string, Record<string, unknown>, RegExp]>) {
@@ -48,6 +49,23 @@ describe("box release constants", () => {
       set(file, over);
       expect(load(dir).errors.join("\n"), JSON.stringify(over)).toMatch(msg);
     }
+  });
+
+  it("the app browser is on only when the release says so: the generated BOX_RELEASE carries it, and a release without it is off", () => {
+    const { value } = load(ROOT);
+    const rel = JSON.parse(readFileSync(join(ROOT, "release/box-release.json"), "utf8"));
+    expect(value.appBrowser).toBe(rel.appBrowser);
+    expect(files(value, ROOT)["packages/protocol/src/boxReleaseConfig.ts"]).toContain(`appBrowser: ${rel.appBrowser} as boolean,`);
+    const dir = mkdtempSync(join(tmpdir(), "box-release-"));
+    tmp.push(dir);
+    cpSync(join(ROOT, "release"), join(dir, "release"), { recursive: true });
+    const { appBrowser: _drop, ...without } = rel;
+    void _drop;
+    writeFileSync(join(dir, "release/box-release.json"), JSON.stringify(without));
+    const off = load(dir);
+    expect(off.errors).toEqual([]);
+    expect(off.value.appBrowser).toBe(false);
+    expect(files(off.value, ROOT)["packages/protocol/src/boxReleaseConfig.ts"]).toContain("appBrowser: false as boolean,");
   });
 
   it("the embedded installer scripts are the scripts, byte for byte, and parse as bash", () => {

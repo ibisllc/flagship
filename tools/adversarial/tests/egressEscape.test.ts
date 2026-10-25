@@ -18,6 +18,8 @@
  *   AT-EGR-11  pinning proxy: an approved host is reachable only on the approved port (was a finding; fixed)
  *   AT-EGR-12  AI provider fetch: redirects drop credentials, never reach internal space
  *   AT-EGR-13  git clone: no redirects, no protocols but http(s), pinned addresses, empty env
+ *   AT-EGR-14  app browser judge: other people's Flagship apps pass as public; this server, .com and the relay's own services do not
+ *   AT-EGR-15  pinning proxy: the relay's addresses are dialed on its web ports only, never its hub or echo
  */
 import { readFileSync } from "node:fs";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
@@ -28,6 +30,7 @@ import { classifyAddress, isPublicAddress, decideAccess as decideAppAccess, chec
 import { decide, hostMatches, normalizeHost, type EgressPolicyState } from "../../../packages/server-daemon/src/egress/policy.js";
 import { parseHttpHost, startProxyServer } from "../../../packages/server-daemon/src/egress/proxy.js";
 import { BrowserGrants, BrowserJudge, type BrowserGrantRequest } from "../../../packages/server-daemon/src/browser/policy/index.js";
+import { buildBrowserProtected } from "../../../packages/server-daemon/src/browser/protectedTargets.js";
 import { ServiceProxies } from "../../../packages/server-daemon/src/browser/egress.js";
 import { guardedFetch, UnsafeBaseUrlError } from "../../../packages/llm-providers/src/index.js";
 import { GIT_CLONE_ENV, hardenedGitConfig } from "../../../packages/server-daemon/src/buildmodes/gitImport.js";
@@ -230,12 +233,52 @@ describe("app browser (SEC-BROWSER-002)", () => {
   // `protectedHosts` nor `egress.protectedAddresses`, so the judge's "this server" refusal and the pinning
   // proxy's own-address refusal are never armed on a real box. With a whole-LAN grant (which describeGrant
   // promises excludes "this server") the app browser can reach the box's own LAN address and the browser
-  // network's gateway. The app browser is OFF (APP_BROWSER.enabled), which bounds the impact today.
+  // network's gateway. Whether the app browser is on is the release setting BOX_RELEASE.appBrowser.
   it("AT-EGR-09 the live box tells the browser judge and the pinning proxies its own names and addresses (catches: a guard whose input is never wired)", () => {
     const src = readFileSync(join(ROOT, "packages/server-daemon/src/index.ts"), "utf8");
     const call = src.slice(src.indexOf("await bootstrapBrowserBundle({"), src.indexOf("await bootstrapBrowserBundle({") + 1200);
     expect(call).toMatch(/protectedHosts\s*:/);
     expect(call).toMatch(/protectedAddresses\s*:/);
+    expect(call).toMatch(/portLimited\s*:/);
+  });
+
+  // Owner decision 2026-10-24: an app's browser may open other people's public Flagship apps like any public
+  // site. What stays protected is this server and every name under it, .com and everything under it, the
+  // relay's own names and services (8443 hub/API, 8444 echo), and the box's own, private and metadata space.
+  it("AT-EGR-14 another person's app passes as a public site; this server's names, .com, the relay's names and its hub and echo ports never do (catches: a protected list that blocks the whole services zone, or one that lets the relay's own services through)", async () => {
+    const relay = ["149.248.216.86", "2a09:8280:1::110:d2b6:0"];
+    const p = buildBrowserProtected({
+      serverFqdn: "home.alice.flagship.services",
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      relayUrl: "wss://flagship-services.fly.dev:8443/tunnel",
+      interfaces: () => ({}),
+      resolve: async (h) => (h === "flagship.services" || h === "flagship-services.fly.dev" ? relay : []),
+    });
+    await p.refresh();
+    const grants = new BrowserGrants(() => 1_000);
+    grants.approve({ serviceId: "app-a", capabilities: ["navigate"], origins: ["*.flagship.services", "*.flagshipserver.com", "flagship.services", "flagship-services.fly.dev", "via-relay.example.com"], ports: [443, 8443, 8444], duration: "service" });
+    const j = new BrowserJudge({
+      grants,
+      protectedHosts: p.hosts,
+      resolve: async (h) => (h === "via-relay.example.com" || h.endsWith("flagship.services") || h.endsWith(".fly.dev") ? relay : []),
+    });
+    const at = (url: string) => j.judge({ serviceId: "app-a", url, kind: "document" });
+    expect(await at("https://chess.bob.flagship.services/")).toMatchObject({ allow: true });
+    expect(await at("https://notes.home2.alice.flagship.services/")).toMatchObject({ allow: true });
+    for (const url of [
+      "https://home.alice.flagship.services/",
+      "https://notes.home.alice.flagship.services./",
+      "https://flagshipserver.com/",
+      "https://webapp.flagshipserver.com/",
+      "https://flagship.services/api/health",
+      "https://flagship-services.fly.dev/tunnel",
+      "https://broadcast--bob.flagship.services/",
+      "https://chess.bob.flagship.services:8443/tunnel",
+      "https://chess.bob.flagship.services:8444/",
+      "https://via-relay.example.com:8443/",
+    ]) {
+      expect(await at(url), url).toMatchObject({ allow: false, code: "protected-destination" });
+    }
   });
 
   it("AT-EGR-07b a whole-LAN grant without protected addresses admits the browser network gateway (documents the effect of AT-EGR-09)", async () => {
@@ -309,6 +352,23 @@ describe("per-app pinning proxies", () => {
     svc.allow("alice--a", "shop.example.com", ["93.184.216.34"]);
     expect(await connectVia(a, "shop.example.com:443")).toMatch(/200/);
     expect(await connectVia(a, "shop.example.com:22")).toMatch(/403/);
+  });
+
+  it("AT-EGR-15 the relay's addresses are dialed on its web ports only, never its tunnel hub (8443) or address echo (8444), whatever was approved (catches: a proxy that trusts the judge alone for the relay)", async () => {
+    origin = createHttpServer((_q, s) => s.end("origin"));
+    await new Promise<void>((r) => origin!.listen(0, "127.0.0.1", r));
+    const originPort = (origin.address() as { port: number }).port;
+    proxies = new ServiceProxies({
+      dial: () => ({ host: "127.0.0.1", port: originPort }),
+      portLimited: () => ({ addresses: ["149.248.216.86"], ports: [80, 443] }),
+    });
+    const a = await proxies.proxyFor("alice--a");
+    proxies.allow("alice--a", "chess.bob.flagship.services", ["149.248.216.86"]);
+    expect(await connectVia(a, "chess.bob.flagship.services:443")).toMatch(/200/);
+    proxies.allow("alice--a", "chess.bob.flagship.services", ["::ffff:149.248.216.86"], { scheme: "https", port: 8443 });
+    expect(await connectVia(a, "chess.bob.flagship.services:8443")).toMatch(/403/);
+    proxies.allow("alice--a", "chess.bob.flagship.services", ["149.248.216.86"], { scheme: "https", port: 8444 });
+    expect(await connectVia(a, "chess.bob.flagship.services:8444")).toMatch(/403/);
   });
 });
 

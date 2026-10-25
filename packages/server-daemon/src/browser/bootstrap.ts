@@ -41,11 +41,12 @@ import { BrowserManager } from "./browserManager.js";
 import { lookup } from "node:dns/promises";
 import { DomainGate } from "./domainGate.js";
 import { PolicedBrowser } from "./policedBrowser.js";
-import { BrowserGrants, BrowserJudge, ContextRegistry } from "./policy/index.js";
+import { BrowserGrants, BrowserJudge, ContextRegistry, type ProtectedHostsView } from "./policy/index.js";
 import { PhonePipe } from "./phonePipe.js";
 import { TabRegistry } from "./tabRegistry.js";
 import { chromiumEgressFlags, contextSession, ServiceProxies, type ServiceProxiesOptions } from "./egress.js";
 import { BrowserGrantRequests } from "./grantRequests.js";
+import { BrowserGrantStore } from "./grantStore.js";
 import type { SensitiveAuthority } from "../egress/approvals.js";
 
 export interface BootstrapBrowserOptions {
@@ -85,7 +86,7 @@ export interface BootstrapBrowserOptions {
    */
   pairedSessionGate?: PairedSessionGate;
   /** This server's own names and addresses: never reachable from an app browser (the judge refuses them). */
-  protectedHosts?: () => { names: string[]; addresses: string[] };
+  protectedHosts?: () => ProtectedHostsView;
   /** Test seam: resolve a name to every address it has. Default: the system resolver. */
   resolve?: (host: string) => Promise<string[]>;
   /** Told of every address the judge approved for a host (beside the app's own pinning proxy, which always is). */
@@ -103,6 +104,8 @@ export interface BootstrapBrowserOptions {
   onGrantRequest?: (serviceId: string) => void;
   /** Told of every refusal, for the owner's activity view. */
   onDenied?: ConstructorParameters<typeof PolicedBrowser>[0]["onDenied"];
+  /** Where the owner's standing browser grants are kept across restarts. Default `<dataDir>/browser-grants.json`; false: memory only. */
+  grantsFile?: string | false;
 }
 
 export interface BrowserBundle {
@@ -177,8 +180,12 @@ export async function bootstrapBrowserBundle(
           authority: opts.authority,
           ...(opts.onGrantRequest ? { onRequest: opts.onGrantRequest } : {}),
           onRevoked: (serviceId) => void policedRef.current?.closeOutOfScope(serviceId).catch(() => {}),
+          ...(opts.grantsFile === false ? {} : { store: new BrowserGrantStore(opts.grantsFile ?? join(opts.dataDir, "browser-grants.json")) }),
+          manifestDomains: (serviceId) => (domainGate.hasGrant(serviceId) ? domainGate.grantsFor(serviceId) : null),
         })
       : null;
+  // An "until you remove it" grant the owner gave outlives a restart (grantStore.ts).
+  await grantRequests?.restore();
   const policed = new PolicedBrowser({
     cdp: browser,
     contexts: new ContextRegistry(),
@@ -194,8 +201,17 @@ export async function bootstrapBrowserBundle(
     },
     ...(opts.onDenied ? { onDenied: opts.onDenied } : {}),
   });
+  // The first registration of an app after start is its manifest coming back at boot: the owner's grants
+  // given under that same manifest stay. Any later change (an update, a new manifest) ends them, as it
+  // always did.
+  const registered = new Set<string>();
   domainGate.onChange = (serviceId, domains) => {
-    grants.revokeService(serviceId);
+    const first = !registered.has(serviceId);
+    registered.add(serviceId);
+    const keep = first && domains !== null && grantRequests ? grantRequests.givenUnder(serviceId, domains) : new Set<string>();
+    let ended = false;
+    for (const g of grants.all()) if (g.serviceId === serviceId && !keep.has(g.id) && grants.revoke(g.id)) ended = true;
+    if (ended) void grantRequests?.persist();
     if (domains === null) {
       grantRequests?.forgetService(serviceId);
       void policed.revokeService(serviceId).catch(() => {});

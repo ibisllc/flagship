@@ -4,8 +4,11 @@
 # included), let the runner tear its fleet down, release the lock, and print one summary line. It runs
 # twice, once per container stack (arch-v2: every group; classic: the groups covering existing boxes).
 # Exits 0 when both are green, 3 when nothing failed but something was skipped (not proven), 5 when
-# classic is green but arch-v2 is not (new boxes must be built on classic), any other code when
-# classic failed.
+# classic is green but arch-v2 is not (new boxes must be built on classic), 6 when every group is green
+# except the policed app browser's (browser-grants: the browser must ship off, release/box-release.json
+# `appBrowser`), any other code when classic failed. The browser group's verdict is also written to
+# gym-results/release-<stamp>-arch-v2/browser-verdict (pass | fail | skip | off | not-run) and printed
+# on its own line.
 #
 #   bash scripts/gym-release-run.sh [--skip-refresh] [--groups a,b] [--dry-run]
 #
@@ -87,7 +90,22 @@ report() { # report <run dir> <stack>
     echo "no summary at $summary (the runner crashed before writing it)"
   fi
 }
-CODE_ARCH=0 CODE_CLASSIC=0
+# The policed browser's verdict, read from one run's summary: off (the release ships it off and the box
+# serves none of its routes), pass, fail, skip or not-run; and whether any OTHER group failed.
+BROWSER_GROUP=browser-grants
+browser_verdict() { # browser_verdict <run dir>  ->  "<verdict> <other groups failed: 0|1>"
+  node -e '
+    const fs = require("fs");
+    const [file, name, appBrowser] = process.argv.slice(1);
+    if (!fs.existsSync(file)) { console.log("not-run 1"); process.exit(0); }
+    const s = JSON.parse(fs.readFileSync(file, "utf8")).summary ?? {};
+    const g = s[name];
+    const others = Object.entries(s).some(([n, x]) => n !== name && x.fail > 0) ? 1 : 0;
+    const v = !g ? "not-run" : g.fail ? "fail" : g.skip || !g.pass ? "skip" : appBrowser === "true" ? "pass" : "off";
+    console.log(`${v} ${others}`);
+  ' "$REPO/$1/summary.json" "$BROWSER_GROUP" "$(node -p 'require(process.argv[1]).appBrowser === true' "$REPO/release/box-release.json")"
+}
+CODE_ARCH=0 CODE_CLASSIC=0 BROWSER=not-run ARCH_OTHERS_FAILED=0
 for STACK in $STACKS; do
   RUN_DIR="gym-results/release-$STAMP-$STACK"
   export GYM_RUN_DIR="$RUN_DIR" GYM_BOX_STACK="$STACK"
@@ -100,14 +118,23 @@ for STACK in $STACKS; do
   set -e
   [ "$DRY" = 1 ] && continue
   report "$RUN_DIR" "$STACK"
-  if [ "$STACK" = classic ]; then CODE_CLASSIC=$c; else CODE_ARCH=$c; fi
+  if [ "$STACK" = classic ]; then CODE_CLASSIC=$c; else
+    CODE_ARCH=$c
+    read -r BROWSER ARCH_OTHERS_FAILED < <(browser_verdict "$RUN_DIR")
+    echo "$BROWSER" > "$REPO/$RUN_DIR/browser-verdict"
+    echo "policed app browser (appBrowser $(node -p 'require(process.argv[1]).appBrowser === true' "$REPO/release/box-release.json")): $BROWSER (written to $RUN_DIR/browser-verdict)"
+  fi
 done
 [ "$DRY" = 1 ] && { echo "dry run: nothing ran"; exit 0; }
 
 # 0 both green · 3 nothing failed but something skipped · 5 classic green, arch-v2 not (build new
-# boxes on classic) · anything else: classic failed, the release is blocked.
+# boxes on classic) · 6 everything green but the policed browser (ship it off) · anything else:
+# classic failed, the release is blocked.
 if [ "$CODE_CLASSIC" != 0 ] && [ "$CODE_CLASSIC" != 3 ]; then
   echo "✗ the classic stack failed (exit $CODE_CLASSIC): boxes already out there would break"; exit "$CODE_CLASSIC"
+fi
+if [ "$CODE_ARCH" != 0 ] && [ "$CODE_ARCH" != 3 ] && [ "$BROWSER" = fail ] && [ "$ARCH_OTHERS_FAILED" = 0 ]; then
+  echo "✗ every group passed except the policed app browser (browser-grants): the app browser must ship off for this release"; exit 6
 fi
 if [ "$CODE_ARCH" != 0 ] && [ "$CODE_ARCH" != 3 ]; then
   echo "✗ the arch-v2 stack failed (exit $CODE_ARCH); classic is green: new boxes must be built on classic"; exit 5

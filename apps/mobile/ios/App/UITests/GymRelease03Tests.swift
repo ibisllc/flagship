@@ -168,7 +168,7 @@ final class GymRelease03Tests: GymSweepCase {
         app.buttons["browser-grant-allow"].tap()
         let done = app.staticTexts["browser-grant-done"]
         XCTAssertTrue(done.waitForExistence(timeout: 15))
-        XCTAssertEqual(done.label, "Allowed. plants can use the browser as asked.")
+        XCTAssertEqual(done.label, "Allowed. plants can use the browser for one visit.")
         expectProbe(app, "signed browser-grant by admin-root")
         expectProbe(app, "browser grant allow bright-maple--plants once")
         app.buttons["browser-grant-close"].tap()
@@ -222,6 +222,7 @@ final class GymRelease03Tests: GymSweepCase {
         once.tap()
         let done = app.staticTexts["browser-grant-done"]
         XCTAssertTrue(done.waitForExistence(timeout: 15))
+        XCTAssertEqual(done.label, "Allowed. wiki can use the browser for one visit.", "Says what was granted, not the ask.")
         expectProbe(app, "browser grant allow bright-maple--wiki once")
     }
 

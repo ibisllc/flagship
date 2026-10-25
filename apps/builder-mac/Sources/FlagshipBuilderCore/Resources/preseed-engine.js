@@ -125,7 +125,9 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     /** The lowest Node a box may run. */
     nodeFloor: "24.22.1",
     /** What a new box is built on: Podman + the Rust path, or Docker + TS (the release gym decides). */
-    newBoxStack: "arch-v2"
+    newBoxStack: "arch-v2",
+    /** Whether a box turns the policed app browser on (SEC-BROWSER-002): on only when the release gym proved it. */
+    appBrowser: true
   };
 
   // src/base64.ts

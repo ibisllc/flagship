@@ -59,12 +59,22 @@ export interface JudgeDeps {
   };
   /** Resolve a name to every address it has. Throws or returns [] on failure. */
   resolve: (host: string) => Promise<string[]>;
-  /** The control host's own name and addresses: never reachable from an app browser. */
   /**
    * This server's own names and addresses, and the services it depends on: never reachable from an app
-   * browser. `names` match exactly; `zones` match the name and every name under it.
+   * browser. `names` match exactly; `zones` match the name and every name under it; `labelPrefixes`
+   * match a name directly under `zone` whose first label starts with `prefix`. `portLimited` names
+   * destinations (by address, or by name and every name under it) reachable only on the listed ports:
+   * the relay, whose web ports carry other people's apps and whose other ports are its own services.
    */
-  protectedHosts?: () => { names: string[]; addresses: string[]; zones?: string[] };
+  protectedHosts?: () => ProtectedHostsView;
+}
+
+export interface ProtectedHostsView {
+  names: string[];
+  addresses: string[];
+  zones?: string[];
+  labelPrefixes?: Array<{ prefix: string; zone: string }>;
+  portLimited?: { addresses: string[]; zones?: string[]; ports: number[] };
 }
 
 const PROTECTED: AddressClass[] = ["loopback", "link-local", "metadata", "multicast", "reserved", "invalid"];
@@ -204,9 +214,20 @@ export class BrowserJudge {
     live: BrowserGrant[],
   ): Promise<{ ok: true; addresses: string[]; local: boolean } | { ok: false; code: Denial; reason: string }> {
     const host = hostOf(u);
-    const protectedHosts = this.deps.protectedHosts?.() ?? { names: [], addresses: [] };
-    const named = protectedHosts.names.some((n) => canonicalName(n) === host) || (protectedHosts.zones ?? []).some((z) => host === canonicalName(z) || host.endsWith(`.${canonicalName(z)}`));
+    const protectedHosts: ProtectedHostsView = this.deps.protectedHosts?.() ?? { names: [], addresses: [] };
+    const under = (z: string) => host === canonicalName(z) || host.endsWith(`.${canonicalName(z)}`);
+    const named =
+      protectedHosts.names.some((n) => canonicalName(n) === host) ||
+      (protectedHosts.zones ?? []).some(under) ||
+      (protectedHosts.labelPrefixes ?? []).some(({ prefix, zone }) => {
+        const z = canonicalName(zone);
+        return host.endsWith(`.${z}`) && !host.slice(0, -z.length - 1).includes(".") && host.startsWith(prefix.toLowerCase());
+      });
     if (named) return { ok: false, code: "protected-destination", reason: "that is this server" };
+    const port = portOf(u);
+    const limited = protectedHosts.portLimited;
+    const portShut = !!limited && !limited.ports.includes(port);
+    if (portShut && (limited!.zones ?? []).some(under)) return { ok: false, code: "protected-destination", reason: "that port is the relay's own service" };
     let addrs: string[];
     if (isIP(host)) addrs = [host];
     else {
@@ -220,6 +241,7 @@ export class BrowserJudge {
     let local = false;
     for (const a of addrs) {
       if (protectedHosts.addresses.some((p) => sameAddress(p, a))) return { ok: false, code: "protected-destination", reason: "that is this server" };
+      if (portShut && limited!.addresses.some((p) => sameAddress(p, a))) return { ok: false, code: "protected-destination", reason: "that port is the relay's own service" };
       const cls = classifyAddress(a);
       if (PROTECTED.includes(cls)) return { ok: false, code: "protected-destination", reason: `that address (${cls}) is never reachable from an app` };
       if (cls === "private") {

@@ -478,6 +478,21 @@ failed, something skipped: you type `accept-skips` only if every skip is an owne
 non-zero (no-go). `GYM_START_REF=origin/gym-ux` runs a UX branch's gym. The upstream-sync group needs
 `GYM_SYNC_REPO`; the passkey group needs `FLAGSHIP_RECOVERY_PROOF_SECRET` on the gym Worker.
 
+The gym also decides two release settings in `release/box-release.json` (compiled into `BOX_RELEASE`):
+
+- `newBoxStack`: exit 5 means classic is green and arch-v2 is not. The script offers to run
+  `node scripts/set-new-box-stack.mjs classic`, commits and lands it; run the step again on the new pin.
+- `appBrowser` (owner decision 2026-10-24: the policed app browser ships on only if the gym proves it).
+  The `browser-grants` group FAILS, never skips, when the release says `appBrowser: true` and the box
+  does not serve the browser's owner routes; with `appBrowser: false` it checks the routes are really
+  not served. `gym-release-run.sh` prints the group's verdict on its own line and writes it to
+  `gym-results/release-<stamp>-arch-v2/browser-verdict` (`pass`, `fail`, `skip`, `off` or `not-run`).
+  Exit 6 means every other group is green and only the browser failed: the script offers to run
+  `node scripts/set-app-browser.mjs off` (rewrites `release/box-release.json`, `gen-box-release --write`,
+  rebuilds the packages and the preseed engine that embed it, repins the bootstrap hash), commits and
+  lands it, and says the browser ships OFF in this release; run the step again on the new pin. Any
+  other failure is a plain no-go.
+
 The root-wildcard checks below stay part of the same run.
 
 The root-wildcard change (`docs/wildcard-dns.md`) rewrites how every account's

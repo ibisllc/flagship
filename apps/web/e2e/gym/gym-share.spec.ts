@@ -209,13 +209,16 @@ test.describe("gym webapp share", () => {
       ["/api/screens/apps-list", { apps: [] }],
       ["/api/screens/server-metrics", METRICS],
     ]);
-    await page.evaluate(async (fqdn) => {
+    await page.evaluate(async ({ fqdn, stk }) => {
+      // This device met its server at first contact, so its key is pinned (lib/serverPins.js):
+      // a share offer carries only the pinned key, never the one `.com` lists.
+      (await import("/lib/serverPins.js")).pinServerKey(fqdn, stk, "first-sight");
       // The owner's admin device: sharing signs under the admin root.
       const { getSession } = await import("/lib/state.js");
       getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
       const { enterServerDetail } = await import("/views/server-detail.js");
       await enterServerDetail(fqdn);
-    }, OWNER_BOX);
+    }, { fqdn: OWNER_BOX, stk: stkPub });
     const card = page.locator("#shared-with-card");
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card.locator("[data-share-sas]")).toHaveText(/^\d{3} \d{3}$/, { timeout: 10_000 });

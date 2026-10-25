@@ -333,7 +333,7 @@ import {
   runUpdateBootGate,
   type UpdateHealthSignal,
 } from "./updateHealthGate.js";
-import { fileUpdateOutcomeStore, onUpdateOutcome } from "./updateOutcome.js";
+import { fileUpdateOutcomeStore, onUpdateOutcome, updateOutcomeActivity } from "./updateOutcome.js";
 import { buildReleaseCatalog } from "./updateReleases.js";
 import { runFirstBootUpdate } from "./firstBootUpdate.js";
 import { installHealthReporter } from "./healthReporter.js";
@@ -848,10 +848,8 @@ async function main(): Promise<void> {
   const frontPage = new FrontPageStore();
   await frontPage.load();
   onUpdateOutcome((r) => {
-    const to = r.targetCommit ? ` ${r.targetCommit.slice(0, 8)}` : "";
-    if (r.outcome === "applied") activityLog.note("server.update.applied", `Updated to${to}.`);
-    else if (r.outcome === "rolled-back") activityLog.note("server.update.rolled-back", `The update to${to} failed its boot check and was rolled back.`, { ok: false });
-    else activityLog.note("server.update.refused", `An update order was refused${r.reason ? ` (${r.reason})` : ""}.`, { ok: false });
+    const line = updateOutcomeActivity(r);
+    activityLog.note(line.kind, line.detail, line.ok ? {} : { ok: false });
   });
 
   // Transfer-a-box re-home (docs/account-deletion-and-name-reclaim.md §4, Layer
@@ -1479,7 +1477,7 @@ async function main(): Promise<void> {
     alertInbox,
     pairedSessions,
     onGrantRequest: (serviceId) => browserGrantAlertRef.current?.(serviceId),
-    // What the app browser may never reach: this server, .com, the relay, its own and metadata addresses.
+    // What the app browser may never reach: this server, .com, the relay's own services, its own and metadata addresses.
     protectedTargets: buildBrowserProtected({
       ...(env.serverFqdn ? { serverFqdn: env.serverFqdn } : {}),
       ...(env.controlPlaneBaseUrl ? { controlPlaneBaseUrl: env.controlPlaneBaseUrl } : {}),
@@ -2599,13 +2597,13 @@ function wireBffStores(): BffStores {
  * or unreachable. The teardown hook is registered separately on exit.
  */
 /**
- * SEC-BROWSER-001: the app browser is off. Apps shared one Chromium profile
- * and the allowlist was checked only on openTab and navigate, so an app
- * granted one site could follow a redirect and read another signed-in one.
- * It stays off until per-app contexts and continuous navigation enforcement
- * pass (SECURITY-HARDENING-PLAN.md §10.4). A code switch, not an env flag.
+ * SEC-BROWSER-001/002: whether the policed app browser is on is a release
+ * setting (release/box-release.json `appBrowser`, compiled into BOX_RELEASE),
+ * not an env flag. It ships on only when the release gym's browser-grants
+ * group proves per-app contexts and continuous navigation enforcement on a
+ * live box; otherwise the release step sets it false (scripts/set-app-browser.mjs).
  */
-export const APP_BROWSER = { enabled: false };
+export const APP_BROWSER = { enabled: BOX_RELEASE.appBrowser };
 
 /** Pinned with the `flagship-browser` network and the chromium service in installer/data-services/docker-compose.yml. */
 export const BROWSER_EGRESS = { gateway: "172.31.250.1", browser: "172.31.250.2", denyPort: 18480 } as const;
@@ -2649,6 +2647,7 @@ async function wireBrowserBundle(deps: {
         acceptFrom: (a) => a === BROWSER_EGRESS.browser || a === `::ffff:${BROWSER_EGRESS.browser}`,
         denyPort: BROWSER_EGRESS.denyPort,
         protectedAddresses: deps.protectedTargets.addresses,
+        portLimited: deps.protectedTargets.portLimited,
       },
       ...(deps.serverDomain ? { serverDomain: deps.serverDomain } : {}),
       ...(deps.authority ? { authority: deps.authority } : {}),

@@ -65,9 +65,14 @@ public enum BrowserGrantCopy {
 
     public static func explanation(_ text: String) -> String { "“\(text)”" }
 
-    public static func answered(app: String, allowed: Bool) -> String {
-        allowed ? String(localized: "Allowed. \(app) can use the browser as asked.")
-                : String(localized: "Denied. \(app) can't use the browser for this.")
+    /// Says what was granted: the owner may have chosen a shorter duration than the app asked for.
+    public static func answered(app: String, allowed: Bool, duration: String) -> String {
+        guard allowed else { return String(localized: "Denied. \(app) can't use the browser for this.") }
+        switch duration {
+        case "once": return String(localized: "Allowed. \(app) can use the browser for one visit.")
+        case "session": return String(localized: "Allowed. \(app) can use the browser until this browser session ends.")
+        default: return String(localized: "Allowed. \(app) can use the browser until you remove it.")
+        }
     }
 
     public static func reason(app: String) -> String {
@@ -183,7 +188,8 @@ public final class BrowserGrantCenter {
     public enum Stage: Equatable {
         case ask
         case working(allow: Bool)
-        case done(allow: Bool)
+        /// `duration` is what the box granted: the ask's own, or the shorter one the owner chose.
+        case done(allow: Bool, duration: String)
         case failed(String)
     }
 
@@ -256,7 +262,7 @@ public final class BrowserGrantCenter {
         do {
             try await BrowserGrantAnswerOrder.send(item.request, allow: allow, duration: duration, appName: item.appName,
                                                    client: client, fallbackServerDomain: item.serverDomain, signer: signer)
-            stage = .done(allow: allow)
+            stage = .done(allow: allow, duration: duration ?? item.request.duration)
         } catch {
             stage = .failed(BrowserGrantCopy.message(for: error))
         }
@@ -323,7 +329,7 @@ public final class BrowserGrantsController {
         do {
             try await BrowserGrantAnswerOrder.send(r, allow: allow, duration: duration, appName: appName, client: client,
                                                    fallbackServerDomain: serverDomain, signer: signer)
-            note = BrowserGrantCopy.answered(app: appName, allowed: allow)
+            note = BrowserGrantCopy.answered(app: appName, allowed: allow, duration: duration ?? r.duration)
         } catch {
             self.error = BrowserGrantCopy.message(for: error)
         }

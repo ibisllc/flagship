@@ -536,3 +536,80 @@ describe("release.sh parsers against captured tool output", () => {
     expect(filters).toEqual(expect.arrayContaining(["scripts", "apps/com", "packages/server-daemon"]));
   });
 });
+
+describe("the app browser ships on only if the release gym proves it (owner decision 2026-10-24)", () => {
+  const GYM_RUN = join(ROOT, "scripts/gym-release-run.sh");
+
+  // Runs gym-release-run.sh with a stub runner that writes each pass's summary.json, as shared-run does.
+  function gymRun(arch: Record<string, { pass: number; fail: number; skip: number }>, archCode: number) {
+    const dir = mkdtempSync(join(tmpdir(), "gym-release-"));
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const fixtures = join(dir, "fx");
+    mkdirSync(fixtures);
+    writeFileSync(join(fixtures, "arch-v2.json"), JSON.stringify({ summary: arch }));
+    writeFileSync(join(fixtures, "classic.json"), JSON.stringify({ summary: { core: { pass: 3, fail: 0, skip: 0 } } }));
+    writeFileSync(join(fixtures, "arch-v2.code"), String(archCode));
+    writeFileSync(join(fixtures, "classic.code"), "0");
+    writeFileSync(
+      join(bin, "npx"),
+      `#!/bin/sh\nmkdir -p "$GYM_RUN_DIR"\ncp "${fixtures}/$GYM_BOX_STACK.json" "$GYM_RUN_DIR/summary.json"\nexit $(cat "${fixtures}/$GYM_BOX_STACK.code")\n`,
+    );
+    chmodSync(join(bin, "npx"), 0o755);
+    const secrets = join(dir, "gym.env");
+    writeFileSync(secrets, "GYM_ADMIN_SECRET=x\nGYM_DEMO_IRK_KEK=y\n");
+    const r = spawnSync("bash", [GYM_RUN, "--skip-refresh"], {
+      cwd: ROOT,
+      encoding: "utf8",
+      env: { PATH: `${bin}:/usr/bin:/bin:${process.execPath.replace(/\/node$/, "")}`, HOME: dir, GYM_SECRETS_FILE: secrets, FLAGSHIP_GYM_LOCK: join(dir, "gym.lock") },
+      timeout: 60_000,
+    });
+    const out = `${r.stdout}${r.stderr}`;
+    const runDir = /\(written to (gym-results\/release-\S+-arch-v2)\/browser-verdict\)/.exec(out)?.[1];
+    const verdict = runDir ? readFileSync(join(ROOT, runDir, "browser-verdict"), "utf8").trim() : null;
+    for (const d of readdirSync(join(ROOT, "gym-results")).filter((n) => runDir && (n === runDir.split("/")[1] || n === runDir.split("/")[1]!.replace(/-arch-v2$/, "-classic")))) {
+      spawnSync("rm", ["-rf", join(ROOT, "gym-results", d)]);
+    }
+    spawnSync("rm", ["-rf", dir]);
+    return { code: r.status, out, verdict };
+  }
+
+  const appBrowser = JSON.parse(readFileSync(join(ROOT, "release/box-release.json"), "utf8")).appBrowser === true;
+
+  it("only the browser group failing exits 6 and writes its verdict on its own", () => {
+    const r = gymRun({ core: { pass: 5, fail: 0, skip: 0 }, "browser-grants": { pass: 0, fail: 1, skip: 0 } }, 1);
+    expect(r.code, r.out).toBe(6);
+    expect(r.verdict).toBe("fail");
+    expect(r.out).toMatch(/policed app browser \(appBrowser (true|false)\): fail/);
+    expect(r.out).toContain("the app browser must ship off");
+  });
+
+  it("another group failing too is arch-v2 not ready (5), not a browser-only verdict", () => {
+    const r = gymRun({ core: { pass: 4, fail: 1, skip: 0 }, "browser-grants": { pass: 0, fail: 1, skip: 0 } }, 1);
+    expect(r.code, r.out).toBe(5);
+    expect(r.verdict).toBe("fail");
+  });
+
+  it("a green browser group is pass when the release turns it on, off when it ships off", () => {
+    const r = gymRun({ core: { pass: 5, fail: 0, skip: 0 }, "browser-grants": { pass: appBrowser ? 6 : 1, fail: 0, skip: 0 } }, 0);
+    expect(r.code, r.out).toBe(0);
+    expect(r.verdict).toBe(appBrowser ? "pass" : "off");
+  });
+
+  it("release.sh offers to ship the browser off on exit 6, through set-app-browser.mjs, and lands it", () => {
+    const step = SOURCE.slice(SOURCE.indexOf("run_gym() {"), SOURCE.indexOf("run_gym() {") + 6000);
+    expect(step).toMatch(/\n\s+6\) warn "every group is green except the policed app browser/);
+    expect(step).toContain("WX node scripts/set-app-browser.mjs off");
+    expect(step).toContain('commit_paths "Ship the app browser off (the release gym did not prove it)"');
+    expect(step).toContain("the app browser ships OFF in this release");
+    expect(SOURCE).toMatch(/6 = only the policed browser failed: ship it off/);
+    expect(RUNBOOK).toContain("node scripts/set-app-browser.mjs off");
+    expect(RUNBOOK).toContain("browser-verdict");
+  });
+
+  it("the browser-grants group fails, never skips, when the release turns the browser on", () => {
+    const src = readFileSync(join(ROOT, "tools/live-e2e/groups/release03/browserGrants.ts"), "utf8");
+    expect(src).toContain("BOX_RELEASE.appBrowser");
+    expect(src).not.toMatch(/rec\.skip\(/);
+  });
+});

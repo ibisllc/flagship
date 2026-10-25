@@ -25,6 +25,7 @@ import { isIP } from "node:net";
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import type { SensitiveAuthority } from "../egress/approvals.js";
 import { contextSession } from "./egress.js";
+import type { BrowserGrantStore, StoredBrowserGrant } from "./grantStore.js";
 import {
   describeGrant,
   GrantRequestError,
@@ -133,6 +134,9 @@ export class BrowserGrantRequests {
   private given = new Set<string>();
   /** `<serviceId>|<digest of the ask>` -> denials so far and when the last one ends. */
   private cooling = new Map<string, { count: number; until: number }>();
+  /** Grant id -> the app's manifest domains when it was given (sorted; null: none), kept with it on disk. */
+  private stamps = new Map<string, string[] | null>();
+  private saving: Promise<void> = Promise.resolve();
 
   constructor(private readonly o: {
     grants: BrowserGrants;
@@ -144,7 +148,63 @@ export class BrowserGrantRequests {
     /** A grant was withdrawn: close what the app had open under it. */
     onRevoked?: (serviceId: string) => void;
     maxSkewMs?: number;
+    /** Where standing grants are kept across restarts (grantStore.ts); absent: memory only. */
+    store?: BrowserGrantStore;
+    /** The app's manifest `browser.domains` now, recorded with each grant given. */
+    manifestDomains?: (serviceId: string) => string[] | null;
   }) {}
+
+  /** Put back the standing grants the owner gave before a restart. Returns how many came back. */
+  async restore(): Promise<number> {
+    if (!this.o.store) return 0;
+    let n = 0;
+    for (const e of await this.o.store.load()) {
+      let ok = false;
+      try {
+        ok = this.o.grants.restore(e.grant);
+      } catch {
+        ok = false;
+      }
+      if (!ok) continue;
+      this.given.add(e.grant.id);
+      this.stamps.set(e.grant.id, e.manifestDomains);
+      n++;
+    }
+    return n;
+  }
+
+  /**
+   * The owner's grants for this app that were given under exactly these manifest domains: the ones a
+   * re-registration of the same manifest (the box starting up) keeps.
+   */
+  givenUnder(serviceId: string, domains: string[] | null): Set<string> {
+    const want = domains === null ? null : JSON.stringify([...domains].map((d) => d.toLowerCase()).sort());
+    const out = new Set<string>();
+    for (const id of this.given) {
+      if (this.o.grants.serviceOf(id) !== serviceId) continue;
+      const stamp = this.stamps.get(id);
+      const had = stamp === undefined || stamp === null ? null : JSON.stringify(stamp);
+      if (had === want) out.add(id);
+    }
+    return out;
+  }
+
+  /** Write the standing grants still in force (after any change); failures are logged, memory stays right. */
+  persist(): Promise<void> {
+    const store = this.o.store;
+    if (!store) return Promise.resolve();
+    this.saving = this.saving
+      .then(() => {
+        const keep: StoredBrowserGrant[] = [];
+        for (const g of this.o.grants.all()) {
+          if (!this.given.has(g.id) || g.duration !== "service" || !this.o.grants.isLive(g.id)) continue;
+          keep.push({ grant: g, manifestDomains: this.stamps.get(g.id) ?? null });
+        }
+        return store.save(keep);
+      })
+      .catch((e) => console.warn(`[browser] could not save browser grants: ${(e as Error).message}`));
+    return this.saving;
+  }
 
   private now(): number {
     return (this.o.now ?? (() => Date.now()))();
@@ -229,7 +289,10 @@ export class BrowserGrantRequests {
     h.status = "allowed";
     h.grantId = g.id;
     this.given.add(g.id);
+    const domains = this.o.manifestDomains?.(h.ask.serviceId) ?? null;
+    this.stamps.set(g.id, domains === null ? null : [...domains].map((d) => d.toLowerCase()).sort());
     this.cooling.delete(this.key(h.ask));
+    if (g.duration === "service") void this.persist();
     return { ok: true, grantId: g.id };
   }
 
@@ -261,6 +324,8 @@ export class BrowserGrantRequests {
     if (!this.signedByOwner(order, b.signatureHex, verifyBrowserGrantRevoke)) return { ok: false, status: 403, reason: "that revoke was not signed by the owner" };
     this.o.grants.revoke(b.grantId);
     this.given.delete(b.grantId);
+    this.stamps.delete(b.grantId);
+    void this.persist();
     try {
       this.o.onRevoked?.(b.serviceId);
     } catch {
@@ -293,6 +358,12 @@ export class BrowserGrantRequests {
       if (h.grantId) this.given.delete(h.grantId);
       this.held.delete(id);
     }
+    for (const id of [...this.given]) {
+      if (this.o.grants.serviceOf(id) !== serviceId) continue;
+      this.given.delete(id);
+      this.stamps.delete(id);
+    }
     for (const k of [...this.cooling.keys()]) if (k.startsWith(`${serviceId}|`)) this.cooling.delete(k);
+    void this.persist();
   }
 }

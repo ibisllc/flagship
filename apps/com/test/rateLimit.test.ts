@@ -475,6 +475,29 @@ describe("rateLimit — wired into route()", () => {
     }
   });
 
+  it("rate-limits the per-share key attestation per source and per account before the handler runs", async () => {
+    expect(endpointFor("POST", "/api/users/alice/share-key-attestation")).toBe("share-key-attestation");
+    expect(endpointFor("GET", "/api/users/alice/share-key-attestation")).toBeNull();
+    expect(extractUsernameHash("/api/users/Alice/share-key-attestation")).toBe("alice");
+    expect(LIMITS["share-key-attestation"]?.map((a) => a.axis).sort()).toEqual(["ip", "ip", "usernameHash"]);
+    const { ns, calls } = makeCounters((key) => !key.startsWith("share-key-attestation|usernameHash|"));
+    const env = makeEnv(ns);
+    const r = await route(
+      new Request("https://flagshipserver.com/api/users/Alice/share-key-attestation", {
+        method: "POST",
+        body: JSON.stringify({ request: { username: "alice", keyPubHex: "aa".repeat(32), issuedAt: 1 }, signature: "bb".repeat(64) }),
+        headers: { "content-type": "application/json", "cf-connecting-ip": "1.2.3.4" },
+      }),
+      env,
+    );
+    expect(r.status).toBe(429);
+    const body = JSON.parse(await r.text());
+    expect(body.endpoint).toBe("share-key-attestation");
+    expect(body.limit).toBe("usernameHash");
+    expect(calls.some((k) => k === "share-key-attestation|ip|1.2.3.4")).toBe(true);
+    expect(calls.some((k) => k === "share-key-attestation|usernameHash|alice")).toBe(true);
+  });
+
   it("rate-limits the recovery endpoint (GET, pre-auth path with usernameHash axis)", async () => {
     const { ns, calls } = makeCounters((key) => !key.startsWith("recovery-by-username|usernameHash|"));
     const env = makeEnv(ns);

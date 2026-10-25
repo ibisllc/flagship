@@ -1,6 +1,7 @@
 # The app browser's Chromium (SEC-BROWSER-002). NOT part of the data layer and not started by init.sh:
-# the browser is off (`APP_BROWSER.enabled` in packages/server-daemon/src/index.ts) until the owner turns
-# it on, and then this file is added to the stack:
+# whether the browser is on is the release setting `appBrowser` (release/box-release.json, read by
+# APP_BROWSER.enabled in packages/server-daemon/src/index.ts); when it is on, this file must be added to the
+# stack (init.sh does not start it yet):
 #
 #   docker compose -f docker-compose.yml -f app-browser.compose.yml --env-file /var/flagship/data-services.env up -d
 #

@@ -271,10 +271,13 @@ async function ownerPage(page: Page, keys: Keys, comRows: unknown[], boxShares: 
   m.get(`${HOME}/api/screens/activity`, { entries: [] });
   m.get(`${HOME}/api/screens/apps-list`, { apps: [] });
   m.get(`${HOME}/api/screens/server-metrics`, METRICS);
-  await page.evaluate(async (fqdn) => {
+  await page.evaluate(async ({ fqdn, stk }) => {
+    // This device met its server at first contact, so its key is pinned (lib/serverPins.js):
+    // a share offer carries only the pinned key, never the one `.com` lists.
+    (await import("/lib/serverPins.js")).pinServerKey(fqdn, stk, "first-sight");
     const { enterServerDetail } = await import("/views/server-detail.js");
     await enterServerDetail(fqdn);
-  }, HOME);
+  }, { fqdn: HOME, stk: HOME_STK });
   await expect(page.locator("#shared-with-card")).toBeVisible({ timeout: 10_000 });
   return m;
 }

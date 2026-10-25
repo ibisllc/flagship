@@ -32,7 +32,7 @@ signed by the account's admin key or the release is not endorsed. A refusal chan
 | **Webapp**: Servers › the server › Update card, the line under "Running" | "Last update: `abc12345` installed and running." | "The last update to `abc12345` didn't start cleanly, so the server went back to `def67890` on its own." Kept in recovery: "The update to `abc12345` didn't start cleanly, and the version before it is too old to go back to safely. The server stays on `abc12345` in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept." | "The server refused the last update: …", one whole sentence per reason |
 | **iPhone / iPad**: the server's page › Update (the line is red unless it installed; the webapp marks recovery and refusals as a warning) | same sentence | same sentence | same sentence |
 | **Android**: the server's page › Update | same sentence | same sentence | same sentence |
-| **Activity** (all three apps, the server's events) | "Updated to `abc12345`." | ⚠️ "Update rolled back": "The update to `abc12345` failed its boot check and was rolled back." | "An update order was refused (…)." |
+| **Activity** (all three apps, the server's events) | "Updated to `abc12345`." | ⚠️ "Update rolled back": "The update to `abc12345` failed its boot check and was rolled back." Kept in recovery: "The update to `abc12345` didn't start cleanly, and the version before it is too old to go back to safely. The server stays on `abc12345` in recovery mode until a fixed update arrives. Your apps and data are kept." | "An update order was refused (…)." |
 | **A server shared with you** (co-manager at "Can manage") | the same line on the shared server's page | same | same |
 
 "Running" on the Update card always shows the release the server runs now. After a rollback, it
@@ -76,6 +76,6 @@ hidden). Turning it off also drops any note not yet sent.
 All three clients carry the switch and the sentences above (parity row `update-results`; mock-gym
 scenarios `web-ux-update-results`, `ios-total-update-kept-in-recovery`,
 `ios-total-update-refusal-sentence`, `android-ux-update-kept-in-recovery`,
-`android-ux-update-refusal-sentence`). Open: the Activity line for a rollback kept in recovery is
-the box's own English sentence ("The update to … failed its boot check and was rolled back."), which
-is wrong for that case and untranslated; it needs a box-side change.
+`android-ux-update-refusal-sentence`). The box's Activity line for a rollback kept in recovery is
+its own sentence (above), under the same "Update rolled back" event; like every Activity detail the
+box writes, it is English.

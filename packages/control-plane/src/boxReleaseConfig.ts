@@ -19,4 +19,6 @@ export const BOX_RELEASE = {
   nodeFloor: "24.22.1",
   /** What a new box is built on: Podman + the Rust path, or Docker + TS (the release gym decides). */
   newBoxStack: "arch-v2" as "arch-v2" | "classic",
+  /** Whether a box turns the policed app browser on (SEC-BROWSER-002): on only when the release gym proved it. */
+  appBrowser: true as boolean,
 } as const;

@@ -16,8 +16,8 @@ import { connect as netConnect, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 
 export interface PinningProxyOptions {
-  /** True for an address that may never be connected to, whatever was approved. */
-  forbidden: (address: string) => boolean;
+  /** True for an address (on that port) that may never be connected to, whatever was approved. */
+  forbidden: (address: string, port: number) => boolean;
   now?: () => number;
   /** How long an approval lasts. */
   ttlMs?: number;
@@ -86,7 +86,7 @@ export class PinningProxy {
   private pinned(scheme: "http" | "https", host: string, port: number): string[] | null {
     const e = this.approved.get(approvalKey(scheme, host, port));
     if (!e || e.until < this.now()) return null;
-    return e.addresses.filter((a) => !this.o.forbidden(a));
+    return e.addresses.filter((a) => !this.o.forbidden(a, port));
   }
 
   async listen(port = 0, host = "127.0.0.1"): Promise<number> {

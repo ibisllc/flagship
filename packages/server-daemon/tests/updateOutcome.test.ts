@@ -6,6 +6,7 @@ import {
   fileUpdateOutcomeStore,
   parseUpdateOutcome,
   refusalRecord,
+  updateOutcomeActivity,
 } from "../src/updateOutcome.js";
 
 const A = "a".repeat(40);
@@ -53,5 +54,20 @@ describe("fileUpdateOutcomeStore", () => {
     expect(store.readSync()).toEqual(record);
     writeFileSync(path, "{not json");
     expect(store.readSync()).toBeNull();
+  });
+});
+
+describe("updateOutcomeActivity (docs/support/update-rollback.md §2)", () => {
+  it("gives a rollback kept in recovery its own line, never 'was rolled back'", () => {
+    const kept = updateOutcomeActivity({ outcome: "rolled-back", at: 1, targetCommit: B, previousCommit: A, rollbackRefused: true });
+    expect(kept.kind).toBe("server.update.rolled-back");
+    expect(kept.ok).toBe(false);
+    expect(kept.detail).toBe(
+      "The update to bbbbbbbb didn't start cleanly, and the version before it is too old to go back to safely. The server stays on bbbbbbbb in recovery mode until a fixed update arrives. Your apps and data are kept.",
+    );
+    expect(kept.detail).not.toMatch(/rolled back/);
+    expect(updateOutcomeActivity({ outcome: "rolled-back", at: 1, targetCommit: B }).detail).toBe("The update to bbbbbbbb failed its boot check and was rolled back.");
+    expect(updateOutcomeActivity({ outcome: "applied", at: 1, targetCommit: B })).toEqual({ kind: "server.update.applied", detail: "Updated to bbbbbbbb.", ok: true });
+    expect(updateOutcomeActivity({ outcome: "refused", at: 1, reason: "not-endorsed" as never })).toMatchObject({ kind: "server.update.refused", ok: false });
   });
 });

@@ -15,6 +15,8 @@ import { PinningProxy, type ApprovedTarget } from "./pinningProxy.js";
 
 const NEVER: AddressClass[] = ["loopback", "link-local", "metadata", "multicast", "reserved", "invalid"];
 
+const normalAddress = (x: string): string => x.toLowerCase().replace(/^\[|\]$/g, "").replace(/^::ffff:(?=\d+\.)/, "");
+
 export interface ServiceProxiesOptions {
   /** The address the proxies listen on, which Chromium must reach (loopback, or the browser network's gateway). */
   listenHost?: string;
@@ -22,6 +24,8 @@ export interface ServiceProxiesOptions {
   acceptFrom?: (remoteAddress: string) => boolean;
   /** This server's own addresses: never connected to, whatever was approved. */
   protectedAddresses?: () => string[];
+  /** Addresses connected to only on these ports (the relay: its web ports carry other boxes' apps). */
+  portLimited?: () => { addresses: string[]; ports: number[] };
   dial?: (address: string, port: number) => { host: string; port: number };
   ttlMs?: number;
   /** A fixed port for the deny-all proxy, which Chromium's launch flags name (0: any). */
@@ -37,7 +41,13 @@ export class ServiceProxies {
 
   private make(): PinningProxy {
     return new PinningProxy({
-      forbidden: (a) => NEVER.includes(classifyAddress(a)) || (this.o.protectedAddresses?.() ?? []).includes(a),
+      forbidden: (a, port) => {
+        if (NEVER.includes(classifyAddress(a))) return true;
+        const n = normalAddress(a);
+        if ((this.o.protectedAddresses?.() ?? []).some((p) => normalAddress(p) === n)) return true;
+        const limited = this.o.portLimited?.();
+        return !!limited && !limited.ports.includes(port) && limited.addresses.some((p) => normalAddress(p) === n);
+      },
       ...(this.o.acceptFrom ? { acceptFrom: this.o.acceptFrom } : {}),
       ...(this.o.dial ? { dial: this.o.dial } : {}),
       ...(this.o.ttlMs ? { ttlMs: this.o.ttlMs } : {}),

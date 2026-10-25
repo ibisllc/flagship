@@ -4,12 +4,13 @@
 // refused; Allow once on the session ask is granted for once and listed among the owner's grants; a
 // signed `flagship/browser-grant-revoke/v1` withdraws it at once; a Deny makes the same ask wait.
 //
-// The app browser is OFF on every box (APP_BROWSER.enabled in packages/server-daemon/src/index.ts, the
-// owner's decision). The group runs only against a box whose build turns it on and runs the chromium
-// service (the gym branch may set APP_BROWSER.enabled for gym boxes); elsewhere the owner routes are not
-// served and the group says so and stops.
+// Whether the app browser is on is a release setting (release/box-release.json `appBrowser`, compiled into
+// BOX_RELEASE, which APP_BROWSER.enabled on the box reads). The release ships it on only if this group
+// proves it (owner decision): with `appBrowser: true` a box that does not serve the owner routes FAILS the
+// group (scripts/gym-release-run.sh reports its verdict on its own; scripts/release.sh then offers to ship
+// the browser off). With `appBrowser: false` the group checks the routes are really not served.
 import { bytesToHex } from "@noble/hashes/utils";
-import { canonicalBrowserGrantAnswer, canonicalBrowserGrantRevoke, ed, type BrowserGrantAnswer } from "@flagship/protocol";
+import { BOX_RELEASE, canonicalBrowserGrantAnswer, canonicalBrowserGrantRevoke, ed, type BrowserGrantAnswer } from "@flagship/protocol";
 import { pair, type Account, type Box } from "../../lib/fleet.js";
 import { assert, http, postJson, short, tryHttp } from "../../lib/harness.js";
 import { buildAndDeploy, finishAndWaitLive, mcpOpen } from "../../lib/mcpBuild.js";
@@ -110,10 +111,18 @@ export const browserGrants: Group = {
     const owner = (path: string) => `https://${b.fqdn}/api/browser/owner/${path}`;
 
     const on = await tryHttp(owner("grants"), { headers: s });
-    if (on.status !== 200) {
-      rec.skip("ask, answer, list, withdraw", `the app browser is off on ${b.serverName} (owner routes answer ${on.status}); a gym build with APP_BROWSER.enabled and the chromium service runs this group`);
+    if (!BOX_RELEASE.appBrowser) {
+      await rec.check("the release ships the app browser off, and the box serves none of its owner routes", () => {
+        assert(on.status !== 200, `appBrowser is false in release/box-release.json, yet ${b.serverName} serves the owner routes (${on.status})`);
+        return `off (owner routes answer ${on.status})`;
+      });
       return;
     }
+    const served = await rec.check("the release turns the app browser on, and the box serves its owner routes", () => {
+      assert(on.status === 200, `appBrowser is true in release/box-release.json, but ${b.serverName} does not serve the owner routes (${on.status}${on.text ? `: ${short(on.text)}` : ""}): the browser bundle is not running (no Chromium, or CDP unreachable)`);
+      return "on";
+    });
+    if (!served) return;
     const serviceId = `${A.username}--${SLUG}`;
     const app = `https://${SLUG}.${b.fqdn}`;
     const up = await rec.check("a browser probe app with browser.domains runs", async () => {

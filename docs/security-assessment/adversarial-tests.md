@@ -4,8 +4,9 @@ Tests that attack the built boundaries end to end (plan §14 "Mandatory adversar
 test title starts with its ID, names the boundary, and says which defect it would catch. A test
 that passes means the attack is refused. A test kept as **`it.fails`** documents an attack that
 **succeeds today**. It stays red-on-green until the product code is fixed; then it becomes a plain
-`it`. Results below are from the base commit `8007d3f8f` plus the working tree, on 2026-10-24
-(macOS, Node 24; no gym run yet).
+`it`. Results below are from commit `a44fc2208` plus the integration follow-ups, on 2026-10-24
+(macOS, Node 24; no gym run yet): 1,196 tests, all passing, 0 `it.fails`. Every finding the suite
+opened is fixed in `a44fc2208` and its test is now a plain `it`.
 
 ```sh
 npx vitest run tools/adversarial/tests                     # every unit-level attack
@@ -15,13 +16,13 @@ bash scripts/gym-release-run.sh --groups adversarial,canary --skip-refresh   # t
 | File | Area | Tests | it.fails (open) |
 |---|---|---|---|
 | `tools/adversarial/tests/envelopeForgery*.test.ts` (+ `support/`) | ENV signed envelopes | 1,069 | 0 |
-| `tools/adversarial/tests/downgrade.test.ts` | DWN strict mode, PQ companions, boot unlock v1/v2 | 26 | 3 |
-| `tools/adversarial/tests/catalogRollback.test.ts` | CAT release catalog rollback/freeze | 20 | 5 |
+| `tools/adversarial/tests/downgrade.test.ts` | DWN strict mode, PQ companions, boot unlock v1/v2 | 26 | 0 |
+| `tools/adversarial/tests/catalogRollback.test.ts` | CAT release catalog rollback/freeze | 20 | 0 |
 | `tools/adversarial/tests/identityLinkage.test.ts` | LNK cross-account / cross-app linkage | 10 | 0 |
-| `tools/adversarial/tests/egressEscape.test.ts` | EGR egress and browser escape | 14 | 3 |
+| `tools/adversarial/tests/egressEscape.test.ts` | EGR egress and browser escape | 16 | 0 |
 | `tools/adversarial/tests/firstContact.test.ts` | FC first-contact MITM | 6 | 0 |
-| `tools/adversarial/tests/appNameCerts.test.ts` | CRT app-name certificate and grant misuse | 6 | 1 |
-| `tools/adversarial/tests/privdArgv.test.ts` | PRV broker argv escapes | 13 | 5 |
+| `tools/adversarial/tests/appNameCerts.test.ts` | CRT app-name certificate and grant misuse | 6 | 0 |
+| `tools/adversarial/tests/privdArgv.test.ts` | PRV broker argv escapes | 13 | 0 |
 | `tools/adversarial/tests/keydPurpose.test.ts` | KEY keyd purpose abuse | 12 | 0 |
 | `tools/live-e2e/groups/release03/adversarial.ts` | LIVE real box, gym | 19 checks | not run yet |
 | `packages/protocol/tests/updateReceipt.test.ts`, `packages/server-daemon/tests/canary/updateReceipts.test.ts`, `apps/com/test/updateReceipts.test.ts`, `tools/release-catalog/tests/rollout.test.ts` | V02 receipts, stop rule | 13 + 10 + 7 + 4 | 0 |
@@ -66,9 +67,9 @@ Note: `verifyBoxArtifactPq` does not check the binding's role itself. It relies 
 | AT-DWN-01..05 | strict signature gate: classical-only signature, either hybrid half zeroed, suite relabelled, fake/foreign/missing binding, signature moved to another purpose | refused |
 | AT-DWN-06..12 | policy chain: box, app, relay, cloud or old client asks for compatibility; classical or unacknowledged opt-out; revoked signer; replayed/skipped/forked generation; older state or rollout going backwards; hybrid suite stripped from the offer; return to strict without re-entry evidence | refused |
 | AT-DWN-13 | `.com` serves a truncated chain, a classical opt-out, or an opt-out signed by the box | box stays strict |
-| **AT-DWN-14** | damaged policy file + an empty chain from `.com` | **open**: the box drops to compatibility (`assurancePolicySync.ts:134` skips anti-rollback while fail-closed) |
-| **AT-DWN-15** | the device that turned strict on is later revoked | **open**: every replay stops at generation 1; the box refuses later owner changes, even from the admin root (`assurancePolicySync.ts:145-162,186-205`) |
-| **AT-DWN-16** | export authorization from an older policy generation | **open** (no caller yet): `classicalExchangeAllowed` ignores generation and scope (`assurancePolicy.ts:288-291`) |
+| AT-DWN-14 | damaged policy file + an empty chain from `.com` | **fixed in `a44fc2208`** (was open: the box dropped to compatibility). A damaged state file falls back to its second copy (`<path>.floor`); with both gone the box stays strict and leaves it only for a chain that verifies at least one change, never for an empty one |
+| AT-DWN-15 | the device that turned strict on is later revoked | **fixed in `a44fc2208`** (was open: every replay stopped at generation 1). The replay continues from the head the box already holds (verified when adopted), so only later changes are checked against today's device book; the admin root or a live admin device continues it |
+| AT-DWN-16 | export authorization from an older policy generation | **fixed in `a44fc2208`** (was open, no caller yet). An export authorization names the strict scope and the policy generation in force; an older generation or another scope is refused |
 | AT-DWN-17..20 | release endorsements, CA leases, box artifacts, security notices with a test PQ pin: classical-only, stripped, moved, wrong commit, unpinned PQ key | refused |
 | AT-DWN-21..25 | boot unlock: v1 reply/lease to a strict box; stranger-sealed reply; replay under another nonce/server/boot key; extended/uncapped/re-id'd v3 lease; phone under strict with no v2 material | refused |
 | AT-DWN-26 | `/boot` policy file garbage → strict; missing → compatibility | the documented §19.3 limitation, not a new finding |
@@ -80,18 +81,18 @@ Note: `verifyBoxArtifactPq` does not check the binding's role itself. It relies 
 | AT-CAT-01..04 | roll back targets, timestamp, snapshot or root (03: a stolen online timestamp key re-signs an old snapshot) | refused |
 | AT-CAT-05 | newer targets with a lower floor | refused |
 | AT-CAT-06 | expired timestamp/snapshot served | stale: new updates blocked, rollback unaffected |
-| **AT-CAT-07** | the catalog fetch is blocked after a fresh view was accepted | **open**: the view never turns stale by the clock (`releaseCatalogGate.ts:100-108` trusts the `stale` flag saved at accept time). A blocked fetch keeps a stopped rollout open on that box |
+| AT-CAT-07 | the catalog fetch is blocked after a fresh view was accepted | **fixed in `a44fc2208`** (was open: the view never turned stale by the clock). The accepted view goes stale at its own expiry, so a blocked fetch no longer keeps a stopped rollout open |
 | AT-CAT-08 | snapshot/targets swapped between two catalogs | refused |
-| **AT-CAT-09** | the same version re-signed with different content | **open**: accepted (`releaseMetadata.ts:236` refuses only lower versions). The `rollout` tool always bumps the version |
+| AT-CAT-09 | the same version re-signed with different content | **fixed in `a44fc2208`** (was open: accepted). Refused as `version-reused` |
 | AT-CAT-10, 11 | targets signed only by the online timestamp key; one key signing twice to reach a threshold | refused |
-| **AT-CAT-12** | two key ids for one public key, threshold 2 | **open**: accepted (`releaseMetadata.ts:139-144,165-179`); `catalog.ts root` accepts any id=pub pairs |
+| AT-CAT-12 | two key ids for one public key, threshold 2 | **fixed in `a44fc2208`** (was open: accepted). The threshold counts distinct keys, not key ids |
 | AT-CAT-13, 14 | root chain: skipped version, self-signed jump, old key only, an attacker's root v2 from the feed | refused; a proper rotation is accepted |
 | AT-CAT-15 | release removed from targets while a floor is set | rollback to it refused; `--percent 0` keeps it a valid target (the stop rule uses `--percent 0`) |
 | AT-CAT-16 | box outside the cohort, unlisted commit, no catalog | refused; a 10% rollout admits about 10% of boxes |
-| **AT-CAT-17** | a 16 MiB catalog body | refused, but **open**: the whole body is read before the 1 MiB check (`releaseCatalogFeed.ts:66-76`) |
+| AT-CAT-17 | a 16 MiB catalog body | **fixed in `a44fc2208`** (was open: the whole body was read before the 1 MiB check). The read stops at the 1 MiB cap |
 | AT-CAT-18 | health rollback below the floor, or the floor check throws | restricted recovery, no restore, marker kept |
 | AT-CAT-19 | a refused catalog | stored state byte-identical |
-| **AT-CAT-20** | the catalog state file is damaged | **open**: the floor reads as 0 until the next good fetch, and the boot health gate runs before that fetch (`releaseCatalogGate.ts:56-72,130`) |
+| AT-CAT-20 | the catalog state file is damaged | **fixed in `a44fc2208`** (was open: the floor read as 0 until the next good fetch). The kept floor still binds, so a rollback below it stays refused before the next fetch |
 
 ## 4. LNK, EGR, FC, CRT
 
@@ -102,23 +103,25 @@ Note: `verifyBoxArtifactPq` does not check the binding's role itself. It relies 
 | AT-LNK-08, 09 | visit and knock proofs moved between apps/pages; chat frames to another app, replayed, from the owner's own account, impersonated, unregistered | refused |
 | AT-LNK-10 | share acceptance anonymity | **fixed 2026-10-24** (was open): the acceptance's #12 is now signed by a per-share admin key `HKDF(UMK, "flagship/server-share-admin/v1\|<shareId>")`, and `.com` attests that key (`keyKind: share`) on a request the account's admin root signs (`POST /api/users/:u/share-key-attestation`); the box accepts no other kind. The key matches nothing `GET /api/username/:u` serves and differs per share. The public `GET /api/users/:u/account-key-attestation` is gone (docs/share-a-server.md §5.1). `irkPub`/`adminRootPub` stay public: pre-sign-in recovery and the DNS broker verify against them |
 | AT-EGR-01..07, 10, 12, 13 | v4-mapped/compat/NAT64/6to4/Teredo/ULA/link-local/metadata spellings; octal/hex/dword IPv4; rebinding names; wildcard label boundaries; duplicate Host; browser judge numerics and `file:`; per-app pinning proxies; provider redirects; git clone pinning | refused |
-| **AT-EGR-08** | `https://<box fqdn>./` (trailing dot) from a granted page | **open**: the judge's "this server" check does not normalise the host (`browser/policy/judge.ts` `destination()`) |
-| **AT-EGR-09** | production wiring of the app-browser judge | **open**: `bootstrapBrowserBundle` in `index.ts` passes neither `protectedHosts` nor `egress.protectedAddresses`. A whole-LAN grant reaches the box itself (app browser is off today) |
-| **AT-EGR-11** | approval for `host:443` used on another port | **open**: `browser/pinningProxy.ts` keys approvals by host only |
+| AT-EGR-08 | `https://<box fqdn>./` (trailing dot) from a granted page | **fixed in `a44fc2208`** (was open). The judge compares canonical hosts (lowercase, IDNA, no trailing dot) |
+| AT-EGR-09 | production wiring of the app-browser judge | **fixed in `a44fc2208`** (was open: `index.ts` passed neither `protectedHosts` nor `egress.protectedAddresses`). `browser/protectedTargets.ts` is wired into both, and the proxies also get the relay's port limits (`portLimited`) |
+| AT-EGR-11 | approval for `host:443` used on another port | **fixed in `a44fc2208`** (was open: approvals were keyed by host only). Approvals are keyed by scheme, host and port |
+| AT-EGR-14 | other people's Flagship apps (owner decision 2026-10-24) | another account's `https://<app>.<user>.flagship.services` (and the owner's other servers) pass as public sites; this server and every name under it, `.com` and every name under it, the relay's own names (its host, the services apex, `broadcast--<user>`, `.internal`/`.flycast`) and its tunnel hub/API (8443) and echo (8444) ports, by name or address, are refused |
+| AT-EGR-15 | the pinning proxy dials the relay on its web ports only | an approval naming the relay's address on 8443 or 8444 is refused (403) |
 | AT-FC-01..06 | enrollment proof with the wrong key, server or serial; the secret forgotten after use; Studio "seen" MAC forgery; a six-digit code collision (found in <20k tries) still refused by the proof; any key change after pinning; the boot-key binding | refused |
 | AT-CRT-01..05 | wildcard grants: IRK where an admin root is pinned, another account's admin, another server or key, another user's name, case/trailing-dot spellings, apex, replay by another box; a revoked server; keyd `TlsKeys` names | refused by `.com`, the DNS broker and keyd |
-| **AT-CRT-06** | keyd `namesFor` on a policy FQDN of `alice.flagship.services` | **open** (defence in depth): keyd would mint a key for `*.flagship.services` (`packages/keyd/src/migrate.ts`); `.com` and Let's Encrypt still refuse the challenge |
+| AT-CRT-06 | keyd `namesFor` on a policy FQDN of `alice.flagship.services` | **fixed in `a44fc2208`** (was open, defence in depth: keyd would have minted a key for `*.flagship.services`). keyd's allowed names never widen past `*.<user>.<apex>`, whatever FQDN its policy holds |
 
 ## 5. PRV, KEY: compromised daemon against the broker and keyd
 
 | ID | Attack | Result |
 |---|---|---|
 | AT-PRV-01, 02 | long-form host flags and host bind mounts (privileged, cap-add, devices, host namespaces, seccomp/apparmor off, env-file, network host, user root, `-v /:/host`, bind `--mount`) | refused |
-| **AT-PRV-03** | `docker run … -v/:/host …` (value attached to the short flag) | **open, high**: accepted. `validateDockerArgs` compares the whole argument with `-v` (`packages/privd/src/policy.ts` `validateDockerArgs`); the Rust broker mirrors it (`rust/crates/flagship-broker/src/policy.rs:640,684`) |
-| **AT-PRV-04** | `docker run -dv /:/host …` (grouped short flags) | **open, high**: accepted, same cause |
-| **AT-PRV-05** | `-u0` / `-uroot` | **open, high**: accepted; root in the container over a host bind with 03/04 |
-| **AT-PRV-06** | `--network container:flagship-postgres` under Docker | **open, medium**: accepted; the `:` check exists only for Podman |
-| **AT-PRV-07** | `--runtime runc` or no runtime on an ordinary run | **open, medium**: accepted; an app image can run outside gVisor |
+| AT-PRV-03 | `docker run … -v/:/host …` (value attached to the short flag) | **fixed in `a44fc2208`** (was open, high: accepted). Short flags with an attached value are parsed as the flag and its value, in `packages/privd` and the Rust broker alike |
+| AT-PRV-04 | `docker run -dv /:/host …` (grouped short flags) | **fixed in `a44fc2208`** (was open, high: accepted, same cause). A value-taking flag inside a group is recognised and held to the same rules |
+| AT-PRV-05 | `-u0` / `-uroot` | **fixed in `a44fc2208`** (was open, high: accepted). Refused like `--user root` |
+| AT-PRV-06 | `--network container:flagship-postgres` under Docker | **fixed in `a44fc2208`** (was open, medium: the `:` check existed only for Podman). Refused under Docker too |
+| AT-PRV-07 | `--runtime runc` or no runtime on an ordinary run | **fixed in `a44fc2208`** (was open, medium: accepted). An ordinary run must name gVisor's runtime |
 | AT-PRV-08..13 | exec outside the two data services or with other flags/env; cp/commit/plugin/swarm/context/buildx/`-H`; NUL, oversize, extra keys, `DOCKER_HOST`; Podman transports, `--rootfs`, hooks, annotations; systemctl masking/editing/other units; the state dir or the engine socket in any argument | refused |
 | AT-KEY-01..11 | keyd as a raw signer, owner/admin purposes, hybrid-only purposes through classical `sign`, pq-binding shape, boot-suspension/boot-auth roles, size bounds, HKDF labels and salt, CGK MAC tags, `unseal` purposes, wire shape (`getPrivateKey`, extra `uid`), per-app derivations | refused |
 | AT-KEY-12 | `swk.deriveTlsKey` for any serverId | documents the known unscoped derivation (REGISTER K01) |

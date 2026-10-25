@@ -178,6 +178,11 @@ export type RateLimitEndpoint =
   // per source and per server or account (the path names it).
   | "pq-binding-put"
   | "assurance-policy-post"
+  // An admin device's per-share key attestation (POST /api/users/<u>/share-key-attestation,
+  // docs/share-a-server.md §5.1): signed by the account's admin root or an admin-granted device and
+  // CA-signed in return. An honest device asks once per share it accepts; per source and per account
+  // (the path names it), so a flood is bounded in signature work and can't be aimed at one account.
+  | "share-key-attestation"
   // Architecture v2 signed time (POST /api/time, signedTime.ts): anonymous, one Ed25519
   // signature each; a box asks at boot and every few hours.
   | "signed-time"
@@ -395,6 +400,11 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "assurance-policy-post": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "subject", limit: 30, windowSec: 3600 },
+  ],
+  "share-key-attestation": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 60, windowSec: 3600 },
+    { axis: "usernameHash", limit: 30, windowSec: 3600 },
   ],
   "signed-time": [{ axis: "ip", limit: 30, windowSec: 60 }],
   "update-receipt": [
@@ -710,6 +720,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/read-token$/.test(pathname)) {
     return "account-read-token";
   }
+  if (m === "POST" && /^\/api\/users\/[^/]+\/share-key-attestation$/.test(pathname)) {
+    return "share-key-attestation";
+  }
   // Phase 3b — vouched cross-device admit.
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {
     return "device-admit";
@@ -855,7 +868,8 @@ export function extractUsernameHash(pathname: string): string | undefined {
     // can't be hammered from a rotating source address.
     pathname.match(/^\/api\/users\/([^/]+)\/re-pair$/) ??
     pathname.match(/^\/api\/users\/([^/]+)\/totp\/verify$/) ??
-    pathname.match(/^\/api\/accounts\/([^/]+)\/read-token$/);
+    pathname.match(/^\/api\/accounts\/([^/]+)\/read-token$/) ??
+    pathname.match(/^\/api\/users\/([^/]+)\/share-key-attestation$/);
   if (!m) return undefined;
   // One budget per account however the path spells it (case, escapes).
   try {

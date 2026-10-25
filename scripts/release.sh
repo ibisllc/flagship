@@ -328,7 +328,7 @@ meta_gym() {
   RUNBOOK="6. Gym refresh and live verification (GATE: nothing deploys to prod until this passes)"
   REQUIRED=1
   OUTWARD=1
-  WHAT="Runs scripts/gym-release-run.sh: refreshes the gym onto this commit, takes the gym lock, runs every live group (core, sharing, invites ... and release03: first contact, app-name certificates, cross-owner chat, passkey recovery, origin generations, release catalog, policed browser, upstream sync, keyd), tears the fleet down. Exit 0 = go, 3 = skips you must accept, anything else = no-go. Then the DNS canary and the two health URLs."
+  WHAT="Runs scripts/gym-release-run.sh: refreshes the gym onto this commit, takes the gym lock, runs every live group (core, sharing, invites ... and release03: first contact, app-name certificates, cross-owner chat, passkey recovery, origin generations, release catalog, policed browser, upstream sync, keyd), tears the fleet down. Exit 0 = go, 3 = skips you must accept, 5 = build new boxes on classic, 6 = only the policed browser failed: ship it off (appBrowser false), anything else = no-go. Then the DNS canary and the two health URLs."
   read -r -d '' CMDS <<'EOF' || true
 bash scripts/gym-release-run.sh          (GYM_START_REF=origin/gym-ux to run a UX branch's gym)
 npx tsx tools/live-e2e/dns-ent-experiment.ts --canary
@@ -1460,11 +1460,18 @@ run_secrets() {
   if [ "$missing" = 1 ]; then confirm "Some names are missing on prod. Continue anyway?" || return 10; fi
 }
 
+# "on" or "off": release/box-release.json `appBrowser` in the worktree (absent means off).
+app_browser_state() {
+  node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).appBrowser === true ? "on" : "off")' "$WT/release/box-release.json"
+}
+
 run_gym() {
   ensure_wt
   say "  The gym proves this commit live before prod, on both container stacks: arch-v2 (Podman + Rust,"
   say "  what new boxes are built on) runs every group, classic (Docker + TS, the boxes already out there)"
-  say "  runs the groups covering them. arch-v2 not green: new boxes are built on classic. Every group"
+  say "  runs the groups covering them. arch-v2 not green: new boxes are built on classic. The policed"
+  say "  app browser ships on only if its group (browser-grants) passes; if only it fails, it ships off."
+  say "  Every group"
   say "  (the 0.3 groups included:"
   say "  first contact, app-name certificates, cross-owner chat, passkey recovery, origin generations,"
   say "  the release catalog, the policed browser, upstream sync, keyd custody) on real UpCloud boxes."
@@ -1478,7 +1485,7 @@ run_gym() {
     printf '%s+ (cd %s && bash scripts/gym-release-run.sh)%s\n' "$C_D" "$WT" "$C_0"
     ( cd "$WT" && GYM_BASE_REF="${GYM_BASE_REF:-origin/main}" bash scripts/gym-release-run.sh ) || rc=$?
     case "$rc" in
-      0) ok "every live group is green on both stacks on $(short "$PIN"): new boxes are built on $(json_field newBoxStack < "$WT/release/box-release.json")" ;;
+      0) ok "every live group is green on both stacks on $(short "$PIN"): new boxes are built on $(json_field newBoxStack < "$WT/release/box-release.json"); the app browser ships $(app_browser_state)" ;;
       3) warn "nothing failed, but some groups were skipped (see the summary above)"
          [ "$(ask_word "Type  accept-skips  if every skip is an owner item you accept for this release")" = accept-skips ] || fail "gym inconclusive" ;;
       4) fail "the gym lock is held by another session: wait for it, then run this step again" ;;
@@ -1490,6 +1497,14 @@ run_gym() {
          commit_paths "Build new boxes on the classic stack (the release gym did not prove arch-v2)" $changed
          land_commits || return $?
          warn "the box artifacts and the gym ran on the previous pin: run this step again on the new one" ;;
+      6) warn "every group is green except the policed app browser (browser-grants): it must ship OFF in this release"
+         confirm "Ship the app browser off (release/box-release.json appBrowser false) and push that to main?" || fail "the app browser ships only if the gym proves it"
+         WX node scripts/set-app-browser.mjs off
+         local changed; changed=$(wt_git status --porcelain | awk '{print $2}')
+         # shellcheck disable=SC2086
+         commit_paths "Ship the app browser off (the release gym did not prove it)" $changed
+         land_commits || return $?
+         warn "the app browser ships OFF in this release; the box artifacts and the gym ran on the previous pin: run this step again on the new one" ;;
       *) fail "the gym run failed on the classic stack (exit $rc): fix on main, run this step again" ;;
     esac
   else

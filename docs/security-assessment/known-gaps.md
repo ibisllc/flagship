@@ -62,12 +62,17 @@ Labels such as "hardware PQ" are therefore claims about code paths, not measurem
   ops still go through the TS privd's v1 `docker` op.
 - **The daemon** runs as root on boxes where keyd never took the keys (existing boxes that have not
   updated), and stays root until privd answers.
-- **The app browser** is off (`APP_BROWSER.enabled`). Its protected-host wiring is missing (finding
-  AT-EGR-09).
+- **The app browser** ships on only if the release gym proves it: `APP_BROWSER.enabled` reads the
+  release setting `appBrowser` (`release/box-release.json`), and the release script offers to turn it
+  off when the `browser-grants` gym group fails. Its protected-host wiring (AT-EGR-09) and the other
+  browser findings (AT-EGR-08, 11) are fixed in `a44fc2208`. By owner decision (2026-10-24) it may
+  open other people's public Flagship apps like any public site (AT-EGR-14). The owner's standing
+  grants are kept across restarts (`browser/grantStore.ts`). Not yet proved on a box: nothing in the
+  box's data-services stack starts the Chromium container yet.
 - **The A01 synthetic traffic trace** (no cloud plaintext, recorded) is not done.
 - **Clients:** the chat approval, browser grant and AI consent screens are partly built (`feat/UX`).
   (The "Share update results" switch and the refused-rollback sentence shipped 2026-10-24 on all three
-  clients; the box's own Activity line for a rollback kept in recovery still reads "rolled back".)
+  clients, and the box's own Activity line for a rollback kept in recovery has its own sentence.)
 - **Keyd** still has a generic `unseal` for the pairing order, `swk.open`/`cgk.open`, and an
   unscoped `swk.deriveTlsKey` (REGISTER K01; AT-KEY-12). Root can read the boot-ceremony token.
 - **Signed time** is classical (CA Ed25519).
@@ -75,7 +80,13 @@ Labels such as "hardware PQ" are therefore claims about code paths, not measurem
 - **Update receipts** are anonymous and therefore forgeable. A dishonest `.com` could match one
   to a box by source address (`docs/runbooks/canary.md` §6).
 
-## 4. Known residual risks documented elsewhere
+## 4. Findings of the adversarial suite
+
+None open. Every finding the V01 suite opened (AT-PRV-03..07, AT-CAT-07/09/12/17/20,
+AT-DWN-14/15/16, AT-CRT-06, AT-EGR-08/09/11) is fixed in `a44fc2208`; the suite has 0 `it.fails`
+(`adversarial-tests.md`).
+
+## 5. Known residual risks documented elsewhere
 
 - Copied lease plus `/boot` STK unlocks the disk (N10; software profile).
 - VM appliances shared one volume key per image before the per-box reencrypt (evidence map §3.1).

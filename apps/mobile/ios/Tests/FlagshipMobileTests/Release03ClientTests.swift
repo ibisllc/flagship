@@ -257,7 +257,9 @@ final class Release03ClientTests: XCTestCase {
         await center.refresh()
         XCTAssertEqual(center.current?.appName, "plants")
         await center.allow()
-        XCTAssertEqual(center.stage, .done(allow: true))
+        XCTAssertEqual(center.stage, .done(allow: true, duration: "session"))
+        XCTAssertEqual(BrowserGrantCopy.answered(app: "plants", allowed: true, duration: "session"),
+                       "Allowed. plants can use the browser until this browser session ends.")
         center.close()
         XCTAssertNil(center.current)
     }
