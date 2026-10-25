@@ -48,7 +48,7 @@ jobs:
           node-version: 24.22.1
       - uses: actions/setup-go@v5
         with:
-          # The newer of the two Go modules: flagship-tlsd needs Go 1.25 (crypto.MessageSigner).
+          # The newer of the two Go modules: flagship-tlsd needs Go 1.26 (crypto/tls calls a MessageSigner).
           go-version-file: installer/tls-frontend/go.mod
           cache: false
       - name: Rust toolchain from rust/rust-toolchain.toml (keyd, broker, core)

@@ -7,10 +7,10 @@
 # its own artifacts without touching production's. For the gym branch's tip this:
 #
 #   1. plans     skips when the tip already is its release commit (scripts/gym-box-release.mjs)
-#   2. builds    in GitHub Actions (box-artifact.yml, Linux, with the Rust keyd/broker/core a box on
-#                the arch-v2 stack runs), after pushing the gym branch; --local builds here instead,
-#                without the Rust binaries (such a box falls back to the TS path, so the arch-v2
-#                gym pass would not test the Rust stack)
+#   2. builds    on a throwaway UpCloud VM (scripts/box-artifact-vm.sh: Linux, the steps of
+#                box-artifact.yml, with the Rust binaries a box on the arch-v2 stack runs; amd64), never
+#                in GitHub Actions; --local builds here instead, without the Rust binaries (such a box
+#                falls back to the TS path, so the arch-v2 gym pass would not test the Rust stack)
 #   3. signs     tools/box-artifact/build.ts sign with the gym key, then verifies against the trust file
 #   4. uploads   to the gym's artifact bucket (flagship-iso-gym), served at gym.flagshipserver.com/build/iso
 #   5. records   writes release/box-release.json, regenerates the compiled constants, commits on the gym
@@ -103,18 +103,8 @@ fi
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 if [ "$LOCAL" = "0" ] && [ "$DRY" != "1" ]; then
-  # The workflow builds a pushed commit; it builds both architectures.
-  [ "$PUSH" = "1" ] || die "a CI build needs the gym branch pushed: drop --no-push, or build here with --local"
-  (cd "$WT" && git push --force-with-lease origin HEAD:gym >/dev/null) || die "could not push the gym branch for the CI build"
-  (cd "$WT" && gh workflow run box-artifact.yml --ref gym -f commit="$COMMIT" -f sequence="$SEQ") || die "could not start box-artifact.yml"
-  sleep 10
-  RUN="$(cd "$WT" && gh run list --workflow box-artifact.yml --branch gym --limit 1 --json databaseId --jq '.[0].databaseId')"
-  say "waiting for box-artifact.yml run $RUN (Linux build, Rust included)"
-  (cd "$WT" && gh run watch "$RUN" --exit-status >/dev/null) || die "box-artifact.yml run $RUN failed"
-  DL="$(mktemp -d)"
-  (cd "$WT" && gh run download "$RUN" -D "$DL") || die "could not download run $RUN"
-  find "$DL" -type f -name 'flagship-box-*' -exec mv {} "$OUT"/ \;
-  rm -rf "$DL"
+  [ "$ARCHES" = "amd64" ] || die "the VM build makes amd64 only; build arm64 with --local"
+  bash "$HERE/box-artifact-vm.sh" --repo "$WT" --commit "$COMMIT" --sequence "$SEQ" --out "$OUT" || die "the VM build failed"
 fi
 for ARCH in ${ARCHES//,/ }; do
   say "build $COMMIT $ARCH (sequence $SEQ)"
