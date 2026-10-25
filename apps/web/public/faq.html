@@ -136,6 +136,19 @@
         </div>
       </details>
       <details class="q">
+        <summary>How do I know the server I'm approving is mine?</summary>
+        <div class="answer">
+          <p>The first time your new server asks to be approved, your phone keeps that server's own key and checks everything against it from then on. If the machine has a screen, it shows a six-digit code, and your phone shows the same code above Approve: if they don't match, don't approve. Your recipe also carries a one-time secret, so a server that was not built from it is refused. When Studio hosts the server on your computer, it checks the code for you. Later, if a server's key ever changes, the app refuses it and tells you.</p>
+        </div>
+      </details>
+      <!-- TODO-RM usb-burn: remove the next question if the seed is not published or the real phone + stick run (journal A5) fails. -->
+      <details class="q">
+        <summary>Can I make the USB stick with my phone?</summary>
+        <div class="answer">
+          <p>On Android, yes. Plug a USB stick into your phone with an OTG adapter and choose to write the installer on this device when you create a server. The app writes a stock Debian installer that anyone can <a href="/security/iso-seed.html">rebuild and check byte for byte</a>, then adds your phone-signed recipe. The iPhone app can't write the stick; on iPhone, use Flagship Studio on a computer.</p>
+        </div>
+      </details>
+      <details class="q">
         <summary>Will it wipe the disk?</summary>
         <div class="answer">
           <p>Yes. The installer formats the target disk, sets up LUKS full-disk encryption with a key only your phone can release, and lays down a hardened Linux base. Anything that was on the disk before is gone. The installer asks twice and shows you the device path; we try hard not to surprise anyone.</p>
@@ -193,13 +206,13 @@
       <details class="q">
         <summary>What encryption do you use?</summary>
         <div class="answer">
-          <p>Standard primitives only: Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certificates, requested by your box itself, for transport. If we ever invent our own crypto, please report it as a bug.</p>
+          <p>Standard primitives only: Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certificates, requested by your box itself, for transport. Since 0.3, servers and phones also hold ML-DSA-65 keys beside their Ed25519 keys, and a hybrid quantum-safe channel (ML-KEM-768 with X25519) is built, with an opt-in setting on iPhone and Android; that work is pending external review. If we ever invent our own crypto, please report it as a bug.</p>
         </div>
       </details>
       <details class="q">
         <summary>Is the source open?</summary>
         <div class="answer">
-          <p>Yes. The protocol, daemon, image-builder, and clients are at <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a> under BUSL-1.1, which converts to Apache 2.0 in 2030. Reproducible builds for the ISO are on the roadmap so you can verify the bytes match the source.</p>
+          <p>Yes. The protocol, daemon, image-builder, and clients are at <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a> under BUSL-1.1, which converts to Apache 2.0 in 2030. The boot image is reproducible: you can <a href="/security/iso-seed.html">check that its bytes match stock Debian</a>. The server software installs from a package signed by Flagship's maintainers.</p>
         </div>
       </details>
       <details class="q">
@@ -224,7 +237,7 @@
       <details class="q">
         <summary>What is "vibe-coding" a service?</summary>
         <div class="answer">
-          <p>You describe what you want in plain language ("a tracker for which houseplants I've watered, push me when one's been thirsty 5+ days"). An LLM writes the code. Your daemon builds it, picks the data-layer scopes (Postgres tables, object storage, push), and runs it at <code>plant-water.you.flagship.services</code>. About 90 seconds. You can edit the code if you feel like it.</p>
+          <p>You describe what you want in plain language ("a tracker for which houseplants I've watered, push me when one's been thirsty 5+ days"). An AI model writes the code: your own provider key, Flagship Inference, or a model running on your own server. Your daemon builds it, gives it what it asked for (a Postgres database, a files folder, push), and runs it at <code>plant-water.you.flagship.services</code>. About 90 seconds. You can edit the code if you feel like it.</p>
         </div>
       </details>
       <details class="q">
@@ -246,6 +259,24 @@
         </div>
       </details>
       <details class="q">
+        <summary>Can I run AI on my own server?</summary>
+        <div class="answer">
+          <p>Yes. Open Local AI from your server's page and download a model. Your apps and builds can then use it, and your prompts and data never leave your server; downloading the model is the only time the server contacts the model's host. It runs on the processor, or on a graphics card once that model of card has been qualified. You can also train a small model on an app's sample data. This is early: small models only.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can an app use my graphics card?</summary>
+        <div class="answer">
+          <p>Only if you say so. An app that needs a graphics card waits for your approval, signed from your admin device, and you can withdraw it later. Flagship also gives a card to an app only once that model of card has passed our hardware tests; until then, apps that need one tell you they can't run yet.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Do apps update on their own?</summary>
+        <div class="answer">
+          <p>Only if you choose it. Each app has an update mode: manual (the default, you approve every update), staged (a checked update waits a week) or automatic. The automatic modes only take updates from the same publisher that ask for no new permissions; anything else waits for you.</p>
+        </div>
+      </details>
+      <details class="q">
         <summary>Can I uninstall a service cleanly?</summary>
         <div class="answer">
           <p>Yes. Uninstall drops its container, its Postgres database, its files folder and its access list. You can keep a snapshot before uninstall if you want to come back to the data later.</p>
@@ -262,6 +293,13 @@
         <summary>What happens to my server if you shut down?</summary>
         <div class="answer">
           <p>It keeps running, and so do your services, until its certificate runs out (certificates last about 90 days). Several things need us: routing through <code>flagship.services</code> (the tunnel hub is ours), renewing the certificate (our DNS zone is used for the challenge), setting up a new server, pairing a new device, account recovery and any routing change. The code is open, so someone could run their own copies, but we have not built a handover for that, and we don't promise one.</p>
+        </div>
+      </details>
+      <!-- TODO-RM offline-control: remove the next question if journal A4 does not ship. -->
+      <details class="q">
+        <summary>What can I do when flagshipserver.com can't be reached?</summary>
+        <div class="answer">
+          <p>Your phone can still find your server on your home network and check the server's own key. From there you can see its status and its apps, start, stop or restart an app, restart or shut down the server, and make a backup and save it to your phone. Every action is signed by your phone and checked by the server. This works while the server is running: a server that restarts still needs us to unlock its disk, and creating an account, adding a device or recovering an account still need us. A web browser can't do this; it takes the iPhone or Android app.</p>
         </div>
       </details>
       <details class="q">

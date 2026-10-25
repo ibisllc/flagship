@@ -130,6 +130,7 @@
         <li>Install the phone app from <a href="/download">/download</a> (or use the <a href="https://webapp.flagshipserver.com/">web app</a>).</li>
         <li>On a computer, install <a href="/studio">Flagship Studio</a>.</li>
         <li>Create a server in the app, pair with Studio's QR or short code, then use Studio to write the installer USB (8 GB+).</li>
+        <li>When the server first asks to be approved, check that the six-digit code on its screen matches the one in the app, then approve.</li>
       </ol>
       <p class="next">About ten minutes to a real green padlock at <code>you.flagship.services</code>.</p>
     </article>
@@ -141,6 +142,7 @@
         <li><strong>"No pairing code accepted"</strong>: reopen Studio to show a fresh QR and short code, then try again.</li>
         <li><strong>"No network"</strong>: the installer needs DHCP on a wired ethernet port. Wi-Fi is not supported during install. Plug a cable in.</li>
         <li><strong>"Disk too small"</strong>: minimum is 32 GB. The installer formats whichever disk you point it at; it does not dual-boot.</li>
+        <li><strong>The six-digit codes don't match</strong>: don't approve. The server on your screen is not the one your phone is talking to. Delete the server in the app and create it again from a new recipe.</li>
       </ol>
       <p class="next">Still stuck? Capture the screen and email it.</p>
     </article>
@@ -149,8 +151,8 @@
       <span class="label">Phone trouble</span>
       <h3>My phone died.</h3>
       <ol>
-        <li>If you enabled iCloud Keychain or Google Block Store at setup, sign in on the new phone and your identity unwraps with biometrics.</li>
-        <li>If you didn't, your account is unrecoverable; that's by design (we have no backdoor) and we tried to be clear about it during setup.</li>
+        <li>If you set up cloud recovery, sign in on the new phone with your account name. It asks for your passkey (kept by iCloud Keychain or Google Password Manager) and your recovery passphrase.</li>
+        <li>No cloud recovery? Use another device that is still signed in, or your saved account key file. With none of these your account can't be recovered; that's by design (we have no backdoor) and we tried to be clear about it during setup.</li>
         <li>The hardware itself is fine. Spinning up a new account against the same box is a clean reinstall.</li>
       </ol>
       <p class="next">Full recovery flow: <a href="/docs/">/docs/recovery</a>.</p>
@@ -164,7 +166,7 @@
         <li><strong>"Cert invalid" / no green padlock</strong>: the daemon is renewing. Check the dashboard for "Renewing" pill; usually clears in 90 seconds.</li>
         <li><strong>"403 not a member"</strong>: the service is identity-gated and your phone hasn't approved your device. Approve from the phone, refresh.</li>
       </ol>
-      <p class="next">Logs live on your box at <code>journalctl -u flagshipd</code>.</p>
+      <p class="next">Your server's recent events are under Activity in the app.</p>
     </article>
   </section>
 
@@ -187,10 +189,25 @@
       <ol>
         <li><strong>Power and network</strong>. Is the box on? Is the cable in? Can it reach the internet (<code>ping 1.1.1.1</code>)?</li>
         <li><strong>Outbound 443 reachable</strong>. Some restrictive networks block long-lived WebSockets. <code>curl https://flagship.services/api/health</code> from the box should return JSON.</li>
-        <li><strong>Daemon health</strong>. SSH in, run <code>systemctl status flagshipd</code>. Restart with <code>systemctl restart flagshipd</code>; recent logs in <code>journalctl -u flagshipd -n 200</code>.</li>
+        <li><strong>Daemon health</strong>. Restart the server from its page in the app. If you turned on debug access (an SSH key you add from the server's page, for a limited time), you can SSH in and run <code>systemctl status flagship</code>; recent logs are in <code>journalctl -u flagship -n 200</code>.</li>
       </ol>
     </div>
 
+    <div class="symptom">
+      <h3>"This server's key changed"</h3>
+      <p>Your phone keeps each server's own key from the first time you approved it. This message means the server now presents a different key. If you did not rebuild the server, do not approve anything for it: someone else may be answering in its place. If you did rebuild it, create it again from the app with a new recipe, so your phone meets its new key the normal way.</p>
+    </div>
+    <!-- TODO-RM offline-control: remove the next symptom if journal A4 does not ship. -->
+    <div class="symptom">
+      <h3>flagshipserver.com is down, and I need my server</h3>
+      <p>Open the iPhone or Android app on the same Wi-Fi as your server. The app finds the server on your home network and checks its key, so you can still:</p>
+      <ol>
+        <li>See its status and its apps.</li>
+        <li>Start, stop or restart an app, or restart or shut down the server.</li>
+        <li>Make a backup and save it to your phone.</li>
+      </ol>
+      <p>This works only while the server is running. Don't restart it unless you have to: a server that restarts needs flagshipserver.com to unlock its disk.</p>
+    </div>
     <div class="symptom">
       <h3>"Cert invalid" in the browser</h3>
       <p>Your TLS cert lives on the daemon and renews automatically 30 days before expiry. If you're seeing a cert warning:</p>

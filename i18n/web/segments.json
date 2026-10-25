@@ -64,7 +64,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "sd8e067f833": {
@@ -121,7 +122,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s3980fa6732": {
@@ -223,6 +225,14 @@
       "index.html"
     ]
   },
+  "sa383976a0f": {
+    "en": "<1><2>→</2><3>What's new in 0.3: local AI, a server you can check is yours, seven languages</3></1>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
   "s412d2d882a": {
     "en": "<1>How it works</1>",
     "kind": "text",
@@ -235,7 +245,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "se24f793bf9": {
@@ -294,8 +305,8 @@
       "index.html"
     ]
   },
-  "seaff254fe3": {
-    "en": "The builder writes your recipe to a stick. Disk encrypts on first boot; the mobile app signs the unlock. Subdomain comes up.",
+  "sd31df1be0c": {
+    "en": "Flagship Studio writes your recipe to a stick. The disk encrypts on first boot. Your phone checks the server's own key with a six-digit code, then signs the unlock. Your subdomain comes up.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -318,8 +329,8 @@
       "index.html"
     ]
   },
-  "s9c6c4044e6": {
-    "en": "Describe what you want. LLM emits manifest, Dockerfile, source; the daemon commits, builds, ships in two minutes.",
+  "sf69ef34c3a": {
+    "en": "Describe what you want. An AI writes the code and its manifest, with your own key, Flagship Inference, or a model running on your own server. Your server builds it and runs it in its own sandbox.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -496,6 +507,22 @@
       "index.html"
     ]
   },
+  "s9a121bb956": {
+    "en": "Can I use AI without sending my data to someone else's cloud?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "index.html"
+    ]
+  },
+  "s8c9bfea094": {
+    "en": "Yes. Download a model to your server from its Local AI page. Your apps and builds can use it, and your prompts and data never leave your server. It runs on the processor, or on a graphics card once that card has been qualified.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "index.html"
+    ]
+  },
   "sf9f5a44ade": {
     "en": "Can I run this on a Raspberry Pi?",
     "kind": "text",
@@ -588,7 +615,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "sb893166c94": {
@@ -603,7 +631,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s311aed55dd": {
@@ -618,7 +647,16 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "se31f2cd95d": {
+    "en": "<1>What's new in 0.3</1>",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "index.html"
     ]
   },
   "s55526cc13a": {
@@ -633,7 +671,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s0ea994bede": {
@@ -648,7 +687,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "sa3c3c380ee": {
@@ -663,7 +703,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s8104119722": {
@@ -678,7 +719,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s5452a6ca48": {
@@ -693,7 +735,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s26e5d747c2": {
@@ -708,7 +751,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s4725b42d57": {
@@ -723,7 +767,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s326d2af3a8": {
@@ -738,7 +783,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s2a8b102c74": {
@@ -753,7 +799,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "sc7470806c3": {
@@ -768,7 +815,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s661cf4f411": {
@@ -783,7 +831,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s82cd1953ed": {
@@ -798,7 +847,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s52d369c9d8": {
@@ -813,7 +863,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "sfbb821f74f": {
@@ -828,7 +879,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "sef298c20e8": {
@@ -858,7 +910,8 @@
       "docs/index.html",
       "open-source.html",
       "adapters.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "sd034a70edb": {
@@ -982,6 +1035,38 @@
     "verbatim": [
       "you.flagship.services"
     ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s31a2f9138e": {
+    "en": "How do I know the server I'm approving is mine?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s5e0f38ea57": {
+    "en": "The first time your new server asks to be approved, your phone keeps that server's own key and checks everything against it from then on. If the machine has a screen, it shows a six-digit code, and your phone shows the same code above Approve: if they don't match, don't approve. Your recipe also carries a one-time secret, so a server that was not built from it is refused. When Studio hosts the server on your computer, it checks the code for you. Later, if a server's key ever changes, the app refuses it and tells you.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s93a304eb95": {
+    "en": "Can I make the USB stick with my phone?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sf2fa12b9ae": {
+    "en": "On Android, yes. Plug a USB stick into your phone with an OTG adapter and choose to write the installer on this device when you create a server. The app writes a stock Debian installer that anyone can <1>rebuild and check byte for byte</1>, then adds your phone-signed recipe. The iPhone app can't write the stick; on iPhone, use Flagship Studio on a computer.",
+    "kind": "text",
+    "ctx": "p",
     "pages": [
       "faq.html"
     ]
@@ -1153,8 +1238,8 @@
       "faq.html"
     ]
   },
-  "s749eca938a": {
-    "en": "Standard primitives only: Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certificates, requested by your box itself, for transport. If we ever invent our own crypto, please report it as a bug.",
+  "sf3d72bf419": {
+    "en": "Standard primitives only: Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certificates, requested by your box itself, for transport. Since 0.3, servers and phones also hold ML-DSA-65 keys beside their Ed25519 keys, and a hybrid quantum-safe channel (ML-KEM-768 with X25519) is built, with an opt-in setting on iPhone and Android; that work is pending external review. If we ever invent our own crypto, please report it as a bug.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -1169,8 +1254,8 @@
       "faq.html"
     ]
   },
-  "s552fbf27d1": {
-    "en": "Yes. The protocol, daemon, image-builder, and clients are at <1>github.com/ibisllc/flagship</1> under BUSL-1.1, which converts to Apache 2.0 in 2030. Reproducible builds for the ISO are on the roadmap so you can verify the bytes match the source.",
+  "s2bce618ebc": {
+    "en": "Yes. The protocol, daemon, image-builder, and clients are at <1>github.com/ibisllc/flagship</1> under BUSL-1.1, which converts to Apache 2.0 in 2030. The boot image is reproducible: you can <2>check that its bytes match stock Debian</2>. The server software installs from a package signed by Flagship's maintainers.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -1245,8 +1330,8 @@
       "faq.html"
     ]
   },
-  "se463b7d8ab": {
-    "en": "You describe what you want in plain language (\"a tracker for which houseplants I've watered, push me when one's been thirsty 5+ days\"). An LLM writes the code. Your daemon builds it, picks the data-layer scopes (Postgres tables, object storage, push), and runs it at <1>plant-water.you.flagship.services</1>. About 90 seconds. You can edit the code if you feel like it.",
+  "s7a8ffdc3ac": {
+    "en": "You describe what you want in plain language (\"a tracker for which houseplants I've watered, push me when one's been thirsty 5+ days\"). An AI model writes the code: your own provider key, Flagship Inference, or a model running on your own server. Your daemon builds it, gives it what it asked for (a Postgres database, a files folder, push), and runs it at <1>plant-water.you.flagship.services</1>. About 90 seconds. You can edit the code if you feel like it.",
     "kind": "text",
     "ctx": "p",
     "verbatim": [
@@ -1298,6 +1383,54 @@
   },
   "s09e0f849e7": {
     "en": "Whichever you've configured: bring your own key for Anthropic, OpenAI, Google, OpenRouter or any OpenAI-compatible API. Keys live on your daemon, encrypted at rest. By default your box reaches the provider through our relay address, which carries the encrypted connection and sees the provider's hostname and the amount of data, not the prompts; you can turn that off per key. With no key, building an app uses Flagship Inference, our built-in AI: it passes requests to a third-party model provider without keeping them (see <1>/privacy</1>).",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s62d80fd8bc": {
+    "en": "Can I run AI on my own server?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s18144a118b": {
+    "en": "Yes. Open Local AI from your server's page and download a model. Your apps and builds can then use it, and your prompts and data never leave your server; downloading the model is the only time the server contacts the model's host. It runs on the processor, or on a graphics card once that model of card has been qualified. You can also train a small model on an app's sample data. This is early: small models only.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s370fd38205": {
+    "en": "Can an app use my graphics card?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sac0412dc54": {
+    "en": "Only if you say so. An app that needs a graphics card waits for your approval, signed from your admin device, and you can withdraw it later. Flagship also gives a card to an app only once that model of card has passed our hardware tests; until then, apps that need one tell you they can't run yet.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "se934ba67c8": {
+    "en": "Do apps update on their own?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "s86a00fdcb4": {
+    "en": "Only if you choose it. Each app has an update mode: manual (the default, you approve every update), staged (a checked update waits a week) or automatic. The automatic modes only take updates from the same publisher that ask for no new permissions; anything else waits for you.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -1359,6 +1492,22 @@
     "verbatim": [
       "flagship.services"
     ],
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "seb4b8a0043": {
+    "en": "What can I do when flagshipserver.com can't be reached?",
+    "kind": "text",
+    "ctx": "summary",
+    "pages": [
+      "faq.html"
+    ]
+  },
+  "sffe39b539a": {
+    "en": "Your phone can still find your server on your home network and check the server's own key. From there you can see its status and its apps, start, stop or restart an app, restart or shut down the server, and make a backup and save it to your phone. Every action is signed by your phone and checked by the server. This works while the server is running: a server that restarts still needs us to unlock its disk, and creating an account, adding a device or recovering an account still need us. A web browser can't do this; it takes the iPhone or Android app.",
+    "kind": "text",
+    "ctx": "p",
     "pages": [
       "faq.html"
     ]
@@ -1503,6 +1652,14 @@
       "help.html"
     ]
   },
+  "sd048fd6940": {
+    "en": "When the server first asks to be approved, check that the six-digit code on its screen matches the one in the app, then approve.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
   "s53d6d4748d": {
     "en": "About ten minutes to a real green padlock at <1>you.flagship.services</1>.",
     "kind": "text",
@@ -1554,6 +1711,14 @@
       "help.html"
     ]
   },
+  "s98f437936a": {
+    "en": "<1>The six-digit codes don't match</1>: don't approve. The server on your screen is not the one your phone is talking to. Delete the server in the app and create it again from a new recipe.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
   "s891df71926": {
     "en": "Still stuck? Capture the screen and email it.",
     "kind": "text",
@@ -1578,16 +1743,16 @@
       "help.html"
     ]
   },
-  "s5be434e4b9": {
-    "en": "If you enabled iCloud Keychain or Google Block Store at setup, sign in on the new phone and your identity unwraps with biometrics.",
+  "s7d26d40cba": {
+    "en": "If you set up cloud recovery, sign in on the new phone with your account name. It asks for your passkey (kept by iCloud Keychain or Google Password Manager) and your recovery passphrase.",
     "kind": "text",
     "ctx": "li",
     "pages": [
       "help.html"
     ]
   },
-  "s6f69b9ac84": {
-    "en": "If you didn't, your account is unrecoverable; that's by design (we have no backdoor) and we tried to be clear about it during setup.",
+  "s80ccd2804b": {
+    "en": "No cloud recovery? Use another device that is still signed in, or your saved account key file. With none of these your account can't be recovered; that's by design (we have no backdoor) and we tried to be clear about it during setup.",
     "kind": "text",
     "ctx": "li",
     "pages": [
@@ -1650,13 +1815,10 @@
       "help.html"
     ]
   },
-  "sda5c18af9e": {
-    "en": "Logs live on your box at <1>journalctl -u flagshipd</1>.",
+  "sb6bd8c3f33": {
+    "en": "Your server's recent events are under Activity in the app.",
     "kind": "text",
     "ctx": "p",
-    "verbatim": [
-      "journalctl -u flagshipd"
-    ],
     "pages": [
       "help.html"
     ]
@@ -1758,15 +1920,78 @@
       "help.html"
     ]
   },
-  "sf761e4b436": {
-    "en": "<1>Daemon health</1>. SSH in, run <2>systemctl status flagshipd</2>. Restart with <3>systemctl restart flagshipd</3>; recent logs in <4>journalctl -u flagshipd -n 200</4>.",
+  "s15730e8f94": {
+    "en": "<1>Daemon health</1>. Restart the server from its page in the app. If you turned on debug access (an SSH key you add from the server's page, for a limited time), you can SSH in and run <2>systemctl status flagship</2>; recent logs are in <3>journalctl -u flagship -n 200</3>.",
     "kind": "text",
     "ctx": "li",
     "verbatim": [
-      "systemctl status flagshipd",
-      "systemctl restart flagshipd",
-      "journalctl -u flagshipd -n 200"
+      "systemctl status flagship",
+      "journalctl -u flagship -n 200"
     ],
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s44f88f2441": {
+    "en": "\"This server's key changed\"",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sa70e0188d8": {
+    "en": "Your phone keeps each server's own key from the first time you approved it. This message means the server now presents a different key. If you did not rebuild the server, do not approve anything for it: someone else may be answering in its place. If you did rebuild it, create it again from the app with a new recipe, so your phone meets its new key the normal way.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sa00a6f828b": {
+    "en": "flagshipserver.com is down, and I need my server",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s5d184d4eab": {
+    "en": "Open the iPhone or Android app on the same Wi-Fi as your server. The app finds the server on your home network and checks its key, so you can still:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sa203f1ca1b": {
+    "en": "See its status and its apps.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s5ac4b74a54": {
+    "en": "Start, stop or restart an app, or restart or shut down the server.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "s56e15914f8": {
+    "en": "Make a backup and save it to your phone.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "help.html"
+    ]
+  },
+  "sf8592afdca": {
+    "en": "This works only while the server is running. Don't restart it unless you have to: a server that restarts needs flagshipserver.com to unlock its disk.",
+    "kind": "text",
+    "ctx": "p",
     "pages": [
       "help.html"
     ]
@@ -1988,8 +2213,8 @@
       "security.html"
     ]
   },
-  "s254faa5618": {
-    "en": "<1>Three device families.</1> The native iOS app and Android app use Secure Enclave / StrongBox: strong key storage. The installable webapp uses software-only IndexedDB-with-passphrase: weaker, suitable for testing or accessibility. We deliberately don't share keys between families: a webapp identity and an iOS identity are independent accounts, the way Apple Pay never crosses to Google Pay.",
+  "s358e24ed02": {
+    "en": "<1>Two kinds of key storage.</1> The iPhone and Android apps wrap your keys with the phone's secure hardware (the Secure Enclave on iPhone, the hardware-backed Keystore on Android, StrongBox where the phone has it): strong key storage. The installable webapp keeps its keys in the browser, protected by your passphrase: weaker, and we say so when you start with it. Either can be a device of the same account.",
     "kind": "text",
     "ctx": "div",
     "pages": [
@@ -2004,8 +2229,8 @@
       "security.html"
     ]
   },
-  "sf2a6e53eb2": {
-    "en": "All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is open source under Apache 2.0.",
+  "s85746274a5": {
+    "en": "All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is public under BUSL-1.1, which becomes Apache 2.0 on 2030-05-03.",
     "kind": "text",
     "ctx": "li",
     "pages": [
@@ -2020,15 +2245,17 @@
       "security.html"
     ]
   },
-  "s91d0513e04": {
-    "en": "Standard primitives only: <1>Ed25519</1>, <2>X25519</2>, <3>AES-256-GCM</3>, <4>HKDF-SHA-256</4>. No homemade crypto.",
+  "s6b9e915fe5": {
+    "en": "Standard primitives only: <1>Ed25519</1>, <2>X25519</2>, <3>AES-256-GCM</3>, <4>HKDF-SHA-256</4>, and since 0.3 <5>ML-DSA-65</5> and <6>ML-KEM-768</6> in hybrid with the classical ones. No homemade crypto.",
     "kind": "text",
     "ctx": "li",
     "verbatim": [
       "Ed25519",
       "X25519",
       "AES-256-GCM",
-      "HKDF-SHA-256"
+      "HKDF-SHA-256",
+      "ML-DSA-65",
+      "ML-KEM-768"
     ],
     "pages": [
       "security.html"
@@ -2066,6 +2293,118 @@
     "en": "<1>No KYC, ever.</1> We do not collect, store, or expose any real-world identity attribute about any user: no legal name, no email, no phone, no government ID. <2>Read the full policy →</2>",
     "kind": "text",
     "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s2504f726f3": {
+    "en": "What 0.3 changed",
+    "kind": "text",
+    "ctx": "h3",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s1d6802e65c": {
+    "en": "For 0.3 we assumed parts of a server could be attacked, and made each part hold as little power as it needs. In plain terms:",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s0dc66718e1": {
+    "en": "<1>The server program no longer runs as root.</1> It runs as an ordinary user. The few jobs that need root (power, containers, the firewall, installing a release) go through a small broker that accepts only a fixed list of typed requests and refuses and records everything else.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sc302cdc408": {
+    "en": "<1>Keys live apart from the server program.</1> The server's identity key, its TLS key and its Let's Encrypt account key sit in a separate key service. The server program asks it to sign and never holds the keys. This is a software boundary on the same machine, not a hardware one.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s137bad7a02": {
+    "en": "<1>Your phone pins each server's own key at first contact.</1> A new server proves it was built from your recipe with a one-time secret, and shows a six-digit code that your phone computes for itself from the server's key. After that, a server presenting a different key is refused.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s8939ec53e1": {
+    "en": "<1>Sensitive actions need your admin key.</1> On a server that knows its admin, updates, rank changes, journal reads, graphics-card approvals and similar orders are refused unless the admin device signed them. Every route of the server's control interface goes through one default-deny check.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s48f9971e31": {
+    "en": "<1>Signed install packages.</1> Servers install and update from one release package signed by Flagship's maintainers, with a sequence number that only goes up and a minimum runtime version. No package manager, compiler or git checkout runs on your server to install or update it. A rollback only switches back to a release already on the disk.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s8b202b61d9": {
+    "en": "<1>Boot.</1> Each VM appliance makes its own disk key on first start and removes the shared factory key. The sealed copy of the disk key is addressed to a boot-only key, and where a server has a TPM the key that opens it is kept in the TPM. We make no measured-boot or attestation claims.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "se987023fe0": {
+    "en": "<1>Apps stay in their lane.</1> Each app runs under gVisor and reaches only the internet hosts you approve. App database migrations run in a locked-down one-shot container. A restored backup's apps start with nobody on their access list until you approve it, and run only the exact image the backup recorded. An app that needs a graphics card waits for your signed approval.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sd201233f71": {
+    "en": "<1>AI stays fenced.</1> Every tool call an AI model makes goes through a broker that allows only what you granted, and everything your server shows a model is stripped of names, mail addresses, times, languages and network addresses. Local AI runs on the server with no internet.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "sbf0945f112": {
+    "en": "<1>Recovery checks your passkey.</1> flagshipserver.com releases a cloud-recovery record only after a valid signature from your passkey, and a new record is signed over all of its contents. A recovery set up before 0.3 gets this when you accept the apps' one-time \"Update your account recovery\" prompt.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s1713373fd3": {
+    "en": "<1>Quantum-safe groundwork.</1> Servers and phones hold ML-DSA-65 keys bound to their Ed25519 keys, and a hybrid channel (X-Wing: ML-KEM-768 with X25519) is built, with an opt-in setting on iPhone and Android. Release signatures, install packages and boot leases need their quantum-safe half only after our signing ceremony. All of this is pending external review; it is not a claim that Flagship is quantum-safe today.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "scf8cfc8dc9": {
+    "en": "<1>Findings fixed.</1> 0.3 fixes the stop-ship findings of a security review of the whole product and the 24 findings of our own adversarial test suite, which now runs on every release. An external assessment has not been done yet.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "security.html"
+    ]
+  },
+  "s22ecf44cde": {
+    "en": "What has not changed: TLS ends on your own server, so we can't read what your apps send. Our relay sees connection metadata: which server, when, and how much. An AI model never learns who or where you are.",
+    "kind": "text",
+    "ctx": "p",
     "pages": [
       "security.html"
     ]
@@ -2837,7 +3176,8 @@
     "ctx": "a[aria-label]",
     "pages": [
       "docs/index.html",
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s1d34362df3": {
@@ -2944,8 +3284,8 @@
       "docs/index.html"
     ]
   },
-  "s68234bbec4": {
-    "en": "<1>2.</1> Get <2>Flagship Studio</2> on your computer. In the phone app, choose Add server → Pair with Studio and scan the QR Studio shows. Studio receives the signed recipe and writes the boot USB for you. Plug in and boot — or order a pre-built box that's ready to go.",
+  "s93b97f748e": {
+    "en": "<1>2.</1> Get <2>Flagship Studio</2> on your computer. In the phone app, choose Add server → Pair with Studio and scan the QR Studio shows. Studio receives the signed recipe and writes the boot USB for you. Plug in and boot. When the server asks to be approved, check that the six-digit code on its screen matches the one in the app.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -3027,8 +3367,8 @@
       "docs/index.html"
     ]
   },
-  "s3e7d605afd": {
-    "en": "<1>3 · Boot &amp; install.</1> The USB boots a hardened Linux base on your hardware. A first-boot script validates the recipe signature locally, then fetches the public installer from our GitHub repo at the exact pinned ref — a few hundred auditable lines of shell. It formats the disk with LUKS, generates a per-box identity, requests a real Let's Encrypt cert (DNS-01 wildcard), registers with <2>flagshipserver.com</2>, and boots into steady state. Your phone lights up: <3>\"Your Flagship is online.\"</3>",
+  "s52716ff267": {
+    "en": "<1>3 · Boot &amp; install.</1> The USB boots a hardened Linux base on your hardware. A first-boot script validates the recipe signature locally, then installs one Flagship release package for an exact version, after checking the maintainers' signature on it; no git checkout or package manager runs. It formats the disk with LUKS, generates a per-box identity, requests a real Let's Encrypt cert (DNS-01 wildcard), registers with <2>flagshipserver.com</2>, and boots into steady state. The first time it asks to be approved, your phone pins the server's own key: the server proves it was built from your recipe, and if it has a screen it shows a six-digit code that your phone shows too. Then your phone lights up: <3>\"Your Flagship is online.\"</3>",
     "kind": "text",
     "ctx": "p",
     "verbatim": [
@@ -3049,8 +3389,8 @@
       "docs/index.html"
     ]
   },
-  "s498947451c": {
-    "en": "<1>5 · Live. Vibe-code. Share.</1> From the phone you describe a service in plain language. An LLM writes it (your own provider key, or Flagship Inference's free credits). The daemon builds the container, provisions a Postgres database and a files folder scoped to the service, deploys it, and registers a subdomain — live within a minute at <2>app.you.flagship.services</2>. Sharing is one tap: a signed invite or a username search. Services never see cookies; the daemon injects identity headers after a membership check.",
+  "s7416d92305": {
+    "en": "<1>5 · Live. Vibe-code. Share.</1> From the phone you describe a service in plain language. An LLM writes it (your own provider key, Flagship Inference's free credits, or a model you downloaded to your own server, which never sends anything out). The daemon builds the container, provisions a Postgres database and a files folder scoped to the service, deploys it, and registers a subdomain — live within a minute at <2>app.you.flagship.services</2>. Sharing is one tap: a signed invite or a username search. Services never see cookies; the daemon injects identity headers after a membership check.",
     "kind": "text",
     "ctx": "p",
     "verbatim": [
@@ -3084,16 +3424,16 @@
       "docs/index.html"
     ]
   },
-  "sa9acc1d69b": {
-    "en": "The installer is a public shell script in our open-source repo. It's pinned by hash inside the signed recipe. The installer formats the disk with LUKS, generates a server identity, requests a Let's Encrypt cert via DNS-01, and registers with .com.",
+  "sdf9f27fcd7": {
+    "en": "The first-boot bootstrap is public in our open-source repo and pinned by hash inside the signed recipe. It installs the server software from one release package that Flagship's maintainers signed, checking the signature first. It formats the disk with LUKS, generates a server identity, requests a Let's Encrypt cert via DNS-01, and registers with .com. The server software runs as an ordinary user; its keys are held by a separate key service.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "docs/index.html"
     ]
   },
-  "sd02d86d61b": {
-    "en": "Every subsequent boot, the phone has to approve the LUKS unlock. A stolen box without your phone is a brick.",
+  "s3f204144fa": {
+    "en": "Every subsequent boot, the phone has to approve the LUKS unlock, unless you turned on Auto-unlock for that server. A stolen box without your phone is a brick.",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -3418,13 +3758,14 @@
       "docs/index.html"
     ]
   },
-  "sb320add4a3": {
-    "en": "<1>schema_version</1>: always <2>1</2>. <3>name</3>: a DNS label (lowercase letters, digits and dashes). <4>version</4>: semver, like <5>1.2.0</5>. <6>description</6>: optional.",
+  "s531cc9dc7a": {
+    "en": "<1>schema_version</1>: <2>1</2>, or <3>2</3> for the fields new in 0.3 (below). <4>name</4>: a DNS label (lowercase letters, digits and dashes). <5>version</5>: semver, like <6>1.2.0</6>. <7>description</7>: optional.",
     "kind": "text",
     "ctx": "li",
     "verbatim": [
       "schema_version",
       "1",
+      "2",
       "name",
       "version",
       "1.2.0",
@@ -3523,6 +3864,24 @@
     "ctx": "li",
     "verbatim": [
       "browser.domains"
+    ],
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s2ae716dd24": {
+    "en": "Schema 2 only: <1>runtime.kind</1> <2>wasi</2> for a WebAssembly app; <3>components</3>, up to eight parts of one app that start in order; <4>localAi</4>, to use the model on your own server; <5>accelerator</5>, to ask for a graphics card, which waits for the owner's approval. The details are in <6>docs/manifest.md</6>, <7>docs/wasi-apps.md</7> and <8>docs/app-groups.md</8> in the repo.",
+    "kind": "text",
+    "ctx": "li",
+    "verbatim": [
+      "runtime.kind",
+      "wasi",
+      "components",
+      "localAi",
+      "accelerator",
+      "docs/manifest.md",
+      "docs/wasi-apps.md",
+      "docs/app-groups.md"
     ],
     "pages": [
       "docs/index.html"
@@ -4139,7 +4498,8 @@
     "kind": "attr",
     "ctx": "link[title]",
     "pages": [
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s1e60a4effc": {
@@ -4163,7 +4523,8 @@
     "kind": "text",
     "ctx": "nav",
     "pages": [
-      "blog/index.html"
+      "blog/index.html",
+      "blog/flagship-0-3.html"
     ]
   },
   "s8fc4e92202": {
@@ -4182,28 +4543,460 @@
       "blog/index.html"
     ]
   },
-  "sefe57fd6f9": {
-    "en": "First posts coming alongside the 0.2 Beta launch. Until then, the source-of-truth on what we're building is the <1>docs</1>, the <2>security model</2>, and the <3>open-source</3> page.",
-    "kind": "text",
-    "ctx": "p",
-    "pages": [
-      "blog/index.html"
-    ]
-  },
-  "s8f7b9ab588": {
-    "en": "Drafts",
+  "s89e898846e": {
+    "en": "<1>What's new in Flagship 0.3</1>",
     "kind": "text",
     "ctx": "h2",
     "pages": [
       "blog/index.html"
     ]
   },
-  "seb2f4750ac": {
-    "en": "We post when we have something concrete to say. Watch the RSS feed.",
+  "s1248a26de9": {
+    "en": "Your phone checks every new server is yours, AI runs on your own server, apps get their own databases, and the server software was rebuilt for security. Still free.",
     "kind": "text",
     "ctx": "p",
     "pages": [
       "blog/index.html"
+    ]
+  },
+  "s3787a8369d": {
+    "en": "We post when we have something concrete to say. Watch the RSS feed. The rest of what we're building is in the <1>docs</1>, the <2>security model</2>, and the <3>open-source</3> page.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/index.html"
+    ]
+  },
+  "s511099215f": {
+    "en": "What's new in Flagship 0.3 · Flagship",
+    "kind": "text",
+    "ctx": "title",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s32a3c2e749": {
+    "en": "Flagship 0.3: your phone checks every new server is yours, AI runs on your own server, apps get their own databases, and the server software was rebuilt for security. Still free.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s2b8f0531ec": {
+    "en": "What's new in Flagship 0.3",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sf9f93a8474": {
+    "en": "Your phone checks every new server is yours, AI runs on your own server, and the server software was rebuilt for security. Still free.",
+    "kind": "attr",
+    "ctx": "meta[content]",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s594a9ce4a8": {
+    "en": "What's new in Flagship 0.3",
+    "kind": "text",
+    "ctx": "h1",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "se146bad1fe": {
+    "en": "Release notes. Flagship is still free: there is nothing to buy in this release.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sb1c7db0e0e": {
+    "en": "Flagship 0.3 is our biggest release so far. Most of it you will never see: it rebuilds how your server keeps its keys, installs its software and runs your apps. Some of it you will see every day: the apps speak your language, setting up a server is harder to fool, and your server can run AI and new kinds of apps without anyone else's cloud.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s6b374cb2ad": {
+    "en": "Set up a server you can be sure is yours",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s94bb8c74c8": {
+    "en": "<1>Your phone checks it is talking to your new server.</1> The first time your server asks to be approved, your phone keeps that server's own key and checks everything against it from then on. If the machine has a screen, it shows a six-digit code, and your phone shows the same code above Approve. If they don't match, don't approve. When Flagship Studio hosts the server on your computer, Studio checks the code for you.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sa6efcbe088": {
+    "en": "<1>A server that was not built from your recipe is refused.</1> Your recipe carries a one-time secret that only your own server can prove it holds.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s57e6e27288": {
+    "en": "<1>Make the installer stick with your Android phone.</1> Plug a USB stick into your phone with an OTG adapter and the app writes the installer itself, no computer needed. The stick starts from a stock Debian image that anyone can <2>rebuild and check byte for byte</2>.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sbbf8daf8ea": {
+    "en": "<1>Servers install from one signed package.</1> A new server no longer downloads code from a repository while it installs. It checks the signature of one package from Flagship's maintainers, then installs it with no further downloads.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s0c5765be41": {
+    "en": "Run more kinds of apps",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s02342ed0e9": {
+    "en": "<1>Each app gets its own database server.</1> On new servers an app's database runs on its own, with its own memory, disk and connection limits, so one busy app can't slow the others down.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s2c7d00f852": {
+    "en": "<1>Apps made of several parts.</1> An app can be up to eight parts, such as a web server and a worker, that start in order and count as one app: one approval, one list of sites it may reach, one database.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s818b145ade": {
+    "en": "<1>WebAssembly apps.</1> An app can be a small WebAssembly (WASI) program. Each request runs in a fresh copy with hard limits on time and memory.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sd7a1a7eb12": {
+    "en": "<1>Choose how each app updates.</1> Manual is the default: you approve every update. Staged holds a checked update for a week before it installs. Automatic installs it at once. Both automatic choices only take updates from the same publisher that ask for no new permissions; anything else waits for you.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s948e0291cc": {
+    "en": "<1>Apps can ask to talk to another person's apps.</1> When an app on someone else's server wants to send messages to one of yours, you see a request and choose Allow, Always allow or Deny. You can take an Always allow back at any time.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s0fa0011de6": {
+    "en": "<1>Apps can use a web browser on your server,</1> but only on the sites you approved when you installed them, with a separate browser for each app. Your home network and Flagship's own services are always out of reach.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s7c5d98cf0e": {
+    "en": "Run AI on your own server",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s3ae17b0e96": {
+    "en": "<1>Local AI.</1> Open Local AI from your server's page and download a model. Your apps and your builds can then use it, and it runs only on your server: your prompts and data are not sent anywhere. It runs on your processor, or on a graphics card once that card has been qualified. Downloading the model is the only time your server contacts the model's host.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s605b95185f": {
+    "en": "<1>Train a small model on your own data.</1> You can train one of the small models on an app's sample data, on your server. This is early: small models only.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sccecf025ff": {
+    "en": "<1>Agree before AI spends anything.</1> Before an AI repair uses your own API key or your Flagship Inference credits, you see an estimate and who pays, and you agree. The amount you agreed to is a hard stop.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s397aaf75d3": {
+    "en": "<1>AI still never learns who you are.</1> What your server sends to an outside AI model is now also stripped of names, mail addresses, home folders, times, time zones, languages and network addresses.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sb876515cdc": {
+    "en": "Use a graphics card, with your permission",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sc1b0315093": {
+    "en": "<1>Your server lists its graphics cards</1> on its page, with the app that holds each one.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "se9f1239faa": {
+    "en": "<1>An app that needs a graphics card waits for you.</1> You get a notification and approve it from your admin device, or withdraw the approval later. Until then the app runs without the card if it can, or tells you why it can't.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s7b9edd03fd": {
+    "en": "<1>Cards are qualified before use.</1> Flagship gives a graphics card to an app only once that model of card has passed our hardware tests. Until then, apps that need one say plainly that they can't run yet. The software supports NVIDIA, AMD and Intel cards.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s5a5bb0ea59": {
+    "en": "Keep control when Flagship can't be reached",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s9e32be024b": {
+    "en": "<1>Your phone finds your server on your home network</1> when flagshipserver.com or our relay can't be reached. It looks for your server on the same Wi-Fi and checks the server's own key.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sdccb65cc3a": {
+    "en": "<1>Basic control without us:</1> see your server's status and its apps, start, stop or restart an app, restart or shut down the server, and make a backup and save it to your phone.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s9a1150db73": {
+    "en": "<1>Every action is still signed by your phone</1> and checked by your server.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s03f541a65b": {
+    "en": "This works while your server is running. A server that restarts still needs flagshipserver.com to unlock its disk. Creating an account, adding a device and recovering an account also still need flagshipserver.com.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s34603a3e95": {
+    "en": "Use Flagship in your language",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s724c866031": {
+    "en": "The apps, the web app, this website, Flagship Studio and the pages your server shows visitors are now in English, Spanish, French, German, Brazilian Portuguese, Japanese and Simplified Chinese. Notifications arrive in your phone's language. The translations are machine-made drafts that native speakers have not reviewed yet. If a sentence reads wrong, tell us at <1>support@flagshipserver.com</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sfa81abe989": {
+    "en": "A calmer app",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sedf35f07aa": {
+    "en": "<1>Home, Activity and Settings were redesigned</1> on iPhone, Android and the web app: shorter screens, one \"Add / Restore a server\" button, and red buttons only for what can't be undone.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "se404d40041": {
+    "en": "<1>Approve a server's start from your watch with your phone locked,</1> on Apple Watch and Wear OS.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "saf3b12baef": {
+    "en": "<1>Signing out asks for Face ID, your fingerprint or your device PIN first</1> whenever it would erase keys.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s96f5e7d5c9": {
+    "en": "<1>Account recovery now checks your passkey too.</1> The apps ask you once to update your recovery so it is protected by your passkey as well as your passphrase.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s1dcd3e3e21": {
+    "en": "Safer updates",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s500667885c": {
+    "en": "<1>A server update proves itself or steps back.</1> The new release installs beside the old one and gets three starts to prove it is healthy. If it fails, your server goes back to the release it ran before, by itself. Updates and rollbacks never touch your apps, data, keys or settings.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s0cc81577ed": {
+    "en": "<1>Updates reach a small group of servers first,</1> and more only once those are healthy.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s83e56176ac": {
+    "en": "<1>Share update results.</1> An optional switch on your server's page, off by default, sends Flagship one receipt per update saying whether it worked. It names no app and holds no content.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sbdfe1c2da5": {
+    "en": "<1>A newer foundation for new servers.</1> New servers run apps with Podman and keep their keys in small, separate programs written in Rust. Servers you already have keep their current setup.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s4ca741b757": {
+    "en": "For the security-minded",
+    "kind": "text",
+    "ctx": "h2",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sdfff021dfd": {
+    "en": "We assumed parts of the server could be attacked, and made each part hold as little power as it needs. The details are on the <1>security page</1>.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "saff256f110": {
+    "en": "<1>The server program no longer runs as root.</1> The few jobs that need root go through a small broker that accepts a fixed list of requests and refuses everything else.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s4271460a9f": {
+    "en": "<1>Keys live apart from the server program.</1> The server's identity, TLS and Let's Encrypt keys sit in a separate key service. The server program asks it to sign; it never holds the keys.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s32b449e9a7": {
+    "en": "<1>Sensitive actions need your admin key.</1> Updates, rank changes, journal reads and graphics-card approvals are refused unless your admin device signed them.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "se0287867e3": {
+    "en": "<1>Review findings fixed.</1> This release fixes the stop-ship findings of a security review of the whole product and the 24 findings of our own adversarial test suite, which now runs on every release.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sd329c2c8a0": {
+    "en": "<1>Quantum-safe groundwork.</1> Servers and phones hold ML-DSA-65 keys beside their Ed25519 keys, a hybrid channel (ML-KEM-768 with X25519) is built, and iPhone and Android have an opt-in Quantum-safe protection setting. All of it is pending external review.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "sb5e67497fd": {
+    "en": "<1>What has not changed.</1> TLS still ends on your own server, so we can't read what your apps send. Our relay sees connection metadata: which server, when, and how much. An AI model never learns who or where you are.",
+    "kind": "text",
+    "ctx": "li",
+    "pages": [
+      "blog/flagship-0-3.html"
+    ]
+  },
+  "s526b6ca09c": {
+    "en": "<1>All posts</1> · <2>Report a vulnerability</2>",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "blog/flagship-0-3.html"
     ]
   }
 }

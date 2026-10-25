@@ -94,7 +94,7 @@
       <h2>快速开始</h2>
       <p>三个步骤，大约十分钟。</p>
       <p><strong>1.</strong>安装手机应用，选一个用户名，批准生物识别。你的主密钥绝不会离开手机。</p>
-      <p><strong>2.</strong>在电脑上安装 <a href="/studio">Flagship Studio</a>。在手机应用中依次选择“添加服务器 → 与 Studio 配对”，并扫描 Studio 显示的二维码。Studio 收到已签名的配方，并为你写入启动 U 盘。插上并启动即可，也可以订购一台开箱即用的成品盒子。</p>
+      <p><strong>2.</strong>在电脑上安装 <a href="/studio">Flagship Studio</a>。在手机应用中依次选择“添加服务器 → 与 Studio 配对”，并扫描 Studio 显示的二维码。Studio 收到已签名的配方，并为你写入启动 U 盘。插上并启动。服务器请求批准时，请确认其屏幕上的 6 位代码与应用中的一致。</p>
       <p><strong>3.</strong>在手机上用 vibe coding 做出你的第一个应用。完成。</p><a class="next" href="#how-it-works">查看完整流程 →</a></section>
 
     <section class="doc-section" id="architecture">
@@ -107,15 +107,15 @@
       <p>从头到尾共五个阶段。每一步都由你的手机签名，即使是你第一次注册，我们也看不到你的内容。</p>
       <p><strong>1 · 配对你的手机。</strong>你安装 Flagship 应用，它会生成一个主密钥，并用存放在手机安全硬件中的密钥将其包裹（iPhone 上是 Secure Enclave，Android 上是硬件支持的 Keystore），通过 Face ID、Touch ID 或指纹解锁。主密钥绝不会离开手机。我们从中再派生出三个密钥：一个用于身份（你的用户名），一个用于备份授权（LUKS 解锁），一个用于工作密钥（每台服务器的秘密）。你选一个用户名，手机对注册请求签名，<code>flagshipserver.com</code> 记录用户名和公钥那一半。没有邮箱、没有密码、没有短信。</p>
       <p><strong>2 · 生成并交付配方。</strong>你的手机通过 Studio 显示的二维码或短码，直接与 <a href="/studio">Flagship Studio</a> 配对。确认安全码一致后，手机会生成并发送一份小型已签名配方，其中写明你的服务器名称，并带有短暂、单次有效的过期时间。Studio 获取合适的基础操作系统并写入启动 U 盘：你无需自己挑选或下载系统镜像。</p>
-      <p><strong>3 · 启动与安装。</strong>U 盘在你的硬件上启动一个经过加固的 Linux 基础系统。首次启动脚本在本地验证配方签名，然后从我们的 GitHub 仓库按精确固定的引用获取公开安装程序，只有几百行可审计的 shell。它用 LUKS 格式化磁盘，生成每台盒子独有的身份，申请真实的 Let's Encrypt 证书（DNS-01 通配符），向 <code>flagshipserver.com</code> 注册，然后进入稳态运行。你的手机会亮起：<em>“你的 Flagship 已上线。”</em></p>
+      <p><strong>3 · 启动与安装。</strong>U 盘在你的硬件上启动一个经过加固的 Linux 基础系统。首次启动脚本在本地验证配方签名，然后在核实维护者的签名后，安装一个指定确切版本的 Flagship 发布包；不运行 git 检出或包管理器。它用 LUKS 格式化磁盘，生成每台主机独有的身份，申请真实的 Let's Encrypt 证书（DNS-01 通配符），向 <code>flagshipserver.com</code> 注册，然后进入稳态运行。它第一次请求批准时，你的手机会固定该服务器自己的密钥：服务器证明它是由你的配方构建的；如果有屏幕，它会显示一个 6 位代码，你的手机上也会显示同一个代码。随后你的手机会亮起：<em>“你的 Flagship 已上线。”</em></p>
       <p><strong>4 · 每次启动都需解锁。</strong>盒子重启时，LUKS 加密的根分区不会自动打开。启动阶段会向 <code>flagshipserver.com</code> 轮询是否有已解封的解锁密钥。你的手机被推送唤醒后，要求生物识别，在本地解密密封数据块，并存入有效期 10 分钟的已解封密钥。盒子取用后，该行在读取时即被删除，磁盘随之打开。没有你手机的被盗盒子只是一块砖，连我们也帮不上忙，因为我们从未拥有过已解封的密钥。</p>
-      <p><strong>5 · 上线。Vibe coding。分享。</strong>你在手机上用日常语言描述一个服务，由 LLM 来写（使用你自己的提供商密钥，或 Flagship Inference 的免费额度）。守护进程构建容器，配置限定于该服务的 Postgres 数据库和文件夹，完成部署并注册子域名，一分钟内就能在 <code>app.you.flagship.services</code> 上线。分享只需轻点一下：签名邀请或用户搜索。服务永远看不到 Cookie；守护进程在检查成员资格之后注入身份请求头。</p>
+      <p><strong>5 · 上线。Vibe coding。分享。</strong>你在手机上用日常语言描述一个服务，由 LLM 来写（使用你自己的提供商密钥、Flagship Inference 的免费额度，或你下载到自己服务器上的模型，它不会向外发送任何内容）。守护进程构建容器，配置限定于该服务的 Postgres 数据库和文件夹，完成部署并注册子域名，一分钟内就能在 <code>app.you.flagship.services</code> 上线。分享只需轻点一下：签名邀请或用户搜索。服务永远看不到 Cookie；守护进程在检查成员资格之后注入身份请求头。</p>
       <p><strong>如果你丢了手机。</strong>云端恢复只保存你主密钥的加密副本。在 iOS 上，恢复它既需要你的恢复密码短语，也需要访问保存着你 Flagship 通行密钥的 iCloud 钥匙串；Flagship 既无法读取该密钥，也无法重置你的密码短语。没有云端恢复的话，单设备账户必须走更慢的、带等待期的申领流程。</p><a class="next" href="/zh-hans/security">阅读信任模型 →</a></section>
 
     <section class="doc-section" id="install">
       <h2>安装与首次启动</h2>
-      <p>安装程序是我们开源仓库中的一个公开 shell 脚本，并通过哈希固定在已签名的配方中。安装程序会用 LUKS 格式化磁盘、生成服务器身份、通过 DNS-01 申请 Let's Encrypt 证书，并向 .com 注册。</p>
-      <p>此后每次启动，手机都必须批准 LUKS 解锁。没有你手机的被盗盒子只是一块砖。</p><a class="next" href="/zh-hans/help">卡在安装环节？ →</a></section>
+      <p>首次启动的引导程序公开在我们的开源仓库中，并通过哈希固定在已签名的配方里。它先核实签名，再从一个由 Flagship 维护者签名的发布包安装服务器软件。它会用 LUKS 格式化磁盘、生成服务器身份、通过 DNS-01 申请 Let's Encrypt 证书，并向 .com 注册。服务器软件以普通用户身份运行；其密钥由一个独立的密钥服务持有。</p>
+      <p>此后每次启动，除非你为该服务器开启了“自动解锁”，否则手机都必须批准 LUKS 解锁。没有你手机的被盗主机只是一块砖。</p><a class="next" href="/zh-hans/help">卡在安装环节？ →</a></section>
 
     <section class="doc-section" id="burn">
       <h2>组装你的服务器</h2>
@@ -197,13 +197,14 @@
       <h3>清单参考</h3>
       <p>各字段，在安装应用时都会被检查：</p>
       <ul>
-        <li><code>schema_version</code>：始终为 <code>1</code>。<code>name</code>：DNS 标签（小写字母、数字和连字符）。<code>version</code>：语义化版本，如 <code>1.2.0</code>。<code>description</code>：可选。</li>
+        <li><code>schema_version</code>：<code>1</code>，若使用 0.3 新增的字段（见下文）则为 <code>2</code>。<code>name</code>：DNS 标签（小写字母、数字和连字符）。<code>version</code>：语义化版本，如 <code>1.2.0</code>。<code>description</code>：可选。</li>
         <li><code>runtime</code>：<code>base</code> 为 <code>node-24</code>、<code>python-3.13</code> 或 <code>static</code>，另有 <code>port</code>（应用监听 <code>$PORT</code>）、<code>start</code>（以列表形式给出的启动命令；<code>node-24</code> 默认为 <code>npm start</code>）和 <code>env</code>。以 <code>FLAGSHIP_</code> 开头的键归服务器所有。自带 Dockerfile 的导入仓库应指定 <code>image</code>，而不是 <code>base</code>。</li>
         <li><code>data.stores</code>：<code>postgres: true</code> 为应用提供一个 Postgres 18 数据库（<code>FLAGSHIP_PG_URL</code>，带有 pgvector 和常用扩展）；<code>files: true</code> 提供位于 <code>/data</code> 的可写文件夹（<code>FLAGSHIP_FILES_DIR</code>），重启和重新部署后依然保留。没有 S3 和 Redis。</li>
         <li><code>network</code>：<code>subdomain</code>（服务地址为 <code>&lt;subdomain&gt;.&lt;server&gt;.&lt;you&gt;.flagship.services</code>）和 <code>egress</code>（应用请求访问的主机，每个都附带理由）。在你于应用的访问列表中批准之前，不会有任何流量发出。</li>
         <li><code>access</code>：<code>enabled: true</code>（应用不能放弃身份验证）、<code>default_role</code>、可选的 <code>custom_roles</code>、<code>public_routes</code>（在仅限成员的应用中任何人都能打开的路径）和 <code>queryable_by</code>。</li>
         <li><code>migration.verification</code>：<code>standard</code>（生物识别）或 <code>elevated</code>（生物识别加第二因素），适用于涉及资金、健康或密码数据的应用。</li>
         <li>可选：<code>browser.domains</code>，应用可在你服务器自带的浏览器中操作的网站，在安装时批准。</li>
+        <li>仅适用于 schema 2：WebAssembly 应用使用 <code>runtime.kind</code> <code>wasi</code>；<code>components</code>：同一应用中按顺序启动的最多八个部分；<code>localAi</code>：使用你自己服务器上的模型；<code>accelerator</code>：请求显卡，需等待所有者批准。详情见仓库中的 <code>docs/manifest.md</code>、<code>docs/wasi-apps.md</code> 和 <code>docs/app-groups.md</code>。</li>
       </ul>
       <pre><code>{
   "schema_version": 1,

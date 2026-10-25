@@ -124,6 +124,19 @@
         </div>
       </details>
       <details class="q">
+        <summary>Woher weiß ich, dass der Server, den ich genehmige, mir gehört?</summary>
+        <div class="answer">
+          <p>Wenn dein neuer Server zum ersten Mal um Genehmigung bittet, speichert dein Telefon den eigenen Schlüssel dieses Servers und prüft ab dann alles daran. Hat die Maschine einen Bildschirm, zeigt sie einen sechsstelligen Code, und dein Telefon zeigt denselben Code über „Genehmigen“: Stimmen sie nicht überein, genehmige nicht. Dein Rezept enthält außerdem ein einmaliges Geheimnis, sodass ein Server, der nicht daraus gebaut wurde, abgelehnt wird. Wenn Studio den Server auf deinem Computer hostet, prüft es den Code für dich. Ändert sich später jemals der Schlüssel eines Servers, lehnt die App ihn ab und sagt es dir.</p>
+        </div>
+      </details>
+      <!-- TODO-RM usb-burn: remove the next question if the seed is not published or the real phone + stick run (journal A5) fails. -->
+      <details class="q">
+        <summary>Kann ich den USB-Stick mit meinem Telefon erstellen?</summary>
+        <div class="answer">
+          <p>Unter Android ja. Steck einen USB-Stick mit einem OTG-Adapter an dein Telefon und wähle beim Erstellen eines Servers, den Installer auf diesem Gerät zu schreiben. Die App schreibt einen unveränderten Debian-Installer, den jeder <a href="/security/iso-seed.html">neu bauen und Byte für Byte prüfen</a> kann, und fügt dann dein vom Telefon signiertes Rezept hinzu. Die iPhone-App kann den Stick nicht schreiben; nutze auf dem iPhone Flagship Studio auf einem Computer.</p>
+        </div>
+      </details>
+      <details class="q">
         <summary>Wird die Festplatte gelöscht?</summary>
         <div class="answer">
           <p>Ja. Der Installer formatiert die Zielplatte, richtet LUKS-Vollverschlüsselung mit einem Schlüssel ein, den nur dein Telefon freigeben kann, und legt eine gehärtete Linux-Basis an. Alles, was vorher auf der Platte war, ist weg. Der Installer fragt zweimal nach und zeigt dir den Gerätepfad; wir geben uns Mühe, niemanden zu überraschen.</p>
@@ -181,13 +194,13 @@
       <details class="q">
         <summary>Welche Verschlüsselung verwendet ihr?</summary>
         <div class="answer">
-          <p>Ausschließlich Standardprimitive: Ed25519-Signaturen, X25519 + AES-256-GCM für versiegelte Blobs, HKDF-SHA-256 zur Schlüsselableitung, LUKS2/argon2id für die Festplatte. Für den Transport echte Let's-Encrypt-Zertifikate, die deine Box selbst anfordert. Wenn wir jemals eigene Kryptografie erfinden, melde das bitte als Fehler.</p>
+          <p>Ausschließlich Standardprimitive: Ed25519-Signaturen, X25519 + AES-256-GCM für versiegelte Blobs, HKDF-SHA-256 zur Schlüsselableitung, LUKS2/argon2id für die Festplatte. Für den Transport echte Zertifikate von Let's Encrypt, die deine Box selbst anfordert. Seit 0.3 halten Server und Telefone außerdem ML-DSA-65-Schlüssel neben ihren Ed25519-Schlüsseln, und ein hybrider quantensicherer Kanal (ML-KEM-768 mit X25519) wurde entwickelt, mit einer Einstellung, die du auf iPhone und Android selbst einschaltest; diese Arbeit wartet noch auf eine externe Prüfung. Wenn wir jemals eigene Kryptografie erfinden, melde das bitte als Fehler.</p>
         </div>
       </details>
       <details class="q">
         <summary>Ist der Quellcode offen?</summary>
         <div class="answer">
-          <p>Ja. Protokoll, Daemon, Image-Builder und Clients liegen unter <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a> unter BUSL-1.1, die 2030 zu Apache 2.0 wird. Reproduzierbare Builds für das ISO stehen auf der Roadmap, damit du prüfen kannst, dass die Bytes zum Quellcode passen.</p>
+          <p>Ja. Protokoll, Daemon, Image-Builder und Clients liegen auf <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a>, lizenziert unter BUSL-1.1, die 2030 zu Apache 2.0 wird. Das Boot-Image ist reproduzierbar: Du kannst <a href="/security/iso-seed.html">prüfen, dass seine Bytes dem unveränderten Debian entsprechen</a>. Die Serversoftware wird aus einem Paket installiert, das die Maintainer von Flagship signiert haben.</p>
         </div>
       </details>
       <details class="q">
@@ -212,7 +225,7 @@
       <details class="q">
         <summary>Was heißt, einen Dienst per „Vibe-Coding“ zu bauen?</summary>
         <div class="answer">
-          <p>Du beschreibst in normaler Sprache, was du willst („ein Tracker, welche Zimmerpflanzen ich gegossen habe; benachrichtige mich, wenn eine seit mehr als 5 Tagen durstig ist“). Ein LLM schreibt den Code. Dein Daemon baut ihn, wählt die Datenschicht-Bereiche (Postgres-Tabellen, Objektspeicher, Push) und führt ihn unter <code>plant-water.you.flagship.services</code> aus. Etwa 90 Sekunden. Den Code kannst du bearbeiten, wenn du Lust hast.</p>
+          <p>Du beschreibst in normaler Sprache, was du willst („ein Tracker, welche Zimmerpflanzen ich gegossen habe; benachrichtige mich, wenn eine seit mehr als 5 Tagen durstig ist“). Ein KI-Modell schreibt den Code: mit deinem eigenen Anbieter-Schlüssel, mit Flagship Inference oder mit einem Modell, das auf deinem eigenen Server läuft. Dein Daemon baut die App, gibt ihr, was sie angefordert hat (eine Postgres-Datenbank, einen Dateiordner, Push), und führt sie unter <code>plant-water.you.flagship.services</code> aus. Etwa 90 Sekunden. Den Code kannst du bearbeiten, wenn du Lust hast.</p>
         </div>
       </details>
       <details class="q">
@@ -234,6 +247,24 @@
         </div>
       </details>
       <details class="q">
+        <summary>Kann ich KI auf meinem eigenen Server laufen lassen?</summary>
+        <div class="answer">
+          <p>Ja. Öffne „Lokale KI“ auf der Seite deines Servers und lade ein Modell herunter. Deine Apps und Builds können es dann nutzen, und deine Prompts und Daten verlassen deinen Server nie; das Herunterladen des Modells ist das einzige Mal, dass der Server den Host des Modells kontaktiert. Es läuft auf dem Prozessor oder auf einer Grafikkarte, sobald dieses Kartenmodell freigegeben wurde. Du kannst auch ein kleines Modell mit den Beispieldaten einer App trainieren. Das steht noch am Anfang: nur kleine Modelle.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Kann eine App meine Grafikkarte nutzen?</summary>
+        <div class="answer">
+          <p>Nur wenn du es willst. Eine App, die eine Grafikkarte braucht, wartet auf deine Genehmigung, signiert von deinem Administratorgerät, und du kannst sie später zurückziehen. Außerdem gibt Flagship einer App eine Karte erst, wenn dieses Kartenmodell unsere Hardwaretests bestanden hat; bis dahin sagen dir Apps, die eine brauchen, dass sie noch nicht laufen können.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Aktualisieren sich Apps von selbst?</summary>
+        <div class="answer">
+          <p>Nur wenn du es so wählst. Jede App hat einen Update-Modus: manuell (Standard, du genehmigst jedes Update), verzögert (ein geprüftes Update wartet eine Woche) oder automatisch. Die automatischen Modi übernehmen nur Updates desselben Herausgebers, die keine neuen Berechtigungen verlangen; alles andere wartet auf dich.</p>
+        </div>
+      </details>
+      <details class="q">
         <summary>Kann ich einen Dienst sauber deinstallieren?</summary>
         <div class="answer">
           <p>Ja. Beim Deinstallieren werden Container, Postgres-Datenbank, Dateiordner und Zugriffsliste entfernt. Du kannst vor dem Deinstallieren einen Snapshot behalten, falls du später auf die Daten zurückkommen möchtest.</p>
@@ -250,6 +281,13 @@
         <summary>Was passiert mit meinem Server, wenn ihr dichtmacht?</summary>
         <div class="answer">
           <p>Er läuft weiter, ebenso deine Dienste, bis sein Zertifikat abläuft (Zertifikate halten etwa 90 Tage). Einiges braucht uns: das Routing über <code>flagship.services</code> (der Tunnel-Hub gehört uns), die Zertifikatserneuerung (unsere DNS-Zone wird für die Challenge verwendet), das Einrichten eines neuen Servers, das Koppeln eines neuen Geräts, die Kontowiederherstellung und jede Routing-Änderung. Der Code ist offen, also könnte jemand eigene Kopien betreiben, aber eine Übergabe dafür haben wir nicht gebaut und versprechen sie auch nicht.</p>
+        </div>
+      </details>
+      <!-- TODO-RM offline-control: remove the next question if journal A4 does not ship. -->
+      <details class="q">
+        <summary>Was kann ich tun, wenn flagshipserver.com nicht erreichbar ist?</summary>
+        <div class="answer">
+          <p>Dein Telefon kann deinen Server weiterhin in deinem Heimnetz finden und den eigenen Schlüssel des Servers prüfen. Von dort aus kannst du seinen Status und seine Apps sehen, eine App starten, stoppen oder neu starten, den Server neu starten oder herunterfahren und ein Backup erstellen und auf deinem Telefon speichern. Jede Aktion wird von deinem Telefon signiert und vom Server geprüft. Das funktioniert, solange der Server läuft: Ein Server, der neu startet, braucht uns weiterhin, um seine Platte zu entsperren, und das Erstellen eines Kontos, das Hinzufügen eines Geräts oder die Wiederherstellung eines Kontos brauchen uns ebenfalls weiterhin. Ein Webbrowser kann das nicht; dafür brauchst du die iPhone- oder Android-App.</p>
         </div>
       </details>
       <details class="q">

@@ -537,6 +537,7 @@
       text-transform: uppercase;
     }
     .studio-promo--center { justify-content: center; }
+    .hero-news { margin: 18px 0 0; }
     .studio-promo__label { color: var(--muted); margin-right: 2px; border-bottom: none; }
     .studio-promo__label:hover { color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none; }
     .studio-tag { font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 1px 5px; border: 1px solid currentColor; border-radius: 999px; opacity: .75; vertical-align: 1px; margin-left: 2px; }
@@ -904,6 +905,8 @@
             <a class="studio-promo__label" href="/studio">Flagship Studio</a>
             <a class="studio-download" data-studio-platform="mac" href="/download/mac">macOS</a><a class="studio-download" data-studio-platform="windows" href="/download/windows">Windows <span class="studio-tag">Expérimental</span></a></div>
 
+          <p class="hero-news"><a href="/fr/blog/flagship-0-3" class="arrow-link"><span class="arrow" aria-hidden="true">→</span><span>Nouveautés de la 0.3 : IA locale, un serveur dont vous pouvez vérifier qu’il est bien le vôtre, sept langues</span></a></p>
+
         </div>
       </div>
     </div>
@@ -924,10 +927,10 @@
           <p>Une clé dans le Secure Enclave (iOS) ou dans le Keystore adossé au matériel (Android) protège l’unique copie. Si vous perdez l’appareil sans récupération dans le cloud, les données sont perdues, comme avec un portefeuille matériel.</p>
         </article>
         <article class="step-card"><span class="num">02 · Démarrer</span><h3>Une clé USB, un redémarrage.</h3>
-          <p>Le builder écrit votre recette sur une clé. Le disque est chiffré au premier démarrage ; l’app mobile signe le déverrouillage. Le sous-domaine s’active.</p>
+          <p>Flagship Studio écrit votre recette sur une clé USB. Le disque est chiffré au premier démarrage. Votre téléphone vérifie la clé propre du serveur grâce à un code à six chiffres, puis signe le déverrouillage. Votre sous-domaine s’active.</p>
         </article>
         <article class="step-card"><span class="num">03 · Créer</span><h3>Créez un service en vibe coding.</h3>
-          <p>Décrivez ce que vous voulez. Le LLM produit le manifeste, le Dockerfile et le code ; le démon valide, compile et déploie en deux minutes.</p>
+          <p>Décrivez ce que vous voulez. Une IA écrit le code et son manifeste, avec votre propre clé, Flagship Inference ou un modèle qui tourne sur votre propre serveur. Votre serveur construit l’app et l’exécute dans son propre bac à sable.</p>
         </article>
         <article class="step-card"><span class="num">04 · Partager</span><h3>Donnez un lien à un ami.</h3>
           <p>Chaque service vit sur <code>app.you.flagship.services</code>. Un geste pour partager, un geste pour révoquer.</p>
@@ -1020,6 +1023,10 @@
           <div class="answer"><p>Non. L’app mobile vous guide à chaque étape. Le vibe coding, c’est écrire ce que vous voulez ; le LLM le code, le démon le déploie.</p></div>
         </details>
         <details class="q">
+          <summary>Puis-je utiliser l’IA sans envoyer mes données dans le cloud de quelqu’un d’autre ?</summary>
+          <div class="answer"><p>Oui. Téléchargez un modèle sur votre serveur depuis sa page « IA locale ». Vos apps et la création de vos apps peuvent l’utiliser, et vos prompts et vos données ne quittent jamais votre serveur. Il tourne sur le processeur, ou sur une carte graphique une fois que cette carte a été qualifiée.</p></div>
+        </details>
+        <details class="q">
           <summary>Puis-je l’exécuter sur un Raspberry Pi ?</summary>
           <div class="answer"><p>L’image actuelle est en x86_64. Les NUC, mini-PC et vieux portables fonctionnent. ARM64 est prévu ; la prise en charge du Pi suivra la même image.</p></div>
         </details>
@@ -1068,6 +1075,7 @@
               <li><a href="/fr/docs#how-it-works">Comment ça marche</a></li>
               <li><a href="/studio">Flagship Studio</a></li>
               <li><a href="https://webapp.flagshipserver.com/">App web</a></li>
+              <li><a href="/fr/blog/flagship-0-3">Nouveautés de la 0.3</a></li>
             </ul>
           </div>
           <div class="footer-col">

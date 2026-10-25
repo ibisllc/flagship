@@ -537,6 +537,7 @@
       text-transform: uppercase;
     }
     .studio-promo--center { justify-content: center; }
+    .hero-news { margin: 18px 0 0; }
     .studio-promo__label { color: var(--muted); margin-right: 2px; border-bottom: none; }
     .studio-promo__label:hover { color: var(--ink); text-decoration: underline var(--teal) 2px; text-underline-offset: 5px; border-bottom: none; }
     .studio-tag { font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 1px 5px; border: 1px solid currentColor; border-radius: 999px; opacity: .75; vertical-align: 1px; margin-left: 2px; }
@@ -904,6 +905,8 @@
             <a class="studio-promo__label" href="/studio">Flagship Studio</a>
             <a class="studio-download" data-studio-platform="mac" href="/download/mac">macOS</a><a class="studio-download" data-studio-platform="windows" href="/download/windows">Windows <span class="studio-tag">实验性</span></a></div>
 
+          <p class="hero-news"><a href="/zh-hans/blog/flagship-0-3" class="arrow-link"><span class="arrow" aria-hidden="true">→</span><span>0.3 新功能：本地 AI、可以确认归你所有的服务器、七种语言</span></a></p>
+
         </div>
       </div>
     </div>
@@ -924,10 +927,10 @@
           <p>唯一的副本由 Secure Enclave（iOS）或硬件支持的 Keystore（Android）中的密钥保护。如果没有设置云端恢复就丢了设备，数据也就没了，就像硬件钱包一样。</p>
         </article>
         <article class="step-card"><span class="num">02 · 启动</span><h3>一个 U 盘，一次重启。</h3>
-          <p>构建器把你的配方写入 U 盘。首次启动时磁盘被加密，手机应用为解锁签名，子域名随即上线。</p>
+          <p>Flagship Studio 把你的配方写入 U 盘。首次启动时磁盘被加密。手机通过一个 6 位代码核对服务器自己的密钥，然后为解锁签名。你的子域名随即上线。</p>
         </article>
         <article class="step-card"><span class="num">03 · 构建</span><h3>用 vibe coding 做一个服务。</h3>
-          <p>描述你想要的东西。LLM 生成清单、Dockerfile 和源码，守护进程在两分钟内完成提交、构建和发布。</p>
+          <p>描述你想要的东西。AI 编写代码及其清单，可以使用你自己的密钥、Flagship Inference，或在你自己服务器上运行的模型。你的服务器构建它，并在它专属的沙箱中运行。</p>
         </article>
         <article class="step-card"><span class="num">04 · 分享</span><h3>把链接递给朋友。</h3>
           <p>每个服务都位于 <code>app.you.flagship.services</code>。轻点一下分享，轻点一下撤销。</p>
@@ -1020,6 +1023,10 @@
           <div class="answer"><p>不需要。手机应用会带你走完每一步。所谓 vibe coding，就是输入你想要的东西：LLM 来写，守护进程来发布。</p></div>
         </details>
         <details class="q">
+          <summary>我能在不把数据发到别人云上的情况下使用 AI 吗？</summary>
+          <div class="answer"><p>可以。在服务器的“本地 AI”页面把模型下载到服务器上。你的应用和构建都能使用它，你的提示词和数据绝不会离开你的服务器。它在处理器上运行；显卡通过验证后，也可以在该显卡上运行。</p></div>
+        </details>
+        <details class="q">
           <summary>可以在树莓派上运行吗？</summary>
           <div class="answer"><p>目前的镜像是 x86_64，NUC、迷你主机、旧笔记本都可以用。ARM64 已在计划中，对树莓派的支持将跟随同一镜像。</p></div>
         </details>
@@ -1068,6 +1075,7 @@
               <li><a href="/zh-hans/docs#how-it-works">工作原理</a></li>
               <li><a href="/studio">Flagship Studio</a></li>
               <li><a href="https://webapp.flagshipserver.com/">网页版</a></li>
+              <li><a href="/zh-hans/blog/flagship-0-3">0.3 新功能</a></li>
             </ul>
           </div>
           <div class="footer-col">

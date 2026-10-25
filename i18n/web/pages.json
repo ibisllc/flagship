@@ -8,6 +8,7 @@
     { "src": "docs/index.html" },
     { "src": "open-source.html" },
     { "src": "adapters.html" },
-    { "src": "blog/index.html" }
+    { "src": "blog/index.html" },
+    { "src": "blog/flagship-0-3.html" }
   ]
 }

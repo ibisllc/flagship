@@ -4,7 +4,7 @@
 // Worker reads on "/" to decide whether to send a first-time visitor to their language.
 (function () {
   var LOCALES = [{"code":"en","native":"English","path":"","ga":true},{"code":"es","native":"Español","path":"es","ga":true},{"code":"fr","native":"Français","path":"fr","ga":true},{"code":"de","native":"Deutsch","path":"de","ga":true},{"code":"pt-BR","native":"Português (Brasil)","path":"pt-br","ga":true},{"code":"ja","native":"日本語","path":"ja","ga":true},{"code":"zh-Hans","native":"简体中文","path":"zh-hans","ga":true}];
-  var PAGES = ["/","/faq","/help","/security","/docs","/open-source","/adapters","/blog"];
+  var PAGES = ["/","/faq","/help","/security","/docs","/open-source","/adapters","/blog","/blog/flagship-0-3"];
   var NOTE = {"es":"Traducción automática. El original en inglés es la versión de referencia.","fr":"Traduction automatique. L’original en anglais fait foi.","de":"Maschinelle Übersetzung. Maßgeblich ist das englische Original.","pt-BR":"Tradução automática. O original em inglês é a versão de referência.","ja":"機械翻訳です。英語の原文が正式版です。","zh-Hans":"此为机器翻译，以英文原文为准。"};
   var here = document.documentElement.getAttribute("lang") || "en";
   var preview = /[?&]i18n-preview\b/.test(location.search) || (function () { try { return localStorage.getItem("fs-i18n-preview") === "1"; } catch (e) { return false; } })();

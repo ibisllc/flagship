@@ -82,23 +82,48 @@
         </p>
 
         <div class="callout">
-          <strong>Three device families.</strong> The native iOS app and Android app use Secure
-          Enclave / StrongBox: strong key storage. The installable webapp uses software-only
-          IndexedDB-with-passphrase: weaker, suitable for testing or accessibility. We
-          deliberately don't share keys between families: a webapp identity and an iOS identity
-          are independent accounts, the way Apple Pay never crosses to Google Pay.
+          <strong>Two kinds of key storage.</strong> The iPhone and Android apps wrap your keys with
+          the phone's secure hardware (the Secure Enclave on iPhone, the hardware-backed Keystore
+          on Android, StrongBox where the phone has it): strong key storage. The installable
+          webapp keeps its keys in the browser, protected by your passphrase: weaker, and we say
+          so when you start with it. Either can be a device of the same account.
         </div>
 
         <h3>What we promise</h3>
         <ul class="bullets">
-          <li>All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is open source under Apache 2.0.</li>
+          <li>All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is public under BUSL-1.1, which becomes Apache 2.0 on 2030-05-03.</li>
           <li>The boot image is built reproducibly: you can <a href="/security/iso-seed.html">verify the bytes match stock Debian</a>.</li>
-          <li>Standard primitives only: <code>Ed25519</code>, <code>X25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code>. No homemade crypto.</li>
+          <li>Standard primitives only: <code>Ed25519</code>, <code>X25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code>, and since 0.3 <code>ML-DSA-65</code> and <code>ML-KEM-768</code> in hybrid with the classical ones. No homemade crypto.</li>
           <li>Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.</li>
           <li>The auth domain (<code>flagshipserver.com</code>) is separate from the user-content domain (<code>*.flagship.services</code>) so user apps cannot reach session cookies via subdomain confusion.</li>
           <li>flagshipserver.com is physically unable to read user-content TLS: bytes are routed by SNI and decrypted only on your own server.</li>
           <li id="no-kyc"><strong>No KYC, ever.</strong> We do not collect, store, or expose any real-world identity attribute about any user: no legal name, no email, no phone, no government ID. <a href="https://github.com/ibisllc/flagship/blob/main/docs/policy/no-kyc.md">Read the full policy →</a></li>
         </ul>
+
+        <h3 id="hardening-0-3">What 0.3 changed</h3>
+        <p>
+          For 0.3 we assumed parts of a server could be attacked, and made each part hold as
+          little power as it needs. In plain terms:
+        </p>
+        <ul class="bullets">
+          <li><strong>The server program no longer runs as root.</strong> It runs as an ordinary user. The few jobs that need root (power, containers, the firewall, installing a release) go through a small broker that accepts only a fixed list of typed requests and refuses and records everything else.</li>
+          <li><strong>Keys live apart from the server program.</strong> The server's identity key, its TLS key and its Let's Encrypt account key sit in a separate key service. The server program asks it to sign and never holds the keys. This is a software boundary on the same machine, not a hardware one.</li>
+          <li><strong>Your phone pins each server's own key at first contact.</strong> A new server proves it was built from your recipe with a one-time secret, and shows a six-digit code that your phone computes for itself from the server's key. After that, a server presenting a different key is refused.</li>
+          <li><strong>Sensitive actions need your admin key.</strong> On a server that knows its admin, updates, rank changes, journal reads, graphics-card approvals and similar orders are refused unless the admin device signed them. Every route of the server's control interface goes through one default-deny check.</li>
+          <li><strong>Signed install packages.</strong> Servers install and update from one release package signed by Flagship's maintainers, with a sequence number that only goes up and a minimum runtime version. No package manager, compiler or git checkout runs on your server to install or update it. A rollback only switches back to a release already on the disk.</li>
+          <li><strong>Boot.</strong> Each VM appliance makes its own disk key on first start and removes the shared factory key. The sealed copy of the disk key is addressed to a boot-only key, and where a server has a TPM the key that opens it is kept in the TPM. We make no measured-boot or attestation claims.</li>
+          <li><strong>Apps stay in their lane.</strong> Each app runs under gVisor and reaches only the internet hosts you approve. App database migrations run in a locked-down one-shot container. A restored backup's apps start with nobody on their access list until you approve it, and run only the exact image the backup recorded. An app that needs a graphics card waits for your signed approval.</li>
+          <li><strong>AI stays fenced.</strong> Every tool call an AI model makes goes through a broker that allows only what you granted, and everything your server shows a model is stripped of names, mail addresses, times, languages and network addresses. Local AI runs on the server with no internet.</li>
+          <li><strong>Recovery checks your passkey.</strong> flagshipserver.com releases a cloud-recovery record only after a valid signature from your passkey, and a new record is signed over all of its contents. A recovery set up before 0.3 gets this when you accept the apps' one-time "Update your account recovery" prompt.</li>
+          <li><strong>Quantum-safe groundwork.</strong> Servers and phones hold ML-DSA-65 keys bound to their Ed25519 keys, and a hybrid channel (X-Wing: ML-KEM-768 with X25519) is built, with an opt-in setting on iPhone and Android. Release signatures, install packages and boot leases need their quantum-safe half only after our signing ceremony. All of this is pending external review; it is not a claim that Flagship is quantum-safe today.</li>
+          <!-- TODO-RM findings: confirm this wording (the review's author is not named; N06/N07/N12/N13 are partly done). -->
+          <li><strong>Findings fixed.</strong> 0.3 fixes the stop-ship findings of a security review of the whole product and the 24 findings of our own adversarial test suite, which now runs on every release. An external assessment has not been done yet.</li>
+        </ul>
+        <p>
+          What has not changed: TLS ends on your own server, so we can't read what your apps send.
+          Our relay sees connection metadata: which server, when, and how much. An AI model never
+          learns who or where you are.
+        </p>
 
         <h3>Source code</h3>
         <p>

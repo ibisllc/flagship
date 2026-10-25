@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="alternate" type="application/rss+xml" title="Flagship blog" href="/blog/rss.xml" />
+    <link rel="stylesheet" href="/site.css" />
+    <title>What's new in Flagship 0.3 · Flagship</title>
+    <meta name="description" content="Flagship 0.3: your phone checks every new server is yours, AI runs on your own server, apps get their own databases, and the server software was rebuilt for security. Still free." />
+    <meta property="og:title" content="What's new in Flagship 0.3" />
+    <meta property="og:description" content="Your phone checks every new server is yours, AI runs on your own server, and the server software was rebuilt for security. Still free." />
+    <meta property="og:image" content="/og?title=Flagship+0.3" />
+    <link rel="stylesheet" href="/theme-ui.css">
+    <style>
+      .post-meta { color: var(--fg-mute, var(--text-muted)); font-size: var(--body-sm-size, 14px); margin-top: calc(-1 * var(--space-2, 8px)); }
+      main ul.notes { padding-left: 1.2em; }
+      main ul.notes li { margin: 0 0 var(--space-3, 12px); }
+      .limits { border-left: 2px solid var(--accent-graphic, currentColor); padding: var(--space-3, 12px) var(--space-4, 16px); margin: var(--space-4, 16px) 0; }
+    </style>
+  <script src="/theme.js"></script>
+  <script src="/i18n.js" defer></script>
+</head>
+  <body>
+    <header class="topbar">
+      <a href="/" class="brand" aria-label="Flagship — home">
+        <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
+        <span class="name">Flagship</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/docs/">Docs</a>
+        <a href="/blog/">Blog</a>
+        <a href="/blog/rss.xml">RSS</a>
+      </nav>
+        <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
+    </header>
+
+    <main>
+      <h1>What's new in Flagship 0.3</h1>
+      <p class="post-meta">Release notes. Flagship is still free: there is nothing to buy in this release.</p>
+      <p class="lede">
+        Flagship 0.3 is our biggest release so far. Most of it you will never see: it rebuilds how your
+        server keeps its keys, installs its software and runs your apps. Some of it you will see every
+        day: the apps speak your language, setting up a server is harder to fool, and your server can
+        run AI and new kinds of apps without anyone else's cloud.
+      </p>
+
+      <h2 id="setup">Set up a server you can be sure is yours</h2>
+      <ul class="notes">
+        <li><strong>Your phone checks it is talking to your new server.</strong> The first time your server asks to be approved, your phone keeps that server's own key and checks everything against it from then on. If the machine has a screen, it shows a six-digit code, and your phone shows the same code above Approve. If they don't match, don't approve. When Flagship Studio hosts the server on your computer, Studio checks the code for you.</li>
+        <li><strong>A server that was not built from your recipe is refused.</strong> Your recipe carries a one-time secret that only your own server can prove it holds.</li>
+        <!-- TODO-RM usb-burn: remove the next item if the seed is not published or the real phone + stick run (journal A5) fails. -->
+        <li><strong>Make the installer stick with your Android phone.</strong> Plug a USB stick into your phone with an OTG adapter and the app writes the installer itself, no computer needed. The stick starts from a stock Debian image that anyone can <a href="/security/iso-seed.html">rebuild and check byte for byte</a>.</li>
+        <li><strong>Servers install from one signed package.</strong> A new server no longer downloads code from a repository while it installs. It checks the signature of one package from Flagship's maintainers, then installs it with no further downloads.</li>
+      </ul>
+
+      <h2 id="apps">Run more kinds of apps</h2>
+      <ul class="notes">
+        <!-- TODO-RM new-box-stack: dedicated databases exist only on the arch-v2 (Podman) stack; remove the next item if newBoxStack is classic. -->
+        <li><strong>Each app gets its own database server.</strong> On new servers an app's database runs on its own, with its own memory, disk and connection limits, so one busy app can't slow the others down.</li>
+        <li><strong>Apps made of several parts.</strong> An app can be up to eight parts, such as a web server and a worker, that start in order and count as one app: one approval, one list of sites it may reach, one database.</li>
+        <li><strong>WebAssembly apps.</strong> An app can be a small WebAssembly (WASI) program. Each request runs in a fresh copy with hard limits on time and memory.</li>
+        <li><strong>Choose how each app updates.</strong> Manual is the default: you approve every update. Staged holds a checked update for a week before it installs. Automatic installs it at once. Both automatic choices only take updates from the same publisher that ask for no new permissions; anything else waits for you.</li>
+        <li><strong>Apps can ask to talk to another person's apps.</strong> When an app on someone else's server wants to send messages to one of yours, you see a request and choose Allow, Always allow or Deny. You can take an Always allow back at any time.</li>
+        <!-- TODO-RM app-browser: remove the next item if the release gym turns the app browser off. -->
+        <li><strong>Apps can use a web browser on your server,</strong> but only on the sites you approved when you installed them, with a separate browser for each app. Your home network and Flagship's own services are always out of reach.</li>
+      </ul>
+
+      <h2 id="ai">Run AI on your own server</h2>
+      <ul class="notes">
+        <li><strong>Local AI.</strong> Open Local AI from your server's page and download a model. Your apps and your builds can then use it, and it runs only on your server: your prompts and data are not sent anywhere. It runs on your processor, or on a graphics card once that card has been qualified. Downloading the model is the only time your server contacts the model's host.</li>
+        <li><strong>Train a small model on your own data.</strong> You can train one of the small models on an app's sample data, on your server. This is early: small models only.</li>
+        <li><strong>Agree before AI spends anything.</strong> Before an AI repair uses your own API key or your Flagship Inference credits, you see an estimate and who pays, and you agree. The amount you agreed to is a hard stop.</li>
+        <li><strong>AI still never learns who you are.</strong> What your server sends to an outside AI model is now also stripped of names, mail addresses, home folders, times, time zones, languages and network addresses.</li>
+      </ul>
+
+      <h2 id="gpu">Use a graphics card, with your permission</h2>
+      <ul class="notes">
+        <li><strong>Your server lists its graphics cards</strong> on its page, with the app that holds each one.</li>
+        <li><strong>An app that needs a graphics card waits for you.</strong> You get a notification and approve it from your admin device, or withdraw the approval later. Until then the app runs without the card if it can, or tells you why it can't.</li>
+        <li><strong>Cards are qualified before use.</strong> Flagship gives a graphics card to an app only once that model of card has passed our hardware tests. Until then, apps that need one say plainly that they can't run yet. The software supports NVIDIA, AMD and Intel cards.</li>
+      </ul>
+
+      <!-- TODO-RM offline-control: remove this section (h2 + list + note) if journal A4 does not ship. -->
+      <h2 id="offline">Keep control when Flagship can't be reached</h2>
+      <ul class="notes">
+        <li><strong>Your phone finds your server on your home network</strong> when flagshipserver.com or our relay can't be reached. It looks for your server on the same Wi-Fi and checks the server's own key.</li>
+        <li><strong>Basic control without us:</strong> see your server's status and its apps, start, stop or restart an app, restart or shut down the server, and make a backup and save it to your phone.</li>
+        <li><strong>Every action is still signed by your phone</strong> and checked by your server.</li>
+      </ul>
+      <p class="limits">This works while your server is running. A server that restarts still needs flagshipserver.com to unlock its disk. Creating an account, adding a device and recovering an account also still need flagshipserver.com.</p>
+
+      <h2 id="languages">Use Flagship in your language</h2>
+      <p>The apps, the web app, this website, Flagship Studio and the pages your server shows visitors are now in English, Spanish, French, German, Brazilian Portuguese, Japanese and Simplified Chinese. Notifications arrive in your phone's language. The translations are machine-made drafts that native speakers have not reviewed yet. If a sentence reads wrong, tell us at <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>.</p>
+
+      <h2 id="calmer">A calmer app</h2>
+      <ul class="notes">
+        <li><strong>Home, Activity and Settings were redesigned</strong> on iPhone, Android and the web app: shorter screens, one "Add / Restore a server" button, and red buttons only for what can't be undone.</li>
+        <li><strong>Approve a server's start from your watch with your phone locked,</strong> on Apple Watch and Wear OS.</li>
+        <li><strong>Signing out asks for Face ID, your fingerprint or your device PIN first</strong> whenever it would erase keys.</li>
+        <li><strong>Account recovery now checks your passkey too.</strong> The apps ask you once to update your recovery so it is protected by your passkey as well as your passphrase.</li>
+      </ul>
+
+      <h2 id="updates">Safer updates</h2>
+      <ul class="notes">
+        <li><strong>A server update proves itself or steps back.</strong> The new release installs beside the old one and gets three starts to prove it is healthy. If it fails, your server goes back to the release it ran before, by itself. Updates and rollbacks never touch your apps, data, keys or settings.</li>
+        <!-- TODO-RM canary: remove the next item if release/catalog-root.json is not pinned in this release. -->
+        <li><strong>Updates reach a small group of servers first,</strong> and more only once those are healthy.</li>
+        <li><strong>Share update results.</strong> An optional switch on your server's page, off by default, sends Flagship one receipt per update saying whether it worked. It names no app and holds no content.</li>
+        <!-- TODO-RM new-box-stack: if the release gym sets newBoxStack to classic, remove the next item. -->
+        <li><strong>A newer foundation for new servers.</strong> New servers run apps with Podman and keep their keys in small, separate programs written in Rust. Servers you already have keep their current setup.</li>
+      </ul>
+
+      <h2 id="security">For the security-minded</h2>
+      <p>We assumed parts of the server could be attacked, and made each part hold as little power as it needs. The details are on the <a href="/security#hardening-0-3">security page</a>.</p>
+      <ul class="notes">
+        <li><strong>The server program no longer runs as root.</strong> The few jobs that need root go through a small broker that accepts a fixed list of requests and refuses everything else.</li>
+        <li><strong>Keys live apart from the server program.</strong> The server's identity, TLS and Let's Encrypt keys sit in a separate key service. The server program asks it to sign; it never holds the keys.</li>
+        <li><strong>Sensitive actions need your admin key.</strong> Updates, rank changes, journal reads and graphics-card approvals are refused unless your admin device signed them.</li>
+        <!-- TODO-RM findings: confirm this wording (the review's author is not named; N06/N07/N12/N13 are partly done). -->
+        <li><strong>Review findings fixed.</strong> This release fixes the stop-ship findings of a security review of the whole product and the 24 findings of our own adversarial test suite, which now runs on every release.</li>
+        <li><strong>Quantum-safe groundwork.</strong> Servers and phones hold ML-DSA-65 keys beside their Ed25519 keys, a hybrid channel (ML-KEM-768 with X25519) is built, and iPhone and Android have an opt-in Quantum-safe protection setting. All of it is pending external review.</li>
+        <li><strong>What has not changed.</strong> TLS still ends on your own server, so we can't read what your apps send. Our relay sees connection metadata: which server, when, and how much. An AI model never learns who or where you are.</li>
+      </ul>
+
+      <p><a href="/blog/">All posts</a> · <a href="/security#report">Report a vulnerability</a></p>
+    </main>
+
+    <footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <a href="/" class="wordmark"><span class="glyph" aria-hidden="true"></span><span>Flagship</span></a>
+      <p>A personal cloud that respects you, your hardware, and your mobile device.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="https://webapp.flagshipserver.com/">Webapp</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Trust</h4>
+      <ul>
+        <li><a href="/security#model">Architecture</a></li>
+        <li><a href="/security#disclosure">Disclosure</a></li>
+        <li><a href="/security#report">Report a vuln</a></li>
+        <li><a href="/abuse">Abuse</a></li>
+        <li><a href="/.well-known/security.txt">security.txt</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Open</h4>
+      <ul>
+        <li><a href="/open-source.html">Open source</a></li>
+        <li><a href="/adapters.html">Repo adapters</a></li>
+        <li><a href="/status/">Status</a></li>
+        <li><a href="/docs/">Docs</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="/help">Help</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 Flagship · Patent Pending · BUSL-1.1 → Apache 2.0 on 2030-05-03</span>
+    <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span>
+  </div>
+</footer>
+  <script src="/motion.js" defer></script>
+</body>
+</html>

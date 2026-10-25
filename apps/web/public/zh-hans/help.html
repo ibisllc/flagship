@@ -121,6 +121,7 @@
         <li>从 <a href="/download">/download</a> 安装手机应用（或使用<a href="https://webapp.flagshipserver.com/">网页版</a>）。</li>
         <li>在电脑上安装 <a href="/studio">Flagship Studio</a>。</li>
         <li>在应用中创建服务器，用 Studio 的二维码或短码完成配对，然后用 Studio 写入安装 U 盘（8 GB 以上）。</li>
+        <li>服务器第一次请求批准时，请确认其屏幕上的 6 位代码与应用中的一致，然后再批准。</li>
       </ol>
       <p class="next">大约十分钟后，你就会在 <code>you.flagship.services</code> 上看到真正的绿色小锁。</p>
     </article>
@@ -130,14 +131,15 @@
         <li><strong>“配对码未被接受”</strong>：重新打开 Studio 以显示新的二维码和短码，然后再试一次。</li>
         <li><strong>“无网络”</strong>：安装程序需要有线以太网口上的 DHCP。安装期间不支持 Wi-Fi，请插上网线。</li>
         <li><strong>“磁盘太小”</strong>：最低要求为 32 GB。安装程序会格式化你指定的磁盘，不支持双系统。</li>
+        <li><strong>6 位代码不一致</strong>：不要批准。你屏幕上的服务器并不是你的手机正在通信的那台。请在应用中删除该服务器，然后用新的配方重新创建。</li>
       </ol>
       <p class="next">还是卡住？请截图并通过邮件发给我们。</p>
     </article>
 
     <article class="card help-card"><span class="label">手机问题</span><h3>我的手机坏了。</h3>
       <ol>
-        <li>如果你在设置时启用了 iCloud 钥匙串或 Google Block Store，在新手机上登录后，你的身份会通过生物识别解开。</li>
-        <li>如果没有，你的账户就无法恢复；这是有意为之（我们没有后门），我们在设置过程中也尽量说得很清楚了。</li>
+        <li>如果你设置了云端恢复，在新手机上用你的账户名登录。它会要求你的通行密钥（由 iCloud 钥匙串或 Google 密码管理器保存）和恢复密码短语。</li>
+        <li>没有云端恢复？请使用另一台仍处于登录状态的设备，或你保存的账户密钥文件。如果这些都没有，你的账户就无法恢复；这是有意为之（我们没有后门），我们在设置过程中也尽量说得很清楚了。</li>
         <li>硬件本身没问题。用同一个盒子新建账户，相当于一次干净的重装。</li>
       </ol>
       <p class="next">完整恢复流程：<a href="/zh-hans/docs">/docs/recovery</a>。</p>
@@ -149,7 +151,7 @@
         <li><strong>“证书无效”/没有绿色小锁</strong>：守护进程正在续期。请在控制台查看“正在续期”标记，通常 90 秒内会恢复。</li>
         <li><strong>“403 非成员”</strong>：该服务受身份保护，而你的手机尚未批准你的设备。请在手机上批准，然后刷新。</li>
       </ol>
-      <p class="next">日志位于你的盒子上，用 <code>journalctl -u flagshipd</code> 查看。</p>
+      <p class="next">服务器最近的事件可在应用的“活动”中查看。</p>
     </article>
   </section>
 
@@ -172,10 +174,25 @@
       <ol>
         <li><strong>电源和网络</strong>。盒子开着吗？网线插好了吗？能访问互联网吗（<code>ping 1.1.1.1</code>）？</li>
         <li><strong>出站 443 可达</strong>。某些限制严格的网络会阻断长连接 WebSocket。在盒子上运行 <code>curl https://flagship.services/api/health</code> 应当返回 JSON。</li>
-        <li><strong>守护进程状态</strong>。通过 SSH 登录并运行 <code>systemctl status flagshipd</code>。用 <code>systemctl restart flagshipd</code> 重启；近期日志见 <code>journalctl -u flagshipd -n 200</code>。</li>
+        <li><strong>守护进程状态</strong>。在应用中从服务器页面重启服务器。如果你开启了调试访问（从服务器页面添加的一个限时 SSH 密钥），就可以通过 SSH 登录并运行 <code>systemctl status flagship</code>；近期日志见 <code>journalctl -u flagship -n 200</code>。</li>
       </ol>
     </div>
 
+    <div class="symptom">
+      <h3>“此服务器的密钥已更改”</h3>
+      <p>你的手机从你第一次批准某台服务器起，就保存了该服务器自己的密钥。这条消息表示该服务器现在出示的是另一个密钥。如果你没有重建这台服务器，请不要为它批准任何操作：可能有别人在代替它应答。如果你确实重建了它，请在应用中用新的配方重新创建，让手机按正常流程认识它的新密钥。</p>
+    </div>
+    <!-- TODO-RM offline-control: remove the next symptom if journal A4 does not ship. -->
+    <div class="symptom">
+      <h3>flagshipserver.com 宕机了，而我需要用我的服务器</h3>
+      <p>在与服务器相同的 Wi-Fi 下打开 iPhone 或 Android 应用。应用会在家庭网络中找到服务器并核对它的密钥，因此你仍然可以：</p>
+      <ol>
+        <li>查看它的状态和应用。</li>
+        <li>启动、停止或重启某个应用，或者重启或关闭服务器。</li>
+        <li>创建备份并保存到手机上。</li>
+      </ol>
+      <p>这只在服务器运行时有效。除非必要，请不要重启它：服务器重启后需要 flagshipserver.com 才能解锁磁盘。</p>
+    </div>
     <div class="symptom">
       <h3>浏览器提示“证书无效”</h3>
       <p>你的 TLS 证书存放在守护进程上，并会在到期前 30 天自动续期。如果你看到证书警告：</p>

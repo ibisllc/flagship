@@ -1,0 +1,25 @@
+{
+  "_about": "Flagship 0.3 的 App Store 和 Google Play 商店文案（简体中文），译自 store/listings/en.json。",
+  "_todo": [
+    "appstore.name / playstore.title: confirm against the live listings (the store name must match what App Store Connect and the Play Console hold).",
+    "offline-control: the sentence 'If flagshipserver.com can't be reached ...' in appstore.description, appstore.whatsNew, playstore.fullDescription and playstore.whatsNew depends on journal A4 (phone side not built on 2026-10-25). Remove it in every language if A4 does not ship.",
+    "usb-burn: the sentence 'Make the installer USB stick with your phone ...' in playstore.fullDescription and playstore.whatsNew depends on journal A5 (seed published, one real phone + stick run). Android only; never in the App Store texts.",
+    "local-ai and graphics cards: true as written (CPU path runs; GPU apps wait for qualification). Keep 'wait for your approval'; never claim GPU apps run today."
+  ],
+  "lang": "zh-Hans",
+  "review": "machine draft: needs native review",
+  "appstore": {
+    "name": "Flagship",
+    "subtitle": "你的云，运行在你自己的硬件上",
+    "promotionalText": "0.3 新功能：手机会核实每台新服务器确实属于你，AI 在你自己的服务器上运行，应用支持七种语言。依然免费。",
+    "description": "Flagship 把一台闲置电脑变成你自己的云。密钥由你的手机掌握。\n\n你的应用、文件和备份都存放在你拥有的服务器上：一台旧电脑、一台迷你主机，或你已在使用的电脑上的一台虚拟机。每台服务器都有自己的网址和真正的绿色小锁，加密在你的服务器上终止，而不是在我们的服务器上。Flagship 无法读取你的应用发送的内容。\n\n【你可以做什么】\n• 在电脑上用 Flagship Studio，大约十分钟就能设置好一台服务器。\n• 用 Face ID 批准服务器启动；如果你愿意，也可以让它自行启动。\n• 描述你想要的应用即可构建，也可以从 git 仓库安装。\n• 按应用逐个邀请家人和朋友。他们只能使用那个应用，永远拿不到你的密钥。\n• 把服务器备份到你的手机或你的其他服务器上。只有你的账户能打开这些备份。\n• 在你自己的服务器上运行 AI 模型。你的提示词和数据都留在那里。\n• 在 Apple Watch 上查看你的服务器，并直接从手腕上批准启动。\n\n【0.3 新功能】\n• 你第一次批准一台新服务器时，手机会保存这台服务器自己的密钥，此后每次都会核对。手机会显示一个六位数代码，供你与服务器屏幕上的代码比对。\n• 本地 AI：把模型下载到你的服务器上，在应用和构建中使用。任何内容都不会被发送到别处。\n• 应用拥有自己的数据库，可以由多个部分组成，也可以是小型 WebAssembly 程序。\n• 需要显卡的应用会等待你的批准。\n• 为每个应用选择更新方式：等待你确认、等待一周，或立即安装。\n• 服务器更新必须证明自己运行正常，否则会自动回退。\n• 服务器软件为安全而重建：不再以 root 身份运行，密钥保存在单独的服务中，并且只安装已签名的软件包。\n• 即使无法连接 flagshipserver.com，你的手机仍能在家里的 Wi-Fi 上找到你的服务器，显示其状态，启动和停止应用，并创建备份。\n• 支持英语、西班牙语、法语、德语、巴西葡萄牙语、日语和简体中文。\n\n【隐私，说清楚】\n• 加密在你的服务器上终止。我们的中继转发加密流量，能看到连接元数据：哪台服务器、何时、多少流量。\n• 无需邮箱、密码或手机号。你的账户就是你设备上的一组密钥。\n• AI 模型永远不会知道你是谁、身在何处。\n• 代码公开在 github.com/ibisllc/flagship。\n\nFlagship 是免费的，没有任何需要购买的东西。\n\n你需要一台服务器：一台闲置电脑，或一台运行 Flagship Studio 的电脑（macOS；Windows 和 Linux 为实验性支持）。",
+    "keywords": "自托管,家庭服务器,私有云,个人云,私人云盘,本地AI,备份,加密,隐私,NAS,homelab,自建服务器",
+    "whatsNew": "Flagship 0.3 是我们迄今最大的一次更新。\n\n• 你第一次批准一台新服务器时，手机会保存这台服务器自己的密钥，并显示一个六位数代码，供你与服务器屏幕上的代码比对。由 Studio 托管服务器时，Studio 会替你核对代码。\n• 本地 AI：在服务器页面把模型下载到你的服务器上。你的应用和构建都可以使用它，任何内容都不会被发送到别处。\n• 应用拥有自己的数据库，可以由多个部分组成，也可以是 WebAssembly 程序。\n• 需要显卡的应用会等待你的批准。\n• 为每个应用选择：更新等待你确认、等待一周，或立即安装。\n• AI 修复在动用你的密钥或额度之前，会先显示费用并征得你同意。\n• 应用可以请求与其他人的应用通信。你可以选择“允许”“始终允许”或“拒绝”。\n• 即使 iPhone 处于锁定状态，也能在 Apple Watch 上批准服务器启动。\n• 即使无法连接 flagshipserver.com，你的手机仍能在家里的 Wi-Fi 上找到你的服务器，显示其状态，启动和停止应用，并创建备份。\n• 服务器更新必须证明自己运行正常，否则会自动回退。\n• 服务器不再以 root 身份运行，密钥保存在单独的服务中，并且只安装已签名的软件包。\n• 恢复账户时，除了密码短语，现在还会验证你的通行密钥。\n• 新增语言：西班牙语、法语、德语、巴西葡萄牙语、日语和简体中文。\n• 重新设计了主页、活动和设置。"
+  },
+  "playstore": {
+    "title": "Flagship",
+    "shortDescription": "在你自己的硬件上运行的私有云。密钥由你的手机掌握。",
+    "fullDescription": "Flagship 把一台闲置电脑变成你自己的云。密钥由你的手机掌握。\n\n你的应用、文件和备份都存放在你拥有的服务器上：一台旧电脑、一台迷你主机，或你已在使用的电脑上的一台虚拟机。每台服务器都有自己的网址和真正的绿色小锁，加密在你的服务器上终止，而不是在我们的服务器上。Flagship 无法读取你的应用发送的内容。\n\n【你可以做什么】\n• 在电脑上用 Flagship Studio，大约十分钟就能设置好一台服务器；也可以用手机和 USB OTG 转接头制作安装 U 盘。\n• 用指纹批准服务器启动；如果你愿意，也可以让它自行启动。\n• 描述你想要的应用即可构建，也可以从 git 仓库安装。\n• 按应用逐个邀请家人和朋友。他们只能使用那个应用，永远拿不到你的密钥。\n• 把服务器备份到你的手机或你的其他服务器上。只有你的账户能打开这些备份。\n• 在你自己的服务器上运行 AI 模型。你的提示词和数据都留在那里。\n• 在 Wear OS 上查看你的服务器，并直接从手腕上批准启动。\n\n【0.3 新功能】\n• 你第一次批准一台新服务器时，手机会保存这台服务器自己的密钥，此后每次都会核对。手机会显示一个六位数代码，供你与服务器屏幕上的代码比对。\n• 用手机制作安装 U 盘：无需电脑。\n• 本地 AI：把模型下载到你的服务器上，在应用和构建中使用。任何内容都不会被发送到别处。\n• 应用拥有自己的数据库，可以由多个部分组成，也可以是小型 WebAssembly 程序。\n• 需要显卡的应用会等待你的批准。\n• 为每个应用选择更新方式：等待你确认、等待一周，或立即安装。\n• 服务器更新必须证明自己运行正常，否则会自动回退。\n• 服务器软件为安全而重建：不再以 root 身份运行，密钥保存在单独的服务中，并且只安装已签名的软件包。\n• 即使无法连接 flagshipserver.com，你的手机仍能在家里的 Wi-Fi 上找到你的服务器，显示其状态，启动和停止应用，并创建备份。\n• 支持英语、西班牙语、法语、德语、巴西葡萄牙语、日语和简体中文。\n\n【隐私，说清楚】\n• 加密在你的服务器上终止。我们的中继转发加密流量，能看到连接元数据：哪台服务器、何时、多少流量。\n• 无需邮箱、密码或手机号。你的账户就是你设备上的一组密钥。\n• AI 模型永远不会知道你是谁、身在何处。\n• 代码公开在 github.com/ibisllc/flagship。\n\nFlagship 是免费的，没有任何需要购买的东西。\n\n你需要一台服务器：一台闲置电脑，或一台运行 Flagship Studio 的电脑（macOS；Windows 和 Linux 为实验性支持）。",
+    "whatsNew": "Flagship 0.3：\n• 手机保存每台新服务器的密钥，并显示用于比对的代码\n• 用手机制作安装 U 盘\n• 在你自己的服务器上运行本地 AI\n• 按应用的数据库、更新选项、GPU 批准\n• 无法连接我们时，也能在家里的 Wi-Fi 上找到你的服务器\n• 更安全的更新；服务器不再以 root 身份运行\n• 新增 6 种语言，界面重新设计"
+  }
+}

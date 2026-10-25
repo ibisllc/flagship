@@ -124,6 +124,19 @@
         </div>
       </details>
       <details class="q">
+        <summary>我怎么知道正在批准的服务器是我自己的？</summary>
+        <div class="answer">
+          <p>新服务器第一次请求批准时，你的手机会保存该服务器自己的密钥，此后所有内容都以它为准进行核对。如果这台机器有屏幕，它会显示一个 6 位代码，你的手机也会在“批准”上方显示同一个代码：如果两者不一致，请不要批准。你的配方还带有一个一次性秘密值，因此不是由它构建的服务器会被拒绝。当 Studio 在你的电脑上托管服务器时，它会替你核对代码。之后，如果某台服务器的密钥发生变化，应用会拒绝它并告诉你。</p>
+        </div>
+      </details>
+      <!-- TODO-RM usb-burn: remove the next question if the seed is not published or the real phone + stick run (journal A5) fails. -->
+      <details class="q">
+        <summary>我能用手机制作 U 盘吗？</summary>
+        <div class="answer">
+          <p>Android 可以。用 OTG 转接头把 U 盘接到手机上，并在创建服务器时选择在此设备上写入安装程序。应用会写入一个原版 Debian 安装程序（任何人都可以<a href="/security/iso-seed.html">重新构建并逐字节核对</a>），然后加入由你手机签名的配方。iPhone 应用无法写入 U 盘；在 iPhone 上，请在电脑上使用 Flagship Studio。</p>
+        </div>
+      </details>
+      <details class="q">
         <summary>会清空磁盘吗？</summary>
         <div class="answer">
           <p>会。安装程序会格式化目标磁盘，用只有你的手机才能释放的密钥启用 LUKS 全盘加密，并写入一个经过加固的 Linux 基础系统。磁盘上原有的一切都会消失。安装程序会确认两次并显示设备路径；我们尽力不让任何人感到意外。</p>
@@ -181,13 +194,13 @@
       <details class="q">
         <summary>你们使用什么加密？</summary>
         <div class="answer">
-          <p>只使用标准原语：Ed25519 签名，密封数据块用 X25519 + AES-256-GCM，密钥派生用 HKDF-SHA-256，磁盘用 LUKS2/argon2id。传输使用由你的盒子自己申请的真实 Let's Encrypt 证书。如果我们哪天自己发明密码学，请把它当作 bug 报告。</p>
+          <p>只使用标准原语：Ed25519 签名，密封数据块用 X25519 + AES-256-GCM，密钥派生用 HKDF-SHA-256，磁盘用 LUKS2/argon2id。传输使用由你的主机自己申请的真实 Let's Encrypt 证书。从 0.3 起，服务器和手机除了 Ed25519 密钥外还持有 ML-DSA-65 密钥，混合抗量子通道（ML-KEM-768 加 X25519）也已构建完成，iPhone 和 Android 上有一个可选开启的设置；这部分工作尚待外部审查。如果我们哪天自己发明密码学，请把它当作 bug 报告。</p>
         </div>
       </details>
       <details class="q">
         <summary>源代码是公开的吗？</summary>
         <div class="answer">
-          <p>是的。协议、守护进程、镜像构建器和客户端都在 <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a>，采用 BUSL-1.1，并将在 2030 年转为 Apache 2.0。ISO 的可复现构建已列入路线图，方便你验证字节与源码一致。</p>
+          <p>是的。协议、守护进程、镜像构建器和客户端都在 <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a>，采用 BUSL-1.1，并将在 2030 年转为 Apache 2.0。启动镜像可复现：你可以<a href="/security/iso-seed.html">核实其字节与原版 Debian 一致</a>。服务器软件从一个由 Flagship 维护者签名的软件包安装。</p>
         </div>
       </details>
       <details class="q">
@@ -212,7 +225,7 @@
       <details class="q">
         <summary>“vibe coding”一个服务是什么意思？</summary>
         <div class="answer">
-          <p>你用日常语言描述想要的东西（“记录我浇过哪些绿植，哪盆缺水超过 5 天就推送通知我”）。LLM 来写代码，你的守护进程负责构建、选择数据层范围（Postgres 表、对象存储、推送），并把它运行在 <code>plant-water.you.flagship.services</code>。大约 90 秒。如果你愿意，也可以自己修改代码。</p>
+          <p>你用日常语言描述想要的东西（“记录我浇过哪些绿植，哪盆缺水超过 5 天就推送通知我”）。由 AI 模型来写代码：使用你自己的提供商密钥、Flagship Inference，或在你自己服务器上运行的模型。你的守护进程负责构建，提供它所请求的资源（一个 Postgres 数据库、一个文件夹、推送），并把它运行在 <code>plant-water.you.flagship.services</code>。大约 90 秒。如果你愿意，也可以自己修改代码。</p>
         </div>
       </details>
       <details class="q">
@@ -234,6 +247,24 @@
         </div>
       </details>
       <details class="q">
+        <summary>我能在自己的服务器上运行 AI 吗？</summary>
+        <div class="answer">
+          <p>可以。在服务器页面打开“本地 AI”并下载一个模型。之后你的应用和构建都能使用它，你的提示词和数据绝不会离开你的服务器；下载模型是服务器唯一一次联系模型的托管方。它在处理器上运行；该型号的显卡通过验证后，也可以在显卡上运行。你还可以用某个应用的示例数据训练一个小模型。这项功能还处于早期阶段：仅限小模型。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>应用能使用我的显卡吗？</summary>
+        <div class="answer">
+          <p>只有在你同意时才可以。需要显卡的应用会等待你的批准（从你的管理员设备签名），你之后也可以撤回。此外，只有在该型号的显卡通过我们的硬件测试后，Flagship 才会把显卡分配给应用；在此之前，需要显卡的应用会告诉你它们暂时无法运行。</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>应用会自动更新吗？</summary>
+        <div class="answer">
+          <p>只有在你选择时才会。每个应用都有一种更新模式：手动（默认，每次更新都由你批准）、分阶段（经过检查的更新等待一周）或自动。分阶段和自动这两种模式只接受来自同一发布者、且不要求新权限的更新；其他更新都会等你决定。</p>
+        </div>
+      </details>
+      <details class="q">
         <summary>可以干净地卸载服务吗？</summary>
         <div class="answer">
           <p>可以。卸载会删除它的容器、Postgres 数据库、文件夹和访问列表。如果以后还想找回数据，可以在卸载前保留一份快照。</p>
@@ -250,6 +281,13 @@
         <summary>如果你们关停了，我的服务器会怎样？</summary>
         <div class="answer">
           <p>它和你的服务会继续运行，直到证书到期（证书有效期约 90 天）。有几件事需要我们：通过 <code>flagship.services</code> 路由（隧道中枢是我们的）、证书续期（验证用的是我们的 DNS 区域）、创建新服务器、配对新设备、账户恢复，以及任何路由变更。代码是开源的，所以有人可以自己运行副本，但我们没有为此构建交接机制，也不做这样的承诺。</p>
+        </div>
+      </details>
+      <!-- TODO-RM offline-control: remove the next question if journal A4 does not ship. -->
+      <details class="q">
+        <summary>flagshipserver.com 无法访问时，我能做什么？</summary>
+        <div class="answer">
+          <p>你的手机仍然可以在家庭网络中找到你的服务器，并核对服务器自己的密钥。之后你可以查看它的状态和应用，启动、停止或重启某个应用，重启或关闭服务器，以及创建备份并保存到手机上。每个操作都由你的手机签名、由服务器核验。这只在服务器运行时有效：服务器重启后，仍需要我们来解锁它的磁盘；创建账户、添加设备或恢复账户也仍需要我们。网页浏览器做不到这一点，需要使用 iPhone 或 Android 应用。</p>
         </div>
       </details>
       <details class="q">

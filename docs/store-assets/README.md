@@ -45,6 +45,27 @@ caption gains a character the vendored font cut does not have, `npm run i18n` sa
 `python3 scripts/store-assets/subset-cjk.py` (needs `pip install fonttools brotli`; it downloads the pinned Noto
 sources once to `~/.cache/flagship-store-fonts`). Then `npm run store-assets:render`.
 
+## Store listing texts
+
+The words on the store pages (App Store name, subtitle, promotional text, description, keywords and What's New;
+Google Play title, short and full description and What's new) live in `store/listings/<lang>.json`, one file per ga
+language, English in `store/listings/en.json`. They are plain text (the stores take no HTML) and are pasted into App
+Store Connect and the Play Console by hand; nothing uploads them yet. The release's What's New texts follow
+`docs/release-notes/<version>.md`. (This replaces the `i18n/store-metadata/` folder the brief planned.)
+
+```sh
+node scripts/store-assets/listings.mjs counts   # every field's length per language, then the check
+node scripts/store-assets/listings.mjs check     # the check alone (exit 1 on a problem)
+```
+
+The check: every ga language has a file, every field is present and within its store's limit (counted in Unicode
+characters, as the stores count; the limits are listed once, in `scripts/store-assets/listings.mjs`: verify them
+against the stores' pages before a release), no exclamation marks or HTML, App Store keywords without spaces around
+commas or repeats and without the app name, "Flagship" kept in both long descriptions, and each translation's
+`review` reads `machine draft: needs native review` until a native reviewer replaces it with `reviewed by <name>,
+<date>`. `_todo` in each file lists the sentences that depend on something not settled at writing time; settle or
+remove them in every language before upload. Keep the store texts consistent with the slide captions in `i18n/store/`.
+
 ## Language work
 
 1. **Improve the whole codebase and the language strings.** Treat this as an open invitation, not a footnote:

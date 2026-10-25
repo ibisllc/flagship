@@ -124,6 +124,19 @@
         </div>
       </details>
       <details class="q">
+        <summary>Como sei que o servidor que estou aprovando é o meu?</summary>
+        <div class="answer">
+          <p>Na primeira vez que seu novo servidor pede aprovação, seu celular guarda a chave do próprio servidor e, a partir daí, confere tudo com ela. Se a máquina tiver tela, ela mostra um código de seis dígitos, e seu celular mostra o mesmo código acima de Aprovar: se não forem iguais, não aprove. Sua receita também traz um segredo de uso único, então um servidor que não foi criado a partir dela é recusado. Quando o Studio hospeda o servidor no seu computador, ele confere o código para você. Mais tarde, se a chave de um servidor algum dia mudar, o app o recusa e avisa você.</p>
+        </div>
+      </details>
+      <!-- TODO-RM usb-burn: remove the next question if the seed is not published or the real phone + stick run (journal A5) fails. -->
+      <details class="q">
+        <summary>Posso criar o pen drive com o meu celular?</summary>
+        <div class="answer">
+          <p>No Android, sim. Conecte um pen drive ao celular com um adaptador OTG e, ao criar um servidor, escolha gravar o instalador neste dispositivo. O app grava um instalador Debian original que qualquer pessoa pode <a href="/security/iso-seed.html">recompilar e conferir byte a byte</a> e depois adiciona sua receita assinada pelo celular. O app de iPhone não consegue gravar o pen drive; no iPhone, use o Flagship Studio em um computador.</p>
+        </div>
+      </details>
+      <details class="q">
         <summary>Isso apaga o disco?</summary>
         <div class="answer">
           <p>Sim. O instalador formata o disco de destino, configura a criptografia de disco completo LUKS com uma chave que só o seu celular pode liberar e instala uma base Linux reforçada. Tudo o que havia no disco antes se perde. O instalador pergunta duas vezes e mostra o caminho do dispositivo; fazemos o possível para não surpreender ninguém.</p>
@@ -181,13 +194,13 @@
       <details class="q">
         <summary>Que criptografia vocês usam?</summary>
         <div class="answer">
-          <p>Apenas primitivas padrão: assinaturas Ed25519, X25519 + AES-256-GCM para blobs selados, HKDF-SHA-256 para derivação de chaves, LUKS2/argon2id para o disco. Certificados reais do Let's Encrypt, solicitados pela própria caixa, para o transporte. Se um dia inventarmos criptografia própria, reporte como um bug.</p>
+          <p>Apenas primitivas padrão: assinaturas Ed25519, X25519 + AES-256-GCM para blobs selados, HKDF-SHA-256 para derivação de chaves, LUKS2/argon2id para o disco. Certificados reais do Let's Encrypt, solicitados pela própria caixa, para o transporte. Desde a 0.3, servidores e celulares também têm chaves ML-DSA-65 ao lado das chaves Ed25519, e um canal híbrido pós-quântico (ML-KEM-768 com X25519) já está construído, com uma configuração opcional que você pode ativar no iPhone e no Android; esse trabalho está pendente de revisão externa. Se um dia inventarmos criptografia própria, reporte como um bug.</p>
         </div>
       </details>
       <details class="q">
         <summary>O código-fonte é aberto?</summary>
         <div class="answer">
-          <p>Sim. O protocolo, o daemon, o criador de imagens e os clientes estão em <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a> sob BUSL-1.1, que se converte em Apache 2.0 em 2030. Builds reproduzíveis da ISO estão no roteiro, para que você possa verificar que os bytes correspondem ao código-fonte.</p>
+          <p>Sim. O protocolo, o daemon, o criador de imagens e os clientes estão em <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a> sob BUSL-1.1, que se converte em Apache 2.0 em 2030. A imagem de boot é reproduzível: você pode <a href="/security/iso-seed.html">verificar que os bytes dela correspondem ao Debian original</a>. O software do servidor é instalado a partir de um pacote assinado pelos mantenedores do Flagship.</p>
         </div>
       </details>
       <details class="q">
@@ -212,7 +225,7 @@
       <details class="q">
         <summary>O que é fazer «vibe coding» de um serviço?</summary>
         <div class="answer">
-          <p>Você descreve o que quer em linguagem natural («um controle de quais plantas eu reguei, me avise quando uma estiver com sede há 5+ dias»). Um LLM escreve o código. Seu daemon o compila, escolhe os escopos da camada de dados (tabelas Postgres, armazenamento de objetos, push) e o executa em <code>plant-water.you.flagship.services</code>. Cerca de 90 segundos. Você pode editar o código se quiser.</p>
+          <p>Você descreve o que quer em linguagem natural («um controle de quais plantas eu reguei, me avise quando uma estiver com sede há 5+ dias»). Um modelo de IA escreve o código: com a chave do seu próprio provedor, com o Flagship Inference ou com um modelo rodando no seu próprio servidor. Seu daemon o compila, dá a ele o que pediu (um banco Postgres, uma pasta de arquivos, push) e o executa em <code>plant-water.you.flagship.services</code>. Cerca de 90 segundos. Você pode editar o código se quiser.</p>
         </div>
       </details>
       <details class="q">
@@ -234,6 +247,24 @@
         </div>
       </details>
       <details class="q">
+        <summary>Posso rodar IA no meu próprio servidor?</summary>
+        <div class="answer">
+          <p>Sim. Abra IA local na página do seu servidor e baixe um modelo. Depois, seus apps e seus builds podem usá-lo, e seus prompts e dados nunca saem do seu servidor; baixar o modelo é a única vez em que o servidor contata o site que hospeda o modelo. Ele roda no processador, ou em uma placa de vídeo quando esse modelo de placa já tiver sido qualificado. Você também pode treinar um modelo pequeno com os dados de exemplo de um app. Isso ainda está no começo: só modelos pequenos.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Um app pode usar minha placa de vídeo?</summary>
+        <div class="answer">
+          <p>Só se você autorizar. Um app que precisa de uma placa de vídeo aguarda sua aprovação, assinada pelo seu dispositivo administrador, e você pode retirá-la depois. Além disso, o Flagship só entrega uma placa a um app quando esse modelo de placa passou nos nossos testes de hardware; até lá, os apps que precisam de uma avisam que ainda não podem rodar.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Os apps se atualizam sozinhos?</summary>
+        <div class="answer">
+          <p>Só se você escolher. Cada app tem um modo de atualização: manual (o padrão; você aprova cada atualização), escalonado (uma atualização verificada espera uma semana) ou automático. Os modos automáticos só aceitam atualizações do mesmo editor que não peçam novas permissões; todo o resto continua esperando por você.</p>
+        </div>
+      </details>
+      <details class="q">
         <summary>Posso desinstalar um serviço sem deixar rastro?</summary>
         <div class="answer">
           <p>Sim. Desinstalar remove o contêiner, o banco Postgres, a pasta de arquivos e a lista de acesso. Você pode manter um snapshot antes de desinstalar, caso queira voltar aos dados mais tarde.</p>
@@ -250,6 +281,13 @@
         <summary>O que acontece com meu servidor se vocês encerrarem?</summary>
         <div class="answer">
           <p>Ele continua funcionando, e seus serviços também, até o certificado expirar (certificados duram cerca de 90 dias). Algumas coisas dependem de nós: o roteamento por <code>flagship.services</code> (o hub de túnel é nosso), a renovação do certificado (nossa zona DNS é usada no desafio), criar um servidor novo, parear um dispositivo novo, a recuperação de conta e qualquer mudança de roteamento. O código é aberto, então alguém poderia rodar as próprias cópias, mas não construímos uma transição para isso e não prometemos uma.</p>
+        </div>
+      </details>
+      <!-- TODO-RM offline-control: remove the next question if journal A4 does not ship. -->
+      <details class="q">
+        <summary>O que posso fazer quando flagshipserver.com está inacessível?</summary>
+        <div class="answer">
+          <p>Seu celular ainda consegue encontrar seu servidor na sua rede doméstica e conferir a chave do próprio servidor. A partir daí, você pode ver o status e os apps dele, iniciar, parar ou reiniciar um app, reiniciar ou desligar o servidor, e fazer um backup e salvá-lo no celular. Cada ação é assinada pelo seu celular e verificada pelo servidor. Isso funciona enquanto o servidor está rodando: um servidor que reinicia ainda precisa de nós para desbloquear o disco, e criar uma conta, adicionar um dispositivo ou recuperar uma conta também ainda precisam de nós. Um navegador web não consegue fazer isso; é preciso o app de iPhone ou de Android.</p>
         </div>
       </details>
       <details class="q">

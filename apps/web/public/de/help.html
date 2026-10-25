@@ -121,6 +121,7 @@
         <li>Installiere die Telefon-App über <a href="/download">/download</a> (oder nutze die <a href="https://webapp.flagshipserver.com/">Web-App</a>).</li>
         <li>Installiere auf einem Computer <a href="/studio">Flagship Studio</a>.</li>
         <li>Erstelle in der App einen Server, koppel ihn mit dem QR-Code oder dem Kurzcode von Studio und schreib dann mit Studio den Installations-USB-Stick (ab 8 GB).</li>
+        <li>Wenn der Server zum ersten Mal um Genehmigung bittet, prüfe, ob der sechsstellige Code auf seinem Bildschirm mit dem in der App übereinstimmt, und genehmige dann.</li>
       </ol>
       <p class="next">Etwa zehn Minuten bis zum echten grünen Schloss unter <code>you.flagship.services</code>.</p>
     </article>
@@ -130,14 +131,15 @@
         <li><strong>„Kopplungscode nicht akzeptiert“</strong>: Öffne Studio erneut, um einen frischen QR-Code und Kurzcode anzuzeigen, und versuch es noch einmal.</li>
         <li><strong>„Kein Netzwerk“</strong>: Der Installer braucht DHCP an einem kabelgebundenen Ethernet-Port. WLAN wird während der Installation nicht unterstützt. Steck ein Kabel ein.</li>
         <li><strong>„Festplatte zu klein“</strong>: Das Minimum sind 32 GB. Der Installer formatiert die Platte, auf die du ihn zeigst; ein Dual-Boot gibt es nicht.</li>
+        <li><strong>Die sechsstelligen Codes stimmen nicht überein</strong>: Genehmige nicht. Der Server auf deinem Bildschirm ist nicht der, mit dem dein Telefon spricht. Lösche den Server in der App und erstelle ihn mit einem neuen Rezept neu.</li>
       </ol>
       <p class="next">Immer noch festgefahren? Mach einen Screenshot und schick ihn per E-Mail.</p>
     </article>
 
     <article class="card help-card"><span class="label">Probleme mit dem Telefon</span><h3>Mein Telefon ist kaputt.</h3>
       <ol>
-        <li>Wenn du bei der Einrichtung den iCloud-Schlüsselbund oder Google Block Store aktiviert hast, melde dich auf dem neuen Telefon an, und deine Identität wird per Biometrie entpackt.</li>
-        <li>Wenn nicht, ist dein Konto nicht wiederherstellbar; das ist Absicht (wir haben keine Hintertür), und wir haben versucht, das bei der Einrichtung deutlich zu machen.</li>
+        <li>Wenn du die Cloud-Wiederherstellung eingerichtet hast, melde dich auf dem neuen Telefon mit deinem Kontonamen an. Es fragt nach deinem Passkey (aufbewahrt im iCloud-Schlüsselbund oder im Google Passwortmanager) und deiner Wiederherstellungs-Passphrase.</li>
+        <li>Keine Cloud-Wiederherstellung? Nutze ein anderes Gerät, das noch angemeldet ist, oder deine gespeicherte Kontoschlüsseldatei. Ohne eines davon ist dein Konto nicht wiederherstellbar; das ist Absicht (wir haben keine Hintertür), und wir haben versucht, das bei der Einrichtung deutlich zu machen.</li>
         <li>Die Hardware selbst ist in Ordnung. Ein neues Konto mit derselben Box anzulegen entspricht einer sauberen Neuinstallation.</li>
       </ol>
       <p class="next">Der vollständige Wiederherstellungsablauf: <a href="/de/docs">/docs/recovery</a>.</p>
@@ -149,7 +151,7 @@
         <li><strong>„Zertifikat ungültig“ / kein grünes Schloss</strong>: Der Daemon erneuert gerade. Achte im Dashboard auf die Anzeige „Wird erneuert“; meist ist es nach 90 Sekunden erledigt.</li>
         <li><strong>„403 kein Mitglied“</strong>: Der Dienst ist identitätsgeschützt, und dein Telefon hat dein Gerät nicht genehmigt. Genehmige es am Telefon und lade neu.</li>
       </ol>
-      <p class="next">Die Protokolle liegen auf deiner Box unter <code>journalctl -u flagshipd</code>.</p>
+      <p class="next">Die letzten Ereignisse deines Servers findest du in der App unter „Aktivität“.</p>
     </article>
   </section>
 
@@ -172,10 +174,25 @@
       <ol>
         <li><strong>Strom und Netzwerk</strong>. Ist die Box an? Steckt das Kabel? Erreicht sie das Internet (<code>ping 1.1.1.1</code>)?</li>
         <li><strong>Ausgehender Port 443 erreichbar</strong>. Manche restriktiven Netzwerke blockieren langlebige WebSockets. <code>curl https://flagship.services/api/health</code> von der Box aus sollte JSON zurückgeben.</li>
-        <li><strong>Zustand des Daemons</strong>. Verbinde dich per SSH und führe <code>systemctl status flagshipd</code> aus. Neustart mit <code>systemctl restart flagshipd</code>; aktuelle Protokolle in <code>journalctl -u flagshipd -n 200</code>.</li>
+        <li><strong>Zustand des Daemons</strong>. Starte den Server über seine Seite in der App neu. Wenn du den Debug-Zugriff eingeschaltet hast (ein SSH-Schlüssel, den du auf der Seite des Servers für begrenzte Zeit hinzufügst), kannst du dich per SSH anmelden und <code>systemctl status flagship</code> ausführen; die letzten Protokolle zeigt <code>journalctl -u flagship -n 200</code>.</li>
       </ol>
     </div>
 
+    <div class="symptom">
+      <h3>„Der Schlüssel dieses Servers hat sich geändert“</h3>
+      <p>Dein Telefon speichert den eigenen Schlüssel jedes Servers ab dem ersten Mal, an dem du ihn genehmigt hast. Diese Meldung bedeutet, dass der Server jetzt einen anderen Schlüssel vorzeigt. Wenn du den Server nicht neu aufgebaut hast, genehmige nichts für ihn: Möglicherweise antwortet jemand anderes an seiner Stelle. Wenn du ihn neu aufgebaut hast, erstelle ihn in der App mit einem neuen Rezept neu, damit dein Telefon seinen neuen Schlüssel auf dem normalen Weg kennenlernt.</p>
+    </div>
+    <!-- TODO-RM offline-control: remove the next symptom if journal A4 does not ship. -->
+    <div class="symptom">
+      <h3>flagshipserver.com ist ausgefallen, und ich brauche meinen Server</h3>
+      <p>Öffne die iPhone- oder Android-App im selben WLAN wie dein Server. Die App findet den Server in deinem Heimnetz und prüft seinen Schlüssel, sodass du weiterhin Folgendes tun kannst:</p>
+      <ol>
+        <li>Seinen Status und seine Apps sehen.</li>
+        <li>Eine App starten, stoppen oder neu starten oder den Server neu starten oder herunterfahren.</li>
+        <li>Ein Backup erstellen und auf deinem Telefon speichern.</li>
+      </ol>
+      <p>Das funktioniert nur, solange der Server läuft. Starte ihn nicht neu, wenn es nicht sein muss: Ein Server, der neu startet, braucht flagshipserver.com, um seine Platte zu entsperren.</p>
+    </div>
     <div class="symptom">
       <h3>„Zertifikat ungültig“ im Browser</h3>
       <p>Dein TLS-Zertifikat liegt auf dem Daemon und wird 30 Tage vor Ablauf automatisch erneuert. Wenn du eine Zertifikatswarnung siehst:</p>

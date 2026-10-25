@@ -94,7 +94,7 @@
       <h2>クイックスタート</h2>
       <p>3 ステップ。所要時間は約 10 分。</p>
       <p><strong>1.</strong> スマートフォンアプリをインストールし、ユーザー名を決めて、生体認証を承認します。マスターキーがスマートフォンの外に出ることはありません。</p>
-      <p><strong>2.</strong> コンピューターに <a href="/studio">Flagship Studio</a> を入れます。スマートフォンアプリで「サーバーを追加」→「Studio とペアリング」を選び、Studio に表示される QR コードをスキャンします。Studio が署名済みレシピを受け取り、起動用 USB メモリを書き込みます。あとは挿して起動するだけです。組み立て済みの箱を注文することもできます。</p>
+      <p><strong>2.</strong> コンピューターに <a href="/studio">Flagship Studio</a> を入れます。スマートフォンアプリで「サーバーを追加」→「Studio とペアリング」を選び、Studio に表示される QR コードをスキャンします。Studio が署名済みレシピを受け取り、起動用 USB メモリを書き込みます。あとは挿して起動するだけです。サーバーが承認を求めたら、画面の 6 桁のコードがアプリのコードと一致することを確認します。</p>
       <p><strong>3.</strong> スマートフォンから最初のアプリをバイブコーディングで作ります。これで完了です。</p><a class="next" href="#how-it-works">全体の流れを見る →</a></section>
 
     <section class="doc-section" id="architecture">
@@ -107,15 +107,15 @@
       <p>最初から最後まで 5 つの段階があります。すべての手順にスマートフォンが署名するため、初めて登録するときでも、私たちがコンテンツを見ることはありません。</p>
       <p><strong>1 · スマートフォンをペアリングする。</strong> Flagship アプリをインストールすると、マスターキーが生成され、スマートフォンの安全なハードウェア内の鍵（iPhone では Secure Enclave、Android ではハードウェア保護された Keystore）でラップされます。ロック解除には Face ID、Touch ID、または指紋を使います。マスターキーがスマートフォンの外に出ることはありません。ここから、ID 用（ユーザー名）、バックアップ認可用（LUKS のロック解除）、作業鍵用（サーバーごとの秘密）の 3 つの鍵を導き出します。ユーザー名を選ぶと、スマートフォンが登録リクエストに署名し、<code>flagshipserver.com</code> がユーザー名と公開鍵の側を記録します。メールもパスワードも SMS も使いません。</p>
       <p><strong>2 · レシピを作成して渡す。</strong> スマートフォンは、Studio に表示される QR コードまたは短いコードで <a href="/studio">Flagship Studio</a> と直接ペアリングします。表示されたセキュリティコードが一致することを確認すると、スマートフォンがサーバー名を記した、有効期間が短く一度しか使えない小さな署名付きレシピを作成して送ります。Studio が適切なベース OS を取得して起動用 USB メモリに書き込むので、OS イメージを自分で選んだりダウンロードしたりする必要はありません。</p>
-      <p><strong>3 · 起動とインストール。</strong> USB メモリが、堅牢化された Linux ベースをお手元のハードウェアで起動します。初回起動スクリプトがレシピの署名をローカルで検証し、固定された正確な参照で GitHub リポジトリから公開インストーラー（監査可能な数百行のシェル）を取得します。ディスクを LUKS でフォーマットし、箱ごとの ID を生成し、本物の Let's Encrypt 証明書（DNS-01 ワイルドカード）を要求し、<code>flagshipserver.com</code> に登録して、定常状態で起動します。スマートフォンに<em>「Flagship がオンラインになりました」</em>と表示されます。</p>
+      <p><strong>3 · 起動とインストール。</strong> USB メモリが、堅牢化された Linux ベースをお手元のハードウェアで起動します。初回起動スクリプトがレシピの署名をローカルで検証し、メンテナーの署名を確認したうえで、特定のバージョンの Flagship リリースパッケージを 1 つインストールします。git チェックアウトやパッケージマネージャーは動きません。ディスクを LUKS でフォーマットし、ボックスごとの ID を生成し、本物の Let's Encrypt 証明書（DNS-01 ワイルドカード）を要求し、<code>flagshipserver.com</code> に登録して、定常状態で起動します。初めて承認を求めるとき、スマートフォンはサーバー自身の鍵をピン留めします。サーバーはあなたのレシピから作られたことを証明し、画面がある場合は 6 桁のコードを表示します。同じコードがスマートフォンにも表示されます。そしてスマートフォンに<em>「Flagship がオンラインになりました」</em>と表示されます。</p>
       <p><strong>4 · 起動のたびのロック解除。</strong> 箱が再起動すると、LUKS で暗号化されたルートは開きません。ブート段階は <code>flagshipserver.com</code> に、封印を解いたロック解除キーがないか問い合わせ続けます。プッシュで起こされたスマートフォンが生体認証を求め、封印された blob をローカルで復号し、封印を解いたキーを有効期間 10 分で預けます。箱はそれを使い、行は読み出した時点で削除され、ディスクが開きます。スマートフォンのない盗難品の箱は文鎮です。封印を解いたキーを私たちは一度も持ったことがないので、私たちにも手助けはできません。</p>
-      <p><strong>5 · 公開。バイブコーディング。共有。</strong> スマートフォンからサービスを普通の言葉で説明すると、LLM がそれを書きます（ご自身のプロバイダーキー、または Flagship Inference の無料クレジットを使用）。デーモンがコンテナをビルドし、そのサービス専用の Postgres データベースとファイルフォルダーを用意してデプロイし、サブドメインを登録します。<code>app.you.flagship.services</code> で 1 分以内に公開されます。共有はタップ 1 回で、署名付き招待またはユーザー検索で行います。サービスが Cookie を目にすることはなく、デーモンがメンバーシップを確認した後に ID ヘッダーを付与します。</p>
+      <p><strong>5 · 公開。バイブコーディング。共有。</strong> スマートフォンからサービスを普通の言葉で説明すると、LLM がそれを書きます（ご自身のプロバイダーキー、Flagship Inference の無料クレジット、またはご自身のサーバーにダウンロードしたモデルを使用。ダウンロードしたモデルは外部に何も送りません）。デーモンがコンテナをビルドし、そのサービス専用の Postgres データベースとファイルフォルダーを用意してデプロイし、サブドメインを登録します。<code>app.you.flagship.services</code> で 1 分以内に公開されます。共有はタップ 1 回で、署名付き招待またはユーザー検索で行います。サービスが Cookie を目にすることはなく、デーモンがメンバーシップを確認した後に ID ヘッダーを付与します。</p>
       <p><strong>スマートフォンをなくしたら。</strong> クラウドリカバリーが保存するのは、マスターキーの暗号化されたコピーだけです。iOS では、リカバリーにリカバリーパスフレーズと、Flagship のパスキーを保持する iCloud キーチェーンへのアクセスの両方が必要です。Flagship がキーを読んだり、パスフレーズをリセットしたりすることはできません。クラウドリカバリーがない場合、単一デバイスのアカウントは、待機期間のある、より時間のかかる申請手続きを使う必要があります。</p><a class="next" href="/ja/security">信頼モデルを読む →</a></section>
 
     <section class="doc-section" id="install">
       <h2>インストールと初回起動</h2>
-      <p>インストーラーは、当社のオープンソースリポジトリにある公開シェルスクリプトで、署名付きレシピの中でハッシュにより固定されています。インストーラーはディスクを LUKS でフォーマットし、サーバーの ID を生成し、DNS-01 で Let's Encrypt 証明書を要求して、.com に登録します。</p>
-      <p>以降の起動では、毎回スマートフォンが LUKS のロック解除を承認する必要があります。スマートフォンのない盗難品の箱は文鎮です。</p><a class="next" href="/ja/help">インストールで止まった？ →</a></section>
+      <p>初回起動のブートストラップは当社のオープンソースリポジトリで公開されており、署名付きレシピの中でハッシュにより固定されています。ブートストラップは、まず署名を確認したうえで、Flagship のメンテナーが署名した 1 つのリリースパッケージからサーバーソフトウェアをインストールします。ディスクを LUKS でフォーマットし、サーバーの ID を生成し、DNS-01 で Let's Encrypt 証明書を要求して、.com に登録します。サーバーソフトウェアは一般ユーザーとして動作し、その鍵は独立した鍵サービスが保持します。</p>
+      <p>以降の起動では、そのサーバーで「自動ロック解除」をオンにしていない限り、毎回スマートフォンが LUKS のロック解除を承認する必要があります。スマートフォンのない盗難品のボックスは文鎮です。</p><a class="next" href="/ja/help">インストールで止まった？ →</a></section>
 
     <section class="doc-section" id="burn">
       <h2>サーバーを組み立てる</h2>
@@ -197,13 +197,14 @@
       <h3>マニフェストリファレンス</h3>
       <p>各フィールドは、アプリのインストール時にすべて検証されます。</p>
       <ul>
-        <li><code>schema_version</code>：常に <code>1</code>。<code>name</code>：DNS ラベル（小文字、数字、ハイフン）。<code>version</code>：<code>1.2.0</code> のようなセマンティックバージョン。<code>description</code>：省略可。</li>
+        <li><code>schema_version</code>：<code>1</code>、または 0.3 で追加されたフィールド（下記）を使う場合は <code>2</code>。<code>name</code>：DNS ラベル（小文字、数字、ハイフン）。<code>version</code>：<code>1.2.0</code> のようなセマンティックバージョン。<code>description</code>：省略可。</li>
         <li><code>runtime</code>：<code>base</code> は <code>node-24</code>、<code>python-3.13</code>、<code>static</code> のいずれか。加えて <code>port</code>（アプリは <code>$PORT</code> で待ち受け）、<code>start</code>（起動コマンドをリストで指定。<code>node-24</code> の既定は <code>npm start</code>）、<code>env</code>。<code>FLAGSHIP_</code> で始まるキーはサーバーのものです。独自の Dockerfile を持つインポート済みリポジトリは、<code>base</code> の代わりに <code>image</code> を指定します。</li>
         <li><code>data.stores</code>：<code>postgres: true</code> でアプリに Postgres 18 のデータベース（<code>FLAGSHIP_PG_URL</code>、pgvector と一般的な拡張を含む）が付き、<code>files: true</code> で <code>/data</code> に書き込み可能なフォルダー（<code>FLAGSHIP_FILES_DIR</code>）が付きます。後者は再起動や再デプロイをまたいで保持されます。S3 や Redis はありません。</li>
         <li><code>network</code>：<code>subdomain</code>（<code>&lt;subdomain&gt;.&lt;server&gt;.&lt;you&gt;.flagship.services</code> で提供）と、アプリが接続を求めるホストとその理由を記す <code>egress</code>。アプリのアクセスリストで承認するまで、外部への通信は一切行われません。</li>
         <li><code>access</code>：<code>enabled: true</code>（アプリは ID の利用を拒否できません）、<code>default_role</code>、省略可の <code>custom_roles</code>、<code>public_routes</code>（メンバー限定のアプリで誰でも開けるパス）、<code>queryable_by</code>。</li>
         <li><code>migration.verification</code>：<code>standard</code>（生体認証）または <code>elevated</code>（生体認証＋第二要素）。金銭、健康、パスワードのデータを扱うアプリ向けです。</li>
         <li>省略可：<code>browser.domains</code>。アプリがサーバー自身のブラウザーで操作してよいサイトで、インストール時に承認します。</li>
+        <li>スキーマ 2 のみ：WebAssembly アプリには <code>runtime.kind</code> <code>wasi</code>。<code>components</code>：順番に起動する、1 つのアプリを構成する最大 8 つのパーツ。<code>localAi</code>：ご自身のサーバー上のモデルを使う場合。<code>accelerator</code>：グラフィックカードを要求する場合（所有者の承認を待ちます）。詳細はリポジトリの <code>docs/manifest.md</code>、<code>docs/wasi-apps.md</code>、<code>docs/app-groups.md</code> にあります。</li>
       </ul>
       <pre><code>{
   "schema_version": 1,

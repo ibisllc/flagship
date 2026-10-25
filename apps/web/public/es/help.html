@@ -121,6 +121,7 @@
         <li>Instala la app del teléfono desde <a href="/download">/download</a> (o usa la <a href="https://webapp.flagshipserver.com/">app web</a>).</li>
         <li>En un ordenador, instala <a href="/studio">Flagship Studio</a>.</li>
         <li>Crea un servidor en la app, vincúlalo con el QR o el código corto de Studio y luego usa Studio para escribir la memoria USB de instalación (8 GB o más).</li>
+        <li>Cuando el servidor pida aprobación por primera vez, comprueba que el código de seis dígitos de su pantalla coincide con el de la app y luego apruébalo.</li>
       </ol>
       <p class="next">Unos diez minutos hasta un candado verde de verdad en <code>you.flagship.services</code>.</p>
     </article>
@@ -130,14 +131,15 @@
         <li><strong>«No se aceptó el código de vinculación»</strong>: vuelve a abrir Studio para mostrar un QR y un código corto nuevos, y reinténtalo.</li>
         <li><strong>«Sin red»</strong>: el instalador necesita DHCP en un puerto Ethernet con cable. No se admite Wi-Fi durante la instalación. Conecta un cable.</li>
         <li><strong>«Disco demasiado pequeño»</strong>: el mínimo es 32 GB. El instalador formatea el disco que le indiques; no hace arranque dual.</li>
+        <li><strong>Los códigos de seis dígitos no coinciden</strong>: no lo apruebes. El servidor de tu pantalla no es el mismo con el que habla tu teléfono. Elimina el servidor en la app y vuelve a crearlo a partir de una receta nueva.</li>
       </ol>
       <p class="next">¿Sigues atascado? Captura la pantalla y envíanosla por correo.</p>
     </article>
 
     <article class="card help-card"><span class="label">Problemas con el teléfono</span><h3>Mi teléfono se murió.</h3>
       <ol>
-        <li>Si activaste el Llavero de iCloud o Google Block Store al configurar, inicia sesión en el teléfono nuevo y tu identidad se desenvuelve con biometría.</li>
-        <li>Si no lo hiciste, tu cuenta es irrecuperable; es así por diseño (no tenemos puerta trasera) y intentamos dejarlo claro durante la configuración.</li>
+        <li>Si configuraste la recuperación en la nube, inicia sesión en el teléfono nuevo con el nombre de tu cuenta. Te pide tu llave de acceso (guardada en el Llavero de iCloud o en el Administrador de contraseñas de Google) y tu frase de contraseña de recuperación.</li>
+        <li>¿Sin recuperación en la nube? Usa otro dispositivo que siga con la sesión iniciada, o el archivo de clave de tu cuenta que guardaste. Sin ninguno de ellos, tu cuenta no se puede recuperar; es así por diseño (no tenemos puerta trasera) e intentamos dejarlo claro durante la configuración.</li>
         <li>El hardware en sí está bien. Crear una cuenta nueva con la misma caja equivale a una reinstalación limpia.</li>
       </ol>
       <p class="next">Flujo de recuperación completo: <a href="/es/docs">/docs/recovery</a>.</p>
@@ -149,7 +151,7 @@
         <li><strong>«Certificado no válido» / sin candado verde</strong>: el daemon se está renovando. Busca el indicador «Renovando» en el panel; normalmente se resuelve en 90 segundos.</li>
         <li><strong>«403 no eres miembro»</strong>: el servicio está protegido por identidad y tu teléfono no ha aprobado tu dispositivo. Apruébalo desde el teléfono y actualiza.</li>
       </ol>
-      <p class="next">Los registros están en tu caja, en <code>journalctl -u flagshipd</code>.</p>
+      <p class="next">Los eventos recientes de tu servidor están en Actividad, en la app.</p>
     </article>
   </section>
 
@@ -172,10 +174,25 @@
       <ol>
         <li><strong>Alimentación y red</strong>. ¿Está encendida la caja? ¿Está conectado el cable? ¿Llega a internet (<code>ping 1.1.1.1</code>)?</li>
         <li><strong>Se alcanza el 443 saliente</strong>. Algunas redes restrictivas bloquean WebSockets de larga duración. <code>curl https://flagship.services/api/health</code> desde la caja debería devolver JSON.</li>
-        <li><strong>Estado del daemon</strong>. Entra por SSH y ejecuta <code>systemctl status flagshipd</code>. Reinicia con <code>systemctl restart flagshipd</code>; registros recientes en <code>journalctl -u flagshipd -n 200</code>.</li>
+        <li><strong>Estado del daemon</strong>. Reinicia el servidor desde su página en la app. Si activaste el acceso de depuración (una clave SSH que añades desde la página del servidor, por un tiempo limitado), puedes entrar por SSH y ejecutar <code>systemctl status flagship</code>; los registros recientes están en <code>journalctl -u flagship -n 200</code>.</li>
       </ol>
     </div>
 
+    <div class="symptom">
+      <h3>«La clave de este servidor cambió»</h3>
+      <p>Tu teléfono guarda la clave propia de cada servidor desde la primera vez que lo aprobaste. Este mensaje significa que ahora el servidor presenta una clave distinta. Si no reinstalaste el servidor, no apruebes nada para él: puede que otra persona esté respondiendo en su lugar. Si lo reinstalaste, vuelve a crearlo desde la app con una receta nueva, para que tu teléfono conozca su clave nueva de la forma normal.</p>
+    </div>
+    <!-- TODO-RM offline-control: remove the next symptom if journal A4 does not ship. -->
+    <div class="symptom">
+      <h3>flagshipserver.com no funciona y necesito mi servidor</h3>
+      <p>Abre la app de iPhone o de Android en la misma red Wi-Fi que tu servidor. La app encuentra el servidor en tu red doméstica y comprueba su clave, así que aún puedes:</p>
+      <ol>
+        <li>Ver su estado y sus apps.</li>
+        <li>Iniciar, detener o reiniciar una app, o reiniciar o apagar el servidor.</li>
+        <li>Hacer una copia de seguridad y guardarla en tu teléfono.</li>
+      </ol>
+      <p>Esto solo funciona mientras el servidor está en marcha. No lo reinicies salvo que sea necesario: un servidor que se reinicia necesita flagshipserver.com para desbloquear su disco.</p>
+    </div>
     <div class="symptom">
       <h3>«Certificado no válido» en el navegador</h3>
       <p>Tu certificado TLS vive en el daemon y se renueva automáticamente 30 días antes de caducar. Si ves una advertencia de certificado:</p>
