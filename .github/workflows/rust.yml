@@ -45,9 +45,9 @@ jobs:
       - name: Register gVisor with Docker (the release the box pins, appSandbox/gvisor.ts)
         run: |
           set -eu
-          rel=$(sed -n 's/^export const GVISOR_RELEASE = "\(.*\)";/\1/p' packages/server-daemon/src/appSandbox/gvisor.ts)
+          rel=$(sed -n 's/^export const GVISOR_RELEASE = "\(.*\)";/\1/p' "$GITHUB_WORKSPACE/packages/server-daemon/src/appSandbox/gvisor.ts")
           arch=$(uname -m)
-          want=$(sed -n "s/^  $arch: \"\([0-9a-f]*\)\",*/\1/p" packages/server-daemon/src/appSandbox/gvisor.ts)
+          want=$(sed -n "s/^  $arch: \"\([0-9a-f]*\)\",*/\1/p" "$GITHUB_WORKSPACE/packages/server-daemon/src/appSandbox/gvisor.ts")
           test -n "$rel" && test ${#want} -eq 128
           curl -fsSL "https://storage.googleapis.com/gvisor/releases/release/$rel/$arch/gvisor.tar.zstd" -o "$RUNNER_TEMP/gvisor.tar.zstd"
           echo "$want  $RUNNER_TEMP/gvisor.tar.zstd" | sha512sum -c -
