@@ -767,8 +767,8 @@
     "en": "Recommended distributions",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:765"
   },
-  "Advanced mode remasters a stock Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.": {
-    "en": "Advanced mode remasters a stock Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.",
+  "Advanced mode remasters a stock Ubuntu or Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.": {
+    "en": "Advanced mode remasters a stock Ubuntu or Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.",
     "ctx": "apps/builder-mac/Sources/FlagshipBuilder/WizardView.swift:766"
   },
   "Encrypted disk · unlocked by your phone": {

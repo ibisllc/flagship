@@ -363,7 +363,7 @@
   "s97cee8f5ff": "<1>Vous n’avez pas besoin de télécharger ni de choisir une image de système d’exploitation.</1> Le Builder récupère automatiquement la bonne base Linux durcie, la vérifie et y intègre votre recette. La base épinglée est <2>Debian 13</2>, choisie parce qu’elle démarre sur la plus grande variété de machines.",
   "se5fe651511": "La référence technique ci-dessous s’adresse à celles et ceux qui veulent savoir exactement ce qui est écrit, ou qui utilisent le Builder dans son mode avancé avec image personnelle. Tous les autres peuvent la passer.",
   "s7f52cf3ba2": "Debian 13 (trixie) <1>amd64 · recommandé</1>",
-  "s57f4af19c1": "Le choix le plus compatible. Son installateur sait placer le chargeur d’amorçage là où même un micrologiciel UEFI capricieux le trouvera, si bien que Debian s’installe et démarre sur des machines où d’autres installateurs abandonnent. C’est aussi un téléchargement plus léger (un installateur réseau), et il démarre en BIOS comme en UEFI.",
+  "s5453e779b9": "Le choix le plus compatible. Son installateur sait placer le chargeur d’amorçage là où même un micrologiciel UEFI capricieux le trouvera, si bien que Debian s’installe et démarre sur des machines où d’autres installateurs abandonnent. C’est aussi un téléchargement plus léger (un installateur réseau), et il démarre en BIOS comme en UEFI. <1>Si vous hésitez, choisissez Debian.</1>",
   "s124b378347": "Téléchargement",
   "s4490eeba7e": "<1>debian-13.6.0-amd64-netinst.iso</1>",
   "s1fd992e1fa": "Taille",
@@ -475,5 +475,10 @@
   "s8f7ae3923b": "Chaque adaptation publiée actuellement, par projet : où elle se trouve, sa licence, l'empreinte (digest) de chaque adaptateur, le commit amont sur lequel elle a été faite et un statut honnête (<1>publiée</1>, ou <2>contestée</2> quand plus d'installations ont échoué qu'elles n'ont été confirmées). C'est le fichier <3><4>directory.json</4></3> du dépôt public. Il n'y a aucun nombre d'installations ni rien sur qui en a envoyé ou installé une, et un statut est un constat, pas une garantie de sécurité. Les mainteneurs peuvent rendre une adaptation inutile en publiant leur propre <5>flagship.app.json</5>.",
   "sf885433e9b": "Rechercher dans l'annuaire des adaptateurs",
   "s69437d5481": "Projet, hôte ou licence",
-  "s8897545066": "Chargement de l'annuaire…"
+  "s8897545066": "Chargement de l'annuaire…",
+  "s4919e118dd": "Ubuntu Server 22.04.5 LTS <1>amd64</1>",
+  "sad22f8e225": "L'image serveur à support long terme. Démarre en BIOS comme en UEFI. Une alternative solide, même si, sur certaines machines dont le firmware refuse d'enregistrer une nouvelle entrée de démarrage, l'installateur d'Ubuntu ne peut pas aller au bout ; si cela vous arrive, utilisez Debian.",
+  "s7edf991ed5": "<1>ubuntu-22.04.5-live-server-amd64.iso</1>",
+  "sc6494c2967": "~2,0 Go",
+  "s2d2da5d5b8": "9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0"
 }

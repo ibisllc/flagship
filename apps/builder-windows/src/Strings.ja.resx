@@ -104,8 +104,8 @@ https://flagshipserver.com</value>
   <data name="pickRecipeJson" xml:space="preserve">
     <value>レシピ（.json）を選択</value>
   </data>
-  <data name="pickADebianInstallerIso" xml:space="preserve">
-    <value>Debian インストーラーの ISO を選択</value>
+  <data name="pickADebianOrUbuntuInstallerIso" xml:space="preserve">
+    <value>Debian または Ubuntu のインストーラー ISO を選択</value>
   </data>
   <data name="deleteTheVmAndItsEncrypted" xml:space="preserve">
     <value>{0} を削除しますか？
@@ -556,8 +556,8 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="recipe" xml:space="preserve">
     <value>レシピ</value>
   </data>
-  <data name="debianIso" xml:space="preserve">
-    <value>Debian ISO</value>
+  <data name="debianOrUbuntuIso" xml:space="preserve">
+    <value>Debian / Ubuntu の ISO</value>
   </data>
   <data name="dropAStockInstallerIsoTo" xml:space="preserve">
     <value>リマスターする標準のインストーラー ISO をドロップ</value>

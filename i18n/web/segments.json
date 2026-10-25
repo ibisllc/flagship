@@ -3196,8 +3196,8 @@
       "docs/index.html"
     ]
   },
-  "s57f4af19c1": {
-    "en": "The most compatible choice. Its installer can place the bootloader where even stubborn UEFI firmware will find it — so Debian installs and boots on machines where other installers give up. It's also a smaller download (a network installer), and boots on both BIOS and UEFI.",
+  "s5453e779b9": {
+    "en": "The most compatible choice. Its installer can place the bootloader where even stubborn UEFI firmware will find it — so Debian installs and boots on machines where other installers give up. It's also a smaller download (a network installer), and boots on both BIOS and UEFI. <1>If you're not sure which to pick, pick Debian.</1>",
     "kind": "text",
     "ctx": "p",
     "pages": [
@@ -3246,6 +3246,46 @@
   },
   "s413750e99c": {
     "en": "65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7",
+    "kind": "text",
+    "ctx": "dd",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s4919e118dd": {
+    "en": "Ubuntu Server 22.04.5 LTS <1>amd64</1>",
+    "kind": "text",
+    "ctx": "h4",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sad22f8e225": {
+    "en": "The long-term-support server image. Boots on both BIOS and UEFI. A solid alternative — though on some machines whose firmware refuses to register a new boot entry, Ubuntu's installer can't complete; if that happens to you, use Debian instead.",
+    "kind": "text",
+    "ctx": "p",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s7edf991ed5": {
+    "en": "<1>ubuntu-22.04.5-live-server-amd64.iso</1>",
+    "kind": "text",
+    "ctx": "dd",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "sc6494c2967": {
+    "en": "~2.0 GB",
+    "kind": "text",
+    "ctx": "dd",
+    "pages": [
+      "docs/index.html"
+    ]
+  },
+  "s2d2da5d5b8": {
+    "en": "9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0",
     "kind": "text",
     "ctx": "dd",
     "pages": [

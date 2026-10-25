@@ -104,8 +104,8 @@ https://flagshipserver.com</value>
   <data name="pickRecipeJson" xml:space="preserve">
     <value>Elegir receta (.json)</value>
   </data>
-  <data name="pickADebianInstallerIso" xml:space="preserve">
-    <value>Elegir una ISO del instalador de Debian</value>
+  <data name="pickADebianOrUbuntuInstallerIso" xml:space="preserve">
+    <value>Elige una ISO del instalador de Debian o Ubuntu</value>
   </data>
   <data name="deleteTheVmAndItsEncrypted" xml:space="preserve">
     <value>¿Eliminar {0}?
@@ -556,8 +556,8 @@ La VM y su imagen de disco cifrada se eliminan de este PC. </value>
   <data name="recipe" xml:space="preserve">
     <value>Receta</value>
   </data>
-  <data name="debianIso" xml:space="preserve">
-    <value>ISO de Debian</value>
+  <data name="debianOrUbuntuIso" xml:space="preserve">
+    <value>ISO de Debian / Ubuntu</value>
   </data>
   <data name="dropAStockInstallerIsoTo" xml:space="preserve">
     <value>Suelta una ISO estándar del instalador para remasterizarla</value>

@@ -137,7 +137,7 @@
         <p style="color: var(--text-muted);">Die technische Referenz unten ist für Leute, die genau wissen wollen, was geschrieben wird, oder den Builder im fortgeschrittenen Modus mit eigenem Image betreiben. Alle anderen können sie überspringen.</p>
 
         <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-6) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Debian 13 (trixie) <span class="pill">amd64 · empfohlen</span></h4>
-        <p>Die kompatibelste Wahl. Sein Installer kann den Bootloader dort ablegen, wo ihn selbst eigensinnige UEFI-Firmware findet – Debian lässt sich daher auf Maschinen installieren und starten, an denen andere Installer aufgeben. Außerdem ist der Download kleiner (ein Netzwerk-Installer), und es startet sowohl mit BIOS als auch mit UEFI.</p>
+        <p>Die kompatibelste Wahl. Sein Installer kann den Bootloader dort ablegen, wo ihn selbst eigensinnige UEFI-Firmware findet – Debian lässt sich daher auf Maschinen installieren und starten, an denen andere Installer aufgeben. Außerdem ist der Download kleiner (ein Netzwerk-Installer), und es startet sowohl mit BIOS als auch mit UEFI. <strong>Wenn du unsicher bist, nimm Debian.</strong></p>
         <dl class="kv">
           <dt>Download</dt>
           <dd><a href="https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso">debian-13.6.0-amd64-netinst.iso</a></dd>
@@ -147,6 +147,16 @@
           <dd>65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7</dd>
         </dl>
 
+        <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-8) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Ubuntu Server 22.04.5 LTS <span class="pill">amd64</span></h4>
+        <p>Das Server-Image mit Langzeitunterstützung. Startet unter BIOS und UEFI. Eine solide Alternative, allerdings kann der Ubuntu-Installer auf manchen Rechnern, deren Firmware keinen neuen Booteintrag annimmt, nicht abschließen; passiert dir das, nimm Debian.</p>
+        <dl class="kv">
+          <dt>Download</dt>
+          <dd><a href="https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso">ubuntu-22.04.5-live-server-amd64.iso</a></dd>
+          <dt>Größe</dt>
+          <dd>~2,0 GB</dd>
+          <dt>SHA-256</dt>
+          <dd>9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0</dd>
+        </dl>
         <div class="callout">
           <p style="margin:0;"><strong>Warum eine gepinnte Liste?</strong> Der Builder prüft den SHA-256 des Images gegen diese Liste, bevor er irgendetwas schreibt. Ein beschädigter Download, ein manipulierter Mirror oder eine ungetestete Version wird abgelehnt – du musst nie von Hand eine Prüfsumme kontrollieren. Wir nehmen Images erst nach einer echten Ende-zu-Ende-Installation auf echter Hardware hier auf.</p>
         </div>

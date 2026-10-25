@@ -225,12 +225,12 @@
     "en": "Drop the ISO",
     "ctx": "wizard.py:1556 (title=)"
   },
-  "Debian netinst stock image. Run `flagship-build distros` for accepted SHAs.": {
-    "en": "Debian netinst stock image. Run `flagship-build distros` for accepted SHAs.",
+  "Ubuntu Server or Debian netinst stock image. Run `flagship-build distros` for accepted SHAs.": {
+    "en": "Ubuntu Server or Debian netinst stock image. Run `flagship-build distros` for accepted SHAs.",
     "ctx": "wizard.py:1557 (subtitle=)"
   },
-  "Drop debian-*-netinst.iso here": {
-    "en": "Drop debian-*-netinst.iso here",
+  "Drop ubuntu-*-live-server.iso or debian-*-netinst.iso here": {
+    "en": "Drop ubuntu-*-live-server.iso or debian-*-netinst.iso here",
     "ctx": "wizard.py:1562 (prose)"
   },
   "Pick ISO": {

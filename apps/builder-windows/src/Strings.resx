@@ -136,8 +136,8 @@ https://flagshipserver.com</value>
     <value>Pick recipe (.json)</value>
     <comment>MainWindow.xaml.cs:207 (prose)</comment>
   </data>
-  <data name="pickADebianInstallerIso" xml:space="preserve">
-    <value>Pick a Debian installer ISO</value>
+  <data name="pickADebianOrUbuntuInstallerIso" xml:space="preserve">
+    <value>Pick a Debian or Ubuntu installer ISO</value>
     <comment>MainWindow.xaml.cs:230 (prose)</comment>
   </data>
   <data name="deleteTheVmAndItsEncrypted" xml:space="preserve">
@@ -738,8 +738,8 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Recipe</value>
     <comment>MainWindow.xaml Text</comment>
   </data>
-  <data name="debianIso" xml:space="preserve">
-    <value>Debian ISO</value>
+  <data name="debianOrUbuntuIso" xml:space="preserve">
+    <value>Debian / Ubuntu ISO</value>
     <comment>MainWindow.xaml Text</comment>
   </data>
   <data name="dropAStockInstallerIsoTo" xml:space="preserve">

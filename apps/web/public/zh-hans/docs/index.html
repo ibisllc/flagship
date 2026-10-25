@@ -137,7 +137,7 @@
         <p style="color: var(--text-muted);">下面的技术参考适合想确切了解写入内容的人，或在高级“自带镜像”模式下运行构建器的人。其他人可以跳过。</p>
 
         <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-6) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Debian 13 (trixie) <span class="pill">amd64 · 推荐</span></h4>
-        <p>兼容性最好的选择。它的安装程序可以把引导程序放在连最顽固的 UEFI 固件也能找到的位置，因此 Debian 能在其他安装程序放弃的机器上完成安装并启动。它的下载量也更小（网络安装器），同时支持 BIOS 和 UEFI 启动。</p>
+        <p>兼容性最好的选择。它的安装程序可以把引导程序放在连最顽固的 UEFI 固件也能找到的位置，因此 Debian 能在其他安装程序放弃的机器上完成安装并启动。它的下载量也更小（网络安装器），同时支持 BIOS 和 UEFI 启动。 <strong>拿不准选哪个时,就选 Debian。</strong></p>
         <dl class="kv">
           <dt>下载</dt>
           <dd><a href="https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso">debian-13.6.0-amd64-netinst.iso</a></dd>
@@ -147,6 +147,16 @@
           <dd>65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7</dd>
         </dl>
 
+        <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-8) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Ubuntu Server 22.04.5 LTS <span class="pill">amd64</span></h4>
+        <p>长期支持版服务器镜像。可在 BIOS 和 UEFI 上启动。这是可靠的备选,但在某些拒绝注册新启动项的固件上,Ubuntu 安装程序无法完成;遇到这种情况请改用 Debian。</p>
+        <dl class="kv">
+          <dt>下载</dt>
+          <dd><a href="https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso">ubuntu-22.04.5-live-server-amd64.iso</a></dd>
+          <dt>大小</dt>
+          <dd>约 2.0 GB</dd>
+          <dt>SHA-256</dt>
+          <dd>9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0</dd>
+        </dl>
         <div class="callout">
           <p style="margin:0;"><strong>为什么用固定列表？</strong>构建器在写入任何内容之前，会用这份列表校验镜像的 SHA-256。损坏的下载、被篡改的镜像站或未经测试的版本都会被拒绝，你无需手动核对校验和。只有在真实硬件上完成真实的端到端安装之后，我们才会把镜像加入这里。</p>
         </div>

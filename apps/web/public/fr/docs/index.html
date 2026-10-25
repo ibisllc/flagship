@@ -137,7 +137,7 @@
         <p style="color: var(--text-muted);">La référence technique ci-dessous s’adresse à celles et ceux qui veulent savoir exactement ce qui est écrit, ou qui utilisent le Builder dans son mode avancé avec image personnelle. Tous les autres peuvent la passer.</p>
 
         <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-6) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Debian 13 (trixie) <span class="pill">amd64 · recommandé</span></h4>
-        <p>Le choix le plus compatible. Son installateur sait placer le chargeur d’amorçage là où même un micrologiciel UEFI capricieux le trouvera, si bien que Debian s’installe et démarre sur des machines où d’autres installateurs abandonnent. C’est aussi un téléchargement plus léger (un installateur réseau), et il démarre en BIOS comme en UEFI.</p>
+        <p>Le choix le plus compatible. Son installateur sait placer le chargeur d’amorçage là où même un micrologiciel UEFI capricieux le trouvera, si bien que Debian s’installe et démarre sur des machines où d’autres installateurs abandonnent. C’est aussi un téléchargement plus léger (un installateur réseau), et il démarre en BIOS comme en UEFI. <strong>Si vous hésitez, choisissez Debian.</strong></p>
         <dl class="kv">
           <dt>Téléchargement</dt>
           <dd><a href="https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso">debian-13.6.0-amd64-netinst.iso</a></dd>
@@ -147,6 +147,16 @@
           <dd>65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7</dd>
         </dl>
 
+        <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-8) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Ubuntu Server 22.04.5 LTS <span class="pill">amd64</span></h4>
+        <p>L'image serveur à support long terme. Démarre en BIOS comme en UEFI. Une alternative solide, même si, sur certaines machines dont le firmware refuse d'enregistrer une nouvelle entrée de démarrage, l'installateur d'Ubuntu ne peut pas aller au bout ; si cela vous arrive, utilisez Debian.</p>
+        <dl class="kv">
+          <dt>Téléchargement</dt>
+          <dd><a href="https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso">ubuntu-22.04.5-live-server-amd64.iso</a></dd>
+          <dt>Taille</dt>
+          <dd>~2,0 Go</dd>
+          <dt>SHA-256</dt>
+          <dd>9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0</dd>
+        </dl>
         <div class="callout">
           <p style="margin:0;"><strong>Pourquoi une liste épinglée ?</strong> Le Builder vérifie le SHA-256 de l’image par rapport à cette liste avant d’écrire quoi que ce soit. Un téléchargement corrompu, un miroir falsifié ou une version non testée sont refusés : vous n’avez jamais à vérifier une somme de contrôle à la main. Nous n’ajoutons des images ici qu’après une vraie installation de bout en bout sur du matériel réel.</p>
         </div>

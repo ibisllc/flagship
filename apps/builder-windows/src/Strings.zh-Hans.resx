@@ -104,8 +104,8 @@ https://flagshipserver.com</value>
   <data name="pickRecipeJson" xml:space="preserve">
     <value>选择配方（.json）</value>
   </data>
-  <data name="pickADebianInstallerIso" xml:space="preserve">
-    <value>选择 Debian 安装程序 ISO</value>
+  <data name="pickADebianOrUbuntuInstallerIso" xml:space="preserve">
+    <value>选择 Debian 或 Ubuntu 安装 ISO</value>
   </data>
   <data name="deleteTheVmAndItsEncrypted" xml:space="preserve">
     <value>删除 {0}？
@@ -556,8 +556,8 @@ https://flagshipserver.com</value>
   <data name="recipe" xml:space="preserve">
     <value>配方</value>
   </data>
-  <data name="debianIso" xml:space="preserve">
-    <value>Debian ISO</value>
+  <data name="debianOrUbuntuIso" xml:space="preserve">
+    <value>Debian / Ubuntu ISO</value>
   </data>
   <data name="dropAStockInstallerIsoTo" xml:space="preserve">
     <value>拖放标准安装程序 ISO 以重新制作</value>

@@ -30,6 +30,10 @@ export function regenerateBoxRelease() {
   const vectors = JSON.parse(readFileSync(vectorsFile, "utf8"));
   for (const v of vectors.vectors) {
     v.expectedPreseed = ctx.FlagshipPreseed.buildPreseedFromRecipe(v.recipeJson, v.burnOptsJson);
+    // feat/other-os-installers: the engine also emits the Ubuntu autoinstall user-data.
+    if (typeof ctx.FlagshipPreseed.buildUserDataFromRecipe === "function") {
+      v.expectedUserData = ctx.FlagshipPreseed.buildUserDataFromRecipe(v.recipeJson, v.burnOptsJson);
+    }
     v.expectedInstallBlobJson = ctx.FlagshipPreseed.buildInstallBlobJsonFromRecipe(v.recipeJson);
   }
   writeFileSync(vectorsFile, JSON.stringify(vectors, null, 2) + "\n");

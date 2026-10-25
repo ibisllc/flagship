@@ -137,7 +137,7 @@
         <p style="color: var(--text-muted);">A referência técnica abaixo é para quem quer saber exatamente o que é gravado, ou usa o Builder no modo avançado com imagem própria. Todos os outros podem pular.</p>
 
         <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-6) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Debian 13 (trixie) <span class="pill">amd64 · recomendado</span></h4>
-        <p>A escolha mais compatível. Seu instalador consegue colocar o bootloader onde até firmwares UEFI teimosos o encontram, então o Debian instala e inicia em máquinas em que outros instaladores desistem. Também é um download menor (um instalador de rede) e inicia tanto em BIOS quanto em UEFI.</p>
+        <p>A escolha mais compatível. Seu instalador consegue colocar o bootloader onde até firmwares UEFI teimosos o encontram, então o Debian instala e inicia em máquinas em que outros instaladores desistem. Também é um download menor (um instalador de rede) e inicia tanto em BIOS quanto em UEFI. <strong>Se não souber qual escolher, escolha o Debian.</strong></p>
         <dl class="kv">
           <dt>Download</dt>
           <dd><a href="https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso">debian-13.6.0-amd64-netinst.iso</a></dd>
@@ -147,6 +147,16 @@
           <dd>65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7</dd>
         </dl>
 
+        <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-8) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Ubuntu Server 22.04.5 LTS <span class="pill">amd64</span></h4>
+        <p>A imagem de servidor com suporte de longo prazo. Inicia tanto em BIOS quanto em UEFI. Uma alternativa sólida, embora em algumas máquinas cujo firmware se recusa a registrar uma nova entrada de inicialização o instalador do Ubuntu não consiga terminar; se isso acontecer com você, use o Debian.</p>
+        <dl class="kv">
+          <dt>Download</dt>
+          <dd><a href="https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso">ubuntu-22.04.5-live-server-amd64.iso</a></dd>
+          <dt>Tamanho</dt>
+          <dd>~2,0 GB</dd>
+          <dt>SHA-256</dt>
+          <dd>9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0</dd>
+        </dl>
         <div class="callout">
           <p style="margin:0;"><strong>Por que uma lista fixada?</strong> O Builder verifica o SHA-256 da imagem contra esta lista antes de gravar qualquer coisa. Um download corrompido, um espelho adulterado ou uma versão não testada são recusados: você nunca precisa conferir um checksum à mão. Só adicionamos imagens aqui depois de uma instalação real de ponta a ponta em hardware real.</p>
         </div>

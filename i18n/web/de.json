@@ -363,7 +363,7 @@
   "s97cee8f5ff": "<1>Du musst kein Betriebssystem-Image herunterladen oder auswählen.</1> Der Builder holt automatisch die passende gehärtete Linux-Basis, prüft sie und backt dein Rezept ein. Die gepinnte Basis ist <2>Debian 13</2> – gewählt, weil es auf der größten Bandbreite an Maschinen startet.",
   "se5fe651511": "Die technische Referenz unten ist für Leute, die genau wissen wollen, was geschrieben wird, oder den Builder im fortgeschrittenen Modus mit eigenem Image betreiben. Alle anderen können sie überspringen.",
   "s7f52cf3ba2": "Debian 13 (trixie) <1>amd64 · empfohlen</1>",
-  "s57f4af19c1": "Die kompatibelste Wahl. Sein Installer kann den Bootloader dort ablegen, wo ihn selbst eigensinnige UEFI-Firmware findet – Debian lässt sich daher auf Maschinen installieren und starten, an denen andere Installer aufgeben. Außerdem ist der Download kleiner (ein Netzwerk-Installer), und es startet sowohl mit BIOS als auch mit UEFI.",
+  "s5453e779b9": "Die kompatibelste Wahl. Sein Installer kann den Bootloader dort ablegen, wo ihn selbst eigensinnige UEFI-Firmware findet – Debian lässt sich daher auf Maschinen installieren und starten, an denen andere Installer aufgeben. Außerdem ist der Download kleiner (ein Netzwerk-Installer), und es startet sowohl mit BIOS als auch mit UEFI. <1>Wenn du unsicher bist, nimm Debian.</1>",
   "s124b378347": "Download",
   "s4490eeba7e": "<1>debian-13.6.0-amd64-netinst.iso</1>",
   "s1fd992e1fa": "Größe",
@@ -475,5 +475,10 @@
   "s8f7ae3923b": "Jede derzeit veröffentlichte Anpassung, nach Projekt: wo sie liegt, ihre Lizenz, der Digest jedes Adapters, der Upstream-Commit, für den sie erstellt wurde, und ein ehrlicher Status (<1>veröffentlicht</1> oder <2>umstritten</2>, wenn mehr Installationen fehlschlugen als bestätigt wurden). Es ist die Datei <3><4>directory.json</4></3> im öffentlichen Repository. Es gibt keine Installationszahlen und nichts darüber, wer eine eingereicht oder installiert hat, und ein Status ist eine Aufzeichnung, keine Sicherheitszusage. Maintainer können eine Anpassung überflüssig machen, indem sie ihre eigene <5>flagship.app.json</5> committen.",
   "sf885433e9b": "Adapter-Verzeichnis durchsuchen",
   "s69437d5481": "Projekt, Host oder Lizenz",
-  "s8897545066": "Verzeichnis wird geladen…"
+  "s8897545066": "Verzeichnis wird geladen…",
+  "s4919e118dd": "Ubuntu Server 22.04.5 LTS <1>amd64</1>",
+  "sad22f8e225": "Das Server-Image mit Langzeitunterstützung. Startet unter BIOS und UEFI. Eine solide Alternative, allerdings kann der Ubuntu-Installer auf manchen Rechnern, deren Firmware keinen neuen Booteintrag annimmt, nicht abschließen; passiert dir das, nimm Debian.",
+  "s7edf991ed5": "<1>ubuntu-22.04.5-live-server-amd64.iso</1>",
+  "sc6494c2967": "~2,0 GB",
+  "s2d2da5d5b8": "9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0"
 }

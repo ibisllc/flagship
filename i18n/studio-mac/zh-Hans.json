@@ -166,7 +166,7 @@
   "Couldn't create the server": "无法创建服务器",
   "Choose destination": "选择目标位置",
   "Recommended distributions": "推荐的发行版",
-  "Advanced mode remasters a stock Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.": "“高级”模式会重新制作你提供的标准 Debian 安装程序 ISO。请查看已知可顺利组装并启动的发行版列表。",
+  "Advanced mode remasters a stock Ubuntu or Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.": "高级模式会改制你提供的原版 Ubuntu 或 Debian 安装 ISO。请查看已知能顺利组装和启动的发行版列表。",
   "Encrypted disk · unlocked by your phone": "加密磁盘 · 由你的手机解锁",
   "Try again": "重试",
   "Host on this Mac instead": "改为在这台 Mac 上托管",

@@ -166,7 +166,7 @@
 "Couldn't create the server" = "Der Server konnte nicht erstellt werden";
 "Choose destination" = "Ziel wählen";
 "Recommended distributions" = "Empfohlene Distributionen";
-"Advanced mode remasters a stock Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly." = "Der erweiterte Modus remastert ein von dir bereitgestelltes Standard-Debian-Installer-ISO. Sieh dir die Liste der Distributionen an, die sich nachweislich sauber zusammenstellen und starten lassen.";
+"Advanced mode remasters a stock Ubuntu or Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly." = "Der erweiterte Modus baut ein unverändertes Ubuntu- oder Debian-Installer-ISO um, das du bereitstellst. Sieh dir die Liste der Distributionen an, die sich bekanntermaßen sauber zusammenbauen und starten lassen.";
 "Encrypted disk · unlocked by your phone" = "Verschlüsselter Datenträger · von deinem Telefon entsperrt";
 "Try again" = "Erneut versuchen";
 "Host on this Mac instead" = "Stattdessen auf diesem Mac hosten";

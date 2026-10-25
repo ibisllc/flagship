@@ -236,12 +236,12 @@ msgid "Drop the ISO"
 msgstr "ISO をドロップ"
 
 #: wizard.py:1557 (subtitle=)
-msgid "Debian netinst stock image. Run `flagship-build distros` for accepted SHAs."
-msgstr "標準の Debian netinst イメージです。受け付ける SHA は `flagship-build distros` で確認できます。"
+msgid "Ubuntu Server or Debian netinst stock image. Run `flagship-build distros` for accepted SHAs."
+msgstr "Ubuntu Server または Debian netinst の公式イメージ。受け付ける SHA は `flagship-build distros` で確認できます。"
 
 #: wizard.py:1562 (prose)
-msgid "Drop debian-*-netinst.iso here"
-msgstr "ここに debian-*-netinst.iso をドロップ"
+msgid "Drop ubuntu-*-live-server.iso or debian-*-netinst.iso here"
+msgstr "ubuntu-*-live-server.iso または debian-*-netinst.iso をここにドロップ"
 
 #: wizard.py:1570 (prose)
 msgid "Pick ISO"

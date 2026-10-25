@@ -137,7 +137,7 @@
         <p style="color: var(--text-muted);">以下の技術リファレンスは、何が書き込まれるのかを正確に知りたい方や、ビルダーを上級者向けの独自イメージモードで使う方向けです。それ以外の方は読み飛ばして構いません。</p>
 
         <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-6) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Debian 13 (trixie) <span class="pill">amd64 · 推奨</span></h4>
-        <p>最も互換性の高い選択肢です。インストーラーは、頑固な UEFI ファームウェアでも見つけられる場所にブートローダーを配置できるため、他のインストーラーが諦めるマシンでも Debian はインストールして起動できます。ダウンロードサイズも小さく（ネットワークインストーラー）、BIOS と UEFI の両方で起動します。</p>
+        <p>最も互換性の高い選択肢です。インストーラーは、頑固な UEFI ファームウェアでも見つけられる場所にブートローダーを配置できるため、他のインストーラーが諦めるマシンでも Debian はインストールして起動できます。ダウンロードサイズも小さく（ネットワークインストーラー）、BIOS と UEFI の両方で起動します。 <strong>迷ったら Debian を選んでください。</strong></p>
         <dl class="kv">
           <dt>ダウンロード</dt>
           <dd><a href="https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso">debian-13.6.0-amd64-netinst.iso</a></dd>
@@ -147,6 +147,16 @@
           <dd>65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7</dd>
         </dl>
 
+        <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-8) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Ubuntu Server 22.04.5 LTS <span class="pill">amd64</span></h4>
+        <p>長期サポート版のサーバーイメージです。BIOS と UEFI の両方で起動します。有力な選択肢ですが、新しいブートエントリーの登録を拒むファームウェアのマシンでは Ubuntu のインストーラーが完了できないことがあります。その場合は Debian を使ってください。</p>
+        <dl class="kv">
+          <dt>ダウンロード</dt>
+          <dd><a href="https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso">ubuntu-22.04.5-live-server-amd64.iso</a></dd>
+          <dt>サイズ</dt>
+          <dd>約 2.0 GB</dd>
+          <dt>SHA-256</dt>
+          <dd>9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0</dd>
+        </dl>
         <div class="callout">
           <p style="margin:0;"><strong>なぜ固定リストなのか。</strong> ビルダーは、何かを書き込む前に、イメージの SHA-256 をこのリストと照合します。破損したダウンロード、改ざんされたミラー、未検証のバージョンは拒否されるので、チェックサムを手で確認する必要はありません。実機でのエンドツーエンドのインストールを確認した後にだけ、イメージをここに追加します。</p>
         </div>

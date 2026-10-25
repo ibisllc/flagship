@@ -92,11 +92,12 @@ function extractEmbeddedBlob(yaml: string): Record<string, any> {
 }
 
 /** Decode the embedded first-boot bootstrap script back to its bash text. */
-function extractBootstrap(yaml: string): string {
-  const m = yaml.match(
-    /echo "([A-Za-z0-9+/=]+)" \| base64 -d > \/usr\/local\/sbin\/flagship-bootstrap\.sh/,
-  );
-  if (!m) throw new Error("bootstrap late-command not found in user-data");
+function extractBootstrap(config: string): string {
+  // Ubuntu user-data (curtin late-command) or the Debian preseed (d-i late_command).
+  const m =
+    config.match(/echo "([A-Za-z0-9+/=]+)" \| base64 -d > \/usr\/local\/sbin\/flagship-bootstrap\.sh/) ??
+    config.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh/);
+  if (!m) throw new Error("bootstrap late-command not found in user-data or preseed");
   return Buffer.from(m[1]!, "base64").toString("utf8");
 }
 
@@ -1330,11 +1331,12 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     // sha256 — the unlock hook/premount (which fix 3 changed on every LUKS
     // burn) had no cross-language pin before.
     const s = buildBootstrapScript({
-      ref: "main",
+      ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       repoUrl: "https://github.com/ibisllc/flagship.git",
       encryptRoot: true,
       bootUnlockMode: "auto",
       bootHost: DEFAULT_BOOT_HOST,
+      family: "ubuntu",
     });
     // The initramfs unlock hook must stage the virtio NIC drivers so a
     // virtio-backed guest (Apple VZ / QEMU-KVM) has an interface at premount —
@@ -1363,7 +1365,10 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // and retries on failure (no once-only env-file gate); its Description
       // and comments name Postgres, Forgejo and Chromium (MinIO and Redis
       // are gone).
-      "8d5f95deb93a1c1567714299111fb681a990f321c0137de5d2fdf0a38f0ebe80",
+      // Re-pinned 2026-10-25 on the rebase onto release/0.3: the Ubuntu family of
+      // the release's artifact-install bootstrap (exact commit, signed box
+      // artifact, generated premount); the bootstrap no longer clones git.
+      "ffc77cdba66dc2d9f37eb10e2a545d52638624dc4e272695388929124a689a6a",
     );
   });
 

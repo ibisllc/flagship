@@ -127,8 +127,8 @@
     "en": "Pick recipe (.json)",
     "ctx": "MainWindow.xaml.cs:207 (prose)"
   },
-  "pickADebianInstallerIso": {
-    "en": "Pick a Debian installer ISO",
+  "pickADebianOrUbuntuInstallerIso": {
+    "en": "Pick a Debian or Ubuntu installer ISO",
     "ctx": "MainWindow.xaml.cs:230 (prose)"
   },
   "deleteTheVmAndItsEncrypted": {
@@ -727,8 +727,8 @@
     "en": "Recipe",
     "ctx": "MainWindow.xaml Text"
   },
-  "debianIso": {
-    "en": "Debian ISO",
+  "debianOrUbuntuIso": {
+    "en": "Debian / Ubuntu ISO",
     "ctx": "MainWindow.xaml Text"
   },
   "dropAStockInstallerIsoTo": {

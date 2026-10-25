@@ -236,12 +236,12 @@ msgid "Drop the ISO"
 msgstr "Suelta la ISO"
 
 #: wizard.py:1557 (subtitle=)
-msgid "Debian netinst stock image. Run `flagship-build distros` for accepted SHAs."
-msgstr "Imagen estándar netinst de Debian. Ejecuta `flagship-build distros` para ver los SHA aceptados."
+msgid "Ubuntu Server or Debian netinst stock image. Run `flagship-build distros` for accepted SHAs."
+msgstr "Imagen original de Ubuntu Server o Debian netinst. Ejecuta `flagship-build distros` para ver los SHA aceptados."
 
 #: wizard.py:1562 (prose)
-msgid "Drop debian-*-netinst.iso here"
-msgstr "Suelta aquí debian-*-netinst.iso"
+msgid "Drop ubuntu-*-live-server.iso or debian-*-netinst.iso here"
+msgstr "Suelta aquí ubuntu-*-live-server.iso o debian-*-netinst.iso"
 
 #: wizard.py:1570 (prose)
 msgid "Pick ISO"

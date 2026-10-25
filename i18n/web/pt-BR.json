@@ -363,7 +363,7 @@
   "s97cee8f5ff": "<1>Você não precisa baixar nem escolher uma imagem de sistema operacional.</1> O Builder busca automaticamente a base Linux reforçada certa, a verifica e incorpora a sua receita. A base fixada é o <2>Debian 13</2>, escolhido porque inicia na mais ampla variedade de máquinas.",
   "se5fe651511": "A referência técnica abaixo é para quem quer saber exatamente o que é gravado, ou usa o Builder no modo avançado com imagem própria. Todos os outros podem pular.",
   "s7f52cf3ba2": "Debian 13 (trixie) <1>amd64 · recomendado</1>",
-  "s57f4af19c1": "A escolha mais compatível. Seu instalador consegue colocar o bootloader onde até firmwares UEFI teimosos o encontram, então o Debian instala e inicia em máquinas em que outros instaladores desistem. Também é um download menor (um instalador de rede) e inicia tanto em BIOS quanto em UEFI.",
+  "s5453e779b9": "A escolha mais compatível. Seu instalador consegue colocar o bootloader onde até firmwares UEFI teimosos o encontram, então o Debian instala e inicia em máquinas em que outros instaladores desistem. Também é um download menor (um instalador de rede) e inicia tanto em BIOS quanto em UEFI. <1>Se não souber qual escolher, escolha o Debian.</1>",
   "s124b378347": "Download",
   "s4490eeba7e": "<1>debian-13.6.0-amd64-netinst.iso</1>",
   "s1fd992e1fa": "Tamanho",
@@ -475,5 +475,10 @@
   "s8f7ae3923b": "Cada adaptação publicada no momento, por projeto: onde fica, sua licença, o digest de cada adaptador, o commit de origem sobre o qual foi feita e um status honesto (<1>publicada</1>, ou <2>contestada</2> quando mais instalações falharam do que foram confirmadas). É o arquivo <3><4>directory.json</4></3> no repositório público. Não há contagem de instalações nem nada sobre quem enviou ou instalou uma, e um status é um registro, não uma garantia de segurança. Os mantenedores podem tornar uma adaptação desnecessária publicando o próprio <5>flagship.app.json</5>.",
   "sf885433e9b": "Pesquisar no diretório de adaptadores",
   "s69437d5481": "Projeto, host ou licença",
-  "s8897545066": "Carregando o diretório…"
+  "s8897545066": "Carregando o diretório…",
+  "s4919e118dd": "Ubuntu Server 22.04.5 LTS <1>amd64</1>",
+  "sad22f8e225": "A imagem de servidor com suporte de longo prazo. Inicia tanto em BIOS quanto em UEFI. Uma alternativa sólida, embora em algumas máquinas cujo firmware se recusa a registrar uma nova entrada de inicialização o instalador do Ubuntu não consiga terminar; se isso acontecer com você, use o Debian.",
+  "s7edf991ed5": "<1>ubuntu-22.04.5-live-server-amd64.iso</1>",
+  "sc6494c2967": "~2,0 GB",
+  "s2d2da5d5b8": "9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0"
 }
