@@ -297,3 +297,10 @@ Running when this was written (subagents; if this session is gone, they are gone
   escalation under 0.3's unprivileged daemon). Open on custom-names: recovery record v2 names the
   account, so a rename needs a re-signed record before the paid name change launches. iOS strings for
   custom-domains/outbound-proxy wrapped but not harvested.
+- 2026-10-25: Harry: nothing more into 0.3 (outbound proxy stays out); but boxes created with 0.3 must
+  be able to upgrade to anonymous messaging later. Found: nothing refreshes the initramfs unlock
+  script/hooks after install, so an installed box's boot path is frozen. An agent is building the
+  "boot-chain refresh" in the release worktree (privd + Rust broker step, regenerate from the
+  release's own builders, keep the known-good initrd, GRUB fallback, run on each applied update and
+  once on first boot, Activity labels) — uncommitted until it reports. Harry's note: a serious user
+  can hide from us with a VPS on their home network anyway, so no more anonymity work now.
