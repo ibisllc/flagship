@@ -656,6 +656,21 @@ export class ServicePlatform {
     return whileDeploying(this.deps.activity, id, () => this.redeployNow(args));
   }
 
+  /**
+   * Stop an installed app's container and keep everything else: its data, address, members and
+   * settings (offline control, docs/data-sovereignty.md). It stays stopped until it is started
+   * again or the server restarts, which brings every installed app back.
+   */
+  async stopService(serviceId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (!this.apps.has(serviceId)) return { ok: false, reason: "not installed" };
+    try {
+      await this.deps.appRunner.stop(serviceId);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: (e as Error).message };
+    }
+  }
+
   /** Start the app again from what is installed: after its working tree moved (an update). */
   async restartService(serviceId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
     const app = this.apps.get(serviceId);

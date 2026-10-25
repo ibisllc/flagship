@@ -114,6 +114,15 @@ describe("decodeAndVerifySelfDeleteCarrier", () => {
     ).toThrow(/not this box's owner/);
   });
 
+  it("refuses an order signed before this server existed, or dated in the future", () => {
+    const irk = makeKey(1);
+    const base = { ownerIrkPub: irk.publicKey, username: USERNAME };
+    // The owner created this server (its AuthCode) at t=5,000: an account-wide order from t=1,000 is an old one replayed.
+    expect(() => decodeAndVerifySelfDeleteCarrier({ ...base, sealedHex: carrier(USERNAME, irk, 1_000), notBefore: 5_000 })).toThrow(/predates this server/);
+    expect(decodeAndVerifySelfDeleteCarrier({ ...base, sealedHex: carrier(USERNAME, irk, 6_000), notBefore: 5_000, now: 6_000 }).issuedAt).toBe(6_000);
+    expect(() => decodeAndVerifySelfDeleteCarrier({ ...base, sealedHex: carrier(USERNAME, irk, 10 * 60_000), now: 1_000 })).toThrow(/in the future/);
+  });
+
   it("throws on junk hex / non-JSON", () => {
     const irk = makeKey(1);
     expect(() =>

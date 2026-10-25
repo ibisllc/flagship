@@ -25,6 +25,14 @@ const UNWIRED_BOX_PURPOSES = new Set([
  */
 const SESSION_BOX_PURPOSES = new Set(["flagship/pq-session-accept/v1", "flagship/pq-session-finish/v1"]);
 
+/**
+ * The rescue hello's bytes come from a canonical builder that takes its tag as an argument
+ * (packages/protocol/src/rescue.ts), which this scan cannot follow; it was missing from this
+ * list, so no keyd box could answer a rescue. packages/server-daemon/tests/rescue.test.ts checks
+ * the tag is here and signs the hello through keyd's policy.
+ */
+const RESCUE_BOX_PURPOSES = new Set(["flagship/rescue-hello/v1"]);
+
 /** Signed by the owner, an admin or the account key, never by the box: keyd must refuse them. */
 const NOT_BOX_PURPOSES = [
   "flagship/membership/v1",
@@ -54,7 +62,7 @@ describe("box signing purposes", () => {
   });
 
   it("lists nothing the box does not sign", () => {
-    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t));
+    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t) && !RESCUE_BOX_PURPOSES.has(t));
     expect(idle).toEqual([]);
     for (const t of NOT_BOX_PURPOSES) expect(BOX_SIGN_PURPOSES.has(t), t).toBe(false);
   });

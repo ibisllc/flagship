@@ -41,6 +41,7 @@ const execFileP = async (cmd: string, args: string[], o: { timeout: number }): P
  */
 
 const HEX = /^[0-9a-f]+$/;
+const SELF_DELETE_MAX_SKEW_MS = 5 * 60_000;
 
 function hexToBytes(hex: string): Uint8Array {
   if (hex.length % 2 !== 0) throw new Error("hex must have even length");
@@ -69,6 +70,14 @@ export function decodeAndVerifySelfDeleteCarrier(args: {
   adminRootPub?: Uint8Array;
   /** Slice D — box-local active admin grants (`[]` box-side today). */
   activeGrants?: readonly AdminGrantView[];
+  /**
+   * When this server was created (its AuthCode's `issuedAt`, signed by the owner). The order
+   * names an account, not a server, so one signed before this server existed was never meant
+   * for it: refused (docs/data-sovereignty.md §7, self-delete freshness).
+   */
+  notBefore?: number;
+  /** Now (ms); an order dated more than five minutes ahead of it is refused. */
+  now?: number;
 }): ServersSelfDelete {
   const hex = args.sealedHex.toLowerCase();
   if (!HEX.test(hex) || hex.length % 2 !== 0) {
@@ -110,6 +119,12 @@ export function decodeAndVerifySelfDeleteCarrier(args: {
     username: p.request.username,
     issuedAt: p.request.issuedAt,
   };
+  if (args.notBefore !== undefined && order.issuedAt < args.notBefore) {
+    throw new Error("self-delete order predates this server, so it was not meant for it");
+  }
+  if (order.issuedAt > (args.now ?? Date.now()) + SELF_DELETE_MAX_SKEW_MS) {
+    throw new Error("self-delete order is dated in the future");
+  }
   let sig: Uint8Array;
   try {
     sig = hexToBytes(p.signature.toLowerCase());
@@ -175,6 +190,8 @@ export interface ClaimAndRunSelfDeleteOptions {
   activeGrants?: readonly AdminGrantView[];
   /** This box's owner account (cfg.userId) — the order must name it. */
   username: string;
+  /** When this server was created (its AuthCode's `issuedAt`): older orders are refused. */
+  notBefore?: number;
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /**
@@ -245,6 +262,7 @@ export async function claimAndRunSelfDelete(
       username: opts.username,
       ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
       ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
+      ...(opts.notBefore !== undefined ? { notBefore: opts.notBefore } : {}),
     });
   } catch (e) {
     log(`[self-delete] order rejected: ${(e as Error).message}`);

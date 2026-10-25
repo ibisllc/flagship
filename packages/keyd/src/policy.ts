@@ -24,6 +24,9 @@ export const BOX_SIGN_PURPOSES: ReadonlySet<string> = new Set([
   "flagship/pb-manifest/v1",
   "flagship/mint-reservation/v1",
   "flagship/lan-hint/v1",
+  // The box answering its owner's phone on the LAN with .com gone (docs/data-sovereignty.md):
+  // names the phone's nonce and the certificate on the wire; classical and hybrid.
+  "flagship/rescue-hello/v1",
   "flagship/dns01-publish/v1",
   "flagship/dns01-delete/v1",
   "flagship/box-trust-status/v1",

@@ -1,5 +1,5 @@
 import { languageFor } from "./i18n/index.js";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
 import { readdir, readFile, rename, rm, stat, statfs } from "node:fs/promises";
 import { onCorruptState, onNoSpace, withFileLock, writeFileDurable } from "./durableFile.js";
@@ -186,6 +186,7 @@ import { buildAppRuntimeHttp } from "./appRuntimeHttp.js";
 import { RuntimeRouter } from "./appRuntimes.js";
 import { ownerOnlyGate } from "./ownerOnlyGate.js";
 import { buildAppStatusReader } from "./appStatus.js";
+import { collectServerMetrics } from "./screens/serverMetrics.js";
 import { buildActivityResolver } from "./serviceActivity.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
 import { ScreensEventBus } from "./screens/screensEvents.js";
@@ -534,6 +535,17 @@ async function configFromInstallBlob(): Promise<ServerConfig | null> {
     };
   } catch {
     return null;
+  }
+}
+
+/** When the owner created this server: its install blob's AuthCode `issuedAt` (owner-signed, ms), or undefined. */
+function installBlobIssuedAt(): number | undefined {
+  try {
+    const b = JSON.parse(readFileSync(process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json", "utf8")) as { authCode?: { issuedAt?: unknown } };
+    const t = b.authCode?.issuedAt;
+    return typeof t === "number" && Number.isSafeInteger(t) && t > 0 ? t : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -2265,6 +2277,8 @@ async function main(): Promise<void> {
       updateScheduler,
       liveCertInfoRef,
       liveCertPemRef,
+      hostPowerRunner,
+      stkHybridSigner: keyd?.pqPublicKeyHex() ? (m: Uint8Array) => keyd.signHybridAsBox(m) : null,
     });
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
@@ -3203,6 +3217,10 @@ async function wireRuntimeSurfaces(deps: {
     current: { notAfter?: number; notBefore?: number; sans?: string[] } | null;
   };
   liveCertPemRef: { current: string | null };
+  /** Restart or power off the machine (offline control). */
+  hostPowerRunner: HostPowerRunner;
+  /** The STK's hybrid signer where keyd holds an ML-DSA key (the rescue hello's PQ half). */
+  stkHybridSigner: ((msg: Uint8Array) => Uint8Array) | null;
 }): Promise<void> {
   const {
     runtime,
@@ -3387,9 +3405,16 @@ async function wireRuntimeSurfaces(deps: {
       },
     },
   );
+  const serviceRunnerMod = await import("./serviceRunner.js");
+  // The status pill (docs/app-placement.md §6): one `docker ps` for every app. Shared by the
+  // owner's screens and the offline rescue status.
+  const rescueAppStatus = buildAppStatusReader({
+    cmd: serviceRunnerMod.realCommandRunner,
+    containerName: (id) => `flagship-${id}`,
+  });
+  const rescueStartedAt = Date.now();
   // The private copy every AI build deploys to and tests before it goes
   // live (docs/ai-privacy-and-staging.md §2). Never routed from the internet.
-  const serviceRunnerMod = await import("./serviceRunner.js");
   const stagingRunner = new StagingRunner({
     cmd: serviceRunnerMod.realCommandRunner,
     workingDir: vibeAppDir,
@@ -4367,6 +4392,7 @@ async function wireRuntimeSurfaces(deps: {
         ? buildRescue({
             serverFqdn: env.serverFqdn,
             signAsBox: (msg) => custodian.signAsBox(msg),
+            signHybridAsBox: deps.stkHybridSigner,
             certSha256: () => (liveCertPemRef.current ? leafCertSha256(liveCertPemRef.current) : null),
             authorize: buildRescueAuthorize({
               irkPub: () => cfg.irkPublicKey,
@@ -4388,6 +4414,27 @@ async function wireRuntimeSurfaces(deps: {
             },
             archive: serverArchiveService,
             apps: () => (runtime.servicePlatform?.list() ?? []).map((a) => ({ serviceId: a.serviceId, name: a.manifest.name })),
+            appStates: (ids) => rescueAppStatus.statuses(ids),
+            status: async () => {
+              const m = await collectServerMetrics({ provider: null, now: () => Date.now() }).catch(() => null);
+              return {
+                version: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",
+                startedAt: rescueStartedAt,
+                certValidUntil: liveCertInfoRef.current?.notAfter ?? null,
+                ...(m ? { cpuPercent: m.cpuPercent, memUsedBytes: m.memUsedBytes, memTotalBytes: m.memTotalBytes, diskUsedBytes: m.diskUsedBytes, diskTotalBytes: m.diskTotalBytes } : {}),
+              };
+            },
+            control: runtime.servicePlatform
+              ? {
+                  app: (action, serviceId) => {
+                    const p = runtime.servicePlatform!;
+                    return action === "app-stop" ? p.stopService(serviceId) : p.restartService(serviceId);
+                  },
+                  // A plain restart or power-off: the box unlocks again as it always does (through
+                  // .com), so with .com gone a restarted server stays locked until it is back.
+                  power: (mode) => deps.hostPowerRunner.power(mode),
+                }
+              : null,
             note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
             onExport: (e) => exportAlert(e),
             log: (m) => console.log(m),
@@ -4396,10 +4443,7 @@ async function wireRuntimeSurfaces(deps: {
     backupPolicy: backupPolicyHttp,
     // The status pill (docs/app-placement.md §6): one `docker ps` for every
     // app, and what's deploying or being edited here.
-    appStatus: buildAppStatusReader({
-      cmd: serviceRunnerMod.realCommandRunner,
-      containerName: (id) => `flagship-${id}`,
-    }),
+    appStatus: rescueAppStatus,
     appActivity: buildActivityResolver({
       tracker: runtime.serviceActivity,
       chats: () => vibeRegistry.list(),
@@ -5154,6 +5198,11 @@ async function wireOwnerHandlers(deps: {
       ownerIrkPub: cfg.irkPublicKey,
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       username: cfg.userId,
+      // An account-wide order signed before this server was created was never meant for it.
+      ...((): { notBefore?: number } => {
+        const t = installBlobIssuedAt();
+        return t !== undefined ? { notBefore: t } : {};
+      })(),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       ...bellFetch(),
       markerStore: fileMarkerStore(`${dataDir}/self-delete-done.json`),

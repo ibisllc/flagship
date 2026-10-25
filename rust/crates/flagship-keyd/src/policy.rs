@@ -21,6 +21,7 @@ pub const BOX_SIGN_PURPOSES: &[&str] = &[
     "flagship/pb-manifest/v1",
     "flagship/mint-reservation/v1",
     "flagship/lan-hint/v1",
+    "flagship/rescue-hello/v1",
     "flagship/dns01-publish/v1",
     "flagship/dns01-delete/v1",
     "flagship/box-trust-status/v1",

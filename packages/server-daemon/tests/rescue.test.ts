@@ -39,7 +39,24 @@ import {
   type DeviceCapabilityGrant,
   type Keypair,
   type RescueExchange,
+  GENESIS_DIGEST,
+  canonicalPqKeyBinding,
+  hybridSigKeygen,
+  hybridSign,
+  messagePurpose,
+  offlineControlCanonicalBytes,
+  rescueHelloCanonicalBytes,
+  rescueSessionCanonicalBytes,
+  signOfflineControl,
+  verifyCriticalSignature,
+  verifyPqKeyBinding,
+  type OfflineControlOrder,
+  type PolicyState,
+  type PqKeyBindingStatement,
+  type VerifiedPqKeyBinding,
 } from "@flagship/protocol";
+import { setPqAuthority } from "../src/pqAuthority.js";
+import { BOX_SIGN_PURPOSES, checkSign } from "../../keyd/src/policy.js";
 import { AccountDeviceBook, type ListedGrant } from "../src/accessPrincipals.js";
 import { DeviceRevocations } from "../src/deviceRevocations.js";
 import { applyDeliveredRotations, type AdminRootPin, type AdminRootPinStore } from "../src/adminRootRotationConsumer.js";
@@ -156,11 +173,13 @@ interface Rig {
   revocations: DeviceRevocations;
   pins: { current: AdminRootPin | null; restarts: number };
   refreshBook: () => Promise<void>;
+  /** What the offline controls were asked to do, in order. */
+  controls: string[];
   close: () => Promise<void>;
 }
 
 /** A box: real TLS in front of the daemon's own screens handler, `adminPinned` as the config says. */
-async function startBox(opts: { adminPinned: boolean; expiredCert?: boolean; coolingMs?: number }): Promise<Rig> {
+async function startBox(opts: { adminPinned: boolean; expiredCert?: boolean; coolingMs?: number; hybridHello?: boolean }): Promise<Rig> {
   const dir = mkdtempSync(join(tmpdir(), "rescue-"));
   const alerts: PhoneAlert[] = [];
   const notify = exportNotice({ alert: (a) => alerts.push(a), now: () => clock });
@@ -186,6 +205,8 @@ async function startBox(opts: { adminPinned: boolean; expiredCert?: boolean; coo
   revocations.subscribe((id) => void book.dropGrant(id));
   const pins: { current: AdminRootPin | null; restarts: number } = { current: null, restarts: 0 };
   const pinStore: AdminRootPinStore = { read: async () => pins.current, write: async (p) => void (pins.current = p) };
+  const controls: string[] = [];
+  const stopped = new Set<string>();
   const rescue = buildRescue({
     serverFqdn: FQDN,
     signAsBox: (m) => box.signAsBox(m),
@@ -212,6 +233,18 @@ async function startBox(opts: { adminPinned: boolean; expiredCert?: boolean; coo
     },
     archive: svc,
     apps: () => platform.list().map((a) => ({ serviceId: a.serviceId, name: a.manifest.name })),
+    appStates: async (ids) => new Map(ids.map((id) => [id, stopped.has(id) ? ("stopped" as const) : ("running" as const)])),
+    status: async () => ({ version: "0.3.0", startedAt: 1, certValidUntil: null }),
+    control: {
+      app: async (action, id) => {
+        controls.push(`${action} ${id}`);
+        if (action === "app-stop") stopped.add(id);
+        else stopped.delete(id);
+        return { ok: true };
+      },
+      power: async (mode) => void controls.push(`power ${mode}`),
+    },
+    ...(opts.hybridHello ? { signHybridAsBox: (m: Uint8Array) => hybridSign(BOX_PQ_SECRET, messagePurposeOf(m), m) } : {}),
     note: (kind, _d, ok = true) => void notes.push({ kind, ok }),
     onExport: notify,
     now: () => clock,
@@ -232,6 +265,7 @@ async function startBox(opts: { adminPinned: boolean; expiredCert?: boolean; coo
     revocations,
     pins,
     refreshBook: () => book.refresh(),
+    controls,
     close: () => new Promise<void>((r) => server.close(() => r())),
   };
 }
@@ -298,6 +332,10 @@ function request(port: number, method: string, path: string, opts: { headers?: R
     req.end();
   });
 }
+
+/** The box's ML-DSA half (keyd's `sign.hybrid`) for the hybrid hello. */
+const BOX_PQ_SECRET = new Uint8Array([...stk.privateKey.subarray(0, 32), ...new Uint8Array(32).fill(0x61)]);
+const messagePurposeOf = (m: Uint8Array) => messagePurpose(m);
 
 const nonce = () => Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString("hex");
 
@@ -760,5 +798,248 @@ describe("a fresh install that has only the account key file", () => {
     expect(restored.account.adminRootSeed).toBeUndefined();
     const refused = await openSession(rig.port, deriveIRK(restored.umk));
     expect(refused.reply.status).toBe(403);
+  });
+});
+
+// ── basic offline control and the post-quantum half (owner scope 2026-10-25) ──
+
+const STRICT: PolicyState = { scope: { kind: "installation", id: FQDN }, profile: "strict", rollout: "enforced", generation: 1, headDigest: GENESIS_DIGEST, enforcedEver: true };
+const ROOT_ML_SEED = new Uint8Array(32).fill(0x52);
+const ROOT_HYBRID = new Uint8Array([...ADMIN_ROOT_SEED, ...ROOT_ML_SEED]);
+function rootBinding(): VerifiedPqKeyBinding {
+  const { publicKey } = hybridSigKeygen(ADMIN_ROOT_SEED, ROOT_ML_SEED);
+  const st: PqKeyBindingStatement = { role: "admin-root", subjectId: "harry", ed25519PubHex: Buffer.from(publicKey.subarray(0, 32)).toString("hex"), mldsaPubHex: Buffer.from(publicKey.subarray(32)).toString("hex"), issuedAt: clock - 1000 };
+  const wire = { v: 1 as const, ...st, signature: Buffer.from(hybridSign(ROOT_HYBRID, "flagship/pq-key-binding/v1", canonicalPqKeyBinding(st))).toString("hex") };
+  return verifyPqKeyBinding(wire, { role: "admin-root", subjectId: "harry", ed25519PubHex: st.ed25519PubHex, now: clock });
+}
+const pqWire = (canonical: Uint8Array) => ({ suite: "hybrid-ed25519-mldsa65/v1", signature: Buffer.from(hybridSign(ROOT_HYBRID, messagePurpose(canonical), canonical)).toString("hex") });
+
+/** Open a session whose order also carries the admin root's hybrid signature. */
+async function openHybridSession(port: number): Promise<{ token: string; hello: RescueExchange; reply: Reply }> {
+  const clientNonce = nonce();
+  const h = await request(port, "POST", "/api/rescue/hello", { body: { clientNonce } });
+  const hello = h.json.hello as RescueExchange;
+  const order = { ...hello, issuedAt: clock };
+  const reply = await request(port, "POST", "/api/rescue/session", {
+    body: { order, signatureHex: Buffer.from(signRescueSession(order, adminRoot)).toString("hex"), pqSignature: pqWire(rescueSessionCanonicalBytes(order)) },
+  });
+  return { token: reply.json?.token as string, hello, reply };
+}
+
+async function sessionNonceOf(port: number, token: string): Promise<string> {
+  const r = await request(port, "GET", "/api/rescue/server", { headers: auth(token) });
+  expect(r.status).toBe(200);
+  return r.json.sessionNonce as string;
+}
+
+function controlOrder(sessionNonce: string, action: OfflineControlOrder["action"], target: string, over: Partial<OfflineControlOrder> = {}): OfflineControlOrder {
+  return { serverDomain: FQDN, sessionNonce, action, target, nonce: nonce(), issuedAt: clock, ...over };
+}
+
+async function sendControl(port: number, token: string, order: OfflineControlOrder, signer: Keypair, extra: Record<string, unknown> = {}): Promise<Reply> {
+  return request(port, "POST", "/api/rescue/control", {
+    headers: auth(token),
+    body: { order, signatureHex: Buffer.from(signOfflineControl(order, signer)).toString("hex"), ...extra },
+  });
+}
+
+describe("basic offline control with .com unreachable", () => {
+  let rig: Rig;
+  beforeEach(async () => {
+    rig = await startBox({ adminPinned: true });
+  });
+  afterEach(async () => {
+    setPqAuthority(null);
+    await rig.close();
+  });
+
+  it("shows the server's status and its apps with their state, and names the session nonce", async () => {
+    const { token } = await openSession(rig.port, adminRoot);
+    const r = await request(rig.port, "GET", "/api/rescue/server", { headers: auth(token) });
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ serverDomain: FQDN, apps: [{ serviceId: SERVICE, name: "notes", state: "running" }], status: { version: "0.3.0" } });
+    expect(r.json.controls).toEqual(["app-start", "app-stop", "app-restart", "server-restart", "server-shutdown"]);
+    expect(r.json.sessionNonce).toMatch(/^[0-9a-f]{32}$/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("stops, starts and restarts an app, each an admin-signed order the box checks itself", async () => {
+    const { token } = await openSession(rig.port, adminRoot);
+    const sn = await sessionNonceOf(rig.port, token);
+    for (const action of ["app-stop", "app-start", "app-restart"] as const) {
+      const r = await sendControl(rig.port, token, controlOrder(sn, action, SERVICE), adminRoot);
+      expect(r.status, action).toBe(200);
+      expect(r.json).toEqual({ ok: true, action, serviceId: SERVICE });
+    }
+    expect(rig.controls).toEqual([`app-stop ${SERVICE}`, `app-start ${SERVICE}`, `app-restart ${SERVICE}`]);
+    expect(rig.notes.map((n) => n.kind)).toEqual(expect.arrayContaining(["server.offline.app-stopped", "server.offline.app-started", "server.offline.app-restarted"]));
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("restarts and shuts down the server after the reply has gone out", async () => {
+    const { token } = await openSession(rig.port, adminRoot);
+    const sn = await sessionNonceOf(rig.port, token);
+    const r = await sendControl(rig.port, token, controlOrder(sn, "server-restart", FQDN), adminRoot);
+    expect(r.status).toBe(202);
+    expect(rig.controls).toEqual([]);
+    await new Promise((res) => setTimeout(res, 650));
+    expect(rig.controls).toEqual(["power restart"]);
+    const off = await sendControl(rig.port, token, controlOrder(sn, "server-shutdown", FQDN), adminRoot);
+    expect(off.status).toBe(202);
+    await new Promise((res) => setTimeout(res, 650));
+    expect(rig.controls).toEqual(["power restart", "power off"]);
+    expect(rig.notes.map((n) => n.kind)).toEqual(expect.arrayContaining(["server.offline.restart", "server.offline.shutdown"]));
+  });
+
+  it("the session token alone does nothing: an order without a valid owner signature is refused", async () => {
+    const { token } = await openSession(rig.port, adminRoot);
+    const sn = await sessionNonceOf(rig.port, token);
+    const stranger = deriveIRK({ seed: new Uint8Array(32).fill(0xee) });
+    const r = await sendControl(rig.port, token, controlOrder(sn, "app-stop", SERVICE), stranger);
+    expect(r.status).toBe(403);
+    expect(r.json.code).toBe("offline-order-refused");
+    expect(rig.controls).toEqual([]);
+  });
+
+  it("refuses the account key (IRK) on a box that pins an admin root", async () => {
+    const { token } = await openSession(rig.port, adminRoot);
+    const sn = await sessionNonceOf(rig.port, token);
+    const r = await sendControl(rig.port, token, controlOrder(sn, "server-shutdown", FQDN), irk);
+    expect(r.status).toBe(403);
+    await new Promise((res) => setTimeout(res, 650));
+    expect(rig.controls).toEqual([]);
+  });
+
+  it("refuses a replay, a stale order, another server, another session and a malformed one", async () => {
+    const { token } = await openSession(rig.port, adminRoot);
+    const sn = await sessionNonceOf(rig.port, token);
+    const order = controlOrder(sn, "app-stop", SERVICE);
+    expect((await sendControl(rig.port, token, order, adminRoot)).status).toBe(200);
+    const replay = await sendControl(rig.port, token, order, adminRoot);
+    expect(replay.status).toBe(403);
+    expect(replay.json.error).toContain("already used");
+    expect((await sendControl(rig.port, token, controlOrder(sn, "app-stop", SERVICE, { issuedAt: clock - 3 * 60_000 }), adminRoot)).json.error).toContain("stale");
+    expect((await sendControl(rig.port, token, controlOrder(sn, "app-stop", SERVICE, { issuedAt: clock + 3 * 60_000 }), adminRoot)).json.error).toContain("stale");
+    const other = { ...controlOrder(sn, "server-restart", "home2.harry.flagship.services"), serverDomain: "home2.harry.flagship.services" };
+    expect((await sendControl(rig.port, token, other, adminRoot)).json.error).toContain("another server");
+    const elsewhere = await sendControl(rig.port, token, controlOrder("00".repeat(16), "app-stop", SERVICE), adminRoot);
+    expect(elsewhere.json.error).toContain("another session");
+    const bad = await request(rig.port, "POST", "/api/rescue/control", { headers: auth(token), body: { order: { ...order, action: "app-delete" }, signatureHex: "00".repeat(64) } });
+    expect(bad.status).toBe(400);
+    expect(rig.controls).toEqual([`app-stop ${SERVICE}`]);
+  });
+
+  it("an order signed on one session is refused on another (bound to the session's nonce)", async () => {
+    const a = await openSession(rig.port, adminRoot);
+    const b = await openSession(rig.port, adminRoot);
+    const order = controlOrder(await sessionNonceOf(rig.port, a.token), "app-stop", SERVICE);
+    const r = await sendControl(rig.port, b.token, order, adminRoot);
+    expect(r.status).toBe(403);
+    expect(r.json.error).toContain("another session");
+  });
+
+  it("needs an open session: no token, a made-up token and an expired session get nothing", async () => {
+    const { token } = await openSession(rig.port, adminRoot);
+    const sn = await sessionNonceOf(rig.port, token);
+    const order = controlOrder(sn, "app-stop", SERVICE);
+    const body = { order, signatureHex: Buffer.from(signOfflineControl(order, adminRoot)).toString("hex") };
+    expect((await request(rig.port, "POST", "/api/rescue/control", { body })).status).toBe(401);
+    expect((await request(rig.port, "POST", "/api/rescue/control", { headers: auth("ab".repeat(32)), body })).status).toBe(401);
+    expect((await request(rig.port, "GET", "/api/rescue/server", {})).status).toBe(401);
+    clock += RESCUE_SESSION_TTL_MS + 1;
+    expect((await request(rig.port, "POST", "/api/rescue/control", { headers: auth(token), body: { ...body, order: { ...order, issuedAt: clock } } })).status).toBe(401);
+    expect(rig.controls).toEqual([]);
+  });
+
+  it("an app that isn't on this server is not found, and nothing runs", async () => {
+    const { token } = await openSession(rig.port, adminRoot);
+    const sn = await sessionNonceOf(rig.port, token);
+    const r = await sendControl(rig.port, token, controlOrder(sn, "app-restart", "harry--ghost"), adminRoot);
+    expect(r.status).toBe(404);
+    expect(r.json.code).toBe("no-such-app");
+    expect(rig.controls).toEqual([]);
+  });
+
+  it("under the strict profile a classical-only session order opens nothing, a hybrid one does", async () => {
+    const binding = rootBinding();
+    setPqAuthority({ policy: () => STRICT, bindingFor: (h) => (h === binding.ed25519PubHex ? binding : null) });
+    const classical = await openSession(rig.port, adminRoot);
+    expect(classical.reply.status).toBe(403);
+    expect(classical.reply.json.code).toBe("rescue-refused");
+    const hybrid = await openHybridSession(rig.port);
+    expect(hybrid.reply.status).toBe(200);
+    expect(hybrid.token).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("under the strict profile every offline order needs its hybrid half too", async () => {
+    const binding = rootBinding();
+    setPqAuthority({ policy: () => STRICT, bindingFor: (h) => (h === binding.ed25519PubHex ? binding : null) });
+    const { token } = await openHybridSession(rig.port);
+    const sn = await sessionNonceOf(rig.port, token);
+    const classical = await sendControl(rig.port, token, controlOrder(sn, "app-stop", SERVICE), adminRoot);
+    expect(classical.status).toBe(403);
+    const order = controlOrder(sn, "app-stop", SERVICE);
+    const hybrid = await sendControl(rig.port, token, order, adminRoot, { pqSignature: pqWire(offlineControlCanonicalBytes(order)) });
+    expect(hybrid.status).toBe(200);
+    // A hybrid half lifted from another order (the session's) never passes.
+    const order2 = controlOrder(sn, "app-start", SERVICE);
+    const lifted = await sendControl(rig.port, token, order2, adminRoot, { pqSignature: pqWire(offlineControlCanonicalBytes(order)) });
+    expect(lifted.status).toBe(403);
+    expect(rig.controls).toEqual([`app-stop ${SERVICE}`]);
+  });
+
+  it("a hybrid half that is sent must verify even outside strict", async () => {
+    const binding = rootBinding();
+    setPqAuthority({ policy: () => ({ ...STRICT, profile: "compatibility", rollout: "legacy" }), bindingFor: (h) => (h === binding.ed25519PubHex ? binding : null) });
+    const { token } = await openSession(rig.port, adminRoot);
+    const sn = await sessionNonceOf(rig.port, token);
+    const order = controlOrder(sn, "app-stop", SERVICE);
+    const r = await sendControl(rig.port, token, order, adminRoot, { pqSignature: { suite: "hybrid-ed25519-mldsa65/v1", signature: "00".repeat(3373) } });
+    expect(r.status).toBe(403);
+    expect(rig.controls).toEqual([]);
+  });
+});
+
+describe("the box's hello under keyd and post-quantum", () => {
+  it("keyd's box policy signs the rescue hello (a keyd box could not answer before)", () => {
+    expect(BOX_SIGN_PURPOSES.has("flagship/rescue-hello/v1")).toBe(true);
+    const h: RescueExchange = { serverDomain: FQDN, clientNonce: "11".repeat(16), boxNonce: "22".repeat(16), certSha256: "ab".repeat(32), issuedAt: 1 };
+    expect(checkSign(rescueHelloCanonicalBytes(h), Buffer.from(stk.publicKey).toString("hex"))).toBe("flagship/rescue-hello/v1");
+  });
+
+  it("carries the STK's hybrid signature when the box holds an ML-DSA key, and it verifies under strict", async () => {
+    const rig = await startBox({ adminPinned: true, hybridHello: true });
+    try {
+      const h = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
+      expect(h.status).toBe(200);
+      expect(h.json.pqSignature.suite).toBe("hybrid-ed25519-mldsa65/v1");
+      const { publicKey } = hybridSigKeygen(stk.privateKey, new Uint8Array(32).fill(0x61));
+      const st: PqKeyBindingStatement = { role: "box-stk", subjectId: FQDN, ed25519PubHex: Buffer.from(stk.publicKey).toString("hex"), mldsaPubHex: Buffer.from(publicKey.subarray(32)).toString("hex"), issuedAt: clock - 1000 };
+      const binding = verifyPqKeyBinding(
+        { v: 1, ...st, signature: Buffer.from(hybridSign(BOX_PQ_SECRET, "flagship/pq-key-binding/v1", canonicalPqKeyBinding(st))).toString("hex") },
+        { role: "box-stk", subjectId: FQDN, ed25519PubHex: st.ed25519PubHex, now: clock },
+      );
+      const v = verifyCriticalSignature({
+        message: rescueHelloCanonicalBytes(h.json.hello),
+        expectedPurpose: "flagship/rescue-hello/v1",
+        envelope: h.json.pqSignature,
+        signerEd25519PubHex: st.ed25519PubHex,
+        binding,
+        policy: STRICT,
+      });
+      expect(v).toEqual({ suite: "hybrid-ed25519-mldsa65/v1", strict: true });
+    } finally {
+      await rig.close();
+    }
+  });
+
+  it("a box without an ML-DSA key sends a classical hello only", async () => {
+    const rig = await startBox({ adminPinned: true });
+    try {
+      const h = await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
+      expect(h.json.pqSignature).toBeUndefined();
+    } finally {
+      await rig.close();
+    }
   });
 });
