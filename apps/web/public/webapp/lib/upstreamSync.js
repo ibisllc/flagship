@@ -73,9 +73,16 @@ export function syncRowHtml(repo) {
 
 const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string") : []);
 
-/** The box's answer, kept to well-formed fields. Null when it isn't one. */
+/**
+ * The box's answer, kept to well-formed fields. Null when it isn't one. "Already up to date" carries no
+ * build (the box opens none); a proposal always names the build that holds it.
+ */
 export function readSyncResult(body) {
-  if (!body || typeof body !== "object" || typeof body.buildId !== "string" || !body.buildId) return null;
+  if (!body || typeof body !== "object") return null;
+  if (body.upToDate === true) {
+    return { buildId: "", candidateCommit: typeof body.candidateCommit === "string" ? body.candidateCommit : "", upToDate: true, takeUpstream: [], localChanged: [], alreadyApplied: [], conflicts: [], capabilityChanges: [] };
+  }
+  if (typeof body.buildId !== "string" || !body.buildId) return null;
   const p = body.proposal && typeof body.proposal === "object" ? body.proposal : {};
   const capabilityChanges = (Array.isArray(p.capabilityChanges) ? p.capabilityChanges : [])
     .filter((c) => c && typeof c.section === "string")
@@ -84,7 +91,7 @@ export function readSyncResult(body) {
   return {
     buildId: body.buildId,
     candidateCommit: typeof body.candidateCommit === "string" ? body.candidateCommit : "",
-    upToDate: body.upToDate === true,
+    upToDate: false,
     takeUpstream: list(p.takeUpstream),
     localChanged: list(p.localChanged),
     alreadyApplied: list(p.alreadyApplied),
@@ -157,7 +164,7 @@ export async function requestSync(client, serviceId, ref) {
   return r;
 }
 
-/** Forget the build the sync opened (an up-to-date check, or Discard). Best effort. */
+/** Forget the build a proposal opened (Discard). Best effort. */
 export async function discardSyncBuild(client, buildId) {
   try {
     await client.fetch(`/api/build/sessions/${encodeURIComponent(buildId)}/discard`, { method: "POST", body: "{}" });
@@ -240,7 +247,6 @@ export function openUpstreamSync({ serviceId, repo, client = boxClient() }) {
         if (check) check.textContent = SYNC_COPY.check;
         return showError(e.message);
       }
-      openBuild = r.buildId;
       if (r.upToDate) {
         card.innerHTML = `
           <h3 class="modal-title">${escapeHtml(checkUpdatesLabel(repo))}</h3>
@@ -249,6 +255,7 @@ export function openUpstreamSync({ serviceId, repo, client = boxClient() }) {
         card.querySelector('[data-sync-choice="close"]').addEventListener("click", () => void finish("up-to-date"));
         return;
       }
+      openBuild = r.buildId;
       card.innerHTML = proposalHtml(repo, r);
       card.querySelector('[data-sync-choice="discard"]').addEventListener("click", () => void finish("discarded"));
       card.querySelector('[data-sync-choice="review"]').addEventListener("click", async () => {

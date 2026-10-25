@@ -9,6 +9,7 @@
  * `example.com.attacker.test`. A URL path is recorded for the prompt but is NOT a security
  * boundary: the same origin runs scripts with that origin's authority.
  */
+import { randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 
 export type BrowserCapability = "navigate" | "read-dom" | "screenshot" | "input" | "download";
@@ -93,7 +94,6 @@ export function describeGrant(g: Pick<BrowserGrantRequest, "capabilities" | "ori
 
 export class BrowserGrants {
   private grants = new Map<string, BrowserGrant>();
-  private seq = 0;
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
@@ -104,7 +104,8 @@ export class BrowserGrants {
     if (req.duration === "session" && !opts.sessionId) throw new GrantRequestError("a session grant needs a session");
     const t = this.now();
     const g: BrowserGrant = {
-      id: `bg${++this.seq}`,
+      // Random, so a signed revoke of one grant can never name a later one (ids are not reused after a restart).
+      id: `bg-${randomUUID()}`,
       serviceId: req.serviceId,
       capabilities: [...new Set(req.capabilities)],
       origins: [...new Set(req.origins.map(normalizeOriginPattern))].sort(),
@@ -130,6 +131,32 @@ export class BrowserGrants {
     return [...this.grants.values()].filter(
       (g) =>
         g.serviceId === serviceId && g.revokedAt === null && g.spentAt === null && (g.expiresAt === null || g.expiresAt > t) &&
+        (g.duration !== "session" || g.sessionId === sessionId),
+    ).map((g) => ({ ...g }));
+  }
+
+  /** Every grant this box holds (copies), live or not. */
+  all(): BrowserGrant[] {
+    return [...this.grants.values()].map((g) => ({ ...g }));
+  }
+
+  /** Not revoked, not expired and not spent. */
+  isLive(id: string): boolean {
+    const g = this.grants.get(id);
+    const t = this.now();
+    return !!g && g.revokedAt === null && g.spentAt === null && (g.expiresAt === null || g.expiresAt > t);
+  }
+
+  serviceOf(id: string): string | null {
+    return this.grants.get(id)?.serviceId ?? null;
+  }
+
+  /** Like {@link live}, but a spent `once` grant still counts: the visit it opened (see judge.ts). */
+  usable(serviceId: string, sessionId?: string): BrowserGrant[] {
+    const t = this.now();
+    return [...this.grants.values()].filter(
+      (g) =>
+        g.serviceId === serviceId && g.revokedAt === null && (g.expiresAt === null || g.expiresAt > t) &&
         (g.duration !== "session" || g.sessionId === sessionId),
     ).map((g) => ({ ...g }));
   }

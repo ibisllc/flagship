@@ -117,9 +117,43 @@ pub fn load_policy(state: &Path) -> std::io::Result<Option<String>> {
 /// `namesFor` (migrate.ts): the names a box may have a certificate for. The last is the
 /// account's wildcard `*.<user>.<apex>`, which a box asks for once an admin grants it the
 /// account's app names (server-daemon runtime.ts `boxCertSans`).
+/// A name of any other shape than `<server>.<user>.<apex>` yields no names at all, never a
+/// wildcard over the whole apex (AT-CRT-06).
 pub fn names_for(fqdn: &str) -> Vec<String> {
-    let account = fqdn.split_once('.').map_or("", |(_, rest)| rest);
-    vec![fqdn.to_owned(), format!("*.{fqdn}"), format!("*.{account}")]
+    account_zone_of(fqdn, SERVICES_APEXES).map_or_else(Vec::new, |account| {
+        vec![fqdn.to_owned(), format!("*.{fqdn}"), format!("*.{account}")]
+    })
+}
+
+/// `SERVICES_APEXES` (migrate.ts): the data-plane apexes a box name may sit under.
+pub const SERVICES_APEXES: &[&str] = &["flagship.services", "gym.flagship.services"];
+
+/// `^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`
+fn is_server_label(s: &str) -> bool {
+    let b = s.as_bytes();
+    let alnum = |c: &u8| c.is_ascii_lowercase() || c.is_ascii_digit();
+    match (b.first(), b.last()) {
+        (Some(f), Some(l)) => {
+            b.len() <= 63 && alnum(f) && alnum(l) && b.iter().all(|c| alnum(c) || *c == b'-')
+        }
+        _ => false,
+    }
+}
+
+/// `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`, without `--`.
+fn is_user_label(s: &str) -> bool {
+    (3..=30).contains(&s.len()) && is_server_label(s) && !s.contains("--")
+}
+
+/// `accountZoneOf` (migrate.ts): `<user>.<apex>` for a box name of exactly the shape
+/// `<server>.<user>.<apex>` under one of the apexes, or `None`.
+pub fn account_zone_of(fqdn: &str, apexes: &[&str]) -> Option<String> {
+    apexes.iter().find_map(|apex| {
+        let head = fqdn.strip_suffix(apex)?.strip_suffix('.')?;
+        let (server, user) = head.split_once('.')?;
+        (!user.contains('.') && is_server_label(server) && is_user_label(user))
+            .then(|| format!("{user}.{apex}"))
+    })
 }
 
 /// `loadOwnerAnchor` (migrate.ts): the owner key root in `owner.json`, lowercase hex, or `None`.

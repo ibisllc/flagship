@@ -364,20 +364,25 @@ public final class ServerShareClient: Sendable {
                        headers: [Self.shareTokenHeader: token])
     }
 
-    /// `.com`'s CA attestation of this account's sensitive key (§5.1). The
-    /// device asks about its own account; the attestation names none.
-    public func accountKeyAttestation(username: String) async throws -> AccountKeyAttestation {
+    /// `.com`'s CA attestation of this account's per-share admin key (§5.1,
+    /// AT-LNK-10), asked for with a request the admin root signed. The
+    /// attestation names no account; `.com` never learns the share. A 403 with
+    /// `code: accept-not-admin` means this device is no admin of the account.
+    public func shareKeyAttestation(request: ShareKeyAttestationRequest, signature: String) async throws -> AccountKeyAttestation {
+        struct B: Encodable { let request: ShareKeyAttestationRequest; let signature: String }
         struct R: Decodable { let attestation: AccountKeyAttestation }
-        let r: R = try await send(com, apex(), "GET", "/api/users/\(seg(username))/account-key-attestation", body: nil as String?)
+        let r: R = try await send(com, apex(), "POST", "/api/users/\(seg(request.username))/share-key-attestation",
+                                  body: B(request: request, signature: signature))
         return r.attestation
     }
 
-    /// A demo account's devices hold no admin root: `.com` signs its #12.
-    public func demoShareAccept(username: String, admit: ServerShareAcceptAdmin) async throws -> String {
-        struct B: Encodable { let admit: ServerShareAcceptAdmin }
-        struct R: Decodable { let signature: String }
-        let r: R = try await send(com, apex(), "POST", "/api/dev/sample-user/\(seg(username))/share-accept", body: B(admit: admit))
-        return r.signature
+    /// A demo account's devices hold no admin root: `.com` signs the request for it.
+    public func demoShareKeyAttestation(username: String, keyPubHex: String) async throws -> AccountKeyAttestation {
+        struct B: Encodable { let keyPubHex: String }
+        struct R: Decodable { let attestation: AccountKeyAttestation }
+        let r: R = try await send(com, apex(), "POST", "/api/dev/sample-user/\(seg(username))/share-key-attestation",
+                                  body: B(keyPubHex: keyPubHex))
+        return r.attestation
     }
 
     public func accept(shareId: String, token: String, acceptanceHex: String) async throws {

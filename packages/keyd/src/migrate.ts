@@ -93,7 +93,7 @@ export function writePolicyFromEnv(envFile: string, keydDir: string): KeydPolicy
   if (!existsSync(envFile)) return null;
   const line = readFileSync(envFile, "utf8").split("\n").find((l) => l.startsWith("FLAGSHIP_SUBDOMAIN="));
   const fqdn = line?.slice("FLAGSHIP_SUBDOMAIN=".length).trim().toLowerCase();
-  if (!fqdn || !/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(fqdn)) return null;
+  if (!fqdn || !/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(fqdn) || accountZoneOf(fqdn) === null) return null;
   mkdirSync(keydDir, { recursive: true, mode: 0o700 });
   writeFileSync(`${target}.tmp`, JSON.stringify({ serverFqdn: fqdn }), { mode: 0o400 });
   renameSync(`${target}.tmp`, target);
@@ -112,7 +112,31 @@ export function loadPolicy(keydDir: string): KeydPolicy | null {
  * app names (`*.<user>.<apex>`, which the box only gets a certificate for with the admin's grant, checked
  * by `.com` on the challenge: serverWildcardGrant.ts in the daemon).
  */
-export const namesFor = (fqdn: string): string[] => [fqdn, `*.${fqdn}`, `*.${fqdn.split(".").slice(1).join(".")}`];
+export function namesFor(fqdn: string, apexes: readonly string[] = SERVICES_APEXES): string[] {
+  const account = accountZoneOf(fqdn, apexes);
+  return account ? [fqdn, `*.${fqdn}`, `*.${account}`] : [];
+}
+
+/** The data-plane apexes a box name may sit under: production, and the test gym's. */
+export const SERVICES_APEXES: readonly string[] = ["flagship.services", "gym.flagship.services"];
+const SERVER_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const USER_LABEL = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+
+/**
+ * `<user>.<apex>` for a box name of exactly the shape `<server>.<user>.<apex>` under one of the
+ * apexes, or null. keyd derives the account's wildcard from it, so a name one label short (or any
+ * other shape) yields no names at all rather than a wildcard over the whole apex.
+ */
+export function accountZoneOf(fqdn: string, apexes: readonly string[] = SERVICES_APEXES): string | null {
+  for (const apex of apexes) {
+    if (!fqdn.endsWith(`.${apex}`)) continue;
+    const labels = fqdn.slice(0, -apex.length - 1).split(".");
+    if (labels.length !== 2) continue;
+    const [server, user] = labels as [string, string];
+    if (SERVER_LABEL.test(server) && USER_LABEL.test(user) && !user.includes("--")) return `${user}.${apex}`;
+  }
+  return null;
+}
 
 /** The PEM files an upgraded box already serves with, if any (the daemon's persistent ACME store). */
 export function legacyTlsFiles(legacyDir: string, fqdn: string): { keyPath: string; certPath: string } | null {

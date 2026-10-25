@@ -53,7 +53,7 @@ public final class UpstreamSyncViewModel {
     public enum Phase: Equatable {
         case ask
         case checking
-        case upToDate(buildId: String)
+        case upToDate
         case proposal(AppSyncResponse)
         case failed(String)
     }
@@ -76,22 +76,22 @@ public final class UpstreamSyncViewModel {
         let r = ref.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             let resp = try await client.appSync(serviceId: serviceId, AppSyncRequest(ref: r.isEmpty ? nil : r))
-            phase = resp.upToDate ? .upToDate(buildId: resp.buildId) : .proposal(resp)
+            // Up to date: the box opened no build, so there is nothing to discard.
+            if resp.upToDate { phase = .upToDate }
+            else if resp.buildId != nil, resp.proposal != nil { phase = .proposal(resp) }
+            else { phase = .failed(ScreensClientError.userFacing(ScreensClientError.decoding("no proposal"))) }
         } catch {
             phase = .failed(UpstreamSyncCopy.message(for: error))
         }
     }
 
-    /// The build the box opened, while the owner hasn't taken it to review.
+    /// The build the box opened for a proposal, while the owner hasn't taken it to review.
     public var openBuildId: String? {
-        switch phase {
-        case .upToDate(let id): return id
-        case .proposal(let r): return r.buildId
-        default: return nil
-        }
+        if case .proposal(let r) = phase { return r.buildId }
+        return nil
     }
 
-    /// Forget the build the check opened (closing an up-to-date answer, or Discard).
+    /// Forget the build a proposal opened (Discard, or closing the sheet without reviewing).
     public func discard() async {
         guard let id = openBuildId else { return }
         phase = .ask
@@ -178,7 +178,7 @@ public struct UpstreamSyncSheet: View {
 
     @ViewBuilder
     private func proposal(_ r: AppSyncResponse, c: FSColors) -> some View {
-        let p = r.proposal
+        let p = r.proposal ?? SyncProposal()
         if let commit = r.candidateCommit {
             Text(UpstreamSyncCopy.version(commit)).font(FS.font.mono()).foregroundColor(c.textMuted)
                 .accessibilityIdentifier("sync-version")
@@ -235,7 +235,7 @@ public struct UpstreamSyncSheet: View {
         Text(UpstreamSyncCopy.nothingLive).font(FS.font.bodySm()).foregroundColor(c.textMuted)
             .accessibilityIdentifier("sync-nothing-live")
         FSPrimaryButton(UpstreamSyncCopy.reviewAndDeploy, block: true) {
-            let id = r.buildId
+            guard let id = r.buildId else { return }
             dismiss()
             onReview(id)
         }

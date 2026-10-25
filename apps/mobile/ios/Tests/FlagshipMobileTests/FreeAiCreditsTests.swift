@@ -168,7 +168,7 @@ final class FreeAiCreditsTests: XCTestCase {
         XCTAssertEqual(sent.request.provider, "flagship")
         XCTAssertEqual(sent.request.desiredDailyInputTokenCap, 0)
         let sig = try XCTUnwrap(Data(hexString: sent.signature))
-        XCTAssertTrue(key.publicKey.isValidSignature(sig, for: sent.request.canonicalBytes()))
+        XCTAssertTrue(key.publicKey.isValidSignature(sig, for: try sent.request.canonicalBytes()))
         _ = try await service().status()
         XCTAssertEqual(server.freeAiStatusRequests.last?.request.serverFqdn, "")
     }

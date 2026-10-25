@@ -1,6 +1,7 @@
 // Browser access requests (SEC-BROWSER-002): the dialog raised for each ask, Activity's list and the
-// "Browser access" section of an app's page (the sites approved with its manifest, then what it
-// asks for now). Driven by [BrowserGrantCenter].
+// "Browser access" section of an app's page (the sites approved with its manifest, what it asks for
+// now, and what the owner allowed, with Withdraw). Allow is offered once per duration the owner may
+// grant, shortest first (the ask's own or shorter). Driven by [BrowserGrantCenter].
 
 package com.flagshipserver.app.ui.screens
 
@@ -24,6 +25,7 @@ import com.flagshipserver.app.core.BrowserGrantCenter
 import com.flagshipserver.app.core.BrowserGrantItem
 import com.flagshipserver.app.core.BrowserGrantText
 import com.flagshipserver.app.core.LocalBrowserGrantCenter
+import com.flagshipserver.app.core.OwnerGrantItem
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.AlertDialog
 import com.flagshipserver.app.ui.components.FSCard
@@ -39,6 +41,11 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 private fun tagOf(item: BrowserGrantItem) = item.request.requestId.replace(Regex("[^A-Za-z0-9_-]"), "")
+private fun tagOf(item: OwnerGrantItem) = item.grant.grantId.replace(Regex("[^A-Za-z0-9_-]"), "")
+
+/** The ask's own duration keeps the plain tag; a shorter choice adds its duration. */
+private fun allowTag(base: String, item: BrowserGrantItem, d: String) =
+    if (d == item.request.duration) base else base.replace("allow", "allow-$d")
 
 /** What the owner is asked about: the verified app, the exact sites and network, what it can do, how long. */
 @Composable
@@ -111,17 +118,19 @@ fun BrowserGrantDialogHost(center: BrowserGrantCenter) {
                     }
                 },
                 confirmButton = {
-                    Row {
+                    Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+                        item.durationChoices.forEach { d ->
+                            TextButton(
+                                enabled = sending == null,
+                                onClick = { scope.launch { center.answerShown(true, d) } },
+                                modifier = Modifier.testTag(allowTag("browser-grant-allow", item, d)),
+                            ) { Text(BrowserGrantText.allowLabel(d)) }
+                        }
                         TextButton(
                             enabled = sending == null,
                             onClick = { scope.launch { center.answerShown(false) } },
                             modifier = Modifier.testTag("browser-grant-deny"),
                         ) { Text(stringResource(R.string.deny)) }
-                        TextButton(
-                            enabled = sending == null,
-                            onClick = { scope.launch { center.answerShown(true) } },
-                            modifier = Modifier.testTag("browser-grant-allow"),
-                        ) { Text(BrowserGrantText.allowLabel(item.request.duration)) }
                     }
                 },
                 dismissButton = {
@@ -159,30 +168,32 @@ fun BrowserGrantRequestsList(center: BrowserGrantCenter, serviceId: String? = nu
                     if (!canAnswer) {
                         Text(stringResource(R.string.browser_grant_admin_only), color = FS.colors.textMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("browser-grant-admin-only"))
                     } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                            FSSecondaryButton(
-                                stringResource(R.string.deny),
-                                onClick = {
-                                    scope.launch {
-                                        val failure = center.answer(r, false)
-                                        if (failure == null) toasts.success(BrowserGrantText.answered(false)) else toasts.error(failure)
-                                    }
-                                },
-                                enabled = r.key !in busy,
-                                modifier = Modifier.weight(1f).testTag("browser-grant-card-deny-$t"),
-                            )
-                            FSPrimaryButton(
-                                BrowserGrantText.allowLabel(r.request.duration),
-                                onClick = {
-                                    scope.launch {
-                                        val failure = center.answer(r, true)
-                                        if (failure == null) toasts.success(BrowserGrantText.answered(true)) else toasts.error(failure)
-                                    }
-                                },
-                                enabled = r.key !in busy,
-                                modifier = Modifier.weight(1f).testTag("browser-grant-card-allow-$t"),
-                            )
+                        r.durationChoices.forEach { d ->
+                            val onClick: () -> Unit = {
+                                scope.launch {
+                                    val failure = center.answer(r, true, d)
+                                    if (failure == null) toasts.success(BrowserGrantText.answered(true)) else toasts.error(failure)
+                                }
+                            }
+                            val tag = allowTag("browser-grant-card-allow-$t", r, d)
+                            if (d == r.request.duration) {
+                                FSPrimaryButton(BrowserGrantText.allowLabel(d), onClick = onClick, enabled = r.key !in busy, block = true, modifier = Modifier.testTag(tag))
+                            } else {
+                                FSSecondaryButton(BrowserGrantText.allowLabel(d), onClick = onClick, enabled = r.key !in busy, block = true, modifier = Modifier.testTag(tag))
+                            }
                         }
+                        FSSecondaryButton(
+                            stringResource(R.string.deny),
+                            onClick = {
+                                scope.launch {
+                                    val failure = center.answer(r, false)
+                                    if (failure == null) toasts.success(BrowserGrantText.answered(false)) else toasts.error(failure)
+                                }
+                            },
+                            enabled = r.key !in busy,
+                            block = true,
+                            modifier = Modifier.testTag("browser-grant-card-deny-$t"),
+                        )
                         Text(stringResource(R.string.browser_grant_deny_note), color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -201,15 +212,70 @@ fun manifestBrowserDomains(manifest: Map<String, JsonElement>): List<String> {
     }.filter { it.isNotBlank() }
 }
 
-/** The app page's "Browser access": what its manifest was approved with, then what it asks now. */
+/** One grant the owner gave: the sites and network, what it can do, how long, the app's words; Withdraw. */
 @Composable
-fun BrowserAccessSection(serviceId: String, manifest: Map<String, JsonElement>) {
+private fun OwnerGrantCard(center: BrowserGrantCenter, item: OwnerGrantItem, appName: String, canWithdraw: Boolean, busy: Boolean) {
+    val t = tagOf(item)
+    val g = item.grant
+    val toasts = LocalToastCenter.current
+    val scope = rememberCoroutineScope()
+    FSCard(modifier = Modifier.testTag("browser-granted-$t")) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            if (g.origins.isNotEmpty()) {
+                Text(stringResource(R.string.browser_grant_sites), style = MaterialTheme.typography.titleSmall)
+                g.origins.forEach { o ->
+                    val (host, note) = BrowserGrantText.site(o)
+                    Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        Text(host, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace), modifier = Modifier.testTag("browser-granted-site-$t"))
+                        note?.let { Text(it, color = FS.colors.textMuted, style = MaterialTheme.typography.bodyMedium) }
+                    }
+                }
+            }
+            BrowserGrantText.localNetwork(g.localNetwork)?.let {
+                Text(it, color = FS.colors.textMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("browser-granted-lan-$t"))
+            }
+            Text(stringResource(R.string.browser_grant_it_can), style = MaterialTheme.typography.titleSmall)
+            Text(g.capabilities.joinToString(", ") { BrowserGrantText.capability(it) }, color = FS.colors.textMuted, style = MaterialTheme.typography.bodyMedium)
+            Text(BrowserGrantText.duration(g.duration), color = FS.colors.textMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("browser-granted-duration-$t"))
+            if (g.explanation.isNotBlank()) {
+                Text(stringResource(R.string.browser_grant_app_says), style = MaterialTheme.typography.titleSmall)
+                Text("“${g.explanation}”", color = FS.colors.textMuted, style = MaterialTheme.typography.bodyMedium)
+            }
+            if (canWithdraw) {
+                FSSecondaryButton(
+                    stringResource(R.string.browser_grant_withdraw),
+                    onClick = {
+                        scope.launch {
+                            val failure = center.withdraw(item, appName)
+                            if (failure == null) toasts.success(BrowserGrantText.withdrawn()) else toasts.error(failure)
+                        }
+                    },
+                    enabled = !busy,
+                    block = true,
+                    modifier = Modifier.testTag("browser-granted-withdraw-$t"),
+                )
+            } else {
+                Text(stringResource(R.string.browser_grant_admin_only), color = FS.colors.textMuted, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+/** The app page's "Browser access": what its manifest was approved with, what it asks now, what the owner allowed. */
+@Composable
+fun BrowserAccessSection(serviceId: String, manifest: Map<String, JsonElement>, appName: String = serviceId) {
     val center = LocalBrowserGrantCenter.current
-    LaunchedEffect(center, serviceId) { runCatching { center?.load() } }
+    LaunchedEffect(center, serviceId) {
+        runCatching { center?.load() }
+        runCatching { center?.loadGrants(serviceId) }
+    }
     val listing by (center?.listing ?: kotlinx.coroutines.flow.MutableStateFlow(BrowserGrantCenter.Listing())).collectAsState()
+    val grantMap by (center?.grants ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap())).collectAsState()
+    val busy by (center?.busy ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsState()
     val declared = manifestBrowserDomains(manifest)
     val asks = listing.requests.filter { it.request.serviceId == serviceId }
-    if (declared.isEmpty() && asks.isEmpty()) return
+    val given = grantMap[serviceId].orEmpty()
+    if (declared.isEmpty() && asks.isEmpty() && given.isEmpty()) return
     Column(Modifier.testTag("service-detail-browser-access"), verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
         FSSectionHeader(stringResource(R.string.browser_access))
         if (declared.isNotEmpty()) {
@@ -223,5 +289,10 @@ fun BrowserAccessSection(serviceId: String, manifest: Map<String, JsonElement>) 
             }
         }
         if (center != null && asks.isNotEmpty()) BrowserGrantRequestsList(center, serviceId)
+        if (center != null && given.isNotEmpty()) {
+            Text(stringResource(R.string.browser_grant_allowed_by_you), style = MaterialTheme.typography.titleSmall, modifier = Modifier.testTag("browser-granted-title"))
+            val canWithdraw = center.canAnswerHere()
+            given.forEach { OwnerGrantCard(center, it, appName, canWithdraw, it.key in busy) }
+        }
     }
 }

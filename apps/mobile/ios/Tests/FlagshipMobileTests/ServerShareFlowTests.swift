@@ -44,10 +44,12 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
     var pushTokens: [String: [String: (platform: String, token: String)]] = [:]
     var lastPushBody: [String: Any]?
     var lastUpdateBody: [String: Any]?
-    /// The joining account's admin root, as `.com` attests it (§5.1).
+    /// The joining account's admin root, which `.com` pins and checks the attestation request under (§5.1).
     var joinAdminPub: Data = Data()
     var attestationReads = 0
-    /// A demo account's admin root, which `.com` holds and signs #12 with.
+    /// The per-share admin keys `.com` attested (AT-LNK-10: never a stable account key).
+    var attestedKeys: Set<String> = []
+    /// A demo account's admin root, which `.com` holds and signs the request with.
     var demoAdmin: Curve25519.Signing.PrivateKey?
 
     init(domain: String, ownerSensitivePub: Data, ownerAccountPub: Data, stk: Curve25519.Signing.PrivateKey) {
@@ -96,18 +98,23 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
             guard let token, let h = try? ServerShare.shareTokenHash(token) else { return false }
             return h == row.tokenHash
         }
-        if m == "GET", p.hasSuffix("/account-key-attestation") {
+        if m == "POST", p.hasPrefix("/api/users/"), p.hasSuffix("/share-key-attestation") {
             attestationReads += 1
-            let now = ServerShareClock.nowMs()
-            return (200, ["attestation": AccountKeyAttestation(
-                keyKind: .adminRoot, keyPubHex: HexUtil.encode(joinAdminPub), issuedAt: now - 1000, expiresAt: now + 86_400_000,
-                signedBy: String(repeating: "ca", count: 32), signature: String(repeating: "00", count: 64)).jsonObject()])
+            let (status, obj, key) = ShareAcceptMockWorld.answerAttestationRequest(b, adminPub: joinAdminPub)
+            if let key { attestedKeys.insert(key) }
+            return (status, obj)
         }
-        if m == "POST", p.hasPrefix("/api/dev/sample-user/"), p.hasSuffix("/share-accept") {
-            guard let demoAdmin, let admit = ServerShareAcceptAdmin.parse(jsonObject: b["admit"] as Any),
-                  admit.keyPubHex == HexUtil.encode(demoAdmin.publicKey.rawRepresentation)
-            else { return (400, ["error": "admit must name this demo account's admin root"]) }
-            return (200, ["signature": HexUtil.encode(try! admit.sign(with: demoAdmin))])
+        if m == "POST", p.hasPrefix("/api/dev/sample-user/"), p.hasSuffix("/share-key-attestation") {
+            attestationReads += 1
+            guard let demoAdmin, let keyPubHex = b["keyPubHex"] as? String else { return (404, ["error": "no such demo user"]) }
+            let request = ShareKeyAttestationRequest(username: "bob", keyPubHex: keyPubHex, issuedAt: ServerShareClock.nowMs())
+            let signed: [String: Any] = [
+                "request": ["username": request.username, "keyPubHex": request.keyPubHex, "issuedAt": request.issuedAt],
+                "signature": HexUtil.encode(try! request.sign(with: demoAdmin)),
+            ]
+            let (status, obj, key) = ShareAcceptMockWorld.answerAttestationRequest(signed, adminPub: demoAdmin.publicKey.rawRepresentation)
+            if let key { attestedKeys.insert(key) }
+            return (status, obj)
         }
         if m == "POST", p.hasSuffix("/server-shares"), parts.count == 4 {
             guard let offer = ServerShareOffer.parse(jsonObject: b["offer"] as Any),
@@ -280,8 +287,9 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
                         return (403, ["error": ShareAcceptMockWorld.notAdminSentence, "code": "accept-not-admin"])
                     }
                     guard proof.admit.shareId == a.shareId, proof.admit.memberPubHex == a.memberPubHex,
-                          proof.admit.acceptedAt == a.acceptedAt, proof.admit.keyPubHex == HexUtil.encode(joinAdminPub),
-                          verify(proof.admit, proof.signature, joinAdminPub)
+                          proof.admit.acceptedAt == a.acceptedAt, proof.admit.keyKind == .share,
+                          attestedKeys.contains(proof.admit.keyPubHex), let sharePub = HexUtil.decode(proof.admit.keyPubHex),
+                          verify(proof.admit, proof.signature, sharePub)
                     else { return (403, ["error": ShareAcceptMockWorld.badSignatureSentence, "code": "accept-signature"]) }
                 }
                 grants[g.shareId] = (g, b["signature"] as! String)
@@ -395,8 +403,7 @@ final class ServerShareFlowTests: XCTestCase {
         ShareAcceptAdminKeys(
             username: "bob", isDemo: demo,
             adminRootPubHex: key.map { HexUtil.encode($0.publicKey.rawRepresentation) },
-            adminRoot: { _ in guard let key else { throw ServerShareFlowError.notAdminDevice }; return key },
-            irk: { _ in Curve25519.Signing.PrivateKey() })
+            adminRoot: { _ in guard let key else { throw ServerShareFlowError.notAdminDevice }; return key })
     }
 
     private var stkHex: String { HexUtil.encode(stk.publicKey.rawRepresentation) }
@@ -475,15 +482,18 @@ final class ServerShareFlowTests: XCTestCase {
 
     // MARK: Only an admin device of the joining account accepts (docs/share-a-server.md §5.1)
 
-    func test_accept_sealsAdminProof_signedByTheAdminRoot_andTheBoxTakesIt() async throws {
+    func test_accept_sealsAdminProof_signedByThePerShareKey_andTheBoxTakesIt() async throws {
         let (row, accepted) = try await shareAndConfirm()
         XCTAssertEqual(row.status, .active)
         let body = try XCTUnwrap(backend.lastGrantBody)
         let proof = try XCTUnwrap(ShareAcceptAdminProof(jsonObject: try XCTUnwrap(body["acceptAdmin"])))
-        XCTAssertEqual(proof.admit.keyKind, .adminRoot)
-        XCTAssertEqual(proof.admit.keyPubHex, HexUtil.encode(memberAdmin.publicKey.rawRepresentation))
+        let shareAdmin = try ServerShare.deriveShareAdminKey(umkSeed: memberUmk, shareId: row.shareId)
+        XCTAssertEqual(proof.admit.keyKind, .share)
+        XCTAssertEqual(proof.admit.keyPubHex, HexUtil.encode(shareAdmin.publicKey.rawRepresentation))
+        XCTAssertNotEqual(proof.admit.keyPubHex, HexUtil.encode(memberAdmin.publicKey.rawRepresentation),
+                          "the box never sees the account's admin root (AT-LNK-10)")
         XCTAssertEqual(proof.admit.shareId, row.shareId)
-        XCTAssertTrue(proof.admit.verify(signature: HexUtil.decode(proof.signature)!, publicKey: memberAdmin.publicKey.rawRepresentation))
+        XCTAssertTrue(proof.admit.verify(signature: HexUtil.decode(proof.signature)!, publicKey: shareAdmin.publicKey.rawRepresentation))
         XCTAssertEqual(proof.attestation.keyPubHex, proof.admit.keyPubHex)
         XCTAssertEqual(backend.attestationReads, 1)
         XCTAssertFalse(accepted.sas.isEmpty)
@@ -526,7 +536,7 @@ final class ServerShareFlowTests: XCTestCase {
         member = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed }, admin: adminKeys(nil, demo: true))
         let (row, _) = try await shareAndConfirm()
         XCTAssertEqual(row.status, .active)
-        XCTAssertTrue(backend.didCall("POST", "com.test", "/share-accept"))
+        XCTAssertTrue(backend.didCall("POST", "com.test", "/api/dev/sample-user/bob/share-key-attestation"))
     }
 
     func test_ownerConfirm_showsTheBoxSentence_forAnAcceptanceWithNoProof() async throws {

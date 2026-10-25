@@ -125,6 +125,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/server-backup-slot/v2": "aad server backup key slot",
   "flagship/server-code/v1": "hash six-digit first-contact code",
   "flagship/server-share-member/v1": "kdf share member key",
+  "flagship/server-share-admin/v1": "kdf per-share admin key (AT-LNK-10)",
   "flagship/server-share/acceptance/v1": "aad share acceptance",
   "flagship/server-share/link-key/v1": "kdf share link key",
   "flagship/server-share/offer/v1": "aad share offer",

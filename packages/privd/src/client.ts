@@ -113,6 +113,11 @@ export class PrivdClient {
     return this.call("wipe", { target: "data" });
   }
 
+  /** Write (from typed fields; the broker renders the text) or remove one WASI app's unit drop-in. */
+  wasiUnit(args: { action: "write"; instance: string; world: "command" | "http-proxy"; memoryMiB: number; tasks: number; cpuPercent: number; restart: "always" | "on-failure" | "never"; filesPath?: string } | { action: "remove"; instance: string }): Promise<unknown> {
+    return this.call("wasi.unit", args as unknown as Record<string, unknown>);
+  }
+
   setup(step: string): Promise<{ stdout?: string; stderr?: string }> {
     return this.call("setup", { step });
   }

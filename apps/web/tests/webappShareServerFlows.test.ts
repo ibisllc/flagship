@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deriveIRK,
+  deriveShareAdminKey,
   deriveShareMemberKey,
   ed,
   verifyAppAccessGrant,
@@ -18,8 +19,8 @@ import { InMemoryStorage } from "@flagship/storage";
 import { pinServerKey } from "../public/webapp/lib/serverPins.js";
 import {
   deriveDemoAdminRoot,
-  handleDemoShareAccept,
-  handleAccountKeyAttestation,
+  demoShareKeyAttestationRequest,
+  handleShareKeyAttestation,
   handleAcceptServerShare,
   handleCreateServerShare,
   handleGetServerShare,
@@ -111,8 +112,8 @@ async function world() {
     if (url.origin === APEX) {
       const token = headers["x-flagship-share-token"] ?? null;
       let r: { status: number; body: unknown } | null = null;
-      if (method === "GET" && (m = p.match(/^\/api\/users\/([^/]+)\/account-key-attestation$/))) {
-        r = await handleAccountKeyAttestation({ ca: { keypair: TEST_CA, issuer: "test-ca" }, usernames: storage.usernames }, m[1]!);
+      if (method === "POST" && (m = p.match(/^\/api\/users\/([^/]+)\/share-key-attestation$/))) {
+        r = await handleShareKeyAttestation({ ca: { keypair: TEST_CA, issuer: "test-ca" }, usernames: storage.usernames }, m[1]!, body);
       } else if (method === "POST" && p === "/api/users/alice/server-shares") r = await handleCreateServerShare(com, "alice", body);
       else if (method === "POST" && p === "/api/users/alice/server-shares/list") r = await handleListServerShares(com, "alice", body);
       else if (method === "POST" && (m = p.match(/^\/api\/users\/alice\/server-shares\/([0-9a-f]{32})\/revoke$/))) r = await handleRevokeServerShare(com, "alice", m[1]!, body);
@@ -255,13 +256,16 @@ describe("share this server — owner and member flows", () => {
     await shares.confirmShare(S, a, w.depsA);
     const post = w.boxPosts.find((p) => p.path === "/api/screens/shares")!;
     expect(Object.keys(post.body).sort()).toEqual(["accept", "acceptAdmin", "acceptSignature", "grant", "signature"]);
-    // Bob's admin device signed #12 with his admin root; the box checked it.
+    // Bob's admin device had .com attest his per-share admin key (asked with his admin root) and
+    // signed #12 with it; the box checked it. No stable account key reaches the box (AT-LNK-10).
     const proof = post.body.acceptAdmin as { admit: Record<string, unknown>; signature: string; attestation: Record<string, unknown> };
-    expect(proof.admit).toMatchObject({ shareId: created.shareId, memberPubHex: memberPub, keyKind: "admin-root", keyPubHex: hex(bobAdminPub) });
-    expect(verifyServerShareAcceptAdmin(proof.admit as never, fromHex(proof.signature), bobAdminPub)).toBe(true);
-    expect(proof.attestation).toMatchObject({ kind: "AccountKeyAttestation", keyKind: "admin-root", keyPubHex: hex(bobAdminPub) });
+    const shareAdminPub = deriveShareAdminKey({ seed: umkB }, created.shareId).publicKey;
+    expect(proof.admit).toMatchObject({ shareId: created.shareId, memberPubHex: memberPub, keyKind: "share", keyPubHex: hex(shareAdminPub) });
+    expect(verifyServerShareAcceptAdmin(proof.admit as never, fromHex(proof.signature), shareAdminPub)).toBe(true);
+    expect(proof.attestation).toMatchObject({ kind: "AccountKeyAttestation", keyKind: "share", keyPubHex: hex(shareAdminPub) });
     expect(JSON.stringify(proof)).not.toContain("bob");
-    expect(w.store.get(created.shareId)?.acceptAdmin?.admit.keyPubHex).toBe(hex(bobAdminPub));
+    expect(JSON.stringify(proof)).not.toContain(hex(bobAdminPub));
+    expect(w.store.get(created.shareId)?.acceptAdmin?.admit.keyPubHex).toBe(hex(shareAdminPub));
     expect(post.body.grant).toMatchObject({
       serverDomain: S,
       shareId: created.shareId,
@@ -345,8 +349,11 @@ describe("share this server — owner and member flows", () => {
       createdAt: 1, provisionPhase: null, provisionPhaseAt: null, provisionLastError: null,
     } as never);
     const demoFetch = async (input: string, init: Init = {}) => {
-      if (input === `${APEX}/api/dev/sample-user/bob/share-accept`) {
-        const r = await handleDemoShareAccept({ storage: w.storage.demoUsers, demoIrkKek: KEK }, "bob", JSON.parse(init.body ?? "{}"));
+      if (input === `${APEX}/api/dev/sample-user/bob/share-key-attestation`) {
+        const signed = await demoShareKeyAttestationRequest({ storage: w.storage.demoUsers, demoIrkKek: KEK }, "bob", JSON.parse(init.body ?? "{}"));
+        const r = signed.ok
+          ? await handleShareKeyAttestation({ ca: { keypair: TEST_CA, issuer: "test-ca" }, usernames: w.storage.usernames }, "bob", { request: signed.request, signature: signed.signature })
+          : signed.response;
         return new Response(JSON.stringify(r.body), { status: r.status });
       }
       return w.fetchImpl(input, init);
@@ -358,7 +365,7 @@ describe("share this server — owner and member flows", () => {
     expect(unlocks).toBe(0);
     const [a] = (await shares.loadOwnerShares(S, w.depsA)).awaiting;
     await shares.confirmShare(S, a, w.depsA);
-    expect(w.store.get(created.shareId)?.acceptAdmin?.admit.keyPubHex).toBe(hex(demoRoot.publicKey));
+    expect(w.store.get(created.shareId)?.acceptAdmin?.admit.keyPubHex).toBe(hex(deriveShareAdminKey({ seed: umkB }, created.shareId).publicKey));
   });
 
   it("someone who got the link first shows a different code, and the link works once", async () => {

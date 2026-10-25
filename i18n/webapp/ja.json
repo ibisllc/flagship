@@ -2876,5 +2876,18 @@
   "Enter your username and the recovery passphrase you chose when you set this up. Your passkey then confirms it is you and unlocks your account key, all on this device. The passphrase never leaves your browser.": "ユーザー名と、設定時に決めたリカバリー用パスフレーズを入力してください。続いてパスキーで本人確認が行われ、このデバイス上でアカウントキーのロックが解除されます。パスフレーズがブラウザーの外に出ることはありません。",
   "Fetch + unlock": "取得してロック解除",
   "Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Confirm with your passkey once.": "アカウントのリカバリーでパスキーも確認できるようになりました。これにより、パスフレーズだけではリカバリー用コピーをダウンロードできません。一度だけパスキーで確認してください。",
-  "You're on <code>recovery.flagshipserver.com</code> — a separate address used only for recovery, so your passkey is kept apart from the main app. (Technical: rpId <code>recovery.flagshipserver.com</code>, passkey isolated by sub-origin.)": "ここは <code>recovery.flagshipserver.com</code> です。リカバリー専用の別アドレスなので、パスキーはメインのアプリから切り離されています。（技術情報: rpId <code>recovery.flagshipserver.com</code>、パスキーはサブオリジンで分離）"
+  "You're on <code>recovery.flagshipserver.com</code> — a separate address used only for recovery, so your passkey is kept apart from the main app. (Technical: rpId <code>recovery.flagshipserver.com</code>, passkey isolated by sub-origin.)": "ここは <code>recovery.flagshipserver.com</code> です。リカバリー専用の別アドレスなので、パスキーはメインのアプリから切り離されています。（技術情報: rpId <code>recovery.flagshipserver.com</code>、パスキーはサブオリジンで分離）",
+  "The server refused the last update: Flagship's maintainers haven't endorsed that release.": "サーバーは直近のアップデートを拒否しました：Flagship のメンテナーはそのリリースを承認していません。",
+  "The server refused the last update: the server was no longer on the version the update was made for. Send it again.": "サーバーは直近のアップデートを拒否しました：サーバーが、アップデート対象のバージョンではなくなっていました。もう一度送信してください。",
+  "The server refused the last update: it couldn't download or build the new version. Nothing changed.": "サーバーは直近のアップデートを拒否しました：新しいバージョンをダウンロードまたはビルドできませんでした。何も変更されていません。",
+  "The server refused the last update: the request wasn't signed by this account's admin key.": "サーバーは直近のアップデートを拒否しました：リクエストがこのアカウントの管理者キーで署名されていませんでした。",
+  "The server refused the last update: the request was too old. Send it again.": "サーバーは直近のアップデートを拒否しました：リクエストが古すぎます。もう一度送信してください。",
+  "The server refused the last update: the request was for a different server.": "サーバーは直近のアップデートを拒否しました：リクエストは別のサーバー宛てでした。",
+  "The update to {0} didn't start cleanly, and the version before it is too old to go back to safely. The server stays on {0} in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.": "{0} へのアップデートは正常に起動しませんでした。また、その前のバージョンは古すぎて安全に戻せません。修正版のアップデートが届くまで、サーバーは {0} のままリカバリーモードで動作します。提供されたら、このカードからインストールしてください。アプリとデータはそのまま保持されます。",
+  "The last update didn't start cleanly, and the version before it is too old to go back to safely. The server stays on the new version in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.": "前回のアップデートは正常に起動しませんでした。また、その前のバージョンは古すぎて安全に戻せません。修正版のアップデートが届くまで、サーバーは新しいバージョンのままリカバリーモードで動作します。提供されたら、このカードからインストールしてください。アプリとデータはそのまま保持されます。",
+  "Share update results": "アップデート結果を共有",
+  "Send Flagship an anonymous note after each update: the release, whether it started cleanly and whether it went back. Never your server's name, your account or anything about your apps.": "アップデートのたびに、Flagship に匿名のメモを送信します：リリース、正常に起動したかどうか、元に戻ったかどうか。サーバー名、アカウント、アプリに関する情報は一切送信しません。",
+  "Allowed by you": "あなたが許可したもの",
+  "Browser access withdrawn": "ブラウザーアクセスを取り下げました",
+  "That access was already withdrawn.": "そのアクセスはすでに取り下げられています。"
 }

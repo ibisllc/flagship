@@ -353,7 +353,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                 )
 
                 // Browser access: the sites the manifest was approved with, then what the app asks now.
-                BrowserAccessSection(serviceId = serviceId, manifest = resp.manifest)
+                BrowserAccessSection(serviceId = serviceId, manifest = resp.manifest, appName = resp.app.slug.replaceFirstChar { it.uppercase() })
 
                 // Browser viewer: only when the daemon reports tabs.
                 if (resp.browserTabs.isNotEmpty()) {

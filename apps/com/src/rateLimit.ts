@@ -180,7 +180,10 @@ export type RateLimitEndpoint =
   | "assurance-policy-post"
   // Architecture v2 signed time (POST /api/time, signedTime.ts): anonymous, one Ed25519
   // signature each; a box asks at boot and every few hours.
-  | "signed-time";
+  | "signed-time"
+  // Canary update receipts (POST /api/update-receipts, updateReceipts.ts): anonymous by design, so the
+  // network is the only axis; a box sends about one per update.
+  | "update-receipt";
 
 /**
  * Endpoints that refuse when the counter can't be reached: each one gates
@@ -394,6 +397,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "subject", limit: 30, windowSec: 3600 },
   ],
   "signed-time": [{ axis: "ip", limit: 30, windowSec: 60 }],
+  "update-receipt": [
+    { axis: "ip", limit: 6, windowSec: 3600 },
+    { axis: "ip", limit: 24, windowSec: 86_400 },
+  ],
 };
 
 export interface RateLimitInput {
@@ -602,6 +609,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "PUT" && /^\/api\/accounts\/[^/]+\/pq-key-bindings$/.test(pathname)) return "pq-binding-put";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/assurance-policy$/.test(pathname)) return "assurance-policy-post";
   if (m === "POST" && pathname === "/api/time") return "signed-time";
+  if (m === "POST" && pathname === "/api/update-receipts") return "update-receipt";
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";
   if (m === "POST" && pathname === "/api/accounts") return "username-claim";
   if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";

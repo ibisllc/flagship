@@ -47,6 +47,22 @@ class MigrationViewModelTest {
     private val irkKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 9 })
     private val adminKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 5 })
 
+    // This phone blessed the old server before: production pins its key at first contact in the one
+    // process-wide pin store, which the migration reads. A fresh store per test, restored after.
+    private val savedPins = com.flagshipserver.app.core.ServerKeyPins.shared
+
+    @org.junit.Before
+    fun pinTheServer() {
+        val pins = com.flagshipserver.app.core.ServerKeyPins(com.flagshipserver.app.core.InMemoryServerKeyPinStore())
+        assertEquals(com.flagshipserver.app.core.ServerKeyPins.Record.Recorded, pins.recordFirstSeen(server, stkHex))
+        com.flagshipserver.app.core.ServerKeyPins.shared = pins
+    }
+
+    @org.junit.After
+    fun restorePins() {
+        com.flagshipserver.app.core.ServerKeyPins.shared = savedPins
+    }
+
     private fun freshHoldStore(): MigrationHoldStore {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val prefs = ctx.getSharedPreferences("migrationHold.${System.nanoTime()}", Context.MODE_PRIVATE)

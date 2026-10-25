@@ -32,9 +32,12 @@ export const TAG_SHARE_INBOX = "flagship/share-inbox/v1";
 export const TAG_SERVER_SHARE_PUSH = "flagship/server-share-push/v1";
 export const TAG_SERVER_SHARE_UPDATE = "flagship/server-share-update/v1";
 export const TAG_SERVER_SHARE_ACCEPT_ADMIN = "flagship/server-share-accept-admin/v1";
-export const ACCOUNT_KEY_KINDS = Object.freeze(["admin-root", "irk"]);
+// Only a per-share key is ever attested (AT-LNK-10): a stable account key would let sharers link the account.
+export const ACCOUNT_KEY_KINDS = Object.freeze(["share"]);
+export const TAG_SHARE_KEY_ATTESTATION_REQUEST = "flagship/share-key-attestation-request/v1";
 
 const INFO_MEMBER = "flagship/server-share-member/v1";
+const INFO_ADMIN = "flagship/server-share-admin/v1";
 const INFO_TOKEN = "flagship/server-share/token/v1";
 const INFO_LINK_KEY = "flagship/server-share/link-key/v1";
 const INFO_INBOX = "flagship/share-inbox/v1";
@@ -155,6 +158,15 @@ function umkSeedOf(umk) {
 export async function deriveShareMemberKey(umkSeed, shareId) {
   checkShareId(shareId);
   return keypair(await hk(umkSeedOf(umkSeed), `${INFO_MEMBER}|${shareId}`));
+}
+
+/**
+ * B's per-share admin key (#12): `.com` attests it for an admin device of B's
+ * account, and it is no key `.com` serves by name, nor the same on two shares.
+ */
+export async function deriveShareAdminKey(umkSeed, shareId) {
+  checkShareId(shareId);
+  return keypair(await hk(umkSeedOf(umkSeed), `${INFO_ADMIN}|${shareId}`));
 }
 
 /** Sign with B's member key for one share (its sign-ins to that server's apps). */
@@ -437,14 +449,29 @@ export function serverShareAcceptCanonicalBytes(a) {
   return join(TAG_SERVER_SHARE_ACCEPT, [a.serverDomain, a.shareId, a.memberPubHex, String(a.acceptedAt)]);
 }
 
+/**
+ * What an admin device signs with the account's sensitive key (admin root, else
+ * the IRK of an account that pins none) to have `.com` attest the share key.
+ */
+export function shareKeyAttestationRequestCanonicalBytes(r) {
+  if (typeof r.username !== "string" || r.username.length === 0) throw new Error("share-key-attestation-request: bad username");
+  for (let i = 0; i < r.username.length; i++) {
+    const c = r.username.charCodeAt(i);
+    if (c === 0x7c || c <= 0x1f || c === 0x7f) throw new Error("share-key-attestation-request: bad username");
+  }
+  checkHex64("keyPubHex", r.keyPubHex);
+  time("issuedAt", r.issuedAt);
+  return join(TAG_SHARE_KEY_ATTESTATION_REQUEST, [r.username, r.keyPubHex, String(r.issuedAt)]);
+}
+
 /** #4 leave — B's member key. */
-/** #12 accept-admin — the joining account's sensitive key (admin root, else IRK). */
+/** #12 accept-admin — B's per-share admin key (keyKind "share"), attested by `.com`. */
 export function serverShareAcceptAdminCanonicalBytes(a) {
   domain(a.serverDomain);
   checkShareId(a.shareId);
   checkHex64("memberPubHex", a.memberPubHex);
   time("acceptedAt", a.acceptedAt);
-  if (!ACCOUNT_KEY_KINDS.includes(a.keyKind)) throw new Error("server-share: keyKind must be admin-root or irk");
+  if (!ACCOUNT_KEY_KINDS.includes(a.keyKind)) throw new Error("server-share: keyKind must be share");
   checkHex64("keyPubHex", a.keyPubHex);
   return join(TAG_SERVER_SHARE_ACCEPT_ADMIN, [
     a.serverDomain,
@@ -580,6 +607,8 @@ export const verifyServerShareRevoke = verifierFor(serverShareRevokeCanonicalByt
 export const signServerShareAccept = signerFor(serverShareAcceptCanonicalBytes);
 export const verifyServerShareAccept = verifierFor(serverShareAcceptCanonicalBytes);
 export const signServerShareAcceptAdmin = signerFor(serverShareAcceptAdminCanonicalBytes);
+export const signShareKeyAttestationRequest = signerFor(shareKeyAttestationRequestCanonicalBytes);
+export const verifyShareKeyAttestationRequest = verifierFor(shareKeyAttestationRequestCanonicalBytes);
 export const verifyServerShareAcceptAdmin = verifierFor(serverShareAcceptAdminCanonicalBytes);
 export const signServerShareLeave = signerFor(serverShareLeaveCanonicalBytes);
 export const verifyServerShareLeave = verifierFor(serverShareLeaveCanonicalBytes);

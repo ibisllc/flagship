@@ -93,6 +93,17 @@ export function validateNoSepCtrl(name: string, value: string): void {
  * rejects empty values, the '|' separator, and control chars, naming both
  * the envelope and the field in the error.
  */
+/**
+ * A numeric field joined into canonical bytes must be a safe integer: a
+ * string or a float could carry the '|' separator or an exponent that
+ * reads as another number (AT-ENV-09).
+ */
+export function integerFieldGuard(name: string, value: unknown): void {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    throw new Error(`canonical-bytes field "${name}" must be a safe integer`);
+  }
+}
+
 export function assertCanonicalField(value: string, envelope: string, field: string): void {
   if (value.length === 0) throw new Error(`${envelope}: empty "${field}"`);
   for (let i = 0; i < value.length; i++) {

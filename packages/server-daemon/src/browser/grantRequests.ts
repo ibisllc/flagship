@@ -7,12 +7,18 @@
  *   POST /api/browser/grant-requests                 (app token)  { capabilities, origins, localNetwork?, duration, explanation? }
  *   GET  /api/browser/grant-requests/<id>            (app token)  -> { status }
  *   GET  /api/browser/owner/grant-requests           (owner session) -> { requests: [...] }
- *   POST /api/browser/owner/grant-requests/answer    (owner session) { requestId, decision, issuedAt, signature? }
+ *   POST /api/browser/owner/grant-requests/answer    (owner session) { requestId, decision, issuedAt, signature?,
+ *                                                     duration?, capabilities?, origins?, localNetwork? }
+ *   GET  /api/browser/owner/grants                   (owner session) -> { grants: [...] }
+ *   POST /api/browser/owner/grants/revoke            (owner session) { serviceId, grantId, issuedAt, signature }
  *
- * An answer that lets something in is an owner signature over exactly what the owner was shown
+ * An answer that lets something in is an owner signature over exactly what is granted
  * (`flagship/browser-grant/v1`, the sensitive-order key), so a stolen paired session cannot widen
- * an app's browser. A denial only narrows and needs the session alone; it starts a cooldown on the
- * same ask from the same app (1 minute, then 10, then an hour, then a day), so an app cannot nag.
+ * an app's browser. The owner may grant the ask as it is or narrower (a shorter duration, fewer
+ * capabilities, sites or local hosts; `browserGrantWithin`), never wider. A denial only narrows and
+ * needs the session alone; it starts a cooldown on the same ask from the same app (1 minute, then 10,
+ * then an hour, then a day), so an app cannot nag. A grant the owner gave can be withdrawn with a
+ * signed `flagship/browser-grant-revoke/v1`; the judge refuses the app's next request under it.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
@@ -43,11 +49,28 @@ export interface BrowserGrantAsk {
 }
 
 /** The signed answer's bytes live in the protocol, shared with the clients (`flagship/browser-grant/v1`). */
-export { TAG_BROWSER_GRANT, canonicalBrowserGrantAnswer, verifyBrowserGrantAnswer, type BrowserGrantAnswer } from "@flagship/protocol";
-import { verifyBrowserGrantAnswer, type BrowserGrantAnswer } from "@flagship/protocol";
+export {
+  TAG_BROWSER_GRANT,
+  TAG_BROWSER_GRANT_REVOKE,
+  canonicalBrowserGrantAnswer,
+  canonicalBrowserGrantRevoke,
+  verifyBrowserGrantAnswer,
+  verifyBrowserGrantRevoke,
+  type BrowserGrantAnswer,
+  type BrowserGrantRevoke,
+} from "@flagship/protocol";
+import { browserGrantWithin, verifyBrowserGrantAnswer, verifyBrowserGrantRevoke, type BrowserGrantAnswer, type BrowserGrantRevoke } from "@flagship/protocol";
 
 /** Validate and normalize what an app asks for; throws GrantRequestError with the reason. */
 export function normalizeAsk(serviceId: string, body: Record<string, unknown>): BrowserGrantAsk {
+  const { capabilities, origins, localNetwork, duration } = normalizeScope(body);
+  return { serviceId, capabilities, origins, localNetwork, duration, explanation: typeof body.explanation === "string" ? body.explanation.slice(0, 500) : "" };
+}
+
+export type GrantScope = Pick<BrowserGrantAsk, "capabilities" | "origins" | "localNetwork" | "duration">;
+
+/** The scope part of an ask or of the owner's narrowed answer, normalized the same way. */
+export function normalizeScope(body: Record<string, unknown>): GrantScope {
   const caps = Array.isArray(body.capabilities) ? body.capabilities : [];
   if (caps.length === 0 || caps.some((c) => !CAPS.includes(c as BrowserCapability))) throw new GrantRequestError("name the capabilities: navigate, read-dom, screenshot, input or download");
   const origins = (Array.isArray(body.origins) ? body.origins : []).map((o) => {
@@ -70,14 +93,19 @@ export function normalizeAsk(serviceId: string, body: Record<string, unknown>): 
   if (origins.length === 0 && !localNetwork) throw new GrantRequestError("ask for at least one site or local-network access");
   const duration = body.duration as GrantDuration;
   if (!DURATIONS.includes(duration)) throw new GrantRequestError("duration is once, session or service");
-  return {
-    serviceId,
-    capabilities: [...new Set(caps as BrowserCapability[])].sort(),
-    origins: [...new Set(origins)].sort(),
-    localNetwork,
-    duration,
-    explanation: typeof body.explanation === "string" ? body.explanation.slice(0, 500) : "",
-  };
+  return { capabilities: [...new Set(caps as BrowserCapability[])].sort(), origins: [...new Set(origins)].sort(), localNetwork, duration };
+}
+
+/** A grant the owner gave beyond the manifest, as the owner's app lists it. */
+export interface OwnerBrowserGrant {
+  grantId: string;
+  serviceId: string;
+  capabilities: BrowserCapability[];
+  origins: string[];
+  localNetwork: LocalNetworkGrant;
+  duration: GrantDuration;
+  explanation: string;
+  issuedAt: number;
 }
 
 interface Held {
@@ -88,10 +116,21 @@ interface Held {
   grantId: string | null;
 }
 
+type AnswerBody = {
+  requestId: string;
+  decision: "allow" | "deny";
+  issuedAt?: number;
+  signatureHex?: string;
+  /** The owner's narrower choice; absent fields keep the ask's. */
+  scope?: Partial<Record<"capabilities" | "origins" | "localNetwork" | "duration", unknown>>;
+};
+
 export type AskOutcome = { ok: true; requestId: string } | { ok: false; status: 429; retryAfterMs: number } | { ok: false; status: 409; reason: string };
 
 export class BrowserGrantRequests {
   private held = new Map<string, Held>();
+  /** Ids of the grants this box gave on the owner's answers (the manifest's own grant is never listed). */
+  private given = new Set<string>();
   /** `<serviceId>|<digest of the ask>` -> denials so far and when the last one ends. */
   private cooling = new Map<string, { count: number; until: number }>();
 
@@ -102,6 +141,8 @@ export class BrowserGrantRequests {
     now?: () => number;
     /** Wake the owner: a request is waiting (content-free; the screens list carries the detail). */
     onRequest?: (serviceId: string) => void;
+    /** A grant was withdrawn: close what the app had open under it. */
+    onRevoked?: (serviceId: string) => void;
     maxSkewMs?: number;
   }) {}
 
@@ -147,7 +188,7 @@ export class BrowserGrantRequests {
     return [...this.held.values()].filter((h) => h.status === "pending").map((h) => ({ ...h.ask, requestId: h.id, at: h.at, meaning: describeGrant(h.ask) }));
   }
 
-  answer(b: { requestId: string; decision: "allow" | "deny"; issuedAt?: number; signatureHex?: string }): { ok: true } | { ok: false; status: number; reason: string } {
+  answer(b: AnswerBody): { ok: true; grantId?: string } | { ok: false; status: number; reason: string } {
     const h = this.held.get(b.requestId);
     if (!h || h.status !== "pending") return { ok: false, status: 404, reason: "that request is no longer waiting" };
     if (b.decision === "deny") {
@@ -161,46 +202,97 @@ export class BrowserGrantRequests {
       return { ok: false, status: 400, reason: "a signed answer with a current time is required" };
     }
     if (typeof b.signatureHex !== "string" || !/^[0-9a-f]{128}$/i.test(b.signatureHex)) return { ok: false, status: 400, reason: "a signed answer is required" };
+    let scope: GrantScope;
+    try {
+      const asked: GrantScope = { capabilities: h.ask.capabilities, origins: h.ask.origins, localNetwork: h.ask.localNetwork, duration: h.ask.duration };
+      scope = b.scope ? normalizeScope({ ...asked, ...Object.fromEntries(Object.entries(b.scope).filter(([, v]) => v !== undefined)) }) : asked;
+    } catch (e) {
+      return { ok: false, status: 400, reason: e instanceof GrantRequestError ? e.message : "that answer is not a grant" };
+    }
+    if (!browserGrantWithin(h.ask, scope)) return { ok: false, status: 400, reason: "an answer can grant the request or less, never more" };
     const order: BrowserGrantAnswer = {
       serverDomain: this.o.serverDomain,
       requestId: h.id,
       serviceId: h.ask.serviceId,
       decision: "allow",
-      duration: h.ask.duration,
-      capabilities: h.ask.capabilities,
-      origins: h.ask.origins,
-      localNetwork: h.ask.localNetwork,
+      duration: scope.duration,
+      capabilities: scope.capabilities,
+      origins: scope.origins,
+      localNetwork: scope.localNetwork,
       issuedAt: b.issuedAt as number,
     };
-    let ok = false;
+    if (!this.signedByOwner(order, b.signatureHex, verifyBrowserGrantAnswer)) return { ok: false, status: 403, reason: "that answer was not signed by the owner" };
+    const g = this.o.grants.approve(
+      { serviceId: h.ask.serviceId, capabilities: scope.capabilities, origins: scope.origins, localNetwork: scope.localNetwork, duration: scope.duration, explanation: h.ask.explanation, schemes: ["https"] },
+      scope.duration === "session" ? { sessionId: contextSession(h.ask.serviceId) } : {},
+    );
+    h.status = "allowed";
+    h.grantId = g.id;
+    this.given.add(g.id);
+    this.cooling.delete(this.key(h.ask));
+    return { ok: true, grantId: g.id };
+  }
+
+  /** The grants the owner gave (not the manifest's own), still live: what the app's page lists with Withdraw. */
+  granted(serviceId?: string): OwnerBrowserGrant[] {
+    const out: OwnerBrowserGrant[] = [];
+    for (const g of this.o.grants.all()) {
+      if (!this.given.has(g.id)) continue;
+      if (!this.o.grants.isLive(g.id)) {
+        this.given.delete(g.id);
+        continue;
+      }
+      if (serviceId && g.serviceId !== serviceId) continue;
+      out.push({ grantId: g.id, serviceId: g.serviceId, capabilities: g.capabilities, origins: g.origins, localNetwork: g.localNetwork, duration: g.duration, explanation: g.explanation, issuedAt: g.issuedAt });
+    }
+    return out.sort((a, b) => b.issuedAt - a.issuedAt);
+  }
+
+  /** The owner withdraws a grant they gave: signed, current, and only one this box handed out on an answer. */
+  revoke(b: { serviceId: string; grantId: string; issuedAt?: number; signatureHex?: string }): { ok: true } | { ok: false; status: number; reason: string } {
+    if (!this.given.has(b.grantId) || !this.o.grants.isLive(b.grantId) || this.o.grants.serviceOf(b.grantId) !== b.serviceId) {
+      return { ok: false, status: 404, reason: "that grant is no longer in force" };
+    }
+    if (!Number.isSafeInteger(b.issuedAt) || Math.abs(this.now() - (b.issuedAt as number)) > (this.o.maxSkewMs ?? 10 * 60_000)) {
+      return { ok: false, status: 400, reason: "a signed answer with a current time is required" };
+    }
+    if (typeof b.signatureHex !== "string" || !/^[0-9a-f]{128}$/i.test(b.signatureHex)) return { ok: false, status: 400, reason: "a signed revoke is required" };
+    const order: BrowserGrantRevoke = { serverDomain: this.o.serverDomain, serviceId: b.serviceId, grantId: b.grantId, issuedAt: b.issuedAt as number };
+    if (!this.signedByOwner(order, b.signatureHex, verifyBrowserGrantRevoke)) return { ok: false, status: 403, reason: "that revoke was not signed by the owner" };
+    this.o.grants.revoke(b.grantId);
+    this.given.delete(b.grantId);
+    try {
+      this.o.onRevoked?.(b.serviceId);
+    } catch {
+      // the grant is gone either way; the judge refuses the next request under it
+    }
+    return { ok: true };
+  }
+
+  private signedByOwner<T>(order: T, signatureHex: string, verify: (o: T, sig: Uint8Array, pub: Uint8Array) => boolean): boolean {
     try {
       const a = this.o.authority();
-      ok = authorizeSensitiveOrder({
+      return authorizeSensitiveOrder({
         ownerIrkPub: a.ownerIrkPub,
         ...(a.adminRootPub ? { adminRootPub: a.adminRootPub } : {}),
         username: a.username,
         ...(a.activeGrants ? { activeGrants: a.activeGrants } : {}),
         order,
-        signature: Uint8Array.from(Buffer.from(b.signatureHex, "hex")),
-        verify: verifyBrowserGrantAnswer,
+        signature: Uint8Array.from(Buffer.from(signatureHex, "hex")),
+        verify,
       });
     } catch {
-      ok = false;
+      return false;
     }
-    if (!ok) return { ok: false, status: 403, reason: "that answer was not signed by the owner" };
-    const g = this.o.grants.approve(
-      { serviceId: h.ask.serviceId, capabilities: h.ask.capabilities, origins: h.ask.origins, localNetwork: h.ask.localNetwork, duration: h.ask.duration, explanation: h.ask.explanation, schemes: ["https"] },
-      h.ask.duration === "session" ? { sessionId: contextSession(h.ask.serviceId) } : {},
-    );
-    h.status = "allowed";
-    h.grantId = g.id;
-    this.cooling.delete(this.key(h.ask));
-    return { ok: true };
   }
 
   /** The app was removed: its requests and cooldowns go with it. */
   forgetService(serviceId: string): void {
-    for (const [id, h] of this.held) if (h.ask.serviceId === serviceId) this.held.delete(id);
+    for (const [id, h] of this.held) {
+      if (h.ask.serviceId !== serviceId) continue;
+      if (h.grantId) this.given.delete(h.grantId);
+      this.held.delete(id);
+    }
     for (const k of [...this.cooling.keys()]) if (k.startsWith(`${serviceId}|`)) this.cooling.delete(k);
   }
 }

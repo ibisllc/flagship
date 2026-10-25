@@ -47,8 +47,8 @@ Either side can end a share at any time: A revokes, B leaves.
 | Someone who sees the link before B opens it | accept the share in B's place | A confirms a 6-digit code that B's phone shows (SAS over the link secret and the accepting key) before signing the grant. A thief's acceptance shows a different code. One acceptance per link. |
 | B, or B's stolen phone | do owner things on S | every route is level-gated on the box, default deny; owner-only routes verify A's keys; B's manage actions that need a signature verify B's pairwise key **chained to A's grant**. |
 | B after the share ends | keep acting | the box tombstones the share id and drops B's sessions at once (A revokes on the box) or on the next poll of `.com` (≤5 min). A revoked share id can never be granted again. |
-| A server owner (A, or any other owner B is shared with) | link B across servers or apps | B's key toward S is `HKDF(UMK_B, "flagship/server-share-member/v1|<shareId>")`: per share, so per server. B's account name, global AID and IRK never reach S. The activity log names B by A's label only. The one exception is B's admin root public key, which S keeps as the proof that an admin device accepted (§5.1, residual below). |
-| B's own non-admin device (or a thief holding one) | accept a share for B's account; owner rule 2026-10-16: only an admin device may | S takes a first grant only with #12 signed by B's sensitive key (admin root, else IRK) and `.com`'s CA attestation of that key (§5.1). A non-admin device holds no admin root, and `.com` attests an IRK only for an account that pins no admin root. |
+| A server owner (A, or any other owner B is shared with) | link B across servers or apps | B's key toward S is `HKDF(UMK_B, "flagship/server-share-member/v1|<shareId>")`: per share, so per server. B's account name, global AID, IRK and admin root never reach S. The activity log names B by A's label only. The proof that an admin device accepted names B's per-share admin key `HKDF(UMK_B, "flagship/server-share-admin/v1|<shareId>")`, which `.com` serves to nobody and which differs on every share (§5.1, AT-LNK-10). |
+| B's own non-admin device (or a thief holding one) | accept a share for B's account; owner rule 2026-10-16: only an admin device may | S takes a first grant only with #12 signed by B's per-share admin key and `.com`'s CA attestation of that key (§5.1). `.com` attests it only on a request (#13) signed by B's sensitive key: the admin root or an admin-granted device, the IRK only for an account that pins no admin root. A non-admin device holds no admin root. |
 | An AI on S | learn who B is | B's label never enters a prompt; AI-facing text keeps going through `buildModelRedactor`. |
 
 Residual risks, stated plainly:
@@ -129,8 +129,9 @@ fields are lowercase; times are Unix ms, non-negative safe integers.
 | 9 | `flagship/share-inbox/v1` | `inboxPubHex\|op\|entryId\|ctSha256\|issuedAt` | B's inbox key | `.com` |
 | 10 | `flagship/server-share-push/v1` | `serverDomain\|shareId\|memberPubHex\|op\|platform\|tokenSha256\|issuedAt` | B's member key | `.com` |
 | 11 | `flagship/server-share-update/v1` | `serverDomain\|shareId\|memberPubHex\|targetCommit\|fromCommit\|nonce\|issuedAt` | B's member key | S |
-| 12 | `flagship/server-share-accept-admin/v1` | `serverDomain\|shareId\|memberPubHex\|acceptedAt\|keyKind\|keyPubHex` | B's sensitive key | S |
-| A | `flagship/account-key-attestation/v1` | `keyKind\|keyPubHex\|issuedAt\|expiresAt` | `.com`'s CA key | S (maintainer CA chain) |
+| 12 | `flagship/server-share-accept-admin/v1` | `serverDomain\|shareId\|memberPubHex\|acceptedAt\|keyKind\|keyPubHex` (`keyKind` is `share`) | B's per-share admin key | S |
+| 13 | `flagship/share-key-attestation-request/v1` | `username\|keyPubHex\|issuedAt` | B's sensitive key | `.com` |
+| A | `flagship/account-key-attestation/v1` | `keyKind\|keyPubHex\|issuedAt\|expiresAt` (`keyKind` is `share`) | `.com`'s CA key | S (maintainer CA chain) |
 
 Field rules:
 
@@ -150,11 +151,15 @@ Field rules:
 - In #11, `targetCommit` and `fromCommit` are 40 lowercase hex and `nonce`
   is 64 lowercase hex. It shares no tag with A's `flagship/server-update/v1`,
   so neither order can stand in for the other.
-- In #12, `keyKind` is `admin-root` or `irk` and `keyPubHex` is that key;
-  the other four fields equal #3's. `test-vectors/server-share-accept-admin/vectors.json`
-  is its cross-platform reference (TS, webapp, Swift, Kotlin).
-- Attestation A is `.com`'s CA signature that `keyPubHex` is the current
-  sensitive key of some account (`keyKind` says which). It names no account.
+- In #12, `keyKind` is `share` and `keyPubHex` is B's per-share admin key;
+  the other four fields equal #3's. In #13, `username` is B's account (no
+  `|` or control characters), `keyPubHex` the per-share admin key.
+  `test-vectors/server-share-accept-admin/vectors.json` is the
+  cross-platform reference for #12, #13 and the key derivation (TS, webapp,
+  Swift, Kotlin).
+- Attestation A is `.com`'s CA signature that `keyPubHex` (`keyKind: share`)
+  was vouched for by the sensitive key of some account. It names no account
+  and no key `.com` serves by name.
   It lives 14 days and is checked like every CA artifact: the baked
   maintainer pin, the forward ca-track chain, a live CaEndorsement lease
   (the box reads both from its own checkout), then the signature and TTL.
@@ -190,8 +195,10 @@ A's phone                        .com                          B's phone        
  show link + QR  https://flagshipserver.com/share#s=<shareId>&k=<kHex>
                                    ◀──── GET /api/server-shares/<id>  (x-flagship-share-token)
                                                              open offer, show "A's server S, Can view"
-                                   ◀──── GET /api/users/B/account-key-attestation   (B asks about B)
-                                                             biometric → admin root signs #12
+                                                             biometric → derive per-share admin key,
+                                                             admin root signs #13
+                                   ◀──── POST /api/users/B/share-key-attestation {#13}  → attestation A
+                                                             per-share admin key signs #12
                                                              derive member key, sign #3
                                    ◀──── POST …/<id>/accept {acceptance (sealed)}  first write wins
                                                              put inbox entry (#9)
@@ -207,22 +214,42 @@ A's phone                        .com                          B's phone        
 ```
 
 - **Only an admin device of B's account accepts** (owner decision
-  2026-10-16), and S enforces it with no blind tokens and nothing new for
-  `.com`. B's device fetches attestation A about its own account (`.com`
-  sees B read B's own keys, from B's network, as on any app start), signs
-  #12 with the key A names behind one biometric (the webapp: one fresh
-  unlock, `lib/freshUnlock.js`), and seals `{admit, signature, attestation}`
-  into the acceptance next to #3. `.com` relays it unread. A's app forwards
-  it to S as `acceptAdmin`; before the first grant for a share id S checks
-  that #12 names the same share, server, member key and time as #3, that it
-  verifies under `keyPubHex`, that A names that key and kind and verifies
-  under the CA chain S ships with, and that it is fresh. S keeps the proof
-  with the share. Refusals (403 unless noted, `{error, code}`; A's app shows
-  `error` as is):
-  - `accept-not-admin`: no proof, or an IRK signature while A names an
-    admin root. "Only an admin device of their account can accept a
-    co-manage invitation. Cancel this link and send a new one for them to
-    open on an admin device."
+  2026-10-16), and S enforces it with no blind tokens and without learning
+  who B is. Behind one biometric (the webapp: one fresh unlock,
+  `lib/freshUnlock.js`) B's device derives its **per-share admin key**
+  `deriveShareAdminKey(UMK, shareId)` = `HKDF(UMK, "flagship/server-share-admin/v1|<shareId>")`,
+  signs #13 naming that key with the account's admin root, and posts it to
+  `POST /api/users/B/share-key-attestation`. `.com` checks #13 like any
+  sensitive order (`authorizeSensitiveComOp`: the admin root or an
+  admin-granted device; the IRK only for an account that pins no admin
+  root; otherwise 403 `accept-not-admin`, shown as "Only an admin device of
+  your account can accept a co-manage invitation.") and returns attestation
+  A of the key with `keyKind: share`. B signs #12 with the per-share key and
+  seals `{admit, signature, attestation}` into the acceptance next to #3.
+  `.com` relays it unread. A's app forwards it to S as `acceptAdmin`; before
+  the first grant for a share id S checks that #12 names the same share,
+  server, member key and time as #3, that its kind is `share`, that it
+  verifies under `keyPubHex`, that A names that key and verifies under the
+  CA chain S ships with, and that it is fresh. S keeps the proof with the
+  share.
+- **Why a per-share key (AT-LNK-10, 2026-10-24).** Until then #12 was signed
+  by B's admin root (or IRK) and A attested that key. `GET /api/username/:u`
+  serves both keys to anyone (pre-sign-in recovery and the DNS broker need
+  them), so A could confirm a guessed account name, and two owners sharing
+  with B could link B by the identical key. The per-share admin key appears
+  nowhere else: `.com` sees it once, in #13, but never sees the share id or
+  the acceptance (sealed), and never sees it again; S sees a different key on
+  every share; it is not the member key, which `.com` sees in unlock
+  deposits. The old `GET /api/users/:u/account-key-attestation` (which
+  attested an account's stable key to anyone who named it) and
+  `POST /api/dev/sample-user/:u/share-accept` are gone, and S refuses a proof
+  of kind `admin-root` or `irk` (400 "malformed admin proof"). A proof S kept
+  from before is dropped on its next load; the share stays.
+  Refusals (403 unless noted, `{error, code}`; A's app shows `error` as is):
+  - `accept-not-admin`: no proof, or a proof of another kind than `share`.
+    "Only an admin device of their account can accept a co-manage
+    invitation. Cancel this link and send a new one for them to open on an
+    admin device."
   - `accept-signature`: #12 doesn't match #3, doesn't verify, or A isn't
     the CA's or names another key. "Their acceptance isn't signed by their
     account's admin key, so this server can't trust it. Cancel this link and
@@ -234,9 +261,10 @@ A's phone                        .com                          B's phone        
     check the acceptance right now because its list of trusted Flagship
     keys is out of date. Update the server, then confirm again."
 - A **demo account** has an admin root, but its devices don't hold it (the
-  operator runs the account): they ask `POST /api/dev/sample-user/:u/share-accept {admit}`,
-  and `.com` signs #12 with the demo account's derived root. S checks it
-  exactly as any other. No biometric on a demo account.
+  operator runs the account): they ask `POST /api/dev/sample-user/:u/share-key-attestation {keyPubHex}`,
+  and `.com` signs #13 with the demo account's derived root and answers with
+  attestation A, exactly as for any account. The device signs #12 with its
+  per-share admin key itself. No biometric on a demo account.
 - A non-admin device never offers Accept: the link shows "Only an admin
   device of your account can accept a co-manage invitation." (all three apps).
 - Shares S held before this rule stay; a later grant change needs no proof.
@@ -432,8 +460,8 @@ New box routes:
 | `POST /api/server-shares/:id/leave` | share token + #4 | end the row, drop B's boot copy |
 | `POST /api/server-shares/:id/push` | share token + #10, an unlock deposit for that key | put or drop one device's start-up push token (§5.4) |
 | `GET /api/server/:domain/share-ends?since=` | none (signed envelopes; box verifies) | revokes and leaves for S |
-| `GET /api/users/:u/account-key-attestation` | none (public keys; `/api/username/:u` already serves them) | attestation A of `:u`'s sensitive key, naming no account (§5.1) |
-| `POST /api/dev/sample-user/:u/share-accept` | a demo username (the capability, as for pairing) | #12 signed with the demo account's admin root; only for `keyKind: admin-root` naming it |
+| `POST /api/users/:u/share-key-attestation` | #13, sensitive (`authorizeSensitiveComOp`), fresh within 5 minutes | attestation A of the per-share admin key #13 names (`keyKind: share`), naming no account (§5.1); 403 `accept-not-admin` otherwise |
+| `POST /api/dev/sample-user/:u/share-key-attestation` | a demo username (the capability, as for pairing) | `.com` signs #13 for the demo account with its derived admin root; then as above |
 | `POST /api/share-inbox` | #9 | B's "Shared with me" entries: put / list / delete |
 | `GET /api/boot/share/pending/:domain`, `GET /api/boot/share/key/:domain`, `POST /api/boot/response` | boot gate role `share` | §5.4 |
 | `POST /api/users/:u/service-invites` with `relay` | S's STK over `flagship/service-invite-co-manager/v1` + B's member-key create | B's invite, relayed by S (§5.7); stored at tier `co-manager` with the member key, nothing about the share |
@@ -536,11 +564,13 @@ A's paired-session token, or B's share token (`fss_…`).
    → `{serverDomain, state, offer, …}`; open `offer`. 404 = bad link, 410 = an unaccepted link that expired; `state: "ended"` = the share is over.
 3. Accept (admin devices only; others show "Only an admin device of your
    account can accept a co-manage invitation." instead of the button) →
-   one biometric; `GET apex/api/users/:u/account-key-attestation` → `{attestation}`;
-   `admit = {...accept, keyKind, keyPubHex}` from it (an `admin-root` key
-   must be this device's admin root, else refuse as above); sign #12 with
-   that key (`irk`: the IRK; demo: `POST apex/api/dev/sample-user/:u/share-accept {admit}`
-   → `{signature}`); `member = deriveShareMemberKey(UMK, shareId)`; sign #3;
+   one biometric; `shareAdmin = deriveShareAdminKey(UMK, shareId)`; sign #13
+   `{username, keyPubHex: shareAdmin.pub, issuedAt}` with the admin root and
+   `POST apex/api/users/:u/share-key-attestation {request, signature}` →
+   `{attestation}` (demo: `POST apex/api/dev/sample-user/:u/share-key-attestation {keyPubHex}`;
+   403 `accept-not-admin` = refuse as above); check `attestation.keyPubHex`;
+   `admit = {...accept, keyKind: "share", keyPubHex}`; sign #12 with
+   `shareAdmin`; `member = deriveShareMemberKey(UMK, shareId)`; sign #3;
    seal `{v:1, accept, signature, admin:{admit, signature, attestation}}`
    with `linkKey(k)`, AAD "acceptance"|shareId;
    `POST apex/api/server-shares/:id/accept {acceptance}` (409 = someone else used the link).

@@ -163,6 +163,36 @@ describe("what a service's browser may request", () => {
     expect(await svc.judge.judge(nav("https://shop.example.com/"))).toMatchObject({ allow: false });
   });
 
+  it("a once grant opens one visit: its page may load what it needs and be acted on, but no second visit", async () => {
+    const w = world({ duration: "once" });
+    const first = await w.judge.judge(nav("https://shop.example.com/"));
+    expect(first).toMatchObject({ allow: true });
+    const grantId = (first as { grantId: string }).grantId;
+    expect(await w.judge.judge({ serviceId: "app-a", url: "https://cdn.other.net/app.js", kind: "subresource", initiatorUrl: "https://shop.example.com/" })).toMatchObject({ allow: true });
+    expect(w.judge.inScope("app-a", "https://shop.example.com/", "read-dom", undefined, { origin: "https://shop.example.com", grantId })).toBe(true);
+    expect(await w.judge.judge(nav("https://shop.example.com/again"))).toMatchObject({ allow: false, code: "no-grant" });
+    w.grants.revokeService("app-a");
+    expect(w.judge.inScope("app-a", "https://shop.example.com/", "read-dom")).toBe(false);
+  });
+
+  it("a page reached by a redirect from inside a grant is in scope while the tab stays on it, under that grant", async () => {
+    const w = world();
+    const landed = await w.judge.judge(nav("https://cdn.other.net/landing", { redirectChain: ["https://shop.example.com/out"] }));
+    expect(landed).toMatchObject({ allow: true, viaRedirect: true });
+    const admitted = { origin: "https://cdn.other.net", grantId: (landed as { grantId: string }).grantId };
+    expect(w.judge.inScope("app-a", "https://cdn.other.net/landing#x", "input", undefined, admitted)).toBe(true);
+    expect(w.judge.inScope("app-a", "https://cdn.other.net/landing", "input")).toBe(false);
+    expect(w.judge.inScope("app-a", "https://tracker.evil.test/", "input", undefined, admitted)).toBe(false);
+    // Its own subresources load under the grant that admitted it; a page nobody admitted gets none.
+    expect(await w.judge.judge({ serviceId: "app-a", url: "https://tracker.evil.test/x.js", kind: "subresource", initiatorUrl: "https://cdn.other.net/landing", initiatorGrantId: admitted.grantId })).toMatchObject({ allow: true });
+    expect(await w.judge.judge({ serviceId: "app-a", url: "https://tracker.evil.test/x.js", kind: "subresource", initiatorUrl: "https://cdn.other.net/landing" })).toMatchObject({ allow: false, code: "out-of-scope" });
+    expect(await w.judge.judge({ serviceId: "app-a", url: "https://printer.local/x", kind: "subresource", initiatorUrl: "https://cdn.other.net/landing", initiatorGrantId: admitted.grantId })).toMatchObject({ allow: false });
+    // A direct visit to the same host is still not approved.
+    expect(await w.judge.judge(nav("https://cdn.other.net/landing"))).toMatchObject({ allow: false, code: "needs-grant" });
+    w.grants.revokeService("app-a");
+    expect(w.judge.inScope("app-a", "https://cdn.other.net/landing", "input", undefined, admitted)).toBe(false);
+  });
+
   it("an expired grant stops working", async () => {
     const w = world();
     w.grants.revokeService("app-a");

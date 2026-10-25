@@ -380,16 +380,6 @@
       "check": "signed-tags",
       "key": "web:flagship/pq-seed-wrap/v2",
       "reason": "The session KEK wrapping is Android's own storage format for its PQ seeds (pq-suites.md §18); iOS opens its seeds with the session's LAContext and the webapp holds no PQ seeds. Nothing is exchanged in this format."
-    },
-    {
-      "check": "screens-bff",
-      "key": "ios-extra:AppDetailResponse.importedFrom",
-      "reason": "Upstream sync (N12): the phones decode the import's repo ahead of the box. AppDetailResponse should carry importedFrom {repo, commit?, ref?} from ImportProvenanceStore; until it does the sync row appears only for adapter-built apps (adaptedFrom). Remove once types.ts has it."
-    },
-    {
-      "check": "screens-bff",
-      "key": "android-extra:AppDetailResponse.importedFrom",
-      "reason": "Upstream sync (N12): the phones decode the import's repo ahead of the box. AppDetailResponse should carry importedFrom {repo, commit?, ref?} from ImportProvenanceStore; until it does the sync row appears only for adapter-built apps (adaptedFrom). Remove once types.ts has it."
     }
   ]
 }

@@ -14,10 +14,10 @@ bash scripts/gym-release-run.sh --groups adversarial,canary --skip-refresh   # t
 
 | File | Area | Tests | it.fails (open) |
 |---|---|---|---|
-| `tools/adversarial/tests/envelopeForgery*.test.ts` (+ `support/`) | ENV signed envelopes | 1,069 | 6 |
+| `tools/adversarial/tests/envelopeForgery*.test.ts` (+ `support/`) | ENV signed envelopes | 1,069 | 0 |
 | `tools/adversarial/tests/downgrade.test.ts` | DWN strict mode, PQ companions, boot unlock v1/v2 | 26 | 3 |
 | `tools/adversarial/tests/catalogRollback.test.ts` | CAT release catalog rollback/freeze | 20 | 5 |
-| `tools/adversarial/tests/identityLinkage.test.ts` | LNK cross-account / cross-app linkage | 10 | 1 |
+| `tools/adversarial/tests/identityLinkage.test.ts` | LNK cross-account / cross-app linkage | 10 | 0 |
 | `tools/adversarial/tests/egressEscape.test.ts` | EGR egress and browser escape | 14 | 3 |
 | `tools/adversarial/tests/firstContact.test.ts` | FC first-contact MITM | 6 | 0 |
 | `tools/adversarial/tests/appNameCerts.test.ts` | CRT app-name certificate and grant misuse | 6 | 1 |
@@ -32,7 +32,7 @@ Harness: `tools/adversarial/tests/support/envelopeDriver.ts` drives every export
 pair in `packages/protocol/src` (167 families) against its **production verifier**, signing through
 an opaque keyd stand-in so it sees the exact signed bytes. `support/tagInventory.ts` labels each of
 the 117 other `flagship/<purpose>/vN` strings: either covered by its own negative vectors, or not a
-signature (KDF, AAD, hash, MAC label). 1,069 tests, 6 `it.fails`.
+signature (KDF, AAD, hash, MAC label). 1,069 tests, 0 `it.fails`.
 
 | ID | What it proves (for each of the 167 families unless stated) | Result |
 |---|---|---|
@@ -44,7 +44,7 @@ signature (KDF, AAD, hash, MAC label). 1,069 tests, 6 `it.fails`.
 | AT-ENV-06 | all 167×166 cross-family replays are refused (tag confusion) | pass |
 | AT-ENV-07 | every family signs bytes starting with its own purpose tag; no two share one (4 reviewed legacy prefixes) | pass |
 | AT-ENV-08 | the all-zero key and the identity point with a zero signature are refused | pass |
-| **AT-ENV-09a–f** | a `\|` inside one text field cannot move into the next under the same signature | **open, low**: five encoders (six cases) join with `\|` without refusing it in some fields, so two different objects share one signature: `llmPromo.ts` `canonicalLlmPromoIssue` (provider/token caps, 09a, 09b), `peerBackupManifest.ts` `canonicalPbManifestDeposit` (09c), `provisioning.ts:115` `canonicalProvisionEvent` (09d), `appRelease.ts:103` `canonicalPublisherTrust` (09e), `pushRelay.ts:73` `canonicalPushRelayRequest` (09f). Exploiting it needs an honest signer to sign a value containing `\|`, or a route passing unvalidated JSON |
+| AT-ENV-09a–f | a `\|` inside one text field cannot move into the next under the same signature | **fixed 2026-10-24** (was open, low): `canonicalLlmPromoIssue` (09a, 09b), `canonicalPbManifestDeposit` (09c), `canonicalProvisionEvent` (09d), `canonicalPublisherTrust` (09e) and `canonicalPushRelayRequest` (09f) now refuse `\|` and control characters in every text field (`legacyFieldGuard`) and require safe integers in numeric ones (`integerFieldGuard`); bytes for valid input are unchanged, so the tags stay. The webapp, Swift, Kotlin and Rust ports of the two cross-port families refuse the same, pinned by `refuse` lists in `test-vectors/llm-promo-issue` and `test-vectors/publisher-trust` |
 | AT-ENV-10 | every purpose tag in protocol src is driven or listed in the inventory, and nothing listed is stale | pass (fails CI for a new unclassified family) |
 | AT-ENV-11 | the harness still drives at least 165 families | pass |
 | AT-ENV-20 | hybrid Ed25519+ML-DSA-65: either half spliced from another message, zeroed or stripped, another purpose, a public key mixing two keys' halves | refused |
@@ -100,7 +100,7 @@ Note: `verifyBoxArtifactPq` does not check the binding's role itself. It relies 
 | AT-LNK-01..03 | per-app visitor key and stable id across apps, accounts and servers; malformed app refs | unlinkable, refused |
 | AT-LNK-04..07 | forged `X-Flagship-*` headers (any case, `_`); sibling-app CSRF and WebSocket; another app's session cookie; one member across two apps | stripped / anonymous / unlinkable |
 | AT-LNK-08, 09 | visit and knock proofs moved between apps/pages; chat frames to another app, replayed, from the owner's own account, impersonated, unregistered | refused |
-| **AT-LNK-10** | share acceptance anonymity | **open**: the account-key attestation in a share acceptance is the account's `adminRootPub`/`irkPub`, which `GET /api/username/:u` returns to anyone (`packages/control-plane/src/usernameClaim.ts` `handleUsernameLookup`). A sharing box can confirm a guessed account, and two sharing owners can link one co-manager |
+| AT-LNK-10 | share acceptance anonymity | **fixed 2026-10-24** (was open): the acceptance's #12 is now signed by a per-share admin key `HKDF(UMK, "flagship/server-share-admin/v1\|<shareId>")`, and `.com` attests that key (`keyKind: share`) on a request the account's admin root signs (`POST /api/users/:u/share-key-attestation`); the box accepts no other kind. The key matches nothing `GET /api/username/:u` serves and differs per share. The public `GET /api/users/:u/account-key-attestation` is gone (docs/share-a-server.md §5.1). `irkPub`/`adminRootPub` stay public: pre-sign-in recovery and the DNS broker verify against them |
 | AT-EGR-01..07, 10, 12, 13 | v4-mapped/compat/NAT64/6to4/Teredo/ULA/link-local/metadata spellings; octal/hex/dword IPv4; rebinding names; wildcard label boundaries; duplicate Host; browser judge numerics and `file:`; per-app pinning proxies; provider redirects; git clone pinning | refused |
 | **AT-EGR-08** | `https://<box fqdn>./` (trailing dot) from a granted page | **open**: the judge's "this server" check does not normalise the host (`browser/policy/judge.ts` `destination()`) |
 | **AT-EGR-09** | production wiring of the app-browser judge | **open**: `bootstrapBrowserBundle` in `index.ts` passes neither `protectedHosts` nor `egress.protectedAddresses`. A whole-LAN grant reaches the box itself (app browser is off today) |

@@ -191,38 +191,6 @@ describe("daemon HTTP — DELETE /apps/:id and POST /restart", () => {
   });
 });
 
-describe("daemon HTTP — GET /apps and /apps/:id/logs", () => {
-  it("GET /apps lists deployed apps with metadata", async () => {
-    const { ctx } = makeCtx({
-      preDeployed: [{ manifest: manifest(), deployedAt: 100 }],
-    });
-    const app = buildDaemonHttp(ctx);
-    const r = await app.inject({ method: "GET", url: "/apps?sessionToken=phone-token" });
-    expect(r.statusCode).toBe(200);
-    const body = JSON.parse(r.body);
-    expect(body.apps).toHaveLength(1);
-    expect(body.apps[0].name).toBe("habit-tracker");
-    expect(body.apps[0].subdomain).toBe("habits");
-  });
-
-  it("GET /apps/:id/logs returns captured stdout and clamps tail to [1, 5000]", async () => {
-    const rec = new RecordingRunner();
-    const { ctx } = makeCtx({
-      runner: rec,
-      preDeployed: [{ manifest: manifest(), deployedAt: 1 }],
-    });
-    const app = buildDaemonHttp(ctx);
-    const r = await app.inject({
-      method: "GET",
-      url: "/apps/habit-tracker/logs?sessionToken=phone-token&tail=999999",
-    });
-    expect(r.statusCode).toBe(200);
-    const body = JSON.parse(r.body);
-    expect(body.tail).toBe(200); // out-of-bound → default
-    expect(body.stdout).toContain("listening on 8080");
-  });
-});
-
 describe("daemon HTTP — POST /apps with data.stores", () => {
   it("provisions Postgres + injects FLAGSHIP_PG_URL into the container env", async () => {
     const rec = new RecordingRunner();

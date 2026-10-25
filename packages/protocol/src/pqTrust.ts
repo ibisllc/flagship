@@ -127,6 +127,11 @@ export function signPqKeyBinding(s: PqKeyBindingStatement, signer: HybridMsgSign
 
 const verified = new WeakSet<object>();
 
+/** True only for a binding `verifyPqKeyBinding` made in this module instance (not a look-alike object). */
+export function isVerifiedPqKeyBinding(b: unknown): b is VerifiedPqKeyBinding {
+  return typeof b === "object" && b !== null && verified.has(b);
+}
+
 /** A binding that verified. Only `verifyPqKeyBinding` makes one; the gate refuses look-alikes. */
 export interface VerifiedPqKeyBinding {
   readonly role: PqBindingRole;

@@ -32,7 +32,9 @@ object FreeAiRequest {
         desiredDailyInputTokenCap: Long = 0,
         desiredDailyOutputTokenCap: Long = 0,
     ): ByteArray {
-        require(!username.contains('|') && !serverFqdn.contains('|')) { "field contains '|'" }
+        for ((name, v) in listOf("username" to username, "serverFqdn" to serverFqdn, "provider" to provider)) {
+            require(v.none { it == '|' || it.code <= 0x1f || it.code == 0x7f }) { "bad $name" }
+        }
         return listOf(
             CANONICAL_TAG,
             username,

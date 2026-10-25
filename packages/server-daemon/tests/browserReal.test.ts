@@ -15,6 +15,13 @@ import { chromium } from "playwright";
 import { BrowserManager } from "../src/browser/browserManager.js";
 import { PolicedBrowser } from "../src/browser/policedBrowser.js";
 import { BrowserGrants, BrowserJudge, ContextRegistry, PolicyError } from "../src/browser/policy/index.js";
+import { buildBrowserApiHandlers } from "../src/browser/apiHandlers.js";
+import { DomainGate } from "../src/browser/domainGate.js";
+import { PhonePipe } from "../src/browser/phonePipe.js";
+import { TabRegistry } from "../src/browser/tabRegistry.js";
+import { InMemoryAlertInbox } from "../src/alertInbox.js";
+import { InMemoryAppAuthTokens } from "../src/serviceAuthToken.js";
+import type { HttpRequest } from "../src/runtime.js";
 
 const exe = (() => {
   try {
@@ -30,6 +37,7 @@ const OTHER = "alice--other";
 const ADDR: Record<string, string[]> = {
   "shop.test": ["93.184.216.34"],
   "evil.test": ["93.184.216.35"],
+  "owner.test": ["93.184.216.37"],
   "lan.test": ["192.168.1.5"],
   "meta.test": ["169.254.169.254"],
 };
@@ -59,6 +67,8 @@ describe.skipIf(!HAVE)("app browser under policy (real Chromium)", () => {
       } else if (url.startsWith("/redir")) {
         res.writeHead(302, { location: `http://evil.test:${port}/landed` });
         res.end();
+      } else if (url.startsWith("/landed")) {
+        html(`<p id=c>landed</p><input id=q><button id=b onclick="document.getElementById('c').textContent='clicked:'+document.getElementById('q').value">b</button>`);
       } else if (url.startsWith("/popup")) {
         html(`<a id=pop href="http://evil.test:${port}/popped" target="_blank" style="position:fixed;left:0;top:0;width:300px;height:300px;display:block">pop</a>`);
       } else if (url.startsWith("/setcookie")) {
@@ -142,15 +152,22 @@ describe.skipIf(!HAVE)("app browser under policy (real Chromium)", () => {
     expect(denied.map((d) => d.code)).toEqual(expect.arrayContaining(["needs-grant", "protected-destination"]));
   }, 30_000);
 
-  it("follows a redirect the browser saw from inside the grant, and the guard then closes the tab that ended elsewhere", async () => {
+  it("follows a redirect the browser saw from inside the grant, and the app can act on the page it landed on", async () => {
     clear();
     const { tabId } = await pb.openTab(SHOP, `http://shop.test:${port}/home`);
     await new Promise((r) => setTimeout(r, 300));
-    // The link goes to shop.test/redir, which 302s to evil.test: a redirect rooted in the grant is allowed...
-    await expect(pb.click(SHOP, tabId, "#go")).rejects.toBeInstanceOf(PolicyError);
-    // ...but the action ended outside the approval, so the tab is gone and nothing more can be done in it.
+    // The link goes to shop.test/redir, which 302s to evil.test: a redirect rooted in the grant is allowed
+    // (owner decision: the start URL is what is approved), and the landing page stays usable.
+    await pb.click(SHOP, tabId, "#go");
     expect(hits).toContain("evil.test/landed");
-    await expect(pb.readDOM(SHOP, tabId, "#c")).rejects.toBeInstanceOf(PolicyError);
+    expect(await text(SHOP, tabId)).toContain(">landed<");
+    await pb.fill(SHOP, tabId, "#q", "hello");
+    await pb.click(SHOP, tabId, "#b");
+    expect(await text(SHOP, tabId)).toContain("clicked:hello");
+    // The same host reached directly is still outside what was approved, and never contacted.
+    await expect(pb.navigate(SHOP, tabId, `http://evil.test:${port}/direct`)).rejects.toBeInstanceOf(PolicyError);
+    expect(hits.some((h) => h.startsWith("evil.test/direct"))).toBe(false);
+    await pb.closeTab(SHOP, tabId);
   }, 30_000);
 
   it("does not let a popup carry the page somewhere it was not approved to go", async () => {
@@ -179,6 +196,53 @@ describe.skipIf(!HAVE)("app browser under policy (real Chromium)", () => {
     expect(await text(OTHER, b.tabId)).not.toContain("sid=secret");
     await expect(pb.readDOM(OTHER, a.tabId, "#c")).rejects.toBeInstanceOf(PolicyError); // not its tab
     for (const [s, t] of [[SHOP, a.tabId], [SHOP, a2.tabId], [OTHER, b.tabId]] as const) await pb.closeTab(s, t).catch(() => {});
+  }, 40_000);
+
+  it("through the app API: the judge decides the start URL with every live grant, and a redirect's landing page stays usable", async () => {
+    clear();
+    const API = "alice--api";
+    const gate = new DomainGate();
+    gate.setGrant(API, ["shop.test"]); // the manifest's browser.domains: owner.test is not in it
+    // The manifest's sites, and a site the owner granted beyond them (both as the judge holds them).
+    grants.approve({ serviceId: API, capabilities: ["navigate", "read-dom", "input"], origins: ["shop.test"], schemes: ["http"], ports: [port], duration: "service" });
+    const owners = grants.approve({ serviceId: API, capabilities: ["navigate", "read-dom"], origins: ["owner.test"], schemes: ["http"], ports: [port], duration: "service" });
+    const registry = new TabRegistry(cdp);
+    registry.start();
+    const pipe = new PhonePipe({ browser: cdp, tabRegistry: registry, inbox: new InMemoryAlertInbox() });
+    const tokens = new InMemoryAppAuthTokens();
+    const token = await tokens.mint(API);
+    const handle = buildBrowserApiHandlers({ browser: cdp, tabRegistry: registry, domainGate: gate, phonePipe: pipe, policed: pb, appAuthTokens: tokens, grants });
+    const call = async (method: string, path: string, body?: unknown) => {
+      const r = await handle({ method, path, headers: { authorization: `Bearer ${token}` }, body: body === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body)) } as HttpRequest);
+      return { status: r!.status, json: (() => { try { return JSON.parse(String(r!.body)) as Record<string, unknown>; } catch { return {}; } })() };
+    };
+    // A site the owner granted opens, though the manifest's list alone would refuse it.
+    const granted = await call("POST", "/api/browser/tabs", { url: `http://owner.test:${port}/plain` });
+    expect(granted.status).toBe(200);
+    // A site nobody granted is refused by the judge, before any request leaves.
+    expect((await call("POST", "/api/browser/tabs", { url: `http://evil.test:${port}/direct` })).status).toBe(403);
+    // Start inside the grant, follow the redirect, act on the landing page.
+    const opened = await call("POST", "/api/browser/tabs", { url: `http://shop.test:${port}/home` });
+    expect(opened.status).toBe(200);
+    const tab = String(opened.json.tabId);
+    await new Promise((r) => setTimeout(r, 300));
+    expect((await call("POST", `/api/browser/tabs/${tab}/click`, { selector: "#go" })).status).toBe(200);
+    expect(hits).toContain("evil.test/landed");
+    expect(String((await call("GET", `/api/browser/tabs/${tab}/dom?selector=%23c`)).json.outerHTML)).toContain(">landed<");
+    expect((await call("POST", `/api/browser/tabs/${tab}/fill`, { selector: "#q", value: "api" })).status).toBe(200);
+    expect((await call("POST", `/api/browser/tabs/${tab}/click`, { selector: "#b" })).status).toBe(200);
+    expect(String((await call("GET", `/api/browser/tabs/${tab}/dom?selector=%23c`)).json.outerHTML)).toContain("clicked:api");
+    // The landing host asked for directly is still refused, and never contacted.
+    expect((await call("POST", `/api/browser/tabs/${tab}/navigate`, { url: `http://evil.test:${port}/direct` })).status).toBe(403);
+    expect(hits.some((h) => h.startsWith("evil.test/direct"))).toBe(false);
+    // Withdrawing the owner's grant closes the tab that was open under it at once.
+    grants.revoke(owners.id);
+    // (The redirect tab shows the browser's error page for the refused navigation, which is outside every grant too.)
+    expect(await pb.closeOutOfScope(API)).toContain(String(granted.json.tabId));
+    expect((await call("GET", `/api/browser/tabs/${String(granted.json.tabId)}/dom?selector=%23c`)).status).not.toBe(200);
+    await pb.revokeService(API);
+    pipe.stop();
+    registry.stop();
   }, 40_000);
 
   it("revoking a service closes its tabs and disposes its context", async () => {
@@ -256,7 +320,7 @@ describe.skipIf(!HAVE)("app browser through the pinning proxies (real Chromium)"
       cdp,
       contexts: new ContextRegistry(),
       judge,
-      onApproved: (host, addresses, serviceId) => proxies.allow(serviceId, host, addresses),
+      onApproved: (host, addresses, serviceId, at) => proxies.allow(serviceId, host, addresses, at),
       contextOptions: async (serviceId) => ({ proxyServer: await proxies.proxyFor(serviceId), proxyBypassList: "<-loopback>" }),
       onContextGone: (serviceId) => void proxies.close(serviceId),
     });

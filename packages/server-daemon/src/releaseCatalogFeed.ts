@@ -63,14 +63,51 @@ export class TrustedRootStore {
   }
 }
 
+/** The body as text, or null past `max` bytes: read chunk by chunk and abandoned at the cap, never buffered whole. */
+export async function readBodyCapped(res: Response, max: number): Promise<string | null> {
+  const declared = Number(res.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > max) {
+    await res.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(all);
+}
+
+/** A document over the cap: the whole refresh stops (whoever serves one oversized file serves the others). */
+class CatalogTooLarge extends Error {}
+
 async function fetchJson<T>(fetchImpl: typeof fetch, url: string): Promise<T | null> {
   try {
     const res = await fetchImpl(url, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
-    if (!res.ok) return null;
-    const text = await res.text();
-    if (text.length > MAX_DOC) return null;
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => undefined);
+      return null;
+    }
+    const text = await readBodyCapped(res, MAX_DOC);
+    if (text === null) throw new CatalogTooLarge(url);
     return JSON.parse(text) as T;
-  } catch {
+  } catch (e) {
+    if (e instanceof CatalogTooLarge) throw e;
     return null;
   }
 }
@@ -82,6 +119,15 @@ export async function refreshReleaseCatalog(o: {
   gate: ReleaseCatalogGate;
   fetchImpl?: typeof fetch;
 }): Promise<string> {
+  try {
+    return await refreshOnce(o);
+  } catch (e) {
+    if (e instanceof CatalogTooLarge) return "catalog not reachable";
+    throw e;
+  }
+}
+
+async function refreshOnce(o: { base: string; roots: TrustedRootStore; gate: ReleaseCatalogGate; fetchImpl?: typeof fetch }): Promise<string> {
   const f = o.fetchImpl ?? fetch;
   const base = `${o.base.replace(/\/+$/, "")}/catalog`;
   const newest = await fetchJson<Signed<RootMeta>>(f, `${base}-root.json`);
@@ -91,11 +137,10 @@ export async function refreshReleaseCatalog(o: {
       if (!step || !(await o.roots.advance(step))) return `root chain broke at version ${v}`;
     }
   }
-  const [timestamp, snapshot, targets] = await Promise.all([
-    fetchJson<Signed<TimestampMeta>>(f, `${base}-timestamp.json`),
-    fetchJson<Signed<SnapshotMeta>>(f, `${base}-snapshot.json`),
-    fetchJson<Signed<TargetsMeta>>(f, `${base}-targets.json`),
-  ]);
+  // One at a time: at most one capped body is held while it is read.
+  const timestamp = await fetchJson<Signed<TimestampMeta>>(f, `${base}-timestamp.json`);
+  const snapshot = await fetchJson<Signed<SnapshotMeta>>(f, `${base}-snapshot.json`);
+  const targets = await fetchJson<Signed<TargetsMeta>>(f, `${base}-targets.json`);
   if (!timestamp || !snapshot || !targets) return "catalog not reachable";
   const r = await o.gate.accept({ timestamp, snapshot, targets });
   return r.ok ? `catalog accepted (targets v${r.catalog.targets.version}${r.catalog.stale ? ", stale" : ""})` : `catalog refused: ${r.reason}`;

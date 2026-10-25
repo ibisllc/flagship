@@ -340,6 +340,17 @@ class LiveScreensClient(
         request<Unit>("/api/browser/owner/grant-requests/answer", null, "POST", bytes)
     }
 
+    override suspend fun browserGrants(serviceId: String?): OwnerBrowserGrantsResponse =
+        request(
+            "/api/browser/owner/grants" + (serviceId?.let { "?serviceId=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: ""),
+            OwnerBrowserGrantsResponse.serializer(),
+        )
+
+    override suspend fun browserGrantRevoke(body: BrowserGrantRevokeBody) {
+        val bytes = json.encodeToString(BrowserGrantRevokeBody.serializer(), body).toByteArray()
+        request<Unit>("/api/browser/owner/grants/revoke", null, "POST", bytes)
+    }
+
     override suspend fun accessAlerts(): AccessAlertsSetting =
         request("/api/screens/settings/access-alerts", AccessAlertsSetting.serializer())
 
@@ -350,6 +361,17 @@ class LiveScreensClient(
 
     @kotlinx.serialization.Serializable
     private data class AccessAlertsBody(val enabled: Boolean)
+
+    override suspend fun updateReports(): UpdateReportsSetting =
+        request("/api/update-reports", UpdateReportsSetting.serializer())
+
+    override suspend fun updateReportsSet(share: Boolean): UpdateReportsSetting {
+        val body = json.encodeToString(UpdateReportsBody.serializer(), UpdateReportsBody(share)).toByteArray()
+        return request("/api/update-reports", UpdateReportsSetting.serializer(), "POST", body)
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class UpdateReportsBody(val share: Boolean)
 
     override suspend fun serviceEgressSet(serviceId: String, req: AppEgressRequest): AppEgressResponse {
         val body = json.encodeToString(AppEgressRequest.serializer(), req).toByteArray()

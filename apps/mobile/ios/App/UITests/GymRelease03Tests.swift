@@ -207,6 +207,47 @@ final class GymRelease03Tests: GymSweepCase {
         expectProbe(app, "browser grant allow bright-maple--plants service")
     }
 
+    /// A session ask offers Allow once beside Allow for this session; Allow once signs the shorter grant.
+    func test_browserGrantNarrowedToOnce() throws {
+        let app = launch(tab: "home", ["-smoke-browser-grant-narrow"])
+        let title = app.staticTexts["browser-grant-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 25))
+        XCTAssertEqual(title.label, "wiki wants to use this server's browser.")
+        let once = app.buttons["browser-grant-allow-once"]
+        XCTAssertTrue(once.exists)
+        XCTAssertEqual(once.label, "Allow once")
+        XCTAssertEqual(app.buttons["browser-grant-allow"].label, "Allow for this session")
+        XCTAssertFalse(app.buttons["browser-grant-allow-service"].exists, "Never wider than the ask.")
+        shot(app, "browser-grant-narrow")
+        once.tap()
+        let done = app.staticTexts["browser-grant-done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 15))
+        expectProbe(app, "browser grant allow bright-maple--wiki once")
+    }
+
+    /// The app page lists what the owner allowed beyond the manifest; Withdraw signs the revoke and the
+    /// grant is gone.
+    func test_browserGrantWithdrawOnTheAppPage() throws {
+        let app = launch(tab: "apps", ["-smoke-browser-grant-granted"])
+        openApp(app, named: "Plants")
+        let heading = app.staticTexts["app-browser-granted-title"]
+        XCTAssertTrue(reveal(app, heading, tries: 16), "The app page lists the grants the owner gave.")
+        XCTAssertEqual(heading.label, "Allowed by you")
+        XCTAssertTrue(app.staticTexts["prices.example.net"].exists)
+        let withdraw = app.buttons["app-browser-withdraw"]
+        XCTAssertTrue(reveal(app, withdraw, tries: 6))
+        XCTAssertEqual(withdraw.label, "Withdraw")
+        shot(app, "browser-grant-granted")
+        bringToMiddle(app, withdraw)
+        withdraw.tap()
+        let note = app.staticTexts["app-browser-note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 15))
+        XCTAssertEqual(note.label, "Browser access withdrawn")
+        expectProbe(app, "browser grant withdrawn bright-maple--plants")
+        waitGone(app.buttons["app-browser-withdraw"])
+        XCTAssertFalse(app.staticTexts["prices.example.net"].exists)
+    }
+
     // MARK: - Upstream sync
 
     /// An imported app checks its repo at a chosen ref: the proposal names the version, the counts, the
@@ -244,8 +285,8 @@ final class GymRelease03Tests: GymSweepCase {
         expectNoProbe(app, "discarded build gym-sync-build")
     }
 
-    /// Already current: it says so, and closing forgets the build the check opened.
-    func test_syncUpToDateDiscards() throws {
+    /// Already current: it says so, and the box opened no build, so closing discards nothing.
+    func test_syncUpToDateOpensNoBuild() throws {
         let app = launch(tab: "apps", ["-smoke-upstream-sync-current"])
         openApp(app, named: "Plants")
         let row = app.buttons["service-detail-sync"]
@@ -260,6 +301,41 @@ final class GymRelease03Tests: GymSweepCase {
         XCTAssertTrue(same.label.contains("You already run the latest version from github.com/ana/plants."))
         shot(app, "sync-up-to-date")
         app.buttons["sync-close"].tap()
-        expectProbe(app, "discarded build gym-sync-current")
+        waitGone(same)
+        expectNoProbe(app, "discarded build")
+    }
+
+    // MARK: - Update results (docs/support/update-rollback.md §5)
+
+    /// A failed update the floor kept in recovery reads as stuck, not "went back on its own"; the
+    /// Share update results switch is off and sends the owner's choice to the box.
+    func test_updateKeptInRecoveryAndShareSwitch() throws {
+        let app = launch(tab: "home", ["-smoke-update-kept-in-recovery"])
+        openServerPage(app, named: "Home")
+        let last = app.staticTexts["sd-update-last-outcome"]
+        XCTAssertTrue(reveal(app, last, tries: 14), "The card says how the last update went.")
+        XCTAssertTrue(last.label.contains("recovery mode"), "Got: \(last.label)")
+        XCTAssertFalse(last.label.contains("on its own"), "Got: \(last.label)")
+        let toggle = app.switches["sd-update-reports"]
+        XCTAssertTrue(reveal(app, toggle, tries: 6), "The update card offers Share update results.")
+        XCTAssertEqual(toggle.value as? String, "0")
+        XCTAssertTrue(text(app, containing: "Never your server's name, your account or anything about your apps.").exists)
+        shot(app, "update-results")
+        toggle.switches.firstMatch.tap()
+        expectProbe(app, "update reports on")
+        wait(toggle, "value == '1'")
+        toggle.switches.firstMatch.tap()
+        expectProbe(app, "update reports off")
+    }
+
+    /// A refusal is one whole sentence; a box that refuses the session shows no switch.
+    func test_updateRefusalSentenceAndNoSwitchWhenRefused() throws {
+        let app = launch(tab: "home", ["-smoke-update-refused-stale"])
+        openServerPage(app, named: "Home")
+        let last = app.staticTexts["sd-update-last-outcome"]
+        XCTAssertTrue(reveal(app, last, tries: 14))
+        XCTAssertEqual(last.label, "The server refused the last update: the request was too old. Send it again.")
+        XCTAssertFalse(app.switches["sd-update-reports"].exists)
+        shot(app, "update-refusal")
     }
 }

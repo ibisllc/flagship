@@ -52,9 +52,9 @@ extension ServerShareFlowError {
     public static let notAdminDeviceMessage = String(localized: "Only an admin device of your account can accept a co-manage invitation.")
 }
 
-/// The joining account's sensitive key for #12 (docs/share-a-server.md §5.1):
-/// its admin root, or its IRK when `.com` attests the account pins none. A demo
-/// account's devices hold neither; `.com` signs for it.
+/// The joining account's admin root, which signs the request for `.com` to
+/// attest the per-share admin key that signs #12 (docs/share-a-server.md §5.1,
+/// AT-LNK-10). A demo account's devices hold none; `.com` signs for it.
 public struct ShareAcceptAdminKeys: Sendable {
     public var username: String
     public var isDemo: Bool
@@ -62,17 +62,13 @@ public struct ShareAcceptAdminKeys: Sendable {
     public var adminRootPubHex: String?
     /// The admin root, behind Face ID. Argument: the Face ID reason.
     public var adminRoot: @Sendable (_ reason: String) async throws -> Curve25519.Signing.PrivateKey
-    /// The IRK, for an account that pins no admin root.
-    public var irk: @Sendable (_ reason: String) async throws -> Curve25519.Signing.PrivateKey
 
     public init(username: String, isDemo: Bool, adminRootPubHex: String?,
-                adminRoot: @escaping @Sendable (_ reason: String) async throws -> Curve25519.Signing.PrivateKey,
-                irk: @escaping @Sendable (_ reason: String) async throws -> Curve25519.Signing.PrivateKey) {
+                adminRoot: @escaping @Sendable (_ reason: String) async throws -> Curve25519.Signing.PrivateKey) {
         self.username = username
         self.isDemo = isDemo
         self.adminRootPubHex = adminRootPubHex
         self.adminRoot = adminRoot
-        self.irk = irk
     }
 
     /// Whether this device may accept at all (the rule every app asks first).
@@ -628,28 +624,32 @@ public struct ServerShareMemberFlow: Sendable {
         self.now = now
     }
 
-    /// The joining account's proof for #12 (§5.1): `.com`'s attestation of
-    /// this account's sensitive key, and #12 signed with that key. Returns the
-    /// signer to use once the accept is built (one Face ID, for the admin root).
-    private func adminSigner(reason: String) async throws -> (AccountKeyAttestation, (ServerShareAcceptAdmin) async throws -> String) {
-        guard let admin, admin.isAdminDevice else { throw ServerShareFlowError.notAdminDevice }
-        let attestation = try await client.accountKeyAttestation(username: admin.username)
-        if admin.isDemo {
-            return (attestation, { admit in try await client.demoShareAccept(username: admin.username, admit: admit) })
-        }
-        switch attestation.keyKind {
-        case .adminRoot:
-            // This device's admin root must be the one the account pins now.
-            guard admin.adminRootPubHex == attestation.keyPubHex else { throw ServerShareFlowError.notAdminDevice }
-            let key = try await admin.adminRoot(reason)
-            guard HexUtil.encode(key.publicKey.rawRepresentation) == attestation.keyPubHex else {
-                throw ServerShareFlowError.notAdminDevice
+    /// The joining account's proof for #12 (§5.1, AT-LNK-10): the per-share
+    /// admin key (from the UMK and the share id, so the shared server never sees
+    /// a key `.com` serves by name), and `.com`'s attestation of it, asked for
+    /// with a request this device's admin root signs (one Face ID; `.com`
+    /// refuses a device that is no admin of the account). A demo account's
+    /// device asks `.com` to sign the request for it.
+    private func adminProofKey(admin: ShareAcceptAdminKeys, root: Curve25519.Signing.PrivateKey?, seed: Data,
+                               shareId: String) async throws -> (Curve25519.Signing.PrivateKey, AccountKeyAttestation) {
+        let key = try ServerShare.deriveShareAdminKey(umkSeed: seed, shareId: shareId)
+        let keyPubHex = HexUtil.encode(key.publicKey.rawRepresentation)
+        let attestation: AccountKeyAttestation
+        do {
+            if let root {
+                let request = ShareKeyAttestationRequest(username: admin.username, keyPubHex: keyPubHex, issuedAt: now())
+                attestation = try await client.shareKeyAttestation(request: request,
+                                                                   signature: HexUtil.encode(try request.sign(with: root)))
+            } else {
+                attestation = try await client.demoShareKeyAttestation(username: admin.username, keyPubHex: keyPubHex)
             }
-            return (attestation, { admit in HexUtil.encode(try admit.sign(with: key)) })
-        case .irk:
-            let key = try await admin.irk(reason)
-            return (attestation, { admit in HexUtil.encode(try admit.sign(with: key)) })
+        } catch let e as ServerShareHTTPError where e.status == 403 && e.code == "accept-not-admin" {
+            throw ServerShareFlowError.notAdminDevice
         }
+        guard attestation.keyKind == .share, attestation.keyPubHex == keyPubHex else {
+            throw ServerShareHTTPError(status: 502, error: "attestation names another key", code: nil)
+        }
+        return (key, attestation)
     }
 
     /// §9 "B accepts" 1-2: read the offer with the link token and open it.
@@ -676,8 +676,11 @@ public struct ServerShareMemberFlow: Sendable {
     /// return the code to read to the owner.
     public func accept(_ inv: ShareInvitation) async throws -> AcceptedShare {
         guard let secret = HexUtil.decode(inv.secretHex) else { throw ServerShareFlowError.badLink }
-        let (attestation, signAdmit) = try await adminSigner(reason: "Accept the server shared with you")
+        guard let admin, admin.isAdminDevice else { throw ServerShareFlowError.notAdminDevice }
+        var root: Curve25519.Signing.PrivateKey?
+        if !admin.isDemo { root = try await admin.adminRoot("Accept the server shared with you") }
         let seed = try await umkSeed("Accept the server shared with you")
+        let (shareAdmin, attestation) = try await adminProofKey(admin: admin, root: root, seed: seed, shareId: inv.shareId)
         let member = try ServerShare.deriveShareMemberKey(umkSeed: seed, shareId: inv.shareId)
         let memberPubHex = HexUtil.encode(member.publicKey.rawRepresentation)
         let token = try ServerShare.shareTokenFromSecret(secret)
@@ -685,8 +688,8 @@ public struct ServerShareMemberFlow: Sendable {
         let acceptedAt = now()
         let accept = ServerShareAccept(serverDomain: inv.offer.serverDomain, shareId: inv.shareId,
                                        memberPubHex: memberPubHex, acceptedAt: acceptedAt)
-        let admit = ServerShareAcceptAdmin(accept: accept, keyKind: attestation.keyKind, keyPubHex: attestation.keyPubHex)
-        let proof = ShareAcceptAdminProof(admit: admit, signature: try await signAdmit(admit), attestation: attestation)
+        let admit = ServerShareAcceptAdmin(accept: accept, keyKind: .share, keyPubHex: attestation.keyPubHex)
+        let proof = ShareAcceptAdminProof(admit: admit, signature: HexUtil.encode(try admit.sign(with: shareAdmin)), attestation: attestation)
         let payload = ShareAcceptancePayload(accept: accept, signature: HexUtil.encode(try accept.sign(with: member)), admin: proof)
         let sealed = try ServerShare.seal(key: linkKey, aad: ServerShare.shareAad(ServerShare.aadAcceptance, inv.shareId),
                                           plaintext: payload.jsonData())

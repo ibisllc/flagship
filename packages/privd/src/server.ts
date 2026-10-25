@@ -3,7 +3,7 @@ import { appendFileSync, chmodSync, chownSync, closeSync, constants, existsSync,
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 import { BOX_RELEASE } from "@flagship/protocol";
-import { DAEMON_TRANSFER_ROOTS, transferPath, validateRequest, type Exec, type ReleaseTrust } from "./policy.js";
+import { DAEMON_TRANSFER_ROOTS, transferPath, validateRequest, type Exec, type GpuClaimReader, type GpuRunClaim, type ReleaseTrust } from "./policy.js";
 import { readActiveEngine, type EngineKind } from "./podman.js";
 import { FrameReader, PRIVD_PROTOCOL_VERSION, PrivdError, encodeFrame, parseRequest, type PrivdRequest, type PrivdResponse } from "./wire.js";
 
@@ -200,6 +200,31 @@ export const realRunner: Runner = (e) =>
     }
   });
 
+/** Where flagship-gpud (root) publishes the GPU allocations it attached (flagship-gpu attach.rs). */
+export const GPU_RUN_CLAIMS_FILE = "/run/flagship-gpu/run-claims.json";
+
+/**
+ * The attached GPU allocations, read for each request: only a root-owned file that neither group
+ * nor others can write, in a root-owned directory, counts. Anything else is no claim at all.
+ */
+export function gpuClaimsFromFile(path: string): GpuClaimReader {
+  return (id) => {
+    try {
+      for (const p of [path, dirname(path)]) {
+        const st = statSync(p);
+        if (st.uid !== 0 || (st.mode & 0o022) !== 0) return null;
+      }
+      const doc = JSON.parse(readFileSync(path, "utf8")) as { schema?: unknown; claims?: unknown };
+      if (doc.schema !== "flagship/gpu-run-claims/v1" || !Array.isArray(doc.claims)) return null;
+      const c = (doc.claims as GpuRunClaim[]).find((x) => x && x.allocationId === id);
+      if (!c || typeof c.container !== "string" || typeof c.runtime !== "string" || !Array.isArray(c.devices) || !c.devices.every((d) => typeof d === "string")) return null;
+      return { allocationId: c.allocationId, appId: String(c.appId), container: c.container, runtime: c.runtime, devices: [...c.devices] };
+    } catch {
+      return null;
+    }
+  };
+}
+
 export interface PrivdServerOptions {
   socketPath: string;
   run?: Runner;
@@ -209,6 +234,8 @@ export interface PrivdServerOptions {
   maxPerSecond?: number;
   /** The mount table loop checks read (tests). Default /proc/self/mounts. */
   mounts?: () => string;
+  /** flagship-gpud's attached GPU allocations (tests). Default GPU_RUN_CLAIMS_FILE. */
+  gpuClaims?: GpuClaimReader;
   /** The box's architecture for a release install (tests). */
   arch?: string;
   /** The group whose members may open the socket (the daemon's). */
@@ -332,6 +359,7 @@ export class PrivdServer {
       mounts: this.o.mounts ?? (() => readFileSync("/proc/self/mounts", "utf8")),
       trust: this.o.trust ?? THIS_RELEASE_TRUST,
       arch: this.o.arch ?? hostArch(),
+      gpuClaims: this.o.gpuClaims ?? gpuClaimsFromFile(GPU_RUN_CLAIMS_FILE),
     });
   }
 
@@ -356,10 +384,18 @@ export class PrivdServer {
  * A line for the audit log: what was asked, never the bodies or secrets that came with it. A request
  * whose argv is not a list says only that, since its other fields may carry stdin or a password.
  */
+/**
+ * `PGPASSWORD=…`, `POSTGRES_PASSWORD=…`, `-ePOSTGRES_PASSWORD=…`, `--env=db_password=…`: whatever
+ * follows the first `<name>PASSWORD=` in an argument (any case) never reaches the audit.
+ */
+export function maskSecret(a: string): string {
+  return a.replace(/([A-Za-z0-9_]*PASSWORD)=[\s\S]*$/i, "$1=…");
+}
+
 export function summary(req: PrivdRequest): string {
   const argv = Array.isArray(req.args.argv) ? (req.args.argv as unknown[]).map((a) => (typeof a === "string" ? a : JSON.stringify(a) ?? "")) : null;
   if (req.op === "docker" || req.op === "docker.file" || req.op === "systemctl") {
-    return argv ? argv.slice(0, 3).map((a) => (a.startsWith("PGPASSWORD=") ? "PGPASSWORD=…" : a)).join(" ") : "malformed request";
+    return argv ? argv.slice(0, 3).map(maskSecret).join(" ") : "malformed request";
   }
   if (req.op === "host") return argv && typeof req.args.file === "string" ? `${req.args.file} ${argv.slice(0, 2).join(" ")}` : "malformed request";
   if (req.op === "nft.apply" || req.op === "iptables.restore") return "firewall rules";

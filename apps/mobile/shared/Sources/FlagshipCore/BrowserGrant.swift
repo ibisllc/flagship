@@ -53,3 +53,73 @@ public struct BrowserGrantAnswer: Equatable, Sendable {
         return Data(parts.joined(separator: "|").utf8)
     }
 }
+
+extension BrowserGrantAnswer {
+    /// The scope part of an ask or of the owner's answer (`browserGrantWithin` in
+    /// packages/protocol/src/browserGrant.ts).
+    public struct Scope: Equatable, Sendable {
+        public let duration: String
+        public let capabilities: [String]
+        public let origins: [String]
+        public let localNetwork: LocalNetwork
+        public init(duration: String, capabilities: [String], origins: [String], localNetwork: LocalNetwork) {
+            self.duration = duration; self.capabilities = capabilities; self.origins = origins; self.localNetwork = localNetwork
+        }
+    }
+
+    static let durations = ["once", "session", "service"]
+
+    /// The durations the owner may choose for an ask, shortest first: the asked one or shorter.
+    public static func durationChoices(asked: String) -> [String] {
+        guard let rank = durations.firstIndex(of: asked) else { return [] }
+        return Array(durations[0...rank])
+    }
+
+    /// The owner may grant the ask as it is or narrower, never wider (the box checks the same rule).
+    public static func within(ask: Scope, answer: Scope) -> Bool {
+        guard let a = durations.firstIndex(of: answer.duration), let q = durations.firstIndex(of: ask.duration), a <= q else { return false }
+        let caps = Set(ask.capabilities)
+        guard !answer.capabilities.isEmpty, answer.capabilities.allSatisfy({ caps.contains($0) }) else { return false }
+        let origins = Set(ask.origins)
+        guard answer.origins.allSatisfy({ origins.contains($0) }) else { return false }
+        switch answer.localNetwork {
+        case .none: break
+        case .wholeLan:
+            guard case .wholeLan = ask.localNetwork else { return false }
+        case .exact(let hosts):
+            guard case .exact(let asked) = ask.localNetwork, !hosts.isEmpty else { return false }
+            let allowed = Set(asked)
+            guard hosts.allSatisfy({ allowed.contains($0) }) else { return false }
+        }
+        if case .none = answer.localNetwork { return !answer.origins.isEmpty }
+        return true
+    }
+}
+
+/// `flagship/browser-grant-revoke/v1`: the owner withdraws a browser grant they gave an app; the box
+/// drops it at once. Posted to `POST /api/browser/owner/grants/revoke`. Wire parity with
+/// packages/protocol/src/browserGrant.ts; pinned by packages/protocol/test-vectors/browser-grant-revoke/vectors.json.
+public struct BrowserGrantRevoke: Equatable, Sendable {
+    public static let canonicalTag = "flagship/browser-grant-revoke/v1"
+
+    public let serverDomain: String
+    public let serviceId: String
+    public let grantId: String
+    public let issuedAt: Int64
+
+    public init(serverDomain: String, serviceId: String, grantId: String, issuedAt: Int64) {
+        self.serverDomain = serverDomain; self.serviceId = serviceId; self.grantId = grantId; self.issuedAt = issuedAt
+    }
+
+    private static func clean(_ s: String) -> Bool {
+        !s.isEmpty && !s.unicodeScalars.contains(where: { $0.value == 0x7c || $0.value <= 0x1f || $0.value == 0x7f })
+    }
+
+    public func canonicalBytes() throws -> Data {
+        for (k, v) in [("serverDomain", serverDomain), ("serviceId", serviceId), ("grantId", grantId)] where !Self.clean(v) {
+            throw BrowserGrantAnswer.Invalid(reason: k)
+        }
+        guard issuedAt >= 0 else { throw BrowserGrantAnswer.Invalid(reason: "issuedAt") }
+        return Data([Self.canonicalTag, serverDomain.lowercased(), serviceId, grantId, String(issuedAt)].joined(separator: "|").utf8)
+    }
+}

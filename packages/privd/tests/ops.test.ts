@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { maskSecret, parseRunArgv, renderWasiDropIn, summary, wasiUnitExec } from "../src/index.js";
 import {
   FILES_HELPER_IMAGE,
   PrivdClient,
@@ -310,5 +311,49 @@ describe("on an architecture v2 box", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("docker run read as the docker CLI reads it", () => {
+  const IMG = `img@sha256:${"a".repeat(64)}`;
+  it("normalizes attached values, shorthand groups and = forms before any rule", () => {
+    expect(parseRunArgv(["run", "-dv/:/h", "-itu0", "--net=x", "-e=A=b", "--rm", IMG, "-v", "/:/x"])).toEqual({
+      flags: [{ name: "detach", value: "true" }, { name: "volume", value: "/:/h" }, { name: "interactive", value: "true" }, { name: "tty", value: "true" }, { name: "user", value: "0" }, { name: "network", value: "x" }, { name: "env", value: "A=b" }, { name: "rm", value: "true" }],
+      image: IMG,
+      command: ["-v", "/:/x"],
+    });
+    expect(parseRunArgv(["run", "-dv", "/:/h", IMG]).flags).toEqual([{ name: "detach", value: "true" }, { name: "volume", value: "/:/h" }]);
+    for (const bad of [["run", "-Z", IMG], ["run", "--nope", IMG], ["run", "--rm=yes", IMG], ["run", "-v"], ["run", "--rm"], ["run", "--=x", IMG], ["run", "--Privileged", IMG]]) refused(() => parseRunArgv(bad));
+  });
+});
+
+describe("WASI app workers", () => {
+  const ok = { action: "write", instance: "0123456789abcdef", world: "http-proxy", memoryMiB: 384, tasks: 64, cpuPercent: 50, restart: "on-failure" };
+  it("renders a drop-in from typed fields and writes it only under the app's own unit", () => {
+    const e = wasiUnitExec(ok);
+    expect(e.file).toBe("/usr/bin/install");
+    expect(e.args).toEqual(["-D", "-m", "0644", "/dev/stdin", "/run/systemd/system/flagship-wasi@0123456789abcdef.service.d/50-app.conf"]);
+    expect(e.input).toBe(renderWasiDropIn({ world: "http-proxy", memoryMiB: 384, tasks: 64, cpuPercent: 50, restart: "on-failure" }));
+    expect(e.input).toContain("ExecStart=/usr/local/lib/flagship-wasi/flagship-wasi-worker serve --config /var/app/pkg/worker.json\n");
+    expect(wasiUnitExec({ action: "remove", instance: "0123456789abcdef" }).args).toEqual(["-rf", "--", "/run/systemd/system/flagship-wasi@0123456789abcdef.service.d"]);
+  });
+  it("refuses unit text, another unit, and a folder that is not the app's files", () => {
+    for (const bad of [
+      { ...ok, world: "http-proxy\nExecStartPre=/bin/sh" }, { ...ok, restart: "always\nUser=root" }, { ...ok, memoryMiB: 64.5 }, { ...ok, tasks: "64" }, { ...ok, text: "[Service]" },
+      { ...ok, instance: "../../../etc/systemd/system/x" }, { ...ok, instance: "0123456789ABCDEF" }, { ...ok, filesPath: "/etc" }, { ...ok, filesPath: "/var/lib/flagship-files/flagship-files-a/data\nBindPaths=/:/x" },
+      { ...ok, filesPath: `/var/lib/flagship-files/flagship-pgdata-${"0".repeat(24)}/data` }, { action: "remove", instance: "0123456789abcdef", world: "command" },
+    ]) refused(() => wasiUnitExec(bad));
+  });
+});
+
+describe("the audit", () => {
+  it("never shows a password variable's value", () => {
+    expect(maskSecret("POSTGRES_PASSWORD=s3cret")).toBe("POSTGRES_PASSWORD=…");
+    expect(maskSecret("PGPASSWORD=s3cret")).toBe("PGPASSWORD=…");
+    expect(maskSecret("-ePOSTGRES_PASSWORD=x")).toBe("-ePOSTGRES_PASSWORD=…");
+    expect(maskSecret("--env=db_password=a=b")).toBe("--env=db_password=…");
+    expect(maskSecret("PORT=8080")).toBe("PORT=8080");
+    expect(summary({ id: 1, op: "docker", args: { argv: ["run", "-ePOSTGRES_PASSWORD=s3cret", "img"] } })).toBe("run -ePOSTGRES_PASSWORD=… img");
+    expect(summary({ id: 1, op: "docker", args: { argv: ["run", "-e", "POSTGRES_PASSWORD=s3cret", "img"] } })).toBe("run -e POSTGRES_PASSWORD=…");
   });
 });

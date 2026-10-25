@@ -70,9 +70,11 @@ import {
 import { podShortName } from "../lib/podSwitcher.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { isDemoProfile } from "../lib/demoAccount.js";
+import { updateReportsSwitchHtml, wireUpdateReportsSwitch } from "../lib/updateReports.js";
 import {
   clearPendingUpdate,
   describeLastUpdate,
+  lastUpdateNeedsAttention,
   groupReleases,
   loadReleaseCatalog,
   orderServerUpdate,
@@ -624,12 +626,13 @@ export async function renderServerDetail() {
           <span class="value" id="update-current-commit">${escapeHtml(shortCommit(body.currentCommit))}</span>
         </div>
         <p class="note small mt-2 hidden" id="update-available"></p>
-        <p class="note small mt-2${describeLastUpdate(body.lastUpdate) ? "" : " hidden"}" id="update-last-outcome">${escapeHtml(describeLastUpdate(body.lastUpdate) || "")}</p>
+        <p class="note small mt-2${describeLastUpdate(body.lastUpdate) ? "" : " hidden"}${lastUpdateNeedsAttention(body.lastUpdate) ? " warn-text" : ""}" id="update-last-outcome">${escapeHtml(describeLastUpdate(body.lastUpdate) || "")}</p>
         <div class="mt-2 hidden" id="update-pending"></div>
         <button id="update-server-btn" class="danger full-width mt-2"${body.currentCommit ? "" : " disabled"}>${tr("Update this server")}</button>
         <p class="note small${body.currentCommit ? " hidden" : ""}" id="update-hint">
           ${tr("Waiting for this server to report its current version — it can't be updated in place until it does.")}
         </p>
+        ${isCompanionProfile() ? "" : updateReportsSwitchHtml()}
       </div>
 
       ${renderDangerZoneCard({
@@ -1891,6 +1894,7 @@ export function wireUpdate(body) {
   updateCard = card;
   $("update-server-btn")?.addEventListener("click", () => runUpdateDialog(card));
   paintUpdateCard(card);
+  void wireUpdateReportsSwitch({ fetchBox: fetchOn(body.serverFqdn), root: $("update-card"), onError: (e) => toast(humanError(e), "err") });
 }
 
 function runUpdateDialog(card, opts) {
@@ -1917,6 +1921,7 @@ function paintUpdateCard(card) {
     const last = describeLastUpdate(d.lastUpdate);
     lastEl.textContent = last || "";
     lastEl.classList.toggle("hidden", !last);
+    lastEl.classList.toggle("warn-text", lastUpdateNeedsAttention(d.lastUpdate));
   }
   const btn = $("update-server-btn");
   const hint = $("update-hint");

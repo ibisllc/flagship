@@ -9,7 +9,14 @@
  * devices and their ML-DSA bindings from the device book), and adopts the result only if it is
  * not older than what it already holds (`adoptStoredState`), so a `.com` that serves a shorter
  * chain cannot roll a strict box back. A chain that fails part way is used up to the last change
- * that verified. An unreadable state file reads as strict until a verified chain arrives.
+ * that verified.
+ *
+ * The replay starts from the state the box already holds when the served chain contains its head
+ * (that prefix was verified when it was adopted), so revoking the device that signed an early
+ * change does not freeze the policy: the admin root, or an admin device still in the book, can
+ * continue the chain. A second copy of the state (`<path>.floor`) is kept beside the first; when
+ * both are unreadable the box reads as strict and leaves that only for a non-empty chain that
+ * verifies, never for an empty one.
  */
 import { readFile } from "node:fs/promises";
 import {
@@ -17,6 +24,7 @@ import {
   TAG_ASSURANCE_POLICY,
   adoptStoredState,
   advanceRollout,
+  assurancePolicyDigest,
   applyPolicyChange,
   legacyPolicyState,
   verifyCriticalSignature,
@@ -48,6 +56,8 @@ export interface AssurancePolicySyncOptions {
   log?: (m: string) => void;
 }
 
+type StoredRead = { kind: "missing" } | { kind: "unreadable" } | { kind: "ok"; state: PolicyState; headLoss: string[] };
+
 const PROFILES = new Set(["strict", "compatibility"]);
 const ROLLOUTS = new Set(["legacy", "capable", "prepared", "enforced", "retired"]);
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -69,6 +79,8 @@ export class AssurancePolicySync {
   /** What the owner acknowledged in the change in force (the browser answer, for a strict scope). */
   private headLoss: readonly string[] = [];
   private failClosed = false;
+  /** The primary state file was unreadable and the floor copy stood in: rewrite it on the next refresh. */
+  private repair = false;
   private readonly scope: PolicyScope;
   private readonly now: () => number;
 
@@ -96,26 +108,51 @@ export class AssurancePolicySync {
   }
 
   async load(): Promise<void> {
-    let text: string;
-    try {
-      text = await readFile(this.opts.path, "utf8");
-    } catch {
-      return;
-    }
-    let parsed: PolicyState | null = null;
-    try {
-      parsed = parseState(JSON.parse(text), this.scope);
-    } catch {
-      parsed = null;
-    }
-    if (parsed) {
-      this.state = parsed;
-      const loss = (JSON.parse(text) as { headLoss?: unknown }).headLoss;
-      this.headLoss = Array.isArray(loss) ? loss.filter((x): x is string => typeof x === "string") : [];
-    } else {
+    const primary = await this.readStored(this.opts.path);
+    const floor = await this.readStored(this.floorPath());
+    if (primary.kind === "missing" && floor.kind === "missing") return;
+    const usable = [primary, floor].filter((r): r is Extract<StoredRead, { kind: "ok" }> => r.kind === "ok");
+    if (usable.length === 0) {
       this.failClosed = true;
       this.opts.log?.("[assurance] the stored policy state is unreadable; treating this server as strict until the owner's chain is replayed");
+      return;
     }
+    const best = usable.reduce((a, b) => (b.state.generation > a.state.generation ? b : a));
+    this.state = best.state;
+    this.headLoss = best.headLoss;
+    if (primary.kind !== "ok" || best !== primary) {
+      this.repair = true;
+      this.opts.log?.("[assurance] the stored policy state was damaged or behind; using its second copy");
+    }
+  }
+
+  private floorPath(): string {
+    return `${this.opts.path}.floor`;
+  }
+
+  private async readStored(path: string): Promise<StoredRead> {
+    let text: string;
+    try {
+      text = await readFile(path, "utf8");
+    } catch (e) {
+      return (e as NodeJS.ErrnoException).code === "ENOENT" ? { kind: "missing" } : { kind: "unreadable" };
+    }
+    try {
+      const raw = JSON.parse(text) as { headLoss?: unknown };
+      const state = parseState(raw, this.scope);
+      if (!state) return { kind: "unreadable" };
+      const loss = raw.headLoss;
+      return { kind: "ok", state, headLoss: Array.isArray(loss) ? loss.filter((x): x is string => typeof x === "string") : [] };
+    } catch {
+      return { kind: "unreadable" };
+    }
+  }
+
+  private async persist(): Promise<void> {
+    const text = JSON.stringify({ ...this.state, headLoss: this.headLoss });
+    await writeFileDurable(this.floorPath(), text);
+    await writeFileDurable(this.opts.path, text);
+    this.repair = false;
   }
 
   /** Replays `.com`'s chain and adopts it when it is not older. */
@@ -130,21 +167,37 @@ export class AssurancePolicySync {
     const b = body as { chain?: unknown; evidence?: { recoveryChecked?: unknown } } | null;
     if (!b || !Array.isArray(b.chain)) return this.policy();
     const { state: replayed, headLoss } = this.replayWithLoss(b.chain, b.evidence?.recoveryChecked === true);
-    try {
-      const next = this.failClosed ? replayed : adoptStoredState(this.state, replayed);
-      const changed = this.failClosed || next.generation !== this.state.generation || next.rollout !== this.state.rollout || next.headDigest !== this.state.headDigest;
-      this.state = next;
-      if (changed || this.failClosed) this.headLoss = headLoss;
+    if (this.failClosed) {
+      // Both copies are gone: only a chain that verifies at least one change can stand in for them.
+      if (replayed.generation < 1) {
+        this.opts.log?.("[assurance] the served chain verifies no change; staying strict");
+        return this.policy();
+      }
+      this.state = replayed;
+      this.headLoss = headLoss;
       this.failClosed = false;
-      if (changed) await writeFileDurable(this.opts.path, JSON.stringify({ ...next, headLoss: this.headLoss }));
+      await this.persist();
+      return this.policy();
+    }
+    try {
+      const next = adoptStoredState(this.state, replayed);
+      const changed = next.generation !== this.state.generation || next.rollout !== this.state.rollout || next.headDigest !== this.state.headDigest;
+      this.state = next;
+      if (changed) this.headLoss = headLoss;
+      if (changed) await this.persist();
     } catch (e) {
       if (e instanceof PolicyError) this.opts.log?.(`[assurance] the served chain is older than the policy in force (${e.code}); kept ours`);
       else throw e;
     }
+    if (this.repair) await this.persist();
     return this.policy();
   }
 
-  /** Replays a served chain from legacy; stops at the first change that does not verify. */
+  /**
+   * Replays a served chain; stops at the first change that does not verify. When the chain holds
+   * the change at the head of the state in force, the replay starts there (its prefix was verified
+   * when it was adopted) and checks only what follows against today's keys.
+   */
   replay(chain: readonly unknown[], recoveryChecked: boolean): PolicyState {
     return this.replayWithLoss(chain, recoveryChecked).state;
   }
@@ -152,7 +205,24 @@ export class AssurancePolicySync {
   private replayWithLoss(chain: readonly unknown[], recoveryChecked: boolean): { state: PolicyState; headLoss: readonly string[] } {
     let s = legacyPolicyState(this.scope);
     let headLoss: readonly string[] = [];
-    for (const entry of chain) {
+    let start = 0;
+    if (!this.failClosed && this.state.generation > 0) {
+      const at = chain.findIndex((entry) => {
+        const c = (entry as { change?: AssurancePolicyChange } | null)?.change;
+        if (!c || c.generation !== this.state.generation) return false;
+        try {
+          return assurancePolicyDigest(c) === this.state.headDigest;
+        } catch {
+          return false;
+        }
+      });
+      if (at >= 0) {
+        s = this.state;
+        headLoss = this.headLoss;
+        start = at + 1;
+      }
+    }
+    for (const entry of chain.slice(start)) {
       const e = entry as { change?: AssurancePolicyChange; signature?: SignatureEnvelope } | null;
       const change = e?.change;
       const sig = e?.signature;

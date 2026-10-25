@@ -23,6 +23,12 @@ extension GymSweepSeams {
         requestId: "33333333-3333-4333-8333-333333333333", serviceId: "bright-maple--plants",
         capabilities: ["download", "navigate"], origins: ["files.example.net"], duration: "service", at: 3)
 
+    /// What `-smoke-browser-grant-granted` says the owner allowed plants beyond its manifest.
+    public static let browserGranted = OwnerBrowserGrant(
+        grantId: "bg-44444444-4444-4444-8444-444444444444", serviceId: "bright-maple--plants",
+        capabilities: ["navigate", "read-dom"], origins: ["prices.example.net"], duration: "service",
+        explanation: "Compare prices", issuedAt: 4)
+
     /// The proposal `-smoke-upstream-sync` makes the box answer for plants.
     public static let syncProposal = AppSyncResponse(
         buildId: "gym-sync-build",
@@ -52,6 +58,15 @@ extension GymSweepSeams {
         if args.contains("-smoke-browser-grant") {
             mocks.screens.mockBrowserGrantRequests = [browserOnce, browserSession]
         }
+        // Narrowing: a session ask, answered "Allow once".
+        if args.contains("-smoke-browser-grant-narrow") {
+            mocks.screens.mockBrowserGrantRequests = [browserSession]
+        }
+        // A grant the owner gave plants beyond its manifest, listed under "Allowed by you" with Withdraw.
+        if args.contains("-smoke-browser-grant-granted") {
+            mocks.screens.mockBrowserGrants = [browserGranted]
+            mocks.screens.mockBrowserDomains["bright-maple--plants"] = ["shop.example.com"]
+        }
         if args.contains("-smoke-browser-grant-app") {
             mocks.screens.mockBrowserGrantRequests = [browserService]
             mocks.screens.mockBrowserDomains["bright-maple--plants"] = ["shop.example.com"]
@@ -60,10 +75,26 @@ extension GymSweepSeams {
             mocks.screens.mockImportedFrom["bright-maple--plants"] = "github.com/ana/plants"
             mocks.screens.mockSyncResponses["bright-maple--plants"] = syncProposal
         }
+        // docs/support/update-rollback.md §5: a failed update the floor kept in recovery, and the
+        // "Share update results" switch (off until the owner turns it on).
+        if args.contains("-smoke-update-kept-in-recovery") {
+            mocks.screens.lastUpdateFixture = LastUpdate(
+                outcome: "rolled-back", at: Int64(Date().timeIntervalSince1970 * 1000) - 60_000,
+                targetCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1",
+                previousCommit: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
+                bootAttempts: 3, rollbackRefused: true)
+            mocks.screens.mockUpdateReportsShare = false
+        }
+        if args.contains("-smoke-update-refused-stale") {
+            mocks.screens.lastUpdateFixture = LastUpdate(
+                outcome: "refused", at: Int64(Date().timeIntervalSince1970 * 1000) - 60_000, reason: "stale")
+            mocks.screens.mockUpdateReportsShare = nil
+        }
         if args.contains("-smoke-upstream-sync-current") {
             mocks.screens.mockImportedFrom["bright-maple--plants"] = "github.com/ana/plants"
+            // Up to date: the box opens no build (no buildId, no proposal), so nothing is discarded.
             mocks.screens.mockSyncResponses["bright-maple--plants"] = AppSyncResponse(
-                buildId: "gym-sync-current", proposal: SyncProposal(), candidateCommit: "1111111111111111111111111111111111111111",
+                buildId: nil, proposal: nil, candidateCommit: "1111111111111111111111111111111111111111",
                 upToDate: true)
         }
     }

@@ -39,6 +39,8 @@ fn every_vector_gets_the_ts_verdict() {
             .map_or_else(|| default_trust.clone(), |t| trust_from_json(t).unwrap());
         let empty = Map::new();
         let args = c["args"].as_object().unwrap_or(&empty);
+        let claims = flagship_broker::conformance::gpu_claims_from_json(c.get("gpu"));
+        let gpu = move |id: &str| claims.get(id).cloned();
         let got = verdict(
             c["op"].as_str().unwrap(),
             args,
@@ -47,6 +49,7 @@ fn every_vector_gets_the_ts_verdict() {
                 mounts: &mounts,
                 trust: &trust,
                 arch: pick("arch").as_str().unwrap(),
+                gpu: &gpu,
             },
         );
         if got != c["expect"] {

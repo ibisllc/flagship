@@ -219,6 +219,14 @@ interface ScreensClient {
     suspend fun browserGrantAnswer(body: BrowserGrantAnswerBody): Unit =
         throw ScreensError.NotImplemented("browser grant requests")
 
+    /** `GET /api/browser/owner/grants?serviceId=`: the grants the owner gave beyond the manifest, still in force. */
+    suspend fun browserGrants(serviceId: String?): OwnerBrowserGrantsResponse =
+        throw ScreensError.NotImplemented("browser grants")
+
+    /** `POST /api/browser/owner/grants/revoke`: withdraw one, signed; the box drops it at once. */
+    suspend fun browserGrantRevoke(body: BrowserGrantRevokeBody): Unit =
+        throw ScreensError.NotImplemented("browser grants")
+
     /** `GET /api/screens/settings/access-alerts`: whether this box pushes
      *  access requests. An older box answers 404. */
     suspend fun accessAlerts(): AccessAlertsSetting =
@@ -228,6 +236,15 @@ interface ScreensClient {
      *  only reduce what the box sends). */
     suspend fun accessAlertsSet(enabled: Boolean): AccessAlertsSetting =
         throw ScreensError.NotImplemented("access alerts")
+
+    /** `GET /api/update-reports`: whether this server sends Flagship one anonymous
+     *  note per update (owner sessions only; docs/runbooks/canary.md). */
+    suspend fun updateReports(): UpdateReportsSetting =
+        throw ScreensError.NotImplemented("update reports")
+
+    /** `POST /api/update-reports {share}`. */
+    suspend fun updateReportsSet(share: Boolean): UpdateReportsSetting =
+        throw ScreensError.NotImplemented("update reports")
 
     /** `GET /api/screens/events` (WebSocket): the box's live events, e.g.
      *  `{"type":"access-request","serviceId":…}`. Ends when the socket closes;

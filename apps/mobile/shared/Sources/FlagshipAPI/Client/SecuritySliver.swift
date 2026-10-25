@@ -52,6 +52,9 @@ public struct PublisherTrust: Codable, Equatable, Sendable {
             if v.isEmpty { throw TrustError.badField(n) }
             for u in v.unicodeScalars where u.value == 0x7c || u.value <= 0x1f || u.value == 0x7f { throw TrustError.badField(n) }
         }
+        for (n, v) in [("oldKeyHex", oldKeyHex), ("newKeyHex", newKeyHex)] {
+            for u in v.unicodeScalars where u.value == 0x7c || u.value <= 0x1f || u.value == 0x7f { throw TrustError.badField(n) }
+        }
         return Data([Self.canonicalTag, serviceId, appId, String(identityGeneration), oldKeyHex, newKeyHex, String(newEpoch), String(issuedAt)].joined(separator: "|").utf8)
     }
 

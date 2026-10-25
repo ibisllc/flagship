@@ -1,18 +1,23 @@
 import {
   ACCOUNT_KEY_ATTESTATION_TTL_MS,
+  canonicalShareKeyAttestationRequest,
   ed,
+  SHARE_KEY_ATTESTATION_REQUEST_SKEW_MS,
   signAccountKeyAttestation,
   signAuthTime,
   verifyAuthTime,
   signUserPubKeyBinding,
   verifyCaSignedAccountKeyAttestation,
   verifyCaSignedUserPubKeyBinding,
+  verifyShareKeyAttestationRequest,
   type CaTrustChain,
+  type ShareKeyAttestationRequest,
   type Keypair,
   type UserPubKeyBinding,
 } from "@flagship/protocol";
 import type { UsernameStorage } from "@flagship/storage";
 import { hexToBytes, bytesToHex } from "./hex.js";
+import { authorizeSensitiveComOp, type AdminAuthorityGateDeps } from "./adminAuthorityGate.js";
 import {
   malformed,
   forbidden,
@@ -153,30 +158,57 @@ export async function handleUserPubKeyCert(
 }
 
 /**
- * `GET /api/users/:u/account-key-attestation` — the CA's word that a key is
- * the account's current sensitive key: its admin root, else its IRK (the
- * `authorizeSensitiveComOp` rule). The attestation names no account: a
- * device of the account fetches it about its own account and seals it into a
- * share acceptance, so the shared server checks "an admin device of the
- * joining account accepted" without asking `.com` who joined
- * (docs/share-a-server.md §5.1). Public, like `/api/username/:u`, which
- * already serves both keys.
+ * `POST /api/users/:u/share-key-attestation` — the CA's word that an admin of
+ * SOME account vouched for a per-share key (keyKind `share`). An admin device
+ * of the joining account derives the key from its UMK and the share id
+ * (`deriveShareAdminKey`), signs `flagship/share-key-attestation-request/v1`
+ * with the account's sensitive key (admin root or an admin-granted device; the
+ * IRK only when the account pins no admin root: `authorizeSensitiveComOp`),
+ * and seals the attestation into the share acceptance, so the shared server
+ * checks "an admin of the joining account accepted" without `.com` learning
+ * the share or the server learning any key `.com` serves by name (AT-LNK-10,
+ * docs/share-a-server.md §5.1). Body: `{ request: {username, keyPubHex,
+ * issuedAt}, signature }`. A non-admin device's signature is refused with
+ * `code: accept-not-admin`.
  */
-export async function handleAccountKeyAttestation(
-  deps: PubkeyCertDeps,
+export async function handleShareKeyAttestation(
+  deps: PubkeyCertDeps & AdminAuthorityGateDeps,
   username: string,
+  body: { request?: unknown; signature?: unknown } | undefined,
 ): Promise<HandlerResponseWithHeaders> {
   const now = (deps.now ?? (() => Date.now()))();
+  const r = body?.request as Partial<ShareKeyAttestationRequest> | undefined;
+  if (!r || typeof r !== "object" || typeof body?.signature !== "string" || !/^[0-9a-f]{128}$/.test(body.signature)) {
+    return malformed("request and a 64-byte hex signature are required");
+  }
+  const request: ShareKeyAttestationRequest = { username: r.username as string, keyPubHex: r.keyPubHex as string, issuedAt: r.issuedAt as number };
+  try {
+    canonicalShareKeyAttestationRequest(request);
+  } catch (e) {
+    return malformed((e as Error).message);
+  }
+  if (request.username.toLowerCase() !== username.toLowerCase()) return malformed("request names another account");
+  if (Math.abs(now - request.issuedAt) > SHARE_KEY_ATTESTATION_REQUEST_SKEW_MS) return forbidden("stale request");
   const u = await deps.usernames.get(username.toLowerCase());
   if (!u) return notFound("username not registered");
-  const admin = typeof u.adminRootPubHex === "string" && /^[0-9a-f]{64}$/i.test(u.adminRootPubHex) ? u.adminRootPubHex.toLowerCase() : null;
+  const sig = hexToBytes(body.signature);
+  const auth = await authorizeSensitiveComOp(deps, {
+    username: u.username,
+    userRec: u,
+    verifyWith: (pubHex) => verifyShareKeyAttestationRequest(request, sig, hexToBytes(pubHex)),
+    now,
+  });
+  if (!auth.ok) {
+    return {
+      status: 403,
+      body: {
+        error: "Only an admin device of your account can accept a co-manage invitation.",
+        code: "accept-not-admin",
+      },
+    };
+  }
   const attestation = signAccountKeyAttestation(
-    {
-      keyKind: admin ? "admin-root" : "irk",
-      keyPubHex: admin ?? u.irkPubHex.toLowerCase(),
-      issuedAt: now,
-      expiresAt: now + ACCOUNT_KEY_ATTESTATION_TTL_MS,
-    },
+    { keyKind: "share", keyPubHex: request.keyPubHex, issuedAt: now, expiresAt: now + ACCOUNT_KEY_ATTESTATION_TTL_MS },
     deps.ca.keypair,
   );
   const gateResp = evaluateCaGate(deps.caGate, "AccountKeyAttestation", u.username, now, () =>

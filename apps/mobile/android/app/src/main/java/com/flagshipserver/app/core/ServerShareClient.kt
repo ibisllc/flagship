@@ -39,7 +39,7 @@ interface ShareKeys {
     suspend fun adminRoot(reason: String): Ed25519Sign = error("no admin root on this device")
 }
 
-/** Who this phone accepts shares as: `.com` attests this account's admin key. */
+/** Who this phone accepts shares as: `.com` attests a per-share key this account's admin key asks for. */
 data class ShareAccount(val username: String, val isDemo: Boolean)
 
 class ShareException(val kind: Kind, message: String) : Exception(message) {
@@ -170,7 +170,10 @@ data class ShareGrantBody(
 )
 
 @Serializable
-private data class DemoShareAcceptBody(val admit: ServerShare.AcceptAdmin)
+private data class ShareKeyAttestationBody(val request: ServerShare.ShareKeyAttestationRequest, val signature: String)
+
+@Serializable
+private data class DemoShareKeyAttestationBody(val keyPubHex: String)
 
 @Serializable
 data class ShareRevokeBody(val revoke: ServerShare.Revoke, val signature: String)
@@ -710,7 +713,7 @@ class ServerShareClient(
         }
 
         val accept = ServerShare.Accept(serverDomain, opened.shareId, memberPubHex, now())
-        val admin = adminProof(who!!, accept, "Accept ${opened.offer.serverName}")
+        val admin = adminProof(who!!, umk, accept, "Accept ${opened.offer.serverName}")
         val payload = ServerShare.AcceptancePayload(accept = accept, signature = ServerShare.signHex(accept, member), admin = admin)
         val sealed = ServerShare.sealShareJson(
             ServerShare.shareLinkKey(secret),
@@ -730,32 +733,29 @@ class ServerShareClient(
     }
 
     /**
-     * The joining account's admin proof (docs/share-a-server.md §5.1): `.com`'s
-     * attestation of this account's sensitive key, fetched about our own
-     * account, and #12 signed with that key under the biometric the UMK just
-     * took. A demo account's device holds no admin root: `.com` signs for it.
+     * The joining account's admin proof (docs/share-a-server.md §5.1): the
+     * per-share admin key (derived from the UMK and the share id, so the shared
+     * server never sees a key `.com` serves by name, AT-LNK-10), `.com`'s
+     * attestation of it, asked for with a request the admin root signs under the
+     * biometric the UMK just took, and #12 signed with the share key. A demo
+     * account's device holds no admin root: `.com` signs the request for it.
      */
-    private suspend fun adminProof(who: ShareAccount, accept: ServerShare.Accept, reason: String): ServerShare.AcceptAdminProof {
-        val r = call(apex, "GET", "${apexBase()}/api/users/${enc(who.username)}/account-key-attestation")
+    private suspend fun adminProof(who: ShareAccount, umk: ByteArray, accept: ServerShare.Accept, reason: String): ServerShare.AcceptAdminProof {
+        val keyPubHex = HexUtil.encode(ServerShare.deriveShareAdminPub(umk, accept.shareId))
+        val r = if (who.isDemo) {
+            post(apex, "${apexBase()}/api/dev/sample-user/${enc(who.username)}/share-key-attestation", DemoShareKeyAttestationBody(keyPubHex), DemoShareKeyAttestationBody.serializer())
+        } else {
+            val request = ServerShare.ShareKeyAttestationRequest(who.username, keyPubHex, now())
+            val signature = ServerShare.signHex(request, keys.adminRoot(reason))
+            post(apex, "${apexBase()}/api/users/${enc(who.username)}/share-key-attestation", ShareKeyAttestationBody(request, signature), ShareKeyAttestationBody.serializer())
+        }
+        if (r.status == 403 && errorCode(r) == "accept-not-admin") throw ShareException(ShareException.Kind.NotAdmin, ACCEPT_ADMIN_ONLY)
         expectOk(r, "accept")
         val attestation = ServerShare.parseAccountKeyAttestation(errorObject(r)?.get("attestation"))
+            ?.takeIf { it.keyPubHex == keyPubHex }
             ?: throw ShareException(ShareException.Kind.Refused, FSStrings.get(R.string.couldnt_accept_try_again))
-        val admit = ServerShare.AcceptAdmin(accept.serverDomain, accept.shareId, accept.memberPubHex, accept.acceptedAt, attestation.keyKind, attestation.keyPubHex)
-        val signature = when {
-            who.isDemo -> {
-                val d = post(apex, "${apexBase()}/api/dev/sample-user/${enc(who.username)}/share-accept", DemoShareAcceptBody(admit), DemoShareAcceptBody.serializer())
-                expectOk(d, "accept")
-                (errorObject(d)?.get("signature") as? JsonPrimitive)?.content
-                    ?: throw ShareException(ShareException.Kind.Refused, FSStrings.get(R.string.couldnt_accept_try_again))
-            }
-            attestation.keyKind == ServerShare.KEY_KIND_ADMIN_ROOT -> {
-                // This phone's admin root must be the one the account pins now.
-                if (keys.adminRootPubHex() != attestation.keyPubHex) throw ShareException(ShareException.Kind.NotAdmin, ACCEPT_ADMIN_ONLY)
-                ServerShare.signHex(admit, keys.adminRoot(reason))
-            }
-            // An account that pins no admin root: its IRK is its sensitive key.
-            else -> ServerShare.signHex(admit, keys.accountKey(reason))
-        }
+        val admit = ServerShare.AcceptAdmin(accept.serverDomain, accept.shareId, accept.memberPubHex, accept.acceptedAt, ServerShare.KEY_KIND_SHARE, keyPubHex)
+        val signature = ServerShare.signHex(admit, ServerShare.deriveShareAdminKey(umk, accept.shareId))
         return ServerShare.AcceptAdminProof(admit, signature, attestation)
     }
 

@@ -23,7 +23,10 @@ import { showServerCode } from "./enrollment.js";
 import { loadArchV2Config } from "./engine/engine.js";
 import { installHealthReporter } from "./healthReporter.js";
 import { installRustStack } from "./rustStack/install.js";
-import { SERVER_CODE_REQUEST } from "./privileged.js";
+import { DAEMON_USER, SERVER_CODE_REQUEST } from "./privileged.js";
+import { ensureWasiRuntime } from "./wasi/install.js";
+import { installGpudFromRelease, rootEngine } from "./gpu/wire.js";
+import { WASI_APPS_DIR, WASI_MODULES_DIR } from "./wasi/unit.js";
 import { localCommandRunner, type CommandRunner } from "./serviceRunner.js";
 import { repairSystemPackages } from "./systemRepair.js";
 import { installUpdateGuard } from "./updateGuard.js";
@@ -124,6 +127,17 @@ async function syncDataUnit(): Promise<unknown> {
   return { changed: true };
 }
 
+/**
+ * The pinned WASI worker and its `flagship-wasi@.service` template, from the release (the daemon
+ * hands nothing in), then the apps' and modules' folders to the daemon, which writes each app's
+ * module and config there. Per-app drop-ins go through the broker's `wasi.unit` op.
+ */
+async function wasiRuntime(): Promise<unknown> {
+  const r = await ensureWasiRuntime({ repoPath: REPO, run, onLog: log });
+  if (r.available) for (const dir of [WASI_APPS_DIR, WASI_MODULES_DIR]) await run("chown", [`${DAEMON_USER}:${DAEMON_USER}`, dir]);
+  return r;
+}
+
 async function serverCode(): Promise<unknown> {
   const env = await daemonEnv();
   const req = JSON.parse(await readFile(SERVER_CODE_REQUEST, "utf8")) as { stkPubHex?: unknown };
@@ -152,6 +166,9 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
   "server-code": serverCode,
   // The Rust path's units, for a daemon that no longer runs as root (archV2Boot.ts).
   "rust-stack": () => installRustStack({ repoPath: REPO, config: loadArchV2Config(), run, onLog: log }),
+  "wasi-runtime": wasiRuntime,
+  // flagship-gpud (gpu/unit.ts), for a daemon that no longer runs as root.
+  "gpu-broker": () => installGpudFromRelease(REPO, rootEngine(), log),
 };
 
 // Real paths: /opt/flagship is a link to the running release, and Node reports a module by its real path.

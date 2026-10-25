@@ -24,6 +24,7 @@
  */
 import { sha256 } from "@noble/hashes/sha256";
 import { ed } from "./edSync.js";
+import { integerFieldGuard, legacyFieldGuard } from "./canonicalBase.js";
 import type { Bytes, Keypair } from "./types.js";
 
 /**
@@ -71,6 +72,10 @@ function sealedPayloadDigestHex(sealedPayloadHex: string): string {
 }
 
 export function canonicalPushRelayRequest(r: PushRelayRequest): Bytes {
+  legacyFieldGuard("targetUsername", r.targetUsername);
+  legacyFieldGuard("category", r.category);
+  legacyFieldGuard("sealedPayloadHex", r.sealedPayloadHex);
+  integerFieldGuard("issuedAt", r.issuedAt);
   return new TextEncoder().encode(
     [
       TAG_PUSH_RELAY,

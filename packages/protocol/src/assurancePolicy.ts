@@ -278,14 +278,35 @@ export function selectSignatureSuite(state: PolicyState, offered: readonly Signa
 export interface ExportAuthorization {
   /** Digest of the exact data or workflow the owner allowed into compatibility. */
   subjectDigest: string;
+  /** The strict scope that allowed the export, and its policy generation at the time. */
+  scope: PolicyScope;
   generation: number;
 }
 
 /**
- * Two scopes exchanging data over a classical-only channel: the stricter side decides. A strict
- * scope refuses unless the owner authorized exporting that exact subject.
+ * Two scopes exchanging data over a classical-only channel: the stricter side decides. Each
+ * strict scope refuses unless the owner authorized exporting that exact subject from that scope
+ * under the policy generation now in force (a later policy change voids the authorization).
  */
-export function classicalExchangeAllowed(a: PolicyState, b: PolicyState, subjectDigest: string, auth?: ExportAuthorization): boolean {
-  if (!strictInForce(a) && !strictInForce(b)) return true;
-  return auth !== undefined && auth.subjectDigest === subjectDigest && HEX64.test(subjectDigest);
+export function classicalExchangeAllowed(
+  a: PolicyState,
+  b: PolicyState,
+  subjectDigest: string,
+  auth?: ExportAuthorization | readonly ExportAuthorization[],
+): boolean {
+  if (!HEX64.test(subjectDigest) && (strictInForce(a) || strictInForce(b))) return false;
+  const auths: readonly ExportAuthorization[] = auth === undefined ? [] : Array.isArray(auth) ? auth : [auth as ExportAuthorization];
+  const covered = (s: PolicyState) =>
+    !strictInForce(s) ||
+    auths.some(
+      (x) =>
+        !!x &&
+        x.subjectDigest === subjectDigest &&
+        !!x.scope &&
+        x.scope.kind === s.scope.kind &&
+        x.scope.id === s.scope.id &&
+        Number.isSafeInteger(x.generation) &&
+        x.generation === s.generation,
+    );
+  return covered(a) && covered(b);
 }

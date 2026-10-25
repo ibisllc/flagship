@@ -462,6 +462,14 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONSerialization.data(withJSONObject: ["enabled": enabled])
         return try await request("/api/screens/settings/access-alerts", method: "POST", body: body)
     }
+    public func updateReportsSetting() async throws -> UpdateReportsSetting {
+        try await request("/api/update-reports")
+    }
+    @discardableResult
+    public func setUpdateReports(share: Bool) async throws -> UpdateReportsSetting {
+        let body = try JSONSerialization.data(withJSONObject: ["share": share])
+        return try await request("/api/update-reports", method: "POST", body: body)
+    }
     public func serviceApiKeys(serviceId: String) async throws -> AppApiKeysResponse {
         try await request("/api/screens/services/\(esc(serviceId))/api-keys")
     }
@@ -570,6 +578,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                     }
                     if AppAccessEvents.isRequestFrame(data) { continuation.yield(()) }
                     if ChatRequestEvents.isRequestFrame(data) { ChatRequestEvents.post() }
+                    if BrowserGrantEvents.isRequestFrame(data) { BrowserGrantEvents.post() }
                 }
                 ws.cancel(with: .normalClosure, reason: nil)
                 continuation.finish()
@@ -594,6 +603,17 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func browserGrantAnswer(_ answer: BrowserGrantAnswerRequest) async throws {
         _ = try await requestData("/api/browser/owner/grant-requests/answer", method: "POST",
                                   body: try JSONEncoder().encode(answer), timeout: 30)
+    }
+    public func browserGrants(serviceId: String) async throws -> OwnerBrowserGrantsResponse {
+        do {
+            return try await request("/api/browser/owner/grants?serviceId=\(esc(serviceId))")
+        } catch ScreensClientError.http(status: 404, _) {
+            return OwnerBrowserGrantsResponse(grants: [])
+        }
+    }
+    public func browserGrantRevoke(_ revoke: BrowserGrantRevokeRequest) async throws {
+        _ = try await requestData("/api/browser/owner/grants/revoke", method: "POST",
+                                  body: try JSONEncoder().encode(revoke), timeout: 30)
     }
     public func appSync(serviceId: String, _ req: AppSyncRequest) async throws -> AppSyncResponse {
         // The box clones the chosen upstream version before it answers.

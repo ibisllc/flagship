@@ -1,0 +1,56 @@
+{
+  "about": "The owner withdraws a browser grant: flagship/browser-grant-revoke/v1|serverDomain (lowercase)|serviceId|grantId|issuedAt; Ed25519, seed 0x99 repeated. Each refused revoke must fail to produce canonical bytes.",
+  "seedHex": "9999999999999999999999999999999999999999999999999999999999999999",
+  "pubHex": "332ebe8d27cb7323b3a401c1c13b5dd64bccc0e10ecda1c2b5d11a03779a85e5",
+  "revokes": [
+    {
+      "revoke": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "serviceId": "alice--shop",
+        "grantId": "bg-0f4c9a1e-2d3b-4c5d-8e6f-7a8b9c0d1e2f",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/browser-grant-revoke/v1|home.alice.flagship.services|alice--shop|bg-0f4c9a1e-2d3b-4c5d-8e6f-7a8b9c0d1e2f|1760000000000",
+      "signatureHex": "df75428780e0a002ad56444c318b2ca91eec3eb5fc9ce486b3de1fcf038464c614d1d4d12638759946888275945454084abbbff9e213c254319a48229463260e"
+    },
+    {
+      "revoke": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "serviceId": "bob--maps",
+        "grantId": "bg-11111111-2222-4333-8444-555555555555",
+        "issuedAt": 1760000123456
+      },
+      "canonical": "flagship/browser-grant-revoke/v1|home.alice.flagship.services|bob--maps|bg-11111111-2222-4333-8444-555555555555|1760000123456",
+      "signatureHex": "cbd47b92d7ec4ae303f64e68a51d24a5a1acf0394560b8427e37a25d25a8303e849ae86c3f540d4b97800cf2dfb6924304ccd4bf156158d703731c792f101107"
+    }
+  ],
+  "refused": [
+    {
+      "name": "a separator in the grant id",
+      "revoke": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "serviceId": "alice--shop",
+        "grantId": "bg|1",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "an empty service id",
+      "revoke": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "serviceId": "",
+        "grantId": "bg-0f4c9a1e-2d3b-4c5d-8e6f-7a8b9c0d1e2f",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "name": "a negative time",
+      "revoke": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "serviceId": "alice--shop",
+        "grantId": "bg-0f4c9a1e-2d3b-4c5d-8e6f-7a8b9c0d1e2f",
+        "issuedAt": -1
+      }
+    }
+  ]
+}

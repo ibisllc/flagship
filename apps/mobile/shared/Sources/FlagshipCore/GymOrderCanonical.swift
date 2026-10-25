@@ -134,7 +134,15 @@ public enum GymOrderCanonical {
             guard let r = p as? [String: Any], let server = r["serverDomain"] as? String,
                   let req = r["request"] as? BrowserGrantRequest, let a = r["answer"] as? BrowserGrantAnswerRequest
             else { return nil }
-            return try? BrowserGrantOrder.answer(for: req, serverDomain: server, decision: a.decision, issuedAt: a.issuedAt).canonicalBytes()
+            return try? BrowserGrantOrder.answer(for: req, serverDomain: server, decision: a.decision, duration: a.duration,
+                                                 issuedAt: a.issuedAt).canonicalBytes()
+        }
+        signers.registerCanonical("browser-grant-revoke") { p in
+            guard let r = p as? [String: Any], let server = r["serverDomain"] as? String,
+                  let rv = r["revoke"] as? BrowserGrantRevokeRequest
+            else { return nil }
+            return try? BrowserGrantRevoke(serverDomain: server, serviceId: rv.serviceId, grantId: rv.grantId,
+                                           issuedAt: rv.issuedAt).canonicalBytes()
         }
         signers.registerCanonical("ai-consent") { p in
             guard let r = p as? [String: Any], let server = r["serverDomain"] as? String, let buildId = r["buildId"] as? String,

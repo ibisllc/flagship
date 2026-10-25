@@ -4,7 +4,9 @@ import CryptoKit
 
 /// An in-memory `.com` and owner's box for accepting a co-manage share
 /// (docs/share-a-server.md §5.1), with the real wire and checks: `.com`'s
-/// account-key attestation (naming the account's admin root, no account), the
+/// attestation of the joining device's per-share admin key, given only for a
+/// request the account's admin root signed (AT-LNK-10: naming no account and
+/// no stable account key), the
 /// sealed acceptance (opened with the link key; its #3 and #12 verified as the
 /// owner's phone and the box would), and the box's first grant, which takes
 /// the acceptance only with that proof and otherwise answers the box's own
@@ -20,8 +22,10 @@ public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendab
     public let shareId: String
     public let secret: Data
     public let serverDomain: String
-    /// The admin root `.com` attests for the joining account.
+    /// The admin root `.com` pins for the joining account: it must sign the attestation request.
     public let accountAdminPub: Data
+    /// The per-share keys `.com` attested.
+    public private(set) var attestedKeys: Set<String> = []
     public private(set) var acceptanceHex: String?
     public private(set) var acceptedProof: ShareAcceptAdminProof?
     public private(set) var refusals: [String] = []
@@ -55,11 +59,27 @@ public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendab
         return (status, ["error": error, "code": code])
     }
 
-    public func attestation() -> [String: Any] {
+    /// `.com`'s attestation of a per-share admin key (a stand-in CA signature: the box here checks shape).
+    public static func attestation(keyPubHex: String) -> [String: Any] {
         let now = ServerShareClock.nowMs()
-        return AccountKeyAttestation(keyKind: .adminRoot, keyPubHex: HexUtil.encode(accountAdminPub),
+        return AccountKeyAttestation(keyKind: .share, keyPubHex: keyPubHex,
                                      issuedAt: now - 1000, expiresAt: now + 14 * 86_400_000,
                                      signedBy: String(repeating: "ca", count: 32), signature: String(repeating: "00", count: 64)).jsonObject()
+    }
+
+    /// `POST /api/users/<u>/share-key-attestation`, as `.com` answers it: the
+    /// request must verify under the pinned admin root, else `accept-not-admin`.
+    public static func answerAttestationRequest(_ body: [String: Any], adminPub: Data) -> (Int, [String: Any], String?) {
+        guard let r = body["request"] as? [String: Any], let username = r["username"] as? String,
+              let keyPubHex = r["keyPubHex"] as? String, let issuedAt = ServerShare.jsonTime(r["issuedAt"]),
+              let sigHex = body["signature"] as? String, let sig = HexUtil.decode(sigHex)
+        else { return (400, ["error": "malformed request"], nil) }
+        let request = ShareKeyAttestationRequest(username: username, keyPubHex: keyPubHex, issuedAt: issuedAt)
+        guard (try? request.canonicalBytes()) != nil else { return (400, ["error": "malformed request"], nil) }
+        guard request.verify(signature: sig, publicKey: adminPub) else {
+            return (403, ["error": ServerShareFlowError.notAdminDeviceMessage, "code": "accept-not-admin"], nil)
+        }
+        return (200, ["attestation": attestation(keyPubHex: keyPubHex)], keyPubHex)
     }
 
     private var ownerRows: [[String: Any]] = []
@@ -95,9 +115,9 @@ public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendab
         let a = proof.admit
         guard a.serverDomain == acc.accept.serverDomain, a.shareId == acc.accept.shareId,
               a.memberPubHex == acc.accept.memberPubHex, a.acceptedAt == acc.accept.acceptedAt,
-              a.keyKind == .adminRoot, a.keyPubHex == HexUtil.encode(accountAdminPub),
-              proof.attestation.keyPubHex == a.keyPubHex,
-              let sig = HexUtil.decode(proof.signature), a.verify(signature: sig, publicKey: accountAdminPub)
+              a.keyKind == .share, attestedKeys.contains(a.keyPubHex),
+              proof.attestation.keyPubHex == a.keyPubHex, let pub = HexUtil.decode(a.keyPubHex),
+              let sig = HexUtil.decode(proof.signature), a.verify(signature: sig, publicKey: pub)
         else { return (acc, "accept-signature") }
         return (acc, nil)
     }
@@ -107,9 +127,12 @@ public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendab
         let body = r.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any] ?? [:]
         let method = r.httpMethod ?? "GET"
         let path = url.path
-        if method == "GET", path.hasSuffix("/account-key-attestation") {
+        if method == "POST", path.hasSuffix("/share-key-attestation") {
             attestationReads += 1
-            return (200, ["attestation": attestation()])
+            let (status, obj, key) = Self.answerAttestationRequest(body, adminPub: accountAdminPub)
+            if let key { attestedKeys.insert(key) }
+            if let code = obj["code"] as? String { refusals.append(code) }
+            return (status, obj)
         }
         if method == "GET", path == "/api/server-shares/\(shareId)" {
             let offer = ShareOfferPayload(serverDomain: serverDomain, serverName: "Cabin", stkPubHex: String(repeating: "7c", count: 32),
@@ -156,8 +179,9 @@ public final class ShareAcceptMockWorld: ServerShareTransport, @unchecked Sendab
             guard let proofObj = body["acceptAdmin"], let proof = ShareAcceptAdminProof(jsonObject: proofObj) else {
                 return refuse(403, "accept-not-admin", Self.notAdminSentence)
             }
-            guard let sig = HexUtil.decode(proof.signature), proof.admit.keyPubHex == HexUtil.encode(accountAdminPub),
-                  proof.admit.verify(signature: sig, publicKey: accountAdminPub)
+            guard let sig = HexUtil.decode(proof.signature), proof.admit.keyKind == .share,
+                  attestedKeys.contains(proof.admit.keyPubHex), let pub = HexUtil.decode(proof.admit.keyPubHex),
+                  proof.admit.verify(signature: sig, publicKey: pub)
             else { return refuse(403, "accept-signature", Self.badSignatureSentence) }
             grants.append(proof.admit.shareId)
             return (200, ["ok": true, "created": true])

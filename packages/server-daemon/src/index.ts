@@ -73,6 +73,7 @@ import {
 import { InMemoryCompanionTicketStore } from "./companion/companionTicketStore.js";
 import { InMemoryCompanionWriteRequestStore } from "./companion/companionWriteRequestStore.js";
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
+import { buildBrowserProtected, type BrowserProtected } from "./browser/protectedTargets.js";
 import { buildCloneApp } from "./cloneService.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
 import {
@@ -103,6 +104,7 @@ import { enrollmentDeviceInfo, forgetEnrollmentSecret, showServerCode } from "./
 import { buildGenerationGate, originGeneration } from "./appGeneration.js";
 import { ImportProvenanceStore } from "./buildmodes/appProvenance.js";
 import { ReleaseCatalogGate } from "./releaseCatalogGate.js";
+import { UpdateReceiptReporter, buildUpdateReportsHttp, loadRolloutSalt } from "./canary/updateReceipts.js";
 import { TrustedRootStore, refreshReleaseCatalog } from "./releaseCatalogFeed.js";
 import { buildInvitePage } from "./invitePage.js";
 import { buildMemberRolesHttp, buildRankEntryApplier } from "./memberRoles.js";
@@ -121,6 +123,7 @@ import { keydTlsKeyd } from "./keydAsync.js";
 import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
 import { bootArchV2, privilegedHelperFor, rustPathHealthy } from "./archV2Boot.js";
+import { installGpudAsRoot, installGpudFromRelease, startAccelerators } from "./gpu/wire.js";
 import { BROKER_V1_SOCKET } from "./rustStack/units.js";
 
 /** Either custodian: the keys in this process, or in flagship-keyd. */
@@ -155,11 +158,14 @@ import { applySliverPlan, offlineReplicaSliverPlan, recoverySliverPlan } from ".
 import { realCommandRunner as realCommandRunnerStatic } from "./serviceRunner.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildAppBackupHttpHandlers } from "./serviceBackupHttp.js";
+import { buildAppRuntimeHttp } from "./appRuntimeHttp.js";
+import { RuntimeRouter } from "./appRuntimes.js";
 import { ownerOnlyGate } from "./ownerOnlyGate.js";
 import { buildAppStatusReader } from "./appStatus.js";
 import { buildActivityResolver } from "./serviceActivity.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
 import { ScreensEventBus } from "./screens/screensEvents.js";
+import { buildBrowserGrantAlerts } from "./browser/grantAlerts.js";
 import { UpgradeTicketStore } from "./screens/upgradeTickets.js";
 import { AccessAlertSetting } from "./egress/accessAlertSetting.js";
 import { readServiceSource } from "./llm/serviceSource.js";
@@ -757,6 +763,12 @@ async function main(): Promise<void> {
     log: (m) => console.log(m),
   });
 
+  // GPUs (gpu/wire.ts): the pinned flagship-gpud on a box that has one; no-op without a GPU.
+  if (runsUnprivileged()) await installGpudAsRoot((m) => console.log(m));
+  else if (process.getuid?.() === 0) {
+    await installGpudFromRelease(process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship", archV2.engine, (m) => console.log(m));
+  }
+
   // The TLS frontend goes in once keyd is answering and this release carries it.
   if (keyd && !process.env.FLAGSHIP_TLS_UPSTREAM) {
     const t = await installTlsd({
@@ -971,11 +983,36 @@ async function main(): Promise<void> {
   // public /api/leads advertisement and the authenticated screens BFF, and the
   // applied-commit truth the self-update consumer enforces `fromCommit` against.
   const currentCommitProvider = buildCurrentCommitProvider(dataDir);
+  // The box's secret rollout salt (canary/updateReceipts.ts): decides its cohort for the catalog gate and
+  // names it in update receipts. Not the server's public name, which anybody could hash.
+  const rolloutSalt = await loadRolloutSalt(`${dataDir}/rollout-salt`);
+  // Canary update receipts (V02, docs/runbooks/canary.md): content-free, only while the owner shares them.
+  {
+    const outcomes = fileUpdateOutcomeStore(`${dataDir}/update-outcome.json`);
+    const reporter = new UpdateReceiptReporter({
+      consentPath: `${dataDir}/update-reports.json`,
+      outboxPath: `${dataDir}/update-receipts-outbox.json`,
+      salt: () => rolloutSalt,
+      stack: () => (archV2.config.engine === "podman" ? "arch-v2" : "classic"),
+      outcome: () => outcomes.readSync(),
+      controlBase: env.controlPlaneBaseUrl ?? "",
+      defaultShare: process.env.FLAGSHIP_UPDATE_RECEIPTS === "1",
+    });
+    updateReceiptsRef.current = reporter;
+    const tick = () =>
+      reporter
+        .sync()
+        .then(() => reporter.flush())
+        .then((r) => r.sent > 0 && console.log(`[update-receipts] sent ${r.sent}`))
+        .catch((e: Error) => console.warn(`[update-receipts] ${e.message}`));
+    setTimeout(() => void tick(), 120_000).unref?.();
+    setInterval(() => void tick(), 15 * 60_000).unref?.();
+  }
   // The signed release catalog (N13): only for a release that pins its root; refreshed beside the artifacts.
   {
     const roots = new TrustedRootStore({ pinnedPath: `${selfUpdateRepoPath}/release/catalog-root.json`, statePath: `${dataDir}/release-catalog-root.json` });
     if (await roots.load()) {
-      const gate = new ReleaseCatalogGate({ path: `${dataDir}/release-catalog.json`, root: () => roots.current(), boxSalt: () => env.serverFqdn ?? "" });
+      const gate = new ReleaseCatalogGate({ path: `${dataDir}/release-catalog.json`, root: () => roots.current(), boxSalt: () => rolloutSalt });
       releaseCatalogRef.current = gate;
       const refresh = () =>
         refreshReleaseCatalog({ base: BOX_RELEASE.artifactBase, roots, gate })
@@ -1009,6 +1046,7 @@ async function main(): Promise<void> {
         outcome: event === "update-applied" ? "applied" : "rolled-back",
         at: Date.now(),
         ...info,
+        ...(event === "update-rollback-refused" ? { rollbackRefused: true as const } : {}),
       }),
     onLog: (m) => console.log(m),
   }).catch(() => {});
@@ -1440,6 +1478,14 @@ async function main(): Promise<void> {
     dataDir,
     alertInbox,
     pairedSessions,
+    onGrantRequest: (serviceId) => browserGrantAlertRef.current?.(serviceId),
+    // What the app browser may never reach: this server, .com, the relay, its own and metadata addresses.
+    protectedTargets: buildBrowserProtected({
+      ...(env.serverFqdn ? { serverFqdn: env.serverFqdn } : {}),
+      ...(env.controlPlaneBaseUrl ? { controlPlaneBaseUrl: env.controlPlaneBaseUrl } : {}),
+      ...(env.tunnelHubFallback ? { relayUrl: env.tunnelHubFallback } : {}),
+      extraAddresses: [BROWSER_EGRESS.gateway, BROWSER_EGRESS.browser],
+    }),
     ...(cfg && env.serverFqdn
       ? { serverDomain: env.serverFqdn, authority: () => ({ ownerIrkPub: cfg.irkPublicKey, ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}), username: cfg.userId }) }
       : {}),
@@ -2566,6 +2612,7 @@ export const BROWSER_EGRESS = { gateway: "172.31.250.1", browser: "172.31.250.2"
 
 /** The signed release catalog's gate, when the running release pins a catalog root (releaseCatalogFeed.ts). */
 const releaseCatalogRef: { current: ReleaseCatalogGate | null } = { current: null };
+const updateReceiptsRef: { current: UpdateReceiptReporter | null } = { current: null };
 /** Every update path asks this before anything changes; with no catalog for this release it allows, as before. */
 const releaseAllowedByCatalog = (target: string, current: string) =>
   releaseCatalogRef.current ? releaseCatalogRef.current.allowsUpdateTo(target, current) : Promise.resolve({ ok: true as const });
@@ -2573,26 +2620,39 @@ const releaseAllowedByCatalog = (target: string, current: string) =>
 /** The authenticated clock, bound when the authority layer starts; chat leases read it. */
 const authClockRef: { current: AuthClock | null } = { current: null };
 
+/** Set once the screens socket and the push relay exist: an app's browser grant request reaches the owner. */
+const browserGrantAlertRef: { current: ((serviceId: string) => void) | null } = { current: null };
+
 async function wireBrowserBundle(deps: {
   dataDir: string;
   alertInbox: InMemoryAlertInbox;
   pairedSessions: FilePairedSessionStore;
   serverDomain?: string;
   authority?: () => import("./egress/approvals.js").SensitiveAuthority;
+  onGrantRequest?: (serviceId: string) => void;
+  protectedTargets: BrowserProtected;
 }): Promise<BrowserBundle | null> {
   const cdpEndpoint = process.env.FLAGSHIP_CHROMIUM_CDP ?? `http://${BROWSER_EGRESS.browser}:9222`;
   if (!APP_BROWSER.enabled || process.env.FLAGSHIP_DISABLE_BROWSER === "1") return null;
   try {
+    deps.protectedTargets.startRefresh();
     const bundle = await bootstrapBrowserBundle({
       cdpEndpoint,
       dataDir: deps.dataDir,
       alertInbox: deps.alertInbox,
       pairedSessionGate: ownerOnlyGate(deps.pairedSessions, deps.pairedSessions),
+      protectedHosts: deps.protectedTargets.hosts,
       // The browser container sits alone on the `flagship-browser` network (docker-compose.yml) and reaches
       // the outside only through these proxies, on that network's gateway.
-      egress: { listenHost: BROWSER_EGRESS.gateway, acceptFrom: (a) => a === BROWSER_EGRESS.browser || a === `::ffff:${BROWSER_EGRESS.browser}`, denyPort: BROWSER_EGRESS.denyPort },
+      egress: {
+        listenHost: BROWSER_EGRESS.gateway,
+        acceptFrom: (a) => a === BROWSER_EGRESS.browser || a === `::ffff:${BROWSER_EGRESS.browser}`,
+        denyPort: BROWSER_EGRESS.denyPort,
+        protectedAddresses: deps.protectedTargets.addresses,
+      },
       ...(deps.serverDomain ? { serverDomain: deps.serverDomain } : {}),
       ...(deps.authority ? { authority: deps.authority } : {}),
+      ...(deps.onGrantRequest ? { onGrantRequest: deps.onGrantRequest } : {}),
     });
     console.log(`[daemon] browser bundle online (CDP ${cdpEndpoint})`);
     return bundle;
@@ -3581,6 +3641,28 @@ async function wireRuntimeSurfaces(deps: {
       : {}),
   });
 
+  // Browser grant requests (browser/grantAlerts.ts): the same socket and content-free wake.
+  browserGrantAlertRef.current = buildBrowserGrantAlerts({
+    sinks: () => ({
+      emit: (e) => screensEvents.publish(e),
+      alertsEnabled: () => accessAlertSetting.enabled(),
+      ...(accessPushCfg
+        ? {
+            push: () =>
+              sendPushRelay({
+                category: "generic",
+                targetUsername: accessPushCfg.userId,
+                signer: custodian,
+                controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+                logTag: "[browser] grant request push",
+                log: (l) => console.log(l),
+              }),
+          }
+        : {}),
+    }),
+    log: (m) => console.warn(m),
+  });
+
   // App chat: a held request reaches an open owner app on the screens socket and wakes the phone
   // through the push relay, content-free, like an internet-access request. The admin's answer is
   // signed (chat/approvals.ts).
@@ -4021,6 +4103,7 @@ async function wireRuntimeSurfaces(deps: {
     // every other sensitive order.
     publisherTrustKeys: () => (cfg ? [...(cfg.adminRootPub ? [cfg.adminRootPub] : [cfg.irkPublicKey])] : []),
     debugAccess,
+    accelerators: startAccelerators({ dataDir: process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship", pairedSessions }).http,
     gate: sharesBundle?.gate ?? pairedSessions,
     shares: sharesBundle?.shares ?? null,
     // An unreadable access state leaves every app members-only (the store's own default).
@@ -4139,6 +4222,10 @@ async function wireRuntimeSurfaces(deps: {
       server: () => runtime.appQuota.serverView(),
     },
     pairedSessions,
+    importedFrom: (() => {
+      const store = new ImportProvenanceStore(join(dataDir, "data", "app-provenance"));
+      return (serviceId: string) => store.importedFrom(serviceId);
+    })(),
     ...(adapterIndex
       ? {
           adapterReports: {
@@ -4260,6 +4347,26 @@ async function wireRuntimeSurfaces(deps: {
         backups: runtime.appBackup,
         gate: ownerOnlyGate(sharesBundle?.gate ?? pairedSessions, pairedSessions),
       }),
+    );
+  }
+  // WASI module uploads and how an app runs (P04/P05, appRuntimeHttp.ts): the owner's own sessions only.
+  if (runtime.appRunner instanceof RuntimeRouter) {
+    runtime.addHandler(
+      buildAppRuntimeHttp({
+        gate: ownerOnlyGate(pairedSessions, pairedSessions),
+        modules: runtime.appRuntimes.wasiModules,
+        wasi: () => runtime.appRuntimes.wasiStatus(),
+        platform: () => runtime.servicePlatform,
+        router: runtime.appRunner,
+        cmd: realCommandRunnerStatic,
+        dedicated: runtime.appRuntimes.dedicated,
+      }),
+    );
+  }
+  // The owner's choice to share content-free update receipts (canary/updateReceipts.ts).
+  if (updateReceiptsRef.current) {
+    runtime.addHandler(
+      buildUpdateReportsHttp({ reporter: updateReceiptsRef.current, gate: ownerOnlyGate(sharesBundle?.gate ?? pairedSessions, pairedSessions) }),
     );
   }
   runtime.addUpgradeHandler(
@@ -4448,6 +4555,8 @@ async function wireOwnerHandlers(deps: {
     buildJournalHttp({
       serverId: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
       reader: new JournalctlReader(),
     }),
   );

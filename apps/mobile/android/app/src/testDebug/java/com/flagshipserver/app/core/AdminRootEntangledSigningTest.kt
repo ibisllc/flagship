@@ -143,8 +143,11 @@ class AdminRootEntangledSigningTest {
             override suspend fun resolve(reason: String) =
                 IrkMaterial(signer = irk, seed = irkSeed, pubHex = irkPubHex)
         }
+        // Blessed on this phone before: first contact and the seal checks share one pin store.
+        val trusted = PinnedServers(serverDomain to stkPubHex)
         val coord = SecretRequestCoordinator(
-        firstContact = firstContactPinned(serverDomain to stkPubHex),
+            firstContact = trusted.firstContact,
+            pins = trusted.boxKeyPins,
             mailbox = mock,
             username = user,
             irk = irkAccess,

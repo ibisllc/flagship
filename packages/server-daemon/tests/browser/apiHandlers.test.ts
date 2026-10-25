@@ -8,6 +8,9 @@ import { InMemoryAppAuthTokens } from "../../src/serviceAuthToken.js";
 import { buildBrowserApiHandlers } from "../../src/browser/apiHandlers.js";
 import type { HttpRequest } from "../../src/runtime.js";
 import { FakeCdpServer } from "./fakeCdpServer.js";
+import { BrowserGrants, PolicyError } from "../../src/browser/policy/index.js";
+import { contextSession } from "../../src/browser/egress.js";
+import type { PolicedBrowser } from "../../src/browser/policedBrowser.js";
 
 describe("Browser HTTP handlers", () => {
   let server: FakeCdpServer;
@@ -376,5 +379,51 @@ describe("Browser HTTP handlers", () => {
       req({ method: "POST", path: "/api/browser/tabs/tab-1/eval", token: aliceToken, body: {} }),
     );
     expect(r?.status).toBe(405);
+  });
+
+  describe("a site the owner granted beyond the manifest", () => {
+    const open = (h: typeof handle, url: string) => h(req({ method: "POST", path: "/api/browser/tabs", token: aliceToken, body: { url } }));
+
+    it("without the policed browser, the start-URL check consults the live grants beside the manifest", async () => {
+      const grants = new BrowserGrants();
+      const h = buildBrowserApiHandlers({ browser: mgr, tabRegistry: registry, domainGate: gate, phonePipe: pipe, appAuthTokens: tokens, grants });
+      expect((await open(h, "https://walmart.com/"))?.status).toBe(403);
+      grants.approve({ serviceId: "alice-shopper", capabilities: ["navigate"], origins: ["walmart.com"], duration: "service" });
+      grants.approve({ serviceId: "alice-shopper", capabilities: ["navigate"], origins: ["target.com"], duration: "session" }, { sessionId: contextSession("alice-shopper") });
+      grants.approve({ serviceId: "bob-mailer", capabilities: ["navigate"], origins: ["ebay.com"], duration: "service" });
+      server.on("Target.createTarget", () => ({ targetId: "tab-w" }));
+      expect((await open(h, "https://walmart.com/"))?.status).toBe(200);
+      expect((await open(h, "https://target.com/cart"))?.status).toBe(200);
+      expect((await open(h, "https://ebay.com/"))?.status).toBe(403); // another app's grant
+      expect((await open(h, "http://walmart.com/"))?.status).toBe(403); // https only, as granted
+      server.on("Target.createTarget", () => ({ targetId: "tab-n" }));
+      await open(h, "https://amazon.com/");
+      const nav = await h(req({ method: "POST", path: "/api/browser/tabs/tab-n/navigate", token: aliceToken, body: { url: "https://walmart.com/x" } }));
+      expect(nav?.status).toBe(200);
+    });
+
+    it("with the policed browser, the judge decides: the manifest's list alone refuses nothing first", async () => {
+      const asked: string[] = [];
+      const policed = {
+        openTab: async (_s: string, url: string) => {
+          asked.push(url);
+          if (url.includes("evil")) throw new PolicyError("needs-grant", "this site is outside what you approved");
+          return { tabId: `tab-${asked.length}` };
+        },
+        navigate: async (_s: string, _t: string, url: string) => {
+          asked.push(url);
+          if (url.includes("evil")) throw new PolicyError("needs-grant", "this site is outside what you approved");
+        },
+      } as unknown as PolicedBrowser;
+      const h = buildBrowserApiHandlers({ browser: mgr, tabRegistry: registry, domainGate: gate, phonePipe: pipe, appAuthTokens: tokens, policed });
+      const ok = await open(h, "https://walmart.com/");
+      expect(ok?.status).toBe(200);
+      const refused = await open(h, "https://evil.example/");
+      expect(refused?.status).toBe(403);
+      expect(JSON.parse(String(refused?.body)).code).toBe("needs-grant");
+      const tab = JSON.parse(String(ok?.body)).tabId as string;
+      expect((await h(req({ method: "POST", path: `/api/browser/tabs/${tab}/navigate`, token: aliceToken, body: { url: "https://walmart.com/b" } })))?.status).toBe(200);
+      expect(asked).toEqual(["https://walmart.com/", "https://evil.example/", "https://walmart.com/b"]);
+    });
   });
 });

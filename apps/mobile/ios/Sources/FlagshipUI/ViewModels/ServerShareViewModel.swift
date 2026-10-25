@@ -249,8 +249,8 @@ public enum ServerShareServices {
     }
 
     /// The account's admin key for accepting a co-manage share (§5.1): the
-    /// admin root this device holds (one Face ID), the IRK for an account with
-    /// none, and `.com`'s signer for a demo account.
+    /// admin root this device holds (one Face ID) signs the request for `.com`
+    /// to attest the per-share admin key; `.com` signs it for a demo account.
     @MainActor
     public static func acceptAdminKeys(username: String, isDemoAccount: Bool) -> ShareAcceptAdminKeys {
         ShareAcceptAdminKeys(
@@ -263,8 +263,7 @@ public enum ServerShareServices {
                 let context = try await BiometricGate().evaluateReturningContext(reason: reason)
                 Keystore.cacheSessionUMK(authenticatedBy: context)
                 return try Keystore.adminRootKey(authenticatedBy: context)
-            },
-            irk: { reason in try await Keystore.deriveIRK(reason: reason) }
+            }
         )
     }
 

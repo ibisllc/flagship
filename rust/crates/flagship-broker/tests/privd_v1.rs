@@ -130,6 +130,7 @@ fn only_an_apps_own_files_volume_or_the_egress_resolver_may_be_mounted() {
     assert!(
         docker(&[
             "run",
+            "--runtime=runsc",
             "--mount",
             "type=volume,src=flagship-files-alice--chess,dst=/data",
             "img"
@@ -139,6 +140,7 @@ fn only_an_apps_own_files_volume_or_the_egress_resolver_may_be_mounted() {
     assert!(
         docker(&[
             "run",
+            "--runtime=runsc",
             "--mount",
             "type=bind,src=/run/flagship-resolv-apps.conf,dst=/etc/resolv.conf,readonly",
             "img"
@@ -148,6 +150,7 @@ fn only_an_apps_own_files_volume_or_the_egress_resolver_may_be_mounted() {
     refused(
         docker(&[
             "run",
+            "--runtime=runsc",
             "--mount",
             "type=volume,src=somebody-elses,dst=/data",
             "img",
@@ -157,6 +160,7 @@ fn only_an_apps_own_files_volume_or_the_egress_resolver_may_be_mounted() {
     refused(
         docker(&[
             "create",
+            "--runtime=runsc",
             "--mount",
             "type=volume,src=flagship-files-x,dst=/data",
             "img",

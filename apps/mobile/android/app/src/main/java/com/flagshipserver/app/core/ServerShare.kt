@@ -41,11 +41,13 @@ object ServerShare {
     const val TAG_SERVER_SHARE_PUSH = "flagship/server-share-push/v1"
     const val TAG_SERVER_SHARE_UPDATE = "flagship/server-share-update/v1"
     const val TAG_SERVER_SHARE_ACCEPT_ADMIN = "flagship/server-share-accept-admin/v1"
-    const val KEY_KIND_ADMIN_ROOT = "admin-root"
-    const val KEY_KIND_IRK = "irk"
-    val KEY_KINDS: List<String> = listOf(KEY_KIND_ADMIN_ROOT, KEY_KIND_IRK)
+    const val TAG_SHARE_KEY_ATTESTATION_REQUEST = "flagship/share-key-attestation-request/v1"
+    /** Only a per-share key is ever attested (AT-LNK-10): a stable account key would let sharers link the account. */
+    const val KEY_KIND_SHARE = "share"
+    val KEY_KINDS: List<String> = listOf(KEY_KIND_SHARE)
 
     private const val INFO_MEMBER = "flagship/server-share-member/v1"
+    private const val INFO_ADMIN = "flagship/server-share-admin/v1"
     private const val INFO_TOKEN = "flagship/server-share/token/v1"
     private const val INFO_LINK_KEY = "flagship/server-share/link-key/v1"
     private const val INFO_INBOX = "flagship/share-inbox/v1"
@@ -97,6 +99,23 @@ object ServerShare {
 
     fun deriveShareMemberPub(umkSeed: ByteArray, shareId: String): ByteArray =
         Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveShareMemberKeySeed(umkSeed, shareId)).publicKey
+
+    /**
+     * B's per-share admin key (#12, §5.1): `.com` attests it for an admin device
+     * of B's account. It is never the member key (which `.com` sees in unlock
+     * deposits) and differs per share, so no owner can tie B to a name or link B
+     * across servers (AT-LNK-10).
+     */
+    fun deriveShareAdminKeySeed(umkSeed: ByteArray, shareId: String): ByteArray {
+        checkShareId(shareId)
+        return hk(umkSeed, "$INFO_ADMIN|$shareId")
+    }
+
+    fun deriveShareAdminKey(umkSeed: ByteArray, shareId: String): Ed25519Sign =
+        Ed25519Sign(deriveShareAdminKeySeed(umkSeed, shareId))
+
+    fun deriveShareAdminPub(umkSeed: ByteArray, shareId: String): ByteArray =
+        Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveShareAdminKeySeed(umkSeed, shareId)).publicKey
 
     /** Signs B's "Shared with me" inbox requests; its public key is the inbox id. */
     fun deriveShareInboxKeySeed(umkSeed: ByteArray): ByteArray = hk(umkSeed, INFO_INBOX)
@@ -223,9 +242,10 @@ object ServerShare {
     }
 
     /**
-     * `.com`'s CA-signed attestation that [keyPubHex] is an account's current
-     * sensitive key (docs/share-a-server.md §4). It names no account. The app
-     * only carries it: the shared server checks the CA signature.
+     * `.com`'s CA-signed attestation that an admin of some account vouched for
+     * [keyPubHex], a per-share admin key (docs/share-a-server.md §4, §5.1). It
+     * names no account. The app only carries it: the shared server checks the
+     * CA signature.
      */
     @Serializable
     data class AccountKeyAttestation(
@@ -466,9 +486,9 @@ object ServerShare {
     }
 
     /**
-     * #12 — signed by the joining account's sensitive key (its admin root, or
-     * its IRK when it pins none): only an admin device accepts a share. #3's
-     * fields plus which key signs.
+     * #12 — signed by the joining account's per-share admin key (keyKind
+     * `share`), which `.com` attests only when the account's sensitive key asks:
+     * only an admin device accepts a share. #3's fields plus which key signs.
      */
     @Serializable
     data class AcceptAdmin(
@@ -484,9 +504,28 @@ object ServerShare {
             checkShareId(shareId)
             checkHex64("memberPubHex", memberPubHex)
             checkTime("acceptedAt", acceptedAt)
-            require(keyKind in KEY_KINDS) { "server-share: keyKind must be admin-root or irk" }
+            require(keyKind in KEY_KINDS) { "server-share: keyKind must be share" }
             checkHex64("keyPubHex", keyPubHex)
             return join(TAG_SERVER_SHARE_ACCEPT_ADMIN, serverDomain, shareId, memberPubHex, acceptedAt.toString(), keyKind, keyPubHex)
+        }
+    }
+
+    /**
+     * What an admin device signs with the account's admin root to have `.com`
+     * attest its per-share admin key (`POST /api/users/<u>/share-key-attestation`).
+     */
+    @Serializable
+    data class ShareKeyAttestationRequest(
+        val username: String,
+        val keyPubHex: String,
+        val issuedAt: Long,
+    ) : Envelope {
+        override fun canonicalBytes(): ByteArray {
+            require(username.isNotEmpty()) { "share-key-attestation-request: bad username" }
+            legacyFieldGuard("username", username)
+            checkHex64("keyPubHex", keyPubHex)
+            checkTime("issuedAt", issuedAt)
+            return join(TAG_SHARE_KEY_ATTESTATION_REQUEST, username, keyPubHex, issuedAt.toString())
         }
     }
 

@@ -198,19 +198,23 @@ export async function depositUpdateOrder(args, deps = {}) {
   return { ok: true, order, expiresAt: out.expiresAt };
 }
 
-const REFUSAL_COPY = {
-  unendorsed: tr("Flagship's maintainers haven't endorsed that release."),
-  "from-commit-mismatch":
-    tr("the server was no longer on the version the update was made for. Send it again."),
-  "apply-failed": tr("it couldn't download or build the new version. Nothing changed."),
-  rejected: tr("the request wasn't signed by this account's admin key."),
-  stale: tr("the request was too old. Send it again."),
-  "wrong-domain": tr("the request was for a different server."),
+/** Each refusal is one whole sentence (docs/i18n.md: never build a sentence from pieces). */
+const REFUSAL_SENTENCE = {
+  unendorsed: () => tr("The server refused the last update: Flagship's maintainers haven't endorsed that release."),
+  "from-commit-mismatch": () =>
+    tr("The server refused the last update: the server was no longer on the version the update was made for. Send it again."),
+  "apply-failed": () => tr("The server refused the last update: it couldn't download or build the new version. Nothing changed."),
+  rejected: () => tr("The server refused the last update: the request wasn't signed by this account's admin key."),
+  stale: () => tr("The server refused the last update: the request was too old. Send it again."),
+  "wrong-domain": () => tr("The server refused the last update: the request was for a different server."),
 };
 
 /**
  * One sentence for the box-reported `lastUpdate` verdict (server-detail), or
  * null when there is nothing to say (no update yet, or an older daemon).
+ * `rollbackRefused` (docs/support/update-rollback.md): the release failed but the
+ * one before it is below the signed security floor, so the server did NOT go
+ * back; it stays on the new release in recovery mode until a fixed one arrives.
  */
 export function describeLastUpdate(lastUpdate) {
   if (!lastUpdate || typeof lastUpdate !== "object") return null;
@@ -220,6 +224,11 @@ export function describeLastUpdate(lastUpdate) {
   if (lastUpdate.outcome === "applied") {
     return target ? tr("Last update: {0} installed and running.", target) : tr("Last update installed and running.");
   }
+  if (lastUpdate.outcome === "rolled-back" && lastUpdate.rollbackRefused === true) {
+    return target
+      ? tr("The update to {0} didn't start cleanly, and the version before it is too old to go back to safely. The server stays on {0} in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.", target)
+      : tr("The last update didn't start cleanly, and the version before it is too old to go back to safely. The server stays on the new version in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.");
+  }
   if (lastUpdate.outcome === "rolled-back") {
     if (target && previous) return tr("The last update to {0} didn't start cleanly, so the server went back to {1} on its own.", target, previous);
     if (target) return tr("The last update to {0} didn't start cleanly, so the server went back on its own.", target);
@@ -227,10 +236,15 @@ export function describeLastUpdate(lastUpdate) {
     return tr("The last update didn't start cleanly, so the server went back on its own.");
   }
   if (lastUpdate.outcome === "refused") {
-    const why = REFUSAL_COPY[lastUpdate.reason];
-    return why ? tr("The server refused the last update: {0}", why) : tr("The server refused the last update.");
+    const sentence = REFUSAL_SENTENCE[lastUpdate.reason];
+    return sentence ? sentence() : tr("The server refused the last update.");
   }
   return null;
+}
+
+/** Whether the last verdict needs the owner's attention (anything but a clean install). */
+export function lastUpdateNeedsAttention(lastUpdate) {
+  return !!lastUpdate && typeof lastUpdate === "object" && (lastUpdate.outcome === "refused" || lastUpdate.rollbackRefused === true);
 }
 
 export const DOWNGRADE_WARNING =

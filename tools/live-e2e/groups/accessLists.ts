@@ -34,7 +34,10 @@ export const accessLists: Group = {
     const events: string[] = [];
     let ws: WebSocket | null = null;
     try {
-      ws = new WebSocket(`wss://${b.fqdn}/api/screens/events?sessionToken=${session}`);
+      // 0.3 refuses a session token in the URL (N06): the stream opens with a single-use ticket.
+      const t = await postJson(`https://${b.fqdn}/api/screens/ws-ticket`, { route: "/api/screens/events" }, s);
+      assert(t.status === 200 && typeof t.json?.ticket === "string", `ws-ticket ${t.status}: ${short(t.text)}`);
+      ws = new WebSocket(`wss://${b.fqdn}/api/screens/events?ticket=${encodeURIComponent(t.json.ticket)}`);
       ws.onmessage = (m) => events.push(String(m.data));
       await new Promise((res) => setTimeout(res, 3000));
     } catch {

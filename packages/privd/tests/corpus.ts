@@ -4,7 +4,7 @@
  * broker against the same file, and the live check runs the Rust binary on it). Every case the
  * privd tests use, the hostile ones, and each docker case again under Podman.
  */
-import { FILES_HELPER_IMAGE, FOLDER_FINGERPRINT_SCRIPT } from "../src/policy.js";
+import { FILES_HELPER_IMAGE, FOLDER_FINGERPRINT_SCRIPT, type GpuRunClaim } from "../src/policy.js";
 
 export interface CorpusCase {
   name: string;
@@ -14,6 +14,8 @@ export interface CorpusCase {
   mounts?: string;
   arch?: string;
   trust?: Record<string, unknown>;
+  /** flagship-gpud's attached allocations, by id (run-claims.json); none when absent. */
+  gpu?: Record<string, GpuRunClaim>;
 }
 
 export const TEST_TRUST = { keys: ["a".repeat(64)], threshold: 1, nodeFloor: "24.0.0", minSequence: 3, pqKeyIds: [] as string[], legacyManifests: [] as string[] };
@@ -303,6 +305,140 @@ add("wipe", { target: "data", path: "/" });
 for (const step of ["gvisor", "health-reporter", "update-guard", "container-links", "data-unit", "debug-access", "debug-access-close", "system-repair", "server-code", "rust-stack", "../../tmp/x", "constructor", ""]) add("setup", { step });
 add("setup", { step: "gvisor", script: "/tmp/x.js" });
 add("setup", { step: 1 });
+
+// docker run read as the CLI reads it (AT-PRV-03..07): attached values, shorthand groups, `=` forms
+const IMG = `img@sha256:${"a".repeat(64)}`;
+const R = (...f: string[]) => ["run", "-d", "--runtime", "runsc", ...f, IMG];
+for (const ok of [
+  R(), R("-e", "A=b"), R("-eA=b"), R("-it"), R("-it", "--rm"), R("-p", "127.0.0.1:8080:80"), R("-p127.0.0.1:8080:80"), R("--network", "flagship-apps"), R("--net=flagship-apps"),
+  R("-u", "10001:10001"), R("-u10001"), R("--user=10001:0"), R("--rm=true"), R("--rm=false"), R("-w/app"), R("-d=true"), R("--tmpfs", "/tmp:rw,size=8m"), R("-l", "a=b"),
+  ["run", "--runtime=runsc", "--", IMG, "-v", "/:/x"], ["run", "--runtime=runsc", IMG, "--privileged"], ["create", "--runtime=runsc", "--name", "x", IMG],
+  ["run", "-d", "--name", "flagship-alice--chess", "--runtime=runsc", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--network", "flagship-apps", "--dns", "10.89.0.1",
+    "--add-host", "host.flagship.internal:10.89.0.1", "--mount", "type=bind,src=/run/flagship-daemon/flagship-resolv-apps.conf,dst=/etc/resolv.conf,readonly", "--memory", "512m",
+    "--cpus", "1.0", "--pids-limit", "256", "--read-only", "--tmpfs", "/tmp:rw,size=64m", "-e", "PORT=8080", "-p", "127.0.0.1:41000:8080", "--mount",
+    "type=volume,src=flagship-files-alice--chess,dst=/data", IMG, "node", "server.js"],
+  ["run", "--rm", "-i", "--name", "flagship-migrate-0a1b2c3d4e5f", "--runtime=runsc", "--network=none", "--mount", `type=volume,src=flagship-pgsock-${"0".repeat(24)},dst=/var/run/postgresql,readonly`,
+    "--user", "10001:10001", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--memory", "256m", "--cpus", "0.5", "--pids-limit", "64",
+    "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m", "-e", "PGPASSWORD", "-e", "PGOPTIONS", "--entrypoint", "psql", IMG, "-h", "/var/run/postgresql", "-p", "5432", "-U", "u", "-d", "d", "-1",
+    "--set=ON_ERROR_STOP=1", "--no-psqlrc", "-f", "-"],
+]) docker(...ok);
+for (const bad of [
+  R("-v/:/host"), R("-v=/:/host"), R("-v"), ["run", "-dv", "/:/host", "--runtime", "runsc", IMG], R("-itv", "/:/host"), R("-itv/:/host"), R("-tv=/:/h"), R("--volume=/:/h"),
+  R("-u0"), R("-uroot"), R("-u=0"), R("-u", "00"), R("-u", "+0:0"), R("-u", "-0"), R("--user=0"), R("-du0"), R("-itu", "root:root"), R("--user=root"),
+  R("-eX=/var/flagship/identity"), R("--env=A=/var/run/docker.sock"), R("--mount=type=bind,src=/,dst=/h"), R("--device=/dev/kvm"), R("--cap-add=SYS_ADMIN"), R("--privileged=true"),
+  R("--privileged=false"), R("--privileged"), R("--security-opt=seccomp=unconfined"), R("--security-opt=no-new-privileges=false"), R("--pid=host"), R("--ipc=host"), R("--uts=host"),
+  R("--userns=host"), R("--cgroupns=host"), R("--network", "container:flagship-postgres"), R("--network=container:alice--chess"), R("--net=container:x"), R("--net", "host"),
+  R("--network=host"), R("--network", "ns:/proc/1/ns/net"), R("--network", "a,alias=b"), R("--use-api-socket"), R("--annotation", "dev.gvisor.internal.x=1"),
+  R("--link", "flagship-postgres:db"), R("--log-driver", "syslog"), R("--log-opt", "path=/etc/x"), R("--volume-driver", "x"), R("--storage-opt", "size=1"), R("--group-add=0"),
+  R("--gpus=all"), R("--device-read-bps", "/dev/sda:1mb"), R("--blkio-weight-device=/dev/sda:10"), R("--volumes-from=flagship-postgres"), R("--isolation=hyperv"),
+  R("--PRIVILEGED"), R("-Z"), R("-dZ"), R("--rm=yes"), R("-d=1"), R("---privileged"), R("--=x"), R("--log_opt", "x"), R("--unknown-flag"), R("--mount", "type=volume,src=x,dst=/data"),
+  R("--mount", `type=volume,src=flagship-pgsock-${"0".repeat(24)},dst=/var/run/postgresql`), R("--mount", `type=volume,src=flagship-pgdata-${"0".repeat(24)},dst=/var/lib/postgresql`),
+  ["run", "-d", IMG], ["run", "-d", "--runtime", "runc", IMG], ["run", "-d", "--runtime=runsc", "--runtime=runc", IMG], ["run", "--runtime", "runsc"], ["run", "--runtime"],
+  ["run", "-d", "--runtime", "kata", IMG], ["create", "-d", IMG], ["run", "--"], ["run", "-"], ["create", "--runtime=runsc", "--mount", "type=volume,src=flagship-files-x,dst=/data", IMG],
+]) docker(...bad);
+// an app's dedicated database (dataLayer/dedicated.ts dedicatedRunArgs)
+const PGKEY = "0123456789abcdef01234567";
+const pg = (o: { key?: string; over?: (a: string[]) => string[]; extra?: string[]; cmd?: string[] } = {}) => {
+  const k = o.key ?? PGKEY;
+  const a = [
+    "run", "-d", "--name", `flagship-pgd-${PGKEY}`, "--label", "flagship.role=dedicated-postgres", "--restart", "unless-stopped", "--runtime=runsc", "--cap-drop=ALL",
+    ...["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"].flatMap((c) => ["--cap-add", c]), "--security-opt=no-new-privileges", "--network", "flagship-apps",
+    "--memory", "256m", "--memory-swap", "256m", "--cpus", "0.50", "--pids-limit", "128", "--shm-size", "64m", "-e", "POSTGRES_USER=flagship_admin",
+    "-e", `POSTGRES_PASSWORD=${"Ab9_-".repeat(6)}xy`, "-e", "POSTGRES_DB=postgres", "-e", "POSTGRES_INITDB_ARGS=--auth-local=scram-sha-256 --auth-host=scram-sha-256",
+    "-p", "127.0.0.1:41234:5432", "--mount", `type=volume,src=flagship-pgdata-${k},dst=/var/lib/postgresql`, "--mount", `type=volume,src=flagship-pgsock-${k},dst=/var/run/postgresql`,
+    ...(o.extra ?? []), FILES_HELPER_IMAGE, ...(o.cmd ?? ["postgres", "-c", "listen_addresses=*", "-c", "max_connections=20", "-c", "shared_buffers=32MB", "-c", "statement_timeout=30s"]),
+  ];
+  return o.over ? o.over(a) : a;
+};
+docker(...pg());
+for (const bad of [
+  pg({ key: "fedcba9876543210fedcba98" }), pg({ over: (a) => a.filter((x) => x !== "--runtime=runsc") }), pg({ over: (a) => a.map((x) => (x === "--runtime=runsc" ? "--runtime=runc" : x)) }),
+  pg({ extra: ["--cap-add", "SYS_ADMIN"] }), pg({ extra: ["-v", "/:/host"] }), pg({ extra: ["--privileged"] }), pg({ extra: ["--network", "host"] }), pg({ extra: ["--user", "0"] }),
+  pg({ over: (a) => a.map((x) => (x === FILES_HELPER_IMAGE ? "postgres:18" : x)) }), pg({ cmd: ["postgres", "-c", "archive_command=sh -c id"] }), pg({ cmd: ["sh", "-c", "id"] }),
+  pg({ over: (a) => a.map((x) => (x.startsWith("POSTGRES_PASSWORD=") ? "POSTGRES_PASSWORD=a\nb" : x)) }), pg({ over: (a) => a.map((x) => (x === "-p" ? "--publish" : x === "127.0.0.1:41234:5432" ? "0.0.0.0:41234:5432" : x)) }),
+  pg({ over: (a) => a.map((x) => (x.startsWith("type=volume,src=flagship-pgdata") ? `type=volume,src=flagship-files-alice--chess,dst=/var/lib/postgresql` : x)) }),
+  pg({ over: (a) => a.map((x) => (x.startsWith("type=volume,src=flagship-pgsock") ? `type=bind,src=/,dst=/var/run/postgresql` : x)) }),
+  pg({ over: (a) => a.filter((x, i) => !(x.startsWith("type=volume,src=flagship-pgsock") || (x === "--mount" && a[i + 1]?.startsWith("type=volume,src=flagship-pgsock")))) }),
+  pg({ over: (a) => a.map((x) => (x === `flagship-pgd-${PGKEY}` ? "flagship-postgres" : x)) }), pg({ extra: ["-e", "LD_PRELOAD=/x"] }), pg({ over: (a) => ["create", ...a.slice(1)] }),
+]) docker(...bad);
+docker("exec", `flagship-pgd-${PGKEY}`, "pg_isready", "-q", "-h", "127.0.0.1", "-U", "flagship_admin");
+docker("exec", `flagship-pgd-${PGKEY}`, "sh", "-c", "id");
+docker("exec", "flagship-pgd-xyz", "pg_isready");
+docker("volume", "create", "--driver", "local", "--opt", "type=none", "--opt", "o=bind", "--opt", `device=${ROOT}/flagship-pgdata-${PGKEY}/data`, "--label", "flagship.quota=loop", `flagship-pgdata-${PGKEY}`);
+docker("volume", "create", "--driver", "local", "--opt", "type=none", "--opt", "o=bind", "--opt", `device=${ROOT}/flagship-pgdata-${PGKEY}/data`, `flagship-pgdata-${"f".repeat(24)}`);
+host("fallocate", ["-l", "536870912", `${ROOT}/flagship-pgdata-${PGKEY}.img`]);
+host("fallocate", ["-l", "536870912", `${ROOT}/${VOL}.img`]);
+host("fallocate", ["-l", "536870912", `${ROOT}/flagship-pgdata-xyz.img`]);
+host("fallocate", ["-l", "536870912", "/var/lib/docker/volumes/x.img"]);
+host("truncate", ["536870912", `${ROOT}/flagship-pgdata-${PGKEY}.img`]);
+host("mount", ["-o", "loop,nodev,nosuid,discard,noinit_itable", `${ROOT}/flagship-pgdata-${PGKEY}.img`, `${ROOT}/flagship-pgdata-${PGKEY}`]);
+host("mount", ["-o", "loop,nodev,nosuid,discard,noinit_itable", `${ROOT}/flagship-pgdata-${PGKEY}.img`, `${ROOT}/flagship-pgdata-${"f".repeat(24)}`]);
+// GPU apps (rust/crates/flagship-gpu attach.rs): exactly the runtime and CDI devices flagship-gpud
+// attached for that container, read from its root-owned run-claims; nothing else gets a device.
+const GPU: Record<string, GpuRunClaim> = {
+  "app-alice--llm-k1": { allocationId: "app-alice--llm-k1", appId: "alice--llm", container: "flagship-alice--llm", runtime: "runsc-nvproxy", devices: ["nvidia.com/gpu=0"] },
+  "app-carol--mig-k3": { allocationId: "app-carol--mig-k3", appId: "carol--mig", container: "flagship-carol--mig", runtime: "runsc-nvproxy", devices: ["nvidia.com/gpu=1:0", "nvidia.com/gpu=2"] },
+  "app-bob--render-k2": { allocationId: "app-bob--render-k2", appId: "bob--render", container: "flagship-bob--render", runtime: "kata-vfio", devices: ["flagship.vfio/group=12"] },
+};
+const gpuRun = (o: { name?: string; runtime?: string; devices?: string[]; label?: string; extra?: string[]; sub?: string } = {}) => [
+  o.sub ?? "run", "-d", "--name", o.name ?? "flagship-alice--llm", `--runtime=${o.runtime ?? "runsc-nvproxy"}`, ...(o.devices ?? ["nvidia.com/gpu=0"]).flatMap((d) => ["--device", d]),
+  "--label", `flagship.gpu.allocation=${o.label ?? "app-alice--llm-k1"}`, "--cap-drop=ALL", "--security-opt=no-new-privileges", "--network", "flagship-apps", "--read-only",
+  "--user", "10001:10001", "--memory", "2048m", "-e", "FLAGSHIP_GPU_MEMORY_BUDGET_MIB=4096", ...(o.extra ?? []), IMG,
+];
+const gpuDocker = (argv: string[], claims: Record<string, GpuRunClaim> | null = GPU) => add("docker", { argv }, claims ? { gpu: claims } : {});
+gpuDocker(gpuRun());
+gpuDocker(gpuRun({ name: "flagship-carol--mig", devices: ["nvidia.com/gpu=1:0", "nvidia.com/gpu=2"], label: "app-carol--mig-k3" }));
+gpuDocker(gpuRun({ name: "flagship-bob--render", runtime: "kata-vfio", devices: ["flagship.vfio/group=12"], label: "app-bob--render-k2" }));
+for (const bad of [
+  gpuRun({ devices: ["nvidia.com/gpu=1"] }), // a device the app's allocation doesn't hold
+  gpuRun({ devices: ["nvidia.com/gpu=0", "nvidia.com/gpu=2"] }), // one more than it holds
+  gpuRun({ devices: [] }), // fewer than it holds
+  gpuRun({ devices: ["nvidia.com/gpu=0", "nvidia.com/gpu=0"] }),
+  gpuRun({ devices: ["nvidia.com/gpu=all"] }),
+  gpuRun({ devices: ["/dev/nvidia0"] }), // a raw device path
+  gpuRun({ devices: ["/dev/vfio/12"] }),
+  gpuRun({ label: "app-bob--render-k2", runtime: "kata-vfio", devices: ["flagship.vfio/group=12"] }), // another app's claim, on this app's container
+  gpuRun({ name: "flagship-bob--render" }), // this claim on another container
+  gpuRun({ runtime: "runc" }), gpuRun({ runtime: "runsc" }), gpuRun({ runtime: "kata" }), gpuRun({ runtime: "kata-vfio" }), // runtimes the claim doesn't name
+  gpuRun({ extra: ["--runtime=runsc"] }),
+  gpuRun({ label: "app-nobody-k9" }),
+  gpuRun({ label: "../../etc" }),
+  gpuRun({ extra: ["--label", "flagship.gpu.allocation=app-carol--mig-k3"] }),
+  gpuRun({ extra: ["--gpus", "all"] }), gpuRun({ extra: ["--privileged"] }), gpuRun({ extra: ["-v", "/dev:/dev"] }), gpuRun({ extra: ["--device-cgroup-rule", "c 195:* rwm"] }),
+  gpuRun({ extra: ["--user", "0"] }), gpuRun({ extra: ["--network", "host"] }), gpuRun({ sub: "create" }),
+]) gpuDocker(bad);
+gpuDocker(gpuRun(), null); // no claims published: no GPU
+docker("run", "-d", "--runtime=runsc", "--device", "nvidia.com/gpu=0", IMG); // a device without an allocation
+// WASI app workers (docs/wasi-apps.md): their unit instances, the verbs the daemon uses, typed drop-ins
+const WASI = "flagship-wasi@0123456789abcdef.service";
+sc("start", "--no-block", WASI);
+sc("stop", WASI);
+sc("reset-failed", WASI);
+sc("show", WASI, "--property=ActiveState,Result");
+sc("freeze", WASI);
+sc("thaw", WASI);
+for (const bad of [
+  ["enable", WASI], ["restart", WASI], ["mask", WASI], ["is-active", WASI], ["start", "flagship-wasi@0123456789ABCDEF.service"], ["start", "flagship-wasi@.service"],
+  ["start", "flagship-wasi@0123456789abcdef0.service"], ["start", "flagship-wasi@0123456789abcde.service"], ["start", "flagship-wasi@../../etc/x.service"],
+  ["start", `${WASI}\nExecStart=/bin/sh`], ["start", "flagship-wasi@0123456789abcdef.socket"], ["freeze", "docker.service"], ["thaw", "flagship-daemon.service"],
+  ["stop", WASI, "docker.service"], ["start", "getty@0123456789abcdef.service"],
+]) sc(...bad);
+const wu = (args: Record<string, unknown>) => add("wasi.unit", args);
+const wasiOk = { action: "write", instance: "0123456789abcdef", world: "http-proxy", memoryMiB: 384, tasks: 64, cpuPercent: 50, restart: "on-failure" };
+wu(wasiOk);
+wu({ ...wasiOk, world: "command", restart: "never", filesPath: `${ROOT}/${VOL}/data` });
+wu({ ...wasiOk, restart: "always", filesPath: `/var/lib/containers/storage/volumes/${VOL}/_data` });
+wu({ action: "remove", instance: "0123456789abcdef" });
+for (const bad of [
+  { ...wasiOk, world: "http-proxy\nExecStartPre=/bin/sh -c id" }, { ...wasiOk, restart: "on-failure\nUser=root" }, { ...wasiOk, world: "serve" }, { ...wasiOk, memoryMiB: 1e9 },
+  { ...wasiOk, memoryMiB: 64.5 }, { ...wasiOk, memoryMiB: "64" }, { ...wasiOk, tasks: 1 }, { ...wasiOk, cpuPercent: 801 }, { ...wasiOk, filesPath: "/etc" },
+  { ...wasiOk, filesPath: `${ROOT}/flagship-pgdata-${PGKEY}/data` }, { ...wasiOk, filesPath: `${ROOT}/${VOL}/data/../../../etc` }, { ...wasiOk, filesPath: `${ROOT}/${VOL}/data\nBindPaths=/:/x` },
+  { ...wasiOk, filesPath: 5 }, { ...wasiOk, instance: "../../../etc/systemd" }, { ...wasiOk, instance: "0123456789ABCDEF" }, { ...wasiOk, instance: 5 }, { ...wasiOk, text: "[Service]\nUser=root" },
+  { ...wasiOk, unit: "flagship-daemon.service" }, { action: "remove", instance: "0123456789abcdef", world: "command" }, { action: "install", instance: "0123456789abcdef" },
+  { action: "remove", instance: "0123456789abcdef/../../../etc" }, {},
+]) wu(bad);
+add("setup", { step: "wasi-runtime" });
+add("setup", { step: "gpu-broker" });
 
 /** Every docker and docker.file case again, under Podman. */
 export const CORPUS: CorpusCase[] = [

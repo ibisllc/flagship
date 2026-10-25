@@ -38,6 +38,7 @@ import { handleInferenceModelRoutes, isInferenceModelPath } from "./inferenceMod
 import { handleSecurityNotices, isSecurityNoticesPath } from "./securityNotices.js";
 import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetworkRoutes.js";
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
+import { CANARY_REPORT_PATH, UPDATE_RECEIPT_PATH, handleCanaryReport, handleUpdateReceipt } from "./updateReceipts.js";
 import { handleOutboundHosts, isOutboundHostsPath } from "./outboundHosts.js";
 import { handleReapRoute, REAP_PATH_PREFIX } from "./prodReap.js";
 import { CloudflareDnsClient } from "@flagship/control-plane";
@@ -691,6 +692,10 @@ async function routeImpl(
   if (url.pathname === RATE_LIMIT_REPORT_PATH) {
     return handleRateLimitReport(request, env);
   }
+  // Canary update receipts, the operator's view (x-admin-secret; updateReceipts.ts, npm run canary).
+  if (url.pathname === CANARY_REPORT_PATH) {
+    return handleCanaryReport(request, env);
+  }
   // Which hosts boxes' AI calls may leave through the hub: the hub asks and reports
   // (x-usage-secret); the owner reads and blocks (x-admin-secret). docs/outbound-hosts.md.
   if (isOutboundHostsPath(url.pathname)) {
@@ -928,6 +933,11 @@ async function routeImpl(
       ...(subject ? { subject } : {}),
     }, ctx);
     if (rl.limited) return rateLimitedResponse(rl);
+  }
+
+  // A box's content-free update receipt (updateReceipts.ts): metered above, stored as counts only.
+  if (url.pathname === UPDATE_RECEIPT_PATH) {
+    return handleUpdateReceipt(buffered, env);
   }
 
   // .com control-plane routes (D1-backed). When DB binding is present,

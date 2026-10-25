@@ -257,22 +257,27 @@ test.describe("gym webapp share", () => {
     await reachHome(page);
     const fx = await fixtures(page);
     let accepted: { acceptance: string } | null = null;
-    // Co-managing a server adds it to the account: an admin device does it,
-    // and signs the acceptance with the admin root the account pins.
+    let attestationRequest: { request: { username: string; keyPubHex: string; issuedAt: number }; signature: string } | null = null;
+    // Co-managing a server adds it to the account: an admin device does it. Its
+    // admin root asks .com to attest a per-share admin key, which signs the
+    // acceptance (no stable account key reaches the shared server: AT-LNK-10).
     const adminPubHex = await page.evaluate(async () => {
       const { getSession } = await import("/lib/state.js");
       const ks = await import("/keystore.js");
       getSession().adminRootSeed = ks.hexToBytes("6c".repeat(32));
       return ks.adminRootPubHex(getSession().adminRootSeed);
     });
-    const attestation = {
-      kind: "AccountKeyAttestation", version: 1, keyKind: "admin-root", keyPubHex: adminPubHex,
+    const attestationFor = (keyPubHex: string) => ({
+      kind: "AccountKeyAttestation", version: 1, keyKind: "share", keyPubHex,
       issuedAt: Date.now() - 1000, expiresAt: Date.now() + 14 * 86_400_000, signedBy: "ca".repeat(32), signature: "00".repeat(64),
-    };
+    });
     await stub(page, [
       [`/api/server-shares/${fx.alice.shareId}/accept`, (b) => ((accepted = b as { acceptance: string }), { json: { ok: true } })],
       [`/api/server-shares/${fx.alice.shareId}`, () => ({ json: { shareId: fx.alice.shareId, serverDomain: SHARED_BOX, state: accepted ? "accepted" : "offered", offer: fx.alice.offer, acceptance: null, unlock: false } })],
-      ["/api/users/smoketest/account-key-attestation", { attestation }],
+      ["/api/users/smoketest/share-key-attestation", (b) => {
+        attestationRequest = b as NonNullable<typeof attestationRequest>;
+        return { json: { attestation: attestationFor(attestationRequest.request.keyPubHex) } };
+      }],
       ["/api/share-inbox", (b) => ({ json: (b as { request: { op: string } }).request.op === "list" ? { entries: [] } : { ok: true } })],
     ]);
     await page.evaluate(async (link) => {
@@ -287,20 +292,24 @@ test.describe("gym webapp share", () => {
     await page.fill(".modal-input", PASSPHRASE);
     await page.click("[data-modal-ok]");
     await expect(page.locator("[data-share-sas]")).toHaveText(/^\d{3} \d{3}$/, { timeout: 10_000 });
-    // The sealed acceptance carries #12, signed by that admin root, and the attestation.
-    const proof = await page.evaluate(async ({ secretHex, shareId, sealed, adminPubHex }) => {
+    // The admin root signed the attestation request; the sealed acceptance carries #12, signed by
+    // the per-share admin key the request named, and the attestation of that key.
+    const proof = await page.evaluate(async ({ secretHex, shareId, sealed, adminPubHex, req }) => {
       const ss = await import("/lib/serverShare.js");
       const ks = await import("/keystore.js");
       const p = ss.parseShareAcceptancePayload(
         await ss.openShareJson(await ss.shareLinkKey(ks.hexToBytes(secretHex)), ss.shareAad(ss.AAD_SHARE_ACCEPTANCE, shareId), sealed),
       );
+      const key = p?.admin?.admit.keyPubHex ?? "";
       return {
-        keyPubHex: p?.admin?.admit.keyPubHex,
-        verifies: p?.admin ? await ss.verifyServerShareAcceptAdmin(p.admin.admit, p.admin.signature, adminPubHex) : false,
-        attested: p?.admin?.attestation.keyPubHex,
+        requested: req.request.keyPubHex === key,
+        requestSignedByAdminRoot: await ss.verifyShareKeyAttestationRequest(req.request, req.signature, adminPubHex),
+        notTheAdminRoot: key !== adminPubHex && key.length === 64,
+        verifies: p?.admin ? await ss.verifyServerShareAcceptAdmin(p.admin.admit, p.admin.signature, key) : false,
+        attested: p?.admin?.attestation.keyPubHex === key && p?.admin?.attestation.keyKind === "share",
       };
-    }, { secretHex: fx.alice.secretHex, shareId: fx.alice.shareId, sealed: accepted!.acceptance, adminPubHex });
-    expect(proof).toEqual({ keyPubHex: adminPubHex, verifies: true, attested: adminPubHex });
+    }, { secretHex: fx.alice.secretHex, shareId: fx.alice.shareId, sealed: accepted!.acceptance, adminPubHex, req: attestationRequest! });
+    expect(proof).toEqual({ requested: true, requestSignedByAdminRoot: true, notTheAdminRoot: true, verifies: true, attested: true });
     await expect(page.locator("[data-share-waiting]")).toContainText("Waiting for the owner to confirm");
     await shot(page, testInfo, "member-code");
   });

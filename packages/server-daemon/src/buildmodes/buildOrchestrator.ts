@@ -676,8 +676,16 @@ export class BuildOrchestrator {
    * upstream changed take the candidate's, files only the owner changed keep theirs, and a conflict keeps
    * the owner's version and is listed. Nothing goes live: the owner reviews the proposal (new capabilities
    * are named on their own), then deploys that build or lets a consented AI repair resolve the conflicts.
+   * When there is nothing to take the answer is `upToDate: true` and no build is opened.
    */
-  async proposeUpstreamSync(serviceId: string, ref?: string): Promise<{ ok: true; buildId: string; proposal: Omit<SyncProposal, "merged">; candidateCommit?: string; upToDate: boolean } | { ok: false; status: number; reason: string }> {
+  async proposeUpstreamSync(
+    serviceId: string,
+    ref?: string,
+  ): Promise<
+    | { ok: true; buildId: string; proposal: Omit<SyncProposal, "merged">; candidateCommit?: string; upToDate: false }
+    | { ok: true; upToDate: true; candidateCommit?: string }
+    | { ok: false; status: number; reason: string }
+  > {
     const prov = await this.deps.provenance?.load(serviceId);
     if (!prov) return { ok: false, status: 404, reason: "this app was not imported from a repo on this server, or its import is too large to sync" };
     const buildId = this.newBuildId();
@@ -686,6 +694,12 @@ export class BuildOrchestrator {
     if (!candidate.fit && candidate.unreadable) return { ok: false, status: 422, reason: candidate.reason };
     const upstream = candidate.original ?? candidate.files;
     const proposal = proposeSync({ base: prov.base, local: prov.local, upstream });
+    // Nothing to take: the same commit, or a candidate whose merge would leave what runs now as it is.
+    // No build is opened, so the owner has nothing to discard.
+    if ((candidate.commit !== undefined && candidate.commit === prov.commit) || (proposal.takeUpstream.length === 0 && proposal.conflicts.length === 0)) {
+      await this.deps.journal.append(buildId, { mode: "git", kind: "cancelled", actor: "system", summary: "sync: already up to date" });
+      return { ok: true, upToDate: true, ...(candidate.commit ? { candidateCommit: candidate.commit } : {}) };
+    }
     const tree: FileTree = { ...proposal.merged };
     for (const path of proposal.conflicts) if (prov.local[path] !== undefined) tree[path] = prov.local[path]!;
     this.states.set(buildId, { buildId, mode: "git", serverFqdn: this.deps.serverFqdn, createdAt: this.now(), gitFit: true, editsServiceId: serviceId });
@@ -712,7 +726,7 @@ export class BuildOrchestrator {
       buildId,
       proposal: summary,
       ...(candidate.commit ? { candidateCommit: candidate.commit } : {}),
-      upToDate: candidate.commit !== undefined && candidate.commit === prov.commit,
+      upToDate: false,
     };
   }
 

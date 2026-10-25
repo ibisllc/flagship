@@ -1,5 +1,7 @@
 package com.flagshipserver.app.core.pq
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import java.security.MessageDigest
 
 /**
@@ -14,10 +16,10 @@ object QuantumSafety {
     val LEAVING_STRICT_LOSS = listOf("classical-signatures-accepted", "classical-key-exchange-accepted", BROWSER_LOSS)
 
     fun lossText(code: String): String = when (code) {
-        "classical-signatures-accepted" -> "Orders signed only with today's (classical) signatures will be accepted again."
-        "classical-key-exchange-accepted" -> "Connections that use only classical key exchange will be accepted again."
-        BROWSER_LOSS -> "Browsers can reach it. A browser's connection uses post-quantum key exchange, but the server's identity is still proven with a classical certificate."
-        CONNECTOR_LOSS -> "This service's own connection is classical, so what it is sent could be read by a future quantum computer."
+        "classical-signatures-accepted" -> FSStrings.get(R.string.orders_signed_only_with_todays_classical)
+        "classical-key-exchange-accepted" -> FSStrings.get(R.string.connections_that_use_only_classical_key)
+        BROWSER_LOSS -> FSStrings.get(R.string.browsers_can_reach_it_a_browsers)
+        CONNECTOR_LOSS -> FSStrings.get(R.string.this_services_own_connection_is_classical)
         else -> code
     }
 
@@ -128,11 +130,11 @@ object QuantumSafety {
     ) {
         val ready: Boolean get() = thisDeviceIsAdmin && thisDeviceBound && devices > 0 && devicesBound == devices && recoveryChecked && serverBound
         val missing: List<String> get() = buildList {
-            if (!thisDeviceIsAdmin) add("Only an admin device of this account can turn this on.")
-            if (!thisDeviceBound) add("This device's post-quantum key isn't registered yet. Unlock the app once while online.")
-            if (devicesBound < devices) add("${devices - devicesBound} of your devices have no post-quantum key yet. Open Flagship on each of them, or remove the ones you no longer use.")
-            if (!recoveryChecked) add("Save and test your account recovery first.")
-            if (!serverBound) add("This server hasn't registered its post-quantum key yet. Update it first.")
+            if (!thisDeviceIsAdmin) add(FSStrings.get(R.string.only_an_admin_device_of_this_3))
+            if (!thisDeviceBound) add(FSStrings.get(R.string.this_devices_post_quantum_key_isnt))
+            if (devicesBound < devices) add(FSStrings.get(R.string.of_your_devices_have_no_post, devices - devicesBound))
+            if (!recoveryChecked) add(FSStrings.get(R.string.save_and_test_your_account_recovery))
+            if (!serverBound) add(FSStrings.get(R.string.this_server_hasnt_registered_its_post))
         }
     }
 
@@ -143,11 +145,11 @@ object QuantumSafety {
     }
 
     fun connectors(aiProviders: List<String>): List<Connector> = buildList {
-        add(Connector("ai-flagship-inference", "Flagship Inference", "Builds your apps with a hosted model. Prompts and code go over the provider's own TLS.", Protection.CLASSICAL))
+        add(Connector("ai-flagship-inference", FSStrings.get(R.string.flagship_inference), FSStrings.get(R.string.builds_your_apps_with_a_hosted), Protection.CLASSICAL))
         for (p in aiProviders.map { it.lowercase() }.distinct().sorted()) if (p != "flagship-inference") {
-            add(Connector("ai-$p", p.replaceFirstChar { it.uppercase() }, "Your own AI key. Prompts and code go over the provider's own TLS.", Protection.CLASSICAL))
+            add(Connector("ai-$p", p.replaceFirstChar { it.uppercase() }, FSStrings.get(R.string.your_own_ai_key_prompts_and), Protection.CLASSICAL))
         }
-        add(Connector("push-fcm", "Google push", "Wakes the app. Carries no content; the app then asks the server over the quantum-safe channel.", Protection.CONTENT_FREE))
+        add(Connector("push-fcm", FSStrings.get(R.string.google_push), FSStrings.get(R.string.wakes_the_app_carries_no_content), Protection.CONTENT_FREE))
     }
 
     fun connectorScope(server: String, connector: String) = AssurancePolicy.Scope("connector", "${server.lowercase()}:$connector")

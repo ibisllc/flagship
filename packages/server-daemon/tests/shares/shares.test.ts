@@ -38,8 +38,7 @@ import { ShareStore, type ShareStoreOptions } from "../../src/shares/shareStore.
 import { ShareSessionStore, buildShares, pollShareEndsOnce } from "../../src/shares/sharesHttp.js";
 import type { ShareInvites } from "../../src/shares/shareInvites.js";
 import { ACCEPT_ADMIN_SENTENCES, checkShareAcceptAdmin } from "../../src/shares/acceptAdmin.js";
-import { deriveDemoAdminRoot } from "@flagship/control-plane";
-import { JOIN_ADMIN, adminProof, testVerifyAcceptAdmin, type ProofOptions } from "./acceptAdminFixture.js";
+import { adminProof, joinShareAdmin, testVerifyAcceptAdmin, type ProofOptions } from "./acceptAdminFixture.js";
 
 const BOX = "home.harry.flagship.services";
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -367,11 +366,11 @@ describe("only an admin device of the joining account accepts", () => {
   }
   const nonAdmin = deriveIRK({ seed: memberUmk.seed });
 
-  it("takes an acceptance its admin root signed, and keeps the proof", async () => {
+  it("takes an acceptance its per-share admin key signed, and keeps the proof", async () => {
     const x = setup();
     const r = await firstGrant(x, acceptance());
     expect(r.status).toBe(200);
-    expect(x.store.get(SHARE)?.acceptAdmin?.admit.keyPubHex).toBe(hex(JOIN_ADMIN.publicKey));
+    expect(x.store.get(SHARE)?.acceptAdmin?.admit.keyPubHex).toBe(hex(joinShareAdmin(SHARE).publicKey));
   });
 
   it("refuses an acceptance with no admin proof (a non-admin device or an older app)", async () => {
@@ -383,15 +382,24 @@ describe("only an admin device of the joining account accepts", () => {
     );
   });
 
-  it("refuses a non-admin device that signs with its IRK while the account pins an admin root", async () => {
-    const r = await firstGrant(setup(), acceptance(member, SHARE, { signer: nonAdmin, keyKind: "irk", attested: JOIN_ADMIN, attestedKind: "admin-root" }));
-    expect(r.body.code).toBe("accept-not-admin");
+  it("refuses a proof that names a stable account key instead of the per-share key (AT-LNK-10)", async () => {
+    const a = acceptance();
+    const proof = a.acceptAdmin!;
+    for (const keyKind of ["admin-root", "irk"]) {
+      const legacy = {
+        ...proof,
+        admit: { ...proof.admit, keyKind, keyPubHex: hex(nonAdmin.publicKey) },
+        attestation: { ...proof.attestation, keyKind, keyPubHex: hex(nonAdmin.publicKey) },
+      };
+      const r = await firstGrant(setup(), { ...a, acceptAdmin: legacy });
+      expect(r.status).toBe(400);
+    }
   });
 
   it("refuses a forged key: one the device made up, or one the CA never attested", async () => {
     const madeUp = deriveIRK({ seed: new Uint8Array(32).fill(99) });
-    // Signed by a key of its own while the attestation names the real admin root.
-    let r = await firstGrant(setup(), acceptance(member, SHARE, { signer: madeUp, attested: JOIN_ADMIN }));
+    // Signed by a key of its own while the attestation names the real share key.
+    let r = await firstGrant(setup(), acceptance(member, SHARE, { signer: madeUp, attested: joinShareAdmin(SHARE) }));
     expect(r.status).toBe(403);
     expect(r.body).toEqual({ error: ACCEPT_ADMIN_SENTENCES["accept-signature"], code: "accept-signature" });
     // An attestation for its own key, signed by something that isn't the CA.
@@ -399,7 +407,7 @@ describe("only an admin device of the joining account accepts", () => {
     expect(r.body.code).toBe("accept-signature");
     // A real attestation, but the #12 signature is over other bytes.
     const a = acceptance();
-    const tampered = { ...a, acceptAdmin: { ...a.acceptAdmin!, signature: hex(signServerShareAccept(a.accept, JOIN_ADMIN)) } };
+    const tampered = { ...a, acceptAdmin: { ...a.acceptAdmin!, signature: hex(signServerShareAccept(a.accept, joinShareAdmin(SHARE))) } };
     r = await firstGrant(setup(), tampered);
     expect(r.body.code).toBe("accept-signature");
   });
@@ -449,15 +457,11 @@ describe("only an admin device of the joining account accepts", () => {
     expect(r.body.error).toBe(ACCEPT_ADMIN_SENTENCES["accept-unverifiable"]);
   });
 
-  it("follows the no-admin-root fallback: the IRK of an account that pins none", async () => {
-    const r = await firstGrant(setup(), acceptance(member, SHARE, { signer: nonAdmin, keyKind: "irk" }));
-    expect(r.status).toBe(200);
-  });
-
-  it("works the same for a demo account (its admin root, derived on .com)", async () => {
-    const demoRoot = deriveDemoAdminRoot(new Uint8Array(32).fill(5), "playstore-test-0725");
-    const r = await firstGrant(setup(), acceptance(member, SHARE, { signer: demoRoot }));
-    expect(r.status).toBe(200);
+  it("never sees the same key for one account on two shares (AT-LNK-10)", async () => {
+    const one = acceptance(member, SHARE).acceptAdmin!;
+    const two = acceptance(member, "cd".repeat(16)).acceptAdmin!;
+    expect(one.admit.keyPubHex).not.toBe(two.admit.keyPubHex);
+    expect([one.admit.keyPubHex, two.admit.keyPubHex]).not.toContain(hex(nonAdmin.publicKey));
   });
 
   it("asks for the proof only on the first grant; a change keeps it", async () => {
@@ -476,7 +480,7 @@ describe("only an admin device of the joining account accepts", () => {
     await firstGrant(x, acceptance());
     const y = setup({ dir, verifyAcceptAdmin: () => ({ ok: false, status: 503, code: "accept-unverifiable", error: "x" }) });
     await y.store.load();
-    expect(y.store.get(SHARE)?.acceptAdmin?.admit.keyKind).toBe("admin-root");
+    expect(y.store.get(SHARE)?.acceptAdmin?.admit.keyKind).toBe("share");
   });
 });
 

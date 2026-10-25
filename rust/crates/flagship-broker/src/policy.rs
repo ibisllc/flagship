@@ -53,6 +53,8 @@ pub const SETUP_STEPS: &[&str] = &[
     "system-repair",
     "server-code",
     "rust-stack",
+    "wasi-runtime",
+    "gpu-broker",
 ];
 
 fn forbidden(m: impl Into<String>) -> PrivdError {
@@ -229,7 +231,10 @@ const HELPER_REQUIRED: &[&str] = &[
     "--entrypoint",
 ];
 
-const VOL: &str = "flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128}";
+/// An app's files volume, or a dedicated database's data, each in its own quota image.
+const VOL: &str = "(?:flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128}|flagship-pgdata-[0-9a-f]{24})";
+/// Only an app's files volume (what a WASI app's unit binds).
+const FILES_VOL: &str = "flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128}";
 
 static FILES_MOUNT_RE: LazyLock<Regex> = LazyLock::new(|| {
     re(r"^type=volume,src=flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128},dst=/data(,readonly)?$")
@@ -245,9 +250,10 @@ static COMPOSE_ARG_RE: LazyLock<Regex> = LazyLock::new(|| {
 static COMPOSE_VERSION_ARG_RE: LazyLock<Regex> =
     LazyLock::new(|| re(r"^(--short|--format|json|\{\{\.Version\}\})$"));
 static NNP_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^no-new-privileges(:true)?$"));
-static ROOT_USER_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^(0|root)(:|$)"));
 static BIND_DEVICE: LazyLock<Regex> = LazyLock::new(|| {
-    re(r"^device=/var/lib/flagship-files/(flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128})/data$")
+    re(
+        r"^device=/var/lib/flagship-files/(flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128}|flagship-pgdata-[0-9a-f]{24})/data$",
+    )
 });
 static SAVE_IMAGE_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^[a-z0-9][a-z0-9._/:@-]{0,255}$"));
 static HELPER_SIZE_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^[0-9]{1,6}[kmg]?$"));
@@ -285,25 +291,35 @@ fn for_engine(
     a: Vec<String>,
     engine: EngineKind,
     docker_rules: bool,
+    gpu: GpuClaimReader<'_>,
 ) -> Result<(&'static str, Vec<String>), PrivdError> {
     if engine != EngineKind::Podman {
         return Ok((EngineKind::Docker.binary(), a));
     }
     let mapped = podman_argv(&a)?;
     if docker_rules {
-        validate_docker_args(&mapped)?;
+        validate_docker_args_with(&mapped, gpu)?;
     }
     validate_podman_args(&mapped)?;
     Ok((EngineKind::Podman.binary(), mapped))
 }
 
 pub fn docker_exec(args: &Args, engine: EngineKind) -> Result<PrivExec, PrivdError> {
+    docker_exec_with(args, engine, &no_gpu_claims)
+}
+
+/// `dockerExec` with flagship-gpud's attached GPU allocations.
+pub fn docker_exec_with(
+    args: &Args,
+    engine: EngineKind,
+    gpu: GpuClaimReader<'_>,
+) -> Result<PrivExec, PrivdError> {
     no_extra(args, &["argv", "stdin", "env"])?;
     let a = string_argv(args.get("argv"), 256)?;
     let sub = at(&a, 0).to_owned();
     if sub == "compose" {
         let c = compose_exec(a)?;
-        let (file, argv) = for_engine(c.args.clone(), engine, false)?;
+        let (file, argv) = for_engine(c.args.clone(), engine, false, gpu)?;
         return Ok(PrivExec {
             file,
             args: argv,
@@ -332,10 +348,10 @@ pub fn docker_exec(args: &Args, engine: EngineKind) -> Result<PrivExec, PrivdErr
     if sub == "network" && at(&a, 1) == "create" {
         validate_network_create(&a)?;
     }
-    validate_docker_args(&a)?;
+    validate_docker_args_with(&a, gpu)?;
     let input = args.get("stdin").and_then(Value::as_str).map(str::to_owned);
     let env = client_env(args.get("env"))?;
-    let (file, argv) = for_engine(a, engine, true)?;
+    let (file, argv) = for_engine(a, engine, true, gpu)?;
     Ok(PrivExec {
         file,
         args: argv,
@@ -518,7 +534,7 @@ fn validate_docker_exec(a: &[String]) -> Result<(), PrivdError> {
         }
         return Err(forbidden(format!("exec flag {f} is not allowed")));
     }
-    if !EXEC_CONTAINERS.contains(&at(a, i)) {
+    if !EXEC_CONTAINERS.contains(&at(a, i)) && !DEDICATED_PG_CONTAINER.is_match(at(a, i)) {
         return Err(forbidden("exec reaches only the box's data services"));
     }
     let cmd = at(a, i.saturating_add(1));
@@ -562,7 +578,7 @@ pub fn docker_file_exec(args: &Args, engine: EngineKind) -> Result<PrivExec, Pri
         return Err(bad("load needs stdinPath"));
     }
     let env = client_env(args.get("env"))?;
-    let (file, argv) = for_engine(a, engine, true)?;
+    let (file, argv) = for_engine(a, engine, true, &no_gpu_claims)?;
     Ok(PrivExec {
         file,
         args: argv,
@@ -629,16 +645,638 @@ fn compose_exec(a: Vec<String>) -> Result<PrivExec, PrivdError> {
     Ok(exec("/usr/bin/docker", a, 10 * 60_000))
 }
 
+// ── docker run / create, read the way the docker CLI reads them ───────────
+
+/// `RUN_BOOL_FLAGS` / `RUN_VALUE_FLAGS` (policy.ts): every flag `docker run` / `docker create`
+/// knows, by long name, and whether it takes a value. The argv is parsed with the CLI's own
+/// (pflag) rules into (flag, value) pairs, and the policy reads those; an unknown flag is refused.
+const RUN_BOOL_FLAGS: &[&str] = &[
+    "detach",
+    "interactive",
+    "tty",
+    "rm",
+    "init",
+    "privileged",
+    "publish-all",
+    "read-only",
+    "no-healthcheck",
+    "oom-kill-disable",
+    "sig-proxy",
+    "disable-content-trust",
+    "quiet",
+    "use-api-socket",
+];
+const RUN_VALUE_FLAGS: &[&str] = &[
+    "attach",
+    "add-host",
+    "annotation",
+    "blkio-weight",
+    "blkio-weight-device",
+    "cap-add",
+    "cap-drop",
+    "cgroup-parent",
+    "cgroupns",
+    "cidfile",
+    "cpu-count",
+    "cpu-percent",
+    "cpu-period",
+    "cpu-quota",
+    "cpu-rt-period",
+    "cpu-rt-runtime",
+    "cpu-shares",
+    "cpus",
+    "cpuset-cpus",
+    "cpuset-mems",
+    "detach-keys",
+    "device",
+    "device-cgroup-rule",
+    "device-read-bps",
+    "device-read-iops",
+    "device-write-bps",
+    "device-write-iops",
+    "dns",
+    "dns-option",
+    "dns-search",
+    "domainname",
+    "entrypoint",
+    "env",
+    "env-file",
+    "expose",
+    "gpus",
+    "group-add",
+    "health-cmd",
+    "health-interval",
+    "health-retries",
+    "health-start-interval",
+    "health-start-period",
+    "health-timeout",
+    "hostname",
+    "io-maxbandwidth",
+    "io-maxiops",
+    "ip",
+    "ip6",
+    "ipc",
+    "isolation",
+    "kernel-memory",
+    "label",
+    "label-file",
+    "link",
+    "link-local-ip",
+    "log-driver",
+    "log-opt",
+    "mac-address",
+    "memory",
+    "memory-reservation",
+    "memory-swap",
+    "memory-swappiness",
+    "mount",
+    "name",
+    "network",
+    "network-alias",
+    "oom-score-adj",
+    "pid",
+    "pids-limit",
+    "platform",
+    "publish",
+    "pull",
+    "restart",
+    "runtime",
+    "security-opt",
+    "shm-size",
+    "stop-signal",
+    "stop-timeout",
+    "storage-opt",
+    "sysctl",
+    "tmpfs",
+    "ulimit",
+    "user",
+    "userns",
+    "uts",
+    "volume",
+    "volume-driver",
+    "volumes-from",
+    "workdir",
+];
+static LONG_FLAG_NAME: LazyLock<Regex> = LazyLock::new(|| re(r"^[a-z0-9][a-z0-9-]{0,63}$"));
+
+/// `RUN_FLAG_ALIASES`: second names the CLI gives a flag.
+fn run_flag_alias(spelled: &str) -> &str {
+    match spelled {
+        "net" => "network",
+        "net-alias" => "network-alias",
+        "dns-opt" => "dns-option",
+        other => other,
+    }
+}
+
+/// `RUN_SHORTHANDS`.
+fn run_shorthand(c: char) -> Option<&'static str> {
+    Some(match c {
+        'd' => "detach",
+        'i' => "interactive",
+        't' => "tty",
+        'P' => "publish-all",
+        'q' => "quiet",
+        'a' => "attach",
+        'c' => "cpu-shares",
+        'e' => "env",
+        'h' => "hostname",
+        'l' => "label",
+        'm' => "memory",
+        'p' => "publish",
+        'u' => "user",
+        'v' => "volume",
+        'w' => "workdir",
+        _ => return None,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FlagKind {
+    Bool,
+    Value,
+}
+
+fn run_flag(name: &str) -> Option<FlagKind> {
+    if RUN_BOOL_FLAGS.contains(&name) {
+        Some(FlagKind::Bool)
+    } else if RUN_VALUE_FLAGS.contains(&name) {
+        Some(FlagKind::Value)
+    } else {
+        None
+    }
+}
+
+/// One parsed run flag: its long name (alias resolved) and its value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunFlag {
+    pub name: String,
+    pub value: String,
+}
+
+/// `ParsedRun`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedRun {
+    pub flags: Vec<RunFlag>,
+    pub image: String,
+    pub command: Vec<String>,
+}
+
+fn bool_value(spelled: &str, v: &str) -> Result<String, PrivdError> {
+    if v == "true" || v == "false" {
+        Ok(v.to_owned())
+    } else {
+        Err(forbidden(format!("{spelled} takes true or false")))
+    }
+}
+
+/// `parseRunArgv`: `docker run|create …` as the CLI parses it; refuses what it cannot classify.
+pub fn parse_run_argv(a: &[String]) -> Result<ParsedRun, PrivdError> {
+    let mut flags: Vec<RunFlag> = Vec::new();
+    let push = |flags: &mut Vec<RunFlag>, name: &str, value: String| {
+        flags.push(RunFlag {
+            name: name.to_owned(),
+            value,
+        });
+    };
+    let mut i = 1usize;
+    while i < a.len() {
+        let x = at(a, i);
+        if x == "--" {
+            i = i.saturating_add(1);
+            break;
+        }
+        if !x.starts_with('-') || x == "-" {
+            break;
+        }
+        if let Some(body) = x.strip_prefix("--") {
+            let eq = body.find('=');
+            let spelled = eq.map_or(body, |e| body.get(..e).unwrap_or_default());
+            if !LONG_FLAG_NAME.is_match(spelled) {
+                return Err(forbidden("a flag the broker cannot read is not allowed"));
+            }
+            let name = run_flag_alias(spelled);
+            let Some(kind) = run_flag(name) else {
+                return Err(forbidden(format!(
+                    "--{spelled} is not a flag the broker knows"
+                )));
+            };
+            let attached = eq.map(|e| body.get(e.saturating_add(1)..).unwrap_or_default());
+            match (kind, attached) {
+                (FlagKind::Bool, Some(v)) => {
+                    let v = bool_value(&format!("--{spelled}"), v)?;
+                    push(&mut flags, name, v);
+                }
+                (FlagKind::Bool, None) => push(&mut flags, name, "true".to_owned()),
+                (FlagKind::Value, Some(v)) => push(&mut flags, name, v.to_owned()),
+                (FlagKind::Value, None) => {
+                    if i.saturating_add(1) >= a.len() {
+                        return Err(forbidden(format!("--{spelled} needs a value")));
+                    }
+                    i = i.saturating_add(1);
+                    push(&mut flags, name, at(a, i).to_owned());
+                }
+            }
+            i = i.saturating_add(1);
+            continue;
+        }
+        // A group of shorthands: bools until one that takes a value, which takes the rest (or the
+        // next argument).
+        let mut pos = 1usize;
+        while let Some(c) = x.get(pos..).and_then(|r| r.chars().next()) {
+            let Some(name) = run_shorthand(c) else {
+                return Err(forbidden(format!("-{c} is not a flag the broker knows")));
+            };
+            let kind = run_flag(name).unwrap_or(FlagKind::Value);
+            let rest = x
+                .get(pos.saturating_add(c.len_utf8())..)
+                .unwrap_or_default();
+            if rest.len() > 1 && rest.starts_with('=') {
+                let v = rest.get(1..).unwrap_or_default();
+                let v = if kind == FlagKind::Bool {
+                    bool_value(&format!("-{c}"), v)?
+                } else {
+                    v.to_owned()
+                };
+                push(&mut flags, name, v);
+                break;
+            }
+            if kind == FlagKind::Bool {
+                push(&mut flags, name, "true".to_owned());
+                pos = pos.saturating_add(c.len_utf8());
+                continue;
+            }
+            if rest.is_empty() {
+                if i.saturating_add(1) >= a.len() {
+                    return Err(forbidden(format!("-{c} needs a value")));
+                }
+                i = i.saturating_add(1);
+                push(&mut flags, name, at(a, i).to_owned());
+            } else {
+                push(&mut flags, name, rest.to_owned());
+            }
+            break;
+        }
+        i = i.saturating_add(1);
+    }
+    let Some(image) = a.get(i) else {
+        return Err(forbidden("name an image"));
+    };
+    Ok(ParsedRun {
+        flags,
+        image: image.clone(),
+        command: a.get(i.saturating_add(1)..).unwrap_or_default().to_vec(),
+    })
+}
+
+/// The runtime every app, staging and sandbox container runs under (appSandbox/gvisor.ts).
+pub const APP_RUNTIME: &str = "runsc";
+/// `RUN_FORBIDDEN`: run flags that give a container the host, another container, or a host file.
+const RUN_FORBIDDEN: &[&str] = &[
+    "privileged",
+    "cap-add",
+    "device",
+    "device-cgroup-rule",
+    "device-read-bps",
+    "device-read-iops",
+    "device-write-bps",
+    "device-write-iops",
+    "blkio-weight-device",
+    "pid",
+    "ipc",
+    "uts",
+    "userns",
+    "cgroupns",
+    "volumes-from",
+    "sysctl",
+    "group-add",
+    "gpus",
+    "cgroup-parent",
+    "env-file",
+    "label-file",
+    "cidfile",
+    "volume-driver",
+    "use-api-socket",
+    "annotation",
+    "link",
+    "storage-opt",
+    "log-driver",
+    "log-opt",
+    "isolation",
+];
+static PGSOCK_RO_MOUNT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    re(r"^type=volume,src=flagship-pgsock-[0-9a-f]{24},dst=/var/run/postgresql,readonly$")
+});
+static ROOT_UID_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^[+-]?0+$"));
+const RUNTIME_MESSAGE: &str = "a container runs under gVisor (--runtime runsc)";
+const GPU_DEVICE_MESSAGE: &str = "a GPU container gets only the devices its allocation holds";
+const GPU_RUNTIME_MESSAGE: &str = "a GPU container runs under the runtime its allocation names";
+
+/// A GPU allocation flagship-gpud attached for one container (flagship-gpu attach.rs): the runtime
+/// it must run under and the exact CDI devices the claim journal holds for it, as gpud publishes
+/// them root-owned in `/run/flagship-gpu/run-claims.json`. The daemon never writes them.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuRunClaim {
+    pub allocation_id: String,
+    pub app_id: String,
+    pub container: String,
+    pub runtime: String,
+    pub devices: Vec<String>,
+}
+
+pub type GpuClaimReader<'a> = &'a dyn Fn(&str) -> Option<GpuRunClaim>;
+
+pub fn no_gpu_claims(_: &str) -> Option<GpuRunClaim> {
+    None
+}
+
+/// The only runtimes a GPU container may name.
+pub const GPU_RUNTIMES: &[&str] = &["runsc-nvproxy", "kata-vfio"];
+const GPU_LABEL: &str = "flagship.gpu.allocation=";
+static GPU_CDI_DEVICE: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^(?:nvidia\.com/gpu|flagship\.vfio/group)=[A-Za-z0-9:._-]{1,32}$"));
+static GPU_ALLOCATION_ID: LazyLock<Regex> = LazyLock::new(|| re(r"^[A-Za-z0-9._-]{1,128}$"));
+pub const GPU_RUN_CLAIMS_FILE: &str = "/run/flagship-gpu/run-claims.json";
+
+/// `gpuClaimsFromFile`: only a root-owned file no group or other can write, in a root-owned
+/// directory, counts; anything else is no claim.
+pub fn gpu_claim_from_file(path: &str, id: &str) -> Option<GpuRunClaim> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let p = std::path::Path::new(path);
+        for q in [Some(p), p.parent()].into_iter().flatten() {
+            let m = std::fs::metadata(q).ok()?;
+            if m.uid() != 0 || m.mode() & 0o022 != 0 {
+                return None;
+            }
+        }
+    }
+    #[derive(serde::Deserialize)]
+    struct Doc {
+        schema: String,
+        claims: Vec<GpuRunClaim>,
+    }
+    let doc: Doc = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+    if doc.schema != "flagship/gpu-run-claims/v1" {
+        return None;
+    }
+    doc.claims.into_iter().find(|c| c.allocation_id == id)
+}
+
+/// `gpuClaimFor`: the GPU allocation a run names by its label, as gpud attached it.
+fn gpu_claim_for(
+    run: &ParsedRun,
+    claims: GpuClaimReader<'_>,
+) -> Result<Option<GpuRunClaim>, PrivdError> {
+    let labels: Vec<&RunFlag> = run
+        .flags
+        .iter()
+        .filter(|f| f.name == "label" && f.value.starts_with(GPU_LABEL))
+        .collect();
+    let Some(first) = labels.first() else {
+        return Ok(None);
+    };
+    if labels.len() > 1 {
+        return Err(forbidden("a container holds one GPU allocation"));
+    }
+    let id = first.value.get(GPU_LABEL.len()..).unwrap_or_default();
+    let claim = if GPU_ALLOCATION_ID.is_match(id) {
+        claims(id)
+    } else {
+        None
+    };
+    match claim {
+        Some(c) if c.allocation_id == id => Ok(Some(c)),
+        _ => Err(forbidden("this container holds no attached GPU allocation")),
+    }
+}
+
+/// `isRootUser`: whether a `--user` value names uid 0, in any spelling the engine reads as 0.
+fn is_root_user(v: &str) -> bool {
+    let uid = v.split(':').next().unwrap_or_default();
+    uid == "root" || ROOT_UID_RE.is_match(uid)
+}
+
+/// `checkOrdinaryRun`: an app, a staging copy, a sandbox or a probe. The first violation wins.
+fn check_ordinary_run(
+    sub: &str,
+    run: &ParsedRun,
+    gpu: Option<&GpuRunClaim>,
+) -> Result<(), PrivdError> {
+    let mut runtime = false;
+    let mut devices: Vec<&str> = Vec::new();
+    for f in &run.flags {
+        let (name, value) = (f.name.as_str(), f.value.as_str());
+        if RUN_FORBIDDEN.contains(&name) && !(gpu.is_some() && name == "device") {
+            return Err(forbidden(format!("--{name} is not allowed")));
+        }
+        match name {
+            "device" => {
+                let held = gpu.is_some_and(|g| g.devices.iter().any(|d| d == value));
+                if !GPU_CDI_DEVICE.is_match(value) || !held || devices.contains(&value) {
+                    return Err(forbidden(GPU_DEVICE_MESSAGE));
+                }
+                devices.push(value);
+            }
+            "volume" => return Err(forbidden("host-path mounts are not allowed")),
+            "security-opt" if !NNP_RE.is_match(value) => {
+                return Err(forbidden("--security-opt is not allowed"));
+            }
+            "network" => {
+                if value == "host" {
+                    return Err(forbidden("host networking is not allowed"));
+                }
+                if !NETWORK_NAME.is_match(value) {
+                    return Err(forbidden("a container joins a named network only"));
+                }
+            }
+            "mount" => {
+                if sub != "run"
+                    || !(FILES_MOUNT_RE.is_match(value)
+                        || RESOLV_MOUNT_RE.is_match(value)
+                        || PGSOCK_RO_MOUNT_RE.is_match(value))
+                {
+                    return Err(forbidden("only an app's files volume may be mounted"));
+                }
+            }
+            "user" if is_root_user(value) => {
+                return Err(forbidden("a container may not run as root"));
+            }
+            "runtime" => {
+                let ok = match gpu {
+                    Some(g) => !runtime && value == g.runtime && GPU_RUNTIMES.contains(&value),
+                    None => value == APP_RUNTIME,
+                };
+                if !ok {
+                    return Err(forbidden(if gpu.is_some() {
+                        GPU_RUNTIME_MESSAGE
+                    } else {
+                        RUNTIME_MESSAGE
+                    }));
+                }
+                runtime = true;
+            }
+            _ => {}
+        }
+    }
+    if !runtime {
+        return Err(forbidden(if gpu.is_some() {
+            GPU_RUNTIME_MESSAGE
+        } else {
+            RUNTIME_MESSAGE
+        }));
+    }
+    if let Some(g) = gpu {
+        if sub != "run" {
+            return Err(forbidden("a GPU container is started with run"));
+        }
+        if devices.len() != g.devices.len() {
+            return Err(forbidden(GPU_DEVICE_MESSAGE));
+        }
+        let names: Vec<&RunFlag> = run.flags.iter().filter(|f| f.name == "name").collect();
+        if names.len() != 1 || names.first().is_none_or(|n| n.value != g.container) {
+            return Err(forbidden(
+                "the GPU allocation was attached for another container",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The pinned Postgres image of an app's dedicated database (dataLayer/dedicated.ts).
+pub const DEDICATED_PG_IMAGE: &str = "pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0";
+const DEDICATED_CAPS: &[&str] = &["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"];
+const DEDICATED_SETTINGS: &[&str] = &[
+    "listen_addresses",
+    "max_connections",
+    "superuser_reserved_connections",
+    "shared_buffers",
+    "work_mem",
+    "maintenance_work_mem",
+    "temp_file_limit",
+    "max_wal_size",
+    "min_wal_size",
+    "statement_timeout",
+    "idle_in_transaction_session_timeout",
+    "max_parallel_workers_per_gather",
+    "log_min_messages",
+];
+const DEDICATED_ENV: &[&str] = &[
+    "POSTGRES_USER=flagship_admin",
+    "POSTGRES_DB=postgres",
+    "POSTGRES_INITDB_ARGS=--auth-local=scram-sha-256 --auth-host=scram-sha-256",
+];
+static DEDICATED_NAME_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^flagship-pgd-([0-9a-f]{24})$"));
+static DEDICATED_SETTING_RE: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^([a-z_]{1,64})=([A-Za-z0-9*.]{1,32})$"));
+static DEDICATED_MEMORY_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^[1-9][0-9]{0,5}m$"));
+static DEDICATED_CPUS_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^[0-9]{1,2}(\.[0-9]{1,2})?$"));
+static DEDICATED_PIDS_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^[1-9][0-9]{0,4}$"));
+static DEDICATED_PASSWORD_RE: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^POSTGRES_PASSWORD=[A-Za-z0-9_-]{16,128}$"));
+static DEDICATED_PUBLISH_RE: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^127\.0\.0\.1:[1-9][0-9]{3,4}:5432$"));
+/// An app's dedicated database container (dataLayer/dedicated.ts dedicatedContainer).
+static DEDICATED_PG_CONTAINER: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^flagship-pgd-[0-9a-f]{24}$"));
+
+/// `isDedicatedPostgresRun`: an app's dedicated database in its exact shape: the pinned image
+/// under gVisor, its own data and socket volumes for its own key, the capabilities its
+/// entrypoint needs, its limits, a loopback port, its fixed settings.
+fn is_dedicated_postgres_run(sub: &str, run: &ParsedRun) -> bool {
+    if sub != "run" || run.image != DEDICATED_PG_IMAGE {
+        return false;
+    }
+    let first_name = run
+        .flags
+        .iter()
+        .find(|f| f.name == "name")
+        .map(|f| f.value.as_str())
+        .unwrap_or_default();
+    let Some(key) = DEDICATED_NAME_RE
+        .captures(first_name)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().to_owned())
+    else {
+        return false;
+    };
+    let c = &run.command;
+    if c.first().map(String::as_str) != Some("postgres") || c.len() % 2 != 1 {
+        return false;
+    }
+    let mut i = 1usize;
+    while i < c.len() {
+        let setting = DEDICATED_SETTING_RE
+            .captures(at(c, i.saturating_add(1)))
+            .and_then(|m| m.get(1))
+            .map(|m| m.as_str());
+        if at(c, i) != "-c" || !setting.is_some_and(|s| DEDICATED_SETTINGS.contains(&s)) {
+            return false;
+        }
+        i = i.saturating_add(2);
+    }
+    let data_mount = format!("type=volume,src=flagship-pgdata-{key},dst=/var/lib/postgresql");
+    let sock_mount = format!("type=volume,src=flagship-pgsock-{key},dst=/var/run/postgresql");
+    let mut seen: Vec<&str> = Vec::new();
+    let mut mounts: Vec<&str> = Vec::new();
+    for f in &run.flags {
+        let (name, value) = (f.name.as_str(), f.value.as_str());
+        let ok = match name {
+            "detach" => value == "true",
+            "name" => !seen.contains(&"name"),
+            "label" => value == "flagship.role=dedicated-postgres",
+            "restart" => value == "unless-stopped",
+            "runtime" => value == APP_RUNTIME,
+            "cap-drop" => value == "ALL",
+            "cap-add" => DEDICATED_CAPS.contains(&value),
+            "security-opt" => value == "no-new-privileges",
+            "network" => value != "host" && NETWORK_NAME.is_match(value),
+            "memory" | "memory-swap" => DEDICATED_MEMORY_RE.is_match(value),
+            "cpus" => DEDICATED_CPUS_RE.is_match(value),
+            "pids-limit" => DEDICATED_PIDS_RE.is_match(value),
+            "shm-size" => value == "64m",
+            "env" => DEDICATED_ENV.contains(&value) || DEDICATED_PASSWORD_RE.is_match(value),
+            "publish" => DEDICATED_PUBLISH_RE.is_match(value),
+            "mount" => {
+                let ok = value == data_mount || value == sock_mount;
+                if ok && !mounts.contains(&value) {
+                    mounts.push(value);
+                }
+                ok
+            }
+            _ => false,
+        };
+        if !ok {
+            return false;
+        }
+        if !seen.contains(&name) {
+            seen.push(name);
+        }
+    }
+    mounts.len() == 2
+        && [
+            "runtime",
+            "cap-drop",
+            "security-opt",
+            "memory",
+            "pids-limit",
+        ]
+        .iter()
+        .all(|r| seen.contains(r))
+}
+
 /// `validateDockerArgs`: every rule that keeps a container from being the host.
 pub fn validate_docker_args(a: &[String]) -> Result<(), PrivdError> {
-    let helper = is_files_helper_run(a);
+    validate_docker_args_with(a, &no_gpu_claims)
+}
+
+/// `validateDockerArgs` with flagship-gpud's attached GPU allocations.
+pub fn validate_docker_args_with(a: &[String], gpu: GpuClaimReader<'_>) -> Result<(), PrivdError> {
     let first = a.first().map(String::as_str);
-    let get = |i: usize| a.get(i).map(String::as_str);
-    let mut i = 0usize;
-    while let Some(x) = get(i) {
+    for (i, x) in a.iter().enumerate() {
         let lower = x.to_lowercase();
-        let name = lower.split('=').next().unwrap_or_default();
-        let has_eq = x.contains('=');
         let last = i.saturating_add(1) == a.len();
         if lower.contains("docker.sock") {
             return Err(forbidden("the docker socket is never mounted"));
@@ -650,10 +1288,23 @@ pub fn validate_docker_args(a: &[String]) -> Result<(), PrivdError> {
                 "the box's state directory is never visible to a container",
             ));
         }
-        if helper {
-            i = i.saturating_add(1);
-            continue;
+    }
+    if let Some(sub @ ("run" | "create")) = first {
+        let run = parse_run_argv(a)?;
+        // The files helper's flags are checked one by one in is_files_helper_run; it alone runs
+        // as uid 0 under runc.
+        if is_files_helper_run(a) || is_dedicated_postgres_run(sub, &run) {
+            return Ok(());
         }
+        let claim = gpu_claim_for(&run, gpu)?;
+        return check_ordinary_run(sub, &run, claim.as_ref());
+    }
+    let get = |i: usize| a.get(i).map(String::as_str);
+    let mut i = 0usize;
+    while let Some(x) = get(i) {
+        let lower = x.to_lowercase();
+        let name = lower.split('=').next().unwrap_or_default();
+        let has_eq = x.contains('=');
         if FORBIDDEN_FLAGS.contains(&name) {
             if name == "--security-opt" {
                 let v = if has_eq {
@@ -673,52 +1324,37 @@ pub fn validate_docker_args(a: &[String]) -> Result<(), PrivdError> {
         }
         if name == "--network" || name == "--net" {
             let v = if has_eq {
-                js::split_nth(x, '=', 1)
+                js::after_first(x, '=')
             } else {
-                get(i.saturating_add(1))
+                get(i.saturating_add(1)).unwrap_or_default()
             };
-            if v == Some("host") {
+            if v == "host" {
                 return Err(forbidden("host networking is not allowed"));
+            }
+            if !NETWORK_NAME.is_match(v) {
+                return Err(forbidden("a container joins a named network only"));
             }
         }
         if name == "-v" || name == "--volume" {
             return Err(forbidden("host-path mounts are not allowed"));
         }
+        // Outside run and create, these mean nothing safe.
         if name == "--mount" {
+            return Err(forbidden("only an app's files volume may be mounted"));
+        }
+        if name == "--user" || name == "-u" {
             let v = if has_eq {
                 js::after_first(x, '=')
             } else {
                 i = i.saturating_add(1);
                 get(i).unwrap_or_default()
             };
-            if first != Some("run") || !(FILES_MOUNT_RE.is_match(v) || RESOLV_MOUNT_RE.is_match(v))
-            {
-                return Err(forbidden("only an app's files volume may be mounted"));
-            }
-            i = i.saturating_add(1);
-            continue;
-        }
-        if name == "--user" || name == "-u" {
-            let v = if has_eq {
-                js::split_nth(x, '=', 1).unwrap_or_default()
-            } else {
-                i = i.saturating_add(1);
-                get(i).unwrap_or_default()
-            };
-            if ROOT_USER_RE.is_match(v) {
+            if is_root_user(v) {
                 return Err(forbidden("a container may not run as root"));
             }
         }
         if name == "--runtime" {
-            let v = if has_eq {
-                js::split_nth(x, '=', 1).unwrap_or_default()
-            } else {
-                i = i.saturating_add(1);
-                get(i).unwrap_or_default()
-            };
-            if v != "runsc" && v != "runc" {
-                return Err(forbidden("unknown container runtime"));
-            }
+            return Err(forbidden("--runtime is not allowed"));
         }
         if first == Some("build") && (name == "-f" || name == "--file") {
             return Err(forbidden(
@@ -798,7 +1434,13 @@ const UNIT_VERBS: &[&str] = &[
     "show",
     "enable",
     "status",
+    "freeze",
+    "thaw",
 ];
+/// One WASI app's worker (server-daemon wasi/unit.ts wasiUnitName).
+static WASI_UNIT: LazyLock<Regex> = LazyLock::new(|| re(r"^flagship-wasi@[0-9a-f]{16}\.service$"));
+/// What the daemon does to a WASI worker.
+const WASI_VERBS: &[&str] = &["start", "stop", "reset-failed", "show", "freeze", "thaw"];
 const ENABLE_UNITS: &[&str] = &[
     "ssh",
     "ssh.service",
@@ -828,8 +1470,22 @@ pub fn systemctl_exec(args: &Args) -> Result<PrivExec, PrivdError> {
     if units.is_empty() {
         return Err(bad("name a unit"));
     }
-    if units.iter().any(|u| !MANAGED_UNITS.contains(u)) {
+    let wasi = units.iter().filter(|u| WASI_UNIT.is_match(u)).count();
+    if units
+        .iter()
+        .any(|u| !MANAGED_UNITS.contains(u) && !WASI_UNIT.is_match(u))
+    {
         return Err(forbidden("that unit is not one the daemon manages"));
+    }
+    if wasi > 0 && (wasi != units.len() || !WASI_VERBS.contains(&verb)) {
+        return Err(forbidden(format!(
+            "systemctl {verb} is not allowed on a WebAssembly app's worker"
+        )));
+    }
+    if (verb == "freeze" || verb == "thaw") && wasi == 0 {
+        return Err(forbidden(format!(
+            "systemctl {verb} is only for a WebAssembly app's worker"
+        )));
     }
     for f in rest
         .iter()
@@ -848,6 +1504,156 @@ pub fn systemctl_exec(args: &Args) -> Result<PrivExec, PrivdError> {
         return Err(forbidden("that unit is not enabled from here"));
     }
     Ok(exec("/usr/bin/systemctl", a, 60_000))
+}
+
+// ── WASI app workers (server-daemon wasi/unit.ts) ─────────────────────────
+
+/// The worker binary the release's `wasi-runtime` setup step installs.
+pub const WASI_WORKER_BIN: &str = "/usr/local/lib/flagship-wasi/flagship-wasi-worker";
+pub const WASI_DROPIN_ROOT: &str = "/run/systemd/system";
+const WASI_GUEST_CONFIG: &str = "/var/app/pkg/worker.json";
+const WASI_GUEST_DATA: &str = "/var/app/data";
+static WASI_INSTANCE: LazyLock<Regex> = LazyLock::new(|| re(r"^[0-9a-f]{16}$"));
+static WASI_FILES_IMAGE_DATA: LazyLock<Regex> =
+    LazyLock::new(|| re(&format!("^{FILES_IMAGE_ROOT}/{FILES_VOL}/data$")));
+static WASI_FILES_VOLUME_DATA: LazyLock<Regex> = LazyLock::new(|| {
+    re(&format!(
+        "^/var/lib/(?:docker/volumes|containers/storage/volumes)/{FILES_VOL}/_data$"
+    ))
+});
+
+/// `WasiDropInFields`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WasiDropInFields {
+    pub world: String,
+    pub memory_mib: u64,
+    pub tasks: u64,
+    pub cpu_percent: u64,
+    pub restart: String,
+    pub files_path: Option<String>,
+}
+
+/// `renderWasiDropIn`: one app's drop-in, rendered here from typed fields, byte for byte.
+pub fn render_wasi_drop_in(d: &WasiDropInFields) -> String {
+    let mut lines = vec![
+        "# Written by the Flagship daemon (wasi/unit.ts) for one app.".to_owned(),
+        "[Service]".to_owned(),
+        "ExecStart=".to_owned(),
+        format!(
+            "ExecStart={WASI_WORKER_BIN} {} --config {WASI_GUEST_CONFIG}",
+            if d.world == "command" { "run" } else { "serve" }
+        ),
+        format!(
+            "Restart={}",
+            if d.restart == "never" {
+                "no"
+            } else {
+                d.restart.as_str()
+            }
+        ),
+        format!("MemoryMax={}M", d.memory_mib),
+        format!("TasksMax={}", d.tasks),
+        format!("CPUQuota={}%", d.cpu_percent),
+    ];
+    if let Some(p) = d.files_path.as_deref().filter(|p| !p.is_empty()) {
+        lines.push(format!("BindPaths={p}:{WASI_GUEST_DATA}"));
+    }
+    let mut out = lines.join("\n");
+    out.push('\n');
+    out
+}
+
+/// `intIn`: a JSON number that is a whole number in `min..=max`.
+fn int_in(v: Option<&Value>, min: u64, max: u64, what: &str) -> Result<u64, PrivdError> {
+    let refuse = || bad(format!("{what} must be a whole number from {min} to {max}"));
+    let n = v.and_then(Value::as_f64).ok_or_else(refuse)?;
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    if n.fract() == 0.0 && n >= min as f64 && n <= max as f64 {
+        Ok(n as u64)
+    } else {
+        Err(refuse())
+    }
+}
+
+/// `wasiUnitExec`: write or remove one WASI app's drop-in under
+/// /run/systemd/system/flagship-wasi@<instance>.service.d/.
+pub fn wasi_unit_exec(args: &Args) -> Result<PrivExec, PrivdError> {
+    no_extra(
+        args,
+        &[
+            "action",
+            "instance",
+            "world",
+            "memoryMiB",
+            "tasks",
+            "cpuPercent",
+            "restart",
+            "filesPath",
+        ],
+    )?;
+    let instance = match args.get("instance").and_then(Value::as_str) {
+        Some(x) if WASI_INSTANCE.is_match(x) => x,
+        _ => return Err(bad("instance is 16 lowercase hex")),
+    };
+    let dir = format!("{WASI_DROPIN_ROOT}/flagship-wasi@{instance}.service.d");
+    let action = args.get("action").and_then(Value::as_str);
+    if action == Some("remove") {
+        no_extra(args, &["action", "instance"])?;
+        return Ok(exec(
+            "/usr/bin/rm",
+            vec!["-rf".into(), "--".into(), dir],
+            30_000,
+        ));
+    }
+    if action != Some("write") {
+        return Err(bad("action is write or remove"));
+    }
+    let world = match args.get("world").and_then(Value::as_str) {
+        Some(w @ ("command" | "http-proxy")) => w,
+        _ => return Err(bad("world is command or http-proxy")),
+    };
+    let restart = match args.get("restart").and_then(Value::as_str) {
+        Some(r @ ("always" | "on-failure" | "never")) => r,
+        _ => return Err(bad("restart is always, on-failure or never")),
+    };
+    let mut fields = WasiDropInFields {
+        world: world.to_owned(),
+        restart: restart.to_owned(),
+        memory_mib: int_in(args.get("memoryMiB"), 32, 8192, "memoryMiB")?,
+        tasks: int_in(args.get("tasks"), 8, 4096, "tasks")?,
+        cpu_percent: int_in(args.get("cpuPercent"), 5, 800, "cpuPercent")?,
+        files_path: None,
+    };
+    if let Some(v) = args.get("filesPath") {
+        match v.as_str() {
+            Some(p) if WASI_FILES_IMAGE_DATA.is_match(p) || WASI_FILES_VOLUME_DATA.is_match(p) => {
+                fields.files_path = Some(p.to_owned());
+            }
+            _ => {
+                return Err(forbidden(
+                    "a WebAssembly app binds only its own files folder",
+                ));
+            }
+        }
+    }
+    Ok(PrivExec {
+        input: Some(render_wasi_drop_in(&fields)),
+        ..exec(
+            "/usr/bin/install",
+            vec![
+                "-D".into(),
+                "-m".into(),
+                "0644".into(),
+                "/dev/stdin".into(),
+                format!("{dir}/50-app.conf"),
+            ],
+            30_000,
+        )
+    })
 }
 
 // ── host operations ───────────────────────────────────────────────────────
@@ -994,10 +1800,11 @@ fn host_command(name: &str, a: &[String], mounts: MountsReader<'_>) -> Option<Pr
                 60_000,
             )
         }),
-        "fallocate" => {
-            (n == 3 && s(0) == "-l" && DIGITS_16.is_match(s(1)) && IMAGE_BALLAST.is_match(s(2)))
-                .then(|| exec("/usr/bin/fallocate", all(), 10 * 60_000))
-        }
+        "fallocate" => (n == 3
+            && s(0) == "-l"
+            && DIGITS_16.is_match(s(1))
+            && (IMAGE_BALLAST.is_match(s(2)) || IMAGE_FILE.is_match(s(2))))
+        .then(|| exec("/usr/bin/fallocate", all(), 10 * 60_000)),
         "mkfs.ext4" => (n == MKFS_ARGS.len().saturating_add(1)
             && MKFS_ARGS.iter().enumerate().all(|(i, x)| s(i) == *x)
             && IMAGE_FILE.is_match(s(n.saturating_sub(1))))
@@ -1422,6 +2229,8 @@ pub struct PolicyContext<'a> {
     pub mounts: MountsReader<'a>,
     pub trust: &'a ReleaseTrust,
     pub arch: &'a str,
+    /// flagship-gpud's attached GPU allocations (run-claims.json).
+    pub gpu: GpuClaimReader<'a>,
 }
 
 impl std::fmt::Debug for PolicyContext<'_> {
@@ -1443,7 +2252,7 @@ pub fn validate_request(
         "power" => power_exec(args),
         "systemd.restart" => restart_exec(args),
         "systemctl" => systemctl_exec(args),
-        "docker" => docker_exec(args, ctx.engine),
+        "docker" => docker_exec_with(args, ctx.engine, ctx.gpu),
         "docker.file" => docker_file_exec(args, ctx.engine),
         "host" => host_exec(args, ctx.mounts),
         "iptables.restore" => iptables_restore_exec(args),
@@ -1451,6 +2260,7 @@ pub fn validate_request(
         "release" => release_exec(args, ctx.trust, ctx.arch),
         "wipe" => wipe_exec(args),
         "setup" => setup_exec(args),
+        "wasi.unit" => wasi_unit_exec(args),
         _ => Err(PrivdError::new(ErrorCode::UnknownOp, "unknown operation")),
     }
 }

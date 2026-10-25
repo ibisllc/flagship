@@ -148,6 +148,7 @@ class MockBuildClient(
     /** Each sync asked for, as (serviceId, ref). */
     val syncCalls: MutableList<Pair<String, String?>> = mutableListOf()
     /** The box's answer to a sync; null = a proposal with one conflict and a new egress host. */
+    /** Replaces the default proposal (an up-to-date answer carries no build). */
     var syncFixture: BuildSyncResponse? = null
     /** Thrown by a sync instead (e.g. the 404 for an app not imported here). */
     var syncError: Throwable? = null

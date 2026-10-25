@@ -4,7 +4,7 @@
  * closed), and while strict is in force every sensitive order needs a hybrid signature by the
  * signer's bound key.
  */
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -164,12 +164,58 @@ describe("the box replays the owner's chain", () => {
     expect(await (await world(() => [entry(one), tail])).sync.refresh()).toMatchObject({ profile: "strict", generation: 1 });
   });
 
-  it("reads an unreadable state file as strict until a verified chain arrives", async () => {
+  it("reads an unreadable state file as strict until a chain that verifies a change arrives", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "pqpol-")), "assurance-policy.json");
     writeFileSync(path, "{not json");
-    const w = await world(() => [], path);
+    let chain: unknown[] = [];
+    const w = await world(() => chain, path);
     expect(w.sync.policy()).toMatchObject({ profile: "strict", rollout: "enforced" });
-    expect(await w.sync.refresh()).toEqual(legacyPolicyState({ kind: "installation", id: S }));
+    // An empty chain (or one that verifies nothing) never stands in for the lost state.
+    expect(await w.sync.refresh()).toMatchObject({ profile: "strict", rollout: "enforced" });
+    const forged = entry(one);
+    forged.signature.signature = entry(change({ issuedAt: T + 1 })).signature.signature;
+    chain = [forged];
+    expect(await w.sync.refresh()).toMatchObject({ profile: "strict", rollout: "enforced" });
+    chain = [entry(one), entry(back)];
+    expect(await w.sync.refresh()).toMatchObject({ profile: "compatibility", generation: 2 });
+  });
+
+  it("keeps a second copy of the state: a damaged file falls back to it, never to legacy", async () => {
+    const w = await world(() => [entry(one)]);
+    await w.sync.refresh();
+    writeFileSync(w.statePath, "{damaged");
+    const again = await world(() => [], w.statePath);
+    expect(again.sync.policy()).toMatchObject({ profile: "strict", rollout: "enforced", generation: 1 });
+    expect(await again.sync.refresh()).toMatchObject({ profile: "strict", generation: 1 });
+    // The damaged file is rewritten from the copy.
+    expect(JSON.parse(readFileSync(w.statePath, "utf8"))).toMatchObject({ profile: "strict", generation: 1 });
+  });
+
+  it("continues the chain from the state it holds, so a later admin-root change is adopted after the first signer is revoked", async () => {
+    let chain: unknown[] = [entry(one)];
+    let devAdmin = true;
+    const b = makeBook(() => ({ grants: [listedGrant(binding(dev, "device", DEVICE_ID))], pqKeyBindings: { adminRoot: binding(admin, "admin-root", U) } }));
+    await b.refresh();
+    const sync = new AssurancePolicySync({
+      path: join(mkdtempSync(join(tmpdir(), "pqpol-")), "assurance-policy.json"),
+      account: U,
+      serverDomain: S,
+      fetchChain: async () => ({ chain, evidence: { recoveryChecked: true } }),
+      adminRootHex: () => admin.pub,
+      isAdminDevice: (pub) => devAdmin && b.classify(pub)?.tier === "admin",
+      bindingFor: (pub) => b.pqBindingFor(pub),
+      ownEvidence: () => ({ stkBound: true, bootKeyHybrid: true }),
+      now: () => T,
+    });
+    await sync.load();
+    expect(await sync.refresh()).toMatchObject({ profile: "strict", generation: 1 });
+    devAdmin = false;
+    const byRoot = change({ prior: "strict", next: "compatibility", generation: 2, prevDigest: assurancePolicyDigest(one), acknowledgedLoss: ["classical-signatures-accepted"], signerKind: "admin-root", signerKeyId: admin.pub, issuedAt: T + 10 });
+    // The revoked device cannot sign the next change itself.
+    chain = [entry(one), entry(back)];
+    expect(await sync.refresh()).toMatchObject({ profile: "strict", generation: 1 });
+    chain = [entry(one), entry(byRoot, admin)];
+    expect(await sync.refresh()).toMatchObject({ profile: "compatibility", generation: 2 });
   });
 });
 

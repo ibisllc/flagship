@@ -22,9 +22,10 @@
 import { BrowserManager } from "./browserManager.js";
 import { guardedAction } from "./policy/actionGuard.js";
 import { ContextRegistry, PolicyError } from "./policy/contexts.js";
-import type { BrowserJudge, Decision, RequestKind } from "./policy/judge.js";
+import type { AdmittedDocument, BrowserJudge, Decision, RequestKind } from "./policy/judge.js";
 import type { BrowserCapability } from "./policy/grants.js";
 import { contextSession } from "./egress.js";
+import { approvedTargetOf, type ApprovedTarget } from "./pinningProxy.js";
 
 interface Sess {
   sessionId: string;
@@ -33,6 +34,10 @@ interface Sess {
   serviceId: string;
   /** The document URL requests from this session count as coming from. */
   docUrl: string;
+  /** The last main-frame document request the judge allowed in this tab, and under which grant. */
+  pendingDoc?: { origin: string; grantId: string };
+  /** The committed main-frame document the judge admitted (also by redirect): what actions and its subresources run under. */
+  docAdmit?: AdmittedDocument;
 }
 
 export interface PolicedBrowserOptions {
@@ -42,7 +47,7 @@ export interface PolicedBrowserOptions {
   /** Told of every refusal (for the owner's activity view); never carries a page body. */
   onDenied?: (e: { serviceId: string; url: string; kind: RequestKind; code: string; reason: string }) => void;
   /** Told of every allowed destination with the addresses the judge resolved, and for which app (its pinning proxy connects only to these). */
-  onApproved?: (host: string, addresses: string[], serviceId: string) => void;
+  onApproved?: (host: string, addresses: string[], serviceId: string, at: ApprovedTarget) => void;
   /** Extra `Target.createBrowserContext` parameters for an app's context: its own proxy (`egress.ts`). */
   contextOptions?: (serviceId: string) => Promise<Record<string, unknown>>;
   /** The app's context was disposed: its session grants and its proxy end with it. */
@@ -141,6 +146,19 @@ export class PolicedBrowser {
     return this.o.contexts.targetsOf(serviceId).filter((t) => this.sessionOfTarget.has(t));
   }
 
+  /** A grant was withdrawn: close at once every tab of the service that is no longer inside what remains. */
+  async closeOutOfScope(serviceId: string): Promise<string[]> {
+    const closed: string[] = [];
+    for (const t of this.tabsOf(serviceId)) {
+      const url = ((await this.o.cdp.send("Target.getTargetInfo", { targetId: t }).catch(() => ({ targetInfo: { url: "" } }))) as { targetInfo: { url: string } }).targetInfo.url;
+      if (this.o.judge.inScope(serviceId, url, undefined, contextSession(serviceId), this.admittedIn(t))) continue;
+      this.o.contexts.quarantine(t);
+      await this.dropTab(t);
+      closed.push(t);
+    }
+    return closed;
+  }
+
   /** Uninstall or revocation: close everything the service owned and dispose its context. */
   async revokeService(serviceId: string): Promise<void> {
     const { targets, contextId } = this.o.contexts.destroyService(serviceId);
@@ -162,6 +180,7 @@ export class PolicedBrowser {
         judge: this.o.judge,
         currentUrl: async (id) => ((await this.o.cdp.send("Target.getTargetInfo", { targetId: id })) as { targetInfo: { url: string } }).targetInfo.url,
         closeTab: (id) => this.dropTab(id),
+        admitted: (id) => this.admittedIn(id),
       },
       { serviceId, tabId, capability, sessionId: contextSession(serviceId) },
       async () => {
@@ -216,7 +235,14 @@ export class PolicedBrowser {
       return;
     }
     const parent = parentSession ? this.sessions.get(parentSession) : undefined;
-    this.sessions.set(sessionId, { sessionId, targetId: info.targetId, type: info.type, serviceId: verdict.serviceId, docUrl: parent?.docUrl ?? info.url ?? "" });
+    this.sessions.set(sessionId, {
+      sessionId,
+      targetId: info.targetId,
+      type: info.type,
+      serviceId: verdict.serviceId,
+      docUrl: parent?.docUrl ?? info.url ?? "",
+      ...(info.type !== "page" && parent?.docAdmit ? { docAdmit: parent.docAdmit } : {}),
+    });
     try {
       await cdp.sessionSend(sessionId, "Fetch.enable", { patterns: [{ urlPattern: "*" }] });
       // Sent in order but not awaited: a paused popup answers renderer-side commands only once it runs, and
@@ -233,7 +259,16 @@ export class PolicedBrowser {
 
   private onFrameNavigated(p: { frame?: { url?: string; parentId?: string } }, sessionId: string | undefined): void {
     const s = sessionId ? this.sessions.get(sessionId) : undefined;
-    if (s && p.frame && !p.frame.parentId && typeof p.frame.url === "string") s.docUrl = p.frame.url;
+    if (!s || !p.frame || p.frame.parentId || typeof p.frame.url !== "string") return;
+    s.docUrl = p.frame.url;
+    const origin = originOf(p.frame.url);
+    s.docAdmit = s.pendingDoc && origin && s.pendingDoc.origin === origin ? { origin, grantId: s.pendingDoc.grantId } : undefined;
+  }
+
+  /** The admitted main-frame document of a tab (see actionGuard.ts). */
+  private admittedIn(tabId: string): AdmittedDocument | undefined {
+    const sid = this.sessionOfTarget.get(tabId);
+    return sid ? this.sessions.get(sid)?.docAdmit : undefined;
   }
 
   private onDestroyed(targetId: string | undefined): void {
@@ -267,7 +302,9 @@ export class PolicedBrowser {
         kind,
         sessionId: contextSession(sess.serviceId),
         ...(prior.length ? { redirectChain: prior } : {}),
-        ...(kind === "subresource" || kind === "worker" || kind === "websocket" ? { initiatorUrl: sess.docUrl } : {}),
+        ...(kind === "subresource" || kind === "worker" || kind === "websocket"
+          ? { initiatorUrl: sess.docUrl, ...(sess.docAdmit && originOf(sess.docUrl) === sess.docAdmit.origin ? { initiatorGrantId: sess.docAdmit.grantId } : {}) }
+          : {}),
       });
       if (!decision.allow) {
         this.lastDenial.set(sess.targetId, decision.reason);
@@ -275,8 +312,13 @@ export class PolicedBrowser {
         await fail();
         return;
       }
+      if (kind === "document" && decision.grantId) {
+        const origin = originOf(url);
+        if (origin) sess.pendingDoc = { origin, grantId: decision.grantId };
+      }
       try {
-        this.o.onApproved?.(new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, ""), decision.addresses, sess.serviceId);
+        const at = approvedTargetOf(url);
+        if (at) this.o.onApproved?.(new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, ""), decision.addresses, sess.serviceId, at);
       } catch {
         // an observer's failure never decides a request
       }
@@ -292,5 +334,14 @@ export class PolicedBrowser {
     if (type === "WebSocket") return "websocket";
     if (sess.type === "worker" || sess.type === "service_worker" || sess.type === "shared_worker") return "worker";
     return "subresource";
+  }
+}
+
+function originOf(url: string): string | null {
+  try {
+    const o = new URL(url).origin;
+    return o === "null" ? null : o;
+  } catch {
+    return null;
   }
 }

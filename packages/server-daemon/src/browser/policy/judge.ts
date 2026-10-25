@@ -13,8 +13,11 @@
  *   - A document navigation needs a live grant that covers it, or a redirect chain the BROWSER saw
  *     that started inside one. After that a redirect may land on any public site. An unrelated
  *     direct navigation outside the grant is `needs-grant`, not a silent allow.
- *   - A subresource, worker or socket must come from a document that is itself in scope, and must
- *     reach a public destination.
+ *   - A subresource, worker or socket must come from a document that is itself in scope (covered by a
+ *     grant, or admitted by the judge as the main frame, also through a redirect), and must reach a
+ *     public destination.
+ *   - A `once` grant is spent by the top-level navigation it admits; the visit it opened stays usable
+ *     (its subresources, the app's actions on that page) while the tab stays on it.
  */
 import { classifyAddress, type AddressClass } from "@flagship/protocol";
 import { isIP } from "node:net";
@@ -30,6 +33,8 @@ export interface JudgeRequest {
   redirectChain?: string[];
   /** The URL of the document that initiated this request, for subresources and sockets. */
   initiatorUrl?: string;
+  /** The grant under which the browser admitted that document (it may have landed there by redirect). */
+  initiatorGrantId?: string;
   sessionId?: string;
 }
 
@@ -39,12 +44,27 @@ export type Decision =
   | { allow: true; grantId: string | null; addresses: string[]; viaRedirect: boolean }
   | { allow: false; code: Denial; reason: string };
 
+/** A main-frame document the judge admitted: its origin and the grant it was admitted under. */
+export interface AdmittedDocument {
+  origin: string;
+  grantId: string;
+}
+
 export interface JudgeDeps {
-  grants: { live(serviceId: string, sessionId?: string): BrowserGrant[]; spend(id: string): void };
+  grants: {
+    live(serviceId: string, sessionId?: string): BrowserGrant[];
+    spend(id: string): void;
+    /** Like `live`, but a spent `once` grant still counts (the visit it opened). Absent: `live`. */
+    usable?(serviceId: string, sessionId?: string): BrowserGrant[];
+  };
   /** Resolve a name to every address it has. Throws or returns [] on failure. */
   resolve: (host: string) => Promise<string[]>;
   /** The control host's own name and addresses: never reachable from an app browser. */
-  protectedHosts?: () => { names: string[]; addresses: string[] };
+  /**
+   * This server's own names and addresses, and the services it depends on: never reachable from an app
+   * browser. `names` match exactly; `zones` match the name and every name under it.
+   */
+  protectedHosts?: () => { names: string[]; addresses: string[]; zones?: string[] };
 }
 
 const PROTECTED: AddressClass[] = ["loopback", "link-local", "metadata", "multicast", "reserved", "invalid"];
@@ -55,6 +75,31 @@ function parse(url: string): URL | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The host every check compares: lowercase, IDNA (`URL` already gives the ASCII form), no brackets, and
+ * no trailing dot, so `box.example.` and `BOX.example` are the same name as `box.example`.
+ */
+export function hostOf(u: URL): string {
+  return canonicalName(u.hostname.replace(/^\[|\]$/g, ""));
+}
+
+function canonicalName(n: string): string {
+  let h = n.trim().toLowerCase().replace(/\.+$/, "");
+  if (!isIP(h) && /[^\x00-\x7f]/.test(h)) {
+    try {
+      h = new URL(`http://${h}/`).hostname;
+    } catch {
+      // leave it: it will not match anything real
+    }
+  }
+  return h;
+}
+
+function sameAddress(a: string, b: string): boolean {
+  const n = (x: string) => x.toLowerCase().replace(/^\[|\]$/g, "").replace(/^::ffff:(?=\d+\.)/, "");
+  return n(a) === n(b);
 }
 
 function portOf(u: URL): number {
@@ -71,18 +116,31 @@ function portOk(g: BrowserGrant, u: URL): boolean {
 }
 
 function covers(g: BrowserGrant, u: URL): boolean {
-  const host = u.hostname.toLowerCase();
+  const host = hostOf(u);
   return schemeOk(g, u) && portOk(g, u) && g.origins.some((o) => patternCovers(o, host));
 }
 
 export class BrowserJudge {
   constructor(private readonly deps: JudgeDeps) {}
 
-  /** Is `url` inside a live grant for the service (used before and after every action)? */
-  inScope(serviceId: string, url: string, capability?: BrowserCapability, sessionId?: string): boolean {
+  private usable(serviceId: string, sessionId?: string): BrowserGrant[] {
+    return this.deps.grants.usable?.(serviceId, sessionId) ?? this.deps.grants.live(serviceId, sessionId);
+  }
+
+  /**
+   * Is `url` inside a grant for the service (used before and after every action)? Either a grant covers
+   * it, or it is the document the judge admitted in that tab (`admitted`, also a redirect's landing page)
+   * and the grant that admitted it still holds.
+   */
+  inScope(serviceId: string, url: string, capability?: BrowserCapability, sessionId?: string, admitted?: AdmittedDocument): boolean {
     const u = parse(url);
     if (!u || (u.protocol !== "http:" && u.protocol !== "https:")) return false;
-    return this.deps.grants.live(serviceId, sessionId).some((g) => covers(g, u) && (!capability || g.capabilities.includes(capability)));
+    const usable = this.usable(serviceId, sessionId);
+    const fits = (g: BrowserGrant) => !capability || g.capabilities.includes(capability);
+    if (usable.some((g) => covers(g, u) && fits(g))) return true;
+    if (!admitted || u.origin !== admitted.origin) return false;
+    const g = usable.find((x) => x.id === admitted.grantId);
+    return !!g && fits(g);
   }
 
   async judge(req: JudgeRequest): Promise<Decision> {
@@ -90,35 +148,40 @@ export class BrowserJudge {
     if (!u || (u.protocol !== "http:" && u.protocol !== "https:")) return { allow: false, code: "scheme", reason: "only http and https pages can be opened" };
     if (!u.hostname) return { allow: false, code: "scheme", reason: "no host" };
     const live = this.deps.grants.live(req.serviceId, req.sessionId);
-    if (live.length === 0) return { allow: false, code: "no-grant", reason: "this app has no browser access" };
+    const usable = this.usable(req.serviceId, req.sessionId);
+    if (usable.length === 0) return { allow: false, code: "no-grant", reason: "this app has no browser access" };
 
-    const destination = await this.destination(u, live);
+    const destination = await this.destination(u, usable);
     if (!destination.ok) return { allow: false, code: destination.code, reason: destination.reason };
 
-    const direct = live.find((g) => covers(g, u) && this.capabilityFits(g, req.kind));
+    // A new top-level visit needs a live grant; a frame or download inside the visit a spent `once` opened may use it.
+    const direct = (req.kind === "document" ? live : usable).find((g) => covers(g, u) && this.capabilityFits(g, req.kind));
     if (destination.local && (req.kind === "document" || req.kind === "subframe")) {
       // Local-network access is its own grant, for the exact targets or the whole network; the
       // destination checks above already refused it when no such grant exists.
       const lan = live.find((g) => g.localNetwork !== null && this.capabilityFits(g, req.kind));
-      if (lan) return this.allow(lan, destination.addresses, false);
+      if (lan) return this.allow(lan, destination.addresses, false, req.kind);
       return { allow: false, code: "local-network", reason: "that is on your local network; ask for local-network access" };
     }
     if (req.kind === "document" || req.kind === "subframe" || req.kind === "download") {
-      if (direct) return this.allow(direct, destination.addresses, false);
-      // A redirect the browser saw, starting inside a grant, may land on any public site.
+      if (direct) return this.allow(direct, destination.addresses, false, req.kind);
+      // A redirect the browser saw, starting inside a grant, may land on any public site. The chain's
+      // first hop was itself judged (and may have spent a `once` grant), so a spent grant still roots it.
       const chain = req.redirectChain ?? [];
       const root = chain.length ? parse(chain[0]!) : null;
-      const rooted = root ? live.find((g) => covers(g, root) && this.capabilityFits(g, req.kind)) : undefined;
-      if (rooted && chain.every((c) => parse(c)) && !destination.local) return this.allow(rooted, destination.addresses, true);
+      const rooted = root ? usable.find((g) => covers(g, root) && this.capabilityFits(g, req.kind)) : undefined;
+      if (rooted && chain.every((c) => parse(c)) && !destination.local) return this.allow(rooted, destination.addresses, true, req.kind);
+      if (live.length === 0 && !chain.length) return { allow: false, code: "no-grant", reason: "this app has no browser access" };
       return { allow: false, code: chain.length ? "out-of-scope" : "needs-grant", reason: "this site is outside what you approved" };
     }
     // Subresource, worker, websocket: the initiating document must itself be in scope, and the
     // destination must be public (checked above for protected and private space).
     const init = req.initiatorUrl ? parse(req.initiatorUrl) : null;
-    const initGrant = init ? live.find((g) => covers(g, init)) ?? this.viaRedirectScope(live, req) : undefined;
+    const admittedBy = req.initiatorGrantId ? usable.find((g) => g.id === req.initiatorGrantId) : undefined;
+    const initGrant = init ? usable.find((g) => covers(g, init)) ?? admittedBy ?? this.viaRedirectScope(usable, req) : undefined;
     if (!initGrant) return { allow: false, code: "out-of-scope", reason: "the page asking is outside what you approved" };
     if (destination.local) return { allow: false, code: "local-network", reason: "a page cannot reach your network from the internet" };
-    return this.allow(initGrant, destination.addresses, false);
+    return this.allow(initGrant, destination.addresses, false, req.kind);
   }
 
   private viaRedirectScope(live: BrowserGrant[], req: JudgeRequest): BrowserGrant | undefined {
@@ -130,8 +193,9 @@ export class BrowserJudge {
     return kind === "download" ? g.capabilities.includes("download") : g.capabilities.includes("navigate");
   }
 
-  private allow(g: BrowserGrant, addresses: string[], viaRedirect: boolean): Decision {
-    this.deps.grants.spend(g.id);
+  private allow(g: BrowserGrant, addresses: string[], viaRedirect: boolean, kind: RequestKind): Decision {
+    // Only a top-level navigation spends a `once` grant: the page it opens may still load what it needs.
+    if (kind === "document") this.deps.grants.spend(g.id);
     return { allow: true, grantId: g.id, addresses, viaRedirect };
   }
 
@@ -139,9 +203,10 @@ export class BrowserJudge {
     u: URL,
     live: BrowserGrant[],
   ): Promise<{ ok: true; addresses: string[]; local: boolean } | { ok: false; code: Denial; reason: string }> {
-    const host = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const host = hostOf(u);
     const protectedHosts = this.deps.protectedHosts?.() ?? { names: [], addresses: [] };
-    if (protectedHosts.names.some((n) => n.toLowerCase() === host)) return { ok: false, code: "protected-destination", reason: "that is this server" };
+    const named = protectedHosts.names.some((n) => canonicalName(n) === host) || (protectedHosts.zones ?? []).some((z) => host === canonicalName(z) || host.endsWith(`.${canonicalName(z)}`));
+    if (named) return { ok: false, code: "protected-destination", reason: "that is this server" };
     let addrs: string[];
     if (isIP(host)) addrs = [host];
     else {
@@ -154,7 +219,7 @@ export class BrowserJudge {
     }
     let local = false;
     for (const a of addrs) {
-      if (protectedHosts.addresses.includes(a)) return { ok: false, code: "protected-destination", reason: "that is this server" };
+      if (protectedHosts.addresses.some((p) => sameAddress(p, a))) return { ok: false, code: "protected-destination", reason: "that is this server" };
       const cls = classifyAddress(a);
       if (PROTECTED.includes(cls)) return { ok: false, code: "protected-destination", reason: `that address (${cls}) is never reachable from an app` };
       if (cls === "private") {

@@ -1,11 +1,12 @@
 /**
  * Test seams for "only an admin device of the joining account accepts"
  * (src/shares/acceptAdmin.ts): a stand-in maintainer CA, the joining
- * account's admin root, and the proof its admin device seals into an
+ * account's per-share admin key, and the proof its admin device seals into an
  * acceptance.
  */
 import {
   ACCOUNT_KEY_ATTESTATION_TTL_MS,
+  deriveShareAdminKey,
   ed,
   signAccountKeyAttestation,
   signServerShareAcceptAdmin,
@@ -26,8 +27,10 @@ const kp = (fill: number): Keypair => {
 
 /** The maintainer-endorsed CA these tests trust. */
 export const TEST_CA = kp(0xc4);
-/** The joining account's admin root. */
-export const JOIN_ADMIN = kp(0x3c);
+/** The joining account's UMK: its per-share admin key signs #12. */
+export const JOIN_UMK = { seed: new Uint8Array(32).fill(0x3c) };
+/** The joining account's per-share admin key for one share (AT-LNK-10: never a stable account key). */
+export const joinShareAdmin = (shareId: string): Keypair => deriveShareAdminKey(JOIN_UMK, shareId);
 
 export const testCaChain: CaTrustChain = { authorizedCaKeys: () => [hex(TEST_CA.publicKey)] };
 
@@ -44,8 +47,8 @@ export interface ProofOptions {
 
 /** The proof an admin device of the joining account seals with its acceptance. */
 export function adminProof(accept: ServerShareAccept, o: ProofOptions = {}): ShareAcceptAdminProof {
-  const signer = o.signer ?? JOIN_ADMIN;
-  const keyKind = o.keyKind ?? "admin-root";
+  const signer = o.signer ?? joinShareAdmin(accept.shareId);
+  const keyKind = o.keyKind ?? "share";
   const attested = o.attested ?? signer;
   const issuedAt = o.issuedAt ?? accept.acceptedAt - 1000;
   const admit = { ...accept, keyKind, keyPubHex: hex(signer.publicKey), ...o.admit };

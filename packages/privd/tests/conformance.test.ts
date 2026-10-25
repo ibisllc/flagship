@@ -37,9 +37,16 @@ function execJson(e: Exec): Record<string, unknown> {
   };
 }
 
-function tsVerdict(c: Pick<CorpusCase, "op" | "args" | "engine" | "mounts" | "arch">, trust: ReleaseTrust): Verdict {
+function tsVerdict(c: Pick<CorpusCase, "op" | "args" | "engine" | "mounts" | "arch" | "gpu">, trust: ReleaseTrust): Verdict {
   const mounts = c.mounts ?? DEFAULTS.mounts;
-  const ctx: PolicyContext = { engine: c.engine ?? DEFAULTS.engine, mounts: () => mounts, trust, arch: c.arch ?? DEFAULTS.arch };
+  const gpu = c.gpu ?? {};
+  const ctx: PolicyContext = {
+    engine: c.engine ?? DEFAULTS.engine,
+    mounts: () => mounts,
+    trust,
+    arch: c.arch ?? DEFAULTS.arch,
+    gpuClaims: (id) => (Object.hasOwn(gpu, id) ? gpu[id]! : null),
+  };
   try {
     return { ok: true, exec: execJson(validateRequest(c.op as Op, c.args as Record<string, unknown>, ctx)) };
   } catch (e) {
@@ -63,7 +70,7 @@ describe("the shared v1 policy vectors", () => {
 
   it("cover every op, both engines, allowed and refused", () => {
     const ops = new Set(computed.map((c) => c.op));
-    for (const op of ["power", "systemd.restart", "systemctl", "docker", "docker.file", "host", "iptables.restore", "nft.apply", "release", "wipe", "setup"]) {
+    for (const op of ["power", "systemd.restart", "systemctl", "docker", "docker.file", "host", "iptables.restore", "nft.apply", "release", "wipe", "setup", "wasi.unit"]) {
       expect(computed.some((c) => c.op === op && c.expect.ok), `${op} allowed`).toBe(true);
       expect(computed.some((c) => c.op === op && !c.expect.ok), `${op} refused`).toBe(true);
       expect(ops.has(op)).toBe(true);
@@ -80,7 +87,7 @@ describe.skipIf(!existsSync(BIN))("the Rust broker, live", () => {
       { op: "release", args: { action: "install", commit: "b".repeat(40), sha256: "c".repeat(64) }, arch: "arm64" },
     ];
     const lines = [
-      ...computed.map((c) => ({ op: c.op, args: c.args, engine: c.engine ?? DEFAULTS.engine, mounts: c.mounts ?? DEFAULTS.mounts, arch: c.arch ?? DEFAULTS.arch, trust: c.trust ?? DEFAULTS.trust })),
+      ...computed.map((c) => ({ op: c.op, args: c.args, engine: c.engine ?? DEFAULTS.engine, mounts: c.mounts ?? DEFAULTS.mounts, arch: c.arch ?? DEFAULTS.arch, trust: c.trust ?? DEFAULTS.trust, ...(c.gpu ? { gpu: c.gpu } : {}) })),
       ...releaseCases.map((c) => ({ ...c, engine: "docker", mounts: "", trust: "release" })),
     ];
     const r = spawnSync(BIN, ["check-v1"], { input: lines.map((l) => JSON.stringify(l)).join("\n") + "\n", encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });

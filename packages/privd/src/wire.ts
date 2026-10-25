@@ -10,7 +10,7 @@
 export const PRIVD_PROTOCOL_VERSION = 1;
 export const MAX_FRAME_BYTES = 1024 * 1024;
 
-export const OPS = ["hello", "power", "systemd.restart", "systemctl", "docker", "docker.file", "host", "iptables.restore", "nft.apply", "release", "wipe", "setup"] as const;
+export const OPS = ["hello", "power", "systemd.restart", "systemctl", "docker", "docker.file", "host", "iptables.restore", "nft.apply", "release", "wipe", "setup", "wasi.unit"] as const;
 export type Op = (typeof OPS)[number];
 
 export interface PrivdRequest {

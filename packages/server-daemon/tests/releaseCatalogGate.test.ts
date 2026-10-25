@@ -73,12 +73,38 @@ describe("ReleaseCatalogGate", () => {
     expect(await again.floor()).toBe(1);
   });
 
-  it("a damaged state file is kept aside and the box starts over without throwing", async () => {
+  it("a damaged state file with no kept floor is kept aside: nothing new, no rollback, until a catalog is accepted again", async () => {
     const { make, path } = await gate();
     await writeFile(path, "{not json");
     const g = make();
     expect(await g.floor()).toBe(0);
+    expect(await g.rollbackAllowed(rel(1).commit)).toBe(false);
+    expect((await g.mayTakeNewRelease(rel(2), 1)).ok).toBe(false);
     expect((await g.accept(view({}))).ok).toBe(true);
+    expect(await g.rollbackAllowed(rel(1).commit)).toBe(true);
+  });
+
+  it("the kept floor survives a lost state file and still binds the next catalog", async () => {
+    const { make, path } = await gate();
+    expect((await make().accept(view({ tv: 3, floor: 2, releases: [rel(1), rel(2), rel(3)] }))).ok).toBe(true);
+    await writeFile(path, JSON.stringify({ state: { rootVersion: 0 } }));
+    const g = make();
+    expect(await g.floor()).toBe(2);
+    expect(await g.rollbackAllowed(rel(2).commit)).toBe(false);
+    expect(await g.allowsUpdateTo(rel(3).commit, rel(2).commit)).toEqual({ ok: false, reason: "catalog-state-lost" });
+    expect(await g.accept(view({ tv: 2, floor: 2 }))).toEqual({ ok: false, reason: "rollback" });
+    expect((await g.accept(view({ tv: 4, floor: 2, releases: [rel(1), rel(2), rel(3)] }))).ok).toBe(true);
+    expect(await g.rollbackAllowed(rel(2).commit)).toBe(true);
+  });
+
+  it("an accepted view turns stale by the clock, without another fetch", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "rcg-"));
+    const clock = { t: NOW };
+    const g = new ReleaseCatalogGate({ path: join(dir, "c.json"), root: () => root, boxSalt: () => "box", now: () => clock.t });
+    expect((await g.accept(view({}))).ok).toBe(true);
+    expect(await g.mayTakeNewRelease(rel(2), 1)).toEqual({ ok: true });
+    clock.t = NOW + DAY; // the timestamp's own expiry
+    expect(await g.mayTakeNewRelease(rel(2), 1)).toEqual({ ok: false, reason: "stale-catalog" });
   });
 
   it("holds a release back until its rollout cohort opens", async () => {

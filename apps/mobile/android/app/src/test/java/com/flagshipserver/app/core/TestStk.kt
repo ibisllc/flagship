@@ -19,3 +19,18 @@ fun firstContactPinned(vararg pinned: Pair<String, String>): FirstContact {
     for ((d, k) in pinned) pins.recordFirstSeen(d, k)
     return FirstContact(pins, InMemoryEnrollmentSecretStore(), studioSeen = { emptyList() })
 }
+
+/**
+ * A server this phone blessed before, the way production holds it: ONE pin store ([ServerKeyPins])
+ * that first contact pinned at the blessing and that every later seal (the unlock reply, the
+ * auto-unlock lease, the deposits) is checked against through [BoxKeyPins]. Pass both to the code
+ * under test; a separate pin store would leave the seal side unpinned.
+ */
+class PinnedServers(vararg pinned: Pair<String, String>) {
+    val pins = ServerKeyPins(InMemoryServerKeyPinStore())
+    init {
+        for ((d, k) in pinned) check(pins.recordFirstSeen(d, k) == ServerKeyPins.Record.Recorded)
+    }
+    val firstContact = FirstContact(pins, InMemoryEnrollmentSecretStore(), studioSeen = { emptyList() })
+    val boxKeyPins = BoxKeyPins(pins)
+}

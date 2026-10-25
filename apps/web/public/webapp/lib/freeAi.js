@@ -108,6 +108,12 @@ export function freeAiEntryView(status) {
 
 /** The canonical bytes the account signs (vectors: packages/protocol/test-vectors/llm-promo-issue). */
 export function canonicalFor(request) {
+  for (const k of ["username", "serverFqdn", "provider"]) {
+    if (typeof request[k] !== "string" || /[|\u0000-\u001f\u007f]/.test(request[k])) throw new Error(`bad ${k}`);
+  }
+  for (const k of ["desiredDailyInputTokenCap", "desiredDailyOutputTokenCap", "issuedAt"]) {
+    if (!Number.isSafeInteger(request[k])) throw new Error(`bad ${k}`);
+  }
   return [
     FREE_AI_TAG,
     request.username,

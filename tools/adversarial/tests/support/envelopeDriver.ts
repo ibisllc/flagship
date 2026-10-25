@@ -83,7 +83,7 @@ function enumFor(name: string): Cand[] {
     [/reason/i, ["lost", "stolen", "decommissioned"]],
     [/^op$|action/i, ["set", "unset", "allow", "deny", "add", "remove"]],
     [/scope/i, ["read", "write"]],
-    [/kind|type$/i, ["remote", "device", "set-front-page", "power-off"]],
+    [/kind|type$/i, ["remote", "device", "set-front-page", "power-off", "share"]],
     [/arch/i, ["amd64", "arm64"]],
     [/answer|decision|verdict/i, ["allow", "deny", "once", "session", "always"]],
   ];

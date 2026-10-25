@@ -12,7 +12,7 @@
  * Signatures prove the publisher and the bytes, never good intent.
  */
 import { ed } from "./edSync.js";
-import { hex, legacyFieldGuard } from "./canonicalBase.js";
+import { hex, integerFieldGuard, legacyFieldGuard } from "./canonicalBase.js";
 import type { Bytes, Keypair } from "./types.js";
 
 export const TAG_APP_RELEASE = "flagship/app-release/v1";
@@ -103,6 +103,11 @@ export interface PublisherTrust {
 export function canonicalPublisherTrust(t: PublisherTrust): Bytes {
   legacyFieldGuard("serviceId", t.serviceId);
   legacyFieldGuard("appId", t.appId);
+  integerFieldGuard("identityGeneration", t.identityGeneration);
+  legacyFieldGuard("oldKeyHex", t.oldKeyHex);
+  legacyFieldGuard("newKeyHex", t.newKeyHex);
+  integerFieldGuard("newEpoch", t.newEpoch);
+  integerFieldGuard("issuedAt", t.issuedAt);
   return new TextEncoder().encode([TAG_PUBLISHER_TRUST, t.serviceId, t.appId, t.identityGeneration, t.oldKeyHex, t.newKeyHex, t.newEpoch, t.issuedAt].join("|"));
 }
 

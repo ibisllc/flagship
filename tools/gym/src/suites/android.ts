@@ -1156,7 +1156,7 @@ const OCTOBER: readonly Scenario[] = [
   ),
   androidTotal(
     "android-oct-share-accept-admin",
-    "D3: an admin device accepts a share link: it signs flagship/server-share-accept-admin/v1 with the admin root and seals it with .com's attestation (the mock .com refuses the acceptance otherwise), then shows the code to read to the owner.",
+    "D3: an admin device accepts a share link: its admin root asks .com to attest a per-share admin key (flagship/share-key-attestation-request/v1), that key signs flagship/server-share-accept-admin/v1, and the attestation is sealed with it (the mock .com refuses the acceptance otherwise; no stable account key reaches the shared server), then shows the code to read to the owner.",
     O + "shareLinkOnAnAdminDeviceSignsTheAcceptance",
     {
       steps: [

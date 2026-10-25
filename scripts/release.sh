@@ -95,7 +95,7 @@ st_get() { if [ -f "$STATE" ]; then st get "$1"; fi; }
 # ---------------------------------------------------------------- the plan
 
 STEP_IDS=(preflight version plan lease catalogkeys pqkeys endorse artifacts catalog kickoff secrets gym backup migrations services dnsbroker dns com cpu publish redeployA status
-          notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android hof final)
+          canary notice scrub reap retire studiowl studiomac publisharm redeployB uxchecks ios android hof final)
 LAST_A=22   # the last step of phase A (status)
 
 step_id()    { echo "${STEP_IDS[$(($1 - 1))]}"; }
@@ -184,6 +184,21 @@ git add -- release/catalog-releases.json && git commit -m "Release catalog v<V>"
 EOF
   GATE="The tool's own check passed; the timestamp workflow is green; the served catalog-targets.json names this release."
   ROLLBACK="Publish a newer targets version without the release (or with rolloutPercent 0); versions only go up. A floor raised by mistake cannot be lowered: boxes refuse rollbacks below it until a newer release ships."
+}
+meta_canary() {
+  TITLE="Canary cohorts: widen the box release on update receipts, stop it on bad news"
+  RUNBOOK="9b. Canary cohorts"
+  WHAT="Skipped when no catalog root is pinned. Existing boxes take this release only inside its rollout percent (each box's own secret salt decides its cohort). Reads the content-free update receipts of consenting boxes (npm run canary) for the release and its stage: STOP signs and publishes the release at 0% (the stop rule) and ends the run; HOLD (one rollback) asks for a typed reason before widening; WAIT defers the step (resume with --only); WIDEN signs the next stage of 1, 5, 20, 50, 100 with the offline keys, publishes it and records when the stage opened. Done at 100%."
+  read -r -d '' CMDS <<'EOF' || true
+npm run canary -- --release <commit> --opened-at <when this stage opened>
+curl -fsS https://flagshipserver.com/build/iso/catalog-{targets,timestamp}.json        (the served catalog: the new one must move past it)
+npx tsx tools/release-catalog/catalog.ts rollout --root release/catalog-root.json --list release/catalog-releases.json --commit <commit> --percent <next stage> --key <offline>/catalog-root-1.key.json --timestamp-key <offline>/catalog-timestamp-1.key.json --previous-targets <served targets> --previous-timestamp <served timestamp> --out-dir <out>
+(cd apps/com && wrangler r2 object put flagship-iso/catalog-<name>.json --file <out>/<name>.json --remote)    (targets, snapshot, timestamp)
+git add -- release/catalog-releases.json && git commit -m "Canary: <commit> to <N>%" && git push origin HEAD:main
+STOP:  the same rollout command with --percent 0 (or --remove), the same upload and commit
+EOF
+  GATE="Each widening: the stage open at least 48 h (more for boot or driver changes), at least 3 receipts, no rollback in any profile (one holds the canary for a look, two stop it), no box stuck below the floor. The first widening also needs this release's gym run green for the update and canary groups and one deliberate rollback drill receipt (docs/runbooks/canary.md). Deferred until 100%."
+  ROLLBACK="The stop rule: rollout --percent 0 (or --remove) signed and published; boxes take nothing new from it. Boxes that already updated keep it: ship a fixed release with a higher security version. Prefer --percent 0 to --remove when a floor is set (a removed release is no longer a rollback target)."
 }
 meta_dnsbroker() {
   TITLE="Deploy the DNS broker (before .com)"
@@ -1282,7 +1297,7 @@ run_catalog() {
   label=$(json_field product < "$WT/release/version.json")
   sv=$(ask_word "Security version of $(short "$commit") ($label): raise it above every listed release (now highest $(node -e 'const j=require(process.argv[1]);console.log(Math.max(0,...j.releases.map(r=>r.securityVersion)))' "$list"))")
   floor=$(ask_word "Security floor (boxes never roll back below it; now $(json_field floor < "$list"); usually unchanged)")
-  pct=$(ask_word "Rollout percent for this release (100 = every box now)")
+  pct=$(ask_word "Rollout percent to start at (the canary step widens it along 1, 5, 20, 50, 100; 100 = every box now, no canary)")
   node -e 'const fs=require("fs");const [f,v,fl,c,l,sv,p,sha]=process.argv.slice(1);const j=JSON.parse(fs.readFileSync(f,"utf8"));j.version=Number(v);j.floor=Number(fl);j.releases=j.releases.filter(r=>r.commit!==c);j.releases.push({commit:c,label:l,securityVersion:Number(sv),artifactSha256:sha,rolloutPercent:Number(p)});fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")' \
     "$list" "$v" "$floor" "$commit" "$label" "$sv" "$pct" "$(st_get artifactSha_amd64)"
   local tmp; tmp=$(mktemp -d); node -e 'const j=require(process.argv[1]);require("fs").writeFileSync(process.argv[2],JSON.stringify(j.releases))' "$list" "$tmp/releases.json"
@@ -1295,10 +1310,88 @@ run_catalog() {
   for n in targets snapshot timestamp; do WRX r2 object put "flagship-iso/catalog-$n.json" --file "$tmp/out/$n.json" --content-type application/json --remote; done
   rm -rf "$tmp"
   probe_code "catalog targets served" "$COM_URL/build/iso/catalog-targets.json" 200
+  st_w set canaryOpenedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   XA "$REPO" gh workflow run release-catalog-timestamp.yml --ref main
   commit_paths "Release catalog v$v: $(short "$commit") at security version $sv" release/catalog-releases.json
   land_commits || return $?
   probe_end
+}
+
+canary_percent() { # canary_percent <list file> <commit> -> the release's rollout percent, or nothing
+  node -e 'const j=require(process.argv[1]);const r=j.releases.find(r=>r.commit===process.argv[2]);console.log(r?r.rolloutPercent:"")' "$1" "$2"
+}
+canary_verdict() { # stdin: npm run canary --json -> "<action> <next>" for the one release
+  node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s).rows[0];if(!r){console.log("wait");return}console.log(`${r.verdict.action} ${r.verdict.next??""}`.trim())})'
+}
+canary_publish() { # canary_publish <commit> <percent> <message>: sign the rollout change, upload it, commit the list
+  local commit=$1 pct=$2 msg=$3 dir tmp n
+  dir=$(st_get catalogKeyDir); [ -n "$dir" ] || dir=$(ask_word "Offline folder holding catalog-root-1.key.json and catalog-timestamp-1.key.json")
+  [ -f "$dir/catalog-root-1.key.json" ] || fail "no root key in $dir"
+  tmp=$(mktemp -d)
+  curl -fsS -m 25 "$COM_URL/build/iso/catalog-targets.json" -o "$tmp/targets.json" || fail "cannot read the served catalog-targets.json"
+  curl -fsS -m 25 "$COM_URL/build/iso/catalog-timestamp.json" -o "$tmp/timestamp.json" || fail "cannot read the served catalog-timestamp.json"
+  WX npx tsx tools/release-catalog/catalog.ts rollout --root "$CATALOG_ROOT_FILE" --list release/catalog-releases.json --commit "$commit" --percent "$pct" \
+    --key "$dir/catalog-root-1.key.json" --timestamp-key "$dir/catalog-timestamp-1.key.json" \
+    --previous-targets "$tmp/targets.json" --previous-timestamp "$tmp/timestamp.json" --out-dir "$tmp/out"
+  confirm "Upload the catalog with $(short "$commit") at $pct% to R2 flagship-iso?" || { rm -rf "$tmp"; return 10; }
+  for n in targets snapshot timestamp; do WRX r2 object put "flagship-iso/catalog-$n.json" --file "$tmp/out/$n.json" --content-type application/json --remote; done
+  rm -rf "$tmp"
+  probe_code "catalog targets served" "$COM_URL/build/iso/catalog-targets.json" 200
+  commit_paths "$msg" release/catalog-releases.json
+  land_commits || return $?
+}
+
+run_canary() {
+  ensure_wt
+  [ -f "$WT/$CATALOG_ROOT_FILE" ] || { ok "no catalog root is pinned: every box takes the release, nothing to stage"; return 0; }
+  local commit; commit=$(st_get artifactCommit); [ -n "$commit" ] || commit=$(json_field commit < "$WT/release/box-release.json")
+  [ -f "$WT/release/catalog-releases.json" ] || fail "no release/catalog-releases.json: run the catalog step (3c) first"
+  local pct; pct=$(canary_percent "$WT/release/catalog-releases.json" "$commit")
+  [ -n "$pct" ] || fail "$(short "$commit") is not in release/catalog-releases.json: run the catalog step (3c) first"
+  local opened; opened=$(st_get canaryOpenedAt)
+  if [ -z "$opened" ]; then
+    opened=$(date -u +%Y-%m-%dT%H:%M:%SZ); st_w set canaryOpenedAt "$opened"
+    warn "no opening time was recorded for the ${pct}% stage: counting from now ($opened)"
+  fi
+  need_admin_secret || { warn "no admin secret: cannot read the receipts"; return 20; }
+  say "  $(short "$commit") is at ${pct}%, this stage opened $opened"
+  ( cd "$WT" && with_secret npx tsx scripts/canary.ts --release "$commit" --opened-at "$opened" ) || fail "npm run canary failed"
+  local verdict action next
+  verdict=$(cd "$WT" && with_secret npx tsx scripts/canary.ts --release "$commit" --opened-at "$opened" --json | canary_verdict)
+  action=${verdict%% *}; next=${verdict#"$action"}; next=${next# }
+  case "$action" in
+    complete)
+      ok "$(short "$commit") is at 100% and no receipt says it failed"; return 0 ;;
+    wait)
+      warn "not yet (see the verdict above): run this step again later with --only $CURRENT_STEP"; return 20 ;;
+    stop)
+      err "the canary says STOP for $(short "$commit") (docs/runbooks/canary.md, Stop)"
+      if confirm "Sign and publish $(short "$commit") at 0% now (the stop rule)?"; then
+        canary_publish "$commit" 0 "Canary stop: $(short "$commit") to 0%" || return $?
+        st_w set canaryStoppedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      fi
+      fail "the release is stopped: boxes that took it keep it; ship a fixed release with a higher security version" ;;
+    hold)
+      warn "the canary holds: one update rolled back. Find out why first (runbook: Reading a rollback)."
+      local why; why=$(ask_word "Type the reason it is safe to widen anyway, or press Enter to wait")
+      [ -n "$why" ] || return 20
+      st_w set canaryHoldReason "$why"
+      next=$(node -e 'const s=[1,5,20,50,100];console.log(s.find(x=>x>Number(process.argv[1]))??"")' "$pct") ;;
+    widen) ;;
+    *) fail "unexpected canary verdict: $verdict" ;;
+  esac
+  [ -n "$next" ] || fail "no next stage after ${pct}%"
+  if [ "$(st_get canaryFirstGate)" != confirmed ]; then
+    say "  Before the first widening: this release's gym run (step $(step_index gym)) must be green for the update and canary groups, and one deliberate rollback drill must have sent its receipt (runbook 9b)."
+    [ "$(ask_word "Type  confirmed  when both are true")" = confirmed ] || return 20
+    st_w set canaryFirstGate confirmed
+  fi
+  confirm "Widen $(short "$commit") from ${pct}% to ${next}%?" || return 20
+  canary_publish "$commit" "$next" "Canary: $(short "$commit") to ${next}%" || return $?
+  st_w set canaryOpenedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ "$next" = 100 ]; then ok "$(short "$commit") is at 100%"; return 0; fi
+  ok "$(short "$commit") is at ${next}%: run this step again after the next observation window (--only $CURRENT_STEP)"
+  return 20
 }
 
 run_dnsbroker() {

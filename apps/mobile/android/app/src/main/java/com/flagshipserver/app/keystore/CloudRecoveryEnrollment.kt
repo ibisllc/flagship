@@ -301,7 +301,7 @@ object CloudRecoveryEnrollment {
                 server.fetchWrappedUmkWithToken(username, tokenHex, now)
             }
             if (!fetched.credentialId.equals(meta.credentialId, ignoreCase = true)) {
-                throw ValidationError("The recovery record changed while it was being read; try again.")
+                throw ValidationError(FSStrings.get(R.string.the_recovery_record_changed_while_it))
             }
             return fetched to prf
         } catch (t: Throwable) {

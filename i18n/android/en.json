@@ -83,23 +83,73 @@
     "en": "Last update installed and running.",
     "ctx": "api/ScreensModels.kt:563 (prose)"
   },
-  "the_last_update_didnt_start_cleanly": {
-    "en": "The last update%1$s didn't start cleanly, so the server went back%2$s on its own.",
-    "ctx": "api/ScreensModels.kt:567 (prose)",
+  "last_update_rolled_back_to": {
+    "en": "The last update to %1$s didn't start cleanly, so the server went back to %2$s on its own.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)",
     "args": 2
   },
-  "the_server_refused_the_last_update": {
-    "en": "The server refused the last update: %1$s",
-    "ctx": "api/ScreensModels.kt:569 (prose)",
+  "last_update_rolled_back_target": {
+    "en": "The last update to %1$s didn't start cleanly, so the server went back on its own.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)",
     "args": 1
+  },
+  "last_update_rolled_back_previous": {
+    "en": "The last update didn't start cleanly, so the server went back to %1$s on its own.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)",
+    "args": 1
+  },
+  "last_update_rolled_back": {
+    "en": "The last update didn't start cleanly, so the server went back on its own.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)"
+  },
+  "last_update_kept_in_recovery": {
+    "en": "The update to %1$s didn't start cleanly, and the version before it is too old to go back to safely. The server stays on %1$s in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)",
+    "args": 1
+  },
+  "last_update_kept_in_recovery_2": {
+    "en": "The last update didn't start cleanly, and the version before it is too old to go back to safely. The server stays on the new version in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)"
+  },
+  "last_update_refused_unendorsed": {
+    "en": "The server refused the last update: Flagship's maintainers haven't endorsed that release.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)"
+  },
+  "last_update_refused_from_commit_mismatch": {
+    "en": "The server refused the last update: the server was no longer on the version the update was made for. Send it again.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)"
+  },
+  "last_update_refused_apply_failed": {
+    "en": "The server refused the last update: it couldn't download or build the new version. Nothing changed.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)"
+  },
+  "last_update_refused_rejected": {
+    "en": "The server refused the last update: the request wasn't signed by this account's admin key.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)"
+  },
+  "last_update_refused_stale": {
+    "en": "The server refused the last update: the request was too old. Send it again.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)"
+  },
+  "last_update_refused_wrong_domain": {
+    "en": "The server refused the last update: the request was for a different server.",
+    "ctx": "api/ScreensModels.kt LastUpdate (prose)"
+  },
+  "share_update_results": {
+    "en": "Share update results",
+    "ctx": "ui/screens/ServerDetailScreen.kt UpdateReportsSwitch"
+  },
+  "share_update_results_detail": {
+    "en": "Send Flagship an anonymous note after each update: the release, whether it started cleanly and whether it went back. Never your server's name, your account or anything about your apps.",
+    "ctx": "ui/screens/ServerDetailScreen.kt UpdateReportsSwitch"
+  },
+  "couldnt_save_this_setting_on_the_server": {
+    "en": "Couldn't save this setting on the server. Try again.",
+    "ctx": "ui/screens/ServerDetailScreen.kt UpdateReportsSwitch"
   },
   "the_server_refused_the_last_update_2": {
     "en": "The server refused the last update.",
     "ctx": "api/ScreensModels.kt:570 (prose)"
-  },
-  "flagships_maintainers_havent_endorsed_that": {
-    "en": "Flagship's maintainers haven't endorsed that release.",
-    "ctx": "api/ScreensModels.kt:577 (prose)"
   },
   "use_letters_digits_and_only_not": {
     "en": "Use letters, digits and _ only, not starting with a digit (like API_KEY).",
@@ -5581,10 +5631,6 @@
   "pick_a_passphrase_8_characters_treat": {
     "en": "Pick a passphrase (8+ characters) — treat it like a password and write it down somewhere safe. You'll need it, plus your passkey, to get back in on a new device. We can't reset it.",
     "ctx": "ui/screens/RecoveryScreen.kt:305 (arg of Text)"
-  },
-  "n_8_characters_minimum": {
-    "en": "8 characters minimum",
-    "ctx": "ui/screens/RecoveryScreen.kt:313 (helper=)"
   },
   "configuring": {
     "en": "Configuring…",
@@ -11595,6 +11641,27 @@
     "en": "Approved when you installed it",
     "ctx": "ui/screens/BrowserGrantScreens.kt app page, under the manifest's sites"
   },
+  "browser_grant_allowed_by_you": {
+    "en": "Allowed by you",
+    "ctx": "ui/screens/BrowserGrantScreens.kt heading over the browser grants the owner gave an app"
+  },
+  "browser_grant_withdraw": {
+    "en": "Withdraw",
+    "ctx": "ui/screens/BrowserGrantScreens.kt button that takes back a browser grant"
+  },
+  "browser_grant_withdraw_reason": {
+    "en": "Withdraw %1$s's browser access",
+    "ctx": "core/BrowserGrantCenter.kt biometric prompt reason, %1$s = app",
+    "args": 1
+  },
+  "browser_grant_withdrawn": {
+    "en": "Browser access withdrawn",
+    "ctx": "core/BrowserGrantCenter.kt toast after a grant was taken back"
+  },
+  "browser_grant_already_withdrawn": {
+    "en": "That access was already withdrawn.",
+    "ctx": "core/BrowserGrantCenter.kt the box no longer holds that grant"
+  },
   "sync_check_from": {
     "en": "Check for updates from %1$s",
     "ctx": "ui/screens/UpstreamSyncScreen.kt app page row, %1$s = repo",
@@ -11725,5 +11792,304 @@
   "sync_not_imported": {
     "en": "This app wasn't imported from a repo on this server, so it can't check for updates.",
     "ctx": "ui/screens/UpstreamSyncScreen.kt 404"
+  },
+  "this_server_is_quantum_safe_but": {
+    "en": "This server is quantum-safe, but this phone hasn't checked its post-quantum key yet. Open the server once while online.",
+    "ctx": "core/pq/PqChannelInterceptor.kt:76 (prose)"
+  },
+  "this_server_only_accepts_quantum_safe": {
+    "en": "This server only accepts quantum-safe connections, and this phone's post-quantum key isn't ready. Unlock the app and try again.",
+    "ctx": "core/pq/PqChannelInterceptor.kt:77 (prose)"
+  },
+  "the_server_refused_this_phones_quantum": {
+    "en": "The server refused this phone's quantum-safe connection.",
+    "ctx": "core/pq/PqChannelInterceptor.kt:80 (prose)"
+  },
+  "the_servers_quantum_safe_connection_did": {
+    "en": "The server's quantum-safe connection did not complete.",
+    "ctx": "core/pq/PqChannelInterceptor.kt:83 (prose)"
+  },
+  "the_server_keeps_closing_the_quantum": {
+    "en": "The server keeps closing the quantum-safe connection. Try again.",
+    "ctx": "core/pq/PqChannelInterceptor.kt:116 (prose)"
+  },
+  "orders_signed_only_with_todays_classical": {
+    "en": "Orders signed only with today's (classical) signatures will be accepted again.",
+    "ctx": "core/pq/QuantumSafety.kt:17 (prose)"
+  },
+  "connections_that_use_only_classical_key": {
+    "en": "Connections that use only classical key exchange will be accepted again.",
+    "ctx": "core/pq/QuantumSafety.kt:18 (prose)"
+  },
+  "browsers_can_reach_it_a_browsers": {
+    "en": "Browsers can reach it. A browser's connection uses post-quantum key exchange, but the server's identity is still proven with a classical certificate.",
+    "ctx": "core/pq/QuantumSafety.kt:19 (prose)"
+  },
+  "this_services_own_connection_is_classical": {
+    "en": "This service's own connection is classical, so what it is sent could be read by a future quantum computer.",
+    "ctx": "core/pq/QuantumSafety.kt:20 (prose)"
+  },
+  "only_an_admin_device_of_this_3": {
+    "en": "Only an admin device of this account can turn this on.",
+    "ctx": "core/pq/QuantumSafety.kt:131 (prose)"
+  },
+  "this_devices_post_quantum_key_isnt": {
+    "en": "This device's post-quantum key isn't registered yet. Unlock the app once while online.",
+    "ctx": "core/pq/QuantumSafety.kt:132 (prose)"
+  },
+  "of_your_devices_have_no_post": {
+    "en": "%1$s of your devices have no post-quantum key yet. Open Flagship on each of them, or remove the ones you no longer use.",
+    "ctx": "core/pq/QuantumSafety.kt:133 (prose)",
+    "args": 1
+  },
+  "save_and_test_your_account_recovery": {
+    "en": "Save and test your account recovery first.",
+    "ctx": "core/pq/QuantumSafety.kt:134 (prose)"
+  },
+  "this_server_hasnt_registered_its_post": {
+    "en": "This server hasn't registered its post-quantum key yet. Update it first.",
+    "ctx": "core/pq/QuantumSafety.kt:135 (prose)"
+  },
+  "builds_your_apps_with_a_hosted": {
+    "en": "Builds your apps with a hosted model. Prompts and code go over the provider's own TLS.",
+    "ctx": "core/pq/QuantumSafety.kt:146 (prose)"
+  },
+  "your_own_ai_key_prompts_and": {
+    "en": "Your own AI key. Prompts and code go over the provider's own TLS.",
+    "ctx": "core/pq/QuantumSafety.kt:148 (prose)"
+  },
+  "google_push": {
+    "en": "Google push",
+    "ctx": "core/pq/QuantumSafety.kt:150 (prose)"
+  },
+  "wakes_the_app_carries_no_content": {
+    "en": "Wakes the app. Carries no content; the app then asks the server over the quantum-safe channel.",
+    "ctx": "core/pq/QuantumSafety.kt:150 (prose)"
+  },
+  "every_device_on_the_account_needs": {
+    "en": "Every device on the account needs its post-quantum key before strict comes back.",
+    "ctx": "core/pq/StrictReentry.kt:52 (prose)"
+  },
+  "test_your_recovery_before_turning_strict": {
+    "en": "Test your recovery before turning strict on again.",
+    "ctx": "core/pq/StrictReentry.kt:55 (prose)"
+  },
+  "the_recovery_record_changed_while_it": {
+    "en": "The recovery record changed while it was being read; try again.",
+    "ctx": "keystore/CloudRecoveryEnrollment.kt:304 (prose)"
+  },
+  "protect_your_account_keys": {
+    "en": "Protect your account keys",
+    "ctx": "keystore/PqIdentityUpgrade.kt:62 (prose)"
+  },
+  "pq_seed_does_not_match_its": {
+    "en": "PQ seed does not match its key",
+    "ctx": "keystore/PqKeyCustody.kt:223 (prose)"
+  },
+  "quantum_safe_protection": {
+    "en": "Quantum-safe protection",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:87 (title=)"
+  },
+  "strict_quantum_resistant_protection_makes_a": {
+    "en": "Strict quantum-resistant protection makes a server refuse anything signed or sent with today's classical cryptography alone. It is off until you turn it on, one server at a time.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:89 (subtitle=)"
+  },
+  "these_protections_are_new_and_pending": {
+    "en": "These protections are new and pending an external review.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:91 (arg of Text)"
+  },
+  "this_devices_key": {
+    "en": "This device's key: %1$s",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:92 (arg of Text)",
+    "args": 1
+  },
+  "you_have_no_servers_yet": {
+    "en": "You have no servers yet.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:97 (arg of Text)"
+  },
+  "strict": {
+    "en": "Strict",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:103 (ui label)"
+  },
+  "compatibility": {
+    "en": "Compatibility",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:103 (ui label)"
+  },
+  "browsers_can_still_reach_it_a": {
+    "en": "Browsers can still reach it. A browser uses post-quantum key exchange, but the server's identity is proven with a classical certificate.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:108 (prose)"
+  },
+  "only_the_flagship_app_reaches_it": {
+    "en": "Only the Flagship app reaches it. Browsers are refused.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:109 (prose)"
+  },
+  "apps_on_this_server": {
+    "en": "Apps on this server",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:113 (arg of Text)"
+  },
+  "choose_for_each_app_whether_browsers": {
+    "en": "Choose for each app whether browsers may reach it. A browser's connection is quantum-safe, but the server's identity is proven with a classical certificate.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:114 (arg of Text)"
+  },
+  "only_the_flagship_app": {
+    "en": "Only the Flagship app",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:120 (arg of Text)"
+  },
+  "also_browsers": {
+    "en": "Also browsers",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:122 (arg of Text)"
+  },
+  "turn_off_2": {
+    "en": "Turn off…",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:126 (arg of FSDangerButton)"
+  },
+  "not_ready_yet": {
+    "en": "Not ready yet",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:128 (arg of Text)"
+  },
+  "can_browsers_still_reach_this_server": {
+    "en": "Can browsers still reach this server?",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:131 (arg of Text)"
+  },
+  "services_this_server_sends_things_to": {
+    "en": "Services this server sends things to",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:139 (arg of Text)"
+  },
+  "keep_using_it_classical": {
+    "en": "Keep using it (classical)",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:146 (arg of Text)"
+  },
+  "block_it_in_strict": {
+    "en": "Block it in strict",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:147 (arg of Text)"
+  },
+  "allowed_in_strict_it_carries_no": {
+    "en": "Allowed in strict: it carries no content.",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:150 (arg of Text)"
+  },
+  "turn_on_strict_protection": {
+    "en": "Turn on strict protection",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:155 (arg of FSPrimaryButton)"
+  },
+  "turn_off_quantum_safe_protection": {
+    "en": "Turn off quantum-safe protection?",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:175 (arg of Text)"
+  },
+  "turn_off_and_accept_these_losses": {
+    "en": "Turn off and accept these losses",
+    "ctx": "ui/screens/QuantumSafetyScreen.kt:177 (arg of Text)"
+  },
+  "this_servers_key_changed": {
+    "en": "This server's key changed",
+    "ctx": "ui/screens/ServerDetailScreen.kt:742 (arg of Text)"
+  },
+  "trust_its_new_key": {
+    "en": "Trust its new key",
+    "ctx": "ui/screens/ServerDetailScreen.kt:745 (label=)"
+  },
+  "strict_protection_per_server": {
+    "en": "Strict protection per server",
+    "ctx": "ui/screens/SettingsScreen.kt:243 (subtitle=)"
+  },
+  "sign_in_first": {
+    "en": "Sign in first.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:109 (prose)"
+  },
+  "quantum_safe_protection_isnt_available_on": {
+    "en": "Quantum-safe protection isn't available on this account.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:111 (prose)"
+  },
+  "not_available_on_this_account": {
+    "en": "Not available on this account.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:212 (prose)"
+  },
+  "only_an_admin_device_of_this_4": {
+    "en": "Only an admin device of this account can change this.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:219 (prose)"
+  },
+  "unlock_the_app_and_try_again": {
+    "en": "Unlock the app and try again.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:220 (prose)"
+  },
+  "this_devices_post_quantum_key_isnt_2": {
+    "en": "This device's post-quantum key isn't ready. Unlock the app once while online, then try again.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:227 (prose)"
+  },
+  "couldnt_read_this_servers_protection_history": {
+    "en": "Couldn't read this server's protection history. Check your connection and try again.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:244 (prose)"
+  },
+  "couldnt_read_this_servers_protection_history_2": {
+    "en": "Couldn't read this server's protection history.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:246 (prose)"
+  },
+  "this_phone_hasnt_checked_the_servers": {
+    "en": "This phone hasn't checked the server's post-quantum key yet. Open the server once, then try again.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:248 (prose)"
+  },
+  "let_browsers_reach": {
+    "en": "Let browsers reach %1$s",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:267 (prose)",
+    "args": 1
+  },
+  "keep_browsers_away_from": {
+    "en": "Keep browsers away from %1$s",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:267 (prose)",
+    "args": 1
+  },
+  "browsers_can_reach_again_within_15": {
+    "en": "Browsers can reach %1$s again, within 15 minutes.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:276 (prose)",
+    "args": 1
+  },
+  "only_the_flagship_app_reaches_now": {
+    "en": "Only the Flagship app reaches %1$s now, within 15 minutes.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:276 (prose)",
+    "args": 1
+  },
+  "wasnt_changed": {
+    "en": "%1$s wasn't changed.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:281 (prose)",
+    "args": 1
+  },
+  "turn_on_quantum_safe_protection_for": {
+    "en": "Turn on quantum-safe protection for %1$s",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:294 (prose)",
+    "args": 1
+  },
+  "quantum_safe_protection_is_on_for": {
+    "en": "Quantum-safe protection is on for %1$s. It takes effect when the server next checks in, within 15 minutes.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:307 (prose)",
+    "args": 1
+  },
+  "quantum_safe_protection_wasnt_changed": {
+    "en": "Quantum-safe protection wasn't changed.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:312 (prose)"
+  },
+  "turn_off_quantum_safe_protection_for": {
+    "en": "Turn off quantum-safe protection for %1$s",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:326 (prose)",
+    "args": 1
+  },
+  "is_back_to_compatibility_turning_strict": {
+    "en": "%1$s is back to compatibility. Turning strict on again later needs a fresh check of every device and your recovery.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:328 (prose)",
+    "args": 1
+  },
+  "the_server_isnt_ready_yet_every": {
+    "en": "The server isn't ready yet: every device, the server and your recovery need their post-quantum keys first.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:342 (prose)"
+  },
+  "this_devices_post_quantum_key_isnt_3": {
+    "en": "This device's post-quantum key isn't registered yet. Unlock the app once while online, then try again.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:343 (prose)"
+  },
+  "another_device_changed_this_at_the": {
+    "en": "Another device changed this at the same time. Refresh and try again.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:344 (prose)"
+  },
+  "turning_strict_on_again_needs_a": {
+    "en": "Turning strict on again needs a fresh check of every device, a rekey and a tested recovery.",
+    "ctx": "viewmodels/QuantumSafetyViewModel.kt:345 (prose)"
   }
 }

@@ -8,7 +8,7 @@
  * signatures remain byte-identical. (Imported by `provisionProgress.ts`.)
  */
 import { ed } from "./edSync.js";
-import { legacyFieldGuard } from "./canonicalBase.js";
+import { integerFieldGuard, legacyFieldGuard } from "./canonicalBase.js";
 import type { Bytes, Keypair, ServerId } from "./types.js";
 
 /**
@@ -113,7 +113,10 @@ export interface ProvisionEvent {
 const TAG_PROVISION_EVENT = "flagship/provision-event/v1";
 
 function canonicalProvisionEvent(e: ProvisionEvent): Bytes {
+  legacyFieldGuard("serverDomain", e.serverDomain);
+  legacyFieldGuard("phase", e.phase);
   legacyFieldGuard("error", e.error);
+  integerFieldGuard("issuedAt", e.issuedAt);
   return new TextEncoder().encode(
     [
       TAG_PROVISION_EVENT,

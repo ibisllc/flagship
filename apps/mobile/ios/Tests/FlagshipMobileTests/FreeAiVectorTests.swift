@@ -37,11 +37,11 @@ final class FreeAiVectorTests: XCTestCase {
                 desiredDailyInputTokenCap: (c["desiredDailyInputTokenCap"] as! NSNumber).int64Value,
                 desiredDailyOutputTokenCap: (c["desiredDailyOutputTokenCap"] as! NSNumber).int64Value)
             XCTAssertEqual(req.provider, FreeAiIssueRequest.provider)
-            XCTAssertEqual(String(data: req.canonicalBytes(), encoding: .utf8), c["canonical"] as? String)
+            XCTAssertEqual(String(data: try req.canonicalBytes(), encoding: .utf8), c["canonical"] as? String)
             let pinned = try XCTUnwrap(HexUtil.decode(c["signature"] as! String))
-            XCTAssertTrue(key.publicKey.isValidSignature(pinned, for: req.canonicalBytes()))
+            XCTAssertTrue(key.publicKey.isValidSignature(pinned, for: try req.canonicalBytes()))
             let mine = try key.signature(for: req.canonicalBytes())
-            XCTAssertTrue(key.publicKey.isValidSignature(mine, for: req.canonicalBytes()))
+            XCTAssertTrue(key.publicKey.isValidSignature(mine, for: try req.canonicalBytes()))
             let tampered = [
                 FreeAiIssueRequest(username: req.username + "x", serverFqdn: req.serverFqdn, issuedAt: req.issuedAt),
                 FreeAiIssueRequest(username: req.username, serverFqdn: req.serverFqdn + "x", issuedAt: req.issuedAt),
@@ -52,8 +52,25 @@ final class FreeAiVectorTests: XCTestCase {
                                    desiredDailyInputTokenCap: 1),
             ]
             for t in tampered {
-                XCTAssertFalse(key.publicKey.isValidSignature(pinned, for: t.canonicalBytes()))
+                XCTAssertFalse(key.publicKey.isValidSignature(pinned, for: try t.canonicalBytes()))
             }
+        }
+    }
+
+    /// A `|` or a control character in a text field is refused, so a
+    /// separator can never move between fields under one signature (AT-ENV-09).
+    func test_refusesSeparatorsAndControlCharacters() throws {
+        let refuse = try XCTUnwrap(try vectors()["refuse"] as? [[String: Any]])
+        XCTAssertFalse(refuse.isEmpty)
+        for c in refuse {
+            let req = FreeAiIssueRequest(
+                username: c["username"] as! String,
+                serverFqdn: c["serverFqdn"] as! String,
+                issuedAt: (c["issuedAt"] as! NSNumber).int64Value,
+                provider: c["provider"] as! String,
+                desiredDailyInputTokenCap: (c["desiredDailyInputTokenCap"] as! NSNumber).int64Value,
+                desiredDailyOutputTokenCap: (c["desiredDailyOutputTokenCap"] as! NSNumber).int64Value)
+            XCTAssertThrowsError(try req.canonicalBytes(), c["why"] as? String ?? "")
         }
     }
 

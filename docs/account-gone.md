@@ -69,7 +69,7 @@ vary: authorization
 | Account and recovery state | `GET /api/users/<u>`, `GET /api/users/<u>/re-pair` |
 
 Not on it, on purpose: lookups other accounts make about a name
-(`pubkey-cert`, `account-key-attestation`, `server-shares/<id>/unlock|revoke`,
+(`pubkey-cert`, `share-key-attestation`, `server-shares/<id>/unlock|revoke`,
 `service-invites/.../create|revoked-since`), the recovery, TOTP and device-admit
 ceremonies, `account/resolve`, `users/check`, `username/*`. They keep their own
 answers.

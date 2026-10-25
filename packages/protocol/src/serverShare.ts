@@ -31,6 +31,7 @@ export const TAG_SERVER_SHARE_UPDATE = "flagship/server-share-update/v1";
 export const TAG_SERVER_SHARE_ACCEPT_ADMIN = "flagship/server-share-accept-admin/v1";
 
 const INFO_MEMBER = "flagship/server-share-member/v1";
+const INFO_ADMIN = "flagship/server-share-admin/v1";
 const INFO_TOKEN = "flagship/server-share/token/v1";
 const INFO_LINK_KEY = "flagship/server-share/link-key/v1";
 const INFO_INBOX = "flagship/share-inbox/v1";
@@ -77,6 +78,17 @@ function keypair(seed: Bytes): Keypair {
 export function deriveShareMemberKey(umk: UserMasterKey, shareId: string): Keypair {
   checkShareId(shareId);
   return keypair(hk(umk.seed, `${INFO_MEMBER}|${shareId}`));
+}
+
+/**
+ * B's per-share admin key (#12, §5.1): signs only the admin acceptance, and
+ * `.com` attests it for an admin device of B's account. It is never the member
+ * key (which `.com` sees in unlock deposits), so `.com` can't tie the share to
+ * B, and it differs per share, so two servers can't tie B together (AT-LNK-10).
+ */
+export function deriveShareAdminKey(umk: UserMasterKey, shareId: string): Keypair {
+  checkShareId(shareId);
+  return keypair(hk(umk.seed, `${INFO_ADMIN}|${shareId}`));
 }
 
 /**
@@ -186,8 +198,8 @@ export interface ShareOwnerRecord {
 }
 
 /**
- * The joining account's admin proof (§5.1): #12 signed by its sensitive key,
- * and `.com`'s CA attestation that the key is that account's sensitive key.
+ * The joining account's admin proof (§5.1): #12 signed by its per-share admin
+ * key, and `.com`'s CA attestation that an admin of some account vouched for it.
  */
 export interface ShareAcceptAdminProof {
   admit: ServerShareAcceptAdmin;
@@ -445,8 +457,9 @@ export interface ServerShareUpdate {
 }
 
 /**
- * #12 — signed by the joining account's sensitive key (its admin root, or its
- * IRK when it pins none): only an admin device of that account accepts a
+ * #12 — signed by the joining account's per-share admin key
+ * (`deriveShareAdminKey`, keyKind `share`), which `.com` attests only when the
+ * account's sensitive key asks: only an admin device of that account accepts a
  * share. The fields of #3 plus which key signs, so the box can match it to
  * the CA attestation.
  */
@@ -500,7 +513,7 @@ export function serverShareAcceptAdminCanonicalBytes(a: ServerShareAcceptAdmin):
   checkShareId(a.shareId);
   checkHex64("memberPubHex", a.memberPubHex);
   time("acceptedAt", a.acceptedAt);
-  if (a.keyKind !== "admin-root" && a.keyKind !== "irk") throw new Error("server-share: keyKind must be admin-root or irk");
+  if (a.keyKind !== "share") throw new Error("server-share: keyKind must be share");
   checkHex64("keyPubHex", a.keyPubHex);
   return join(TAG_SERVER_SHARE_ACCEPT_ADMIN, [
     a.serverDomain,
@@ -693,7 +706,7 @@ export const parseServerShareAccept = parsed(serverShareAcceptCanonicalBytes, (o
 
 export const parseServerShareAcceptAdmin = parsed(serverShareAcceptAdminCanonicalBytes, (o) =>
   str(o.serverDomain) && str(o.shareId) && str(o.memberPubHex) && isTime(o.acceptedAt) &&
-  (o.keyKind === "admin-root" || o.keyKind === "irk") && str(o.keyPubHex)
+  o.keyKind === "share" && str(o.keyPubHex)
     ? {
         serverDomain: o.serverDomain,
         shareId: o.shareId,

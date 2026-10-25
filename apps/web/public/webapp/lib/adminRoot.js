@@ -66,6 +66,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/chat-approval/v1", //          answer an app chat request (chat/approvals.ts)
   "flagship/ai-repair-consent/v1", //      agree to one AI run's cost (buildmodes/adaptConsent.ts)
   "flagship/browser-grant/v1", //          let an app's browser beyond its manifest (browser/grantRequests.ts)
+  "flagship/browser-grant-revoke/v1", //   withdraw a browser grant the owner gave (browser/grantRequests.ts)
   "flagship/server-wildcard-grant/v1", //  a server may hold the account's app-name certificate
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
@@ -86,7 +87,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/server-share-revoke/v1", //    end a share (box + .com)
   "flagship/server-share-offer/v1", //     offer a share (.com)
   "flagship/server-share-unlock/v1", //    a share's copy of the disk key (.com)
-  "flagship/server-share-accept-admin/v1", // accept a share for this account (the shared box)
+  "flagship/share-key-attestation-request/v1", // have .com attest a per-share key to accept a share (#12 signs with that key)
 ]);
 
 const _decoder = new TextDecoder();

@@ -21,6 +21,12 @@ export function canonicalPublisherTrustBytes(t) {
   for (const k of ["serviceId", "appId"]) {
     if (!t[k] || /[|\u0000-\u001f\u007f]/.test(t[k])) throw new Error(`bad ${k}`);
   }
+  for (const k of ["oldKeyHex", "newKeyHex"]) {
+    if (typeof t[k] !== "string" || /[|\u0000-\u001f\u007f]/.test(t[k])) throw new Error(`bad ${k}`);
+  }
+  for (const k of ["identityGeneration", "newEpoch", "issuedAt"]) {
+    if (!Number.isSafeInteger(t[k])) throw new Error(`bad ${k}`);
+  }
   return new TextEncoder().encode(
     [TAG_PUBLISHER_TRUST, t.serviceId, t.appId, t.identityGeneration, t.oldKeyHex, t.newKeyHex, t.newEpoch, t.issuedAt].join("|"),
   );

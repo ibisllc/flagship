@@ -225,6 +225,8 @@ export interface ScreensHttpDeps {
    * one it holds. Absent ⇒ the path 404s and the order arrives via `.com`.
    */
   serverOrder?: Pick<ServerOrderHolder, "current" | "offer"> | null;
+  /** This server's GPUs, their holders and queue (gpu/http.ts); it denies companions itself. */
+  accelerators?: ((path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>) | null;
   /**
    * Owner debug access (`/api/screens/debug-access`, debugAccessGate.ts): an
    * admin-signed SSH key let in until it ends. Its state rides server-detail.
@@ -277,6 +279,8 @@ export interface ScreensHttpDeps {
     originOf(serviceId: string): { repo: string } | null;
     report(serviceId: string, detail: string): Promise<boolean>;
   };
+  /** Where an app imported on this box came from (ImportProvenanceStore.importedFrom); null when it wasn't. */
+  importedFrom?: (serviceId: string) => Promise<{ repo: string; commit?: string; ref?: string } | null>;
   serverFqdn: string;
   username: string;
   daemonVersion: string;
@@ -608,6 +612,11 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         setting: deps.accessAlerts,
         denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
       })(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.accelerators && path.startsWith("/api/screens/accelerators")) {
+      const r = await deps.accelerators(path, method, req);
       if (r) return r;
     }
 
@@ -1793,7 +1802,13 @@ async function appDetail(app: InstalledService, deps: ScreensHttpDeps): Promise<
     recentLogs: [],
     editable: deps.vibeCode?.canEdit?.(app.serviceId) ?? false,
     ...(deps.adapterReports?.originOf(app.serviceId) ? { adaptedFrom: deps.adapterReports.originOf(app.serviceId)! } : {}),
+    ...(await importedFromOf(app.serviceId, deps)),
   };
+}
+
+async function importedFromOf(serviceId: string, deps: ScreensHttpDeps): Promise<{ importedFrom?: { repo: string; commit?: string; ref?: string } }> {
+  const f = await deps.importedFrom?.(serviceId).catch(() => null);
+  return f ? { importedFrom: f } : {};
 }
 
 /** The stores an app holds: each Postgres database, and its files folder with its size. */

@@ -192,15 +192,17 @@ describe("app-name certificate grant", () => {
     }
   });
 
-  // FINDING AT-CRT-06: keyd's `namesFor` (packages/keyd/src/migrate.ts) derives the account wildcard by
+  // FIXED (was a finding) AT-CRT-06: keyd's `namesFor` (packages/keyd/src/migrate.ts) derives the account wildcard by
   // dropping the first label of whatever FQDN its policy holds, and `writePolicyFromEnv` checks only that
   // FLAGSHIP_SUBDOMAIN is a DNS name. A policy FQDN of `alice.flagship.services` (or any 3-label name)
   // makes keyd willing to create a key for `*.flagship.services`, the whole apex. `.com` and Let's
   // Encrypt still refuse that challenge, so this is defence in depth (low), but keyd is the boundary
   // that should refuse it on its own.
-  it.fails("AT-CRT-06 keyd's allowed names never include a wildcard wider than *.<user>.<apex> (catches: a shape-unchecked FQDN widening keyd's certificate authority)", () => {
+  it("AT-CRT-06 keyd's allowed names never include a wildcard wider than *.<user>.<apex> (catches: a shape-unchecked FQDN widening keyd's certificate authority)", () => {
     expect(namesFor(SERVER).filter((n) => n.startsWith("*.") && n.split(".").length < 4)).toEqual([]);
     // A policy FQDN one label short: the account wildcard becomes the apex wildcard.
     expect(namesFor(`alice.${APEX}`).filter((n) => n.startsWith("*.") && n.split(".").length < 4)).toEqual([]);
+    for (const bad of [APEX, `alice.${APEX}`, `a.home.alice.${APEX}`, `home.alice.example.com`, `home.a--b.${APEX}`, `home.alice.${APEX}.evil.com`]) expect(namesFor(bad), bad).toEqual([]);
+    expect(namesFor(`home.alice.gym.${APEX}`)).toContain(`*.alice.gym.${APEX}`);
   });
 });

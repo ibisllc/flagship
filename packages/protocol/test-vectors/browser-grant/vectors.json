@@ -1,5 +1,5 @@
 {
-  "about": "The owner's answer to an app's browser grant request: flagship/browser-grant/v1|serverDomain (lowercase)|requestId|serviceId|decision|duration|capabilities sorted, comma-joined|SHA-256 hex of the origins sorted, newline-joined|localNetwork (none, whole-lan or exact:<hosts sorted, comma-joined>)|issuedAt; Ed25519, seed 0x99 repeated. Each refused answer must fail to produce canonical bytes.",
+  "about": "The owner's answer to an app's browser grant request: flagship/browser-grant/v1|serverDomain (lowercase)|requestId|serviceId|decision|duration|capabilities sorted, comma-joined|SHA-256 hex of the origins sorted, newline-joined|localNetwork (none, whole-lan or exact:<hosts sorted, comma-joined>)|issuedAt; Ed25519, seed 0x99 repeated. Each refused answer must fail to produce canonical bytes. The owner may answer with the same or a narrower scope (narrowing: is the answer within the ask; choices: the durations offered for each asked duration, shortest first); the last three answers are narrowed answers to the first, the very last one only shorter (Allow once on a session ask).",
   "seedHex": "9999999999999999999999999999999999999999999999999999999999999999",
   "pubHex": "332ebe8d27cb7323b3a401c1c13b5dd64bccc0e10ecda1c2b5d11a03779a85e5",
   "answers": [
@@ -70,6 +70,78 @@
       },
       "canonical": "flagship/browser-grant/v1|home.alice.flagship.services|7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b|alice--shop|allow|service|navigate,read-dom|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855|whole-lan|1760000000000",
       "signatureHex": "29c7dbb3c55c97673b9a2bdd8c5a3a0d54bc51d623f41380846c11187de055b1eae2358b60995f1fb6155e7f7685676782c4381de548ddc3299d89498899b905"
+    },
+    {
+      "answer": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "requestId": "7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b",
+        "serviceId": "alice--shop",
+        "decision": "allow",
+        "duration": "once",
+        "capabilities": [
+          "navigate"
+        ],
+        "origins": [
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local"
+          ]
+        },
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/browser-grant/v1|home.alice.flagship.services|7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b|alice--shop|allow|once|navigate|93d446a9d8ca42b500faf019713f245eaf0377bd89add0676ece0b22d3ebfb02|exact:printer.local|1760000000000",
+      "signatureHex": "000052ee7a6541539dbcd095debaf75e1c4f7aade5c02d5107c4c9cdd2544ac0bc67073267327f22b8f9ea7a1f22bd7f06e96b04472336405bcde91a3a3b7f06"
+    },
+    {
+      "answer": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "requestId": "7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b",
+        "serviceId": "alice--shop",
+        "decision": "allow",
+        "duration": "once",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": null,
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/browser-grant/v1|home.alice.flagship.services|7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b|alice--shop|allow|once|navigate,read-dom|e96b711517dc37d3a33252840dec0eb1455295d1bfe702c095a4fe654fd0b398|none|1760000000000",
+      "signatureHex": "da19df4c5bd9800fd6ea1e928dd41512467d3998e63daa6d919edc56a7cc89e2bc988a3c195800137166aea78ce4fa532d195f3b667c1ed91db5a91cdbc9ea01"
+    },
+    {
+      "answer": {
+        "serverDomain": "Home.Alice.flagship.services",
+        "requestId": "7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b",
+        "serviceId": "alice--shop",
+        "decision": "allow",
+        "duration": "once",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        },
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/browser-grant/v1|home.alice.flagship.services|7c1e2a90-1b3d-4f5e-8a6b-0c9d8e7f6a5b|alice--shop|allow|once|navigate,read-dom|e96b711517dc37d3a33252840dec0eb1455295d1bfe702c095a4fe654fd0b398|exact:192.168.1.20,printer.local|1760000000000",
+      "signatureHex": "22b3a5d71ed6a51bb41caf128ead615122fc63f242d7243760218c2013496233c0ece406a100c0e4243dbf8b0b89405db9a8b0a01f808f9bee85a8fc3f499b06"
     }
   ],
   "refused": [
@@ -150,6 +222,512 @@
         },
         "issuedAt": 1760000000000
       }
+    }
+  ],
+  "narrowing": [
+    {
+      "name": "the ask itself",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "within": true
+    },
+    {
+      "name": "a shorter duration",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "once",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "within": true
+    },
+    {
+      "name": "fewer capabilities, one site, no local network",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [
+          "navigate"
+        ],
+        "origins": [
+          "https://a.example.com"
+        ],
+        "localNetwork": null
+      },
+      "within": true
+    },
+    {
+      "name": "fewer local hosts",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local"
+          ]
+        }
+      },
+      "within": true
+    },
+    {
+      "name": "always for a session ask",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "service",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "within": false
+    },
+    {
+      "name": "a capability it did not ask for",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [
+          "navigate",
+          "download"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "within": false
+    },
+    {
+      "name": "a site it did not ask for",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://a.example.com",
+          "https://c.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "within": false
+    },
+    {
+      "name": "a local host it did not ask for",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "nas.local"
+          ]
+        }
+      },
+      "within": false
+    },
+    {
+      "name": "the whole network for named hosts",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "whole-lan"
+        }
+      },
+      "within": false
+    },
+    {
+      "name": "no capability left",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "within": false
+    },
+    {
+      "name": "nothing left to reach",
+      "ask": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local",
+            "192.168.1.20"
+          ]
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [],
+        "localNetwork": null
+      },
+      "within": false
+    },
+    {
+      "name": "named hosts out of a whole-network ask",
+      "ask": {
+        "duration": "service",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "whole-lan"
+        }
+      },
+      "answer": {
+        "duration": "service",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "exact",
+          "hosts": [
+            "printer.local"
+          ]
+        }
+      },
+      "within": false
+    },
+    {
+      "name": "the whole network kept, for this session",
+      "ask": {
+        "duration": "service",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "whole-lan"
+        }
+      },
+      "answer": {
+        "duration": "session",
+        "capabilities": [
+          "read-dom",
+          "navigate"
+        ],
+        "origins": [
+          "https://b.example.com",
+          "https://a.example.com"
+        ],
+        "localNetwork": {
+          "kind": "whole-lan"
+        }
+      },
+      "within": true
+    }
+  ],
+  "choices": [
+    {
+      "asked": "once",
+      "choices": [
+        "once"
+      ]
+    },
+    {
+      "asked": "session",
+      "choices": [
+        "once",
+        "session"
+      ]
+    },
+    {
+      "asked": "service",
+      "choices": [
+        "once",
+        "session",
+        "service"
+      ]
     }
   ]
 }

@@ -451,12 +451,12 @@ export const WEB_UX: readonly Scenario[] = [
   ),
   webTotal(
     "web-ux-browser-grant-sheet",
-    "SEC-BROWSER-002: an app's browser-access request shows in a sheet and under Activity from its structured fields (the verified app name, each site exactly, wildcards spelled out, local network, capabilities, duration, the app's own words quoted); Allow is labelled by the ask's duration and signs flagship/browser-grant/v1 for it; Deny is unsigned.",
+    "SEC-BROWSER-002: an app's browser-access request shows in a sheet and under Activity from its structured fields (the verified app name, each site exactly, wildcards spelled out, local network, capabilities, duration, the app's own words quoted); one Allow per duration up to the asked one (Allow once / for this session / always), each signing flagship/browser-grant/v1 for the duration chosen; Deny is unsigned.",
     "gym ux browser grants an ask shows in a sheet and under Activity; Allow signs the ask's duration and Deny is unsigned",
     {
       steps: [
         { kind: "launch", describe: "Reach Home on an admin device; the box holds a session ask and a one-visit whole-LAN ask." },
-        { kind: "tap", describe: "Allow for this session; Not now on the second, then Deny it under Activity.", handle: "[data-browser-grant-sheet]" },
+        { kind: "tap", describe: "Allow for this session (Allow once is offered beside it, Always allow is not); Not now on the second, then Deny it under Activity.", handle: "[data-browser-grant-sheet]" },
       ],
       assertions: [
         { describe: "Sheet", handle: "[data-browser-grant-sheet]", expect: "present" },
@@ -468,12 +468,34 @@ export const WEB_UX: readonly Scenario[] = [
   ),
   webTotal(
     "web-ux-browser-grant-app-page",
-    "The app's page has a Browser access section: the manifest's sites (Approved when you installed it) and this app's waiting asks, answered in place with a signed Always allow.",
+    "The app's page has a Browser access section: the manifest's sites (Approved when you installed it) and this app's waiting asks, answered in place with a signed Always allow, which then shows under Allowed by you.",
     "gym ux browser grants the app's page lists what the manifest grants and answers a waiting ask",
     {
       steps: [{ kind: "tap", describe: "Open the app's page; Always allow on the waiting ask.", handle: "#sd-browser-access" }],
       assertions: [{ describe: "Manifest sites", handle: "[data-browser-manifest]", expect: "present" }],
       screenshots: [shot("browser-grant-app-page", "Browser access on the app's page.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-browser-grant-narrow",
+    "The owner may grant less than asked: a session ask offers Deny, Allow once and Allow for this session (never Always allow); Allow once sends duration once and signs flagship/browser-grant/v1 for once (the signature does not stand for the session asked), and the grant lists as For one visit.",
+    "gym ux browser grants Allow once on a session ask signs the shorter duration, and a longer one is never offered",
+    {
+      steps: [{ kind: "tap", describe: "Open the app's page; Allow once on the waiting session ask.", handle: "[data-browser-answer='allow:once']" }],
+      assertions: [{ describe: "Granted for one visit", handle: "#sd-browser-access [data-browser-grant]", expect: "present" }],
+      screenshots: [shot("browser-grant-narrow", "Allow choices up to the asked duration.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-browser-grant-withdraw",
+    "Allowed by you on the app's page lists the grants the owner gave (sites, duration, the app's words); Withdraw signs flagship/browser-grant-revoke/v1 and the grant disappears; one already withdrawn elsewhere (404) says so.",
+    "gym ux browser grants Withdraw drops a grant the owner gave, signed, and an already withdrawn one says so",
+    {
+      steps: [{ kind: "tap", describe: "Open the app's page; Withdraw the first grant, then the second after the box dropped it.", handle: "[data-browser-withdraw]" }],
+      assertions: [{ describe: "Allowed by you", handle: "[data-browser-granted]", expect: "text", text: "Allowed by you" }],
+      screenshots: [shot("browser-grant-withdraw", "Allowed by you with Withdraw.")],
       dimension: "D4",
     },
   ),
@@ -493,10 +515,10 @@ export const WEB_UX: readonly Scenario[] = [
   ),
   webTotal(
     "web-ux-upstream-sync-up-to-date",
-    "Already the latest version: the sheet says so and Close discards the build the check opened; an app the box did not import answers 404 and the sheet says it can't check for updates.",
-    "gym ux upstream sync up to date discards the opened build, and an app not imported here says so",
+    "Already the latest version: the box opens no build for it, so the sheet says so and Close discards nothing; an app the box did not import answers 404 and the sheet says it can't check for updates.",
+    "gym ux upstream sync up to date opens no build, and an app not imported here says so",
     {
-      steps: [{ kind: "tap", describe: "Check for updates (up to date), Close; check again (404), Cancel.", handle: "#sd-sync-upstream" }],
+      steps: [{ kind: "tap", describe: "Check for updates (up to date, no build), Close; check again (404), Cancel.", handle: "#sd-sync-upstream" }],
       assertions: [{ describe: "Up to date", handle: "[data-sync-up-to-date]", expect: "present" }],
       screenshots: [shot("upstream-sync-up-to-date", "Already the latest version.")],
       dimension: "D4",
@@ -510,6 +532,37 @@ export const WEB_UX: readonly Scenario[] = [
       steps: [{ kind: "launch", describe: "Open an editable app with no import or adapter repo." }],
       assertions: [{ describe: "No sync row", handle: "#sd-sync-upstream", expect: "absent" }],
       screenshots: [shot("upstream-sync-no-repo", "An app page with no update check.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-update-results",
+    "docs/support/update-rollback.md §5: the server page's update card says a failed update kept in recovery (rollbackRefused) stays on the new release until a fixed one arrives, never that it went back on its own; a refusal is one whole sentence; the Share update results switch reads the box's /api/update-reports and posts { share } when turned on and off.",
+    "gym ux update results a rollback kept in recovery reads as stuck and the Share update results switch posts the owner's choice",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the server page; the box reports rollbackRefused and sharing off." },
+        { kind: "tap", describe: "Turn Share update results on, then off.", handle: "#update-reports-switch" },
+      ],
+      assertions: [
+        { describe: "Stuck sentence", handle: "#update-last-outcome", expect: "text", text: "recovery mode" },
+        { describe: "Switch", handle: "#update-reports-switch", expect: "present" },
+      ],
+      screenshots: [shot("update-results", "The update card with a rollback kept in recovery and the Share update results switch.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-update-refusal-sentence",
+    "A refused update reads as one whole sentence (the request was too old); a box that refuses the session (403 on /api/update-reports) leaves the Share update results switch hidden.",
+    "gym ux update results a refusal is one sentence and a box that refuses the session hides the switch",
+    {
+      steps: [{ kind: "launch", describe: "Open the server page; the box refused a stale order and answers 403 for /api/update-reports." }],
+      assertions: [
+        { describe: "Refusal sentence", handle: "#update-last-outcome", expect: "text", text: "The server refused the last update: the request was too old. Send it again." },
+        { describe: "No switch", handle: "#update-reports", expect: "absent" },
+      ],
+      screenshots: [shot("update-refusal", "A refusal as one sentence, no switch.")],
       dimension: "D4",
     },
   ),

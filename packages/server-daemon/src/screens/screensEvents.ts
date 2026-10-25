@@ -11,8 +11,13 @@
  *
  *   { type: "chat-request", kind }
  *     An app chat waits for an admin answer (GET /api/screens/chat/requests).
+ *
+ *   { type: "browser-grant-request", serviceId }
+ *     An app asks for browser access beyond its manifest (browser/grantRequests.ts); fetch the
+ *     details from GET /api/browser/owner/grant-requests.
  */
 import type { AccessRequestEvent } from "../egress/accessAlerts.js";
+import type { BrowserGrantRequestEvent } from "../browser/grantAlerts.js";
 
 /** Another owner's app wants to talk to one of this box's apps, or an app here wants to talk to another owner's (chat/approvals.ts). Details come from GET /api/screens/chat/requests. */
 export interface ChatRequestEvent {
@@ -20,7 +25,7 @@ export interface ChatRequestEvent {
   kind: "incoming" | "outgoing";
 }
 
-export type ScreensEvent = AccessRequestEvent | ChatRequestEvent;
+export type ScreensEvent = AccessRequestEvent | ChatRequestEvent | BrowserGrantRequestEvent;
 
 export class ScreensEventBus {
   private readonly subs = new Set<(e: ScreensEvent) => void>();

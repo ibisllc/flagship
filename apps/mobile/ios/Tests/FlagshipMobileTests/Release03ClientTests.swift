@@ -195,6 +195,57 @@ final class Release03ClientTests: XCTestCase {
         XCTAssertTrue(screens.mockBrowserGrantRequests.isEmpty)
     }
 
+    func test_allowOnceOnASessionAskSignsOnceAndTheMockRefusesWider() async throws {
+        let screens = MockScreensClient()
+        let ask = BrowserGrantRequest(requestId: "44444444-4444-4444-8444-444444444444", serviceId: "bright-maple--wiki",
+                                      capabilities: ["navigate"], origins: ["w.example"], duration: "session")
+        screens.mockBrowserGrantRequests = [ask]
+        let key = Curve25519.Signing.PrivateKey()
+        let domain = await screens.boxDomain() ?? "home.bright-maple.flagship.services"
+        // Wider than asked is never signed.
+        var asked = false
+        do {
+            try await BrowserGrantAnswerOrder.send(ask, allow: true, duration: "service", appName: "wiki", client: screens,
+                                                   fallbackServerDomain: domain, signer: { _ in asked = true; return key })
+            XCTFail("a wider answer is refused")
+        } catch {}
+        XCTAssertFalse(asked, "No Face ID for an answer that would be refused.")
+        try await BrowserGrantAnswerOrder.send(ask, allow: true, duration: "once", appName: "wiki", client: screens,
+                                               fallbackServerDomain: domain, signer: { _ in key })
+        let a = try XCTUnwrap(screens.browserGrantAnswers.last)
+        XCTAssertEqual(a.duration, "once")
+        let bytes = try BrowserGrantOrder.answer(for: ask, serverDomain: domain, decision: "allow", duration: "once", issuedAt: a.issuedAt).canonicalBytes()
+        XCTAssertTrue(String(decoding: bytes, as: UTF8.self).contains("|allow|once|"))
+        XCTAssertTrue(key.publicKey.isValidSignature(HexUtil.decode(a.signature ?? "") ?? Data(), for: bytes))
+        XCTAssertEqual(screens.mockBrowserGrants.map(\.duration), ["once"])
+    }
+
+    func test_theAppPageListsGrantsAndWithdrawSignsTheRevoke() async throws {
+        let screens = MockScreensClient()
+        let g = OwnerBrowserGrant(grantId: "bg-1", serviceId: "bright-maple--plants", capabilities: ["navigate"],
+                                  origins: ["shop.example.com"], duration: "service", explanation: "prices")
+        screens.mockBrowserGrants = [g, OwnerBrowserGrant(grantId: "bg-2", serviceId: "bright-maple--wiki", capabilities: ["navigate"],
+                                                          origins: ["w.example"], duration: "service")]
+        let key = Curve25519.Signing.PrivateKey()
+        var reasons: [String] = []
+        let ctl = BrowserGrantsController(serviceId: "bright-maple--plants", appName: "plants",
+                                          serverDomain: "home.bright-maple.flagship.services", client: screens,
+                                          signer: { r in reasons.append(r); return key })
+        await ctl.load()
+        XCTAssertEqual(ctl.grants.map(\.grantId), ["bg-1"], "Only this app's grants.")
+        await ctl.withdraw(g)
+        XCTAssertEqual(reasons, ["Withdraw plants's browser access"])
+        XCTAssertEqual(ctl.note, "Browser access withdrawn")
+        XCTAssertTrue(ctl.grants.isEmpty)
+        let rv = try XCTUnwrap(screens.browserGrantRevokes.last)
+        let domain = await screens.boxDomain() ?? "home.bright-maple.flagship.services"
+        let bytes = try BrowserGrantRevoke(serverDomain: domain, serviceId: rv.serviceId, grantId: rv.grantId, issuedAt: rv.issuedAt).canonicalBytes()
+        XCTAssertTrue(key.publicKey.isValidSignature(HexUtil.decode(rv.signature) ?? Data(), for: bytes))
+        // Already gone: said in its own words.
+        await ctl.withdraw(g)
+        XCTAssertEqual(ctl.error, "That access was already withdrawn.")
+    }
+
     func test_centerAsksEveryBoxAndNamesTheVerifiedApp() async throws {
         let screens = MockScreensClient()
         screens.mockBrowserGrantRequests = [BrowserGrantRequest(requestId: "11111111-1111-4111-8111-111111111111",
@@ -223,7 +274,7 @@ final class Release03ClientTests: XCTestCase {
                        "This app wasn't imported from a repo on this server, so it can't check for updates.")
     }
 
-    func test_syncShowsTheProposalAndUpToDateDiscardsTheBuild() async throws {
+    func test_syncShowsTheProposalAndUpToDateOpensNoBuild() async throws {
         let screens = MockScreensClient()
         let proposal = AppSyncResponse(buildId: "b1", proposal: SyncProposal(takeUpstream: ["a"], conflicts: ["b"],
                                                                              capabilityChanges: [.init(section: "network.egress", added: ["x"], removed: [])],
@@ -236,13 +287,20 @@ final class Release03ClientTests: XCTestCase {
         XCTAssertEqual(vm.phase, .proposal(proposal))
         XCTAssertEqual(screens.appSyncCalls.last?.ref, "v2")
 
-        screens.mockSyncResponses["s2"] = AppSyncResponse(buildId: "b2", proposal: SyncProposal(), upToDate: true)
+        // Up to date: the box opens no build, so closing discards nothing.
+        screens.mockSyncResponses["s2"] = AppSyncResponse(buildId: nil, proposal: nil, candidateCommit: "c", upToDate: true)
         let current = UpstreamSyncViewModel(serviceId: "s2", repo: "r", client: screens)
         await current.check()
-        XCTAssertEqual(current.phase, .upToDate(buildId: "b2"))
+        XCTAssertEqual(current.phase, .upToDate)
+        XCTAssertNil(current.openBuildId)
         XCTAssertNil(screens.appSyncCalls.last?.ref, "A blank ref sends none.")
+        let discardsBefore = screens.buildDiscardCalls.count
         await current.discard()
-        XCTAssertEqual(screens.buildDiscardCalls.last, "b2", "The build the check opened is forgotten.")
+        XCTAssertEqual(screens.buildDiscardCalls.count, discardsBefore, "Nothing to discard.")
+
+        // A proposal's build is still discarded when the owner closes it.
+        await vm.discard()
+        XCTAssertEqual(screens.buildDiscardCalls.last, "b1")
 
         let missing = UpstreamSyncViewModel(serviceId: "nope", repo: "r", client: screens)
         await missing.check()

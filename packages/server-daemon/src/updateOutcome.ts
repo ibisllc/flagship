@@ -24,6 +24,12 @@ export interface UpdateOutcomeRecord {
   bootAttempts?: number;
   /** Why the box refused the order (an UpdateConsumeOutcome reason). */
   reason?: RefusalReason;
+  /**
+   * The new release failed its boot check but the one before it is below the signed security floor, so
+   * the box did NOT go back: it stays on the new release in restricted recovery (`update-rollback-refused`).
+   * Recorded with outcome "rolled-back" for older clients.
+   */
+  rollbackRefused?: true;
 }
 
 export type RefusalReason = Extract<
@@ -79,6 +85,7 @@ export function parseUpdateOutcome(raw: unknown): UpdateOutcomeRecord | null {
   if (typeof r.reason === "string" && OWNER_VISIBLE_REFUSALS.has(r.reason as RefusalReason)) {
     out.reason = r.reason as RefusalReason;
   }
+  if (r.rollbackRefused === true && out.outcome === "rolled-back") out.rollbackRefused = true;
   return out;
 }
 

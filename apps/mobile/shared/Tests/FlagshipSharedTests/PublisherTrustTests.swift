@@ -9,6 +9,8 @@ final class PublisherTrustTests: XCTestCase {
         let trust: PublisherTrust
         let canonical: String
         let signatureHex: String
+        struct Refusal: Decodable { let why: String; let trust: PublisherTrust }
+        let refuse: [Refusal]
     }
 
     private func vectors() throws -> Vectors {
@@ -37,6 +39,13 @@ final class PublisherTrustTests: XCTestCase {
         XCTAssertThrowsError(try t.canonicalBytes())
         t.serviceId = ""
         XCTAssertThrowsError(try t.canonicalBytes())
+    }
+
+    /// AT-ENV-09: a `|` or a control character in any text field is refused.
+    func testEveryRefusalVectorIsRefused() throws {
+        let refuse = try vectors().refuse
+        XCTAssertFalse(refuse.isEmpty)
+        for r in refuse { XCTAssertThrowsError(try r.trust.canonicalBytes(), r.why) }
     }
 
     func testDeadlineWording() {

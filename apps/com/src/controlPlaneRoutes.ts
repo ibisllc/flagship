@@ -189,7 +189,7 @@ import {
   handlePostDaemonStatus,
   handlePostServerHealth,
   handleUserPubKeyCert,
-  handleAccountKeyAttestation,
+  handleShareKeyAttestation,
   handleAuthTime,
   buildPushForwarder,
   wrapForwarderAsV12Fanout,
@@ -228,7 +228,7 @@ import {
   handleListDemoUsers,
   handleOrderDemoUpdate,
   handlePairDemoUser,
-  handleDemoShareAccept,
+  demoShareKeyAttestationRequest,
   handleGymProvision,
   handleMintDeviceGrant,
   handleListAccountDeviceGrants,
@@ -593,7 +593,7 @@ const ROUTE_RE = {
   SERVER_REGISTRY_REVOKE: /^\/api\/server-registry\/revoke$/,
   SERVER_REGISTRY_UNREVOKE: /^\/api\/server-registry\/unrevoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
-  ACCOUNT_KEY_ATTESTATION: /^\/api\/users\/([^/]+)\/account-key-attestation$/,
+  SHARE_KEY_ATTESTATION: /^\/api\/users\/([^/]+)\/share-key-attestation$/,
   AUTH_TIME: /^\/api\/auth-time$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   MAINTAINER_BLESSING: /^\/api\/maintainer-blessing$/,
@@ -826,7 +826,7 @@ const ROUTE_RE = {
   DEMO_USER_CREATE: /^\/api\/dev\/sample-user\/create$/,
   DEMO_USER_CLEANUP: /^\/api\/dev\/sample-user\/cleanup$/,
   DEMO_USER_PAIR: /^\/api\/dev\/sample-user\/([^/]+)\/pair$/,
-  DEMO_USER_SHARE_ACCEPT: /^\/api\/dev\/sample-user\/([^/]+)\/share-accept$/,
+  DEMO_USER_SHARE_KEY_ATTESTATION: /^\/api\/dev\/sample-user\/([^/]+)\/share-key-attestation$/,
   DEMO_USER_ORDER_UPDATE: /^\/api\/dev\/sample-user\/([^/]+)\/order-update$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
@@ -868,7 +868,7 @@ const ROUTE_RE = {
  * For an account that does not exist each answers `404 account-not-found`
  * before any auth check, so a client whose account was deleted learns so in
  * one stable shape. Deliberately absent: lookups other accounts make about a
- * name (pubkey-cert, account-key-attestation, share unlock/revoke, invite
+ * name (pubkey-cert, share unlock/revoke, invite
  * create-fetch/revoked-since) and the recovery, TOTP and admit ceremonies,
  * which keep their own answers.
  */
@@ -1426,14 +1426,16 @@ export async function tryControlPlane(
       ),
     );
   }
-  // A device fetches this about its own account and seals it into a share
-  // acceptance, so the shared server can check that an admin device accepted
-  // without `.com` learning who joined (docs/share-a-server.md §5.1).
-  if (method === "GET" && (m = path.match(ROUTE_RE.ACCOUNT_KEY_ATTESTATION))) {
+  // An admin device has `.com` attest its per-share admin key and seals it into
+  // a share acceptance, so the shared server can check that an admin device
+  // accepted without learning any key `.com` serves by name, and `.com` never
+  // learns the share (docs/share-a-server.md §5.1, AT-LNK-10).
+  if (method === "POST" && (m = path.match(ROUTE_RE.SHARE_KEY_ATTESTATION))) {
     return finish(
-      await handleAccountKeyAttestation(
-        { ca, usernames: storage.usernames, caGate },
+      await handleShareKeyAttestation(
+        { ca, usernames: storage.usernames, caGate, grants: storage.deviceCapabilityGrants },
         decodeURIComponent(m[1]!),
+        await readJson(request),
       ),
     );
   }
@@ -3662,7 +3664,7 @@ export async function tryControlPlane(
   // One admin-owned demo lifecycle: create-or-resume, status, and exact-ID
   // cleanup. Pairing and share acceptance are the only public writes: knowing a
   // demo username is the capability; pairing signs only a non-sensitive paired
-  // session, and share-accept only a share acceptance (#12) for that account.
+  // session, and share-key-attestation only a per-share key for that account.
   if (path.startsWith("/api/dev/sample-user")) {
     const demoServers = createDemoServerRouter(env);
     const sshKeyIdRaw = env.DEMO_PUBLIC_SSH_KEY_ID;
@@ -3706,14 +3708,21 @@ export async function tryControlPlane(
         },
       }, decodeURIComponent(m[1]!), await readJson(request)));
     }
-    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_SHARE_ACCEPT))) {
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_SHARE_KEY_ATTESTATION))) {
       if (!env.DEMO_IRK_KEK) {
         return jsonResponse({ error: "demo share acceptance is not configured" }, 503);
       }
-      return finishPlain(await handleDemoShareAccept({
+      const demoUser = decodeURIComponent(m[1]!);
+      const signed = await demoShareKeyAttestationRequest({
         storage: storage.demoUsers,
         demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
-      }, decodeURIComponent(m[1]!), await readJson(request)));
+      }, demoUser, await readJson(request));
+      if (!signed.ok) return finishPlain(signed.response);
+      return finishPlain(await handleShareKeyAttestation(
+        { ca, usernames: storage.usernames, caGate, grants: storage.deviceCapabilityGrants },
+        demoUser,
+        { request: signed.request, signature: signed.signature },
+      ));
     }
     if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_ORDER_UPDATE))) {
       {

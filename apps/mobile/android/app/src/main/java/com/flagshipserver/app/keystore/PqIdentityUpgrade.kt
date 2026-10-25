@@ -1,5 +1,7 @@
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.pq.PqIdentityBinder
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -59,7 +61,7 @@ object PqIdentityUpgrade {
         if (!Keystore.hasUmkSeed()) return emptyList()
         val user = a.username.lowercase()
         val out = ArrayList<PqIdentityBinder.Identity>(3)
-        val irk = KeystoreIrkAccess().resolve("Protect your account keys")
+        val irk = KeystoreIrkAccess().resolve(FSStrings.get(R.string.protect_your_account_keys))
         out += PqIdentityBinder.Identity("account-irk", user, irk.pubHex) { m -> irk.signer.sign(m) }
         val rootSeed = Keystore.adminRootSeed()
         if (rootSeed != null && rootSeed.size == 32) {

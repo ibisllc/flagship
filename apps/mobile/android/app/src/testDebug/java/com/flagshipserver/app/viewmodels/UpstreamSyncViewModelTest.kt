@@ -1,6 +1,6 @@
 // "Check for updates from <repo>" (N12): the request names the app and the chosen version, the
 // proposal reads as counts with capability changes apart, an up-to-date answer offers nothing to
-// deploy and its build is discarded, and an app not imported here says so.
+// deploy and opens no build, a proposal's build is discarded on leaving, and an app not imported here says so.
 
 package com.flagshipserver.app.viewmodels
 
@@ -46,14 +46,23 @@ class UpstreamSyncViewModelTest {
         assertNull(UpstreamSyncText.version(null))
     }
 
-    @Test fun upToDateOffersNothingAndItsBuildIsDiscarded() = runBlocking {
+    @Test fun upToDateOffersNothingAndOpensNoBuild() = runBlocking {
         val client = MockBuildClient(simulatedLatencyMs = 0)
-        client.syncFixture = BuildSyncResponse(buildId = "bld-same", proposal = SyncProposal(clean = true), candidateCommit = "abc", upToDate = true)
+        client.syncFixture = BuildSyncResponse(candidateCommit = "abc", upToDate = true)
         val m = vm(client)
         m.check("").join()
-        assertEquals(UpstreamSyncViewModel.Phase.UpToDate("bld-same"), m.phase.value)
+        assertEquals(UpstreamSyncViewModel.Phase.UpToDate, m.phase.value)
+        assertNull(m.discard())
+        assertTrue(client.discardCalls.isEmpty())
+    }
+
+    @Test fun discardingAProposalForgetsItsBuild() = runBlocking {
+        val client = MockBuildClient(simulatedLatencyMs = 0)
+        val m = vm(client)
+        m.check("").join()
+        assertEquals("bld-sync-0001", (m.phase.value as UpstreamSyncViewModel.Phase.Proposal).buildId)
         m.discard()?.join()
-        assertEquals(listOf("bld-same"), client.discardCalls)
+        assertEquals(listOf("bld-sync-0001"), client.discardCalls)
         assertEquals(UpstreamSyncViewModel.Phase.Idle, m.phase.value)
     }
 

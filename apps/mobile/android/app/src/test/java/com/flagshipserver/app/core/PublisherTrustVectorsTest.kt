@@ -5,6 +5,7 @@ package com.flagshipserver.app.core
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
@@ -49,6 +50,16 @@ class PublisherTrustVectorsTest {
         val t = trust(vectors())
         assertThrows(IllegalArgumentException::class.java) { t.copy(serviceId = "a|b").canonicalBytes() }
         assertThrows(IllegalArgumentException::class.java) { t.copy(serviceId = "").canonicalBytes() }
+    }
+
+    @Test
+    fun everyRefusalVectorIsRefused() {
+        val refuse = vectors()["refuse"]!!.jsonArray.map { it.jsonObject }
+        assertTrue(refuse.isNotEmpty())
+        for (r in refuse) {
+            val t = Json.decodeFromJsonElement(PublisherTrust.serializer(), r["trust"]!!)
+            assertThrows(r["why"]!!.jsonPrimitive.content, IllegalArgumentException::class.java) { t.canonicalBytes() }
+        }
     }
 
     @Test

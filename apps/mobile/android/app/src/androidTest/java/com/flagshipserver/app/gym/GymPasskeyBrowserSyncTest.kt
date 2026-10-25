@@ -5,9 +5,10 @@
 //   re-enrols with one passkey sheet; Settings keeps a quiet Update row.
 //   Browser: a waiting ask raises a dialog with the verified app, the exact sites and how long;
 //   Allow is an admin-signed flagship/browser-grant/v1 labelled by the ask's duration, Deny is
-//   unsigned; the same asks wait under Activity and on the app's page.
+//   unsigned; the same asks wait under Activity and on the app's page. The owner may grant less
+//   (Allow once on a session ask); what was allowed is listed on the app's page with Withdraw.
 //   Sync: the app page's "Check for updates from <repo>" shows the proposal with the new
-//   permissions apart and hands the build to the deploy step; an up-to-date answer discards it.
+//   permissions apart and hands the build to the deploy step; an up-to-date answer opens no build.
 // NO BACKEND: the mock box and `.com` check each signature and the passkey check as the real ones do.
 
 package com.flagshipserver.app.gym
@@ -162,6 +163,50 @@ class GymPasskeyBrowserSyncTest : GymBase() {
         assertSigned("browser-grant", "admin")
     }
 
+    @Test
+    fun browserGrantNarrowedToOnceOnTheAppsPage() {
+        launch(tab = "apps", adminRoot = true)
+        val ask = "6b7c0f1e-3333-4a2b-9c3d-000000000003"
+        screensMock.browserGrantFixture += com.flagshipserver.app.api.BrowserGrantRequestWire(
+            requestId = ask, serviceId = "bright-maple--plants", capabilities = listOf("navigate", "read-dom"),
+            origins = listOf("docs.plants.example"), duration = "session", explanation = "Read the care guide",
+        )
+        openPlantsFromServices()
+        waitUntilExists("browser-grant-card-$ask", 20_000)
+        // A session ask offers the session or less, shortest first; never "Always allow".
+        assertEquals("Allow once", textOfTag("browser-grant-card-allow-once-$ask"))
+        assertEquals("Allow for this session", textOfTag("browser-grant-card-allow-$ask"))
+        assertEquals(0, composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag("browser-grant-card-allow-service-$ask")).fetchSemanticsNodes().size)
+        gymShot("browser-grant-narrow-choices")
+        tap("browser-grant-card-allow-once-$ask")
+        waitGone("browser-grant-card-$ask", 15_000)
+        val sent = screensMock.browserGrantAnswers.single()
+        assertEquals("once", sent.duration)
+        assertSigned("browser-grant", "admin")
+        assertEquals("once", screensMock.ownerBrowserGrants.single().duration)
+        waitUntilExists("browser-granted-title", 15_000)
+        assertEquals("For one visit", textOfTag("browser-granted-duration-bg-mock-0003"))
+        gymShot("browser-grant-narrowed-allowed")
+    }
+
+    @Test
+    fun browserGrantWithdrawOnTheAppsPage() {
+        launch(tab = "apps", adminRoot = true)
+        screensMock.seedOwnerBrowserGrant()
+        openPlantsFromServices()
+        val gid = "bg-0f4c9a1e-2d3b-4c5d-8e6f-7a8b9c0d1e2f"
+        waitUntilExists("browser-granted-$gid", 20_000)
+        assertEquals("Allowed by you", textOfTag("browser-granted-title"))
+        assertEquals("Until this browser session ends", textOfTag("browser-granted-duration-$gid"))
+        gymShot("browser-grant-allowed-by-you")
+        tap("browser-granted-withdraw-$gid")
+        waitGone("browser-granted-$gid", 15_000)
+        waitText("Browser access withdrawn", 10_000)
+        assertEquals(gid, screensMock.browserGrantRevokes.single().grantId)
+        assertTrue(screensMock.ownerBrowserGrants.isEmpty())
+        assertSigned("browser-grant-revoke", "admin")
+    }
+
     // ---- Sync an imported app with its upstream --------------------------
 
     private val plantsId = "bright-maple--plants"
@@ -190,12 +235,10 @@ class GymPasskeyBrowserSyncTest : GymBase() {
     }
 
     @Test
-    fun syncUpToDateDiscardsTheOpenedBuild() {
+    fun syncUpToDateOpensNoBuild() {
         launch(tab = "apps", adminRoot = true)
         screensMock.importedFromFixture = mapOf(plantsId to "https://github.com/gym/plants")
-        buildMock.syncFixture = com.flagshipserver.app.api.BuildSyncResponse(
-            buildId = "bld-same", proposal = com.flagshipserver.app.api.SyncProposal(clean = true), candidateCommit = "abc", upToDate = true,
-        )
+        buildMock.syncFixture = com.flagshipserver.app.api.BuildSyncResponse(candidateCommit = "abc", upToDate = true)
         openPlantsFromServices()
         tap("service-detail-sync", 20_000)
         tap("app-sync-check")
@@ -203,7 +246,8 @@ class GymPasskeyBrowserSyncTest : GymBase() {
         assertEquals("You already run the latest version from https://github.com/gym/plants.", textOfTag("app-sync-up-to-date"))
         gymShot("app-sync-up-to-date")
         tap("app-sync-close")
-        eventually(10_000, "the build was discarded") { buildMock.discardCalls == listOf("bld-same") }
+        Thread.sleep(1_000)
+        assertTrue("the box opened no build, so nothing is discarded", buildMock.discardCalls.isEmpty())
         assertTrue(buildMock.deployCalls.isEmpty())
     }
 

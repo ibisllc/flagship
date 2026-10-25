@@ -225,6 +225,59 @@ describe("describeLastUpdate — the box's update verdict in the update card", (
     expect(describeLastUpdate(null)).toBeNull();
     expect(describeLastUpdate(undefined)).toBeNull();
   });
+
+  it("gives every refusal reason as one whole sentence", async () => {
+    const { describeLastUpdate } = await loadServerUpdate();
+    const said = ["unendorsed", "from-commit-mismatch", "apply-failed", "rejected", "stale", "wrong-domain"].map((reason) =>
+      describeLastUpdate({ outcome: "refused", at: 1, reason }),
+    );
+    expect(new Set(said).size).toBe(6);
+    for (const s of said) expect(s).toMatch(/^The server refused the last update: [A-Za-z].*\.$/);
+    const src = (await import("node:fs")).readFileSync(resolve(__dirname, "..", "public", "webapp", "lib", "serverUpdate.js"), "utf8");
+    expect(src).toContain('tr("The server refused the last update: the request was too old. Send it again.")');
+    expect(src).not.toContain('tr("The server refused the last update: {0}"');
+  });
+
+  it("says a rollback the floor refused left the server on the new release in recovery, not that it went back", async () => {
+    const { describeLastUpdate, lastUpdateNeedsAttention } = await loadServerUpdate();
+    const stuck = { outcome: "rolled-back", at: 1, previousCommit: A, targetCommit: B, rollbackRefused: true };
+    expect(describeLastUpdate(stuck)).toBe(
+      "The update to bbbbbbbb didn't start cleanly, and the version before it is too old to go back to safely. The server stays on bbbbbbbb in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.",
+    );
+    expect(describeLastUpdate(stuck)).not.toContain("on its own");
+    expect(describeLastUpdate({ outcome: "rolled-back", at: 1, rollbackRefused: true })).toContain("recovery mode");
+    expect(lastUpdateNeedsAttention(stuck)).toBe(true);
+    expect(lastUpdateNeedsAttention({ outcome: "rolled-back", at: 1, targetCommit: B })).toBe(false);
+    expect(lastUpdateNeedsAttention({ outcome: "refused", at: 1 })).toBe(true);
+  });
+});
+
+describe("Share update results — the box's /api/update-reports choice", () => {
+  const loadReports = () => load("lib/updateReports.js");
+
+  it("reads the box's choice and posts only a boolean", async () => {
+    const { readUpdateReports, setUpdateReports, UPDATE_REPORTS_PATH } = await loadReports();
+    expect(UPDATE_REPORTS_PATH).toBe("/api/update-reports");
+    const calls: [string, any][] = [];
+    const fetchBox = async (path: string, init?: any) => {
+      calls.push([path, init]);
+      return init?.method === "POST" ? { share: JSON.parse(init.body).share } : { share: true, source: "owner", sends: ["release"] };
+    };
+    expect(await readUpdateReports(fetchBox)).toEqual({ share: true, source: "owner" });
+    expect(await setUpdateReports(fetchBox, false)).toEqual({ share: false });
+    expect(calls[1]).toEqual(["/api/update-reports", { method: "POST", body: '{"share":false}' }]);
+    expect(await readUpdateReports(async () => ({ share: "yes" }))).toEqual({ share: false, source: "default" });
+  });
+
+  it("uses the support doc's wording through tr()", async () => {
+    const src = (await import("node:fs")).readFileSync(resolve(__dirname, "..", "public", "webapp", "lib", "updateReports.js"), "utf8");
+    expect(src).toContain('tr("Share update results")');
+    expect(src).toContain(
+      `tr("Send Flagship an anonymous note after each update: the release, whether it started cleanly and whether it went back. Never your server's name, your account or anything about your apps.")`,
+    );
+    const view = (await import("node:fs")).readFileSync(resolve(__dirname, "..", "public", "webapp", "views", "server-detail.js"), "utf8");
+    expect(view).toContain("wireUpdateReportsSwitch");
+  });
 });
 
 describe("release list — what the update dialog offers", () => {

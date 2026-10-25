@@ -105,11 +105,6 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-function clamp(n: number, lo: number, hi: number): number {
-  if (!Number.isFinite(n)) return lo;
-  return Math.max(lo, Math.min(hi, Math.floor(n)));
-}
-
 function randomToken(): string {
   const b = new Uint8Array(32);
   crypto.getRandomValues(b);
@@ -381,121 +376,6 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       return reply.status(500).send({ error: "restart failed", message: errMsg(e) });
     }
     return { ok: true };
-  });
-
-  app.get<{
-    Params: { serviceId: string };
-    Querystring: { sessionToken?: string; tail?: string };
-  }>("/apps/:serviceId/logs", async (req, reply) => {
-    if (!ctx.appRunner) return reply.status(503).send({ error: "appRunner not configured" });
-    if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
-    if (!ctx.resolveSession(req.query.sessionToken)) {
-      return reply.status(401).send({ error: "session not authenticated" });
-    }
-    if (!ctx.deployedApps.has(req.params.serviceId)) {
-      return reply.status(404).send({ error: "app not found" });
-    }
-    const tail = Number(req.query.tail ?? 200);
-    const safeTail = Number.isFinite(tail) && tail > 0 && tail <= 5000 ? Math.floor(tail) : 200;
-    try {
-      const out = await ctx.appRunner.logs(req.params.serviceId, safeTail);
-      return { stdout: out.stdout, stderr: out.stderr, tail: safeTail };
-    } catch (e) {
-      return reply.status(500).send({ error: "logs failed", message: errMsg(e) });
-    }
-  });
-
-  app.get<{ Querystring: { sessionToken?: string } }>(
-    "/apps",
-    async (req, reply) => {
-      if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
-      if (!ctx.resolveSession(req.query.sessionToken)) {
-        return reply.status(401).send({ error: "session not authenticated" });
-      }
-      return {
-        apps: [...ctx.deployedApps.entries()].map(([serviceId, e]) => ({
-          serviceId,
-          name: e.manifest.name,
-          version: e.manifest.version,
-          subdomain: e.manifest.network.subdomain,
-          deployedAt: e.deployedAt,
-          source: e.source,
-        })),
-      };
-    },
-  );
-
-  // ---- Data dashboard (read-only, paged) --------------------------------
-
-  /** Resolve `?instance=<name>` (or default to the singleton). */
-  function resolveInstance<T>(map: Record<string, T> | undefined, instance?: string): T | undefined {
-    if (!map) return undefined;
-    return map[instance ?? "default"];
-  }
-
-  app.get<{
-    Params: { serviceId: string };
-    Querystring: { sessionToken?: string; instance?: string };
-  }>("/data/postgres/:serviceId/tables", async (req, reply) => {
-    if (!ctx.deployedApps || !ctx.dataProvisioner) {
-      return reply.status(503).send({ error: "data subsystem missing" });
-    }
-    if (!ctx.resolveSession(req.query.sessionToken)) {
-      return reply.status(401).send({ error: "session not authenticated" });
-    }
-    const entry = ctx.deployedApps.get(req.params.serviceId);
-    if (!entry) return reply.status(404).send({ error: "app not found" });
-    const inst = resolveInstance(entry.data?.postgres, req.query.instance);
-    if (!inst) return reply.status(404).send({ error: "app does not use this postgres instance" });
-    const tables = await ctx.dataProvisioner.listPostgresTables(inst.database);
-    return { database: inst.database, tables };
-  });
-
-  app.get<{
-    Params: { serviceId: string };
-    Querystring: { sessionToken?: string; sql?: string; max?: string; instance?: string };
-  }>("/data/postgres/:serviceId/query", async (req, reply) => {
-    if (!ctx.deployedApps || !ctx.dataProvisioner) {
-      return reply.status(503).send({ error: "data subsystem missing" });
-    }
-    if (!ctx.resolveSession(req.query.sessionToken)) {
-      return reply.status(401).send({ error: "session not authenticated" });
-    }
-    const entry = ctx.deployedApps.get(req.params.serviceId);
-    if (!entry) return reply.status(404).send({ error: "app not found" });
-    const inst = resolveInstance(entry.data?.postgres, req.query.instance);
-    if (!inst) return reply.status(404).send({ error: "app does not use this postgres instance" });
-    if (typeof req.query.sql !== "string" || req.query.sql.length === 0) {
-      return reply.status(400).send({ error: "sql required" });
-    }
-    const max = clamp(Number(req.query.max ?? 100), 1, 1000);
-    try {
-      const out = await ctx.dataProvisioner.queryPostgres({
-        db: inst.database,
-        sql: req.query.sql,
-        maxRows: max,
-      });
-      return { database: inst.database, columns: out.columns, rows: out.rows, max };
-    } catch (e) {
-      return reply.status(500).send({ error: "query failed", message: errMsg(e) });
-    }
-  });
-
-  app.get<{
-    Params: { serviceId: string };
-    Querystring: { sessionToken?: string };
-  }>("/data/files/:serviceId", async (req, reply) => {
-    if (!ctx.deployedApps || !ctx.dataProvisioner) {
-      return reply.status(503).send({ error: "data subsystem missing" });
-    }
-    if (!ctx.resolveSession(req.query.sessionToken)) {
-      return reply.status(401).send({ error: "session not authenticated" });
-    }
-    const entry = ctx.deployedApps.get(req.params.serviceId);
-    if (!entry) return reply.status(404).send({ error: "app not found" });
-    const volume = filesVolumeOf(entry.data);
-    if (!volume) return reply.status(404).send({ error: "app has no files folder" });
-    return { dir: "/data", bytes: await ctx.dataProvisioner.filesBytes(volume) };
   });
 
   // ---- Phone-state backup (opaque SWK-encrypted blob) -------------------

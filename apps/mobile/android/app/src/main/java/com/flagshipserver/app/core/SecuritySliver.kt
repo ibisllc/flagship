@@ -44,6 +44,9 @@ data class PublisherTrust(
         for ((n, v) in listOf("serviceId" to serviceId, "appId" to appId)) {
             require(v.isNotEmpty() && v.none { it == '|' || it.code <= 0x1f || it.code == 0x7f }) { "bad $n" }
         }
+        for ((n, v) in listOf("oldKeyHex" to oldKeyHex, "newKeyHex" to newKeyHex)) {
+            require(v.none { it == '|' || it.code <= 0x1f || it.code == 0x7f }) { "bad $n" }
+        }
         return listOf(TAG, serviceId, appId, identityGeneration.toString(), oldKeyHex, newKeyHex, newEpoch.toString(), issuedAt.toString())
             .joinToString("|").toByteArray(Charsets.UTF_8)
     }

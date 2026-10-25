@@ -61,6 +61,32 @@ describe("syncing an imported app with one upstream version", () => {
     expect(o.state(body.buildId)?.deployedUrl).toBeUndefined();
   });
 
+  it("answers up to date without opening a build when there is nothing to take", async () => {
+    const { o, provenance, handle } = setup(base);
+    await provenance.save("harry--notes", { repoUrl: "https://github.com/me/notes", commit: "a".repeat(40), base, local: { ...base, "style.css": "mine" }, at: 1 });
+    const before = o.editingServiceIds().length;
+    const r = await handle({ method: "POST", path: "/api/build/apps/harry--notes/sync", headers: {}, body: Buffer.from("{}") } as unknown as HttpRequest);
+    expect(r?.status).toBe(200);
+    const body = JSON.parse(r!.body as string) as Record<string, unknown>;
+    expect(body).toMatchObject({ ok: true, upToDate: true });
+    expect(body.buildId).toBeUndefined();
+    expect(o.editingServiceIds().length).toBe(before);
+    expect(o.editingServiceIds()).not.toContain("harry--notes");
+  });
+
+  it("gives the app's page the import record without reading the trees, also for a record kept before it existed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "prov-"));
+    const p = new ImportProvenanceStore(dir);
+    expect(await p.importedFrom("harry--notes")).toBeNull();
+    await p.save("harry--notes", { repoUrl: "https://github.com/me/notes", commit: "b".repeat(40), ref: "main", base, local: base, at: 1 });
+    expect(await p.importedFrom("harry--notes")).toEqual({ repo: "https://github.com/me/notes", commit: "b".repeat(40), ref: "main" });
+    await writeFile(join(dir, "harry--old.json"), JSON.stringify({ repoUrl: "https://github.com/me/old", base, local: base, at: 1 }));
+    expect(await p.importedFrom("harry--old")).toEqual({ repo: "https://github.com/me/old" });
+    await p.forget("harry--notes");
+    expect(await p.importedFrom("harry--notes")).toBeNull();
+    expect(await p.importedFrom("../etc")).toBeNull();
+  });
+
   it("refuses an app with no import record and a ref that is not a branch, tag or commit", async () => {
     const { handle } = setup(base);
     const post = (path: string, body: unknown) => handle({ method: "POST", path, headers: {}, body: Buffer.from(JSON.stringify(body)) } as unknown as HttpRequest);

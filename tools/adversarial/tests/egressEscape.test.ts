@@ -12,10 +12,10 @@
  *   AT-EGR-05  access-list wildcards stop at DNS label boundaries
  *   AT-EGR-06  HTTP proxy: duplicate Host, a non-80 port in Host, or no Host is refused
  *   AT-EGR-07  app browser judge: numeric URL spellings, rebinding answers, private space
- *   AT-EGR-08  app browser judge: the server's own name with a trailing dot (FINDING)
- *   AT-EGR-09  app browser: production wiring tells the judge this server's names (FINDING)
+ *   AT-EGR-08  app browser judge: the server's own name with a trailing dot (was a finding; fixed)
+ *   AT-EGR-09  app browser: production wiring tells the judge this server's names (was a finding; fixed)
  *   AT-EGR-10  per-app pinning proxy: one app's approval never opens a host to another app
- *   AT-EGR-11  pinning proxy: an approved host is reachable only on the approved port (FINDING)
+ *   AT-EGR-11  pinning proxy: an approved host is reachable only on the approved port (was a finding; fixed)
  *   AT-EGR-12  AI provider fetch: redirects drop credentials, never reach internal space
  *   AT-EGR-13  git clone: no redirects, no protocols but http(s), pinned addresses, empty env
  */
@@ -213,11 +213,11 @@ describe("app browser (SEC-BROWSER-002)", () => {
     expect(await j.judge({ serviceId: "app-b", url: "https://shop.example.com/", kind: "document" })).toMatchObject({ allow: false, code: "no-grant" });
   });
 
-  // FINDING AT-EGR-08: BrowserJudge.destination (packages/server-daemon/src/browser/policy/judge.ts,
+  // Was FINDING AT-EGR-08 (fixed: the judge compares canonical hosts): BrowserJudge.destination (packages/server-daemon/src/browser/policy/judge.ts,
   // `protectedHosts.names.some((n) => n.toLowerCase() === host)`) compares the URL host verbatim, so the
   // server's own name with a trailing dot ("home.alice.flagship.services.") is not recognised as "this
   // server". A page in a granted site can then fetch https://<box>./ as an ordinary public destination.
-  it.fails("AT-EGR-08 the server's own name is refused in every spelling, trailing dot included (catches: a name check that does not normalise the FQDN)", async () => {
+  it("AT-EGR-08 the server's own name is refused in every spelling, trailing dot included (catches: a name check that does not normalise the FQDN)", async () => {
     const j = judgeWorld({}, { names: ["home.alice.flagship.services"], addresses: ["10.255.255.1"] });
     const plain = await j.judge({ serviceId: "app-a", url: "https://home.alice.flagship.services/", kind: "subresource", initiatorUrl: "https://shop.example.com/" });
     expect(plain).toMatchObject({ allow: false, code: "protected-destination" });
@@ -225,13 +225,13 @@ describe("app browser (SEC-BROWSER-002)", () => {
     expect(dotted).toMatchObject({ allow: false, code: "protected-destination" });
   });
 
-  // FINDING AT-EGR-09: the production call to bootstrapBrowserBundle (packages/server-daemon/src/index.ts,
+  // Was FINDING AT-EGR-09 (fixed: browser/protectedTargets.ts is wired in): the production call to bootstrapBrowserBundle (packages/server-daemon/src/index.ts,
   // the `bootstrapBrowserBundle({ cdpEndpoint, dataDir, ... egress: {...} })` block) passes neither
   // `protectedHosts` nor `egress.protectedAddresses`, so the judge's "this server" refusal and the pinning
   // proxy's own-address refusal are never armed on a real box. With a whole-LAN grant (which describeGrant
   // promises excludes "this server") the app browser can reach the box's own LAN address and the browser
   // network's gateway. The app browser is OFF (APP_BROWSER.enabled), which bounds the impact today.
-  it.fails("AT-EGR-09 the live box tells the browser judge and the pinning proxies its own names and addresses (catches: a guard whose input is never wired)", () => {
+  it("AT-EGR-09 the live box tells the browser judge and the pinning proxies its own names and addresses (catches: a guard whose input is never wired)", () => {
     const src = readFileSync(join(ROOT, "packages/server-daemon/src/index.ts"), "utf8");
     const call = src.slice(src.indexOf("await bootstrapBrowserBundle({"), src.indexOf("await bootstrapBrowserBundle({") + 1200);
     expect(call).toMatch(/protectedHosts\s*:/);
@@ -299,11 +299,11 @@ describe("per-app pinning proxies", () => {
     expect(await connectVia(deny, "shop.example.com:443")).toMatch(/403/);
   });
 
-  // FINDING AT-EGR-11: PinningProxy.allow(host, addresses) (packages/server-daemon/src/browser/pinningProxy.ts)
+  // Was FINDING AT-EGR-11 (fixed: approvals are keyed by scheme, host and port): PinningProxy.allow(host, addresses) (packages/server-daemon/src/browser/pinningProxy.ts)
   // keys an approval by host only. The judge approved shop.example.com for an https page on 443, yet the
   // app's proxy will CONNECT shop.example.com on any port (22, 25, 6379...) for the approval's TTL. Low:
   // only traffic that escapes CDP interception would use it, but the proxy is meant to be the backstop.
-  it.fails("AT-EGR-11 an approved host is reachable only on the port the judge approved (catches: host-only pinning)", async () => {
+  it("AT-EGR-11 an approved host is reachable only on the port the judge approved (catches: host-only pinning)", async () => {
     const { svc } = await setup();
     const a = await svc.proxyFor("alice--a");
     svc.allow("alice--a", "shop.example.com", ["93.184.216.34"]);

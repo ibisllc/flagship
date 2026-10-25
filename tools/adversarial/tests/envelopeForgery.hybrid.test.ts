@@ -299,15 +299,15 @@ describe("AT-ENV-25 CA-signed time (signed-time/v1, auth-time/v1)", () => {
 describe("AT-ENV-26 CA-signed account-key attestation and service blessing", () => {
   const NOW = 1_760_000_000_000;
   const chain = chainOf([toHex(caKp.publicKey)]);
-  const body: P.AccountKeyAttestationBody = { keyKind: "admin-root", keyPubHex: "07".repeat(32), issuedAt: NOW - 1000, expiresAt: NOW + 86_400_000 };
+  const body: P.AccountKeyAttestationBody = { keyKind: "share", keyPubHex: "07".repeat(32), issuedAt: NOW - 1000, expiresAt: NOW + 86_400_000 };
 
   it("AT-ENV-26a control: the attestation verifies", () => {
     expect(P.verifyCaSignedAccountKeyAttestation(P.signAccountKeyAttestation(body, caKp), chain, NOW, PIN).ok).toBe(true);
   });
 
-  it("AT-ENV-26b an attestation relabelled from irk to admin-root, re-keyed, or signed by a non-CA key is refused (catches: an IRK attestation used to pass an admin-only share accept)", () => {
-    const irkAtt = P.signAccountKeyAttestation({ ...body, keyKind: "irk" }, caKp);
-    expect(P.verifyCaSignedAccountKeyAttestation({ ...irkAtt, keyKind: "admin-root" }, chain, NOW, PIN).ok).toBe(false);
+  it("AT-ENV-26b an attestation relabelled from a per-share key to a stable admin-root, re-keyed, or signed by a non-CA key is refused (catches: an attestation reused as an account-key attestation)", () => {
+    const shareAtt = P.signAccountKeyAttestation(body, caKp);
+    expect(P.verifyCaSignedAccountKeyAttestation({ ...shareAtt, keyKind: "admin-root" as never }, chain, NOW, PIN).ok).toBe(false);
     const a = P.signAccountKeyAttestation(body, caKp);
     expect(P.verifyCaSignedAccountKeyAttestation({ ...a, keyPubHex: "08".repeat(32) }, chain, NOW, PIN).ok).toBe(false);
     const rogue = { privateKey: seed(42), publicKey: ed25519.getPublicKey(seed(42)) };

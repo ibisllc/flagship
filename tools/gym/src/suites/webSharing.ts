@@ -92,7 +92,7 @@ export const WEB_SHARING: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-sharing-member-link",
-    "Co-manager opening a share link: Not now goes Home with nothing accepted; a link .com doesn't know shows its error and Back to servers; Accept asks for the passphrase once and seals an admin-root-signed flagship/server-share-accept-admin/v1 with .com's attestation, saves the inbox entry and, once the owner confirms, 'Open home' lands on the shared server; the page's and the accept view's Back go Home.",
+    "Co-manager opening a share link: Not now goes Home with nothing accepted; a link .com doesn't know shows its error and Back to servers; Accept asks for the passphrase once, has the admin root ask .com to attest a per-share admin key, and seals flagship/server-share-accept-admin/v1 signed by that key with the attestation, saves the inbox entry and, once the owner confirms, 'Open home' lands on the shared server; the page's and the accept view's Back go Home.",
     "gym sharing co-manager link: Not now, a bad link's Back to servers, and Open once the owner confirms",
     {
       steps: [
@@ -125,7 +125,7 @@ export const WEB_SHARING: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-sharing-member-demo-accept",
-    "A demo account's device holds no admin root: Accept (no passphrase) has .com's demo signer sign flagship/server-share-accept-admin/v1 with the demo account's admin root, and seals that with the attestation, so the shared server checks it like any account's.",
+    "A demo account's device holds no admin root: Accept (no passphrase) has .com's demo signer ask for the per-share admin key's attestation with the demo account's admin root; the device signs flagship/server-share-accept-admin/v1 with that key and seals it with the attestation, so the shared server checks it like any account's.",
     "gym sharing a demo account's device accepts through .com's demo signer",
     {
       steps: [{ kind: "tap", describe: "Accept.", handle: "[data-share-accept]" }],

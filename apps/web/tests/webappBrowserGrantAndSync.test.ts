@@ -1,6 +1,6 @@
 // SEC-BROWSER-002 and N12 on the webapp: the owner's answer to an app's browser-access request
-// (signed `flagship/browser-grant/v1` for exactly what was shown, the ask's own duration; a denial
-// unsigned), the wording built from the structured ask, and the upstream-sync proposal (capability
+// (signed `flagship/browser-grant/v1` for what is granted, the asked duration or shorter; a denial
+// unsigned), the grants the owner gave with a signed withdraw, the wording built from the structured ask, and the upstream-sync proposal (capability
 // changes apart from the code). Signatures pinned by packages/protocol/test-vectors/browser-grant.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -10,8 +10,14 @@ import { ed } from "@flagship/protocol";
 vi.mock("../public/webapp/lib/toast.js", () => ({ toast: vi.fn() }));
 
 import {
+  allowChoices,
   allowLabel,
   appNamesOf,
+  browserGrantRevokeBody,
+  browserWithdrawError,
+  parseChoice,
+  readOwnerGrants,
+  allowButtonsHtml,
   browserAccessSectionHtml,
   browserGrantAnswerBody,
   browserGrantError,
@@ -81,12 +87,48 @@ describe("browser access requests", () => {
     expect(browserGrantError({ status: 404 })).toBe("That request is no longer waiting.");
   });
 
-  it("an Allow signs the shared vector's bytes; the duration is the ask's", async () => {
+  it("an Allow signs the shared vector's bytes, for the duration it names", async () => {
     for (const { answer, signatureHex } of v.answers.filter((a: { answer: { decision: string } }) => a.answer.decision === "allow")) {
       const r = { ...answer };
       const body = await browserGrantAnswerBody(r, "allow", { serverDomain: answer.serverDomain, sign, now: () => answer.issuedAt });
-      expect(body).toEqual({ requestId: answer.requestId, decision: "allow", issuedAt: answer.issuedAt, signature: signatureHex });
+      expect(body).toEqual({ requestId: answer.requestId, decision: "allow", issuedAt: answer.issuedAt, duration: answer.duration, signature: signatureHex });
     }
+  });
+
+  it("offers the asked duration or shorter, and Allow once on a session ask signs the shared narrowed vector", async () => {
+    for (const c of v.choices) expect(allowChoices({ duration: c.asked })).toEqual(c.choices);
+    const base = v.answers[0].answer;
+    const once = v.answers[5];
+    const body = await browserGrantAnswerBody({ ...base }, "allow", { serverDomain: base.serverDomain, sign, now: () => base.issuedAt, duration: "once" });
+    expect(body).toEqual({ requestId: base.requestId, decision: "allow", issuedAt: base.issuedAt, duration: "once", signature: once.signatureHex });
+    // Never longer than the app asked.
+    await expect(browserGrantAnswerBody({ ...base }, "allow", { serverDomain: base.serverDomain, sign, now: () => 1, duration: "service" })).rejects.toThrow();
+    expect(parseChoice("allow:once")).toEqual({ decision: "allow", duration: "once" });
+    expect(parseChoice("deny")).toEqual({ decision: "deny", duration: null });
+    expect(parseChoice("allow:forever")).toEqual({ decision: null, duration: null });
+  });
+
+  it("one Allow button per duration, shortest first, the asked one last and primary", () => {
+    const r = readGrantRequests({ requests: [{ ...ask, duration: "service" }] })[0];
+    const html = allowButtonsHtml(r, "data-choice");
+    expect([...html.matchAll(/data-choice="([^"]+)"/g)].map((m) => m[1])).toEqual(["allow:once", "allow:session", "allow:service"]);
+    expect([...html.matchAll(/>([^<]+)<\/button>/g)].map((m) => m[1])).toEqual(["Allow once", "Allow for this session", "Always allow"]);
+    expect(html.match(/class="secondary"/g)).toHaveLength(2);
+  });
+
+  it("lists the grants the owner gave and withdraws one with a signed revoke (shared vector)", async () => {
+    const rv = JSON.parse(readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/browser-grant-revoke/vectors.json"), "utf8"));
+    const { revoke, signatureHex } = rv.revokes[0];
+    const body = await browserGrantRevokeBody({ serviceId: revoke.serviceId, grantId: revoke.grantId }, { serverDomain: revoke.serverDomain, sign: async (b: Uint8Array) => ed.sign(b, Buffer.from(rv.seedHex, "hex")), now: () => revoke.issuedAt });
+    expect(body).toEqual({ serviceId: revoke.serviceId, grantId: revoke.grantId, issuedAt: revoke.issuedAt, signature: signatureHex });
+    const grants = readOwnerGrants({ grants: [{ grantId: "bg-1", serviceId: "alice--shop", capabilities: ["navigate"], origins: ["shop.example.com"], localNetwork: null, duration: "service", explanation: "prices", issuedAt: 9 }, { grantId: "", serviceId: "x" }] });
+    expect(grants).toEqual([{ grantId: "bg-1", serviceId: "alice--shop", capabilities: ["navigate"], origins: ["shop.example.com"], localNetwork: null, duration: "service", explanation: "prices", issuedAt: 9 }]);
+    const html = browserAccessSectionHtml({ grants, canAnswer: true });
+    expect(html).toContain("Allowed by you");
+    expect(html).toContain('data-browser-withdraw="0"');
+    expect(html).toContain("Until you remove it");
+    expect(browserAccessSectionHtml({ grants, canAnswer: false })).toContain("Use an admin device.");
+    expect(browserWithdrawError({ status: 404 })).toBe("That access was already withdrawn.");
   });
 
   it("a Deny carries no signature", async () => {
@@ -112,7 +154,9 @@ describe("browser access requests", () => {
     const html = browserAccessSectionHtml({ domains: ["example.com"], requests: readGrantRequests({ requests: [ask] }), canAnswer: true });
     expect(html).toContain("Browser access");
     expect(html).toContain("Approved when you installed it");
-    expect(html).toContain('data-browser-answer="allow"');
+    expect(html).toContain('data-browser-answer="allow:once"');
+    expect(html).toContain('data-browser-answer="allow:session"');
+    expect(html).not.toContain('data-browser-answer="allow:service"');
     expect(html).toContain("Allow for this session");
     expect(browserAccessSectionHtml({ domains: [], requests: readGrantRequests({ requests: [ask] }), canAnswer: false })).toContain("Use an admin device.");
     expect(browserAccessSectionHtml({})).toBe("");
@@ -159,6 +203,14 @@ describe("upstream sync", () => {
     expect(html).toContain("src/b.ts");
     expect(html).toContain(SYNC_COPY.conflictsNote);
     expect(html).toContain("Nothing goes live until you deploy.");
+  });
+
+  it("an up-to-date answer carries no build, so there is nothing to discard", async () => {
+    const r = readSyncResult({ ok: true, upToDate: true, candidateCommit: "abc" })!;
+    expect(r).toMatchObject({ upToDate: true, buildId: "", candidateCommit: "abc" });
+    expect(readSyncResult({ ok: true, upToDate: false })).toBeNull();
+    const src = readFileSync(resolve(__dirname, "../public/webapp/lib/upstreamSync.js"), "utf8");
+    expect(src.indexOf("openBuild = r.buildId")).toBeGreaterThan(src.indexOf("if (r.upToDate)"));
   });
 
   it("sends the chosen ref and says plainly when the app was not imported", async () => {

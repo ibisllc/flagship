@@ -401,7 +401,16 @@
 //       answered under Activity and on the app's page (lib/browserGrantAlerts.js); an imported app checks
 //       its repo for updates and shows the proposal before the build (lib/upstreamSync.js); the recovery
 //       window is opened in the webapp's language (#<mode>&lang=, lib/recovery.js).
-const SHELL_VERSION = "v177";
+//  v178: the update card says when a failed update was kept in recovery (rollbackRefused) instead of
+//       "went back on its own", each refusal is one whole sentence, and the server page has the
+//       "Share update results" switch (lib/updateReports.js, the box's /api/update-reports).
+//       Browser access: Allow once / for this session / always (never longer than asked), and the app's
+//       page lists the grants the owner gave with Withdraw (lib/browserGrantAlerts.js); an up-to-date
+//       sync check opens no build (lib/upstreamSync.js).
+//       Accepting a co-manage share signs with a per-share admin key .com attests on an admin-root
+//       request (AT-LNK-10, lib/serverShares.js); the free-AI and publisher-trust encoders refuse '|'
+//       and control characters (AT-ENV-09).
+const SHELL_VERSION = "v178";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -487,6 +496,7 @@ const OPTIONAL_SHELL = [
   "/lib/upstreamSync.js",
   "/lib/recoveryUpdate.js",
   "/lib/recoveryUpdateFlag.js",
+  "/lib/updateReports.js",
   "/lib/aiConsentUi.js",
   "/lib/aiRepairConsent.js",
   "/lib/pushSetting.js",

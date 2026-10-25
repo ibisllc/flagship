@@ -736,13 +736,13 @@ private fun BootUnlockApprovalCard(
                 }
             }
         }
-        is BootUnlockApprovalViewModel.State.KeyChanged -> SdSection("Boot unlock") {
+        is BootUnlockApprovalViewModel.State.KeyChanged -> SdSection(stringResource(R.string.boot_unlock)) {
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    Text("This server's key changed", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.this_servers_key_changed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleSmall)
                     Text(s.error.message.orEmpty(), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
                     FSSecondaryButton(
-                        label = "Trust its new key",
+                        label = stringResource(R.string.trust_its_new_key),
                         onClick = { scope.launch { vm.trustNewKey() } },
                         block = true,
                         modifier = Modifier.semantics { contentDescription = "sd-approve-unlock-trust-new-key" },
@@ -1768,6 +1768,7 @@ internal fun UpdateServerCard(
                         )
                     }
                 }
+                UpdateReportsSwitch(serverDomain)
             }
         }
     }
@@ -1785,6 +1786,56 @@ internal fun UpdateServerCard(
                 nowMs = now,
             )
         }
+    }
+}
+
+/** "Share update results" (docs/support/update-rollback.md §4-5): the box's
+ *  `/api/update-reports` choice, off until the owner turns it on. Hidden when
+ *  the box refuses this session (Remote, co-manager) or has no such setting.
+ *  Mirror of iOS UpdateReportsToggle. */
+@Composable
+internal fun UpdateReportsSwitch(serverDomain: String) {
+    val screens = LocalScreensClient.current
+    val scope = rememberCoroutineScope()
+    var share by remember(serverDomain) { mutableStateOf<Boolean?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var failure by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(serverDomain) {
+        share = runCatching { screens.updateReports().share }.getOrNull()
+    }
+    val current = share ?: return
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.share_update_results),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = current,
+                onCheckedChange = { want ->
+                    saving = true
+                    failure = null
+                    share = want
+                    scope.launch {
+                        share = runCatching { screens.updateReportsSet(want).share }.getOrElse {
+                            failure = FSStrings.get(R.string.couldnt_save_this_setting_on_the_server)
+                            current
+                        }
+                        saving = false
+                    }
+                },
+                enabled = !saving,
+                modifier = Modifier.testTag("sd-update-reports"),
+            )
+        }
+        Text(
+            stringResource(R.string.share_update_results_detail),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        failure?.let { Text(it, color = FS.colors.danger, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 

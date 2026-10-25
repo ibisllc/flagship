@@ -7,7 +7,7 @@
  * is afterwards; the result of an action that ended elsewhere is withheld and the tab is closed.
  */
 import { PolicyError, type ContextRegistry } from "./contexts.js";
-import type { BrowserJudge } from "./judge.js";
+import type { AdmittedDocument, BrowserJudge } from "./judge.js";
 import type { BrowserCapability } from "./grants.js";
 
 export const MAX_ACTION_OUTPUT_BYTES = 2 * 1024 * 1024;
@@ -19,6 +19,12 @@ export interface GuardDeps {
   currentUrl: (tabId: string) => Promise<string>;
   /** Close the tab and drop its session. */
   closeTab: (tabId: string) => Promise<void>;
+  /**
+   * The main-frame document the judge admitted in this tab, read now. A page the browser reached by a
+   * redirect from inside a grant is in scope while the tab stays on it (owner decision: the start URL is
+   * what is approved; local, private and protected destinations are never admitted).
+   */
+  admitted?: (tabId: string) => AdmittedDocument | undefined;
 }
 
 export async function guardedAction<T>(
@@ -28,14 +34,14 @@ export async function guardedAction<T>(
 ): Promise<T> {
   deps.contexts.assertOwned(a.serviceId, a.tabId);
   const before = await deps.currentUrl(a.tabId);
-  if (!deps.judge.inScope(a.serviceId, before, a.capability, a.sessionId)) {
+  if (!deps.judge.inScope(a.serviceId, before, a.capability, a.sessionId, deps.admitted?.(a.tabId))) {
     await quarantine(deps, a.tabId);
     throw new PolicyError("origin-changed", "the page is no longer inside what was approved");
   }
   const result = await action();
   // Re-read after: the action may have navigated. An out-of-scope end state withholds the result.
   const after = await deps.currentUrl(a.tabId);
-  if (!deps.judge.inScope(a.serviceId, after, a.capability, a.sessionId)) {
+  if (!deps.judge.inScope(a.serviceId, after, a.capability, a.sessionId, deps.admitted?.(a.tabId))) {
     await quarantine(deps, a.tabId);
     throw new PolicyError("origin-changed", "the page left what was approved while this ran");
   }

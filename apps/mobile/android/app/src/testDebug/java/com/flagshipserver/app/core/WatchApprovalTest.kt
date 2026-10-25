@@ -32,6 +32,8 @@ class WatchApprovalTest {
     private val delegateKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 3 })
     private val stkKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 5 })
     private val stkPubHex = HexUtil.encode(stkKp.publicKey)
+    /** Blessed on this phone before: first contact and the seal checks share one pin store. */
+    private val trusted = PinnedServers(domain to stkPubHex)
     private val nonceHex = "ab".repeat(32)
     private val luksKey = ByteArray(64) { it.toByte() }
 
@@ -58,7 +60,7 @@ class WatchApprovalTest {
     }
 
     private fun coordinator(mock: MockSecretMailboxClient, delegate: Boolean = true) = SecretRequestCoordinator(
-        firstContact = firstContactPinned(domain to stkPubHex),
+        firstContact = trusted.firstContact, pins = trusted.boxKeyPins,
         mailbox = mock,
         username = user,
         irk = irkAccess,
@@ -207,7 +209,7 @@ class WatchApprovalTest {
     @Test fun thePhonesOwnApproveStaysOwnerSigned() = runBlocking {
         val mock = mailbox()
         val coord = SecretRequestCoordinator(
-        firstContact = firstContactPinned(domain to stkPubHex),
+        firstContact = trusted.firstContact, pins = trusted.boxKeyPins,
             mailbox = mock, username = user, irk = irkAccess,
             now = { issuedAt }, nonceGen = { ByteArray(32) { 1 } },
         )

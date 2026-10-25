@@ -99,6 +99,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0117",
   // Boot unlock v2: the hybrid boot key's material and the v2 request extensions.
   "0118",
+  // Canary update receipts: counts per release, cohort, profile and day (V02).
+  "0119",
 ];
 
 export interface SchemaStatusDeps {

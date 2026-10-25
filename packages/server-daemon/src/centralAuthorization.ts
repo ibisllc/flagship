@@ -96,6 +96,7 @@ export const ROUTE_FAMILIES: Readonly<Record<string, { owner: "session" | "signe
   "/api/power": { owner: "signed-order", note: "lock/restart/off; phone-signed" },
   "/api/archive-download": { owner: "signed-order", note: "box to box archive transfer" },
   "/api/archive-probe": { owner: "signed-order", note: "box to box archive transfer" },
+  "/api/update-reports": { owner: "session", note: "the owner's choice to share content-free update receipts; owner only" },
   "/api/multipod": { owner: "session", note: "test harness skin; not mounted on a production box" },
   "/mcp/build": { owner: "session", note: "per-build bearer key, not a paired session" },
 };

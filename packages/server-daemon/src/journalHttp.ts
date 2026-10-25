@@ -1,14 +1,18 @@
 import { execFile } from "node:child_process";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
-import { verifyJournalRequest, type JournalRequest } from "@flagship/protocol";
+import { verifyJournalRequest, type AdminGrantView, type JournalRequest } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
 /**
  * Diagnostics surface — `POST /api/journal`. Rides the same daemon HTTP plane
- * as `/api/power` and verifies against the SAME box config-pinned owner IRK.
- * Body is an `{ request, signature }` envelope where `request` is a
- * `JournalRequest` `{ serverId, unit, lines, issuedAt }`. On a valid IRK
- * signature within the replay window it returns the trailing `lines` of the
- * unit's systemd journal as a JSON string array.
+ * as `/api/power`. Body is an `{ request, signature }` envelope where `request`
+ * is a `JournalRequest` `{ serverId, unit, lines, issuedAt }`. Where the box
+ * pins an admin root, a request signed by that root (as rotated: the daemon
+ * passes the re-pinned root) or by a delegated admin device passes the same
+ * gate as the other owner routes (`authorizeSensitiveOrder`). The account's
+ * IRK is also accepted for this read (the apps sign journal reads with it).
+ * Within the replay window it returns the trailing `lines` of the unit's
+ * systemd journal as a JSON string array.
  *
  * Privacy: this is served by the daemon over the box's OWN pinned pipe
  * (phone→box direct). `.com` terminates no TLS for it and never sees the
@@ -52,6 +56,12 @@ export class JournalctlReader implements JournalReader {
 export interface JournalHttpOptions {
   serverId: string;
   ownerIrkPub: Uint8Array;
+  /** The pinned admin root (`ServerConfig.adminRootPub`, after any verified rotation). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId), for the delegated-grant check. */
+  username?: string;
+  /** Box-local active admin grants. */
+  activeGrants?: readonly AdminGrantView[];
   reader: JournalReader;
   /** Units the owner may read. Default: the flagship units. */
   allowedUnits?: string[];
@@ -62,7 +72,7 @@ export interface JournalHttpOptions {
   maxAgeMs?: number;
 }
 
-const DEFAULT_ALLOWED_UNITS = ["flagship-daemon", "flagship-data-services"];
+const DEFAULT_ALLOWED_UNITS = ["flagship-daemon", "flagship-data-services", "flagship-keyd", "flagship-privd", "flagship-broker"];
 
 export function buildJournalHttp(opts: JournalHttpOptions) {
   const now = opts.now ?? (() => Date.now());
@@ -104,10 +114,21 @@ export function buildJournalHttp(opts: JournalHttpOptions) {
     } catch {
       return { status: 400, headers: H, body: JSON.stringify({ error: "invalid signature hex" }) };
     }
-    // Verify the owner IRK signature BEFORE touching the journal or even
+    // Verify the owner's signature BEFORE touching the journal or even
     // disclosing the allowlist verdict — `unit` is part of the signed bytes,
     // so only the owner can choose it.
-    if (!verifyJournalRequest(parsed, sig, opts.ownerIrkPub)) {
+    const byAdmin =
+      !!opts.adminRootPub &&
+      authorizeSensitiveOrder({
+        order: parsed,
+        signature: sig,
+        verify: verifyJournalRequest,
+        ownerIrkPub: opts.ownerIrkPub,
+        adminRootPub: opts.adminRootPub,
+        username: opts.username ?? "",
+        activeGrants: opts.activeGrants,
+      });
+    if (!byAdmin && !verifyJournalRequest(parsed, sig, opts.ownerIrkPub)) {
       return { status: 403, headers: H, body: JSON.stringify({ error: "invalid signature" }) };
     }
     if (!allowed.includes(parsed.unit)) {

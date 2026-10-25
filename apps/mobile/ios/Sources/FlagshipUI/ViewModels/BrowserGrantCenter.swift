@@ -54,7 +54,7 @@ public enum BrowserGrantCopy {
         }
     }
 
-    /// The Allow button names what the box will grant: exactly the ask's duration.
+    /// An Allow button names what the box will grant: the ask's duration or a shorter one the owner chose.
     public static func allow(_ d: String) -> String {
         switch d {
         case "once": return String(localized: "Allow once")
@@ -72,6 +72,21 @@ public enum BrowserGrantCopy {
 
     public static func reason(app: String) -> String {
         String(localized: "Allow \(app) to use the browser")
+    }
+
+    // "Allowed by you": the grants the owner gave, each with Withdraw.
+    public static let allowedByYou = String(localized: "Allowed by you")
+    public static let withdraw = String(localized: "Withdraw")
+    public static let withdrawn = String(localized: "Browser access withdrawn")
+    public static let alreadyWithdrawn = String(localized: "That access was already withdrawn.")
+
+    public static func withdrawReason(app: String) -> String {
+        String(localized: "Withdraw \(app)'s browser access")
+    }
+
+    public static func withdrawMessage(for error: Error) -> String {
+        if case ScreensClientError.http(404, _) = error { return alreadyWithdrawn }
+        return message(for: error)
     }
 
     public static func message(for error: Error) -> String {
@@ -96,11 +111,13 @@ public enum BrowserGrantCopy {
     }
 }
 
-/// Signs one `flagship/browser-grant/v1` allow (one Face ID) or sends a denial, which needs no signature.
+/// Signs one `flagship/browser-grant/v1` allow (one Face ID) for the duration the owner chose (the
+/// asked one or shorter), or sends a denial, which needs no signature.
 public enum BrowserGrantAnswerOrder {
     public static func send(
         _ r: BrowserGrantRequest,
         allow: Bool,
+        duration: String? = nil,
         appName: String,
         client: any ScreensClient,
         fallbackServerDomain: String?,
@@ -115,10 +132,38 @@ public enum BrowserGrantAnswerOrder {
         guard let domain = await client.boxDomain() ?? fallbackServerDomain else {
             throw ScreensClientError.http(status: 0, message: "")
         }
+        let granted = duration ?? r.duration
+        // Never sign more than was asked: the box refuses it anyway.
+        guard BrowserGrantAnswer.within(ask: BrowserGrantOrder.scope(of: r), answer: BrowserGrantOrder.scope(of: r, duration: granted)) else {
+            throw ScreensClientError.http(status: 400, message: #"{"error":"an answer can grant the request or less, never more"}"#)
+        }
         let key = try await signer(BrowserGrantCopy.reason(app: appName))
-        let order = BrowserGrantOrder.answer(for: r, serverDomain: domain, decision: "allow", issuedAt: at)
+        let order = BrowserGrantOrder.answer(for: r, serverDomain: domain, decision: "allow", duration: granted, issuedAt: at)
         let sig = try key.signature(for: order.canonicalBytes())
         try await client.browserGrantAnswer(BrowserGrantAnswerRequest(requestId: r.requestId, decision: "allow",
+                                                                      issuedAt: at, signature: HexUtil.encode(sig),
+                                                                      duration: granted))
+    }
+}
+
+/// Signs one `flagship/browser-grant-revoke/v1` (one Face ID): the box drops the grant at once.
+public enum BrowserGrantRevokeOrder {
+    public static func send(
+        _ g: OwnerBrowserGrant,
+        appName: String,
+        client: any ScreensClient,
+        fallbackServerDomain: String?,
+        signer: AppAccessSigner,
+        now: () -> Date = Date.init
+    ) async throws {
+        guard let domain = await client.boxDomain() ?? fallbackServerDomain else {
+            throw ScreensClientError.http(status: 0, message: "")
+        }
+        let at = Int64(now().timeIntervalSince1970 * 1000)
+        let key = try await signer(BrowserGrantCopy.withdrawReason(app: appName))
+        let order = BrowserGrantRevoke(serverDomain: domain, serviceId: g.serviceId, grantId: g.grantId, issuedAt: at)
+        let sig = try key.signature(for: order.canonicalBytes())
+        try await client.browserGrantRevoke(BrowserGrantRevokeRequest(serviceId: g.serviceId, grantId: g.grantId,
                                                                       issuedAt: at, signature: HexUtil.encode(sig)))
     }
 }
@@ -165,10 +210,11 @@ public final class BrowserGrantCenter {
         self.signer = signer ?? AppAccessOrder.defaultSigner
     }
 
-    /// The box sends no event of its own for these yet: refresh on the inbox's other wakes.
+    /// Refresh on the box's own `browser-grant-request` frame, and on the inbox's other wakes (the
+    /// content-free `generic` push is the same one an access request sends).
     public func observeEvents() {
         guard observers.isEmpty else { return }
-        for name in [ChatRequestEvents.requested, AppAccessEvents.requested] {
+        for name in [BrowserGrantEvents.requested, ChatRequestEvents.requested, AppAccessEvents.requested] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in await self?.refresh() }
             })
@@ -199,16 +245,17 @@ public final class BrowserGrantCenter {
         queue += found.filter { !known.contains($0.id) && !settled.contains($0.id) }
     }
 
-    public func allow() async { await answer(allow: true) }
-    public func deny() async { await answer(allow: false) }
+    /// `duration` nil = the ask's own; otherwise a shorter one the owner chose.
+    public func allow(duration: String? = nil) async { await answer(allow: true, duration: duration) }
+    public func deny() async { await answer(allow: false, duration: nil) }
 
-    private func answer(allow: Bool) async {
+    private func answer(allow: Bool, duration: String?) async {
         guard let item = current, let client = clients[item.serverDomain] else { return }
         if case .working = stage { return }
         stage = .working(allow: allow)
         do {
-            try await BrowserGrantAnswerOrder.send(item.request, allow: allow, appName: item.appName, client: client,
-                                                   fallbackServerDomain: item.serverDomain, signer: signer)
+            try await BrowserGrantAnswerOrder.send(item.request, allow: allow, duration: duration, appName: item.appName,
+                                                   client: client, fallbackServerDomain: item.serverDomain, signer: signer)
             stage = .done(allow: allow)
         } catch {
             stage = .failed(BrowserGrantCopy.message(for: error))
@@ -232,11 +279,13 @@ public final class BrowserGrantCenter {
     }
 }
 
-/// One app's browser access, for its page: what its manifest was approved for, and what it asks now.
+/// One app's browser access, for its page: what its manifest was approved for, what it asks now, and
+/// what the owner allowed beyond the manifest (each with Withdraw).
 @Observable
 @MainActor
 public final class BrowserGrantsController {
     public private(set) var requests: [BrowserGrantRequest] = []
+    public private(set) var grants: [OwnerBrowserGrant] = []
     public private(set) var busy: String?
     public private(set) var note: String?
     public private(set) var error: String?
@@ -256,22 +305,44 @@ public final class BrowserGrantsController {
     }
 
     public func load() async {
-        guard let r = try? await client.browserGrantRequests() else { return }
-        requests = r.requests.filter { $0.serviceId == serviceId }
+        if let r = try? await client.browserGrantRequests() {
+            requests = r.requests.filter { $0.serviceId == serviceId }
+        }
+        if let g = try? await client.browserGrants(serviceId: serviceId) {
+            grants = g.grants.filter { $0.serviceId == serviceId }
+        }
     }
 
-    public func answer(_ r: BrowserGrantRequest, allow: Bool) async {
+    /// `duration` nil = the ask's own; otherwise a shorter one the owner chose.
+    public func answer(_ r: BrowserGrantRequest, allow: Bool, duration: String? = nil) async {
         guard busy == nil else { return }
         busy = r.requestId
         error = nil
         note = nil
         defer { busy = nil }
         do {
-            try await BrowserGrantAnswerOrder.send(r, allow: allow, appName: appName, client: client,
+            try await BrowserGrantAnswerOrder.send(r, allow: allow, duration: duration, appName: appName, client: client,
                                                    fallbackServerDomain: serverDomain, signer: signer)
             note = BrowserGrantCopy.answered(app: appName, allowed: allow)
         } catch {
             self.error = BrowserGrantCopy.message(for: error)
+        }
+        await load()
+    }
+
+    /// Withdraw one grant the owner gave (signed, one Face ID); the box drops it at once.
+    public func withdraw(_ g: OwnerBrowserGrant) async {
+        guard busy == nil else { return }
+        busy = g.grantId
+        error = nil
+        note = nil
+        defer { busy = nil }
+        do {
+            try await BrowserGrantRevokeOrder.send(g, appName: appName, client: client,
+                                                   fallbackServerDomain: serverDomain, signer: signer)
+            note = BrowserGrantCopy.withdrawn
+        } catch {
+            self.error = BrowserGrantCopy.withdrawMessage(for: error)
         }
         await load()
     }

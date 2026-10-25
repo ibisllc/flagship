@@ -418,6 +418,81 @@ fn canonical_bytes_fixture_every_vector() {
     }
 }
 
+/// AT-ENV-09: every case in a fixture's `refuse` list has a text field the
+/// builder refuses (a `|` or a control character), so no separator can move
+/// between fields under one signature.
+fn check_refusals(
+    rel: &str,
+    cases: &[Value],
+    tag: &str,
+    spec: &[K],
+    input_of: impl Fn(&Value) -> &Value,
+) {
+    assert!(!cases.is_empty(), "{rel}");
+    for c in cases {
+        let input = input_of(c);
+        let mut b = CanonicalV1::new(tag).unwrap();
+        let mut refused = false;
+        for f in spec {
+            let r = match *f {
+                K::S(k) => b.text(input[k].as_str().unwrap()),
+                K::U(k) => b.uint(input[k].as_u64().unwrap()),
+                _ => panic!("{rel}: refusal fixtures use text and uint fields only"),
+            };
+            match r {
+                Ok(next) => b = next,
+                Err(_) => {
+                    refused = true;
+                    break;
+                }
+            }
+        }
+        assert!(refused, "{rel}: not refused: {}", c["why"]);
+    }
+}
+
+#[test]
+fn canonical_join_refusals_and_publisher_trust() {
+    use K::*;
+    let promo = [
+        S("username"),
+        S("serverFqdn"),
+        S("provider"),
+        U("desiredDailyInputTokenCap"),
+        U("desiredDailyOutputTokenCap"),
+        U("issuedAt"),
+    ];
+    let f = load("packages/protocol/test-vectors/llm-promo-issue/vectors.json");
+    check_refusals(
+        "llm-promo-issue",
+        f["refuse"].as_array().unwrap(),
+        "flagship/llm-promo-issue/v1",
+        &promo,
+        |c| c,
+    );
+    let trust = [
+        S("serviceId"),
+        S("appId"),
+        U("identityGeneration"),
+        S("oldKeyHex"),
+        S("newKeyHex"),
+        U("newEpoch"),
+        U("issuedAt"),
+    ];
+    let f = load("packages/protocol/test-vectors/publisher-trust/vectors.json");
+    assert_eq!(
+        build("flagship/publisher-trust/v1", &trust, &f["trust"]),
+        f["canonical"].as_str().unwrap()
+    );
+    check_refusals(
+        "publisher-trust",
+        f["refuse"].as_array().unwrap(),
+        "flagship/publisher-trust/v1",
+        &trust,
+        |c| &c["trust"],
+    );
+}
+
 fn check_cases(
     rel: &str,
     cases: &[Value],

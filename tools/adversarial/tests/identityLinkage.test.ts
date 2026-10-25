@@ -11,7 +11,7 @@
  *   AT-LNK-07  the same member reaches two apps under two unrelated ids
  *   AT-LNK-08  visit and knock proofs are bound to server, app and page: no replay elsewhere
  *   AT-LNK-09  chat carrier: a frame for app A is refused at app B, replays and own-account frames refused
- *   AT-LNK-10  share acceptance: the joining account's key is matchable to its name via .com (FINDING)
+ *   AT-LNK-10  share acceptance: the key the joining account presents is per share and matches nothing .com serves by name
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -21,7 +21,11 @@ import {
   deriveIRK,
   deriveServiceMemberStableId,
   deriveServiceSecret,
+  deriveShareAdminKey,
   ed,
+  parseShareAcceptAdminProof,
+  signServerShareAcceptAdmin,
+  signShareKeyAttestationRequest,
   generateUMK,
   signChatWire,
   chatWireBodySha256,
@@ -37,6 +41,8 @@ import { buildAppSessionResolver } from "../../../packages/server-daemon/src/app
 import { buildWireReceiver, chatAppHost, CHAT_WIRE_PATH } from "../../../packages/server-daemon/src/chat/wire.js";
 import { boxSigner } from "../../../packages/server-daemon/tests/helpers/keyCustody.js";
 import { handleUsernameLookup } from "../../../packages/control-plane/src/usernameClaim.js";
+import { handleShareKeyAttestation } from "../../../packages/control-plane/src/pubkeyCert.js";
+import { checkShareAcceptAdmin } from "../../../packages/server-daemon/src/shares/acceptAdmin.js";
 import { InMemoryStorage } from "../../../packages/storage/src/index.js";
 import type { InstalledService } from "../../../packages/server-daemon/src/servicePlatform.js";
 import type { HttpRequest } from "../../../packages/server-daemon/src/runtime.js";
@@ -248,21 +254,58 @@ describe("cross-owner chat carrier (N08)", () => {
 });
 
 describe("sharing a server with another account", () => {
-  // FINDING AT-LNK-10: the share acceptance hands the sharing box `.com`'s
-  // `flagship/account-key-attestation/v1`, documented as naming no account so the box never learns who
-  // joined (packages/protocol/src/accountKeyAttestation.ts header, docs/share-a-server.md §5.1). But the
-  // attested key is the joining account's admin root (or IRK), which `.com` serves to anyone by name at
-  // `GET /api/username/:u` (packages/control-plane/src/usernameClaim.ts handleUsernameLookup:
-  // `adminRootPub`, `irkPub`). A sharing box can confirm a guessed name, and two sharing owners can link
-  // the same co-manager across their servers by the identical key. Severity: medium (privacy; contradicts
-  // the attestation's stated purpose; no authority gained).
-  it.fails("AT-LNK-10 the key a joining account presents to a sharing box cannot be matched to its name through .com's public lookup (catches: an 'anonymous' attestation over a publicly indexed key)", async () => {
+  // AT-LNK-10 (fixed): the share acceptance used to carry `.com`'s attestation of the joining account's
+  // admin root (or IRK), which `GET /api/username/:u` serves to anyone, so a sharing owner could confirm a
+  // guessed name and two sharing owners could link one co-manager. Now the admin device derives a
+  // per-share admin key from its UMK and the share id (`deriveShareAdminKey`), has `.com` attest it with a
+  // request signed by the account's admin root (`handleShareKeyAttestation`), and signs #12 with it; the
+  // box accepts only that kind (`checkShareAcceptAdmin`).
+  const NOW = 1_800_000_000_000;
+  const caSeed = new Uint8Array(32).fill(0xc7);
+  const ca = { keypair: { privateKey: caSeed, publicKey: ed.getPublicKey(caSeed) }, issuer: "test-ca" };
+  const chain = { authorizedCaKeys: () => [hex(ca.keypair.publicKey)] };
+  const bobUmk = { seed: new Uint8Array(32).fill(33) };
+  const bobAdmin = { privateKey: new Uint8Array(32).fill(31), publicKey: ed.getPublicKey(new Uint8Array(32).fill(31)) };
+
+  async function acceptAs(shareId: string, serverDomain: string, storage: InMemoryStorage) {
+    const key = deriveShareAdminKey(bobUmk, shareId);
+    const request = { username: "bob", keyPubHex: hex(key.publicKey), issuedAt: NOW };
+    const r = await handleShareKeyAttestation(
+      { ca, usernames: storage.usernames, now: () => NOW },
+      "bob",
+      { request, signature: hex(signShareKeyAttestationRequest(request, bobAdmin)) },
+    );
+    expect(r.status).toBe(200);
+    const accept = { serverDomain, shareId, memberPubHex: "cd".repeat(32), acceptedAt: NOW };
+    const admit = { ...accept, keyKind: "share" as const, keyPubHex: hex(key.publicKey) };
+    const proof = parseShareAcceptAdminProof({
+      admit,
+      signature: hex(signServerShareAcceptAdmin(admit, key)),
+      attestation: (r.body as { attestation: unknown }).attestation,
+    })!;
+    expect(checkShareAcceptAdmin({ accept, proof, chain, now: NOW + 1 })).toMatchObject({ ok: true });
+    return proof;
+  }
+
+  it("AT-LNK-10 the key a joining account presents to a sharing box cannot be matched to its name through .com's public lookup, and differs per share (catches: an 'anonymous' attestation over a publicly indexed key)", async () => {
     const storage = new InMemoryStorage();
-    const adminRoot = hex(ed.getPublicKey(new Uint8Array(32).fill(31)));
-    await storage.usernames.put({ username: "bob", irkPubHex: hex(ed.getPublicKey(new Uint8Array(32).fill(32))), claimedAt: 1, adminRootPubHex: adminRoot } as never);
-    const presentedInShareAccept = adminRoot; // AccountKeyAttestation.keyPubHex for keyKind "admin-root"
-    const r = await handleUsernameLookup(storage.usernames, "bob");
-    const body = r.body as { adminRootPub?: string | null; irkPub?: string };
-    expect([body.adminRootPub, body.irkPub]).not.toContain(presentedInShareAccept);
+    const irkPub = hex(ed.getPublicKey(new Uint8Array(32).fill(32)));
+    await storage.usernames.put({ username: "bob", irkPubHex: irkPub, claimedAt: 1, adminRootPubHex: hex(bobAdmin.publicKey) } as never);
+    const one = await acceptAs("0f".repeat(16), "home.alice.flagship.services", storage);
+    const two = await acceptAs("a1".repeat(16), "home.carol.flagship.services", storage);
+    const lookup = (await handleUsernameLookup(storage.usernames, "bob")).body as Record<string, unknown>;
+    const served = JSON.stringify(lookup);
+    for (const p of [one, two]) {
+      expect(served).not.toContain(p.admit.keyPubHex);
+      expect(served).not.toContain(p.attestation.keyPubHex);
+      expect(JSON.stringify(p)).not.toContain(irkPub);
+      expect(JSON.stringify(p)).not.toContain(hex(bobAdmin.publicKey));
+      expect(JSON.stringify(p)).not.toContain("bob");
+    }
+    // Two sharing owners see two unrelated keys.
+    expect(one.admit.keyPubHex).not.toBe(two.admit.keyPubHex);
+    // A stable account key in the proof is refused by the box's parser.
+    const stable = { ...one, admit: { ...one.admit, keyKind: "admin-root", keyPubHex: hex(bobAdmin.publicKey) } };
+    expect(parseShareAcceptAdminProof(stable)).toBeNull();
   });
 });

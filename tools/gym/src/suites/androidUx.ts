@@ -3,7 +3,7 @@
  * the watch boot key (option (a), docs/watch-boot-approval-without-unlock.md) and first contact
  * (docs/first-contact.md), passkey recovery (SEC-REPAIR-001), browser access beyond a manifest
  * (SEC-BROWSER-002) and syncing an imported app with its upstream (N12). Each `harness` is a method
- * of GymUxScreensTest or GymPasskeyBrowserSyncTest (apps/mobile/android/app/src/androidTest). NO
+ * of GymUxScreensTest, GymPasskeyBrowserSyncTest or GymUpdateResultsTest (apps/mobile/android/app/src/androidTest). NO
  * BACKEND: the mock box and `.com` check every signature the way the real ones do on an
  * admin-pinned account, and the mock `.com` checks the recovery passkey as the real one does.
  */
@@ -218,6 +218,42 @@ export const ANDROID_UX: readonly Scenario[] = [
     },
   ),
   androidTotal(
+    "android-ux-browser-grant-narrowed",
+    "An ask for the session offers 'Allow once' and 'Allow for this session' (shortest first, never longer than asked); Allow once sends the admin-signed flagship/browser-grant/v1 for one visit (the mock box refuses any longer duration), and the grant then reads 'For one visit' under 'Allowed by you'.",
+    `${PKG}.GymPasskeyBrowserSyncTest#browserGrantNarrowedToOnceOnTheAppsPage`,
+    {
+      steps: [
+        { kind: "launch", describe: "Open Plants' page with a session ask waiting." },
+        { kind: "tap", describe: "Allow once.", handle: "browser-grant-card-allow-once-6b7c0f1e-3333-4a2b-9c3d-000000000003" },
+      ],
+      assertions: [
+        { describe: "Allow once is offered", handle: "browser-grant-card-allow-once-6b7c0f1e-3333-4a2b-9c3d-000000000003", expect: "text", text: "Allow once" },
+        { describe: "The ask's own duration", handle: "browser-grant-card-allow-6b7c0f1e-3333-4a2b-9c3d-000000000003", expect: "text", text: "Allow for this session" },
+        { describe: "Never longer than asked", handle: "browser-grant-card-allow-service-6b7c0f1e-3333-4a2b-9c3d-000000000003", expect: "absent" },
+        { describe: "Allowed by you", handle: "browser-granted-title", expect: "present" },
+      ],
+      screenshots: [shot("browser-grant-narrow-choices", "Allow once, or for this session."), shot("browser-grant-narrowed-allowed", "Allowed for one visit.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-browser-grant-withdraw",
+    "The app's page lists what the owner allowed under 'Allowed by you' (sites, what it can do, how long, the app's words); Withdraw signs flagship/browser-grant-revoke/v1 with the admin root, the grant disappears and 'Browser access withdrawn' shows.",
+    `${PKG}.GymPasskeyBrowserSyncTest#browserGrantWithdrawOnTheAppsPage`,
+    {
+      steps: [
+        { kind: "launch", describe: "Open Plants' page; the mock box holds a session grant the owner gave." },
+        { kind: "tap", describe: "Withdraw.", handle: "browser-granted-withdraw-bg-0f4c9a1e-2d3b-4c5d-8e6f-7a8b9c0d1e2f" },
+      ],
+      assertions: [
+        { describe: "Allowed by you", handle: "browser-granted-title", expect: "text", text: "Allowed by you" },
+        { describe: "Gone after Withdraw", handle: "browser-granted-bg-0f4c9a1e-2d3b-4c5d-8e6f-7a8b9c0d1e2f", expect: "absent" },
+      ],
+      screenshots: [shot("browser-grant-allowed-by-you", "What the owner allowed, with Withdraw.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
     "android-ux-upstream-sync-proposal",
     "An imported app's page offers 'Check for updates from <repo>'; a branch is chosen, POST /api/build/apps/:id/sync answers a proposal shown as the version, counts, conflicts (your version kept) and the new permissions apart ('Internet access', 'Adds: …'); Review and deploy opens the build that holds the merge, ready to deploy, and Deploy installs exactly that build.",
     `${PKG}.GymPasskeyBrowserSyncTest#syncShowsTheProposalThenDeploysTheBuildThatHoldsIt`,
@@ -238,8 +274,8 @@ export const ANDROID_UX: readonly Scenario[] = [
   ),
   androidTotal(
     "android-ux-upstream-sync-up-to-date",
-    "A sync that finds the app already current says 'You already run the latest version from <repo>.' and discards the build it opened when closed; nothing deploys.",
-    `${PKG}.GymPasskeyBrowserSyncTest#syncUpToDateDiscardsTheOpenedBuild`,
+    "A sync that finds the app already current says 'You already run the latest version from <repo>.'; the box opened no build, so closing discards nothing and nothing deploys.",
+    `${PKG}.GymPasskeyBrowserSyncTest#syncUpToDateOpensNoBuild`,
     {
       steps: [{ kind: "tap", describe: "Close.", handle: "app-sync-close" }],
       assertions: [{ describe: "Up to date", handle: "app-sync-up-to-date", expect: "text", text: "You already run the latest version from" }],
@@ -255,6 +291,34 @@ export const ANDROID_UX: readonly Scenario[] = [
       steps: [{ kind: "launch", describe: "Open Plants with no repo on record." }],
       assertions: [{ describe: "No sync row", handle: "service-detail-sync", expect: "absent" }],
       screenshots: [shot("app-sync-not-offered", "An app with no repo: no sync row.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-update-kept-in-recovery",
+    "docs/support/update-rollback.md §5: a failed update the floor kept in recovery (rollbackRefused) reads as stuck on the new release until a fixed one arrives, never 'went back on its own'; the Share update results switch reads the box's /api/update-reports and sends { share } on and off.",
+    `${PKG}.GymUpdateResultsTest#aRollbackKeptInRecoveryReadsAsStuckAndTheSwitchSendsTheChoice`,
+    {
+      steps: [
+        { kind: "launch", describe: "Open the Living-room mini-PC server; the box reports rollbackRefused and sharing off." },
+        { kind: "tap", describe: "Turn Share update results on, then off.", handle: "sd-update-reports" },
+      ],
+      assertions: [
+        { describe: "Stuck sentence", handle: "sd-update-last-outcome", expect: "present" },
+        { describe: "Switch", handle: "sd-update-reports", expect: "present" },
+      ],
+      screenshots: [shot("update-results", "The update card with a rollback kept in recovery and the switch.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-update-refusal-sentence",
+    "A refused update reads as one whole sentence (the request was too old); a box that refuses the session shows no Share update results switch.",
+    `${PKG}.GymUpdateResultsTest#aRefusalIsOneSentenceAndARefusedSessionShowsNoSwitch`,
+    {
+      steps: [{ kind: "launch", describe: "Open the server; the box refused a stale order and answers 403 for /api/update-reports." }],
+      assertions: [{ describe: "No switch", handle: "sd-update-reports", expect: "absent" }],
+      screenshots: [shot("update-refusal", "A refusal as one sentence, no switch.")],
       dimension: "D3",
     },
   ),

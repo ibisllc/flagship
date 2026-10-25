@@ -116,6 +116,30 @@ describe("root rotation", () => {
   });
 });
 
+describe("equal versions and aliased keys", () => {
+  it("refuses a view that reuses an accepted version with other content, and takes the same view again", () => {
+    const first = verifyReleaseCatalog({ root: root(), ...catalog({ releases: [release(2), release(3, 0)] }), now: NOW, state: EMPTY_TRUST_STATE });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value.state.targetsSha256).toMatch(/^[0-9a-f]{64}$/);
+    const same = verifyReleaseCatalog({ root: root(), ...catalog({ releases: [release(2), release(3, 0)] }), now: NOW, state: first.value.state });
+    expect(same.ok).toBe(true);
+    const widened = verifyReleaseCatalog({ root: root(), ...catalog({ releases: [release(2), release(3, 100)] }), now: NOW, state: first.value.state });
+    expect(widened).toEqual({ ok: false, reason: "version-reused" });
+  });
+
+  it("counts one public key once, whatever ids it is listed under, and refuses a root that aliases one", () => {
+    const aliased = root(1, {
+      keys: { ...root().keys, k6b: g1!.pub },
+      roles: { ...root().roles, targets: { keyIds: ["k6", "k6b"], threshold: 2 } },
+    });
+    const c = catalog({ targetSigners: [g1!, { ...g1!, keyId: "k6b" }] });
+    expect(verifyReleaseCatalog({ root: aliased, ...c, now: NOW, state: EMPTY_TRUST_STATE })).toEqual({ ok: false, reason: "bad-role-keys" });
+    const next = { ...aliased, version: 2 };
+    expect(advanceRoot(root(), signReleaseMeta(next, [r1!, r2!]))).toEqual({ ok: false, reason: "bad-role-keys" });
+  });
+});
+
 describe("floor, cohorts and telemetry", () => {
   it("a rollback must meet the floor", () => {
     expect(meetsSecurityFloor(2, 2)).toBe(true);

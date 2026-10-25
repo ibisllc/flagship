@@ -112,9 +112,12 @@ host, plan §7) and no GPU (Studio cannot pass a GPU through to a guest).
 8. Report the receipts as in "Report" below (one file per drill), with the unlock log, the
    `pcrs` file and the TPM vendor line.
 
-**B. NVIDIA GPU test (milestone 7).** Use the same native USB boot (a Studio VM cannot reach the
-GPU). The steps come with milestone 7; until then only record `lspci -nn | grep -i nvidia` and the
-driver the box reports.
+**B. NVIDIA GPU receipts (milestone 7).** Use the same native USB boot (a Studio VM cannot reach the
+GPU). Follow `docs/architecture-v2/gpu-runbooks/nvidia-cuda.md` (H1 CUDA, H2 residue scrub, H9
+render/video, H11 driver lifecycle): record `lspci -nn | grep -i nvidia` first, then on the box (debug
+access) run `tools/arch-drills/m7/setup-box.sh`, `gpu-real.sh prepare-nvidia`, reboot, and
+`gpu-real.sh qualify-nvidia /root/gpu-receipt` with the check images' bases pinned by digest. Report
+`/root/gpu-receipt/` (summary.json and the raw files) as one receipt file per H-number.
 
 ## Chromebook
 

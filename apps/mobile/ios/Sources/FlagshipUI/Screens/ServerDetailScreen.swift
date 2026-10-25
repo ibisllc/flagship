@@ -1049,6 +1049,7 @@ struct UpdateServerCard: View {
                                 .foregroundColor(c.textMuted)
                         }
                     }
+                    UpdateReportsToggle(serverDomain: serverDomain)
                 }
             }
         }
@@ -1162,6 +1163,63 @@ struct PendingUpdateNotice: View {
 /// below, and going back to an older release (or pasting any commit) is under
 /// Advanced, beside its warning. Whatever is picked, the signed
 /// order names one exact commit. The biometric fires ONCE, on the tap.
+/// "Share update results" (docs/support/update-rollback.md §4-5): the box's
+/// `/api/update-reports` choice, off until the owner turns it on. Hidden when
+/// the box refuses this session (Remote, co-manager) or has no such setting.
+struct UpdateReportsToggle: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.screensClient) private var client
+    let serverDomain: String
+
+    @State private var share: Bool?
+    @State private var saving = false
+    @State private var failure: String?
+
+    static let title = String(localized: "Share update results")
+    static let detail = String(localized: "Send Flagship an anonymous note after each update: the release, whether it started cleanly and whether it went back. Never your server's name, your account or anything about your apps.")
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        Group {
+            if let share {
+                VStack(alignment: .leading, spacing: FS.space.s1) {
+                    Divider().padding(.vertical, FS.space.s1)
+                    Toggle(isOn: Binding(get: { share }, set: { set($0) })) {
+                        Text(Self.title).font(FS.font.bodySm()).foregroundColor(c.text)
+                    }
+                    .tint(c.accent)
+                    .disabled(saving)
+                    .accessibilityIdentifier("sd-update-reports")
+                    Text(Self.detail).font(FS.font.caption()).foregroundColor(c.textMuted)
+                    if let failure {
+                        Text(failure).font(FS.font.caption()).foregroundColor(c.danger)
+                    }
+                }
+            }
+        }
+        .task(id: serverDomain) {
+            share = (try? await client.updateReportsSetting())?.share
+        }
+    }
+
+    private func set(_ want: Bool) {
+        guard !saving else { return }
+        saving = true
+        failure = nil
+        let before = share
+        share = want
+        Task {
+            do {
+                share = try await client.setUpdateReports(share: want).share
+            } catch {
+                share = before
+                failure = String(localized: "Couldn't save this setting on the server. Try again.")
+            }
+            saving = false
+        }
+    }
+}
+
 struct UpdateServerSheet: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.screensClient) private var client

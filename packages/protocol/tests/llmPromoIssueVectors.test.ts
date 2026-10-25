@@ -10,6 +10,7 @@ interface Vectors {
   umkSeedHex: string;
   pub: string;
   cases: Array<LlmPromoIssueRequest & { canonical: string; signature: string }>;
+  refuse: Array<LlmPromoIssueRequest & { why: string }>;
 }
 
 const V = JSON.parse(
@@ -52,5 +53,13 @@ describe("llm-promo-issue vectors (test-vectors/llm-promo-issue/vectors.json)", 
       expect(verifyLlmPromoIssue(req, fromHex(c.signature), irk.publicKey)).toBe(true);
       expect(verifyLlmPromoIssue({ ...req, issuedAt: req.issuedAt + 1 }, fromHex(c.signature), irk.publicKey)).toBe(false);
     }
+  });
+
+  it("every request in refuse is refused before signing (AT-ENV-09)", () => {
+    expect(V.refuse.length).toBeGreaterThan(0);
+    for (const c of V.refuse) expect(() => signLlmPromoIssue(requestOf(c), irk), c.why).toThrow();
+    const base = requestOf(V.cases[0]!);
+    expect(() => signLlmPromoIssue({ ...base, desiredDailyInputTokenCap: "0|0" as unknown as number }, irk)).toThrow();
+    expect(() => signLlmPromoIssue({ ...base, issuedAt: 1.5 }, irk)).toThrow();
   });
 });

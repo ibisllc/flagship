@@ -88,6 +88,14 @@ export interface TrustState {
   snapshotVersion: number;
   targetsVersion: number;
   securityFloor: number;
+  /**
+   * Digests of the accepted timestamp, snapshot and targets. A view at the SAME version must carry the same
+   * content: otherwise two differently signed catalogs sharing a version could be swapped by a mirror.
+   * Absent in states saved before they were kept (nothing to compare with yet).
+   */
+  timestampSha256?: string;
+  snapshotSha256?: string;
+  targetsSha256?: string;
 }
 
 export const EMPTY_TRUST_STATE: TrustState = { rootVersion: 0, timestampVersion: 0, snapshotVersion: 0, targetsVersion: 0, securityFloor: 0 };
@@ -142,6 +150,9 @@ function shapeError(m: AnyMeta): string | null {
       if (new Set(k.keyIds).size !== k.keyIds.length) return "bad-role-keys";
       for (const id of k.keyIds) if (!HEX64.test(m.keys?.[id] ?? "")) return "bad-role-keys";
     }
+    // Two key ids for one public key would let one private key meet a threshold of two.
+    const pubs = Object.values(m.keys ?? {}).map((p) => String(p).toLowerCase());
+    if (new Set(pubs).size !== pubs.length) return "bad-role-keys";
   } else if (m.role === "timestamp") {
     if (!Number.isSafeInteger(m.snapshotVersion) || m.snapshotVersion < 1 || !HEX64.test(m.snapshotSha256)) return "bad-snapshot-ref";
   } else if (m.role === "snapshot") {
@@ -161,16 +172,16 @@ function shapeError(m: AnyMeta): string | null {
   return null;
 }
 
-/** Distinct, listed keys with a valid signature. */
+/** Distinct listed PUBLIC KEYS with a valid signature: key ids aliasing one key count once. */
 function validSigners(doc: Signed<AnyMeta>, role: RoleKeys, keys: Record<string, string>): number {
   const bytes = canonicalReleaseMeta(doc.signed);
   const seen = new Set<string>();
   for (const s of doc.signatures) {
-    if (seen.has(s.keyId) || !role.keyIds.includes(s.keyId)) continue;
-    const pub = keys[s.keyId];
-    if (!pub || !/^[0-9a-f]{128}$/.test(s.sigHex)) continue;
+    if (!role.keyIds.includes(s.keyId)) continue;
+    const pub = keys[s.keyId]?.toLowerCase();
+    if (!pub || seen.has(pub) || !/^[0-9a-f]{128}$/.test(s.sigHex)) continue;
     try {
-      if (ed.verify(unhex(s.sigHex), bytes, unhex(pub))) seen.add(s.keyId);
+      if (ed.verify(unhex(s.sigHex), bytes, unhex(pub))) seen.add(pub);
     } catch {
       // a malformed key or signature counts as no signature
     }
@@ -181,7 +192,7 @@ function validSigners(doc: Signed<AnyMeta>, role: RoleKeys, keys: Record<string,
 export type MetaRefusal =
   | "unknown-format" | "bad-version" | "bad-expiry" | "bad-role-keys" | "bad-snapshot-ref" | "bad-targets-ref"
   | "bad-floor" | "bad-releases" | "bad-release" | "unknown-role" | "wrong-role" | "below-threshold"
-  | "version-not-next" | "rollback" | "root-expired" | "snapshot-mismatch" | "targets-mismatch" | "floor-lowered";
+  | "version-not-next" | "rollback" | "version-reused" | "root-expired" | "snapshot-mismatch" | "targets-mismatch" | "floor-lowered";
 
 export type MetaResult<T> = { ok: true; value: T } | { ok: false; reason: MetaRefusal };
 
@@ -222,6 +233,9 @@ export interface Catalog {
  */
 export function verifyReleaseCatalog(input: CatalogInput): MetaResult<Catalog> {
   const { root, timestamp, snapshot, targets, now, state } = input;
+  const rootBad = shapeError(root);
+  if (rootBad) return { ok: false, reason: rootBad as MetaRefusal };
+  if (root.role !== "root") return { ok: false, reason: "wrong-role" };
   if (root.version < state.rootVersion) return { ok: false, reason: "rollback" };
   if (root.expiresAt <= now) return { ok: false, reason: "root-expired" };
   const docs: [MetaRole, Signed<AnyMeta>][] = [["timestamp", timestamp], ["snapshot", snapshot], ["targets", targets]];
@@ -234,8 +248,18 @@ export function verifyReleaseCatalog(input: CatalogInput): MetaResult<Catalog> {
   }
   const ts = timestamp.signed, sn = snapshot.signed, tg = targets.signed;
   if (ts.version < state.timestampVersion || sn.version < state.snapshotVersion || tg.version < state.targetsVersion) return { ok: false, reason: "rollback" };
-  if (ts.snapshotVersion !== sn.version || ts.snapshotSha256 !== releaseMetaSha256(sn)) return { ok: false, reason: "snapshot-mismatch" };
-  if (sn.targetsVersion !== tg.version || sn.targetsSha256 !== releaseMetaSha256(tg)) return { ok: false, reason: "targets-mismatch" };
+  const tsSha = releaseMetaSha256(ts), snSha = releaseMetaSha256(sn), tgSha = releaseMetaSha256(tg);
+  // Equal version, other content: TUF keeps the trusted file; here the view is refused, so a mirror cannot
+  // flip a box between two catalogs that share a version (e.g. re-open a stopped rollout).
+  if (
+    (ts.version === state.timestampVersion && state.timestampSha256 !== undefined && state.timestampSha256 !== tsSha) ||
+    (sn.version === state.snapshotVersion && state.snapshotSha256 !== undefined && state.snapshotSha256 !== snSha) ||
+    (tg.version === state.targetsVersion && state.targetsSha256 !== undefined && state.targetsSha256 !== tgSha)
+  ) {
+    return { ok: false, reason: "version-reused" };
+  }
+  if (ts.snapshotVersion !== sn.version || ts.snapshotSha256 !== snSha) return { ok: false, reason: "snapshot-mismatch" };
+  if (sn.targetsVersion !== tg.version || sn.targetsSha256 !== tgSha) return { ok: false, reason: "targets-mismatch" };
   if (tg.securityFloor < state.securityFloor) return { ok: false, reason: "floor-lowered" };
   const stale = ts.expiresAt <= now || sn.expiresAt <= now || tg.expiresAt <= now;
   return {
@@ -250,6 +274,9 @@ export function verifyReleaseCatalog(input: CatalogInput): MetaResult<Catalog> {
         snapshotVersion: sn.version,
         targetsVersion: tg.version,
         securityFloor: tg.securityFloor,
+        timestampSha256: tsSha,
+        snapshotSha256: snSha,
+        targetsSha256: tgSha,
       },
     },
   };

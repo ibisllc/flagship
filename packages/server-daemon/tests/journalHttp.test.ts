@@ -148,3 +148,44 @@ describe("buildJournalHttp", () => {
     expect(res!.status).toBe(405);
   });
 });
+
+describe("buildJournalHttp: admin root and units", () => {
+  const ADMIN = makeKey(71);
+  const ROTATED = makeKey(72);
+  const signed = (r: JournalRequest, k: Keypair) => req({ request: r, signature: bytesToHex(signJournalRequest(r, k)) });
+
+  it("accepts the pinned admin root where the box pins one, and the IRK as before", async () => {
+    const { reader, calls } = recordingReader();
+    const handle = mkHandler(reader, { adminRootPub: ADMIN.publicKey, username: "alice" });
+    expect((await handle(signed(journalReq("flagship-daemon", 10), ADMIN)))!.status).toBe(200);
+    expect((await handle(signed(journalReq("flagship-daemon", 10), IRK)))!.status).toBe(200);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("follows a rotated admin root: the old root is refused once the box pins the new one", async () => {
+    const { reader, calls } = recordingReader();
+    const handle = mkHandler(reader, { adminRootPub: ROTATED.publicKey, username: "alice" });
+    expect((await handle(signed(journalReq("flagship-daemon", 10), ROTATED)))!.status).toBe(200);
+    expect((await handle(signed(journalReq("flagship-daemon", 10), ADMIN)))!.status).toBe(403);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("refuses the admin root on a box that pins none, and a stranger everywhere", async () => {
+    const { reader, calls } = recordingReader();
+    expect((await mkHandler(reader)(signed(journalReq("flagship-daemon", 10), ADMIN)))!.status).toBe(403);
+    expect((await mkHandler(reader, { adminRootPub: ADMIN.publicKey })(signed(journalReq("flagship-daemon", 10), makeKey(73))))!.status).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("lets the owner read keyd, privd and the broker, and nothing outside the flagship units", async () => {
+    const { reader, calls } = recordingReader();
+    const handle = mkHandler(reader);
+    for (const unit of ["flagship-keyd", "flagship-privd", "flagship-broker", "flagship-data-services"]) {
+      expect((await handle(signed(journalReq(unit, 10), IRK)))!.status).toBe(200);
+    }
+    expect(calls.map((c) => c.unit)).toEqual(["flagship-keyd", "flagship-privd", "flagship-broker", "flagship-data-services"]);
+    for (const unit of ["ssh", "sshd", "flagship-keyd.service ", "docker"]) {
+      expect((await handle(signed(journalReq(unit, 10), IRK)))!.status).toBe(403);
+    }
+  });
+});

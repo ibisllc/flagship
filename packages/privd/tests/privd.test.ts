@@ -34,10 +34,11 @@ describe("what the broker will run", () => {
   });
 
   it("only an app's own files volume, or the egress resolver, may be mounted", () => {
-    expect(() => docker("run", "--mount", "type=volume,src=flagship-files-alice--chess,dst=/data", "img")).not.toThrow();
-    expect(() => docker("run", "--mount", "type=bind,src=/run/flagship-resolv-apps.conf,dst=/etc/resolv.conf,readonly", "img")).not.toThrow();
-    refused(() => docker("run", "--mount", "type=volume,src=somebody-elses,dst=/data", "img"));
-    refused(() => docker("create", "--mount", "type=volume,src=flagship-files-x,dst=/data", "img")); // only `run` mounts
+    expect(() => docker("run", "--runtime=runsc", "--mount", "type=volume,src=flagship-files-alice--chess,dst=/data", "img")).not.toThrow();
+    expect(() => docker("run", "--runtime=runsc", "--mount", "type=bind,src=/run/flagship-resolv-apps.conf,dst=/etc/resolv.conf,readonly", "img")).not.toThrow();
+    refused(() => docker("run", "--runtime=runsc", "--mount", "type=volume,src=somebody-elses,dst=/data", "img"));
+    refused(() => docker("create", "--runtime=runsc", "--mount", "type=volume,src=flagship-files-x,dst=/data", "img")); // only `run` mounts
+    refused(() => docker("run", "--mount", "type=volume,src=flagship-files-alice--chess,dst=/data", "img"), /gVisor/);
   });
 
   it("docker subcommands outside the list, and exec or cp into an app container, are refused", () => {

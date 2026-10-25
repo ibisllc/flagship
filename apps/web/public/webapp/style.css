@@ -1246,6 +1246,9 @@ section:not(.hidden) {
   margin-top: var(--space-3);
 }
 .row-2 > * { flex: 1; }
+/* Deny and one Allow per duration the owner may grant (browser grant requests): wrap on a phone. */
+.grant-choices { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.grant-choices > * { flex: 1 1 8rem; }
 
 /* Home grid — 2-column dense button grid. */
 .home-grid {

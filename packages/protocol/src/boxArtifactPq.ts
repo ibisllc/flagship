@@ -20,7 +20,7 @@
  */
 import { sha256 } from "@noble/hashes/sha2.js";
 import { hybridSign, hybridVerify, pqKeyId, SUITE_HYBRID_SIG_ED25519_MLDSA65_V1 } from "./pqHybrid.js";
-import { pqBindingPublicKey, pqKeyBindingFromWire, verifyPqKeyBinding, type VerifiedPqKeyBinding } from "./pqTrust.js";
+import { isVerifiedPqKeyBinding, pqBindingPublicKey, pqKeyBindingFromWire, verifyPqKeyBinding, type VerifiedPqKeyBinding } from "./pqTrust.js";
 import { BOX_RELEASE } from "./boxReleaseConfig.js";
 import type { Bytes } from "./types.js";
 
@@ -82,7 +82,11 @@ export function verifiedBoxArtifactBindings(wires: readonly unknown[], pin: BoxA
   return out;
 }
 
-/** True when `pq` is `signer`'s verified companion over this manifest. */
+/**
+ * True when `pq` is `signer`'s verified companion over this manifest. The binding must itself be
+ * a verified `release-key` binding for the box-artifact subject naming this signer: a caller that
+ * builds its own map cannot lend a device's or another role's ML-DSA key to an artifact signer.
+ */
 export function verifyBoxArtifactPq(
   canonicalV1: Bytes,
   signerHex: string,
@@ -92,8 +96,10 @@ export function verifyBoxArtifactPq(
   if (!pq || typeof pq !== "object") return false;
   const { keyId, signatureHex } = pq as Partial<BoxArtifactPqSignature>;
   if (typeof keyId !== "string" || !HEX32.test(keyId) || typeof signatureHex !== "string" || !/^(?:[0-9a-f]{2})+$/.test(signatureHex)) return false;
-  const b = bindings.get(signerHex.toLowerCase());
-  if (!b || b.keyIdHex !== keyId) return false;
+  const signer = signerHex.toLowerCase();
+  const b = bindings.get(signer);
+  if (!b || !isVerifiedPqKeyBinding(b) || b.keyIdHex !== keyId) return false;
+  if (b.role !== "release-key" || b.subjectId !== BOX_ARTIFACT_PQ_BINDING_SUBJECT || b.ed25519PubHex !== signer) return false;
   try {
     hybridVerify(b.hybridPublicKey, TAG_BOX_ARTIFACT_V2, canonicalBoxArtifactV2(canonicalV1, signerHex, keyId), fromHex(signatureHex));
     return true;

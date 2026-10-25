@@ -9,11 +9,11 @@
  *
  *   AT-PRV-01  long-form flags that give a container the host are refused
  *   AT-PRV-02  host bind mounts in every long form are refused
- *   AT-PRV-03  FINDING: a short flag with its value attached (`-v/:/host`) is not recognised
- *   AT-PRV-04  FINDING: a value-taking short flag inside a group (`-dv /:/host`) is not recognised
- *   AT-PRV-05  FINDING: `-u0` / `-uroot` (attached) runs a container as root
- *   AT-PRV-06  FINDING: `--network container:<data service>` joins another container's namespace (Docker)
- *   AT-PRV-07  FINDING: an ordinary run may pick runc or leave the runtime out (outside gVisor)
+ *   AT-PRV-03  (fixed) a short flag with its value attached (`-v/:/host`) is not recognised
+ *   AT-PRV-04  (fixed) a value-taking short flag inside a group (`-dv /:/host`) is not recognised
+ *   AT-PRV-05  (fixed) `-u0` / `-uroot` (attached) runs a container as root
+ *   AT-PRV-06  (fixed) `--network container:<data service>` joins another container's namespace (Docker)
+ *   AT-PRV-07  (fixed) an ordinary run may pick runc or leave the runtime out (outside gVisor)
  *   AT-PRV-08  docker exec reaches only the two data services, with listed commands and env
  *   AT-PRV-09  subcommands outside the closed set are refused
  *   AT-PRV-10  request shapes: NUL, oversize, extra keys, prototype keys, non-strings
@@ -59,40 +59,53 @@ describe("privd docker argument policy (compromised daemon)", () => {
     ]) refused(() => docker(run(...c)));
   });
 
-  // FINDING AT-PRV-03 (high): packages/privd/src/policy.ts validateDockerArgs compares the whole argument
+  // FIXED (was a finding) AT-PRV-03 (high): packages/privd/src/policy.ts validateDockerArgs compares the whole argument
   // (`-v/:/host`) with "-v", so a shorthand with its value attached is not seen. The docker CLI (pflag)
   // parses `-vVALUE` as `-v VALUE`: a compromised daemon gets the host's root filesystem in a container.
-  it.fails("AT-PRV-03 an attached short-flag value (-v/:/host) is refused (catches: shorthand parsing gap)", () => {
+  it("AT-PRV-03 an attached short-flag value (-v/:/host) is refused (catches: shorthand parsing gap)", () => {
     refused(() => docker(run("-v/:/host")));
+    // The argv is parsed the way the docker CLI (pflag) reads it first, so every spelling of every
+    // refused or restricted flag lands on the same rule.
+    for (const c of [
+      ["-v=/:/host"], ["-tv=/:/h"], ["-itv/:/host"], ["--volume=/:/h"], ["-eX=/var/flagship/identity"], ["--env=A=/var/run/docker.sock"], ["--mount=type=bind,src=/,dst=/h"],
+      ["--device=/dev/kvm"], ["--cap-add=SYS_ADMIN"], ["--privileged=true"], ["--privileged=false"], ["--security-opt=seccomp=unconfined"], ["--pid=host"], ["--ipc=host"],
+      ["--uts=host"], ["--userns=host"], ["--use-api-socket"], ["--annotation", "dev.gvisor.internal.x=1"], ["--log-opt", "path=/etc/x"], ["-Z"], ["--unknown-flag"], ["--=x"],
+    ]) refused(() => docker(run(...c)));
   });
 
-  // FINDING AT-PRV-04 (high): a group of short flags ending in a value-taking one (`-dv /:/host`, `-itv /:/x`)
+  // FIXED (was a finding) AT-PRV-04 (high): a group of short flags ending in a value-taking one (`-dv /:/host`, `-itv /:/x`)
   // is parsed by docker as -d -v /:/host; the policy sees an unknown "-dv" and then a bare "/:/host".
-  it.fails("AT-PRV-04 a short-flag group ending in -v (-dv /:/host) is refused (catches: grouped shorthand gap)", () => {
+  it("AT-PRV-04 a short-flag group ending in -v (-dv /:/host) is refused (catches: grouped shorthand gap)", () => {
     refused(() => docker(["run", "-dv", "/:/host", "--runtime", "runsc", IMAGE]));
+    refused(() => docker(run("-itv", "/:/host")));
   });
 
-  // FINDING AT-PRV-05 (high): the root check reads `--user`/`-u` only as separate or `=` forms; `-u0` and
+  // FIXED (was a finding) AT-PRV-05 (high): the root check reads `--user`/`-u` only as separate or `=` forms; `-u0` and
   // `-uroot` reach docker as user 0. With AT-PRV-03 it is root over the host filesystem.
-  it.fails("AT-PRV-05 an attached -u0 / -uroot is refused (catches: root user via shorthand)", () => {
+  it("AT-PRV-05 an attached -u0 / -uroot is refused (catches: root user via shorthand)", () => {
     refused(() => docker(run("-u0")));
     refused(() => docker(run("-uroot")));
+    for (const u of [["-u=0"], ["-u", "00"], ["-u", "+0:0"], ["--user=0"], ["-du0"], ["-itu", "root:root"]]) refused(() => docker(run(...u)));
+    expect(() => docker(run("-u10001"))).not.toThrow();
   });
 
-  // FINDING AT-PRV-06 (medium): under Docker, `--network container:flagship-postgres` (or another app's
+  // FIXED (was a finding) AT-PRV-06 (medium): under Docker, `--network container:flagship-postgres` (or another app's
   // container) shares that container's network namespace, so an app reaches the database's loopback
   // listeners or another app's private ports. The `:` check exists only in validatePodmanArgs.
-  it.fails("AT-PRV-06 joining another container's network namespace is refused under Docker (catches: cross-app via network mode)", () => {
+  it("AT-PRV-06 joining another container's network namespace is refused under Docker (catches: cross-app via network mode)", () => {
     refused(() => docker(run("--network", "container:flagship-postgres")));
     refused(() => docker(run("--network=container:alice--chess")));
+    for (const n of [["--net=container:x"], ["--net", "host"], ["--network", "ns:/proc/1/ns/net"], ["--network=host"]]) refused(() => docker(run(...n)));
   });
 
-  // FINDING AT-PRV-07 (medium): the runtime check accepts runc and an absent --runtime for an ordinary run,
+  // FIXED (was a finding) AT-PRV-07 (medium): the runtime check accepts runc and an absent --runtime for an ordinary run,
   // so a compromised daemon can start an app's image outside gVisor (the app sandbox the plan keeps for all
   // app and staging workloads). The files helper is validated separately and need not share this rule.
-  it.fails("AT-PRV-07 an ordinary run must name runsc (catches: gVisor bypass)", () => {
+  it("AT-PRV-07 an ordinary run must name runsc (catches: gVisor bypass)", () => {
     refused(() => docker(["run", "-d", "--runtime", "runc", IMAGE]));
     refused(() => docker(["run", "-d", IMAGE]));
+    refused(() => docker(["run", "-d", "--runtime=runsc", "--runtime=runc", IMAGE]));
+    expect(() => docker(run())).not.toThrow();
   });
 
   it("AT-PRV-08 docker exec reaches only the data services with listed commands (catches: exec into an app or a shell)", () => {

@@ -1,6 +1,8 @@
 // Runs every case in packages/protocol/test-vectors/server-share-accept-admin/vectors.json
 // (docs/share-a-server.md §4, §5.1): envelope #12, only an admin device of the
-// joining account accepts a share. Read from disk so a drift fails here.
+// joining account accepts a share, signed with the per-share admin key, and the
+// request the admin root signs to have `.com` attest that key (AT-LNK-10).
+// Read from disk so a drift fails here.
 
 package com.flagshipserver.app.core
 
@@ -51,6 +53,7 @@ class ServerShareAcceptAdminVectorsTest {
         "adminRoot" -> Ed25519Sign(adminSeed)
         "irk" -> ServerKeys.deriveProtocolIrk(memberUmk)
         "member" -> ServerShare.deriveShareMemberKey(memberUmk, keys.s("shareId"))
+        "shareAdmin" -> ServerShare.deriveShareAdminKey(memberUmk, keys.s("shareId"))
         else -> error("unknown signer $name")
     }
 
@@ -58,6 +61,7 @@ class ServerShareAcceptAdminVectorsTest {
         "adminRoot" -> bytes(keys.s("adminRootPubHex"))
         "irk" -> ServerKeys.deriveProtocolIrkPub(memberUmk)
         "member" -> ServerShare.deriveShareMemberPub(memberUmk, keys.s("shareId"))
+        "shareAdmin" -> ServerShare.deriveShareAdminPub(memberUmk, keys.s("shareId"))
         else -> error("unknown pub $name")
     }
 
@@ -65,15 +69,41 @@ class ServerShareAcceptAdminVectorsTest {
         f.s("serverDomain"), f.s("shareId"), f.s("memberPubHex"), f["acceptedAt"]!!.jsonPrimitive.long, f.s("keyKind"), f.s("keyPubHex"),
     )
 
+    private fun request(f: JsonObject) = ServerShare.ShareKeyAttestationRequest(
+        f.s("username"), f.s("keyPubHex"), f["issuedAt"]!!.jsonPrimitive.long,
+    )
+
     @Test fun keys() {
         assertEquals(keys.s("adminRootPubHex"), HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(adminSeed).publicKey))
         assertEquals(keys.s("irkPubHex"), HexUtil.encode(pub("irk")))
         assertEquals(keys.s("memberPubHex"), HexUtil.encode(pub("member")))
+        assertEquals(keys.s("shareAdminPubHex"), HexUtil.encode(pub("shareAdmin")))
+        assertEquals(keys.s("otherShareAdminPubHex"), HexUtil.encode(ServerShare.deriveShareAdminPub(memberUmk, keys.s("otherShareId"))))
+        // AT-LNK-10: the share key is no stable account key, and differs per share.
+        assertFalse(keys.s("shareAdminPubHex") in listOf(keys.s("adminRootPubHex"), keys.s("irkPubHex"), keys.s("memberPubHex")))
+        assertFalse(keys.s("shareAdminPubHex") == keys.s("otherShareAdminPubHex"))
+    }
+
+    @Test fun requests() {
+        val all = cases("requests")
+        assertTrue(all.isNotEmpty())
+        for (c in all) {
+            val r = request(c["fields"]!!.jsonObject)
+            assertEquals(c.toString(), c.s("canonical"), String(r.canonicalBytes(), Charsets.UTF_8))
+            val sig = ServerShare.signHex(r, signer(c.s("signer")))
+            assertEquals(c.toString(), c.s("signature"), sig)
+            assertTrue(ServerShare.verify(r, bytes(sig), pub(c.s("signer"))))
+            assertFalse(ServerShare.verify(r.copy(keyPubHex = keys.s("otherShareAdminPubHex")), bytes(sig), pub(c.s("signer"))))
+        }
+        for (c in cases("requestRefuse")) {
+            val built = runCatching { request(c["fields"]!!.jsonObject).canonicalBytes() }
+            assertTrue("built a refused request: ${c.s("why")}", built.isFailure)
+        }
     }
 
     @Test fun envelopes() {
         val all = cases("envelopes")
-        assertEquals(2, all.size)
+        assertEquals(1, all.size)
         for (c in all) {
             val f = c["fields"]!!.jsonObject
             val env = admit(f)
@@ -108,8 +138,9 @@ class ServerShareAcceptAdminVectorsTest {
         val payload = root["payload"]!!.jsonObject
         val p = ServerShare.parseShareAcceptancePayload(payload)
         assertNotNull(p?.admin)
-        assertEquals(keys.s("adminRootPubHex"), p!!.admin!!.admit.keyPubHex)
-        assertEquals(keys.s("adminRootPubHex"), p.admin!!.attestation.keyPubHex)
+        assertEquals(keys.s("shareAdminPubHex"), p!!.admin!!.admit.keyPubHex)
+        assertEquals(keys.s("shareAdminPubHex"), p.admin!!.attestation.keyPubHex)
+        assertEquals(ServerShare.KEY_KIND_SHARE, p.admin!!.attestation.keyKind)
         assertEquals("AccountKeyAttestation", p.admin!!.attestation.kind)
         // Written back as the app seals it, it parses to the same thing.
         val again = ServerShare.parseShareAcceptancePayload(Json.parseToJsonElement(p.toJson()))

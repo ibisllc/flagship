@@ -1288,7 +1288,7 @@ const OCTOBER: readonly Scenario[] = [
   ),
   iosTotal(
     "ios-oct-share-accept-admin",
-    "Only an admin device accepts a co-manage share (docs/share-a-server.md §5.1): an admin device's Accept signs flagship/server-share-accept-admin/v1 with the admin root and seals it with .com's attestation; the mock .com (ShareAcceptMockWorld) takes it only when #12 verifies under the attested root, then the code shows.",
+    "Only an admin device accepts a co-manage share (docs/share-a-server.md §5.1): an admin device's Accept has its admin root ask .com to attest a per-share admin key (flagship/share-key-attestation-request/v1), signs flagship/server-share-accept-admin/v1 with that key and seals it with the attestation; the mock .com (ShareAcceptMockWorld) takes it only when #12 verifies under the attested per-share key, then the code shows.",
     O + "test_shareAcceptAdminDeviceSignsWithTheAdminRoot",
     {
       steps: [

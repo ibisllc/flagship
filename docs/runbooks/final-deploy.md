@@ -24,9 +24,9 @@ force-pushes and keeps its progress in `~/.flagship-release/state.json` so a fai
 run resumes at the failed step. The commands below stay as the reference it follows.
 
 ```sh
-bash scripts/release.sh --list                # the 35 steps, with phase, commands, gate, rollback
+bash scripts/release.sh --list                # the 36 steps, with phase, commands, gate, rollback
 bash scripts/release.sh --phase A             # deploy the real state (steps 1-22), before the Windows test
-bash scripts/release.sh --phase B             # after the Windows results (steps 23-35)
+bash scripts/release.sh --phase B             # after the Windows results (steps 23-36; 23 is the canary, re-run with --only 23)
 bash scripts/release.sh --dry-run --phase A   # print every command, run nothing
 bash scripts/release.sh --status              # pinned sha, finished steps, next step
 bash scripts/release.sh --from 10             # resume at, or --only 10 to run only, one step
@@ -49,8 +49,9 @@ exist yet would get names that do not resolve (and resolvers negative-cache that
 wildcard starts answering them. Adding the wildcard first is safe for existing
 accounts, whose own records keep answering. `zone-health` ships with the `.com`
 deploy, so the DNS step is checked with `dig` and `zone-health` runs as a post-check
-of the `.com` deploy. The maintenance notice (12.1) is its own step at the start of
-phase B. What it cannot do for you: the DNS canary after the gym run (the gym itself runs from the
+of the `.com` deploy. The canary (9b) opens phase B: it is deferred, not done, until the
+release reaches 100%, so run it again with `--only 23` after each observation window; it never
+holds the other phase B steps. The maintenance notice (12.1) is its own step after it. What it cannot do for you: the DNS canary after the gym run (the gym itself runs from the
 script: `scripts/gym-release-run.sh`, gated on its exit code), the Cloudflare dashboard DNS records, the YubiKey and PIN prompts (the
 tools ask on `/dev/tty`), the App Store Connect and Play Console submissions, and
 reading the Windows results (typed `windows-ok` before the scrub).
@@ -66,6 +67,8 @@ The script stops and asks at each of these; nothing else needs you.
 | every release | the product version and the store numbers (they must climb) | 0b |
 | every release | YubiKey PIN + touch: the CA lease, the release endorsement, both box artifacts | 2, 3, 3b |
 | every release | the catalog's security version, floor and rollout percent; the root key file from the stick | 3c |
+| every release | the canary: read `npm run canary`, widen 1 → 5 → 20 → 50 → 100 every 48 h or more, or sign the stop; the root key file from the stick each time | 9b |
+| once | turn on update receipts on the maintainers' own boxes (`FLAGSHIP_UPDATE_RECEIPTS=1` in the daemon env, or `POST /api/update-reports {"share":true}`) and run one deliberate rollback drill | 9b |
 | once | prod secrets `FLAGSHIP_RECOVERY_PROOF_SECRET` (passkey recovery challenges; `openssl rand -hex 32`) on prod AND the gym Worker | 5 |
 | once | a public test repo with tags `v1` and `v2`, named in `GYM_SYNC_REPO` (the gym's upstream-sync group skips without it) | 6 |
 | every release | accept or refuse gym skips (exit 3); the DNS canary | 6 |
@@ -835,6 +838,50 @@ green padlock.
 Rollback: re-point the manifests at the previous commit and redeploy `.com`;
 the old R2 parts stay (the script does not delete). Servers already made from a
 bad image are deleted and recreated.
+
+## 9b. Canary cohorts
+
+The script's first phase B step. The full procedure, the gates and what receipts
+cannot prove are in `docs/runbooks/canary.md`; this is the release-day summary.
+
+Existing boxes take the new box release only inside its `rolloutPercent` in the
+signed catalog (step 3c started it small, usually 1%). Each box decides its own
+cohort from a secret salt that never leaves it. Boxes whose owners agreed to
+share update results send one content-free receipt per update verdict: release,
+cohort, health gate pass/fail, rolled back yes/no, CPU architecture, container
+stack. `.com` keeps counts only.
+
+```sh
+npm run canary -- --release <commit> --opened-at <when this stage opened>   # FLAGSHIP_ADMIN_SECRET
+```
+
+- **stop** (a box stuck below the floor, or two rollbacks, or a rollback share
+  above 5% once there are 20 receipts, in any profile): sign the stop rule and
+  publish it, then halt the release.
+  ```sh
+  curl -fsS https://flagshipserver.com/build/iso/catalog-targets.json -o served-targets.json
+  curl -fsS https://flagshipserver.com/build/iso/catalog-timestamp.json -o served-timestamp.json
+  npx tsx tools/release-catalog/catalog.ts rollout --root release/catalog-root.json \
+    --list release/catalog-releases.json --commit <commit> --percent 0 \
+    --key <offline>/catalog-root-1.key.json --timestamp-key <offline>/catalog-timestamp-1.key.json \
+    --previous-targets served-targets.json --previous-timestamp served-timestamp.json --out-dir out
+  (cd apps/com && wrangler r2 object put flagship-iso/catalog-targets.json --file ../../out/targets.json --remote)   # and snapshot, timestamp
+  git add -- release/catalog-releases.json && git commit -m "Canary stop: <commit> to 0%" && git push origin HEAD:main
+  ```
+  Use `--percent 0`, not `--remove`, while a security floor is set: a removed
+  release is no longer a rollback target. Boxes that already took the release
+  keep it; the remedy is a fixed release with a higher security version.
+- **hold** (one rollback): find out why before widening (runbook "Reading a
+  rollback"); the script asks for a typed reason to widen anyway.
+- **wait**: the stage is younger than 48 hours or has fewer than 3 receipts.
+  The step is deferred; run it again with `--only <step>`.
+- **widen**: the same `rollout` command with `--percent <next stage>` along
+  1, 5, 20, 50, 100, published the same way. Before the first widening,
+  this release's gym run must be green for the `update` and `canary` groups and
+  one deliberate rollback drill must have sent its receipt.
+
+Gate: the release reaches 100% with no stop, and every hold has a recorded reason.
+Rollback: the stop rule above.
 
 ## 10. Studio releases (Mac, Windows, Linux)
 

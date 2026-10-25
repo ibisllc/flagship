@@ -15,6 +15,11 @@ describe("webapp security sliver", () => {
     expect(new TextDecoder().decode(canonicalPublisherTrustBytes(vectors.trust))).toBe(vectors.canonical);
   });
 
+  it("refuses every trust in the shared vectors' refuse list (AT-ENV-09)", () => {
+    expect(vectors.refuse.length).toBeGreaterThan(0);
+    for (const r of vectors.refuse) expect(() => canonicalPublisherTrustBytes(r.trust), r.why).toThrow();
+  });
+
   it("builds the same bytes the box verifies", () => {
     expect(Buffer.from(canonicalPublisherTrustBytes(trust)).toString()).toBe(Buffer.from(canonicalPublisherTrust(trust)).toString());
     expect(() => canonicalPublisherTrustBytes({ ...trust, serviceId: "a|b" })).toThrow();

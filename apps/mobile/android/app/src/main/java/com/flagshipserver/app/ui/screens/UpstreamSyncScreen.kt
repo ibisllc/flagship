@@ -50,7 +50,8 @@ fun UpstreamSyncScreen(nav: NavController, serviceId: String, repo: String) {
     val vm = remember(serviceId, client) { UpstreamSyncViewModel(serviceId, client) }
     val phase by vm.phase.collectAsState()
     var ref by rememberSaveable { mutableStateOf("") }
-    // Leaving with an opened build and no deploy discards it, so it doesn't hold the app's name.
+    // Leaving a proposal's build without deploying discards it, so it doesn't hold the app's name
+    // (an up-to-date answer opened none).
     var handedOver by remember { mutableStateOf(false) }
     DisposableEffect(vm) { onDispose { if (!handedOver) vm.discard() } }
 
@@ -87,7 +88,7 @@ fun UpstreamSyncScreen(nav: NavController, serviceId: String, repo: String) {
                 r = p.result,
                 onReview = {
                     handedOver = true
-                    nav.navigate(UpstreamSync.reviewRoute(p.result.buildId)) { popUpTo("app-sync/{serviceId}?repo={repo}") { inclusive = true } }
+                    nav.navigate(UpstreamSync.reviewRoute(p.buildId)) { popUpTo("app-sync/{serviceId}?repo={repo}") { inclusive = true } }
                 },
                 onDiscard = {
                     vm.discard()

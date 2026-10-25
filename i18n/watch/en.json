@@ -21,21 +21,21 @@
   },
   "Home": {
     "en": "Home",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:106",
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:107",
     "translatable": false
   },
   "Office": {
     "en": "Office",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:107",
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:108",
     "translatable": false
   },
   "Couldn't reach iPhone: %@": {
     "en": "Couldn't reach iPhone: %@",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:167"
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:171"
   },
   "Approval failed.": {
     "en": "Approval failed.",
-    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:164"
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift:168"
   },
   "Flagship": {
     "en": "Flagship",

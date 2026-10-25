@@ -641,9 +641,10 @@ final class GymOctoberTests: XCTestCase {
     // ─── Only an admin device accepts a co-manage share (docs/share-a-server.md §5.1) ──
 
     /// An admin device opens a share link and accepts: the mock `.com`
-    /// (ShareAcceptMockWorld) serves the attestation of the account's admin
-    /// root and takes the sealed acceptance only when its #12 verifies under
-    /// that root, so the code appears only for an admin-root-signed proof.
+    /// (ShareAcceptMockWorld) attests the device's per-share admin key only for
+    /// a request the account's admin root signed, and takes the sealed
+    /// acceptance only when its #12 verifies under that attested key (AT-LNK-10),
+    /// so the code appears only for an admin device's proof.
     func test_shareAcceptAdminDeviceSignsWithTheAdminRoot() throws {
         let app = launch(tab: "home", ["-smoke-shares", "-smoke-share-route", "accept-admin", "-smoke-admin-root"])
         let accept = app.buttons["share-accept"]
@@ -652,7 +653,7 @@ final class GymOctoberTests: XCTestCase {
         gymShot(app, "share-accept-admin-offer")
         accept.tap()
         let sas = app.staticTexts["share-accept-sas"]
-        XCTAssertTrue(sas.waitForExistence(timeout: 20), "The mock .com took the admin-root-signed acceptance: read the code.")
+        XCTAssertTrue(sas.waitForExistence(timeout: 20), "The mock .com took the admin device's acceptance: read the code.")
         gymShot(app, "share-accept-admin-code")
     }
 

@@ -131,6 +131,8 @@ class MockShareWorld(
 
     private val lock = Any()
     private val rows = LinkedHashMap<String, Row>()
+    /** Per-share admin keys `.com` attested (share-key-attestation), as the CA chain does on the box. */
+    private val attestedShareKeys = HashSet<String>()
     private val inbox = LinkedHashMap<String, String>()
     private val held = HashMap<String, LinkedHashMap<String, ServerShare.Grant>>()
     private val ended = HashMap<String, MutableSet<String>>()
@@ -228,8 +230,9 @@ class MockShareWorld(
             }
         }
         val a = proof.admit
-        val known = accounts.values.any { it.adminPubHex == proof.attestation.keyPubHex }
-        val ok = known && a.keyKind == ServerShare.KEY_KIND_ADMIN_ROOT && a.keyPubHex == proof.attestation.keyPubHex &&
+        val known = proof.attestation.keyPubHex in attestedShareKeys
+        val ok = known && a.keyKind == ServerShare.KEY_KIND_SHARE && proof.attestation.keyKind == ServerShare.KEY_KIND_SHARE &&
+            a.keyPubHex == proof.attestation.keyPubHex &&
             a.serverDomain == accept.serverDomain && a.shareId == accept.shareId && a.memberPubHex == accept.memberPubHex &&
             a.acceptedAt == accept.acceptedAt && ServerShare.verify(a, HexUtil.decode(proof.signature)!!, HexUtil.decode(a.keyPubHex)!!)
         if (ok) return null
@@ -287,16 +290,28 @@ class MockShareWorld(
         val share = Regex("/api/server-shares/([0-9a-f]{32})(/accept|/leave|/push)?").matchEntire(path)
         val luks = Regex("/api/server/([^/]+)/sealed-luks-key").matchEntire(path)
         val boot = Regex("/api/boot/share/(pending|key)/([^/]+)").matchEntire(path)
-        val attest = Regex("/api/users/([^/]+)/account-key-attestation").matchEntire(path)
-        val demoSign = Regex("/api/dev/sample-user/([^/]+)/share-accept").matchEntire(path)
+        val attest = Regex("/api/users/([^/]+)/share-key-attestation").matchEntire(path)
+        val demoSign = Regex("/api/dev/sample-user/([^/]+)/share-key-attestation").matchEntire(path)
         return when {
             attest != null -> {
+                // .com's handler: the account's admin root must sign the request (a non-admin device is refused).
                 val who = accounts[java.net.URLDecoder.decode(attest.groupValues[1], "UTF-8")] ?: return err(404, "username not registered")
+                val req = runCatching {
+                    Json.decodeFromJsonElement(ServerShare.ShareKeyAttestationRequest.serializer(), b?.get("request")!!)
+                }.getOrNull() ?: return err(400, "malformed request")
+                val sig = str(b, "signature")?.let { HexUtil.decode(it) }
+                if (req.username != who.username || sig == null || !ServerShare.verify(req, sig, who.adminPub)) {
+                    return 403 to buildJsonObject {
+                        put("error", "Only an admin device of your account can accept a co-manage invitation.")
+                        put("code", "accept-not-admin")
+                    }
+                }
+                attestedShareKeys += req.keyPubHex
                 val now = System.currentTimeMillis()
                 ok(buildJsonObject {
                     put("attestation", buildJsonObject {
-                        put("kind", "AccountKeyAttestation"); put("version", 1); put("keyKind", ServerShare.KEY_KIND_ADMIN_ROOT)
-                        put("keyPubHex", who.adminPubHex); put("issuedAt", now - 1000); put("expiresAt", now + 14 * 86_400_000L)
+                        put("kind", "AccountKeyAttestation"); put("version", 1); put("keyKind", ServerShare.KEY_KIND_SHARE)
+                        put("keyPubHex", req.keyPubHex); put("issuedAt", now - 1000); put("expiresAt", now + 14 * 86_400_000L)
                         put("signedBy", "ca".repeat(32)); put("signature", "00".repeat(64))
                     })
                 })

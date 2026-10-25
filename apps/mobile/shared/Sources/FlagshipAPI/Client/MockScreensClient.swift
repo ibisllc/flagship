@@ -65,10 +65,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// What every server detail reports as its app sandbox (nil: absent, as
     /// from an older daemon).
     public var appSandboxFixture: AppSandbox?
+    /// Replaces the fixture's applied `lastUpdate` (a rollback, a refusal, one kept in recovery).
+    public var lastUpdateFixture: LastUpdate?
 
     public func serverDetail() async throws -> ServerDetailResponse {
         var detail = try await serverDetailFixture()
         detail.appSandbox = appSandboxFixture
+        if let lastUpdateFixture { detail.lastUpdate = lastUpdateFixture }
         return detail
     }
 
@@ -921,16 +924,46 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             throw ScreensClientError.http(status: 404, message: #"{"error":"that request is no longer waiting"}"#)
         }
         let r = mockBrowserGrantRequests[i]
+        let durations = ["once", "session", "service"]
+        let granted = answer.duration ?? r.duration
         if answer.decision == "allow" {
             guard let sig = answer.signature else {
                 throw ScreensClientError.http(status: 400, message: #"{"error":"a signed answer is required"}"#)
             }
+            // The box grants the ask or less, never more (browserGrantWithin).
+            guard let g = durations.firstIndex(of: granted), let q = durations.firstIndex(of: r.duration), g <= q else {
+                throw ScreensClientError.http(status: 400, message: #"{"error":"an answer can grant the request or less, never more"}"#)
+            }
             try MockOrderSigners.shared.require(.sensitive, kind: "browser-grant", signatureHex: sig,
                                                 payload: ["serverDomain": await boxDomain() ?? "", "request": r, "answer": answer] as [String: Any])
+            mockBrowserGrants.append(OwnerBrowserGrant(grantId: "bg-mock-\(r.requestId)", serviceId: r.serviceId,
+                                                       capabilities: r.capabilities, origins: r.origins, localNetwork: r.localNetwork,
+                                                       duration: granted, explanation: r.explanation, issuedAt: answer.issuedAt))
         }
         mockBrowserGrantRequests.remove(at: i)
         browserGrantAnswers.append(answer)
-        GymProbe.note("browser grant \(answer.decision) \(r.serviceId) \(r.duration)")
+        GymProbe.note("browser grant \(answer.decision) \(r.serviceId) \(answer.decision == "allow" ? granted : r.duration)")
+    }
+
+    /// Grants the owner gave (never the manifest's); answering Allow adds one.
+    public var mockBrowserGrants: [OwnerBrowserGrant] = []
+    public private(set) var browserGrantRevokes: [BrowserGrantRevokeRequest] = []
+
+    public func browserGrants(serviceId: String) async throws -> OwnerBrowserGrantsResponse {
+        try await tick()
+        return OwnerBrowserGrantsResponse(grants: mockBrowserGrants.filter { $0.serviceId == serviceId })
+    }
+
+    public func browserGrantRevoke(_ revoke: BrowserGrantRevokeRequest) async throws {
+        try await tick()
+        guard let i = mockBrowserGrants.firstIndex(where: { $0.grantId == revoke.grantId && $0.serviceId == revoke.serviceId }) else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"that grant is no longer in force"}"#)
+        }
+        try MockOrderSigners.shared.require(.sensitive, kind: "browser-grant-revoke", signatureHex: revoke.signature,
+                                            payload: ["serverDomain": await boxDomain() ?? "", "revoke": revoke] as [String: Any])
+        mockBrowserGrants.remove(at: i)
+        browserGrantRevokes.append(revoke)
+        GymProbe.note("browser grant withdrawn \(revoke.serviceId)")
     }
 
     // MARK: - Upstream sync (buildmodes/syncProposal.ts)
@@ -1045,6 +1078,31 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         }
         mockAccessAlertsEnabled = enabled
         return AccessAlertsSetting(enabled: enabled, ok: true)
+    }
+
+    /// The box's "Share update results" choice; nil answers 403 like a box
+    /// that refuses this session (Remote, co-manager).
+    public var mockUpdateReportsShare: Bool? = false
+    public private(set) var setUpdateReportsCalls: [Bool] = []
+
+    public func updateReportsSetting() async throws -> UpdateReportsSetting {
+        try await tick()
+        guard let share = mockUpdateReportsShare else {
+            throw ScreensClientError.http(status: 403, message: #"{"error":"owner sessions only"}"#)
+        }
+        return UpdateReportsSetting(share: share, source: setUpdateReportsCalls.isEmpty ? "default" : "owner")
+    }
+
+    @discardableResult
+    public func setUpdateReports(share: Bool) async throws -> UpdateReportsSetting {
+        try await tick()
+        setUpdateReportsCalls.append(share)
+        guard mockUpdateReportsShare != nil else {
+            throw ScreensClientError.http(status: 403, message: #"{"error":"owner sessions only"}"#)
+        }
+        mockUpdateReportsShare = share
+        GymProbe.note("update reports \(share ? "on" : "off")")
+        return UpdateReportsSetting(share: share, source: "owner")
     }
 
     public func accessRequests() async throws -> AppAccessRequestsResponse {

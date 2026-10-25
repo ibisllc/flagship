@@ -71,8 +71,9 @@ class UpstreamSyncViewModel(
     sealed interface Phase {
         data object Idle : Phase
         data object Checking : Phase
-        data class UpToDate(val buildId: String) : Phase
-        data class Proposal(val result: BuildSyncResponse) : Phase
+        /** Nothing to take: the box opened no build, so there is nothing to discard. */
+        data object UpToDate : Phase
+        data class Proposal(val result: BuildSyncResponse, val buildId: String) : Phase
         data class Failed(val message: String) : Phase
     }
 
@@ -83,7 +84,12 @@ class UpstreamSyncViewModel(
         _phase.value = Phase.Checking
         _phase.value = try {
             val r = client.syncFromUpstream(serviceId, ref.trim().ifEmpty { null })
-            if (r.upToDate) Phase.UpToDate(r.buildId) else Phase.Proposal(r)
+            val id = r.buildId
+            when {
+                r.upToDate -> Phase.UpToDate
+                id.isNullOrEmpty() -> Phase.Failed(FSStrings.get(R.string.couldnt_reach_the_server_check_your))
+                else -> Phase.Proposal(r, id)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
@@ -91,13 +97,9 @@ class UpstreamSyncViewModel(
         }
     }
 
-    /** The build this sync opened, which the owner leaves without deploying. Best effort. */
+    /** The build a proposal opened, which the owner leaves without deploying. Best effort. */
     fun discard(): Job? {
-        val id = when (val p = _phase.value) {
-            is Phase.UpToDate -> p.buildId
-            is Phase.Proposal -> p.result.buildId
-            else -> return null
-        }
+        val id = (_phase.value as? Phase.Proposal)?.buildId ?: return null
         _phase.value = Phase.Idle
         return scope.launch { runCatching { client.discard(id) } }
     }

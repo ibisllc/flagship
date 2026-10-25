@@ -65,9 +65,10 @@ class ServerShareClientFlowTest {
         var updates = ArrayList<ServerShare.Update>()
         val usedUpdateNonces = HashSet<String>()
         var boxCommit = "1".repeat(40)
-        /** The admin root `.com` attests for "bob" (the member account). */
+        /** The admin root `.com` pins for "bob" (the member account): it must sign the attestation request. */
         var bobAdminPubHex: String? = memberKeys.adminPubHex
-        val demoSigned = ArrayList<ServerShare.AcceptAdmin>()
+        /** Per-share keys `.com` attested for the demo account. */
+        val demoAttested = ArrayList<String>()
 
         fun transport(): JsonHttpTransport = object : JsonHttpTransport {
             override val json: Json = ServerShareClient.json
@@ -84,6 +85,13 @@ class ServerShareClientFlowTest {
         }
 
         private fun ok(o: JsonElement = buildJsonObject { put("ok", true) }) = 200 to o
+        private fun attestation(key: String) = ok(buildJsonObject {
+            put("attestation", buildJsonObject {
+                put("kind", "AccountKeyAttestation"); put("version", 1); put("keyKind", ServerShare.KEY_KIND_SHARE); put("keyPubHex", key)
+                put("issuedAt", clock - 1000); put("expiresAt", clock + 14 * 86_400_000L)
+                put("signedBy", "ca".repeat(32)); put("signature", "00".repeat(64))
+            })
+        })
         private fun err(s: Int, e: String) = s to buildJsonObject { put("error", e); put("code", e) }
         private fun sig(o: JsonObject?) = HexUtil.decode(o!!["signature"]!!.jsonPrimitive.content)!!
         private fun tokenOk(row: Map<String, Any?>, h: Map<String, String>): Boolean {
@@ -95,20 +103,16 @@ class ServerShareClientFlowTest {
             val share = Regex("$apex/api/server-shares/([0-9a-f]{32})(/accept|/leave|/push)?").matchEntire(url)
             val revoke = Regex("$apex/api/users/alice/server-shares/([0-9a-f]{32})/(revoke|unlock)").matchEntire(url)
             return when {
-                url == "$apex/api/users/bob/account-key-attestation" -> {
-                    val key = bobAdminPubHex ?: return err(404, "username not registered")
-                    ok(buildJsonObject {
-                        put("attestation", buildJsonObject {
-                            put("kind", "AccountKeyAttestation"); put("version", 1); put("keyKind", "admin-root"); put("keyPubHex", key)
-                            put("issuedAt", clock - 1000); put("expiresAt", clock + 14 * 86_400_000L)
-                            put("signedBy", "ca".repeat(32)); put("signature", "00".repeat(64))
-                        })
-                    })
+                url == "$apex/api/users/bob/share-key-attestation" -> {
+                    val admin = bobAdminPubHex ?: return err(404, "username not registered")
+                    val req = Json.decodeFromJsonElement(ServerShare.ShareKeyAttestationRequest.serializer(), b!!["request"]!!)
+                    if (req.username != "bob" || !ServerShare.verify(req, sig(b), HexUtil.decode(admin)!!)) return err(403, "accept-not-admin")
+                    attestation(req.keyPubHex)
                 }
-                url == "$apex/api/dev/sample-user/bob/share-accept" -> {
-                    val admit = ServerShare.parseServerShareAcceptAdmin(b!!["admit"]) ?: return err(400, "malformed")
-                    demoSigned += admit
-                    ok(buildJsonObject { put("signature", ServerShare.signHex(admit, Ed25519Sign(memberKeys.adminSeed!!))) })
+                url == "$apex/api/dev/sample-user/bob/share-key-attestation" -> {
+                    val key = b!!["keyPubHex"]!!.jsonPrimitive.content
+                    demoAttested += key
+                    attestation(key)
                 }
                 url == "$apex/api/users/alice/server-shares" -> {
                     val offer = ServerShare.parseServerShareOffer(b!!["offer"])!!
@@ -238,7 +242,8 @@ class ServerShareClientFlowTest {
                                 put("code", "accept-not-admin")
                             }
                         val ad = proof.admit
-                        if (ad.shareId != a.shareId || ad.memberPubHex != a.memberPubHex || ad.acceptedAt != a.acceptedAt ||
+                        if (ad.keyKind != ServerShare.KEY_KIND_SHARE || proof.attestation.keyKind != ServerShare.KEY_KIND_SHARE ||
+                            ad.shareId != a.shareId || ad.memberPubHex != a.memberPubHex || ad.acceptedAt != a.acceptedAt ||
                             ad.keyPubHex != proof.attestation.keyPubHex || !ServerShare.verify(ad, HexUtil.decode(proof.signature)!!, HexUtil.decode(ad.keyPubHex)!!)
                         ) return err(403, "accept-signature")
                     }
@@ -396,11 +401,15 @@ class ServerShareClientFlowTest {
         assertTrue(ServerShare.verify(grant, HexUtil.decode(grantCall.body["signature"]!!.jsonPrimitive.content)!!, ownerPub))
         assertNotNull(grantCall.body["accept"])
         assertNotNull(grantCall.body["acceptSignature"])
-        // Bob's admin device signed #12 with its admin root, behind the UMK's biometric.
+        // Bob's admin root asked .com to attest his per-share admin key (behind the UMK's biometric),
+        // and #12 is signed with that key: no stable account key reaches the box (AT-LNK-10).
         val proof = ServerShare.parseShareAcceptAdminProof(grantCall.body["acceptAdmin"])!!
-        assertEquals(memberKeys.adminPubHex, proof.admit.keyPubHex)
-        assertEquals(ServerShare.KEY_KIND_ADMIN_ROOT, proof.admit.keyKind)
-        assertTrue(ServerShare.verify(proof.admit, HexUtil.decode(proof.signature)!!, HexUtil.decode(memberKeys.adminPubHex!!)!!))
+        val shareAdminPub = ServerShare.deriveShareAdminPub(memberKeys.umkSeed, created.shareId)
+        assertEquals(HexUtil.encode(shareAdminPub), proof.admit.keyPubHex)
+        assertEquals(ServerShare.KEY_KIND_SHARE, proof.admit.keyKind)
+        assertEquals(HexUtil.encode(shareAdminPub), proof.attestation.keyPubHex)
+        assertTrue(ServerShare.verify(proof.admit, HexUtil.decode(proof.signature)!!, shareAdminPub))
+        assertFalse(grantCall.body["acceptAdmin"].toString().contains(memberKeys.adminPubHex!!))
         assertTrue(memberKeys.reasons.any { it.startsWith("admin: ") })
         assertEquals("owner-session", grantCall.headers[ServerShareClient.SESSION_HEADER])
 
@@ -428,7 +437,7 @@ class ServerShareClientFlowTest {
             assertEquals("Only an admin device of your account can accept a co-manage invitation.", e.message)
         }
         assertTrue("no prompt, nothing posted", phone.reasons.isEmpty())
-        assertTrue(world.calls.none { it.url.endsWith("/accept") || it.url.endsWith("/account-key-attestation") })
+        assertTrue(world.calls.none { it.url.endsWith("/accept") || it.url.endsWith("/share-key-attestation") })
     }
 
     @Test fun aStaleAdminRootIsNoAdmin() = runBlocking {
@@ -453,7 +462,7 @@ class ServerShareClientFlowTest {
         val phone = Keys(memberKeys.umkSeed, memberKeys.irk, adminSeed = null)
         val member = client(world, phone)
         member.accept(member.open(ServerShare.parseShareLink(created.link)!!))
-        assertEquals(created.shareId, world.demoSigned.single().shareId)
+        assertEquals(HexUtil.encode(ServerShare.deriveShareAdminPub(memberKeys.umkSeed, created.shareId)), world.demoAttested.single())
         assertTrue(phone.reasons.none { it.startsWith("admin: ") })
         demo = false
         owner.confirm("alice", domain, "owner-session", owner.ownerShares("alice", domain, "owner-session").accepted.single())

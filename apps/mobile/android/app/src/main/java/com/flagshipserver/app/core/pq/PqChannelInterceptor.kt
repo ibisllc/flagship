@@ -1,5 +1,7 @@
 package com.flagshipserver.app.core.pq
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -73,15 +75,15 @@ class PqChannelInterceptor : Interceptor {
             .post(body.toString().toRequestBody(jsonType)).build()
 
     private fun connect(chain: Interceptor.Chain, req: Request, host: String): PqSession.Channel {
-        val pinned = responder(host) ?: throw NotReady("This server is quantum-safe, but this phone hasn't checked its post-quantum key yet. Open the server once while online.")
-        val me = identity() ?: throw NotReady("This server only accepts quantum-safe connections, and this phone's post-quantum key isn't ready. Unlock the app and try again.")
+        val pinned = responder(host) ?: throw NotReady(FSStrings.get(R.string.this_server_is_quantum_safe_but))
+        val me = identity() ?: throw NotReady(FSStrings.get(R.string.this_server_only_accepts_quantum_safe))
         val st = PqSession.Initiator(pinned, "device", me.binding, now())
         val h = chain.proceed(post(req, "/api/pq-session/hello", buildJsonObject { put("hello", st.hello.toJson()) }))
-        val hb = h.use { if (it.code != 200) throw NotReady("The server refused this phone's quantum-safe connection.") else json.parseToJsonElement(it.body!!.string()).jsonObject }
+        val hb = h.use { if (it.code != 200) throw NotReady(FSStrings.get(R.string.the_server_refused_this_phones_quantum)) else json.parseToJsonElement(it.body!!.string()).jsonObject }
         val (fin, channel) = st.finish(hb["accept"], now(), me.sign)
         val f = chain.proceed(post(req, "/api/pq-session/finish", buildJsonObject { put("handshake", hb["handshake"]!!); put("finish", fin) }))
-        val fb = f.use { if (it.code != 200) throw NotReady("The server's quantum-safe connection did not complete.") else json.parseToJsonElement(it.body!!.string()).jsonObject }
-        if (fb["session"]?.jsonPrimitive?.contentOrNull != channel.sessionIdHex) throw NotReady("The server's quantum-safe connection did not complete.")
+        val fb = f.use { if (it.code != 200) throw NotReady(FSStrings.get(R.string.the_servers_quantum_safe_connection_did)) else json.parseToJsonElement(it.body!!.string()).jsonObject }
+        if (fb["session"]?.jsonPrimitive?.contentOrNull != channel.sessionIdHex) throw NotReady(FSStrings.get(R.string.the_servers_quantum_safe_connection_did))
         open[host] = channel
         return channel
     }
@@ -113,7 +115,7 @@ class PqChannelInterceptor : Interceptor {
             return Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(ans["status"]!!.jsonPrimitive.int).message("")
                 .headers(hb.build()).body(b.toResponseBody(type)).build()
         }
-        throw NotReady("The server keeps closing the quantum-safe connection. Try again.")
+        throw NotReady(FSStrings.get(R.string.the_server_keeps_closing_the_quantum))
     }
 
     companion object {

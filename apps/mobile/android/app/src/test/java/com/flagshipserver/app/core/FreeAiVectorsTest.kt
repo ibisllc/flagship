@@ -62,6 +62,21 @@ class FreeAiVectorsTest {
         }
     }
 
+    @Test fun refusesEveryRefusalVector() {
+        val refuse = root["refuse"]!!.jsonArray.map { it.jsonObject }
+        assertTrue(refuse.isNotEmpty())
+        for (c in refuse) {
+            try {
+                FreeAiRequest.canonicalBytes(
+                    c.s("username"), c.s("serverFqdn"), c.l("issuedAt"), c.s("provider"),
+                    c.l("desiredDailyInputTokenCap"), c.l("desiredDailyOutputTokenCap"),
+                )
+                fail("not refused: ${c.s("why")}")
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun refusesASeparatorInAField() {
         FreeAiRequest.canonicalBytes("har|ry", "", 1)

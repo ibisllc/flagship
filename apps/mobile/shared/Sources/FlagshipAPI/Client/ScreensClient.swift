@@ -142,6 +142,11 @@ public protocol ScreensClient: Sendable {
     func browserGrantRequests() async throws -> BrowserGrantRequestsResponse
     /// `POST /api/browser/owner/grant-requests/answer`: allow (signed) or deny.
     func browserGrantAnswer(_ answer: BrowserGrantAnswerRequest) async throws
+    /// `GET /api/browser/owner/grants?serviceId=`: the grants the owner gave an app beyond its manifest.
+    /// Empty when the box has no app browser (404).
+    func browserGrants(serviceId: String) async throws -> OwnerBrowserGrantsResponse
+    /// `POST /api/browser/owner/grants/revoke`: withdraw one (signed); the box drops it at once.
+    func browserGrantRevoke(_ revoke: BrowserGrantRevokeRequest) async throws
     /// `POST /api/build/apps/<id>/sync`: compare an imported app with its upstream and open a build
     /// holding the merge. Nothing goes live until the owner deploys that build.
     func appSync(serviceId: String, _ req: AppSyncRequest) async throws -> AppSyncResponse
@@ -183,6 +188,12 @@ public protocol ScreensClient: Sendable {
     /// no signature: it can only quiet the box).
     @discardableResult
     func setAccessAlerts(enabled: Bool) async throws -> AccessAlertsSetting
+    /// `GET /api/update-reports`: whether this server sends Flagship one
+    /// anonymous note per update (owner sessions only; docs/runbooks/canary.md).
+    func updateReportsSetting() async throws -> UpdateReportsSetting
+    /// `POST /api/update-reports {share}`.
+    @discardableResult
+    func setUpdateReports(share: Bool) async throws -> UpdateReportsSetting
 
     // App API keys (docs/app-apis.md §3).
     /// `GET /api/screens/services/<id>/api-keys`. A box without API keys
@@ -556,6 +567,12 @@ public extension ScreensClient {
     func browserGrantAnswer(_ answer: BrowserGrantAnswerRequest) async throws {
         throw ScreensClientError.notImplemented("browser access")
     }
+    func browserGrants(serviceId: String) async throws -> OwnerBrowserGrantsResponse {
+        OwnerBrowserGrantsResponse(grants: [])
+    }
+    func browserGrantRevoke(_ revoke: BrowserGrantRevokeRequest) async throws {
+        throw ScreensClientError.notImplemented("browser access")
+    }
     func appSync(serviceId: String, _ req: AppSyncRequest) async throws -> AppSyncResponse {
         throw ScreensClientError.notImplemented("upstream sync")
     }
@@ -567,6 +584,12 @@ public extension ScreensClient {
     }
     func setAccessAlerts(enabled: Bool) async throws -> AccessAlertsSetting {
         throw ScreensClientError.notImplemented("access alerts setting")
+    }
+    func updateReportsSetting() async throws -> UpdateReportsSetting {
+        throw ScreensClientError.notImplemented("update reports setting")
+    }
+    func setUpdateReports(share: Bool) async throws -> UpdateReportsSetting {
+        throw ScreensClientError.notImplemented("update reports setting")
     }
     func serviceApiKeys(serviceId: String) async throws -> AppApiKeysResponse {
         throw ScreensClientError.notImplemented("app API keys")

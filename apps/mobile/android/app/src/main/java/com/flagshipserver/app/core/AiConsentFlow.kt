@@ -67,7 +67,7 @@ object AiConsent {
         "google" -> "Google"
         "openrouter" -> "OpenRouter"
         "ollama" -> "Ollama"
-        "flagship" -> "Flagship Inference"
+        "flagship" -> FSStrings.get(R.string.flagship_inference)
         else -> provider
     }
 

@@ -3,7 +3,9 @@
  * name and approves its addresses; CDP cannot make the browser connect to exactly those addresses, so a
  * name that answers differently a moment later (DNS rebinding) would slip through. This proxy closes it:
  * the browser never resolves anything, it asks the proxy for `host:port`, and the proxy connects ONLY to the
- * addresses the judge approved for that host a moment ago. A host nobody approved gets 403, and so does a
+ * addresses the judge approved for that host a moment ago. An approval is for one scheme, host and port
+ * (`https://shop.example.com:443`): a CONNECT tunnel counts as https, a plain proxied request as http, and
+ * the same host on another port is not approved. A host nobody approved gets 403, and so does a
  * connection to loopback, link-local, metadata or any other address the caller marks never reachable.
  *
  * Each app's browser context gets its own proxy (`egress.ts`), so one app's approvals never open a host to
@@ -27,6 +29,29 @@ export interface PinningProxyOptions {
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
+/** What an approval opens: one scheme and port of a host. */
+export interface ApprovedTarget {
+  scheme: "http" | "https";
+  port: number;
+}
+
+/** `https://shop.example.com:443`: lowercase, no brackets, no trailing dot, the port always written out. */
+export function approvalKey(scheme: "http" | "https", host: string, port: number): string {
+  return `${scheme}://${host.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "")}:${port}`;
+}
+
+/** The target an approved URL opens (default ports explicit); null for anything but http and https. */
+export function approvedTargetOf(url: string): ApprovedTarget | null {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    const scheme = u.protocol === "https:" ? "https" : "http";
+    return { scheme, port: u.port ? Number(u.port) : scheme === "https" ? 443 : 80 };
+  } catch {
+    return null;
+  }
+}
+
 export class PinningProxy {
   private readonly approved = new Map<string, { addresses: string[]; until: number }>();
   private server: Server | null = null;
@@ -38,10 +63,10 @@ export class PinningProxy {
     this.ttl = o.ttlMs ?? 60_000;
   }
 
-  /** The judge allowed `host` with these addresses. */
-  allow(host: string, addresses: string[]): void {
+  /** The judge allowed `host` with these addresses, for one scheme and port (default https on 443). */
+  allow(host: string, addresses: string[], at: ApprovedTarget = { scheme: "https", port: 443 }): void {
     if (this.approved.size > 4096) this.approved.delete(this.approved.keys().next().value!);
-    this.approved.set(host.toLowerCase(), { addresses: [...addresses], until: this.now() + this.ttl });
+    this.approved.set(approvalKey(at.scheme, host, at.port), { addresses: [...addresses], until: this.now() + this.ttl });
   }
 
   /** Forget every approval (the app's grants ended). */
@@ -58,9 +83,8 @@ export class PinningProxy {
     return this.o.dial ? this.o.dial(address, port) : { host: address, port };
   }
 
-  private pinned(host: string): string[] | null {
-    const h = host.toLowerCase().replace(/^\[|\]$/g, "");
-    const e = this.approved.get(h);
+  private pinned(scheme: "http" | "https", host: string, port: number): string[] | null {
+    const e = this.approved.get(approvalKey(scheme, host, port));
     if (!e || e.until < this.now()) return null;
     return e.addresses.filter((a) => !this.o.forbidden(a));
   }
@@ -89,8 +113,9 @@ export class PinningProxy {
     if (!m || !this.accepts(req.socket.remoteAddress)) return refuse();
     const host = m[1]!;
     const port = Number(m[2]);
-    const addrs = this.pinned(host) ?? [];
-    if (!addrs.length || port < 1 || port > 65535) return refuse();
+    if (port < 1 || port > 65535) return refuse();
+    const addrs = this.pinned("https", host, port) ?? [];
+    if (!addrs.length) return refuse();
     const upstream: Socket = netConnect(this.target(addrs[0]!, port));
     upstream.once("connect", () => {
       client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
@@ -116,12 +141,12 @@ export class PinningProxy {
       res.writeHead(400).end();
       return;
     }
-    const addrs = this.accepts(req.socket.remoteAddress) ? this.pinned(u.hostname) : null;
-    if (u.protocol !== "http:" || !addrs?.length) {
+    const port = u.port ? Number(u.port) : 80;
+    const addrs = this.accepts(req.socket.remoteAddress) && u.protocol === "http:" ? this.pinned("http", u.hostname, port) : null;
+    if (!addrs?.length) {
       res.writeHead(403).end();
       return;
     }
-    const port = u.port ? Number(u.port) : 80;
     const headers = { ...req.headers };
     delete headers["proxy-connection"];
     const to = this.target(addrs[0]!, port);

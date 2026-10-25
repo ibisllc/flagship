@@ -21,8 +21,10 @@ public enum ServerShare {
     public static let tagPush = "flagship/server-share-push/v1"
     public static let tagUpdate = "flagship/server-share-update/v1"
     public static let tagAcceptAdmin = "flagship/server-share-accept-admin/v1"
+    public static let tagShareKeyAttestationRequest = "flagship/share-key-attestation-request/v1"
 
     static let infoMember = "flagship/server-share-member/v1"
+    static let infoAdmin = "flagship/server-share-admin/v1"
     static let infoToken = "flagship/server-share/token/v1"
     static let infoLinkKey = "flagship/server-share/link-key/v1"
     static let infoInbox = "flagship/share-inbox/v1"
@@ -48,6 +50,15 @@ public enum ServerShare {
         try checkSeed(umkSeed)
         try checkShareId(shareId)
         return try Curve25519.Signing.PrivateKey(rawRepresentation: hk(umkSeed, "\(infoMember)|\(shareId)"))
+    }
+
+    /// B's per-share admin key (#12, §5.1): `.com` attests it for an admin device
+    /// of B's account. It is no key `.com` serves by name and differs per share,
+    /// so no owner can match B by name or link B across servers (AT-LNK-10).
+    public static func deriveShareAdminKey(umkSeed: Data, shareId: String) throws -> Curve25519.Signing.PrivateKey {
+        try checkSeed(umkSeed)
+        try checkShareId(shareId)
+        return try Curve25519.Signing.PrivateKey(rawRepresentation: hk(umkSeed, "\(infoAdmin)|\(shareId)"))
     }
 
     /// Signs B's "Shared with me" inbox requests; its public key is the inbox id.
@@ -471,16 +482,38 @@ public struct ServerShareAccept: ServerShareEnvelope {
     }
 }
 
-/// Which of an account's keys is its sensitive key: the admin root, or the IRK
-/// when the account pins no admin root (`authorizeSensitiveOrder`'s rule).
+/// The kind of key `.com` attests: only a per-share admin key, never a stable
+/// account key a sharer could match by name (AT-LNK-10).
 public enum AccountKeyKind: String, Codable, Sendable, CaseIterable {
-    case adminRoot = "admin-root"
-    case irk
+    case share
 }
 
-/// #12 — signed by the joining account's sensitive key: only an admin device of
-/// that account accepts a share (docs/share-a-server.md §5.1). The fields of #3
-/// plus which key signs, so the shared server can match it to the attestation.
+/// What an admin device signs with the account's sensitive key (its admin
+/// root) to have `.com` attest its per-share admin key
+/// (`flagship/share-key-attestation-request/v1`). `.com` learns the key, never the share.
+public struct ShareKeyAttestationRequest: ServerShareEnvelope {
+    public var username: String
+    public var keyPubHex: String
+    public var issuedAt: Int64
+
+    public init(username: String, keyPubHex: String, issuedAt: Int64) {
+        self.username = username
+        self.keyPubHex = keyPubHex
+        self.issuedAt = issuedAt
+    }
+
+    public func canonicalBytes() throws -> Data {
+        try ServerShare.nonEmpty("username", username)
+        try ServerShare.checkHex64("keyPubHex", keyPubHex)
+        try ServerShare.time("issuedAt", issuedAt)
+        return ServerShare.join(ServerShare.tagShareKeyAttestationRequest, [username, keyPubHex, String(issuedAt)])
+    }
+}
+
+/// #12 — signed by the joining account's per-share admin key, which `.com`
+/// attests only for an admin device of that account: only an admin device
+/// accepts a share (docs/share-a-server.md §5.1). The fields of #3 plus which
+/// key signs, so the shared server can match it to the attestation.
 public struct ServerShareAcceptAdmin: ServerShareEnvelope {
     public var serverDomain: String
     public var shareId: String
@@ -522,8 +555,8 @@ public struct ServerShareAcceptAdmin: ServerShareEnvelope {
     }
 }
 
-/// `.com`'s CA-signed word that a key is some account's current sensitive key
-/// (`flagship/account-key-attestation/v1`). It names no account. The apps check
+/// `.com`'s CA-signed word that an admin of some account vouched for a per-share
+/// key (`flagship/account-key-attestation/v1`). It names no account. The apps check
 /// its shape only and carry it unchanged; the shared server checks the CA chain.
 public struct AccountKeyAttestation: Codable, Equatable, Sendable {
     public var keyKind: AccountKeyKind

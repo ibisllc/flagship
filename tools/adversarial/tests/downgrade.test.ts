@@ -17,9 +17,9 @@
  *   AT-DWN-11  suite negotiation stripped of the hybrid offer          -> refused (upgrade-required)
  *   AT-DWN-12  back to strict after enforcement without re-entry       -> refused (reentry-incomplete)
  *   AT-DWN-13  `.com` serves a truncated chain / classical opt-out     -> box keeps strict
- *   AT-DWN-14  damaged box policy file + `.com` serves an empty chain  -> FINDING: box adopts legacy (classical)
- *   AT-DWN-15  device that enabled strict is later revoked             -> FINDING: box can never adopt a newer owner change
- *   AT-DWN-16  stale export authorization (older policy generation)    -> FINDING (latent): accepted
+ *   AT-DWN-14  damaged box policy file + `.com` serves an empty chain  -> box stays strict (second copy / non-empty chain)
+ *   AT-DWN-15  device that enabled strict is later revoked             -> replay continues from the held head; admin root adopted
+ *   AT-DWN-16  stale export authorization (older policy generation)    -> refused
  *   AT-DWN-17  release endorsements once the PQ pin is filled          -> only companion-backed ones eligible; lineage not offered
  *   AT-DWN-18  CA lease edited after the cut-over loses legacy status  -> refused (pq-missing)
  *   AT-DWN-19  box artifact not on the legacy list, PQ halves stripped -> refused (pq-signature-required)
@@ -283,14 +283,9 @@ describe("V01 assurance policy chain (AT-DWN-06..16)", () => {
     expect(await w.sync.refresh()).toMatchObject({ profile: "strict", generation: 1 });
   });
 
-  // FINDING AT-DWN-14: AssurancePolicySync.refresh (packages/server-daemon/src/assurancePolicySync.ts:134) adopts the
-  // replayed chain WITHOUT the anti-rollback check while `failClosed` is set (state file unreadable). `.com` is
-  // untrusted by design ("the box trusts none of .com's state"), yet answering that box with `{chain: []}` moves it
-  // from fail-closed strict to legacy/compatibility, re-enabling classical-only critical signatures. The comment "reads
-  // as strict until a verified chain arrives" treats an EMPTY chain as verified. Needs a second, independent high-water
-  // mark (e.g. on /boot or in keyd) or a rule that a fail-closed box only leaves strict on a non-empty chain whose
-  // head is newer than any digest it has seen. Severity: medium (needs local state damage + hostile/compromised .com).
-  it.fails("AT-DWN-14 boundary: a box whose policy file is damaged must not fall to compatibility because `.com` serves an empty chain (FINDING: it does)", async () => {
+  // AT-DWN-14 (fixed): a damaged state file falls back to its second copy (`<path>.floor`); with both gone the box
+  // stays strict and leaves it only for a chain that verifies at least one change, never for an empty one.
+  it("AT-DWN-14 boundary: a box whose policy file is damaged must not fall to compatibility because `.com` serves an empty chain", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "at-dwn-")), "assurance-policy.json");
     writeFileSync(path, "{damaged");
     const w = await boxWorld(() => [], { statePath: path });
@@ -298,13 +293,9 @@ describe("V01 assurance policy chain (AT-DWN-06..16)", () => {
     expect(await w.sync.refresh()).toMatchObject({ profile: "strict" });
   });
 
-  // FINDING AT-DWN-15: AssurancePolicySync.replayWithLoss (assurancePolicySync.ts:145-162) re-verifies EVERY historic
-  // change with the CURRENT device book (`isAdminDevice`). Once the admin device that signed generation 1 (turning strict
-  // on) is revoked, every replay stops at generation 1, yields legacy, and adoptStoredState refuses it as older. The box
-  // keeps generation 1 forever and never adopts any later owner change (opt-out, re-entry, browser answer), even one the
-  // admin root signs. Fail-safe for confidentiality, but the owner loses control of the box's policy after a routine
-  // "remove lost phone". Combined with AT-DWN-14 the same revocation turns a damaged-file box into compatibility.
-  it.fails("AT-DWN-15 boundary: revoking the device that turned strict on must not freeze the box's policy (FINDING: later admin-root changes are never adopted)", async () => {
+  // AT-DWN-15 (fixed): the replay continues from the head the box already holds (verified when adopted), so only the
+  // changes after it are checked against today's device book; the admin root, or a live admin device, continues it.
+  it("AT-DWN-15 boundary: revoking the device that turned strict on must not freeze the box's policy", async () => {
     const one = change();
     const two = change({ prior: "strict", next: "compatibility", generation: 2, prevDigest: assurancePolicyDigest(one), acknowledgedLoss: ["classical-signatures-accepted"], signerKind: "admin-root", signerKeyId: admin.pub, issuedAt: T + 10 });
     let chain: unknown[] = [entry(one)];
@@ -315,14 +306,14 @@ describe("V01 assurance policy chain (AT-DWN-06..16)", () => {
     expect(await w.sync.refresh()).toMatchObject({ profile: "compatibility", generation: 2 });
   });
 
-  // FINDING AT-DWN-16 (latent, no production caller yet): classicalExchangeAllowed
-  // (packages/protocol/src/assurancePolicy.ts:288-291) ignores ExportAuthorization.generation and the scope, so an export
-  // authorization granted under an earlier policy generation (before the owner re-entered strict) still authorizes a
-  // classical exchange. Bind the authorization to the current generation and scope before wiring it in.
-  it.fails("AT-DWN-16 boundary: an export authorization from an older policy generation is refused (FINDING: generation ignored)", () => {
+  // AT-DWN-16 (fixed): an export authorization names the strict scope and the policy generation in force.
+  it("AT-DWN-16 boundary: an export authorization from an older policy generation, or for another scope, is refused", () => {
     const digest = "ab".repeat(32);
     const now5 = { ...enforced, generation: 5 };
-    expect(classicalExchangeAllowed(now5, legacy, digest, { subjectDigest: digest, generation: 1 })).toBe(false);
+    expect(classicalExchangeAllowed(now5, legacy, digest, { subjectDigest: digest, scope: now5.scope, generation: 1 })).toBe(false);
+    expect(classicalExchangeAllowed(now5, legacy, digest, { subjectDigest: digest, scope: { kind: "service" as const, id: S }, generation: 5 })).toBe(false);
+    expect(classicalExchangeAllowed(now5, legacy, digest, { subjectDigest: digest, generation: 1 } as never)).toBe(false);
+    expect(classicalExchangeAllowed(now5, legacy, digest, { subjectDigest: digest, scope: now5.scope, generation: 5 })).toBe(true);
   });
 });
 

@@ -10,6 +10,7 @@
 import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
+  deriveShareAdminKey,
   deriveShareMemberKey,
   randomShareId,
   sealShareJson,
@@ -21,6 +22,7 @@ import {
   signKnockAuthorization,
   signServerShareAccept,
   signServerShareAcceptAdmin,
+  signShareKeyAttestationRequest,
   signServerShareGrant,
   signServerShareLeave,
   signServerShareOffer,
@@ -68,17 +70,23 @@ function grantFor(b: Box, sh: Share, level: ShareLevel): ServerShareGrant {
 }
 
 /**
- * B's admin proof for an acceptance (docs/share-a-server.md §5.1): `.com`'s
- * attestation of B's admin root, fetched about B's own account, and #12
- * signed with `signer` (B's admin root unless a test forges it).
+ * B's admin proof for an acceptance (docs/share-a-server.md §5.1): B derives
+ * its per-share admin key, `.com` attests it on a request B's admin root signs
+ * (no stable account key reaches the box: AT-LNK-10), and #12 is signed with
+ * `signer` (the share admin key unless a test forges it).
  */
-async function adminProof(B: Account, accept: ServerShareAccept, signer: Keypair = B.keys.adminRoot): Promise<ShareAcceptAdminProof> {
-  const r = await http(`https://${CONTROL}/api/users/${B.username}/account-key-attestation`);
+async function adminProof(B: Account, accept: ServerShareAccept, signer?: Keypair): Promise<ShareAcceptAdminProof> {
+  const key = deriveShareAdminKey({ seed: B.keys.umk }, accept.shareId);
+  const request = { username: B.username, keyPubHex: bytesToHex(key.publicKey), issuedAt: Date.now() };
+  const r = await postJson(`https://${CONTROL}/api/users/${B.username}/share-key-attestation`, {
+    request,
+    signature: bytesToHex(signShareKeyAttestationRequest(request, B.keys.adminRoot)),
+  });
   assert(r.status === 200 && r.json?.attestation, `attestation ${r.status}: ${short(r.text)}`);
   const attestation = r.json.attestation;
-  assert(attestation.keyKind === "admin-root" && attestation.keyPubHex === bytesToHex(B.keys.adminRoot.publicKey), `attestation names ${short(attestation)}`);
-  const admit = { ...accept, keyKind: "admin-root" as const, keyPubHex: attestation.keyPubHex as string };
-  return { admit, signature: bytesToHex(signServerShareAcceptAdmin(admit, signer)), attestation };
+  assert(attestation.keyKind === "share" && attestation.keyPubHex === request.keyPubHex, `attestation names ${short(attestation)}`);
+  const admit = { ...accept, keyKind: "share" as const, keyPubHex: request.keyPubHex };
+  return { admit, signature: bytesToHex(signServerShareAcceptAdmin(admit, signer ?? key)), attestation };
 }
 
 type Proof = "admin" | "none" | ((accept: ServerShareAccept) => Promise<ShareAcceptAdminProof>);
@@ -176,13 +184,18 @@ async function manageOnHome2(A: Account, B: Account, rec: Rec, b: Box): Promise<
     assert(!(list.json?.shares ?? []).some((s: { shareId: string }) => s.shareId === sh.shareId), "a refused share went live");
     return "forged 403, replayed 403, nothing live";
   });
-  await rec.check("B is a demo account: .com's demo signer signs #12 under B's admin root (no device holds it)", async () => {
-    const accept: ServerShareAccept = { serverDomain: b.fqdn, shareId: sh.shareId, memberPubHex: sh.memberPubHex, acceptedAt: Date.now() };
-    const admit = { ...accept, keyKind: "admin-root" as const, keyPubHex: bytesToHex(B.keys.adminRoot.publicKey) };
-    const r = await postJson(`https://${CONTROL}/api/dev/sample-user/${B.username}/share-accept`, { admit });
-    assert(r.status === 200 && typeof r.json?.signature === "string", `${r.status}: ${short(r.text)}`);
-    assert(r.json.signature === bytesToHex(signServerShareAcceptAdmin(admit, B.keys.adminRoot)), "the demo signer's signature isn't B's admin root's");
-    return "signed under B's root";
+  await rec.check("B is a demo account: .com's demo signer has its per-share admin key attested (no device holds the admin root), and B's IRK is refused", async () => {
+    const keyPubHex = bytesToHex(deriveShareAdminKey({ seed: B.keys.umk }, sh.shareId).publicKey);
+    const r = await postJson(`https://${CONTROL}/api/dev/sample-user/${B.username}/share-key-attestation`, { keyPubHex });
+    assert(r.status === 200 && r.json?.attestation?.keyKind === "share" && r.json.attestation.keyPubHex === keyPubHex, `${r.status}: ${short(r.text)}`);
+    assert(!r.text.includes(bytesToHex(B.keys.adminRoot.publicKey)) && !r.text.includes(B.username), "the attestation names B");
+    const request = { username: B.username, keyPubHex, issuedAt: Date.now() };
+    const irk = await postJson(`https://${CONTROL}/api/users/${B.username}/share-key-attestation`, {
+      request,
+      signature: bytesToHex(signShareKeyAttestationRequest(request, B.keys.irk)),
+    });
+    assert(irk.status === 403 && irk.json?.code === "accept-not-admin", `irk ${irk.status}: ${short(irk.text)}`);
+    return "share key attested; IRK refused";
   });
   const shared = await rec.check("A shares home2 with B (admin-root grant + B's acceptance + B's admin proof)", async () => {
     const r = await postGrant(b, ownerSession, sh, "manage", A.keys.adminRoot, true, B);

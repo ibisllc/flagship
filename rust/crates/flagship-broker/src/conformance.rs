@@ -90,6 +90,8 @@ pub fn check(line: &Value, release: &ReleaseTrust) -> Value {
     let arch = line.get("arch").and_then(Value::as_str).unwrap_or("amd64");
     let given = line.get("trust").and_then(trust_from_json);
     let trust = given.as_ref().unwrap_or(release);
+    let claims = gpu_claims_from_json(line.get("gpu"));
+    let gpu = move |id: &str| claims.get(id).cloned();
     verdict(
         op,
         args,
@@ -98,6 +100,24 @@ pub fn check(line: &Value, release: &ReleaseTrust) -> Value {
             mounts: &mounts,
             trust,
             arch,
+            gpu: &gpu,
         },
     )
+}
+
+/// A corpus case's `gpu`: allocation id → the claim gpud would publish.
+pub fn gpu_claims_from_json(
+    v: Option<&Value>,
+) -> std::collections::BTreeMap<String, crate::policy::GpuRunClaim> {
+    v.and_then(Value::as_object)
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, c)| {
+                    serde_json::from_value(c.clone())
+                        .ok()
+                        .map(|c| (k.clone(), c))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }

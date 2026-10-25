@@ -1249,7 +1249,7 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-share-member-accept",
-    "Share a server (co-manager): opening a share link shows the offer; Accept asks for this device's passphrase once, signs flagship/server-share-accept-admin/v1 with the account's admin root and seals it with .com's attestation of that key into the acceptance; then the six-digit code and waiting for the owner to confirm.",
+    "Share a server (co-manager): opening a share link shows the offer; Accept asks for this device's passphrase once, has the account's admin root ask .com to attest a per-share admin key, signs flagship/server-share-accept-admin/v1 with that key and seals it with the attestation into the acceptance; then the six-digit code and waiting for the owner to confirm.",
     "gym share member accepts a link and reads the code",
     {
       steps: [

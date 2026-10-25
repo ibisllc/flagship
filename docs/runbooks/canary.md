@@ -165,8 +165,8 @@ npx tsx tools/release-catalog/catalog.ts rollout … --commit <commit> --percent
 
 ## 8. Open items
 
-- A "Share update results" switch on iOS, Android and the webapp, calling `/api/update-reports`
-  through the translation system. Until it exists, consenting owners cannot opt in.
-- Client text for `rollbackRefused` (the stuck case). All three clients currently say "went back
-  on its own" for it (support doc §3).
+- Done in 0.3: the "Share update results" switch on iOS, Android and the webapp (server page,
+  Software update card, owner sessions; `/api/update-reports`), and the client sentence for
+  `rollbackRefused` (support doc §2-§3). Still open: the box's Activity line for that case says
+  "rolled back" in English.
 - The stop rule depends on the box treating an old catalog view as stale by the clock (AT-CAT-07).

@@ -162,8 +162,24 @@ describe("negotiation", () => {
     const compat = legacyPolicyState({ kind: "installation", id: "other" });
     expect(classicalExchangeAllowed(compat, compat, D("c"))).toBe(true);
     expect(classicalExchangeAllowed(strict, compat, D("c"))).toBe(false);
-    expect(classicalExchangeAllowed(compat, strict, D("c"), { subjectDigest: D("d"), generation: 1 })).toBe(false);
-    expect(classicalExchangeAllowed(compat, strict, D("c"), { subjectDigest: D("c"), generation: 1 })).toBe(true);
+    const auth = { subjectDigest: D("c"), scope: strict.scope, generation: strict.generation };
+    expect(classicalExchangeAllowed(compat, strict, D("c"), { ...auth, subjectDigest: D("d") })).toBe(false);
+    expect(classicalExchangeAllowed(compat, strict, D("c"), auth)).toBe(true);
+  });
+
+  it("an export authorization binds the strict scope and the policy generation in force", () => {
+    const strict = enforced();
+    const compat = legacyPolicyState({ kind: "installation", id: "other" });
+    const auth = { subjectDigest: D("c"), scope: strict.scope, generation: strict.generation };
+    expect(classicalExchangeAllowed(compat, { ...strict, generation: strict.generation + 1 }, D("c"), auth)).toBe(false);
+    expect(classicalExchangeAllowed(compat, strict, D("c"), { ...auth, generation: strict.generation - 1 })).toBe(false);
+    expect(classicalExchangeAllowed(compat, strict, D("c"), { ...auth, scope: { kind: "service", id: strict.scope.id } })).toBe(false);
+    expect(classicalExchangeAllowed(compat, strict, D("c"), { ...auth, scope: { kind: "installation", id: "other" } })).toBe(false);
+    expect(classicalExchangeAllowed(compat, strict, D("c"), { subjectDigest: D("c"), generation: strict.generation } as never)).toBe(false);
+    // Both sides strict: each needs its own authorization.
+    const other: PolicyState = { ...strict, scope: { kind: "installation", id: "other" }, generation: 3 };
+    expect(classicalExchangeAllowed(strict, other, D("c"), auth)).toBe(false);
+    expect(classicalExchangeAllowed(strict, other, D("c"), [auth, { subjectDigest: D("c"), scope: other.scope, generation: 3 }])).toBe(true);
   });
 });
 

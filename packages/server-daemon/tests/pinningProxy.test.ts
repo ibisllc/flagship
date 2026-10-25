@@ -56,10 +56,14 @@ function getThrough(url: string): Promise<{ status: number; body: string }> {
 
 describe("pinning proxy", () => {
   it("connects a host only to the addresses approved for it, whatever DNS would say now", async () => {
-    proxy.allow("shop.test", ["127.0.0.1"]);
+    proxy.allow("shop.test", ["127.0.0.1"], { scheme: "http", port: originPort });
     const r = await getThrough(`http://shop.test:${originPort}/x`);
     expect(r).toEqual({ status: 200, body: "hello" });
     expect(seen).toContain(`shop.test:${originPort}/x`);
+    // The approval is for that scheme and port: not the same host as https, nor on another port, nor spelt with a trailing dot elsewhere.
+    expect(await connectThrough("shop.test", originPort)).toMatch(/403/);
+    expect((await getThrough(`http://shop.test:${originPort + 1}/x`)).status).toBe(403);
+    expect((await getThrough(`http://SHOP.test.:${originPort}/x`)).status).toBe(200);
   });
 
   it("refuses a host nobody approved, and an approval that has lapsed", async () => {
@@ -68,7 +72,7 @@ describe("pinning proxy", () => {
     let t = 0;
     const p2 = new PinningProxy({ forbidden: () => false, now: () => t, ttlMs: 1000 });
     const port2 = await p2.listen();
-    p2.allow("late.test", ["127.0.0.1"]);
+    p2.allow("late.test", ["127.0.0.1"], { scheme: "http", port: originPort });
     t = 5000;
     const status = await new Promise<number>((res) => {
       const r = request({ host: "127.0.0.1", port: port2, path: `http://late.test:${originPort}/`, headers: { host: "late.test" } }, (x) => res(x.statusCode ?? 0));
@@ -79,13 +83,16 @@ describe("pinning proxy", () => {
   });
 
   it("never connects to an address on its refusal list, even if approved", async () => {
-    proxy.allow("meta.test", ["169.254.169.254"]);
+    proxy.allow("meta.test", ["169.254.169.254"], { scheme: "https", port: 80 });
+    proxy.allow("meta.test", ["169.254.169.254"], { scheme: "http", port: 80 });
     expect(await connectThrough("meta.test", 80)).toMatch(/403/);
     expect((await getThrough("http://meta.test/")).status).toBe(403);
   });
 
   it("tunnels a CONNECT to the approved address", async () => {
-    proxy.allow("secure.test", ["127.0.0.1"]);
+    proxy.allow("secure.test", ["127.0.0.1"], { scheme: "https", port: originPort });
     expect(await connectThrough("secure.test", originPort)).toMatch(/200 Connection Established/);
+    expect(await connectThrough("secure.test", 22)).toMatch(/403/);
+    expect((await getThrough(`http://secure.test:${originPort}/x`)).status).toBe(403);
   });
 });

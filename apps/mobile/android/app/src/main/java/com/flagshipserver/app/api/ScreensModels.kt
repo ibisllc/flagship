@@ -408,6 +408,7 @@ data class ScreensEvent(val type: String, val serviceId: String? = null) {
     companion object {
         const val ACCESS_REQUEST = "access-request"
         const val CHAT_REQUEST = "chat-request"
+        const val BROWSER_GRANT_REQUEST = "browser-grant-request"
     }
 }
 
@@ -613,7 +614,10 @@ data class AppSandbox(
 }
 
 /** The box's record of the last update order: applied, rolled back after the
- *  new code failed its boot health gate, or refused with a reason. */
+ *  new code failed its boot health gate, or refused with a reason.
+ *  [rollbackRefused]: the release failed but the one before it is below the
+ *  signed security floor, so the server did NOT go back; it stays on the new
+ *  release in recovery mode (docs/support/update-rollback.md). */
 @Serializable
 data class LastUpdate(
     val outcome: String,
@@ -622,38 +626,56 @@ data class LastUpdate(
     val previousCommit: String? = null,
     val bootAttempts: Int? = null,
     val reason: String? = null,
+    val rollbackRefused: Boolean? = null,
 ) {
-    /** One sentence for the update card, or null for an outcome this build
-     *  doesn't know. Matches the webapp's describeLastUpdate. */
+    /** The release failed and the server stayed on it in recovery mode. */
+    val keptInRecovery: Boolean get() = outcome == "rolled-back" && rollbackRefused == true
+
+    /** Anything but a clean install or a rollback that went back by itself. */
+    val needsAttention: Boolean get() = outcome == "refused" || keptInRecovery
+
+    /** One whole sentence for the update card, or null for an outcome this
+     *  build doesn't know. Matches the webapp's describeLastUpdate; each case
+     *  is its own string so every language gets a whole translation. */
     val summary: String?
         get() {
             fun short(sha: String?): String? =
                 sha?.takeIf { it.length == 40 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }?.take(8)
+            val target = short(targetCommit)
+            val previous = short(previousCommit)
             return when (outcome) {
-                "applied" -> short(targetCommit)?.let { FSStrings.get(R.string.last_update_installed_and_running, it) }
+                "applied" -> target?.let { FSStrings.get(R.string.last_update_installed_and_running, it) }
                     ?: FSStrings.get(R.string.last_update_installed_and_running_2)
-                "rolled-back" -> {
-                    val to = short(targetCommit)?.let { " to $it" } ?: ""
-                    val back = short(previousCommit)?.let { " to $it" } ?: ""
-                    FSStrings.get(R.string.the_last_update_didnt_start_cleanly, to, back)
+                "rolled-back" -> when {
+                    rollbackRefused == true && target != null -> FSStrings.get(R.string.last_update_kept_in_recovery, target)
+                    rollbackRefused == true -> FSStrings.get(R.string.last_update_kept_in_recovery_2)
+                    target != null && previous != null -> FSStrings.get(R.string.last_update_rolled_back_to, target, previous)
+                    target != null -> FSStrings.get(R.string.last_update_rolled_back_target, target)
+                    previous != null -> FSStrings.get(R.string.last_update_rolled_back_previous, previous)
+                    else -> FSStrings.get(R.string.last_update_rolled_back)
                 }
-                "refused" -> REFUSAL_COPY[reason]?.let { FSStrings.get(R.string.the_server_refused_the_last_update, it) }
-                    ?: FSStrings.get(R.string.the_server_refused_the_last_update_2)
+                "refused" -> when (reason) {
+                    "unendorsed" -> FSStrings.get(R.string.last_update_refused_unendorsed)
+                    "from-commit-mismatch" -> FSStrings.get(R.string.last_update_refused_from_commit_mismatch)
+                    "apply-failed" -> FSStrings.get(R.string.last_update_refused_apply_failed)
+                    "rejected" -> FSStrings.get(R.string.last_update_refused_rejected)
+                    "stale" -> FSStrings.get(R.string.last_update_refused_stale)
+                    "wrong-domain" -> FSStrings.get(R.string.last_update_refused_wrong_domain)
+                    else -> FSStrings.get(R.string.the_server_refused_the_last_update_2)
+                }
                 else -> null
             }
         }
-
-    private companion object {
-        val REFUSAL_COPY get() = mapOf(
-            "unendorsed" to FSStrings.get(R.string.flagships_maintainers_havent_endorsed_that),
-            "from-commit-mismatch" to "the server was no longer on the version the update was made for. Send it again.",
-            "apply-failed" to "it couldn't download or build the new version. Nothing changed.",
-            "rejected" to "the request wasn't signed by this account's admin key.",
-            "stale" to "the request was too old. Send it again.",
-            "wrong-domain" to "the request was for a different server.",
-        )
-    }
 }
+
+/** GET/POST /api/update-reports: the owner's choice to send Flagship one
+ *  anonymous note per update (docs/runbooks/canary.md). Owner sessions only. */
+@Serializable
+data class UpdateReportsSetting(
+    val share: Boolean,
+    /** "owner" once the owner chose; "default" before (off on real boxes). */
+    val source: String? = null,
+)
 
 /** One maintainer-endorsed release, placed relative to the box's running commit. */
 @Serializable

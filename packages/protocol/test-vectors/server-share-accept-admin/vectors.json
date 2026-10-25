@@ -1,9 +1,12 @@
 {
-  "about": "Envelope #12 of docs/share-a-server.md: only an admin device of the joining account accepts a share. Every platform must build each envelope's canonical string from `fields` and reproduce the Ed25519 signature with the named signer (adminRoot = Ed25519 seed adminRootSeedHex, irk = the protocol IRK of memberUmkSeedHex, member = deriveShareMemberKey(memberUmk, shareId)); refuse every `refuse` case; fail to verify every `reject` case against the named public key; and parse `payload` (the sealed acceptance's plaintext) keeping its `admin` proof. `attestation` is `.com`'s CA-signed AccountKeyAttestation (CA = Ed25519 seed caSeedHex); only TS and the box check it, the apps carry it unchanged.",
+  "about": "Envelope #12 of docs/share-a-server.md: only an admin device of the joining account accepts a share. #12 is signed by the per-share admin key shareAdmin = deriveShareAdminKey(memberUmk, shareId) (HKDF-SHA256, empty salt, info \"flagship/server-share-admin/v1|<shareId>\"), never by a stable account key (AT-LNK-10); `.com` attests that key when the account's sensitive key signs a `requests` envelope (flagship/share-key-attestation-request/v1|username|keyPubHex|issuedAt). Every platform must derive shareAdminPubHex (and otherShareAdminPubHex for otherShareId: a different key per share), build each envelope's and request's canonical string from `fields` and reproduce the Ed25519 signature with the named signer (adminRoot = Ed25519 seed adminRootSeedHex, irk = the protocol IRK of memberUmkSeedHex, member = deriveShareMemberKey(memberUmk, shareId)); refuse every `refuse` and `requestRefuse` case; fail to verify every `reject` case against the named public key; and parse `payload` (the sealed acceptance's plaintext) keeping its `admin` proof. `attestation` is `.com`'s CA-signed AccountKeyAttestation of the share key (CA = Ed25519 seed caSeedHex); only TS and the box check it, the apps carry it unchanged.",
   "keys": {
     "memberUmkSeedHex": "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
     "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
     "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+    "shareAdminPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
+    "otherShareId": "00112233445566778899aabbccddeeff",
+    "otherShareAdminPubHex": "47c9b6af4f5c8bfccf3d8be2d8fd62bfeb7f03195d5504366b6c064626738455",
     "adminRootSeedHex": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
     "adminRootPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60",
     "otherAdminSeedHex": "4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d",
@@ -15,31 +18,17 @@
   "envelopes": [
     {
       "kind": "accept-admin",
-      "signer": "adminRoot",
+      "signer": "shareAdmin",
       "fields": {
         "serverDomain": "home.harry.flagship.services",
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       },
-      "canonical": "flagship/server-share-accept-admin/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|1760000000003|admin-root|5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60",
-      "signature": "2b755f6157149abd1d8756170d583e1e8256812125e898bb3ce6486b3b766a641cbea4537f360045077bf07e1f884aba3d22cc053596e091e86af42d10f6e906"
-    },
-    {
-      "kind": "accept-admin",
-      "signer": "irk",
-      "fields": {
-        "serverDomain": "home.harry.flagship.services",
-        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
-        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
-        "acceptedAt": 1760000000003,
-        "keyKind": "irk",
-        "keyPubHex": "69bf736603d5c8177ee080c7d5ff2a783202becd441c50682fbdcc9d48ebe739"
-      },
-      "canonical": "flagship/server-share-accept-admin/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|1760000000003|irk|69bf736603d5c8177ee080c7d5ff2a783202becd441c50682fbdcc9d48ebe739",
-      "signature": "daf95d1e0aaa5fdf3c3779b0f8156c34da928e53bf04726641d605b920cc213793e563dfb763fe7987004ddcd18c89ecf659b9dbc39326fe0c6ec8d7fd5ed006"
+      "canonical": "flagship/server-share-accept-admin/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|1760000000003|share|0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
+      "signature": "4672583ca9f362d8673709dca3dc48a5b9434d60fd6025949c2bfec031157ce02a3d1aa6dccf9d77952a3bd317001c5d6b1a94817d3f42ae84873a0415a0780c"
     }
   ],
   "refuse": [
@@ -52,7 +41,31 @@
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
         "keyKind": "device",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
+      }
+    },
+    {
+      "kind": "accept-admin",
+      "why": "keyKind names the stable admin root (AT-LNK-10)",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "acceptedAt": 1760000000003,
+        "keyKind": "admin-root",
         "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+      }
+    },
+    {
+      "kind": "accept-admin",
+      "why": "keyKind names the stable IRK (AT-LNK-10)",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "acceptedAt": 1760000000003,
+        "keyKind": "irk",
+        "keyPubHex": "69bf736603d5c8177ee080c7d5ff2a783202becd441c50682fbdcc9d48ebe739"
       }
     },
     {
@@ -63,8 +76,8 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "26f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       }
     },
     {
@@ -75,8 +88,8 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526F742941711B3BC530BA44FF6F6DAB0F0AB71AF832F41A7FE3B9FDAED9C60"
+        "keyKind": "share",
+        "keyPubHex": "0C7026EC8824AACC69FC31454C388BA3D6457899459ED3C996745C048AE53BE4"
       }
     },
     {
@@ -87,8 +100,8 @@
         "shareId": "0F1E2D3C4B5A69788796A5B4C3D2E1F0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       }
     },
     {
@@ -99,8 +112,8 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "ab",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       }
     },
     {
@@ -111,8 +124,8 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       }
     },
     {
@@ -123,8 +136,8 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       }
     },
     {
@@ -135,24 +148,37 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": -1,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       }
     }
   ],
   "reject": [
     {
-      "why": "signed by another account's admin root",
+      "why": "signed by the account's stable admin root instead of the share key",
       "fields": {
         "serverDomain": "home.harry.flagship.services",
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       },
-      "signature": "5ada44cf1e700d05b0bfb54a95ad25f06d334e55b61c44f483d32c06e6ea924a06e24672a90c15196ebf1fc382adef53ce23e48695195df252d96ccdb5b4610b",
-      "pub": "adminRoot"
+      "signature": "8456e8d30411b965a49730a8028b71b3d8275cd87bb421cafde8cf74870d197c18ae913e111e403bb73874bf90a33347f7f8d44c00f07f72a157269345034607",
+      "pub": "shareAdmin"
+    },
+    {
+      "why": "signed with another share's admin key",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "acceptedAt": 1760000000003,
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
+      },
+      "signature": "88b6965266ee41bcd2efcbdcb93c2b814c7f9c62cc211880a7884bbfc258b78d6cfcf76cd90a116e74f244af0ffcb7622067072bad8e9553a46a58bda4e10808",
+      "pub": "shareAdmin"
     },
     {
       "why": "a non-admin device signed with the member key",
@@ -161,11 +187,11 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       },
-      "signature": "39e6d14760fa2e2cd32a4091bea285016aa2848bafbd7f97f85c1f2fa4228781e8f840ce3a1530f334dfd5df269f4f0c4c7c82e91e63d026b96b4d324616d706",
-      "pub": "adminRoot"
+      "signature": "5e883fca9e15a277654a162722450adc8fede9d59d976e059593b8b06d9f10a08ba8ce2cefef580dd4816084f6956f102044c080c3207acf70712c80bde03001",
+      "pub": "shareAdmin"
     },
     {
       "why": "moved to another share after signing",
@@ -174,11 +200,11 @@
         "shareId": "00112233445566778899aabbccddeeff",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       },
-      "signature": "2b755f6157149abd1d8756170d583e1e8256812125e898bb3ce6486b3b766a641cbea4537f360045077bf07e1f884aba3d22cc053596e091e86af42d10f6e906",
-      "pub": "adminRoot"
+      "signature": "4672583ca9f362d8673709dca3dc48a5b9434d60fd6025949c2bfec031157ce02a3d1aa6dccf9d77952a3bd317001c5d6b1a94817d3f42ae84873a0415a0780c",
+      "pub": "shareAdmin"
     },
     {
       "why": "moved to another server after signing",
@@ -187,11 +213,11 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       },
-      "signature": "2b755f6157149abd1d8756170d583e1e8256812125e898bb3ce6486b3b766a641cbea4537f360045077bf07e1f884aba3d22cc053596e091e86af42d10f6e906",
-      "pub": "adminRoot"
+      "signature": "4672583ca9f362d8673709dca3dc48a5b9434d60fd6025949c2bfec031157ce02a3d1aa6dccf9d77952a3bd317001c5d6b1a94817d3f42ae84873a0415a0780c",
+      "pub": "shareAdmin"
     },
     {
       "why": "member key swapped after signing",
@@ -200,11 +226,11 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       },
-      "signature": "2b755f6157149abd1d8756170d583e1e8256812125e898bb3ce6486b3b766a641cbea4537f360045077bf07e1f884aba3d22cc053596e091e86af42d10f6e906",
-      "pub": "adminRoot"
+      "signature": "4672583ca9f362d8673709dca3dc48a5b9434d60fd6025949c2bfec031157ce02a3d1aa6dccf9d77952a3bd317001c5d6b1a94817d3f42ae84873a0415a0780c",
+      "pub": "shareAdmin"
     },
     {
       "why": "acceptedAt moved after signing",
@@ -213,24 +239,11 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000004,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       },
-      "signature": "2b755f6157149abd1d8756170d583e1e8256812125e898bb3ce6486b3b766a641cbea4537f360045077bf07e1f884aba3d22cc053596e091e86af42d10f6e906",
-      "pub": "adminRoot"
-    },
-    {
-      "why": "keyKind relabelled after signing",
-      "fields": {
-        "serverDomain": "home.harry.flagship.services",
-        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
-        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
-        "acceptedAt": 1760000000003,
-        "keyKind": "irk",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
-      },
-      "signature": "2b755f6157149abd1d8756170d583e1e8256812125e898bb3ce6486b3b766a641cbea4537f360045077bf07e1f884aba3d22cc053596e091e86af42d10f6e906",
-      "pub": "adminRoot"
+      "signature": "4672583ca9f362d8673709dca3dc48a5b9434d60fd6025949c2bfec031157ce02a3d1aa6dccf9d77952a3bd317001c5d6b1a94817d3f42ae84873a0415a0780c",
+      "pub": "shareAdmin"
     },
     {
       "why": "a #3 member-key accept signature replayed as #12",
@@ -239,25 +252,97 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       },
       "signature": "50999d34b1de7600b47225f8b811500dbc38079261d4e1d33c22f9e6c4f2089f3d9c5865dfcdbaa463e6367a588f1d83e4b7668782fb8431535cf931c57e4604",
       "pub": "member"
+    }
+  ],
+  "requests": [
+    {
+      "signer": "adminRoot",
+      "fields": {
+        "username": "harry",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
+        "issuedAt": 1760000000002
+      },
+      "canonical": "flagship/share-key-attestation-request/v1|harry|0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4|1760000000002",
+      "signature": "1bfdc597a2a2a4afc4d2e0c7dcb63b3403fcf560ab9adb7303ad31354be6391f7827775b4ef3fb59e5e590842a6d8f9f87117692cf5dda08f18bb53846dba007"
+    },
+    {
+      "signer": "irk",
+      "fields": {
+        "username": "harry",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
+        "issuedAt": 1760000000002
+      },
+      "canonical": "flagship/share-key-attestation-request/v1|harry|0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4|1760000000002",
+      "signature": "4c1ce971592e14ad0eb8eb43b4ad343c257b161f50ae0bc2c58a9e5cefbda893e3dfe3ce67eeb8672bceec7da34ade60382fdb0c49624b2ef763a5486ffbbb06"
+    }
+  ],
+  "requestRefuse": [
+    {
+      "why": "username carries the separator",
+      "fields": {
+        "username": "har|ry",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
+        "issuedAt": 1760000000002
+      }
+    },
+    {
+      "why": "username is empty",
+      "fields": {
+        "username": "",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
+        "issuedAt": 1760000000002
+      }
+    },
+    {
+      "why": "username carries a control character",
+      "fields": {
+        "username": "harry\n",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
+        "issuedAt": 1760000000002
+      }
+    },
+    {
+      "why": "keyPubHex is uppercase",
+      "fields": {
+        "username": "harry",
+        "keyPubHex": "0C7026EC8824AACC69FC31454C388BA3D6457899459ED3C996745C048AE53BE4",
+        "issuedAt": 1760000000002
+      }
+    },
+    {
+      "why": "keyPubHex is not 64 hex",
+      "fields": {
+        "username": "harry",
+        "keyPubHex": "ab",
+        "issuedAt": 1760000000002
+      }
+    },
+    {
+      "why": "issuedAt is negative",
+      "fields": {
+        "username": "harry",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
+        "issuedAt": -1
+      }
     }
   ],
   "attestation": {
     "attestation": {
       "kind": "AccountKeyAttestation",
       "version": 1,
-      "keyKind": "admin-root",
-      "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60",
+      "keyKind": "share",
+      "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
       "issuedAt": 1760000000000,
       "expiresAt": 1761209600000,
       "signedBy": "466627d52773c9d5cda6c8fd28ea31ec7b94e68aa8d42e2ad31a75dc8d24ed07",
-      "signature": "f6bc99b1157d0ff9fcbf8deb063220e62f79ef988305d9cb8f3b847a357ea0489ed93ab891705acf23e92f7bc6f9b02dd8c0334ab629881c77c4624593fecc0e"
+      "signature": "74d98a25ca16dc13fa019ed9999c61d013a0dae7ce300fb369871db3874dd756ea57b9e0f504b150e00fa3d92eee299819712b9436cfd1a3a97091cd538c8102"
     },
-    "canonical": "flagship/account-key-attestation/v1|admin-root|5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60|1760000000000|1761209600000"
+    "canonical": "flagship/account-key-attestation/v1|share|0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4|1760000000000|1761209600000"
   },
   "payload": {
     "v": 1,
@@ -274,19 +359,19 @@
         "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
         "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
         "acceptedAt": 1760000000003,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60"
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4"
       },
-      "signature": "2b755f6157149abd1d8756170d583e1e8256812125e898bb3ce6486b3b766a641cbea4537f360045077bf07e1f884aba3d22cc053596e091e86af42d10f6e906",
+      "signature": "4672583ca9f362d8673709dca3dc48a5b9434d60fd6025949c2bfec031157ce02a3d1aa6dccf9d77952a3bd317001c5d6b1a94817d3f42ae84873a0415a0780c",
       "attestation": {
         "kind": "AccountKeyAttestation",
         "version": 1,
-        "keyKind": "admin-root",
-        "keyPubHex": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60",
+        "keyKind": "share",
+        "keyPubHex": "0c7026ec8824aacc69fc31454c388ba3d6457899459ed3c996745c048ae53be4",
         "issuedAt": 1760000000000,
         "expiresAt": 1761209600000,
         "signedBy": "466627d52773c9d5cda6c8fd28ea31ec7b94e68aa8d42e2ad31a75dc8d24ed07",
-        "signature": "f6bc99b1157d0ff9fcbf8deb063220e62f79ef988305d9cb8f3b847a357ea0489ed93ab891705acf23e92f7bc6f9b02dd8c0334ab629881c77c4624593fecc0e"
+        "signature": "74d98a25ca16dc13fa019ed9999c61d013a0dae7ce300fb369871db3874dd756ea57b9e0f504b150e00fa3d92eee299819712b9436cfd1a3a97091cd538c8102"
       }
     }
   }

@@ -6,10 +6,10 @@ import type {
   ServerStorage,
 } from "@flagship/storage";
 import {
-  parseServerShareAcceptAdmin,
   signPhoneOrder,
-  signServerShareAcceptAdmin,
+  signShareKeyAttestationRequest,
   signUpdateOrder,
+  type ShareKeyAttestationRequest,
   type PhoneOrder,
   type UpdateOrder,
 } from "@flagship/protocol";
@@ -120,31 +120,34 @@ export async function handleListDemoUsers(
 export interface DemoShareAcceptDeps {
   storage: DemoUsersStorage;
   demoIrkKek: Uint8Array;
+  now?: () => number;
 }
 
 /**
- * `POST /api/dev/sample-user/:u/share-accept` — a demo account's device holds
- * no admin root (the operator runs the account; its root is derived here), so
- * `.com` signs that account's share acceptance (#12,
- * `flagship/server-share-accept-admin/v1`) for it, and the shared server
- * checks it exactly as it checks a real account's (docs/share-a-server.md
- * §5.1). Knowing a demo username is the capability, as for pairing; the
- * signature can only ever serve as a share acceptance.
+ * `POST /api/dev/sample-user/:u/share-key-attestation` — a demo account's
+ * device holds no admin root (the operator runs the account; its root is
+ * derived here), so `.com` signs that account's request for a per-share key
+ * attestation (`flagship/share-key-attestation-request/v1`) with the derived
+ * root, and the route hands it to the same handler a real admin device's
+ * request goes through (docs/share-a-server.md §5.1). The device derives the
+ * per-share admin key and signs #12 itself. Knowing a demo username is the
+ * capability, as for pairing; the attestation only ever vouches for a share
+ * key. Body `{ keyPubHex }`. Returns the signed request, or a refusal.
  */
-export async function handleDemoShareAccept(
+export async function demoShareKeyAttestationRequest(
   deps: DemoShareAcceptDeps,
   username: string,
-  body: { admit?: unknown } | undefined,
-): Promise<HandlerResponseWithHeaders> {
+  body: { keyPubHex?: unknown } | undefined,
+): Promise<{ ok: true; request: ShareKeyAttestationRequest; signature: string } | { ok: false; response: HandlerResponseWithHeaders }> {
   const row = await deps.storage.get(username.toLowerCase());
-  if (!row) return notFound("no such demo user");
-  const admit = parseServerShareAcceptAdmin(body?.admit);
-  if (!admit) return malformed("admit must be a flagship/server-share-accept-admin/v1 envelope");
-  const root = deriveDemoAdminRoot(deps.demoIrkKek, row.username);
-  if (admit.keyKind !== "admin-root" || admit.keyPubHex !== bytesToHex(root.publicKey)) {
-    return malformed("admit must name this demo account's admin root");
+  if (!row) return { ok: false, response: notFound("no such demo user") };
+  const keyPubHex = body?.keyPubHex;
+  if (typeof keyPubHex !== "string" || !/^[0-9a-f]{64}$/.test(keyPubHex)) {
+    return { ok: false, response: malformed("keyPubHex must be 64 lowercase hex") };
   }
-  return ok({ signature: bytesToHex(signServerShareAcceptAdmin(admit, root)) }, { "cache-control": "private, no-store" });
+  const request: ShareKeyAttestationRequest = { username: row.username, keyPubHex, issuedAt: (deps.now ?? Date.now)() };
+  const root = deriveDemoAdminRoot(deps.demoIrkKek, row.username);
+  return { ok: true, request, signature: bytesToHex(signShareKeyAttestationRequest(request, root)) };
 }
 
 export async function handlePairDemoUser(

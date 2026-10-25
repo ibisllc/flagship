@@ -44,6 +44,10 @@ describe("shared vectors: publisher-trust", () => {
   it("a different change does not verify under the same signature", () => {
     expect(verifyPublisherTrust({ ...v.trust, newEpoch: v.trust.newEpoch + 1 }, v.signatureHex, unhex(v.ownerPubHex))).toBe(false);
   });
+  it("every trust in refuse is refused before signing (AT-ENV-09)", () => {
+    expect(v.refuse.length).toBeGreaterThan(0);
+    for (const r of v.refuse) expect(() => canonicalPublisherTrust(r.trust), r.why).toThrow();
+  });
 });
 
 describe("shared vectors: re-pair-veto", () => {
@@ -174,5 +178,23 @@ describe("shared vectors: browser-grant", () => {
       expect(verifyBrowserGrantAnswer(a.answer, unhex(a.signatureHex), unhex(v.pubHex))).toBe(true);
     }
     for (const r of v.refused) expect(() => canonicalBrowserGrantAnswer(r.answer), r.name).toThrow();
+  });
+  it("lets the owner answer with the same or a narrower scope, never wider", async () => {
+    const { browserGrantWithin, browserGrantDurationChoices } = await import("../src/browserGrant.js");
+    for (const n of v.narrowing) expect(browserGrantWithin(n.ask, n.answer), n.name).toBe(n.within);
+    for (const c of v.choices) expect(browserGrantDurationChoices(c.asked)).toEqual(c.choices);
+  });
+});
+
+describe("shared vectors: browser-grant-revoke", () => {
+  const v = read("../test-vectors/browser-grant-revoke/vectors.json");
+  it("matches canonical bytes and signatures, and refuses the malformed revokes", async () => {
+    const { canonicalBrowserGrantRevoke, verifyBrowserGrantRevoke } = await import("../src/browserGrant.js");
+    const unhex = (h: string) => Uint8Array.from(h.match(/../g)!.map((x) => parseInt(x, 16)));
+    for (const r of v.revokes) {
+      expect(new TextDecoder().decode(canonicalBrowserGrantRevoke(r.revoke))).toBe(r.canonical);
+      expect(verifyBrowserGrantRevoke(r.revoke, unhex(r.signatureHex), unhex(v.pubHex))).toBe(true);
+    }
+    for (const r of v.refused) expect(() => canonicalBrowserGrantRevoke(r.revoke), r.name).toThrow();
   });
 });

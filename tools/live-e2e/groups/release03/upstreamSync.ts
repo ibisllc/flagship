@@ -1,7 +1,8 @@
 // Syncing an imported app with its upstream (N12, 0.3): import a Flagship-ready repo at one ref, deploy it,
 // then ask for a sync with a later ref: the box answers with a three-way proposal (what upstream changed,
 // conflicts, capability changes) and a NEW build holding the merge, which is not live until the owner
-// deploys it. Needs a public fixture repo that is Flagship-ready at both refs (no AI): set GYM_SYNC_REPO
+// deploys it; the app's page names the repo it came from, and a sync at the version it runs is "up to
+// date" without opening a build. Needs a public fixture repo that is Flagship-ready at both refs (no AI): set GYM_SYNC_REPO
 // (and GYM_SYNC_BASE_REF / GYM_SYNC_NEXT_REF, default v1 / v2); without it the group is skipped.
 import { pair } from "../../lib/fleet.js";
 import { assert, http, postJson, short } from "../../lib/harness.js";
@@ -50,6 +51,20 @@ export const upstreamSync: Group = {
       const st = await http(`https://${b.fqdn}/api/build/sessions/${r.json.buildId}`, { headers: s });
       assert(st.status === 200 && !st.json?.state?.deployedUrl && st.json?.state?.editsServiceId === serviceId, `merge build ${short(st.json?.state)}`);
       return `${p.takeUpstream.length} from upstream, ${p.conflicts.length} conflicts, ${p.capabilityChanges.length} capability changes`;
+    });
+    await rec.check("the app's page carries where it was imported from, so it offers the update check", async () => {
+      const d = await until("the import record on the app page", 2 * 60_000, async () => {
+        const x = await http(`https://${b.fqdn}/api/screens/app-detail/${encodeURIComponent(serviceId)}`, { headers: s });
+        return x.json?.importedFrom?.repo ? x : undefined;
+      });
+      assert(String(d.json.importedFrom.repo).includes(REPO.replace(/^https?:\/\//, "").replace(/\.git$/, "")), `importedFrom ${short(d.json.importedFrom)}`);
+      return short(d.json.importedFrom);
+    });
+    await rec.check(`a sync with ${BASE}, the version it runs, is up to date and opens no build`, async () => {
+      const r = await postJson(`https://${b.fqdn}/api/build/apps/${encodeURIComponent(serviceId)}/sync`, { ref: BASE }, s, 120_000);
+      assert(r.status === 200 && r.json?.upToDate === true, `sync ${r.status}: ${short(r.text)}`);
+      assert(r.json.buildId === undefined, `an up-to-date check opened build ${r.json.buildId}`);
+      return "up to date, no build";
     });
     await rec.check("a ref that is not a branch, tag or commit is refused", async () => {
       const r = await postJson(`https://${b.fqdn}/api/build/apps/${encodeURIComponent(serviceId)}/sync`, { ref: "../../etc" }, s);

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ed, releaseMetaSha256, signReleaseMeta, type RootMeta, type SnapshotMeta, type TargetsMeta, type TimestampMeta } from "@flagship/protocol";
 import { ReleaseCatalogGate } from "../src/releaseCatalogGate.js";
-import { TrustedRootStore, refreshReleaseCatalog } from "../src/releaseCatalogFeed.js";
+import { TrustedRootStore, readBodyCapped, refreshReleaseCatalog } from "../src/releaseCatalogFeed.js";
 
 const DAY = 86_400_000;
 const NOW = 1_800_000_000_000;
@@ -90,5 +90,14 @@ describe("the signed release catalog, fed to the box", () => {
     const dir = mkdtempSync(join(tmpdir(), "catalog-none-"));
     const roots = new TrustedRootStore({ pinnedPath: join(dir, "missing.json"), statePath: join(dir, "s.json") });
     expect(await roots.load()).toBeNull();
+  });
+
+  it("reads a body only up to the cap: a declared or streamed oversize body is abandoned", async () => {
+    expect(await readBodyCapped(new Response("x".repeat(10), { headers: { "content-length": "10" } }), 16)).toBe("x".repeat(10));
+    expect(await readBodyCapped(new Response("x".repeat(10), { headers: { "content-length": "99" } }), 16)).toBeNull();
+    let pulled = 0;
+    const endless = new Response(new ReadableStream<Uint8Array>({ pull(c) { pulled += 8; c.enqueue(new Uint8Array(8).fill(0x20)); } }));
+    expect(await readBodyCapped(endless, 64)).toBeNull();
+    expect(pulled).toBeLessThanOrEqual(96);
   });
 });

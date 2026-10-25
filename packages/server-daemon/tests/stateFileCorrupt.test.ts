@@ -225,7 +225,7 @@ describe("shares", () => {
     const s = new ShareStore(path, {
       serverDomain: "home.alice.flagship.services",
       verifyOwnerGrant: () => true,
-      verifyAcceptAdmin: () => ({ ok: true, keyKind: "admin-root", keyPubHex: "00".repeat(32) }),
+      verifyAcceptAdmin: () => ({ ok: true, keyKind: "share", keyPubHex: "00".repeat(32) }),
     });
     await expect(s.load()).resolves.toEqual({ dropped: 0 });
     expect(s.list()).toEqual([]);

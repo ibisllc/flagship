@@ -11805,5 +11805,57 @@
   "You're on <code>recovery.flagshipserver.com</code> — a separate address used only for recovery, so your passkey is kept apart from the main app. (Technical: rpId <code>recovery.flagshipserver.com</code>, passkey isolated by sub-origin.)": {
     "en": "You're on <code>recovery.flagshipserver.com</code> — a separate address used only for recovery, so your passkey is kept apart from the main app. (Technical: rpId <code>recovery.flagshipserver.com</code>, passkey isolated by sub-origin.)",
     "ctx": "recovery/index.html"
+  },
+  "The server refused the last update: Flagship's maintainers haven't endorsed that release.": {
+    "en": "The server refused the last update: Flagship's maintainers haven't endorsed that release.",
+    "ctx": "webapp/lib/serverUpdate.js:203"
+  },
+  "The server refused the last update: the server was no longer on the version the update was made for. Send it again.": {
+    "en": "The server refused the last update: the server was no longer on the version the update was made for. Send it again.",
+    "ctx": "webapp/lib/serverUpdate.js:205"
+  },
+  "The server refused the last update: it couldn't download or build the new version. Nothing changed.": {
+    "en": "The server refused the last update: it couldn't download or build the new version. Nothing changed.",
+    "ctx": "webapp/lib/serverUpdate.js:206"
+  },
+  "The server refused the last update: the request wasn't signed by this account's admin key.": {
+    "en": "The server refused the last update: the request wasn't signed by this account's admin key.",
+    "ctx": "webapp/lib/serverUpdate.js:207"
+  },
+  "The server refused the last update: the request was too old. Send it again.": {
+    "en": "The server refused the last update: the request was too old. Send it again.",
+    "ctx": "webapp/lib/serverUpdate.js:208"
+  },
+  "The server refused the last update: the request was for a different server.": {
+    "en": "The server refused the last update: the request was for a different server.",
+    "ctx": "webapp/lib/serverUpdate.js:209"
+  },
+  "The update to {0} didn't start cleanly, and the version before it is too old to go back to safely. The server stays on {0} in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.": {
+    "en": "The update to {0} didn't start cleanly, and the version before it is too old to go back to safely. The server stays on {0} in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.",
+    "ctx": "webapp/lib/serverUpdate.js:229"
+  },
+  "The last update didn't start cleanly, and the version before it is too old to go back to safely. The server stays on the new version in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.": {
+    "en": "The last update didn't start cleanly, and the version before it is too old to go back to safely. The server stays on the new version in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.",
+    "ctx": "webapp/lib/serverUpdate.js:230"
+  },
+  "Share update results": {
+    "en": "Share update results",
+    "ctx": "webapp/lib/updateReports.js:12"
+  },
+  "Send Flagship an anonymous note after each update: the release, whether it started cleanly and whether it went back. Never your server's name, your account or anything about your apps.": {
+    "en": "Send Flagship an anonymous note after each update: the release, whether it started cleanly and whether it went back. Never your server's name, your account or anything about your apps.",
+    "ctx": "webapp/lib/updateReports.js:16"
+  },
+  "Allowed by you": {
+    "en": "Allowed by you",
+    "ctx": "webapp/lib/browserGrantAlerts.js:52"
+  },
+  "Browser access withdrawn": {
+    "en": "Browser access withdrawn",
+    "ctx": "webapp/lib/browserGrantAlerts.js:54"
+  },
+  "That access was already withdrawn.": {
+    "en": "That access was already withdrawn.",
+    "ctx": "webapp/lib/browserGrantAlerts.js:55"
   }
 }

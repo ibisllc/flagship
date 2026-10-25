@@ -726,6 +726,35 @@ mod tests {
     }
 
     #[test]
+    fn a_box_name_of_any_other_shape_gives_no_names() {
+        use crate::files::names_for;
+        for bad in [
+            "flagship.services",
+            "alice.flagship.services",
+            "x.home.alice.flagship.services",
+            "home.alice.example.com",
+            "home.a--b.flagship.services",
+            "home.alice.flagship.services.evil.com",
+        ] {
+            assert!(names_for(bad).is_empty(), "{bad}");
+        }
+        assert_eq!(
+            names_for("home.alice.gym.flagship.services"),
+            vec![
+                "home.alice.gym.flagship.services".to_owned(),
+                "*.home.alice.gym.flagship.services".to_owned(),
+                "*.alice.gym.flagship.services".to_owned()
+            ]
+        );
+        assert_eq!(
+            names_for("home.gym.flagship.services")
+                .last()
+                .map(String::as_str),
+            Some("*.gym.flagship.services")
+        );
+    }
+
+    #[test]
     fn csr_is_signed_and_lists_exactly_the_names() {
         let fqdn = "home.alice.flagship.services";
         let mut t = TlsKeys::new(vec![fqdn.into(), format!("*.{fqdn}")], None, system_clock());

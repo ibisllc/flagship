@@ -65,10 +65,9 @@ Labels such as "hardware PQ" are therefore claims about code paths, not measurem
 - **The app browser** is off (`APP_BROWSER.enabled`). Its protected-host wiring is missing (finding
   AT-EGR-09).
 - **The A01 synthetic traffic trace** (no cloud plaintext, recorded) is not done.
-- **Clients:**
-  - no "Share update results" switch (`docs/runbooks/canary.md` §8);
-  - no sentence for a refused rollback (`docs/support/update-rollback.md` §5);
-  - the chat approval, browser grant and AI consent screens are partly built (`feat/UX`).
+- **Clients:** the chat approval, browser grant and AI consent screens are partly built (`feat/UX`).
+  (The "Share update results" switch and the refused-rollback sentence shipped 2026-10-24 on all three
+  clients; the box's own Activity line for a rollback kept in recovery still reads "rolled back".)
 - **Keyd** still has a generic `unseal` for the pairing order, `swk.open`/`cgk.open`, and an
   unscoped `swk.deriveTlsKey` (REGISTER K01; AT-KEY-12). Root can read the boot-ceremony token.
 - **Signed time** is classical (CA Ed25519).

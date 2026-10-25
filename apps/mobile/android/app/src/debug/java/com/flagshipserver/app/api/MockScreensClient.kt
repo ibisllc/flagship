@@ -70,6 +70,9 @@ class MockScreensClient(
         )
     }
 
+    /** Replaces the applied `lastUpdate` (a rollback, a refusal, one kept in recovery). */
+    var lastUpdateFixture: LastUpdate? = null
+
     override suspend fun serverDetail(): ServerDetailResponse {
         tick()
         if (podContext in unreachablePodContexts) throw java.io.IOException("$podContext isn't answering")
@@ -93,7 +96,7 @@ class MockScreensClient(
                 RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "bright-maple--wiki", "v1.4.0"),
                 RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "bright-maple--wiki", "via vibe-code"),
             ),
-            lastUpdate = LastUpdate(
+            lastUpdate = lastUpdateFixture ?: LastUpdate(
                 outcome = "applied",
                 at = now() - 2L * day,
                 targetCommit = "9f2c1ab3de4567890abcdef1234567890abcdef1",
@@ -340,6 +343,24 @@ class MockScreensClient(
         return AccessAlertsSetting(enabled, ok = true)
     }
 
+    /** The box's "Share update results" choice (null: the box refuses this session, 403), and every write. */
+    var updateReportsShare: Boolean? = false
+    val updateReportsWrites: MutableList<Boolean> = mutableListOf()
+
+    override suspend fun updateReports(): UpdateReportsSetting {
+        tick()
+        val share = updateReportsShare ?: throw ScreensError.Http(403, """{"error":"owner sessions only"}""")
+        return UpdateReportsSetting(share, if (updateReportsWrites.isEmpty()) "default" else "owner")
+    }
+
+    override suspend fun updateReportsSet(share: Boolean): UpdateReportsSetting {
+        tick()
+        updateReportsWrites += share
+        if (updateReportsShare == null) throw ScreensError.Http(403, """{"error":"owner sessions only"}""")
+        updateReportsShare = share
+        return UpdateReportsSetting(share, "owner")
+    }
+
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
 
     // ---- App-name certificate grant (serverWildcardGrant.ts) ------------
@@ -432,6 +453,18 @@ class MockScreensClient(
     val browserGrantCooling: MutableSet<String> = mutableSetOf()
     /** Gym: the app browser is off on this box (the owner routes answer 404). */
     var browserOff = false
+    /** The grants the owner gave (an Allow records one with the duration it signed; Withdraw removes it). */
+    val ownerBrowserGrants: MutableList<OwnerBrowserGrantWire> = mutableListOf()
+    val browserGrantRevokes: MutableList<BrowserGrantRevokeBody> = mutableListOf()
+
+    /** Plants was allowed to keep a docs site open for the session. */
+    fun seedOwnerBrowserGrant() {
+        ownerBrowserGrants += OwnerBrowserGrantWire(
+            grantId = "bg-0f4c9a1e-2d3b-4c5d-8e6f-7a8b9c0d1e2f", serviceId = "bright-maple--plants",
+            capabilities = listOf("navigate", "read-dom"), origins = listOf("docs.plants.example"),
+            duration = "session", explanation = "Read the care guide", issuedAt = now() - 120_000L,
+        )
+    }
 
     /** Plants asks for one visit to a weather map; Wiki asks to keep reading a docs site and a printer on the LAN. */
     fun seedBrowserGrants() {
@@ -461,13 +494,22 @@ class MockScreensClient(
             ?: throw ScreensError.Http(404, """{"error":"that request is no longer waiting"}""")
         if (body.decision == "allow") {
             val lan = held.localNetwork
+            // The box's rule: the owner may grant the ask or less, never more (browserGrantWithin).
+            val duration = body.duration ?: held.duration
+            if (duration !in com.flagshipserver.app.core.BrowserGrant.durationChoices(held.duration)) {
+                throw ScreensError.Http(400, """{"error":"an answer can grant the request or less, never more"}""")
+            }
             MockSignatures.requireAdmin(
                 "browser-grant",
                 com.flagshipserver.app.core.BrowserGrant.canonicalBytes(
-                    boxFqdn(), held.requestId, held.serviceId, "allow", held.duration, held.capabilities, held.origins,
+                    boxFqdn(), held.requestId, held.serviceId, "allow", duration, held.capabilities, held.origins,
                     lan?.takeIf { it.kind == "exact" }?.hosts, lan?.kind == "whole-lan", body.issuedAt,
                 ),
                 body.signature,
+            )
+            ownerBrowserGrants += OwnerBrowserGrantWire(
+                grantId = "bg-mock-${held.requestId.takeLast(4)}", serviceId = held.serviceId, capabilities = held.capabilities,
+                origins = held.origins, localNetwork = held.localNetwork, duration = duration, explanation = held.explanation, issuedAt = now(),
             )
         } else {
             if (body.signature != null) throw ScreensError.Http(400, """{"error":"a denial carries no signature"}""")
@@ -475,6 +517,25 @@ class MockScreensClient(
         }
         browserGrantAnswers += body
         browserGrantFixture.remove(held)
+    }
+
+    override suspend fun browserGrants(serviceId: String?): OwnerBrowserGrantsResponse {
+        tick()
+        if (browserOff) throw ScreensError.Http(404, """{"error":"not found"}""")
+        return OwnerBrowserGrantsResponse(ownerBrowserGrants.filter { serviceId == null || it.serviceId == serviceId })
+    }
+
+    override suspend fun browserGrantRevoke(body: BrowserGrantRevokeBody) {
+        tick()
+        val g = ownerBrowserGrants.firstOrNull { it.grantId == body.grantId && it.serviceId == body.serviceId }
+            ?: throw ScreensError.Http(404, """{"error":"that grant is no longer in force"}""")
+        MockSignatures.requireAdmin(
+            "browser-grant-revoke",
+            com.flagshipserver.app.core.BrowserGrant.revokeCanonicalBytes(boxFqdn(), body.serviceId, body.grantId, body.issuedAt),
+            body.signature,
+        )
+        browserGrantRevokes += body
+        ownerBrowserGrants.remove(g)
     }
 
     var sliver: com.flagshipserver.app.core.SecuritySliverResponse = com.flagshipserver.app.core.SecuritySliverResponse()

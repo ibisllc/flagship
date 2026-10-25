@@ -142,6 +142,17 @@ describe("keyd's policy from the box's own recipe", () => {
     expect(namesFor("home.alice.flagship.services")).toEqual(["home.alice.flagship.services", "*.home.alice.flagship.services", "*.alice.flagship.services"]);
   });
 
+  it("names a box only of the shape <server>.<user>.<apex>, so the account wildcard is never the apex's", () => {
+    expect(namesFor("alice.flagship.services")).toEqual([]);
+    expect(namesFor("flagship.services")).toEqual([]);
+    expect(namesFor("x.home.alice.flagship.services")).toEqual([]);
+    expect(namesFor("home.alice.example.com")).toEqual([]);
+    expect(namesFor("home.alice.gym.flagship.services")).toEqual(["home.alice.gym.flagship.services", "*.home.alice.gym.flagship.services", "*.alice.gym.flagship.services"]);
+    expect(namesFor("home.gym.flagship.services")).toEqual(["home.gym.flagship.services", "*.home.gym.flagship.services", "*.gym.flagship.services"]);
+    writeFileSync(join(dir, "short.env"), "FLAGSHIP_SUBDOMAIN=alice.flagship.services\n");
+    expect(writePolicyFromEnv(join(dir, "short.env"), join(dir, "k"))).toBeNull();
+  });
+
   it("refuses a missing file or a name that is not a hostname", () => {
     expect(writePolicyFromEnv(join(dir, "nope.env"), join(dir, "k"))).toBeNull();
     writeFileSync(join(dir, "bad.env"), "FLAGSHIP_SUBDOMAIN=not a host\n");

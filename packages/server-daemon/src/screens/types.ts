@@ -216,6 +216,11 @@ export interface AppDetailResponse {
    * "Report a problem with this adaptation". Absent otherwise.
    */
   adaptedFrom?: { repo: string };
+  /**
+   * Imported from a repo on this box and kept for upstream sync (buildmodes/appProvenance.ts): the
+   * repo and the commit and ref it was imported at, so the page offers "Check for updates from <repo>".
+   */
+  importedFrom?: { repo: string; commit?: string; ref?: string };
 }
 
 // ---------- P1.5 — /api/screens/vibe-code/start ------------------------

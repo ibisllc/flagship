@@ -20,12 +20,20 @@
  *   timestamp --snapshot snapshot.json --key timestamp.key.json [--timestamp-days 1] [--previous timestamp.json] --out timestamp.json
  *       a fresh timestamp over the published snapshot (the daily workflow, release-catalog-timestamp.yml).
  *
+ *   rollout --root release/catalog-root.json --list release/catalog-releases.json --commit <c> (--percent N | --remove)
+ *        --key root.key.json --timestamp-key ts.key.json [--previous-targets served-targets.json]
+ *        [--previous-timestamp served-timestamp.json] --out-dir out
+ *       the canary's stop rule (lower the percent, or remove the release) and widen step (raise it): a new
+ *       targets version above the list and the published one, checked against the state a box holds after
+ *       the published catalog, and the list file updated (docs/runbooks/canary.md).
+ *
  * Publish: `wrangler r2 object put <bucket>/catalog-<name>.json --file out/<name>.json --remote` for each file.
  * Re-sign the timestamp at least daily: a box treats an expired one as stale and takes nothing new.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { EMPTY_TRUST_STATE, ed, releaseMetaSha256, signReleaseMeta, verifyReleaseCatalog, type ReleaseEntry, type RootMeta, type SnapshotMeta, type TargetsMeta, type TimestampMeta } from "../../packages/protocol/src/index.js";
+import { EMPTY_TRUST_STATE, ed, releaseMetaSha256, signReleaseMeta, verifyReleaseCatalog, type ReleaseEntry, type RootMeta, type Signed, type SnapshotMeta, type TargetsMeta, type TimestampMeta } from "../../packages/protocol/src/index.js";
+import { applyRollout, nextVersion, signCatalog, stateAfter, type ReleaseList } from "./rollout.js";
 
 const DAY = 86_400_000;
 const args = process.argv.slice(2);
@@ -50,6 +58,10 @@ if (cmd === "keygen") {
 } else if (cmd === "root") {
   const keys = Object.fromEntries(all("--key").map((kv) => kv.split("=") as [string, string]));
   if (Object.keys(keys).length === 0) fail("at least one --key id=pubHex");
+  for (const [id, pub] of Object.entries(keys)) if (!/^[0-9a-f]{64}$/.test(pub ?? "")) fail(`--key ${id} is not a 32-byte hex public key`);
+  // One public key under two ids would let one private key meet a threshold of two.
+  const pubs = Object.values(keys);
+  if (new Set(pubs).size !== pubs.length) fail("two --key ids name the same public key; every id must be a different key");
   const threshold = Number(one("--threshold", "1"));
   const named = Object.fromEntries(all("--role").map((kv) => { const [r, ids] = kv.split("="); return [r!, ids!.split(",")]; }));
   const roleOf = (r: string) => { const ids = named[r] ?? Object.keys(keys); for (const id of ids) if (!keys[id]) fail(`role ${r} names unknown key ${id}`); return { keyIds: ids, threshold: Math.min(threshold, ids.length) }; };
@@ -95,6 +107,36 @@ if (cmd === "keygen") {
   };
   write(one("--out"), signReleaseMeta(timestamp, [signer(one("--key"))]));
   console.log(`timestamp v${timestamp.version} over snapshot v${snapshot.signed.version}`);
+} else if (cmd === "rollout") {
+  // The canary's stop rule and widen step (rollout.ts, docs/runbooks/canary.md).
+  const rootFile = JSON.parse(readFileSync(one("--root"), "utf8")) as RootMeta | { signed: RootMeta };
+  const root = "signed" in rootFile ? rootFile.signed : rootFile;
+  const listPath = one("--list");
+  const list = JSON.parse(readFileSync(listPath, "utf8")) as ReleaseList;
+  const commit = one("--commit");
+  const change = args.includes("--remove") ? ({ remove: true } as const) : { percent: Number(one("--percent")) };
+  const r = applyRollout(list, commit, change);
+  if (!r.ok) fail(r.reason);
+  for (const w of r.warnings) console.error(`warning: ${w}`);
+  const prevTargetsFile = all("--previous-targets")[0];
+  const prevTsFile = all("--previous-timestamp")[0];
+  const published = prevTargetsFile ? (JSON.parse(readFileSync(prevTargetsFile, "utf8")) as Signed<TargetsMeta>) : undefined;
+  const prevTs = prevTsFile ? (JSON.parse(readFileSync(prevTsFile, "utf8")) as Signed<TimestampMeta>) : undefined;
+  const version = nextVersion(list, published);
+  const signed = signCatalog({
+    root, list: r.list, version, signers: all("--key").map(signer), timestampSigners: all("--timestamp-key").map(signer),
+    ...(prevTs ? { previousTimestampVersion: prevTs.signed.version } : {}),
+    ...(published ? { state: stateAfter(root, { targets: published, ...(prevTs ? { timestamp: prevTs } : {}) }) } : {}),
+    targetsDays: Number(one("--targets-days", "30")), snapshotDays: Number(one("--snapshot-days", "7")), timestampDays: Number(one("--timestamp-days", "1")),
+  });
+  if (!signed.ok) fail(`a box would refuse this catalog: ${signed.reason}`);
+  const out = one("--out-dir");
+  mkdirSync(out, { recursive: true });
+  write(join(out, "targets.json"), signed.catalog.targets);
+  write(join(out, "snapshot.json"), signed.catalog.snapshot);
+  write(join(out, "timestamp.json"), signed.catalog.timestamp);
+  write(listPath, { ...r.list, version });
+  console.log(`wrote ${out}/{targets,snapshot,timestamp}.json (version ${version}): ${commit.slice(0, 12)} ${r.before ?? "-"}% -> ${r.after === null ? "removed" : `${r.after}%`}; ${listPath} updated`);
 } else {
-  fail("usage: catalog.ts keygen|root|sign|timestamp … (see the header)");
+  fail("usage: catalog.ts keygen|root|sign|timestamp|rollout … (see the header)");
 }

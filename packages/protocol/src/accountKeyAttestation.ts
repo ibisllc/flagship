@@ -1,16 +1,23 @@
 /**
- * AccountKeyAttestation: `.com`'s CA signature saying a key is the current
- * sensitive key of a Flagship account (its admin root, or its IRK when the
- * account pins no admin root: the `authorizeSensitiveComOp` rule).
+ * AccountKeyAttestation: `.com`'s CA signature saying a key was vouched for by
+ * the current sensitive key of SOME Flagship account (its admin root or an
+ * admin-granted device, or its IRK when the account pins no admin root: the
+ * `authorizeSensitiveComOp` rule).
  *
- * It names no account. An account's own device fetches it about its own
- * account (`GET /api/users/<u>/account-key-attestation`) and hands it to
- * another account's server inside a sealed share acceptance
- * (docs/share-a-server.md §5.1), so that server can check "an admin device
- * of the joining account signed this" without asking `.com` anything about
- * who joined, and without learning the joining account's name.
+ * The attested key is never a stable account key (AT-LNK-10): it is the
+ * joining account's per-share admin key (`deriveShareAdminKey(UMK, shareId)`,
+ * keyKind `share`), which appears nowhere else. An admin device of the
+ * account asks for it with a request signed by its sensitive key
+ * (`POST /api/users/<u>/share-key-attestation`, the request below); `.com`
+ * learns only that the account vouched for some fresh key, never the share,
+ * and the attestation names no account. The device hands it to another
+ * account's server inside a sealed share acceptance (docs/share-a-server.md
+ * §5.1), so that server can check "an admin of the joining account signed
+ * this" without learning the joining account's name or any key `.com` serves
+ * by name, and two servers B joins see two unrelated keys.
  *
  *   flagship/account-key-attestation/v1|<keyKind>|<keyPubHex>|<issuedAt>|<expiresAt>
+ *   flagship/share-key-attestation-request/v1|<username>|<keyPubHex>|<issuedAt>
  *
  * A consumer accepts it through the same chain as every CA artifact: the
  * baked maintainer pin, the forward ca-track chain, the live CaEndorsement
@@ -18,6 +25,7 @@
  * every attestation fails closed.
  */
 import { ed } from "./edSync.js";
+import { legacyFieldGuard } from "./canonicalBase.js";
 import {
   authorizedCaKeysOrFailClosed,
   MAINTAINER_PINNED_MANDATE_HASH,
@@ -31,8 +39,9 @@ export const TAG_ACCOUNT_KEY_ATTESTATION = "flagship/account-key-attestation/v1"
 /** Long enough for the owner to confirm a share a week after it was accepted. */
 export const ACCOUNT_KEY_ATTESTATION_TTL_MS = 14 * 24 * 3600_000;
 
-export type AccountKeyKind = "admin-root" | "irk";
-export const ACCOUNT_KEY_KINDS: readonly AccountKeyKind[] = ["admin-root", "irk"];
+/** Only a per-share key is ever attested: a stable account key would let sharers link the account. */
+export type AccountKeyKind = "share";
+export const ACCOUNT_KEY_KINDS: readonly AccountKeyKind[] = ["share"];
 
 export interface AccountKeyAttestationBody {
   keyKind: AccountKeyKind;
@@ -88,7 +97,7 @@ export function parseAccountKeyAttestation(v: unknown): AccountKeyAttestation | 
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   const r = v as Record<string, unknown>;
   if (r.kind !== "AccountKeyAttestation" || r.version !== 1) return null;
-  if (r.keyKind !== "admin-root" && r.keyKind !== "irk") return null;
+  if (r.keyKind !== "share") return null;
   if (typeof r.keyPubHex !== "string" || typeof r.signedBy !== "string" || typeof r.signature !== "string") return null;
   if (!HEX64.test(r.signedBy) || !HEX128.test(r.signature)) return null;
   if (!isTime(r.issuedAt) || !isTime(r.expiresAt)) return null;
@@ -140,6 +149,39 @@ export function verifyCaSignedAccountKeyAttestation(
     }
   }
   return { ok: false, reason: "signature-unverified" };
+}
+
+export const TAG_SHARE_KEY_ATTESTATION_REQUEST = "flagship/share-key-attestation-request/v1";
+/** How far a request's clock may be from `.com`'s. */
+export const SHARE_KEY_ATTESTATION_REQUEST_SKEW_MS = 5 * 60_000;
+
+/** What an admin device signs (with the account's sensitive key) to have `.com` attest a per-share key. */
+export interface ShareKeyAttestationRequest {
+  username: string;
+  keyPubHex: string;
+  issuedAt: number;
+}
+
+export function canonicalShareKeyAttestationRequest(r: ShareKeyAttestationRequest): Bytes {
+  if (typeof r.username !== "string" || r.username.length === 0) throw new Error(`${TAG_SHARE_KEY_ATTESTATION_REQUEST}: bad username`);
+  legacyFieldGuard("username", r.username);
+  if (typeof r.keyPubHex !== "string" || !HEX64.test(r.keyPubHex)) {
+    throw new Error(`${TAG_SHARE_KEY_ATTESTATION_REQUEST}: keyPubHex must be 64 lowercase hex`);
+  }
+  if (!isTime(r.issuedAt)) throw new Error(`${TAG_SHARE_KEY_ATTESTATION_REQUEST}: bad issuedAt`);
+  return new TextEncoder().encode([TAG_SHARE_KEY_ATTESTATION_REQUEST, r.username, r.keyPubHex, String(r.issuedAt)].join("|"));
+}
+
+export function signShareKeyAttestationRequest(r: ShareKeyAttestationRequest, key: Keypair): Bytes {
+  return ed.sign(canonicalShareKeyAttestationRequest(r), key.privateKey);
+}
+
+export function verifyShareKeyAttestationRequest(r: ShareKeyAttestationRequest, sig: Bytes, pub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalShareKeyAttestationRequest(r), pub);
+  } catch {
+    return false;
+  }
 }
 
 function toHex(b: Bytes): string {

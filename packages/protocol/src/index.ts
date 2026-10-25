@@ -51,6 +51,7 @@ export * from "./authTime.js";
 export * from "./companionDelegation.js";
 export * from "./watchBootDelegate.js";
 export * from "./releaseMetadata.js";
+export * from "./updateReceipt.js";
 export * from "./chatWire.js";
 export * from "./serverWildcardGrant.js";
 export * from "./enrollment.js";

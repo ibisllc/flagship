@@ -12,6 +12,8 @@ import FlagshipCore
 public enum RecoveryUpdatePrompt {
     public static let title = String(localized: "Update your account recovery")
     public static let body = String(localized: "Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Enter your recovery passphrase, then confirm with your passkey once.")
+    /// When a recovery on this device just used the passphrase: nothing to type, only the passkey.
+    public static let bodyAfterRecovery = String(localized: "Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Confirm with your passkey once.")
     public static let update = String(localized: "Update")
     public static let notNow = String(localized: "Not now")
     public static let updated = String(localized: "Account recovery updated.")
@@ -139,7 +141,7 @@ public struct RecoveryUpdateSheet: View {
                 Text(RecoveryUpdatePrompt.title)
                     .font(FS.font.h3()).foregroundColor(c.text)
                     .accessibilityIdentifier("recovery-update-title")
-                Text(RecoveryUpdatePrompt.body)
+                Text(vm.holdsPassphrase ? RecoveryUpdatePrompt.bodyAfterRecovery : RecoveryUpdatePrompt.body)
                     .font(FS.font.body()).foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("recovery-update-body")

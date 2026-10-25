@@ -131,6 +131,40 @@ export const IOS_RELEASE03: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-total-browser-grant-narrow",
+    "The owner grants less than was asked: a session request offers Allow once beside Allow for this session (never Always allow); Allow once signs flagship/browser-grant/v1 for one visit and the box records a once grant.",
+    N + "test_browserGrantNarrowedToOnce",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-browser-grant-narrow on Home." },
+        { kind: "tap", describe: "Allow once." },
+      ],
+      assertions: [
+        { describe: "Allow once offered", handle: "browser-grant-allow-once", expect: "present" },
+        { describe: "Nothing wider", handle: "browser-grant-allow-service", expect: "absent" },
+      ],
+      screenshots: [shot("browser-grant-narrow", "A session request with Allow once.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-total-browser-grant-withdraw",
+    "The app page's Browser access lists what the owner allowed beyond the manifest (Allowed by you); Withdraw signs flagship/browser-grant-revoke/v1 behind Face ID and the grant is gone.",
+    N + "test_browserGrantWithdrawOnTheAppPage",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-browser-grant-granted on Apps; open Plants." },
+        { kind: "tap", describe: "Withdraw." },
+      ],
+      assertions: [
+        { describe: "Allowed by you", handle: "app-browser-granted-title", expect: "text", text: "Allowed by you" },
+        { describe: "Withdrawn", handle: "app-browser-note", expect: "text", text: "Browser access withdrawn" },
+      ],
+      screenshots: [shot("browser-grant-granted", "Allowed by you with Withdraw.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
     "ios-total-upstream-sync-proposal",
     "An imported app checks its repo at a chosen ref: the proposal shows the version, the counts, the conflict kept as the owner's and the new permission on its own; Review and deploy opens the existing git build screen and nothing goes live before that.",
     N + "test_syncProposalThenReview",
@@ -149,8 +183,8 @@ export const IOS_RELEASE03: readonly Scenario[] = [
   ),
   iosTotal(
     "ios-total-upstream-sync-current",
-    "Already on the latest upstream version: it says so, and closing discards the build the check opened.",
-    N + "test_syncUpToDateDiscards",
+    "Already on the latest upstream version: it says so, and the box opened no build, so closing discards nothing.",
+    N + "test_syncUpToDateOpensNoBuild",
     {
       steps: [
         { kind: "launch", describe: "Launch -smoke-upstream-sync-current on Apps; open Plants." },
@@ -158,6 +192,37 @@ export const IOS_RELEASE03: readonly Scenario[] = [
       ],
       assertions: [{ describe: "Up to date", handle: "sync-up-to-date", expect: "present" }],
       screenshots: [shot("sync-up-to-date", "Already on the latest upstream version.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-total-update-kept-in-recovery",
+    "docs/support/update-rollback.md §5: a failed update the floor kept in recovery (rollbackRefused) reads as stuck on the new release until a fixed one arrives, never \"went back on its own\"; the Share update results switch is off and posts { share } to the box's /api/update-reports on and off.",
+    N + "test_updateKeptInRecoveryAndShareSwitch",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-update-kept-in-recovery on Home; open the Home server." },
+        { kind: "tap", describe: "Turn Share update results on, then off." },
+      ],
+      assertions: [
+        { describe: "Stuck sentence", handle: "sd-update-last-outcome", expect: "present" },
+        { describe: "Switch", handle: "sd-update-reports", expect: "present" },
+      ],
+      screenshots: [shot("update-results", "The update card with a rollback kept in recovery and the switch.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-total-update-refusal-sentence",
+    "A refused update reads as one whole sentence (the request was too old); a box that refuses the session shows no Share update results switch.",
+    N + "test_updateRefusalSentenceAndNoSwitchWhenRefused",
+    {
+      steps: [{ kind: "launch", describe: "Launch -smoke-update-refused-stale on Home; open the Home server." }],
+      assertions: [
+        { describe: "Refusal sentence", handle: "sd-update-last-outcome", expect: "text", text: "The server refused the last update: the request was too old. Send it again." },
+        { describe: "No switch", handle: "sd-update-reports", expect: "absent" },
+      ],
+      screenshots: [shot("update-refusal", "A refusal as one sentence, no switch.")],
       dimension: "D4",
     },
   ),

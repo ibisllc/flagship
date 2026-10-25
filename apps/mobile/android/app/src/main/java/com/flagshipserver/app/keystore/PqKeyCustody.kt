@@ -1,5 +1,7 @@
 package com.flagshipserver.app.keystore
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -220,7 +222,7 @@ class PqKeyStore(
     fun sign(entry: Entry, purpose: String, payload: ByteArray, edSign: (ByteArray) -> ByteArray): ByteArray {
         val seed = wrapper.unwrap(PqHex.decode(entry.wrappedSeedHex) ?: error("corrupt PQ seed blob"))
         try {
-            require(PqHex.encode(PqHybrid.mldsa65PublicKey(seed)) == entry.mldsaPubHex) { "PQ seed does not match its key" }
+            require(PqHex.encode(PqHybrid.mldsa65PublicKey(seed)) == entry.mldsaPubHex) { FSStrings.get(R.string.pq_seed_does_not_match_its) }
             return PqHybrid.hybridSignSplit(PqHex.decode(entry.ed25519PubHex)!!, edSign, seed, purpose, payload)
         } finally {
             seed.fill(0)

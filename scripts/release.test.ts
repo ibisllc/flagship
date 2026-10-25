@@ -82,14 +82,14 @@ describe("release.sh", () => {
     const r = run(env, ["--list"]);
     expect(r.code).toBe(0);
     const steps = planSteps(r.out);
-    expect(steps).toHaveLength(35);
-    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 35 }, (_, i) => i + 1));
+    expect(steps).toHaveLength(36);
+    expect(steps.map((s) => s.n)).toEqual(Array.from({ length: 36 }, (_, i) => i + 1));
     const phases = [...r.out.matchAll(/^ {4}phase ([AB]) \|/gm)].map((m) => m[1]);
-    expect(phases).toHaveLength(35);
+    expect(phases).toHaveLength(36);
     expect(phases.slice(0, 22).every((p) => p === "A")).toBe(true);
     expect(phases.slice(22).every((p) => p === "B")).toBe(true);
-    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(35);
-    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(35);
+    expect([...r.out.matchAll(/^ {4}gate: /gm)]).toHaveLength(36);
+    expect([...r.out.matchAll(/^ {4}rollback: /gm)]).toHaveLength(36);
     expect(calls(env)).toBe("");
   });
 
@@ -103,7 +103,7 @@ describe("release.sh", () => {
     // | 7 .com (+ zone-health post-check) | 14 cpu watch | 9 publish | 9 redeploy | 9 status ...
     expect(sections).toEqual([
       "0", "0b", "1", "2", "2b", "2c", "3", "3b", "3c", "9", "5", "6", "1b", "4", "8", "7a", "6a", "7", "14", "9", "9", "9",
-      "12", "12", "12", "12", "10", "10", "9", "7", "11c", "11", "11", "11b", "13",
+      "9b", "12", "12", "12", "12", "10", "10", "9", "7", "11c", "11", "11", "11b", "13",
     ]);
     // every referenced heading exists verbatim in the runbook
     for (const m of r.out.matchAll(/runbook: (.+)$/gm)) {
@@ -130,13 +130,17 @@ describe("release.sh", () => {
     expect(idx("hall of fame")).toBeGreaterThan(idx("Redeploy .com"));
     expect(idx("PQ release key")).toBeLessThan(idx("Endorse"));
     expect(idx("Write DEPLOYED-FINAL")).toBe(22);
+    // the canary opens phase B: after the release is published, before the scrub and the stores
+    expect(idx("Canary cohorts")).toBe(23);
+    expect(idx("Canary cohorts")).toBeGreaterThan(idx("Sign and publish the release catalog"));
+    expect(idx("Canary cohorts")).toBeGreaterThan(idx("Deploy .com"));
   });
 
   it("--list --phase B lists only phase B", () => {
     const r = run(sandbox(), ["--list", "--short", "--phase", "B"]);
     const steps = planSteps(r.out);
     expect(steps[0]!.n).toBe(23);
-    expect(steps).toHaveLength(13);
+    expect(steps).toHaveLength(14);
   });
 
   it("--dry-run --from 1 prints every command of phase A and runs no tool", () => {
@@ -412,6 +416,18 @@ describe("release.sh parsers against captured tool output", () => {
     return { code: r.status, out: r.stdout.trim(), err: r.stderr };
   };
 
+  it("canary: the release's percent from the list, the verdict from npm run canary --json", () => {
+    const dir = mkdtempSync(join(tmpdir(), "canary-list-"));
+    const c = "0123456789abcdef0123456789abcdef01234567";
+    writeFileSync(join(dir, "list.json"), JSON.stringify({ version: 2, floor: 0, releases: [{ commit: c, rolloutPercent: 5 }] }));
+    expect(sh(`canary_percent ${join(dir, "list.json")} ${c}`, "").out).toBe("5");
+    expect(sh(`canary_percent ${join(dir, "list.json")} ${"f".repeat(40)}`, "").out).toBe("");
+    const rows = (verdict: unknown) => JSON.stringify({ rows: [{ release: c, verdict }] });
+    expect(sh("canary_verdict", rows({ action: "widen", next: 20, reason: "x" })).out).toBe("widen 20");
+    expect(sh("canary_verdict", rows({ action: "stop", reason: "x" })).out).toBe("stop");
+    expect(sh("canary_verdict", JSON.stringify({ rows: [] })).out).toBe("wait");
+  });
+
   it("wrangler secret list -> names", () => {
     const r = sh("json_names", fx("wrangler-secret-list.json"));
     const names = r.out.split("\n");
@@ -444,6 +460,7 @@ describe("release.sh parsers against captured tool output", () => {
     expect(r.out).toMatch(/^0116_assurance_policy_changes\.sql$/m);
     expect(r.out).toMatch(/^0117_server_order_pq_signature\.sql$/m);
     expect(r.out).toMatch(/^0118_boot_unlock_v2\.sql$/m);
+    expect(r.out).toMatch(/^0119_update_receipts\.sql$/m);
     // Feature branches park their own migrations below the ledger's end (0090-0094, 0099): only the ones after it count here.
     expect(r.out.split("\n").filter((f) => f >= "0105")).toEqual(readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f) && f >= "0105").sort());
     // a ledger that has everything -> nothing pending

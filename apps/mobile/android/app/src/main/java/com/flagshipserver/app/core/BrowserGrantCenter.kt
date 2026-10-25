@@ -2,17 +2,25 @@
 // grantRequests.ts). An app asks its box for a one-time visit, the session, an exact host or the
 // local network; the box holds the ask until an admin answers. Like chat requests, the phone asks
 // every box it manages (GET /api/browser/owner/grant-requests) on foreground and when a push lands,
-// raises one dialog per request and lists them under Activity and on the app's page. Allow is an
-// owner-signed `flagship/browser-grant/v1` over exactly what was shown, with the ask's own duration;
-// Deny needs the session alone and starts the box's cooldown. Everything shown comes from the
-// structured ask, never the box's English sentences; the app's explanation is labelled as its own.
+// raises one dialog per request and lists them under Activity and on the app's page; a box's
+// `browser-grant-request` socket frame refreshes at once. Allow is an owner-signed
+// `flagship/browser-grant/v1` over the ask's sites and capabilities for the duration the owner picks
+// (the ask's or shorter: Allow once / for this session / always); Deny needs the session alone and
+// starts the box's cooldown. The app's page also lists the grants the owner gave
+// (GET /api/browser/owner/grants) with Withdraw, a signed `flagship/browser-grant-revoke/v1` the box
+// applies at once. Everything shown comes from structured fields, never the box's English sentences;
+// the app's explanation is labelled as its own.
 
 package com.flagshipserver.app.core
 
 import com.flagshipserver.app.R
 import com.flagshipserver.app.api.BrowserGrantAnswerBody
 import com.flagshipserver.app.api.BrowserGrantRequestWire
+import com.flagshipserver.app.api.BrowserGrantRevokeBody
+import com.flagshipserver.app.api.BrowserLocalNetwork
+import com.flagshipserver.app.api.OwnerBrowserGrantWire
 import com.flagshipserver.app.api.ScreensError
+import com.flagshipserver.app.api.ScreensEvent
 import com.flagshipserver.app.api.boxError
 import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.CancellationException
@@ -36,6 +44,16 @@ data class BrowserGrantItem(
     val key: String get() = "${box.fqdn}|browser|${request.requestId}"
     val wholeLan: Boolean get() = request.localNetwork?.kind == "whole-lan"
     val exactHosts: List<String>? get() = request.localNetwork?.takeIf { it.kind == "exact" }?.hosts
+    /** The durations the owner may grant this ask for, shortest first. */
+    val durationChoices: List<String> get() = BrowserGrant.durationChoices(request.duration)
+}
+
+/** A grant the owner gave beyond the manifest, on the box that holds it. */
+data class OwnerGrantItem(
+    val box: AccessBox,
+    val grant: OwnerBrowserGrantWire,
+) {
+    val key: String get() = "${box.fqdn}|grant|${grant.grantId}"
 }
 
 object BrowserGrantText {
@@ -57,9 +75,12 @@ object BrowserGrantText {
     fun site(origin: String): Pair<String, String?> =
         origin to if (origin.startsWith("*.")) FSStrings.get(R.string.browser_grant_under) else null
 
-    fun localNetwork(item: BrowserGrantItem): String? = when {
-        item.wholeLan -> FSStrings.get(R.string.browser_grant_lan_whole)
-        item.exactHosts != null -> FSStrings.get(R.string.browser_grant_lan_exact, item.exactHosts!!.joinToString(", "))
+    fun localNetwork(item: BrowserGrantItem): String? = localNetwork(item.request.localNetwork)
+
+    fun localNetwork(l: BrowserLocalNetwork?): String? = when {
+        l == null -> null
+        l.kind == "whole-lan" -> FSStrings.get(R.string.browser_grant_lan_whole)
+        l.kind == "exact" && l.hosts.isNotEmpty() -> FSStrings.get(R.string.browser_grant_lan_exact, l.hosts.joinToString(", "))
         else -> null
     }
 
@@ -88,21 +109,29 @@ object BrowserGrantText {
     fun answered(allow: Boolean): String =
         FSStrings.get(if (allow) R.string.browser_grant_allowed else R.string.browser_grant_denied)
 
+    fun withdrawn(): String = FSStrings.get(R.string.browser_grant_withdrawn)
+
+    fun withdrawError(t: Throwable): String = when ((t as? ScreensError.Http)?.status) {
+        404 -> FSStrings.get(R.string.browser_grant_already_withdrawn)
+        403 -> FSStrings.get(R.string.browser_grant_admin_only)
+        else -> t.boxError() ?: FSStrings.get(R.string.couldnt_reach_the_server_check_your)
+    }
+
     fun error(t: Throwable): String = when ((t as? ScreensError.Http)?.status) {
         404 -> FSStrings.get(R.string.browser_grant_gone)
         403 -> FSStrings.get(R.string.browser_grant_admin_only)
         else -> t.boxError() ?: FSStrings.get(R.string.couldnt_reach_the_server_check_your)
     }
 
-    /** The signed bytes for Allow, exactly as shown and as the box rebuilds them. */
-    fun canonical(item: BrowserGrantItem, serverDomain: String, issuedAt: Long): ByteArray {
+    /** The signed bytes for Allow: the ask's sites and capabilities for [duration], as the box rebuilds them. */
+    fun canonical(item: BrowserGrantItem, serverDomain: String, issuedAt: Long, duration: String = item.request.duration): ByteArray {
         val r = item.request
         return BrowserGrant.canonicalBytes(
             serverDomain = serverDomain,
             requestId = r.requestId,
             serviceId = r.serviceId,
             decision = "allow",
-            duration = r.duration,
+            duration = duration,
             capabilities = r.capabilities,
             origins = r.origins,
             exactHosts = item.exactHosts,
@@ -139,6 +168,10 @@ class BrowserGrantCenter(
 
     private val _shown = MutableStateFlow<Shown?>(null)
     val shown: StateFlow<Shown?> = _shown.asStateFlow()
+
+    /** The owner's grants for the app pages that asked ([loadGrants]), keyed by service. */
+    private val _grants = MutableStateFlow<Map<String, List<OwnerGrantItem>>>(emptyMap())
+    val grants: StateFlow<Map<String, List<OwnerGrantItem>>> = _grants.asStateFlow()
 
     private val _busy = MutableStateFlow<Set<String>>(emptySet())
     val busy: StateFlow<Set<String>> = _busy.asStateFlow()
@@ -209,11 +242,13 @@ class BrowserGrantCenter(
         }
     }
 
+    /** While the app is open: each box's event socket, with a slow poll as the safety net. */
     fun start(scope: CoroutineScope) {
         stop()
         poll = scope.launch {
             while (isActive) {
                 runCatching { refresh() }
+                if (isActiveGate()) syncListeners(this) else stopListeners()
                 delay(pollIntervalMs)
             }
         }
@@ -222,10 +257,94 @@ class BrowserGrantCenter(
     fun stop() {
         poll?.cancel()
         poll = null
+        stopListeners()
     }
 
-    /** Allow (signed) or Deny. Returns null on success, else the sentence to show. */
-    suspend fun answer(item: BrowserGrantItem, allow: Boolean): String? {
+    private val listeners = HashMap<String, Job>()
+
+    private fun syncListeners(scope: CoroutineScope) {
+        val current = runCatching { boxes() }.getOrDefault(emptyList()).associateBy { it.fqdn }
+        listeners.entries.removeAll { (fqdn, job) ->
+            val gone = fqdn !in current || !job.isActive
+            if (gone) job.cancel()
+            gone
+        }
+        for ((fqdn, box) in current) {
+            if (listeners.containsKey(fqdn)) continue
+            listeners[fqdn] = scope.launch { runCatching { box.client.screensEvents().collect { e -> onEvent(e) } } }
+        }
+    }
+
+    private fun stopListeners() {
+        listeners.values.forEach { it.cancel() }
+        listeners.clear()
+    }
+
+    /** A box said an app asks for browser access: look now rather than at the next poll. */
+    suspend fun onEvent(e: ScreensEvent) {
+        if (e.type == ScreensEvent.BROWSER_GRANT_REQUEST) refresh()
+    }
+
+    /** The grants the owner gave [serviceId] on every box (an older box or one with the browser off adds none). */
+    suspend fun loadGrants(serviceId: String): List<OwnerGrantItem> {
+        val all = ArrayList<OwnerGrantItem>()
+        for (box in boxes()) {
+            val r = try {
+                box.client.browserGrants(serviceId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                continue
+            }
+            all += r.grants.filter { it.serviceId == serviceId && it.grantId.isNotEmpty() }.map { OwnerGrantItem(box, it) }
+        }
+        _grants.value = _grants.value + (serviceId to all)
+        return all
+    }
+
+    fun grantsFor(serviceId: String): List<OwnerGrantItem> = _grants.value[serviceId].orEmpty()
+
+    /** Withdraw a grant the owner gave (signed). Returns null on success, else the sentence to show. */
+    suspend fun withdraw(item: OwnerGrantItem, appName: String): String? {
+        _busy.value = _busy.value + item.key
+        try {
+            val domain = runCatching { item.box.client.boxFqdn() }.getOrNull()?.takeIf { it.isNotEmpty() } ?: item.box.fqdn
+            val key = try {
+                signer(FSStrings.get(R.string.browser_grant_withdraw_reason, appName))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                return FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(t))
+            }
+            val issuedAt = now()
+            val g = item.grant
+            val sig = HexUtil.encode(key.sign(BrowserGrant.revokeCanonicalBytes(domain, g.serviceId, g.grantId, issuedAt)))
+            try {
+                item.box.client.browserGrantRevoke(BrowserGrantRevokeBody(g.serviceId, g.grantId, issuedAt, sig))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                if ((t as? ScreensError.Http)?.status == 404) dropGrant(item)
+                return BrowserGrantText.withdrawError(t)
+            }
+            dropGrant(item)
+            return null
+        } finally {
+            _busy.value = _busy.value - item.key
+        }
+    }
+
+    private fun dropGrant(item: OwnerGrantItem) {
+        val sid = item.grant.serviceId
+        _grants.value = _grants.value + (sid to grantsFor(sid).filterNot { it.key == item.key })
+    }
+
+    /**
+     * Allow (signed, for [duration]: the ask's own or shorter) or Deny. Returns null on success, else
+     * the sentence to show.
+     */
+    suspend fun answer(item: BrowserGrantItem, allow: Boolean, duration: String = item.request.duration): String? {
+        if (allow && duration !in item.durationChoices) return BrowserGrantText.error(IllegalArgumentException())
         _busy.value = _busy.value + item.key
         try {
             val issuedAt = now()
@@ -238,11 +357,11 @@ class BrowserGrantCenter(
                 } catch (t: Throwable) {
                     return FSStrings.get(R.string.couldnt_access_your_account_key, UserErrorText.reason(t))
                 }
-                HexUtil.encode(key.sign(BrowserGrantText.canonical(item, domain, issuedAt)))
+                HexUtil.encode(key.sign(BrowserGrantText.canonical(item, domain, issuedAt, duration)))
             }
             try {
                 item.box.client.browserGrantAnswer(
-                    BrowserGrantAnswerBody(item.request.requestId, if (allow) "allow" else "deny", issuedAt, signature),
+                    BrowserGrantAnswerBody(item.request.requestId, if (allow) "allow" else "deny", issuedAt, signature, if (allow) duration else null),
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -251,6 +370,7 @@ class BrowserGrantCenter(
                 return BrowserGrantText.error(t)
             }
             forget(item)
+            if (allow && _grants.value.containsKey(item.request.serviceId)) runCatching { loadGrants(item.request.serviceId) }
             return null
         } finally {
             _busy.value = _busy.value - item.key
@@ -266,11 +386,11 @@ class BrowserGrantCenter(
         _listing.value = l.copy(requests = l.requests.filterNot { it.key == item.key })
     }
 
-    suspend fun answerShown(allow: Boolean) {
+    suspend fun answerShown(allow: Boolean, duration: String? = null) {
         val current = _shown.value ?: return
         if (current.phase !is Phase.Asking && current.phase !is Phase.Failed) return
         _shown.value = Shown(current.item, Phase.Sending(allow))
-        val failure = answer(current.item, allow)
+        val failure = answer(current.item, allow, duration ?: current.item.request.duration)
         val phase = if (failure == null) Phase.Done(BrowserGrantText.answered(allow)) else Phase.Failed(failure)
         if (_shown.value?.item?.key == current.item.key) _shown.value = Shown(current.item, phase)
     }

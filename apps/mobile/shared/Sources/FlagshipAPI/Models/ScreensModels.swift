@@ -251,6 +251,9 @@ public struct ReleaseCatalogResponse: Codable, Equatable, Sendable {
 
 /// The box's record of the last update order: applied, rolled back after the
 /// new code failed its boot health gate, or refused with a reason.
+/// `rollbackRefused`: the release failed but the one before it is below the
+/// signed security floor, so the server did NOT go back; it stays on the new
+/// release in recovery mode (docs/support/update-rollback.md).
 public struct LastUpdate: Codable, Equatable, Sendable {
     public let outcome: String
     public let at: Int64
@@ -258,46 +261,87 @@ public struct LastUpdate: Codable, Equatable, Sendable {
     public let previousCommit: String?
     public let bootAttempts: Int?
     public let reason: String?
+    public let rollbackRefused: Bool?
 
-    public init(outcome: String, at: Int64, targetCommit: String? = nil, previousCommit: String? = nil, bootAttempts: Int? = nil, reason: String? = nil) {
+    public init(outcome: String, at: Int64, targetCommit: String? = nil, previousCommit: String? = nil, bootAttempts: Int? = nil, reason: String? = nil, rollbackRefused: Bool? = nil) {
         self.outcome = outcome
         self.at = at
         self.targetCommit = targetCommit
         self.previousCommit = previousCommit
         self.bootAttempts = bootAttempts
         self.reason = reason
+        self.rollbackRefused = rollbackRefused
     }
 
-    /// One sentence for the update card, or nil for an outcome this build
-    /// doesn't know. Matches the webapp's describeLastUpdate.
+    /// The release failed and the server stayed on it in recovery mode.
+    public var keptInRecovery: Bool { outcome == "rolled-back" && rollbackRefused == true }
+
+    /// Anything but a clean install or a rollback that went back by itself.
+    public var needsAttention: Bool { outcome == "refused" || keptInRecovery }
+
+    /// One whole sentence for the update card, or nil for an outcome this
+    /// build doesn't know. Matches the webapp's describeLastUpdate. Each case
+    /// is its own sentence so every language gets a whole translation.
     public var summary: String? {
         func short(_ sha: String?) -> String? {
             guard let sha, sha.count == 40, sha.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else { return nil }
             return String(sha.prefix(8))
         }
+        let target = short(targetCommit)
+        let previous = short(previousCommit)
         switch outcome {
         case "applied":
-            return short(targetCommit).map { String(localized: "Last update: \($0) installed and running.") } ?? String(localized: "Last update installed and running.")
+            return target.map { String(localized: "Last update: \($0) installed and running.") } ?? String(localized: "Last update installed and running.")
+        case "rolled-back" where rollbackRefused == true:
+            if let target {
+                return String(localized: "The update to \(target) didn't start cleanly, and the version before it is too old to go back to safely. The server stays on \(target) in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.")
+            }
+            return String(localized: "The last update didn't start cleanly, and the version before it is too old to go back to safely. The server stays on the new version in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.")
         case "rolled-back":
-            let to = short(targetCommit).map { " to \($0)" } ?? ""
-            let back = short(previousCommit).map { " to \($0)" } ?? ""
-            return String(localized: "The last update\(to) didn't start cleanly, so the server went back\(back) on its own.")
+            switch (target, previous) {
+            case let (t?, p?):
+                return String(localized: "The last update to \(t) didn't start cleanly, so the server went back to \(p) on its own.")
+            case let (t?, nil):
+                return String(localized: "The last update to \(t) didn't start cleanly, so the server went back on its own.")
+            case let (nil, p?):
+                return String(localized: "The last update didn't start cleanly, so the server went back to \(p) on its own.")
+            case (nil, nil):
+                return String(localized: "The last update didn't start cleanly, so the server went back on its own.")
+            }
         case "refused":
-            guard let why = Self.refusalCopy[reason ?? ""] else { return String(localized: "The server refused the last update.") }
-            return String(localized: "The server refused the last update: \(why)")
+            switch reason {
+            case "unendorsed":
+                return String(localized: "The server refused the last update: Flagship's maintainers haven't endorsed that release.")
+            case "from-commit-mismatch":
+                return String(localized: "The server refused the last update: the server was no longer on the version the update was made for. Send it again.")
+            case "apply-failed":
+                return String(localized: "The server refused the last update: it couldn't download or build the new version. Nothing changed.")
+            case "rejected":
+                return String(localized: "The server refused the last update: the request wasn't signed by this account's admin key.")
+            case "stale":
+                return String(localized: "The server refused the last update: the request was too old. Send it again.")
+            case "wrong-domain":
+                return String(localized: "The server refused the last update: the request was for a different server.")
+            default:
+                return String(localized: "The server refused the last update.")
+            }
         default:
             return nil
         }
     }
+}
 
-    private static let refusalCopy: [String: String] = [
-        "unendorsed": String(localized: "Flagship's maintainers haven't endorsed that release."),
-        "from-commit-mismatch": "the server was no longer on the version the update was made for. Send it again.",
-        "apply-failed": "it couldn't download or build the new version. Nothing changed.",
-        "rejected": "the request wasn't signed by this account's admin key.",
-        "stale": "the request was too old. Send it again.",
-        "wrong-domain": "the request was for a different server.",
-    ]
+/// GET/POST /api/update-reports: the owner's choice to send Flagship one
+/// anonymous note per update (docs/runbooks/canary.md). Owner sessions only.
+public struct UpdateReportsSetting: Codable, Equatable, Sendable {
+    public let share: Bool
+    /// "owner" once the owner chose; "default" before (off on real boxes).
+    public let source: String?
+
+    public init(share: Bool, source: String? = nil) {
+        self.share = share
+        self.source = source
+    }
 }
 
 // MARK: - P1.2 apps-list

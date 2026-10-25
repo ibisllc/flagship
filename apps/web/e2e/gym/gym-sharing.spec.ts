@@ -45,12 +45,13 @@ const REVOKE: Canon = [SS, "serverShareRevokeCanonicalBytes"];
 const OFFER: Canon = [SS, "serverShareOfferCanonicalBytes"];
 const UNLOCK: Canon = [SS, "serverShareUnlockCanonicalBytes"];
 const ACCEPT_ADMIN: Canon = [SS, "serverShareAcceptAdminCanonicalBytes"];
+const KEY_REQUEST: Canon = [SS, "shareKeyAttestationRequestCanonicalBytes"];
 const ACCEPT_POST = /\/api\/server-shares\/[0-9a-f]{32}\/accept$/;
 
-/** `.com`'s attestation of this account's admin key (the page only carries it; the box checks the CA signature). */
+/** `.com`'s attestation of the per-share admin key (the page only carries it; the box checks the CA signature). */
 function attestationFor(keyPubHex: string) {
   const now = Date.now();
-  return { kind: "AccountKeyAttestation", version: 1, keyKind: "admin-root", keyPubHex, issuedAt: now - 1000, expiresAt: now + 14 * 86_400_000, signedBy: "ca".repeat(32), signature: "00".repeat(64) };
+  return { kind: "AccountKeyAttestation", version: 1, keyKind: "share", keyPubHex, issuedAt: now - 1000, expiresAt: now + 14 * 86_400_000, signedBy: "ca".repeat(32), signature: "00".repeat(64) };
 }
 
 /** The webapp's fresh unlock for one admin signature: this device's passphrase. */
@@ -560,7 +561,7 @@ test.describe("gym webapp sharing", () => {
     let confirmed = false;
     let accepted = false;
     const m = await mock(page);
-    m.get(`/api/users/${USER}/account-key-attestation`, { attestation: attestationFor(keys.adminPubHex!) });
+    m.post(`/api/users/${USER}/share-key-attestation`, (c) => ({ json: { attestation: attestationFor(c.body.request.keyPubHex) } }));
     m.post(`/api/server-shares/${fx.alice.shareId}/accept`, () => ((accepted = true), { json: { ok: true } }));
     m.get(`/api/server-shares/${fx.alice.shareId}`, () => ({ json: { shareId: fx.alice.shareId, serverDomain: SHARED_BOX, state: accepted ? "accepted" : "offered", offer: fx.alice.offer, acceptance: null, unlock: true } }));
     m.first("GET", `/api/server-shares/${fx.kim.shareId}`, () => ({ status: 404, json: { error: "not found" } }));
@@ -595,15 +596,20 @@ test.describe("gym webapp sharing", () => {
     await page.click("[data-share-home]");
     await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
 
-    // Accept (one fresh unlock: the admin root signs #12), read the code; once
-    // the owner confirms, Open lands on the server.
+    // Accept (one fresh unlock: the admin root asks .com to attest the per-share
+    // key, which signs #12), read the code; once the owner confirms, Open lands
+    // on the server.
     await open({ shareId: fx.alice.shareId, secretHex: fx.alice.secretHex });
     await page.click("[data-share-accept]");
     await passFreshUnlock(page, "Accept this share?");
     await expect(page.locator("[data-share-waiting]")).toBeVisible({ timeout: 10_000 });
     const proof = await acceptanceProof(page, fx.alice, m.sent(ACCEPT_POST)[0]!.body.acceptance);
-    expect(proof.keyPubHex).toBe(keys.adminPubHex);
-    expect(await signer(page, keys, ACCEPT_ADMIN, proof.admit, proof.signature)).toBe("admin");
+    const [keyReq] = m.sent("/share-key-attestation");
+    expect(keyReq!.body.request.keyPubHex).toBe(proof.keyPubHex);
+    expect(await signer(page, keys, KEY_REQUEST, keyReq!.body.request, keyReq!.body.signature)).toBe("admin");
+    // #12 is signed by the per-share key, never by a stable account key (AT-LNK-10).
+    expect(proof.keyPubHex).not.toBe(keys.adminPubHex);
+    expect(await signer(page, keys, ACCEPT_ADMIN, proof.admit, proof.signature)).toBeNull();
     const put = m.sent("/api/share-inbox").find((c) => c.body.request.op === "put");
     expect(put).toBeTruthy();
     confirmed = true;
@@ -638,18 +644,16 @@ test.describe("gym webapp sharing", () => {
     await page.click("[data-share-home]");
     await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
     expect(m.sent("/accept")).toHaveLength(0);
-    expect(m.sent("/account-key-attestation", "GET")).toHaveLength(0);
+    expect(m.sent("/share-key-attestation", "POST")).toHaveLength(0);
   });
 
   test("gym sharing a demo account's device accepts through .com's demo signer", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "demo", servers: [HOME] });
     const fx = await fixtures(page);
-    const demoAdminPub = "d3".repeat(32);
     const m = await mock(page);
     let accepted = false;
     m.get(`/api/server-shares/${fx.alice.shareId}`, () => ({ json: { shareId: fx.alice.shareId, serverDomain: SHARED_BOX, state: accepted ? "accepted" : "offered", offer: fx.alice.offer, acceptance: null, unlock: false } }));
-    m.get(`/api/users/${USER}/account-key-attestation`, { attestation: attestationFor(demoAdminPub) });
-    m.post(`/api/dev/sample-user/${USER}/share-accept`, (c) => ({ json: { signature: c.body.admit.keyPubHex === demoAdminPub ? "5e".repeat(64) : "" } }));
+    m.post(`/api/dev/sample-user/${USER}/share-key-attestation`, (c) => ({ json: { attestation: attestationFor(c.body.keyPubHex) } }));
     m.post(`/api/server-shares/${fx.alice.shareId}/accept`, () => ((accepted = true), { json: { ok: true } }));
     m.post("/api/share-inbox", (c) => ({ json: c.body.request.op === "list" ? { entries: [] } : { ok: true } }));
     m.get(`${SHARED_BOX}/api/shares/nonce`, { nonce: "11".repeat(32) });
@@ -661,10 +665,9 @@ test.describe("gym webapp sharing", () => {
     await page.click("[data-share-accept]");
     // No passphrase: a demo account's operator holds its admin root.
     await expect(page.locator("[data-share-waiting]")).toBeVisible({ timeout: 10_000 });
-    const [signed] = m.sent("/share-accept");
-    expect(signed!.body.admit).toMatchObject({ shareId: fx.alice.shareId, keyKind: "admin-root", keyPubHex: demoAdminPub });
+    const [asked] = m.sent("/share-key-attestation");
     const proof = await acceptanceProof(page, fx.alice, m.sent(ACCEPT_POST)[0]!.body.acceptance);
-    expect(proof.signature).toBe("5e".repeat(64));
+    expect(proof.admit).toMatchObject({ shareId: fx.alice.shareId, keyKind: "share", keyPubHex: asked!.body.keyPubHex });
     await shot(page, testInfo, "member-demo-accepted");
   });
 

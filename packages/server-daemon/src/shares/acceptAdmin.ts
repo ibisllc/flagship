@@ -6,13 +6,17 @@
  *
  *   - #12 `flagship/server-share-accept-admin/v1`, naming the same share,
  *     server, member key and time as the member-key acceptance (#3), signed
- *     by the key it names;
- *   - `.com`'s CA-signed AccountKeyAttestation that this key is an account's
- *     current sensitive key: its admin root, or its IRK only when the account
- *     pins no admin root (the `authorizeSensitiveOrder` fallback).
+ *     by the per-share admin key it names (keyKind `share`);
+ *   - `.com`'s CA-signed AccountKeyAttestation of that key, which `.com`
+ *     issues only on a request signed by the account's sensitive key (admin
+ *     root or an admin-granted device; the IRK only when the account pins no
+ *     admin root: `authorizeSensitiveComOp`).
  *
- * The attestation names no account, and the box asks `.com` nothing: it
- * learns only that some account's admin key vouched for this member key.
+ * The attestation names no account, the box asks `.com` nothing, and the key
+ * is derived per share from the joining account's UMK: it is no key `.com`
+ * serves by name, and another server B joins sees a different one, so no
+ * owner can confirm a guessed account or link B across servers (AT-LNK-10).
+ * The box learns only that some account's admin vouched for this member key.
  */
 import {
   ACCOUNT_KEY_ATTESTATION_TTL_MS,
@@ -69,10 +73,10 @@ export function checkShareAcceptAdmin(args: CheckAcceptAdminArgs): AcceptAdminVe
   ) {
     return refuse("accept-signature");
   }
-  // A device without the admin root can sign only with the IRK; the account's
-  // attestation names its admin root, so that is a non-admin device.
-  if (admit.keyKind === "irk" && attestation.keyKind === "admin-root") return refuse("accept-not-admin");
-  if (admit.keyKind !== attestation.keyKind || admit.keyPubHex !== attestation.keyPubHex) return refuse("accept-signature");
+  // Only a per-share key is accepted: a stable account key would let this
+  // server's owner match the joining account by name (AT-LNK-10).
+  if (admit.keyKind !== "share" || attestation.keyKind !== "share") return refuse("accept-not-admin");
+  if (admit.keyPubHex !== attestation.keyPubHex) return refuse("accept-signature");
   const sig = Buffer.from(proof.signature, "hex");
   if (sig.length !== 64 || !verifyServerShareAcceptAdmin(admit, sig, Buffer.from(admit.keyPubHex, "hex"))) {
     return refuse("accept-signature");

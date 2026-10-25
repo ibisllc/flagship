@@ -64,6 +64,8 @@ const SUB_SUBCOMMANDS: Record<string, Set<string>> = {
 };
 /** The box's data-service containers, the only ones `docker exec` reaches, and what may run in them. */
 const EXEC_CONTAINERS = new Set(["flagship-postgres", "flagship-forgejo"]);
+/** An app's dedicated database (dataLayer/dedicated.ts dedicatedContainer). */
+const DEDICATED_PG_CONTAINER = /^flagship-pgd-[0-9a-f]{24}$/;
 const EXEC_COMMANDS = new Set(["pg_dump", "pg_dumpall", "pg_restore", "psql", "pg_isready", "sqlite3", "tar", "rm", "forgejo"]);
 const EXEC_ENV = /^PGPASSWORD(=[^\u0000\n]{0,512})?$/;
 const COMPOSE_FILE = "/opt/flagship/installer/data-services/docker-compose.yml";
@@ -83,21 +85,21 @@ const FORBIDDEN_FLAGS = [
 /** What a build may say besides its tag and context (serviceRunner.ts dockerBuildArgs). */
 const BUILD_FLAGS = new Set(["--network", "--add-host", "--memory", "--cpu-period", "--cpu-quota", "--ulimit", "-t", "--tag", "--label"]);
 /** A bind volume is only ever an app's own disk image (appQuota/loopVolumes.ts createBindVolume). */
-const BIND_DEVICE = /^device=\/var\/lib\/flagship-files\/(flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128})\/data$/;
+const BIND_DEVICE = /^device=\/var\/lib\/flagship-files\/(flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128}|flagship-pgdata-[0-9a-f]{24})\/data$/;
 
 /**
  * The engine's binary and argv for a checked docker-form request: Docker as written, or Podman's
  * translation held to the docker rules again (when `dockerRules`) and to Podman's own.
  */
-function forEngine(a: string[], engine: EngineKind, dockerRules: boolean): { file: string; args: string[] } {
+function forEngine(a: string[], engine: EngineKind, dockerRules: boolean, gpu: GpuClaimReader = NO_GPU_CLAIMS): { file: string; args: string[] } {
   if (engine !== "podman") return { file: ENGINE_BINARY.docker, args: a };
   const mapped = podmanArgv(a);
-  if (dockerRules) validateDockerArgs(mapped);
+  if (dockerRules) validateDockerArgs(mapped, gpu);
   validatePodmanArgs(mapped);
   return { file: ENGINE_BINARY.podman, args: mapped };
 }
 
-export function dockerExec(args: Record<string, unknown>, engine: EngineKind = "docker"): Exec {
+export function dockerExec(args: Record<string, unknown>, engine: EngineKind = "docker", gpu: GpuClaimReader = NO_GPU_CLAIMS): Exec {
   noExtra(args, ["argv", "stdin", "env"]);
   const argv = args.argv;
   if (!Array.isArray(argv) || argv.length === 0 || argv.length > 256 || !argv.every((a) => typeof a === "string" && a.length <= 4096 && !a.includes("\u0000"))) {
@@ -119,11 +121,11 @@ export function dockerExec(args: Record<string, unknown>, engine: EngineKind = "
   if (sub === "build") validateDockerBuild(a);
   if (sub === "volume" && a[1] === "create") validateVolumeCreate(a);
   if (sub === "network" && a[1] === "create") validateNetworkCreate(a);
-  validateDockerArgs(a);
+  validateDockerArgs(a, gpu);
   const input = typeof args.stdin === "string" ? args.stdin : undefined;
   const env = clientEnv(args.env);
   return {
-    ...forEngine(a, engine, true),
+    ...forEngine(a, engine, true, gpu),
     timeoutMs: sub === "build" ? 20 * 60_000 : 5 * 60_000,
     ...(input !== undefined ? { input } : {}),
     ...(Object.keys(env).length ? { env } : {}),
@@ -230,7 +232,7 @@ function validateDockerExec(a: readonly string[]): void {
     }
     throw new PrivdError("forbidden", `exec flag ${f} is not allowed`);
   }
-  if (!EXEC_CONTAINERS.has(a[i] ?? "")) throw new PrivdError("forbidden", "exec reaches only the box's data services");
+  if (!EXEC_CONTAINERS.has(a[i] ?? "") && !DEDICATED_PG_CONTAINER.test(a[i] ?? "")) throw new PrivdError("forbidden", "exec reaches only the box's data services");
   if (!EXEC_COMMANDS.has(a[i + 1] ?? "")) throw new PrivdError("forbidden", `exec may not run ${a[i + 1] ?? ""}`);
 }
 
@@ -290,19 +292,323 @@ function composeExec(a: string[]): Exec {
   return { file: "/usr/bin/docker", args: a, timeoutMs: 10 * 60_000 };
 }
 
+// ── docker run / create, read the way the docker CLI reads them ───────────
+
+/**
+ * Every flag `docker run` / `docker create` (and Podman's run, for the flags they share) knows, by
+ * long name, whether it takes a value, and its one-letter shorthand. The argv is parsed with the
+ * CLI's own rules (pflag: `--flag value`, `--flag=value`, `-v value`, `-vVALUE`, `-v=VALUE`, short
+ * flags grouped as `-dv VALUE`, flags end at `--` or the image) into one list of (flag, value)
+ * pairs, and the policy reads that list: a spelling the CLI would accept cannot slip past it, and
+ * a flag this table does not know is refused.
+ */
+const RUN_BOOL_FLAGS = new Set([
+  "detach", "interactive", "tty", "rm", "init", "privileged", "publish-all", "read-only", "no-healthcheck", "oom-kill-disable", "sig-proxy",
+  "disable-content-trust", "quiet", "use-api-socket",
+]);
+const RUN_VALUE_FLAGS = new Set([
+  "attach", "add-host", "annotation", "blkio-weight", "blkio-weight-device", "cap-add", "cap-drop", "cgroup-parent", "cgroupns", "cidfile", "cpu-count",
+  "cpu-percent", "cpu-period", "cpu-quota", "cpu-rt-period", "cpu-rt-runtime", "cpu-shares", "cpus", "cpuset-cpus", "cpuset-mems", "detach-keys", "device",
+  "device-cgroup-rule", "device-read-bps", "device-read-iops", "device-write-bps", "device-write-iops", "dns", "dns-option", "dns-search", "domainname",
+  "entrypoint", "env", "env-file", "expose", "gpus", "group-add", "health-cmd", "health-interval", "health-retries", "health-start-interval",
+  "health-start-period", "health-timeout", "hostname", "io-maxbandwidth", "io-maxiops", "ip", "ip6", "ipc", "isolation", "kernel-memory", "label",
+  "label-file", "link", "link-local-ip", "log-driver", "log-opt", "mac-address", "memory", "memory-reservation", "memory-swap", "memory-swappiness",
+  "mount", "name", "network", "network-alias", "oom-score-adj", "pid", "pids-limit", "platform", "publish", "pull", "restart", "runtime",
+  "security-opt", "shm-size", "stop-signal", "stop-timeout", "storage-opt", "sysctl", "tmpfs", "ulimit", "user", "userns", "uts", "volume",
+  "volume-driver", "volumes-from", "workdir",
+]);
+/** Second names the CLI gives a flag. */
+const RUN_FLAG_ALIASES = new Map([["net", "network"], ["net-alias", "network-alias"], ["dns-opt", "dns-option"]]);
+const RUN_SHORTHANDS = new Map([
+  ["d", "detach"], ["i", "interactive"], ["t", "tty"], ["P", "publish-all"], ["q", "quiet"], ["a", "attach"], ["c", "cpu-shares"], ["e", "env"],
+  ["h", "hostname"], ["l", "label"], ["m", "memory"], ["p", "publish"], ["u", "user"], ["v", "volume"], ["w", "workdir"],
+]);
+const LONG_FLAG_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+export interface RunFlag {
+  /** The flag's long name, without dashes (an alias already resolved). */
+  name: string;
+  value: string;
+}
+export interface ParsedRun {
+  flags: RunFlag[];
+  image: string;
+  command: string[];
+}
+
+function runFlag(name: string): "bool" | "value" | null {
+  if (RUN_BOOL_FLAGS.has(name)) return "bool";
+  if (RUN_VALUE_FLAGS.has(name)) return "value";
+  return null;
+}
+
+/** `docker run|create …` as the CLI parses it; refuses what it cannot classify. */
+export function parseRunArgv(a: readonly string[]): ParsedRun {
+  const flags: RunFlag[] = [];
+  const boolValue = (spelled: string, v: string) => {
+    if (v !== "true" && v !== "false") throw new PrivdError("forbidden", `${spelled} takes true or false`);
+    return v;
+  };
+  let i = 1;
+  for (; i < a.length; i++) {
+    const x = a[i]!;
+    if (x === "--") {
+      i++;
+      break;
+    }
+    if (!x.startsWith("-") || x === "-") break;
+    if (x.startsWith("--")) {
+      const body = x.slice(2);
+      const eq = body.indexOf("=");
+      const spelled = eq >= 0 ? body.slice(0, eq) : body;
+      if (!LONG_FLAG_NAME.test(spelled)) throw new PrivdError("forbidden", "a flag the broker cannot read is not allowed");
+      const name = RUN_FLAG_ALIASES.get(spelled) ?? spelled;
+      const kind = runFlag(name);
+      if (kind === null) throw new PrivdError("forbidden", `--${spelled} is not a flag the broker knows`);
+      if (kind === "bool") flags.push({ name, value: eq >= 0 ? boolValue(`--${spelled}`, body.slice(eq + 1)) : "true" });
+      else if (eq >= 0) flags.push({ name, value: body.slice(eq + 1) });
+      else {
+        if (i + 1 >= a.length) throw new PrivdError("forbidden", `--${spelled} needs a value`);
+        flags.push({ name, value: a[++i]! });
+      }
+      continue;
+    }
+    // A group of shorthands: bools until one that takes a value, which takes the rest (or the next argument).
+    let j = 1;
+    while (j < x.length) {
+      const c = x[j]!;
+      const name = RUN_SHORTHANDS.get(c);
+      if (name === undefined) throw new PrivdError("forbidden", `-${c} is not a flag the broker knows`);
+      const kind = runFlag(name)!;
+      if (x.length - j > 2 && x[j + 1] === "=") {
+        const v = x.slice(j + 2);
+        flags.push({ name, value: kind === "bool" ? boolValue(`-${c}`, v) : v });
+        break;
+      }
+      if (kind === "bool") {
+        flags.push({ name, value: "true" });
+        j++;
+        continue;
+      }
+      if (j + 1 < x.length) flags.push({ name, value: x.slice(j + 1) });
+      else {
+        if (i + 1 >= a.length) throw new PrivdError("forbidden", `-${c} needs a value`);
+        flags.push({ name, value: a[++i]! });
+      }
+      break;
+    }
+  }
+  if (i >= a.length) throw new PrivdError("forbidden", "name an image");
+  return { flags, image: a[i]!, command: a.slice(i + 1) };
+}
+
+/** The runtime every app, staging and sandbox container runs under (appSandbox/gvisor.ts GVISOR_RUNTIME). */
+export const APP_RUNTIME = "runsc";
+
+/**
+ * A GPU allocation flagship-gpud attached for one container (rust/crates/flagship-gpu, attach.rs):
+ * the runtime it must run under (`runsc-nvproxy`: runsc with nvproxy; `kata-vfio`: Kata over a VFIO
+ * group) and the exact CDI devices the claim journal holds for it. gpud publishes these, root-owned,
+ * in /run/flagship-gpu/run-claims.json; the daemon never writes them.
+ */
+export interface GpuRunClaim {
+  allocationId: string;
+  appId: string;
+  container: string;
+  runtime: string;
+  devices: string[];
+}
+export type GpuClaimReader = (allocationId: string) => GpuRunClaim | null;
+export const NO_GPU_CLAIMS: GpuClaimReader = () => null;
+/** The only runtimes a GPU container may name. */
+export const GPU_RUNTIMES = new Set(["runsc-nvproxy", "kata-vfio"]);
+const GPU_LABEL = "flagship.gpu.allocation=";
+/** A CDI device as gpud names it: an NVIDIA device or MIG partition, or a VFIO group gpud bound. */
+const GPU_CDI_DEVICE = /^(?:nvidia\.com\/gpu|flagship\.vfio\/group)=[A-Za-z0-9:._-]{1,32}$/;
+/** Run flags that give a container the host, another container, or a host file read or written as root. */
+const RUN_FORBIDDEN = new Set([
+  "privileged", "cap-add", "device", "device-cgroup-rule", "device-read-bps", "device-read-iops", "device-write-bps", "device-write-iops",
+  "blkio-weight-device", "pid", "ipc", "uts", "userns", "cgroupns", "volumes-from", "sysctl", "group-add", "gpus", "cgroup-parent", "env-file",
+  "label-file", "cidfile", "volume-driver", "use-api-socket", "annotation", "link", "storage-opt", "log-driver", "log-opt", "isolation",
+]);
+/** The read-only socket folder of an app's dedicated database, its migration sandbox's one way in (migrationSandbox.ts). */
+const PGSOCK_RO_MOUNT_RE = /^type=volume,src=flagship-pgsock-[0-9a-f]{24},dst=\/var\/run\/postgresql,readonly$/;
+
+/** Whether a `--user` value names uid 0, in any spelling the engine reads as 0. */
+function isRootUser(v: string): boolean {
+  const uid = v.split(":")[0]!;
+  return uid === "root" || /^[+-]?0+$/.test(uid);
+}
+
+/** The rules for an ordinary run: an app, a staging copy, a sandbox or a probe. Throws on the first. */
+function checkOrdinaryRun(sub: string, run: ParsedRun, gpu: GpuRunClaim | null = null): void {
+  let runtime = false;
+  const devices = new Set<string>();
+  for (const { name, value } of run.flags) {
+    if (RUN_FORBIDDEN.has(name) && !(gpu && name === "device")) throw new PrivdError("forbidden", `--${name} is not allowed`);
+    switch (name) {
+      case "device":
+        if (!GPU_CDI_DEVICE.test(value) || !gpu!.devices.includes(value) || devices.has(value)) {
+          throw new PrivdError("forbidden", "a GPU container gets only the devices its allocation holds");
+        }
+        devices.add(value);
+        break;
+      case "volume":
+        throw new PrivdError("forbidden", "host-path mounts are not allowed");
+      case "security-opt":
+        if (!/^no-new-privileges(:true)?$/.test(value)) throw new PrivdError("forbidden", "--security-opt is not allowed");
+        break;
+      case "network":
+        if (value === "host") throw new PrivdError("forbidden", "host networking is not allowed");
+        if (!NETWORK_NAME.test(value)) throw new PrivdError("forbidden", "a container joins a named network only");
+        break;
+      case "mount":
+        if (sub !== "run" || !(FILES_MOUNT_RE.test(value) || RESOLV_MOUNT_RE.test(value) || PGSOCK_RO_MOUNT_RE.test(value))) {
+          throw new PrivdError("forbidden", "only an app's files volume may be mounted");
+        }
+        break;
+      case "user":
+        if (isRootUser(value)) throw new PrivdError("forbidden", "a container may not run as root");
+        break;
+      case "runtime":
+        if (gpu ? runtime || value !== gpu.runtime || !GPU_RUNTIMES.has(value) : value !== APP_RUNTIME) {
+          throw new PrivdError("forbidden", gpu ? "a GPU container runs under the runtime its allocation names" : "a container runs under gVisor (--runtime runsc)");
+        }
+        runtime = true;
+        break;
+    }
+  }
+  if (!runtime) throw new PrivdError("forbidden", gpu ? "a GPU container runs under the runtime its allocation names" : "a container runs under gVisor (--runtime runsc)");
+  if (gpu) {
+    if (sub !== "run") throw new PrivdError("forbidden", "a GPU container is started with run");
+    if (devices.size !== gpu.devices.length) throw new PrivdError("forbidden", "a GPU container gets only the devices its allocation holds");
+    const names = run.flags.filter((f) => f.name === "name");
+    if (names.length !== 1 || names[0]!.value !== gpu.container) throw new PrivdError("forbidden", "the GPU allocation was attached for another container");
+  }
+}
+
+/** The GPU allocation a run names by its label, as gpud attached it; null when it names none. */
+function gpuClaimFor(run: ParsedRun, claims: GpuClaimReader): GpuRunClaim | null {
+  const labels = run.flags.filter((f) => f.name === "label" && f.value.startsWith(GPU_LABEL));
+  if (labels.length === 0) return null;
+  if (labels.length > 1) throw new PrivdError("forbidden", "a container holds one GPU allocation");
+  const id = labels[0]!.value.slice(GPU_LABEL.length);
+  const claim = /^[A-Za-z0-9._-]{1,128}$/.test(id) ? claims(id) : null;
+  if (!claim || claim.allocationId !== id) throw new PrivdError("forbidden", "this container holds no attached GPU allocation");
+  return claim;
+}
+
+/** The pinned Postgres image of an app's dedicated database (dataLayer/dedicated.ts DEDICATED_PG_IMAGE). */
+export const DEDICATED_PG_IMAGE =
+  "pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0";
+const DEDICATED_CAPS = new Set(["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]);
+const DEDICATED_SETTINGS = new Set([
+  "listen_addresses", "max_connections", "superuser_reserved_connections", "shared_buffers", "work_mem", "maintenance_work_mem", "temp_file_limit",
+  "max_wal_size", "min_wal_size", "statement_timeout", "idle_in_transaction_session_timeout", "max_parallel_workers_per_gather", "log_min_messages",
+]);
+const DEDICATED_ENV = new Set(["POSTGRES_USER=flagship_admin", "POSTGRES_DB=postgres", "POSTGRES_INITDB_ARGS=--auth-local=scram-sha-256 --auth-host=scram-sha-256"]);
+
+/**
+ * An app's dedicated database (dataLayer/dedicated.ts dedicatedRunArgs): the pinned Postgres image
+ * under gVisor, named `flagship-pgd-<key>`, its own data and socket volumes for the same key and
+ * nothing else, the capabilities its entrypoint needs to drop to the postgres user, its limits,
+ * a loopback port, its fixed settings. The only run that may add capabilities.
+ */
+function isDedicatedPostgresRun(sub: string, run: ParsedRun): boolean {
+  if (sub !== "run" || run.image !== DEDICATED_PG_IMAGE) return false;
+  const key = /^flagship-pgd-([0-9a-f]{24})$/.exec(run.flags.find((f) => f.name === "name")?.value ?? "")?.[1];
+  if (!key) return false;
+  const c = run.command;
+  if (c[0] !== "postgres" || c.length % 2 !== 1) return false;
+  for (let i = 1; i < c.length; i += 2) {
+    const m = /^([a-z_]{1,64})=([A-Za-z0-9*.]{1,32})$/.exec(c[i + 1]!);
+    if (c[i] !== "-c" || !m || !DEDICATED_SETTINGS.has(m[1]!)) return false;
+  }
+  const seen = new Set<string>();
+  const mounts = new Set<string>();
+  for (const { name, value } of run.flags) {
+    let ok: boolean;
+    switch (name) {
+      case "detach":
+        ok = value === "true";
+        break;
+      case "name":
+        ok = !seen.has(name);
+        break;
+      case "label":
+        ok = value === "flagship.role=dedicated-postgres";
+        break;
+      case "restart":
+        ok = value === "unless-stopped";
+        break;
+      case "runtime":
+        ok = value === APP_RUNTIME;
+        break;
+      case "cap-drop":
+        ok = value === "ALL";
+        break;
+      case "cap-add":
+        ok = DEDICATED_CAPS.has(value);
+        break;
+      case "security-opt":
+        ok = value === "no-new-privileges";
+        break;
+      case "network":
+        ok = value !== "host" && NETWORK_NAME.test(value);
+        break;
+      case "memory":
+      case "memory-swap":
+        ok = /^[1-9][0-9]{0,5}m$/.test(value);
+        break;
+      case "cpus":
+        ok = /^[0-9]{1,2}(\.[0-9]{1,2})?$/.test(value);
+        break;
+      case "pids-limit":
+        ok = /^[1-9][0-9]{0,4}$/.test(value);
+        break;
+      case "shm-size":
+        ok = value === "64m";
+        break;
+      case "env":
+        ok = DEDICATED_ENV.has(value) || /^POSTGRES_PASSWORD=[A-Za-z0-9_-]{16,128}$/.test(value);
+        break;
+      case "publish":
+        ok = /^127\.0\.0\.1:[1-9][0-9]{3,4}:5432$/.test(value);
+        break;
+      case "mount":
+        ok = value === `type=volume,src=flagship-pgdata-${key},dst=/var/lib/postgresql` || value === `type=volume,src=flagship-pgsock-${key},dst=/var/run/postgresql`;
+        if (ok) mounts.add(value);
+        break;
+      default:
+        ok = false;
+    }
+    if (!ok) return false;
+    seen.add(name);
+  }
+  return mounts.size === 2 && seen.has("runtime") && seen.has("cap-drop") && seen.has("security-opt") && seen.has("memory") && seen.has("pids-limit");
+}
+
 /** Every rule that keeps a container from being the host. Throws on the first violation. */
-export function validateDockerArgs(a: readonly string[]): void {
-  const helper = isFilesHelperRun(a);
+export function validateDockerArgs(a: readonly string[], gpu: GpuClaimReader = NO_GPU_CLAIMS): void {
   for (let i = 0; i < a.length; i++) {
     const x = a[i]!;
     const lower = x.toLowerCase();
-    const name = lower.split("=")[0]!;
     if (lower.includes("docker.sock")) throw new PrivdError("forbidden", "the docker socket is never mounted");
     if (lower.includes("/var/flagship") && !(a[0] === "build" && i === a.length - 1 && BUILD_CONTEXT_RE.test(x))) {
       throw new PrivdError("forbidden", "the box's state directory is never visible to a container");
     }
-    // The helper's flags were checked one by one in isFilesHelperRun.
-    if (helper) continue;
+  }
+  if (a[0] === "run" || a[0] === "create") {
+    const run = parseRunArgv(a);
+    // The files helper's flags are checked one by one in isFilesHelperRun; it alone runs as uid 0 under runc.
+    if (isFilesHelperRun(a) || isDedicatedPostgresRun(a[0], run)) return;
+    checkOrdinaryRun(a[0], run, gpuClaimFor(run, gpu));
+    return;
+  }
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const lower = x.toLowerCase();
+    const name = lower.split("=")[0]!;
     if (FORBIDDEN_FLAGS.includes(name)) {
       // Two narrow allowances the app runner itself relies on: dropping the default seccomp is not
       // among them; `--security-opt=no-new-privileges` only tightens.
@@ -312,21 +618,19 @@ export function validateDockerArgs(a: readonly string[]): void {
       }
       throw new PrivdError("forbidden", `${name} is not allowed`);
     }
-    if ((name === "--network" || name === "--net") && (x.includes("=") ? x.split("=")[1] : a[i + 1]) === "host") throw new PrivdError("forbidden", "host networking is not allowed");
+    if (name === "--network" || name === "--net") {
+      const v = x.includes("=") ? x.slice(x.indexOf("=") + 1) : a[i + 1] ?? "";
+      if (v === "host") throw new PrivdError("forbidden", "host networking is not allowed");
+      if (!NETWORK_NAME.test(v)) throw new PrivdError("forbidden", "a container joins a named network only");
+    }
     if (name === "-v" || name === "--volume") throw new PrivdError("forbidden", "host-path mounts are not allowed");
-    if (name === "--mount") {
-      const v = x.includes("=") ? x.slice(x.indexOf("=") + 1) : a[++i] ?? "";
-      if (a[0] !== "run" || !(FILES_MOUNT_RE.test(v) || RESOLV_MOUNT_RE.test(v))) throw new PrivdError("forbidden", "only an app's files volume may be mounted");
-      continue;
-    }
+    // Outside run and create, these mean nothing safe.
+    if (name === "--mount") throw new PrivdError("forbidden", "only an app's files volume may be mounted");
     if (name === "--user" || name === "-u") {
-      const v = x.includes("=") ? x.split("=")[1]! : a[++i] ?? "";
-      if (/^(0|root)(:|$)/.test(v)) throw new PrivdError("forbidden", "a container may not run as root");
+      const v = x.includes("=") ? x.slice(x.indexOf("=") + 1) : a[++i] ?? "";
+      if (isRootUser(v)) throw new PrivdError("forbidden", "a container may not run as root");
     }
-    if (name === "--runtime") {
-      const v = x.includes("=") ? x.split("=")[1]! : a[++i] ?? "";
-      if (v !== "runsc" && v !== "runc") throw new PrivdError("forbidden", "unknown container runtime");
-    }
+    if (name === "--runtime") throw new PrivdError("forbidden", "--runtime is not allowed");
     // A Dockerfile path would read any file on the host as root.
     if (a[0] === "build" && (name === "-f" || name === "--file")) throw new PrivdError("forbidden", "a build uses the Dockerfile the box wrote, not a path");
   }
@@ -406,7 +710,11 @@ const MANAGED_UNITS = new Set([
   "flagship-daemon.service", "flagship-data-services", "flagship-data-services.service",
   "flagship-keyd.service", "flagship-tlsd.service", "flagship-health.timer",
 ]);
-const UNIT_VERBS = new Set(["start", "stop", "restart", "reload", "reset-failed", "is-active", "show", "enable", "status"]);
+const UNIT_VERBS = new Set(["start", "stop", "restart", "reload", "reset-failed", "is-active", "show", "enable", "status", "freeze", "thaw"]);
+/** One WASI app's worker (server-daemon wasi/unit.ts wasiUnitName): its instance is 16 lowercase hex. */
+const WASI_UNIT = /^flagship-wasi@[0-9a-f]{16}\.service$/;
+/** What the daemon does to a WASI worker: run it, read its state, and hold it still for a backup. */
+const WASI_VERBS = new Set(["start", "stop", "reset-failed", "show", "freeze", "thaw"]);
 
 export function systemctlExec(args: Record<string, unknown>): Exec {
   noExtra(args, ["argv"]);
@@ -418,7 +726,10 @@ export function systemctlExec(args: Record<string, unknown>): Exec {
   const units = rest.filter((x) => !x.startsWith("-"));
   const flags = rest.filter((x) => x.startsWith("-"));
   if (units.length === 0) throw new PrivdError("bad-request", "name a unit");
-  for (const u of units) if (!MANAGED_UNITS.has(u)) throw new PrivdError("forbidden", "that unit is not one the daemon manages");
+  const wasi = units.filter((u) => WASI_UNIT.test(u)).length;
+  for (const u of units) if (!MANAGED_UNITS.has(u) && !WASI_UNIT.test(u)) throw new PrivdError("forbidden", "that unit is not one the daemon manages");
+  if (wasi > 0 && (wasi !== units.length || !WASI_VERBS.has(verb))) throw new PrivdError("forbidden", `systemctl ${verb} is not allowed on a WebAssembly app's worker`);
+  if ((verb === "freeze" || verb === "thaw") && wasi === 0) throw new PrivdError("forbidden", `systemctl ${verb} is only for a WebAssembly app's worker`);
   for (const f of flags) {
     if (f === "--no-block" || f === "--now" || f === "--quiet" || f === "--no-pager") continue;
     if (verb === "show" && /^--property=[A-Za-z]{1,64}(,[A-Za-z]{1,64})*$/.test(f)) continue;
@@ -430,11 +741,87 @@ export function systemctlExec(args: Record<string, unknown>): Exec {
   return { file: "/usr/bin/systemctl", args: a, timeoutMs: 60_000 };
 }
 
+// ── WASI app workers (server-daemon wasi/unit.ts) ─────────────────────────
+
+/** The worker binary the release's `wasi-runtime` setup step installs. */
+export const WASI_WORKER_BIN = "/usr/local/lib/flagship-wasi/flagship-wasi-worker";
+export const WASI_DROPIN_ROOT = "/run/systemd/system";
+const WASI_GUEST_CONFIG = "/var/app/pkg/worker.json";
+const WASI_GUEST_DATA = "/var/app/data";
+
+export interface WasiDropInFields {
+  world: "command" | "http-proxy";
+  memoryMiB: number;
+  tasks: number;
+  cpuPercent: number;
+  restart: "always" | "on-failure" | "never";
+  filesPath?: string;
+}
+
+/**
+ * One app's drop-in for its worker unit, rendered here from typed fields: the daemon never hands the
+ * broker unit text. Byte for byte what the daemon writes as root (wasi/unit.ts wasiDropIn; a daemon
+ * test keeps them equal).
+ */
+export function renderWasiDropIn(d: WasiDropInFields): string {
+  const lines = [
+    "# Written by the Flagship daemon (wasi/unit.ts) for one app.",
+    "[Service]",
+    "ExecStart=",
+    `ExecStart=${WASI_WORKER_BIN} ${d.world === "command" ? "run" : "serve"} --config ${WASI_GUEST_CONFIG}`,
+    `Restart=${d.restart === "never" ? "no" : d.restart}`,
+    `MemoryMax=${d.memoryMiB}M`,
+    `TasksMax=${d.tasks}`,
+    `CPUQuota=${d.cpuPercent}%`,
+  ];
+  if (d.filesPath) lines.push(`BindPaths=${d.filesPath}:${WASI_GUEST_DATA}`);
+  return lines.join("\n") + "\n";
+}
+
+function intIn(v: unknown, min: number, max: number, what: string): number {
+  if (typeof v !== "number" || !Number.isInteger(v) || v < min || v > max) throw new PrivdError("bad-request", `${what} must be a whole number from ${min} to ${max}`);
+  return v;
+}
+
+/**
+ * Write or remove one WASI app's drop-in under /run/systemd/system/flagship-wasi@<instance>.service.d/.
+ * The instance is 16 lowercase hex; the files folder, when the app has one, is its own volume's.
+ */
+export function wasiUnitExec(args: Record<string, unknown>): Exec {
+  noExtra(args, ["action", "instance", "world", "memoryMiB", "tasks", "cpuPercent", "restart", "filesPath"]);
+  if (typeof args.instance !== "string" || !/^[0-9a-f]{16}$/.test(args.instance)) throw new PrivdError("bad-request", "instance is 16 lowercase hex");
+  const dir = `${WASI_DROPIN_ROOT}/flagship-wasi@${args.instance}.service.d`;
+  if (args.action === "remove") {
+    noExtra(args, ["action", "instance"]);
+    return { file: "/usr/bin/rm", args: ["-rf", "--", dir], timeoutMs: 30_000 };
+  }
+  if (args.action !== "write") throw new PrivdError("bad-request", "action is write or remove");
+  if (args.world !== "command" && args.world !== "http-proxy") throw new PrivdError("bad-request", "world is command or http-proxy");
+  if (args.restart !== "always" && args.restart !== "on-failure" && args.restart !== "never") throw new PrivdError("bad-request", "restart is always, on-failure or never");
+  const fields: WasiDropInFields = {
+    world: args.world,
+    restart: args.restart,
+    memoryMiB: intIn(args.memoryMiB, 32, 8192, "memoryMiB"),
+    tasks: intIn(args.tasks, 8, 4096, "tasks"),
+    cpuPercent: intIn(args.cpuPercent, 5, 800, "cpuPercent"),
+  };
+  if (args.filesPath !== undefined) {
+    if (typeof args.filesPath !== "string" || !(WASI_FILES_IMAGE_DATA.test(args.filesPath) || WASI_FILES_VOLUME_DATA.test(args.filesPath))) {
+      throw new PrivdError("forbidden", "a WebAssembly app binds only its own files folder");
+    }
+    fields.filesPath = args.filesPath;
+  }
+  return { file: "/usr/bin/install", args: ["-D", "-m", "0644", "/dev/stdin", `${dir}/50-app.conf`], timeoutMs: 30_000, input: renderWasiDropIn(fields) };
+}
+
 // ── host operations (per-app disk images, volume folders, the egress chains) ─
 
 /** Per-app files images (appQuota/loopVolumes.ts in the daemon). */
 export const FILES_IMAGE_ROOT = "/var/lib/flagship-files";
-const VOL = "flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128}";
+/** An app's files volume, or a dedicated database's data (dataLayer/dedicated.ts), each in its own quota image. */
+const VOL = "(?:flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128}|flagship-pgdata-[0-9a-f]{24})";
+/** Only an app's files volume (what a WASI app's unit binds). */
+const FILES_VOL = "flagship-(?:dev)?files-[A-Za-z0-9_.-]{1,128}";
 const IMAGE_MOUNT = new RegExp(`^${FILES_IMAGE_ROOT}/${VOL}$`);
 const IMAGE_FILE = new RegExp(`^${FILES_IMAGE_ROOT}/${VOL}\\.img$`);
 const IMAGE_DATA = new RegExp(`^${FILES_IMAGE_ROOT}/${VOL}/data/?$`);
@@ -446,6 +833,8 @@ const MKFS_ARGS = ["-q", "-F", "-b", "4096", "-T", "default", "-m", "0", "-E", "
 /** An app's files volume's own folder, where Docker or Podman keeps it. */
 const DOCKER_VOLUME_DATA = new RegExp(`^/var/lib/(?:docker/volumes|containers/storage/volumes)/${VOL}/_data$`);
 const MOUNT_OPTS = "loop,nodev,nosuid,discard,noinit_itable";
+const WASI_FILES_IMAGE_DATA = new RegExp(`^${FILES_IMAGE_ROOT}/${FILES_VOL}/data$`);
+const WASI_FILES_VOLUME_DATA = new RegExp(`^/var/lib/(?:docker/volumes|containers/storage/volumes)/${FILES_VOL}/_data$`);
 const LOOP_DEVICE = /^\/dev\/loop[0-9]{1,4}$/;
 /** The daemon's folder fingerprint (appQuota/loopVolumes.ts FOLDER_FINGERPRINT_SCRIPT), byte for byte. */
 export const FOLDER_FINGERPRINT_SCRIPT =
@@ -529,7 +918,7 @@ export function hostExec(args: Record<string, unknown>, mounts: MountsReader): E
       if (a.length === 2 && /^[0-9]{1,16}$/.test(a[0]!) && (IMAGE_FILE.test(a[1]!) || IMAGE_BALLAST.test(a[1]!))) return { file: "/usr/bin/truncate", args: ["-s", a[0]!, "--", a[1]!], timeoutMs: 60_000 };
       break;
     case "fallocate":
-      if (a.length === 3 && a[0] === "-l" && /^[0-9]{1,16}$/.test(a[1]!) && IMAGE_BALLAST.test(a[2]!)) return { file: "/usr/bin/fallocate", args: a, timeoutMs: 10 * 60_000 };
+      if (a.length === 3 && a[0] === "-l" && /^[0-9]{1,16}$/.test(a[1]!) && (IMAGE_BALLAST.test(a[2]!) || IMAGE_FILE.test(a[2]!))) return { file: "/usr/bin/fallocate", args: a, timeoutMs: 10 * 60_000 };
       break;
     case "mkfs.ext4":
       if (a.length === MKFS_ARGS.length + 1 && MKFS_ARGS.every((x, i) => a[i] === x) && IMAGE_FILE.test(a[a.length - 1]!)) return { file: "/usr/sbin/mkfs.ext4", args: a, timeoutMs: 10 * 60_000 };
@@ -677,7 +1066,7 @@ export function wipeExec(args: Record<string, unknown>): Exec {
 }
 
 /** The root steps the release does for the daemon (packages/server-daemon/src/setup.ts), by name only. */
-export const SETUP_STEPS = ["gvisor", "health-reporter", "update-guard", "container-links", "data-unit", "debug-access", "debug-access-close", "system-repair", "server-code", "rust-stack"] as const;
+export const SETUP_STEPS = ["gvisor", "health-reporter", "update-guard", "container-links", "data-unit", "debug-access", "debug-access-close", "system-repair", "server-code", "rust-stack", "wasi-runtime", "gpu-broker"] as const;
 
 export function setupExec(args: Record<string, unknown>): Exec {
   noExtra(args, ["step"]);
@@ -721,6 +1110,8 @@ export interface PolicyContext {
   mounts: MountsReader;
   trust: ReleaseTrust;
   arch: string;
+  /** flagship-gpud's attached GPU allocations (run-claims.json); none when absent. */
+  gpuClaims?: GpuClaimReader;
 }
 
 /** The one exact command a request may run, or a refusal: every op the broker answers besides hello. */
@@ -733,7 +1124,7 @@ export function validateRequest(op: Op, args: Record<string, unknown>, ctx: Poli
     case "systemctl":
       return systemctlExec(args);
     case "docker":
-      return dockerExec(args, ctx.engine);
+      return dockerExec(args, ctx.engine, ctx.gpuClaims ?? NO_GPU_CLAIMS);
     case "docker.file":
       return dockerFileExec(args, ctx.engine);
     case "host":
@@ -748,6 +1139,8 @@ export function validateRequest(op: Op, args: Record<string, unknown>, ctx: Poli
       return wipeExec(args);
     case "setup":
       return setupExec(args);
+    case "wasi.unit":
+      return wasiUnitExec(args);
     default:
       throw new PrivdError("unknown-op", "unknown operation");
   }

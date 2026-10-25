@@ -1,5 +1,7 @@
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.core.AccountReadTokens
@@ -106,9 +108,9 @@ class QuantumSafetyViewModel(
     }
 
     suspend fun loadNow() {
-        val user = username()?.lowercase() ?: return run { _phase.value = Phase.Failed("Sign in first.") }
+        val user = username()?.lowercase() ?: return run { _phase.value = Phase.Failed(FSStrings.get(R.string.sign_in_first)) }
         val dev = deviceId()?.lowercase().orEmpty()
-        val store = QuantumSafetyService.store ?: return run { _phase.value = Phase.Failed("Quantum-safe protection isn't available on this account.") }
+        val store = QuantumSafetyService.store ?: return run { _phase.value = Phase.Failed(FSStrings.get(R.string.quantum_safe_protection_isnt_available_on)) }
         _phase.value = Phase.Loading
         val grants = getJson(user, "${base()}/api/users/${enc(user)}/device-grants")
         val listed = grants?.get("grants")?.jsonArray?.map { it.jsonObject } ?: emptyList()
@@ -209,22 +211,22 @@ class QuantumSafetyViewModel(
     private class Signer(val kind: String, val keyId: String, val role: String, val subject: String, val key: Ed25519Sign)
 
     private suspend fun signer(user: String, reason: String): Signer {
-        val keys = QuantumSafetyService.pqKeys ?: throw IllegalStateException("Not available on this account.")
+        val keys = QuantumSafetyService.pqKeys ?: throw IllegalStateException(FSStrings.get(R.string.not_available_on_this_account))
         val root = Keystore.adminRootPubHex()?.lowercase()
         if (Keystore.hasAdminRoot() && root != null && keys.entry("admin-root", user) != null) {
             return Signer("admin-root", root, "admin-root", user, adminKey(reason))
         }
         val dev = deviceId()?.lowercase().orEmpty()
         val pub = myDevicePubHex(user, dev)
-        if (pub == null || pub !in adminDevices) throw IllegalStateException("Only an admin device of this account can change this.")
-        val key = deviceKey(reason) ?: throw IllegalStateException("Unlock the app and try again.")
+        if (pub == null || pub !in adminDevices) throw IllegalStateException(FSStrings.get(R.string.only_an_admin_device_of_this_4))
+        val key = deviceKey(reason) ?: throw IllegalStateException(FSStrings.get(R.string.unlock_the_app_and_try_again))
         return Signer("admin-device", pub, "device", dev, key)
     }
 
     private suspend fun post(user: String, change: AssurancePolicy.Change, s: Signer) {
         val canonical = AssurancePolicy.canonical(change)
-        val keys = QuantumSafetyService.pqKeys ?: throw IllegalStateException("Not available on this account.")
-        val entry = keys.entry(s.role, s.subject) ?: throw IllegalStateException("This device's post-quantum key isn't ready. Unlock the app once while online, then try again.")
+        val keys = QuantumSafetyService.pqKeys ?: throw IllegalStateException(FSStrings.get(R.string.not_available_on_this_account))
+        val entry = keys.entry(s.role, s.subject) ?: throw IllegalStateException(FSStrings.get(R.string.this_devices_post_quantum_key_isnt_2))
         val sig = keys.sign(entry, AssurancePolicy.TAG_ASSURANCE_POLICY, canonical) { m -> s.key.sign(m) }
         val body = buildJsonObject {
             put("change", AssurancePolicyWire.changeToJson(change))
@@ -241,11 +243,11 @@ class QuantumSafetyViewModel(
     /** The re-entry evidence for a scope that was strict before (strictReentry.ts): what load() verified, the pinned server key, a fresh nonce. */
     private suspend fun reentry(user: String, scope: AssurancePolicy.Scope, fqdn: String): AssurancePolicy.StrictReentryEvidence {
         val body = getJson(user, "${base()}/api/accounts/${enc(user)}/assurance-policy/${scope.kind}/${enc(scope.id)}")
-            ?: throw IllegalStateException("Couldn't read this server's protection history. Check your connection and try again.")
+            ?: throw IllegalStateException(FSStrings.get(R.string.couldnt_read_this_servers_protection_history))
         val head = runCatching { AssurancePolicyWire.chainFromJson(body) }.getOrDefault(emptyList()).lastOrNull()?.change
-            ?: throw IllegalStateException("Couldn't read this server's protection history.")
+            ?: throw IllegalStateException(FSStrings.get(R.string.couldnt_read_this_servers_protection_history_2))
         val box = BoxKeyPins.shared.verifiedBoxPqBinding(user, fqdn)
-            ?: throw IllegalStateException("This phone hasn't checked the server's post-quantum key yet. Open the server once, then try again.")
+            ?: throw IllegalStateException(FSStrings.get(R.string.this_phone_hasnt_checked_the_servers))
         val t = now()
         return try {
             StrictReentry.evidence(StrictReentry.Inputs(user, scope, head.issuedAt, verifiedDevices, deviceCount, rootBindingSeen?.let { StrictReentry.Binding(it) },
@@ -264,7 +266,7 @@ class QuantumSafetyViewModel(
         viewModelScope.launch {
             _busy.value = true
             try {
-                val s = signer(user, if (allowed) "Let browsers reach ${app.name}" else "Keep browsers away from ${app.name}")
+                val s = signer(user, if (allowed) FSStrings.get(R.string.let_browsers_reach, app.name) else FSStrings.get(R.string.keep_browsers_away_from, app.name))
                 val scope = QuantumSafety.serviceScope(fqdn, serviceId)
                 val state = app.replayed?.state ?: AssurancePolicy.legacyState(scope)
                 val change = if (allowed) {
@@ -273,12 +275,12 @@ class QuantumSafetyViewModel(
                     QuantumSafety.strictChange(user, scope, state, false, listOf(fqdn), s.kind, s.keyId, now(), if (state.enforcedEver) reentry(user, scope, fqdn) else null)
                 }
                 post(user, change, s)
-                _message.value = if (allowed) "Browsers can reach ${app.name} again, within 15 minutes." else "Only the Flagship app reaches ${app.name} now, within 15 minutes."
+                _message.value = if (allowed) FSStrings.get(R.string.browsers_can_reach_again_within_15, app.name) else FSStrings.get(R.string.only_the_flagship_app_reaches_now, app.name)
                 loadNow()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                _message.value = e.message ?: "${app.name} wasn't changed."
+                _message.value = e.message ?: FSStrings.get(R.string.wasnt_changed, app.name)
             } finally {
                 _busy.value = false
             }
@@ -291,7 +293,7 @@ class QuantumSafetyViewModel(
         viewModelScope.launch {
             _busy.value = true
             try {
-                val sg = signer(user, "Turn on quantum-safe protection for ${row.name}")
+                val sg = signer(user, FSStrings.get(R.string.turn_on_quantum_safe_protection_for, row.name))
                 val scope = AssurancePolicy.Scope("installation", fqdn)
                 val state = row.replayed?.state ?: AssurancePolicy.legacyState(scope)
                 // Back to strict after a compatibility period: sign what this phone re-checked.
@@ -304,12 +306,12 @@ class QuantumSafetyViewModel(
                         post(user, QuantumSafety.strictChange(user, cs, held, false, listOf(fqdn), sg.kind, sg.keyId, now(), if (held.enforcedEver) reentry(user, cs, fqdn) else null), sg)
                     }
                 }
-                _message.value = "Quantum-safe protection is on for ${row.name}. It takes effect when the server next checks in, within 15 minutes."
+                _message.value = FSStrings.get(R.string.quantum_safe_protection_is_on_for, row.name)
                 loadNow()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                _message.value = e.message ?: "Quantum-safe protection wasn't changed."
+                _message.value = e.message ?: FSStrings.get(R.string.quantum_safe_protection_wasnt_changed)
             } finally {
                 _busy.value = false
             }
@@ -323,14 +325,14 @@ class QuantumSafetyViewModel(
         viewModelScope.launch {
             _busy.value = true
             try {
-                val sg = signer(user, "Turn off quantum-safe protection for ${row.name}")
+                val sg = signer(user, FSStrings.get(R.string.turn_off_quantum_safe_protection_for, row.name))
                 post(user, QuantumSafety.compatibilityChange(user, state.scope, state, QuantumSafety.LEAVING_STRICT_LOSS, listOf(fqdn), sg.kind, sg.keyId, now()), sg)
-                _message.value = "${row.name} is back to compatibility. Turning strict on again later needs a fresh check of every device and your recovery."
+                _message.value = FSStrings.get(R.string.is_back_to_compatibility_turning_strict, row.name)
                 loadNow()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                _message.value = e.message ?: "Quantum-safe protection wasn't changed."
+                _message.value = e.message ?: FSStrings.get(R.string.quantum_safe_protection_wasnt_changed)
             } finally {
                 _busy.value = false
             }
@@ -339,10 +341,10 @@ class QuantumSafetyViewModel(
 
     companion object {
         fun sentence(code: String): String = when (code) {
-            "not-prepared" -> "The server isn't ready yet: every device, the server and your recovery need their post-quantum keys first."
-            "classical-signer-refused", "strict-requires-hybrid", "strict-requires-binding" -> "This device's post-quantum key isn't registered yet. Unlock the app once while online, then try again."
-            "stale-generation", "fork" -> "Another device changed this at the same time. Refresh and try again."
-            "reentry-incomplete" -> "Turning strict on again needs a fresh check of every device, a rekey and a tested recovery."
+            "not-prepared" -> FSStrings.get(R.string.the_server_isnt_ready_yet_every)
+            "classical-signer-refused", "strict-requires-hybrid", "strict-requires-binding" -> FSStrings.get(R.string.this_devices_post_quantum_key_isnt_3)
+            "stale-generation", "fork" -> FSStrings.get(R.string.another_device_changed_this_at_the)
+            "reentry-incomplete" -> FSStrings.get(R.string.turning_strict_on_again_needs_a)
             else -> "flagshipserver.com didn't accept the change ($code)."
         }
     }

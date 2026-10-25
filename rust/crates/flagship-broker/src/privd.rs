@@ -36,6 +36,10 @@ pub trait V1Environment: Send + Sync {
     fn mounts(&self) -> String;
     fn trust(&self) -> &ReleaseTrust;
     fn arch(&self) -> &str;
+    /// flagship-gpud's attached GPU allocation `id`, from its root-owned run-claims file.
+    fn gpu_claim(&self, id: &str) -> Option<crate::policy::GpuRunClaim> {
+        crate::policy::gpu_claim_from_file(crate::policy::GPU_RUN_CLAIMS_FILE, id)
+    }
 }
 
 /// A fixed environment (tests, and the conformance check).
@@ -114,13 +118,26 @@ fn frame(r: &Response) -> Vec<u8> {
 /// Map a request to the one command it may run.
 pub fn validate(req: &Request, env: &dyn V1Environment) -> Result<PrivExec, PrivdError> {
     let mounts = || env.mounts();
+    let gpu = |id: &str| env.gpu_claim(id);
     let ctx = PolicyContext {
         engine: env.engine(),
         mounts: &mounts,
         trust: env.trust(),
         arch: env.arch(),
+        gpu: &gpu,
     };
     validate_request(req.op, &req.args, &ctx)
+}
+
+/// `maskSecret`: everything after the first `<word>PASSWORD=` (any case, anywhere in the
+/// argument: `-ePOSTGRES_PASSWORD=…`, `--env=db_password=…`) never reaches the audit.
+pub fn mask_secret(a: &str) -> String {
+    static SECRET: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        #[allow(clippy::expect_used)]
+        regex::Regex::new(r"([A-Za-z0-9_]*[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd])=(?s:.*)$")
+            .expect("a fixed pattern compiles")
+    });
+    SECRET.replace(a, "${1}=…").into_owned()
 }
 
 /// `summary`: what was asked, never the bodies or secrets that came with it. A request whose
@@ -140,13 +157,7 @@ pub fn summary(req: &Request) -> String {
             |a| {
                 a.iter()
                     .take(3)
-                    .map(|x| {
-                        if x.starts_with("PGPASSWORD=") {
-                            "PGPASSWORD=…".to_owned()
-                        } else {
-                            x.clone()
-                        }
-                    })
+                    .map(|x| mask_secret(x))
                     .collect::<Vec<_>>()
                     .join(" ")
             },

@@ -39,6 +39,8 @@ class AutoUnlockLeaseSignerTest {
     private val adminKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 9 })
     private val stkKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 5 })
     private val stkPubHex = HexUtil.encode(stkKp.publicKey)
+    /** Blessed on this phone before: first contact and the seal checks share one pin store. */
+    private val trusted = PinnedServers(domain to stkPubHex)
     private val nonceHex = "ab".repeat(32)
     private val luksKey = ByteArray(64) { it.toByte() }
 
@@ -73,7 +75,7 @@ class AutoUnlockLeaseSignerTest {
 
     /** A device that holds the admin root: the order key the coordinator is handed is the root. */
     private fun coordinator(mock: MockSecretMailboxClient, leases: PendingLeases? = null) = SecretRequestCoordinator(
-        firstContact = firstContactPinned(domain to stkPubHex),
+        firstContact = trusted.firstContact, pins = trusted.boxKeyPins,
         mailbox = mock,
         username = user,
         irk = irkAccess,
@@ -156,7 +158,7 @@ class AutoUnlockLeaseSignerTest {
             }
         }
         val c2 = SecretRequestCoordinator(
-        firstContact = firstContactPinned(domain to stkPubHex),
+        firstContact = trusted.firstContact, pins = trusted.boxKeyPins,
             mailbox = failing, username = user, irk = irkAccess,
             adminSigner = { Ed25519Sign(adminKp.privateKey) }, now = { issuedAt },
             nonceGen = { ByteArray(32) { 1 } }, pendingLeases = kept, leaseRetryDelaysMs = listOf(0L, 0L),

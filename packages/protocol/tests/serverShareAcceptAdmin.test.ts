@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 import {
   ACCOUNT_KEY_ATTESTATION_TTL_MS,
   canonicalAccountKeyAttestation,
+  canonicalShareKeyAttestationRequest,
   deriveIRK,
+  deriveShareAdminKey,
   deriveShareMemberKey,
   ed,
   parseAccountKeyAttestation,
@@ -16,6 +18,7 @@ import {
   signAccountKeyAttestation,
   verifyCaSignedAccountKeyAttestation,
   verifyServerShareAcceptAdmin,
+  verifyShareKeyAttestationRequest,
   type CaTrustChain,
   type ServerShareAcceptAdmin,
 } from "../src/index.js";
@@ -32,6 +35,7 @@ const signers: Record<string, { privateKey: Uint8Array; publicKey: Uint8Array }>
   otherAdmin: kp(V.keys.otherAdminSeedHex),
   irk: deriveIRK(umk),
   member: deriveShareMemberKey(umk, V.keys.shareId),
+  shareAdmin: deriveShareAdminKey(umk, V.keys.shareId),
 };
 const ca = kp(V.keys.caSeedHex);
 const chain = (keys: string[]): CaTrustChain => ({ authorizedCaKeys: () => keys });
@@ -42,10 +46,30 @@ describe("share accept-admin vectors (#12)", () => {
     expect(Buffer.from(signers.irk!.publicKey).toString("hex")).toBe(V.keys.irkPubHex);
     expect(Buffer.from(signers.member!.publicKey).toString("hex")).toBe(V.keys.memberPubHex);
     expect(Buffer.from(ca.publicKey).toString("hex")).toBe(V.keys.caPubHex);
+    expect(Buffer.from(signers.shareAdmin!.publicKey).toString("hex")).toBe(V.keys.shareAdminPubHex);
+    expect(Buffer.from(deriveShareAdminKey(umk, V.keys.otherShareId).publicKey).toString("hex")).toBe(V.keys.otherShareAdminPubHex);
+  });
+
+  it("the share admin key is never a stable account key, and differs per share (AT-LNK-10)", () => {
+    const stable = [V.keys.adminRootPubHex, V.keys.irkPubHex, V.keys.memberPubHex];
+    expect(stable).not.toContain(V.keys.shareAdminPubHex);
+    expect(V.keys.otherShareAdminPubHex).not.toBe(V.keys.shareAdminPubHex);
+  });
+
+  it("builds, signs and verifies every attestation request, and refuses every requestRefuse case", () => {
+    expect(V.requests.length).toBeGreaterThan(0);
+    for (const c of V.requests) {
+      const b = canonicalShareKeyAttestationRequest(c.fields);
+      expect(new TextDecoder().decode(b)).toBe(c.canonical);
+      expect(Buffer.from(ed.sign(b, signers[c.signer]!.privateKey)).toString("hex")).toBe(c.signature);
+      expect(verifyShareKeyAttestationRequest(c.fields, bytes(c.signature), signers[c.signer]!.publicKey)).toBe(true);
+      expect(verifyShareKeyAttestationRequest({ ...c.fields, keyPubHex: V.keys.otherShareAdminPubHex }, bytes(c.signature), signers[c.signer]!.publicKey)).toBe(false);
+    }
+    for (const c of V.requestRefuse) expect(() => canonicalShareKeyAttestationRequest(c.fields), c.why).toThrow();
   });
 
   it("builds, signs, verifies and parses every envelope", () => {
-    expect(V.envelopes).toHaveLength(2);
+    expect(V.envelopes).toHaveLength(1);
     for (const c of V.envelopes) {
       const f = c.fields as ServerShareAcceptAdmin;
       const b = serverShareAcceptAdminCanonicalBytes(f);
@@ -74,7 +98,8 @@ describe("share accept-admin vectors (#12)", () => {
   it("parses the sealed acceptance's plaintext with its admin proof", () => {
     const p = parseShareAcceptancePayload(V.payload);
     expect(p?.admin?.admit).toEqual(V.payload.admin.admit);
-    expect(p?.admin?.attestation.keyPubHex).toBe(V.keys.adminRootPubHex);
+    expect(p?.admin?.attestation.keyPubHex).toBe(V.keys.shareAdminPubHex);
+    expect(p?.admin?.attestation.keyKind).toBe("share");
     const { admin: _a, ...withoutAdmin } = V.payload;
     expect(parseShareAcceptancePayload(withoutAdmin)?.admin).toBeUndefined();
     expect(parseShareAcceptancePayload({ ...V.payload, admin: { ...V.payload.admin, signature: "ab" } })).toBeNull();
@@ -121,8 +146,10 @@ describe("AccountKeyAttestation", () => {
   it("a swapped key or kind no longer verifies", () => {
     const swapped = { ...a, keyPubHex: V.keys.otherAdminPubHex };
     expect(verifyCaSignedAccountKeyAttestation(swapped, chain([V.keys.caPubHex]), t0 + 1).ok).toBe(false);
-    const relabelled = { ...a, keyKind: "irk" as const };
+    const relabelled = { ...a, keyKind: "admin-root" as never };
     expect(verifyCaSignedAccountKeyAttestation(relabelled, chain([V.keys.caPubHex]), t0 + 1).ok).toBe(false);
+    expect(parseAccountKeyAttestation({ ...a, keyKind: "admin-root" })).toBeNull();
+    expect(parseAccountKeyAttestation({ ...a, keyKind: "irk" })).toBeNull();
   });
 
   it("rejects malformed shapes", () => {

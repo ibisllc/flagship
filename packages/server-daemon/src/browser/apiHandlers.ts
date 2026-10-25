@@ -24,7 +24,8 @@ import type { DomainGate } from "./domainGate.js";
 import type { PhonePipe, InputKind } from "./phonePipe.js";
 import type { TabRegistry } from "./tabRegistry.js";
 import { normalizeAsk, type BrowserGrantRequests } from "./grantRequests.js";
-import { GrantRequestError } from "./policy/grants.js";
+import { GrantRequestError, patternCovers, type BrowserGrant } from "./policy/grants.js";
+import { contextSession } from "./egress.js";
 
 const J = { "content-type": "application/json" } as const;
 const PNG = { "content-type": "image/png" } as const;
@@ -53,6 +54,32 @@ export interface BrowserApiDeps {
   pairedSessionGate?: PairedSessionGate;
   /** Grants beyond the manifest, asked by the app and answered by the owner (grantRequests.ts). */
   grantRequests?: BrowserGrantRequests;
+  /**
+   * The live grants (the manifest's and the owner's). Without `policed` the start-URL check consults
+   * them beside the manifest's domains, so a site the owner granted is not refused before anything
+   * else looks at it. With `policed` the judge decides on every request and this is not needed.
+   */
+  grants?: { live(serviceId: string, sessionId?: string): BrowserGrant[] };
+}
+
+/**
+ * May the app open or navigate to `url`? With the policed browser the judge decides (it reads every live
+ * grant, the manifest's and the owner's, and follows redirects the browser sees), so nothing is refused
+ * here first. Without it: the manifest's domains, or a live grant that covers the host.
+ */
+function startAllowed(serviceId: string, url: string, deps: BrowserApiDeps): boolean {
+  if (deps.policed) return true;
+  if (deps.domainGate.check(serviceId, url) === "allow") return true;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  const host = u.hostname.toLowerCase();
+  const scheme = u.protocol.slice(0, -1) as "http" | "https";
+  return (deps.grants?.live(serviceId, contextSession(serviceId)) ?? []).some((g) => g.schemes.includes(scheme) && g.origins.some((o) => patternCovers(o, host)));
 }
 
 export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
@@ -91,11 +118,29 @@ export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
           return { status: 200, headers: J, body: JSON.stringify({ requests: deps.grantRequests.pending() }) };
         }
         if (p === "/api/browser/owner/grant-requests/answer" && req.method === "POST") {
-          const b = parseJson(req.body) as { requestId?: unknown; decision?: unknown; issuedAt?: unknown; signature?: unknown } | null;
+          const b = parseJson(req.body) as Record<string, unknown> | null;
           if (!b || typeof b.requestId !== "string" || (b.decision !== "allow" && b.decision !== "deny")) return jerr(400, "name the request and allow or deny");
+          // The owner's narrower choice (the same or less than the ask; the box checks), when sent.
+          const scope = Object.fromEntries((["duration", "capabilities", "origins", "localNetwork"] as const).filter((k) => k in b).map((k) => [k, b[k]]));
           const r = deps.grantRequests.answer({
             requestId: b.requestId,
             decision: b.decision,
+            ...(typeof b.issuedAt === "number" ? { issuedAt: b.issuedAt } : {}),
+            ...(typeof b.signature === "string" ? { signatureHex: b.signature } : {}),
+            ...(Object.keys(scope).length ? { scope } : {}),
+          });
+          return r.ok ? { status: 200, headers: J, body: JSON.stringify({ ok: true, ...(r.grantId ? { grantId: r.grantId } : {}) }) } : jerr(r.status, r.reason);
+        }
+        if (p === "/api/browser/owner/grants" && req.method === "GET") {
+          const q = qIdx >= 0 ? new URLSearchParams(req.path.slice(qIdx + 1)).get("serviceId") : null;
+          return { status: 200, headers: J, body: JSON.stringify({ grants: deps.grantRequests.granted(q ?? undefined) }) };
+        }
+        if (p === "/api/browser/owner/grants/revoke" && req.method === "POST") {
+          const b = parseJson(req.body) as { serviceId?: unknown; grantId?: unknown; issuedAt?: unknown; signature?: unknown } | null;
+          if (!b || typeof b.serviceId !== "string" || typeof b.grantId !== "string") return jerr(400, "name the app and the grant");
+          const r = deps.grantRequests.revoke({
+            serviceId: b.serviceId,
+            grantId: b.grantId,
             ...(typeof b.issuedAt === "number" ? { issuedAt: b.issuedAt } : {}),
             ...(typeof b.signature === "string" ? { signatureHex: b.signature } : {}),
           });
@@ -197,7 +242,7 @@ async function openTab(
   const body = parseJson(req.body);
   const url = (body as { url?: string } | null)?.url;
   if (typeof url !== "string") return jerr(400, "url is required");
-  if (deps.domainGate.check(serviceId, url) !== "allow") {
+  if (!startAllowed(serviceId, url, deps)) {
     return jerr(403, "domain not in app's browser.domains allowlist");
   }
   let tabId: string;
@@ -238,7 +283,7 @@ async function navigate(
   const body = parseJson(req.body);
   const url = (body as { url?: string } | null)?.url;
   if (typeof url !== "string") return jerr(400, "url is required");
-  if (deps.domainGate.check(serviceId, url) !== "allow") {
+  if (!startAllowed(serviceId, url, deps)) {
     return jerr(403, "domain not in app's browser.domains allowlist");
   }
   try {

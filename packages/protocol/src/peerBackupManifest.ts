@@ -3,6 +3,7 @@ import { gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { ed } from "./edSync.js";
+import { integerFieldGuard, legacyFieldGuard } from "./canonicalBase.js";
 import type { Bytes, Keypair, ServerId } from "./types.js";
 
 // ──────────────────────────────────────────────────────────────────────
@@ -65,6 +66,11 @@ export interface PbManifestDeposit {
 }
 
 function canonicalPbManifestDeposit(d: PbManifestDeposit): Bytes {
+  legacyFieldGuard("serverId", d.serverId);
+  integerFieldGuard("generation", d.generation);
+  integerFieldGuard("updatedAt", d.updatedAt);
+  legacyFieldGuard("ciphertextSha256Hex", d.ciphertextSha256Hex);
+  legacyFieldGuard("nonceHex", d.nonceHex);
   return new TextEncoder().encode(
     [
       TAG_PB_MANIFEST_DEPOSIT,

@@ -88,8 +88,11 @@ describe("webapp Flagship Inference", () => {
     const { canonicalFor } = await load("lib", "freeAi.js");
     const v = JSON.parse(
       readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/llm-promo-issue/vectors.json"), "utf8"),
-    ) as { cases: Array<Record<string, unknown> & { canonical: string }> };
+    ) as { cases: Array<Record<string, unknown> & { canonical: string }>; refuse: Array<Record<string, unknown> & { why: string }> };
     for (const c of v.cases) expect(canonicalFor(c)).toBe(c.canonical);
+    expect(v.refuse.length).toBeGreaterThan(0);
+    for (const c of v.refuse) expect(() => canonicalFor(c), c.why).toThrow();
+    expect(() => canonicalFor({ ...v.cases[0], desiredDailyInputTokenCap: "0|0" })).toThrow();
   });
 
   it("tells a free AI pass from your own key, and leaves your own key alone", async () => {

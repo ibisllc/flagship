@@ -7,7 +7,7 @@
  * byte-identical.
  */
 import { ed } from "./edSync.js";
-import { legacyFieldGuard } from "./canonicalBase.js";
+import { integerFieldGuard, legacyFieldGuard } from "./canonicalBase.js";
 import type { Bytes, Keypair } from "./types.js";
 
 // ──────────────────────────────────────────────────────────────────────
@@ -46,6 +46,10 @@ const TAG_LLM_PROMO_ISSUE = "flagship/llm-promo-issue/v1";
 function canonicalLlmPromoIssue(r: LlmPromoIssueRequest): Bytes {
   legacyFieldGuard("username", r.username);
   legacyFieldGuard("serverFqdn", r.serverFqdn);
+  legacyFieldGuard("provider", r.provider);
+  integerFieldGuard("desiredDailyInputTokenCap", r.desiredDailyInputTokenCap);
+  integerFieldGuard("desiredDailyOutputTokenCap", r.desiredDailyOutputTokenCap);
+  integerFieldGuard("issuedAt", r.issuedAt);
   return new TextEncoder().encode(
     [
       TAG_LLM_PROMO_ISSUE,

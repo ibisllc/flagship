@@ -4,16 +4,18 @@
 // The webapp lists waiting asks under Activity and on the app's page, and asks about each in a sheet
 // like a chat request: on load, on focus, after a notification click and on the screens socket.
 //
-// Allow is an owner-signed `flagship/browser-grant/v1` over exactly what the sheet showed, for the
-// duration the app asked (the box verifies that one); Deny carries no signature and the box makes the
-// app wait before asking again. The sheet is built from the structured ask, never from the box's own
-// English description.
+// Allow is an owner-signed `flagship/browser-grant/v1` over exactly what is granted: the sites and
+// capabilities the sheet showed, for the duration the owner picked (Allow once / for this session /
+// always, never longer than the app asked; the box checks it is the same or narrower). Deny carries no
+// signature and the box makes the app wait before asking again. The sheet is built from the structured
+// ask, never from the box's own English description. The app's page also lists the grants the owner
+// gave, each with Withdraw (a signed `flagship/browser-grant-revoke/v1`; the box drops it at once).
 
 import { boxClient, getPodBaseUrl } from "./api.js";
 import { loadAccountPods, sessionServers } from "./appPlacement.js";
 import { getSession } from "./state.js";
 import { sensitiveSigner } from "./adminRoot.js";
-import { canonicalBrowserGrantAnswer } from "./browserGrant.js";
+import { browserGrantDurationChoices, canonicalBrowserGrantAnswer, canonicalBrowserGrantRevoke } from "./browserGrant.js";
 import { isCompanionProfile } from "./companionGuard.js";
 import { canSignAdminOrders } from "./addServerGate.js";
 import { pushNotificationsEnabled } from "./pushSetting.js";
@@ -26,6 +28,8 @@ import { tr } from "./i18n.js";
 
 export const BROWSER_REQUESTS_PATH = "/api/browser/owner/grant-requests";
 export const BROWSER_ANSWER_PATH = "/api/browser/owner/grant-requests/answer";
+export const BROWSER_GRANTS_PATH = "/api/browser/owner/grants";
+export const BROWSER_REVOKE_PATH = "/api/browser/owner/grants/revoke";
 export const BROWSER_EVENT = "browser-grant-request";
 
 const CAPS = ["navigate", "read-dom", "screenshot", "input", "download"];
@@ -45,6 +49,10 @@ export const BROWSER_GRANT_COPY = Object.freeze({
   gone: tr("That request is no longer waiting."),
   allowed: tr("Browser access allowed"),
   denied: tr("Browser access denied"),
+  allowedByYou: tr("Allowed by you"),
+  withdraw: tr("Withdraw"),
+  withdrawn: tr("Browser access withdrawn"),
+  alreadyWithdrawn: tr("That access was already withdrawn."),
 });
 
 const CAP_LABEL = Object.freeze({
@@ -171,16 +179,23 @@ export function grantDetailsHtml(r, { small = false } = {}) {
   return `${sites}${lan}${caps}${dur}${says}`;
 }
 
-/** The POST body for an answer. Allow signs the ask exactly as shown, for the duration the app asked. */
-export async function browserGrantAnswerBody(r, decision, { serverDomain, sign, now = Date.now }) {
+/** The Allow choices for an ask: one per duration the owner may grant, shortest first. */
+export const allowChoices = (r) => browserGrantDurationChoices(r.duration);
+
+/**
+ * The POST body for an answer. Allow signs the ask's sites and capabilities as shown, for the duration
+ * the owner chose (default: the one the app asked; never longer, the box refuses that).
+ */
+export async function browserGrantAnswerBody(r, decision, { serverDomain, sign, now = Date.now, duration = r.duration }) {
   const issuedAt = now();
   if (decision === "deny") return { requestId: r.requestId, decision: "deny", issuedAt };
+  if (!allowChoices(r).includes(duration)) throw new Error("duration");
   const bytes = await canonicalBrowserGrantAnswer({
     serverDomain,
     requestId: r.requestId,
     serviceId: r.serviceId,
     decision: "allow",
-    duration: r.duration,
+    duration,
     capabilities: r.capabilities,
     origins: r.origins,
     localNetwork: r.localNetwork,
@@ -191,20 +206,57 @@ export async function browserGrantAnswerBody(r, decision, { serverDomain, sign, 
     requestId: r.requestId,
     decision: "allow",
     issuedAt,
-    signature: Array.from(sig, (b) => b.toString(16).padStart(2, "0")).join(""),
+    duration,
+    signature: hexOf(sig),
   };
 }
 
-/** Answer one ask on the server that holds it; Allow is signed with this session's sensitive-order key. */
-export async function answerBrowserGrant(r, decision, { client = boxClient(r.serverDomain || ""), sign, now = Date.now } = {}) {
-  let signer = sign;
-  if (!signer && decision === "allow") {
-    const session = getSession();
-    if (!session?.umk) throw new Error(tr("Unlock the webapp first"));
-    signer = (bytes) => sensitiveSigner()(session.umk, bytes);
-  }
-  const body = await browserGrantAnswerBody(r, decision, { serverDomain: client.fqdn || r.serverDomain, sign: signer, now });
+const hexOf = (sig) => Array.from(sig, (b) => b.toString(16).padStart(2, "0")).join("");
+
+function sessionSigner() {
+  const session = getSession();
+  if (!session?.umk) throw new Error(tr("Unlock the webapp first"));
+  return (bytes) => sensitiveSigner()(session.umk, bytes);
+}
+
+/**
+ * Answer one ask on the server that holds it; Allow is signed with this session's sensitive-order key,
+ * for `duration` (one of {@link allowChoices}).
+ */
+export async function answerBrowserGrant(r, decision, { client = boxClient(r.serverDomain || ""), sign, now = Date.now, duration = r.duration } = {}) {
+  const signer = sign ?? (decision === "allow" ? sessionSigner() : undefined);
+  const body = await browserGrantAnswerBody(r, decision, { serverDomain: client.fqdn || r.serverDomain, sign: signer, now, duration });
   return client.fetch(BROWSER_ANSWER_PATH, { method: "POST", body: JSON.stringify(body) });
+}
+
+/** One grant the owner gave, as the box lists it, or null. */
+export function readOwnerGrant(g) {
+  const r = readGrantRequest({ ...g, requestId: g?.grantId });
+  if (!r) return null;
+  return { grantId: r.requestId, serviceId: r.serviceId, capabilities: r.capabilities, origins: r.origins, localNetwork: r.localNetwork, duration: r.duration, explanation: r.explanation, issuedAt: typeof g.issuedAt === "number" ? g.issuedAt : 0 };
+}
+
+export function readOwnerGrants(body) {
+  return (Array.isArray(body?.grants) ? body.grants : []).map(readOwnerGrant).filter(Boolean);
+}
+
+/** The POST body that withdraws one grant: signed, current. */
+export async function browserGrantRevokeBody(g, { serverDomain, sign, now = Date.now }) {
+  const issuedAt = now();
+  const sig = await sign(canonicalBrowserGrantRevoke({ serverDomain, serviceId: g.serviceId, grantId: g.grantId, issuedAt }));
+  return { serviceId: g.serviceId, grantId: g.grantId, issuedAt, signature: hexOf(sig) };
+}
+
+/** Withdraw a grant on the server that holds it. */
+export async function withdrawBrowserGrant(g, { client = boxClient(), sign, now = Date.now } = {}) {
+  const body = await browserGrantRevokeBody(g, { serverDomain: client.fqdn, sign: sign ?? sessionSigner(), now });
+  return client.fetch(BROWSER_REVOKE_PATH, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function browserWithdrawError(e) {
+  if (e?.status === 404) return BROWSER_GRANT_COPY.alreadyWithdrawn;
+  if (e?.status === 403) return BROWSER_GRANT_COPY.adminOnly;
+  return browserGrantError(e);
 }
 
 export function browserGrantError(e) {
@@ -248,7 +300,14 @@ function openSheet(html) {
   });
 }
 
-/** Allow (labelled by the ask's duration) / Deny / Not now. Resolves to the choice. */
+/** The Allow buttons for an ask, shortest duration first; `attr` names the data attribute each carries. */
+export function allowButtonsHtml(r, attr, extra = "") {
+  return allowChoices(r)
+    .map((d, i, all) => `<button${i < all.length - 1 ? ' class="secondary"' : ""} ${attr}="allow:${d}"${extra}>${escapeHtml(allowLabel(d))}</button>`)
+    .join("");
+}
+
+/** Deny / Allow once … the asked duration / Not now. Resolves to "deny", "allow:<duration>" or "later". */
 export function showBrowserGrantSheet(r, { multi = false } = {}) {
   return openSheet(`
     <h3 class="modal-title" data-browser-grant-sheet>${escapeHtml(BROWSER_GRANT_COPY.title)}</h3>
@@ -256,9 +315,9 @@ export function showBrowserGrantSheet(r, { multi = false } = {}) {
     ${multi ? `<p class="note small">${escapeHtml(podShortName(r.serverDomain))}</p>` : ""}
     ${grantDetailsHtml(r)}
     <p class="note small">${escapeHtml(BROWSER_GRANT_COPY.denyNote)}</p>
-    <div class="row-2 mt-3">
+    <div class="grant-choices mt-3" data-grant-choices>
       <button class="secondary" data-choice="deny">${escapeHtml(BROWSER_GRANT_COPY.deny)}</button>
-      <button data-choice="allow">${escapeHtml(allowLabel(r.duration))}</button>
+      ${allowButtonsHtml(r, "data-choice")}
     </div>
     <div class="access-sheet-later mt-2"><button class="linklike" data-choice="later">${escapeHtml(BROWSER_GRANT_COPY.notNow)}</button></div>
   `);
@@ -269,9 +328,9 @@ export function showBrowserGrantSheet(r, { multi = false } = {}) {
 /** One waiting ask as a card with its answers; a device that can't sign sees why instead. */
 export function grantRequestCardHtml(r, i, { canAnswer, multi = false, withTitle = true } = {}) {
   const buttons = canAnswer
-    ? `<div class="row-2 mt-2">
+    ? `<div class="grant-choices mt-2">
         <button class="secondary" data-browser-answer="deny" data-browser-i="${i}">${escapeHtml(BROWSER_GRANT_COPY.deny)}</button>
-        <button data-browser-answer="allow" data-browser-i="${i}">${escapeHtml(allowLabel(r.duration))}</button>
+        ${allowButtonsHtml(r, "data-browser-answer", ` data-browser-i="${i}"`)}
       </div>
       <p class="note small">${escapeHtml(BROWSER_GRANT_COPY.denyNote)}</p>`
     : `<p class="note small">${escapeHtml(BROWSER_GRANT_COPY.adminOnly)}</p>`;
@@ -283,15 +342,22 @@ export function grantRequestCardHtml(r, i, { canAnswer, multi = false, withTitle
   </div>`;
 }
 
+/** "deny" | "allow:<duration>" from a button, into the answer and its duration. */
+export function parseChoice(v) {
+  if (v === "deny") return { decision: "deny", duration: null };
+  const m = /^allow:(once|session|service)$/.exec(v ?? "");
+  return m ? { decision: "allow", duration: m[1] } : { decision: null, duration: null };
+}
+
 function bindAnswers(root, requests, after) {
   root.querySelectorAll("[data-browser-answer]").forEach((b) =>
     b.addEventListener("click", async () => {
       const r = requests[Number(b.getAttribute("data-browser-i"))];
-      const decision = b.getAttribute("data-browser-answer");
-      if (!r) return;
+      const { decision, duration } = parseChoice(b.getAttribute("data-browser-answer"));
+      if (!r || !decision) return;
       root.querySelectorAll("button").forEach((x) => (x.disabled = true));
       try {
-        await answerBrowserGrant(r, decision);
+        await answerBrowserGrant(r, decision, duration ? { duration } : {});
         toast(browserAnsweredText(decision), "ok");
       } catch (e) {
         toast(browserGrantError(e), "err");
@@ -330,12 +396,20 @@ export function manifestBrowserDomains(manifest) {
   return Array.isArray(d) ? d.filter(str) : [];
 }
 
+/** One grant the owner gave, as a card with Withdraw (admin devices) or why it can't be withdrawn here. */
+export function ownerGrantCardHtml(g, i, { canAnswer }) {
+  const action = canAnswer
+    ? `<div class="row-2 mt-2"><button class="secondary" data-browser-withdraw="${i}">${escapeHtml(BROWSER_GRANT_COPY.withdraw)}</button></div>`
+    : `<p class="note small">${escapeHtml(BROWSER_GRANT_COPY.adminOnly)}</p>`;
+  return `<div class="card" data-browser-grant="${escapeHtml(g.grantId)}">${grantDetailsHtml(g, { small: true })}${action}</div>`;
+}
+
 /**
- * The app page's "Browser access" section: what the manifest grants, then this app's waiting asks
- * with their answers. Empty when the app has neither.
+ * The app page's "Browser access" section: what the manifest grants, this app's waiting asks with
+ * their answers, then what the owner allowed beyond the manifest with Withdraw. Empty when it has none.
  */
-export function browserAccessSectionHtml({ domains = [], requests = [], canAnswer = false } = {}) {
-  if (domains.length === 0 && requests.length === 0) return "";
+export function browserAccessSectionHtml({ domains = [], requests = [], grants = [], canAnswer = false } = {}) {
+  if (domains.length === 0 && requests.length === 0 && grants.length === 0) return "";
   const declared = domains.length
     ? `<div class="card" data-browser-manifest>
         <ul class="sd-egress-hosts">${domains.map((d) => `<li class="mono text-sm">${escapeHtml(d)}</li>`).join("")}</ul>
@@ -344,22 +418,44 @@ export function browserAccessSectionHtml({ domains = [], requests = [], canAnswe
     : "";
   return `<h2 class="mt-4">${escapeHtml(BROWSER_GRANT_COPY.sectionTitle)}</h2>
     ${declared}
-    ${requests.map((r, i) => grantRequestCardHtml(r, i, { canAnswer, withTitle: false })).join("")}`;
+    ${requests.map((r, i) => grantRequestCardHtml(r, i, { canAnswer, withTitle: false })).join("")}
+    ${grants.length ? `<p class="note mt-2" data-browser-granted><strong>${escapeHtml(BROWSER_GRANT_COPY.allowedByYou)}</strong></p>${grants.map((g, i) => ownerGrantCardHtml(g, i, { canAnswer })).join("")}` : ""}`;
 }
 
 /** Fill the app page's slot for `app` on the server `client` talks to. */
 export async function loadBrowserAccessSection(slot, { app, manifest, client = boxClient(), isCurrent = () => true } = {}) {
   if (!slot || isCompanionProfile()) return;
   let requests = [];
+  let grants = [];
   try {
     const all = readGrantRequests(await client.fetch(BROWSER_REQUESTS_PATH));
     requests = all.filter((r) => r.serviceId === app.serviceId).map((r) => ({ ...r, serverDomain: client.fqdn, appName: app.slug ?? app.serviceId }));
   } catch {
     requests = [];
   }
+  try {
+    grants = readOwnerGrants(await client.fetch(`${BROWSER_GRANTS_PATH}?serviceId=${encodeURIComponent(app.serviceId)}`)).filter((g) => g.serviceId === app.serviceId);
+  } catch {
+    grants = [];
+  }
   if (!isCurrent()) return;
-  slot.innerHTML = browserAccessSectionHtml({ domains: manifestBrowserDomains(manifest), requests, canAnswer: canSignAdminOrders() });
-  bindAnswers(slot, requests, () => loadBrowserAccessSection(slot, { app, manifest, client, isCurrent }));
+  const reload = () => loadBrowserAccessSection(slot, { app, manifest, client, isCurrent });
+  slot.innerHTML = browserAccessSectionHtml({ domains: manifestBrowserDomains(manifest), requests, grants, canAnswer: canSignAdminOrders() });
+  bindAnswers(slot, requests, reload);
+  slot.querySelectorAll("[data-browser-withdraw]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const g = grants[Number(b.getAttribute("data-browser-withdraw"))];
+      if (!g) return;
+      slot.querySelectorAll("button").forEach((x) => (x.disabled = true));
+      try {
+        await withdrawBrowserGrant(g, { client });
+        toast(BROWSER_GRANT_COPY.withdrawn, "ok");
+      } catch (e) {
+        toast(browserWithdrawError(e), "err");
+      }
+      await reload();
+    }),
+  );
 }
 
 // ───────────────────────────── the shell ─────────────────────────────
@@ -388,17 +484,17 @@ export function startBrowserGrantAlerts({ isUnlocked }) {
       return list;
     },
     handle: async (r) => {
-      const choice = await showBrowserGrantSheet(r, { multi });
-      if (choice !== "allow" && choice !== "deny") return "later";
+      const { decision, duration } = parseChoice(await showBrowserGrantSheet(r, { multi }));
+      if (!decision) return "later";
       try {
-        await answerBrowserGrant(r, choice);
+        await answerBrowserGrant(r, decision, duration ? { duration } : {});
       } catch (e) {
         toast(browserGrantError(e), "err");
         return "failed";
       }
-      toast(browserAnsweredText(choice), "ok");
+      toast(browserAnsweredText(decision), "ok");
       refreshActivity();
-      return choice;
+      return decision;
     },
   });
   const poke = (force = false) => void controller.check({ force });

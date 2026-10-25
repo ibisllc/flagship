@@ -111,8 +111,15 @@ public struct FreeAiIssueRequest: Codable, Equatable, Sendable {
         self.issuedAt = issuedAt
     }
 
-    public func canonicalBytes() -> Data {
-        Data([
+    public enum FieldError: Error, Equatable { case badField(String) }
+
+    /// Refuses `|` and control characters in the text fields, like the TS
+    /// encoder (AT-ENV-09): otherwise a separator could move between fields.
+    public func canonicalBytes() throws -> Data {
+        for (n, v) in [("username", username), ("serverFqdn", serverFqdn), ("provider", provider)] {
+            for u in v.unicodeScalars where u.value == 0x7c || u.value <= 0x1f || u.value == 0x7f { throw FieldError.badField(n) }
+        }
+        return Data([
             Self.canonicalTag, username, serverFqdn, provider,
             String(desiredDailyInputTokenCap), String(desiredDailyOutputTokenCap), String(issuedAt),
         ].joined(separator: "|").utf8)
@@ -121,7 +128,7 @@ public struct FreeAiIssueRequest: Codable, Equatable, Sendable {
 
 public struct FreeAiSignedRequest: Codable, Equatable, Sendable {
     public let request: FreeAiIssueRequest
-    /// Ed25519 signature over `request.canonicalBytes()`, lowercase hex.
+    /// Ed25519 signature over `try request.canonicalBytes()`, lowercase hex.
     public let signature: String
     public init(request: FreeAiIssueRequest, signature: String) {
         self.request = request

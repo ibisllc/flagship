@@ -19,7 +19,7 @@ import { _internal as bootSeal, fetchSealedDiskKey } from "./bootApproval.js";
 import { BoxKeyChangedError, requirePinnedBoxKey } from "./boxKeyPins.js";
 import { sharedBootKeyFor } from "./bootKey.js";
 import { humanError } from "./humanError.js";
-import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes, adminRootPubHex } from "../keystore.js";
+import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes } from "../keystore.js";
 import { confirmFreshUnlock } from "./freshUnlock.js";
 import { getActiveProfile } from "./profiles.js";
 
@@ -589,10 +589,12 @@ export async function openShareLink({ shareId, secretHex }, deps = {}) {
 }
 
 /**
- * The joining account's admin proof (#12, docs/share-a-server.md §5.1): `.com`'s
- * attestation of this account's sensitive key, fetched about our own account,
- * and #12 signed with that key after one fresh unlock. A demo account's device
- * holds no admin root; `.com` signs for the demo account instead.
+ * The joining account's admin proof (#12, docs/share-a-server.md §5.1): the
+ * per-share admin key (derived from the UMK and the share id, so the shared
+ * server never sees a key `.com` serves by name, AT-LNK-10), `.com`'s
+ * attestation of it, asked for with a request the admin root signs after one
+ * fresh unlock, and #12 signed with it. A demo account's device holds no admin
+ * root; `.com` signs the request for the demo account instead.
  */
 async function adminProof(d, accept) {
   const isAdmin = d.adminRootSeed instanceof Uint8Array;
@@ -606,25 +608,24 @@ async function adminProof(d, accept) {
     });
     if (!unlocked.ok) throw new ShareError(unlocked.error ?? tr("Not accepted."), unlocked.cancelled ? "cancelled" : "unlock");
   }
-  const res = await call(d, `${d.apex}/api/users/${encodeURIComponent(d.username)}/account-key-attestation`);
-  const attestation = res.ok ? ss.parseAccountKeyAttestation(res.body?.attestation) : null;
-  if (!attestation) throw new ShareError(errText(res, tr("Couldn't accept. Try again.")), "attestation", res.status);
-  const admit = { ...accept, keyKind: attestation.keyKind, keyPubHex: attestation.keyPubHex };
-  let signature;
+  const key = await ss.deriveShareAdminKey(d.umk, accept.shareId);
+  const keyPubHex = bytesToHex(key.publicKey);
+  const user = encodeURIComponent(d.username);
+  let res;
   if (isDemo) {
-    const r = await postJson(d, `${d.apex}/api/dev/sample-user/${encodeURIComponent(d.username)}/share-accept`, { admit });
-    if (!r.ok || typeof r.body?.signature !== "string") throw new ShareError(errText(r, tr("Couldn't accept. Try again.")), "accept-failed", r.status);
-    signature = r.body.signature;
-  } else if (attestation.keyKind === "admin-root") {
-    // This device's admin root must be the one the account pins now.
-    if ((await adminRootPubHex(d.adminRootSeed)) !== attestation.keyPubHex) {
-      throw new ShareError(SHARE_ACCEPT_ADMIN_ONLY, "not-admin");
-    }
-    signature = await sigHex(ss.signServerShareAcceptAdmin(admit, d.adminRootSeed));
+    res = await postJson(d, `${d.apex}/api/dev/sample-user/${user}/share-key-attestation`, { keyPubHex });
   } else {
-    // An account that pins no admin root: its IRK is its sensitive key.
-    signature = await sigHex(ss.signServerShareAcceptAdmin(admit, d.accountSign));
+    const request = { username: d.username, keyPubHex, issuedAt: d.now() };
+    const signature = await sigHex(ss.signShareKeyAttestationRequest(request, d.adminRootSeed));
+    res = await postJson(d, `${d.apex}/api/users/${user}/share-key-attestation`, { request, signature });
   }
+  if (res.status === 403 && res.body?.code === "accept-not-admin") throw new ShareError(SHARE_ACCEPT_ADMIN_ONLY, "not-admin");
+  const attestation = res.ok ? ss.parseAccountKeyAttestation(res.body?.attestation) : null;
+  if (!attestation || attestation.keyPubHex !== keyPubHex) {
+    throw new ShareError(errText(res, tr("Couldn't accept. Try again.")), "attestation", res.status);
+  }
+  const admit = { ...accept, keyKind: "share", keyPubHex };
+  const signature = await sigHex(ss.signServerShareAcceptAdmin(admit, key.seed));
   return { admit, signature, attestation };
 }
 

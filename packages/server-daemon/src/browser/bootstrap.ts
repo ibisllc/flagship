@@ -89,7 +89,7 @@ export interface BootstrapBrowserOptions {
   /** Test seam: resolve a name to every address it has. Default: the system resolver. */
   resolve?: (host: string) => Promise<string[]>;
   /** Told of every address the judge approved for a host (beside the app's own pinning proxy, which always is). */
-  onApproved?: (host: string, addresses: string[], serviceId: string) => void;
+  onApproved?: (host: string, addresses: string[], serviceId: string, at: import("./pinningProxy.js").ApprovedTarget) => void;
   /**
    * Where each app context's pinning proxy listens and whom it serves (egress.ts). Chromium must be
    * started with {@link BrowserBundle.chromiumFlags}. `false` (tests of the policy alone): no proxies.
@@ -168,6 +168,7 @@ export async function bootstrapBrowserBundle(
     ...(opts.protectedHosts ? { protectedHosts: opts.protectedHosts } : {}),
   });
   const proxies = opts.egress === false ? null : new ServiceProxies(opts.egress ?? {});
+  const policedRef: { current: PolicedBrowser | null } = { current: null };
   const grantRequests =
     opts.authority && opts.serverDomain
       ? new BrowserGrantRequests({
@@ -175,15 +176,16 @@ export async function bootstrapBrowserBundle(
           serverDomain: opts.serverDomain,
           authority: opts.authority,
           ...(opts.onGrantRequest ? { onRequest: opts.onGrantRequest } : {}),
+          onRevoked: (serviceId) => void policedRef.current?.closeOutOfScope(serviceId).catch(() => {}),
         })
       : null;
   const policed = new PolicedBrowser({
     cdp: browser,
     contexts: new ContextRegistry(),
     judge,
-    onApproved: (host, addresses, serviceId) => {
-      proxies?.allow(serviceId, host, addresses);
-      opts.onApproved?.(host, addresses, serviceId);
+    onApproved: (host, addresses, serviceId, at) => {
+      proxies?.allow(serviceId, host, addresses, at);
+      opts.onApproved?.(host, addresses, serviceId, at);
     },
     ...(proxies ? { contextOptions: async (serviceId: string) => ({ proxyServer: await proxies.proxyFor(serviceId), proxyBypassList: "<-loopback>" }) } : {}),
     onContextGone: (serviceId) => {
@@ -213,6 +215,7 @@ export async function bootstrapBrowserBundle(
       // a domain the grant rules refuse (an address, a bare TLD) leaves the app with no grant: it can open nothing
     }
   };
+  policedRef.current = policed;
   await policed.start();
 
   const phonePipe = new PhonePipe({
@@ -239,6 +242,7 @@ export async function bootstrapBrowserBundle(
     policed,
     appAuthTokens,
     pairedSessionGate: opts.pairedSessionGate,
+    grants,
     ...(grantRequests ? { grantRequests } : {}),
   });
 

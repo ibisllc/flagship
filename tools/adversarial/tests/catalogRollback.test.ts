@@ -9,20 +9,20 @@
  *   AT-CAT-04  trusted root rolled back                            -> refused (rollback)
  *   AT-CAT-05  security floor lowered in a newer targets           -> refused (floor-lowered)
  *   AT-CAT-06  freeze: expired timestamp served                    -> stale: new updates blocked, rollback unaffected
- *   AT-CAT-07  freeze: refetch blocked after a fresh accept        -> FINDING: last view never goes stale
+ *   AT-CAT-07  freeze: refetch blocked after a fresh accept        -> stale at its own expiry (fixed)
  *   AT-CAT-08  mix-and-match snapshot / targets                    -> refused (snapshot-/targets-mismatch)
- *   AT-CAT-09  same version, different targets content             -> FINDING: accepted
+ *   AT-CAT-09  same version, different targets content             -> refused (version-reused; fixed)
  *   AT-CAT-10  targets signed only by the online timestamp key     -> refused (below-threshold)
  *   AT-CAT-11  threshold 2 met by one key signing twice            -> refused (below-threshold)
- *   AT-CAT-12  threshold 2 met by two key ids aliasing one key     -> FINDING: accepted
+ *   AT-CAT-12  threshold 2 met by two key ids aliasing one key     -> refused (fixed)
  *   AT-CAT-13  root chain: skip, self-signed jump, old-only signed -> refused; proper rotation accepted
  *   AT-CAT-14  feed: a forged root step stops the chain            -> old root kept, view under new keys refused
  *   AT-CAT-15  release removed from targets, floor > 0             -> rollback to it refused (confirms suspicion 2)
  *   AT-CAT-16  rollout cohort / unlisted / no catalog              -> update refused for each
- *   AT-CAT-17  feed serves a multi-megabyte document               -> refused, but FINDING: whole body buffered first
+ *   AT-CAT-17  feed serves a multi-megabyte document               -> refused, read stops at the 1 MiB cap (fixed)
  *   AT-CAT-18  update gate: rollback below the floor               -> restricted recovery, no restore
  *   AT-CAT-19  a refused view changes nothing persisted            -> state file byte-identical
- *   AT-CAT-20  catalog state file damaged                          -> FINDING: floor reads 0 until a refetch
+ *   AT-CAT-20  catalog state file damaged                          -> kept floor still binds; rollback refused (fixed)
  */
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -146,13 +146,13 @@ describe("V01 release catalog: rollback, freeze and mix-and-match (AT-CAT)", () 
     expect(await g2.allowsUpdateTo(commit(2), commit(1))).toEqual({ ok: false, reason: "stale-catalog" });
   });
 
-  // FINDING AT-CAT-07: ReleaseCatalogGate.mayTakeNewRelease (packages/server-daemon/src/releaseCatalogGate.ts:100-108)
+  // FIXED AT-CAT-07 (was): ReleaseCatalogGate.mayTakeNewRelease (packages/server-daemon/src/releaseCatalogGate.ts:100-108)
   // reads the `stale` flag persisted at accept() time; it never compares the accepted view's expiries with the
   // current clock. An attacker who blocks the box's catalog refresh (network position, a `.com`/R2 outage, or a
   // mirror answering 404) freezes the box on its last FRESH view forever, so a later stop rule (rolloutPercent 0 or a
   // removed release) never reaches it and it keeps taking the stopped release. The class comment ("counts as fresh only
   // until its own expiry") says the opposite of what the code does.
-  it.fails("AT-CAT-07 boundary: freeze by blocking refresh. The last accepted view must go stale at its own expiry (FINDING: it stays fresh forever)", async () => {
+  it("AT-CAT-07 boundary: freeze by blocking refresh. The last accepted view must go stale at its own expiry (was FINDING: it stayed fresh forever)", async () => {
     const w = gateWorld();
     const g = w.make();
     expect((await g.accept(view())).ok).toBe(true);
@@ -168,12 +168,12 @@ describe("V01 release catalog: rollback, freeze and mix-and-match (AT-CAT)", () 
     expect(verify({ ...a, snapshot: b.snapshot })).toEqual({ ok: false, reason: "snapshot-mismatch" });
   });
 
-  // FINDING AT-CAT-09: verifyReleaseCatalog (packages/protocol/src/releaseMetadata.ts:236) only refuses LOWER versions.
+  // FIXED AT-CAT-09 (was): verifyReleaseCatalog (packages/protocol/src/releaseMetadata.ts:236) only refuses LOWER versions.
   // A targets/snapshot/timestamp at the SAME version as the accepted state but with different content is accepted,
   // so two differently-signed catalogs sharing a version number (e.g. a stop rule that reused the version of the
   // catalog it stops, or a re-sign after an edit) let a mirror flip boxes between them: re-opening a stopped rollout.
   // TUF keeps the trusted file when the version is equal; the box should refuse equal-version-different-digest.
-  it.fails("AT-CAT-09 boundary: equal version must mean equal content. A re-signed targets v1 with rollout widened is refused (FINDING: accepted)", async () => {
+  it("AT-CAT-09 boundary: equal version must mean equal content. A re-signed targets v1 with rollout widened is refused (was FINDING: accepted)", async () => {
     const w = gateWorld();
     const g = w.make();
     expect((await g.accept(view({ releases: [rel(1), rel(2, 0)] }))).ok).toBe(true); // the stop: rollout 0
@@ -193,12 +193,12 @@ describe("V01 release catalog: rollback, freeze and mix-and-match (AT-CAT)", () 
     expect(verify({ ...v, targets: doubled }, EMPTY_TRUST_STATE, root2)).toEqual({ ok: false, reason: "below-threshold" });
   });
 
-  // FINDING AT-CAT-12: validSigners (packages/protocol/src/releaseMetadata.ts:165-179) dedupes by keyId, and the root
+  // FIXED AT-CAT-12 (was): validSigners (packages/protocol/src/releaseMetadata.ts:165-179) dedupes by keyId, and the root
   // shape check (line 139-144) never refuses two keyIds mapping to the SAME public key. A root that lists k4 and an alias
   // k4b = pub(k4) with threshold 2 is satisfied by one private key, silently defeating k-of-n. TUF derives key ids from
   // the key for this reason. Needs a root signed by the root role, so it is a ceremony/rotation-tooling defect, not a
   // remote attack; catalog.ts `root` accepts any --key id=pub pairs.
-  it.fails("AT-CAT-12 boundary: threshold must count distinct KEYS. Two key ids aliasing one public key cannot meet threshold 2 (FINDING: accepted)", () => {
+  it("AT-CAT-12 boundary: threshold must count distinct KEYS. Two key ids aliasing one public key cannot meet threshold 2 (was FINDING: accepted)", () => {
     const root2: RootMeta = {
       ...root1,
       keys: { ...root1.keys, k4b: TGK.pub },
@@ -276,11 +276,11 @@ describe("V01 release catalog: rollback, freeze and mix-and-match (AT-CAT)", () 
     expect(admitted).toBeLessThan(280);
   });
 
-  // FINDING AT-CAT-17: fetchJson (packages/server-daemon/src/releaseCatalogFeed.ts:66-76) calls res.text() and only then
+  // FIXED AT-CAT-17 (was): fetchJson (packages/server-daemon/src/releaseCatalogFeed.ts:66-76) calls res.text() and only then
   // compares the length with MAX_DOC (1 MiB). Whoever answers the catalog URL (`.com`, R2, anyone on the path if TLS
   // fails open) can make the daemon buffer an unbounded body for up to the 30 s timeout: a memory-exhaustion lever
   // against the management process. The cap should be enforced while streaming (content-length + reader).
-  it.fails("AT-CAT-17 boundary: catalog fetch size cap. A multi-megabyte body is cut off near 1 MiB, not read whole (FINDING: read whole before the check)", async () => {
+  it("AT-CAT-17 boundary: catalog fetch size cap. A multi-megabyte body is cut off near 1 MiB, not read whole (was FINDING: read whole before the check)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "at-cat-big-"));
     writeFileSync(join(dir, "pinned.json"), JSON.stringify(root1));
     const roots = new TrustedRootStore({ pinnedPath: join(dir, "pinned.json"), statePath: join(dir, "root-state.json") });
@@ -335,13 +335,13 @@ describe("V01 release catalog: rollback, freeze and mix-and-match (AT-CAT)", () 
     expect(await w.make().floor()).toBe(2);
   });
 
-  // FINDING AT-CAT-20: ReleaseCatalogGate.load (packages/server-daemon/src/releaseCatalogGate.ts:56-72) reads a damaged
+  // FIXED AT-CAT-20 (was): ReleaseCatalogGate.load (packages/server-daemon/src/releaseCatalogGate.ts:56-72) reads a damaged
   // state file as EMPTY_TRUST_STATE: floor 0 and every version 0. Until the next successful fetch, rollbackAllowed()
   // returns true for ANY commit (line 130), and the box will accept any older-but-unexpired signed catalog (lower
   // versions, lower floor) a mirror replays. The update boot gate runs at boot, before the fire-and-forget refresh, so a
   // failed update right after the damage rolls back below the floor. The class comment claims the floor is never
   // lowered. The high-water marks need a second copy (or fail closed: refuse rollbacks until a catalog is re-accepted).
-  it.fails("AT-CAT-20 boundary: damaged catalog state must not lower the floor. A rollback below the old floor stays refused before the next fetch (FINDING: floor reads 0)", async () => {
+  it("AT-CAT-20 boundary: damaged catalog state must not lower the floor. A rollback below the old floor stays refused before the next fetch (was FINDING: floor read 0)", async () => {
     const w = gateWorld();
     expect((await w.make().accept(view({ tv: 2, floor: 2, releases: [rel(1), rel(2)] }))).ok).toBe(true);
     expect(await w.make().rollbackAllowed(commit(1))).toBe(false);

@@ -239,8 +239,8 @@ fun SettingsScreen(nav: NavController) {
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Shield,
-                    title = "Quantum-safe protection",
-                    subtitle = "Strict protection per server",
+                    title = stringResource(R.string.quantum_safe_protection),
+                    subtitle = stringResource(R.string.strict_protection_per_server),
                     onClick = { nav.navigate("quantum-safety") },
                     testTag = "settings-open-quantum-safety",
                 ),

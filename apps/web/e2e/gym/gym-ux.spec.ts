@@ -1264,6 +1264,9 @@ test.describe("gym ux recovery update", () => {
 // ───────────────────────────── browser access requests (SEC-BROWSER-002) ─────────────────────────────
 
 const BROWSER_CANON: [string, string] = ["/lib/browserGrant.js", "canonicalBrowserGrantAnswer"];
+const BROWSER_REVOKE_CANON: [string, string] = ["/lib/browserGrant.js", "canonicalBrowserGrantRevoke"];
+const DURATION_RANK = { once: 0, session: 1, service: 2 } as const;
+type OwnerGrant = { grantId: string; serviceId: string; capabilities: string[]; origins: string[]; localNetwork: GrantAsk["localNetwork"]; duration: GrantAsk["duration"]; explanation: string; issuedAt: number };
 type GrantAsk = { requestId: string; serviceId: string; capabilities: string[]; origins: string[]; localNetwork: null | { kind: string; hosts?: string[] }; duration: "once" | "session" | "service"; explanation: string; at: number; meaning: string[] };
 const grantAsk = (id: string, extra: Partial<GrantAsk> = {}): GrantAsk => ({
   requestId: id,
@@ -1278,17 +1281,37 @@ const grantAsk = (id: string, extra: Partial<GrantAsk> = {}): GrantAsk => ({
   ...extra,
 });
 
-/** The box's owner routes for browser grants (browser/grantRequests.ts): the list, and answers that remove the ask. */
-function browserBox(m: Mock, page: Page, keys: Keys, state: { requests: GrantAsk[] }): Mock {
+/**
+ * The box's owner routes for browser grants (browser/grantRequests.ts): the list, answers that remove
+ * the ask (the owner's duration, never longer than asked, signed), the grants the owner gave, and the
+ * signed withdraw that drops one.
+ */
+function browserBox(m: Mock, page: Page, keys: Keys, state: { requests: GrantAsk[]; grants?: OwnerGrant[] }): Mock {
+  state.grants ??= [];
   m.get(box(HOME, "/api/browser/owner/grant-requests"), () => ({ json: { requests: state.requests } }));
   m.post(box(HOME, "/api/browser/owner/grant-requests/answer"), async (c: Call) => {
     const r = state.requests.find((q) => q.requestId === c.body.requestId);
     if (!r) return { status: 404, json: { error: "that request is no longer waiting" } };
     if (c.body.decision === "allow") {
-      const arg = { serverDomain: HOME, requestId: r.requestId, serviceId: r.serviceId, decision: "allow", duration: r.duration, capabilities: r.capabilities, origins: r.origins, localNetwork: r.localNetwork, issuedAt: c.body.issuedAt };
+      const duration = (c.body.duration ?? r.duration) as GrantAsk["duration"];
+      if (!(duration in DURATION_RANK) || DURATION_RANK[duration] > DURATION_RANK[r.duration]) return { status: 400, json: { error: "an answer can grant the request or less, never more" } };
+      const arg = { serverDomain: HOME, requestId: r.requestId, serviceId: r.serviceId, decision: "allow", duration, capabilities: r.capabilities, origins: r.origins, localNetwork: r.localNetwork, issuedAt: c.body.issuedAt };
       if (!(await authorize(page, keys, BROWSER_CANON, arg, c.body.signature))) return { status: 403, json: { error: "that answer was not signed by the owner" } };
+      state.grants!.push({ grantId: `bg-${r.requestId}`, serviceId: r.serviceId, capabilities: r.capabilities, origins: r.origins, localNetwork: r.localNetwork, duration, explanation: r.explanation, issuedAt: c.body.issuedAt });
     }
     state.requests = state.requests.filter((q) => q !== r);
+    return { json: { ok: true } };
+  });
+  m.get(box(HOME, "/api/browser/owner/grants"), (c: Call) => {
+    const only = c.url.searchParams.get("serviceId");
+    return { json: { grants: state.grants!.filter((g) => !only || g.serviceId === only) } };
+  });
+  m.post(box(HOME, "/api/browser/owner/grants/revoke"), async (c: Call) => {
+    const g = state.grants!.find((x) => x.grantId === c.body.grantId && x.serviceId === c.body.serviceId);
+    if (!g) return { status: 404, json: { error: "that grant is no longer in force" } };
+    const arg = { serverDomain: HOME, serviceId: g.serviceId, grantId: g.grantId, issuedAt: c.body.issuedAt };
+    if (!(await authorize(page, keys, BROWSER_REVOKE_CANON, arg, c.body.signature))) return { status: 403, json: { error: "that revoke was not signed by the owner" } };
+    state.grants = state.grants!.filter((x) => x !== g);
     return { json: { ok: true } };
   });
   return m;
@@ -1314,17 +1337,18 @@ test.describe("gym ux browser grants", () => {
     await expect(sheet.locator("[data-grant-explanation]")).toHaveText("The app says: “To print your receipts”");
     await expect(sheet).toContainText("If you deny, the app has to wait before asking again.");
     await expect(sheet).not.toContainText("BOX ENGLISH");
-    await expect(sheet.locator('[data-choice="allow"]')).toHaveText("Allow for this session");
+    await expect(sheet.locator('[data-grant-choices] button')).toHaveText(["Deny", "Allow once", "Allow for this session"]);
+    await expect(sheet.locator('[data-choice="allow:service"]')).toHaveCount(0);
     await shot(page, testInfo, "browser-grant-sheet");
-    await sheet.locator('[data-choice="allow"]').click();
+    await sheet.locator('[data-choice="allow:session"]').click();
     const allow = await m.waitFor("/api/browser/owner/grant-requests/answer");
-    expect(allow.body).toMatchObject({ requestId: "11111111-1111-4111-8111-111111111111", decision: "allow" });
+    expect(allow.body).toMatchObject({ requestId: "11111111-1111-4111-8111-111111111111", decision: "allow", duration: "session" });
     const r1 = grantAsk("11111111-1111-4111-8111-111111111111");
     expect(await signer(page, keys, BROWSER_CANON, { serverDomain: HOME, requestId: r1.requestId, serviceId: SERVICE_ID, decision: "allow", duration: "session", capabilities: r1.capabilities, origins: r1.origins, localNetwork: r1.localNetwork, issuedAt: allow.body.issuedAt }, allow.body.signature)).toBe("admin");
 
     // A one-visit ask for the whole local network: Allow once is offered; Not now, then Deny it from Activity.
     await expect(page.locator("[data-grant-lan]")).toHaveText("Every device on your local network", { timeout: 10_000 });
-    await expect(page.locator('.modal-overlay [data-choice="allow"]')).toHaveText("Allow once");
+    await expect(page.locator('.modal-overlay [data-grant-choices] button')).toHaveText(["Deny", "Allow once"]);
     await page.locator('.modal-overlay [data-choice="later"]').click();
     await page.click('[data-tab-target="activity"]');
     const card = page.locator('#activity-browser [data-browser-request="22222222-2222-4222-8222-222222222222"]');
@@ -1357,13 +1381,76 @@ test.describe("gym ux browser grants", () => {
     const ask = section.locator('[data-browser-request="33333333-3333-4333-8333-333333333333"]');
     await expect(ask).toContainText("docs.example.com");
     await expect(ask).toContainText("Until you remove it");
-    await expect(ask.locator('[data-browser-answer="allow"]')).toHaveText("Always allow");
+    await expect(ask.locator('[data-browser-answer="allow:service"]')).toHaveText("Always allow");
     await shot(page, testInfo, "browser-grant-app-page");
-    await ask.locator('[data-browser-answer="allow"]').click();
+    await ask.locator('[data-browser-answer="allow:service"]').click();
     const allow = await m.waitFor("/api/browser/owner/grant-requests/answer");
     expect(await signer(page, keys, BROWSER_CANON, { serverDomain: HOME, requestId: "33333333-3333-4333-8333-333333333333", serviceId: SERVICE_ID, decision: "allow", duration: "service", capabilities: ["navigate", "read-dom"], origins: ["docs.example.com"], localNetwork: null, issuedAt: allow.body.issuedAt }, allow.body.signature)).toBe("admin");
     await expect(section.locator("[data-browser-request]")).toHaveCount(0, { timeout: 10_000 });
     await expect(section.locator("[data-browser-manifest]")).toBeVisible();
+    // What was just allowed is listed under Allowed by you.
+    await expect(section.locator('[data-browser-grant="bg-33333333-3333-4333-8333-333333333333"]')).toContainText("docs.example.com", { timeout: 10_000 });
+  });
+
+  test("gym ux browser grants Allow once on a session ask signs the shorter duration, and a longer one is never offered", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    await page.evaluate(async () => (await import("/lib/pushSetting.js")).setPushNotificationsEnabled?.(false));
+    const state = { requests: [grantAsk("44444444-4444-4444-8444-444444444444")] };
+    const m = browserBox(await mock(page), page, keys, state);
+    world(m, [livePod(HOME)]);
+    m.get(box(HOME, `/api/screens/app-detail/${SERVICE_ID}`), {
+      app: { serviceId: SERVICE_ID, slug: "notes", creator: "smoketest", status: "running", url: `https://notes.${HOME}` },
+      manifest: { name: "notes", browser: { domains: ["example.com"] } },
+      dataLayerInstances: [],
+      members: [],
+    });
+    await page.evaluate(async (id) => (await import("/views/service-detail.js")).enterServiceDetail(id), SERVICE_ID);
+    const ask = page.locator('#sd-browser-access [data-browser-request="44444444-4444-4444-8444-444444444444"]');
+    await expect(ask.locator("[data-browser-answer]")).toHaveText(["Deny", "Allow once", "Allow for this session"], { timeout: 10_000 });
+    await expect(ask.locator('[data-browser-answer="allow:service"]')).toHaveCount(0);
+    await shot(page, testInfo, "browser-grant-narrow");
+    await ask.locator('[data-browser-answer="allow:once"]').click();
+    const allow = await m.waitFor("/api/browser/owner/grant-requests/answer");
+    expect(allow.body).toMatchObject({ decision: "allow", duration: "once" });
+    const r = grantAsk("44444444-4444-4444-8444-444444444444");
+    expect(await signer(page, keys, BROWSER_CANON, { serverDomain: HOME, requestId: r.requestId, serviceId: SERVICE_ID, decision: "allow", duration: "once", capabilities: r.capabilities, origins: r.origins, localNetwork: r.localNetwork, issuedAt: allow.body.issuedAt }, allow.body.signature)).toBe("admin");
+    // The signature does not stand for the session the app asked.
+    expect(await signer(page, keys, BROWSER_CANON, { serverDomain: HOME, requestId: r.requestId, serviceId: SERVICE_ID, decision: "allow", duration: "session", capabilities: r.capabilities, origins: r.origins, localNetwork: r.localNetwork, issuedAt: allow.body.issuedAt }, allow.body.signature)).toBeNull();
+    await expect(page.locator("#sd-browser-access [data-browser-grant]")).toContainText("For one visit", { timeout: 10_000 });
+  });
+
+  test("gym ux browser grants Withdraw drops a grant the owner gave, signed, and an already withdrawn one says so", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    await page.evaluate(async () => (await import("/lib/pushSetting.js")).setPushNotificationsEnabled?.(false));
+    const given = (id: string, origin: string): OwnerGrant => ({ grantId: id, serviceId: SERVICE_ID, capabilities: ["navigate"], origins: [origin], localNetwork: null, duration: "service", explanation: "Prices", issuedAt: Date.now() });
+    const state = { requests: [] as GrantAsk[], grants: [given("bg-aaaa", "prices.example.com"), given("bg-bbbb", "maps.example.com")] };
+    const m = browserBox(await mock(page), page, keys, state);
+    world(m, [livePod(HOME)]);
+    m.get(box(HOME, `/api/screens/app-detail/${SERVICE_ID}`), {
+      app: { serviceId: SERVICE_ID, slug: "notes", creator: "smoketest", status: "running", url: `https://notes.${HOME}` },
+      manifest: { name: "notes" },
+      dataLayerInstances: [],
+      members: [],
+    });
+    await page.evaluate(async (id) => (await import("/views/service-detail.js")).enterServiceDetail(id), SERVICE_ID);
+    const section = page.locator("#sd-browser-access");
+    await expect(section.locator("[data-browser-granted]")).toHaveText("Allowed by you", { timeout: 10_000 });
+    const first = section.locator('[data-browser-grant="bg-aaaa"]');
+    await expect(first).toContainText("prices.example.com");
+    await expect(first).toContainText("Until you remove it");
+    await expect(first).toContainText("The app says: “Prices”");
+    await shot(page, testInfo, "browser-grant-withdraw");
+    await first.locator("[data-browser-withdraw]").click();
+    const revoke = await m.waitFor("/api/browser/owner/grants/revoke");
+    expect(revoke.body).toMatchObject({ serviceId: SERVICE_ID, grantId: "bg-aaaa" });
+    expect(await signer(page, keys, BROWSER_REVOKE_CANON, { serverDomain: HOME, serviceId: SERVICE_ID, grantId: "bg-aaaa", issuedAt: revoke.body.issuedAt }, revoke.body.signature)).toBe("admin");
+    await sawToast(page, "Browser access withdrawn");
+    await expect(section.locator('[data-browser-grant="bg-aaaa"]')).toHaveCount(0, { timeout: 10_000 });
+    // Withdrawn elsewhere meanwhile: the box answers 404 and the page says it plainly.
+    state.grants = [];
+    await section.locator('[data-browser-grant="bg-bbbb"] [data-browser-withdraw]').click();
+    await sawToast(page, "That access was already withdrawn.");
+    await expect(section.locator("[data-browser-grant]")).toHaveCount(0, { timeout: 10_000 });
   });
 });
 
@@ -1445,12 +1532,13 @@ test.describe("gym ux upstream sync", () => {
     expect(m.sent(/\/deploy$/)).toHaveLength(0);
   });
 
-  test("gym ux upstream sync up to date discards the opened build, and an app not imported here says so", async ({ page }, testInfo) => {
+  test("gym ux upstream sync up to date opens no build, and an app not imported here says so", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin" });
     const m = await mock(page);
     let upToDate = true;
+    // The box answers "up to date" without opening a build: nothing to discard.
     m.post(box(HOME, `/api/build/apps/${SERVICE_ID}/sync`), () =>
-      upToDate ? { json: syncAnswer({ upToDate: true, candidateCommit: "1".repeat(40), proposal: { upstreamChanged: [], localChanged: [], takeUpstream: [], conflicts: [], alreadyApplied: [], capabilityChanges: [], clean: true } }) } : { status: 404, json: { error: "this app was not imported from a repo on this server" } },
+      upToDate ? { json: { ok: true, upToDate: true, candidateCommit: "1".repeat(40) } } : { status: 404, json: { error: "this app was not imported from a repo on this server" } },
     );
     m.post(box(HOME, `/api/build/sessions/${SYNC_BUILD}/discard`), { ok: true });
     await openSyncedApp(page, m, syncDetail({ importedFrom: undefined, adaptedFrom: { repo: "github.com/alice/notes" } }));
@@ -1460,15 +1548,15 @@ test.describe("gym ux upstream sync", () => {
     await expect(sheet.locator("[data-sync-up-to-date]")).toHaveText("You already run the latest version from github.com/alice/notes.", { timeout: 10_000 });
     await shot(page, testInfo, "upstream-sync-up-to-date");
     await sheet.locator('[data-sync-choice="close"]').click();
-    await m.waitFor(`/api/build/sessions/${SYNC_BUILD}/discard`);
     await expect(sheet).toHaveCount(0);
+    expect(m.sent(/\/discard$/)).toHaveLength(0);
 
     upToDate = false;
     await page.locator("#sd-sync-upstream").click();
     await page.locator('[data-sync-sheet] [data-sync-choice="check"]').click();
     await expect(page.locator("[data-sync-sheet] [data-sync-error]")).toHaveText("This app wasn't imported from a repo on this server, so it can't check for updates.", { timeout: 10_000 });
     await page.locator('[data-sync-sheet] [data-sync-choice="cancel"]').click();
-    expect(m.sent(`/api/build/sessions/${SYNC_BUILD}/discard`)).toHaveLength(1);
+    expect(m.sent(/\/discard$/)).toHaveLength(0);
   });
 
   test("gym ux upstream sync an app with no repo offers no check", async ({ page }, testInfo) => {
@@ -1478,5 +1566,65 @@ test.describe("gym ux upstream sync", () => {
     await expect(page.locator("#service-detail-content .card-title").first()).toContainText("notes", { timeout: 10_000 });
     await expect(page.locator("#sd-sync-upstream")).toHaveCount(0);
     await shot(page, testInfo, "upstream-sync-no-repo");
+  });
+});
+
+// ───────────────────────────── update results (docs/support/update-rollback.md §5) ─────────────────────────────
+
+test.describe("gym ux update results", () => {
+  test("gym ux update results a rollback kept in recovery reads as stuck and the Share update results switch posts the owner's choice", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    world(m, [livePod(HOME)]);
+    const target = "b".repeat(40);
+    const previous = "a".repeat(40);
+    m.first("GET", box(HOME, "/api/screens/server-detail"), serverDetail(HOME, {
+      currentCommit: target,
+      lastUpdate: { outcome: "rolled-back", at: Date.now() - 60_000, targetCommit: target, previousCommit: previous, bootAttempts: 3, rollbackRefused: true },
+    }));
+    let share = false;
+    m.get(box(HOME, "/api/update-reports"), () => ({ json: { share, source: "default", sends: ["release", "cohort", "healthGate", "rolledBack", "arch", "stack"] } }));
+    m.post(box(HOME, "/api/update-reports"), (c: Call) => {
+      share = (c.body as { share: boolean }).share;
+      return { json: { share } };
+    });
+    await page.evaluate(async (fqdn) => (await import("/views/server-detail.js")).enterServerDetail(fqdn), HOME);
+
+    const last = page.locator("#update-last-outcome");
+    await expect(last).toHaveText(
+      "The update to bbbbbbbb didn't start cleanly, and the version before it is too old to go back to safely. The server stays on bbbbbbbb in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.",
+      { timeout: 10_000 },
+    );
+    await expect(last).not.toContainText("on its own");
+    await expect(last).toHaveClass(/warn-text/);
+
+    const sw = page.locator("#update-reports-switch");
+    await expect(sw).toBeEnabled({ timeout: 10_000 });
+    await expect(sw).not.toBeChecked();
+    await expect(page.locator("#update-reports")).toContainText("Share update results");
+    await expect(page.locator("#update-reports")).toContainText("Never your server's name, your account or anything about your apps.");
+    await shot(page, testInfo, "update-results");
+    await sw.click();
+    const on = await m.waitFor("/api/update-reports");
+    expect(on.body).toEqual({ share: true });
+    await expect(sw).toBeChecked();
+    await expect(sw).toBeEnabled();
+    await sw.click();
+    const off = await m.waitFor("/api/update-reports", "POST", 2);
+    expect(off.body).toEqual({ share: false });
+    await expect(sw).not.toBeChecked();
+  });
+
+  test("gym ux update results a refusal is one sentence and a box that refuses the session hides the switch", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    world(m, [livePod(HOME)]);
+    m.first("GET", box(HOME, "/api/screens/server-detail"), serverDetail(HOME, { lastUpdate: { outcome: "refused", at: Date.now() - 60_000, reason: "stale" } }));
+    m.get(box(HOME, "/api/update-reports"), () => ({ status: 403, json: { error: "owner sessions only" } }));
+    await page.evaluate(async (fqdn) => (await import("/views/server-detail.js")).enterServerDetail(fqdn), HOME);
+    await expect(page.locator("#update-last-outcome")).toHaveText("The server refused the last update: the request was too old. Send it again.", { timeout: 10_000 });
+    await m.waitFor("/api/update-reports", "GET");
+    await expect(page.locator("#update-reports")).toBeHidden();
+    await shot(page, testInfo, "update-refusal");
   });
 });

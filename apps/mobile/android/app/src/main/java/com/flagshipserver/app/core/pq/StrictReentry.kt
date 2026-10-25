@@ -1,5 +1,7 @@
 package com.flagshipserver.app.core.pq
 
+import com.flagshipserver.app.core.FSStrings
+import com.flagshipserver.app.R
 import java.security.MessageDigest
 import java.security.SecureRandom
 
@@ -49,10 +51,10 @@ object StrictReentry {
         if (!NONCE.matches(i.nonceHex)) throw Refusal("bad-input", "strict-reentry: the nonce must be 32 bytes of hex")
         if (i.leftStrictAt < 0 || i.checkedAt < 0 || i.deviceCount < 0) throw Refusal("bad-input", "strict-reentry: bad number")
         if (i.devices.size != i.deviceCount || i.deviceCount == 0) {
-            throw Refusal("devices-not-enrolled", "Every device on the account needs its post-quantum key before strict comes back.")
+            throw Refusal("devices-not-enrolled", FSStrings.get(R.string.every_device_on_the_account_needs))
         }
         val recAt = i.recoveryCheckedAt
-        if (!i.recoveryChecked || recAt == null) throw Refusal("recovery-not-checked", "Test your recovery before turning strict on again.")
+        if (!i.recoveryChecked || recAt == null) throw Refusal("recovery-not-checked", FSStrings.get(R.string.test_your_recovery_before_turning_strict))
         val head = "$TAG|${i.account}|${i.scope.kind}|${i.scope.id}|${i.leftStrictAt}"
         val devices = i.devices.map(::line).sorted()
         val server = line(i.server)

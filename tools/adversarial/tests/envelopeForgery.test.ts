@@ -229,9 +229,9 @@ const UNTAGGED_REVIEWED = [
 const SHARED_TAGS_REVIEWED: [string, string[]][] = [];
 
 /**
- * Field pairs where a "|" moves between fields and the signed bytes stay equal. Each is a finding
- * (AT-ENV-09a..e below, marked it.fails until the encoder refuses the separator). Listed here so the
- * aggregate test still fails on any NEW ambiguity.
+ * Field pairs where a "|" used to move between fields with the signed bytes staying equal (AT-ENV-09a..f,
+ * fixed: each encoder now refuses '|' and control characters in its text fields and requires integers
+ * in its numeric ones). Kept as regression tests below; the aggregate test fails on any ambiguity.
  */
 const FINDINGS_09: [string, string, string][] = [
   ["LlmPromoIssue", "provider", "desiredDailyInputTokenCap"],
@@ -241,21 +241,19 @@ const FINDINGS_09: [string, string, string][] = [
   ["PublisherTrust", "oldKeyHex", "newKeyHex"],
   ["PushRelayRequest", "targetUsername", "category"],
 ];
-const KNOWN_AMBIGUOUS: string[] = FINDINGS_09.flatMap(([f, a, b]) => [`${f}.${a}/${b}`, `${f}.${a}/${b} (cross-verify)`]);
+const KNOWN_AMBIGUOUS: string[] = [];
 
-describe("AT-ENV-09 findings: canonical-join ambiguity, one per family (it.fails until fixed)", () => {
-  // FINDING AT-ENV-09a..f: the encoders below join fields with "|" without refusing "|" inside these
-  // fields (no legacyFieldGuard / validateNoSepCtrl / hex or integer check), so
-  //   {a: "x|y", b: "z"} and {a: "x", b: "y|z"} produce the SAME signed bytes and one signature verifies
-  // both. Exploiting it needs the honest signer to have signed a value containing "|" in one of these
-  // fields (or a route that passes untyped JSON through to the verifier); severity low, defence in depth.
-  // Files: llmPromo.ts canonicalLlmPromoIssue (provider, both caps), peerBackupManifest.ts
-  // canonicalPbManifestDeposit (ciphertextSha256Hex, nonceHex), provisioning.ts canonicalProvisionEvent
-  // (serverDomain, phase), appRelease.ts canonicalPublisherTrust (oldKeyHex, newKeyHex), pushRelay.ts
-  // canonicalPushRelayRequest (targetUsername, category).
+describe("AT-ENV-09 regressions: canonical-join ambiguity, one per family (fixed)", () => {
+  // AT-ENV-09a..f (fixed): these encoders joined fields with "|" without refusing "|" inside them, so
+  //   {a: "x|y", b: "z"} and {a: "x", b: "y|z"} produced the SAME signed bytes and one signature verified
+  // both. Each now refuses '|' and control characters in its text fields (legacyFieldGuard) and requires
+  // safe integers in its numeric fields (integerFieldGuard): llmPromo.ts canonicalLlmPromoIssue,
+  // peerBackupManifest.ts canonicalPbManifestDeposit, provisioning.ts canonicalProvisionEvent,
+  // appRelease.ts canonicalPublisherTrust, pushRelay.ts canonicalPushRelayRequest. The webapp, Swift,
+  // Kotlin and Rust ports of the two cross-port families refuse the same (test-vectors `refuse` lists).
   const ids = "abcdef";
   FINDINGS_09.forEach(([fam, a, b2], i) => {
-    it.fails(`AT-ENV-09${ids[i]} ${fam}: "${a}" and "${b2}" cannot trade a "|" under one signature (catches: canonical-join ambiguity) [FINDING]`, async () => {
+    it(`AT-ENV-09${ids[i]} ${fam}: "${a}" and "${b2}" cannot trade a "|" under one signature (catches: canonical-join ambiguity)`, async () => {
       const f = families.find((x) => x.name === fam)!;
       const key = newKey(6);
       const va = String(f.sample[a]);

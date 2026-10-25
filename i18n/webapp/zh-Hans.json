@@ -2876,5 +2876,18 @@
   "Enter your username and the recovery passphrase you chose when you set this up. Your passkey then confirms it is you and unlocks your account key, all on this device. The passphrase never leaves your browser.": "输入你的用户名和设置时选择的恢复密码短语。随后你的通行密钥会确认是你本人，并在此设备上解锁你的账户密钥。密码短语绝不会离开你的浏览器。",
   "Fetch + unlock": "获取并解锁",
   "Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Confirm with your passkey once.": "账户恢复现在也会检查你的通行密钥，因此仅凭密码短语无法下载你的恢复副本。请使用通行密钥确认一次。",
-  "You're on <code>recovery.flagshipserver.com</code> — a separate address used only for recovery, so your passkey is kept apart from the main app. (Technical: rpId <code>recovery.flagshipserver.com</code>, passkey isolated by sub-origin.)": "你正在访问 <code>recovery.flagshipserver.com</code>：这是仅用于恢复的独立地址，因此你的通行密钥与主应用相互隔离。（技术信息：rpId <code>recovery.flagshipserver.com</code>，通行密钥按子源隔离。）"
+  "You're on <code>recovery.flagshipserver.com</code> — a separate address used only for recovery, so your passkey is kept apart from the main app. (Technical: rpId <code>recovery.flagshipserver.com</code>, passkey isolated by sub-origin.)": "你正在访问 <code>recovery.flagshipserver.com</code>：这是仅用于恢复的独立地址，因此你的通行密钥与主应用相互隔离。（技术信息：rpId <code>recovery.flagshipserver.com</code>，通行密钥按子源隔离。）",
+  "The server refused the last update: Flagship's maintainers haven't endorsed that release.": "服务器拒绝了最近一次更新：Flagship 维护者尚未认可该版本。",
+  "The server refused the last update: the server was no longer on the version the update was made for. Send it again.": "服务器拒绝了最近一次更新：服务器已不在此更新所针对的版本上。请重新发送。",
+  "The server refused the last update: it couldn't download or build the new version. Nothing changed.": "服务器拒绝了最近一次更新：无法下载或构建新版本。未做任何更改。",
+  "The server refused the last update: the request wasn't signed by this account's admin key.": "服务器拒绝了最近一次更新：该请求未使用此账户的管理员密钥签名。",
+  "The server refused the last update: the request was too old. Send it again.": "服务器拒绝了最近一次更新：请求太旧。请重新发送。",
+  "The server refused the last update: the request was for a different server.": "服务器拒绝了最近一次更新：该请求针对的是另一台服务器。",
+  "The update to {0} didn't start cleanly, and the version before it is too old to go back to safely. The server stays on {0} in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.": "更新到 {0} 后未能正常启动，而之前的版本太旧，无法安全回退。在修复后的更新到来之前，服务器会以恢复模式停留在 {0}：更新可用时，请在此卡片中安装。你的应用和数据都会保留。",
+  "The last update didn't start cleanly, and the version before it is too old to go back to safely. The server stays on the new version in recovery mode until a fixed update arrives: install it from this card when it's offered. Your apps and data are kept.": "上次更新未能正常启动，而之前的版本太旧，无法安全回退。在修复后的更新到来之前，服务器会以恢复模式停留在新版本上：更新可用时，请在此卡片中安装。你的应用和数据都会保留。",
+  "Share update results": "共享更新结果",
+  "Send Flagship an anonymous note after each update: the release, whether it started cleanly and whether it went back. Never your server's name, your account or anything about your apps.": "每次更新后向 Flagship 发送一条匿名记录：版本、是否正常启动以及是否回退。绝不包含你的服务器名称、你的账户或任何关于你的应用的信息。",
+  "Allowed by you": "由你允许",
+  "Browser access withdrawn": "已撤回浏览器访问",
+  "That access was already withdrawn.": "该访问已被撤回。"
 }

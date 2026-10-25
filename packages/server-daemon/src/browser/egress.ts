@@ -11,7 +11,7 @@
  *     are off, so nothing leaves around the proxies.
  */
 import { classifyAddress, type AddressClass } from "@flagship/protocol";
-import { PinningProxy } from "./pinningProxy.js";
+import { PinningProxy, type ApprovedTarget } from "./pinningProxy.js";
 
 const NEVER: AddressClass[] = ["loopback", "link-local", "metadata", "multicast", "reserved", "invalid"];
 
@@ -71,9 +71,9 @@ export class ServiceProxies {
     return made.url;
   }
 
-  /** The judge approved `host` at these addresses for this app. */
-  allow(serviceId: string, host: string, addresses: string[]): void {
-    this.proxies.get(serviceId)?.proxy.allow(host, addresses);
+  /** The judge approved `host` at these addresses for this app, on one scheme and port (default https 443). */
+  allow(serviceId: string, host: string, addresses: string[], at?: ApprovedTarget): void {
+    this.proxies.get(serviceId)?.proxy.allow(host, addresses, at);
   }
 
   /** The app's browser access ended: its proxy stops and forgets everything. */
