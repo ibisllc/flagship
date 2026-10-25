@@ -103,7 +103,7 @@ own control plane (next release; notes in docs/data-sovereignty.md).
 - [x] A2 (`a03887d5c` incl. A3; branch deleted, tip archived under refs/archive/2026-10-25/landed/) Fast-forward release/0.3 onto feat/phone-usb-burn (13 commits, already on the tip; rebase
       it first if the release moved), delete the feat branch (archive ref first).
 - [x] A3 (landed with A2; combined stack: tsc, 3,019 tests, i18n, parity green) Merge feat/data-sovereignty's box half (8 commits) the same way.
-- [ ] A4 Build the sovereignty PHONE side (iOS reference, then Android; webapp gets only the
+- [~] A4 (SECOND AGENT, 2026-10-25: iOS `89587cbfa`, Android `41ffca4ec`, webapp vector port; shell **v182**; Android has no mock-gym scenarios, no OfflineControlViewModel unit test and has never run on an emulator/device; iOS gym/VM tests were never run by me; the Kotlin PQ-gate vectors (pq-vectors.json) are not ported; main agent to review) Build the sovereignty PHONE side (iOS reference, then Android; webapp gets only the
       vector ports — a browser can't do LAN rescue): Swift/Kotlin ports of rescue + keyfile v2 vectors;
       Bonjour (iOS NWBrowser, Info.plist NSBonjourServices `_flagship._tcp`) / Android NsdManager
       discovery by the opaque rescueDiscoveryId; key-bound TLS (trust the pinned box key, not DNS/CA);
@@ -398,3 +398,4 @@ own control plane (next release; notes in docs/data-sovereignty.md).
   app groups, WASI pinned install, local-AI delete 500, AT-LIVE-19 signature, no Chromium, gpu-sim
   core quota, WORKERS_PLAN=paid. A triage agent is fixing them in the release worktree
   (uncommitted until it reports); then rebase gym onto release/0.3 and run the release gym again.
+- 2026-10-25 (SECOND AGENT; main agent was interrupted for lack of funds and will review): finished the A4 Android half in /Users/harrywinner/flagship-tmp (NSD discovery, key-bound TLS, offline control + Rescue my data screens, Settings/server page/account-gone entry points, environment factory, 83 strings reusing the iOS drafts in 6 languages, RescueVectorsTest + KeyfileVectorsTest green, parity/i18n green, Android compiles). Rebased work/sovereignty-phone onto release/0.3 (conflicts: webapp shell took v182, compatibility.json 182, i18n json merged per key then catalogs rebuilt) and fast-forwarded release/0.3. Not done yet: Android/iOS mock-gym scenarios for Android, PQ-gate vectors in Kotlin, release gym triage (gym2 failures: nothing from the earlier triage agent was found uncommitted in the worktree, so it must be redone), A5, B-F.
