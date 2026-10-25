@@ -357,22 +357,6 @@ fn spec_for(name: &str) -> Option<(&'static str, Vec<K>)> {
                 IntOr("maxUses", -1),
             ],
         ),
-        "order-power-off-off" | "order-power-off-restart" => (
-            "flagship/order/power-off/v1",
-            vec![S("serverId"), S("mode"), U("issuedAt")],
-        ),
-        "daemon-status" | "daemon-status-liveness" => (
-            "flagship/daemon-status/v1",
-            vec![
-                S("serverDomain"),
-                NullableHex("certSha256"),
-                NullableU("certValidUntil"),
-                NullableS("certIssuer"),
-                Sorted("appsServed"),
-                Hex("nonce"),
-                U("issuedAt"),
-            ],
-        ),
         "name-dibs-initiate" => (
             "flagship/name-dibs-initiate/v1",
             vec![S("username"), S("name"), Hex("irkPubHex"), U("issuedAt")],
@@ -387,7 +371,12 @@ fn spec_for(name: &str) -> Option<(&'static str, Vec<K>)> {
         ),
         "name-change" => (
             "flagship/name-change/v1",
-            vec![Hex("aidPubHex"), S("oldUsername"), S("newUsername"), U("issuedAt")],
+            vec![
+                Hex("aidPubHex"),
+                S("oldUsername"),
+                S("newUsername"),
+                U("issuedAt"),
+            ],
         ),
         "auto-unlock-lease-revoke" => (
             "flagship/auto-unlock-lease-revoke/v1",

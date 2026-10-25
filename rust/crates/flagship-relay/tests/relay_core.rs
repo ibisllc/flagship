@@ -42,10 +42,20 @@ fn cfg() -> RelayConfig {
     c
 }
 
+const SOCKET_BUFFER: u32 = 256 * 1024;
+
+fn small_buffer_listener() -> TcpListener {
+    let sock = tokio::net::TcpSocket::new_v4().unwrap();
+    sock.set_send_buffer_size(SOCKET_BUFFER).unwrap();
+    sock.set_recv_buffer_size(SOCKET_BUFFER).unwrap();
+    sock.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    sock.listen(64).unwrap()
+}
+
 async fn start_with(c: RelayConfig, meter: Option<Arc<dyn Meter>>) -> RunningRelay {
     let l = Listeners {
         sni: TcpListener::bind("127.0.0.1:0").await.unwrap(),
-        hub: TcpListener::bind("127.0.0.1:0").await.unwrap(),
+        hub: small_buffer_listener(),
         echo: Some(TcpListener::bind("127.0.0.1:0").await.unwrap()),
     };
     relay::start(
@@ -141,7 +151,12 @@ struct TestBox {
 impl TestBox {
     async fn connect(r: &RunningRelay, accept: TypeSet) -> Self {
         let url = format!("ws://{}/tunnel", r.hub_addr);
-        let (ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+        // Fixed socket buffers (Linux would otherwise auto-tune them to megabytes), so what the
+        // scheduling test counts ahead of a small request is the hub's own queue, not the kernel's.
+        let sock = tokio::net::TcpSocket::new_v4().unwrap();
+        sock.set_recv_buffer_size(SOCKET_BUFFER).unwrap();
+        let tcp = sock.connect(r.hub_addr).await.unwrap();
+        let (ws, _) = tokio_tungstenite::client_async(url, tcp).await.unwrap();
         let (mut sink, mut stream) = ws.split();
         let (tx, mut out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let (in_tx, rx) = mpsc::unbounded_channel();
@@ -393,7 +408,7 @@ async fn hello_refusals_match_ts_reasons_and_close() {
 async fn production_mode_refuses_an_authority_without_signatures() {
     let l = Listeners {
         sni: TcpListener::bind("127.0.0.1:0").await.unwrap(),
-        hub: TcpListener::bind("127.0.0.1:0").await.unwrap(),
+        hub: small_buffer_listener(),
         echo: None,
     };
     let e = relay::start(
