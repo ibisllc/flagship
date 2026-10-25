@@ -568,8 +568,17 @@ fun HomeTab() {
                     health = pod.health,
                     onBack = { nav.popBackStack() },
                     onOpenLocalAi = { nav.navigate(com.flagshipserver.app.ui.screens.localAiRoute(podId)) },
+                    onOpenOfflineControl = { nav.navigate("offline-control/" + android.net.Uri.encode(pod.fqdn)) },
                 )
             }
+        }
+        composable("offline-control/{focus}") { entry ->
+            val app = com.flagshipserver.app.core.LocalAppState.current
+            com.flagshipserver.app.ui.screens.OfflineControlScreen(
+                username = app.currentUser.value.orEmpty(),
+                focus = entry.arguments?.getString("focus")?.let(android.net.Uri::decode),
+                onBack = { nav.popBackStack() },
+            )
         }
         composable(
             "transfer-acquirer?offer={offer}",

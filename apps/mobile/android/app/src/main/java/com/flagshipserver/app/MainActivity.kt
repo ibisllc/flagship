@@ -141,6 +141,9 @@ class MainActivity : FragmentActivity() {
         com.flagshipserver.app.core.ServerKeyPins.shared =
             com.flagshipserver.app.core.ServerKeyPins(com.flagshipserver.app.keystore.KeystoreServerKeyPinStore)
         com.flagshipserver.app.core.FirstContact.shared = com.flagshipserver.app.keystore.KeystoreEnrollmentSecretStore
+        // Offline control (docs/data-sovereignty.md 4.9): where each server was last seen on a LAN.
+        com.flagshipserver.app.core.RescueServerBook.shared =
+            com.flagshipserver.app.core.RescueServerBook(com.flagshipserver.app.keystore.KeystoreRescueBookStore)
         com.flagshipserver.app.core.WildcardGrants.outbox = com.flagshipserver.app.keystore.KeystoreWildcardGrantOutbox
         // Pins and the list of boxes this phone knows survive a restart, so a cold start is not a
         // window in which a known box falls back to ordinary web trust.

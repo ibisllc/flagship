@@ -147,8 +147,63 @@ object Keyfile {
     // ── Unwrap (import) ────────────────────────────────────────────
 
     /** Parse + decrypt a `.flagshipkey` file. Throws KeyfileException on
-     *  any failure (malformed / bad-passphrase / version). */
+     *  any failure (malformed / bad-passphrase / version). A v2 account file
+     *  opens here too, as its UMK (as the TS v1 reader does). */
     fun unwrap(fileText: String, passphrase: String): Pair<ByteArray, Meta> {
+        val a = unwrapAccount(fileText, passphrase)
+        return Pair(a.umkSeed, a.meta)
+    }
+
+    // ── v2: the whole local account (docs/data-sovereignty.md 4.11) ──
+
+    const val ACCOUNT_VERSION = 2
+
+    /** What the rescue flow needs about one server with `.com` gone: its name, where it was last
+     *  seen on a LAN (a hint), and the server key this device pinned (docs/first-contact.md). */
+    data class Server(val domain: String, val lan: List<String> = emptyList(), val stk: String? = null)
+
+    class Account(val umkSeed: ByteArray, val adminRootSeed: ByteArray?, val servers: List<Server>, val meta: Meta, val version: Int)
+
+    private val HEX64 = Regex("^[0-9a-f]{64}$")
+
+    private fun cleanDomain(d: String) = d.isNotEmpty() && d.length <= 253 && d.none { it == '|' || it.isWhitespace() || it.code <= 0x20 || it.code == 0x7f }
+
+    /** Wrap the account into a v2 `.flagshipkey`: the UMK seed, the admin root seed (when this device
+     *  holds it: random, so a UMK alone never rebuilds it) and the server records. */
+    fun wrapAccount(
+        umkSeed: ByteArray,
+        adminRootSeed: ByteArray?,
+        servers: List<Server>,
+        passphrase: String,
+        meta: Meta,
+        params: ArgonParams = ARGON_PARAMS,
+    ): String {
+        if (umkSeed.size != 32) throw KeyfileException("UMK seed must be 32 bytes", KeyfileException.Code.MALFORMED)
+        if (adminRootSeed != null && adminRootSeed.size != 32) throw KeyfileException("admin root seed must be 32 bytes", KeyfileException.Code.MALFORMED)
+        if (passphrase.length < MIN_PASSPHRASE) throw KeyfileException("passphrase too short (min $MIN_PASSPHRASE)", KeyfileException.Code.MALFORMED)
+        val list = org.json.JSONArray()
+        for (srv in servers.take(64)) {
+            val d = srv.domain.lowercase()
+            if (!cleanDomain(d)) throw KeyfileException("malformed server record", KeyfileException.Code.MALFORMED)
+            val r = JSONObject().put("domain", d)
+            val lan = srv.lan.filter { it.length <= 64 }.take(8)
+            if (lan.isNotEmpty()) r.put("lan", org.json.JSONArray(lan))
+            srv.stk?.let { r.put("stk", it.lowercase()) }
+            list.put(r)
+        }
+        val body = JSONObject().put("umkSeedHex", HexUtil.encode(umkSeed)).put("servers", list)
+        if (adminRootSeed != null) body.put("adminRootSeedHex", HexUtil.encode(adminRootSeed))
+        val salt = ByteArray(16).also(rng::nextBytes)
+        val nonce = ByteArray(12).also(rng::nextBytes)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(deriveKey(passphrase, salt, params), "AES"), GCMParameterSpec(128, nonce))
+        cipher.updateAAD(aadBytes(ACCOUNT_VERSION, meta.username, meta.accountId, meta.createdAt, params))
+        val ct = cipher.doFinal(body.toString().toByteArray(Charsets.UTF_8))
+        return envelopeJson(meta, params, HexUtil.encode(salt), HexUtil.encode(nonce), HexUtil.encode(ct), ACCOUNT_VERSION)
+    }
+
+    /** Open a v1 or v2 `.flagshipkey`. A v1 file yields the UMK and no admin root or servers. */
+    fun unwrapAccount(fileText: String, passphrase: String): Account {
         val obj = try {
             JSONObject(fileText)
         } catch (_: Throwable) {
@@ -161,7 +216,7 @@ object Keyfile {
             throw KeyfileException("missing version", KeyfileException.Code.MALFORMED)
         }
         val ver = obj.optInt("version", -1)
-        if (ver != VERSION) {
+        if (ver != VERSION && ver != ACCOUNT_VERSION) {
             throw KeyfileException("unsupported version $ver", KeyfileException.Code.VERSION)
         }
         val kdf = obj.optJSONObject("kdf")
@@ -202,7 +257,7 @@ object Keyfile {
         val key = deriveKey(passphrase, salt, params)
         val aad = aadBytes(ver, username, accountId, createdAt, params)
 
-        val seed = try {
+        val plain = try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(
                 Cipher.DECRYPT_MODE,
@@ -225,10 +280,37 @@ object Keyfile {
                 KeyfileException.Code.BAD_PASSPHRASE,
             )
         }
-        if (seed.size != 32) {
-            throw KeyfileException("decrypted seed is not 32 bytes", KeyfileException.Code.MALFORMED)
+        val meta = Meta(username = username, accountId = accountId, createdAt = createdAt)
+        if (ver == VERSION) {
+            if (plain.size != 32) {
+                throw KeyfileException("decrypted seed is not 32 bytes", KeyfileException.Code.MALFORMED)
+            }
+            return Account(plain, null, emptyList(), meta, ver)
         }
-        return Pair(seed, Meta(username = username, accountId = accountId, createdAt = createdAt))
+        val body = try {
+            JSONObject(String(plain, Charsets.UTF_8))
+        } catch (_: Throwable) {
+            throw KeyfileException("the account inside is damaged", KeyfileException.Code.MALFORMED)
+        }
+        fun key32(v: Any?): ByteArray {
+            val s = v as? String
+            if (s == null || !HEX64.matches(s)) throw KeyfileException("a key inside is not 32 bytes", KeyfileException.Code.MALFORMED)
+            return HexUtil.decode(s)!!
+        }
+        val umk = key32(body.opt("umkSeedHex"))
+        val admin = if (body.has("adminRootSeedHex")) key32(body.opt("adminRootSeedHex")) else null
+        val arr = if (body.has("servers")) body.optJSONArray("servers") ?: throw KeyfileException("malformed server list", KeyfileException.Code.MALFORMED) else org.json.JSONArray()
+        if (arr.length() > 64) throw KeyfileException("malformed server list", KeyfileException.Code.MALFORMED)
+        val servers = (0 until arr.length()).map { i ->
+            val r = arr.optJSONObject(i) ?: throw KeyfileException("malformed server record", KeyfileException.Code.MALFORMED)
+            val d = r.opt("domain") as? String
+            if (d == null || !cleanDomain(d)) throw KeyfileException("malformed server record", KeyfileException.Code.MALFORMED)
+            val stk = if (r.has("stk")) (r.opt("stk") as? String)?.takeIf { HEX64.matches(it) } ?: throw KeyfileException("malformed server key", KeyfileException.Code.MALFORMED) else null
+            val lanArr = r.optJSONArray("lan")
+            val lan = if (lanArr == null) emptyList() else (0 until lanArr.length()).mapNotNull { lanArr.opt(it) as? String }.filter { it.length <= 64 }.take(8)
+            Server(d.lowercase(), lan, stk)
+        }
+        return Account(umk, admin, servers, meta, ver)
     }
 
     // ── Helpers ────────────────────────────────────────────────────
@@ -243,12 +325,13 @@ object Keyfile {
         saltHex: String,
         nonceHex: String,
         ciphertextHex: String,
+        version: Int = VERSION,
     ): String {
         fun q(s: String): String = JSONObject.quote(s)
         val sb = StringBuilder()
         sb.append("{\n")
         sb.append("  \"magic\": ").append(q(MAGIC)).append(",\n")
-        sb.append("  \"version\": ").append(VERSION).append(",\n")
+        sb.append("  \"version\": ").append(version).append(",\n")
         sb.append("  \"username\": ").append(q(meta.username)).append(",\n")
         if (meta.accountId != null) {
             sb.append("  \"accountId\": ").append(q(meta.accountId)).append(",\n")

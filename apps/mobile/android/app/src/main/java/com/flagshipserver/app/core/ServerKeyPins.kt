@@ -15,6 +15,8 @@ interface ServerKeyPinStore {
     fun get(serverDomain: String): String?
     fun put(serverDomain: String, stkPubHex: String)
     fun remove(serverDomain: String)
+    /** Every server with a pin (Offline control's list). */
+    fun domains(): List<String> = emptyList()
 }
 
 /** A pin store held in memory: tests, previews, and until the app installs the Keystore one. */
@@ -23,6 +25,7 @@ class InMemoryServerKeyPinStore : ServerKeyPinStore {
     override fun get(serverDomain: String) = map[serverDomain]
     override fun put(serverDomain: String, stkPubHex: String) { map[serverDomain] = stkPubHex }
     override fun remove(serverDomain: String) { map.remove(serverDomain) }
+    override fun domains(): List<String> = map.keys.sorted()
 }
 
 class ServerKeyPins(private val store: ServerKeyPinStore) {
@@ -59,6 +62,9 @@ class ServerKeyPins(private val store: ServerKeyPinStore) {
     /** The pinned key for [serverDomain], or null when none was pinned. Every check goes through this. */
     fun pinnedStk(serverDomain: String): ByteArray? =
         pinnedHex(serverDomain)?.let(HexUtil::decode)?.takeIf { it.size == 32 }
+
+    /** Every server this device pinned a key for. */
+    fun domains(): List<String> = store.domains()
 
     /** The pinned key as lowercase hex, or null. */
     fun pinnedHex(serverDomain: String): String? = record(serverDomain)?.stk

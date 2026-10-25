@@ -15,6 +15,14 @@ object KeystoreServerKeyPinStore : ServerKeyPinStore {
     override fun get(serverDomain: String) = runCatching { Keystore.serverKeyPin(serverDomain) }.getOrNull()
     override fun put(serverDomain: String, stkPubHex: String) = Keystore.setServerKeyPin(serverDomain, stkPubHex)
     override fun remove(serverDomain: String) = Keystore.setServerKeyPin(serverDomain, null)
+    override fun domains(): List<String> = runCatching { Keystore.serverKeyPinDomains() }.getOrDefault(emptyList())
+}
+
+/** Offline control's record of where each server was last seen (RescueServerBook), device-local. */
+object KeystoreRescueBookStore : com.flagshipserver.app.core.RescueBookStore {
+    private const val NAME = "rescue.servers"
+    override fun all(): Map<String, String> = runCatching { Keystore.deviceLocalAll(NAME) }.getOrDefault(emptyMap())
+    override fun put(serverDomain: String, value: String?) = Keystore.setDeviceLocalValue(NAME, serverDomain, value)
 }
 
 object KeystoreEnrollmentSecretStore : EnrollmentSecretStore {

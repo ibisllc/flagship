@@ -574,6 +574,12 @@ object Keystore {
 
     fun deviceLocalValue(name: String, serverDomain: String): String? = deviceLocalLines(name)[serverDomain.lowercase()]
 
+    /** Every per-server record kept under [name]. */
+    fun deviceLocalAll(name: String): Map<String, String> = deviceLocalLines(name)
+
+    /** The servers this device pinned a key for (ServerKeyPins). */
+    fun serverKeyPinDomains(): List<String> = serverKeyPins().keys.sorted()
+
     fun setDeviceLocalValue(name: String, serverDomain: String, value: String?) {
         require(value == null || (' ' !in value && '\n' !in value)) { "value" }
         val next = deviceLocalLines(name).toMutableMap()

@@ -11,6 +11,7 @@ import com.flagshipserver.app.R
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -243,6 +244,13 @@ fun SettingsScreen(nav: NavController) {
                     subtitle = stringResource(R.string.strict_protection_per_server),
                     onClick = { nav.navigate("quantum-safety") },
                     testTag = "settings-open-quantum-safety",
+                ),
+                FSSettingsRowData(
+                    icon = Icons.Outlined.Wifi,
+                    title = stringResource(R.string.offline_control),
+                    subtitle = stringResource(R.string.offline_settings_subtitle),
+                    onClick = { nav.navigate("offline-control") },
+                    testTag = "settings-open-offline-control",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.AutoAwesome,

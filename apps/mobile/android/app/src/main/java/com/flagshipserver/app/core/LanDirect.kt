@@ -101,6 +101,12 @@ class LanDirectRegistry(
         val why = LanHint.reject(envelope.hint, sig, stkPub, box, pinnedCertSha256, clock())
         if (why == null) {
             hints[box.lowercase()] = Entry(envelope.hint.endpoints, envelope.hint.certSha256, envelope.hint.expiresAt)
+            // Offline control starts from where this box was last seen (docs/data-sovereignty.md 4.9).
+            if (this === shared) {
+                for (e in envelope.hint.endpoints.reversed()) {
+                    RescueServerBook.shared.saw(box, if (':' in e.address) "[${e.address}]:${e.port}" else "${e.address}:${e.port}")
+                }
+            }
         } else {
             forget(box)
             log("refused $box's LAN hint ($why); staying on the relay")

@@ -124,6 +124,10 @@ fun SettingsTab() {
             )
         }
         composable("account-security") { AccountSecurityScreen(nav) }
+        composable("offline-control") {
+            val app = com.flagshipserver.app.core.LocalAppState.current
+            com.flagshipserver.app.ui.screens.OfflineControlScreen(username = app.currentUser.value.orEmpty(), onBack = { nav.popBackStack() })
+        }
         composable("quantum-safety") { com.flagshipserver.app.ui.screens.QuantumSafetyScreen(nav) }
         composable("paired-sessions") { PairedSessionsScreen(nav) }
         composable("recovery") { RecoveryScreen(nav) }

@@ -65,6 +65,9 @@ import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSSecondaryButton
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import com.flagshipserver.app.ui.screens.KeyfileExportScreen
 import com.flagshipserver.app.ui.theme.FS
 
@@ -98,6 +101,7 @@ fun AccountGoneScreen(name: String) {
             composable("gone") { GoneCard(name, nav) }
             // "Save my account key first" opens the account-key export.
             composable("keyfile-export") { KeyfileExportScreen(nav) }
+            composable("offline-control") { com.flagshipserver.app.ui.screens.OfflineControlScreen(username = name, onBack = { nav.popBackStack() }) }
         }
     }
 }
@@ -114,6 +118,9 @@ private fun GoneCard(name: String, nav: NavController) {
             holdsAdminRoot = Variant.forceAdminRoot || runCatching { Keystore.hasAdminRoot() }.getOrDefault(false),
             holdsServerSession = sessions.podTokenIds().isNotEmpty(),
         )
+    }
+    val holdsRescueKey = remember {
+        runCatching { Keystore.hasAdminRoot() || com.flagshipserver.app.core.ServerKeyPins.shared.domains().isNotEmpty() }.getOrDefault(false)
     }
     fun leave(thenCreate: Boolean) {
         AccountGone.createNext = thenCreate
@@ -155,6 +162,17 @@ private fun GoneCard(name: String, nav: NavController) {
                     style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
                     modifier = Modifier.testTag("account-gone-restore-hint"),
                 )
+                // First: the keys on this device can still take a copy of each server's data over the
+                // local network, and both buttons below can erase them (docs/data-sovereignty.md 4.1).
+                if (holdsRescueKey) {
+                    FSSecondaryButton(
+                        label = stringResource(R.string.offline_save_data),
+                        onClick = { nav.navigate("offline-control") },
+                        block = true,
+                        large = true,
+                        modifier = Modifier.testTag("account-gone-save"),
+                    )
+                }
                 FSPrimaryButton(
                     label = AccountGoneCopy.CREATE,
                     onClick = { if (needsWarning) warning = true else leave(true) },

@@ -175,6 +175,8 @@ fun ServerDetailScreen(
     onBack: () -> Unit,
     /** Opens this server's Local AI screen (docs/architecture-v2/local-ai.md); null hides the card. */
     onOpenLocalAi: (() -> Unit)? = null,
+    /** Offline control for this server (docs/data-sovereignty.md): offered while it can't be reached. */
+    onOpenOfflineControl: (() -> Unit)? = null,
     // The directory's cheap `awaitingUnlock` flag for this box. When true the
     // box is definitely waiting for a boot-unlock approval, so the inline
     // approval card must be offered REGARDLESS of whether the daemon BFF loaded
@@ -454,6 +456,13 @@ fun ServerDetailScreen(
                 lastUpdate = d.value.lastUpdate,
                 onRefresh = { detailVm?.load() },
             )
+        }
+
+        if (detail !is LoadingState.Loaded && pod?.isRevoked != true) {
+            onOpenOfflineControl?.let { open ->
+                Text(stringResource(R.string.offline_next_to_it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FSSecondaryButton(label = stringResource(R.string.offline_reach_wifi), onClick = open, block = true, modifier = Modifier.testTag("server-detail-offline-control"))
+            }
         }
 
         // The health report comes from the directory, not the box, so it still

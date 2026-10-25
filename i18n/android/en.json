@@ -12873,5 +12873,337 @@
   "activity_bootchain_rolled_back": {
     "en": "Kept the previous start-up unlock",
     "ctx": "core/BoxEventLabels.kt (Activity)"
+  },
+  "offline_control": {
+    "en": "Offline control",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_heading": {
+    "en": "Use your server without Flagship",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_intro": {
+    "en": "When Flagship or the relay can't be reached, this phone can still reach your server on the same Wi-Fi. It checks the server by its own key, and every action is signed by this phone and checked by the server. Adding devices, unlocking the server's disk after a restart, and changes to your account still need Flagship.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_checking": {
+    "en": "Checking %1$s by its own key…",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_your_servers": {
+    "en": "Your servers",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_no_servers": {
+    "en": "This phone doesn't know any of your servers yet. Enter one below.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_found_at": {
+    "en": "Found on this Wi-Fi at %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_looking": {
+    "en": "Looking for it on this Wi-Fi…",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_unpinned": {
+    "en": "This phone never confirmed this server's own key, so it can't check it here.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_connect": {
+    "en": "Connect",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_manual_heading": {
+    "en": "Not found? Enter its address",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_manual_hint": {
+    "en": "The server shows its local address on its own screen. Your router's list of devices has it too.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_manual_name": {
+    "en": "Server name, like home.alice.flagship.services",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_manual_address": {
+    "en": "Address, like 192.168.1.20",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_manual_connect": {
+    "en": "Connect to this address",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_connected_to": {
+    "en": "Connected to %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_checked_by_key": {
+    "en": "Checked by its own key on this Wi-Fi. Flagship wasn't needed.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_apps": {
+    "en": "Apps",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_no_apps": {
+    "en": "No apps on this server.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_server": {
+    "en": "Server",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_restart_note": {
+    "en": "A restarted server needs Flagship to unlock its disk. While Flagship can't be reached, it stays locked after a restart, with your data safe on it.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_restart": {
+    "en": "Restart",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_shut_down": {
+    "en": "Shut down",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_start": {
+    "en": "Start",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_stop": {
+    "en": "Stop",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_rescue_heading": {
+    "en": "Rescue my data",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_disconnect": {
+    "en": "Disconnect",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_software": {
+    "en": "Software %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_running_since": {
+    "en": "Running since %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_disk": {
+    "en": "Disk: %1$s of %2$s used",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_cert_expired": {
+    "en": "Web certificate expired %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_cert_valid": {
+    "en": "Web certificate valid until %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_state_running": {
+    "en": "Running",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_state_starting": {
+    "en": "Starting",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_state_stopped": {
+    "en": "Stopped",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_state_unknown": {
+    "en": "Unknown",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_confirm_stop": {
+    "en": "Stop %1$s?",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_confirm_restart": {
+    "en": "Restart %1$s?",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_confirm_start": {
+    "en": "Start %1$s?",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_confirm_restart_server": {
+    "en": "Restart the server?",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_confirm_shutdown_server": {
+    "en": "Shut down the server?",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_confirm_stop_body": {
+    "en": "People using it lose it until you start it again. Its data stays.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_confirm_app_body": {
+    "en": "It's back in a moment.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_confirm_restart_server_body": {
+    "en": "While Flagship can't be reached, the server can't unlock its disk after the restart, so it and its apps stay off until Flagship is back. Your data stays safe on it.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_confirm_shutdown_body": {
+    "en": "It stays off until someone turns it on. Turning it on needs Flagship to unlock its disk.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_rescue_intro": {
+    "en": "Make a backup of this server and save it on this phone. To bring it back, make a new account and use Add a server, Import a backup.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_rescue": {
+    "en": "Rescue my data",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_make_and_download": {
+    "en": "Make and download the backup",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_downloading": {
+    "en": "Downloading… %1$d%%",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_resume": {
+    "en": "Resume the download",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_saved_note": {
+    "en": "Your data is saved in one .flagship file. Keep it somewhere safe: Files, a USB drive, or send it to a computer. To restore it, make a new account and use Add a server, Import a backup, with its passcode.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_never_confirmed_key": {
+    "en": "This phone has never confirmed %1$s's own key, so it can't check that the server it finds is really yours. Open it once from Home while Flagship can be reached.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_not_found": {
+    "en": "%1$s wasn't found on this Wi-Fi. Check that this phone is on the same network as the server, or enter its address.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_didnt_answer": {
+    "en": "%1$s didn't answer on this network. Check that this phone is on the same Wi-Fi as the server, or enter its address.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_reason_connect": {
+    "en": "Connect to %1$s on this network",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_certificate_note": {
+    "en": "This server's web certificate isn't valid any more (it expired, or its name no longer resolves). This phone checked the server by its own key instead.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_no_bundle": {
+    "en": "This server's release can't hand out the backup as one file yet.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_download_stopped": {
+    "en": "The download stopped: %1$s What's already here is kept; Resume picks up from there.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_not_your_server": {
+    "en": "This isn't your server: what answered couldn't prove it holds the key of %1$s. Nothing was sent to it.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_connection_changed": {
+    "en": "Something between this phone and the server is changing the connection, so this phone stopped. Nothing was sent to it.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_another_server": {
+    "en": "Another server answered at that address.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_clocks_apart": {
+    "en": "The server's clock and this phone's are more than two minutes apart. Check the time on both and try again.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_answer_mismatch": {
+    "en": "The server's answer didn't match this phone's question. Try again.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_strict_unproven": {
+    "en": "This server is set to post-quantum checks only, and it didn't prove itself that way. Nothing was sent to it.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_pq_bad": {
+    "en": "The server's post-quantum signature didn't check out, so this phone stopped. Nothing was sent to it.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_reason_start": {
+    "en": "Start %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_reason_stop": {
+    "en": "Stop %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_reason_restart": {
+    "en": "Restart %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_reason_shutdown": {
+    "en": "Shut down %1$s",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_done_started": {
+    "en": "%1$s was started.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_done_stopped": {
+    "en": "%1$s was stopped. It starts again when you start it here, or when the server restarts.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_done_restarted": {
+    "en": "%1$s was restarted.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_done_server_restart": {
+    "en": "The server is restarting. To unlock its disk it needs Flagship, so while Flagship can't be reached it stays locked after the restart.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_done_server_shutdown": {
+    "en": "The server is shutting down.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_failed": {
+    "en": "That didn't work.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_unreachable": {
+    "en": "The server didn't answer on this network. Check that this phone is on the same Wi-Fi as the server.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_certificate_changed": {
+    "en": "The connection changed to another certificate partway through, so this phone stopped. Try again on a network you trust.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_malformed": {
+    "en": "The server's answer couldn't be read.",
+    "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
+  },
+  "offline_protect_backup": {
+    "en": "Protect this backup with your account key",
+    "ctx": "OfflineControlViewModel (biometric prompt reason)"
+  },
+  "offline_settings_subtitle": {
+    "en": "Your servers on this Wi-Fi, without Flagship",
+    "ctx": "Offline control entry points (prose)"
+  },
+  "offline_next_to_it": {
+    "en": "Next to it? This phone can reach it on the same Wi-Fi without Flagship.",
+    "ctx": "Offline control entry points (prose)"
+  },
+  "offline_reach_wifi": {
+    "en": "Reach it on this Wi-Fi",
+    "ctx": "Offline control entry points (prose)"
+  },
+  "offline_save_data": {
+    "en": "Save my servers' data",
+    "ctx": "Offline control entry points (prose)"
   }
 }
