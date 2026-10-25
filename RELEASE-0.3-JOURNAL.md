@@ -216,3 +216,13 @@ Running when this was written (subagents; if this session is gone, they are gone
   accelerator owner card on iOS/Android/web, Swift/Kotlin ExportAuthorization scope, iOS checks
   (browser-grant toast on app page, share demo seed). If this session ends: review `git status`,
   finish/verify each area, commit by explicit paths.
+- 2026-10-25: GPU/WASI gaps committed `dcdb763f3` (gpud terms persist; gpud verifies
+  flagship/gpu-approval/v1 itself; WASI logs via privd + Rust broker `wasi.logs`). Consequence: every
+  app GPU claim is refused until the owner signs an approval, so the loop is being closed: the GPU
+  agent builds the box side (manifest → AppSpec.accelerator, pendingApprovals on the GPU screens
+  route, POST /api/screens/gpu/approvals and /withdraw, push/Activity), the clients agent the
+  Approve/Decline/Withdraw UI on all three apps. Release step: re-pin installer/rust/PINS.json
+  (gpud and broker changed); hardware runbooks' manual claims need a signed approvalProof.
+  Still known after this: revocation and maintenance orders come from the daemon's word; strict-PQ
+  half of the approval not required; daemon keeps SupplementaryGroups=systemd-journal (journalHttp,
+  dockerHealth read the journal); a VM job whose kept terms are lost can't return its VFIO groups.
