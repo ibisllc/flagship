@@ -227,5 +227,8 @@
   "returnToPairingHome": "Zurück zum Kopplungsbeginn",
   "wiFiNetworkNameOptional": "WLAN-Netzwerkname (optional)",
   "wiFiPasswordOptional": "WLAN-Passwort (optional)",
-  "actions": "Aktionen"
+  "actions": "Aktionen",
+  "quickAlpine": "Schnell (Alpine)",
+  "personalizing": "Wird personalisiert…",
+  "quickAlpineBuildsUsbInstallersOnly": "Schnell (Alpine) erstellt nur USB-Installer. Wechsle zu Einfach, um einen Server auf diesem PC zu hosten."
 }

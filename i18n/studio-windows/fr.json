@@ -227,5 +227,8 @@
   "returnToPairingHome": "Retour à l’accueil de l’association",
   "wiFiNetworkNameOptional": "Nom du réseau Wi-Fi (facultatif)",
   "wiFiPasswordOptional": "Mot de passe Wi-Fi (facultatif)",
-  "actions": "Actions"
+  "actions": "Actions",
+  "quickAlpine": "Rapide (Alpine)",
+  "personalizing": "Personnalisation…",
+  "quickAlpineBuildsUsbInstallersOnly": "Rapide (Alpine) ne crée que des installateurs USB. Passez en mode Simple pour héberger un serveur sur ce PC."
 }

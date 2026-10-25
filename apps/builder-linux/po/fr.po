@@ -746,3 +746,19 @@ msgstr "L’image de serveur préconstruite est prévue pour {0}, mais cette rec
 #, python-brace-format
 msgid "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free."
 msgstr "Pas assez d’espace disque libre pour l’image du serveur : {0:.1f} Go nécessaires, {1:.1f} Go disponibles."
+
+#: wizard.py (phase)
+msgid "Personalizing…"
+msgstr "Personnalisation…"
+
+#: wizard.py (hosting refusal)
+msgid "Quick (Alpine) builds USB installers only. Switch to Simple to host a server on this PC."
+msgstr "Rapide (Alpine) ne crée que des installateurs USB. Passez en mode Simple pour héberger un serveur sur ce PC."
+
+#: wizard.py (tooltip)
+msgid "Quick: flash the cached Alpine base with the recipe appended"
+msgstr "Rapide : écrit la base Alpine en cache avec la recette ajoutée"
+
+#: wizard.py (label)
+msgid "Alpine Quick"
+msgstr "Alpine rapide"

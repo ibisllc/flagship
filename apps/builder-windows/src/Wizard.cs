@@ -385,7 +385,7 @@ public sealed class Wizard : INotifyPropertyChanged
         get
         {
             if (Mode == BuilderMode.Quick)
-                return "Quick (Alpine) builds USB installers only. Switch to Simple to host a server on this PC.";
+                return Strings.T("quickAlpineBuildsUsbInstallersOnly");
             if (Vm.ToolchainError != null) return Vm.ToolchainError;
             if (_whpx is { IsAvailable: false } v) return v.Message;
             var cap = Vm.MaxVMCount;

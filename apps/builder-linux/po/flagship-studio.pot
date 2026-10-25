@@ -745,3 +745,19 @@ msgstr ""
 #, python-brace-format
 msgid "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free."
 msgstr ""
+
+#: wizard.py (phase)
+msgid "Personalizing…"
+msgstr ""
+
+#: wizard.py (hosting refusal)
+msgid "Quick (Alpine) builds USB installers only. Switch to Simple to host a server on this PC."
+msgstr ""
+
+#: wizard.py (tooltip)
+msgid "Quick: flash the cached Alpine base with the recipe appended"
+msgstr ""
+
+#: wizard.py (label)
+msgid "Alpine Quick"
+msgstr ""

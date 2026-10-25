@@ -227,5 +227,8 @@
   "returnToPairingHome": "返回配对首页",
   "wiFiNetworkNameOptional": "Wi-Fi 网络名称（可选）",
   "wiFiPasswordOptional": "Wi-Fi 密码（可选）",
-  "actions": "操作"
+  "actions": "操作",
+  "quickAlpine": "快速(Alpine)",
+  "personalizing": "正在个性化…",
+  "quickAlpineBuildsUsbInstallersOnly": "快速(Alpine)只能制作 USB 安装器。要在这台电脑上托管服务器,请切换到简单模式。"
 }

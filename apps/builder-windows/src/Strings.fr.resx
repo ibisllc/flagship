@@ -697,4 +697,13 @@ La VM et son image disque chiffrée sont supprimées de ce PC. </value>
   <data name="actions" xml:space="preserve">
     <value>Actions</value>
   </data>
+  <data name="quickAlpine" xml:space="preserve">
+    <value>Rapide (Alpine)</value>
+  </data>
+  <data name="personalizing" xml:space="preserve">
+    <value>Personnalisation…</value>
+  </data>
+  <data name="quickAlpineBuildsUsbInstallersOnly" xml:space="preserve">
+    <value>Rapide (Alpine) ne crée que des installateurs USB. Passez en mode Simple pour héberger un serveur sur ce PC.</value>
+  </data>
 </root>

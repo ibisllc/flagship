@@ -697,4 +697,13 @@ VM と暗号化されたディスクイメージはこの PC から削除され�
   <data name="actions" xml:space="preserve">
     <value>操作</value>
   </data>
+  <data name="quickAlpine" xml:space="preserve">
+    <value>クイック(Alpine)</value>
+  </data>
+  <data name="personalizing" xml:space="preserve">
+    <value>カスタマイズしています…</value>
+  </data>
+  <data name="quickAlpineBuildsUsbInstallersOnly" xml:space="preserve">
+    <value>クイック(Alpine)は USB インストーラーの作成専用です。この PC でサーバーをホストするにはシンプルに切り替えてください。</value>
+  </data>
 </root>

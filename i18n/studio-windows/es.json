@@ -227,5 +227,8 @@
   "returnToPairingHome": "Volver al inicio de vinculación",
   "wiFiNetworkNameOptional": "Nombre de la red Wi-Fi (opcional)",
   "wiFiPasswordOptional": "Contraseña de Wi-Fi (opcional)",
-  "actions": "Acciones"
+  "actions": "Acciones",
+  "quickAlpine": "Rápido (Alpine)",
+  "personalizing": "Personalizando…",
+  "quickAlpineBuildsUsbInstallersOnly": "Rápido (Alpine) solo crea instaladores USB. Cambia a Simple para alojar un servidor en este PC."
 }

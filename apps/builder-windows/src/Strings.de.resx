@@ -697,4 +697,13 @@ Die VM und ihr verschlüsseltes Datenträger-Image werden von diesem PC entfernt
   <data name="actions" xml:space="preserve">
     <value>Aktionen</value>
   </data>
+  <data name="quickAlpine" xml:space="preserve">
+    <value>Schnell (Alpine)</value>
+  </data>
+  <data name="personalizing" xml:space="preserve">
+    <value>Wird personalisiert…</value>
+  </data>
+  <data name="quickAlpineBuildsUsbInstallersOnly" xml:space="preserve">
+    <value>Schnell (Alpine) erstellt nur USB-Installer. Wechsle zu Einfach, um einen Server auf diesem PC zu hosten.</value>
+  </data>
 </root>

@@ -697,4 +697,13 @@ https://flagshipserver.com</value>
   <data name="actions" xml:space="preserve">
     <value>操作</value>
   </data>
+  <data name="quickAlpine" xml:space="preserve">
+    <value>快速(Alpine)</value>
+  </data>
+  <data name="personalizing" xml:space="preserve">
+    <value>正在个性化…</value>
+  </data>
+  <data name="quickAlpineBuildsUsbInstallersOnly" xml:space="preserve">
+    <value>快速(Alpine)只能制作 USB 安装器。要在这台电脑上托管服务器,请切换到简单模式。</value>
+  </data>
 </root>

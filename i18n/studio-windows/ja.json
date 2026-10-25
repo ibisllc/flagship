@@ -227,5 +227,8 @@
   "returnToPairingHome": "ペアリングのホームに戻る",
   "wiFiNetworkNameOptional": "Wi-Fi ネットワーク名（任意）",
   "wiFiPasswordOptional": "Wi-Fi パスワード（任意）",
-  "actions": "操作"
+  "actions": "操作",
+  "quickAlpine": "クイック(Alpine)",
+  "personalizing": "カスタマイズしています…",
+  "quickAlpineBuildsUsbInstallersOnly": "クイック(Alpine)は USB インストーラーの作成専用です。この PC でサーバーをホストするにはシンプルに切り替えてください。"
 }

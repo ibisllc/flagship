@@ -914,5 +914,17 @@
   "actions": {
     "en": "Actions",
     "ctx": "MainWindow.xaml ToolTip"
+  },
+  "quickAlpine": {
+    "en": "Quick (Alpine)",
+    "ctx": "MainWindow.xaml Content"
+  },
+  "personalizing": {
+    "en": "Personalizing…",
+    "ctx": "Wizard.cs (phase)"
+  },
+  "quickAlpineBuildsUsbInstallersOnly": {
+    "en": "Quick (Alpine) builds USB installers only. Switch to Simple to host a server on this PC.",
+    "ctx": "Wizard.cs (hosting refusal)"
   }
 }

@@ -227,5 +227,8 @@
   "returnToPairingHome": "a191757b52ad",
   "wiFiNetworkNameOptional": "03d0fcab545d",
   "wiFiPasswordOptional": "69178de8cbb0",
-  "actions": "aa6d82bdb3cc"
+  "actions": "aa6d82bdb3cc",
+  "quickAlpine": "7d2d230f0e14",
+  "personalizing": "054926ac6a68",
+  "quickAlpineBuildsUsbInstallersOnly": "a425a019dc59"
 }

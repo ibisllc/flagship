@@ -926,4 +926,16 @@ The VM and its encrypted disk image are removed from this PC. </value>
     <value>Actions</value>
     <comment>MainWindow.xaml ToolTip</comment>
   </data>
+  <data name="quickAlpine" xml:space="preserve">
+    <value>Quick (Alpine)</value>
+    <comment>MainWindow.xaml Content</comment>
+  </data>
+  <data name="personalizing" xml:space="preserve">
+    <value>Personalizing…</value>
+    <comment>Wizard.cs (phase)</comment>
+  </data>
+  <data name="quickAlpineBuildsUsbInstallersOnly" xml:space="preserve">
+    <value>Quick (Alpine) builds USB installers only. Switch to Simple to host a server on this PC.</value>
+    <comment>Wizard.cs (hosting refusal)</comment>
+  </data>
 </root>

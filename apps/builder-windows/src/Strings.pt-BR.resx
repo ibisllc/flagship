@@ -697,4 +697,13 @@ A VM e a imagem de disco criptografada dela são removidas deste PC. </value>
   <data name="actions" xml:space="preserve">
     <value>Ações</value>
   </data>
+  <data name="quickAlpine" xml:space="preserve">
+    <value>Rápido (Alpine)</value>
+  </data>
+  <data name="personalizing" xml:space="preserve">
+    <value>Personalizando…</value>
+  </data>
+  <data name="quickAlpineBuildsUsbInstallersOnly" xml:space="preserve">
+    <value>Rápido (Alpine) só cria instaladores USB. Mude para Simples para hospedar um servidor neste PC.</value>
+  </data>
 </root>

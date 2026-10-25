@@ -793,5 +793,21 @@
   "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free.": {
     "en": "Not enough free disk space for the server image: needs {0:.1f} GB, {1:.1f} GB free.",
     "ctx": "vm/appliance_cache.py:307 (prose)"
+  },
+  "Personalizing…": {
+    "en": "Personalizing…",
+    "ctx": "wizard.py (phase)"
+  },
+  "Quick (Alpine) builds USB installers only. Switch to Simple to host a server on this PC.": {
+    "en": "Quick (Alpine) builds USB installers only. Switch to Simple to host a server on this PC.",
+    "ctx": "wizard.py (hosting refusal)"
+  },
+  "Quick: flash the cached Alpine base with the recipe appended": {
+    "en": "Quick: flash the cached Alpine base with the recipe appended",
+    "ctx": "wizard.py (tooltip)"
+  },
+  "Alpine Quick": {
+    "en": "Alpine Quick",
+    "ctx": "wizard.py (label)"
   }
 }

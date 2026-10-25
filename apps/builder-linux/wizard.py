@@ -935,7 +935,7 @@ class WizardModel:
         Honest, actionable reasons only (toolchain / capacity). A missing KVM
         does NOT block: the VM degrades to TCG with accel_warning."""
         if self.state.mode == MODE_QUICK:
-            return (
+            return tr(
                 "Quick (Alpine) builds USB installers only. Switch to Simple "
                 "to host a server on this PC."
             )
@@ -1520,7 +1520,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     quick_switch = Gtk.Switch()
     quick_switch.set_active(wizard_model.state.mode == MODE_QUICK)
     quick_switch.set_valign(Gtk.Align.CENTER)
-    quick_switch.set_tooltip_text("Quick: flash the cached Alpine base with the recipe appended")
+    quick_switch.set_tooltip_text(tr("Quick: flash the cached Alpine base with the recipe appended"))
 
     def _on_quick_toggle(sw, _pspec):
         if sw.get_active():
@@ -1529,7 +1529,7 @@ def build_window(application, model: Optional[WizardModel] = None):
             wizard_model.set_mode(MODE_SIMPLE)
 
     quick_switch.connect("notify::active", _on_quick_toggle)
-    quick_box.append(Gtk.Label(label="Alpine Quick", xalign=0.0))
+    quick_box.append(Gtk.Label(label=tr("Alpine Quick"), xalign=0.0))
     quick_box.append(quick_switch)
     header.pack_end(quick_box)
 
