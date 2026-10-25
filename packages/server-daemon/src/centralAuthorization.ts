@@ -100,6 +100,7 @@ export const ROUTE_FAMILIES: Readonly<Record<string, { owner: "session" | "signe
   "/api/update-reports": { owner: "session", note: "the owner's choice to share content-free update receipts; owner only" },
   "/api/multipod": { owner: "session", note: "test harness skin; not mounted on a production box" },
   "/api/app-runtime": { owner: "session", note: "how an installed app runs (WASI world, group members, database profile); owner only" },
+  "/api/rescue": { owner: "public", note: "data rescue with .com gone: an admin-signed order bound to this box's certificate opens a narrow token to the backup routes" },
   "/api/wasi": { owner: "session", note: "WASI module store and status; storing grants nothing, a signed install runs it; owner only" },
   "/mcp/build": { owner: "session", note: "per-build bearer key, not a paired session" },
 };
