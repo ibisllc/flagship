@@ -322,12 +322,36 @@ public struct AppDetailResponse: Codable {
     /// Built from a shared repo adaptation: the repo it adapts, so the page
     /// can offer to report a problem with it.
     public var adaptedFrom: AdaptedFrom? = nil
+    /// Imported from a repo on this box, which keeps where it came from so the owner can sync with it
+    /// (N12). Not sent by boxes yet; `adaptedFrom` stands in.
+    public var importedFrom: ImportedFrom? = nil
     /// Files folder and database use against their limits. Absent on older boxes.
     public var storage: AppDiskUsage? = nil
 
     public struct AdaptedFrom: Codable, Equatable {
         public let repo: String
         public init(repo: String) { self.repo = repo }
+    }
+
+    public struct ImportedFrom: Codable, Equatable {
+        public let repo: String
+        public let commit: String?
+        public let ref: String?
+        public init(repo: String, commit: String? = nil, ref: String? = nil) {
+            self.repo = repo
+            self.commit = commit
+            self.ref = ref
+        }
+    }
+
+    /// The repo "Check for updates" names, when the app came from one.
+    public var syncRepo: String? { importedFrom?.repo ?? adaptedFrom?.repo }
+
+    /// The sites the owner approved for the app's browser at install (manifest `browser.domains`).
+    public var browserDomains: [String] {
+        guard let browser = manifest["browser"]?.value as? [String: Any],
+              let domains = browser["domains"] as? [Any] else { return [] }
+        return domains.compactMap { $0 as? String }
     }
 
     public struct DataLayerInstance: Codable, Equatable {

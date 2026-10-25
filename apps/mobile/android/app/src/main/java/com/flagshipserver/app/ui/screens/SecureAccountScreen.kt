@@ -285,6 +285,7 @@ fun SecureAccountScreen(
                     value = passphrase,
                     onValueChange = { passphrase = it },
                     label = stringResource(R.string.recovery_passphrase_8_characters),
+                    helper = recoveryPassphraseHelper(passphrase),
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.semantics { contentDescription = "secure-account-passphrase" },
                 )

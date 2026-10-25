@@ -209,6 +209,16 @@ interface ScreensClient {
     suspend fun chatAlwaysRevoke(app: ChatAppIdentity, sender: ChatAppIdentity?): ChatAlwaysRevokeResponse =
         throw ScreensError.NotImplemented("chat requests")
 
+    /** `GET /api/browser/owner/grant-requests` (owner session): what apps ask of the box's
+     *  browser beyond their manifest. A box with the app browser off answers 404. */
+    suspend fun browserGrantRequests(): BrowserGrantRequestsResponse =
+        throw ScreensError.NotImplemented("browser grant requests")
+
+    /** `POST /api/browser/owner/grant-requests/answer`: Allow carries the owner's signed
+     *  flagship/browser-grant/v1; Deny needs the session alone. */
+    suspend fun browserGrantAnswer(body: BrowserGrantAnswerBody): Unit =
+        throw ScreensError.NotImplemented("browser grant requests")
+
     /** `GET /api/screens/settings/access-alerts`: whether this box pushes
      *  access requests. An older box answers 404. */
     suspend fun accessAlerts(): AccessAlertsSetting =

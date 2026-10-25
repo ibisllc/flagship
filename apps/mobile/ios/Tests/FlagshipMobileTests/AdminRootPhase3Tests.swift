@@ -429,7 +429,7 @@ final class AdminRootPhase3Tests: XCTestCase {
         }
 
         let secrets = try RecoveryDerivation.derivePassphraseSecrets("correcthorse", user)
-        let before = try await server.fetchWrappedUmk(
+        let before = try await server.fetchChecked(
             username: user, fetchTokenHex: HexUtil.encode(secrets.fetchToken)
         )
         let oldWrappedAdmin = try XCTUnwrap(before.wrappedAdminRoot)
@@ -441,7 +441,7 @@ final class AdminRootPhase3Tests: XCTestCase {
         try await AdminRootReEscrow(client: server, webAuthn: webAuthn)
             .run(username: user, passphrase: "correcthorse")
 
-        let after = try await server.fetchWrappedUmk(
+        let after = try await server.fetchChecked(
             username: user, fetchTokenHex: HexUtil.encode(secrets.fetchToken)
         )
         XCTAssertEqual(after.credentialId, credentialId, "SAME credential ⇒ replaced in place")
@@ -483,7 +483,7 @@ final class AdminRootPhase3Tests: XCTestCase {
             return XCTFail("recovery setup failed: \(recovery.phase)")
         }
         let secrets = try RecoveryDerivation.derivePassphraseSecrets("correcthorse", user)
-        let baseline = try await server.fetchWrappedUmk(
+        let baseline = try await server.fetchChecked(
             username: user, fetchTokenHex: HexUtil.encode(secrets.fetchToken)
         ).wrappedAdminRoot
 
@@ -517,7 +517,7 @@ final class AdminRootPhase3Tests: XCTestCase {
             XCTAssertEqual(e, .wrapKeySanityFailed)
         }
 
-        let final = try await server.fetchWrappedUmk(
+        let final = try await server.fetchChecked(
             username: user, fetchTokenHex: HexUtil.encode(secrets.fetchToken)
         ).wrappedAdminRoot
         XCTAssertEqual(final, baseline, "no abort path may mutate the stored record")
@@ -677,6 +677,10 @@ final class GarbagePrfProvider: WebAuthnProvider, @unchecked Sendable {
     }
     func prfAssert(credentialId: String, prfSalt: Data) async throws -> Data {
         Data(repeating: 0x42, count: 32)
+    }
+    func recoveryAssert(credentialId: String, prfSalt: Data, challenge: Data) async throws -> WebAuthnRecoveryAssertion {
+        WebAuthnRecoveryAssertion(prfSecret: Data(repeating: 0x42, count: 32), credentialId: Data(), authenticatorData: Data(),
+                                  clientDataJSON: Data(), signature: Data())
     }
 }
 

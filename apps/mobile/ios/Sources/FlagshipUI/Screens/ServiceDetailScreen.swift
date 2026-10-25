@@ -18,6 +18,7 @@ import FlagshipCore
 public struct ServiceDetailScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.voiciNameClient) private var voiciNames
+    @Environment(\.screensClient) private var screensClient
     @Bindable var vm: ServiceDetailViewModel
     let username: String?
     let pods: [PodInfo]
@@ -40,7 +41,12 @@ public struct ServiceDetailScreen: View {
     /// Allow / Stop access on the internet card. False on a restricted
     /// (companion) profile: the box refuses its signature anyway.
     var canApproveEgress: Bool = true
+    /// N12: open the build an upstream sync made, on the git build screen (review, then deploy).
+    var onOpenBuild: (String) -> Void = { _ in }
+    /// The box a signed browser grant names when the client can't say.
+    var serverDomain: String? = nil
     @State private var confirmStopEgress = false
+    @State private var sync: UpstreamSyncViewModel?
 
     public init(
         vm: ServiceDetailViewModel,
@@ -51,8 +57,12 @@ public struct ServiceDetailScreen: View {
         onOpenAccess: @escaping () -> Void = {},
         onOpenDatabase: @escaping () -> Void = {},
         onEdit: @escaping () -> Void = {},
-        canApproveEgress: Bool = true
+        canApproveEgress: Bool = true,
+        onOpenBuild: @escaping (String) -> Void = { _ in },
+        serverDomain: String? = nil
     ) {
+        self.onOpenBuild = onOpenBuild
+        self.serverDomain = serverDomain
         self.vm = vm
         self.username = username
         self.pods = pods
@@ -81,6 +91,7 @@ public struct ServiceDetailScreen: View {
                         egressCard(c: c)
                     }
                     if d.editable == true { editRow(c: c) }
+                    if let repo = d.syncRepo, canApproveEgress { syncRow(repo: repo, c: c) }
                     if let from = d.adaptedFrom { adapterReportRow(repo: from.repo, c: c) }
                     if let runsOn = vm.runsOn { RunsOnSection(controller: runsOn) }
                     webDomains(d: d, c: c)
@@ -93,6 +104,9 @@ public struct ServiceDetailScreen: View {
                     if let restored = vm.restoredAccess { RestoredAccessSection(controller: restored, canApprove: vm.canApproveRestored) }
                     if let mode = vm.updateMode { UpdateModeSection(controller: mode) }
                     if let perms = vm.permissions { ServicePermissionsSection(controller: perms) }
+                    BrowserAccessSection(serviceId: vm.serviceId, appName: d.app.name ?? d.app.slug,
+                                         manifestDomains: d.browserDomains, serverDomain: serverDomain,
+                                         canAnswer: canApproveEgress)
                     storageSection(d.storage, c: c)
                     logsAndBackup(d: d, c: c)
                     if vm.canUninstall {
@@ -416,6 +430,28 @@ public struct ServiceDetailScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("service-detail-open-database")
+        }
+    }
+
+    /// N12: "Check for updates from <repo>" for an app imported from a repo.
+    private func syncRow(repo: String, c: FSColors) -> some View {
+        Button(action: { sync = UpstreamSyncViewModel(serviceId: vm.serviceId, repo: repo, client: screensClient) }) {
+            FSCard {
+                HStack(spacing: FS.space.s3) {
+                    Image(systemName: "arrow.triangle.branch").foregroundColor(c.accent)
+                    Text(UpstreamSyncCopy.check(repo)).foregroundColor(c.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("service-detail-sync")
+        .sheet(isPresented: Binding(get: { sync != nil }, set: { if !$0 { sync = nil } })) {
+            if let sync {
+                UpstreamSyncSheet(vm: sync) { buildId in onOpenBuild(buildId) }
+            }
         }
     }
 

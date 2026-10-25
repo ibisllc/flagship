@@ -54,11 +54,6 @@ import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.keystore.BlockStoreUmkStore
 import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
-import com.flagshipserver.app.keystore.Keystore
-import com.flagshipserver.app.keystore.KeystoreIrkAccess
-import com.flagshipserver.app.keystore.PasskeyCeremonyAdapter
-import com.flagshipserver.app.keystore.PasskeyRecoveryManager
-import com.flagshipserver.app.keystore.WrappedUmk
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGroup
@@ -69,10 +64,8 @@ import com.flagshipserver.app.ui.components.FSRow
 import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private enum class RecoveryMode { Choose, Setup }
 private enum class CloudStatus { Unknown, NotConfigured, Configured, Failed }
@@ -88,7 +81,6 @@ fun RecoveryScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
 
     val blockStore = remember(ctx) { BlockStoreUmkStore(ctx.applicationContext) }
-    val passkeys = remember(ctx) { PasskeyRecoveryManager(ctx.applicationContext) }
 
     var mode by remember { mutableStateOf(RecoveryMode.Choose) }
     var cloudStatus by remember { mutableStateOf(CloudStatus.Unknown) }
@@ -100,6 +92,25 @@ fun RecoveryScreen(nav: NavController) {
     // Why a second passkey prompt follows the create (see createPasskey).
     var note by remember { mutableStateOf<String?>(null) }
     var savedIn by remember { mutableStateOf(RecoveryProviderStore.read(ctx)) }
+    // A record from before `.com` checked its passkey (SEC-REPAIR-001): a quiet "Update" row.
+    var passkeyLegacy by remember { mutableStateOf(false) }
+    var showUpdate by remember { mutableStateOf(false) }
+    LaunchedEffect(app.currentUser.value) {
+        val u = app.currentUser.value ?: return@LaunchedEffect
+        passkeyLegacy = runCatching { flagshipServer.recoveryRecordState(u) }.getOrNull()?.let { !it.passkeyRequired } ?: false
+    }
+    if (showUpdate) {
+        RecoveryUpdateDialog(
+            knownPassphrase = null,
+            onDecline = { showUpdate = false },
+            onUpdated = {
+                showUpdate = false
+                passkeyLegacy = false
+                app.currentUser.value?.let { com.flagshipserver.app.core.RecoveryUpdatePromptStore.fromContext(ctx).markAsked(it) }
+                toasts.success(FSStrings.get(R.string.recovery_update_done))
+            },
+        )
+    }
 
     LaunchedEffect(Unit) {
         cloudStatus = if (RecoveryProviderStore.isConfigured(ctx)) CloudStatus.Configured else try {
@@ -167,11 +178,24 @@ fun RecoveryScreen(nav: NavController) {
         }
 
         when (mode) {
-            RecoveryMode.Choose -> ChooseCard(
-                cloudStatus = cloudStatus,
-                savedIn = savedIn,
-                onSetup = { mode = RecoveryMode.Setup },
-            )
+            RecoveryMode.Choose -> {
+                ChooseCard(
+                    cloudStatus = cloudStatus,
+                    savedIn = savedIn,
+                    onSetup = { mode = RecoveryMode.Setup },
+                )
+                if (passkeyLegacy) {
+                    Spacer(Modifier.height(FS.space.s3))
+                    FSGroup {
+                        FSRow(
+                            title = stringResource(R.string.recovery_update_row),
+                            icon = Icons.Outlined.Sync,
+                            onClick = { showUpdate = true },
+                            modifier = Modifier.semantics { testTag = "recovery-update-row" },
+                        )
+                    }
+                }
+            }
             RecoveryMode.Setup -> SetupCard(
                 working = working,
                 passphrase = passphrase,
@@ -186,57 +210,18 @@ fun RecoveryScreen(nav: NavController) {
                     scope.launch {
                         working = true; error = null; note = null
                         try {
-                            val username = app.currentUser.value ?: "you"
-                            // IRK access prompt up front (biometric) so the
-                            // Argon2id + passkey work happens after consent.
-                            val irkMaterial = KeystoreIrkAccess().resolve(FSStrings.get(R.string.set_up_cloud_recovery))
-                            val umk = Keystore.loadOrCreateUmkSeed()
-                            val acmeScalar = try {
-                                Keystore.loadOrCreateAcmeAccountKeyScalar()
-                            } catch (_: Throwable) {
-                                null
-                            }
-                            // Argon2id (~1-2s) + the wrap math off the main
-                            // thread; the passkey ceremony resumes on whatever
-                            // dispatcher CredentialManager hops to internally.
-                            val ceremony = PasskeyCeremonyAdapter(passkeys, activity) { note = SECOND_PASSKEY_PROMPT }
-                            val result = withContext(Dispatchers.Default) {
-                                CloudRecoveryEnrollment.enroll(
-                                    server = flagshipServer,
-                                    passkeys = ceremony,
-                                    irk = irkMaterial.signer,
-                                    irkPubHex = irkMaterial.pubHex,
-                                    username = username,
-                                    umkSeed = umk,
-                                    passphrase = passphrase,
-                                    passphraseConfirm = passphraseConfirm,
-                                    acmeScalar = acmeScalar,
-                                    now = System.currentTimeMillis(),
-                                    // Slice D (D-3) — escrow the admin master root.
-                                    adminRootSeed = Keystore.adminRootSeed(),
-                                )
-                            }
-                            // Keep the Android Block Store copy so a new device
-                            // on the same Google account auto-restores. A
-                            // convenience: the escrow on `.com` is done, so a
-                            // Block Store failure doesn't fail the set-up.
-                            runCatching {
-                                blockStore.save(
-                                    WrappedUmk(
-                                        credentialId = result.credentialId,
-                                        wrappedUmkBase64 = result.wrappedUmk,
-                                    ),
-                                )
-                            }.onFailure {
-                                com.flagshipserver.app.core.ErrorLog.caught(
-                                    "cloud-recovery-blockstore", it, NetworkErrorHumanizer.errorCode(it),
-                                )
-                            }
+                            val done = CloudRecoverySetup.enroll(
+                                activity = activity,
+                                server = flagshipServer,
+                                app = app,
+                                passphrase = passphrase,
+                                passphraseConfirm = passphraseConfirm,
+                                onSecondPrompt = { note = SECOND_PASSKEY_PROMPT },
+                            )
                             passphrase = ""; passphraseConfirm = ""
                             cloudStatus = CloudStatus.Configured
-                            app.setHasCloudRecovery(true)
-                            savedIn = ceremony.lastProvider
-                            RecoveryProviderStore.write(ctx, savedIn)
+                            passkeyLegacy = false
+                            savedIn = done.provider
                             toasts.success(FSStrings.get(R.string.cloud_recovery_configured))
                             mode = RecoveryMode.Choose
                         } catch (t: Throwable) {
@@ -338,8 +323,9 @@ private fun SetupCard(
                 value = passphrase,
                 onValueChange = onPassphrase,
                 label = stringResource(R.string.recovery_passphrase),
-                helper = stringResource(R.string.n_8_characters_minimum),
+                helper = recoveryPassphraseHelper(passphrase),
                 visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.semantics { testTag = "recovery-passphrase" },
             )
             FSField(
                 value = passphraseConfirm,

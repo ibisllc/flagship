@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.LockOpen
@@ -110,6 +111,9 @@ fun ActivityScreen(
     LaunchedEffect(chatCenter) { runCatching { chatCenter?.load() } }
     val chatListing by (chatCenter?.listing ?: kotlinx.coroutines.flow.MutableStateFlow(com.flagshipserver.app.core.ChatRequestCenter.Listing())).collectAsState()
     val chatScope = androidx.compose.runtime.rememberCoroutineScope()
+    val browserCenter = com.flagshipserver.app.core.LocalBrowserGrantCenter.current
+    LaunchedEffect(browserCenter) { runCatching { browserCenter?.load() } }
+    val browserListing by (browserCenter?.listing ?: kotlinx.coroutines.flow.MutableStateFlow(com.flagshipserver.app.core.BrowserGrantCenter.Listing())).collectAsState()
 
     // Server filter (the PodSwitcher). null == "All servers".
     val pods by app.pods.collectAsState()
@@ -141,6 +145,7 @@ fun ActivityScreen(
             com.flagshipserver.app.ui.components.TextButton(onClick = {
                 vm.load(); approvals.reload()
                 chatScope.launch { runCatching { chatCenter?.load() } }
+                chatScope.launch { runCatching { browserCenter?.load() } }
             }) { Text(stringResource(R.string.refresh)) }
         },
     ) {
@@ -198,6 +203,20 @@ fun ActivityScreen(
                 count = chatListing.requests.size,
                 badge = true,
             ) { ChatRequestsList(chatCenter) }
+        }
+
+        // Browser access beyond an app's manifest (SEC-BROWSER-002): shown while an ask waits.
+        if (browserCenter != null && browserListing.requests.isNotEmpty()) {
+            Spacer(Modifier.height(FS.space.s3))
+            Accordion(
+                section = ActivitySection.Browser,
+                title = stringResource(R.string.browser_grant_section),
+                hint = stringResource(R.string.browser_grant_section_hint),
+                isOpen = open == ActivitySection.Browser,
+                onToggle = { toggle(ActivitySection.Browser) },
+                count = browserListing.requests.size,
+                badge = true,
+            ) { BrowserGrantRequestsList(browserCenter) }
         }
 
         val serverTitle = activityServerTitle(pods, effectiveServerFilter)
@@ -287,7 +306,7 @@ fun ActivityScreen(
     }
 }
 
-internal enum class ActivitySection { Approvals, Chat, Recovery, Account, Server }
+internal enum class ActivitySection { Approvals, Chat, Browser, Recovery, Account, Server }
 
 /** The detail pane of Activity on an expanded window: the open section's content
  *  is drawn here instead of under its title. Null on a phone. */
@@ -342,6 +361,7 @@ private fun Accordion(
                 val tileIcon = when (section) {
                     ActivitySection.Approvals -> Icons.Outlined.LockOpen
                     ActivitySection.Chat -> Icons.Outlined.Forum
+                    ActivitySection.Browser -> Icons.Outlined.Public
                     ActivitySection.Recovery -> Icons.Outlined.Restore
                     ActivitySection.Account -> Icons.Outlined.Person
                     ActivitySection.Server -> Icons.Outlined.Dns

@@ -280,7 +280,8 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                 }
                 AppStorageSection(resp.storage)
                 val adaptedFrom = resp.adaptedFrom
-                if (resp.editable == true || adaptedFrom != null) {
+                val upstream = resp.upstreamRepo
+                if (resp.editable == true || adaptedFrom != null || upstream != null) {
                     FSGroup {
                         if (resp.editable == true) {
                             FSRow(
@@ -292,7 +293,17 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                                 modifier = Modifier.semantics { testTag = "service-detail-edit" },
                             )
                         }
-                        if (resp.editable == true && adaptedFrom != null) FSDivider()
+                        if (upstream != null) {
+                            if (resp.editable == true) FSDivider()
+                            FSRow(
+                                title = FSStrings.get(R.string.sync_check_from, upstream),
+                                icon = Icons.Outlined.Autorenew,
+                                iconTint = FS.colors.accent,
+                                onClick = { nav.navigate(UpstreamSync.route(serviceId, upstream)) },
+                                modifier = Modifier.semantics { testTag = "service-detail-sync" },
+                            )
+                        }
+                        if (adaptedFrom != null && (resp.editable == true || upstream != null)) FSDivider()
                         if (adaptedFrom != null) {
                             FSRow(
                                 title = AdapterReport.ROW_TITLE,
@@ -340,6 +351,9 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         showReplaceDialog = true
                     },
                 )
+
+                // Browser access: the sites the manifest was approved with, then what the app asks now.
+                BrowserAccessSection(serviceId = serviceId, manifest = resp.manifest)
 
                 // Browser viewer: only when the daemon reports tabs.
                 if (resp.browserTabs.isNotEmpty()) {

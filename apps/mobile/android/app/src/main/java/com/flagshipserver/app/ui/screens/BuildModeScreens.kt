@@ -427,6 +427,13 @@ private fun DetailAdaptCard(buildId: String, vm: BuildJournalViewModel, nav: Nav
             Spacer(Modifier.height(FS.space.s4))
             FSPrimaryButton(stringResource(R.string.install_it), onClick = { vm.deployAgain(buildId) }, block = true, modifier = Modifier.testTag("build-journal-deploy"))
         }
+        is BuildJournalViewModel.DetailAdapt.HoldsUpdate -> FSCard(padding = PaddingValues(FS.space.s5)) {
+            StatusLine(stringResource(R.string.ready_to_deploy), FS.colors.success, large = true, modifier = Modifier.testTag("build-journal-holds-update"))
+            Spacer(Modifier.height(FS.space.s2))
+            Text(stringResource(R.string.sync_nothing_live), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(FS.space.s4))
+            FSPrimaryButton(stringResource(R.string.deploy), onClick = { vm.deployAgain(buildId) }, block = true, modifier = Modifier.testTag("build-journal-deploy"))
+        }
         is BuildJournalViewModel.DetailAdapt.Deployed -> FSCard(padding = PaddingValues(FS.space.s5)) {
             StatusLine(stringResource(R.string.installed), FS.colors.success, large = true, modifier = Modifier.testTag("build-journal-deployed"))
             Spacer(Modifier.height(FS.space.s2))
@@ -1137,7 +1144,7 @@ private fun CodeBlock(text: String) {
 // ── journal ─────────────────────────────────────────────────────
 
 @Composable
-fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
+fun BuildJournalScreen(nav: NavController, buildId: String? = null, holdsUpdate: Boolean = false) {
     val client = LocalBuildClient.current
     val screens = LocalScreensClient.current
     val appState = com.flagshipserver.app.core.LocalAppState.current
@@ -1162,7 +1169,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
     var confirmDiscardBuild by remember { mutableStateOf<BuildSummary?>(null) }
 
     LaunchedEffect(buildId) {
-        if (buildId != null) vm.loadDetail(buildId) else vm.loadList()
+        if (buildId != null) vm.loadDetail(buildId, holdsUpdate) else vm.loadList()
     }
 
     ScreenScaffold(

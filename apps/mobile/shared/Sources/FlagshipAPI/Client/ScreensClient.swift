@@ -137,6 +137,14 @@ public protocol ScreensClient: Sendable {
     /// conversations that Always allow had let in were ended.
     @discardableResult
     func chatRevokeAlways(_ revoke: ChatRevokeRequest) async throws -> Int
+    /// `GET /api/browser/owner/grant-requests`: apps asking for browser access beyond their manifest.
+    /// Empty when the box has no app browser (404).
+    func browserGrantRequests() async throws -> BrowserGrantRequestsResponse
+    /// `POST /api/browser/owner/grant-requests/answer`: allow (signed) or deny.
+    func browserGrantAnswer(_ answer: BrowserGrantAnswerRequest) async throws
+    /// `POST /api/build/apps/<id>/sync`: compare an imported app with its upstream and open a build
+    /// holding the merge. Nothing goes live until the owner deploys that build.
+    func appSync(serviceId: String, _ req: AppSyncRequest) async throws -> AppSyncResponse
     /// `POST /api/screens/server-order` (docs/server-order.md): hand the box
     /// the owner's signed server order; it answers with the one it now holds.
     /// An older box answers 404 and gets the order from `.com` instead.
@@ -541,6 +549,15 @@ public extension ScreensClient {
     }
     func chatRevokeAlways(_ revoke: ChatRevokeRequest) async throws -> Int {
         throw ScreensClientError.notImplemented("app chat")
+    }
+    func browserGrantRequests() async throws -> BrowserGrantRequestsResponse {
+        BrowserGrantRequestsResponse(requests: [])
+    }
+    func browserGrantAnswer(_ answer: BrowserGrantAnswerRequest) async throws {
+        throw ScreensClientError.notImplemented("browser access")
+    }
+    func appSync(serviceId: String, _ req: AppSyncRequest) async throws -> AppSyncResponse {
+        throw ScreensClientError.notImplemented("upstream sync")
     }
     func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         throw ScreensClientError.notImplemented("server order")

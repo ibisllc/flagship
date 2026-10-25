@@ -11427,5 +11427,303 @@
   "couldnt_confirm_try_again": {
     "en": "Couldn't confirm. Try again.",
     "ctx": "biometric prompt failed"
+  },
+  "recovery_passkey_required": {
+    "en": "This recovery needs your passkey. Try again and choose your Flagship passkey.",
+    "ctx": "core/RecoveryPasskeyFlow.kt SEC-REPAIR-001 refusal"
+  },
+  "recovery_passkey_challenge": {
+    "en": "The passkey check expired. Try again.",
+    "ctx": "core/RecoveryPasskeyFlow.kt SEC-REPAIR-001 refusal"
+  },
+  "recovery_passkey_invalid": {
+    "en": "That passkey isn't the one your account recovery uses.",
+    "ctx": "core/RecoveryPasskeyFlow.kt SEC-REPAIR-001 refusal"
+  },
+  "recovery_passkey_unavailable": {
+    "en": "Passkey recovery isn't available right now. Try again later.",
+    "ctx": "core/RecoveryPasskeyFlow.kt SEC-REPAIR-001 refusal"
+  },
+  "recovery_passphrase_min": {
+    "en": "Use at least 8 characters.",
+    "ctx": "ui/screens/RecoveryUpdate.kt recovery passphrase field, too short"
+  },
+  "recovery_passphrase_hint": {
+    "en": "Longer is stronger and there is no upper limit: a whole sentence you will remember works well",
+    "ctx": "ui/screens/RecoveryUpdate.kt recovery passphrase field helper"
+  },
+  "recovery_update_title": {
+    "en": "Update your account recovery",
+    "ctx": "ui/screens/RecoveryUpdate.kt one-time prompt title"
+  },
+  "recovery_update_body": {
+    "en": "Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Enter your recovery passphrase, then confirm with your passkey once.",
+    "ctx": "ui/screens/RecoveryUpdate.kt one-time prompt body"
+  },
+  "recovery_update_body_after_recovery": {
+    "en": "Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Confirm with your passkey once.",
+    "ctx": "ui/screens/RecoveryUpdate.kt prompt body right after a recovery (passphrase already entered)"
+  },
+  "recovery_update_row": {
+    "en": "Update account recovery",
+    "ctx": "ui/screens/RecoveryUpdate.kt Settings, cloud recovery row"
+  },
+  "recovery_update_done": {
+    "en": "Account recovery updated.",
+    "ctx": "ui/screens/RecoveryUpdate.kt toast"
+  },
+  "recovery_update_working": {
+    "en": "Updating…",
+    "ctx": "ui/screens/RecoveryUpdate.kt button while working"
+  },
+  "browser_grant_title": {
+    "en": "Browser access request",
+    "ctx": "ui/screens/BrowserGrantScreens.kt dialog and card title"
+  },
+  "browser_grant_wants": {
+    "en": "%1$s wants to use this server's browser.",
+    "ctx": "core/BrowserGrantCenter.kt %1$s = the app's name",
+    "args": 1
+  },
+  "browser_grant_sites": {
+    "en": "Sites",
+    "ctx": "ui/screens/BrowserGrantScreens.kt heading over the exact hosts"
+  },
+  "browser_grant_under": {
+    "en": "and every address under it",
+    "ctx": "core/BrowserGrantCenter.kt after a *.example.com pattern"
+  },
+  "browser_grant_lan_exact": {
+    "en": "These devices on your network: %1$s",
+    "ctx": "core/BrowserGrantCenter.kt %1$s = comma-separated addresses",
+    "args": 1
+  },
+  "browser_grant_lan_whole": {
+    "en": "Every device on your local network",
+    "ctx": "core/BrowserGrantCenter.kt"
+  },
+  "browser_grant_it_can": {
+    "en": "It can:",
+    "ctx": "ui/screens/BrowserGrantScreens.kt heading over the capabilities"
+  },
+  "browser_grant_cap_navigate": {
+    "en": "Open pages",
+    "ctx": "core/BrowserGrantCenter.kt browser capability"
+  },
+  "browser_grant_cap_read_dom": {
+    "en": "Read page content",
+    "ctx": "core/BrowserGrantCenter.kt browser capability"
+  },
+  "browser_grant_cap_screenshot": {
+    "en": "Take screenshots",
+    "ctx": "core/BrowserGrantCenter.kt browser capability"
+  },
+  "browser_grant_cap_input": {
+    "en": "Type and click",
+    "ctx": "core/BrowserGrantCenter.kt browser capability"
+  },
+  "browser_grant_cap_download": {
+    "en": "Download files",
+    "ctx": "core/BrowserGrantCenter.kt browser capability"
+  },
+  "browser_grant_once": {
+    "en": "For one visit",
+    "ctx": "core/BrowserGrantCenter.kt how long the grant lasts"
+  },
+  "browser_grant_session": {
+    "en": "Until this browser session ends",
+    "ctx": "core/BrowserGrantCenter.kt how long the grant lasts"
+  },
+  "browser_grant_service": {
+    "en": "Until you remove it",
+    "ctx": "core/BrowserGrantCenter.kt how long the grant lasts"
+  },
+  "browser_grant_app_says": {
+    "en": "The app says:",
+    "ctx": "ui/screens/BrowserGrantScreens.kt before the app's own explanation (untrusted)"
+  },
+  "browser_grant_allow_once": {
+    "en": "Allow once",
+    "ctx": "ui/screens/BrowserGrantScreens.kt button"
+  },
+  "browser_grant_allow_session": {
+    "en": "Allow for this session",
+    "ctx": "ui/screens/BrowserGrantScreens.kt button"
+  },
+  "browser_grant_allow_service": {
+    "en": "Always allow",
+    "ctx": "ui/screens/BrowserGrantScreens.kt button: until removed"
+  },
+  "browser_grant_deny_note": {
+    "en": "If you deny, the app has to wait before asking again.",
+    "ctx": "ui/screens/BrowserGrantScreens.kt footnote"
+  },
+  "browser_grant_admin_only": {
+    "en": "This device can't approve browser access. Use an admin device.",
+    "ctx": "core/BrowserGrantCenter.kt refusal"
+  },
+  "browser_grant_gone": {
+    "en": "That request is no longer waiting.",
+    "ctx": "core/BrowserGrantCenter.kt refusal"
+  },
+  "browser_grant_allowed": {
+    "en": "Browser access allowed",
+    "ctx": "core/BrowserGrantCenter.kt after Allow"
+  },
+  "browser_grant_denied": {
+    "en": "Browser access denied",
+    "ctx": "core/BrowserGrantCenter.kt after Deny"
+  },
+  "browser_grant_sign_reason": {
+    "en": "Allow browser access for %1$s",
+    "ctx": "core/BrowserGrantCenter.kt biometric prompt reason, %1$s = app",
+    "args": 1
+  },
+  "browser_grant_section": {
+    "en": "Browser access requests",
+    "ctx": "ui/screens/ActivityScreen.kt section title"
+  },
+  "browser_grant_section_hint": {
+    "en": "Apps asking to use this server's browser",
+    "ctx": "ui/screens/ActivityScreen.kt section hint"
+  },
+  "browser_grant_none": {
+    "en": "No browser access requests are waiting.",
+    "ctx": "ui/screens/BrowserGrantScreens.kt empty list"
+  },
+  "browser_access_manifest": {
+    "en": "Approved when you installed it",
+    "ctx": "ui/screens/BrowserGrantScreens.kt app page, under the manifest's sites"
+  },
+  "sync_check_from": {
+    "en": "Check for updates from %1$s",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt app page row, %1$s = repo",
+    "args": 1
+  },
+  "sync_check_button": {
+    "en": "Check for updates",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt button"
+  },
+  "sync_ref_label": {
+    "en": "Branch, tag or commit (optional)",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt field label"
+  },
+  "sync_checking": {
+    "en": "Checking %1$s…",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt progress, %1$s = repo",
+    "args": 1
+  },
+  "sync_up_to_date": {
+    "en": "You already run the latest version from %1$s.",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt %1$s = repo",
+    "args": 1
+  },
+  "sync_title": {
+    "en": "Update from %1$s",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt proposal title, %1$s = repo",
+    "args": 1
+  },
+  "sync_version": {
+    "en": "Version %1$s",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt %1$s = short commit",
+    "args": 1
+  },
+  "sync_files_upstream": {
+    "en": {
+      "one": "%1$d file updated from upstream",
+      "other": "%1$d files updated from upstream"
+    },
+    "ctx": "ui/screens/UpstreamSyncScreen.kt proposal count",
+    "plural": true
+  },
+  "sync_local_kept": {
+    "en": {
+      "one": "%1$d of your changes kept",
+      "other": "%1$d of your changes kept"
+    },
+    "ctx": "ui/screens/UpstreamSyncScreen.kt proposal count",
+    "plural": true
+  },
+  "sync_already_match": {
+    "en": {
+      "one": "%1$d file already matches",
+      "other": "%1$d files already match"
+    },
+    "ctx": "ui/screens/UpstreamSyncScreen.kt proposal count",
+    "plural": true
+  },
+  "sync_conflicts": {
+    "en": {
+      "one": "%1$d conflict: your version was kept",
+      "other": "%1$d conflicts: your version was kept"
+    },
+    "ctx": "ui/screens/UpstreamSyncScreen.kt conflicts heading",
+    "plural": true
+  },
+  "sync_conflicts_note": {
+    "en": "Resolve them in the build before you deploy, or deploy with your version.",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt"
+  },
+  "sync_permissions_title": {
+    "en": "New permissions",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt capability changes heading"
+  },
+  "sync_permissions_body": {
+    "en": "This update changes what the app is allowed to do. Review before you deploy.",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt"
+  },
+  "sync_cap_egress": {
+    "en": "Internet access",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt manifest section network.egress"
+  },
+  "sync_cap_subdomain": {
+    "en": "Web addresses",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt manifest section network.subdomain"
+  },
+  "sync_cap_stores": {
+    "en": "Data stores",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt manifest section data.stores"
+  },
+  "sync_cap_browser": {
+    "en": "Browser sites",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt manifest section browser.domains"
+  },
+  "sync_cap_access": {
+    "en": "Public pages",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt manifest section access"
+  },
+  "sync_cap_runtime": {
+    "en": "Runtime",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt manifest section runtime"
+  },
+  "sync_cap_distribution": {
+    "en": "Distribution",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt manifest section distribution"
+  },
+  "sync_adds": {
+    "en": "Adds: %1$s",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt %1$s = entries",
+    "args": 1
+  },
+  "sync_removes": {
+    "en": "Removes: %1$s",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt %1$s = entries",
+    "args": 1
+  },
+  "sync_nothing_live": {
+    "en": "Nothing goes live until you deploy.",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt footer"
+  },
+  "sync_review_deploy": {
+    "en": "Review and deploy",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt button"
+  },
+  "sync_discard": {
+    "en": "Discard",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt button"
+  },
+  "sync_not_imported": {
+    "en": "This app wasn't imported from a repo on this server, so it can't check for updates.",
+    "ctx": "ui/screens/UpstreamSyncScreen.kt 404"
   }
 }

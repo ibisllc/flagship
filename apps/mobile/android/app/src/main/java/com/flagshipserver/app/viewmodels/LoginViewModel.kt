@@ -175,6 +175,10 @@ class LoginViewModel(
      *  into the re-pair `totpProof`. */
     private var secondFactor: RePairInitiateRequest.TotpProof? = null
 
+    /** The passphrase of a recovery `.com` released without its passkey check, held only until
+     *  the account opens (Phase A), when the update offer takes it. */
+    private var legacyPassphrase: String? = null
+
     /**
      * Entry point. Branch on the preflight:
      *   - no cloud backup → a clean STATE.
@@ -230,6 +234,9 @@ class LoginViewModel(
             // The credential for the re-pair this may lead to: `.com`'s
             // attestation that the unwrap above was passphrase-gated.
             recoveryProofToken = result.recoveryProofToken
+            // A record from before the passkey check: once the account is open here, offer to
+            // update it without asking for the passphrase again.
+            legacyPassphrase = if (result.passkeyLegacy) passphrase else null
             _phase.value = if (isMulti) {
                 LoginPhase.AwaitingSecondFactor
             } else {
@@ -252,6 +259,9 @@ class LoginViewModel(
 
             override suspend fun assert(credentialId: String, prfEvalInput: ByteArray): ByteArray =
                 webauthn.prfAssertWithSalt(credentialId, prfEvalInput)
+
+            override suspend fun assertForRecovery(credentialId: String, prfEvalInput: ByteArray, challenge: String): Pair<ByteArray, String?> =
+                webauthn.prfAssertWithChallenge(credentialId, prfEvalInput, challenge)
         }
 
     /** Run the passkey-PRF assertion + unwrap. On success: single lands
@@ -430,9 +440,12 @@ class LoginViewModel(
                 // signed grant, not a display name, and any name it shows is
                 // an encrypted self-profile its owner writes later.
                 app.completeOnboarding(username = username, pods = emptyList())
+                legacyPassphrase?.let { com.flagshipserver.app.core.RecoveryUpdateOffer.offer(username, it) }
+                legacyPassphrase = null
                 _phase.value = LoginPhase.Opened
                 return
             }
+            legacyPassphrase = null
 
             // Phase B (or any multi takeover) — derive the NEW (next-version)
             // IRK and sign the re-pair with it; the device proves it holds
@@ -585,6 +598,7 @@ class LoginViewModel(
 
     private fun humanizedError(t: Throwable): String {
         RateLimitedException.messageOf(t)?.let { return it }
+        if (t is com.flagshipserver.app.core.PasskeyCheckError) return t.message ?: FSStrings.get(R.string.recovery_couldnt_be_completed_please_try)
         val m = t.message?.lowercase().orEmpty()
         return when {
             // #52 — the completion window (7d past the grace deadline)

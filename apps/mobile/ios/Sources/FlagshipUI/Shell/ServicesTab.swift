@@ -520,7 +520,9 @@ struct ServiceDetailContainer: View {
                     onOpenAccess: { path.append(.serviceAccess(serviceId: serviceId)) },
                     onOpenDatabase: { path.append(.appDatabase(serviceId: serviceId)) },
                     onEdit: { path.append(.editService(serviceId: serviceId)) },
-                    canApproveEgress: !app.isRestrictedDevice && AdminOrderGate.allows(app)
+                    canApproveEgress: !app.isRestrictedDevice && AdminOrderGate.allows(app),
+                    onOpenBuild: { path.append(.buildGitResume(buildId: $0)) },
+                    serverDomain: sessionServerDomain
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)

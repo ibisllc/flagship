@@ -32,6 +32,9 @@ import com.flagshipserver.app.core.AcmeAccountKey
 import com.flagshipserver.app.core.AdminRootEscrow
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
+import com.flagshipserver.app.core.PasskeyCheckError
+import com.flagshipserver.app.core.RecoveryPasskey
+import com.flagshipserver.app.core.RecoveryPasskeyText
 import com.flagshipserver.app.core.RecoveryRecordChain
 import com.flagshipserver.app.core.SignedRecoveryRecord
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -52,13 +55,27 @@ object CloudRecoveryEnrollment {
 
         /** PRF-assert an existing credentialId, return the prfSecret. */
         suspend fun assert(credentialId: String, prfEvalInput: ByteArray): ByteArray
+
+        /** [create], plus the platform's attestation object (base64url) `.com` reads the
+         *  passkey's public key from. A ceremony that has none returns null. */
+        suspend fun createWithAttestation(username: String, prfEvalInput: ByteArray): CreatedCredential =
+            create(username, prfEvalInput).let { CreatedCredential(it.first, it.second, null) }
+
+        /** One sheet that evaluates the PRF and signs `.com`'s [challenge]: the PRF secret and the
+         *  authentication response JSON (null from a ceremony that can't sign one). */
+        suspend fun assertForRecovery(credentialId: String, prfEvalInput: ByteArray, challenge: String): Pair<ByteArray, String?> =
+            assert(credentialId, prfEvalInput) to null
     }
+
+    data class CreatedCredential(val credentialId: String, val prfSecret: ByteArray, val attestationObject: String?)
 
     /** Result of a successful enroll — surfaced so callers can mirror the
      *  webapp's local Block Store save (Android keeps a Block Store copy). */
     data class EnrollResult(
         val credentialId: String,
         val wrappedUmk: String,
+        /** The record went up with the passkey's attestation, so `.com` checks the passkey. */
+        val passkeyChecked: Boolean = false,
     )
 
     /**
@@ -93,7 +110,9 @@ object CloudRecoveryEnrollment {
 
         val secrets = RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
         // PRF input = prfSalt, exactly like recovery.js's createPasskey.
-        val (credentialId, prfSecret) = passkeys.create(username, secrets.prfSalt)
+        val created = passkeys.createWithAttestation(username, secrets.prfSalt)
+        val credentialId = created.credentialId
+        val prfSecret = created.prfSecret
         val wrappedUmk = Recovery.wrap(umkSeed = umkSeed, prfSecret = prfSecret)
 
         // #28 — escrow the ACME account key under the same PRF secret (own
@@ -122,8 +141,9 @@ object CloudRecoveryEnrollment {
         postRecord(
             server, irk, irkPubHex, username, credentialId, wrappedUmk, wrappedAdminRoot, wrappedAcme,
             RecoveryDerivation.sha256Hex(secrets.fetchToken), RecoveryDerivation.sha256Hex(secrets.prfSalt), now,
+            passkeyAttestationObject = created.attestationObject,
         )
-        return EnrollResult(credentialId = credentialId, wrappedUmk = wrappedUmk)
+        return EnrollResult(credentialId = credentialId, wrappedUmk = wrappedUmk, passkeyChecked = created.attestationObject != null)
     }
 
     /** Recovered material from a gated restore: the UMK seed + the optional
@@ -142,6 +162,9 @@ object CloudRecoveryEnrollment {
         val recoveryProofToken: String? = null,
         /** True when the record came from a v1 row whose escrow extras carry no signature. */
         val recordWasLegacy: Boolean = false,
+        /** SEC-REPAIR-001: `.com` released it on the passphrase alone (a record from before the
+         *  passkey check); the app offers once to update it. */
+        val passkeyLegacy: Boolean = false,
     )
 
     /**
@@ -164,11 +187,7 @@ object CloudRecoveryEnrollment {
         }
         val secrets = RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
 
-        val fetched = server.fetchWrappedUmkWithToken(
-            username = username,
-            fetchTokenHex = HexUtil.encode(secrets.fetchToken),
-            issuedAt = now,
-        )
+        val (fetched, assertedPrf) = gatedFetch(server, passkeys, username, secrets, now)
 
         // Defense-in-depth: confirm .com returned the same prfSalt we
         // derived locally before we trust its PRF coupling. Mirrors
@@ -193,8 +212,8 @@ object CloudRecoveryEnrollment {
             }
         }
 
-        // PRF get() input = prfSalt → unwrap.
-        val prfSecret = passkeys.assert(fetched.credentialId, secrets.prfSalt)
+        // PRF get() input = prfSalt → unwrap (already asserted when `.com` asked for the passkey).
+        val prfSecret = assertedPrf ?: passkeys.assert(fetched.credentialId, secrets.prfSalt)
         val umkSeed = Recovery.unwrap(
             wrappedUmkBase64 = fetched.wrappedUmk,
             prfSecret = prfSecret,
@@ -231,7 +250,63 @@ object CloudRecoveryEnrollment {
             adminRootSeed = adminRootSeed,
             recoveryProofToken = fetched.recoveryProof?.token,
             recordWasLegacy = fetched.signed == null,
+            passkeyLegacy = fetched.passkeyLegacy == true,
         )
+    }
+
+    /**
+     * SEC-REPAIR-001, in the order the passphrase allows: the passphrase is already derived (it
+     * feeds the PRF), then `.com`'s challenge, then ONE passkey sheet that both evaluates the PRF
+     * and signs the challenge, then the fetch carrying that assertion. Returns the fetched record
+     * and the PRF secret when the sheet already ran (null: assert after the fetch, as before).
+     *
+     * A record from before the check (`passkeyRequired` false) still recovers when `.com` can't
+     * issue a challenge; a record that holds the passkey's key never does without one.
+     */
+    private suspend fun gatedFetch(
+        server: FlagshipServerClient,
+        passkeys: PasskeyCeremony,
+        username: String,
+        secrets: RecoveryDerivation.PassphraseSecrets,
+        now: Long,
+    ): Pair<com.flagshipserver.app.api.GatedRecoveryEnvelope, ByteArray?> {
+        val tokenHex = HexUtil.encode(secrets.fetchToken)
+        val meta = try {
+            server.recoveryRecordState(username)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
+        try {
+            if (meta == null) {
+                return server.fetchWrappedUmkWithToken(username, tokenHex, now) to null
+            }
+            val challenge = try {
+                server.recoveryChallenge(username)?.challenge
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                if (meta.passkeyRequired || RecoveryPasskeyText.codeOf(t) != RecoveryPasskeyText.UNAVAILABLE) throw t
+                null
+            }
+            if (challenge == null) {
+                if (meta.passkeyRequired) throw PasskeyCheckError(RecoveryPasskeyText.UNAVAILABLE, RecoveryPasskeyText.forCode(RecoveryPasskeyText.UNAVAILABLE)!!)
+                return server.fetchWrappedUmkWithToken(username, tokenHex, now) to null
+            }
+            val (prf, responseJson) = passkeys.assertForRecovery(meta.credentialId, secrets.prfSalt, challenge)
+            val fetched = if (responseJson != null) {
+                server.fetchWrappedUmkWithPasskey(username, tokenHex, now, RecoveryPasskey.fetchPasskeyField(challenge, responseJson))
+            } else {
+                server.fetchWrappedUmkWithToken(username, tokenHex, now)
+            }
+            if (!fetched.credentialId.equals(meta.credentialId, ignoreCase = true)) {
+                throw ValidationError("The recovery record changed while it was being read; try again.")
+            }
+            return fetched to prf
+        } catch (t: Throwable) {
+            throw RecoveryPasskeyText.translate(t)
+        }
     }
 
     /** Does a key derived from the recovered UMK (any of the first few rotation versions) verify
@@ -261,6 +336,7 @@ object CloudRecoveryEnrollment {
         fetchTokenHashHex: String,
         prfSaltHashHex: String,
         now: Long,
+        passkeyAttestationObject: String? = null,
     ) {
         val current = server.recoveryRecordState(username)
         val claim = RecoveryRecordChain.next(
@@ -283,6 +359,7 @@ object CloudRecoveryEnrollment {
                 wrappedUmk = wrappedUmk,
                 wrappedAdminRoot = wrappedAdminRoot,
                 wrappedAcmeAccountKey = wrappedAcme,
+                passkeyAttestationObject = passkeyAttestationObject,
             ),
         )
     }
@@ -320,12 +397,8 @@ object CloudRecoveryEnrollment {
         }
         val secrets = RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
 
-        val fetched = try {
-            server.fetchWrappedUmkWithToken(
-                username = username,
-                fetchTokenHex = HexUtil.encode(secrets.fetchToken),
-                issuedAt = now,
-            )
+        val (fetched, assertedPrf) = try {
+            gatedFetch(server, passkeys, username, secrets, now)
         } catch (e: HttpException) {
             // The gate 403s on a fetchToken derived from the wrong passphrase.
             if (e.status == 403) throw ValidationError(FSStrings.get(R.string.that_passphrase_didnt_match))
@@ -345,7 +418,7 @@ object CloudRecoveryEnrollment {
         }
 
         // EXISTING credential — assert, never create.
-        val prfSecret = passkeys.assert(fetched.credentialId, secrets.prfSalt)
+        val prfSecret = assertedPrf ?: passkeys.assert(fetched.credentialId, secrets.prfSalt)
 
         // Sanity gate BEFORE overwriting the stored record: the fetched UMK
         // blob must unwrap under this PRF secret (AEADBadTagException aborts).

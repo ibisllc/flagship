@@ -46,12 +46,14 @@ class PlatformWebAuthnProvider(
      *  new credentialId so the immediately-following [prfAssert] reuses it
      *  instead of prompting the user a second time. */
     private val freshSecrets = HashMap<String, ByteArray>()
+    private val attestations = HashMap<String, String>()
 
     override suspend fun register(): String {
         val act = activity()
             ?: throw IllegalStateException(FSStrings.get(R.string.open_this_screen_from_the_foreground))
         val created = manager.createPasskey(act, username() ?: "you")
         freshSecrets[created.credentialId] = created.prfSecret
+        created.attestationObject?.let { attestations[created.credentialId] = it }
         return created.credentialId
     }
 
@@ -73,4 +75,13 @@ class PlatformWebAuthnProvider(
             ?: throw IllegalStateException(FSStrings.get(R.string.open_this_screen_from_the_foreground))
         return manager.assertPrf(act, credentialId, prfSalt)
     }
+
+    override suspend fun prfAssertWithChallenge(credentialId: String, prfSalt: ByteArray, challenge: String): Pair<ByteArray, String?> {
+        val act = activity()
+            ?: throw IllegalStateException(FSStrings.get(R.string.open_this_screen_from_the_foreground))
+        val a = manager.assertWithChallenge(act, credentialId, prfSalt, challenge)
+        return a.prfSecret to a.responseJson
+    }
+
+    override fun attestationFor(credentialId: String): String? = attestations[credentialId]
 }

@@ -39,6 +39,8 @@ public struct HomeTab: View {
     /// list's "Delete server" context action). Non-nil ⇒ the typed-name
     /// delete sheet is shown.
     @State private var pendingDeletePod: PodInfo?
+    /// SEC-REPAIR-001: the once-only "Update your account recovery" sheet.
+    @State private var recoveryUpdate: RecoveryUpdateViewModel?
 
     public init() {}
 
@@ -289,6 +291,14 @@ public struct HomeTab: View {
                 Task { await refreshRecoveryStatus() }
             }
         }
+        .sheet(isPresented: Binding(get: { recoveryUpdate != nil }, set: { if !$0 { recoveryUpdate = nil } })) {
+            if let vm = recoveryUpdate {
+                RecoveryUpdateSheet(vm: vm) {
+                    app.recoveryNeedsPasskeyUpdate = false
+                    toasts.success(RecoveryUpdatePrompt.updated)
+                }
+            }
+        }
         .sheet(item: $pendingDeletePod) { pod in
             let toastCenter = toasts
             DeleteServerSheet(
@@ -310,6 +320,13 @@ public struct HomeTab: View {
         guard let user = app.currentUser, !user.isEmpty else { return }
         let recovery: Bool? = try? await server.hasCloudRecovery(username: user)
         if let recovery { app.hasCloudRecovery = recovery }
+        guard recovery == true, !app.isDemoAccount,
+              let state = try? await server.recoveryRecordState(username: user) else { return }
+        app.recoveryNeedsPasskeyUpdate = state.needsPasskeyUpdate
+        if recoveryUpdate == nil, RecoveryUpdatePrompt.shouldAsk(state: state, username: user) {
+            recoveryUpdate = RecoveryUpdateViewModel(username: user, client: server,
+                                                     webAuthn: RecoveryWebAuthn.provider(username: user))
+        }
     }
 
     /// Every way into a flow that adds a server (Home's menu, a share,

@@ -105,6 +105,7 @@ extension GymSweepSeams {
         if args.contains("-smoke-pairing-unavailable") {
             mocks.pairingRelay?.behavior = .unavailable
         }
+        onboardingRecoveryPasskey(args, mocks)
         if args.contains("-smoke-join-bundle"), let relay = mocks.pairingRelay {
             Task {
                 try? await relay.adminDeliverBundle(sid: "gym", ciphertextBase64Url: "AAAAAAAAAAAAAAAAAAAAAA",

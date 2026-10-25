@@ -905,6 +905,50 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     private struct MockConsentRefusal: Encodable { let error: String; let code: String; let estimate: AiCostEstimate }
 
+    // MARK: - Browser grants (browser/grantRequests.ts)
+
+    public var mockBrowserGrantRequests: [BrowserGrantRequest] = []
+    public private(set) var browserGrantAnswers: [BrowserGrantAnswerRequest] = []
+
+    public func browserGrantRequests() async throws -> BrowserGrantRequestsResponse {
+        try await tick()
+        return BrowserGrantRequestsResponse(requests: mockBrowserGrantRequests)
+    }
+
+    public func browserGrantAnswer(_ answer: BrowserGrantAnswerRequest) async throws {
+        try await tick()
+        guard let i = mockBrowserGrantRequests.firstIndex(where: { $0.requestId == answer.requestId }) else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"that request is no longer waiting"}"#)
+        }
+        let r = mockBrowserGrantRequests[i]
+        if answer.decision == "allow" {
+            guard let sig = answer.signature else {
+                throw ScreensClientError.http(status: 400, message: #"{"error":"a signed answer is required"}"#)
+            }
+            try MockOrderSigners.shared.require(.sensitive, kind: "browser-grant", signatureHex: sig,
+                                                payload: ["serverDomain": await boxDomain() ?? "", "request": r, "answer": answer] as [String: Any])
+        }
+        mockBrowserGrantRequests.remove(at: i)
+        browserGrantAnswers.append(answer)
+        GymProbe.note("browser grant \(answer.decision) \(r.serviceId) \(r.duration)")
+    }
+
+    // MARK: - Upstream sync (buildmodes/syncProposal.ts)
+
+    /// What the sync route answers for an app; nil = 404 (not imported here).
+    public var mockSyncResponses: [String: AppSyncResponse] = [:]
+    public private(set) var appSyncCalls: [(serviceId: String, ref: String?)] = []
+
+    public func appSync(serviceId: String, _ req: AppSyncRequest) async throws -> AppSyncResponse {
+        try await tick()
+        appSyncCalls.append((serviceId, req.ref))
+        guard let r = mockSyncResponses[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"this app was not imported from a repo on this server, or its import is too large to sync"}"#)
+        }
+        GymProbe.note("sync proposal \(serviceId)\(req.ref.map { " at \($0)" } ?? "")")
+        return r
+    }
+
     // MARK: - App chat (chat/approvals.ts)
 
     public var mockChatRequests: [ChatRequest] = []
@@ -1052,8 +1096,21 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         )
         if mockEditableApps.contains(serviceId) { detail.editable = true }
         if let repo = mockAdaptedFrom[serviceId] { detail.adaptedFrom = .init(repo: repo) }
+        if let repo = mockImportedFrom[serviceId] { detail.importedFrom = .init(repo: repo, commit: "1111111111111111111111111111111111111111") }
+        if let domains = mockBrowserDomains[serviceId] {
+            detail = AppDetailResponse(app: detail.app, manifest: detail.manifest.merging(["browser": AnyCodable(["domains": domains])]) { $1 },
+                                       dataLayerInstances: detail.dataLayerInstances, members: detail.members,
+                                       browserTabs: detail.browserTabs, lastBackup: detail.lastBackup, recentLogs: detail.recentLogs,
+                                       editable: detail.editable, adaptedFrom: detail.adaptedFrom, importedFrom: detail.importedFrom,
+                                       storage: detail.storage)
+        }
         return detail
     }
+
+    /// Apps imported from a repo (N12 sync): serviceId → repo.
+    public var mockImportedFrom: [String: String] = [:]
+    /// The sites an app's manifest names for its browser: serviceId → `browser.domains`.
+    public var mockBrowserDomains: [String: [String]] = [:]
 
     /// Apps the box says can be edited here ("Edit this service").
     public var mockEditableApps: Set<String> = []

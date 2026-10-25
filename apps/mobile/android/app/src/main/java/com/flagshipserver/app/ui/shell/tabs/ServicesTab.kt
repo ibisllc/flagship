@@ -222,6 +222,25 @@ fun ServicesTab() {
                 ServiceDetailScreen(nav, serviceId = id)
             }
         }
+        // "Check for updates from <repo>" on an imported app (N12), then its build's deploy step.
+        composable(
+            "app-sync/{serviceId}?repo={repo}",
+            arguments = listOf(
+                navArgument("serviceId") { type = NavType.StringType },
+                navArgument("repo") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            PodScoped(nav, placement, entry, creation = false) {
+                com.flagshipserver.app.ui.screens.UpstreamSyncScreen(nav, serviceId = id, repo = entry.arguments?.getString("repo").orEmpty())
+            }
+        }
+        composable("build/sync/{buildId}") { entry ->
+            val bid = entry.arguments?.getString("buildId") ?: return@composable
+            PodScoped(nav, placement, entry, creation = false) {
+                BuildJournalScreen(nav, buildId = bid, holdsUpdate = true)
+            }
+        }
         // W10 — per-app env-var KV editor, reachable from the detail screen's
         // "Configure environment" row. serviceId = "<creator>--<slug>"; split on
         // the `--` delimiter (both halves may carry single dashes —

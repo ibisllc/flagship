@@ -31,6 +31,8 @@ struct ContentView: View {
     /// "A remote machine claiming to run … wants to talk to …" sheets (app chat
     /// between owners), asked of every managed box on the same wakes.
     @State private var chatAlerts: ChatRequestCenter?
+    /// "Browser access request" sheets (an app asking for more than its manifest), same inbox and wakes.
+    @State private var browserGrants: BrowserGrantCenter?
     /// Settings → Privacy → "Push notifications": the registration on `.com`
     /// and every box's access-alert setting follow it.
     @State private var pushPrefs: PushPreferenceSync?
@@ -85,6 +87,19 @@ struct ContentView: View {
         )) {
             if let chatAlerts {
                 ChatRequestSheet(center: chatAlerts)
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: {
+                app.isPaired && app.isUnlocked && privacy.pushNotificationsEnabled
+                    && accessAlerts?.current == nil && chatAlerts?.current == nil && browserGrants?.current != nil
+            },
+            set: { shown in
+                if !shown, let center = browserGrants, let id = center.current?.id { center.dismissed(id: id) }
+            }
+        )) {
+            if let browserGrants {
+                BrowserGrantSheet(center: browserGrants)
             }
         }
         .fullScreenCover(isPresented: Binding(
@@ -327,6 +342,20 @@ struct ContentView: View {
             chats.observeEvents()
             chatAlerts = chats
         }
+        if browserGrants == nil {
+            let app = self.app
+            let grants = BrowserGrantCenter(
+                boxes: managedBoxes(),
+                isActive: { [weak app] in
+                    guard let app else { return false }
+                    return app.isPaired && app.isUnlocked && !app.isRestrictedDevice && AdminOrderGate.allows(app)
+                        && !UpdateLock.shared.isLocked && !AccountGoneRegistry.shared.isGone
+                },
+                alertsEnabled: { privacy.pushNotificationsEnabled }
+            )
+            grants.observeEvents()
+            browserGrants = grants
+        }
         if pushPrefs == nil {
             let registrar: @MainActor () -> PushRegistrar? = {
                 (UIApplication.shared.delegate as? AppDelegate)?.pushRegistrar
@@ -354,19 +383,21 @@ struct ContentView: View {
             Task { await WatchDelegateRenewal.runIfDue(server: server, mailbox: mailbox, username: user) }
         }
         if inFront && !app.isRestrictedDevice && AdminOrderGate.allows(app) && privacy.pushNotificationsEnabled {
-            let chats = chatAlerts
+            let chats = chatAlerts, grants = browserGrants
             Task {
                 await center.refresh()
                 await chats?.refresh()
+                await grants?.refresh()
                 await center.startListening()
             }
         } else {
             center.stopListening()
             if !privacy.pushNotificationsEnabled {
-                let chats = chatAlerts
+                let chats = chatAlerts, grants = browserGrants
                 Task {
                     await center.refresh()
                     await chats?.refresh()
+                    await grants?.refresh()
                 }
             }
         }

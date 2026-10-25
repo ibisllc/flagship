@@ -113,7 +113,7 @@ public struct SecureAccountScreen: View {
                 // Settings → Cloud recovery (RecoveryContainer).
                 recoveryVm = RecoveryViewModel(
                     client: server,
-                    webAuthn: PlatformWebAuthnProvider(),
+                    webAuthn: RecoveryWebAuthn.provider(username: username),
                     username: { [username] in username }
                 )
             }
@@ -177,6 +177,11 @@ public struct SecureAccountScreen: View {
                 .textInputAutocapitalization(.never)
                 .fsInputBox()
                 .accessibilityIdentifier("secure-account-passphrase-2")
+            Text(RecoveryPasskeyCopy.passphraseHint)
+                .font(FS.font.caption())
+                .foregroundColor(c.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("secure-account-passphrase-hint")
         }
         .padding(FS.space.s4)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -285,7 +290,7 @@ public struct SecureAccountScreen: View {
         // enroll). The Argon2id derivation + envelope upload happen inside
         // RecoveryViewModel.setup.
         guard cloudPassphrase.count >= 8 else {
-            cloudError = String(localized: "Passphrase must be 8+ characters.")
+            cloudError = RecoveryPasskeyCopy.passphraseTooShort
             return
         }
         guard cloudPassphrase == cloudPassphrase2 else {

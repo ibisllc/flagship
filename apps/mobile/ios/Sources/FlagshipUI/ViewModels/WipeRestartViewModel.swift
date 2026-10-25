@@ -99,7 +99,11 @@ public final class WipeRestartViewModel {
         // 3 — PRF assert against the new credential.
         let prfSecret: Data
         do {
-            prfSecret = try await webAuthn.prfAssert(credentialId: registration.credentialId)
+            if let fromCreation = registration.prfSecret {
+                prfSecret = fromCreation
+            } else {
+                prfSecret = try await webAuthn.prfAssert(credentialId: registration.credentialId)
+            }
         } catch {
             phase = .failed(String(localized: "PRF assertion failed: \(UserErrorText.of(error))"))
             return
@@ -184,6 +188,8 @@ public final class WipeRestartViewModel {
                     ),
                     signature: HexUtil.encode(signature),
                     idempotencyKey: idempotencyKey,
+                    // SEC-REPAIR-001: the new passkey's public key, so the new record keeps `.com`'s check.
+                    newPasskeyAttestationObject: registration.attestationObject.map(RecoveryPasskey.attestationField)
                 ),
                 ifMatch: currentEtag,
             )

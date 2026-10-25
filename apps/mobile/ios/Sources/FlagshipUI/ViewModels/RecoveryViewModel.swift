@@ -78,7 +78,7 @@ public final class RecoveryViewModel {
             return
         }
         guard passphrase.count >= 8 else {
-            phase = .failed(String(localized: "Passphrase must be 8+ characters."))
+            phase = .failed(RecoveryPasskeyCopy.passphraseTooShort)
             return
         }
         do {
@@ -90,10 +90,16 @@ public final class RecoveryViewModel {
             // the raw credential-ID bytes (Worker requires ^[0-9a-fA-F]+$).
             let registration = try await webAuthn.register(prfSalt: secrets.prfSalt)
             let credentialIdHex = Self.credentialIdHex(registration.credentialId)
-            let prfSecret = try await webAuthn.prfAssert(
-                credentialId: registration.credentialId,
-                prfSalt: secrets.prfSalt
-            )
+            // A creation that already returned the PRF needs no second sheet.
+            let prfSecret: Data
+            if let fromCreation = registration.prfSecret {
+                prfSecret = fromCreation
+            } else {
+                prfSecret = try await webAuthn.prfAssert(
+                    credentialId: registration.credentialId,
+                    prfSalt: secrets.prfSalt
+                )
+            }
             // Single self-contained AES-GCM blob (nonce‖ct‖tag). The Worker
             // base64-decodes it and SHA-256s the bytes; we hash the same
             // bytes to put into the signed canonical.
@@ -166,8 +172,11 @@ public final class RecoveryViewModel {
                 signature: try claim.sign(with: irk),
                 wrappedUmk: wrappedUmk,
                 wrappedAdminRoot: wrappedAdminRoot,
-                wrappedAcmeAccountKey: wrappedAcme
+                wrappedAcmeAccountKey: wrappedAcme,
+                // SEC-REPAIR-001: `.com` keeps the passkey's public key and checks it at recovery.
+                passkeyAttestationObject: registration.attestationObject.map(RecoveryPasskey.attestationField)
             ))
+            recoveredRecordNeedsPasskeyUpdate = false
             phase = .registered(credentialId: credentialIdHex)
         } catch {
             phase = .failed(UserErrorText.of(error))
@@ -193,17 +202,17 @@ public final class RecoveryViewModel {
             return nil
         }
         guard passphrase.count >= 8 else {
-            phase = .failed(String(localized: "Passphrase must be 8+ characters."))
+            phase = .failed(RecoveryPasskeyCopy.passphraseTooShort)
             return nil
         }
         do {
             let secrets = try RecoveryDerivation.derivePassphraseSecrets(passphrase, normalizedUser)
 
-            // The gate: present the fetchToken; a wrong passphrase → 403.
-            let fetched = try await client.fetchWrappedUmk(
-                username: normalizedUser,
-                fetchTokenHex: HexUtil.encode(secrets.fetchToken)
-            )
+            // SEC-REPAIR-001: `.com`'s challenge, then ONE passkey sheet (PRF + signature), then the
+            // gated fetch carrying the signature; a wrong passphrase → 403.
+            let gated = try await RecoveryGatedFetch.run(client: client, webAuthn: webAuthn,
+                                                         username: normalizedUser, secrets: secrets)
+            let fetched = gated.fetched
             // Recovery Phase B — remember the registered IRK so the
             // post-recovery flow can detect a rotated key.
             registeredIrkPubHex = fetched.registeredIrkPubHex
@@ -236,12 +245,9 @@ public final class RecoveryViewModel {
                 }
             }
             recoveredRecordWasLegacy = fetched.signed == nil
+            recoveredRecordNeedsPasskeyUpdate = fetched.passkeyLegacy == true
 
-            // PRF get() against the released credential, salt = prfSalt.
-            let prfSecret = try await webAuthn.prfAssert(
-                credentialId: fetched.credentialId,
-                prfSalt: secrets.prfSalt
-            )
+            let prfSecret = gated.prfSecret
             let seed = try Recovery.unwrap(
                 wrappedUmkBase64: fetched.wrappedUmk,
                 prfSecret: prfSecret
@@ -297,13 +303,20 @@ public final class RecoveryViewModel {
             phase = .recovered
             return seed
         } catch {
-            phase = .failed(UserErrorText.of(error))
+            if RecoveryGatedFetch.isPasskeyRefusal(error), case ScreensClientError.http(_, let sentence) = error {
+                phase = .failed(sentence)
+            } else {
+                phase = .failed(UserErrorText.of(error))
+            }
             return nil
         }
     }
 
     /// True when the last recovery came from a v1 record whose escrow extras carry no signature.
     public private(set) var recoveredRecordWasLegacy = false
+    /// True when the last recovery came from a record `.com` released on the passphrase alone
+    /// (`passkeyLegacy`): the app offers once to update it.
+    public private(set) var recoveredRecordNeedsPasskeyUpdate = false
 
     /// Does a key derived from the recovered UMK (any of the first few rotation versions) verify the
     /// owner's signed record? The record was signed by the key in force when it was written.
@@ -361,6 +374,9 @@ public protocol WebAuthnProvider: Sendable {
     func register(prfSalt: Data) async throws -> WebAuthnRegistration
     func assertAny() async throws -> WebAuthnRegistration
     func prfAssert(credentialId: String, prfSalt: Data) async throws -> Data
+    /// SEC-REPAIR-001: ONE passkey sheet that both evaluates the PRF (input = `prfSalt`) and signs
+    /// `.com`'s `challenge`, so recovery asks for the passkey once.
+    func recoveryAssert(credentialId: String, prfSalt: Data, challenge: Data) async throws -> WebAuthnRecoveryAssertion
 }
 
 /// The default PRF salt used by the no-salt convenience overloads — keeps
@@ -381,7 +397,41 @@ public extension WebAuthnProvider {
 
 public struct WebAuthnRegistration: Sendable {
     public let credentialId: String
-    public init(credentialId: String) { self.credentialId = credentialId }
+    /// The platform's attestation object from the creation, which `.com` reads the passkey's public
+    /// key from (SEC-REPAIR-001). Nil from a provider that can't give one.
+    public let attestationObject: Data?
+    /// The PRF output when the creation already returned it, so setup needs no second sheet.
+    public let prfSecret: Data?
+    public init(credentialId: String, attestationObject: Data? = nil, prfSecret: Data? = nil) {
+        self.credentialId = credentialId
+        self.attestationObject = attestationObject
+        self.prfSecret = prfSecret
+    }
+}
+
+/// The PRF output and the signature over `.com`'s challenge, from one passkey sheet.
+public struct WebAuthnRecoveryAssertion: Sendable {
+    public let prfSecret: Data
+    public let credentialId: Data
+    public let authenticatorData: Data
+    public let clientDataJSON: Data
+    public let signature: Data
+    public init(prfSecret: Data, credentialId: Data, authenticatorData: Data, clientDataJSON: Data, signature: Data) {
+        self.prfSecret = prfSecret
+        self.credentialId = credentialId
+        self.authenticatorData = authenticatorData
+        self.clientDataJSON = clientDataJSON
+        self.signature = signature
+    }
+
+    /// The `/fetch` body's `passkey` field (wire parity: FlagshipCore `RecoveryPasskey.fetchPasskeyField`).
+    public func fetchField(challenge: String) -> RecoveryPasskeyAssertion {
+        RecoveryPasskeyAssertion(challenge: challenge, assertion: .init(
+            credentialId: RecoveryPasskey.base64url(credentialId),
+            authenticatorData: RecoveryPasskey.base64url(authenticatorData),
+            clientDataJSON: RecoveryPasskey.base64url(clientDataJSON),
+            signature: RecoveryPasskey.base64url(signature)))
+    }
 }
 
 #if DEBUG
@@ -397,7 +447,8 @@ public final class MockWebAuthnProvider: WebAuthnProvider, @unchecked Sendable {
         // Hex credentialId so it satisfies the Worker's ^[0-9a-fA-F]{16,512}$
         // and survives a hex→bytes→hex round-trip in tests.
         WebAuthnRegistration(
-            credentialId: "aabbccdd" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+            credentialId: "aabbccdd" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
+            attestationObject: Data("mock-attestation".utf8)
         )
     }
     public func assertAny() async throws -> WebAuthnRegistration {
@@ -416,6 +467,17 @@ public final class MockWebAuthnProvider: WebAuthnProvider, @unchecked Sendable {
             outputByteCount: 32
         )
         return key.withUnsafeBytes { Data($0) }
+    }
+
+    /// Challenges signed so far, oldest first (tests check the sheet signed `.com`'s challenge).
+    public private(set) var signedChallenges: [Data] = []
+
+    public func recoveryAssert(credentialId: String, prfSalt: Data, challenge: Data) async throws -> WebAuthnRecoveryAssertion {
+        signedChallenges.append(challenge)
+        return WebAuthnRecoveryAssertion(
+            prfSecret: try await prfAssert(credentialId: credentialId, prfSalt: prfSalt),
+            credentialId: Data(credentialId.utf8), authenticatorData: Data(repeating: 1, count: 37),
+            clientDataJSON: Data(#"{"type":"webauthn.get"}"#.utf8), signature: Data(repeating: 2, count: 64))
     }
 }
 #endif

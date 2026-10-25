@@ -70,6 +70,7 @@ object Variant : AppVariant {
         SecurityNoticeCenter.shared?.reset()
         AccountGone.clear()
         AccountGone.createNext = false
+        RecoveryUpdateOffer.clear()
         val cfg = SmokeModeConfig.from(intent)
         if (cfg == null) {
             // A normal launch in the same process as an earlier gym run (the

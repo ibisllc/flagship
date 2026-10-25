@@ -423,6 +423,60 @@ class MockScreensClient(
         return ChatAlwaysRevokeResponse(before - chatAlwaysFixture.size)
     }
 
+    // ---- Browser grants beyond the manifest (browser/grantRequests.ts) ---
+
+    /** Held asks; empty unless a scenario seeds them ([seedBrowserGrants]). */
+    val browserGrantFixture: MutableList<BrowserGrantRequestWire> = mutableListOf()
+    val browserGrantAnswers: MutableList<BrowserGrantAnswerBody> = mutableListOf()
+    /** The box's cooldown after a denial: the same ask from the same app waits. */
+    val browserGrantCooling: MutableSet<String> = mutableSetOf()
+    /** Gym: the app browser is off on this box (the owner routes answer 404). */
+    var browserOff = false
+
+    /** Plants asks for one visit to a weather map; Wiki asks to keep reading a docs site and a printer on the LAN. */
+    fun seedBrowserGrants() {
+        browserGrantFixture.clear()
+        browserGrantFixture += BrowserGrantRequestWire(
+            requestId = "6b7c0f1e-1111-4a2b-9c3d-000000000001", serviceId = "bright-maple--plants",
+            capabilities = listOf("navigate", "screenshot"), origins = listOf("radar.weather.example"),
+            duration = "once", explanation = "Show today's rain radar next to your plants", at = now() - 60_000L,
+        )
+        browserGrantFixture += BrowserGrantRequestWire(
+            requestId = "6b7c0f1e-2222-4a2b-9c3d-000000000002", serviceId = "bright-maple--wiki",
+            capabilities = listOf("navigate", "read-dom"), origins = listOf("*.docs.example.org"),
+            localNetwork = BrowserLocalNetwork("exact", listOf("192.168.1.40")),
+            duration = "service", at = now() - 30_000L,
+        )
+    }
+
+    override suspend fun browserGrantRequests(): BrowserGrantRequestsResponse {
+        tick()
+        if (browserOff) throw ScreensError.Http(404, """{"error":"not found"}""")
+        return BrowserGrantRequestsResponse(browserGrantFixture.toList())
+    }
+
+    override suspend fun browserGrantAnswer(body: BrowserGrantAnswerBody) {
+        tick()
+        val held = browserGrantFixture.firstOrNull { it.requestId == body.requestId }
+            ?: throw ScreensError.Http(404, """{"error":"that request is no longer waiting"}""")
+        if (body.decision == "allow") {
+            val lan = held.localNetwork
+            MockSignatures.requireAdmin(
+                "browser-grant",
+                com.flagshipserver.app.core.BrowserGrant.canonicalBytes(
+                    boxFqdn(), held.requestId, held.serviceId, "allow", held.duration, held.capabilities, held.origins,
+                    lan?.takeIf { it.kind == "exact" }?.hosts, lan?.kind == "whole-lan", body.issuedAt,
+                ),
+                body.signature,
+            )
+        } else {
+            if (body.signature != null) throw ScreensError.Http(400, """{"error":"a denial carries no signature"}""")
+            browserGrantCooling += held.serviceId
+        }
+        browserGrantAnswers += body
+        browserGrantFixture.remove(held)
+    }
+
     var sliver: com.flagshipserver.app.core.SecuritySliverResponse = com.flagshipserver.app.core.SecuritySliverResponse()
     val publisherStates: MutableMap<String, com.flagshipserver.app.core.WaitingPublisherResponse> = mutableMapOf()
     val trustCalls: MutableList<Triple<String, com.flagshipserver.app.core.PublisherTrust, String>> = mutableListOf()
@@ -807,6 +861,7 @@ class MockScreensClient(
             recentLogs = listOf("listening on :8080", "GET / → 200", "migration check ok"),
             editable = serviceId in editableServiceIds,
             adaptedFrom = adaptedFromFixture[serviceId]?.let { AppDetailResponse.AdaptedFrom(it) },
+            importedFrom = importedFromFixture[serviceId]?.let { AppDetailResponse.ImportedFrom(it) },
             storage = appStorageFixture[serviceId],
         )
     }
@@ -1130,6 +1185,9 @@ class MockScreensClient(
 
     /** Services built from a shared adaptation, and the repo each adapts. */
     var adaptedFromFixture: Map<String, String> = emptyMap()
+
+    /** Apps imported from a repo on this box (N12 provenance), by service id. */
+    var importedFromFixture: Map<String, String> = emptyMap()
     val adapterReports: MutableList<Pair<String, String>> = mutableListOf()
     /** Thrown by `adapterReport` instead of sending. */
     var adapterReportError: Throwable? = null

@@ -33,3 +33,14 @@ func makeRecoveryUpload(
         wrappedAdminRoot: wrappedAdminRoot, wrappedAcmeAccountKey: wrappedAcmeAccountKey
     )
 }
+
+extension MockFlagshipServerClient {
+    /// The gated fetch as a client makes it since SEC-REPAIR-001: a fresh challenge and a passkey answer
+    /// (the mock checks only that the challenge is one it issued).
+    func fetchChecked(username: String, fetchTokenHex: String) async throws -> RecoveryFetchResponse {
+        let challenge = try await recoveryChallenge(username: username).challenge
+        let passkey = RecoveryPasskeyAssertion(challenge: challenge, assertion: .init(
+            credentialId: "aWQ", authenticatorData: "YWQ", clientDataJSON: "Y2Q", signature: "c2ln"))
+        return try await fetchWrappedUmk(username: username, fetchTokenHex: fetchTokenHex, passkey: passkey)
+    }
+}

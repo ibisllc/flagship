@@ -385,4 +385,132 @@ export const WEB_UX: readonly Scenario[] = [
       dimension: "D4",
     },
   ),
+  webTotal(
+    "web-ux-recovery-passkey-challenge",
+    "SEC-REPAIR-001: the recovery window (its real origin, a virtual WebAuthn authenticator with PRF) enrols with the attestation object beside the result, then recovers in order: passphrase, .com's challenge, ONE passkey sheet that gives the PRF and signs the challenge, and the fetch carrying that assertion.",
+    "gym ux passkey recovery the recovery window signs .com's challenge in the one passkey sheet and the fetch carries it",
+    {
+      steps: [
+        { kind: "launch", describe: "Open recovery.flagshipserver.com/#enroll with a PRF-capable virtual authenticator; enrol with a passphrase." },
+        { kind: "tap", describe: "Recover with the same passphrase.", handle: "#recover-go" },
+      ],
+      assertions: [{ describe: "Recover view", handle: "#view-recover", expect: "present" }],
+      screenshots: [shot("recovery-window-done", "The recovery window after a passkey-checked recovery.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-recovery-passkey-legacy-update",
+    "A recovery record from before the passkey check (passkeyLegacy) offers Update your account recovery once in the recovery window: Update makes a new passkey over the same passphrase and hands back its attestation; Not now is remembered and the next recovery asks nothing.",
+    "gym ux passkey recovery a record from before offers Update once; Update sends a new passkey, Not now is remembered",
+    {
+      steps: [
+        { kind: "tap", describe: "Recover a record from before; Update.", handle: "#recover-update-go" },
+        { kind: "tap", describe: "Recover again; Not now. Recover a third time.", handle: "#recover-update-later" },
+      ],
+      assertions: [{ describe: "Update panel title", handle: "#recover-update-title", expect: "text", text: "Update your account recovery" }],
+      screenshots: [shot("recovery-window-update", "The one-time update in the recovery window.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-recovery-update-prompt",
+    "On the first Home of a session the webapp asks once to update a recovery record from before (Update / Not now); Not now is remembered per account and Settings keeps a quiet Update account recovery row.",
+    "gym ux recovery update a record from before is asked about once; Not now is remembered and Settings keeps Update",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on an admin device; .com says the record has passkeyRequired false." },
+        { kind: "tap", describe: "Not now, then Home again, then Settings, Cloud recovery.", handle: "[data-modal-choice=later]" },
+      ],
+      assertions: [{ describe: "Settings row", handle: "#recovery-cloud-update", expect: "text", text: "Update account recovery" }],
+      screenshots: [shot("recovery-update-prompt", "The one-time prompt."), shot("recovery-update-row", "Settings keeps the Update row.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-recovery-update-run",
+    "Update account recovery re-enrols through the recovery window and the signed record goes to .com with passkeyAttestationObject beside the claim (never inside the signed bytes); the row then goes away.",
+    "gym ux recovery update Update re-enrols and the record carries the passkey's attestation",
+    {
+      steps: [{ kind: "tap", describe: "Settings, Cloud recovery, Update account recovery.", handle: "#recovery-cloud-update" }],
+      assertions: [{ describe: "Row gone", handle: "#recovery-cloud-update", expect: "absent" }],
+      screenshots: [shot("recovery-updated", "Cloud recovery after the update.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-wipe-restart-attestation",
+    "Wipe & restart sends newPasskeyAttestationObject, the attestation of the new recovery passkey whose credential id the old key signs.",
+    "gym ux recovery update wipe and restart sends the new passkey's attestation",
+    {
+      steps: [{ kind: "tap", describe: "Trusted devices, Wipe & restart, a new browser passphrase.", handle: "#wipe-restart-btn" }],
+      assertions: [{ describe: "Wipe button", handle: "#wipe-restart-btn", expect: "present" }],
+      screenshots: [shot("wipe-restart-attestation", "After the wipe request.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-browser-grant-sheet",
+    "SEC-BROWSER-002: an app's browser-access request shows in a sheet and under Activity from its structured fields (the verified app name, each site exactly, wildcards spelled out, local network, capabilities, duration, the app's own words quoted); Allow is labelled by the ask's duration and signs flagship/browser-grant/v1 for it; Deny is unsigned.",
+    "gym ux browser grants an ask shows in a sheet and under Activity; Allow signs the ask's duration and Deny is unsigned",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on an admin device; the box holds a session ask and a one-visit whole-LAN ask." },
+        { kind: "tap", describe: "Allow for this session; Not now on the second, then Deny it under Activity.", handle: "[data-browser-grant-sheet]" },
+      ],
+      assertions: [
+        { describe: "Sheet", handle: "[data-browser-grant-sheet]", expect: "present" },
+        { describe: "Activity heading", handle: "#activity-browser-heading", expect: "text", text: "Browser access requests" },
+      ],
+      screenshots: [shot("browser-grant-sheet", "The browser access sheet."), shot("browser-grant-activity", "A waiting ask under Activity.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-browser-grant-app-page",
+    "The app's page has a Browser access section: the manifest's sites (Approved when you installed it) and this app's waiting asks, answered in place with a signed Always allow.",
+    "gym ux browser grants the app's page lists what the manifest grants and answers a waiting ask",
+    {
+      steps: [{ kind: "tap", describe: "Open the app's page; Always allow on the waiting ask.", handle: "#sd-browser-access" }],
+      assertions: [{ describe: "Manifest sites", handle: "[data-browser-manifest]", expect: "present" }],
+      screenshots: [shot("browser-grant-app-page", "Browser access on the app's page.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-upstream-sync-proposal",
+    "N12: an imported app's page offers Check for updates from <repo>; the box's three-way proposal shows the version, new permissions apart and before the code, the counts and the conflicts (your version kept), and Review and deploy opens the existing git build screen; nothing is deployed.",
+    "gym ux upstream sync the proposal shows new permissions apart and the conflicts, then opens the build to deploy",
+    {
+      steps: [
+        { kind: "tap", describe: "Check for updates from github.com/alice/notes with ref v2.0.", handle: "#sd-sync-upstream" },
+        { kind: "tap", describe: "Review and deploy.", handle: "[data-sync-choice=review]" },
+      ],
+      assertions: [{ describe: "New permissions", handle: "[data-sync-capabilities]", expect: "present" }],
+      screenshots: [shot("upstream-sync-proposal", "The sync proposal.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-upstream-sync-up-to-date",
+    "Already the latest version: the sheet says so and Close discards the build the check opened; an app the box did not import answers 404 and the sheet says it can't check for updates.",
+    "gym ux upstream sync up to date discards the opened build, and an app not imported here says so",
+    {
+      steps: [{ kind: "tap", describe: "Check for updates (up to date), Close; check again (404), Cancel.", handle: "#sd-sync-upstream" }],
+      assertions: [{ describe: "Up to date", handle: "[data-sync-up-to-date]", expect: "present" }],
+      screenshots: [shot("upstream-sync-up-to-date", "Already the latest version.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-ux-upstream-sync-no-repo",
+    "An app with no repo on record offers no update check.",
+    "gym ux upstream sync an app with no repo offers no check",
+    {
+      steps: [{ kind: "launch", describe: "Open an editable app with no import or adapter repo." }],
+      assertions: [{ describe: "No sync row", handle: "#sd-sync-upstream", expect: "absent" }],
+      screenshots: [shot("upstream-sync-no-repo", "An app page with no update check.")],
+      dimension: "D4",
+    },
+  ),
 ];

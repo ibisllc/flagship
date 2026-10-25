@@ -56,6 +56,8 @@ class MockFlagshipServerClient(
         /** N03 — null = a legacy (v1) row. */
         val signed: com.flagshipserver.app.core.SignedRecoveryRecord? = null,
         val updatedAt: Long,
+        /** SEC-REPAIR-001: `.com` holds this passkey's public key and checks it at recovery. */
+        val passkey: Boolean = false,
     )
     private val recoveryByUsername = mutableMapOf<String, MockRecoveryRecord>()
 
@@ -313,7 +315,14 @@ class MockFlagshipServerClient(
             wrappedAcmeAccountKey = acme,
             wrappedAdminRoot = adminRoot,
         )
+        if (req.passkeyAttestationObject != null) {
+            val att = runCatching { com.flagshipserver.app.core.RecoveryPasskey.decode(req.passkeyAttestationObject) }.getOrNull()
+            if (att == null || att.isEmpty()) throw HttpException(400, "passkeyAttestationObject must be base64")
+            recoveryAttestations += req.passkeyAttestationObject
+        }
+        val keepsPasskey = prior?.passkey == true && prior.credentialId == claim.credentialIdHex
         recoveryByUsername[key] = MockRecoveryRecord(
+            passkey = req.passkeyAttestationObject != null || keepsPasskey,
             credentialId = claim.credentialIdHex,
             wrappedUmk = req.wrappedUmk,
             wrappedAcmeAccountKey = acme,
@@ -337,6 +346,42 @@ class MockFlagshipServerClient(
             digestHex = row.signed?.digestHex,
             adminRootDigestHex = row.wrappedAdminRoot?.let { RecoveryRecordV2.sha256HexOfBase64(it) },
             acmeKeyDigestHex = row.wrappedAcmeAccountKey?.let { RecoveryRecordV2.sha256HexOfBase64(it) },
+            passkeyRequired = row.passkey,
+        )
+    }
+
+    /** Every passkey attestation an enrolment sent, in order. */
+    val recoveryAttestations = mutableListOf<String>()
+
+    /** Challenges handed out and not yet spent; every passkey fetch, in order. */
+    private val openChallenges = mutableSetOf<String>()
+    val passkeyFetches = mutableListOf<kotlinx.serialization.json.JsonObject>()
+
+    /** Gym: `.com` without the recovery secret (503 passkey-unavailable). */
+    var recoveryChallengeUnavailable = false
+
+    override suspend fun recoveryChallenge(username: String): RecoveryChallenge {
+        tick()
+        if (recoveryChallengeUnavailable) throw HttpException(503, """{"error":"passkey recovery is not configured","code":"passkey-unavailable"}""")
+        val c = com.flagshipserver.app.core.RecoveryPasskey.base64url(ByteArray(48).also { java.security.SecureRandom().nextBytes(it) })
+        openChallenges += c
+        return RecoveryChallenge(c, nowMs() + 300_000)
+    }
+
+    /** Gym: a record made before the passkey check, under [passphrase] (no passkey key held). */
+    fun seedLegacyRecovery(username: String, passphrase: String, credentialId: String = "0102030405060708090a0b0c0d0e0f10") {
+        val secrets = com.flagshipserver.app.keystore.RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
+        val wrapped = java.util.Base64.getEncoder().encodeToString(ByteArray(60) { 7 })
+        recoveryStore[credentialId] = RecoveryEnvelope(credentialId = credentialId, wrappedUmk = wrapped)
+        recoveryByUsername[username.lowercase()] = MockRecoveryRecord(
+            credentialId = credentialId,
+            wrappedUmk = wrapped,
+            wrappedAcmeAccountKey = null,
+            wrappedAdminRoot = null,
+            fetchTokenHashHex = com.flagshipserver.app.keystore.RecoveryDerivation.sha256Hex(secrets.fetchToken),
+            prfSaltHashHex = com.flagshipserver.app.keystore.RecoveryDerivation.sha256Hex(secrets.prfSalt),
+            signed = null,
+            updatedAt = nowMs(),
         )
     }
 
@@ -354,10 +399,38 @@ class MockFlagshipServerClient(
         username: String,
         fetchTokenHex: String,
         issuedAt: Long,
+    ): GatedRecoveryEnvelope = gatedFetch(username, fetchTokenHex, null)
+
+    override suspend fun fetchWrappedUmkWithPasskey(
+        username: String,
+        fetchTokenHex: String,
+        issuedAt: Long,
+        passkey: kotlinx.serialization.json.JsonObject,
+    ): GatedRecoveryEnvelope = gatedFetch(username, fetchTokenHex, passkey)
+
+    private suspend fun gatedFetch(
+        username: String,
+        fetchTokenHex: String,
+        passkey: kotlinx.serialization.json.JsonObject?,
     ): GatedRecoveryEnvelope {
         tick()
         val rec = recoveryByUsername[username.lowercase()]
             ?: throw HttpException(404, "no recovery record")
+        if (passkey != null) passkeyFetches += passkey
+        if (rec.passkey) {
+            // Mirrors handleFetchWrappedUmkWithToken: a keyed record needs an assertion over a live
+            // challenge, from the credential the record names.
+            if (passkey == null) throw HttpException(403, """{"error":"this recovery needs your passkey","code":"passkey-required"}""")
+            val challenge = (passkey["challenge"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            if (challenge == null || !openChallenges.remove(challenge)) {
+                throw HttpException(403, """{"error":"the passkey challenge expired; try again","code":"passkey-challenge"}""")
+            }
+            val credB64 = ((passkey["assertion"] as? kotlinx.serialization.json.JsonObject)?.get("credentialId") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            val credHex = credB64?.let { runCatching { HexUtil.encode(com.flagshipserver.app.core.RecoveryPasskey.decode(it)) }.getOrNull() }
+            if (credHex == null || !credHex.equals(rec.credentialId, ignoreCase = true)) {
+                throw HttpException(403, """{"error":"the assertion is for another passkey","code":"passkey-invalid"}""")
+            }
+        }
         // Legacy row with no gate → the Worker refuses with 409.
         val storedHash = rec.fetchTokenHashHex
             ?: throw HttpException(409, "record predates passphrase gate — re-enrol cloud recovery")
@@ -381,6 +454,8 @@ class MockFlagshipServerClient(
             recoveryProof = RecoveryProofToken(token = proofToken),
             signed = rec.signed,
             legacy = if (rec.signed == null) true else null,
+            passkeyLegacy = if (rec.passkey) null else true,
+            passkeyChecked = if (rec.passkey) true else null,
         )
     }
 

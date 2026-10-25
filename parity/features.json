@@ -788,6 +788,56 @@
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/FirstContact.kt", "class FirstContact"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerKeyPins.kt", "fun pinnedStk"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/FirstContactViews.kt", "fun ServerCodeBox"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/WildcardGrantUpkeep.kt", "class WildcardGrantUpkeep"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/InstallBlobWire.kt", "val enrollmentKeyHex"]] },
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerKeyPins.swift", "public func pinnedStk\\("], ["apps/mobile/shared/Sources/FlagshipCore/FirstContact.swift", "enrollmentProof: enrollmentProof"], ["apps/mobile/shared/Sources/FlagshipCore/SecretRequestCoordinator.swift", "serverKeys\\.pin\\(stkPubData"], ["apps/mobile/ios/Sources/FlagshipUI/Components/ServerCodeBox.swift", "FirstContact\\.codeLine"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/CreateServerViewModel.swift", "enrollmentKeyHex: enrollmentKeyHex"], ["apps/mobile/shared/Sources/FlagshipCore/ServerWildcardGrantKeeper.swift", "ServerWildcardGrantUpkeep"]] }
       }
+    },
+    {
+      "id": "recovery-passkey",
+      "title": "Recovery passkey check (SEC-REPAIR-001): enrolment sends passkeyAttestationObject beside the signed record; recovery asks the passphrase, then POST /challenge, then ONE passkey sheet (PRF + assertion over the challenge), then /fetch carrying `passkey`; passkey-required/-challenge/-invalid/-unavailable shown as sentences; passphrase min 8 with 'Longer is stronger and there is no upper limit'",
+      "ref": "ios",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/recovery/recovery.js", "passkeySheet\\(hexToBytes\\(meta\\.credentialId\\)"], ["apps/web/public/webapp/lib/recovery.js", "export const RECOVERY_PASSKEY_ERRORS"], ["apps/web/public/webapp/lib/recovery.js", "const body = typeof passkeyAttestationObject"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/RecoveryGatedFetch.swift", "public enum RecoveryGatedFetch"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/RecoveryViewModel.swift", "passkeyAttestationObject: registration.attestationObject"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/CloudRecoveryEnrollment.kt", "server\\.fetchWrappedUmkWithPasskey"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/CloudRecoveryEnrollment.kt", "passkeyAttestationObject = created\\.attestationObject"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/PasskeyRecoveryManager.kt", "suspend fun assertWithChallenge"]] }
+      }
+    },
+    {
+      "id": "recovery-update-prompt",
+      "title": "A recovery record from before the passkey check (passkeyLegacy / passkeyRequired:false) asks ONCE per account and device 'Update your account recovery' (Update / Not now, one passkey sheet, re-enrolment with the attestation); declining keeps everything working and leaves a quiet 'Update account recovery' row in Settings",
+      "ref": "ios",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/recoveryUpdate.js", "export async function maybeAskRecoveryUpdate"], ["apps/web/public/recovery/recovery.js", "function askRecoveryUpdate"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/RecoveryUpdatePrompt.swift", "public enum RecoveryUpdatePrompt"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/RecoveryUpdate.kt", "fun RecoveryUpdateHost"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RecoveryPasskeyFlow.kt", "class RecoveryUpdatePromptStore"]] }
+      }
+    },
+    {
+      "id": "wipe-restart-passkey",
+      "title": "Wipe & restart sends newPasskeyAttestationObject (the new credential the old IRK signs) so the new recovery record keeps .com's passkey check",
+      "ref": "ios",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/wipeRestartCeremony.js", "newPasskeyAttestationObject: reg\\.passkeyAttestationObject"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/WipeRestartViewModel.swift", "newPasskeyAttestationObject: registration"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/WipeRestartViewModel.kt", "newPasskeyAttestationObject = webAuthn\\.attestationFor"]] }
+      }
+    },
+    {
+      "id": "browser-grant-prompt",
+      "title": "Browser grants beyond the manifest (SEC-BROWSER-002): the box's waiting asks (GET /api/browser/owner/grant-requests) show in the inbox and on the app's Browser access section with the verified app, exact sites, local network, capabilities and duration from the structured fields; Allow (labelled once / session / always by the ask) signs flagship/browser-grant/v1 with the sensitive-order key; Deny is unsigned and starts the box's cooldown",
+      "ref": "ios",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/browserGrantAlerts.js", "export function showBrowserGrantSheet"], ["apps/web/public/webapp/lib/browserGrantAlerts.js", "export async function loadBrowserAccessSection"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/BrowserGrantCenter.swift", "public final class BrowserGrantCenter"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/BrowserGrantScreens.swift", "struct BrowserAccessSection"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BrowserGrantCenter.kt", "class BrowserGrantCenter"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/BrowserGrantScreens.kt", "fun BrowserGrantDialogHost"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/BrowserGrantScreens.kt", "fun BrowserAccessSection"]] }
+      }
+    },
+    {
+      "id": "upstream-sync",
+      "title": "Upstream sync (N12): an imported app's page offers 'Check for updates from <repo>' (importedFrom, else adaptedFrom), POST /api/build/apps/:id/sync {ref?}; the proposal shows the version, counts, conflicts and capability changes apart ('New permissions'), then the existing git build to deploy or Discard; nothing goes live until the owner deploys",
+      "ref": "ios",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/upstreamSync.js", "export function openUpstreamSync"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/UpstreamSyncScreens.swift", "public final class UpstreamSyncViewModel"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/LiveScreensClient.swift", "func appSync"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/UpstreamSyncViewModel.kt", "class UpstreamSyncViewModel"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/UpstreamSyncScreen.kt", "fun UpstreamSyncScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/LiveBuildClient.kt", "override suspend fun syncFromUpstream"]] }
+      }
     }
   ]
 }

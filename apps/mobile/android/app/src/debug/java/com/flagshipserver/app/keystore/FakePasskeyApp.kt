@@ -24,6 +24,7 @@ class FakePasskeyApp : CredentialCalls {
     override suspend fun create(activity: Activity, request: CreatePublicKeyCredentialRequest): CreateCredentialResponse {
         val json = JSONObject().apply {
             put("id", b64(id))
+            put("response", JSONObject().apply { put("attestationObject", b64("fake-attestation|".toByteArray() + id)) })
             put("clientExtensionResults", JSONObject().apply {
                 put("prf", JSONObject().apply { put("enabled", true) })
             })
@@ -36,8 +37,19 @@ class FakePasskeyApp : CredentialCalls {
         val input = JSONObject(option.requestJson).getJSONObject("extensions")
             .getJSONObject("prf").getJSONObject("eval").getString("first")
         val key = MessageDigest.getInstance("SHA-256").digest(("fake-passkey|$input").toByteArray())
+        val challenge = JSONObject(option.requestJson).getString("challenge")
+        val clientData = JSONObject().apply {
+            put("type", "webauthn.get")
+            put("challenge", challenge)
+        }
         val json = JSONObject().apply {
             put("id", b64(id))
+            put("rawId", b64(id))
+            put("response", JSONObject().apply {
+                put("authenticatorData", b64(ByteArray(37) { 1 }))
+                put("clientDataJSON", b64(clientData.toString().toByteArray()))
+                put("signature", b64(ByteArray(64) { 2 }))
+            })
             put("clientExtensionResults", JSONObject().apply {
                 put("prf", JSONObject().apply { put("results", JSONObject().apply { put("first", b64(key)) }) })
             })

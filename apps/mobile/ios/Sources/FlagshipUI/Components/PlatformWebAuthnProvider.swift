@@ -160,6 +160,13 @@ extension PlatformWebAuthnProvider {
         return WebAuthnRegistration(credentialId: Self.hexCredentialId("platform-\(id)"))
     }
 
+    public func recoveryAssert(credentialId: String, prfSalt: Data, challenge: Data) async throws -> WebAuthnRecoveryAssertion {
+        // No authenticator: the PRF stand-in below and placeholder signature bytes `.com` would refuse.
+        WebAuthnRecoveryAssertion(
+            prfSecret: try await prfAssert(credentialId: credentialId, prfSalt: prfSalt),
+            credentialId: Data(credentialId.utf8), authenticatorData: Data(), clientDataJSON: Data(), signature: Data())
+    }
+
     public func prfAssert(credentialId: String, prfSalt: Data) async throws -> Data {
         // Deterministic 32-byte secret keyed off the credentialID + the
         // passphrase-derived prfSalt + a device-bound (Keychain) salt. NOT
@@ -210,12 +217,16 @@ extension PlatformWebAuthnProvider {
             throw WebAuthnError.unexpectedCredential
         }
 
-        // `output.first` is a CryptoKit.SymmetricKey? — presence here is
-        // a support signal only; the secret is read in `prfAssert`.
-        prfAvailable = credential.prf?.first != nil
+        // `output.first` is a CryptoKit.SymmetricKey? — when the creation
+        // already evaluated the PRF, setup uses it and skips a second sheet.
+        let prfFirst = credential.prf?.first.map { $0.withUnsafeBytes { Data($0) } }
+        prfAvailable = prfFirst != nil
 
         let credentialIdHex = Self.hex(credential.credentialID)
-        return WebAuthnRegistration(credentialId: credentialIdHex)
+        // SEC-REPAIR-001: `.com` reads the passkey's public key from the attestation object.
+        return WebAuthnRegistration(credentialId: credentialIdHex,
+                                    attestationObject: credential.rawAttestationObject,
+                                    prfSecret: prfFirst)
     }
 
     /// Authenticate with any existing passkey for this relying party (no
@@ -285,6 +296,44 @@ extension PlatformWebAuthnProvider {
         }
         prfAvailable = false
         throw WebAuthnError.prfUnsupported
+    }
+
+    /// SEC-REPAIR-001: one sheet that evaluates the PRF and signs `.com`'s recovery challenge.
+    public func recoveryAssert(credentialId: String, prfSalt: Data, challenge: Data) async throws -> WebAuthnRecoveryAssertion {
+        guard let credentialIDBytes = Self.hexToData(credentialId) else {
+            throw WebAuthnError.invalidCredentialId
+        }
+        let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
+            relyingPartyIdentifier: relyingPartyId
+        )
+        let request = provider.createCredentialAssertionRequest(challenge: challenge)
+        request.allowedCredentials = [
+            ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: credentialIDBytes)
+        ]
+        request.prf = .inputValues(.init(saltInput1: prfSalt))
+        // `.com` requires user verification on the assertion.
+        request.userVerificationPreference = .required
+        let authorization = try await perform(
+            request, options: .preferImmediatelyAvailableCredentials
+        )
+        guard
+            let credential = authorization.credential
+                as? ASAuthorizationPlatformPublicKeyCredentialAssertion
+        else {
+            throw WebAuthnError.unexpectedCredential
+        }
+        guard let output = credential.prf else {
+            prfAvailable = false
+            throw WebAuthnError.prfUnsupported
+        }
+        prfAvailable = true
+        return WebAuthnRecoveryAssertion(
+            prfSecret: output.first.withUnsafeBytes { Data($0) },
+            credentialId: credential.credentialID,
+            authenticatorData: credential.rawAuthenticatorData,
+            clientDataJSON: credential.rawClientDataJSON,
+            signature: credential.signature
+        )
     }
 
     /// Bridge a single `ASAuthorizationController` run to async/await.

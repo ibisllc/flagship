@@ -14,7 +14,7 @@
 //      IRK (the currently-registered key, proof of possession of the
 //      displaced identity).
 //   5. POST `/api/users/:u/wipe-restart` with `{ request, signature,
-//      idempotencyKey }` plus the optional `If-Match` ETag for the
+//      idempotencyKey, newPasskeyAttestationObject }` plus the optional `If-Match` ETag for the
 //      device-list-shifted fence.
 //
 // Server returns:
@@ -108,7 +108,7 @@ export function newUmkSeed() {
  * @param {Uint8Array} args.umk             current session UMK (OLD)
  * @param {string|null} [args.ifMatch]      devices-list ETag (optional)
  * @param {object} [args.deps]              ceremony deps (mostly tests)
- * @param {(umk: Uint8Array, username: string) => Promise<{credentialIdHex:string, wrappedUmkB64:string, wrappedUmkBytes:Uint8Array}>} [args.enrollPasskey]
+ * @param {(umk: Uint8Array, username: string) => Promise<{credentialIdHex:string, wrappedUmkB64:string, wrappedUmkBytes:Uint8Array, passkeyAttestationObject?:string}>} [args.enrollPasskey]
  *        Override the recovery-passkey enrollment. Defaults to the
  *        production sub-origin popup; tests pass a synchronous stub.
  * @param {object} [deps]
@@ -192,6 +192,11 @@ export async function runWipeRestartCeremony(args, deps = {}) {
     },
     signature: bytesToHex(sigBytes),
     idempotencyKey,
+    // SEC-REPAIR-001: the new passkey's public key, bound by the credential id the old key signed, so
+    // the new recovery record keeps `.com`'s passkey check.
+    ...(typeof reg.passkeyAttestationObject === "string" && reg.passkeyAttestationObject
+      ? { newPasskeyAttestationObject: reg.passkeyAttestationObject }
+      : {}),
   };
   let resp;
   try {

@@ -228,6 +228,11 @@ public final class RealAccountLoginViewModel {
             phase = .failed(String(localized: "Couldn't install your recovered account key: \(UserErrorText.of(error))"))
             return
         }
+        // A record `.com` released on the passphrase alone: Home offers once to update it, with the
+        // passphrase just typed (kept in memory only).
+        if recoveryVM.recoveredRecordNeedsPasskeyUpdate {
+            RecoveryUpdatePrompt.hold(passphrase: passphraseInput, for: username)
+        }
 
         // Task #29 / Recovery Phase A vs B — the decision the whole
         // sign-out → recover → instant-repair round-trip rests on. Derive
@@ -399,6 +404,11 @@ public final class RealAccountLoginViewModel {
             phase = .failed(String(localized: "Couldn't install your recovered account key: \(UserErrorText.of(error))"))
             return
         }
+        // A record `.com` released on the passphrase alone: Home offers once to update it, with the
+        // passphrase just typed (kept in memory only).
+        if recoveryVM.recoveredRecordNeedsPasskeyUpdate {
+            RecoveryUpdatePrompt.hold(passphrase: passphraseInput, for: username)
+        }
 
         do {
             let resp = try await initiateTakeoverRePair(
@@ -554,6 +564,8 @@ public final class RealAccountLoginViewModel {
     /// Error. Maps the common cases (cancelled sheet, wrong passphrase, missing
     /// passkey) to friendly copy; otherwise passes the message through.
     private func humanizedRecoveryMessage(_ raw: String) -> String {
+        if ["passkey-required", "passkey-challenge", "passkey-invalid", "passkey-unavailable"]
+            .compactMap(RecoveryPasskeyCopy.message(forCode:)).contains(raw) { return raw }
         let lower = raw.lowercased()
         if lower.contains("cancel") || lower.contains("1001") {
             return String(localized: "Passkey sign-in was cancelled. Tap Restore access to try again, or use Import backup file below.")

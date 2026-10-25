@@ -62,6 +62,7 @@ val LocalDeepLinker = staticCompositionLocalOf<DeepLinker> { DeepLinker() }
  *  previews, tests and mock mode: no dialogs. */
 val LocalAccessRequestCenter = staticCompositionLocalOf<AccessRequestCenter?> { null }
 val LocalChatRequestCenter = staticCompositionLocalOf<ChatRequestCenter?> { null }
+val LocalBrowserGrantCenter = staticCompositionLocalOf<BrowserGrantCenter?> { null }
 
 /** Settings → Push notifications. Null on previews. */
 val LocalPushNotificationsSwitch = staticCompositionLocalOf<PushNotificationsSwitch?> { null }

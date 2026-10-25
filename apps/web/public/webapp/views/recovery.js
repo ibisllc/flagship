@@ -16,9 +16,10 @@
 import { $, registerView, show } from "../lib/router.js";
 import {
   deleteCloudRecovery,
-  hasCloudRecovery,
+  recoveryPasskeyStatus,
   setupCloudRecovery,
 } from "../lib/recovery.js";
+import { RECOVERY_UPDATE_COPY, runRecoveryUpdate } from "../lib/recoveryUpdate.js";
 import { ensureUsername, getSession, unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { failureText } from "../lib/rateLimited.js";
@@ -146,8 +147,11 @@ async function refreshCloudStatus() {
     return;
   }
   pill.textContent = tr("checking…");
-  const exists = await hasCloudRecovery(username);
+  const st = await recoveryPasskeyStatus(username);
+  const exists = st?.exists === true;
   pill.textContent = exists ? "on" : "off";
+  const updateBtn = $("recovery-cloud-update");
+  updateBtn?.classList.toggle("hidden", !(exists && st.legacy));
   setupBtn.textContent = exists ? tr("Re-register passkey") : tr("Set up cloud recovery");
   removeBtn.style.display = exists ? "" : "none";
 }
@@ -180,6 +184,22 @@ async function runSetupCloud() {
     toast(tr("Setup failed: {0}", e.message ?? e), "err");
   } finally {
     if (btn) btn.disabled = false;
+    void refreshCloudStatus();
+  }
+}
+
+async function runUpdateCloud() {
+  const btn = $("recovery-cloud-update");
+  if (btn) btn.disabled = true;
+  try {
+    await runRecoveryUpdate(await ensureUsername());
+  } catch (e) {
+    toast(tr("Setup failed: {0}", e.message ?? e), "err");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = RECOVERY_UPDATE_COPY.row;
+    }
     void refreshCloudStatus();
   }
 }
@@ -584,6 +604,7 @@ export function initRecoveryView() {
     if (f) importWrapped(f);
   });
   $("recovery-cloud-setup")?.addEventListener("click", runSetupCloud);
+  $("recovery-cloud-update")?.addEventListener("click", runUpdateCloud);
   $("recovery-cloud-remove")?.addEventListener("click", runRemoveCloud);
   // J.4 integration: after a recovery binds, the user lands here. The
   // "reattach progress" button opens the per-app re-issuance summary.

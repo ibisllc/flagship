@@ -584,6 +584,22 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func chatAnswer(_ answer: ChatAnswerRequest) async throws {
         _ = try await requestData("/api/screens/chat/answer", method: "POST", body: try JSONEncoder().encode(answer), timeout: 30)
     }
+    public func browserGrantRequests() async throws -> BrowserGrantRequestsResponse {
+        do {
+            return try await request("/api/browser/owner/grant-requests")
+        } catch ScreensClientError.http(status: 404, _) {
+            return BrowserGrantRequestsResponse(requests: [])
+        }
+    }
+    public func browserGrantAnswer(_ answer: BrowserGrantAnswerRequest) async throws {
+        _ = try await requestData("/api/browser/owner/grant-requests/answer", method: "POST",
+                                  body: try JSONEncoder().encode(answer), timeout: 30)
+    }
+    public func appSync(serviceId: String, _ req: AppSyncRequest) async throws -> AppSyncResponse {
+        // The box clones the chosen upstream version before it answers.
+        try await request("/api/build/apps/\(esc(serviceId))/sync", method: "POST",
+                          body: try JSONEncoder().encode(req), timeout: 5 * 60)
+    }
     public func chatRevokeAlways(_ revoke: ChatRevokeRequest) async throws -> Int {
         struct Ended: Decodable { let ended: Int? }
         let r: Ended = try await request("/api/screens/chat/always/revoke", method: "POST", body: try JSONEncoder().encode(revoke))

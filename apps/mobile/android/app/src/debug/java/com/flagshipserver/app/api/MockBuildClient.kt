@@ -145,6 +145,33 @@ class MockBuildClient(
 
     val discardCalls: MutableList<String> = mutableListOf()
 
+    /** Each sync asked for, as (serviceId, ref). */
+    val syncCalls: MutableList<Pair<String, String?>> = mutableListOf()
+    /** The box's answer to a sync; null = a proposal with one conflict and a new egress host. */
+    var syncFixture: BuildSyncResponse? = null
+    /** Thrown by a sync instead (e.g. the 404 for an app not imported here). */
+    var syncError: Throwable? = null
+
+    override suspend fun syncFromUpstream(serviceId: String, ref: String?): BuildSyncResponse {
+        tick()
+        syncCalls += serviceId to ref
+        syncError?.let { throw it }
+        return syncFixture ?: BuildSyncResponse(
+            buildId = "bld-sync-0001",
+            proposal = SyncProposal(
+                upstreamChanged = listOf("src/app.js", "src/rain.js", "README.md"),
+                localChanged = listOf("src/app.js", "public/style.css"),
+                takeUpstream = listOf("src/rain.js", "README.md"),
+                conflicts = listOf("src/app.js"),
+                alreadyApplied = emptyList(),
+                capabilityChanges = listOf(SyncCapabilityChange("network.egress", added = listOf("api.rain.example"))),
+                clean = false,
+            ),
+            candidateCommit = "4f2a9c0e1b7d3a5c6e8f",
+            upToDate = false,
+        )
+    }
+
     override suspend fun discard(buildId: String) {
         tick()
         discardCalls.add(buildId)

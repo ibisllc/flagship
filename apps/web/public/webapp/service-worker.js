@@ -395,7 +395,12 @@
 //  v176: release 0.3 (one shell for the security release, UX and architecture v2): first contact is the
 //       only way a server's key is pinned (one pin store, never on first sight); the PQ and strict checks
 //       read the same pins; everything earlier in this list from v157 on ships together here.
-const SHELL_VERSION = "v176";
+//  v177: SEC-REPAIR-001: cloud recovery sends the passkey's attestation, signs .com's challenge in the
+//       one passkey sheet and asks once to update a record from before (lib/recoveryUpdate.js); wipe &
+//       restart sends the new passkey's attestation; browser access requests beyond an app's manifest are
+//       answered under Activity and on the app's page (lib/browserGrantAlerts.js); an imported app checks
+//       its repo for updates and shows the proposal before the build (lib/upstreamSync.js).
+const SHELL_VERSION = "v177";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -476,6 +481,11 @@ const OPTIONAL_SHELL = [
   "/lib/accessAlerts.js",
   "/lib/chatAlerts.js",
   "/lib/chatApproval.js",
+  "/lib/browserGrant.js",
+  "/lib/browserGrantAlerts.js",
+  "/lib/upstreamSync.js",
+  "/lib/recoveryUpdate.js",
+  "/lib/recoveryUpdateFlag.js",
   "/lib/aiConsentUi.js",
   "/lib/aiRepairConsent.js",
   "/lib/pushSetting.js",

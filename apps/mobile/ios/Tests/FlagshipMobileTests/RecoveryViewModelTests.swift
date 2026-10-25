@@ -86,7 +86,7 @@ final class RecoveryViewModelTests: XCTestCase {
         // when the SHA-256 of the presented fetchToken matches. We present
         // the SAME fetchToken the derivation yields and expect a 200.
         let secrets = try RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
-        let fetched = try await server.fetchWrappedUmk(
+        let fetched = try await server.fetchChecked(
             username: username,
             fetchTokenHex: HexUtil.encode(secrets.fetchToken)
         )
@@ -104,7 +104,7 @@ final class RecoveryViewModelTests: XCTestCase {
         // A fetchToken derived from the WRONG passphrase won't hash-match.
         let wrong = try RecoveryDerivation.derivePassphraseSecrets("totally wrong passphrase", username)
         do {
-            _ = try await server.fetchWrappedUmk(username: username, fetchTokenHex: HexUtil.encode(wrong.fetchToken))
+            _ = try await server.fetchChecked(username: username, fetchTokenHex: HexUtil.encode(wrong.fetchToken))
             XCTFail("expected a 403 for a mismatched fetchToken")
         } catch let ScreensClientError.http(status, _) {
             XCTAssertEqual(status, 403)

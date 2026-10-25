@@ -79,15 +79,18 @@ public struct AdminRootReEscrow: Sendable {
         // on the concurrency pool, off the main actor.
         let secrets = try RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
 
-        // The gate: a wrong passphrase derives the wrong fetchToken → 403.
+        // The gate: the passkey signs `.com`'s challenge in the same sheet that gives the PRF; a wrong
+        // passphrase derives the wrong fetchToken → 403.
         let fetched: RecoveryFetchResponse
+        let prfSecret: Data
         do {
-            fetched = try await client.fetchWrappedUmk(
-                username: username,
-                fetchTokenHex: HexUtil.encode(secrets.fetchToken)
-            )
-        } catch ScreensClientError.http(let status, _) where status == 403 {
-            throw ReEscrowError.wrongPassphrase
+            let gated = try await RecoveryGatedFetch.run(client: client, webAuthn: webAuthn,
+                                                         username: username, secrets: secrets)
+            fetched = gated.fetched
+            prfSecret = gated.prfSecret
+        } catch let e where !RecoveryGatedFetch.isPasskeyRefusal(e) {
+            if case ScreensClientError.http(let status, _) = e, status == 403 { throw ReEscrowError.wrongPassphrase }
+            throw e
         }
 
         // Anti-coercion: a tampered `.com` feeding a different salt would
@@ -97,12 +100,6 @@ public struct AdminRootReEscrow: Sendable {
                 throw ReEscrowError.prfSaltMismatch
             }
         }
-
-        // PRF assert against the EXISTING credential (no register()).
-        let prfSecret = try await webAuthn.prfAssert(
-            credentialId: fetched.credentialId,
-            prfSalt: secrets.prfSalt
-        )
 
         // Sanity gate: prove the wrap key is right BEFORE overwriting the
         // stored record — the fetched wrappedUmk must unwrap under it.

@@ -158,6 +158,9 @@ public struct SettingsScreen: View {
     /// not enrolled (no enrolment = removing this device permanently
     /// loses account access).
     var hasCloudRecovery: Bool = true
+    /// SEC-REPAIR-001: the recovery record predates `.com`'s passkey check; a quiet row offers the update.
+    var recoveryNeedsUpdate: Bool = false
+    var onUpdateRecovery: () -> Void = {}
     /// A passwordless demo session holds no account keys, so the key-backed
     /// rows (recovery, key backup, trusted devices) are hidden for it.
     var isDemoAccount: Bool = false
@@ -240,8 +243,12 @@ public struct SettingsScreen: View {
         holdsAdminKey: Bool = false,
         holdsRescueKey: Bool = false,
         keyBackedUp: Bool = false,
-        onSaveDataFirst: @escaping () -> Void = {}
+        onSaveDataFirst: @escaping () -> Void = {},
+        recoveryNeedsUpdate: Bool = false,
+        onUpdateRecovery: @escaping () -> Void = {}
     ) {
+        self.recoveryNeedsUpdate = recoveryNeedsUpdate
+        self.onUpdateRecovery = onUpdateRecovery
         self.username = username
         self.accountDisplayName = accountDisplayName
         self.controlDevices = controlDevices
@@ -526,6 +533,11 @@ public struct SettingsScreen: View {
             FSSettingsRow(icon: "sparkles", title: String(localized: "AI API keys"), subtitle: String(localized: "Bring-your-own keys for building apps"), action: onOpenAiKeys),
         ] + (isDemoAccount ? [] : [
             FSSettingsRow(icon: "key.horizontal.fill", title: String(localized: "Cloud recovery"), subtitle: String(localized: "Recover on a new device"), action: onOpenRecovery),
+        ] + (recoveryNeedsUpdate ? [
+            FSSettingsRow(icon: "person.badge.key", title: RecoveryUpdatePrompt.settingsRow,
+                          subtitle: String(localized: "Have your passkey checked too"),
+                          accessibilityId: "settings-update-recovery", action: onUpdateRecovery),
+        ] : []) + [
             FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: String(localized: "Back up account key"), subtitle: String(localized: "Save an encrypted key file"), action: onOpenKeyfileBackup),
         ]) + (nameDibsOpen && !isDemoAccount ? [
             FSSettingsRow(icon: "flag.fill", title: String(localized: "Claim your .com name"), subtitle: String(localized: "Own the .com? The matching name is held for you"),

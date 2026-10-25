@@ -98,6 +98,19 @@ interface FlagshipServerClient {
         fetchTokenHex: String,
         issuedAt: Long,
     ): GatedRecoveryEnvelope
+
+    /** SEC-REPAIR-001: the gated fetch carrying the recovery passkey's assertion over a challenge
+     *  from [recoveryChallenge]. `.com` refuses a record that holds the passkey's key without it. */
+    suspend fun fetchWrappedUmkWithPasskey(
+        username: String,
+        fetchTokenHex: String,
+        issuedAt: Long,
+        passkey: kotlinx.serialization.json.JsonObject,
+    ): GatedRecoveryEnvelope = fetchWrappedUmkWithToken(username, fetchTokenHex, issuedAt)
+
+    /** `POST /api/recovery/by-username/<u>/challenge` → what the recovery passkey signs in the
+     *  same sheet that evaluates the PRF. Null from a client that can't ask (tests, old fakes). */
+    suspend fun recoveryChallenge(username: String): RecoveryChallenge? = null
     /** Register an FCM device token with .com so the Worker can relay
      *  encrypted push payloads. Returns a handle to later revoke. */
     suspend fun registerPushToken(req: PushTokenRegisterRequest): PushTokenRegisterResponse
@@ -492,6 +505,9 @@ data class WipeRestartRequest(
     val request: Inner,
     val signature: String,
     val idempotencyKey: String,
+    /** SEC-REPAIR-001: the new passkey's attestation object (base64url), for the credential the
+     *  old IRK signs, so the new record keeps `.com`'s passkey check. */
+    val newPasskeyAttestationObject: String? = null,
 ) {
     @Serializable
     data class Inner(
@@ -1276,10 +1292,17 @@ data class RecoveryEnvelopeRequest(
     val wrappedUmk: String,
     val wrappedAdminRoot: String? = null,
     val wrappedAcmeAccountKey: String? = null,
+    /** SEC-REPAIR-001: the platform's attestation object for the passkey the claim names
+     *  (base64url); `.com` keeps its public key and checks it at recovery. */
+    val passkeyAttestationObject: String? = null,
 )
 
 @Serializable
 data class RecoveryEnvelopeResponse(val ok: Boolean)
+
+/** `POST /api/recovery/by-username/<u>/challenge`: base64url, signed by the recovery passkey. */
+@Serializable
+data class RecoveryChallenge(val challenge: String, val expiresAt: Long? = null)
 
 /** Response shape for the recovery fetch path. The Worker returns
  *  `wrappedUmk` (the single self-contained blob), `credentialId`, and the
@@ -1303,6 +1326,8 @@ data class RecoveryEnvelope(
 data class GatedRecoveryFetchRequest(
     val fetchToken: String, // hex
     val issuedAt: Long,
+    /** `{ challenge, assertion: { credentialId, authenticatorData, clientDataJSON, signature } }`. */
+    val passkey: kotlinx.serialization.json.JsonObject? = null,
 )
 
 /** Success body of the gated fetch. Mirrors handleFetchWrappedUmkWithToken
@@ -1335,6 +1360,10 @@ data class GatedRecoveryEnvelope(
      *  for a legacy (v1) record, whose escrow extras carry no signature. */
     val signed: com.flagshipserver.app.core.SignedRecoveryRecord? = null,
     val legacy: Boolean? = null,
+    /** SEC-REPAIR-001: true = a record from before the passkey check, released on the passphrase
+     *  alone; the apps offer once to update it. */
+    val passkeyLegacy: Boolean? = null,
+    val passkeyChecked: Boolean? = null,
 )
 
 /** The gated fetch's recovery-session attestation. Opaque to clients. */
@@ -1562,6 +1591,31 @@ class LiveFlagshipServerClient(
             GatedRecoveryFetchRequest(fetchToken = fetchTokenHex, issuedAt = issuedAt),
             serializer = GatedRecoveryFetchRequest.serializer(),
             responseSerializer = GatedRecoveryEnvelope.serializer(),
+        )
+    }
+
+    override suspend fun fetchWrappedUmkWithPasskey(
+        username: String,
+        fetchTokenHex: String,
+        issuedAt: Long,
+        passkey: kotlinx.serialization.json.JsonObject,
+    ): GatedRecoveryEnvelope {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            "$base/api/recovery/by-username/$encoded/fetch",
+            GatedRecoveryFetchRequest(fetchToken = fetchTokenHex, issuedAt = issuedAt, passkey = passkey),
+            serializer = GatedRecoveryFetchRequest.serializer(),
+            responseSerializer = GatedRecoveryEnvelope.serializer(),
+        )
+    }
+
+    override suspend fun recoveryChallenge(username: String): RecoveryChallenge {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            "$base/api/recovery/by-username/$encoded/challenge",
+            kotlinx.serialization.json.JsonObject(emptyMap()),
+            serializer = kotlinx.serialization.json.JsonObject.serializer(),
+            responseSerializer = RecoveryChallenge.serializer(),
         )
     }
 

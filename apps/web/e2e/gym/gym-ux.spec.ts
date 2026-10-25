@@ -19,16 +19,21 @@
  * voiciNames.ts), name-dibs/window (nameDibs.ts handleNameDibsWindow).
  */
 
+import { readFileSync, existsSync } from "node:fs";
+import { extname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
 import {
   HOME,
   OFFICE,
   PASSPHRASE,
   USER,
+  authorize,
   livePod,
   mock,
   reachHome,
   renderHome,
+  sawToast,
   seedSession,
   sensitive,
   serverDetail,
@@ -974,5 +979,504 @@ test.describe("gym ux first contact", () => {
     await expect(page.locator("#server-key-card")).toHaveCount(0);
     await shot(page, testInfo, "first-contact-silent-grant");
     expect(m.sent("/api/screens/server-wildcard-grant")).toHaveLength(1);
+  });
+});
+
+// ───────────────────────────── passkey recovery (SEC-REPAIR-001) ─────────────────────────────
+//
+// The recovery window (recovery.<apex>) asks for the passphrase, then `.com`'s challenge, then ONE
+// passkey sheet that gives the PRF and signs the challenge, then the fetch carrying that signature.
+// It runs here on its real origin with a virtual WebAuthn authenticator (PRF on); its messages to the
+// webapp are read from a stand-in opener. The webapp's own screens are driven with a stand-in window.
+
+const RECOVERY_HOST = "recovery.flagshipserver.com";
+const RECOVERY_DIR = fileURLToPath(new URL("../../public/recovery/", import.meta.url));
+const RECOVERY_USER = "gymrec";
+const RECOVERY_PASS = "a whole sentence I will remember";
+const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, OPTIONS" };
+const corsJson = (status: number, body: unknown) => ({ status, raw: JSON.stringify(body), contentType: "application/json", headers: CORS });
+const b64url = (b: Uint8Array) => Buffer.from(b).toString("base64url");
+
+type Posted = { type: string; [k: string]: any };
+
+/** The recovery page's own files, served on its origin; `.com` answers with CORS like the Worker. */
+async function recoveryPage(page: Page, m: Mock): Promise<void> {
+  m.on("OPTIONS", () => true, () => ({ status: 204, raw: "", contentType: "text/plain", headers: CORS }));
+  m.get((u: URL) => u.host === RECOVERY_HOST, (c: Call) => {
+    const rel = c.url.pathname === "/" ? "index.html" : c.url.pathname.slice(1);
+    const file = RECOVERY_DIR + rel;
+    if (!existsSync(file)) return { status: 404, raw: "", contentType: "text/plain" };
+    const type = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" }[extname(file)] ?? "application/octet-stream";
+    return { raw: readFileSync(file), contentType: type };
+  });
+  // The page talks to its opener (the webapp); here the opener records what it is sent.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __posted: unknown[]; opener: unknown };
+    w.__posted = [];
+    w.opener = { closed: false, postMessage: (msg: unknown) => w.__posted.push(msg) };
+  });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("WebAuthn.enable");
+  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: { protocol: "ctap2", ctap2Version: "ctap2_1", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, hasPrf: true, automaticPresenceSimulation: true },
+  });
+}
+
+async function posted(page: Page, type: string, count = 1): Promise<Posted> {
+  await page.waitForFunction(({ type, count }) => ((window as unknown as { __posted: Posted[] }).__posted ?? []).filter((x) => x.type === type || x.type === "flagship-recovery-error").length >= count, { type, count }, { timeout: 60_000 });
+  const all = await page.evaluate(() => (window as unknown as { __posted: Posted[] }).__posted);
+  const err = all.find((x) => x.type === "flagship-recovery-error");
+  if (err) throw new Error(`recovery window error: ${err.reason}`);
+  return all.filter((x) => x.type === type)[count - 1]!;
+}
+
+/** Enrol through the recovery window: the webapp's payload, the passphrase twice, one passkey. */
+async function enrolInWindow(page: Page, umk: number[]): Promise<Posted> {
+  await page.goto(`https://${RECOVERY_HOST}/#enroll`);
+  await expect(page.locator("#view-enroll")).toBeVisible();
+  await page.evaluate(
+    ({ umk, user }) => window.dispatchEvent(new MessageEvent("message", { origin: "https://webapp.flagshipserver.com", data: { type: "flagship-recovery-enroll-payload", umk, username: user } })),
+    { umk, user: RECOVERY_USER },
+  );
+  await page.fill("#enroll-passphrase", RECOVERY_PASS);
+  await page.fill("#enroll-passphrase-2", RECOVERY_PASS);
+  await page.click("#enroll-go");
+  return posted(page, "flagship-recovery-enroll-result");
+}
+
+/** `.com`'s side of a recovery over the record `held` (credential, ciphertext, salt hash). */
+function recoveryCom(m: Mock, held: { credentialIdHex: string; wrappedUmkB64: string; prfSaltHashHex: string }, opts: { passkeyRequired: boolean; challenge: string | null; passkeyLegacy: boolean }) {
+  m.first("GET", (u: URL) => u.pathname === `/api/recovery/by-username/${RECOVERY_USER}`, () => corsJson(200, { credentialId: held.credentialIdHex, hasFetchTokenGate: true, passkeyRequired: opts.passkeyRequired, legacy: true }));
+  m.first("POST", (u: URL) => u.pathname === `/api/recovery/by-username/${RECOVERY_USER}/challenge`, () =>
+    opts.challenge ? corsJson(200, { challenge: opts.challenge, expiresAt: Date.now() + 300_000 }) : corsJson(503, { error: "passkey recovery is not configured", code: "passkey-unavailable" }),
+  );
+  m.first("POST", (u: URL) => u.pathname === `/api/recovery/by-username/${RECOVERY_USER}/fetch`, () =>
+    corsJson(200, {
+      username: RECOVERY_USER,
+      credentialId: held.credentialIdHex,
+      wrappedUmk: held.wrappedUmkB64,
+      prfSaltHash: held.prfSaltHashHex,
+      legacy: true,
+      ...(opts.passkeyLegacy ? { passkeyLegacy: true } : { passkeyChecked: true }),
+    }),
+  );
+}
+
+async function recoverInWindow(page: Page): Promise<void> {
+  await page.goto(`https://${RECOVERY_HOST}/?t=${Date.now()}#recover`);
+  await expect(page.locator("#view-recover")).toBeVisible();
+  await page.evaluate(() => ((window as unknown as { __posted: unknown[] }).__posted = []));
+  await page.fill("#recover-username", RECOVERY_USER);
+  await page.fill("#recover-passphrase", RECOVERY_PASS);
+  await page.click("#recover-go");
+}
+
+const UMK = Array.from({ length: 32 }, (_, i) => (i * 13 + 7) & 0xff);
+
+test.describe("gym ux passkey recovery", () => {
+  test("gym ux passkey recovery the recovery window signs .com's challenge in the one passkey sheet and the fetch carries it", async ({ page }, testInfo) => {
+    const m = await mock(page);
+    await recoveryPage(page, m);
+    const enrolled = await enrolInWindow(page, UMK);
+    expect(enrolled.passkeyAttestationObject).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+    expect(enrolled.credentialIdHex).toMatch(/^[0-9a-f]{16,}$/);
+
+    const challenge = b64url(Uint8Array.from({ length: 48 }, (_, i) => (i * 29 + 3) & 0xff));
+    recoveryCom(m, enrolled as never, { passkeyRequired: true, challenge, passkeyLegacy: false });
+    await recoverInWindow(page);
+    const result = await posted(page, "flagship-recovery-recover-result");
+    expect(result.umk).toEqual(UMK);
+    expect(result.passkeyLegacy).toBeUndefined();
+    await shot(page, testInfo, "recovery-window-done");
+
+    const order = ["GET", "POST", "POST"].map((method, i) => m.calls.findIndex((c) => c.method === method && c.url.pathname === [`/api/recovery/by-username/${RECOVERY_USER}`, `/api/recovery/by-username/${RECOVERY_USER}/challenge`, `/api/recovery/by-username/${RECOVERY_USER}/fetch`][i]));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    const fetch = m.last(`/api/recovery/by-username/${RECOVERY_USER}/fetch`)!;
+    expect(fetch.body.passkey.challenge).toBe(challenge);
+    expect(Buffer.from(fetch.body.passkey.assertion.credentialId, "base64url").toString("hex")).toBe(enrolled.credentialIdHex);
+    const client = JSON.parse(Buffer.from(fetch.body.passkey.assertion.clientDataJSON, "base64url").toString("utf8"));
+    expect(client).toMatchObject({ type: "webauthn.get", challenge, origin: `https://${RECOVERY_HOST}` });
+    expect(fetch.body.fetchToken).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("gym ux passkey recovery a record from before offers Update once; Update sends a new passkey, Not now is remembered", async ({ page }, testInfo) => {
+    const m = await mock(page);
+    await recoveryPage(page, m);
+    const enrolled = await enrolInWindow(page, UMK);
+
+    // A record from before: `.com` issues no challenge it can check, the fetch carries no passkey.
+    recoveryCom(m, enrolled as never, { passkeyRequired: false, challenge: null, passkeyLegacy: true });
+    await recoverInWindow(page);
+    const panel = page.locator("#view-recover-update");
+    await expect(panel.locator("#recover-update-title")).toHaveText("Update your account recovery", { timeout: 60_000 });
+    await expect(panel).toContainText("Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy.");
+    await shot(page, testInfo, "recovery-window-update");
+    expect(m.last(`/api/recovery/by-username/${RECOVERY_USER}/fetch`)!.body.passkey).toBeUndefined();
+    await page.click("#recover-update-go");
+    const updated = await posted(page, "flagship-recovery-recover-result");
+    expect(updated.umk).toEqual(UMK);
+    expect(updated.passkeyLegacy).toBe(true);
+    expect(updated.update.passkeyAttestationObject).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+    expect(updated.update.prfSaltHashHex).toBe(enrolled.prfSaltHashHex);
+    expect(updated.update.fetchTokenHashHex).toBe(enrolled.fetchTokenHashHex);
+
+    // The new passkey unwraps the re-wrapped key; Not now is remembered on this device.
+    recoveryCom(m, updated.update, { passkeyRequired: false, challenge: null, passkeyLegacy: true });
+    await recoverInWindow(page);
+    await expect(panel).toBeVisible({ timeout: 60_000 });
+    await page.click("#recover-update-later");
+    const declined = await posted(page, "flagship-recovery-recover-result");
+    expect(declined).toMatchObject({ updateDeclined: true, passkeyLegacy: true });
+    expect(declined.update).toBeUndefined();
+
+    await recoverInWindow(page);
+    const quiet = await posted(page, "flagship-recovery-recover-result");
+    expect(quiet.updateDeclined).toBeUndefined();
+    expect(quiet.update).toBeUndefined();
+    expect(quiet.umk).toEqual(UMK);
+  });
+});
+
+// ───────────── the webapp's side: one-time update prompt, enrolment and wipe & restart ─────────────
+
+/** A stand-in recovery window: answers the webapp's popup protocol with `answer(mode)`. */
+async function standInRecoveryWindow(page: Page, answers: Record<string, Record<string, unknown>>): Promise<void> {
+  await page.evaluate((answers) => {
+    const w = window as unknown as { __opened: string[]; open: (u: string) => unknown };
+    w.__opened = [];
+    w.open = (url: string) => {
+      w.__opened.push(String(url));
+      const mode = String(url).split("#")[1] ?? "";
+      // The webapp's recovery origin is recovery.<its control apex> (here, of the gym's own host).
+      const origin = String(url).split("#")[0]!.replace(/\/+$/, "");
+      const fire = (data: unknown) => window.dispatchEvent(new MessageEvent("message", { origin, data }));
+      let ready = false;
+      return {
+        closed: false,
+        close() {
+          this.closed = true;
+        },
+        postMessage(msg: { type: string }) {
+          if (msg.type === "flagship-recovery-hello" && !ready) {
+            ready = true;
+            setTimeout(() => fire({ type: "flagship-recovery-ready", mode }), 0);
+            if (mode === "recover") setTimeout(() => fire(answers.recover), 10);
+          }
+          if (msg.type === "flagship-recovery-enroll-payload") setTimeout(() => fire(answers.enroll), 0);
+        },
+      };
+    };
+  }, answers);
+}
+
+const ATT_STANDIN = b64url(Uint8Array.from({ length: 96 }, (_, i) => (i * 5 + 1) & 0xff));
+const enrollAnswer = (cred = "c0ffee00".repeat(4)) => ({
+  type: "flagship-recovery-enroll-result",
+  credentialIdHex: cred,
+  wrappedUmkB64: Buffer.from(Uint8Array.from({ length: 60 }, (_, i) => i)).toString("base64"),
+  fetchTokenHashHex: "ab".repeat(32),
+  prfSaltHashHex: "cd".repeat(32),
+  passkeyAttestationObject: ATT_STANDIN,
+});
+
+test.describe("gym ux recovery update", () => {
+  test("gym ux recovery update a record from before is asked about once; Not now is remembered and Settings keeps Update", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    world(m, [livePod(HOME)]);
+    m.get("/api/recovery/by-username/smoketest", { credentialId: "aa".repeat(16), hasFetchTokenGate: true, passkeyRequired: false, legacy: true });
+    // The first Home of the session with a server asks.
+    await page.click('[data-tab-target="settings"]');
+    await page.click('[data-tab-target="home"]');
+    const prompt = page.locator(".modal-overlay", { hasText: "Update your account recovery" });
+    await expect(prompt.locator(".modal-message")).toHaveText(
+      "Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Enter your recovery passphrase, then confirm with your passkey once.",
+      { timeout: 20_000 },
+    );
+    await shot(page, testInfo, "recovery-update-prompt");
+    await prompt.locator('[data-modal-choice="later"]').click();
+    await expect(prompt).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem("flagship.recoveryUpdateAsked.smoketest"))).toBe("1");
+    expect(m.sent("/api/recovery", "POST").filter((c) => c.url.pathname === "/api/recovery")).toHaveLength(0);
+
+    // Asked once: another Home shows nothing; Settings keeps a quiet Update row.
+    await page.click('[data-tab-target="settings"]');
+    await page.click('[data-tab-target="home"]');
+    await page.waitForTimeout(1_500);
+    await expect(page.locator(".modal-overlay")).toHaveCount(0);
+    await page.click('[data-tab-target="settings"]');
+    await page.click("#settings-tab-recovery");
+    await expect(page.locator("#recovery-cloud-update")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#recovery-cloud-update")).toHaveText("Update account recovery");
+    await shot(page, testInfo, "recovery-update-row");
+  });
+
+  test("gym ux recovery update Update re-enrols and the record carries the passkey's attestation", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    world(m, [livePod(HOME)]);
+    let legacy = true;
+    m.get("/api/recovery/by-username/smoketest", () => ({ json: { credentialId: "aa".repeat(16), hasFetchTokenGate: true, passkeyRequired: !legacy, legacy } }));
+    m.get("/api/username/smoketest", { username: USER, irkPub: keys.irkPubHex, adminRootPub: keys.adminPubHex });
+    m.post((u: URL) => u.pathname === "/api/recovery", () => {
+      legacy = false;
+      return { json: { ok: true, generation: 1, passkeyChecked: true } };
+    });
+    await standInRecoveryWindow(page, { enroll: enrollAnswer() });
+    await page.click('[data-tab-target="settings"]');
+    await page.click("#settings-tab-recovery");
+    await expect(page.locator("#recovery-cloud-update")).toBeVisible({ timeout: 10_000 });
+    await page.click("#recovery-cloud-update");
+    const up = await m.waitFor((u: URL) => u.pathname === "/api/recovery");
+    expect(up.body.passkeyAttestationObject).toBe(ATT_STANDIN);
+    expect(up.body.claim).toMatchObject({ credentialIdHex: "c0ffee00".repeat(4), priorDigestHex: "legacy", irkPubHex: keys.irkPubHex });
+    expect(JSON.stringify(up.body.claim)).not.toContain(ATT_STANDIN);
+    const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!).toMatch(/^https?:\/\/recovery\./);
+    expect(opened[0]!.endsWith("/#enroll")).toBe(true);
+    await sawToast(page, "Account recovery updated.");
+    await expect(page.locator("#recovery-cloud-update")).toBeHidden({ timeout: 10_000 });
+    await shot(page, testInfo, "recovery-updated");
+  });
+
+  test("gym ux recovery update wipe and restart sends the new passkey's attestation", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    world(m, [livePod(HOME)]);
+    m.get(`/api/accounts/${"0f1e2d3c4b5a69788796a5b4c3d2e1f0"}/directory`, { devices: [], selfProfiles: [], managedProfiles: [], grants: [] });
+    m.post("/api/users/smoketest/wipe-restart", { ok: true, auditSeq: 7, newIrkPub: "cc".repeat(32), revokedGrantIds: [] });
+    await standInRecoveryWindow(page, { enroll: enrollAnswer("beef0000".repeat(4)) });
+    await page.click('[data-tab-target="settings"]');
+    await page.click("#settings-tab-trusted-devices");
+    await page.click("#wipe-restart-btn");
+    await page.locator("dialog.ceremony-dialog [data-primary]").click();
+    await page.fill(".modal-input", "a brand new browser passphrase");
+    await page.click("[data-modal-ok]");
+    const wipe = await m.waitFor("/api/users/smoketest/wipe-restart");
+    expect(wipe.body.newPasskeyAttestationObject).toBe(ATT_STANDIN);
+    expect(wipe.body.request).toMatchObject({ username: USER, oldIrkPub: keys.irkPubHex, newCredentialId: "beef0000".repeat(4) });
+    await shot(page, testInfo, "wipe-restart-attestation");
+  });
+});
+
+// ───────────────────────────── browser access requests (SEC-BROWSER-002) ─────────────────────────────
+
+const BROWSER_CANON: [string, string] = ["/lib/browserGrant.js", "canonicalBrowserGrantAnswer"];
+type GrantAsk = { requestId: string; serviceId: string; capabilities: string[]; origins: string[]; localNetwork: null | { kind: string; hosts?: string[] }; duration: "once" | "session" | "service"; explanation: string; at: number; meaning: string[] };
+const grantAsk = (id: string, extra: Partial<GrantAsk> = {}): GrantAsk => ({
+  requestId: id,
+  serviceId: SERVICE_ID,
+  capabilities: ["navigate", "read-dom"],
+  origins: ["*.example.com", "shop.example.org"],
+  localNetwork: { kind: "exact", hosts: ["printer.local"] },
+  duration: "session",
+  explanation: "To print your receipts",
+  at: Date.now(),
+  meaning: ["BOX ENGLISH NEVER SHOWN"],
+  ...extra,
+});
+
+/** The box's owner routes for browser grants (browser/grantRequests.ts): the list, and answers that remove the ask. */
+function browserBox(m: Mock, page: Page, keys: Keys, state: { requests: GrantAsk[] }): Mock {
+  m.get(box(HOME, "/api/browser/owner/grant-requests"), () => ({ json: { requests: state.requests } }));
+  m.post(box(HOME, "/api/browser/owner/grant-requests/answer"), async (c: Call) => {
+    const r = state.requests.find((q) => q.requestId === c.body.requestId);
+    if (!r) return { status: 404, json: { error: "that request is no longer waiting" } };
+    if (c.body.decision === "allow") {
+      const arg = { serverDomain: HOME, requestId: r.requestId, serviceId: r.serviceId, decision: "allow", duration: r.duration, capabilities: r.capabilities, origins: r.origins, localNetwork: r.localNetwork, issuedAt: c.body.issuedAt };
+      if (!(await authorize(page, keys, BROWSER_CANON, arg, c.body.signature))) return { status: 403, json: { error: "that answer was not signed by the owner" } };
+    }
+    state.requests = state.requests.filter((q) => q !== r);
+    return { json: { ok: true } };
+  });
+  return m;
+}
+
+test.describe("gym ux browser grants", () => {
+  test("gym ux browser grants an ask shows in a sheet and under Activity; Allow signs the ask's duration and Deny is unsigned", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    const state = { requests: [grantAsk("11111111-1111-4111-8111-111111111111"), grantAsk("22222222-2222-4222-8222-222222222222", { duration: "once", localNetwork: { kind: "whole-lan" }, origins: [], explanation: "" })] };
+    const m = browserBox(await mock(page), page, keys, state);
+    world(m, [livePod(HOME)]);
+    await page.evaluate(SW_GENERIC);
+
+    const sheet = page.locator(".modal-overlay", { has: page.locator("[data-browser-grant-sheet]") });
+    await expect(sheet.locator("[data-browser-grant-sheet]")).toHaveText("Browser access request", { timeout: 10_000 });
+    await expect(sheet.locator("[data-grant-title]")).toHaveText("notes wants to use this server's browser.");
+    await expect(sheet.locator("[data-grant-sites]")).toContainText("*.example.com and every address under it");
+    await expect(sheet.locator("[data-grant-sites]")).toContainText("shop.example.org");
+    await expect(sheet.locator("[data-grant-lan]")).toHaveText("These devices on your network: printer.local");
+    await expect(sheet.locator("[data-grant-caps]")).toContainText("Open pages");
+    await expect(sheet.locator("[data-grant-caps]")).toContainText("Read page content");
+    await expect(sheet.locator("[data-grant-duration]")).toHaveText("Until this browser session ends");
+    await expect(sheet.locator("[data-grant-explanation]")).toHaveText("The app says: “To print your receipts”");
+    await expect(sheet).toContainText("If you deny, the app has to wait before asking again.");
+    await expect(sheet).not.toContainText("BOX ENGLISH");
+    await expect(sheet.locator('[data-choice="allow"]')).toHaveText("Allow for this session");
+    await shot(page, testInfo, "browser-grant-sheet");
+    await sheet.locator('[data-choice="allow"]').click();
+    const allow = await m.waitFor("/api/browser/owner/grant-requests/answer");
+    expect(allow.body).toMatchObject({ requestId: "11111111-1111-4111-8111-111111111111", decision: "allow" });
+    const r1 = grantAsk("11111111-1111-4111-8111-111111111111");
+    expect(await signer(page, keys, BROWSER_CANON, { serverDomain: HOME, requestId: r1.requestId, serviceId: SERVICE_ID, decision: "allow", duration: "session", capabilities: r1.capabilities, origins: r1.origins, localNetwork: r1.localNetwork, issuedAt: allow.body.issuedAt }, allow.body.signature)).toBe("admin");
+
+    // A one-visit ask for the whole local network: Allow once is offered; Not now, then Deny it from Activity.
+    await expect(page.locator("[data-grant-lan]")).toHaveText("Every device on your local network", { timeout: 10_000 });
+    await expect(page.locator('.modal-overlay [data-choice="allow"]')).toHaveText("Allow once");
+    await page.locator('.modal-overlay [data-choice="later"]').click();
+    await page.click('[data-tab-target="activity"]');
+    const card = page.locator('#activity-browser [data-browser-request="22222222-2222-4222-8222-222222222222"]');
+    await expect(card).toContainText("notes wants to use this server's browser.", { timeout: 10_000 });
+    await expect(page.locator("#activity-browser-heading")).toHaveText("Browser access requests");
+    await shot(page, testInfo, "browser-grant-activity");
+    await card.locator('[data-browser-answer="deny"]').click();
+    const deny = await m.waitFor("/api/browser/owner/grant-requests/answer", "POST", 2);
+    expect(deny.body).toMatchObject({ requestId: "22222222-2222-4222-8222-222222222222", decision: "deny" });
+    expect(deny.body.signature).toBeUndefined();
+    await expect(page.locator("#activity-browser")).toBeHidden({ timeout: 10_000 });
+  });
+
+  test("gym ux browser grants the app's page lists what the manifest grants and answers a waiting ask", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin" });
+    await page.evaluate(async () => (await import("/lib/pushSetting.js")).setPushNotificationsEnabled?.(false));
+    const state = { requests: [grantAsk("33333333-3333-4333-8333-333333333333", { duration: "service", localNetwork: null, origins: ["docs.example.com"] })] };
+    const m = browserBox(await mock(page), page, keys, state);
+    world(m, [livePod(HOME)]);
+    m.get(box(HOME, `/api/screens/app-detail/${SERVICE_ID}`), {
+      app: { serviceId: SERVICE_ID, slug: "notes", creator: "smoketest", status: "running", url: `https://notes.${HOME}` },
+      manifest: { name: "notes", browser: { domains: ["example.com"] } },
+      dataLayerInstances: [],
+      members: [],
+    });
+    await page.evaluate(async (id) => (await import("/views/service-detail.js")).enterServiceDetail(id), SERVICE_ID);
+    const section = page.locator("#sd-browser-access");
+    await expect(section.locator("[data-browser-manifest]")).toContainText("example.com", { timeout: 10_000 });
+    await expect(section.locator("[data-browser-manifest]")).toContainText("Approved when you installed it");
+    const ask = section.locator('[data-browser-request="33333333-3333-4333-8333-333333333333"]');
+    await expect(ask).toContainText("docs.example.com");
+    await expect(ask).toContainText("Until you remove it");
+    await expect(ask.locator('[data-browser-answer="allow"]')).toHaveText("Always allow");
+    await shot(page, testInfo, "browser-grant-app-page");
+    await ask.locator('[data-browser-answer="allow"]').click();
+    const allow = await m.waitFor("/api/browser/owner/grant-requests/answer");
+    expect(await signer(page, keys, BROWSER_CANON, { serverDomain: HOME, requestId: "33333333-3333-4333-8333-333333333333", serviceId: SERVICE_ID, decision: "allow", duration: "service", capabilities: ["navigate", "read-dom"], origins: ["docs.example.com"], localNetwork: null, issuedAt: allow.body.issuedAt }, allow.body.signature)).toBe("admin");
+    await expect(section.locator("[data-browser-request]")).toHaveCount(0, { timeout: 10_000 });
+    await expect(section.locator("[data-browser-manifest]")).toBeVisible();
+  });
+});
+
+// ───────────────────────────── upstream sync (N12) ─────────────────────────────
+
+const SYNC_BUILD = "fedcba9876543210";
+const SYNC_COMMIT = "9f8e7d6c5b4a39281706f5e4d3c2b1a0ffeeddcc";
+const syncDetail = (extra: Record<string, unknown> = {}) => ({
+  app: { serviceId: SERVICE_ID, slug: "notes", creator: "smoketest", status: "running", url: `https://notes.${HOME}` },
+  manifest: { name: "notes" },
+  dataLayerInstances: [],
+  members: [],
+  editable: true,
+  importedFrom: { repo: "https://github.com/alice/notes.git", commit: "1".repeat(40) },
+  ...extra,
+});
+const syncAnswer = (extra: Record<string, unknown> = {}) => ({
+  ok: true,
+  buildId: SYNC_BUILD,
+  candidateCommit: SYNC_COMMIT,
+  upToDate: false,
+  proposal: {
+    upstreamChanged: ["src/a.ts", "src/b.ts", "flagship.app.json"],
+    localChanged: ["src/b.ts", "README.md"],
+    takeUpstream: ["src/a.ts", "flagship.app.json"],
+    conflicts: ["src/b.ts"],
+    alreadyApplied: ["LICENSE"],
+    capabilityChanges: [{ section: "network.egress", added: ["api.example.com"], removed: [] }],
+    clean: false,
+  },
+  ...extra,
+});
+
+async function openSyncedApp(page: Page, m: Mock, detail = syncDetail()): Promise<void> {
+  world(m, [livePod(HOME)]);
+  m.get(box(HOME, `/api/screens/app-detail/${SERVICE_ID}`), detail);
+  await page.evaluate(async (id) => (await import("/views/service-detail.js")).enterServiceDetail(id), SERVICE_ID);
+}
+
+test.describe("gym ux upstream sync", () => {
+  test("gym ux upstream sync the proposal shows new permissions apart and the conflicts, then opens the build to deploy", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    m.post(box(HOME, `/api/build/apps/${SERVICE_ID}/sync`), syncAnswer());
+    m.get(box(HOME, `/api/build/sessions/${SYNC_BUILD}`), { state: { buildId: SYNC_BUILD, mode: "git", serverFqdn: HOME, createdAt: 1, gitFit: true, name: "notes" }, files: ["a", "b"] });
+    await openSyncedApp(page, m);
+    const row = page.locator("#sd-sync-upstream");
+    await expect(row).toContainText("Check for updates from github.com/alice/notes", { timeout: 10_000 });
+    await row.click();
+    const sheet = page.locator("[data-sync-sheet]");
+    await sheet.locator("#sync-ref").fill("v2.0");
+    await sheet.locator('[data-sync-choice="check"]').click();
+    const sent = await m.waitFor(`/api/build/apps/${SERVICE_ID}/sync`);
+    expect(sent.body).toEqual({ ref: "v2.0" });
+    await expect(sheet.locator("[data-sync-title]")).toHaveText("Update from github.com/alice/notes", { timeout: 10_000 });
+    await expect(sheet.locator("[data-sync-version]")).toHaveText("Version 9f8e7d6c5b4a");
+    const perms = sheet.locator("[data-sync-capabilities]");
+    await expect(perms).toContainText("New permissions");
+    await expect(perms).toContainText("This update changes what the app is allowed to do. Review before you deploy.");
+    await expect(perms.locator('[data-sync-section="network.egress"]')).toContainText("Internet access");
+    await expect(perms.locator('[data-sync-section="network.egress"]')).toContainText("Adds: api.example.com");
+    await expect(sheet.locator("[data-sync-summary]")).toContainText("2 files updated from upstream");
+    await expect(sheet.locator("[data-sync-summary]")).toContainText("1 of your changes kept");
+    await expect(sheet.locator("[data-sync-summary]")).toContainText("1 file already matches");
+    await expect(sheet.locator("[data-sync-conflicts]")).toContainText("1 conflict: your version was kept");
+    await expect(sheet.locator("[data-sync-conflicts]")).toContainText("src/b.ts");
+    await expect(sheet.locator("[data-sync-footer]")).toHaveText("Nothing goes live until you deploy.");
+    // The permissions come before the code.
+    expect(await sheet.evaluate((el) => {
+      const p = el.querySelector("[data-sync-capabilities]")!;
+      const s = el.querySelector("[data-sync-summary]")!;
+      return !!(p.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING);
+    })).toBe(true);
+    await shot(page, testInfo, "upstream-sync-proposal");
+    await sheet.locator('[data-sync-choice="review"]').click();
+    await expect(page.locator("#view-build-git")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#build-git-deploy")).toBeVisible({ timeout: 10_000 });
+    expect(m.sent(`/api/build/sessions/${SYNC_BUILD}/discard`)).toHaveLength(0);
+    expect(m.sent(/\/deploy$/)).toHaveLength(0);
+  });
+
+  test("gym ux upstream sync up to date discards the opened build, and an app not imported here says so", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    let upToDate = true;
+    m.post(box(HOME, `/api/build/apps/${SERVICE_ID}/sync`), () =>
+      upToDate ? { json: syncAnswer({ upToDate: true, candidateCommit: "1".repeat(40), proposal: { upstreamChanged: [], localChanged: [], takeUpstream: [], conflicts: [], alreadyApplied: [], capabilityChanges: [], clean: true } }) } : { status: 404, json: { error: "this app was not imported from a repo on this server" } },
+    );
+    m.post(box(HOME, `/api/build/sessions/${SYNC_BUILD}/discard`), { ok: true });
+    await openSyncedApp(page, m, syncDetail({ importedFrom: undefined, adaptedFrom: { repo: "github.com/alice/notes" } }));
+    await page.locator("#sd-sync-upstream").click();
+    const sheet = page.locator("[data-sync-sheet]");
+    await sheet.locator('[data-sync-choice="check"]').click();
+    await expect(sheet.locator("[data-sync-up-to-date]")).toHaveText("You already run the latest version from github.com/alice/notes.", { timeout: 10_000 });
+    await shot(page, testInfo, "upstream-sync-up-to-date");
+    await sheet.locator('[data-sync-choice="close"]').click();
+    await m.waitFor(`/api/build/sessions/${SYNC_BUILD}/discard`);
+    await expect(sheet).toHaveCount(0);
+
+    upToDate = false;
+    await page.locator("#sd-sync-upstream").click();
+    await page.locator('[data-sync-sheet] [data-sync-choice="check"]').click();
+    await expect(page.locator("[data-sync-sheet] [data-sync-error]")).toHaveText("This app wasn't imported from a repo on this server, so it can't check for updates.", { timeout: 10_000 });
+    await page.locator('[data-sync-sheet] [data-sync-choice="cancel"]').click();
+    expect(m.sent(`/api/build/sessions/${SYNC_BUILD}/discard`)).toHaveLength(1);
+  });
+
+  test("gym ux upstream sync an app with no repo offers no check", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin" });
+    const m = await mock(page);
+    await openSyncedApp(page, m, syncDetail({ importedFrom: undefined }));
+    await expect(page.locator("#service-detail-content .card-title").first()).toContainText("notes", { timeout: 10_000 });
+    await expect(page.locator("#sd-sync-upstream")).toHaveCount(0);
+    await shot(page, testInfo, "upstream-sync-no-repo");
   });
 });

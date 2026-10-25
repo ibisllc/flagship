@@ -93,6 +93,8 @@ import { initAppAccessView } from "./views/app-access.js";
 import { initAppDbView } from "./views/app-db.js";
 import { startAccessAlerts } from "./lib/accessAlerts.js";
 import { startChatAlerts } from "./lib/chatAlerts.js";
+import { startBrowserGrantAlerts } from "./lib/browserGrantAlerts.js";
+import { startRecoveryUpdatePrompt } from "./lib/recoveryUpdate.js";
 import { canSyncPushSetting, startPushSettingSync } from "./lib/pushSetting.js";
 import { unsubscribeFromWebPush } from "./lib/push.js";
 import { initServiceAccessView } from "./views/service-access.js";
@@ -679,6 +681,10 @@ async function boot() {
   startAccessAlerts({ isUnlocked: sliversUnlocked });
   // App chat requests from other owners' apps (lib/chatAlerts.js), on the same triggers.
   startChatAlerts({ isUnlocked: sliversUnlocked });
+  // An app's request for browser access beyond its manifest (lib/browserGrantAlerts.js), the same way.
+  startBrowserGrantAlerts({ isUnlocked: sliversUnlocked });
+  // A cloud-recovery record from before the passkey check: ask once to update it (lib/recoveryUpdate.js).
+  startRecoveryUpdatePrompt({ isUnlocked: sliversUnlocked });
 
   // The Push notifications switch (same doc, "Turning alerts off"): on load
   // and on every return to the foreground, tell each box whether to send

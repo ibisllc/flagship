@@ -130,6 +130,12 @@ public enum GymOrderCanonical {
             return try? ChatApproval(serverDomain: server, requestId: a.requestId, kind: kind, decision: decision,
                                      issuedAt: a.issuedAt).canonicalBytes()
         }
+        signers.registerCanonical("browser-grant") { p in
+            guard let r = p as? [String: Any], let server = r["serverDomain"] as? String,
+                  let req = r["request"] as? BrowserGrantRequest, let a = r["answer"] as? BrowserGrantAnswerRequest
+            else { return nil }
+            return try? BrowserGrantOrder.answer(for: req, serverDomain: server, decision: a.decision, issuedAt: a.issuedAt).canonicalBytes()
+        }
         signers.registerCanonical("ai-consent") { p in
             guard let r = p as? [String: Any], let server = r["serverDomain"] as? String, let buildId = r["buildId"] as? String,
                   let op = (r["operation"] as? String).flatMap(AiRepairConsent.Operation.init(rawValue:)),

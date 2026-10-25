@@ -28,6 +28,7 @@ import { getSession } from "../lib/state.js";
 import { tr } from "../lib/i18n.js";
 import { noServerCardHtml } from "../lib/noServerCard.js";
 import { renderChatSection } from "../lib/chatAlerts.js";
+import { renderBrowserGrantSection } from "../lib/browserGrantAlerts.js";
 registerView("view-activity", { tab: "activity" });
 
 // The user's online pods (statusByDomain map values), fetched alongside the
@@ -186,9 +187,11 @@ export async function renderActivity() {
   $("activity-with-server")?.toggleAttribute("hidden", noServer);
   if (noServer) {
     $("activity-chat")?.toggleAttribute("hidden", true);
+    $("activity-browser")?.toggleAttribute("hidden", true);
     return;
   }
   void renderChatSection().catch(() => {});
+  void renderBrowserGrantSection().catch(() => {});
   try {
     const { boxes, recovery, audit } = await fanOut();
 

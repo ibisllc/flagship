@@ -81,6 +81,9 @@ public final class AppState {
     /// because it's cheap to refresh on launch from .com, and we want
     /// the source of truth to be the server.
     public var hasCloudRecovery: Bool
+    /// SEC-REPAIR-001: the account's recovery record is from before `.com` checked the passkey
+    /// (`passkeyRequired: false`). Settings keeps a quiet "Update account recovery" row while true.
+    public var recoveryNeedsPasskeyUpdate: Bool = false
     /// True while `.com` refuses this device's reads of the account's
     /// servers and no read token can be minted without a prompt
     /// (docs/account-read-token.md): Home keeps the last state and says
@@ -875,6 +878,7 @@ public final class AppState {
         if let name = currentUser { presentationNames?.clear(name) }
         self.isPaired = false
         self.currentUser = nil
+        self.recoveryNeedsPasskeyUpdate = false
         self.pods = []
         self.serverOrder = []
         self.serverOrderIssuedAt = 0

@@ -46,9 +46,25 @@ import { getSession } from "./state.js";
 import { buildRecoveryEnvelope, ciphertextMismatch, verifySignedRecord } from "./recoveryRecord.js";
 import { controlApex, recoveryOrigin } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
+import { toast } from "./toast.js";
 
 import { tr } from "./i18n.js";
+import { recoveryUpdateAsked, markRecoveryUpdateAsked } from "./recoveryUpdateFlag.js";
 const APEX = controlApex();
+
+/** SEC-REPAIR-001: `.com`'s refusal codes on the recovery fetch, as the apps say them. */
+export const RECOVERY_PASSKEY_ERRORS = Object.freeze({
+  "passkey-required": tr("This recovery needs your passkey. Try again and choose your Flagship passkey."),
+  "passkey-challenge": tr("The passkey check expired. Try again."),
+  "passkey-invalid": tr("That passkey isn't the one your account recovery uses."),
+  "passkey-unavailable": tr("Passkey recovery isn't available right now. Try again later."),
+});
+
+/** The sub-origin flow; tests replace it (the popup needs a real recovery origin). */
+let subOriginFlow = (mode, payload) => runSubOriginFlow(mode, payload);
+export function setRecoveryFlowForTests(fn) {
+  subOriginFlow = fn ?? ((mode, payload) => runSubOriginFlow(mode, payload));
+}
 const RECOVERY_ORIGIN = recoveryOrigin();
 
 /** Time-budget for the popup round-trip; covers WebAuthn UV ceremony. */
@@ -82,7 +98,7 @@ export async function setupCloudRecovery(username) {
   // Drive the sub-origin popup. It will receive the UMK seed +
   // username (+ admin root, when present), prompt the user for a passphrase
   // (Task #74), and postMessage back the wrap result.
-  const result = await runSubOriginFlow("enroll", {
+  const result = await subOriginFlow("enroll", {
     umk: session.umk,
     username,
     ...(adminRootSeed ? { adminRootSeed } : {}),
@@ -90,7 +106,7 @@ export async function setupCloudRecovery(username) {
   if (result.type !== "flagship-recovery-enroll-result") {
     throw new Error(`enroll: ${result.reason ?? tr("no result")}`);
   }
-  const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, fetchTokenHashHex, prfSaltHashHex } = result;
+  const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, fetchTokenHashHex, prfSaltHashHex, passkeyAttestationObject } = result;
   if (typeof credentialIdHex !== "string" || typeof wrappedUmkB64 !== "string") {
     throw new Error("enroll: bad payload from sub-origin");
   }
@@ -102,10 +118,13 @@ export async function setupCloudRecovery(username) {
   if (typeof fetchTokenHashHex !== "string" || typeof prfSaltHashHex !== "string") {
     throw new Error("enroll: sub-origin omitted the passphrase hashes");
   }
-  return await uploadRecord({
+  const out = await uploadRecord({
     session, username, credentialIdHex, wrappedUmkB64, wrappedAdminRootB64,
-    fetchTokenHashHex, prfSaltHashHex,
+    fetchTokenHashHex, prfSaltHashHex, passkeyAttestationObject,
   });
+  // A fresh record with the passkey's key is the update a legacy record was asked for.
+  markRecoveryUpdateAsked(username);
+  return out;
 }
 
 /**
@@ -122,6 +141,14 @@ let lastRecoveryProof = null;
 
 /** True when the last cloud unwrap came from a v1 record whose escrow extras carry no signature. */
 let lastRecordLegacy = false;
+
+/** "updated" / "failed" when the last recovery also ran the one-time passkey update, else null. */
+let lastRecoveryUpdate = null;
+export function takeRecoveryUpdateOutcome() {
+  const v = lastRecoveryUpdate;
+  lastRecoveryUpdate = null;
+  return v;
+}
 export function recoveredRecordWasLegacy() {
   return lastRecordLegacy;
 }
@@ -160,7 +187,17 @@ export function takeRecoveryProof() {
  */
 export async function recoverFromCloud(username) {
   if (!username) throw new Error("username required");
-  const result = await runSubOriginFlow("recover", { hintUsername: username });
+  let result;
+  try {
+    result = await subOriginFlow("recover", { hintUsername: username, askUpdate: !recoveryUpdateAsked(username) });
+  } catch (e) {
+    if (e?.code && RECOVERY_PASSKEY_ERRORS[e.code]) {
+      const out = new Error(RECOVERY_PASSKEY_ERRORS[e.code]);
+      out.code = e.code;
+      throw out;
+    }
+    throw e;
+  }
   if (result.type !== "flagship-recovery-recover-result") {
     throw new Error(`recover: ${result.reason ?? tr("no result")}`);
   }
@@ -177,6 +214,16 @@ export async function recoverFromCloud(username) {
     }
   }
   lastRecordLegacy = !result.signedRecord;
+  const who = typeof result.username === "string" && result.username ? result.username : username;
+  lastRecoveryUpdate = null;
+  if (result.updateDeclined === true || result.update) markRecoveryUpdateAsked(who);
+  if (result.update && typeof result.update === "object") {
+    // The owner said Update in the recovery window: the new record is written with the recovered
+    // key. Best effort: a key rotated since the record was written cannot sign it, and the Settings
+    // row still offers the update.
+    lastRecoveryUpdate = await applyRecoveryUpdate(seed, who, result.update).then(() => "updated", () => "failed");
+    if (lastRecoveryUpdate === "updated") toast(tr("Account recovery updated."), "ok");
+  }
   lastRecoveryProof =
     result.recoveryProof && typeof result.recoveryProof.token === "string"
       ? result.recoveryProof
@@ -293,16 +340,39 @@ export async function enrollNewRecoveryPasskey(umk, username) {
     throw new Error("umk must be a 32-byte Uint8Array");
   }
   if (!username) throw new Error("username required");
-  const result = await runSubOriginFlow("enroll", { umk, username });
+  const result = await subOriginFlow("enroll", { umk, username });
   if (result.type !== "flagship-recovery-enroll-result") {
     throw new Error(`enroll: ${result.reason ?? tr("no result")}`);
   }
-  const { credentialIdHex, wrappedUmkB64 } = result;
+  const { credentialIdHex, wrappedUmkB64, passkeyAttestationObject } = result;
   if (typeof credentialIdHex !== "string" || typeof wrappedUmkB64 !== "string") {
     throw new Error("enroll: bad payload from sub-origin");
   }
   const wrappedUmkBytes = base64ToBytes(wrappedUmkB64);
-  return { credentialIdHex, wrappedUmkB64, wrappedUmkBytes };
+  return {
+    credentialIdHex,
+    wrappedUmkB64,
+    wrappedUmkBytes,
+    ...(typeof passkeyAttestationObject === "string" && passkeyAttestationObject ? { passkeyAttestationObject } : {}),
+  };
+}
+
+/**
+ * Where the account's recovery stands for the update prompt: `exists` when `.com` holds a record,
+ * `legacy` when that record predates the passkey check (`passkeyRequired: false`). Null when `.com`
+ * cannot be asked.
+ */
+export async function recoveryPasskeyStatus(username, { fetchImpl = fetch } = {}) {
+  if (!username) return null;
+  try {
+    const r = await fetchImpl(`${APEX}/api/recovery/by-username/${encodeURIComponent(username)}`);
+    if (r.status === 404) return { exists: false, legacy: false };
+    if (!r.ok) return null;
+    const b = await r.json();
+    return { exists: true, legacy: b?.passkeyRequired === false };
+  } catch {
+    return null;
+  }
 }
 
 /** Best-effort presence check used by views to decide UI state. */
@@ -364,7 +434,11 @@ async function runSubOriginFlow(mode, payload) {
         }
         return;
       }
-      if (m.type === "flagship-recovery-error") return fail(new Error(m.reason || "sub-origin error"));
+      if (m.type === "flagship-recovery-error") {
+        const e = new Error(m.reason || "sub-origin error");
+        if (typeof m.code === "string") e.code = m.code;
+        return fail(e);
+      }
       if (m.type === "flagship-recovery-enroll-result" && mode === "enroll") return ok(m);
       if (m.type === "flagship-recovery-recover-result" && mode === "recover") return ok(m);
     };
@@ -376,7 +450,7 @@ async function runSubOriginFlow(mode, payload) {
     const tryHello = () => {
       if (popup.closed) return fail(new Error("recovery popup closed"));
       try {
-        popup.postMessage({ type: "flagship-recovery-hello", mode }, RECOVERY_ORIGIN);
+        popup.postMessage({ type: "flagship-recovery-hello", mode, ...(payload?.askUpdate === false ? { askUpdate: false } : {}) }, RECOVERY_ORIGIN);
       } catch {
         // The popup may still be loading; ignore.
       }
@@ -401,9 +475,42 @@ async function accountAuthority(session, username) {
   return { irkPubHex, adminRootPubHex: admin };
 }
 
+/**
+ * Write the record the recovery window re-made (a new passkey over the same passphrase), signed by
+ * whichever rotation of the recovered key the account holds now.
+ */
+export async function applyRecoveryUpdate(seed, username, update) {
+  const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, fetchTokenHashHex, prfSaltHashHex, passkeyAttestationObject } = update ?? {};
+  if (typeof credentialIdHex !== "string" || typeof wrappedUmkB64 !== "string" || typeof fetchTokenHashHex !== "string" || typeof prfSaltHashHex !== "string") {
+    throw new Error("update: bad payload from sub-origin");
+  }
+  const r = await fetch(`${APEX}/api/username/${encodeURIComponent(username)}`);
+  if (!r.ok) throw new Error(`account lookup failed: ${r.status}`);
+  const acct = await r.json();
+  const registered = String(acct.irkPub ?? acct.irkPubHex ?? "").toLowerCase();
+  let version = 0;
+  for (let v = 1; v <= 4 && !version; v++) {
+    if (bytesToHex((await deriveIrkVersioned(seed, v)).publicKey) === registered) version = v;
+  }
+  if (!version) throw new Error("the account key moved since this recovery was written");
+  const irk = await deriveIrkVersioned(seed, version);
+  return uploadRecord({
+    session: { umk: seed },
+    username,
+    credentialIdHex,
+    wrappedUmkB64,
+    wrappedAdminRootB64: typeof wrappedAdminRootB64 === "string" ? wrappedAdminRootB64 : undefined,
+    fetchTokenHashHex,
+    prfSaltHashHex,
+    passkeyAttestationObject,
+    authority: { irkPubHex: registered, adminRootPubHex: typeof acct.adminRootPub === "string" ? acct.adminRootPub.toLowerCase() : "none" },
+    sign: async (bytes) => new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, irk.privateKey, bytes)),
+  });
+}
+
 async function uploadRecord({
   session, username, credentialIdHex, wrappedUmkB64, wrappedAdminRootB64,
-  fetchTokenHashHex, prfSaltHashHex,
+  fetchTokenHashHex, prfSaltHashHex, passkeyAttestationObject, authority, sign,
 }) {
   // N03: the signature covers every value that changes what recovery does, and chains onto the
   // record it replaces. A stored v1 record is replaced once ("legacy"); any other stored record
@@ -414,19 +521,22 @@ async function uploadRecord({
   const envelope = await buildRecoveryEnvelope({
     op: "put",
     username,
-    authority: await accountAuthority(session, username),
+    authority: authority ?? (await accountAuthority(session, username)),
     current,
     credentialIdHex,
     wrappedUmkB64,
     wrappedAdminRootB64,
     fetchTokenHashHex,
     prfSaltHashHex,
-    sign: (bytes) => signWithIrk(session.umk, bytes),
+    sign: sign ?? ((bytes) => signWithIrk(session.umk, bytes)),
   });
+  // SEC-REPAIR-001: the passkey's public key rides beside the signed record; `.com` reads it from
+  // the attestation object and checks the passkey before it ever releases this record.
+  const body = typeof passkeyAttestationObject === "string" && passkeyAttestationObject ? { ...envelope, passkeyAttestationObject } : envelope;
   const r = await fetch(`${APEX}/api/recovery`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(envelope),
+    body: JSON.stringify(body),
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => "");

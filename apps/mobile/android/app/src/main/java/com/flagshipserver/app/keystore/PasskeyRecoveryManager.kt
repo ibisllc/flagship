@@ -69,7 +69,14 @@ class PasskeyRecoveryManager(
         val prfSecret: ByteArray,
         /** The passkey app that saved it, when its AAGUID is a known one. */
         val provider: String? = null,
+        /** The registration's attestation object, base64url: `.com` reads the passkey's public
+         *  key from it (SEC-REPAIR-001). Null when the passkey app returned none. */
+        val attestationObject: String? = null,
     )
+
+    /** A PRF assertion that also signed a server challenge: the PRF output and the
+     *  authentication response JSON `.com` checks. */
+    class ChallengeAssertion(val prfSecret: ByteArray, val responseJson: String)
 
     sealed class RecoveryError(msg: String) : RuntimeException(msg) {
         object PrfUnavailable : RecoveryError(FSStrings.get(R.string.authenticator_doesnt_support_prf_use_offline))
@@ -126,10 +133,11 @@ class PasskeyRecoveryManager(
         if (rawIdB64u.isEmpty()) throw RecoveryError.ProtocolError("missing credential id")
         val credentialIdHex = HexUtil.encode(decodeB64Url(rawIdB64u))
         val provider = providerName(obj)
+        val attestation = runCatching { com.flagshipserver.app.core.RecoveryPasskey.attestationField(raw) }.getOrNull()
 
         // Some passkey apps return the PRF output on create (the same value a
         // later assertion gives for this input): no second prompt then.
-        prfFirst(obj)?.let { return CreatedPasskey(credentialIdHex, it, provider) }
+        prfFirst(obj)?.let { return CreatedPasskey(credentialIdHex, it, provider, attestation) }
 
         // Many (Samsung Pass among them) return it only on an assertion, and
         // some aren't ready to answer one the instant the create sheet closes:
@@ -139,7 +147,7 @@ class PasskeyRecoveryManager(
         repeat(CREATE_ASSERT_ATTEMPTS) { attempt ->
             if (attempt > 0) delay(retryDelayMs)
             try {
-                return CreatedPasskey(credentialIdHex, assertPrf(activity, credentialIdHex, prfEvalInput), provider)
+                return CreatedPasskey(credentialIdHex, assertPrf(activity, credentialIdHex, prfEvalInput), provider, attestation)
             } catch (e: RecoveryError.GetFailed) {
                 if (e.cause0 is GetCredentialCancellationException) throw e
                 last = e
@@ -168,8 +176,29 @@ class PasskeyRecoveryManager(
         prfEvalInput: ByteArray = Recovery.PRF_SALT,
     ): ByteArray {
         val challenge = ByteArray(32).also(rng::nextBytes)
+        return getAssertion(activity, credentialId, prfEvalInput, b64u(challenge)).prfSecret
+    }
+
+    /**
+     * The recovery sheet (SEC-REPAIR-001): ONE assertion that evaluates the PRF and signs
+     * [challenge], the base64url challenge `.com` issued, so the same prompt both unwraps and
+     * proves the passkey to `.com`.
+     */
+    suspend fun assertWithChallenge(
+        activity: Activity,
+        credentialId: String,
+        prfEvalInput: ByteArray,
+        challenge: String,
+    ): ChallengeAssertion = getAssertion(activity, credentialId, prfEvalInput, challenge.trimEnd('='))
+
+    private suspend fun getAssertion(
+        activity: Activity,
+        credentialId: String,
+        prfEvalInput: ByteArray,
+        challengeB64u: String,
+    ): ChallengeAssertion {
         val getOption = buildGetOption(
-            challenge = challenge,
+            challengeB64u = challengeB64u,
             allowedCredentialId = credentialId,
             prfEvalInput = prfEvalInput,
         )
@@ -181,8 +210,12 @@ class PasskeyRecoveryManager(
         }
         val pkc = resp.credential as? PublicKeyCredential
             ?: throw RecoveryError.ProtocolError("non-publickey credential returned")
-        return prfFirst(JSONObject(pkc.authenticationResponseJson)) ?: throw RecoveryError.PrfUnavailable
+        val json = pkc.authenticationResponseJson
+        val prf = prfFirst(JSONObject(json)) ?: throw RecoveryError.PrfUnavailable
+        return ChallengeAssertion(prf, json)
     }
+
+    private fun b64u(b: ByteArray): String = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(b)
 
     /** `clientExtensionResults.prf.results.first`, decoded, or null. */
     private fun prfFirst(obj: JSONObject): ByteArray? {
@@ -267,11 +300,10 @@ class PasskeyRecoveryManager(
     }
 
     private fun buildGetOption(
-        challenge: ByteArray,
+        challengeB64u: String,
         allowedCredentialId: String,
         prfEvalInput: ByteArray,
     ): GetPublicKeyCredentialOption {
-        val challengeB64u = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(challenge)
         val prfEvalB64u = java.util.Base64.getUrlEncoder().withoutPadding()
             .encodeToString(prfEvalInput)
         // allowedCredentialId arrives as hex (the stored / on-wire form);
@@ -325,12 +357,18 @@ class PasskeyCeremonyAdapter(
     var lastProvider: String? = null
         private set
 
-    override suspend fun create(username: String, prfEvalInput: ByteArray): Pair<String, ByteArray> {
+    override suspend fun create(username: String, prfEvalInput: ByteArray): Pair<String, ByteArray> =
+        createWithAttestation(username, prfEvalInput).let { it.credentialId to it.prfSecret }
+
+    override suspend fun createWithAttestation(username: String, prfEvalInput: ByteArray): CloudRecoveryEnrollment.CreatedCredential {
         val created = manager.createPasskey(activity, username, prfEvalInput, onSecondPrompt)
         lastProvider = created.provider
-        return created.credentialId to created.prfSecret
+        return CloudRecoveryEnrollment.CreatedCredential(created.credentialId, created.prfSecret, created.attestationObject)
     }
 
     override suspend fun assert(credentialId: String, prfEvalInput: ByteArray): ByteArray =
         manager.assertPrf(activity, credentialId, prfEvalInput)
+
+    override suspend fun assertForRecovery(credentialId: String, prfEvalInput: ByteArray, challenge: String): Pair<ByteArray, String?> =
+        manager.assertWithChallenge(activity, credentialId, prfEvalInput, challenge).let { it.prfSecret to it.responseJson }
 }

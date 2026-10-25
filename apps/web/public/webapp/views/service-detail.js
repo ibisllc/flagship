@@ -100,6 +100,8 @@ import { appStorageLines } from "../lib/appStorage.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { isDeviceFullyScoped } from "../lib/usersCheck.js";
 import { accountReadFetch } from "../lib/accountRead.js";
+import { loadBrowserAccessSection } from "../lib/browserGrantAlerts.js";
+import { openUpstreamSync, syncRepoOf, syncRowHtml } from "../lib/upstreamSync.js";
 
 import { tr } from "../lib/i18n.js";
 import { renderLinkField, bindLinkField } from "../lib/linkField.js";
@@ -200,11 +202,13 @@ export async function renderServiceDetail(serviceId) {
       <div id="sd-runs-on">${runsOnHtml([], { companion: isCompanionProfile(), adminOnly: !canSignAdminOrders() })}</div>
       ${body.editable === true ? renderEditRow() : ""}
       ${typeof body.adaptedFrom?.repo === "string" ? renderReportRow(body.adaptedFrom.repo) : ""}
+      ${syncRepoOf(body) && !isCompanionProfile() ? syncRowHtml(syncRepoOf(body)) : ""}
       <div id="sd-egress">${renderInternetSection(s)}</div>
       <div id="sd-api-keys"></div>
       <div id="sd-database"></div>
       <div id="sd-update-mode-slot"></div>
       <div id="sd-permissions"></div>
+      <div id="sd-browser-access"></div>
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <h2 class="mt-4">${tr("App config")}</h2>
@@ -253,6 +257,9 @@ export async function renderServiceDetail(serviceId) {
     $("sd-report-adapter")?.addEventListener("click", () => {
       void openAdapterReport({ serviceId: s.serviceId, fetchJson: (path, init) => screensFetch(path, init) });
     });
+    $("sd-sync-upstream")?.addEventListener("click", () => {
+      void openUpstreamSync({ serviceId: s.serviceId, repo: syncRepoOf(body), client: boxClient() });
+    });
     $("sd-backup-go")?.addEventListener("click", () => triggerBackup(s.serviceId));
     $("sd-open-browser")?.addEventListener("click", () => {
       enterBrowserViewer(s.serviceId).catch((e) => { console.error(e); toast(humanError(e), "err"); });
@@ -277,6 +284,7 @@ export async function renderServiceDetail(serviceId) {
     void loadApiKeysSection(s);
     void loadDatabaseEntry(s);
     void loadPermissions(s);
+    void loadBrowserAccessSection($("sd-browser-access"), { app: s, manifest: body.manifest, client: boxClient(), isCurrent: () => currentServiceId === s.serviceId });
     void loadUpdateMode(s);
     void loadRunsOn(s);
   } catch (e) {

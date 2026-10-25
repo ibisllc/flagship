@@ -80,6 +80,11 @@ public protocol FlagshipServerClient: Sendable {
     /// flow. See `RecoveryFetchResponse` for the body shape and
     /// recovery.js `fetchWrappedUmk` for the canonical reference.
     func fetchWrappedUmk(username: String, fetchTokenHex: String) async throws -> RecoveryFetchResponse
+    /// SEC-REPAIR-001: the same fetch carrying the recovery passkey's assertion over a challenge from
+    /// `recoveryChallenge` (nil for a record from before, which `.com` releases on the passphrase).
+    func fetchWrappedUmk(username: String, fetchTokenHex: String, passkey: RecoveryPasskeyAssertion?) async throws -> RecoveryFetchResponse
+    /// `POST /api/recovery/by-username/<u>/challenge`: what the recovery passkey signs.
+    func recoveryChallenge(username: String) async throws -> RecoveryChallenge
     /// Register an APNs device token with .com so the Worker can relay
     /// (or retry) encrypted push payloads to this device. The returned
     /// tokenId is the handle to later revoke the registration.
@@ -322,6 +327,12 @@ public extension FlagshipServerClient {
 public extension FlagshipServerClient {
     func recoveryRecordState(username: String) async throws -> RecoveryRecordState? { nil }
     func pinnedAdminRoot(username: String) async throws -> String? { nil }
+    func fetchWrappedUmk(username: String, fetchTokenHex: String, passkey: RecoveryPasskeyAssertion?) async throws -> RecoveryFetchResponse {
+        try await fetchWrappedUmk(username: username, fetchTokenHex: fetchTokenHex)
+    }
+    func recoveryChallenge(username: String) async throws -> RecoveryChallenge {
+        throw ScreensClientError.http(status: 503, message: #"{"error":"passkey recovery is not configured","code":"passkey-unavailable"}"#)
+    }
 }
 
 public extension FlagshipServerClient {
@@ -544,10 +555,14 @@ public struct WipeRestartRequest: Encodable, Sendable {
     public let signature: String
     /// 32 hex chars (16 random bytes) — server dedupes within 5 min.
     public let idempotencyKey: String
+    /// SEC-REPAIR-001: the NEW credential's attestation object (base64url), beside the signed request,
+    /// so `.com` keeps checking the new recovery passkey. Bound by the credential id the old IRK signs.
+    public let newPasskeyAttestationObject: String?
 
-    public init(request: Inner, signature: String, idempotencyKey: String) {
+    public init(request: Inner, signature: String, idempotencyKey: String, newPasskeyAttestationObject: String? = nil) {
         self.request = request; self.signature = signature
         self.idempotencyKey = idempotencyKey
+        self.newPasskeyAttestationObject = newPasskeyAttestationObject
     }
 }
 
@@ -2168,9 +2183,14 @@ public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
     public let wrappedUmk: String
     public let wrappedAdminRoot: String?
     public let wrappedAcmeAccountKey: String?
-    public init(claim: RecoveryRecordV2, signature: String, wrappedUmk: String, wrappedAdminRoot: String? = nil, wrappedAcmeAccountKey: String? = nil) {
+    /// SEC-REPAIR-001: the passkey's attestation object from its creation (base64url), so `.com` keeps
+    /// its public key and checks it before releasing the record. Absent when the credential is unchanged.
+    public let passkeyAttestationObject: String?
+    public init(claim: RecoveryRecordV2, signature: String, wrappedUmk: String, wrappedAdminRoot: String? = nil,
+                wrappedAcmeAccountKey: String? = nil, passkeyAttestationObject: String? = nil) {
         self.claim = claim; self.signature = signature; self.wrappedUmk = wrappedUmk
         self.wrappedAdminRoot = wrappedAdminRoot; self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+        self.passkeyAttestationObject = passkeyAttestationObject
     }
 }
 
@@ -2264,6 +2284,11 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
     /// for a legacy (v1) record, whose escrow extras carry no signature.
     public let signed: SignedRecoveryRecord?
     public let legacy: Bool?
+    /// SEC-REPAIR-001: `.com` checked the passkey before releasing this record.
+    public let passkeyChecked: Bool?
+    /// A record from before the passkey check, released on the passphrase alone: the apps ask once to
+    /// update it.
+    public let passkeyLegacy: Bool?
     public init(
         username: String,
         credentialId: String,
@@ -2275,10 +2300,14 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
         registeredIrkPubHex: String? = nil,
         recoveryProof: RecoveryProofToken? = nil,
         signed: SignedRecoveryRecord? = nil,
-        legacy: Bool? = nil
+        legacy: Bool? = nil,
+        passkeyChecked: Bool? = nil,
+        passkeyLegacy: Bool? = nil
     ) {
         self.signed = signed
         self.legacy = legacy
+        self.passkeyChecked = passkeyChecked
+        self.passkeyLegacy = passkeyLegacy
         self.username = username
         self.credentialId = credentialId
         self.wrappedUmk = wrappedUmk
@@ -2333,8 +2362,31 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         var prfSaltHash: String?      // SHA-256 hex of the prfSalt
         var signed: SignedRecoveryRecord?   // N03 — nil = a legacy (v1) row
         var updatedAt: Int64
+        /// SEC-REPAIR-001: `.com` holds the passkey's public key, so the fetch needs its assertion.
+        var passkey: Bool = false
     }
     private var recoveryRowsByUser: [String: MockRecoveryRow] = [:]
+    /// Every passkey field the gated fetch received, oldest first (tests read the order of events).
+    public private(set) var recoveryFetchPasskeys: [RecoveryPasskeyAssertion?] = []
+    /// Challenges handed out by `recoveryChallenge`, oldest first.
+    public private(set) var recoveryChallengesIssued: [String] = []
+    /// Test hook: the `/challenge` route answers 503 `passkey-unavailable`.
+    public var recoveryChallengeUnavailable = false
+    /// Test hook: the next passkey-checked fetch is refused with this `.com` code.
+    public var recoveryPasskeyRefusalCode: String?
+    /// Seed a record as `.com` holds it (gym and tests): `passkey` false = from before the check.
+    public func seedRecoveryRecord(username: String, credentialId: String, wrappedUmk: String,
+                                   fetchTokenHash: String, prfSaltHash: String, passkey: Bool) {
+        recoveryRowsByUser[username.lowercased()] = MockRecoveryRow(
+            credentialId: credentialId, wrappedUmk: wrappedUmk, wrappedAcmeAccountKey: nil, wrappedAdminRoot: nil,
+            fetchTokenHash: fetchTokenHash, prfSaltHash: prfSaltHash, signed: nil,
+            updatedAt: Int64(Date().timeIntervalSince1970 * 1000), passkey: passkey)
+        cloudRecoveryByUser[username.lowercased()] = true
+    }
+    /// Whether the stored record holds the passkey key (what `.com` would check).
+    public func recoveryRecordHoldsPasskey(username: String) -> Bool {
+        recoveryRowsByUser[username.lowercased()]?.passkey ?? false
+    }
     /// Test hook — when set, the gated fetch returns THIS `prfSaltHash`
     /// instead of the stored one, modelling a tampered/malicious `.com`.
     /// Exercises the recover-path anti-coercion check.
@@ -2668,6 +2720,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             wrappedAdminRoot: adminRoot
         )
         let digest = try claim.digestHex()
+        let keepsPasskey = existing?.passkey == true && existing?.credentialId == claim.credentialIdHex
         recoveryRowsByUser[u] = MockRecoveryRow(
             credentialId: claim.credentialIdHex,
             wrappedUmk: req.wrappedUmk,
@@ -2676,8 +2729,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             fetchTokenHash: claim.fetchTokenHashHex,
             prfSaltHash: claim.prfSaltHashHex,
             signed: SignedRecoveryRecord(claim: claim, signatureHex: req.signature, digestHex: digest, generation: claim.generation),
-            updatedAt: Int64(Date().timeIntervalSince1970 * 1000)
+            updatedAt: Int64(Date().timeIntervalSince1970 * 1000),
+            passkey: req.passkeyAttestationObject != nil || keepsPasskey
         )
+        if req.passkeyAttestationObject != nil { GymProbe.note("recovery passkey enrolled") }
         cloudRecoveryByUser[u] = true
         return RecoveryEnvelopeResponse(ok: true, updated: updated)
     }
@@ -2693,7 +2748,8 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             generation: row.signed?.generation,
             digestHex: row.signed?.digestHex,
             adminRootDigestHex: digest(row.wrappedAdminRoot),
-            acmeKeyDigestHex: digest(row.wrappedAcmeAccountKey)
+            acmeKeyDigestHex: digest(row.wrappedAcmeAccountKey),
+            passkeyRequired: row.passkey
         )
     }
 
@@ -2711,9 +2767,35 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     }
 
     public func fetchWrappedUmk(username: String, fetchTokenHex: String) async throws -> RecoveryFetchResponse {
+        try await fetchWrappedUmk(username: username, fetchTokenHex: fetchTokenHex, passkey: nil)
+    }
+
+    public func recoveryChallenge(username: String) async throws -> RecoveryChallenge {
         try await tick()
+        if recoveryChallengeUnavailable {
+            throw ScreensClientError.http(status: 503, message: #"{"error":"passkey recovery is not configured","code":"passkey-unavailable"}"#)
+        }
+        let challenge = Data((0..<48).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+        recoveryChallengesIssued.append(challenge)
+        return RecoveryChallenge(challenge: challenge, expiresAt: Int64(Date().timeIntervalSince1970 * 1000) + 5 * 60_000)
+    }
+
+    public func fetchWrappedUmk(username: String, fetchTokenHex: String, passkey: RecoveryPasskeyAssertion?) async throws -> RecoveryFetchResponse {
+        try await tick()
+        recoveryFetchPasskeys.append(passkey)
         guard let row = recoveryRowsByUser[username.lowercased()] else {
             throw ScreensClientError.http(status: 404, message: String(localized: "no recovery record"))
+        }
+        if row.passkey {
+            if let code = recoveryPasskeyRefusalCode {
+                recoveryPasskeyRefusalCode = nil
+                throw ScreensClientError.http(status: 403, message: RecoveryPasskeyCopy.message(forCode: code) ?? code)
+            }
+            guard let passkey, recoveryChallengesIssued.contains(passkey.challenge) else {
+                throw ScreensClientError.http(status: 403, message: RecoveryPasskeyCopy.message(forCode: "passkey-required")!)
+            }
+            GymProbe.note("recovery passkey checked")
         }
         // Legacy row with no gate → 409, same as the Worker.
         guard let storedHash = row.fetchTokenHash else {
@@ -2747,7 +2829,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                 expiresAt: Int64(Date().timeIntervalSince1970 * 1000) + 5 * 60 * 1000
             ) : nil,
             signed: row.signed,
-            legacy: row.signed == nil ? true : nil
+            legacy: row.signed == nil ? true : nil,
+            passkeyChecked: row.passkey ? true : nil,
+            passkeyLegacy: row.passkey ? nil : true
         )
     }
 
@@ -3146,6 +3230,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     ) async throws -> WipeRestartResponse {
         try await tick()
         lastWipeRestart = (username, body, ifMatch)
+        if body.newPasskeyAttestationObject != nil { GymProbe.note("wipe-restart new passkey attested") }
         switch wipeRestartBehavior {
         case .ok:
             return WipeRestartResponse(
@@ -3753,6 +3838,24 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     }
 
     public func fetchWrappedUmk(username: String, fetchTokenHex: String) async throws -> RecoveryFetchResponse {
+        try await fetchWrappedUmk(username: username, fetchTokenHex: fetchTokenHex, passkey: nil)
+    }
+
+    public func recoveryChallenge(username: String) async throws -> RecoveryChallenge {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/recovery/by-username/\(encoded)/challenge"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = Data("{}".utf8)
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(RecoveryChallenge.self, from: data)
+    }
+
+    public func fetchWrappedUmk(username: String, fetchTokenHex: String, passkey: RecoveryPasskeyAssertion?) async throws -> RecoveryFetchResponse {
         // Task #74 — the gate. POST the passphrase-derived fetchToken;
         // `.com` only releases the ciphertext when SHA-256(fetchToken)
         // matches the stored hash. Maps the Worker's status codes to the
@@ -3763,9 +3866,12 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-        req.httpBody = try JSONEncoder().encode(RecoveryFetchTokenBody(fetchToken: fetchTokenHex, issuedAt: issuedAt))
+        req.httpBody = try JSONEncoder().encode(RecoveryGatedFetchBody(fetchToken: fetchTokenHex, issuedAt: issuedAt, passkey: passkey))
         let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if !(200..<300).contains(status), let message = RecoveryPasskeyCopy.message(forBody: data) {
+            throw ScreensClientError.http(status: status, message: message)
+        }
         switch status {
         case 200..<300:
             return try JSONDecoder().decode(RecoveryFetchResponse.self, from: data)
@@ -4005,12 +4111,14 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             let digestHex: String?
             let adminRootDigestHex: String?
             let acmeKeyDigestHex: String?
+            let passkeyRequired: Bool?
         }
         let b = try JSONDecoder().decode(Body.self, from: data)
         return RecoveryRecordState(
             credentialId: b.credentialId, wrappedUmkHash: b.wrappedUmkHash, legacy: b.legacy ?? (b.digestHex == nil),
             generation: b.generation, digestHex: b.digestHex,
-            adminRootDigestHex: b.adminRootDigestHex, acmeKeyDigestHex: b.acmeKeyDigestHex
+            adminRootDigestHex: b.adminRootDigestHex, acmeKeyDigestHex: b.acmeKeyDigestHex,
+            passkeyRequired: b.passkeyRequired
         )
     }
 

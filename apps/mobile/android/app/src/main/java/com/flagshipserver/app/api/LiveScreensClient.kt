@@ -332,6 +332,14 @@ class LiveScreensClient(
         return request("/api/screens/chat/always/revoke", ChatAlwaysRevokeResponse.serializer(), "POST", bytes)
     }
 
+    override suspend fun browserGrantRequests(): BrowserGrantRequestsResponse =
+        request("/api/browser/owner/grant-requests", BrowserGrantRequestsResponse.serializer())
+
+    override suspend fun browserGrantAnswer(body: BrowserGrantAnswerBody) {
+        val bytes = json.encodeToString(BrowserGrantAnswerBody.serializer(), body).toByteArray()
+        request<Unit>("/api/browser/owner/grant-requests/answer", null, "POST", bytes)
+    }
+
     override suspend fun accessAlerts(): AccessAlertsSetting =
         request("/api/screens/settings/access-alerts", AccessAlertsSetting.serializer())
 

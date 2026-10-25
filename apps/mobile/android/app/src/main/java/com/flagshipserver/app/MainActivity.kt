@@ -565,11 +565,27 @@ class MainActivity : FragmentActivity() {
                     alertsEnabled = { privacy.pushNotificationsEnabled.value },
                 )
             }
+            // Browser access beyond a manifest (SEC-BROWSER-002): the same boxes and triggers.
+            val browserGrantCenter = remember {
+                val mockBoxes = mocks?.chatBoxes
+                com.flagshipserver.app.core.BrowserGrantCenter(
+                    boxes = if (mockBoxes != null) ({ mockBoxes(appState) }) else accessBoxes,
+                    isActiveGate = {
+                        appState.isPaired.value && appState.isUnlocked.value &&
+                            !com.flagshipserver.app.core.UpdateLock.isLocked &&
+                            !com.flagshipserver.app.core.AccountGone.isGone &&
+                            !appState.isRestrictedDevice()
+                    },
+                    canAnswer = { com.flagshipserver.app.core.AdminOrderGate.allows(appState) },
+                    alertsEnabled = { privacy.pushNotificationsEnabled.value },
+                )
+            }
             val accessScope = androidx.compose.runtime.rememberCoroutineScope()
             androidx.compose.runtime.DisposableEffect(accessCenter) {
                 com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest = {
                     accessScope.launch { accessCenter.refresh() }
                     accessScope.launch { chatCenter.refresh() }
+                    accessScope.launch { browserGrantCenter.refresh() }
                 }
                 onDispose { com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest = null }
             }
@@ -588,6 +604,13 @@ class MainActivity : FragmentActivity() {
                     chatCenter.start(this)
                 } else {
                     chatCenter.stop()
+                }
+            }
+            LaunchedEffect(useLive, isForeground, accessPaired, accessUnlocked) {
+                if ((useLive || mocks?.chatBoxes != null) && isForeground && accessPaired && accessUnlocked) {
+                    browserGrantCenter.start(this)
+                } else {
+                    browserGrantCenter.stop()
                 }
             }
             val pushOn by privacy.pushNotificationsEnabled.collectAsState()
@@ -797,6 +820,7 @@ class MainActivity : FragmentActivity() {
                     com.flagshipserver.app.core.LocalAccessRequestCenter provides
                         (if (useLive) accessCenter else smokeAccessCenter),
                     com.flagshipserver.app.core.LocalChatRequestCenter provides chatCenter,
+                    com.flagshipserver.app.core.LocalBrowserGrantCenter provides browserGrantCenter,
                     LocalPrivacySettings provides privacy,
                     com.flagshipserver.app.core.LocalPushNotificationsSwitch provides pushSwitch,
                     // Real IRK signer for env changes (was the 128-zero
@@ -1050,6 +1074,14 @@ private fun AppRoot(
         val chatCenter = com.flagshipserver.app.core.LocalChatRequestCenter.current
         if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone && chatCenter != null) {
             com.flagshipserver.app.ui.screens.ChatRequestDialogHost(chatCenter)
+        }
+        val browserGrantCenter = com.flagshipserver.app.core.LocalBrowserGrantCenter.current
+        if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone && browserGrantCenter != null) {
+            com.flagshipserver.app.ui.screens.BrowserGrantDialogHost(browserGrantCenter)
+        }
+        // A recovery record from before `.com` checked its passkey: offered once per account.
+        if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone) {
+            com.flagshipserver.app.ui.screens.RecoveryUpdateHost()
         }
         // The watch's Approve reached a session without its biometric yet.
         if (isPaired && isUnlocked && !showUpdateLock && !showAccountGone) {

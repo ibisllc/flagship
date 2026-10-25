@@ -248,8 +248,9 @@ describe("/webapp PWA static surface", () => {
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain("setupCloudRecovery");
     expect(r.body).toContain("deleteCloudRecovery");
-    expect(r.body).toContain("hasCloudRecovery");
+    expect(r.body).toContain("recoveryPasskeyStatus");
     expect(r.body).toContain("recovery-cloud-setup");
+    expect(r.body).toContain("recovery-cloud-update");
   });
 
   it("/webapp/views/bootstrap.js is username-first and offers the access pathways", async () => {
@@ -384,7 +385,7 @@ describe("/webapp PWA static surface", () => {
     // v56 picks each new app's server, lists a server's apps and copies apps between servers.
     // v57 titles a server's page with its name.
     // v58 shows one status pill per app across its servers, and each server's state on the app page.
-    expect(r.body).toContain('SHELL_VERSION = "v176"');
+    expect(r.body).toContain('SHELL_VERSION = "v177"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

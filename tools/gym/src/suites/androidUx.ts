@@ -1,9 +1,11 @@
 /**
  * Android gym scenarios: the 0.3 security screens. App chat requests (N08), AI-run consent (N12)
  * the watch boot key (option (a), docs/watch-boot-approval-without-unlock.md) and first contact
- * (docs/first-contact.md). Each `harness`
- * is a method of GymUxScreensTest (apps/mobile/android/app/src/androidTest). NO BACKEND: the mock
- * box and `.com` check every signature the way the real ones do on an admin-pinned account.
+ * (docs/first-contact.md), passkey recovery (SEC-REPAIR-001), browser access beyond a manifest
+ * (SEC-BROWSER-002) and syncing an imported app with its upstream (N12). Each `harness` is a method
+ * of GymUxScreensTest or GymPasskeyBrowserSyncTest (apps/mobile/android/app/src/androidTest). NO
+ * BACKEND: the mock box and `.com` check every signature the way the real ones do on an
+ * admin-pinned account, and the mock `.com` checks the recovery passkey as the real one does.
  */
 
 import type { Scenario } from "../scenario.js";
@@ -133,6 +135,126 @@ export const ANDROID_UX: readonly Scenario[] = [
       steps: [{ kind: "tap", describe: "Open Server approvals.", handle: "activity-section-approvals" }],
       assertions: [{ describe: "The refusal", handle: "first-contact-refusal", expect: "text", text: "This server's key changed." }],
       screenshots: [shot("first-contact-key-changed", "The changed key, refused.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-recovery-passkey-enrol",
+    "Cloud recovery set-up (SEC-REPAIR-001): the passphrase field says 'Longer is stronger and there is no upper limit: a whole sentence you will remember works well'; Configure makes the recovery passkey and sends its attestation object as passkeyAttestationObject beside the signed record, so .com's record now requires the passkey.",
+    `${PKG}.GymPasskeyBrowserSyncTest#recoverySetUpSendsThePasskeysAttestation`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings as an admin device with the gym passkey app." },
+        { kind: "tap", describe: "Cloud recovery, then Set up cloud recovery.", handle: "recovery-setup" },
+        { kind: "assert", describe: "The passphrase hint." },
+        { kind: "tap", describe: "Configure with a passphrase typed twice." },
+      ],
+      assertions: [{ describe: "Configured", handle: "recovery-active", expect: "present" }],
+      screenshots: [shot("recovery-passphrase-hint", "The recovery passphrase field and its hint.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-recovery-update-once",
+    "A recovery record from before .com checked the passkey raises 'Update your account recovery' once per account; Not now is final (asked again: nothing), nothing changes on .com, and Settings → Cloud recovery keeps a quiet 'Update account recovery' row.",
+    `${PKG}.GymPasskeyBrowserSyncTest#recoveryUpdateIsOfferedOnceAndNotNowIsFinal`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=home; the mock .com then holds a legacy record and the phone looks again." },
+        { kind: "tap", describe: "Not now.", handle: "recovery-update-not-now" },
+        { kind: "tap", describe: "Settings → Cloud recovery.", handle: "tab-settings" },
+      ],
+      assertions: [
+        { describe: "The prompt title", handle: "recovery-update-title", expect: "text", text: "Update your account recovery" },
+        { describe: "The quiet row", handle: "recovery-update-row", expect: "present" },
+      ],
+      screenshots: [shot("recovery-update-prompt", "The one-time prompt."), shot("recovery-update-row", "The Settings row.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-recovery-update-passphrase",
+    "Update with the passphrase: a wrong one is refused by .com ('That passphrase didn't match.') before anything is replaced; the right one re-enrols with one passkey sheet, sends the attestation and shows 'Account recovery updated.'",
+    `${PKG}.GymPasskeyBrowserSyncTest#recoveryUpdateWithThePassphraseReEnrolsWithThePasskey`,
+    {
+      steps: [
+        { kind: "type", describe: "A wrong passphrase, Update.", handle: "recovery-update-passphrase" },
+        { kind: "type", describe: "The right passphrase, Update.", handle: "recovery-update-confirm" },
+      ],
+      assertions: [{ describe: "The wrong passphrase", handle: "recovery-update-error", expect: "text", text: "That passphrase didn't match." }],
+      screenshots: [shot("recovery-update-wrong-passphrase", "A wrong passphrase, refused before anything changes.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-browser-grant-allow-deny",
+    "A content-free push wakes the app: an app's ask for browser access beyond its manifest raises 'Browser access request' with the verified app ('Plants wants to use this server's browser.'), the exact site, what it can do and how long; 'Allow once' sends an admin-signed flagship/browser-grant/v1 over the ask's own duration; the next ask ('Always allow', a LAN device by address) waits under Activity → Browser access requests, where Deny answers it unsigned.",
+    `${PKG}.GymPasskeyBrowserSyncTest#browserGrantAllowOnceFromTheDialogDenyFromActivity`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=activity as an admin device; the mock box then holds two asks and a push lands." },
+        { kind: "tap", describe: "Allow once in the dialog.", handle: "browser-grant-allow" },
+        { kind: "tap", describe: "Not now on the second ask.", handle: "browser-grant-not-now" },
+        { kind: "tap", describe: "Open Browser access requests under Activity.", handle: "activity-section-browser" },
+        { kind: "tap", describe: "Deny the second ask there.", handle: "browser-grant-card-deny-6b7c0f1e-2222-4a2b-9c3d-000000000002" },
+      ],
+      assertions: [
+        { describe: "The dialog title", handle: "browser-grant-title", expect: "text", text: "Browser access request" },
+        { describe: "Allow names the duration", handle: "browser-grant-allow", expect: "text", text: "Allow once" },
+      ],
+      screenshots: [shot("browser-grant-dialog", "The browser access dialog."), shot("browser-grant-activity", "Browser access requests under Activity.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-browser-grant-app-page",
+    "The app's page has a Browser access section: its own waiting ask (only that app's) with Allow, signed with the admin root.",
+    `${PKG}.GymPasskeyBrowserSyncTest#browserGrantOnTheAppsPage`,
+    {
+      steps: [{ kind: "tap", describe: "Allow once on Plants' page.", handle: "browser-grant-card-allow-6b7c0f1e-1111-4a2b-9c3d-000000000001" }],
+      assertions: [{ describe: "The section", handle: "service-detail-browser-access", expect: "present" }],
+      screenshots: [shot("browser-grant-app-page", "Browser access on the app's page.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-upstream-sync-proposal",
+    "An imported app's page offers 'Check for updates from <repo>'; a branch is chosen, POST /api/build/apps/:id/sync answers a proposal shown as the version, counts, conflicts (your version kept) and the new permissions apart ('Internet access', 'Adds: …'); Review and deploy opens the build that holds the merge, ready to deploy, and Deploy installs exactly that build.",
+    `${PKG}.GymPasskeyBrowserSyncTest#syncShowsTheProposalThenDeploysTheBuildThatHoldsIt`,
+    {
+      steps: [
+        { kind: "tap", describe: "Check for updates from the repo.", handle: "service-detail-sync" },
+        { kind: "type", describe: "A branch, then Check for updates.", handle: "app-sync-ref" },
+        { kind: "tap", describe: "Review and deploy.", handle: "app-sync-review" },
+        { kind: "tap", describe: "Deploy.", handle: "build-journal-deploy" },
+      ],
+      assertions: [
+        { describe: "The version", handle: "app-sync-version", expect: "text", text: "Version 4f2a9c0e1b7d" },
+        { describe: "New permissions apart", handle: "app-sync-permissions", expect: "present" },
+      ],
+      screenshots: [shot("app-sync-proposal", "The sync proposal.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-upstream-sync-up-to-date",
+    "A sync that finds the app already current says 'You already run the latest version from <repo>.' and discards the build it opened when closed; nothing deploys.",
+    `${PKG}.GymPasskeyBrowserSyncTest#syncUpToDateDiscardsTheOpenedBuild`,
+    {
+      steps: [{ kind: "tap", describe: "Close.", handle: "app-sync-close" }],
+      assertions: [{ describe: "Up to date", handle: "app-sync-up-to-date", expect: "text", text: "You already run the latest version from" }],
+      screenshots: [shot("app-sync-up-to-date", "Already up to date.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-ux-upstream-sync-not-imported",
+    "An app not imported from a repo has no 'Check for updates' row.",
+    `${PKG}.GymPasskeyBrowserSyncTest#syncIsNotOfferedForAnAppNotImported`,
+    {
+      steps: [{ kind: "launch", describe: "Open Plants with no repo on record." }],
+      assertions: [{ describe: "No sync row", handle: "service-detail-sync", expect: "absent" }],
+      screenshots: [shot("app-sync-not-offered", "An app with no repo: no sync row.")],
       dimension: "D3",
     },
   ),

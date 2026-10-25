@@ -301,6 +301,11 @@ interface BuildClient {
     /** `POST …/discard`: forget an open git or IDE build, freeing its name. */
     suspend fun discard(buildId: String): Unit = throw ScreensError.NotImplemented("discard")
 
+    /** `POST /api/build/apps/:serviceId/sync {ref?}`: a three-way proposal against the app's
+     *  upstream and a new build holding the merge. Nothing goes live until it is deployed. */
+    suspend fun syncFromUpstream(serviceId: String, ref: String? = null): BuildSyncResponse =
+        throw ScreensError.NotImplemented("sync")
+
     /** `GET …/adapter`: the flagship.app.json that makes a git import's repo
      *  run the way this build does, for the repo's author to commit. */
     suspend fun adapterFile(buildId: String): String = throw ScreensError.NotImplemented("flagship.app.json")

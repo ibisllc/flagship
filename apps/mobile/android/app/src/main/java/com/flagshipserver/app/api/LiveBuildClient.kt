@@ -114,6 +114,14 @@ class LiveBuildClient(
         request<Unit>("/api/build/sessions/$buildId/discard", null, "POST", "{}".toByteArray())
     }
 
+    override suspend fun syncFromUpstream(serviceId: String, ref: String?): BuildSyncResponse {
+        val body = json.encodeToString(BuildSyncRequest.serializer(), BuildSyncRequest(ref?.trim()?.ifEmpty { null })).toByteArray()
+        return request(
+            "/api/build/apps/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/sync", BuildSyncResponse.serializer(), "POST", body,
+            readTimeoutSeconds = 5 * 60,
+        )
+    }
+
     override suspend fun adapterFile(buildId: String): String =
         request("/api/build/sessions/$buildId/adapter", BuildAdapterFileResponse.serializer()).file
 

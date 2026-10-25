@@ -25,4 +25,13 @@ interface WebAuthnProvider {
      *  salt) so existing impls + the Wipe/register seam keep working. */
     suspend fun prfAssertWithSalt(credentialId: String, prfSalt: ByteArray): ByteArray =
         prfAssert(credentialId)
+
+    /** SEC-REPAIR-001: one assertion that evaluates the PRF with [prfSalt] and signs `.com`'s
+     *  [challenge]. Returns the PRF output and the authentication response JSON (null from a
+     *  provider that can't sign a server challenge). */
+    suspend fun prfAssertWithChallenge(credentialId: String, prfSalt: ByteArray, challenge: String): Pair<ByteArray, String?> =
+        prfAssertWithSalt(credentialId, prfSalt) to null
+
+    /** The attestation object (base64url) of a credential [register] just made, when known. */
+    fun attestationFor(credentialId: String): String? = null
 }

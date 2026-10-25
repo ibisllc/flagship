@@ -608,6 +608,8 @@ class BuildJournalViewModel(
         data class Working(val text: String) : DetailAdapt
         data class Adapted(val fileCount: Int) : DetailAdapt
         data class Deployed(val url: String) : DetailAdapt
+        /** A sync from upstream opened this build holding the merge: ready to deploy as it is. */
+        data object HoldsUpdate : DetailAdapt
     }
 
     private val _detailAdapt = MutableStateFlow<DetailAdapt>(DetailAdapt.None)
@@ -690,7 +692,7 @@ class BuildJournalViewModel(
         _list.value = LoadingState.Loaded(ok.flatMap { it.builds.orEmpty() }.sortedByDescending { it.startedAt })
     }
 
-    fun loadDetail(buildId: String): Job = scope.launch {
+    fun loadDetail(buildId: String, holdsUpdate: Boolean = false): Job = scope.launch {
         _detail.value = LoadingState.Loading
         try {
             _detail.value = LoadingState.Loaded(client.journal(buildId).entries)
@@ -708,6 +710,8 @@ class BuildJournalViewModel(
         val adapt = state?.adapt
         _detailAdapt.value = if (adapt?.status == "failed" && !adapt.reason.isNullOrBlank()) {
             DetailAdapt.Failed(adapt.reason, canRunAi = state.sealed != true)
+        } else if (holdsUpdate) {
+            DetailAdapt.HoldsUpdate
         } else {
             DetailAdapt.None
         }

@@ -138,6 +138,9 @@ data class RecoveryRecordState(
     val digestHex: String? = null,
     val adminRootDigestHex: String? = null,
     val acmeKeyDigestHex: String? = null,
+    /** SEC-REPAIR-001: `.com` checks a passkey signature before releasing this record. False on a
+     *  record from before the check, which the apps offer once to update. */
+    val passkeyRequired: Boolean = false,
 )
 
 /** The signed claim `.com` serves with the ciphertext on the gated fetch. */

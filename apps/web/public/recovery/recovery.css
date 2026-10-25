@@ -97,6 +97,7 @@ button {
 }
 button:hover { background: var(--accent-2); color: var(--fg); }
 button:disabled { opacity: 0.55; cursor: progress; }
+button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--fg-2); }
 .status {
   margin: 14px 0 0;
   font-size: 14px;

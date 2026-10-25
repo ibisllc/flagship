@@ -21,6 +21,8 @@ public struct SettingsTab: View {
     @State private var replaceVm: ReplaceDeviceViewModel?
     @State private var replaceToast: String?
     @State private var wipeVm: WipeRestartViewModel?
+    /// SEC-REPAIR-001: "Update account recovery" from the quiet Settings row.
+    @State private var recoveryUpdate: RecoveryUpdateViewModel?
     @State private var wipeToast: String?
     @State private var showDemoDeleteNotice = false
     @State private var companionRequestsVm: CompanionRequestsViewModel?
@@ -318,8 +320,22 @@ public struct SettingsTab: View {
                     holdsAdminKey: !app.isDemoAccount && RescueKeyCheck.holdsAdminRoot,
                     holdsRescueKey: RescueKeyCheck.holdsRescueKey(app),
                     keyBackedUp: KeyBackupState.hasBackup(username: app.currentUser ?? ""),
-                    onSaveDataFirst: { path.append(.keyfileBackup) }
+                    onSaveDataFirst: { path.append(.keyfileBackup) },
+                    recoveryNeedsUpdate: app.recoveryNeedsPasskeyUpdate && !app.isDemoAccount,
+                    onUpdateRecovery: {
+                        guard let user = app.currentUser else { return }
+                        recoveryUpdate = RecoveryUpdateViewModel(username: user, client: server,
+                                                                 webAuthn: RecoveryWebAuthn.provider(username: user))
+                    }
                 )
+                .sheet(isPresented: Binding(get: { recoveryUpdate != nil }, set: { if !$0 { recoveryUpdate = nil } })) {
+                    if let vm = recoveryUpdate {
+                        RecoveryUpdateSheet(vm: vm) {
+                            app.recoveryNeedsPasskeyUpdate = false
+                            toasts.success(RecoveryUpdatePrompt.updated)
+                        }
+                    }
+                }
                 .alert(
                     "Replace device",
                     isPresented: Binding(
@@ -820,7 +836,7 @@ struct RecoveryContainer: View {
                 // simulator path falls back to a stable HKDF derivation.
                 vm = RecoveryViewModel(
                     client: serverClient,
-                    webAuthn: PlatformWebAuthnProvider(),
+                    webAuthn: RecoveryWebAuthn.provider(username: app.currentUser),
                     username: { [app] in app.currentUser }
                 )
             }

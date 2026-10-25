@@ -713,9 +713,17 @@ data class AppDetailResponse(
     /** Built from a shared repo adaptation: the repo it adapts, so the page
      *  can offer to report a problem with it. */
     val adaptedFrom: AdaptedFrom? = null,
+    /** Imported from a repo on this box: where to check for updates (N12). */
+    val importedFrom: ImportedFrom? = null,
 ) {
     @Serializable
     data class AdaptedFrom(val repo: String)
+
+    @Serializable
+    data class ImportedFrom(val repo: String, val commit: String? = null, val ref: String? = null)
+
+    /** The repo "Check for updates" reads from, when the app came from one. */
+    val upstreamRepo: String? get() = importedFrom?.repo?.takeIf { it.isNotBlank() } ?: adaptedFrom?.repo?.takeIf { it.isNotBlank() }
 
     @Serializable
     data class DataLayerInstance(val store: String, val instanceName: String)

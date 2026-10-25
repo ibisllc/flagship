@@ -137,6 +137,7 @@ class WipeRestartViewModel(
                     ),
                     signature = HexUtil.encode(signature),
                     idempotencyKey = idempotencyKey,
+                    newPasskeyAttestationObject = webAuthn.attestationFor(credentialId),
                 ),
                 ifMatch = currentEtag,
             )

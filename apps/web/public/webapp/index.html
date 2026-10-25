@@ -208,6 +208,11 @@
           <div id="activity-chat-content"></div>
         </div>
 
+        <div id="activity-browser" role="region" aria-labelledby="activity-browser-heading" hidden>
+          <h2 id="activity-browser-heading" class="mt-5">Browser access requests</h2>
+          <div id="activity-browser-content"></div>
+        </div>
+
         <div id="activity-with-server">
         <h2 class="mt-5">Install progress</h2>
         <div class="card">
@@ -1040,6 +1045,7 @@
             Store an encrypted copy of your account key for a new browser.
           </p>
           <div class="row"><span class="label">Status</span><span class="pill" id="recovery-cloud-pill">checking…</span></div>
+          <button id="recovery-cloud-update" class="secondary full-width mt-2 hidden">Update account recovery</button>
           <button id="recovery-cloud-setup" class="full-width mt-2">Set up cloud recovery</button>
           <button class="secondary full-width mt-2" id="recovery-cloud-remove" style="display:none;">Remove cloud recovery</button>
         </div>

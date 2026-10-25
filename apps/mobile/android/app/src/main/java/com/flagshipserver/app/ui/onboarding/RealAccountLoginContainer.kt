@@ -264,6 +264,7 @@ private fun PassphraseView(
             value = passphrase,
             onValueChange = { passphrase = it },
             label = stringResource(R.string.recovery_passphrase),
+            helper = if (passphrase.isNotEmpty() && passphrase.length < CloudRecoveryEnrollment.MIN_PASSPHRASE) stringResource(R.string.recovery_passphrase_min) else null,
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.semantics { contentDescription = "login-passphrase-field" },
         )

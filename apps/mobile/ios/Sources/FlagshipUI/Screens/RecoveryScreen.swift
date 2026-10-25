@@ -1,4 +1,5 @@
 import SwiftUI
+import FlagshipAPI
 import CryptoKit
 import Flagship
 import FlagshipCore
@@ -79,6 +80,10 @@ public struct RecoveryScreen: View {
                                 .textInputAutocapitalization(.never)
                                 .fsInputBox()
                                 .accessibilityIdentifier("recovery-enroll-passphrase-2")
+                            Text(RecoveryPasskeyCopy.passphraseHint)
+                                .font(FS.font.caption()).foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("recovery-enroll-hint")
                             if let localError {
                                 Text(localError).font(FS.font.caption()).foregroundColor(c.danger)
                             }
@@ -137,7 +142,7 @@ public struct RecoveryScreen: View {
     /// must match. Surfaces the error inline without leaving `.idle`.
     private func validateEnroll() -> Bool {
         if enrollPassphrase.count < 8 {
-            localError = String(localized: "Passphrase must be 8+ characters.")
+            localError = RecoveryPasskeyCopy.passphraseTooShort
             return false
         }
         if enrollPassphrase != enrollPassphrase2 {

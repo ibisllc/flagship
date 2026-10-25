@@ -11429,5 +11429,253 @@
   "QUANTUM-SAFE PROTECTION": {
     "en": "QUANTUM-SAFE PROTECTION",
     "ctx": "webapp/index.html"
+  },
+  "Browser access request": {
+    "en": "Browser access request",
+    "ctx": "webapp/lib/browserGrantAlerts.js:35"
+  },
+  "Sites": {
+    "en": "Sites",
+    "ctx": "webapp/lib/browserGrantAlerts.js:36"
+  },
+  "It can:": {
+    "en": "It can:",
+    "ctx": "webapp/lib/browserGrantAlerts.js:37"
+  },
+  "The app says:": {
+    "en": "The app says:",
+    "ctx": "webapp/lib/browserGrantAlerts.js:38"
+  },
+  "If you deny, the app has to wait before asking again.": {
+    "en": "If you deny, the app has to wait before asking again.",
+    "ctx": "webapp/lib/browserGrantAlerts.js:41"
+  },
+  "Approved when you installed it": {
+    "en": "Approved when you installed it",
+    "ctx": "webapp/lib/browserGrantAlerts.js:43"
+  },
+  "This device can't approve browser access. Use an admin device.": {
+    "en": "This device can't approve browser access. Use an admin device.",
+    "ctx": "webapp/lib/browserGrantAlerts.js:44"
+  },
+  "Browser access allowed": {
+    "en": "Browser access allowed",
+    "ctx": "webapp/lib/browserGrantAlerts.js:46"
+  },
+  "Browser access denied": {
+    "en": "Browser access denied",
+    "ctx": "webapp/lib/browserGrantAlerts.js:47"
+  },
+  "Open pages": {
+    "en": "Open pages",
+    "ctx": "webapp/lib/browserGrantAlerts.js:51"
+  },
+  "Read page content": {
+    "en": "Read page content",
+    "ctx": "webapp/lib/browserGrantAlerts.js:52"
+  },
+  "Take screenshots": {
+    "en": "Take screenshots",
+    "ctx": "webapp/lib/browserGrantAlerts.js:53"
+  },
+  "Type and click": {
+    "en": "Type and click",
+    "ctx": "webapp/lib/browserGrantAlerts.js:54"
+  },
+  "Download files": {
+    "en": "Download files",
+    "ctx": "webapp/lib/browserGrantAlerts.js:55"
+  },
+  "For one visit": {
+    "en": "For one visit",
+    "ctx": "webapp/lib/browserGrantAlerts.js:59"
+  },
+  "Until this browser session ends": {
+    "en": "Until this browser session ends",
+    "ctx": "webapp/lib/browserGrantAlerts.js:60"
+  },
+  "Until you remove it": {
+    "en": "Until you remove it",
+    "ctx": "webapp/lib/browserGrantAlerts.js:61"
+  },
+  "Allow once": {
+    "en": "Allow once",
+    "ctx": "webapp/lib/browserGrantAlerts.js:65"
+  },
+  "Allow for this session": {
+    "en": "Allow for this session",
+    "ctx": "webapp/lib/browserGrantAlerts.js:66"
+  },
+  "{0} wants to use this server's browser.": {
+    "en": "{0} wants to use this server's browser.",
+    "ctx": "webapp/lib/browserGrantAlerts.js:144"
+  },
+  "and every address under it": {
+    "en": "and every address under it",
+    "ctx": "webapp/lib/browserGrantAlerts.js:147"
+  },
+  "Every device on your local network": {
+    "en": "Every device on your local network",
+    "ctx": "webapp/lib/browserGrantAlerts.js:151"
+  },
+  "These devices on your network: {0}": {
+    "en": "These devices on your network: {0}",
+    "ctx": "webapp/lib/browserGrantAlerts.js:152"
+  },
+  "This recovery needs your passkey. Try again and choose your Flagship passkey.": {
+    "en": "This recovery needs your passkey. Try again and choose your Flagship passkey.",
+    "ctx": "webapp/lib/recovery.js:57"
+  },
+  "The passkey check expired. Try again.": {
+    "en": "The passkey check expired. Try again.",
+    "ctx": "webapp/lib/recovery.js:58"
+  },
+  "That passkey isn't the one your account recovery uses.": {
+    "en": "That passkey isn't the one your account recovery uses.",
+    "ctx": "webapp/lib/recovery.js:59"
+  },
+  "Passkey recovery isn't available right now. Try again later.": {
+    "en": "Passkey recovery isn't available right now. Try again later.",
+    "ctx": "webapp/lib/recovery.js:60"
+  },
+  "Account recovery updated.": {
+    "en": "Account recovery updated.",
+    "ctx": "webapp/lib/recovery.js:225"
+  },
+  "Update your account recovery": {
+    "en": "Update your account recovery",
+    "ctx": "webapp/lib/recoveryUpdate.js:15"
+  },
+  "Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Enter your recovery passphrase, then confirm with your passkey once.": {
+    "en": "Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Enter your recovery passphrase, then confirm with your passkey once.",
+    "ctx": "webapp/lib/recoveryUpdate.js:16"
+  },
+  "Update account recovery": {
+    "en": "Update account recovery",
+    "ctx": "webapp/index.html"
+  },
+  "Branch, tag or commit (optional)": {
+    "en": "Branch, tag or commit (optional)",
+    "ctx": "webapp/lib/upstreamSync.js:18"
+  },
+  "Check for updates": {
+    "en": "Check for updates",
+    "ctx": "webapp/lib/upstreamSync.js:19"
+  },
+  "Review and deploy": {
+    "en": "Review and deploy",
+    "ctx": "webapp/lib/upstreamSync.js:22"
+  },
+  "Discard": {
+    "en": "Discard",
+    "ctx": "webapp/lib/upstreamSync.js:23"
+  },
+  "Nothing goes live until you deploy.": {
+    "en": "Nothing goes live until you deploy.",
+    "ctx": "webapp/lib/upstreamSync.js:24"
+  },
+  "New permissions": {
+    "en": "New permissions",
+    "ctx": "webapp/lib/upstreamSync.js:25"
+  },
+  "This update changes what the app is allowed to do. Review before you deploy.": {
+    "en": "This update changes what the app is allowed to do. Review before you deploy.",
+    "ctx": "webapp/lib/upstreamSync.js:26"
+  },
+  "Resolve them in the build before you deploy, or deploy with your version.": {
+    "en": "Resolve them in the build before you deploy, or deploy with your version.",
+    "ctx": "webapp/lib/upstreamSync.js:27"
+  },
+  "This app wasn't imported from a repo on this server, so it can't check for updates.": {
+    "en": "This app wasn't imported from a repo on this server, so it can't check for updates.",
+    "ctx": "webapp/lib/upstreamSync.js:28"
+  },
+  "Enter a branch, tag or commit name, or leave it empty.": {
+    "en": "Enter a branch, tag or commit name, or leave it empty.",
+    "ctx": "webapp/lib/upstreamSync.js:29"
+  },
+  "Web addresses": {
+    "en": "Web addresses",
+    "ctx": "webapp/lib/upstreamSync.js:34"
+  },
+  "Data stores": {
+    "en": "Data stores",
+    "ctx": "webapp/lib/upstreamSync.js:35"
+  },
+  "Browser sites": {
+    "en": "Browser sites",
+    "ctx": "webapp/lib/upstreamSync.js:36"
+  },
+  "Public pages": {
+    "en": "Public pages",
+    "ctx": "webapp/lib/upstreamSync.js:37"
+  },
+  "Runtime": {
+    "en": "Runtime",
+    "ctx": "webapp/lib/upstreamSync.js:38"
+  },
+  "Distribution": {
+    "en": "Distribution",
+    "ctx": "webapp/lib/upstreamSync.js:39"
+  },
+  "Check for updates from {0}": {
+    "en": "Check for updates from {0}",
+    "ctx": "webapp/lib/upstreamSync.js:55"
+  },
+  "Checking {0}…": {
+    "en": "Checking {0}…",
+    "ctx": "webapp/lib/upstreamSync.js:56"
+  },
+  "You already run the latest version from {0}.": {
+    "en": "You already run the latest version from {0}.",
+    "ctx": "webapp/lib/upstreamSync.js:57"
+  },
+  "Update from {0}": {
+    "en": "Update from {0}",
+    "ctx": "webapp/lib/upstreamSync.js:58"
+  },
+  "Version {0}": {
+    "en": "Version {0}",
+    "ctx": "webapp/lib/upstreamSync.js:59"
+  },
+  "{0} file updated from upstream": {
+    "en": "{0} file updated from upstream",
+    "ctx": "webapp/lib/upstreamSync.js:98"
+  },
+  "{0} files updated from upstream": {
+    "en": "{0} files updated from upstream",
+    "ctx": "webapp/lib/upstreamSync.js:98"
+  },
+  "{0} of your changes kept": {
+    "en": "{0} of your changes kept",
+    "ctx": "webapp/lib/upstreamSync.js:100"
+  },
+  "{0} file already matches": {
+    "en": "{0} file already matches",
+    "ctx": "webapp/lib/upstreamSync.js:101"
+  },
+  "{0} files already match": {
+    "en": "{0} files already match",
+    "ctx": "webapp/lib/upstreamSync.js:101"
+  },
+  "{0} conflict: your version was kept": {
+    "en": "{0} conflict: your version was kept",
+    "ctx": "webapp/lib/upstreamSync.js:105"
+  },
+  "{0} conflicts: your version was kept": {
+    "en": "{0} conflicts: your version was kept",
+    "ctx": "webapp/lib/upstreamSync.js:105"
+  },
+  "Adds: {0}": {
+    "en": "Adds: {0}",
+    "ctx": "webapp/lib/upstreamSync.js:117"
+  },
+  "Removes: {0}": {
+    "en": "Removes: {0}",
+    "ctx": "webapp/lib/upstreamSync.js:118"
+  },
+  "Browser access requests": {
+    "en": "Browser access requests",
+    "ctx": "webapp/index.html"
   }
 }

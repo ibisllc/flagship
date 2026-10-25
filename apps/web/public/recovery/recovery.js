@@ -20,17 +20,18 @@
 //     3. Create a passkey + PRF-derived AES-GCM key (PRF input = prfSalt).
 //     4. Wrap the UMK seed → ciphertext.
 //     5. postMessage {credentialIdHex, wrappedUmkB64, fetchTokenHashHex,
-//        prfSaltHashHex} back to the parent so the parent signs + uploads
+//        prfSaltHashHex, passkeyAttestationObject} back to the parent so the parent signs + uploads
 //        via /api/recovery on the apex. (Task #74)
 //
 //   recover mode (#recover):
 //     1. Collect username + passphrase.
 //     2. Re-derive Argon2id → fetchToken + prfSalt.
-//     3. POST /api/recovery/by-username/<u>/fetch with fetchToken. .com
-//        verifies SHA256(fetchToken) === stored hash; returns wrappedUmk +
-//        prfSaltHash + a short-lived recoveryProof on match.
-//     4. WebAuthn get() with PRF (input = prfSalt) → unwrap → UMK seed.
-//     5. postMessage the seed + the recoveryProof back to the parent.
+//     3. POST /api/recovery/by-username/<u>/challenge (SEC-REPAIR-001).
+//     4. ONE WebAuthn get(): PRF (input = prfSalt) and a signature over that challenge.
+//     5. POST /api/recovery/by-username/<u>/fetch with fetchToken + the passkey's answer. .com
+//        checks both; returns wrappedUmk + prfSaltHash + a short-lived recoveryProof on match.
+//     6. Unwrap → UMK seed; a record from before the passkey check offers the update once.
+//     7. postMessage the seed + the recoveryProof back to the parent.
 //
 //   The recoveryProof is .com's attestation that THIS caller passed the
 //   passphrase gate. The parent needs it because a re-pair initiate (an
@@ -53,6 +54,7 @@ import {
   HKDF_ADMIN_ROOT_SALT,
 } from "./recoveryWrap.js";
 import { ciphertextMismatch } from "./recoveryRecordCheck.js";
+import { attestationField, challengeBytes, fetchPasskeyField } from "./recoveryPasskey.js";
 
 // The page serves only at recovery.<apex> (prod recovery.flagshipserver.com, the gym
 // recovery.gym.flagshipserver.com), so its own host names the apex, the rpId and the webapp.
@@ -108,7 +110,39 @@ const state = {
   enrollAdminRootSeed: null, // Slice D (D-3): admin root, escrowed with the UMK
   enrollUsername: null,
   parentOrigin: null, // pinned to event.origin of the first valid HELLO
+  askUpdate: true, // the webapp says false when the owner already declined the recovery update here
 };
+
+// SEC-REPAIR-001: the sentences the apps share (iOS is the reference). This page is English only.
+const PASSKEY_ERRORS = {
+  "passkey-required": "This recovery needs your passkey. Try again and choose your Flagship passkey.",
+  "passkey-challenge": "The passkey check expired. Try again.",
+  "passkey-invalid": "That passkey isn't the one your account recovery uses.",
+  "passkey-unavailable": "Passkey recovery isn't available right now. Try again later.",
+};
+const MIN_PASSPHRASE = "Use at least 8 characters.";
+
+function coded(message, code) {
+  const e = new Error(message);
+  if (code) e.code = code;
+  return e;
+}
+
+const DECLINED_PREFIX = "flagship.recovery.updateDeclined.";
+function updateDeclined(username) {
+  try {
+    return localStorage.getItem(DECLINED_PREFIX + username.toLowerCase()) === "1";
+  } catch {
+    return false;
+  }
+}
+function markUpdateDeclined(username) {
+  try {
+    localStorage.setItem(DECLINED_PREFIX + username.toLowerCase(), "1");
+  } catch {
+    /* private window: the webapp keeps its own flag */
+  }
+}
 
 function $(id) { return document.getElementById(id); }
 function show(id) { $(id)?.classList.remove("hidden"); }
@@ -162,6 +196,7 @@ window.addEventListener("message", (ev) => {
   if (!m || typeof m !== "object") return;
   if (m.type === "flagship-recovery-hello") {
     state.parentOrigin = ev.origin;
+    if (m.askUpdate === false) state.askUpdate = false;
     postToParent({ type: "flagship-recovery-ready", mode: state.mode });
     return;
   }
@@ -209,7 +244,7 @@ $("enroll-go")?.addEventListener("click", async () => {
     await assertWebauthn();
     const pp1 = $("enroll-passphrase")?.value || "";
     const pp2 = $("enroll-passphrase-2")?.value || "";
-    if (pp1.length < 8) throw new Error("passphrase must be 8+ characters");
+    if (pp1.length < 8) throw new Error(MIN_PASSPHRASE);
     if (pp1 !== pp2) throw new Error("passphrases do not match");
 
     const username = state.enrollUsername;
@@ -217,7 +252,7 @@ $("enroll-go")?.addEventListener("click", async () => {
     const { fetchToken, prfSalt } = await derivePassphraseSecrets(pp1, username);
 
     setStatus("enroll-status", "Creating passkey on this device…", null);
-    const { credentialIdHex, prfBytes } = await createPasskey(username, prfSalt);
+    const { credentialIdHex, prfBytes, passkeyAttestationObject } = await createPasskey(username, prfSalt);
     // Cross-platform escrow (mobile-identical): each secret is its OWN
     // self-contained blob, wrapped under an HKDF-SHA256(prf, <domain salt>)
     // AES-256-GCM key — NEVER the raw PRF bytes, and NEVER a `umk||adminRoot`
@@ -240,6 +275,7 @@ $("enroll-go")?.addEventListener("click", async () => {
       ...(wrappedAdminRootB64 ? { wrappedAdminRootB64 } : {}),
       fetchTokenHashHex,
       prfSaltHashHex,
+      passkeyAttestationObject,
     });
     setStatus("enroll-status", "Done — return to the webapp to finish.", "ok");
   } catch (e) {
@@ -263,16 +299,29 @@ $("recover-go")?.addEventListener("click", async () => {
     const username = ($("recover-username")?.value || "").trim().toLowerCase();
     const pp = $("recover-passphrase")?.value || "";
     if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(username)) throw new Error("invalid username");
-    if (pp.length < 8) throw new Error("passphrase must be 8+ characters");
+    if (pp.length < 8) throw new Error(MIN_PASSPHRASE);
 
+    // SEC-REPAIR-001 order: the passphrase first (it feeds the PRF), then ONE passkey sheet that both
+    // unwraps (PRF) and signs .com's challenge, then the fetch carrying that signature.
     setStatus("recover-status", "Hardening your passphrase (Argon2id, ~1.5s)…", null);
     const { fetchToken, prfSalt } = await derivePassphraseSecrets(pp, username);
 
-    setStatus("recover-status", `Asking ${APEX_HOST} for the wrapped key…`, null);
-    const fetched = await fetchWrappedUmk(username, fetchToken);
-    if (!fetched) throw new Error("no cloud recovery for that username");
+    setStatus("recover-status", `Asking ${APEX_HOST} for your recovery…`, null);
+    const meta = await recoveryMeta(username);
+    if (!meta) throw new Error("no cloud recovery for that username");
+    const challenge = await recoveryChallenge(username, meta.passkeyRequired === true);
+
+    setStatus("recover-status", "Confirm with your passkey…", null);
+    const cred = await passkeySheet(hexToBytes(meta.credentialId), prfSalt, challenge ? challengeBytes(challenge) : randBytes(32));
+    const prfBytes = readPrfFirst(cred);
+    if (!prfBytes) throw new Error("WebAuthn PRF not supported by this authenticator");
+
+    const fetched = await fetchWrappedUmk(username, fetchToken, challenge ? fetchPasskeyField(challenge, cred) : null, meta.credentialId);
     const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, prfSaltHash, recoveryProof, signed } =
       fetched;
+    if (credentialIdHex.toLowerCase() !== String(meta.credentialId).toLowerCase()) {
+      throw new Error("the recovery record changed while you were signing in; try again");
+    }
 
     // N03: a signed record names the digest of every ciphertext it covers. Refuse before any
     // unwrap if `.com` returned a different one (a swapped, dropped or added escrow). A legacy
@@ -284,21 +333,14 @@ $("recover-go")?.addEventListener("click", async () => {
       if (bad) throw new Error(`the stored recovery record does not match its signed digest (${bad}); refusing to unwrap it`);
     }
 
-    // Defense-in-depth: verify the server returned the same prfSalt we
-    // derived locally (otherwise a tampered .com could feed us a
-    // different salt to coerce the wrong PRF output → AES-GCM decrypt
-    // will then fail with a generic "tag mismatch" that's hard to
-    // debug. Surface a specific error here.)
+    // A tampered .com could feed a different salt to coerce the wrong PRF output; say so plainly
+    // instead of a bare AES-GCM tag failure.
     if (prfSaltHash) {
       const localPrfSaltHash = await sha256Hex(prfSalt);
       if (localPrfSaltHash !== prfSaltHash.toLowerCase()) {
         throw new Error("server returned a stale prfSaltHash — refusing to proceed");
       }
     }
-
-    const credentialId = hexToBytes(credentialIdHex);
-    const prfBytes = await getPrfWithGet(credentialId, prfSalt);
-    if (!prfBytes) throw new Error("WebAuthn PRF not supported by this authenticator");
 
     // Cross-platform unwrap: the UMK is its OWN blob (HKDF under the UMK salt);
     // the admin master root (Slice D D-3) is a SEPARATE `wrappedAdminRoot` blob
@@ -308,6 +350,20 @@ $("recover-go")?.addEventListener("click", async () => {
     const adminRootSeed = wrappedAdminRootB64
       ? await unwrapWithPrf(wrappedAdminRootB64, prfBytes, HKDF_ADMIN_ROOT_SALT)
       : null;
+
+    // A record from before the passkey check: offer the update once, here, while the passphrase is
+    // still in memory, so the owner is not asked for it again.
+    let update = null;
+    let updateDeclinedNow = false;
+    if (fetched.passkeyLegacy && state.askUpdate && !updateDeclined(username)) {
+      if ((await askRecoveryUpdate()) === "update") {
+        update = await reenrolForUpdate(username, prfSalt, fetchToken, umk, adminRootSeed);
+      } else {
+        markUpdateDeclined(username);
+        updateDeclinedNow = true;
+      }
+    }
+
     postToParent({
       type: "flagship-recovery-recover-result",
       username,
@@ -315,15 +371,50 @@ $("recover-go")?.addEventListener("click", async () => {
       ...(adminRootSeed ? { adminRootSeed: Array.from(adminRootSeed) } : {}),
       ...(recoveryProof ? { recoveryProof } : {}),
       ...(signed ? { signedRecord: { claim: signed.claim, signatureHex: signed.signatureHex } } : { recordLegacy: true }),
+      ...(fetched.passkeyLegacy ? { passkeyLegacy: true } : {}),
+      ...(update ? { update } : {}),
+      ...(updateDeclinedNow ? { updateDeclined: true } : {}),
     });
     setStatus("recover-status", "Done — return to the webapp to finish.", "ok");
   } catch (e) {
-    setStatus("recover-status", String(e?.message ?? e), "err");
-    postToParent({ type: "flagship-recovery-error", reason: String(e?.message ?? e) });
+    const msg = e?.code && PASSKEY_ERRORS[e.code] ? PASSKEY_ERRORS[e.code] : String(e?.message ?? e);
+    setStatus("recover-status", msg, "err");
+    postToParent({ type: "flagship-recovery-error", reason: msg, ...(e?.code ? { code: e.code } : {}) });
   } finally {
     if (btn) btn.disabled = false;
+    hide("view-recover-update");
   }
 });
+
+/** "Update your account recovery" with Update / Not now; resolves to the choice. */
+function askRecoveryUpdate() {
+  show("view-recover-update");
+  return new Promise((resolve) => {
+    const done = (v) => {
+      $("recover-update-go")?.removeEventListener("click", onUpdate);
+      $("recover-update-later")?.removeEventListener("click", onLater);
+      resolve(v);
+    };
+    const onUpdate = () => done("update");
+    const onLater = () => done("later");
+    $("recover-update-go")?.addEventListener("click", onUpdate);
+    $("recover-update-later")?.addEventListener("click", onLater);
+  });
+}
+
+/** A new recovery passkey (one sheet) over the same passphrase, its attestation for .com, and the re-wrapped escrows. */
+async function reenrolForUpdate(username, prfSalt, fetchToken, umk, adminRootSeed) {
+  setStatus("recover-status", "Creating your new recovery passkey…", null);
+  const made = await createPasskey(username, prfSalt);
+  return {
+    credentialIdHex: made.credentialIdHex,
+    wrappedUmkB64: await wrapWithPrf(umk, made.prfBytes, HKDF_UMK_SALT),
+    ...(adminRootSeed ? { wrappedAdminRootB64: await wrapWithPrf(adminRootSeed, made.prfBytes, HKDF_ADMIN_ROOT_SALT) } : {}),
+    fetchTokenHashHex: await sha256Hex(fetchToken),
+    prfSaltHashHex: await sha256Hex(prfSalt),
+    passkeyAttestationObject: made.passkeyAttestationObject,
+  };
+}
 
 // ──────────────────────────────────────────────────────────────────────
 // WebAuthn helpers
@@ -361,22 +452,27 @@ async function createPasskey(username, prfSalt) {
   let prfBytes = readPrfFirst(cred);
   if (!prfBytes) prfBytes = await getPrfWithGet(credentialId, prfSalt);
   if (!prfBytes) throw new Error("WebAuthn PRF not supported by this authenticator");
-  return { credentialIdHex: bytesToHex(credentialId), prfBytes };
+  return { credentialIdHex: bytesToHex(credentialId), prfBytes, passkeyAttestationObject: attestationField(cred.response.attestationObject) };
 }
 
 async function getPrfWithGet(credentialId, prfSalt) {
-  const challenge = randBytes(32);
+  return readPrfFirst(await passkeySheet(credentialId, prfSalt, randBytes(32)));
+}
+
+/** The one get() of a recovery: the PRF for the unwrap and, with `.com`'s challenge, its signature. */
+async function passkeySheet(credentialId, prfSalt, challenge) {
   const cred = await navigator.credentials.get({
     publicKey: {
       challenge,
       rpId: RP_ID,
       allowCredentials: [{ type: "public-key", id: credentialId }],
-      userVerification: "preferred",
+      userVerification: "required",
       timeout: 90_000,
       extensions: { prf: { eval: { first: prfSalt } } },
     },
   });
-  return readPrfFirst(cred);
+  if (!cred) throw new Error("passkey sign-in cancelled");
+  return cred;
 }
 
 function readPrfFirst(cred) {
@@ -390,28 +486,45 @@ function readPrfFirst(cred) {
 // .com fetch
 // ──────────────────────────────────────────────────────────────────────
 
-async function fetchWrappedUmk(username, fetchToken) {
-  // Task #74 — the gate. We first hit the metadata GET to confirm a
-  // record exists + grab the credentialId, then POST /fetch with the
-  // passphrase-derived fetchToken. .com only releases the ciphertext
-  // when SHA-256(fetchToken) matches the stored hash. A wrong
-  // passphrase will return 403 here; the rate-limiter caps attempts
-  // at 3-per-15min per usernameHash before the request even reaches
-  // this handler.
-  const meta = await fetch(
-    `${APEX}/api/recovery/by-username/${encodeURIComponent(username)}`,
-  );
+/** The public metadata: credentialId, whether the passkey check applies. Null when there is no record. */
+async function recoveryMeta(username) {
+  const meta = await fetch(`${APEX}/api/recovery/by-username/${encodeURIComponent(username)}`);
   if (meta.status === 404) return null;
   if (meta.status === 429) throw new Error(await tooManyTries(meta));
   if (!meta.ok) throw new Error(`metadata fetch failed: ${meta.status}`);
-  const metaBody = await meta.json();
-  if (!metaBody.hasFetchTokenGate) {
-    throw new Error(
-      "this record predates the passphrase gate — re-enrol cloud recovery first",
-    );
+  const body = await meta.json();
+  if (!body.hasFetchTokenGate) {
+    throw new Error("this record predates the passphrase gate — re-enrol cloud recovery first");
   }
-  const credentialIdHex = metaBody.credentialId;
+  if (typeof body.credentialId !== "string" || !/^[0-9a-fA-F]+$/.test(body.credentialId)) throw new Error("the recovery record names no passkey");
+  return body;
+}
 
+/**
+ * `.com`'s challenge for this account, or null for a record from before the passkey check when
+ * `.com` cannot issue one (the fetch then needs only the passphrase, as before).
+ */
+async function recoveryChallenge(username, required) {
+  let r;
+  try {
+    r = await fetch(`${APEX}/api/recovery/by-username/${encodeURIComponent(username)}/challenge`, { method: "POST" });
+  } catch (e) {
+    if (!required) return null;
+    throw e;
+  }
+  if (r.status === 429) throw new Error(await tooManyTries(r));
+  if (r.ok) {
+    const b = await r.json().catch(() => ({}));
+    if (typeof b.challenge === "string" && b.challenge) return b.challenge;
+  }
+  if (!required) return null;
+  throw coded(PASSKEY_ERRORS["passkey-unavailable"], "passkey-unavailable");
+}
+
+async function fetchWrappedUmk(username, fetchToken, passkey, credentialIdHex) {
+  // Task #74 — the gate: .com releases the ciphertext only when SHA-256(fetchToken) matches the
+  // stored hash and, for a record that holds the passkey's key, the passkey signed the challenge.
+  // The rate-limiter caps attempts at 3-per-15min per usernameHash.
   const gated = await fetch(
     `${APEX}/api/recovery/by-username/${encodeURIComponent(username)}/fetch`,
     {
@@ -420,11 +533,14 @@ async function fetchWrappedUmk(username, fetchToken) {
       body: JSON.stringify({
         fetchToken: bytesToHex(fetchToken),
         issuedAt: Date.now(),
+        ...(passkey ? { passkey } : {}),
       }),
     },
   );
-  if (gated.status === 403) {
-    throw new Error("wrong passphrase");
+  if (gated.status === 403 || gated.status === 503) {
+    const body = await gated.json().catch(() => ({}));
+    if (body && PASSKEY_ERRORS[body.code]) throw coded(PASSKEY_ERRORS[body.code], body.code);
+    if (gated.status === 403) throw new Error("wrong passphrase");
   }
   if (gated.status === 429) {
     throw new Error(await tooManyTries(gated));
@@ -449,6 +565,7 @@ async function fetchWrappedUmk(username, fetchToken) {
     wrappedAcmeAccountKeyB64: typeof b.wrappedAcmeAccountKey === "string" ? b.wrappedAcmeAccountKey : null,
     signed: b.signed && typeof b.signed === "object" && b.signed.claim && typeof b.signed.signatureHex === "string" ? b.signed : null,
     prfSaltHash: b.prfSaltHash,
+    passkeyLegacy: b.passkeyLegacy === true,
   };
 }
 

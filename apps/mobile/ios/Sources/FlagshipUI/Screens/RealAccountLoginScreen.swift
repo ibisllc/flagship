@@ -65,7 +65,7 @@ public struct RealAccountLoginScreen: View {
                 vm = RealAccountLoginViewModel(
                     resolution: resolution,
                     server: server,
-                    webAuthn: PlatformWebAuthnProvider()
+                    webAuthn: RecoveryWebAuthn.provider(username: nil)
                 )
             }
             if importVm == nil {

@@ -177,11 +177,18 @@ public struct RecoveryRecordState: Codable, Equatable, Sendable {
     public let digestHex: String?
     public let adminRootDigestHex: String?
     public let acmeKeyDigestHex: String?
-    public init(credentialId: String, wrappedUmkHash: String, legacy: Bool, generation: Int? = nil, digestHex: String? = nil, adminRootDigestHex: String? = nil, acmeKeyDigestHex: String? = nil) {
+    /// SEC-REPAIR-001: true = `.com` checks the passkey before releasing the record; false = a record
+    /// from before (the apps offer to update it once); nil = a `.com` that doesn't say.
+    public let passkeyRequired: Bool?
+    public init(credentialId: String, wrappedUmkHash: String, legacy: Bool, generation: Int? = nil, digestHex: String? = nil, adminRootDigestHex: String? = nil, acmeKeyDigestHex: String? = nil, passkeyRequired: Bool? = nil) {
         self.credentialId = credentialId; self.wrappedUmkHash = wrappedUmkHash; self.legacy = legacy
         self.generation = generation; self.digestHex = digestHex
         self.adminRootDigestHex = adminRootDigestHex; self.acmeKeyDigestHex = acmeKeyDigestHex
+        self.passkeyRequired = passkeyRequired
     }
+
+    /// A record `.com` releases on the passphrase alone.
+    public var needsPasskeyUpdate: Bool { passkeyRequired == false }
 }
 
 /// The signed claim `.com` serves with the ciphertext on the gated fetch.

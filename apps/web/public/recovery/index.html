@@ -37,13 +37,20 @@
 
       <section id="view-recover" class="card hidden">
         <h2>Recover from passkey</h2>
-        <p class="note">Enter your username and the recovery passphrase you chose when you set this up. We use them to retrieve your account key and unlock it with your passkey — all on this device. The passphrase never leaves your browser.</p>
+        <p class="note">Enter your username and the recovery passphrase you chose when you set this up. Your passkey then confirms it is you and unlocks your account key, all on this device. The passphrase never leaves your browser.</p>
         <label for="recover-username">Username</label>
         <input id="recover-username" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" />
         <label for="recover-passphrase">Passphrase</label>
         <input id="recover-passphrase" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
         <button id="recover-go" type="button">Fetch + unlock</button>
         <p id="recover-status" class="status" aria-live="polite"></p>
+      </section>
+
+      <section id="view-recover-update" class="card hidden" aria-labelledby="recover-update-title">
+        <h2 id="recover-update-title">Update your account recovery</h2>
+        <p class="note">Account recovery can now also check your passkey, so your passphrase alone can't download your recovery copy. Confirm with your passkey once.</p>
+        <button id="recover-update-go" type="button">Update</button>
+        <button id="recover-update-later" class="secondary" type="button">Not now</button>
       </section>
 
       <p class="footnote">You're on <code>recovery.flagshipserver.com</code> — a separate address used only for recovery, so your passkey is kept apart from the main app. (Technical: rpId <code>recovery.flagshipserver.com</code>, passkey isolated by sub-origin.)</p>
