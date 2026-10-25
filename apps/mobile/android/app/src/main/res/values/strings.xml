@@ -3102,4 +3102,14 @@
     <string name="activity_stack_switch_started">Started a stack move</string>
     <string name="activity_stack_switched">Finished a stack move</string>
     <string name="activity_stack_switch_reverted">The stack move was undone</string>
+    <string name="finalizing_the_install_image_do_not">Finalizing the install image — do not unplug…</string>
+    <string name="reading_the_local_seed_image">Reading the local seed image…</string>
+    <string name="couldnt_open_the_local_seed_at">Couldn\'t open the local seed at %1$s.</string>
+    <string name="the_local_seed_at_is_empty">The local seed at %1$s is empty.</string>
+    <string name="using_local_seed_image">Using local seed image (%1$s).</string>
+    <string name="developer_seed_source">Developer: seed source</string>
+    <string name="managed_manifest_download">Managed (manifest download)</string>
+    <string name="choose_local_seed">Choose local seed…</string>
+    <string name="use_managed">Use managed</string>
+    <string name="finalizing">Finalizing</string>
 </resources>

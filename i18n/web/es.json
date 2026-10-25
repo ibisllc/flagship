@@ -223,7 +223,7 @@
   "s254faa5618": "<1>Tres familias de dispositivos.</1> La app nativa de iOS y la de Android usan Secure Enclave / StrongBox: almacenamiento de claves robusto. La app web instalable usa IndexedDB con frase de contraseña, solo por software: más débil, adecuada para pruebas o accesibilidad. A propósito no compartimos claves entre familias: una identidad de la app web y una de iOS son cuentas independientes, igual que Apple Pay nunca pasa a Google Pay.",
   "s7289acbffd": "Lo que prometemos",
   "sf2a6e53eb2": "Todo el código crítico para la seguridad (derivación de claves, firma, cifrado, daemon, ruta de arranque, clientes móviles) es de código abierto bajo Apache 2.0.",
-  "s798346340b": "La imagen de arranque se compila de forma reproducible: puedes verificar que los bytes coinciden con el código fuente.",
+  "sf9fea4b86e": "La imagen de arranque se compila de forma reproducible: puedes <1>verificar que los bytes coinciden con Debian original</1>.",
   "s91d0513e04": "Solo primitivas estándar: <1>Ed25519</1>, <2>X25519</2>, <3>AES-256-GCM</3>, <4>HKDF-SHA-256</4>. Nada de criptografía casera.",
   "sa4b3981430": "El arranque del servidor requiere una aprobación firmada por el teléfono a través de la red. Un servidor robado no puede desbloquearse solo.",
   "sf3e26c491b": "El dominio de autenticación (<1>flagshipserver.com</1>) está separado del dominio de contenido de usuario (<2>*.flagship.services</2>) para que las apps de usuario no puedan alcanzar las cookies de sesión mediante confusión de subdominios.",

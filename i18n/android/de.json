@@ -3095,5 +3095,15 @@
   "activity_gpu_approval_withdrawn": "GPU-Nutzung einer App zurückgezogen",
   "activity_stack_switch_started": "Architekturwechsel begonnen",
   "activity_stack_switched": "Architekturwechsel abgeschlossen",
-  "activity_stack_switch_reverted": "Der Architekturwechsel wurde rückgängig gemacht"
+  "activity_stack_switch_reverted": "Der Architekturwechsel wurde rückgängig gemacht",
+  "finalizing_the_install_image_do_not": "Installations-Image wird abgeschlossen, nicht abziehen…",
+  "reading_the_local_seed_image": "Lokales Basis-Image wird gelesen…",
+  "couldnt_open_the_local_seed_at": "Das lokale Basis-Image unter %1$s ließ sich nicht öffnen.",
+  "the_local_seed_at_is_empty": "Das lokale Basis-Image unter %1$s ist leer.",
+  "using_local_seed_image": "Lokales Basis-Image wird verwendet (%1$s).",
+  "developer_seed_source": "Entwicklung: Quelle des Basis-Images",
+  "managed_manifest_download": "Verwaltet (Download laut Manifest)",
+  "choose_local_seed": "Lokales Basis-Image wählen…",
+  "use_managed": "Verwaltete verwenden",
+  "finalizing": "Abschließen"
 }

@@ -3098,4 +3098,14 @@
     <string name="activity_stack_switch_started">Architekturwechsel begonnen</string>
     <string name="activity_stack_switched">Architekturwechsel abgeschlossen</string>
     <string name="activity_stack_switch_reverted">Der Architekturwechsel wurde rückgängig gemacht</string>
+    <string name="finalizing_the_install_image_do_not">Installations-Image wird abgeschlossen, nicht abziehen…</string>
+    <string name="reading_the_local_seed_image">Lokales Basis-Image wird gelesen…</string>
+    <string name="couldnt_open_the_local_seed_at">Das lokale Basis-Image unter %1$s ließ sich nicht öffnen.</string>
+    <string name="the_local_seed_at_is_empty">Das lokale Basis-Image unter %1$s ist leer.</string>
+    <string name="using_local_seed_image">Lokales Basis-Image wird verwendet (%1$s).</string>
+    <string name="developer_seed_source">Entwicklung: Quelle des Basis-Images</string>
+    <string name="managed_manifest_download">Verwaltet (Download laut Manifest)</string>
+    <string name="choose_local_seed">Lokales Basis-Image wählen…</string>
+    <string name="use_managed">Verwaltete verwenden</string>
+    <string name="finalizing">Abschließen</string>
 </resources>

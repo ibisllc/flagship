@@ -220,20 +220,20 @@ private fun DevSeedPicker(
         if (uri != null) onPick(uri.toString(), uri.lastPathSegment)
     }
     FSCard {
-        Text("Developer: seed source", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+        Text(stringResource(R.string.developer_seed_source), color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
         Spacer(Modifier.height(FS.space.s1))
         Text(
-            label ?: "Managed (manifest download)",
+            label ?: stringResource(R.string.managed_manifest_download),
             color = FS.colors.text,
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
         )
         Spacer(Modifier.height(FS.space.s2))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            FSGhostButton(label = "Choose local seed…", onClick = { picker.launch(arrayOf("*/*")) })
+            FSGhostButton(label = stringResource(R.string.choose_local_seed), onClick = { picker.launch(arrayOf("*/*")) })
             if (label != null) {
                 Spacer(Modifier.height(0.dp))
                 Text("  ")
-                FSGhostButton(label = "Use managed", onClick = onClear)
+                FSGhostButton(label = stringResource(R.string.use_managed), onClick = onClear)
             }
         }
     }
@@ -262,7 +262,7 @@ private fun ProgressBlock(state: BuilderOnDeviceViewModel.State) {
         BuilderOnDeviceViewModel.Phase.Verifying -> stringResource(R.string.verifying)
         BuilderOnDeviceViewModel.Phase.Injecting -> stringResource(R.string.preparing_2)
         BuilderOnDeviceViewModel.Phase.Writing -> stringResource(R.string.writing)
-        BuilderOnDeviceViewModel.Phase.Finalizing -> "Finalizing"
+        BuilderOnDeviceViewModel.Phase.Finalizing -> stringResource(R.string.finalizing)
         else -> ""
     }
     FSCard {

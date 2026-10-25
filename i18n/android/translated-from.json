@@ -3035,5 +3035,15 @@
   "activity_gpu_approval_withdrawn": "67523985671f",
   "activity_stack_switch_started": "740c3c91d11f",
   "activity_stack_switched": "ed315af47d51",
-  "activity_stack_switch_reverted": "ec76816112d1"
+  "activity_stack_switch_reverted": "ec76816112d1",
+  "finalizing_the_install_image_do_not": "4cd4954e3003",
+  "reading_the_local_seed_image": "9a377ee6c580",
+  "couldnt_open_the_local_seed_at": "298ba4f7a55f",
+  "the_local_seed_at_is_empty": "8311daca3ce2",
+  "using_local_seed_image": "6f951436c349",
+  "developer_seed_source": "27cebf089189",
+  "managed_manifest_download": "c362ad0b86fc",
+  "choose_local_seed": "ed4fa48732b6",
+  "use_managed": "e36339ca53f5",
+  "finalizing": "f41a6921d9f7"
 }

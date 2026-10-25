@@ -12822,5 +12822,48 @@
   "activity_stack_switch_reverted": {
     "en": "The stack move was undone",
     "ctx": "core/BoxEventLabels.kt (Activity)"
+  },
+  "finalizing_the_install_image_do_not": {
+    "en": "Finalizing the install image — do not unplug…",
+    "ctx": "builder/BuilderOnDeviceViewModel.kt:196 (prose)"
+  },
+  "reading_the_local_seed_image": {
+    "en": "Reading the local seed image…",
+    "ctx": "builder/BuilderOnDeviceViewModel.kt:233 (prose)"
+  },
+  "couldnt_open_the_local_seed_at": {
+    "en": "Couldn't open the local seed at %1$s.",
+    "ctx": "builder/BuilderOnDeviceViewModel.kt:239 (prose)",
+    "args": 1
+  },
+  "the_local_seed_at_is_empty": {
+    "en": "The local seed at %1$s is empty.",
+    "ctx": "builder/BuilderOnDeviceViewModel.kt:244 (prose)",
+    "args": 1
+  },
+  "using_local_seed_image": {
+    "en": "Using local seed image (%1$s).",
+    "ctx": "builder/BuilderOnDeviceViewModel.kt:245 (prose)",
+    "args": 1
+  },
+  "developer_seed_source": {
+    "en": "Developer: seed source",
+    "ctx": "ui/screens/BuilderOnDeviceScreen.kt:223 (arg of Text)"
+  },
+  "managed_manifest_download": {
+    "en": "Managed (manifest download)",
+    "ctx": "ui/screens/BuilderOnDeviceScreen.kt:226 (prose)"
+  },
+  "choose_local_seed": {
+    "en": "Choose local seed…",
+    "ctx": "ui/screens/BuilderOnDeviceScreen.kt:232 (label=)"
+  },
+  "use_managed": {
+    "en": "Use managed",
+    "ctx": "ui/screens/BuilderOnDeviceScreen.kt:236 (label=)"
+  },
+  "finalizing": {
+    "en": "Finalizing",
+    "ctx": "ui/screens/BuilderOnDeviceScreen.kt:265 (ui label)"
   }
 }

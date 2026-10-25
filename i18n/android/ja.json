@@ -3095,5 +3095,15 @@
   "activity_gpu_approval_withdrawn": "アプリのGPU使用を取り消しました",
   "activity_stack_switch_started": "アーキテクチャの移行を開始しました",
   "activity_stack_switched": "アーキテクチャの移行が完了しました",
-  "activity_stack_switch_reverted": "アーキテクチャの移行は取り消されました"
+  "activity_stack_switch_reverted": "アーキテクチャの移行は取り消されました",
+  "finalizing_the_install_image_do_not": "インストールイメージを仕上げています。抜かないでください…",
+  "reading_the_local_seed_image": "ローカルのシードイメージを読み込んでいます…",
+  "couldnt_open_the_local_seed_at": "%1$s のローカルシードを開けませんでした。",
+  "the_local_seed_at_is_empty": "%1$s のローカルシードは空です。",
+  "using_local_seed_image": "ローカルのシードイメージを使用しています(%1$s)。",
+  "developer_seed_source": "開発者向け: シードの取得元",
+  "managed_manifest_download": "管理対象(マニフェストからダウンロード)",
+  "choose_local_seed": "ローカルシードを選択…",
+  "use_managed": "管理対象を使う",
+  "finalizing": "仕上げ中"
 }

@@ -3095,5 +3095,15 @@
   "activity_gpu_approval_withdrawn": "Utilisation du GPU retirée à une app",
   "activity_stack_switch_started": "Changement d’architecture commencé",
   "activity_stack_switched": "Changement d’architecture terminé",
-  "activity_stack_switch_reverted": "Le changement d’architecture a été annulé"
+  "activity_stack_switch_reverted": "Le changement d’architecture a été annulé",
+  "finalizing_the_install_image_do_not": "Finalisation de l'image d'installation, ne débranchez pas…",
+  "reading_the_local_seed_image": "Lecture de l'image de base locale…",
+  "couldnt_open_the_local_seed_at": "Impossible d'ouvrir l'image de base locale à %1$s.",
+  "the_local_seed_at_is_empty": "L'image de base locale à %1$s est vide.",
+  "using_local_seed_image": "Utilisation de l'image de base locale (%1$s).",
+  "developer_seed_source": "Développement : source de l'image de base",
+  "managed_manifest_download": "Gérée (téléchargement selon le manifeste)",
+  "choose_local_seed": "Choisir une image de base locale…",
+  "use_managed": "Utiliser la version gérée",
+  "finalizing": "Finalisation"
 }

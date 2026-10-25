@@ -2012,8 +2012,8 @@
       "security.html"
     ]
   },
-  "s798346340b": {
-    "en": "The boot image is built reproducibly: you can verify the bytes match the source.",
+  "sf9fea4b86e": {
+    "en": "The boot image is built reproducibly: you can <1>verify the bytes match stock Debian</1>.",
     "kind": "text",
     "ctx": "li",
     "pages": [
