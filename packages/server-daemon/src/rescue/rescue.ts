@@ -85,6 +85,8 @@ export interface RescueDeps {
   /** What the owner may see once in: the apps this box runs. */
   apps: () => Array<{ serviceId: string; name: string }>;
   note?: (kind: string, detail: string, ok?: boolean) => void;
+  /** A rescue session just opened: who, and the acting phone's own nonce. The daemon alerts the admin devices. */
+  onExport?: (e: { stage: "rescue-opened"; by: string; ref: string }) => void;
   now?: () => number;
   random?: (n: number) => Buffer;
   log?: (m: string) => void;
@@ -206,6 +208,11 @@ export function buildRescue(deps: RescueDeps) {
     sessions.set(sha(token), { exp: expiresAt, signer });
     const who = signer.kind === "root" ? "the admin key" : `admin device ${signer.deviceId.slice(0, 8)}`;
     note("server.rescue.opened", `A rescue session was opened with ${who}: it can make and download a backup of this server.`);
+    try {
+      deps.onExport?.({ stage: "rescue-opened", by: who, ref: order.clientNonce });
+    } catch {
+      /* an alert never fails a rescue */
+    }
     log("[rescue] session opened");
     return json(200, { token, expiresAt });
   }

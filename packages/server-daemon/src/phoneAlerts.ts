@@ -101,9 +101,29 @@ export type AppStorageAlert = {
   store: "files" | "postgres";
 };
 
+/**
+ * A copy of this server's data is being, or has been, taken (docs/data-sovereignty.md):
+ * a rescue session was opened, a backup was downloaded, or a browser download
+ * was approved. Sent to every admin device so the ones that did not do it
+ * hear of it; the push that wakes the phone is content-free (`generic`), and
+ * the acting phone drops the alert whose `ref` it made itself.
+ */
+export type BackupExportAlert = {
+  kind: "backup-exported";
+  /** Always empty: the alert is about the server, not an app. */
+  serviceId: string;
+  stage: "rescue-opened" | "downloaded" | "browser-approved";
+  /** "the admin key" or "admin device 1a2b3c4d" for a rescue session; empty otherwise. */
+  by: string;
+  /** The acting phone's own nonce for a rescue session (so it can ignore its own alert); empty otherwise. */
+  ref: string;
+  at: number;
+};
+
 export type PhoneAlert =
   | PhoneUpdateAlert
   | BrowserAlert
   | ReissuanceAlert
   | AiChatAlert
-  | AppStorageAlert;
+  | AppStorageAlert
+  | BackupExportAlert;
