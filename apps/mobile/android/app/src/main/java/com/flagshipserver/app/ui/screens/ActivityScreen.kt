@@ -203,7 +203,7 @@ fun ActivityScreen(
                 onToggle = { toggle(ActivitySection.Chat) },
                 count = chatListing.requests.size,
                 badge = true,
-            ) { ChatRequestsList(chatCenter) }
+            ) { ChatRequestsList(chatCenter, scope = chatScope) }
         }
 
         // Browser access beyond an app's manifest (SEC-BROWSER-002): shown while an ask waits.

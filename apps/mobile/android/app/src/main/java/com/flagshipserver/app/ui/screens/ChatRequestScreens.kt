@@ -33,6 +33,7 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.TextButton
 import com.flagshipserver.app.ui.theme.FS
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 private fun tagOf(item: ChatItem) = item.requestId.replace(Regex("[^A-Za-z0-9_-]"), "")
@@ -116,11 +117,10 @@ fun ChatRequestDialogHost(center: ChatRequestCenter) {
 
 /** Activity → App chat requests: what waits, then the apps that take chats without asking. */
 @Composable
-fun ChatRequestsList(center: ChatRequestCenter) {
+fun ChatRequestsList(center: ChatRequestCenter, scope: CoroutineScope = rememberCoroutineScope()) {
     val listing by center.listing.collectAsState()
     val busy by center.busy.collectAsState()
     val toasts = LocalToastCenter.current
-    val scope = rememberCoroutineScope()
     val canAnswer = center.canAnswerHere()
     val multi = (listing.requests.map { it.box.fqdn } + listing.always.map { it.box.fqdn }).toSet().size > 1
     Column(Modifier.fillMaxWidth().testTag("activity-chat-list"), verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {

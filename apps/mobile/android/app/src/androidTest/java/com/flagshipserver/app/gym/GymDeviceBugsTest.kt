@@ -47,9 +47,11 @@ class GymDeviceBugsTest : GymBase() {
         waitUntilExists("settings-title")
         composeRule.onNodeWithText("Cloud recovery").performScrollTo().performClick()
         waitUntilExists("recovery-setup")
-        // Provider-neutral: the passkey may live in Samsung Pass, not Google.
-        composeRule.onNodeWithText("Samsung Pass", substring = true).assertExists()
+        // Provider-neutral: the passkey may live in Samsung Pass, not Google ("How this works", behind the (?)).
         composeRule.onNodeWithText("Google account that holds", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("recovery-how-it-works").performClick()
+        composeRule.onNodeWithText("Samsung Pass", substring = true).assertExists()
+        composeRule.onNodeWithText("Close").performClick()
         gymShot("recovery-not-set-up")
 
         composeRule.onNodeWithTag("recovery-setup").performClick()
