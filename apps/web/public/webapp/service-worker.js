@@ -422,7 +422,8 @@
 //       dry run shows the box's plan, Move now sends it, the card follows the move. Journal reads and
 //       these orders sign with the admin root (lib/adminRoot.js SENSITIVE_TAGS).
 //  v181: feat/marketplace only: release/0.3's shell (v180) plus the marketplace, tier status, allowance, install, developer views and the Pro "Separate list on each server" switch (lib/listScope.js); a version above its parent's, bump past the parent's on rebase.
-const SHELL_VERSION = "v181";
+//  v183: feat/custom-names only: feat/marketplace's v181 plus the paid name change (v182 is feat/custom-domains').
+const SHELL_VERSION = "v183";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -643,7 +644,6 @@ const OPTIONAL_SHELL = [
   "/lib/allowance.js",
   "/lib/marketplaceLlmKey.js",
   "/lib/proBanner.js",
-  "/lib/nameDibs.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -668,7 +668,6 @@ const OPTIONAL_SHELL = [
   "/views/tier-status.js",
   "/views/marketplace.js",
   "/views/developer.js",
-  "/views/name-dibs.js",
   "/views/vibe-code.js",
   "/views/edit-service.js",
   "/views/service-env.js",
