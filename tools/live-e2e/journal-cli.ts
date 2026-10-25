@@ -15,7 +15,7 @@ if (!user || !serverName) {
 }
 const fqdn = `${serverName}.${user}.${SERVICES}`;
 const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: Number(linesArg ?? 300), issuedAt: Date.now() };
-const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, new Account(user).keys.irk)) });
+const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, new Account(user).keys.adminRoot)) });
 const lines: string[] = r.json?.lines ?? r.json?.log ?? [];
 const re = pattern ? new RegExp(pattern, "i") : null;
 for (const l of lines) if (!re || re.test(l)) process.stdout.write(l + "\n");

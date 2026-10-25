@@ -131,13 +131,15 @@ export const core: Group = {
       return "adminRootPub = the demo admin root";
     });
 
-    await rec.check("POST /api/journal (owner-IRK signed) returns daemon log lines", async () => {
+    await rec.check("POST /api/journal (admin-root signed) returns daemon log lines; the IRK is refused", async () => {
       const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 25, issuedAt: Date.now() };
-      const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, irk)) });
+      const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, adminRoot)) });
       assert(r.status === 200, `got ${r.status}: ${short(r.text)}`);
       const lines = r.json?.lines ?? r.json?.log ?? [];
       assert(Array.isArray(lines) && lines.length > 0, "no lines");
-      return `${lines.length} lines`;
+      const byIrk = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, irk)) });
+      assert(byIrk.status === 403, `IRK-signed read: ${byIrk.status}`);
+      return `${lines.length} lines, IRK ${byIrk.status}`;
     });
     await rec.check("POST /api/journal rejects a forged signature", async () => {
       const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 5, issuedAt: Date.now() };

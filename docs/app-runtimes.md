@@ -286,8 +286,14 @@ can't (`dataLayer/dedicated.ts`, `appRuntimeWiring.ts`):
 `<dataDir>/data/database-profile.json` (`{"default": "shared"|"dedicated",
 "apps": {"<creator>--<slug>": …}}`) overrides the choice; there is no owner
 screen for it yet. The quota limiter skips dedicated databases (their image is
-their limit). Peer backups (`volumeDump.ts`) still dump only the shared
-instance; whole-server backups and app copies dump each app's own.
+their limit). Every backup path takes the dedicated databases too: whole-server
+backups (scheduled, the `.flagship` file, peer backup v2, Migrate) and app
+copies dump each app's database inside its own instance and restore it into
+the new server's instance for that app (or its shared one); the older peer
+backup and its reload (`volumeDump.ts`) `pg_dumpall` each instance as its own
+admin into `_dumps/dedicated/<key>.dump` and load it back only into the
+instance of that key, made first on its own quota image when only its state
+came back.
 
 WebAssembly apps (`runtime.kind: "wasi"`) are in `docs/wasi-apps.md`; apps
 made of several processes (`components`) in `docs/app-groups.md`.

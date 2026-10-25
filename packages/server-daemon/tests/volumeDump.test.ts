@@ -11,8 +11,10 @@ import {
   isRawDataMount,
   isDumpSubtree,
   type DataServicesCreds,
+  type DedicatedDumpSource,
   type VolumeDumpRunner,
 } from "../src/volumeDump.js";
+import type { DedicatedLogin } from "../src/dataLayer/dedicated.js";
 import { assertNoHostPathInDockerArgs } from "../src/serviceRunner.js";
 
 const CREDS: DataServicesCreds = {
@@ -114,7 +116,7 @@ describe("dumpDataVolumes", () => {
     const { runner, calls } = recordingRunner();
     const report = await dumpDataVolumes({ dataRoot, runner, creds: CREDS });
     expect(report.ok).toBe(true);
-    expect(report.stores).toEqual({ postgres: "ok", files: "ok", forgejo: "ok" });
+    expect(report.stores).toEqual({ postgres: "ok", files: "ok", forgejo: "ok", dedicated: "skipped" });
 
     // postgres: pg_dumpall via docker exec, password via -e PGPASSWORD, → all.dump
     const pg = calls.find((c) => c.args.includes("pg_dumpall"));
@@ -199,7 +201,7 @@ describe("dumpDataVolumes", () => {
   it("dumps the files folders even without the data-services credentials", async () => {
     const { runner, calls } = recordingRunner();
     const report = await dumpDataVolumes({ dataRoot, runner, creds: null });
-    expect(report.stores).toEqual({ postgres: "skipped", files: "ok", forgejo: "skipped" });
+    expect(report.stores).toEqual({ postgres: "skipped", files: "ok", forgejo: "skipped", dedicated: "skipped" });
     expect(tarRuns(calls)).toHaveLength(2);
     expect(calls.some((c) => c.args.includes("pg_dumpall"))).toBe(false);
   });
@@ -246,7 +248,7 @@ describe("dumpDataVolumes", () => {
   it("honors `only` to dump a subset of stores", async () => {
     const { runner, calls } = recordingRunner();
     const report = await dumpDataVolumes({ dataRoot, runner, creds: CREDS, only: ["postgres"] });
-    expect(report.stores).toEqual({ postgres: "ok", files: "skipped", forgejo: "skipped" });
+    expect(report.stores).toEqual({ postgres: "ok", files: "skipped", forgejo: "skipped", dedicated: "skipped" });
     expect(tarRuns(calls)).toHaveLength(0);
   });
 
@@ -269,7 +271,7 @@ describe("reloadDataVolumes", () => {
     const { runner, calls } = recordingRunner();
     const report = await reloadDataVolumes({ dataRoot, runner, creds: CREDS });
     expect(report.ok).toBe(true);
-    expect(report.stores).toEqual({ postgres: "ok", files: "ok", forgejo: "ok" });
+    expect(report.stores).toEqual({ postgres: "ok", files: "ok", forgejo: "ok", dedicated: "absent" });
 
     // postgres: psql fed the all.dump on stdin (pg_dumpall --clean output is idempotent)
     const psql = calls.find((c) => c.args.includes("psql"));
@@ -318,7 +320,7 @@ describe("reloadDataVolumes", () => {
     await dumpDataVolumes({ dataRoot, runner: dump.runner, creds: CREDS });
     const { runner, calls } = recordingRunner();
     const report = await reloadDataVolumes({ dataRoot, runner, creds: null });
-    expect(report.stores).toEqual({ postgres: "absent", files: "ok", forgejo: "absent" });
+    expect(report.stores).toEqual({ postgres: "absent", files: "ok", forgejo: "absent", dedicated: "absent" });
     expect(calls.some((c) => c.args.includes("psql"))).toBe(false);
   });
 
@@ -329,7 +331,7 @@ describe("reloadDataVolumes", () => {
     const { runner, calls } = recordingRunner();
     const report = await reloadDataVolumes({ dataRoot, runner, creds: CREDS });
     expect(report.ok).toBe(true);
-    expect(report.stores).toEqual({ postgres: "ok", files: "absent", forgejo: "absent" });
+    expect(report.stores).toEqual({ postgres: "ok", files: "absent", forgejo: "absent", dedicated: "absent" });
     expect(calls.some((c) => c.args.includes("psql"))).toBe(true);
   });
 
@@ -371,5 +373,107 @@ describe("loadDataServicesCreds", () => {
     const partial = join(workdir, "partial.env");
     await writeFile(partial, "POSTGRES_ADMIN_USER=x\n");
     expect(await loadDataServicesCreds(partial)).toBeNull();
+  });
+});
+
+describe("the apps' own database instances", () => {
+  const KA = "a".repeat(24);
+  const KB = "b".repeat(24);
+  const login = (key: string, over: Partial<DedicatedLogin> = {}): DedicatedLogin => ({
+    key,
+    container: `flagship-pgd-${key}`,
+    user: "flagship_admin",
+    password: `pw-${key.slice(0, 1)}`,
+    ...over,
+  });
+  function source(logins: DedicatedLogin[], restore: Record<string, DedicatedLogin | null> = {}) {
+    const asked: string[] = [];
+    const src: DedicatedDumpSource = {
+      backupLogins: async () => logins,
+      restoreLogin: async (k) => {
+        asked.push(k);
+        return Object.hasOwn(restore, k) ? restore[k]! : login(k);
+      },
+    };
+    return { src, asked };
+  }
+  const dumpsOf = (calls: Rec[]) => calls.filter((c) => c.args.includes("pg_dumpall") && c.args.some((a) => a.startsWith("flagship-pgd-")));
+
+  it("dumps each instance as its own admin, in its own container, even without the shared credentials", async () => {
+    const { runner, calls } = recordingRunner();
+    const report = await dumpDataVolumes({ dataRoot, runner, creds: null, dedicated: source([login(KA), login(KB)]).src });
+    expect(report.stores).toEqual({ postgres: "skipped", files: "ok", forgejo: "skipped", dedicated: "ok" });
+    const dumps = dumpsOf(calls);
+    expect(dumps.map((d) => d.outPath)).toEqual([join(dataRoot, "_dumps", "dedicated", `${KA}.dump`), join(dataRoot, "_dumps", "dedicated", `${KB}.dump`)]);
+    expect(dumps[0]!.args.slice(0, 4)).toEqual(["exec", "-e", "PGPASSWORD=pw-a", `flagship-pgd-${KA}`]);
+    expect(dumps[0]!.args).toEqual(expect.arrayContaining(["-U", "flagship_admin", "--clean", "--if-exists"]));
+    expect(isDumpSubtree(`_dumps/dedicated/${KA}.dump`)).toBe(true);
+    expect(calls.some((c) => c.args.includes("flagship-postgres"))).toBe(false);
+  });
+
+  it("drops a removed app's dump, and keeps the last good dump of one that failed this time", async () => {
+    const first = recordingRunner();
+    await dumpDataVolumes({ dataRoot, runner: first.runner, creds: CREDS, dedicated: source([login(KA), login(KB)]).src });
+    const { runner } = recordingRunner({ fail: `flagship-pgd-${KB}` });
+    const report = await dumpDataVolumes({ dataRoot, runner, creds: CREDS, dedicated: source([login(KB)]).src });
+    expect(report.stores.dedicated).toBe("error");
+    expect(report.stores.postgres).toBe("ok");
+    expect(report.errors.find((e) => e.store === "dedicated")!.message).toMatch(new RegExp(`${KB}: injected failure`));
+    expect(await exists(join(dataRoot, "_dumps", "dedicated", `${KA}.dump`))).toBe(false);
+    expect(await exists(join(dataRoot, "_dumps", "dedicated", `${KB}.dump`))).toBe(true);
+  });
+
+  it("refuses a login that names the shared instance or another app's container, and runs nothing against it", async () => {
+    const { runner, calls } = recordingRunner();
+    const report = await dumpDataVolumes({
+      dataRoot,
+      runner,
+      creds: CREDS,
+      dedicated: source([login(KA, { container: "flagship-postgres" }), login(KB, { container: `flagship-pgd-${KA}` }), login("../../x"), login(KA)]).src,
+    });
+    expect(report.stores.dedicated).toBe("error");
+    const dumps = dumpsOf(calls);
+    expect(dumps).toHaveLength(1);
+    expect(dumps[0]!.args).toContain(`flagship-pgd-${KA}`);
+    expect(dumps[0]!.outPath).toBe(join(dataRoot, "_dumps", "dedicated", `${KA}.dump`));
+    expect(calls.filter((c) => c.args.includes("pg_dumpall") && c.args.includes("flagship-postgres"))).toHaveLength(1);
+  });
+
+  it("reloads each dump only into the instance of its own key, started for it", async () => {
+    await dumpDataVolumes({ dataRoot, runner: recordingRunner().runner, creds: null, dedicated: source([login(KA), login(KB)]).src });
+    await writeFile(join(dataRoot, "_dumps", "dedicated", "not-a-key.dump"), "SQL");
+    const { runner, calls } = recordingRunner();
+    const s = source([]);
+    const report = await reloadDataVolumes({ dataRoot, runner, creds: null, dedicated: s.src });
+    expect(report.stores.dedicated).toBe("ok");
+    expect(s.asked).toEqual([KA, KB]);
+    const loads = calls.filter((c) => c.kind === "runFromFile" && c.args.includes("psql"));
+    expect(loads.map((c) => [c.args[4], c.inPath])).toEqual([
+      [`flagship-pgd-${KA}`, join(dataRoot, "_dumps", "dedicated", `${KA}.dump`)],
+      [`flagship-pgd-${KB}`, join(dataRoot, "_dumps", "dedicated", `${KB}.dump`)],
+    ]);
+    expect(loads[0]!.args).toEqual(["exec", "-i", "-e", "PGPASSWORD=pw-a", `flagship-pgd-${KA}`, "psql", "-U", "flagship_admin", "-h", "127.0.0.1", "-d", "postgres"]);
+  });
+
+  it("never loads a dump into another instance: no instance here, or one that answers for another key, is an error", async () => {
+    await dumpDataVolumes({ dataRoot, runner: recordingRunner().runner, creds: null, dedicated: source([login(KA), login(KB)]).src });
+    const { runner, calls } = recordingRunner();
+    const report = await reloadDataVolumes({
+      dataRoot,
+      runner,
+      creds: null,
+      dedicated: source([], { [KA]: null, [KB]: login(KA) }).src,
+    });
+    expect(report.stores.dedicated).toBe("error");
+    expect(report.errors[0]!.message).toMatch(new RegExp(`${KA}: no database instance for it here`));
+    expect(report.errors[0]!.message).toMatch(new RegExp(`${KB}: no database instance for it here`));
+    expect(calls.some((c) => c.args.includes("psql"))).toBe(false);
+  });
+
+  it("is left out entirely when the box keeps no dedicated instances", async () => {
+    const { runner, calls } = recordingRunner();
+    const report = await dumpDataVolumes({ dataRoot, runner, creds: CREDS, only: ["dedicated"] });
+    expect(report.stores.dedicated).toBe("skipped");
+    expect(calls).toHaveLength(0);
   });
 });

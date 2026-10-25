@@ -97,3 +97,4 @@ export * from "./releasePqPin.js";
 export * from "./caLeasePq.js";
 export * from "./bootUnlockV2.js";
 export * from "./signedTime.js";
+export * from "./archV2Switch.js";

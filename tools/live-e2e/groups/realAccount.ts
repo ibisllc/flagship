@@ -160,13 +160,15 @@ export const realAccount: Group = {
       assert(ok.status === 200 || ok.status === 409, `admin-root RCK ${ok.status}: ${short(ok.text)}`);
       return `IRK 403, admin root ${ok.status}`;
     });
-    await rec.check("R's box (registered under the admin-approved code) is owned by R's IRK and pins R's admin root", async () => {
+    await rec.check("R's box (registered under the admin-approved code) pins R's admin root: its journal takes the admin root, not the IRK", async () => {
       const req: JournalRequest = { serverId: b.fqdn, unit: "flagship-daemon", lines: 5, issuedAt: Date.now() };
-      const r = await postJson(`https://${b.fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, irk)) });
+      const r = await postJson(`https://${b.fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, adminRoot)) });
       assert(r.status === 200, `journal ${r.status}: ${short(r.text)}`);
+      const byIrk = await postJson(`https://${b.fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, irk)) });
+      assert(byIrk.status === 403, `IRK-signed journal ${byIrk.status}`);
       const u = await http(`https://${CONTROL}/api/username/${user}`);
       assert(u.json?.adminRootPub === bytesToHex(adminRoot.publicKey), `adminRootPub ${short(u.json?.adminRootPub, 20)}`);
-      return "journal 200 under R's IRK";
+      return "journal 200 under R's admin root, 403 under R's IRK";
     });
 
     // ── rate limits ───────────────────────────────────────────────────────

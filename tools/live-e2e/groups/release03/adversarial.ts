@@ -95,22 +95,24 @@ export const adversarial: Group = {
 
     try {
       // ── signed routes on the real box ───────────────────────────────────
-      await rec.check("AT-LIVE-02 journal (/api/journal, owner IRK): forged, foreign, other-box and unlisted-unit requests are refused and return no lines — catches a log read without the owner's key or outside the unit allowlist", async () => {
+      await rec.check("AT-LIVE-02 journal (/api/journal, admin root): the account's IRK, forged, foreign, other-box and unlisted-unit requests are refused and return no lines — catches a log read without the owner's key or outside the unit allowlist", async () => {
         const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 5, issuedAt: Date.now() };
         const send = (body: Record<string, unknown>) => postJson(`https://${fqdn}/api/journal`, body);
-        const variants = signatureVariants(hex(signJournalRequest(req, irk)), {
+        const variants = signatureVariants(hex(signJournalRequest(req, adminRoot)), {
+          "the account's own IRK": hex(signJournalRequest(req, irk)),
           "account B's IRK": hex(signJournalRequest(req, acctB.keys.irk)),
+          "account B's admin root": hex(signJournalRequest(req, acctB.keys.adminRoot)),
           "a stranger's key": hex(signJournalRequest(req, evil)),
         });
         const seen = await refuseAll((sig) => send(sig === undefined ? { request: req } : { request: req, signature: sig }), variants);
         const otherBox: JournalRequest = { ...req, serverId: b1.fqdn };
-        const r1 = await send({ request: otherBox, signature: hex(signJournalRequest(otherBox, irk)) });
+        const r1 = await send({ request: otherBox, signature: hex(signJournalRequest(otherBox, adminRoot)) });
         assert(isRefusal(r1.status), `a request naming B1, sent to A1: ${r1.status}`);
         const unit: JournalRequest = { ...req, unit: "ssh" };
-        const r2 = await send({ request: unit, signature: hex(signJournalRequest(unit, irk)) });
+        const r2 = await send({ request: unit, signature: hex(signJournalRequest(unit, adminRoot)) });
         assert(r2.status === 403 && !Array.isArray(r2.json?.lines), `unit outside the allowlist: ${r2.status} ${short(r2.text)}`);
         const stale: JournalRequest = { ...req, issuedAt: Date.now() - 3_600_000 };
-        const r3 = await send({ request: stale, signature: hex(signJournalRequest(stale, irk)) });
+        const r3 = await send({ request: stale, signature: hex(signJournalRequest(stale, adminRoot)) });
         assert(isRefusal(r3.status), `an hour-old request: ${r3.status}`);
         return `${seen}; other box ${r1.status}, unit ${r2.status}, stale ${r3.status}`;
       });

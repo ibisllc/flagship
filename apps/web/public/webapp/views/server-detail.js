@@ -1074,7 +1074,7 @@ async function runJournalFetch(body, btn) {
       unit,
       lines,
       umk: session.umk,
-      signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+      signWithIrk: sensitiveSigner(),
     });
     if (out) {
       out.classList.remove("hidden");

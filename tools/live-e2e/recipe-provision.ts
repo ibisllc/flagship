@@ -462,10 +462,10 @@ async function main(): Promise<void> {
       });
 
       // ── 7. PROVE app-ownership via the app IRK ───────────────────────────
-      log("[prove ownership — APP IRK signed journal]");
-      await check("POST /api/journal signed by the APP IRK returns real log lines (owned!)", async () => {
+      log("[prove ownership — APP admin-root signed journal]");
+      await check("POST /api/journal signed by the APP admin root returns real log lines (owned!)", async () => {
         const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 25, issuedAt: Date.now() };
-        const sig = bytesToHex(signJournalRequest(req, irk));
+        const sig = bytesToHex(signJournalRequest(req, adminRoot));
         const r = await http(`https://${fqdn}/api/journal`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -474,7 +474,7 @@ async function main(): Promise<void> {
         assert(r.status === 200, `got ${r.status}: ${r.text.slice(0, 160)}`);
         const lines = r.json?.lines ?? r.json?.log ?? [];
         assert(Array.isArray(lines) && lines.length > 0, `no lines (${JSON.stringify(r.json).slice(0, 80)})`);
-        return `${lines.length} lines (box owned by the app IRK)`;
+        return `${lines.length} lines (box pins the app's admin root)`;
       });
       await check("POST /api/journal REJECTS a forged signature (ownership is enforced)", async () => {
         const req: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 5, issuedAt: Date.now() };

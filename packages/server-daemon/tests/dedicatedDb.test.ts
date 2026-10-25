@@ -14,13 +14,14 @@ import {
   diskRoomLeft,
   memoryDedicatedStateStore,
   DEFAULT_DEDICATED_LIMITS,
+  type DedicatedStateStore,
 } from "../src/dataLayer/dedicated.js";
 import { OwnedPortBook, memoryPortBookStore } from "../src/appGroups/portBook.js";
 import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin } from "../src/dataLayer/index.js";
 import { assertNoHostPathInDockerArgs, type CommandRunner } from "../src/serviceRunner.js";
 import { buildSandboxPlan } from "../src/migrationSandbox.js";
 
-function world(opts: { free?: number; total?: number; linkOk?: boolean; gateway?: boolean } = {}) {
+function world(opts: { free?: number; total?: number; linkOk?: boolean; gateway?: boolean; absent?: boolean; state?: DedicatedStateStore } = {}) {
   const calls: string[] = [];
   const running = new Set<string>();
   const cmd: CommandRunner = {
@@ -53,7 +54,7 @@ function world(opts: { free?: number; total?: number; linkOk?: boolean; gateway?
     volumes: {
       create: async (v, size) => void volumes.set(v, size),
       remove: async (v) => void volumes.delete(v),
-      prepare: async () => "mounted",
+      prepare: async (v) => (opts.absent && !volumes.has(v) ? "absent" : "mounted"),
       imagePath: (v) => `/var/lib/flagship-files/${v}.img`,
     },
     preallocate: async (p, b) => void prealloc.push(`${p}:${b}`),
@@ -70,7 +71,7 @@ function world(opts: { free?: number; total?: number; linkOk?: boolean; gateway?
             },
             unlink: async (p) => void linked.delete(p),
           },
-    state: memoryDedicatedStateStore(),
+    state: opts.state ?? memoryDedicatedStateStore(),
     admin: (url) => {
       admins.push(url);
       const a = new InMemoryPostgresAdmin();
@@ -228,5 +229,52 @@ describe("migrations and backups of a dedicated database", () => {
     expect(pgContainerFor({ ...base, profile: "dedicated", container: `flagship-pgd-${"c".repeat(24)}` })).toBe(`flagship-pgd-${"c".repeat(24)}`);
     // A registry entry can't send a dump into some other container.
     expect(() => pgContainerFor({ ...base, container: "flagship-alice--shop" })).toThrow();
+  });
+});
+
+describe("whole-box dumps of the apps' own instances (volumeDump.ts)", () => {
+  it("hands out each instance's own admin login, and never one whose state names another app's key", async () => {
+    const state = memoryDedicatedStateStore();
+    const w = world({ state });
+    await w.d.forApp("alice", "shop");
+    await w.d.forApp("bob", "blog");
+    const ka = dedicatedKey("alice", "shop");
+    const logins = await w.d.backupLogins();
+    expect(logins.map((l) => [l.key, l.container, l.user])).toEqual(
+      [ka, dedicatedKey("bob", "blog")].sort().map((k) => [k, dedicatedContainer(k), "flagship_admin"]),
+    );
+    expect(w.admins.some((u) => u.includes(encodeURIComponent(logins.find((l) => l.key === ka)!.password)))).toBe(true);
+    // A state entry filed under another app's key (a damaged or tampered file) is never used.
+    const s = await state.load();
+    s[ka] = { ...s[ka]!, slug: "blog", creator: "bob" };
+    await state.save(s);
+    expect((await w.d.backupLogins()).map((l) => l.key)).toEqual([dedicatedKey("bob", "blog")]);
+    expect(await w.d.restoreLogin(ka)).toBeNull();
+    expect(await w.d.restoreLogin("../x")).toBeNull();
+  });
+
+  it("brings a restored instance up on a fresh quota image before its dump is loaded", async () => {
+    const state = memoryDedicatedStateStore();
+    const old = world({ state });
+    await old.d.forApp("alice", "shop", { diskBytes: 100 * 2 ** 20 });
+    const key = dedicatedKey("alice", "shop");
+    // The fresh box got the state back but not the instance or its image.
+    const fresh = world({ state, absent: true });
+    const l = await fresh.d.restoreLogin(key);
+    expect(l).toMatchObject({ key, container: dedicatedContainer(key), user: "flagship_admin" });
+    expect(fresh.volumes.get(dedicatedVolume(key))).toBe(100 * 2 ** 20);
+    expect(fresh.prealloc).toEqual([`/var/lib/flagship-files/${dedicatedVolume(key)}.img:${100 * 2 ** 20}`]);
+    expect(fresh.running.has(dedicatedContainer(key))).toBe(true);
+    expect(fresh.linked.get(15400)).toBe("alice--shop");
+    expect(await fresh.d.restoreLogin(dedicatedKey("bob", "blog"))).toBeNull();
+  });
+
+  it("refuses to restore an instance the disk has no room for", async () => {
+    const state = memoryDedicatedStateStore();
+    await world({ state }).d.forApp("alice", "shop", { diskBytes: 512 * 2 ** 20 });
+    const tight = world({ state, absent: true, free: 8.2 * 2 ** 30 });
+    await expect(tight.d.restoreLogin(dedicatedKey("alice", "shop"))).rejects.toThrow(/doesn't have room/);
+    expect(tight.volumes.size).toBe(0);
+    expect(tight.running.size).toBe(0);
   });
 });

@@ -31,7 +31,8 @@ import {
 import { createHash } from "node:crypto";
 import { buildRestoreWait, type RestoreWait } from "../../src/serverArchive/restoreWait.js";
 import { AppCopyOps } from "../../src/appCopy/ops.js";
-import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin } from "../../src/dataLayer/index.js";
+import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin, type PostgresStore } from "../../src/dataLayer/index.js";
+import { dedicatedContainer, dedicatedKey } from "../../src/dataLayer/dedicated.js";
 import { ServicePlatform } from "../../src/servicePlatform.js";
 import { InMemoryAppPullStateStore } from "../../src/updateClient.js";
 import { AppRunner, type CommandRunner } from "../../src/serviceRunner.js";
@@ -115,6 +116,8 @@ function fakeOps() {
   const images = new Set<string>();
   const restoredDbs: string[] = [];
   const restoredFiles: string[] = [];
+  const dumpedFrom: PostgresStore[] = [];
+  const restoredInto: PostgresStore[] = [];
   const ops: AppCopyOps = {
     saveImage: async () => {
       throw new Error("a backup must never carry an image");
@@ -122,17 +125,42 @@ function fakeOps() {
     loadImage: async (p) => void images.add((await readFile(p, "utf8")).slice("image:".length)),
     imageExists: async (i) => images.has(i),
     removeImage: async (i) => void images.delete(i),
-    dumpDatabase: async (s, out) => writeFile(out, `rows-of-${s.database}`),
+    dumpDatabase: async (s, out) => {
+      dumpedFrom.push(s);
+      await writeFile(out, `rows-of-${s.database}`);
+    },
     listDump: async () => "; Archive created\n",
-    restoreDatabase: async (_s, p) => void restoredDbs.push(await readFile(p, "utf8")),
+    restoreDatabase: async (s, p) => {
+      restoredInto.push(s);
+      restoredDbs.push(await readFile(p, "utf8"));
+    },
     archiveFiles: async (v, _c, out) => writeFile(out, `files-of-${v}`),
     restoreFiles: async (_v, p) => void restoredFiles.push(await readFile(p, "utf8")),
   };
-  return { ops, images, restoredDbs, restoredFiles };
+  return { ops, images, restoredDbs, restoredFiles, dumpedFrom, restoredInto };
 }
 
-function platformFor(box: typeof srcBox, nameKey: string) {
-  const provisioner = new DataProvisioner({ postgres: new InMemoryPostgresAdmin(), files: new InMemoryFilesAdmin(), nameKey });
+/** An app's own database instance (dataLayer/dedicated.ts), faked: its own admin, port and container. */
+function ownInstances(port: number) {
+  const admins = new Map<string, InMemoryPostgresAdmin>();
+  return {
+    profileFor: () => "dedicated" as const,
+    forApp: async (c: string, s: string) => {
+      const key = dedicatedKey(c, s);
+      if (!admins.has(key)) admins.set(key, new InMemoryPostgresAdmin());
+      return { admin: admins.get(key)!, port, container: dedicatedContainer(key) };
+    },
+    dropApp: async () => {},
+  };
+}
+
+function platformFor(box: typeof srcBox, nameKey: string, dedicatedPort?: number) {
+  const provisioner = new DataProvisioner({
+    postgres: new InMemoryPostgresAdmin(),
+    files: new InMemoryFilesAdmin(),
+    nameKey,
+    ...(dedicatedPort ? { dedicated: ownInstances(dedicatedPort) } : {}),
+  });
   const cmd: CommandRunner = { run: async () => {}, capture: async () => ({ stdout: "", stderr: "" }) };
   const platform = new ServicePlatform({
     host: { username: "harry", irkPub: owner.publicKey },
@@ -145,16 +173,16 @@ function platformFor(box: typeof srcBox, nameKey: string) {
   return { platform, provisioner };
 }
 
-async function world(o: { dstFree?: () => number } = {}) {
+async function world(o: { dstFree?: () => number; srcOwnDb?: boolean; dstOwnDb?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "server-archive-"));
-  const src = platformFor(srcBox, "s".repeat(40));
+  const src = platformFor(srcBox, "s".repeat(40), o.srcOwnDb ? 15400 : undefined);
   const request = { serverId: SRC, creator: "harry", slug: "notes", manifestJson: JSON.stringify(MANIFEST), addOwnerToMembership: true, issuedAt: Date.now() };
   const installed = await src.platform.install({ request, signature: signInstallService(request, owner), verify: verifyInstallService });
   if (!installed.ok) throw new Error(installed.reason);
   const srcEnv = new InMemoryAppEnvStore();
   await srcEnv.put(SERVICE, { OPENAI_KEY: "sk-secret", MODE: "prod" });
   const sOps = fakeOps();
-  const dst = platformFor(dstBox, "t".repeat(40));
+  const dst = platformFor(dstBox, "t".repeat(40), o.dstOwnDb ? 15411 : undefined);
   const dstEnv = new InMemoryAppEnvStore();
   const tOps = fakeOps();
   const events: string[] = [];
@@ -314,6 +342,36 @@ describe("Backup/clone server", () => {
     expect(w.events).toContain("server.restore.finished");
     // A second upload is refused: the server no longer waits.
     expect(asJson(await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length })).code).toBe("not-waiting");
+  });
+
+  it("an app's own database instance is dumped there and restored into the new server's own instance for it", async () => {
+    const w = await world({ srcOwnDb: true, dstOwnDb: true });
+    const file = await backUp(w);
+    const own = dedicatedContainer(dedicatedKey("harry", "notes"));
+    expect(w.sOps.dumpedFrom).toHaveLength(1);
+    expect(w.sOps.dumpedFrom[0]).toMatchObject({ profile: "dedicated", container: own });
+    expect(w.sOps.dumpedFrom[0]!.url).toContain(":15400/");
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    await upload(w.targetService, file);
+    expect((await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() })).status).toBe(202);
+    await w.targetService.settle();
+    expect(asJson(await call(w.targetService, "GET", RESTORE_PATH)).restore).toMatchObject({ state: "done" });
+    expect(w.tOps.restoredInto).toHaveLength(1);
+    expect(w.tOps.restoredInto[0]).toMatchObject({ profile: "dedicated", container: own });
+    expect(w.tOps.restoredInto[0]!.url).toContain(":15411/");
+    expect(w.tOps.restoredDbs).toEqual([`rows-of-${w.sOps.dumpedFrom[0]!.database}`]);
+  });
+
+  it("an app's own database restores into the shared instance on a server that gives apps none", async () => {
+    const w = await world({ srcOwnDb: true });
+    const file = await backUp(w);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    await upload(w.targetService, file);
+    expect((await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() })).status).toBe(202);
+    await w.targetService.settle();
+    expect(w.tOps.restoredInto).toHaveLength(1);
+    expect(w.tOps.restoredInto[0]).not.toHaveProperty("container");
+    expect(w.tOps.restoredDbs).toEqual([`rows-of-${w.sOps.dumpedFrom[0]!.database}`]);
   });
 
   it("the backup file opens with the passcode or the account key, and names the data file exactly", async () => {

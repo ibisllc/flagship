@@ -11,7 +11,7 @@
  *   LIVE_E2E_REUSE_USER=<user> npx tsx tools/live-e2e/vibe-deploy-debug.ts
  */
 import { randomBytes } from "node:crypto";
-import { deriveDemoUserIrk, deriveDemoDelegatedKey } from "@flagship/control-plane";
+import { deriveDemoAdminRoot, deriveDemoDelegatedKey } from "@flagship/control-plane";
 import { signPhoneOrder, signJournalRequest, type PhoneOrder, type JournalRequest } from "@flagship/protocol";
 
 const CONTROL = process.env.LIVE_E2E_CONTROL || "gym.flagshipserver.com";
@@ -47,9 +47,9 @@ async function http(url: string, init: RequestInit = {}, timeoutMs = 30000) {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function journalGrep(re: RegExp, lines = 250): Promise<string[]> {
-  const irk = deriveDemoUserIrk(hexToBytes(KEK), user);
+  const adminRoot = deriveDemoAdminRoot(hexToBytes(KEK), user);
   const jr: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines, issuedAt: Date.now() };
-  const js = bytesToHex(signJournalRequest(jr, irk));
+  const js = bytesToHex(signJournalRequest(jr, adminRoot));
   const j = await http(`https://${fqdn}/api/journal`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ request: jr, signature: js }),

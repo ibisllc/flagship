@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
-import { verifyJournalRequest, type AdminGrantView, type JournalRequest } from "@flagship/protocol";
+import { canonicalJournalRequest, verifyJournalRequest, type AdminGrantView, type JournalRequest } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { hybridOrderSignature } from "./pqAuthority.js";
 
 /**
  * Diagnostics surface — `POST /api/journal`. Rides the same daemon HTTP plane
@@ -9,10 +10,10 @@ import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
  * is a `JournalRequest` `{ serverId, unit, lines, issuedAt }`. Where the box
  * pins an admin root, a request signed by that root (as rotated: the daemon
  * passes the re-pinned root) or by a delegated admin device passes the same
- * gate as the other owner routes (`authorizeSensitiveOrder`). The account's
- * IRK is also accepted for this read (the apps sign journal reads with it).
- * Within the replay window it returns the trailing `lines` of the unit's
- * systemd journal as a JSON string array.
+ * gate as the other owner routes (`authorizeSensitiveOrder`); the IRK is
+ * refused there, as for every admin-only order. A box that pins no admin root
+ * still takes the IRK. Within the replay window it returns the trailing
+ * `lines` of the unit's systemd journal as a JSON string array.
  *
  * Privacy: this is served by the daemon over the box's OWN pinned pipe
  * (phone→box direct). `.com` terminates no TLS for it and never sees the
@@ -60,8 +61,8 @@ export interface JournalHttpOptions {
   adminRootPub?: Uint8Array;
   /** This box's owner account (cfg.userId), for the delegated-grant check. */
   username?: string;
-  /** Box-local active admin grants. */
-  activeGrants?: readonly AdminGrantView[];
+  /** Box-local active admin grants, read on each request. */
+  activeGrants?: readonly AdminGrantView[] | (() => readonly AdminGrantView[]);
   reader: JournalReader;
   /** Units the owner may read. Default: the flagship units. */
   allowedUnits?: string[];
@@ -85,7 +86,7 @@ export function buildJournalHttp(opts: JournalHttpOptions) {
     if (req.method !== "POST") {
       return { status: 405, headers: H, body: JSON.stringify({ error: "method not allowed" }) };
     }
-    let env: { request?: Record<string, unknown>; signature?: unknown };
+    let env: { request?: Record<string, unknown>; signature?: unknown; pqSignature?: unknown };
     try {
       env = JSON.parse(req.body.toString("utf8"));
     } catch {
@@ -117,18 +118,17 @@ export function buildJournalHttp(opts: JournalHttpOptions) {
     // Verify the owner's signature BEFORE touching the journal or even
     // disclosing the allowlist verdict — `unit` is part of the signed bytes,
     // so only the owner can choose it.
-    const byAdmin =
-      !!opts.adminRootPub &&
-      authorizeSensitiveOrder({
-        order: parsed,
-        signature: sig,
-        verify: verifyJournalRequest,
-        ownerIrkPub: opts.ownerIrkPub,
-        adminRootPub: opts.adminRootPub,
-        username: opts.username ?? "",
-        activeGrants: opts.activeGrants,
-      });
-    if (!byAdmin && !verifyJournalRequest(parsed, sig, opts.ownerIrkPub)) {
+    const authorized = authorizeSensitiveOrder({
+      order: parsed,
+      signature: sig,
+      verify: verifyJournalRequest,
+      ownerIrkPub: opts.ownerIrkPub,
+      ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+      username: opts.username ?? "",
+      activeGrants: typeof opts.activeGrants === "function" ? opts.activeGrants() : opts.activeGrants,
+      hybrid: hybridOrderSignature(canonicalJournalRequest(parsed), env.pqSignature),
+    });
+    if (!authorized) {
       return { status: 403, headers: H, body: JSON.stringify({ error: "invalid signature" }) };
     }
     if (!allowed.includes(parsed.unit)) {

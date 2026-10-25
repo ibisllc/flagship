@@ -93,6 +93,7 @@ export const ROUTE_FAMILIES: Readonly<Record<string, { owner: "session" | "signe
   "/api/alerts": { owner: "session", note: "alert inbox" },
   "/api/identity": { owner: "session", note: "identity rotate; owner only" },
   "/api/journal": { owner: "signed-order", note: "signed journal reads" },
+  "/api/stack": { owner: "mixed", note: "the stack switch: plan and status for owner sessions; the switch itself is an admin-signed order" },
   "/api/power": { owner: "signed-order", note: "lock/restart/off; phone-signed" },
   "/api/archive-download": { owner: "signed-order", note: "box to box archive transfer" },
   "/api/archive-probe": { owner: "signed-order", note: "box to box archive transfer" },

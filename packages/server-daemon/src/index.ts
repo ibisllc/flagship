@@ -61,6 +61,7 @@ import {
   loadDataServicesCreds,
   realVolumeDumpRunner,
   reloadDataVolumes,
+  type DedicatedDumpSource,
 } from "./volumeDump.js";
 import {
   buildMigrationPoller,
@@ -124,6 +125,17 @@ import { keydTlsKeyd } from "./keydAsync.js";
 import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
 import { bootArchV2, privilegedHelperFor, rustPathHealthy } from "./archV2Boot.js";
+import {
+  ArchV2Switcher,
+  applySwitchAsRoot,
+  buildArchV2SwitchHttp,
+  diskAt,
+  ownerSwitchAuthorizer,
+  realSwitchFiles,
+  settleSwitchAsRoot,
+  type RootSwitchDeps,
+} from "./archV2Switch.js";
+import { activeEngine, loadArchV2Config } from "./engine/engine.js";
 import { installGpudAsRoot, installGpudFromRelease, startAccelerators } from "./gpu/wire.js";
 import { localInferenceFor, startLocalAi } from "./localAi/wire.js";
 import { denyCompanionWrite } from "./screens/companion.js";
@@ -159,7 +171,7 @@ import { ManagementReserve } from "./managementReserve.js";
 import { freeBytesAt } from "./serverArchive/service.js";
 import { SecuritySliver } from "./securitySliver.js";
 import { applySliverPlan, offlineReplicaSliverPlan, recoverySliverPlan } from "./sliverFeeds.js";
-import { realCommandRunner as realCommandRunnerStatic } from "./serviceRunner.js";
+import { realCommandRunner as realCommandRunnerStatic, type CommandRunner } from "./serviceRunner.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildAppBackupHttpHandlers } from "./serviceBackupHttp.js";
 import { buildAppRuntimeHttp } from "./appRuntimeHttp.js";
@@ -394,12 +406,13 @@ const onRing = (lane: DoorbellLane | "aliases" | "rotations" | "grants", poll: (
 async function dumpVolumesBeforeWalk(
   dataRoot: string,
   onLog: (m: string) => void,
+  dedicated: DedicatedDumpSource | null,
 ): Promise<{ exclude: (rel: string) => boolean; raiseCapFor: (rel: string) => boolean }> {
   const envFile = process.env.FLAGSHIP_DATA_SERVICES_ENV ?? "/var/flagship/data-services.env";
   const creds = await loadDataServicesCreds(envFile);
   if (!creds) onLog(`[volume-dump] no data-services creds at ${envFile}; dumping files folders only`);
   try {
-    const report = await dumpDataVolumes({ dataRoot, runner: realVolumeDumpRunner, creds, onLog });
+    const report = await dumpDataVolumes({ dataRoot, runner: realVolumeDumpRunner, creds, dedicated, onLog });
     if (!report.ok) {
       onLog(
         `[volume-dump] ${report.errors.length} store(s) failed to dump; they are omitted (not torn) this pass`,
@@ -760,11 +773,49 @@ async function main(): Promise<void> {
   // ---- Architecture v2 path (engine-and-rust-path.md): engine, then the Rust units ----
   // Before anything starts a container: the engine is chosen (and Docker moved to Podman once,
   // when the box's switch asks for it), then keyd/broker/core are put on the Rust binaries.
+  // The owner's switch between the stacks (archV2Switch.ts) is resumed, counted or put back here.
+  const rootSwitchDeps = (): RootSwitchDeps => {
+    if (!cfg) throw new Error("this server has no owner configuration");
+    return {
+      files: realSwitchFiles,
+      run: (c, a) => realUpdateCommandRunner(c, a),
+      serverDomain: env.serverFqdn ?? "",
+      authorize: ownerSwitchAuthorizer({
+        ownerIrkPub: cfg.irkPublicKey,
+        ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        username: cfg.userId,
+        ...(env.controlPlaneBaseUrl ? { controlPlaneBaseUrl: env.controlPlaneBaseUrl } : {}),
+        log: (m) => console.log(m),
+      }),
+      repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+      now: () => Date.now(),
+      log: (m) => console.log(m),
+    };
+  };
+  const archV2SwitchHooks: { runningApps: () => Promise<string[]>; note: (kind: string, detail: string, ok: boolean) => void } = {
+    runningApps: async () => [],
+    note: () => {},
+  };
+  const archV2Switcher = new ArchV2Switcher({
+    files: realSwitchFiles,
+    cmd: realCommandRunnerStatic as Required<CommandRunner>,
+    config: () => loadArchV2Config(),
+    engine: () => activeEngine(),
+    repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+    disk: () => diskAt("/var/lib"),
+    runningApps: () => archV2SwitchHooks.runningApps(),
+    root: runsUnprivileged()
+      ? { apply: () => runSetupStep("arch-v2-switch"), settle: () => runSetupStep("arch-v2-settle") }
+      : { apply: () => applySwitchAsRoot(rootSwitchDeps()), settle: () => settleSwitchAsRoot(rootSwitchDeps()) },
+    note: (kind, detail, ok) => archV2SwitchHooks.note(kind, detail, ok),
+    log: (m) => console.log(m),
+  });
   const archV2 = await bootArchV2({
     repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
     cmd: realCommandRunnerStatic,
     run: (cmd, args) => realUpdateCommandRunner(cmd, args),
     log: (m) => console.log(m),
+    switcher: archV2Switcher,
   });
 
   // GPUs (gpu/wire.ts): the pinned flagship-gpud on a box that has one; no-op without a GPU.
@@ -839,6 +890,7 @@ async function main(): Promise<void> {
   // process; shares, migration, updates, backups and app changes all write to it.
   const activityLog = new ActivityLog(defaultActivityLogPath(dataDir));
   await activityLog.load().catch((e: Error) => console.warn(`[activity] load failed: ${e.message}`));
+  archV2SwitchHooks.note = (kind, detail, ok) => activityLog.note(kind, detail, { ok });
   // A state file found unreadable is set aside and loaded closed; the owner
   // sees it in Activity (reports made before this line are replayed).
   onCorruptState((r) =>
@@ -2206,6 +2258,44 @@ async function main(): Promise<void> {
     migratePause,
   });
 
+  // ---- The owner's switch between the classic stack and arch-v2 (archV2Switch.ts) ----
+  // An app counts as back when its own container runs again.
+  archV2SwitchHooks.runningApps = async () => {
+    const platform = runtime.servicePlatform;
+    if (!platform) return [];
+    const names = new Set((await realCommandRunnerStatic.capture!("docker", ["ps", "--format", "{{.Names}}"])).stdout.split("\n").map((n) => n.trim()));
+    return platform.list().map((s) => `flagship-${s.serviceId}`).filter((n) => names.has(n));
+  };
+  if (cfg && env.serverFqdn) {
+    runtime.addHandler(
+      buildArchV2SwitchHttp({
+        serverId: env.serverFqdn,
+        ownerIrkPub: cfg.irkPublicKey,
+        ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        username: cfg.userId,
+        activeGrants: () => accessPrincipals.book?.adminGrants() ?? [],
+        gate: ownerOnlyGate(pairedSessions, pairedSessions),
+        switcher: archV2Switcher,
+        config: () => loadArchV2Config(),
+        engine: () => activeEngine(),
+        requestRestart: () => {
+          console.log("[arch-v2-switch] restarting to move this server");
+          process.exit(0);
+        },
+      }),
+    );
+  }
+  void archV2Switcher
+    .settle({
+      awaitHealthy: async () => (await selfUpdateHealth.whenHealthy(15 * 60_000)) && (await rustPathHealthy(loadArchV2Config(), (m) => console.log(m))),
+      requestRestart: () => {
+        console.log("[arch-v2-switch] restarting on the stack it had before");
+        process.exit(0);
+      },
+    })
+    .then((r) => r !== "none" && console.log(`[arch-v2-switch] trial: ${r}`))
+    .catch((e: Error) => console.log(`[arch-v2-switch] trial check failed: ${e.message}`));
+
   // ---- Peer-backup periodic pass ----
   // Feed the BackupLoop the REAL data tree on a slow cadence (it previously
   // only ever ran with an empty file list — a ghost run that shipped nothing).
@@ -2220,7 +2310,7 @@ async function main(): Promise<void> {
     const backupTimer = setInterval(() => {
       void (async () => {
         const dataRoot = `${dataDir}/data`;
-        const walkOpts = await dumpVolumesBeforeWalk(dataRoot, (m) => console.log(`[peer-backup] ${m}`));
+        const walkOpts = await dumpVolumesBeforeWalk(dataRoot, (m) => console.log(`[peer-backup] ${m}`), runtime.appRuntimes.dedicated);
         const files = await walkDataDir(dataRoot, {
           onLog: (m) => console.log(`[peer-backup] ${m}`),
           exclude: walkOpts.exclude,
@@ -2286,6 +2376,7 @@ async function main(): Promise<void> {
             dataRoot,
             runner: realVolumeDumpRunner,
             creds,
+            dedicated: runtime.appRuntimes.dedicated,
             onLog: (m) => console.log(`[migration] ${m}`),
           });
           if (!rep.ok) {
@@ -4593,14 +4684,15 @@ async function wireOwnerHandlers(deps: {
       resolveLabel: (l) => deps.servicePlatformRef.current?.byLabel(l) !== undefined,
     }),
   );
-  // Owner-only diagnostics: POST /api/journal — IRK-signed read of the
-  // flagship-daemon systemd journal, served over the box's own pinned pipe.
+  // Owner-only diagnostics: POST /api/journal — an admin-signed read (the IRK
+  // only on a box that pins no admin root) of the flagship units' journal.
   runtime.addHandler(
     buildJournalHttp({
       serverId: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       username: cfg.userId,
+      activeGrants: () => deps.accessPrincipals.book?.adminGrants() ?? [],
       reader: new JournalctlReader(),
     }),
   );
@@ -4984,7 +5076,7 @@ async function wireOwnerHandlers(deps: {
         if (deps.migratePause?.paused()) return;
         if (!deps.backupLoop) return;
         const dataRoot = `${dataDir}/data`;
-        const walkOpts = await dumpVolumesBeforeWalk(dataRoot, (m) => console.log(m));
+        const walkOpts = await dumpVolumesBeforeWalk(dataRoot, (m) => console.log(m), runtime.appRuntimes.dedicated);
         await quiesceDataServices((m) => console.log(m));
         const files = await walkDataDir(dataRoot, {
           onLog: (m) => console.log(m),

@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { createWriteStream, createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { dedicatedContainer, type DedicatedLogin } from "./dataLayer/dedicated.js";
 import { isProdFilesVolume } from "./dataLayer/naming.js";
 import { routePrivileged } from "./privileged.js";
 import { assertNoHostPathInDockerArgs, filesMountArgs } from "./serviceRunner.js";
@@ -27,7 +28,9 @@ import { assertNoHostPathInDockerArgs, filesMountArgs } from "./serviceRunner.js
  * Consistency argument, per store:
  *   - postgres — `pg_dumpall` runs each database dump inside a serialized
  *     snapshot, so the logical dump is self-consistent with CONCURRENT writers.
- *     No freeze needed.
+ *     No freeze needed. An app's own instance (dataLayer/dedicated.ts) is
+ *     dumped the same way, as that instance's admin, into its own file, and
+ *     reloaded only into the instance of the same key.
  *   - files — the app's container is PAUSED (cgroup freezer) for the length
  *     of the archive, so no write lands half-way through it, then unpaused.
  *     The archive is made by a throwaway container (the data layer's own
@@ -214,6 +217,13 @@ export interface DataServicesCreds {
   postgresPassword: string;
 }
 
+/** The apps' own database instances (dataLayer/dedicated.ts DedicatedPostgres). */
+export interface DedicatedDumpSource {
+  backupLogins(): Promise<DedicatedLogin[]>;
+  /** The instance of `key` started for a reload (its image made if only its state came back); null: none here. */
+  restoreLogin(key: string): Promise<DedicatedLogin | null>;
+}
+
 export interface VolumeDumpConfig {
   /** `<dataDir>/data` — the walker root. Dumps land under `<dataRoot>/_dumps`. */
   dataRoot: string;
@@ -224,12 +234,14 @@ export interface VolumeDumpConfig {
   containers?: Partial<Record<"postgres" | "forgejo", string>>;
   /** Image the files archives run in. Default FILES_HELPER_IMAGE. */
   helperImage?: string;
+  /** The apps' own database instances; absent ⇒ none are dumped or reloaded. */
+  dedicated?: DedicatedDumpSource | null;
   /** Restrict to a subset of stores (default: all three, files only without creds). */
   only?: ReadonlyArray<StoreName>;
   onLog?: (m: string) => void;
 }
 
-export type StoreName = "postgres" | "files" | "forgejo";
+export type StoreName = "postgres" | "files" | "forgejo" | "dedicated";
 export type StoreStatus = "ok" | "error";
 
 export interface VolumeDumpReport {
@@ -244,12 +256,19 @@ const DEFAULT_CONTAINERS = {
   forgejo: "flagship-forgejo",
 } as const;
 
-const ALL_STORES: ReadonlyArray<StoreName> = ["postgres", "files", "forgejo"];
+const ALL_STORES: ReadonlyArray<StoreName> = ["postgres", "files", "forgejo", "dedicated"];
 
 function storesFor(cfg: VolumeDumpConfig): ReadonlyArray<StoreName> {
-  const only = cfg.only ?? ALL_STORES;
-  // Postgres and Forgejo need the admin credentials; the files folders don't.
-  return cfg.creds ? only : only.filter((s) => s === "files");
+  const only = (cfg.only ?? ALL_STORES).filter((s) => s !== "dedicated" || !!cfg.dedicated);
+  // Postgres and Forgejo need the shared admin credentials; the files folders and the apps' own instances don't.
+  return cfg.creds ? only : only.filter((s) => s === "files" || s === "dedicated");
+}
+
+const DEDICATED_DUMP = /^([0-9a-f]{24})\.dump$/;
+
+/** A login is used only for the container of its own key: never the shared instance or another app's. */
+function soundLogin(key: string, l: DedicatedLogin | null): l is DedicatedLogin {
+  return !!l && /^[0-9a-f]{24}$/.test(key) && l.key === key && l.container === dedicatedContainer(key);
 }
 
 // Inside-container paths (from the compose volume mounts).
@@ -275,7 +294,7 @@ export async function dumpDataVolumes(cfg: VolumeDumpConfig): Promise<VolumeDump
   const log = cfg.onLog ?? (() => {});
   const only = storesFor(cfg);
   const report: VolumeDumpReport = {
-    stores: { postgres: "skipped", files: "skipped", forgejo: "skipped" },
+    stores: { postgres: "skipped", files: "skipped", forgejo: "skipped", dedicated: "skipped" },
     errors: [],
     ok: true,
   };
@@ -299,6 +318,7 @@ export async function dumpDataVolumes(cfg: VolumeDumpConfig): Promise<VolumeDump
   await runStore("postgres", () => dumpPostgres(cfg, join(outBase, "postgres", "all.dump")));
   await runStore("files", () => dumpFiles(cfg, join(outBase, "files")));
   await runStore("forgejo", () => dumpForgejo(cfg, join(outBase, "forgejo")));
+  await runStore("dedicated", () => dumpDedicated(cfg, join(outBase, "dedicated")));
 
   return report;
 }
@@ -329,6 +349,36 @@ async function dumpPostgres(cfg: VolumeDumpConfig, outPath: string): Promise<voi
     ],
     outPath,
   );
+}
+
+async function dumpDedicated(cfg: VolumeDumpConfig, outDir: string): Promise<void> {
+  await mkdir(outDir, { recursive: true, mode: 0o700 });
+  const logins = await cfg.dedicated!.backupLogins();
+  const failures: string[] = [];
+  const keep = new Set<string>();
+  for (const l of logins) {
+    const key = l.key;
+    if (!soundLogin(key, l)) {
+      failures.push(`${key}: not an app's own database`);
+      continue;
+    }
+    keep.add(`${l.key}.dump`);
+    try {
+      await cfg.runner.runToFile(
+        "docker",
+        ["exec", "-e", `PGPASSWORD=${l.password}`, l.container, "pg_dumpall", "-U", l.user, "-h", "127.0.0.1", "--clean", "--if-exists"],
+        join(outDir, `${l.key}.dump`),
+      );
+    } catch (e) {
+      failures.push(`${l.key}: ${(e as Error).message}`);
+    }
+  }
+  // An uninstalled app's database goes with it; a failed one keeps its last good dump.
+  for (const f of await readdir(outDir).catch(() => [] as string[])) {
+    const m = DEDICATED_DUMP.exec(f);
+    if (m && !keep.has(f) && !failures.some((x) => x.startsWith(`${m[1]}:`))) await rm(join(outDir, f), { force: true });
+  }
+  if (failures.length > 0) throw new Error(`apps' own databases not dumped: ${failures.join("; ")}`);
 }
 
 /** The running containers that mount a volume (the app it belongs to). */
@@ -505,7 +555,7 @@ export async function reloadDataVolumes(cfg: VolumeReloadConfig): Promise<Volume
   const log = cfg.onLog ?? (() => {});
   const only = storesFor(cfg);
   const report: VolumeReloadReport = {
-    stores: { postgres: "absent", files: "absent", forgejo: "absent" },
+    stores: { postgres: "absent", files: "absent", forgejo: "absent", dedicated: "absent" },
     errors: [],
     ok: true,
   };
@@ -537,8 +587,30 @@ export async function reloadDataVolumes(cfg: VolumeReloadConfig): Promise<Volume
   await runStore("forgejo", join(base, "forgejo", "forgejo.db"), () =>
     reloadForgejo(cfg, join(base, "forgejo")),
   );
+  await runStore("dedicated", join(base, "dedicated"), () => reloadDedicated(cfg, join(base, "dedicated")));
 
   return report;
+}
+
+/** Each `<key>.dump` goes back into the instance of that key only, as that instance's admin. */
+async function reloadDedicated(cfg: VolumeReloadConfig, inDir: string): Promise<void> {
+  const failures: string[] = [];
+  for (const f of (await readdir(inDir)).sort()) {
+    const key = DEDICATED_DUMP.exec(f)?.[1];
+    if (!key) continue;
+    try {
+      const l = await cfg.dedicated!.restoreLogin(key);
+      if (!soundLogin(key, l)) throw new Error("no database instance for it here");
+      await cfg.runner.runFromFile(
+        "docker",
+        ["exec", "-i", "-e", `PGPASSWORD=${l.password}`, l.container, "psql", "-U", l.user, "-h", "127.0.0.1", "-d", "postgres"],
+        join(inDir, f),
+      );
+    } catch (e) {
+      failures.push(`${key}: ${(e as Error).message}`);
+    }
+  }
+  if (failures.length > 0) throw new Error(`apps' own databases not restored: ${failures.join("; ")}`);
 }
 
 async function reloadPostgres(cfg: VolumeReloadConfig, dumpPath: string): Promise<void> {

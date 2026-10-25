@@ -87,3 +87,41 @@ signature covers them). Reproducibility across two clean builders is not yet sho
 - Broker: v1 `docker` op still on; most host ops still in the daemon; no capability issuer.
 - Core: shadow only; the checkpoint lists the TS desired set, not image or generation.
 - Appliances/ISOs with Podman not built or published; no gym run (the gym was not used).
+- The owner's stack switch (§7) has run only in unit tests with fakes: no real box, no gym, and no
+  app sends the order yet.
+
+## 7. Moving an existing box on the owner's order
+
+`server-daemon/src/archV2Switch.ts`. An existing (classic) box has no switch file and no Podman;
+§4's move needs both. The owner's order provides them, and can also take the box back:
+
+- **Order.** `flagship/arch-v2-switch/v1|<serverDomain>|<arch-v2|classic>|<nonce>|<issuedAt>`
+  (`protocol/src/archV2Switch.ts`), signed with the sensitive-order key: the admin root on a pinned
+  box (the IRK is refused there), with the hybrid signature under strict. `POST /api/stack/switch
+  {order, signature, pqSignature?, dryRun?}`; `GET /api/stack` (owner sessions) shows the stack,
+  the switch's record and the plan. A dry run answers with the plan and changes nothing.
+- **Plan and refusals.** Steps, images and volumes to move, and the room needed (all image bytes,
+  the largest again for the spool, 2 GiB spare). Refused, with a sentence, when the box is already
+  there, a switch is under way, an update is pending, the release carries no Rust pins, Docker does
+  not answer, the disk is too small, or (going back) there is no Docker.
+- **Root.** The daemon writes the order to `/var/flagship/arch-v2-order.json`; root (setup step
+  `arch-v2-switch` through privd or the broker, or the daemon itself while it still runs as root)
+  checks it again against its own copy of the owner's keys (the admin root along its rotation
+  chain), refuses a stale (10 min), used or second order, installs `podman netavark aardvark-dns
+  crun conmon catatonit docker-compose nftables zstd` with apt (Debian's signed archive), writes the
+  compose drop-in, enables `podman.socket`, and writes the switch file last. Its record,
+  `/var/lib/flagship/arch-v2-switch.json`, is where the daemon can't write.
+- **Move.** The daemon restarts; the next start runs §4's move and puts the Rust units on (§2).
+- **Trial.** Kept once the boot is healthy (tunnel and heartbeat, no Rust component on its
+  fallback) and every app container that ran when the order came runs again within 20 minutes.
+  Otherwise put back (setup step `arch-v2-settle`) with the reason in Activity: a failed move at
+  once, three starts that never got healthy, an app that doesn't come back. Going back restores the
+  switch file as it was, and §4's rollback brings Docker up on its own data. A revert is refused
+  once the switch was kept or after 24 hours, so the daemon alone can't undo the owner's choice.
+- **Resume.** A restart during the install finishes it from the same order at the next start; an
+  install that fails leaves the switch file untouched and records why.
+
+Not yet: the apps' screen and its order (iOS, Android, webapp), the Activity labels
+(`server.stack.switch-started`, `server.stack.switched`, `server.stack.switch-reverted`), a run on a
+real classic box (apt on an appliance without its lists; data written under Podman in copied
+volumes does not go back to Docker), and a gym group.

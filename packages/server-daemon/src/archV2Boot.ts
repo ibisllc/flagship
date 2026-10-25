@@ -14,6 +14,7 @@ import { installRustStack, rustStackRegressions, type RustStackOutcome } from ".
 import { CORE_CHECKPOINT, CORE_DIR } from "./rustStack/units.js";
 import type { CommandRunner } from "./serviceRunner.js";
 import type { InstalledServicesStore, PersistedService } from "./installedServicesStore.js";
+import type { ArchV2Switcher } from "./archV2Switch.js";
 
 export interface ArchV2BootResult {
   config: ArchV2Config;
@@ -28,9 +29,14 @@ export async function bootArchV2(o: {
   run: (cmd: string, args: string[]) => Promise<unknown>;
   log?: (m: string) => void;
   installRust?: (d: Parameters<typeof installRustStack>[0]) => Promise<RustStackOutcome>;
+  /** The owner's switch on trial (archV2Switch.ts): finished, counted or put back around the move. */
+  switcher?: Pick<ArchV2Switcher, "beforeEngine" | "afterEngine">;
+  loadConfig?: () => ArchV2Config;
 }): Promise<ArchV2BootResult> {
   const log = o.log ?? (() => {});
-  const config = loadArchV2Config();
+  const load = o.loadConfig ?? (() => loadArchV2Config());
+  if (o.switcher) await o.switcher.beforeEngine().catch((e: Error) => log(`[arch-v2-switch] ${e.message}`));
+  let config = load();
   const deps = { cmd: o.cmd as Required<CommandRunner>, exists: existsSync, log };
   let engine: EngineKind = "docker";
   let engineNote: string | undefined;
@@ -49,6 +55,7 @@ export async function bootArchV2(o: {
       log(`[engine] ${engineNote}`);
     }
   }
+  if (o.switcher && (await o.switcher.afterEngine(engine, engineNote).catch(() => false))) config = load();
   setActiveEngine(engine);
   log(`[engine] apps run on ${engine === "podman" ? "Podman" : "Docker"}`);
   const rust = await (o.installRust ?? (runsUnprivileged() ? rustStackAsRoot : installRustStack))({ repoPath: o.repoPath, config, run: o.run, onLog: log });

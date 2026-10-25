@@ -154,6 +154,25 @@ export interface DedicatedEntry {
   createdAt: number;
 }
 
+/** An instance's admin login, for the whole-box dumps and their reload (volumeDump.ts). */
+export interface DedicatedLogin {
+  key: string;
+  container: string;
+  user: string;
+  password: string;
+}
+
+const loginOf = (e: DedicatedEntry): DedicatedLogin => ({
+  key: e.key,
+  container: dedicatedContainer(e.key),
+  user: DEDICATED_ADMIN_USER,
+  password: e.adminPassword,
+});
+
+/** A state entry is only taken for the instance its own app's key names. */
+const entryIsSound = (key: string, e: DedicatedEntry | undefined): e is DedicatedEntry =>
+  !!e && /^[0-9a-f]{24}$/.test(key) && e.key === key && dedicatedKey(e.creator, e.slug) === key;
+
 export interface DedicatedStateStore {
   load(): Promise<Record<string, DedicatedEntry>>;
   save(s: Record<string, DedicatedEntry>): Promise<void>;
@@ -363,6 +382,40 @@ export class DedicatedPostgres {
       }
     }
     return { started, failed };
+  }
+
+  /** Every instance this box keeps, with its admin login (the whole-box dumps). */
+  async backupLogins(): Promise<DedicatedLogin[]> {
+    const state = await this.deps.state.load();
+    return Object.keys(state)
+      .sort()
+      .filter((k) => entryIsSound(k, state[k]))
+      .map((k) => loginOf(state[k]!));
+  }
+
+  /**
+   * A restored instance up again so its dump can be loaded into it. When the
+   * restore brought back only its state, its quota image is made first: Docker
+   * must never make an unlimited volume of that name. Null: no such instance here.
+   */
+  restoreLogin(key: string): Promise<DedicatedLogin | null> {
+    return this.locked(async () => {
+      const e = (await this.deps.state.load())[key];
+      if (!entryIsSound(key, e)) return null;
+      const volume = dedicatedVolume(key);
+      if ((await this.deps.volumes.prepare(volume, e.limits.diskBytes)) === "absent") {
+        if (this.deps.disk) {
+          const d = await this.deps.disk();
+          if (d.freeBytes - e.limits.diskBytes < diskRoomLeft(d.totalBytes)) {
+            throw new Error(`this server doesn't have room for the app's own database (${Math.round(e.limits.diskBytes / MiB)} MiB)`);
+          }
+        }
+        await this.deps.volumes.create(volume, e.limits.diskBytes, { "flagship.role": "dedicated-postgres" });
+        await this.deps.preallocate?.(this.deps.volumes.imagePath(volume), e.limits.diskBytes);
+      }
+      await this.startEntry(e);
+      return loginOf(e);
+    });
   }
 
   /** The socket volume of the instance on `port` (a migration's target), or null. */

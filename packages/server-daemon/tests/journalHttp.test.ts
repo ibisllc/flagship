@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { ed, signJournalRequest, type JournalRequest, type Keypair } from "@flagship/protocol";
+import {
+  GENESIS_DIGEST,
+  ed,
+  signDeviceCapabilityGrant,
+  signJournalRequest,
+  type AdminGrantView,
+  type JournalRequest,
+  type Keypair,
+  type PolicyState,
+} from "@flagship/protocol";
 import { buildJournalHttp, type JournalReader } from "../src/journalHttp.js";
+import { setPqAuthority } from "../src/pqAuthority.js";
 
 const SERVER = "home.alice.flagship.services";
 const NOW = 5_000_000;
@@ -24,6 +34,27 @@ function req(body: unknown) {
 }
 
 const IRK = makeKey(70);
+const STRICT: PolicyState = {
+  scope: { kind: "installation", id: SERVER },
+  profile: "strict",
+  rollout: "enforced",
+  generation: 1,
+  headDigest: GENESIS_DIGEST,
+  enforcedEver: true,
+};
+
+function adminGrant(device: Keypair, root: Keypair, username: string, expiresAt: number): AdminGrantView {
+  const grant = {
+    grantId: "11111111-1111-4111-8111-111111111111",
+    username,
+    deviceId: "d1".repeat(16),
+    devicePubKey: device.publicKey,
+    scopes: ["browse", "admin"] as ("browse" | "admin")[],
+    issuedAt: NOW - 1000,
+    expiresAt,
+  };
+  return { grant, signatureHex: bytesToHex(signDeviceCapabilityGrant(grant, root)), signerRoot: "admin-root" };
+}
 
 /** Records what the reader was asked for, returns canned lines. */
 function recordingReader(lines = ["line a", "line b"]) {
@@ -154,12 +185,63 @@ describe("buildJournalHttp: admin root and units", () => {
   const ROTATED = makeKey(72);
   const signed = (r: JournalRequest, k: Keypair) => req({ request: r, signature: bytesToHex(signJournalRequest(r, k)) });
 
-  it("accepts the pinned admin root where the box pins one, and the IRK as before", async () => {
+  it("accepts the pinned admin root where the box pins one and refuses the IRK there", async () => {
     const { reader, calls } = recordingReader();
     const handle = mkHandler(reader, { adminRootPub: ADMIN.publicKey, username: "alice" });
     expect((await handle(signed(journalReq("flagship-daemon", 10), ADMIN)))!.status).toBe(200);
-    expect((await handle(signed(journalReq("flagship-daemon", 10), IRK)))!.status).toBe(200);
-    expect(calls).toHaveLength(2);
+    const byIrk = await handle(signed(journalReq("flagship-daemon", 10), IRK));
+    expect(byIrk!.status).toBe(403);
+    expect(JSON.parse(String(byIrk!.body)).error).toBe("invalid signature");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("refuses the IRK on a pinned box even for a unit off the allowlist (no allowlist oracle)", async () => {
+    const { reader, calls } = recordingReader();
+    const handle = mkHandler(reader, { adminRootPub: ADMIN.publicKey, username: "alice" });
+    const res = await handle(signed(journalReq("sshd", 10), IRK));
+    expect(res!.status).toBe(403);
+    expect(JSON.parse(String(res!.body)).error).toBe("invalid signature");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuses an IRK signature replayed under an admin-root envelope field", async () => {
+    const { reader, calls } = recordingReader();
+    const handle = mkHandler(reader, { adminRootPub: ADMIN.publicKey, username: "alice" });
+    const r = journalReq("flagship-daemon", 10);
+    const res = await handle(
+      req({ request: r, signature: bytesToHex(signJournalRequest(r, IRK)), signerPub: bytesToHex(ADMIN.publicKey) }),
+    );
+    expect(res!.status).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("takes a delegated admin device only with a live admin grant, read on each request", async () => {
+    const { reader, calls } = recordingReader();
+    const DEVICE = makeKey(74);
+    let grants: AdminGrantView[] = [];
+    const handle = mkHandler(reader, { adminRootPub: ADMIN.publicKey, username: "alice", activeGrants: () => grants });
+    expect((await handle(signed(journalReq("flagship-daemon", 10), DEVICE)))!.status).toBe(403);
+    grants = [adminGrant(DEVICE, ADMIN, "alice", Date.now() + 3_600_000)];
+    expect((await handle(signed(journalReq("flagship-daemon", 10), DEVICE)))!.status).toBe(200);
+    grants = [];
+    expect((await handle(signed(journalReq("flagship-daemon", 10), DEVICE)))!.status).toBe(403);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("under strict, refuses a classical-only read and a broken PQ half, pinned or not", async () => {
+    const { reader, calls } = recordingReader();
+    setPqAuthority({ policy: () => STRICT, bindingFor: () => null });
+    try {
+      const pinned = mkHandler(reader, { adminRootPub: ADMIN.publicKey, username: "alice" });
+      expect((await pinned(signed(journalReq("flagship-daemon", 10), ADMIN)))!.status).toBe(403);
+      const r = journalReq("flagship-daemon", 10);
+      const broken = req({ request: r, signature: bytesToHex(signJournalRequest(r, ADMIN)), pqSignature: { suite: "ed25519+ml-dsa-65", signature: "00" } });
+      expect((await pinned(broken))!.status).toBe(403);
+      expect((await mkHandler(reader)(signed(journalReq("flagship-daemon", 10), IRK)))!.status).toBe(403);
+    } finally {
+      setPqAuthority(null);
+    }
+    expect(calls).toHaveLength(0);
   });
 
   it("follows a rotated admin root: the old root is refused once the box pins the new one", async () => {
@@ -180,6 +262,8 @@ describe("buildJournalHttp: admin root and units", () => {
   it("lets the owner read keyd, privd and the broker, and nothing outside the flagship units", async () => {
     const { reader, calls } = recordingReader();
     const handle = mkHandler(reader);
+    expect((await mkHandler(reader, { adminRootPub: ADMIN.publicKey, username: "alice" })(signed(journalReq("flagship-keyd", 10), ADMIN)))!.status).toBe(200);
+    calls.length = 0;
     for (const unit of ["flagship-keyd", "flagship-privd", "flagship-broker", "flagship-data-services"]) {
       expect((await handle(signed(journalReq(unit, 10), IRK)))!.status).toBe(200);
     }

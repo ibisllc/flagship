@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { parseDebugAccessGrant, verifyDebugAccessGrant, DEBUG_ACCESS_MAX_MS, type DebugAccessGrant } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { applyRotationChain, fetchRotationChain } from "./adminRootRotationConsumer.js";
+import { applySwitchAsRoot, ownerSwitchAuthorizer, realSwitchFiles, settleSwitchAsRoot, type RootSwitchDeps } from "./archV2Switch.js";
 import { ensureGvisor, gvisorMirrorBases } from "./appSandbox/gvisor.js";
 import { loadConfig } from "./config.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
@@ -118,6 +119,28 @@ async function openDebugAccess(): Promise<unknown> {
   return { open: true, expiresAt: r.grant.expiresAt };
 }
 
+/** The owner's stack switch (archV2Switch.ts), checked here against root's own copy of the owner's keys. */
+async function switchDeps(): Promise<RootSwitchDeps> {
+  const env = await daemonEnv();
+  const cfg = await loadConfig(env.FLAGSHIP_CONFIG ?? "/etc/flagship/config.json");
+  const base = env.FLAGSHIP_CONTROL_PLANE_BASE_URL;
+  return {
+    files: realSwitchFiles,
+    run,
+    serverDomain: env.FLAGSHIP_SUBDOMAIN ?? "",
+    repoPath: REPO,
+    now: () => Date.now(),
+    log,
+    authorize: ownerSwitchAuthorizer({
+      ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
+      ...(base ? { controlPlaneBaseUrl: base } : {}),
+      log,
+    }),
+  };
+}
+
 async function syncDataUnit(): Promise<unknown> {
   const wanted = await readFile(join(REPO, "installer/data-services/flagship-data-services.service"), "utf8");
   const installed = await readFile(DATA_UNIT_FILE, "utf8").catch(() => null);
@@ -169,6 +192,9 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
   "wasi-runtime": wasiRuntime,
   // flagship-gpud (gpu/unit.ts), for a daemon that no longer runs as root.
   "gpu-broker": () => installGpudFromRelease(REPO, rootEngine(), log),
+  // The owner's move between the classic stack and arch-v2 (archV2Switch.ts).
+  "arch-v2-switch": async () => applySwitchAsRoot(await switchDeps()),
+  "arch-v2-settle": async () => settleSwitchAsRoot(await switchDeps()),
 };
 
 // Real paths: /opt/flagship is a link to the running release, and Node reports a module by its real path.
