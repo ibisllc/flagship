@@ -233,3 +233,9 @@ Running when this was written (subagents; if this session is gone, they are gone
   switch UI + Activity labels, besides accelerators/GPU approvals/ExportAuthorization/iOS checks.
   Still open for the switch: no run on a real classic box (apt without lists, volume move, arm64),
   no gym group, no crypto-graph node for flagship/arch-v2-switch/v1 (nor gpu-approval).
+- 2026-10-25: GPU approvals box side `d894a516c` (GET /api/screens/accelerators pendingApprovals +
+  approvals; POST /api/screens/accelerators/approvals and /approvals/withdraw; withdraw tag
+  flagship/gpu-approval-withdraw/v1; stored in <dataDir>/gpu-approvals.json; push `generic`, Activity
+  gpu.approval.*). Crypto graph `1554f7947`. Known: gpud reads owner.json only at keyd start, so after an
+  admin-root rotation claims are refused until keyd restarts. The apps agent was given the real paths;
+  parity/allowlist.json + features.json + the webapp port of the GPU tags are its to finish.
