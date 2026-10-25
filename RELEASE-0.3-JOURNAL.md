@@ -86,7 +86,7 @@ Tip `28b213c73`. Last full VM run (on `a44fc2208`): vitest 14,337 passed / 2 fai
 `135829c9d`; Rust fmt/clippy/test failures fixed in `90edead1e`. Not yet re-run on the tip.
 
 Running when this was written (subagents; if this session is gone, they are gone too):
-- **AI01/AI02 local AI** (`packages/protocol/src/localAi.ts`, `packages/server-daemon/src/localAi/`,
+- (done, see Log) **AI01/AI02 local AI** (`packages/protocol/src/localAi.ts`, `packages/server-daemon/src/localAi/`,
   protocol manifest edits, webapp/Android/iOS Local AI screens and model menu changes). Its edits are
   **uncommitted in the worktree** (`git status`). If it died: review the diff, finish it (tests, i18n,
   privd allowances for any new host op), commit.
@@ -96,7 +96,7 @@ Running when this was written (subagents; if this session is gone, they are gone
 
 ## Plan (tick as done)
 
-1. [ ] Land AI01/AI02: review the uncommitted diff, `npx tsc -b`, targeted vitest, `npm run i18n`,
+1. [x] Land AI01/AI02 (`2045eef9b`; parity fixed `059251d5d`): review the uncommitted diff, `npx tsc -b`, targeted vitest, `npm run i18n`,
        Android unit tests, iOS build; commit by explicit paths; push.
 2. [ ] Re-run `full-test-vm.sh` on the new tip and CI (`ci.yml`, `rust.yml`); fix everything but
        crypto-graph.
@@ -146,3 +146,11 @@ Running when this was written (subagents; if this session is gone, they are gone
   go.mod now `go 1.26.0`, so box-artifact.yml builds it right); keyd's peercred test needs root (own
   sudo step in rust.yml); two web gym specs (auto-unlock pins first; recovery link has `&lang=`).
   Fixed in `dd96a774e`. Re-dispatched CI 40153988658 and Rust 40153990297 on it.
+- 2026-10-25: AI01/AI02 committed `2045eef9b` (tool broker, redaction coverage, local inference +
+  fine-tune, clients; shell **v179**; gym `local-ai-cpu` 13/13 on a throwaway VM; box group `local-ai`
+  not run). Known from its report: Android `GymBuildTest.ideConnectionCopyAndRegenerate` clipboard
+  timeout (pre-existing); `tools/unseal-crosscheck` vitest needs rustc on PATH; companion sessions may
+  read `/api/screens/local-ai` (left as is: owner-side read). Parity green `059251d5d`.
+  Started: full VM run on `2045eef9b` (log `scratchpad/full-test-3.log`), iOS build with
+  SWIFT_EMIT_LOC_STRINGS into `scratchpad/ios-dd` for the harvest (4 BrowserGrantCenter strings
+  pending). Disk had 5.8 GB free.
