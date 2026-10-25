@@ -160,3 +160,8 @@ Running when this was written (subagents; if this session is gone, they are gone
   `--no-fail-fast`, and the peercred child run from a copy in /tmp (`hostile.rs`); green on run
   40156714426. iOS harvest + 3 browser-grant translations `5e6a71249`. iOS mock gym running
   (`scratchpad/gym-ios.log`); Android mock gym next.
+- 2026-10-25: iOS mock gym on `78fa00740`: 270/276 passed. Failing: GymSweepServerTests
+  test_frontPageSavesAnAdminSignedOrder, GymSweepSettingsTests test_appearanceAndAppIconChoices,
+  GymSweepShareTests test_ownerCreatesALinkAndCancelsIt + test_sheetRouteCreatesALink,
+  GymRelease03Tests test_updatePromptOnceThenSettingsRow + test_updateKeptInRecoveryAndShareSwitch.
+  A helper agent is fixing them (uncommitted until it reports). Android mock gym after it.
