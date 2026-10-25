@@ -15,6 +15,18 @@ class BoxEventLabelsTest {
         assertEquals("Server something new", BoxEventLabels.title(BoxActivityEntry(ts = 1, action = "x", kind = "server.something.new")))
     }
 
+    @Test fun namesTheDebugAccessEntries() {
+        val labels = mapOf(
+            "server.debug-access.granted" to "Debug access turned on",
+            "server.debug-access.renewed" to "Debug access renewed",
+            "server.debug-access.expired" to "Debug access ended",
+            "server.debug-access.revoked" to "Debug access turned off",
+        )
+        for ((kind, label) in labels) {
+            assertEquals(label, BoxEventLabels.title(BoxActivityEntry(ts = 1, action = kind, kind = kind)))
+        }
+    }
+
     @Test fun corruptStateReadsAsAWarningWithTheBoxDetail() {
         val detail = "service-access.json couldn't be read and was set aside. Every app on this server is members-only until you open it again."
         val e = BoxActivityEntry(ts = 1, action = "server.state.corrupt", kind = "server.state.corrupt", detail = detail, ok = false)

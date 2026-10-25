@@ -26,7 +26,7 @@ sealed interface BuilderInbound {
     data object RecipeAccepted : BuilderInbound
     // Phase 4 — the builder asks the phone to approve a security-sensitive
     // setting (e.g. Debug mode). Carries the box's serverDomain so the phone
-    // can sign the owner-IRK debug-access grant the box verifies. Mirrors the
+    // can sign the admin-root debug-access grant the box verifies. Mirrors the
     // iOS BuilderInbound.consentRequest(setting, serverDomain, warning).
     data class ConsentRequest(val setting: String, val serverDomain: String, val warning: String) : BuilderInbound
     data object PeerGone : BuilderInbound

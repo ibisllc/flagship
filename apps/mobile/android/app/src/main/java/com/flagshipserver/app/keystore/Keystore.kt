@@ -541,6 +541,15 @@ object Keystore {
         return Ed25519Sign(seed)
     }
 
+    /** The admin-root signer behind a biometric prompt that runs every time,
+     *  even in an unlocked session: for consent given per act (each debug
+     *  access grant). Errors when this device holds no admin root. */
+    suspend fun adminRootKeyConfirmed(reason: String): Ed25519Sign {
+        BiometricAuthority.confirmNow(reason)
+        val seed = adminRootSeed() ?: error("no admin root on this device")
+        return Ed25519Sign(seed)
+    }
+
     /** Raw read of the 32-byte admin-root seed (no mint, no biometric) — for
      *  the recovery-credential escrow upload (D-3). Null when absent, so a
      *  missing root never forces one into existence. */

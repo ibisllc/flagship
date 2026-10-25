@@ -36,6 +36,27 @@ private class FailingPrompter : BiometricPrompter {
 
 class BiometricAuthorityTest {
 
+    @Test fun confirmNow_promptsEveryTimeEvenInAFreshSession() = runTest {
+        val prompter = CountingPrompter()
+        val a = BiometricAuthority.forTest(prompter)
+        a.markFresh()
+        a.confirmNow("Authorize Flagship", "Turn on debug access")
+        a.confirmNow("Authorize Flagship", "Renew debug access")
+        assertEquals(2, prompter.calls)
+        assertEquals("Renew debug access", prompter.lastSubtitle)
+        a.ensureFresh("Authorize Flagship", "anything")
+        assertEquals(2, prompter.calls)
+    }
+
+    @Test fun confirmNow_refusesWithNobodyToAsk() = runTest {
+        try {
+            BiometricAuthority.forTest(null).confirmNow("Authorize Flagship", "x")
+            fail("expected a refusal")
+        } catch (e: IllegalStateException) {
+            assertEquals("Open Flagship to confirm this.", e.message)
+        }
+    }
+
     @Test fun firstCall_promptsAndLatchesSession() = runTest {
         val prompter = CountingPrompter()
         val authority = BiometricAuthority.forTest(prompter)

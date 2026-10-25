@@ -346,6 +346,12 @@ class LiveScreensClient(
         return request("/api/screens/server-order", ServerOrderDeliveryResponse.serializer(), "POST", body)
     }
 
+    override suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse =
+        request("/api/screens/debug-access", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
+
+    override suspend fun debugAccessRevoke(bodyJson: String): DebugAccessChangeResponse =
+        request("/api/screens/debug-access/revoke", DebugAccessChangeResponse.serializer(), "POST", bodyJson.toByteArray())
+
     override suspend fun serviceCopy(req: AppCopyRequest): AppCopyResponse {
         val body = json.encodeToString(AppCopyRequest.serializer(), req).toByteArray()
         return request("/api/screens/services/copy", AppCopyResponse.serializer(), "POST", body)

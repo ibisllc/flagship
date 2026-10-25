@@ -440,6 +440,30 @@ data class ServerDetailResponse(
     val lastUpdate: LastUpdate? = null,
     /** The sandbox every app runs in (gVisor). Absent from older daemons. */
     val appSandbox: AppSandbox? = null,
+    /** Owner debug access (an SSH key let in until a set time). Absent from older daemons. */
+    val debugAccess: DebugAccessView? = null,
+)
+
+/** The box's debug access state (docs/recipe-delivery-and-remote-install.md "Debug access"). */
+@Serializable
+data class DebugAccessView(
+    val on: Boolean,
+    val expiresAt: Long? = null,
+    val keyFingerprint: String? = null,
+    /** `admin` (admin root or an admin device) or `owner-key` (the IRK, no admin root pinned). */
+    val grantedBy: String? = null,
+    val lastEnded: DebugAccessEnded? = null,
+)
+
+@Serializable
+data class DebugAccessEnded(val at: Long, val why: String)
+
+/** The box's reply to a grant or revoke: `change` is granted, renewed, revoked or unchanged. */
+@Serializable
+data class DebugAccessChangeResponse(
+    val ok: Boolean = true,
+    val change: String? = null,
+    val debugAccess: DebugAccessView? = null,
 )
 
 /** The box's app sandbox (docs/app-runtimes.md §5.1): `off`, `starting`,

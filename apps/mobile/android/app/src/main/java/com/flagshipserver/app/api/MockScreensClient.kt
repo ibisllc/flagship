@@ -7,7 +7,11 @@ package com.flagshipserver.app.api
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.cos
@@ -91,6 +95,7 @@ class MockScreensClient(
                 targetCommit = "9f2c1ab3de4567890abcdef1234567890abcdef1",
                 previousCommit = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
             ),
+            debugAccess = debugAccessState,
         )
     }
 
@@ -297,6 +302,39 @@ class MockScreensClient(
     }
 
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
+
+    /** Debug access as a box would hold it: a grant turns it on until its end, a revoke turns it off. */
+    var debugAccessState: DebugAccessView = DebugAccessView(on = false)
+    val debugAccessBodies: MutableList<String> = mutableListOf()
+
+    override suspend fun debugAccessGrant(bodyJson: String): DebugAccessChangeResponse {
+        tick()
+        debugAccessBodies += bodyJson
+        val g = Json.parseToJsonElement(bodyJson).jsonObject["grant"]?.jsonObject
+            ?: throw ScreensError.Http(400, """{"error":"That debug access grant can't be read."}""")
+        if (g["serverDomain"]?.jsonPrimitive?.content != boxFqdn()) {
+            throw ScreensError.Http(422, """{"error":"That debug access grant is for another server."}""")
+        }
+        val wasOn = debugAccessState.on
+        debugAccessState = DebugAccessView(
+            on = true,
+            expiresAt = g["expiresAt"]?.jsonPrimitive?.long,
+            keyFingerprint = com.flagshipserver.app.core.DebugAccess.fingerprint(g["sshPublicKey"]?.jsonPrimitive?.content.orEmpty()),
+            grantedBy = "admin",
+        )
+        return DebugAccessChangeResponse(ok = true, change = if (wasOn) "renewed" else "granted", debugAccess = debugAccessState)
+    }
+
+    override suspend fun debugAccessRevoke(bodyJson: String): DebugAccessChangeResponse {
+        tick()
+        debugAccessBodies += bodyJson
+        val wasOn = debugAccessState.on
+        debugAccessState = DebugAccessView(
+            on = false,
+            lastEnded = if (wasOn) DebugAccessEnded(now(), "revoked") else debugAccessState.lastEnded,
+        )
+        return DebugAccessChangeResponse(ok = true, change = if (wasOn) "revoked" else "unchanged", debugAccess = debugAccessState)
+    }
 
     // ---- Copies (docs/app-placement.md §5) ----
 

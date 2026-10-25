@@ -278,6 +278,19 @@ fun ServerDetailScreen(
             Spacer(Modifier.height(FS.space.s6))
         }
 
+        // Owner debug access: a banner while it's on, the controls further down.
+        val loadedDetail = (detail as? LoadingState.Loaded)?.value
+        val debugVm = remember(loadedDetail?.serverFqdn, client) {
+            val fqdn = loadedDetail?.serverFqdn
+            if (fqdn != null && client != null) {
+                com.flagshipserver.app.viewmodels.DebugAccessViewModel(fqdn, client, loadedDetail.debugAccess)
+            } else {
+                null
+            }
+        }
+        LaunchedEffect(debugVm, loadedDetail?.debugAccess) { debugVm?.reconcile(loadedDetail?.debugAccess) }
+        debugVm?.let { DebugAccessBanner(it) }
+
         // Boot-unlock approval — hoisted ABOVE the load-state branch so a box
         // waiting for the owner to release its disk key is always actionable
         // here, even when the daemon BFF can't load. Prefer the loaded detail's
@@ -361,6 +374,10 @@ fun ServerDetailScreen(
             DeadManCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             JournalCard(serverDomain = d.value.serverFqdn)
+            debugVm?.let { vm ->
+                Spacer(Modifier.height(FS.space.s6))
+                DebugAccessCard(vm = vm, onChanged = { detailVm?.load() })
+            }
             Spacer(Modifier.height(FS.space.s6))
             BackupMigrateCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
