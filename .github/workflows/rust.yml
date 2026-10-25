@@ -43,7 +43,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
       - name: Privileged-boundary tests (Linux only, disposable runner)
-        run: cargo test --workspace --locked -- --ignored linux_
+        run: cargo test --workspace --locked -- --ignored linux_ --skip linux_peercred_refuses_another_uid
+        env:
+          FLAGSHIP_DISPOSABLE_RUNNER: "1"
+      - name: Peer-credential test (Linux only, as root)
+        run: sudo -E env "PATH=$PATH" cargo test -p flagship-keyd --test hostile --locked -- --ignored --exact linux_peercred_refuses_another_uid
         env:
           FLAGSHIP_DISPOSABLE_RUNNER: "1"
 

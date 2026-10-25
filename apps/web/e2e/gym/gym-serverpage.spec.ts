@@ -725,7 +725,7 @@ test.describe("gym webapp server page and Home leftovers", () => {
   test("gym serverpage auto-unlock seals the disk key for this box and lists the lease", async ({ page }, testInfo) => {
     const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     // A real box identity and a disk key `.com` holds sealed to this account's IRK.
-    const fx = await page.evaluate(async () => {
+    const fx = await page.evaluate(async (d) => {
       const ks = await import("/keystore.js");
       const { getSession } = await import("/lib/state.js");
       const boot = (await import("/lib/bootApproval.js"))._internal;
@@ -734,13 +734,15 @@ test.describe("gym webapp server page and Home leftovers", () => {
       const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
       const irk = await ks.deriveIrkFromSeed(getSession().umk);
       const disk = crypto.getRandomValues(new Uint8Array(32));
+      // This device met its server at first contact, so its key is pinned (lib/serverPins.js).
+      (await import("/lib/serverPins.js")).pinServerKey(d, ks.bytesToHex(pub), "first-sight");
       return {
         stkHex: ks.bytesToHex(pub),
         seedHex: ks.bytesToHex(pkcs8.slice(-32)),
         diskHex: ks.bytesToHex(disk),
         sealedHex: ks.bytesToHex(await boot.sealForBoxStk(disk, irk.publicKey)),
       };
-    });
+    }, HOME);
     let leases: unknown[] = [];
     const m = serverPage(await mock(page), HOME, [livePod(HOME, { identityPubKey: fx.stkHex })]);
     m.first("GET", `/api/server/${HOME}/unlock-key/leases-v2`, () => ({ json: { leases } }));

@@ -3,7 +3,7 @@
 The box's TLS frontend (`SECURITY-HARDENING-PLAN.md` 6.3). It terminates TLS for the box
 **without holding the certificate's private key**: the key lives in `flagship-keyd`, and each
 handshake signature is one `tls.sign` request over keyd's Unix socket (a `crypto.MessageSigner`,
-Go 1.25+): it sends the TLS fields, never a digest, and keyd builds the signed input itself.
+Go 1.26+): it sends the TLS fields, never a digest, and keyd builds the signed input itself.
 
 - Listens on `--listen` (the address the tunnel dials), serves the certificate keyd says is in
   service (`tls.active`, refreshed every few seconds so a renewal needs no restart), and only for

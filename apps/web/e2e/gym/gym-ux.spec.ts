@@ -1235,7 +1235,7 @@ test.describe("gym ux recovery update", () => {
     const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
     expect(opened).toHaveLength(1);
     expect(opened[0]!).toMatch(/^https?:\/\/recovery\./);
-    expect(opened[0]!.endsWith("/#enroll")).toBe(true);
+    expect(opened[0]!).toMatch(/\/#enroll(&lang=[\w-]+)?$/);
     await sawToast(page, "Account recovery updated.");
     await expect(page.locator("#recovery-cloud-update")).toBeHidden({ timeout: 10_000 });
     await shot(page, testInfo, "recovery-updated");
