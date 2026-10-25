@@ -108,7 +108,7 @@ Running when this was written (subagents; if this session is gone, they are gone
        gym branch rebased onto this tip, box artifact built by `box-artifact.yml`); act on its exit code
        (set `newBoxStack` / `appBrowser`, commit the regenerated files).
 7. [ ] M7 VM drills (WASI, app groups, dedicated DBs, GPU sim) and arch drills per `HANDOVER.md`.
-8. [ ] Close the smaller gaps or record them as known in AGENTS.md: gpud share state lost on restart;
+8. [x] (`dcdb763f3` `521ce5955` `d894a516c` `1554f7947` `e271dfa8c`) Close the smaller gaps or record them as known in AGENTS.md: gpud share state lost on restart;
        gpud trusts the daemon's approval until R02; no owner UI for accelerators; WASI journal logs not
        through privd; journalHttp still accepts the IRK; Swift/Kotlin ExportAuthorization scope; a
        classic box can't later migrate to arch-v2; peer backups skip dedicated databases.
@@ -239,3 +239,10 @@ Running when this was written (subagents; if this session is gone, they are gone
   gpu.approval.*). Crypto graph `1554f7947`. Known: gpud reads owner.json only at keyd start, so after an
   admin-root rotation claims are refused until keyd restarts. The apps agent was given the real paths;
   parity/allowlist.json + features.json + the webapp port of the GPU tags are its to finish.
+- 2026-10-25: clients committed `e271dfa8c` (GPU card + signed approvals, stack switch card, journal
+  admin signing incl. webapp SENSITIVE_TAGS, ExportAuthorization scope parity, shell **v180**). Step 8
+  done. Known, to record in AGENTS.md: GPU Decline is local only (no box route); cooperative GPU
+  approvals use trustDomain "owner-apps" and ownerConsent "owner-consent-<issuedAt>" (no input yet);
+  the GPU card doesn't refresh on the gpu-approval-request event/push; stack switch never run on a
+  real classic box and has no gym group. gym is behind the tip (rebase onto integrate before the next
+  release-gym run; the current run uses `61c2d1005`).
