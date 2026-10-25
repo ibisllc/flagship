@@ -204,6 +204,12 @@ export interface KeyfileServer {
   domain: string;
   /** Where it was last seen on a local network (`10.0.0.5:443`), newest first. A hint, never trusted. */
   lan?: string[];
+  /**
+   * The server's own key (STK, 32 bytes hex) as this device pinned it (docs/first-contact.md). A
+   * box makes its STK at install and nothing derives it, so a fresh install restored from this
+   * file checks a box's rescue hello against this pin, never against what the network says.
+   */
+  stk?: string;
 }
 
 /** The whole local account as a v2 keyfile carries it. */
@@ -219,12 +225,15 @@ const MAX_KEYFILE_SERVERS = 64;
 function parseServers(v: unknown): KeyfileServer[] {
   if (!Array.isArray(v) || v.length > MAX_KEYFILE_SERVERS) throw new KeyfileError("malformed server list", "malformed");
   return v.map((x) => {
-    const r = x as { domain?: unknown; lan?: unknown };
+    const r = x as { domain?: unknown; lan?: unknown; stk?: unknown };
     if (typeof r?.domain !== "string" || r.domain.length === 0 || r.domain.length > 253 || /[|\s]/.test(r.domain)) {
       throw new KeyfileError("malformed server record", "malformed");
     }
+    if (r.stk !== undefined && (typeof r.stk !== "string" || !/^[0-9a-f]{64}$/.test(r.stk))) {
+      throw new KeyfileError("malformed server key", "malformed");
+    }
     const lan = Array.isArray(r.lan) ? r.lan.filter((a): a is string => typeof a === "string" && a.length <= 64).slice(0, 8) : undefined;
-    return { domain: r.domain.toLowerCase(), ...(lan && lan.length > 0 ? { lan } : {}) };
+    return { domain: r.domain.toLowerCase(), ...(lan && lan.length > 0 ? { lan } : {}), ...(typeof r.stk === "string" ? { stk: r.stk } : {}) };
   });
 }
 

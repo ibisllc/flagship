@@ -141,3 +141,84 @@ export function rescueDiscoveryId(stkPub: Bytes, serverDomain: string): string {
   legacyFieldGuard("serverDomain", serverDomain);
   return hex(hmac(sha256, stkPub, new TextEncoder().encode(`${TAG_RESCUE_DISCOVERY}|${serverDomain.toLowerCase()}`)).slice(0, 8));
 }
+
+// ── offline control ──────────────────────────────────────────────────────────
+
+/**
+ * Basic offline control (docs/data-sovereignty.md "Offline control"): with `.com` and the relay
+ * out of reach, the owner's phone on the same network starts, stops or restarts an app, or
+ * restarts or shuts down the server. Each action is its own owner-signed order, verified on the
+ * box against its pinned authority (the admin root where one is pinned, an admin device by its
+ * own grant, the IRK only where none is pinned), fresh and single-use:
+ *
+ *   flagship/offline-control/v1|<serverDomain>|<sessionNonce>|<action>|<target>|<nonce>|<issuedAt>
+ *
+ * `sessionNonce` is the box nonce of the hello the rescue session answered, so an order is good
+ * only on the session (and so the connection and certificate) it was signed for. `target` is the
+ * app's service id for an app action and the server's own name for a server action. `nonce` is
+ * 16 random bytes the box spends on first sight.
+ */
+export const TAG_OFFLINE_CONTROL = "flagship/offline-control/v1";
+export const OFFLINE_CONTROL_ACTIONS = ["app-start", "app-stop", "app-restart", "server-restart", "server-shutdown"] as const;
+export type OfflineControlAction = (typeof OFFLINE_CONTROL_ACTIONS)[number];
+
+export interface OfflineControlOrder {
+  serverDomain: string;
+  sessionNonce: string;
+  action: OfflineControlAction;
+  target: string;
+  nonce: string;
+  issuedAt: number;
+}
+
+const SERVICE_LABEL = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+/** `<creator>--<slug>` or a bare `<slug>`, each half a lowercase DNS label (keyd `isServiceId`). */
+export function isOfflineServiceId(id: string): boolean {
+  const parts = id.split("--");
+  return parts.length <= 2 && parts.every((p) => SERVICE_LABEL.test(p));
+}
+
+export function isOfflineControlAction(a: unknown): a is OfflineControlAction {
+  return typeof a === "string" && (OFFLINE_CONTROL_ACTIONS as readonly string[]).includes(a);
+}
+
+export function offlineControlCanonicalBytes(o: OfflineControlOrder): Bytes {
+  if (o.serverDomain.length === 0 || o.serverDomain !== o.serverDomain.toLowerCase()) throw new Error("offline-control: bad serverDomain");
+  legacyFieldGuard("serverDomain", o.serverDomain);
+  if (!HEX32.test(o.sessionNonce)) throw new Error("offline-control: bad sessionNonce");
+  if (!isOfflineControlAction(o.action)) throw new Error("offline-control: bad action");
+  if (o.action.startsWith("app-") ? !isOfflineServiceId(o.target) : o.target !== o.serverDomain) throw new Error("offline-control: bad target");
+  if (!HEX32.test(o.nonce)) throw new Error("offline-control: bad nonce");
+  if (!Number.isSafeInteger(o.issuedAt) || o.issuedAt < 0) throw new Error("offline-control: bad issuedAt");
+  return new TextEncoder().encode([TAG_OFFLINE_CONTROL, o.serverDomain, o.sessionNonce, o.action, o.target, o.nonce, String(o.issuedAt)].join("|"));
+}
+
+export function signOfflineControl(o: OfflineControlOrder, signer: MsgSigner): Bytes {
+  return resolveMsgSigner(signer)(offlineControlCanonicalBytes(o));
+}
+
+/** Never throws: a malformed order simply fails. */
+export function verifyOfflineControl(o: OfflineControlOrder, sig: Bytes, pub: Bytes): boolean {
+  try {
+    return ed.verify(sig, offlineControlCanonicalBytes(o), pub);
+  } catch {
+    return false;
+  }
+}
+
+/** Shape-check an untrusted JSON order (no signature check). */
+export function parseOfflineControl(v: unknown): OfflineControlOrder | null {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const r = v as Record<string, unknown>;
+  if (typeof r.serverDomain !== "string" || typeof r.sessionNonce !== "string" || typeof r.target !== "string" || typeof r.nonce !== "string") return null;
+  if (!isOfflineControlAction(r.action)) return null;
+  if (typeof r.issuedAt !== "number" || !Number.isSafeInteger(r.issuedAt)) return null;
+  const o: OfflineControlOrder = { serverDomain: r.serverDomain, sessionNonce: r.sessionNonce, action: r.action, target: r.target, nonce: r.nonce, issuedAt: r.issuedAt };
+  try {
+    offlineControlCanonicalBytes(o);
+  } catch {
+    return null;
+  }
+  return o;
+}

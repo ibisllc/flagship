@@ -1,0 +1,305 @@
+#!/usr/bin/env -S npx tsx
+/**
+ * Vectors for the phone side of data sovereignty (docs/data-sovereignty.md): the offline-control
+ * orders, the hybrid (post-quantum) half of the rescue session, the box's hello and every offline
+ * order, and the v2 account key file. The TS port GENERATES them; packages/protocol, the webapp,
+ * Swift and Kotlin check every case.
+ *
+ *   packages/protocol/test-vectors/rescue/offline-control.json
+ *   packages/protocol/test-vectors/rescue/pq-vectors.json
+ *   packages/protocol/test-vectors/keyfile/vectors.json
+ *
+ * Run:          npx tsx tools/rescue-vectors.ts
+ * CI freshness: npx tsx tools/rescue-vectors.ts --check
+ */
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { argon2id } from "@noble/hashes/argon2";
+import { gcm } from "@noble/ciphers/aes";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { hybridSigKeygen, hybridSign } from "../packages/protocol/src/pqHybrid.js";
+import { canonicalPqKeyBinding, verifyCriticalSignature, verifyPqKeyBinding, PqTrustError, type PqKeyBindingStatement, type PqKeyBindingWire } from "../packages/protocol/src/pqTrust.js";
+import { deriveIRK } from "../packages/protocol/src/keys.js";
+import {
+  offlineControlCanonicalBytes,
+  rescueHelloCanonicalBytes,
+  rescueSessionCanonicalBytes,
+  signOfflineControl,
+  type OfflineControlOrder,
+  type RescueExchange,
+} from "../packages/protocol/src/rescue.js";
+
+const ROOT = resolve(import.meta.dirname, "..", "packages/protocol/test-vectors");
+const hex = (b: Uint8Array): string => Buffer.from(b).toString("hex");
+const unhex = (s: string): Uint8Array => Uint8Array.from(Buffer.from(s, "hex"));
+const fill = (n: number, v: number): Uint8Array => new Uint8Array(n).fill(v);
+const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
+const zero = (s: string, from: number, to: number): string => s.slice(0, from * 2) + "00".repeat(to - from) + s.slice(to * 2);
+
+const SERVER = "home.alice.flagship.services";
+const NOW = 1792000000000;
+
+// ── offline control ──────────────────────────────────────────────────────────
+
+const UMK_SEED = fill(32, 0x2a);
+const irk = deriveIRK({ seed: UMK_SEED });
+const SESSION = "ffeeddccbbaa99887766554433221100";
+const base = { serverDomain: SERVER, sessionNonce: SESSION, nonce: "00112233445566778899aabbccddeeff", issuedAt: NOW };
+const orders: Array<{ name: string; order: OfflineControlOrder }> = [
+  { name: "app-start", order: { ...base, action: "app-start", target: "alice--notes" } },
+  { name: "app-stop", order: { ...base, action: "app-stop", target: "notes" } },
+  { name: "app-restart", order: { ...base, action: "app-restart", target: "alice--chess-club", nonce: "0f1e2d3c4b5a69788796a5b4c3d2e1f0" } },
+  { name: "server-restart", order: { ...base, action: "server-restart", target: SERVER } },
+  { name: "server-shutdown", order: { ...base, action: "server-shutdown", target: SERVER, issuedAt: NOW + 1 } },
+];
+const refused: Array<{ name: string; order: Record<string, unknown> }> = [
+  { name: "uppercase-domain", order: { ...base, serverDomain: "Home.alice.flagship.services", action: "server-restart", target: "Home.alice.flagship.services" } },
+  { name: "separator-in-domain", order: { ...base, serverDomain: "home|alice", action: "server-restart", target: "home|alice" } },
+  { name: "server-action-other-target", order: { ...base, action: "server-shutdown", target: "home2.alice.flagship.services" } },
+  { name: "app-action-server-target", order: { ...base, action: "app-stop", target: SERVER } },
+  { name: "service-id-uppercase", order: { ...base, action: "app-stop", target: "Notes" } },
+  { name: "service-id-three-parts", order: { ...base, action: "app-stop", target: "a--b--c" } },
+  { name: "service-id-leading-dash", order: { ...base, action: "app-stop", target: "-notes" } },
+  { name: "unknown-action", order: { ...base, action: "app-delete", target: "notes" } },
+  { name: "short-nonce", order: { ...base, action: "app-stop", target: "notes", nonce: "0011" } },
+  { name: "bad-session-nonce", order: { ...base, action: "app-stop", target: "notes", sessionNonce: "FFEEDDCCBBAA99887766554433221100" } },
+  { name: "negative-issued-at", order: { ...base, action: "app-stop", target: "notes", issuedAt: -1 } },
+];
+const offline = {
+  about:
+    "flagship/offline-control/v1 (docs/data-sovereignty.md \"Offline control\"): tag|serverDomain|sessionNonce|action|target|nonce|issuedAt. serverDomain lowercase; sessionNonce = the box nonce of the hello the rescue session answered (16 bytes hex); action one of app-start, app-stop, app-restart, server-restart, server-shutdown; target = the app's service id (<creator>--<slug> or <slug>, each half a lowercase DNS label) for app actions and the serverDomain itself for server actions; nonce 16 bytes hex, spent once. Signed here by the IRK derived from umkSeedHex (deriveIRK); the box takes the admin root where it pins one. Generated by tools/rescue-vectors.ts.",
+  umkSeedHex: hex(UMK_SEED),
+  irkPub: hex(irk.publicKey),
+  cases: orders.map((c) => ({
+    name: c.name,
+    order: c.order,
+    canonical: new TextDecoder().decode(offlineControlCanonicalBytes(c.order)),
+    signature: hex(signOfflineControl(c.order, irk)),
+  })),
+  refused,
+};
+
+// ── PQ gate over the rescue messages ─────────────────────────────────────────
+
+function signer(name: string, a: number, b: number) {
+  const edSeed = fill(32, a);
+  const mldsaSeed = fill(32, b);
+  const { publicKey, secretKey } = hybridSigKeygen(edSeed, mldsaSeed);
+  return { name, edSeed, mldsaSeed, secretKey, ed25519PubHex: hex(publicKey.subarray(0, 32)), mldsaPubHex: hex(publicKey.subarray(32)) };
+}
+const ROOT_KEY = signer("admin-root", 0x51, 0x52);
+const BOX_KEY = signer("box-stk", 0x61, 0x62);
+const ISSUED = NOW - 86_400_000;
+function bind(s: typeof ROOT_KEY, role: string, subjectId: string): PqKeyBindingWire {
+  const st: PqKeyBindingStatement = { role: role as PqKeyBindingStatement["role"], subjectId, ed25519PubHex: s.ed25519PubHex, mldsaPubHex: s.mldsaPubHex, issuedAt: ISSUED };
+  return { v: 1, ...st, signature: hex(hybridSign(s.secretKey, "flagship/pq-key-binding/v1", canonicalPqKeyBinding(st), { deterministic: true })) };
+}
+const bindings = [
+  { name: "admin-root", wire: bind(ROOT_KEY, "admin-root", "alice"), expect: { role: "admin-root", subjectId: "alice", ed25519PubHex: ROOT_KEY.ed25519PubHex, now: NOW } },
+  { name: "box-stk", wire: bind(BOX_KEY, "box-stk", SERVER), expect: { role: "box-stk", subjectId: SERVER, ed25519PubHex: BOX_KEY.ed25519PubHex, now: NOW } },
+];
+
+const exch: RescueExchange = { serverDomain: SERVER, clientNonce: "00112233445566778899aabbccddeeff", boxNonce: SESSION, certSha256: "ab".repeat(32), issuedAt: NOW };
+const helloBytes = rescueHelloCanonicalBytes(exch);
+const sessionBytes = rescueSessionCanonicalBytes(exch);
+const controlBytes = offlineControlCanonicalBytes(orders[0]!.order);
+const shutdownBytes = offlineControlCanonicalBytes(orders[4]!.order);
+const otherSession = rescueSessionCanonicalBytes({ ...exch, certSha256: "cd".repeat(32) });
+const H = (s: typeof ROOT_KEY, purpose: string, m: Uint8Array) => hex(hybridSign(s.secretKey, purpose, m, { deterministic: true }));
+const E = (s: typeof ROOT_KEY, m: Uint8Array) => hex(ed25519.sign(m, s.edSeed));
+const TS = "flagship/rescue-session/v1";
+const TH = "flagship/rescue-hello/v1";
+const TC = "flagship/offline-control/v1";
+
+const compat = { profile: "compatibility", rollout: "legacy" };
+const strict = { profile: "strict", rollout: "enforced" };
+type GateCase = {
+  name: string;
+  messageHex: string;
+  expectedPurpose: string;
+  envelope: { suite: string; signature: string };
+  signerEd25519PubHex: string;
+  binding: string | null;
+  policy: { profile: string; rollout: string };
+};
+const ED = (sig: string) => ({ suite: "ed25519/v1", signature: sig });
+const HY = (sig: string) => ({ suite: "hybrid-ed25519-mldsa65/v1", signature: sig });
+const root = (name: string, m: Uint8Array, purpose: string, o: Partial<GateCase> & Pick<GateCase, "envelope" | "policy">): GateCase => ({
+  name,
+  messageHex: hex(m),
+  expectedPurpose: purpose,
+  signerEd25519PubHex: ROOT_KEY.ed25519PubHex,
+  binding: "admin-root",
+  ...o,
+});
+const box = (name: string, o: Partial<GateCase> & Pick<GateCase, "envelope" | "policy">): GateCase => ({
+  name,
+  messageHex: hex(helloBytes),
+  expectedPurpose: TH,
+  signerEd25519PubHex: BOX_KEY.ed25519PubHex,
+  binding: "box-stk",
+  ...o,
+});
+const sessionHybrid = H(ROOT_KEY, TS, sessionBytes);
+const controlHybrid = H(ROOT_KEY, TC, controlBytes);
+const helloHybrid = H(BOX_KEY, TH, helloBytes);
+const gateCases: GateCase[] = [
+  root("session-strict-hybrid", sessionBytes, TS, { envelope: HY(sessionHybrid), policy: strict }),
+  root("session-compat-classical", sessionBytes, TS, { envelope: ED(E(ROOT_KEY, sessionBytes)), policy: compat }),
+  root("session-strict-classical-refused", sessionBytes, TS, { envelope: ED(E(ROOT_KEY, sessionBytes)), policy: strict }),
+  root("session-strict-hybrid-no-binding", sessionBytes, TS, { envelope: HY(sessionHybrid), binding: null, policy: strict }),
+  root("session-hybrid-for-another-connection", otherSession, TS, { envelope: HY(sessionHybrid), policy: strict }),
+  root("session-hybrid-pq-half-zeroed", sessionBytes, TS, { envelope: HY(zero(sessionHybrid, 64, 3373)), policy: strict }),
+  root("session-hybrid-by-the-box", sessionBytes, TS, { envelope: HY(H(BOX_KEY, TS, sessionBytes)), policy: strict }),
+  root("session-hybrid-presented-as-control", sessionBytes, TC, { envelope: HY(sessionHybrid), policy: strict }),
+  root("control-strict-hybrid", controlBytes, TC, { envelope: HY(controlHybrid), policy: strict }),
+  root("control-shutdown-strict-hybrid", shutdownBytes, TC, { envelope: HY(H(ROOT_KEY, TC, shutdownBytes)), policy: strict }),
+  root("control-compat-classical", controlBytes, TC, { envelope: ED(E(ROOT_KEY, controlBytes)), policy: compat }),
+  root("control-strict-classical-refused", controlBytes, TC, { envelope: ED(E(ROOT_KEY, controlBytes)), policy: strict }),
+  root("control-hybrid-moved-to-shutdown", shutdownBytes, TC, { envelope: HY(controlHybrid), policy: strict }),
+  root("control-hybrid-under-the-session-purpose", controlBytes, TC, { envelope: HY(H(ROOT_KEY, TS, controlBytes)), policy: strict }),
+  root("control-binding-of-another-signer", controlBytes, TC, { envelope: HY(controlHybrid), binding: "box-stk", policy: strict }),
+  box("hello-strict-hybrid", { envelope: HY(helloHybrid), policy: strict }),
+  box("hello-strict-classical-refused", { envelope: ED(E(BOX_KEY, helloBytes)), policy: strict }),
+  box("hello-compat-classical", { envelope: ED(E(BOX_KEY, helloBytes)), policy: compat }),
+  box("hello-hybrid-ed-half-zeroed", { envelope: HY(zero(helloHybrid, 0, 64)), policy: strict }),
+];
+
+const verified = new Map(bindings.map((b) => [b.name, verifyPqKeyBinding(b.wire, b.expect)]));
+const pq = {
+  about:
+    "The post-quantum half of the rescue messages (docs/data-sovereignty.md, docs/architecture-v2/pq-suites.md §11): the owner's session order (flagship/rescue-session/v1) and every offline-control order (flagship/offline-control/v1) carry a hybrid-ed25519-mldsa65/v1 signature by the signer's bound key beside the classical one, and the box's hello (flagship/rescue-hello/v1) carries one by the box's STK binding. Same shape and checks as the gate in test-vectors/pq-binding: each case names the binding it uses (null = none), the policy is {profile, rollout}, and `expect` is the verdict of verifyCriticalSignature. ML-DSA signatures are deterministic (rnd = 0^32). Generated by tools/rescue-vectors.ts.",
+  now: NOW,
+  signers: [ROOT_KEY, BOX_KEY].map((s) => ({ name: s.name, edSeedHex: hex(s.edSeed), mldsaSeedHex: hex(s.mldsaSeed), ed25519PubHex: s.ed25519PubHex, mldsaPubHex: s.mldsaPubHex })),
+  bindings: { valid: bindings },
+  exchange: exch,
+  controlOrder: orders[0]!.order,
+  gate: gateCases.map((c) => {
+    let expect: Record<string, unknown>;
+    try {
+      const v = verifyCriticalSignature({
+        message: unhex(c.messageHex),
+        expectedPurpose: c.expectedPurpose,
+        envelope: c.envelope as never,
+        signerEd25519PubHex: c.signerEd25519PubHex,
+        binding: c.binding ? verified.get(c.binding)! : null,
+        policy: c.policy as never,
+      });
+      expect = { ok: true, suite: v.suite, strict: v.strict };
+    } catch (e) {
+      if (!(e instanceof PqTrustError)) throw e;
+      expect = { ok: false, code: e.code };
+    }
+    return { ...c, expect };
+  }),
+};
+
+// ── keyfile ──────────────────────────────────────────────────────────────────
+
+const ARGON = { m: 256, t: 2, p: 1 };
+const PASS = "correct horse battery staple";
+function aad(version: number, username: string, accountId: string | undefined, createdAt: string): Uint8Array {
+  return utf8(["flagship/keyfile/v1", String(version), username, accountId ?? "", createdAt, `argon2id|m=${ARGON.m}|t=${ARGON.t}|p=${ARGON.p}`, "aes-256-gcm"].join("|"));
+}
+function keyfile(o: { version: number; username: string; accountId?: string; createdAt: string; salt: number; nonce: number; plaintext: Uint8Array; passphrase?: string }): string {
+  const salt = fill(16, o.salt);
+  const nonce = fill(12, o.nonce);
+  const key = argon2id(utf8(o.passphrase ?? PASS), salt, { ...ARGON, dkLen: 32 });
+  const ct = gcm(key, nonce, aad(o.version, o.username, o.accountId, o.createdAt)).encrypt(o.plaintext);
+  const env = {
+    magic: "flagship-key",
+    version: o.version,
+    username: o.username,
+    ...(o.accountId !== undefined ? { accountId: o.accountId } : {}),
+    createdAt: o.createdAt,
+    kdf: { algo: "argon2id", ...ARGON, saltHex: hex(salt) },
+    aead: "aes-256-gcm",
+    nonceHex: hex(nonce),
+    ciphertextHex: hex(ct),
+  };
+  return `${JSON.stringify(env, null, 2)}\n`;
+}
+const UMK2 = fill(32, 0x33);
+const ADMIN = fill(32, 0x44);
+const servers = [
+  { domain: "home.alice.flagship.services", lan: ["192.168.1.20:443", "10.0.0.5:443"], stk: BOX_KEY.ed25519PubHex },
+  { domain: "cabin.alice.flagship.services" },
+];
+const v2Body = (o: Record<string, unknown>) => utf8(JSON.stringify(o));
+const created = "2026-10-25T12:00:00.000Z";
+const v1 = keyfile({ version: 1, username: "alice", createdAt: created, salt: 0x01, nonce: 0x02, plaintext: UMK_SEED });
+const v2 = keyfile({
+  version: 2,
+  username: "alice",
+  accountId: "acct_7f3a9c",
+  createdAt: created,
+  salt: 0x03,
+  nonce: 0x04,
+  plaintext: v2Body({ umkSeedHex: hex(UMK2), adminRootSeedHex: hex(ADMIN), servers }),
+});
+const v2Bare = keyfile({ version: 2, username: "bob", createdAt: created, salt: 0x05, nonce: 0x06, plaintext: v2Body({ umkSeedHex: hex(UMK_SEED), servers: [] }) });
+const tamperHeader = (text: string, f: (o: Record<string, unknown>) => void) => {
+  const o = JSON.parse(text) as Record<string, unknown>;
+  f(o);
+  return `${JSON.stringify(o, null, 2)}\n`;
+};
+const keyfiles = {
+  about:
+    "The .flagshipkey account key file (packages/protocol/src/keyfile.ts). v1 wraps the UMK seed; v2 wraps JSON {umkSeedHex, adminRootSeedHex?, servers: [{domain, lan?, stk?}]} (docs/data-sovereignty.md 4.11; stk = the server key this device pinned, docs/first-contact.md). Argon2id with the params recorded in the file (tiny here, for speed) and AES-256-GCM; the AAD is flagship/keyfile/v1|<version>|<username>|<accountId or empty>|<createdAt>|argon2id|m=<m>|t=<t>|p=<p>|aes-256-gcm. `open` cases must unwrap to `expect`; `refuse` cases must fail with the named error (bad-passphrase, version, malformed). Generated by tools/rescue-vectors.ts.",
+  passphrase: PASS,
+  open: [
+    { name: "v1-umk-only", file: v1, expect: { version: 1, username: "alice", createdAt: created, umkSeedHex: hex(UMK_SEED), servers: [] } },
+    {
+      name: "v2-admin-root-and-servers",
+      file: v2,
+      expect: { version: 2, username: "alice", accountId: "acct_7f3a9c", createdAt: created, umkSeedHex: hex(UMK2), adminRootSeedHex: hex(ADMIN), servers },
+    },
+    { name: "v2-no-admin-root", file: v2Bare, expect: { version: 2, username: "bob", createdAt: created, umkSeedHex: hex(UMK_SEED), servers: [] } },
+  ],
+  refuse: [
+    { name: "wrong-passphrase", file: v2, passphrase: "not the passphrase", error: "bad-passphrase" },
+    { name: "username-changed", file: tamperHeader(v2, (o) => (o.username = "mallory")), error: "bad-passphrase" },
+    { name: "argon-params-lowered", file: tamperHeader(v2, (o) => ((o.kdf as Record<string, unknown>).t = 1)), error: "bad-passphrase" },
+    { name: "version-relabelled", file: tamperHeader(v1, (o) => (o.version = 2)), error: "bad-passphrase" },
+    { name: "unknown-version", file: tamperHeader(v2, (o) => (o.version = 3)), error: "version" },
+    { name: "not-a-key-file", file: tamperHeader(v2, (o) => (o.magic = "something-else")), error: "malformed" },
+    {
+      name: "server-key-not-hex",
+      file: keyfile({ version: 2, username: "alice", createdAt: created, salt: 0x07, nonce: 0x08, plaintext: v2Body({ umkSeedHex: hex(UMK2), servers: [{ domain: "home.alice.flagship.services", stk: "xyz" }] }) }),
+      error: "malformed",
+    },
+    {
+      name: "admin-root-short",
+      file: keyfile({ version: 2, username: "alice", createdAt: created, salt: 0x09, nonce: 0x0a, plaintext: v2Body({ umkSeedHex: hex(UMK2), adminRootSeedHex: "44", servers: [] }) }),
+      error: "malformed",
+    },
+  ],
+};
+
+const outputs: Array<[string, unknown]> = [
+  [resolve(ROOT, "rescue/offline-control.json"), offline],
+  [resolve(ROOT, "rescue/pq-vectors.json"), pq],
+  [resolve(ROOT, "keyfile/vectors.json"), keyfiles],
+];
+let stale = false;
+for (const [path, body] of outputs) {
+  const text = JSON.stringify(body, null, 2) + "\n";
+  if (process.argv.includes("--check")) {
+    let have = "";
+    try {
+      have = readFileSync(path, "utf8");
+    } catch {
+      /* missing */
+    }
+    if (have !== text) {
+      console.error(`${path} is stale: run npx tsx tools/rescue-vectors.ts`);
+      stale = true;
+    }
+  } else {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, text);
+    console.log(`wrote ${path}`);
+  }
+}
+if (stale) process.exit(1);
+if (!process.argv.includes("--check")) for (const c of pq.gate) console.log(`${c.name}: ${JSON.stringify(c.expect)}`);

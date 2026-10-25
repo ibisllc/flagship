@@ -1,9 +1,11 @@
+import { readFileSync as readVectors } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { bytesToHex } from "@noble/hashes/utils";
 import { generateUMK, deriveIRK } from "../src/keys.js";
 import {
   wrapUmkToKeyfile,
   unwrapUmkFromKeyfile,
+  unwrapAccountFromKeyfile as unwrapAccountVector,
   KeyfileError,
   KEYFILE_MAGIC,
   type ArgonParams,
@@ -114,5 +116,34 @@ describe("flagshipkey v2: the whole local account (docs/data-sovereignty.md)", (
     const { wrapAccountToKeyfile } = await import("../src/keyfile.js");
     expect(() => wrapAccountToKeyfile({ umk: generateUMK(), servers: [{ domain: "a|b" }] }, PASS, META, FAST)).toThrow(KeyfileError);
     expect(() => wrapAccountToKeyfile({ umk: generateUMK(), servers: [{ domain: "" }] }, PASS, META, FAST)).toThrow(KeyfileError);
+  });
+});
+
+// ── shared vectors (tools/rescue-vectors.ts) ──
+
+const KV = JSON.parse(readVectors(new URL("../test-vectors/keyfile/vectors.json", import.meta.url), "utf8")) as {
+  passphrase: string;
+  open: Array<{ name: string; file: string; expect: { version: number; username: string; accountId?: string; createdAt: string; umkSeedHex: string; adminRootSeedHex?: string; servers: unknown[] } }>;
+  refuse: Array<{ name: string; file: string; passphrase?: string; error: string }>;
+};
+
+describe("keyfile vectors (test-vectors/keyfile/vectors.json)", () => {
+  it.each(KV.open.map((c) => [c.name, c] as const))("opens %s", (_n, c) => {
+    const a = unwrapAccountVector(c.file, KV.passphrase);
+    expect(bytesToHex(a.umk.seed)).toBe(c.expect.umkSeedHex);
+    expect(a.account.adminRootSeed ? bytesToHex(a.account.adminRootSeed) : undefined).toBe(c.expect.adminRootSeedHex);
+    expect(a.account.servers).toEqual(c.expect.servers);
+    expect(a.meta).toEqual({ username: c.expect.username, ...(c.expect.accountId ? { accountId: c.expect.accountId } : {}), createdAt: c.expect.createdAt });
+    // The v1 reader opens every version as a UMK.
+    expect(bytesToHex(unwrapUmkFromKeyfile(c.file, KV.passphrase).umk.seed)).toBe(c.expect.umkSeedHex);
+  });
+  it.each(KV.refuse.map((c) => [c.name, c] as const))("refuses %s", (_n, c) => {
+    let code = "ok";
+    try {
+      unwrapAccountVector(c.file, c.passphrase ?? KV.passphrase);
+    } catch (e) {
+      code = e instanceof KeyfileError ? e.code : "other";
+    }
+    expect(code).toBe(c.error);
   });
 });
