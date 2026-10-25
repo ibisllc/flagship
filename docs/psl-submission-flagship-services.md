@@ -1,7 +1,8 @@
 # Public Suffix List submission — `flagship.services`
 
-**Status:** ready-to-act. OWNER ACTION, owner-gated. No code, no tests — this
-is an external-process runbook.
+**Status:** ON HOLD (2026-10-24). PR #2897 was closed on 2026-05-06; resubmit only
+when the user threshold below is met. OWNER ACTION, owner-gated. No code, no tests —
+this is an external-process runbook.
 
 **Source:** the CRITICAL "PSL ceiling (scaling blocker)" finding in
 [`docs/per-user-cert-worklist.md`](./per-user-cert-worklist.md) (red-team
@@ -10,24 +11,74 @@ is an external-process runbook.
 
 ---
 
+## 0. Where this stands, and when to resubmit
+
+**First attempt: [PR #2897](https://github.com/publicsuffix/list/pull/2897), closed 2026-05-06.**
+Maintainer `dnsguru`: "Once there are thousands of subdomains in use in a manner
+that can be publicly verified, submit this again using the template, literally,
+not fed through a GPT." An earlier reviewer (`hiifeng`) had also said the PSL is
+not for working around third-party rate limits (Let's Encrypt) and asked for the
+official template. Going live was never the bar: **usage is.**
+
+**The gate.** The PSL template says it considers entries only for projects with
+**2,000–3,000 or more distinct users** (individuals with a direct relationship
+with us who use subnames of the domain; not visitors). It counts users, not
+servers. Do not resubmit before we have that many real accounts, and can show it
+publicly (Certificate Transparency logs list the names; crt.sh on 2026-10-24 showed
+267 certificates and 66 distinct names, far short). Check the current count with
+`npm run ops` or the admin tools, plus crt.sh
+(`https://crt.sh/?q=%25.flagship.services`). A failed resubmission makes the
+next one harder.
+
+**Let's Encrypt is not the reason, and not a blocker.** ISRG approved our
+rate-limit adjustment request: **5,000 certificates per week for the registered
+domain `flagship.services`** (the default is 50). Per-user certs plus that
+override carry us until the PSL entry lands. So the PSL entry is for
+cookie/origin isolation between users only. When it is resubmitted, say so, and
+disclose the override honestly in the third-party limits line (see below).
+Watch the override against growth: at 5,000 a week it is the real ceiling until
+the PSL propagates (§5).
+
+**How to write the PR (lessons from #2897).**
+- Use the official template (`.github/pull_request_template.md` in
+  `publicsuffix/list`) **verbatim**: keep every HTML comment and the
+  `<!-- FILL IN ... -->` / `<!-- END FILL IN -->` markers, and put answers
+  between them. Do not rewrite it, restructure it, or paste a generated
+  document over it. Fetch it fresh the day you submit.
+- Third-party limits line: list Let's Encrypt (and Cloudflare if relevant), say
+  we asked ISRG directly, and give the outcome (5,000/week approved). Do not
+  present rate limits as the reason.
+- State the user count as a real, current number with its source.
+- Keep it plain: who we are, what a user gets (`<server>.<user>.flagship.services`,
+  each user on their own hardware with their own certificate key), why browsers
+  must treat users as separate sites (cookies, storage, SameSite).
+- Abuse contact: `https://flagshipserver.com/abuse.html`; role-based mailboxes
+  `abuse@` and `harry@flagship.services` must be monitored (30-day response).
+- Domain registration: more than 2 years remaining when submitting (it was
+  paid to 2028-06-24; check `whois` and extend first if under 2 years).
+- On resubmitting, repoint the `_psl.flagship.services` TXT, which still holds the
+  closed #2897 URL, at the new PR (§3). This record lives in the
+  `flagship.services` zone; it is one record and the zone's root-wildcard
+  layout (`docs/wildcard-dns.md`) is unaffected. `npm run zone-health` should
+  still pass; if it flags `_psl`, it is a name that is not an account or box name.
+
 ## TL;DR
 
 Add `flagship.services` to the **PRIVATE** section of the Public Suffix List
-(PSL). Once browsers and — critically — **Let's Encrypt** pick up the new
-list, each `<user>.flagship.services` becomes its own *registered domain*
-instead of all users sharing the single registered domain `flagship.services`.
+(PSL). Once browsers and Let's Encrypt pick up the new list, each
+`<user>.flagship.services` becomes its own *registered domain* instead of all
+users sharing the single registered domain `flagship.services`.
 
-**Start now.** Browser/library propagation of a PSL change takes **weeks to
-months** (it ships embedded in browser releases, Go's `golang.org/x/net/publicsuffix`,
-the `psl` npm/python packages, etc.). This is on the critical path for scaling
-past a few thousand users and cannot be expedited after the fact.
+Propagation of a PSL change takes **weeks to months** (it ships embedded in
+browser releases, Go's `golang.org/x/net/publicsuffix`, the `psl` npm/python
+packages, etc.), so submit as soon as the §0 gate is met.
 
 ---
 
-## 1. Why this gates scale
+## 1. Why this matters at scale
 
 Let's Encrypt's primary rate limit — **"Certificates per Registered Domain"
-(50 / week**, with a hard-to-get override to ~3,000–5,000/week) — keys on the
+(50 / week** by default; ours is raised to 5,000/week by ISRG, see §0) — keys on the
 **public-suffix + 1 label** (the "registered domain"). The public suffix is
 whatever the PSL says it is.
 

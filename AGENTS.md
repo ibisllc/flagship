@@ -215,7 +215,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-21**.
+> Last updated **2026-10-23**.
 
 ### Launch
 
@@ -325,6 +325,19 @@ of the last check here: **not yet checked**.
   records until its review ends.
 
 ### In flight
+
+- **Architecture v2 implementation planning (2026-10-23; proposed, not implemented).**
+  `docs/architecture-v2/IMPLEMENTATION-PLAN.md` translates the owner's global proposal
+  (preserved beside it) into Rust custody/broker/core migration, OCI/polyglot, GPU and
+  full-chain PQ work packages, compatibility gates and rollout/recovery tests. Revision 2
+  makes the full wishlist required (Rust relay/engine replacement, WASI, all three GPU
+  vendors, sharing, graphics and single-server training included); no reduced-scope phases.
+  Owner permits necessary breaking changes with explicit user opt-out. Remote streaming
+  and platform multi-server orchestration are excluded; apps use existing limited chat.
+  Strict PQ qualification requires closing classical-only trust bypasses, not just TLS KEM.
+  It consumes `SECURITY-HARDENING-PLAN.md` authority/ceremony contracts; does not replace them.
+  Next: assign owners, revalidate against current main and hardening work, approve the
+  ADRs and establish measured baselines before implementation.
 
 - **Multilingual (2026-10-21, branch `feat/multilingual`, local, not pushed; `docs/i18n.md`).**
   Six languages (es, fr, de, pt-BR, ja, zh-Hans) are `"status": "ga"` in `i18n/locales.json` and their native
