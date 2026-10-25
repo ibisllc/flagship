@@ -17,8 +17,10 @@ package com.flagshipserver.app.core
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.viewmodels.ServerShareRuntime
 import com.google.crypto.tink.subtle.Ed25519Sign
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -171,7 +173,8 @@ class MockShareWorld(
         if (seeded) return
         seedLock.withLock {
             if (seeded) return
-            seed()
+            // The first caller's screen may leave mid-seed: a half-seeded world would seed its shares twice.
+            withContext(NonCancellable) { seed() }
             seeded = true
         }
     }

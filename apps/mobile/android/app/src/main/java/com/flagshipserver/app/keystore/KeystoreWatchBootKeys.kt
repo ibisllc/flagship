@@ -17,7 +17,7 @@ import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.PrivateKey
-import java.security.spec.NamedParameterSpec
+import java.security.spec.ECGenParameterSpec
 import java.security.spec.X509EncodedKeySpec
 import javax.crypto.KeyAgreement
 
@@ -38,7 +38,7 @@ class KeystoreWatchBootKeys : WatchBootKeyStore {
         val gen = KeyPairGenerator.getInstance("XDH", ANDROID_KEY_STORE)
         gen.initialize(
             KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_AGREE_KEY)
-                .setAlgorithmParameterSpec(NamedParameterSpec("X25519"))
+                .setAlgorithmParameterSpec(ECGenParameterSpec("x25519"))
                 .build(),
         )
         val pair = gen.generateKeyPair()

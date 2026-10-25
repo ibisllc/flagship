@@ -34,6 +34,7 @@ import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.components.TextButton
 import com.flagshipserver.app.ui.theme.FS
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -148,11 +149,10 @@ fun BrowserGrantDialogHost(center: BrowserGrantCenter) {
 
 /** Activity's list, or one app's asks when [serviceId] is set. */
 @Composable
-fun BrowserGrantRequestsList(center: BrowserGrantCenter, serviceId: String? = null) {
+fun BrowserGrantRequestsList(center: BrowserGrantCenter, serviceId: String? = null, scope: CoroutineScope = rememberCoroutineScope()) {
     val listing by center.listing.collectAsState()
     val busy by center.busy.collectAsState()
     val toasts = LocalToastCenter.current
-    val scope = rememberCoroutineScope()
     val canAnswer = center.canAnswerHere()
     val items = listing.requests.filter { serviceId == null || it.request.serviceId == serviceId }
     Column(Modifier.fillMaxWidth().testTag("browser-grant-list"), verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
@@ -214,11 +214,10 @@ fun manifestBrowserDomains(manifest: Map<String, JsonElement>): List<String> {
 
 /** One grant the owner gave: the sites and network, what it can do, how long, the app's words; Withdraw. */
 @Composable
-private fun OwnerGrantCard(center: BrowserGrantCenter, item: OwnerGrantItem, appName: String, canWithdraw: Boolean, busy: Boolean) {
+private fun OwnerGrantCard(center: BrowserGrantCenter, item: OwnerGrantItem, appName: String, canWithdraw: Boolean, busy: Boolean, scope: CoroutineScope) {
     val t = tagOf(item)
     val g = item.grant
     val toasts = LocalToastCenter.current
-    val scope = rememberCoroutineScope()
     FSCard(modifier = Modifier.testTag("browser-granted-$t")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             if (g.origins.isNotEmpty()) {
@@ -265,6 +264,8 @@ private fun OwnerGrantCard(center: BrowserGrantCenter, item: OwnerGrantItem, app
 @Composable
 fun BrowserAccessSection(serviceId: String, manifest: Map<String, JsonElement>, appName: String = serviceId) {
     val center = LocalBrowserGrantCenter.current
+    // Answering the last ask (or withdrawing the last grant) takes its card away: the work outlives it.
+    val scope = rememberCoroutineScope()
     LaunchedEffect(center, serviceId) {
         runCatching { center?.load() }
         runCatching { center?.loadGrants(serviceId) }
@@ -288,11 +289,11 @@ fun BrowserAccessSection(serviceId: String, manifest: Map<String, JsonElement>, 
                 }
             }
         }
-        if (center != null && asks.isNotEmpty()) BrowserGrantRequestsList(center, serviceId)
+        if (center != null && asks.isNotEmpty()) BrowserGrantRequestsList(center, serviceId, scope)
         if (center != null && given.isNotEmpty()) {
             Text(stringResource(R.string.browser_grant_allowed_by_you), style = MaterialTheme.typography.titleSmall, modifier = Modifier.testTag("browser-granted-title"))
             val canWithdraw = center.canAnswerHere()
-            given.forEach { OwnerGrantCard(center, it, appName, canWithdraw, it.key in busy) }
+            given.forEach { OwnerGrantCard(center, it, appName, canWithdraw, it.key in busy, scope) }
         }
     }
 }

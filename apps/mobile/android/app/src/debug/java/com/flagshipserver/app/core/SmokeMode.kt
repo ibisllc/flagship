@@ -223,6 +223,15 @@ object SmokeMode {
         } else {
             com.flagshipserver.app.keystore.Keystore.forgetAdminRoot()
         }
+        // This phone blessed its own servers earlier (docs/first-contact.md), so it holds the key
+        // each one has: shares, migration and the watch read that pin, never the listing.
+        if (!config.live) {
+            for (pod in appState.pods.value) {
+                if (pod.fqdn.isEmpty() || pod.identityPubKeyHex.isEmpty()) continue
+                ServerKeyPins.shared.forget(pod.fqdn)
+                ServerKeyPins.shared.recordFirstSeen(pod.fqdn, pod.identityPubKeyHex)
+            }
+        }
         GymSeams.verifySignatures = true
         com.flagshipserver.app.api.MockSignatures.clear()
         // One process runs every scenario: start each with every app open.

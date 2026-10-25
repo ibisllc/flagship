@@ -306,9 +306,22 @@ abstract class GymBase {
      */
     protected fun hideKeyboard() {
         composeRule.waitForIdle()
-        if (!keyboardShown()) return
+        // Typing asks for the keyboard asynchronously, and a sheet's own window may not report it
+        // on the activity: it may not show as up yet, then stay up for the rest of the scenario.
+        // Ask it to go either way, then see it stay gone.
         runCatching { androidx.test.espresso.Espresso.closeSoftKeyboard() }
-        composeRule.waitUntil(10_000) { !keyboardShown() }
+        var hiddenChecks = 0
+        val deadline = System.currentTimeMillis() + 10_000
+        while (hiddenChecks < 3) {
+            check(System.currentTimeMillis() < deadline) { "the soft keyboard stayed up" }
+            if (keyboardShown()) {
+                hiddenChecks = 0
+                runCatching { androidx.test.espresso.Espresso.closeSoftKeyboard() }
+            } else {
+                hiddenChecks++
+            }
+            Thread.sleep(50)
+        }
         composeRule.waitForIdle()
     }
 

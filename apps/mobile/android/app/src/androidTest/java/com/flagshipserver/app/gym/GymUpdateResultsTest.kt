@@ -7,6 +7,8 @@
 
 package com.flagshipserver.app.gym
 
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
@@ -37,7 +39,9 @@ class GymUpdateResultsTest : GymBase() {
         screensMock.updateReportsShare = false
         openHomeServer()
         waitText("in recovery mode until a fixed update arrives", 10_000)
-        assertEquals(0, textCount("on its own"))
+        // Only the verdict: the Boot unlock card above may say the server reboots on its own.
+        val outcome = hasContentDescription("sd-update-last-outcome") and hasText("on its own", substring = true)
+        assertEquals(0, composeRule.onAllNodes(outcome).fetchSemanticsNodes().size)
         waitUntilExists("sd-update-reports", 20_000)
         composeRule.onNodeWithTag("sd-update-reports").performScrollTo()
         waitText("Share update results")

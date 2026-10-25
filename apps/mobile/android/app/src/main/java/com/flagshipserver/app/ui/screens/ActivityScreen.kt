@@ -114,6 +114,7 @@ fun ActivityScreen(
     val browserCenter = com.flagshipserver.app.core.LocalBrowserGrantCenter.current
     LaunchedEffect(browserCenter) { runCatching { browserCenter?.load() } }
     val browserListing by (browserCenter?.listing ?: kotlinx.coroutines.flow.MutableStateFlow(com.flagshipserver.app.core.BrowserGrantCenter.Listing())).collectAsState()
+    val browserScope = androidx.compose.runtime.rememberCoroutineScope()
 
     // Server filter (the PodSwitcher). null == "All servers".
     val pods by app.pods.collectAsState()
@@ -216,7 +217,7 @@ fun ActivityScreen(
                 onToggle = { toggle(ActivitySection.Browser) },
                 count = browserListing.requests.size,
                 badge = true,
-            ) { BrowserGrantRequestsList(browserCenter) }
+            ) { BrowserGrantRequestsList(browserCenter, scope = browserScope) }
         }
 
         val serverTitle = activityServerTitle(pods, effectiveServerFilter)
