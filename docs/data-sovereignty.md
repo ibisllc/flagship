@@ -656,6 +656,23 @@ boot hardening (bounded relay wait, serve a stale certificate while renewing).
 **Not taken up now:** D3 (warn "do not restart" until saved), D4 (no fallback
 certificate: recommend no), D6 (Studio VMs behind NAT).
 
+### Discussion 2026-10-25 (owner): for the next release
+
+Data sovereignty's core is planned for the release after 0.3. Points raised:
+
+- **Boot unlock falls back to the LAN.** The box asks `.com` first; when that
+  fails it listens on a fixed port and tries its default gateway. The reply is
+  already owner-signed and sealed to the box key, so the carrier does not
+  matter. The LAN path is limited to private and link-local addresses.
+- **A phone hotspot is the "serious user" setup:** the phone is the gateway, so
+  the box's default-gateway attempt reaches it directly.
+- **After about 30 minutes without `.com`** a running box advertises itself over
+  mDNS/Bonjour, so the phone finds it with no internet ("turn off the internet
+  and wait"). Phones only: a browser cannot do this.
+- **Open questions:** giving users their own control plane ("what if they don't
+  need us anymore?"), and how to handle harder networks: static IP, 802.1X,
+  captive portals, VLANs, IPv6-only, and headless servers.
+
 ## 7. Phase 2 plan
 
 | Item | Effort | Notes |
