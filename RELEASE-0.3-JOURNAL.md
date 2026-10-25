@@ -141,3 +141,8 @@ Running when this was written (subagents; if this session is gone, they are gone
   durable grants, shell v178); `28b213c73` Chromium only when the release turns the browser on.
 - 2026-10-25: generated store art into `store/out/` (uncommitted, stand-ins; owner didn't need it).
   Journal started.
+- 2026-10-25: CI on `90edead1e` (runs 40150736028/40150738064) found, beyond what `135829c9d` fixed:
+  the Go TLS frontend built with Go 1.25 fails every handshake (needs 1.26's MessageSigner path;
+  go.mod now `go 1.26.0`, so box-artifact.yml builds it right); keyd's peercred test needs root (own
+  sudo step in rust.yml); two web gym specs (auto-unlock pins first; recovery link has `&lang=`).
+  Fixed in `dd96a774e`. Re-dispatched CI 40153988658 and Rust 40153990297 on it.
