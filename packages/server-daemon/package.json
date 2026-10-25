@@ -11,6 +11,7 @@
     "test": "vitest run --dir tests"
   },
   "dependencies": {
+    "@flagship/boot-chain": "*",
     "@flagship/keyd": "*",
     "@flagship/llm-providers": "*",
     "@flagship/privd": "*",

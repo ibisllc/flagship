@@ -3108,4 +3108,6 @@
     <string name="choose_local_seed">选择本地种子镜像…</string>
     <string name="use_managed">使用托管镜像</string>
     <string name="finalizing">正在完成</string>
+    <string name="activity_bootchain_refreshed">已更新此服务器启动时的解锁方式</string>
+    <string name="activity_bootchain_rolled_back">保留了之前的启动解锁方式</string>
 </resources>

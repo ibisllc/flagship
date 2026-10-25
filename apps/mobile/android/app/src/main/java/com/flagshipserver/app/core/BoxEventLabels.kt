@@ -36,6 +36,8 @@ object BoxEventLabels {
         "share.signed-in" to FSStrings.get(R.string.a_shared_person_signed_in),
         "server.update" to FSStrings.get(R.string.server_updated_by_a_co_manager),
         "server.state.corrupt" to FSStrings.get(R.string.this_server_found_a_damaged_settings),
+        "server.bootchain.refreshed" to FSStrings.get(R.string.activity_bootchain_refreshed),
+        "server.bootchain.rolled-back" to FSStrings.get(R.string.activity_bootchain_rolled_back),
         "server.debug-access.granted" to FSStrings.get(R.string.debug_access_turned_on),
         "server.debug-access.renewed" to FSStrings.get(R.string.debug_access_renewed),
         "server.debug-access.expired" to FSStrings.get(R.string.debug_access_ended),

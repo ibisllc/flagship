@@ -3105,5 +3105,7 @@
   "managed_manifest_download": "托管(按清单下载)",
   "choose_local_seed": "选择本地种子镜像…",
   "use_managed": "使用托管镜像",
-  "finalizing": "正在完成"
+  "finalizing": "正在完成",
+  "activity_bootchain_refreshed": "已更新此服务器启动时的解锁方式",
+  "activity_bootchain_rolled_back": "保留了之前的启动解锁方式"
 }

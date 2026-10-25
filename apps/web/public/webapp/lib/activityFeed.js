@@ -37,6 +37,8 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "server.debug-access.expired": { label: tr("Debug access ended"), icon: "🔒" },
   "server.debug-access.revoked": { label: tr("Debug access turned off"), icon: "🔒" },
   "server.state.corrupt": { label: tr("This server found a damaged settings file and locked it down"), icon: "⚠️" },
+  "server.bootchain.refreshed": { label: tr("Updated how this server unlocks at start-up"), icon: "🔐" },
+  "server.bootchain.rolled-back": { label: tr("Kept the previous start-up unlock"), icon: "⚠️" },
   "gpu.approval.pending": { label: tr("An app asked to use a GPU"), icon: "🎛️" },
   "gpu.approval.granted": { label: tr("Approved an app's GPU use"), icon: "🎛️" },
   "gpu.approval.withdrawn": { label: tr("Withdrew an app's GPU use"), icon: "🎛️" },

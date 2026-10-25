@@ -3105,5 +3105,7 @@
   "managed_manifest_download": "Verwaltet (Download laut Manifest)",
   "choose_local_seed": "Lokales Basis-Image wählen…",
   "use_managed": "Verwaltete verwenden",
-  "finalizing": "Abschließen"
+  "finalizing": "Abschließen",
+  "activity_bootchain_refreshed": "Entsperren dieses Servers beim Start aktualisiert",
+  "activity_bootchain_rolled_back": "Bisheriges Entsperren beim Start beibehalten"
 }

@@ -520,6 +520,10 @@ for (const bad of [
   JSON.parse('{"__proto__": {"instance": "0123456789abcdef"}, "lines": 15}'),
 ]) wl(bad);
 
+// The boot chain refresh: by name only; the step reads nothing the daemon hands it.
+add("setup", { step: "boot-chain" });
+for (const bad of [{ step: "boot-chain", from: "/var/flagship/flagship-unseal" }, { step: "boot-chain", kernel: "6.12.0" }, { step: "boot-chain-confirm" }, { step: "Boot-Chain" }, { step: "boot-chain\u0000" }, { step: ["boot-chain"] }]) add("setup", bad);
+
 /** Every docker and docker.file case again, under Podman. */
 export const CORPUS: CorpusCase[] = [
   ...cases,

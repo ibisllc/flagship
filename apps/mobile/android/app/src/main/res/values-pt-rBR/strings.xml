@@ -3108,4 +3108,6 @@
     <string name="choose_local_seed">Escolher imagem base local…</string>
     <string name="use_managed">Usar a gerenciada</string>
     <string name="finalizing">Finalizando</string>
+    <string name="activity_bootchain_refreshed">Atualizado o modo como este servidor se desbloqueia ao iniciar</string>
+    <string name="activity_bootchain_rolled_back">O desbloqueio de inicialização anterior foi mantido</string>
 </resources>

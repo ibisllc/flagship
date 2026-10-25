@@ -12421,5 +12421,13 @@
   "The move was undone: {0}": {
     "en": "The move was undone: {0}",
     "ctx": "webapp/lib/stackSwitch.js:66"
+  },
+  "Updated how this server unlocks at start-up": {
+    "en": "Updated how this server unlocks at start-up",
+    "ctx": "webapp/lib/activityFeed.js:40"
+  },
+  "Kept the previous start-up unlock": {
+    "en": "Kept the previous start-up unlock",
+    "ctx": "webapp/lib/activityFeed.js:41"
   }
 }

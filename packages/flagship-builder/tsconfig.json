@@ -4,10 +4,19 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "composite": true,
-    "lib": ["ES2022"]
+    "lib": [
+      "ES2022"
+    ]
   },
   "references": [
-    { "path": "../protocol" }
+    {
+      "path": "../boot-chain"
+    },
+    {
+      "path": "../protocol"
+    }
   ],
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ]
 }

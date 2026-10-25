@@ -12865,5 +12865,13 @@
   "finalizing": {
     "en": "Finalizing",
     "ctx": "ui/screens/BuilderOnDeviceScreen.kt:265 (ui label)"
+  },
+  "activity_bootchain_refreshed": {
+    "en": "Updated how this server unlocks at start-up",
+    "ctx": "core/BoxEventLabels.kt (Activity)"
+  },
+  "activity_bootchain_rolled_back": {
+    "en": "Kept the previous start-up unlock",
+    "ctx": "core/BoxEventLabels.kt (Activity)"
   }
 }

@@ -3108,4 +3108,6 @@
     <string name="choose_local_seed">Lokales Basis-Image wählen…</string>
     <string name="use_managed">Verwaltete verwenden</string>
     <string name="finalizing">Abschließen</string>
+    <string name="activity_bootchain_refreshed">Entsperren dieses Servers beim Start aktualisiert</string>
+    <string name="activity_bootchain_rolled_back">Bisheriges Entsperren beim Start beibehalten</string>
 </resources>

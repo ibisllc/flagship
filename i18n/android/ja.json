@@ -3105,5 +3105,7 @@
   "managed_manifest_download": "管理対象(マニフェストからダウンロード)",
   "choose_local_seed": "ローカルシードを選択…",
   "use_managed": "管理対象を使う",
-  "finalizing": "仕上げ中"
+  "finalizing": "仕上げ中",
+  "activity_bootchain_refreshed": "このサーバーの起動時のロック解除を更新しました",
+  "activity_bootchain_rolled_back": "以前の起動時のロック解除を維持しました"
 }

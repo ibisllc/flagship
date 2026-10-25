@@ -3112,4 +3112,6 @@
     <string name="choose_local_seed">Choose local seed…</string>
     <string name="use_managed">Use managed</string>
     <string name="finalizing">Finalizing</string>
+    <string name="activity_bootchain_refreshed">Updated how this server unlocks at start-up</string>
+    <string name="activity_bootchain_rolled_back">Kept the previous start-up unlock</string>
 </resources>

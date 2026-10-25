@@ -3045,5 +3045,7 @@
   "managed_manifest_download": "c362ad0b86fc",
   "choose_local_seed": "ed4fa48732b6",
   "use_managed": "e36339ca53f5",
-  "finalizing": "f41a6921d9f7"
+  "finalizing": "f41a6921d9f7",
+  "activity_bootchain_refreshed": "160829ec0e31",
+  "activity_bootchain_rolled_back": "b1acb7d60c9b"
 }

@@ -9,7 +9,7 @@
 use core::fmt;
 
 /// Hosts approved without configuration (`APPROVED_BOOT_HOSTS` in
-/// packages/flagship-builder/src/unlockPremount.ts).
+/// packages/boot-chain/src/unlockPremount.ts).
 pub const BUILTIN_ALLOWED_HOSTS: &[&str] =
     &["boot.flagshipserver.com", "boot.gym.flagshipserver.com"];
 

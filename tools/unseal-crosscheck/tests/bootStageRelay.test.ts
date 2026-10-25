@@ -1,6 +1,6 @@
 // Boot-stage RELAY-path wire-compat gate.
 //
-// the generated initramfs premount (packages/flagship-builder/src/unlockPremount.ts) does, in pure shell, the
+// the generated initramfs premount (packages/boot-chain/src/unlockPremount.ts) does, in pure shell, the
 // crypto the daemon does in TS. This test exercises THOSE shell primitives
 // against the REAL @flagship/protocol + the BUILT Go unseal helper, so a
 // drift between the shell path and the protocol is caught before it bricks

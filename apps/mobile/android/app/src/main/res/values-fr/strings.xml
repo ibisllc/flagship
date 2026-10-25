@@ -3108,4 +3108,6 @@
     <string name="choose_local_seed">Choisir une image de base locale…</string>
     <string name="use_managed">Utiliser la version gérée</string>
     <string name="finalizing">Finalisation</string>
+    <string name="activity_bootchain_refreshed">Mise à jour de la façon dont ce serveur se déverrouille au démarrage</string>
+    <string name="activity_bootchain_rolled_back">Déverrouillage au démarrage précédent conservé</string>
 </resources>

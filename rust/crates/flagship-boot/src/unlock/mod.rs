@@ -1,5 +1,5 @@
 //! `flagship-boot unlock`: the whole early-boot unlock of the initramfs
-//! premount (packages/flagship-builder/src/unlockPremount.ts: the lease, the
+//! premount (packages/boot-chain/src/unlockPremount.ts: the lease, the
 //! relay, the two-tier dispatch, the one-shot lock) plus the cryptsetup
 //! hand-off in one process, so no secret crosses argv, the environment or a
 //! file. It reads the same `/boot` files the premount reads.

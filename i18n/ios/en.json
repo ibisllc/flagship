@@ -12482,5 +12482,13 @@
   "Finished a stack move": {
     "en": "Finished a stack move",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/StackSwitchViewModel.swift"
+  },
+  "Updated how this server unlocks at start-up": {
+    "en": "Updated how this server unlocks at start-up",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift"
+  },
+  "Kept the previous start-up unlock": {
+    "en": "Kept the previous start-up unlock",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift"
   }
 }

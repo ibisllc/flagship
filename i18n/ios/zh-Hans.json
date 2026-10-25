@@ -2866,5 +2866,7 @@
   "Withdrew an app's GPU use": "已撤回应用的 GPU 使用权",
   "The stack move was undone": "架构迁移已撤销",
   "Started a stack move": "已开始迁移架构",
-  "Finished a stack move": "架构迁移已完成"
+  "Finished a stack move": "架构迁移已完成",
+  "Updated how this server unlocks at start-up": "已更新此服务器启动时的解锁方式",
+  "Kept the previous start-up unlock": "保留了之前的启动解锁方式"
 }

@@ -3105,5 +3105,7 @@
   "managed_manifest_download": "Gestionada (descarga según el manifiesto)",
   "choose_local_seed": "Elegir imagen base local…",
   "use_managed": "Usar la gestionada",
-  "finalizing": "Terminando"
+  "finalizing": "Terminando",
+  "activity_bootchain_refreshed": "Se actualizó cómo se desbloquea este servidor al arrancar",
+  "activity_bootchain_rolled_back": "Se mantuvo el desbloqueo de arranque anterior"
 }

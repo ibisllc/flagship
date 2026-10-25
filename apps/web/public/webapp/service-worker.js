@@ -421,7 +421,8 @@
 //       (views/stack-switch.js, lib/stackSwitch.js, admin devices): a signed flagship/arch-v2-switch/v1
 //       dry run shows the box's plan, Move now sends it, the card follows the move. Journal reads and
 //       these orders sign with the admin root (lib/adminRoot.js SENSITIVE_TAGS).
-const SHELL_VERSION = "v180";
+//  v181: Activity labels for the boot chain refresh (server.bootchain.refreshed / .rolled-back).
+const SHELL_VERSION = "v181";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

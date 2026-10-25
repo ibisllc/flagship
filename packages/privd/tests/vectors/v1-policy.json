@@ -17634,6 +17634,100 @@
    }
   },
   {
+   "name": "setup-716",
+   "op": "setup",
+   "args": {
+    "step": "boot-chain"
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/local/bin/node",
+     "args": [
+      "/opt/flagship/packages/server-daemon/dist/setup.js",
+      "boot-chain"
+     ],
+     "timeoutMs": 1800000
+    }
+   }
+  },
+  {
+   "name": "setup-717",
+   "op": "setup",
+   "args": {
+    "step": "boot-chain",
+    "from": "/var/flagship/flagship-unseal"
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "unknown field from"
+   }
+  },
+  {
+   "name": "setup-718",
+   "op": "setup",
+   "args": {
+    "step": "boot-chain",
+    "kernel": "6.12.0"
+   },
+   "expect": {
+    "ok": false,
+    "code": "bad-request",
+    "message": "unknown field kernel"
+   }
+  },
+  {
+   "name": "setup-719",
+   "op": "setup",
+   "args": {
+    "step": "boot-chain-confirm"
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "unknown setup step"
+   }
+  },
+  {
+   "name": "setup-720",
+   "op": "setup",
+   "args": {
+    "step": "Boot-Chain"
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "unknown setup step"
+   }
+  },
+  {
+   "name": "setup-721",
+   "op": "setup",
+   "args": {
+    "step": "boot-chain\u0000"
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "unknown setup step"
+   }
+  },
+  {
+   "name": "setup-722",
+   "op": "setup",
+   "args": {
+    "step": [
+     "boot-chain"
+    ]
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "unknown setup step"
+   }
+  },
+  {
    "name": "docker-14-podman",
    "op": "docker",
    "args": {

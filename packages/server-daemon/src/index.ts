@@ -6,6 +6,7 @@ import { onCorruptState, onNoSpace, withFileLock, writeFileDurable } from "./dur
 import { basename, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
 import { hostname as osHostname } from "node:os";
+import { fileURLToPath } from "node:url";
 import { X509Certificate } from "node:crypto";
 import {
   derivePeerBackupKey,
@@ -130,6 +131,7 @@ import { keydTlsKeyd } from "./keydAsync.js";
 import type { OpaqueTlsOptions } from "./runtime.js";
 import { installKeyd, installTlsd } from "./keydInstall.js";
 import { bootArchV2, privilegedHelperFor, rustPathHealthy } from "./archV2Boot.js";
+import { refreshBootChainAsRoot, type BootChainOutcome } from "./bootChainRefresh.js";
 import {
   ArchV2Switcher,
   applySwitchAsRoot,
@@ -346,6 +348,7 @@ import { buildArtifactCatalog } from "./artifactCatalog.js";
 import {
   buildCurrentCommitProvider,
   applyEndorsedUpdate,
+  updateApplyInProgress,
   buildUpdateConsumerPoller,
   filePendingVerifyStore,
   fileUsedNonceStore,
@@ -354,6 +357,7 @@ import {
 import {
   buildUpdateHealthSignal,
   runUpdateBootGate,
+  type UpdateBootGateOutcome,
   type UpdateHealthSignal,
 } from "./updateHealthGate.js";
 import { fileUpdateOutcomeStore, onUpdateOutcome, updateOutcomeActivity } from "./updateOutcome.js";
@@ -1097,7 +1101,7 @@ async function main(): Promise<void> {
     onLog: (m) => console.log(m),
   });
   const selfUpdateHealth: UpdateHealthSignal = buildUpdateHealthSignal();
-  void runUpdateBootGate({
+  const updateGate = runUpdateBootGate({
     pendingStore: filePendingVerifyStore(`${dataDir}/update-pending.json`),
     swapper: selfUpdateSwapper,
     // Generous window: first boot after an update does a full ACME + tunnel
@@ -1118,7 +1122,30 @@ async function main(): Promise<void> {
         ...(event === "update-rollback-refused" ? { rollbackRefused: true as const } : {}),
       }),
     onLog: (m) => console.log(m),
-  }).catch(() => {});
+  }).catch((): UpdateBootGateOutcome => ({ action: "none" }));
+
+  // ---- Boot chain refresh (bootChainRefresh.ts) ----
+  // Once this release is the verified one and the box is healthy: bring the initramfs unlock up
+  // to the release's, through a one-time test boot (no-op when it already matches). On the first
+  // boot of a box this keeps a copy of the initrd that booted it.
+  void updateGate
+    .then(async (gate) => {
+      if (gate.action !== "none" && gate.action !== "committed") return;
+      if (!(await selfUpdateHealth.whenHealthy(30 * 60_000)) || updateApplyInProgress()) return;
+      const r = runsUnprivileged()
+        ? await runSetupStep<BootChainOutcome>("boot-chain")
+        : process.getuid?.() === 0 && existsSync("/run/systemd/system")
+          ? await refreshBootChainAsRoot({ releaseRoot: selfUpdateRepoPath, trustedFiles: [fileURLToPath(import.meta.resolve("@flagship/boot-chain"))], log: (m) => console.log(m) })
+          : null;
+      if (!r) return;
+      console.log(`[boot-chain] ${r.action}${"reason" in r ? ` (${r.reason})` : ""}`);
+      if (r.action === "refreshed") {
+        activityLog.note("server.bootchain.refreshed", `The new start-up unlock passed a test boot and is now the default (kernel ${r.kernel}).`);
+      } else if (r.action === "rolled-back") {
+        activityLog.note("server.bootchain.rolled-back", r.detail, { ok: false });
+      }
+    })
+    .catch((e) => console.log(`[boot-chain] not refreshed: ${(e as Error).message}`));
 
   // Rolls back an update the gate above can't: one interrupted mid-apply, or
   // one whose code never gets far enough to run the gate (updateGuard.ts).

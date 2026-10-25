@@ -37,7 +37,7 @@ import {
 } from "@flagship/protocol";
 import { InMemoryBootSuspensionStorage, InMemoryBoxSealedLeaseStorage, InMemoryPqTrustStorage, InMemorySecretMailboxStorage } from "@flagship/storage";
 import { InMemoryNonceStore, routeBoot, type BootRouteDeps, type DirectoryClient } from "@flagship/boot-core";
-import { buildUnlockPremountScript } from "../../../packages/flagship-builder/src/unlockPremount.js";
+import { buildUnlockPremountScript } from "../../../packages/boot-chain/src/unlockPremount.js";
 import { bootPqPaths, buildBootPqWire, ensureLeaseCustody } from "../../../packages/server-daemon/src/bootPq.js";
 
 const W = "/var/lib/flagship-m6";

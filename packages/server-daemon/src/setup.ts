@@ -15,6 +15,7 @@ import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { applyRotationChain, fetchRotationChain } from "./adminRootRotationConsumer.js";
 import { applySwitchAsRoot, ownerSwitchAuthorizer, realSwitchFiles, settleSwitchAsRoot, type RootSwitchDeps } from "./archV2Switch.js";
 import { ensureGvisor, gvisorMirrorBases } from "./appSandbox/gvisor.js";
+import { refreshBootChainAsRoot } from "./bootChainRefresh.js";
 import { loadConfig } from "./config.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { DATA_UNIT_FILE } from "./dataLayer/stack.js";
@@ -195,6 +196,8 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
   // The owner's move between the classic stack and arch-v2 (archV2Switch.ts).
   "arch-v2-switch": async () => applySwitchAsRoot(await switchDeps()),
   "arch-v2-settle": async () => settleSwitchAsRoot(await switchDeps()),
+  // The initramfs unlock pieces, brought up to this release's (bootChainRefresh.ts).
+  "boot-chain": () => refreshBootChainAsRoot({ releaseRoot: REPO, trustedFiles: [fileURLToPath(import.meta.resolve("@flagship/boot-chain"))], log }),
 };
 
 // Real paths: /opt/flagship is a link to the running release, and Node reports a module by its real path.

@@ -1100,17 +1100,17 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     expect(b).toContain("grep -E '^wl' | head -1");
     expect(b).toContain("+ 30 ))");
     expect(b).toContain("no wl* interface in 30s — falling through");
-    // The premount is written via an UNQUOTED `cat <<WIFIPREMOUNT` heredoc, so the
-    // bootstrap text carries the shell vars escaped (`\$DRV`) — the cat un-escapes
-    // them to `$DRV` in the on-disk premount.
-    expect(b).toContain('modprobe "\\$DRV"');
-    expect(b).toContain('ip link set "\\$IF" up');
+    // The premount is written through a QUOTED heredoc: the bootstrap carries the
+    // on-disk text as is, and nothing in it (the credentials included) is expanded.
+    expect(b).toContain("<<'WIFIPREMOUNT'");
+    expect(b).toContain('modprobe "$DRV"');
+    expect(b).toContain('ip link set "$IF" up');
     // wpa_supplicant against the baked conf.
     expect(b).toContain("wpa_supplicant -B -i");
     expect(b).toContain("/run/flagship-wpa.conf");
     // DHCP: klibc ipconfig preferred, busybox udhcpc fallback — both bounded.
-    expect(b).toContain('ipconfig -t 20 "\\$IF"');
-    expect(b).toContain('udhcpc -i "\\$IF" -n -q -t 5');
+    expect(b).toContain('ipconfig -t 20 "$IF"');
+    expect(b).toContain('udhcpc -i "$IF" -n -q -t 5');
     // Best-effort: a standard premount header, and an exit 0 fall-through.
     expect(b).toContain('PREREQ=""');
     expect(b).toContain("falling through");
@@ -1178,7 +1178,7 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     // Every native builder runs the bundled engine, so this one pin covers them.
     const s = buildInitramfsWifiBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "388df3fc10c93306f834438bace935e0c2eab77154c9c5680b547a29007f7b96",
+      "3fecc9dad65ab1868f729569b5876b16576fe8f6e9521a458ad6e44f42cf383b",
     );
   });
 });
@@ -1209,16 +1209,16 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
 
   it("FIX 2 — the Wi-Fi premount belt-and-braces-loads the op-mode + writes /etc/resolv.conf", () => {
     const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
-    // (a) op-mode load right after the driver modprobe (unquoted heredoc ⇒ \$).
-    expect(b).toContain('if [ "\\$DRV" = iwlwifi ]; then');
+    // (a) op-mode load right after the driver modprobe (quoted heredoc: the on-disk text).
+    expect(b).toContain('if [ "$DRV" = iwlwifi ]; then');
     expect(b).toContain("for m in iwlmvm iwlmld iwldvm; do");
-    expect(b).toContain('modprobe "\\$m" 2>/dev/null && log_stage "op-mode loaded: \\$m" && break');
+    expect(b).toContain('modprobe "$m" 2>/dev/null && log_stage "op-mode loaded: $m" && break');
     // (b) DNS: klibc ipconfig records DNS in /run/net-<if>.conf but nothing
     // writes /etc/resolv.conf — tonight's actual failure (curl (6)).
-    expect(b).toContain('[ -f "/run/net-\\$IF.conf" ] && . "/run/net-\\$IF.conf"');
-    expect(b).toContain('[ -n "\\$_d" ] && [ "\\$_d" != "0.0.0.0" ] && _dns="\\$_dns \\$_d"');
-    expect(b).toContain('echo "nameserver \\$_d" >> /etc/resolv.conf');
-    expect(b).toContain('log_stage "dns configured:\\$_dns"');
+    expect(b).toContain('[ -f "/run/net-$IF.conf" ] && . "/run/net-$IF.conf"');
+    expect(b).toContain('[ -n "$_d" ] && [ "$_d" != "0.0.0.0" ] && _dns="$_dns $_d"');
+    expect(b).toContain('echo "nameserver $_d" >> /etc/resolv.conf');
+    expect(b).toContain('log_stage "dns configured:$_dns"');
     expect(b).toContain("printf 'nameserver 1.1.1.1\\nnameserver 8.8.8.8\\n' > /etc/resolv.conf");
     expect(b).toContain('log_stage "dns fallback: public resolvers"');
     // The misleading wording is gone: the /run log SURVIVES the pivot
@@ -1312,7 +1312,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "d0f8389611e6da60b4c6a44a3e7df25f8b88e385204d81e46c6d02a2a24155b9",
+      "8ee209f94218a1165687c602a494eebceb513a6074ab2872ba3c82ffd6731b95",
     );
   });
 

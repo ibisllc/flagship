@@ -3105,5 +3105,7 @@
   "managed_manifest_download": "Gérée (téléchargement selon le manifeste)",
   "choose_local_seed": "Choisir une image de base locale…",
   "use_managed": "Utiliser la version gérée",
-  "finalizing": "Finalisation"
+  "finalizing": "Finalisation",
+  "activity_bootchain_refreshed": "Mise à jour de la façon dont ce serveur se déverrouille au démarrage",
+  "activity_bootchain_rolled_back": "Déverrouillage au démarrage précédent conservé"
 }

@@ -1,5 +1,5 @@
 //! The unlock flow of the Debian initramfs premount
-//! (packages/flagship-builder/src/unlockPremount.ts), step for step:
+//! (packages/boot-chain/src/unlockPremount.ts), step for step:
 //!
 //! - `auto`: with the owner's key on /boot, GET the auto-unlock lease, check
 //!   it (owner signature, this server, this box's boot key, expiry; the Go

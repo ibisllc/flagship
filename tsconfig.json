@@ -17,6 +17,9 @@
       "path": "./packages/protocol"
     },
     {
+      "path": "./packages/boot-chain"
+    },
+    {
       "path": "./packages/tunnel-protocol"
     },
     {

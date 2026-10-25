@@ -17,7 +17,7 @@ also enforces expiry, `maxUses` and revocation; the box cannot count uses). With
 ## Why this exists
 
 On the builder / live boot path the disk is LUKS-encrypted. The initramfs premount
-(`packages/flagship-builder/src/unlockPremount.ts`) runs
+(`packages/boot-chain/src/unlockPremount.ts`) runs
 in the **initramfs, before the root is unlocked**, where `/opt/flagship` (node +
 `@flagship/protocol`) sits on the still-encrypted root and is unavailable, and
 plain `openssl` can't do the Ed25519→X25519 private-key birational map or an

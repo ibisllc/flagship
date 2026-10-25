@@ -3030,5 +3030,7 @@
   "Withdrew an app's GPU use": "アプリのGPU使用を取り消しました",
   "The stack move was undone": "アーキテクチャの移行は取り消されました",
   "Started a stack move": "アーキテクチャの移行を開始しました",
-  "Finished a stack move": "アーキテクチャの移行が完了しました"
+  "Finished a stack move": "アーキテクチャの移行が完了しました",
+  "Updated how this server unlocks at start-up": "このサーバーの起動時のロック解除を更新しました",
+  "Kept the previous start-up unlock": "以前の起動時のロック解除を維持しました"
 }

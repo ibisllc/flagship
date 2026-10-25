@@ -162,11 +162,11 @@ Stage B, the `unlock` subcommand (generator change, all ports regenerate):
   ip if the Wi-Fi premount still uses them.
 - Regenerate `preseed-engine.js` and its Mac and Android copies; update the
   userdata, Swift, Kotlin and C# engine golden tests.
-- Existing boxes: `/boot/flagship-unseal` and the initrd are only written at
-  install. An endorsed update changes `/opt/flagship/installer/flagship-unseal`
-  but not `/boot`, so the swap needs a daemon migration that installs the new
-  binary to `/boot`, rewrites the hook and premount, runs `update-initramfs -u`
-  and verifies the result, with a recorded rollback.
+- Existing boxes: since 0.3 the boot chain refresh (`docs/boot-chain-refresh.md`,
+  setup step `boot-chain`) installs the release's helper to `/boot`, rewrites the
+  hook and premount and rebuilds the initrd after an endorsed update, through a
+  one-time GRUB test boot and a recorded rollback. Boxes installed before 0.3 get
+  it with their update to 0.3.
 
 Rescue path (required before Stage B): keep the Go helper as
 `/boot/flagship-unseal.v1` and the shell functions in the premount as a
@@ -179,7 +179,7 @@ Studio-hosted VM.
 ## 5. Findings: today's flow against §7, and what was fixed (branch fix/boot-fix)
 
 The shipping flow is now one generated premount
-(`packages/flagship-builder/src/unlockPremount.ts`); `installer/boot-stage.sh`,
+(`packages/boot-chain/src/unlockPremount.ts`); `installer/boot-stage.sh`,
 which nothing ran, is deleted. `tools/unseal-crosscheck/tests/premount.test.ts`
 runs the generated script with the real curl, openssl, Go helper and boot
 worker router.

@@ -2866,5 +2866,7 @@
   "Withdrew an app's GPU use": "Uso de GPU de um app retirado",
   "The stack move was undone": "A mudança de arquitetura foi desfeita",
   "Started a stack move": "Mudança de arquitetura iniciada",
-  "Finished a stack move": "Mudança de arquitetura concluída"
+  "Finished a stack move": "Mudança de arquitetura concluída",
+  "Updated how this server unlocks at start-up": "Atualizado o modo como este servidor se desbloqueia ao iniciar",
+  "Kept the previous start-up unlock": "O desbloqueio de inicialização anterior foi mantido"
 }

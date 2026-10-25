@@ -1,4 +1,4 @@
-// The generated initramfs premount (packages/flagship-builder/src/unlockPremount.ts),
+// The generated initramfs premount (packages/boot-chain/src/unlockPremount.ts),
 // run for real: /bin/sh, the real curl over TLS, the real openssl, the built Go
 // unseal helper and the real boot worker router (packages/boot-core) behind a
 // local HTTPS server. Only the system tools that need a real disk or network
@@ -27,7 +27,7 @@ import {
 } from "@flagship/protocol";
 import { InMemoryBootSuspensionStorage, InMemoryBoxSealedLeaseStorage, InMemorySecretMailboxStorage } from "@flagship/storage";
 import { InMemoryNonceStore, routeBoot, type BootRouteDeps, type DirectoryClient } from "@flagship/boot-core";
-import { buildUnlockPremountScript } from "../../../packages/flagship-builder/src/unlockPremount.js";
+import { buildUnlockPremountScript } from "../../../packages/boot-chain/src/unlockPremount.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../..");
