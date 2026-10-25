@@ -42,8 +42,22 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      - name: Register gVisor with Docker (the release the box pins, appSandbox/gvisor.ts)
+        run: |
+          set -eu
+          rel=$(sed -n 's/^export const GVISOR_RELEASE = "\(.*\)";/\1/p' packages/server-daemon/src/appSandbox/gvisor.ts)
+          arch=$(uname -m)
+          want=$(sed -n "s/^  $arch: \"\([0-9a-f]*\)\",*/\1/p" packages/server-daemon/src/appSandbox/gvisor.ts)
+          test -n "$rel" && test ${#want} -eq 128
+          curl -fsSL "https://storage.googleapis.com/gvisor/releases/release/$rel/$arch/gvisor.tar.zstd" -o "$RUNNER_TEMP/gvisor.tar.zstd"
+          echo "$want  $RUNNER_TEMP/gvisor.tar.zstd" | sha512sum -c -
+          sudo mkdir -p /usr/local/lib/flagship-gvisor
+          sudo tar --zstd -xf "$RUNNER_TEMP/gvisor.tar.zstd" -C /usr/local/lib/flagship-gvisor
+          sudo /usr/local/lib/flagship-gvisor/runsc install
+          sudo systemctl restart docker
+          docker info --format '{{json .Runtimes}}' | grep -q runsc
       - name: Privileged-boundary tests (Linux only, disposable runner)
-        run: cargo test --workspace --locked -- --ignored linux_ --skip linux_peercred_refuses_another_uid
+        run: cargo test --workspace --locked --no-fail-fast -- --ignored linux_ --skip linux_peercred_refuses_another_uid
         env:
           FLAGSHIP_DISPOSABLE_RUNNER: "1"
       - name: Peer-credential test (Linux only, as root)
