@@ -85,3 +85,13 @@ The branch is kept as ONE commit on top of main (`backup/release-0.3-pre-squash`
 ## Gates
 
 Latest full run, 2026-10-24 (`npm run ready`): tsc green, vitest 11,829 passed (the one failing file was a Chromium temp-folder teardown race in `browserReal.test.ts`, fixed and re-run green), e2e green (42, 1 skipped), locked web gym 299/299, parity green; `branches` still red for the three old feature branches. Earlier run, 2026-10-23 (`npm run ready` phases): tsc green; vitest green (about 11.7k tests); Playwright e2e green (42 passed, 1 skipped; `s06` needed the boot service's suspension record stubbed because the lease deposit now reads it first); the locked web gym green (299/299; the gym kit now answers the stream-ticket mint and the boot service's suspension record, and the Home recovery card finalizes this device's own replacement and offers Reject for anyone else's); `npm run parity` green (entries added to `parity/allowlist.json`: the box-artifact tag and vectors are installer-only). Not green and not caused by this branch: `branches` reports `feat/retail`, `feat/phone-usb-burn` and `alpine` conflict with `main` (they conflicted before). Also green: the shared Swift package (388 tests), the iOS package suite (2,002 tests on a simulator; one stale pin expected `main` as the recipe's install ref and now expects the pinned release commit), the Android unit suite. Not run: `-- --native --live`, any real box, any phone, any watch, the iOS UI gym, Android instrumented tests.
+
+## 2026-10-25: independent review (release journal B2)
+
+Four fresh reviewers read the 0.3 diff by surface (rescue and offline control; boot chain and USB seed; arch-v2 Rust and GPU;
+`.com` and control plane). Fixed with tests: revocation intake budget, offline-order cooling, LAN listener caps, seed stub
+label check, the app's own seed pin, hostile key-file KDF cost, Wi-Fi heredoc injection, mixed-case suspension names, RSA
+exponent, bind-mount source links, pinned local-AI images on the GPU path, a damaged admin root failing open in gpud. Open
+items (design or owner decisions, severity and file:line) are in the Log of `RELEASE-0.3-JOURNAL.md` under "B2 OPEN"; the
+largest are the empty PQ pins (ceremony 2c), unsigned classical health reports under strict, and gpud approval replay after
+withdrawal. Not reviewed: the WASI worker, `flagship-runtime`, `flagship-crypto` and the v2 `typed.rs` path.

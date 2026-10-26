@@ -164,11 +164,11 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   `main` "doesn't think of" it at all. Current branches: **`feat/marketplace`**
   (the marketplace; also Pro payments + vouchers), **`feat/retail`** (getting the
   app working with retail / NFC boxes), **`feat/browser-extension`**,
-  **`feat/phone-usb-burn`** (Android burns a USB stick on its own),
+  ~~**`feat/phone-usb-burn`**~~ (landed in `release/0.3`, 2026-10-25),
   **`feat/other-os-installers`** (the Ubuntu autoinstall and Debian-netboot
   installer paths `main` shed on 2026-10-18, kept for a possible multi-OS effort),
-  **`feat/data-sovereignty`** (parked 2026-10-18, not needed at launch: rescue a
-  server's data over the LAN when `.com` is gone; plan in its
+  ~~**`feat/data-sovereignty`**~~ (landed in `release/0.3`, 2026-10-25: rescue a
+  server's data and basic offline control over the LAN when `.com` is gone;
   `docs/data-sovereignty.md`),
   **`feat/custom-names`** (dibs + paid name change) and **`feat/custom-domains`**
   (custom domains as a Pro feature) and **`feat/outbound-proxy`** (a box's
@@ -215,6 +215,18 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
 > Last updated **2026-10-23**.
+
+### Release 0.3 (in progress, 2026-10-25)
+
+Branch `release/0.3` (not on `main` yet; only `main` is deployed). The plan, the Log and the open items are in
+`RELEASE-0.3-JOURNAL.md`. It ships arch-v2 (Rust keyd/broker, Podman, WASI, GPU, local AI), the boot-chain refresh,
+phone USB burn and data sovereignty (rescue + offline control, iOS and Android). Done: code landed, adversarial and
+independent security review (fixes in; the OPEN list in the journal is for the owner), unit/adversarial/Rust tests, Android
+emulator gym for offline control, CI QEMU lane for a burned stick. Still to do: the live release gym twice (D2/D3), store
+screenshots, `TODO-RM` markers, version bump to 0.3, the hardware acceptance run
+(`docs/runbooks/0.3-hardware-acceptance.md`) and the deploy (`docs/runbooks/0.3-deploy-sheet.md`, `scripts/release.sh`).
+Known: 0.3 ships classical-only endorsement until the PQ release key ceremony (`docs/runbooks/pq-release-key.md`); the crypto-graph
+strict check stays red until then. Webapp shell is v183.
 
 ### Launch
 
@@ -1629,8 +1641,9 @@ Not compiled since the rebase: the iOS and Android code on any branch.
   OHTTP relay to `.com`'s gateway (`docs/outbound-proxy.md`). It holds D1
   migration **0099** (`relay_health`): `main` skips 0099. Owner: pick the
   relay (Oblivious Network first) and set the relay secrets.
-- **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,
-  publish the seed and set `FLAGSHIP_ISO_SEED`.
+- **Phone USB burn (in 0.3):** validate the OTG write on a real phone + stick
+  (`docs/runbooks/0.3-hardware-acceptance.md` step 4); the release script publishes the seed
+  (`scripts/publish-iso-seed.sh`) and sets `FLAGSHIP_ISO_SEED`.
 - **`feat/other-os-installers`** (owner, 2026-10-18): `main` + the Ubuntu
   subiquity autoinstall generator/remaster (TS, Swift, C#, the engine API
   `buildUserDataFromRecipe`) and `packages/installer-netboot` +
