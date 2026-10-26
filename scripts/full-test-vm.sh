@@ -32,7 +32,13 @@ mkdir -p "$OUT"
 vm_up "release-test-${COMMIT:0:12}-$(echo "$STAMP" | tr "[:upper:]" "[:lower:]")" release-test
 vm_send_commit "$REPO" "$COMMIT"
 vm_toolchains "$REPO" "$OUT/setup.log"
-"${VM_SSH[@]}" '/root/.cargo/bin/cargo install --locked cargo-deny >/dev/null 2>&1 || true'
+# cargo-deny is built on the VM; a flaky crates.io fetch once left the suite with "no such command: deny"
+# and a false red, so retry and keep the output where setup.log is.
+for attempt in 1 2 3; do
+  "${VM_SSH[@]}" '/root/.cargo/bin/cargo install --locked cargo-deny' >>"$OUT/setup.log" 2>&1 && break
+  say "cargo-deny install failed (attempt $attempt)"
+  sleep 10
+done
 
 run_suite() { # run_suite <name> <command>: on the VM, output to $OUT/<name>.log, exit code to $OUT/<name>.rc
   say "suite $1"
