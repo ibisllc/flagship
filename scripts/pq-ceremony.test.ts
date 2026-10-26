@@ -35,6 +35,11 @@ describe("parsers", () => {
     expect([[5, 7, 2], [5, 2, 0], [4, 3, 7]].every(C.firmwareOk)).toBe(true);
     expect([[3, 3, 0], [5, 1, 9], null].some(C.firmwareOk as never)).toBe(false);
   });
+  it("spots an AES management key, which age-plugin-yubikey cannot use", () => {
+    expect(C.managementKeyIsAes("Management key algorithm:    AES192\nManagement key is stored on the YubiKey, protected by PIN.")).toBe(true);
+    expect(C.managementKeyIsAes("Management key algorithm:    TDES")).toBe(false);
+    expect(C.managementKeyIsAes("PIV version: 5.7.4")).toBe(false);
+  });
   it("tells a private file from a readable one", () => {
     const f = path.join(os.tmpdir(), `pqc-mode-${process.pid}`);
     fs.writeFileSync(f, "x", { mode: 0o600 });

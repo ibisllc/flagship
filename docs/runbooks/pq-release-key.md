@@ -42,6 +42,11 @@ ceremony with fake YubiKeys. The manual steps below are what it wraps.
 
 ## 1. One age identity per YubiKey
 
+`age-plugin-yubikey` cannot open a PIV management key that is AES (the default of `ykman piv access
+change-management-key --protect --generate` on firmware 5.4+; upstream issue 92). If `ykman piv info` shows
+`Management key algorithm: AES...`, run `ykman piv access change-management-key -a TDES --protect` on that key
+first (PIN only; slot 9c and the PIN/PUK are untouched). The ceremony script checks this before it asks for a PIN.
+
 For **each** YubiKey (insert one at a time):
 
 ```sh

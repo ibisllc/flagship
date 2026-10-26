@@ -37,6 +37,8 @@ export function parseGenerate(out) {
 /** `ykman info` → firmware like 5.7.2 (null when it is not a YubiKey 4/5 style output). */
 export const parseFirmware = (out) => /Firmware version:\s*(\d+)\.(\d+)\.(\d+)/.exec(out)?.slice(1, 4).map(Number) ?? null;
 export const firmwareOk = (v) => !!v && (v[0] > 5 || (v[0] === 5 && v[1] >= 2) || v[0] === 4);
+/** `ykman piv info` → true when the management key is AES: age-plugin-yubikey only opens a TDES one (its issue 92). */
+export const managementKeyIsAes = (out) => /Management key algorithm:\s*AES/i.test(out);
 export const parseKeyId = (out) => /Release key id: ([0-9a-f]{64})/.exec(out)?.[1] ?? null;
 export const parseVerifyOk = (out) => /OK: the inserted YubiKey opens the release key ([0-9a-f]{16})/.exec(out)?.[1] ?? null;
 export const parseRestored = (out) => /Restored release key ([0-9a-f]{16})/.exec(out)?.[1] ?? null;
@@ -227,6 +229,13 @@ async function stepIdentities(ctx) {
       if (fw) (firmwareOk(fw) ? io.ok : io.warn)(`YubiKey firmware ${fw.join(".")}${firmwareOk(fw) ? "" : " is old: age-plugin-yubikey needs a YubiKey 4 or 5"}`);
       if (/PIV/i.test(info.stdout) && !/PIV\s+Enabled/i.test(info.stdout)) io.warn("PIV does not look enabled on this YubiKey (ykman config usb --enable PIV)");
     } else io.note("ykman could not read this YubiKey (fine; the age plugin will tell us)");
+    const piv = await exec("ykman", ["piv", "info"], { cwd: repo, quiet: true });
+    if (piv.code === 0 && managementKeyIsAes(piv.stdout)) {
+      io.fail("this YubiKey's PIV management key is AES, which age-plugin-yubikey cannot use (it needs TDES). Slot 9c is not touched by the fix; it asks for your PIV PIN:");
+      io.say("  ykman piv access change-management-key -a TDES --protect");
+      io.say("Then run this script again.");
+      return false;
+    }
     let got = null;
     const listed = await exec("age-plugin-yubikey", ["--identity"], { cwd: repo, quiet: true });
     if (listed.code === 0 && parseGenerate(listed.stdout).recipient) {
@@ -235,7 +244,7 @@ async function stepIdentities(ctx) {
       if (await io.confirm("Use it (answer n to make a new one)?")) got = g;
     }
     if (!got) {
-      io.say("Now creating the age key. It may ask for the PIV management key (the default is fine), then your PIN, then a touch.");
+      io.say("Now creating the age key. It asks for your PIV PIN, then a touch (a factory-default management key is used silently).");
       const gen = await exec("age-plugin-yubikey", ["--generate", "--name", "flagship-release", "--pin-policy", "always", "--touch-policy", "always"], { cwd: repo });
       got = parseGenerate(gen.stdout);
       if (gen.code !== 0 || !got.recipient || !got.stub) {
