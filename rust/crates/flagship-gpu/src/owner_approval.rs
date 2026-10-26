@@ -90,9 +90,13 @@ impl OwnerAnchor {
             serde_json::from_str(&text).map_err(|_| format!("{name} is not JSON"))
         };
         let owner = read("owner.json")?;
-        let signer_hex = hex64(owner.get("adminRootPubHex"))
-            .or_else(|| hex64(owner.get("irkPubHex")))
-            .ok_or("owner.json pins no owner key")?;
+        // An admin root that is present but damaged must not quietly hand the approval to the IRK.
+        let signer_hex = match owner.get("adminRootPubHex") {
+            None | Some(serde_json::Value::Null) => {
+                hex64(owner.get("irkPubHex")).ok_or("owner.json pins no owner key")?
+            }
+            Some(v) => hex64(Some(v)).ok_or("owner.json adminRootPubHex is not a valid key")?,
+        };
         let server = read("policy.json")?
             .get("serverFqdn")
             .and_then(serde_json::Value::as_str)

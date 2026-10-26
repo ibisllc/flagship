@@ -1192,6 +1192,12 @@ fn check_ordinary_run(
             _ => {}
         }
     }
+    // The unsigned local-AI path (no owner approval) is for the pinned llama.cpp images only.
+    if is_local_ai_name(run) && !LOCAL_AI_IMAGES.contains(&run.image.as_str()) {
+        return Err(forbidden(
+            "a local-AI container runs one of the pinned images",
+        ));
+    }
     if !runtime {
         return Err(forbidden(if gpu.is_some() {
             GPU_RUNTIME_MESSAGE

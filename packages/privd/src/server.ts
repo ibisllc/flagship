@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, chmodSync, chownSync, closeSync, constants, existsSync, fchownSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, unlinkSync, writeSync } from "node:fs";
+import { appendFileSync, chmodSync, chownSync, closeSync, constants, existsSync, fchownSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 import { BOX_RELEASE } from "@flagship/protocol";
@@ -367,6 +367,7 @@ export class PrivdServer {
     let exec: Exec;
     try {
       exec = this.validate(req);
+      checkBindSources(exec);
     } catch (e) {
       const code = e instanceof PrivdError ? e.code : "bad-request";
       this.audit({ op: req.op, ok: false, code, what: summary(req) });
@@ -377,6 +378,34 @@ export class PrivdServer {
     if (r.timedOut) return { id: req.id, ok: false, code: "timed-out", message: "the command ran too long and was stopped" };
     if (r.code !== 0) return { id: req.id, ok: false, code: "failed", message: `exited with code ${r.code}: ${r.stderr.trim().split("\n").slice(-4).join(" | ").slice(0, 600)}` };
     return { id: req.id, ok: true, result: { stdout: r.stdout, stderr: r.stderr } };
+  }
+}
+
+/**
+ * A bind mount's source must be a regular file, not a link: the engine runs as root and follows a link in a
+ * directory the daemon can write (the resolv.conf the egress gateway makes in /run/flagship-daemon), which
+ * would let the daemon have a container read any host file. Checked at run time, after the argv policy.
+ */
+export function checkBindSources(e: Exec, lstat: (p: string) => { isFile(): boolean; isSymbolicLink(): boolean } = lstatSync): void {
+  if (e.file !== "docker" && e.file !== "podman" && !/\/(docker|podman)$/.test(e.file)) return;
+  const values: string[] = [];
+  for (let i = 0; i < e.args.length; i++) {
+    const a = e.args[i]!;
+    if (a === "--mount" && e.args[i + 1] !== undefined) values.push(e.args[i + 1]!);
+    else if (a.startsWith("--mount=")) values.push(a.slice("--mount=".length));
+  }
+  for (const v of values) {
+    const fields = new Map(v.split(",").map((kv) => [kv.slice(0, kv.indexOf("=")), kv.slice(kv.indexOf("=") + 1)] as const));
+    if (fields.get("type") !== "bind") continue;
+    const src = fields.get("src") ?? "";
+    let ok = false;
+    try {
+      const st = lstat(src);
+      ok = st.isFile() && !st.isSymbolicLink();
+    } catch {
+      ok = false;
+    }
+    if (!ok) throw new PrivdError("forbidden", "a bind-mounted source must be a regular file, not a link");
   }
 }
 

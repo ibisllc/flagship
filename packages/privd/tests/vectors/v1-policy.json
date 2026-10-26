@@ -16913,6 +16913,68 @@
      "flagship-localai-0123456789abcdef",
      "--runtime=runsc-nvproxy",
      "--device",
+     "nvidia.com/gpu=0",
+     "--label",
+     "flagship.gpu.allocation=localai-0123456789abcdef",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "gpu": {
+    "localai-0123456789abcdef": {
+     "allocationId": "localai-0123456789abcdef",
+     "appId": "flagship-local-ai",
+     "container": "flagship-localai-0123456789abcdef",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    }
+   },
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-676",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc-nvproxy",
+     "--device",
      "nvidia.com/gpu=1",
      "--label",
      "flagship.gpu.allocation=localai-0123456789abcdef",
@@ -16965,7 +17027,7 @@
    }
   },
   {
-   "name": "host-676",
+   "name": "host-677",
    "op": "host",
    "args": {
     "file": "localai",
@@ -16998,7 +17060,7 @@
    }
   },
   {
-   "name": "host-677",
+   "name": "host-678",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17031,7 +17093,7 @@
    }
   },
   {
-   "name": "host-678",
+   "name": "host-679",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17055,7 +17117,7 @@
    }
   },
   {
-   "name": "host-679",
+   "name": "host-680",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17079,7 +17141,7 @@
    }
   },
   {
-   "name": "host-680",
+   "name": "host-681",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17096,7 +17158,7 @@
    }
   },
   {
-   "name": "host-681",
+   "name": "host-682",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17113,7 +17175,7 @@
    }
   },
   {
-   "name": "host-682",
+   "name": "host-683",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17130,7 +17192,7 @@
    }
   },
   {
-   "name": "host-683",
+   "name": "host-684",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17147,7 +17209,7 @@
    }
   },
   {
-   "name": "host-684",
+   "name": "host-685",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17164,7 +17226,7 @@
    }
   },
   {
-   "name": "host-685",
+   "name": "host-686",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17181,7 +17243,7 @@
    }
   },
   {
-   "name": "host-686",
+   "name": "host-687",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17198,7 +17260,7 @@
    }
   },
   {
-   "name": "host-687",
+   "name": "host-688",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17215,7 +17277,7 @@
    }
   },
   {
-   "name": "host-688",
+   "name": "host-689",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17232,7 +17294,7 @@
    }
   },
   {
-   "name": "host-689",
+   "name": "host-690",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17249,7 +17311,7 @@
    }
   },
   {
-   "name": "host-690",
+   "name": "host-691",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17266,7 +17328,7 @@
    }
   },
   {
-   "name": "host-691",
+   "name": "host-692",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17282,7 +17344,7 @@
    }
   },
   {
-   "name": "host-692",
+   "name": "host-693",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17299,7 +17361,7 @@
    }
   },
   {
-   "name": "wasi.logs-693",
+   "name": "wasi.logs-694",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17323,7 +17385,7 @@
    }
   },
   {
-   "name": "wasi.logs-694",
+   "name": "wasi.logs-695",
    "op": "wasi.logs",
    "args": {
     "instance": "fedcba9876543210",
@@ -17347,7 +17409,7 @@
    }
   },
   {
-   "name": "wasi.logs-695",
+   "name": "wasi.logs-696",
    "op": "wasi.logs",
    "args": {
     "lines": 1,
@@ -17371,7 +17433,7 @@
    }
   },
   {
-   "name": "wasi.logs-696",
+   "name": "wasi.logs-697",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17384,7 +17446,7 @@
    }
   },
   {
-   "name": "wasi.logs-697",
+   "name": "wasi.logs-698",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17397,7 +17459,7 @@
    }
   },
   {
-   "name": "wasi.logs-698",
+   "name": "wasi.logs-699",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17410,7 +17472,7 @@
    }
   },
   {
-   "name": "wasi.logs-699",
+   "name": "wasi.logs-700",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17423,7 +17485,7 @@
    }
   },
   {
-   "name": "wasi.logs-700",
+   "name": "wasi.logs-701",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17436,7 +17498,7 @@
    }
   },
   {
-   "name": "wasi.logs-701",
+   "name": "wasi.logs-702",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17449,7 +17511,7 @@
    }
   },
   {
-   "name": "wasi.logs-702",
+   "name": "wasi.logs-703",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef"
@@ -17461,7 +17523,7 @@
    }
   },
   {
-   "name": "wasi.logs-703",
+   "name": "wasi.logs-704",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789ABCDEF",
@@ -17474,7 +17536,7 @@
    }
   },
   {
-   "name": "wasi.logs-704",
+   "name": "wasi.logs-705",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcde",
@@ -17487,7 +17549,7 @@
    }
   },
   {
-   "name": "wasi.logs-705",
+   "name": "wasi.logs-706",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef0",
@@ -17500,7 +17562,7 @@
    }
   },
   {
-   "name": "wasi.logs-706",
+   "name": "wasi.logs-707",
    "op": "wasi.logs",
    "args": {
     "instance": "../../../var/log",
@@ -17513,7 +17575,7 @@
    }
   },
   {
-   "name": "wasi.logs-707",
+   "name": "wasi.logs-708",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef\n",
@@ -17526,7 +17588,7 @@
    }
   },
   {
-   "name": "wasi.logs-708",
+   "name": "wasi.logs-709",
    "op": "wasi.logs",
    "args": {
     "instance": "flagship-daemon",
@@ -17539,7 +17601,7 @@
    }
   },
   {
-   "name": "wasi.logs-709",
+   "name": "wasi.logs-710",
    "op": "wasi.logs",
    "args": {
     "instance": 5,
@@ -17552,7 +17614,7 @@
    }
   },
   {
-   "name": "wasi.logs-710",
+   "name": "wasi.logs-711",
    "op": "wasi.logs",
    "args": {
     "lines": 15
@@ -17564,7 +17626,7 @@
    }
   },
   {
-   "name": "wasi.logs-711",
+   "name": "wasi.logs-712",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17578,7 +17640,7 @@
    }
   },
   {
-   "name": "wasi.logs-712",
+   "name": "wasi.logs-713",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17595,7 +17657,7 @@
    }
   },
   {
-   "name": "wasi.logs-713",
+   "name": "wasi.logs-714",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17609,7 +17671,7 @@
    }
   },
   {
-   "name": "wasi.logs-714",
+   "name": "wasi.logs-715",
    "op": "wasi.logs",
    "args": {},
    "expect": {
@@ -17619,7 +17681,7 @@
    }
   },
   {
-   "name": "wasi.logs-715",
+   "name": "wasi.logs-716",
    "op": "wasi.logs",
    "args": {
     "__proto__": {
@@ -17634,7 +17696,7 @@
    }
   },
   {
-   "name": "setup-716",
+   "name": "setup-717",
    "op": "setup",
    "args": {
     "step": "boot-chain"
@@ -17652,7 +17714,7 @@
    }
   },
   {
-   "name": "setup-717",
+   "name": "setup-718",
    "op": "setup",
    "args": {
     "step": "boot-chain",
@@ -17665,7 +17727,7 @@
    }
   },
   {
-   "name": "setup-718",
+   "name": "setup-719",
    "op": "setup",
    "args": {
     "step": "boot-chain",
@@ -17678,7 +17740,7 @@
    }
   },
   {
-   "name": "setup-719",
+   "name": "setup-720",
    "op": "setup",
    "args": {
     "step": "boot-chain-confirm"
@@ -17690,7 +17752,7 @@
    }
   },
   {
-   "name": "setup-720",
+   "name": "setup-721",
    "op": "setup",
    "args": {
     "step": "Boot-Chain"
@@ -17702,7 +17764,7 @@
    }
   },
   {
-   "name": "setup-721",
+   "name": "setup-722",
    "op": "setup",
    "args": {
     "step": "boot-chain\u0000"
@@ -17714,7 +17776,7 @@
    }
   },
   {
-   "name": "setup-722",
+   "name": "setup-723",
    "op": "setup",
    "args": {
     "step": [
@@ -30093,6 +30155,69 @@
   },
   {
    "name": "docker-675-podman",
+   "op": "docker",
+   "args": {
+    "argv": [
+     "run",
+     "-d",
+     "--name",
+     "flagship-localai-0123456789abcdef",
+     "--runtime=runsc-nvproxy",
+     "--device",
+     "nvidia.com/gpu=0",
+     "--label",
+     "flagship.gpu.allocation=localai-0123456789abcdef",
+     "--network",
+     "flagship-staging",
+     "--read-only",
+     "--cap-drop=ALL",
+     "--security-opt=no-new-privileges",
+     "--user",
+     "10001:10001",
+     "--memory",
+     "900m",
+     "--cpus",
+     "4",
+     "--pids-limit",
+     "1024",
+     "--label",
+     "flagship.role=local-ai",
+     "--mount",
+     "type=volume,src=flagship-models,dst=/models,readonly",
+     "-p",
+     "127.0.0.1:41234:8080",
+     "-e",
+     "LLAMA_API_KEY=k3y",
+     "img@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8080",
+     "-m",
+     "/models/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gguf",
+     "--jinja"
+    ]
+   },
+   "gpu": {
+    "localai-0123456789abcdef": {
+     "allocationId": "localai-0123456789abcdef",
+     "appId": "flagship-local-ai",
+     "container": "flagship-localai-0123456789abcdef",
+     "runtime": "runsc-nvproxy",
+     "devices": [
+      "nvidia.com/gpu=0"
+     ]
+    }
+   },
+   "engine": "podman",
+   "expect": {
+    "ok": false,
+    "code": "forbidden",
+    "message": "only an app's files volume may be mounted"
+   }
+  },
+  {
+   "name": "docker-676-podman",
    "op": "docker",
    "args": {
     "argv": [

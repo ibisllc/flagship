@@ -493,6 +493,7 @@ for (const bad of [
   aiTrain({ mounts: [MODELS_MOUNT, OUT_MOUNT, "type=volume,src=flagship-devfiles-alice--notes,dst=/dataset,readonly,volume-subpath=.."] }),
   aiTrain({ image: AI_SERVER, name: "flagship-alice--notes" }),
 ]) docker(...bad);
+gpuDocker(aiServe({ image: IMG, runtime: ["--runtime=runsc-nvproxy", "--device", "nvidia.com/gpu=0", "--label", `flagship.gpu.allocation=localai-${AI_HEX}`] }), AI_GPU); // any image on the GPU under the unsigned local-AI claim
 gpuDocker(aiServe({ image: AI_SERVER_CUDA, runtime: ["--runtime=runsc-nvproxy", "--device", "nvidia.com/gpu=1", "--label", `flagship.gpu.allocation=localai-${AI_HEX}`] }), AI_GPU); // a device it doesn't hold
 const MODELS_DIR = "/var/lib/docker/volumes/flagship-models/_data";
 const SHA = "b".repeat(64);

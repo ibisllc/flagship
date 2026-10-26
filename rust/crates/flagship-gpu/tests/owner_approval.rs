@@ -99,6 +99,35 @@ fn keyds_pins_are_the_anchor() {
         root,
         "the admin root, never the IRK, once pinned"
     );
+    // A damaged admin root never falls back to the IRK on a box that pins one.
+    put(
+        "owner.json",
+        &format!(
+            r#"{{"irkPubHex":"{irk}","adminRootPubHex":"{}"}}"#,
+            "A".repeat(64)
+        ),
+    );
+    assert!(
+        OwnerAnchor::from_keyd_state(d).is_err(),
+        "uppercase admin root"
+    );
+    put(
+        "owner.json",
+        &format!(r#"{{"irkPubHex":"{irk}","adminRootPubHex":"short"}}"#),
+    );
+    assert!(
+        OwnerAnchor::from_keyd_state(d).is_err(),
+        "damaged admin root"
+    );
+    put(
+        "owner.json",
+        &format!(r#"{{"irkPubHex":"{irk}","adminRootPubHex":null}}"#),
+    );
+    assert_eq!(
+        OwnerAnchor::from_keyd_state(d).unwrap().signer_hex,
+        irk,
+        "null means none pinned"
+    );
     for bad in [
         r#"{"irkPubHex":"AAAA"}"#,
         r#"{"adminRootPubHex":"zz"}"#,

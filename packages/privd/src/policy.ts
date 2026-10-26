@@ -529,6 +529,8 @@ function checkOrdinaryRun(sub: string, run: ParsedRun, gpu: GpuRunClaim | null =
         break;
     }
   }
+  // The unsigned local-AI path (no owner approval) is for the pinned llama.cpp images only.
+  if (isLocalAiName(run) && !LOCAL_AI_IMAGES.includes(run.image)) throw new PrivdError("forbidden", "a local-AI container runs one of the pinned images");
   if (!runtime) throw new PrivdError("forbidden", gpu ? "a GPU container runs under the runtime its allocation names" : "a container runs under gVisor (--runtime runsc)");
   if (gpu) {
     if (sub !== "run") throw new PrivdError("forbidden", "a GPU container is started with run");

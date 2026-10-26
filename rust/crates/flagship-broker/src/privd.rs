@@ -177,6 +177,57 @@ pub fn summary(req: &Request) -> String {
     }
 }
 
+/// A bind mount's source must be a regular file, not a link: the engine runs as root and follows a
+/// link in a directory the daemon can write (the resolv.conf the egress gateway makes in
+/// `/run/flagship-daemon`), which would let the daemon have a container read any host file. TS twin:
+/// `checkBindSources` in packages/privd/src/server.ts.
+pub fn check_bind_sources(exec: &PrivExec) -> Result<(), PrivdError> {
+    check_bind_sources_with(exec, |p| {
+        std::fs::symlink_metadata(p)
+            .map(|m| m.file_type().is_file())
+            .unwrap_or(false)
+    })
+}
+
+pub fn check_bind_sources_with(
+    exec: &PrivExec,
+    is_regular_file: impl Fn(&str) -> bool,
+) -> Result<(), PrivdError> {
+    let base = exec.file.rsplit('/').next().unwrap_or(exec.file);
+    if base != "docker" && base != "podman" {
+        return Ok(());
+    }
+    let mut values: Vec<&str> = Vec::new();
+    let mut it = exec.args.iter();
+    while let Some(a) = it.next() {
+        if a == "--mount" {
+            if let Some(v) = it.next() {
+                values.push(v);
+            }
+        } else if let Some(v) = a.strip_prefix("--mount=") {
+            values.push(v);
+        }
+    }
+    for v in values {
+        let mut kind = "";
+        let mut src = "";
+        for kv in v.split(',') {
+            match kv.split_once('=') {
+                Some(("type", t)) => kind = t,
+                Some(("src", s)) => src = s,
+                _ => {}
+            }
+        }
+        if kind == "bind" && !is_regular_file(src) {
+            return Err(PrivdError::new(
+                ErrorCode::Forbidden,
+                "a bind-mounted source must be a regular file, not a link",
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Execute a validated request and shape the answer as privd does.
 pub fn handle(
     runner: &dyn V1Runner,
@@ -201,6 +252,10 @@ pub fn handle(
             return Response::err(req.id.into(), e);
         }
     };
+    if let Err(e) = check_bind_sources(&exec) {
+        audit_line(false, &[("code", Value::from(e.code.as_str()))]);
+        return Response::err(req.id.into(), e);
+    }
     let r = runner.run(&exec);
     audit_line(
         r.code == Some(0),
@@ -292,5 +347,59 @@ impl Connection for V1Connection {
             &self.audit,
             &req,
         )))
+    }
+}
+
+#[cfg(test)]
+mod bind_source_tests {
+    use super::*;
+
+    fn exec(file: &'static str, args: &[&str]) -> PrivExec {
+        PrivExec {
+            file,
+            args: args.iter().map(|a| (*a).to_owned()).collect(),
+            timeout_ms: 1000,
+            input: None,
+            stdin_file: None,
+            stdout_file: None,
+            env: Default::default(),
+            copy_in: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_link_or_missing_source_is_refused_a_regular_file_and_volumes_pass() {
+        let regular = |p: &str| p == "/run/flagship-daemon/flagship-resolv-a.conf";
+        let ok = exec(
+            "/usr/bin/docker",
+            &[
+                "run",
+                "--mount",
+                "type=bind,src=/run/flagship-daemon/flagship-resolv-a.conf,dst=/etc/resolv.conf,readonly",
+                "img",
+            ],
+        );
+        assert!(check_bind_sources_with(&ok, regular).is_ok());
+        let link = exec(
+            "/usr/bin/docker",
+            &[
+                "run",
+                "--mount=type=bind,src=/run/flagship-daemon/flagship-resolv-b.conf,dst=/etc/resolv.conf",
+                "img",
+            ],
+        );
+        assert!(check_bind_sources_with(&link, regular).is_err());
+        let volume = exec(
+            "/usr/bin/docker",
+            &[
+                "run",
+                "--mount",
+                "type=volume,src=flagship-files-x,dst=/data",
+                "img",
+            ],
+        );
+        assert!(check_bind_sources_with(&volume, regular).is_ok());
+        let other = exec("/usr/bin/systemctl", &["--mount", "type=bind,src=/nope"]);
+        assert!(check_bind_sources_with(&other, regular).is_ok());
     }
 }

@@ -170,3 +170,22 @@ describe("units", () => {
     expect(d).not.toMatch(/docker/);
   });
 });
+
+describe("a bind mount's source must be a regular file", () => {
+  it("refuses a link in the daemon's runtime directory, takes a regular file, ignores volumes", async () => {
+    const { mkdtempSync, writeFileSync, symlinkSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { checkBindSources } = await import("../src/server.js");
+    const dir = mkdtempSync(join(tmpdir(), "bind-"));
+    writeFileSync(join(dir, "real.conf"), "nameserver 1.1.1.1\n");
+    symlinkSync("/etc/shadow", join(dir, "link.conf"));
+    const run = (src: string, type = "bind") => ({ file: "/usr/bin/docker", args: ["run", "--mount", `type=${type},src=${src},dst=/etc/resolv.conf,readonly`, "img"], timeoutMs: 1000 });
+    expect(() => checkBindSources(run(join(dir, "real.conf")))).not.toThrow();
+    expect(() => checkBindSources(run(join(dir, "link.conf")))).toThrow(/regular file/);
+    expect(() => checkBindSources(run(join(dir, "missing.conf")))).toThrow(/regular file/);
+    expect(() => checkBindSources(run("flagship-files-x", "volume"))).not.toThrow();
+    expect(() => checkBindSources({ file: "/usr/bin/docker", args: ["run", `--mount=type=bind,src=${join(dir, "link.conf")},dst=/x`, "img"], timeoutMs: 1 })).toThrow(/regular file/);
+    expect(() => checkBindSources({ file: "/usr/bin/systemctl", args: ["--mount", "type=bind,src=/nope"], timeoutMs: 1 })).not.toThrow();
+  });
+});
