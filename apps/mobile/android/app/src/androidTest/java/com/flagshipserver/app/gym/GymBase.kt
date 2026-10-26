@@ -126,6 +126,7 @@ abstract class GymBase {
         onboarding: Boolean = false,
         rateLimited: List<String> = emptyList(),
         chat: String? = null,
+        rescue: String? = null,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -154,6 +155,7 @@ abstract class GymBase {
             if (onboarding) putExtra(SmokeModeConfig.EXTRA_SMOKE_ONBOARDING, true)
             if (rateLimited.isNotEmpty()) putExtra(SmokeModeConfig.EXTRA_SMOKE_RATE_LIMITED, rateLimited.joinToString(","))
             if (chat != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_CHAT, chat)
+            if (rescue != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_RESCUE, rescue)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()

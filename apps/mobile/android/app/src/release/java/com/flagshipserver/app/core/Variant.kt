@@ -25,6 +25,8 @@ object Variant : AppVariant {
         trust: TrustCenter,
     ): GymLaunch? = null
 
+    override fun rescueEnvironment(context: android.content.Context, username: String): com.flagshipserver.app.viewmodels.OfflineControlEnvironment? = null
+
     override val usesMockClients: Boolean get() = false
     override val forceAdminRoot: Boolean get() = false
     override val bypassBiometricGates: Boolean get() = false

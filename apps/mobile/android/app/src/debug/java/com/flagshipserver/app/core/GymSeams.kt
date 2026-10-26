@@ -83,6 +83,10 @@ object GymSeams {
     @Volatile
     var noticeFetcher: NoticeFetcher? = null
 
+    /** Offline control runs against GymRescue's in-process box in this scenario (null: the live one). */
+    @Volatile
+    var rescueScenario: String? = null
+
     /** Back to production behaviour (a launch without the gym's extras). */
     fun reset() {
         forceAdminRoot = false
@@ -96,5 +100,6 @@ object GymSeams {
         noticePin = null
         noticeClockOffsetMs = 0
         noticeFetcher = null
+        rescueScenario = null
     }
 }

@@ -77,6 +77,9 @@ data class SmokeModeConfig(
     /** The build chat the mock box serves (MockScreensClient.chatVariant):
      *  "ready" | "failed" (continuable) | "env" (asks for an env var, the default). */
     val chatVariant: String? = null,
+    /** Offline control's in-process box (GymRescue): "found" | "not-found" | "wrong-key" |
+     *  "expired-cert" | "interrupt" | "stranger". */
+    val rescue: String? = null,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -98,6 +101,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_ONBOARDING = "flagship.smokeOnboarding"
         const val EXTRA_SMOKE_RATE_LIMITED = "flagship.smokeRateLimited"
         const val EXTRA_SMOKE_CHAT = "flagship.smokeChat"
+        const val EXTRA_SMOKE_RESCUE = "flagship.smokeRescue"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -132,6 +136,8 @@ data class SmokeModeConfig(
                     ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() },
                 chatVariant = intent.getStringExtra(EXTRA_SMOKE_CHAT)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("ready", "failed", "env") },
+                rescue = intent.getStringExtra(EXTRA_SMOKE_RESCUE)?.trim()?.lowercase()
+                    ?.takeIf { it in setOf("found", "not-found", "wrong-key", "expired-cert", "interrupt", "stranger") },
             )
         }
     }
@@ -208,6 +214,7 @@ object SmokeMode {
         // same-process launch's seed can never leak into an unflagged run.
         GymSeams.forceAdminRoot = config.seedAdminRoot
         GymSeams.deviceRank = config.deviceRank
+        GymSeams.rescueScenario = config.rescue
         GymSeams.bypassBiometricGates = !config.realBiometrics
         GymSeams.refuseBiometricGates = config.refuseBiometrics
         if (config.realBiometrics) appState.setRequireBiometricAtLaunch(true)

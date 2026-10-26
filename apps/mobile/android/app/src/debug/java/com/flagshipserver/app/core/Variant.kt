@@ -180,6 +180,11 @@ object Variant : AppVariant {
     }
 
     override val usesMockClients: Boolean get() = mockRun
+    override fun rescueEnvironment(context: android.content.Context, username: String): com.flagshipserver.app.viewmodels.OfflineControlEnvironment? =
+        GymSeams.rescueScenario?.let {
+            GymRescue.environment("home.${username.lowercase()}.flagship.services", it, java.io.File(context.cacheDir, "gym-rescue")).first
+        }
+
     override val forceAdminRoot: Boolean get() = GymSeams.forceAdminRoot
     override val bypassBiometricGates: Boolean get() = GymSeams.bypassBiometricGates
     override val refuseBiometricGates: Boolean get() = GymSeams.refuseBiometricGates

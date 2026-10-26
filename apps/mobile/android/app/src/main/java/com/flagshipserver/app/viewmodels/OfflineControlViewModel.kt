@@ -404,6 +404,7 @@ class OfflineControlViewModel(
 fun offlineControlEnvironment(context: android.content.Context, username: String): OfflineControlEnvironment {
     val user = username.lowercase()
     val app = context.applicationContext
+    com.flagshipserver.app.core.Variant.rescueEnvironment(app, user)?.let { return it }
     return OfflineControlEnvironment(
         servers = {
             val pins = com.flagshipserver.app.core.ServerKeyPins.shared

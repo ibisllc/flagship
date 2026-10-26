@@ -37,6 +37,9 @@ interface AppVariant {
         trust: TrustCenter,
     ): GymLaunch?
 
+    /** Gym: Offline control against the in-process box of the scenario the launch named; null otherwise (always in release). */
+    fun rescueEnvironment(context: android.content.Context, username: String): com.flagshipserver.app.viewmodels.OfflineControlEnvironment?
+
     /** True while the app runs on mock clients (a debug gym run). */
     val usesMockClients: Boolean
 
