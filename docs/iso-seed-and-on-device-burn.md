@@ -96,7 +96,7 @@ hash — that is the transparency guarantee.
 | field | value |
 |---|---|
 | stock base | Debian 13.6.0 amd64 netinst (`FLAGSHIP_ISO_MANIFEST`, official signed sha) |
-| seed sha256 | `54be17b43ddafa10e2112b2e5966835f12aaff39a50d21415f942e06a7ae7f19` |
+| seed sha256 | `892cf430928897afa5327a38c107271ed8ced064b5091680509ab6da256295e4` |
 | built by | `iso-seed/build-seed.sh` @ this commit, `xorriso` 1.5.4 / 1.5.6 (Debian 12 / 13) |
 
 Re-pin the seed sha whenever the stock base or `build-seed.sh` changes (a new
@@ -141,7 +141,7 @@ pinned `SOURCE_DATE_EPOCH`, so the seed stays byte-for-byte reproducible.
 ## Validation status
 
 - **Reproducible seed build** — done + verified (byte-identical across runs;
-  `sha256=54be17b4…` for the Debian 13.6.0 base, identical under Debian 12
+  `sha256=892cf430…` for the Debian 13.6.0 base, identical under Debian 12
   and 13 toolchains — the `iso-seed` CI job checks it).
 - **`FLAGSHIP` is GPT-registered** — verified by parsing the seed's GPT
   (`part3: name=Appended3`, the 16 MiB FLAGSHIP region past the ISO).

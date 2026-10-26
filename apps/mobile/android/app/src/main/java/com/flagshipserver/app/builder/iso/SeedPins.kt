@@ -7,5 +7,5 @@ package com.flagshipserver.app.builder.iso
  * (scripts/iso-seed-pins.test.ts) keeps this list equal to it.
  */
 object SeedPins {
-    val SHA256: Set<String> = setOf("54be17b43ddafa10e2112b2e5966835f12aaff39a50d21415f942e06a7ae7f19")
+    val SHA256: Set<String> = setOf("892cf430928897afa5327a38c107271ed8ced064b5091680509ab6da256295e4")
 }

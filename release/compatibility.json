@@ -12,7 +12,7 @@
     "release-metadata": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/releaseMetadata.ts", "note": "TUF-style roles; the box gate is server-daemon/src/releaseCatalogGate.ts and is not yet fed a live catalog" },
     "chat-wire": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/protocol/src/chatWire.ts", "note": "box-to-box frames, lease votes and the admin approval order" },
     "chat-frame": { "current": 1, "minimumSecurity": 1, "preferred": 1, "unknownVersion": "refuse", "where": "packages/server-daemon/src/chat/harness.ts" },
-    "webapp-shell": { "current": 182, "minimumSecurity": 176, "preferred": 182, "unknownVersion": "refuse", "where": "apps/web/public/webapp/lib/buildInfo.js", "note": "the service worker replaces an older shell on the next load" }
+    "webapp-shell": { "current": 183, "minimumSecurity": 176, "preferred": 183, "unknownVersion": "refuse", "where": "apps/web/public/webapp/lib/buildInfo.js", "note": "the service worker replaces an older shell on the next load" }
   },
   "receiverFirst": [
     "boot worker and .com verify the format",

@@ -98,26 +98,25 @@ export async function downloadSaved({ client, serverDomain, archiveId, umk, sign
 
 const DAY = 24 * 60 * 60_000;
 
+// Both directions use the same UTC offset (the one in force at `ref`), so they are exact inverses on every
+// day of the year, including the week a clock change falls in. A UTC schedule cannot keep a wall-clock hour
+// across a clock change anyway; the page shows the hour as it is now.
+const WEEK_MIN = 7 * 24 * 60;
+const wrapWeek = (m) => ((m % WEEK_MIN) + WEEK_MIN) % WEEK_MIN;
+
 /** Local "HH:MM" (and local weekday 0..6 for weekly) → { minuteOfDayUtc, weekdayUtc }. */
 export function localToUtc({ hour, minute, weekday = 0, frequency }, ref = new Date()) {
-  const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), hour, minute, 0, 0);
-  if (frequency === "weekly") {
-    const delta = (weekday - d.getDay() + 7) % 7;
-    d.setDate(d.getDate() + delta);
-  }
-  return { minuteOfDayUtc: d.getUTCHours() * 60 + d.getUTCMinutes(), weekdayUtc: d.getUTCDay() };
+  const offset = -ref.getTimezoneOffset();
+  const local = (frequency === "weekly" ? weekday : 0) * 1440 + hour * 60 + minute;
+  const utc = wrapWeek(local - offset);
+  return { minuteOfDayUtc: utc % 1440, weekdayUtc: frequency === "weekly" ? Math.floor(utc / 1440) : Math.floor(utc / 1440) % 7 };
 }
 
 /** { minuteOfDayUtc, weekdayUtc } → local { hour, minute, weekday }. */
 export function utcToLocal({ minuteOfDayUtc, weekdayUtc = 0, frequency }, ref = new Date()) {
-  const base = Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate()) + minuteOfDayUtc * 60_000;
-  let t = base;
-  if (frequency === "weekly") {
-    const delta = (weekdayUtc - new Date(t).getUTCDay() + 7) % 7;
-    t += delta * DAY;
-  }
-  const d = new Date(t);
-  return { hour: d.getHours(), minute: d.getMinutes(), weekday: d.getDay() };
+  const offset = -ref.getTimezoneOffset();
+  const local = wrapWeek((frequency === "weekly" ? weekdayUtc : 0) * 1440 + minuteOfDayUtc + offset);
+  return { hour: Math.floor((local % 1440) / 60), minute: local % 60, weekday: Math.floor(local / 1440) };
 }
 
 /** Weekday names in the app's language (0 = Sunday); 2024-01-07 was a Sunday. */

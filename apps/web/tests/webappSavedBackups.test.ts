@@ -167,6 +167,27 @@ describe("saved backups on the server page", () => {
       }
     }
   });
+  it("round-trips on every day of the year in zones with clock changes (it drifted an hour in the week of one)", () => {
+    const was = process.env.TZ;
+    try {
+      for (const tz of ["America/Chicago", "Europe/London", "Australia/Lord_Howe", "Pacific/Auckland", "Asia/Kolkata"]) {
+        process.env.TZ = tz;
+        for (let day = 0; day < 366; day++) {
+          const ref = new Date(2026, 0, 1 + day, 21, 5);
+          for (const frequency of ["daily", "weekly"]) {
+            for (const [hour, minute, weekday] of [[3, 0, 0], [23, 30, 6], [0, 15, 1]] as const) {
+              const back = saved.utcToLocal({ ...saved.localToUtc({ hour, minute, weekday, frequency }, ref), frequency }, ref);
+              expect([tz, day, frequency, back.hour, back.minute]).toEqual([tz, day, frequency, hour, minute]);
+              if (frequency === "weekly") expect(back.weekday).toBe(weekday);
+            }
+          }
+        }
+      }
+    } finally {
+      if (was === undefined) delete process.env.TZ;
+      else process.env.TZ = was;
+    }
+  });
   it("says what happened, what's next, and the box's own failure", () => {
     const fmt = { formatBytes: (n: number) => `${n}B`, formatTime: (t: number) => `T${t}` };
     expect(saved.statusLines({ backups: [], waitingReason: "an admin device of your account hasn't approved backups for this server yet" }, fmt)).toEqual({

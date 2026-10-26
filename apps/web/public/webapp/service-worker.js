@@ -423,8 +423,10 @@
 //       these orders sign with the admin root (lib/adminRoot.js SENSITIVE_TAGS).
 //  v181: Activity labels for the boot chain refresh (server.bootchain.refreshed / .rolled-back).
 //  v182: lib/keyfile.js opens a v2 account key file a phone exported (admin root and server records),
-//       not only v1 (packages/protocol/test-vectors/keyfile). (v183-v185 belong to feature branches.)
-const SHELL_VERSION = "v182";
+//       not only v1 (packages/protocol/test-vectors/keyfile).
+//  v183: lib/savedBackups.js converts the backup schedule with one UTC offset both ways (it drifted an hour
+//       in the week a clock change fell in). (Feature branches that used v183-v185 renumber on rebase.)
+const SHELL_VERSION = "v183";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
