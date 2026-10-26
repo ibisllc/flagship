@@ -235,3 +235,15 @@ describe("pins and the core checkpoint", () => {
     expect(cp).toEqual({ takenAt: 5, tsControllerPaused: false, workloads: [{ installation: "alice--notes", generation: 0, image: "", running: true }] });
   });
 });
+
+describe("the privileged units keep CAP_SETUID", () => {
+  // Debian 13's systemd drops CAP_SETUID from a service that sets an explicit User=root together with
+  // NoNewPrivileges=yes, and NoNewPrivs then keeps every child from getting it back. runsc's gofer needs setuid:
+  // every gVisor container under the broker failed with "fork/exec /proc/self/exe: operation not permitted"
+  // (found on a live gym box, 2026-10-26).
+  it("the broker unit sets no User= (root is the default)", () => {
+    const unit = brokerServiceUnit();
+    expect(unit).toMatch(/^NoNewPrivileges=yes$/m);
+    expect(unit).not.toMatch(/^User=/m);
+  });
+});

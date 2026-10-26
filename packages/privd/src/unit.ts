@@ -24,7 +24,9 @@ Before=flagship-daemon.service
 [Service]
 Type=simple
 ExecStart=${node} ${binary} --socket ${PRIVD_SOCKET} --audit ${PRIVD_AUDIT_LOG} --socket-group ${DAEMON_USER}
-User=root
+# No User=: a system service is root already. An explicit User=root together with NoNewPrivileges=yes makes systemd (Debian 13, v257)
+# drop CAP_SETUID from the service, and NoNewPrivs then keeps every child from getting it back; runsc's gofer needs it
+# (setuid), so every gVisor container failed with 'fork/exec /proc/self/exe: operation not permitted'.
 RuntimeDirectory=flagship-privd
 RuntimeDirectoryMode=0755
 LogsDirectory=flagship-privd

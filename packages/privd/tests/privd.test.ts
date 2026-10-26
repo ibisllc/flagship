@@ -150,6 +150,12 @@ describe("the broker over its socket", () => {
 });
 
 describe("units", () => {
+  it("sets no User= (Debian 13's systemd drops CAP_SETUID from User=root + NoNewPrivileges=yes, and runsc's gofer needs it)", () => {
+    const u = privdUnit();
+    expect(u).toMatch(/^NoNewPrivileges=yes$/m);
+    expect(u).not.toMatch(/^User=/m);
+  });
+
   it("the broker acts on the host's own mounts and network, gains nothing new, and only the daemon's group reaches it", () => {
     const u = privdUnit();
     expect(u).toMatch(/NoNewPrivileges=yes/);

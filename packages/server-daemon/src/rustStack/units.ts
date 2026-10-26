@@ -255,7 +255,9 @@ StateDirectoryMode=0700
 Environment=FLAGSHIP_BROKER_V1_SOCKET=${BROKER_V1_SOCKET}
 Environment=FLAGSHIP_BROKER_SOCKET=${BROKER_TYPED_SOCKET}
 Environment=FLAGSHIP_BROKER_STATE=/var/lib/flagship-broker
-User=root
+# No User=: a system service is root already. An explicit User=root together with NoNewPrivileges=yes makes systemd (Debian 13, v257)
+# drop CAP_SETUID from the service, and NoNewPrivs then keeps every child from getting it back; runsc's gofer needs it
+# (setuid), so every gVisor container failed with 'fork/exec /proc/self/exe: operation not permitted'.
 NoNewPrivileges=yes
 RestrictRealtime=yes
 LockPersonality=yes
