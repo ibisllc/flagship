@@ -151,6 +151,20 @@ export function checkSign(
       throw new KeydError("forbidden", "the box binds only its own two keys, as the box");
     }
   }
+  if (purpose === "flagship/rescue-hello/v1") {
+    // tag|<server domain>|<clientNonce 32 hex>|<boxNonce 32 hex>|<certSha256 64 hex>|<issuedAt ms>: one hello, nothing else.
+    const parts = new TextDecoder().decode(msg).split("|");
+    if (
+      parts.length !== 6 ||
+      !/^[a-z0-9][a-z0-9.-]{0,252}$/.test(parts[1]!) ||
+      !/^[0-9a-f]{32}$/.test(parts[2]!) ||
+      !/^[0-9a-f]{32}$/.test(parts[3]!) ||
+      !/^[0-9a-f]{64}$/.test(parts[4]!) ||
+      !/^[0-9]{1,16}$/.test(parts[5]!)
+    ) {
+      throw new KeydError("forbidden", "a rescue hello names a server, two nonces, a certificate hash and a time");
+    }
+  }
   if (purpose === "flagship/pq-session-accept/v1" || purpose === "flagship/pq-session-finish/v1") {
     // tag|<server domain>|<128-hex transcript digest>: one transcript, nothing else.
     const parts = new TextDecoder().decode(msg).split("|");

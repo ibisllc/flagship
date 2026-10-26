@@ -652,6 +652,16 @@ describe("admin devices, revocation and rotation without .com", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("a flood of hellos cannot stop the admin key delivering a revocation or a rotation", async () => {
+    rig = await startBox({ adminPinned: true });
+    const dev = admitAdminDevice(rig, 32, 3 * 86_400_000);
+    await rig.refreshBook();
+    for (let i = 0; i < 300; i++) await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } });
+    expect((await request(rig.port, "POST", "/api/rescue/hello", { body: { clientNonce: nonce() } })).status).toBe(429);
+    expect((await request(rig.port, "POST", "/api/rescue/revoke", { body: revoke(dev.grant.grantId) })).status).toBe(200);
+    expect(rig.revocations.has(dev.grant.grantId)).toBe(true);
+  });
+
   it("a revocation survives a restart of the box", async () => {
     rig = await startBox({ adminPinned: true });
     const dev = admitAdminDevice(rig, 32, 3 * 86_400_000);

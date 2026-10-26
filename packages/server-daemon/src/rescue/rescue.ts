@@ -62,6 +62,12 @@ const MAX_OUTSTANDING_NONCES = 256;
 const MAX_SESSIONS = 4;
 const WINDOW_MS = 60_000;
 const MAX_HELLOS_PER_WINDOW = 300;
+/**
+ * Revocations and rotations are self-authenticating and the admin's way to cut a stolen device off,
+ * so a flood of hellos (which anyone who can reach the relay can send) must never use their budget.
+ * Each costs one signature check, so this only bounds that work.
+ */
+const MAX_INTAKES_PER_WINDOW = 6000;
 const NOTE_REFUSALS_EVERY_MS = 10_000;
 
 /** The only backup routes a rescue token opens: method, rescue-relative path. */
@@ -181,6 +187,7 @@ export function buildRescue(deps: RescueDeps) {
     for (const [k, v] of sessions) if (v.signer.kind === "device" && v.signer.grantId === grantId) sessions.delete(k);
   });
   let hellos: number[] = [];
+  let intakes: number[] = [];
   let lastRefusalNote = -Infinity;
 
   const sweep = () => {
@@ -189,6 +196,7 @@ export function buildRescue(deps: RescueDeps) {
     for (const [k, v] of sessions) if (v.exp <= t) sessions.delete(k);
     for (const [k, at] of spentControl) if (t - at > 2 * RESCUE_HELLO_TTL_MS) spentControl.delete(k);
     hellos = hellos.filter((x) => t - x < WINDOW_MS);
+    intakes = intakes.filter((x) => t - x < WINDOW_MS);
   };
 
   function hello(req: HttpRequest): HttpResponse {
@@ -278,8 +286,8 @@ export function buildRescue(deps: RescueDeps) {
 
   /** Both intake routes are self-authenticating (a signature under the pinned admin root) and only ever remove authority. */
   function intakeAllowed(): boolean {
-    if (hellos.length >= MAX_HELLOS_PER_WINDOW) return false;
-    hellos.push(now());
+    if (intakes.length >= MAX_INTAKES_PER_WINDOW) return false;
+    intakes.push(now());
     return true;
   }
 
