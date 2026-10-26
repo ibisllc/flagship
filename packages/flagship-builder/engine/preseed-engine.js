@@ -173,7 +173,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
   }
 
   // src/engineSetup.ts
-  var ENGINE_APT_PACKAGES = "podman netavark aardvark-dns crun conmon catatonit docker-compose nftables zstd";
+  var ENGINE_APT_PACKAGES = "podman netavark aardvark-dns crun conmon catatonit docker-compose nftables iptables zstd";
   var ENGINE_REQUIRED_COMMANDS = "podman nft";
   var NEW_BOX_ARCH_V2_JSON = '{"version":1,"rust":"on","engine":"podman","source":"new-box"}';
   var ENGINE_SETUP_BLOCK = "# Architecture v2 on a new box: Podman runs the apps, keyd/broker/core run from the release's\n# Rust binaries (each falls back to its TS path on its own; engine-and-rust-path.md).\nmkdir -p /var/lib/flagship /etc/containers/containers.conf.d\ncat > /var/lib/flagship/arch-v2.json <<'FLAGSHIP_ARCH_V2'\n".concat(NEW_BOX_ARCH_V2_JSON, "\nFLAGSHIP_ARCH_V2\nchmod 644 /var/lib/flagship/arch-v2.json\necho podman > /var/lib/flagship/engine-active\ncat > /etc/containers/containers.conf.d/40-flagship-compose.conf <<'FLAGSHIP_COMPOSE'\n# The data services' compose file runs through docker-compose against Podman's root-only socket.\n[engine]\ncompose_providers = [\"/usr/bin/docker-compose\"]\ncompose_warning_logs = false\nFLAGSHIP_COMPOSE\nmkdir -p /etc/systemd/system/sockets.target.wants\nln -sf /usr/lib/systemd/system/podman.socket /etc/systemd/system/sockets.target.wants/podman.socket\n");

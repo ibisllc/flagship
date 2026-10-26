@@ -13,8 +13,12 @@ import { BOX_RELEASE } from "./boxReleaseConfig.js";
 
 export type BoxStack = "arch-v2" | "classic";
 
-/** Debian 13 packages for the engine. docker-compose is only the `podman compose` provider. */
-export const ENGINE_APT_PACKAGES = "podman netavark aardvark-dns crun conmon catatonit docker-compose nftables zstd";
+/**
+ * Debian 13 packages for the engine. docker-compose is only the `podman compose` provider. `iptables` is not in a minimal
+ * Debian 13: the egress firewall (server-daemon egress/firewall.ts) writes its chains with iptables-restore, and without
+ * the binary every app install failed with "its internet firewall isn't running: No such file or directory".
+ */
+export const ENGINE_APT_PACKAGES = "podman netavark aardvark-dns crun conmon catatonit docker-compose nftables iptables zstd";
 
 /** Commands a prebuilt appliance must already have. */
 export const ENGINE_REQUIRED_COMMANDS = "podman nft";

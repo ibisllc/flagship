@@ -316,8 +316,9 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     const b = bootstrap();
     // Root cause of the field "no docker" crash loop: the engine was never
     // installed, so the daemon's ensureNetwork hit ENOENT. A new box installs
-    // Podman (engineSetup.ts), compose's provider and nft for the bridge isolation.
-    expect(b).toMatch(/apt-get install -y --no-install-recommends .*podman netavark aardvark-dns crun conmon catatonit docker-compose nftables zstd/);
+    // Podman (engineSetup.ts), compose's provider, nft for the bridge isolation and iptables for the egress firewall
+    // (a minimal Debian 13 has none; without it every app install failed on the missing iptables-restore).
+    expect(b).toMatch(/apt-get install -y --no-install-recommends .*podman netavark aardvark-dns crun conmon catatonit docker-compose nftables iptables zstd/);
     expect(b).not.toContain("docker.io docker-cli");
     expect(b).not.toContain("systemctl enable docker.service");
     // The box switch: a new box runs Podman and the Rust path.
@@ -1316,7 +1317,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "d2b726febe698acaa04f21e592d268d993fb002ab29c905783b7a9782d4e6a74",
+      "721e5a2c68fcead7220e8bb140c0a369fd2be8ee23220a28c1cd884339911275",
     );
   });
 

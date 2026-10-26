@@ -50,7 +50,7 @@ export const APPS_BACK_MS = 20 * 60_000;
 const GiB = 1024 ** 3;
 
 /** What a new arch-v2 box installs (flagship-builder engineSetup.ts ENGINE_APT_PACKAGES; a test pins them together). */
-export const ENGINE_PACKAGES = ["podman", "netavark", "aardvark-dns", "crun", "conmon", "catatonit", "docker-compose", "nftables", "zstd"];
+export const ENGINE_PACKAGES = ["podman", "netavark", "aardvark-dns", "crun", "conmon", "catatonit", "docker-compose", "nftables", "iptables", "zstd"];
 export const COMPOSE_DROPIN_PATH = "/etc/containers/containers.conf.d/40-flagship-compose.conf";
 export const COMPOSE_DROPIN = `# The data services' compose file runs through docker-compose against Podman's root-only socket.
 [engine]
