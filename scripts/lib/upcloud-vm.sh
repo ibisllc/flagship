@@ -69,7 +69,7 @@ print(next((a["address"] for i in d["networking"]["interfaces"]["interface"] if 
   for _ in $(seq 1 60); do "${VM_SSH[@]}" true 2>/dev/null && break; sleep 5; done
   say "VM up at $IP"
   say "installing git (the bare image has none)"
-  "${VM_SSH[@]}" 'export DEBIAN_FRONTEND=noninteractive; apt-get update -q >/dev/null && apt-get install -y -q git >/dev/null'
+  "${VM_SSH[@]}" 'export DEBIAN_FRONTEND=noninteractive; apt-get -o DPkg::Lock::Timeout=600 update -q >/dev/null && apt-get -o DPkg::Lock::Timeout=600 install -y -q git >/dev/null'
 }
 
 vm_send_commit() { # vm_send_commit <repo> <40-hex commit>
@@ -89,8 +89,8 @@ vm_toolchains() { # vm_toolchains <repo> [log file]
   "${VM_SSH[@]}" bash -s "$node_v" "$VM_GO" <<'SETUP' > "${2:-/dev/null}" 2>&1
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -q
-apt-get install -y -q git curl xz-utils build-essential pkg-config libssl-dev python3 jq openssl xxd cryptsetup gnupg dirmngr
+apt-get -o DPkg::Lock::Timeout=600 update -q
+apt-get -o DPkg::Lock::Timeout=600 install -y -q git curl xz-utils build-essential pkg-config libssl-dev python3 jq openssl xxd cryptsetup gnupg dirmngr
 curl -fsSL "https://nodejs.org/dist/v$1/node-v$1-linux-x64.tar.xz" | tar -xJ -C /usr/local --strip-components=1
 curl -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain none --profile minimal
 curl -fsSL "https://go.dev/dl/$2.linux-amd64.tar.gz" | tar -xz -C /usr/local
