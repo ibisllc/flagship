@@ -93,9 +93,11 @@ fi
 
 # The gym branch trusts exactly its own key.
 TRUST="$WT/release/box-artifact-trust.json"
-if [ -n "$PUB" ] && ! node -e 'const t=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); process.exit(t.threshold===1&&t.keys.length===1&&t.keys[0]===process.argv[2]?0:1)' "$TRUST" "$PUB"; then
+# It also has no PQ half: the gym key is a classical-only test key, so the gym's trust file pins no PQ key (the real
+# release key is pinned on release/0.3 and would refuse every gym-signed artifact).
+if [ -n "$PUB" ] && ! node -e 'const t=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); process.exit(t.threshold===1&&t.keys.length===1&&t.keys[0]===process.argv[2]&&(t.pq?.keyIds??[]).length===0?0:1)' "$TRUST" "$PUB"; then
   if [ "$DRY" = "1" ]; then say "DRY-RUN would set $TRUST to threshold 1 and the gym key $PUB"; else
-    node -e 'const f=process.argv[1],t=JSON.parse(require("node:fs").readFileSync(f,"utf8")); t.threshold=1; t.keys=[process.argv[2]]; require("node:fs").writeFileSync(f, JSON.stringify(t,null,2)+"\n")' "$TRUST" "$PUB"
+    node -e 'const f=process.argv[1],t=JSON.parse(require("node:fs").readFileSync(f,"utf8")); t.threshold=1; t.keys=[process.argv[2]]; t.pq={keyIds:[],legacyManifests:[]}; require("node:fs").writeFileSync(f, JSON.stringify(t,null,2)+"\n")' "$TRUST" "$PUB"
     say "gym trust file now names the gym key"
   fi
 fi
