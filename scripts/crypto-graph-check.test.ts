@@ -154,3 +154,21 @@ describe("crypto-graph-check", () => {
     expect(run(broken).status).toBe(2);
   });
 });
+
+describe("the real graph", () => {
+  const graph = join(__dirname, "..", "docs", "architecture-v2", "crypto-graph.json");
+
+  it("is valid and every evidence reference points at a file and line that exist", () => {
+    const r = spawnSync("node", [SCRIPT, graph, "--schema-only", "--check-evidence"], { encoding: "utf8" });
+    expect(r.stdout + r.stderr).toContain("schema: ok");
+    expect(r.status).toBe(0);
+  });
+
+  it("models the rescue session and the offline orders", () => {
+    const g = JSON.parse(require("node:fs").readFileSync(graph, "utf8")) as { nodes: Array<{ id: string }>; targets: Array<{ node: string }> };
+    for (const id of ["eff.rescue-session", "eff.offline-control"]) {
+      expect(g.nodes.map((n) => n.id)).toContain(id);
+      expect(g.targets.map((t) => t.node)).toContain(id);
+    }
+  });
+});

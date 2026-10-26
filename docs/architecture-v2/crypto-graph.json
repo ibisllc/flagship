@@ -613,7 +613,7 @@
    "owner": "unassigned (Rust/platform)",
    "evidence": [
     "packages/flagship-builder/src/userdata.ts:705",
-    "packages/flagship-builder/src/userdata.ts:1661",
+    "packages/flagship-builder/src/userdata.ts:738",
     "packages/server-daemon/src/index.ts:4636"
    ],
    "notes": "Not a cryptographic weakness: a physical-access one. Outside the classical-break model, recorded for the evidence map."
@@ -734,7 +734,7 @@
   {
    "id": "exe.unseal-helper",
    "kind": "executable",
-   "label": "/boot/flagship-unseal + boot-stage.sh (initramfs)",
+   "label": "/boot/flagship-unseal + the unlock premount (initramfs)",
    "algorithms": [
     "X25519",
     "HKDF",
@@ -745,7 +745,7 @@
    "owner": "unassigned (Rust/platform)",
    "evidence": [
     "installer/unseal-helper/internal/unseal/unseal.go:63",
-    "installer/boot-stage.sh:251"
+    "packages/boot-chain/src/unlockPremount.ts:60"
    ],
    "notes": "No Secure Boot/UKI measurement covers it; replaceable with physical access."
   },
@@ -1004,7 +1004,7 @@
    "pq": "classical-only",
    "owner": "unassigned (security/protocol)",
    "evidence": [
-    "packages/flagship-builder/src/userdata.ts:1551",
+    "packages/flagship-builder/src/userdata.ts:1336",
     "packages/control-plane/src/luksKeys.ts:112"
    ],
    "notes": "Public ciphertext: the first harvest-now-decrypt-later target."
@@ -1111,7 +1111,7 @@
    "pq": "n/a",
    "owner": "unassigned (Rust/platform)",
    "evidence": [
-    "installer/boot-stage.sh:443"
+    "packages/boot-chain/src/unlockPremount.ts:207"
    ]
   },
   {
@@ -1123,7 +1123,7 @@
    "pq": "n/a",
    "owner": "unassigned (Rust/platform)",
    "evidence": [
-    "installer/boot-stage.sh:443"
+    "packages/boot-chain/src/unlockPremount.ts:207"
    ]
   },
   {
@@ -1329,6 +1329,45 @@
    "owner": "unassigned (Rust/platform)",
    "evidence": [
     "rust/crates/flagship-gpu/src/owner_approval.rs:182"
+   ]
+  },
+  {
+   "id": "eff.rescue-session",
+   "kind": "effect",
+   "label": "Offline rescue session opens (status, apps, backup download over the LAN, .com unreachable)",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/server-daemon/src/rescue/rescue.ts:259"
+   ]
+  },
+  {
+   "id": "eff.offline-control",
+   "kind": "effect",
+   "label": "Offline control order runs (start/stop/restart an app, restart or shut down the server)",
+   "algorithms": [],
+   "location": "box",
+   "pq": "n/a",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/server-daemon/src/rescue/rescue.ts:359"
+   ]
+  },
+  {
+   "id": "ver.rescue-hello",
+   "kind": "verifier",
+   "label": "Phone's check of the box's rescue hello (pinned STK, certificate hash, optional hybrid half)",
+   "algorithms": [
+    "Ed25519",
+    "ML-DSA-65"
+   ],
+   "location": "phone",
+   "pq": "hybrid",
+   "owner": "unassigned (security/protocol)",
+   "evidence": [
+    "packages/protocol/src/rescue.ts:117"
    ]
   }
  ],
@@ -1543,7 +1582,7 @@
    "to": "env.luks-deposit",
    "type": "unwraps",
    "evidence": [
-    "packages/flagship-builder/src/userdata.ts:1551"
+    "packages/flagship-builder/src/userdata.ts:1336"
    ]
   },
   {
@@ -1567,7 +1606,7 @@
    "to": "data.disk-key",
    "type": "unwraps",
    "evidence": [
-    "installer/boot-stage.sh:443"
+    "packages/boot-chain/src/unlockPremount.ts:207"
    ]
   },
   {
@@ -1575,7 +1614,7 @@
    "to": "env.auto-unlock-lease",
    "type": "unwraps",
    "evidence": [
-    "installer/boot-stage.sh:251"
+    "packages/boot-chain/src/unlockPremount.ts:60"
    ]
   },
   {
@@ -1583,7 +1622,7 @@
    "to": "data.disk-key",
    "type": "unwraps",
    "evidence": [
-    "installer/boot-stage.sh:443"
+    "packages/boot-chain/src/unlockPremount.ts:207"
    ]
   },
   {
@@ -1625,7 +1664,7 @@
    "to": "data.disk-plaintext",
    "type": "unwraps",
    "evidence": [
-    "installer/boot-stage.sh:443"
+    "packages/boot-chain/src/unlockPremount.ts:207"
    ]
   },
   {
@@ -2223,6 +2262,40 @@
    "evidence": [
     "rust/crates/flagship-gpu/src/owner_approval.rs:116"
    ]
+  },
+  {
+   "from": "key.admin-root",
+   "to": "eff.rescue-session",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/rescue/authority.ts:44"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "eff.rescue-session",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/rescue/authority.ts:46"
+   ],
+   "notes": "only on a box that pins no admin root"
+  },
+  {
+   "from": "key.admin-root",
+   "to": "eff.offline-control",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/rescue/authority.ts:44"
+   ]
+  },
+  {
+   "from": "key.irk",
+   "to": "eff.offline-control",
+   "type": "authorizes",
+   "evidence": [
+    "packages/server-daemon/src/rescue/authority.ts:46"
+   ],
+   "notes": "only on a box that pins no admin root"
   }
  ],
  "targets": [
@@ -2303,6 +2376,16 @@
   },
   {
    "node": "eff.app-install",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.rescue-session",
+   "claim": "authorization",
+   "profile": "strict"
+  },
+  {
+   "node": "eff.offline-control",
    "claim": "authorization",
    "profile": "strict"
   }
