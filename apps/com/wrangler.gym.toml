@@ -196,7 +196,9 @@ CA_ENDORSEMENT_ENFORCE = "true"
 DEMO_CLOUD_PROVIDER = "upcloud"
 UPCLOUD_ZONE = "de-fra1"
 UPCLOUD_PLAN = "STARTER-4xCPU-8GB"
-UPCLOUD_TEMPLATE = "01000000-0000-4000-8000-000020070100"
+# Debian 13 (Trixie): what a real new box runs (the ISO pins 13.6.0) and what the 0.3 box installer's packages and
+# Podman 5 flags (--interface-name, unmanaged bridges, docker-cli) are written for. Bookworm (…20070100) has Podman 4.3.
+UPCLOUD_TEMPLATE = "01000000-0000-4000-8000-000020080100"
 UPCLOUD_STORAGE_GB = "40"
 UPCLOUD_EXTRA_LABELS = "flagship-env=gym"
 
