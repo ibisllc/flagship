@@ -138,7 +138,7 @@ EOF
 meta_pqkeys() {
   TITLE="PQ release key ceremony (once): two YubiKeys, paper backup, the three pins"
   RUNBOOK="2c. PQ release key (once)"
-  WHAT="Skipped once release/box-artifact-trust.json names a PQ key. Otherwise makes the ML-DSA-65 half of the release key, encrypts it with age to your two YubiKeys, prints the paper backup, proves each YubiKey opens it, then pins it for release endorsements, CA leases and box artifacts (each with its cut-over: what is already signed stays valid), commits the pins and the binding, and re-pins. From then on endorsements, leases and artifacts carry a PQ companion and boxes need it."
+  WHAT="Do it ahead of time with node scripts/pq-ceremony.mjs (guided, checked between steps, resumable); this step then finds the key pinned. Skipped once release/box-artifact-trust.json names a PQ key. Otherwise makes the ML-DSA-65 half of the release key, encrypts it with age to your two YubiKeys, prints the paper backup, proves each YubiKey opens it, then pins it for release endorsements, CA leases and box artifacts (each with its cut-over: what is already signed stays valid), commits the pins and the binding, and re-pins. From then on endorsements, leases and artifacts carry a PQ companion and boxes need it."
   read -r -d '' CMDS <<'EOF' || true
 brew install age age-plugin-yubikey          (once)
 age-plugin-yubikey --generate --name flagship-release --pin-policy always --touch-policy always   (each YubiKey; recipients and stubs to ~/.flagship-release/)

@@ -23,6 +23,14 @@ safe as the two YubiKeys, the encrypted file on your Mac and the paper.
 The plaintext seed is never written to disk: it exists in memory while a command runs and is
 wiped after (best effort: JavaScript and the age child process may leave copies in freed memory).
 
+## The guided script
+
+`node scripts/pq-ceremony.mjs` runs everything below as one guided session with on-screen instructions: checks
+first, one age identity per YubiKey, the key and its paper backup, proof that the paper, the key id and each YubiKey
+work, the three pins, the tests, and the commit. Each step is checked against the disk before the next one starts,
+and it resumes where it stopped (`--status` shows where). Its tests (`scripts/pq-ceremony.test.ts`) run the whole
+ceremony with fake YubiKeys. The manual steps below are what it wraps.
+
 ## Before the ceremony
 
 - Both YubiKeys, the one with the Ed25519 release key in PIV slot 9c (the ca-track holder) and
