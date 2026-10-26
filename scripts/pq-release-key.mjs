@@ -458,12 +458,20 @@ export async function cmdInit(args, out) {
     writeEncrypted(keyFile, vault.encrypt(seed), false);
     out(`Encrypted seed written to ${keyFile}`);
     out("Signing the release-key binding: approve on the YubiKey (PIN, then touch).");
-    const binding = await signReleasePqBinding({ ed25519PubHex: ed.pubHex, mldsaPubHex, issuedAt: Date.now() }, ed.sign, seed);
-    const { bindings } = verifyReleasePqBindings([binding], { version: 1, keyIds: [keyId], requirePqAfter: null }, Date.now());
-    if (bindings.length !== 1) throw new Error("the new binding does not verify");
     const file = path.join(bindingsDir(root), `${keyId.slice(0, 16)}.json`);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(binding, null, 2) + "\n");
+    try {
+      const binding = await signReleasePqBinding({ ed25519PubHex: ed.pubHex, mldsaPubHex, issuedAt: Date.now() }, ed.sign, seed);
+      const { bindings } = verifyReleasePqBindings([binding], { version: 1, keyIds: [keyId], requirePqAfter: null }, Date.now());
+      if (bindings.length !== 1) throw new Error("the new binding does not verify");
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(binding, null, 2) + "\n");
+    } catch (e) {
+      // No paper backup exists yet, so the file holds a seed nobody can recover or use: drop it, or the next
+      // attempt is refused ("a release key was already made") and the owner is stuck.
+      fs.rmSync(keyFile, { force: true });
+      fs.rmSync(file, { force: true });
+      throw e;
+    }
     out(`Binding written to ${file}`);
     if (!args.noPaper) {
       const term = terminal(vault.fake);
