@@ -31,6 +31,7 @@ pub const V1_BINARIES: &[&str] = &[
     "/usr/bin/truncate",
     "/usr/bin/fallocate",
     "/usr/sbin/mkfs.ext4",
+    "/usr/bin/install",
     "/usr/bin/touch",
     "/usr/bin/rm",
     "/usr/bin/rmdir",

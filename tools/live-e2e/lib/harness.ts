@@ -176,6 +176,12 @@ export function certInfo(fqdn: string): { issuer: string; subject: string; sans:
   return { issuer, subject, sans };
 }
 
+/** Whether a cert's SAN list covers `name`: listed itself, or by a `*.` wildcard one label up. */
+export function sanCovers(sans: string[], name: string): boolean {
+  const dot = name.indexOf(".");
+  return sans.includes(name) || (dot > 0 && sans.includes(`*${name.slice(dot)}`));
+}
+
 /** Raw HTTP/1.1 over openssl, with SNI and Host chosen independently (null = no Host). */
 export function rawTlsGet(sni: string, host: string | null, path: string): { status: number; text: string } {
   const hostLine = host === null ? "" : `Host: ${host}\\r\\n`;

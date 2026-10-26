@@ -4,7 +4,7 @@
 // of the account's boxes the relay routes it to. Needs gossip, so the account's gossip key is deposited
 // first (lib/cgk.ts, as on feat/UX).
 import { depositCgk, waitGossiping } from "../../lib/cgk.js";
-import { SERVICES, assert, certInfo, tryHttp } from "../../lib/harness.js";
+import { SERVICES, assert, certInfo, sanCovers, tryHttp } from "../../lib/harness.js";
 import { installWhoami } from "../gating.js";
 import type { Group } from "../types.js";
 import { uninstall, until } from "./util.js";
@@ -26,7 +26,7 @@ export const appNames: Group = {
           const ci = certInfo(b.fqdn);
           return ci.sans.includes(account) ? ci : undefined;
         }, 20_000);
-        assert(c.sans.includes(b.fqdn) && c.sans.includes(`*.${b.fqdn}`), `sans=${c.sans.join(",")}`);
+        assert(sanCovers(c.sans, b.fqdn) && c.sans.includes(`*.${b.fqdn}`), `sans=${c.sans.join(",")}`);
         assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer}`);
         return c.sans.join(", ");
       });
@@ -57,7 +57,7 @@ export const appNames: Group = {
     });
     await rec.check(`the certificate served for ${canonical} is home's own, naming ${account}`, () => {
       const c = certInfo(canonical);
-      assert(c.sans.includes(account) && c.sans.includes(b1.fqdn), `sans=${c.sans.join(",")}`);
+      assert(c.sans.includes(account) && sanCovers(c.sans, b1.fqdn), `sans=${c.sans.join(",")}`);
       return c.sans.join(", ");
     });
     await uninstall(A, b1, slug);

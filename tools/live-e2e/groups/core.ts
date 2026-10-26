@@ -20,7 +20,7 @@ import {
 } from "@flagship/protocol";
 import { pair, sweep } from "../lib/fleet.js";
 import { accountRecordSurprises } from "../lib/dnsBudget.js";
-import { CONTROL, SERVICES, assert, certInfo, http, postJson, rawTlsGet, short, sleep, tryHttp } from "../lib/harness.js";
+import { CONTROL, SERVICES, assert, certInfo, http, sanCovers, postJson, rawTlsGet, short, sleep, tryHttp } from "../lib/harness.js";
 import type { Group } from "./types.js";
 
 export function whoamiManifest(slug: string, extra: Record<string, unknown> = {}): string {
@@ -62,7 +62,7 @@ export const core: Group = {
     await rec.check("box presents a Let's Encrypt cert for its FQDN + per-box wildcard", () => {
       const c = certInfo(fqdn);
       assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer || "<none>"}`);
-      assert(c.sans.includes(fqdn) && c.sans.includes(`*.${fqdn}`), `sans=${c.sans.join(",")}`);
+      assert(sanCovers(c.sans, fqdn) && c.sans.includes(`*.${fqdn}`), `sans=${c.sans.join(",")}`);
       return c.sans.join(", ");
     });
     // Root wildcard (docs/wildcard-dns.md): the zone holds `*.<apex>` and the apex
