@@ -5,6 +5,7 @@
  * chain refresh (server-daemon bootChainRefresh.ts) both write exactly what
  * these functions return, so a box's boot chain can follow its release.
  */
+import { BOOT_FS_MOUNT_SH } from "./bootFsMount.js";
 import { APPROVED_BOOT_HOSTS, buildUnlockPremountScript, isBootHostName } from "./unlockPremount.js";
 
 export const UNLOCK_HOOK_PATH = "/etc/initramfs-tools/hooks/flagship-unlock";
@@ -355,17 +356,12 @@ log_stage() {
 }
 log_stage "premount start (ssid baked)"
 
-# The boot fs is found by label; at init-premount udev may not have settled the
-# by-label symlink yet, so wait for it (bounded ~10s) before mounting. Lines
-# logged before the mount accumulate in /run; the cat seeds them into the
-# persistent log once mounted, so the first line is never lost — an EMPTY
-# persistent log can only mean the premount never ran.
-_bdeadline=$(( $(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0) + 10 ))
-while [ ! -e /dev/disk/by-label/FLAGSHIP_BOOT ]; do
-  [ "$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 999)" -ge "$_bdeadline" ] && break
-  sleep 1
-done
-if mount /dev/disk/by-label/FLAGSHIP_BOOT "$FLAGSHIP_BOOTMNT" 2>/dev/null; then
+# The boot fs is found by label and needs ext4 loaded: see mount_boot_fs. Lines logged
+# before the mount accumulate in /run; the cat seeds them into the persistent log once
+# mounted, so the first line is never lost — an EMPTY persistent log can only mean the
+# premount never ran.
+${BOOT_FS_MOUNT_SH}
+if mount_boot_fs "$FLAGSHIP_BOOTMNT"; then
   cat "$FLAGSHIP_WIFI_LOG" >> "$FLAGSHIP_BOOTMNT/flagship-wifi.log" 2>/dev/null || true
   log_stage "boot fs mounted (persistent log live)"
 else

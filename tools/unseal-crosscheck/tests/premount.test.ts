@@ -257,7 +257,7 @@ function stage(s: Setup): string {
 function run(R: string, env: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   return new Promise((ok) => {
     const p = spawn("/bin/sh", [join(R, "premount.sh")], {
-      env: { PATH: `${join(R, "stub")}:/usr/bin:/bin:/usr/sbin:/sbin`, FLAGSHIP_PREMOUNT_TEST_ROOT: R, ...env },
+      env: { PATH: `${join(R, "stub")}:/usr/bin:/bin:/usr/sbin:/sbin`, FLAGSHIP_PREMOUNT_TEST_ROOT: R, FLAGSHIP_BOOT_WAIT_SECS: "0", ...env },
     });
     let out = "";
     p.stdout.on("data", (d) => (out += d));

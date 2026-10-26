@@ -277,7 +277,7 @@ function stage(name: string, o: { mode: "auto" | "approve"; policy: "strict" | "
 function premount(R: string, env: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   return new Promise((ok) => {
     const p = spawn("/bin/sh", [join(R, "premount.sh")], {
-      env: { PATH: `${join(R, "stub")}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`, FLAGSHIP_PREMOUNT_TEST_ROOT: R, TPM2TOOLS_TCTI: TCTI, ...env },
+      env: { PATH: `${join(R, "stub")}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`, FLAGSHIP_PREMOUNT_TEST_ROOT: R, FLAGSHIP_BOOT_WAIT_SECS: "0", TPM2TOOLS_TCTI: TCTI, ...env },
     });
     let out = "";
     p.stdout.on("data", (d) => (out += d));

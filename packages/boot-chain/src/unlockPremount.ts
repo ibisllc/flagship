@@ -9,6 +9,8 @@
 /** Boot workers a box may be told to talk to (the host of /boot/flagship-boot-host). */
 export const APPROVED_BOOT_HOSTS: readonly string[] = ["boot.flagshipserver.com", "boot.gym.flagshipserver.com"];
 
+import { BOOT_FS_MOUNT_SH } from "./bootFsMount.js";
+
 const HOST_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 
 export function isBootHostName(h: string): boolean {
@@ -74,7 +76,8 @@ REQUEST_LIFETIME_SECS="$(bounded "\${FLAGSHIP_RELAY_REQUEST_SECS:-}" "$REQUEST_L
 LOCK_ONCE_MOUNT="$R/run/flagship-lockmnt"
 LOCK_ONCE="no"
 mkdir -p "$LOCK_ONCE_MOUNT" 2>/dev/null || true
-if mount /dev/disk/by-label/FLAGSHIP_BOOT "$LOCK_ONCE_MOUNT" 2>/dev/null; then
+${BOOT_FS_MOUNT_SH}
+if mount_boot_fs "$LOCK_ONCE_MOUNT"; then
     if [ -f "$LOCK_ONCE_MOUNT/flagship-lock-once" ]; then LOCK_ONCE="yes"; fi
 else
     LOCK_ONCE_MOUNT=""
