@@ -151,9 +151,13 @@ export async function ensureSandboxNetwork(
     info = null;
   }
   if (!info) {
-    await cmd.run("docker", networkCreateArgs(spec.network, spec)).catch(() => {});
+    let why = "";
+    await cmd.run("docker", networkCreateArgs(spec.network, spec)).catch((e: Error) => {
+      why = e.message;
+    });
     info = await inspectNetwork(cmd, spec.network);
-    if (!info) throw new Error(`docker network ${spec.network} could not be created`);
+    // The create's own error is what says why (a bridge name taken, no netavark, a bad option): keep it.
+    if (!info) throw new Error(`docker network ${spec.network} could not be created${why ? `: ${why.replace(/\s+/g, " ").slice(0, 400)}` : ""}`);
   }
   if (podman) await ensureHostBridge(cmd, info);
   return info;
