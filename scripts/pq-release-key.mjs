@@ -455,21 +455,22 @@ export async function cmdInit(args, out) {
   try {
     const mldsaPubHex = Buffer.from(mldsa65PublicKey(seed)).toString("hex");
     const keyId = releasePqKeyId(ed.pubHex, mldsaPubHex);
-    writeEncrypted(keyFile, vault.encrypt(seed), false);
-    out(`Encrypted seed written to ${keyFile}`);
+    // Sign first: the card connection opened to read the public key goes stale if the age plugin runs (and
+    // touches the YubiKey) before the signature, and nothing is written to disk until the signature is in.
     out("Signing the release-key binding: approve on the YubiKey (PIN, then touch).");
     const file = path.join(bindingsDir(root), `${keyId.slice(0, 16)}.json`);
+    const binding = await signReleasePqBinding({ ed25519PubHex: ed.pubHex, mldsaPubHex, issuedAt: Date.now() }, ed.sign, seed);
+    const { bindings } = verifyReleasePqBindings([binding], { version: 1, keyIds: [keyId], requirePqAfter: null }, Date.now());
+    if (bindings.length !== 1) throw new Error("the new binding does not verify");
+    writeEncrypted(keyFile, vault.encrypt(seed), false);
+    out(`Encrypted seed written to ${keyFile}`);
     try {
-      const binding = await signReleasePqBinding({ ed25519PubHex: ed.pubHex, mldsaPubHex, issuedAt: Date.now() }, ed.sign, seed);
-      const { bindings } = verifyReleasePqBindings([binding], { version: 1, keyIds: [keyId], requirePqAfter: null }, Date.now());
-      if (bindings.length !== 1) throw new Error("the new binding does not verify");
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, JSON.stringify(binding, null, 2) + "\n");
     } catch (e) {
-      // No paper backup exists yet, so the file holds a seed nobody can recover or use: drop it, or the next
-      // attempt is refused ("a release key was already made") and the owner is stuck.
+      // No paper backup exists yet, so the file holds a seed nobody can recover: drop it, or the next attempt is
+      // refused ("a release key was already made").
       fs.rmSync(keyFile, { force: true });
-      fs.rmSync(file, { force: true });
       throw e;
     }
     out(`Binding written to ${file}`);
