@@ -7,13 +7,17 @@ name: iso-seed (reproducible build check)
 # and anyone can re-run it to check the seed .com serves.
 on:
   push:
-    branches: [feat/phone-usb-burn]
+    branches: [main, "release/**"]
     paths:
       - "iso-seed/**"
+      - "tools/usb-burn-qemu/**"
+      - "packages/flagship-builder/src/**"
       - ".github/workflows/iso-seed.yml"
   pull_request:
     paths:
       - "iso-seed/**"
+      - "tools/usb-burn-qemu/**"
+      - "packages/flagship-builder/src/**"
       - ".github/workflows/iso-seed.yml"
   workflow_dispatch:
 
@@ -60,3 +64,55 @@ jobs:
             i=$((i+1))
           done > chunks.txt
           exit 1
+      - name: Keep the seed for publishing (scripts/publish-iso-seed.sh)
+        if: matrix.container == 'debian:13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: iso-seed-amd64
+          path: seed.iso
+          retention-days: 30
+          if-no-files-found: error
+
+  # A burned stick boots and installs (docs/iso-seed-and-on-device-burn.md): the seed (with the
+  # installer on the serial port, a test-only build) gets the real generated preseed on its FLAGSHIP
+  # partition exactly as the phone writes it, boots in QEMU as a USB disk through its own BIOS entry,
+  # and debian-installer must find the partition, run the recipe's late command and power off. The
+  # server coming online against a gym .com is the live lane's job (tools/live-e2e/lanes/luks-burn.ts).
+  burned-stick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      BASE_URL: https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso
+      BASE_SHA256: 65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7
+      WORK: ${{ github.workspace }}/stick-work
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc -b packages/flagship-builder
+      - name: Tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils mtools xorriso >/dev/null
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_opt_mode"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+          ls -l /dev/kvm || echo "no KVM: the install will run emulated (slow)"
+      - name: Stock base, test seed, burned stick
+        run: |
+          mkdir -p "$WORK"
+          curl -fsSL --retry 3 -o "$WORK/base.iso" "$BASE_URL"
+          echo "$BASE_SHA256  $WORK/base.iso" | sha256sum -c -
+          FLAGSHIP_SEED_CONSOLE=ttyS0 bash iso-seed/build-seed.sh "$WORK/base.iso" "$WORK/seed.iso"
+          node tools/usb-burn-qemu/make-stick.mjs "$WORK/seed.iso" "$WORK/stick.img"
+      - name: Boot the stick and install
+        run: bash tools/usb-burn-qemu/run.sh "$WORK/stick.img"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: burned-stick-serial
+          path: stick-work/serial.log
+          if-no-files-found: ignore

@@ -432,16 +432,19 @@ EOF
 meta_publish() {
   TITLE="Publish the VM appliances that are ready (amd64 now, arm64 when green)"
   RUNBOOK="9. Publish the VM appliances"
-  WHAT="Finds the newest green vm-appliance runs on main built after the endorsement, checks the boot smoke, uploads each arch to R2 and commits the manifests. arm64 may be skipped here and published in phase B."
+  WHAT="Finds the newest green vm-appliance runs on main built after the endorsement, checks the boot smoke, uploads each arch to R2 and commits the manifests. arm64 may be skipped here and published in phase B. Also publishes the phone USB boot seed (reproducible build, GitHub release asset) and switches on FLAGSHIP_ISO_SEED, so the Android burn works from the .com deploy after this."
   read -r -d '' CMDS <<'EOF' || true
 gh run list --workflow vm-appliance.yml --branch main --status success
 gh api repos/{owner}/{repo}/actions/runs/<id>/artifacts       (arch = artifact name)
 gh run view <id> --json jobs                                  (the boot smoke step must be success)
 bash scripts/publish-vm-appliance.sh <run id>                 (once per arch; uploads parts to R2 flagship-iso/)
 git add -- apps/web/public/downloads/FlagshipVMAppliance-<arch>.json && git commit -m "Publish the rebuilt VM appliances"
+gh workflow run iso-seed.yml --ref main                       (rebuilds the USB seed and checks the pin; wait for green)
+bash scripts/publish-iso-seed.sh <iso-seed run id>            (GitHub release asset + FLAGSHIP_ISO_SEED in apps/com/wrangler.toml)
+git add -- apps/com/wrangler.toml && git commit -m "Publish the USB seed"
 git push origin HEAD:main
 EOF
-  GATE="Each manifest's commit equals the endorsed release; its sha256 is recorded for the status file."
+  GATE="Each manifest's commit equals the endorsed release; its sha256 is recorded for the status file. FLAGSHIP_ISO_SEED is set with the seed's real url and size, and the seed sha256 equals the iso-seed.yml pin."
   ROLLBACK="Re-point the manifest at the previous commit and redeploy .com; old R2 parts stay."
 }
 meta_redeployA() {
