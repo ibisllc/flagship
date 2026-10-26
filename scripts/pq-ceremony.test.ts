@@ -29,6 +29,12 @@ describe("parsers", () => {
     expect(C.parseShowPub(`key id:         ${id}  (NOT pinned)`)).toEqual({ keyId: id, pinned: false });
     expect(C.parseShowPub(`key id:         ${id}  (pinned)`)).toEqual({ keyId: id, pinned: true });
   });
+  it("reads a YubiKey's firmware and judges it", () => {
+    expect(C.parseFirmware("Device type: YubiKey 5C NFC\nFirmware version: 5.7.2\n")).toEqual([5, 7, 2]);
+    expect(C.parseFirmware("nothing")).toBeNull();
+    expect([[5, 7, 2], [5, 2, 0], [4, 3, 7]].every(C.firmwareOk)).toBe(true);
+    expect([[3, 3, 0], [5, 1, 9], null].some(C.firmwareOk as never)).toBe(false);
+  });
   it("tells a private file from a readable one", () => {
     const f = path.join(os.tmpdir(), `pqc-mode-${process.pid}`);
     fs.writeFileSync(f, "x", { mode: 0o600 });

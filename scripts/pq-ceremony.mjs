@@ -34,6 +34,9 @@ export function parseGenerate(out) {
   const stub = STUB_RE.exec(out)?.[0] ?? null;
   return { recipient, stub };
 }
+/** `ykman info` → firmware like 5.7.2 (null when it is not a YubiKey 4/5 style output). */
+export const parseFirmware = (out) => /Firmware version:\s*(\d+)\.(\d+)\.(\d+)/.exec(out)?.slice(1, 4).map(Number) ?? null;
+export const firmwareOk = (v) => !!v && (v[0] > 5 || (v[0] === 5 && v[1] >= 2) || v[0] === 4);
 export const parseKeyId = (out) => /Release key id: ([0-9a-f]{64})/.exec(out)?.[1] ?? null;
 export const parseVerifyOk = (out) => /OK: the inserted YubiKey opens the release key ([0-9a-f]{16})/.exec(out)?.[1] ?? null;
 export const parseRestored = (out) => /Restored release key ([0-9a-f]{16})/.exec(out)?.[1] ?? null;
@@ -218,6 +221,12 @@ async function stepIdentities(ctx) {
       continue;
     }
     await io.pause(`Plug in YubiKey ${i + 1} and UNPLUG every other YubiKey. Press Enter`);
+    const info = await exec("ykman", ["info"], { cwd: repo, quiet: true });
+    if (info.code === 0) {
+      const fw = parseFirmware(info.stdout);
+      if (fw) (firmwareOk(fw) ? io.ok : io.warn)(`YubiKey firmware ${fw.join(".")}${firmwareOk(fw) ? "" : " is old: age-plugin-yubikey needs a YubiKey 4 or 5"}`);
+      if (/PIV/i.test(info.stdout) && !/PIV\s+Enabled/i.test(info.stdout)) io.warn("PIV does not look enabled on this YubiKey (ykman config usb --enable PIV)");
+    } else io.note("ykman could not read this YubiKey (fine; the age plugin will tell us)");
     let got = null;
     const listed = await exec("age-plugin-yubikey", ["--identity"], { cwd: repo, quiet: true });
     if (listed.code === 0 && parseGenerate(listed.stdout).recipient) {

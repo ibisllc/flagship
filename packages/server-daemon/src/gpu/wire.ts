@@ -6,11 +6,10 @@
  * they have a CPU path.
  */
 import { existsSync } from "node:fs";
-import { readFileSync } from "node:fs";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
-import { activeEngine, loadArchV2Config } from "../engine/engine.js";
+import { activeEngine } from "../engine/engine.js";
 import { runSetupStep } from "../privileged.js";
 import type { FilePairedSessionStore } from "../pairedSessionStore.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
@@ -85,17 +84,6 @@ export function startAccelerators(o: { dataDir: string; pairedSessions: FilePair
   const { broker, apps } = acceleratorCore(o.dataDir);
   started = { broker, apps, http: buildAcceleratorsHttp({ broker, denyCompanion: (r) => denyCompanionWrite(o.pairedSessions, r), approvals: () => gpuApprovals() }) };
   return started;
-}
-
-/** The engine the box runs apps on, as root sees it (the engine-active record, else the switch). */
-export function rootEngine(): "docker" | "podman" {
-  try {
-    const t = readFileSync("/var/lib/flagship/engine-active", "utf8").trim();
-    if (t === "podman" || t === "docker") return t;
-  } catch {
-    // no record yet
-  }
-  return loadArchV2Config().engine === "podman" ? "podman" : "docker";
 }
 
 /**

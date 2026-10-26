@@ -83,6 +83,24 @@ export function activeEngine(): EngineKind {
   return active;
 }
 
+/** The box's own record of the engine it runs apps on (written by the installer and the migration). */
+export const ENGINE_ACTIVE_RECORD = "/var/lib/flagship/engine-active";
+
+/**
+ * The engine as a root process that did not run the daemon's boot sees it: the engine-active record, else the
+ * switch file. The root setup steps (gVisor, the GPU broker, ...) are separate processes, so without this they
+ * assumed Docker on every Podman box and failed with "Docker didn't pick up the gVisor runtime".
+ */
+export function rootEngine(record: string = ENGINE_ACTIVE_RECORD, config: () => ArchV2Config = loadArchV2Config): EngineKind {
+  try {
+    const t = readFileSync(record, "utf8").trim();
+    if (t === "podman" || t === "docker") return t;
+  } catch {
+    // no record yet
+  }
+  return config().engine === "podman" ? "podman" : "docker";
+}
+
 export class EngineTranslationError extends Error {}
 
 const FORMAT_MAP: Readonly<Record<string, Readonly<Record<string, string>>>> = {

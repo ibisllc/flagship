@@ -22,12 +22,12 @@ import { DATA_UNIT_FILE } from "./dataLayer/stack.js";
 import { buildDebugSystem, realDebugCommandRunner } from "./debugAccessGate.js";
 import { writeFileDurable } from "./durableFile.js";
 import { showServerCode } from "./enrollment.js";
-import { loadArchV2Config } from "./engine/engine.js";
+import { loadArchV2Config, rootEngine, setActiveEngine } from "./engine/engine.js";
 import { installHealthReporter } from "./healthReporter.js";
 import { installRustStack } from "./rustStack/install.js";
 import { DAEMON_USER, SERVER_CODE_REQUEST } from "./privileged.js";
 import { ensureWasiRuntime } from "./wasi/install.js";
-import { installGpudFromRelease, rootEngine } from "./gpu/wire.js";
+import { installGpudFromRelease } from "./gpu/wire.js";
 import { WASI_APPS_DIR, WASI_MODULES_DIR } from "./wasi/unit.js";
 import { localCommandRunner, type CommandRunner } from "./serviceRunner.js";
 import { repairSystemPackages } from "./systemRepair.js";
@@ -208,6 +208,8 @@ if (invokedDirectly) {
     console.error("usage (as root, from flagship-privd): setup.js <step>");
     process.exit(2);
   }
+  // A root step is its own process: it never ran the daemon's boot, so it must learn the engine from the box's record.
+  setActiveEngine(rootEngine());
   step().then(
     (r) => {
       console.log(JSON.stringify(r ?? null));
