@@ -17,7 +17,9 @@
  *     would never apply.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
@@ -164,4 +166,60 @@ describe("per-recipe preseed is a valid debconf-set-selections body", () => {
       expect(bad, `debconf-set-selections would choke on:\n${bad.join("\n")}`).toEqual([]);
     });
   }
+});
+
+describe("the stub's early_command takes the recipe from the FLAGSHIP partition only", () => {
+  const cfg = readFileSync(join(__dirname, "..", "..", "..", "iso-seed", "preseed.cfg"), "utf8");
+  const early = cfg.slice(cfg.indexOf("d-i preseed/early_command string")).replace(/^d-i preseed\/early_command string /, "").replace(/\\\n/g, "\n");
+
+  /** devices: [name, label, hasPreseed]. Returns what d-i would have been handed, and whether it halted. */
+  function run(devices: Array<[string, string, boolean]>): { applied: string[]; halted: boolean } {
+    const dir = mkdtempSync(join(tmpdir(), "stub-"));
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const w = (n: string, body: string) => {
+      writeFileSync(join(bin, n), `#!/bin/sh\n${body}\n`);
+      chmodSync(join(bin, n), 0o755);
+    };
+    const labels = "for a in \"$@\"; do d=$a; done; " + devices.map(([d, l]) => `[ "$d" = ${d} ] && echo ${l}`).join("; ");
+    const withFile = devices.filter(([, , has]) => has).map(([d]) => d).join(" ");
+    w("list-devices", `[ "$1" = partition ] && echo ${devices.map(([d]) => d).join(" ")}; exit 0`);
+    w("blkid", `${labels}; exit 0`);
+    w("mount", `dev=; prev=; for a in "$@"; do dev=$prev; prev=$a; done; echo "$dev" > "${dir}/mounted"; mkdir -p "${dir}/run"; case " ${withFile} " in *" $dev "*) echo "# from $dev" > "${dir}/run/preseed.cfg";; *) rm -f "${dir}/run/preseed.cfg";; esac`);
+    w("umount", "exit 0");
+    w("debconf-set-selections", `cat "$1" >> "${dir}/applied"`);
+    w("sleep", "kill -TERM $PPID");
+    const script = early.replaceAll("/run/flagship", join(dir, "run")).replace("mkdir -p " + join(dir, "run"), `mkdir -p "${join(dir, "run")}"`);
+    let halted = false;
+    try {
+      execFileSync("/bin/sh", ["-c", script], { env: { PATH: `${bin}:/usr/bin:/bin` }, stdio: "pipe", timeout: 10_000 });
+    } catch (e) {
+      halted = (e as { signal?: string }).signal === "SIGTERM";
+    }
+    const applied = existsSync(join(dir, "applied")) ? readFileSync(join(dir, "applied"), "utf8").trim().split("\n") : [];
+    rmSync(dir, { recursive: true, force: true });
+    return { applied, halted };
+  }
+
+  it("loads the recipe from the one partition labelled FLAGSHIP", () => {
+    expect(run([["/dev/sda1", "FLAGSHIP", true]])).toEqual({ applied: ["# from /dev/sda1"], halted: false });
+  });
+  it("ignores another disk's FAT preseed.cfg, even one that enumerates first", () => {
+    expect(run([["/dev/sda1", "EFI", true], ["/dev/sdb3", "FLAGSHIP", true]])).toEqual({ applied: ["# from /dev/sdb3"], halted: false });
+  });
+  it("halts when nothing is labelled FLAGSHIP", () => {
+    expect(run([["/dev/sda1", "EFI", true]])).toEqual({ applied: [], halted: true });
+  });
+  it("halts when two partitions claim the label rather than choosing one", () => {
+    expect(run([["/dev/sda1", "FLAGSHIP", true], ["/dev/sdb3", "FLAGSHIP", true]])).toEqual({ applied: [], halted: true });
+  });
+});
+
+describe("the Wi-Fi script refuses text that could end its heredoc", () => {
+  it("rejects line breaks and control characters in the name or password", async () => {
+    const { wifiSetupScript } = await import("../src/userdata.js");
+    expect(() => wifiSetupScript("home", "pass\nFLAGSHIP_WPA_EOF\nreboot")).toThrow(/control characters/);
+    expect(() => wifiSetupScript("ho\rme", "pass")).toThrow(/control characters/);
+    expect(wifiSetupScript("home", "a long passphrase")).toContain("home");
+  });
 });

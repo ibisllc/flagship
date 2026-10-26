@@ -87,6 +87,10 @@ export interface LanListenerOptions {
   listAddresses?: () => string[];
   rescanMs?: number;
   maxConnections?: number;
+  /** Connections one source address may hold at once. */
+  maxPerSource?: number;
+  /** A tunnelled connection must show handshake progress (the box answered and the client replied) within this long. */
+  handshakeTimeoutMs?: number;
   headerTimeoutMs?: number;
   idleTimeoutMs?: number;
   log?: (msg: string) => void;
@@ -101,6 +105,9 @@ export interface LanListener {
 export async function startLanListener(o: LanListenerOptions): Promise<LanListener> {
   const listAddresses = o.listAddresses ?? (() => lanAddressesFromInterfaces(os.networkInterfaces()));
   const maxConnections = o.maxConnections ?? 256;
+  const maxPerSource = o.maxPerSource ?? 32;
+  const handshakeTimeoutMs = o.handshakeTimeoutMs ?? 20_000;
+  const perSource = new Map<string, number>();
   const headerTimeoutMs = o.headerTimeoutMs ?? 5_000;
   const idleTimeoutMs = o.idleTimeoutMs ?? 5 * 60_000;
   const log = o.log ?? ((m: string) => console.log(`[lan-direct] ${m}`));
@@ -113,8 +120,22 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
       client.destroy();
       return;
     }
+    // Everything on the LAN is one network, so a single host must not be able to fill the box's slots
+    // (the phone's way to the box when the internet is down is exactly this listener).
+    const source = client.remoteAddress ?? "?";
+    const held = perSource.get(source) ?? 0;
+    if (held >= maxPerSource) {
+      client.destroy();
+      return;
+    }
+    perSource.set(source, held + 1);
     open++;
-    client.once("close", () => open--);
+    client.once("close", () => {
+      open--;
+      const left = (perSource.get(source) ?? 1) - 1;
+      if (left <= 0) perSource.delete(source);
+      else perSource.set(source, left);
+    });
     client.on("error", () => client.destroy());
     client.setTimeout(headerTimeoutMs, () => client.destroy());
 
@@ -139,7 +160,21 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
     const pipe = (initial: Buffer): void => {
       client.removeListener("data", onData);
       client.pause();
+      // Slow-loris guard: a real handshake has the box answer and the client reply to that answer.
+      let boxAnswered = false;
+      let progressed = false;
+      const handshake = setTimeout(() => {
+        if (!progressed) client.destroy();
+      }, handshakeTimeoutMs);
+      handshake.unref();
+      client.once("close", () => clearTimeout(handshake));
+      client.on("data", () => {
+        if (boxAnswered) progressed = true;
+      });
       const upstream = net.connect(o.backendPort, "127.0.0.1", () => {
+        upstream.on("data", () => {
+          boxAnswered = true;
+        });
         client.setTimeout(idleTimeoutMs, () => client.destroy());
         if (initial.length > 0) upstream.write(initial);
         client.pipe(upstream);

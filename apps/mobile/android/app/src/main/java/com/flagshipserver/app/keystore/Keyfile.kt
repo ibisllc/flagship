@@ -49,6 +49,10 @@ object Keyfile {
 
     /** Floor only — surfaces enforce real passphrase strength in the UI. */
     const val MIN_PASSPHRASE = 8
+    /** A key file is untrusted input: its own Argon2 cost must not exhaust memory or time (m in KiB). */
+    private const val MAX_M = 1 shl 20
+    private const val MAX_T = 10
+    private const val MAX_P = 16
 
     data class Meta(
         val username: String,
@@ -238,7 +242,7 @@ object Keyfile {
         // accountId is optional; omitted ⇒ null in the AAD.
         val accountId = if (obj.has("accountId")) obj.optString("accountId") else null
 
-        if (m < 1 || t < 1 || p < 1 || saltHex.isEmpty() || username == null ||
+        if (m < 1 || t < 1 || p < 1 || m > MAX_M || t > MAX_T || p > MAX_P || saltHex.isEmpty() || username == null ||
             createdAt == null || nonceHex.isEmpty() || ciphertextHex.isEmpty()
         ) {
             throw KeyfileException("missing or malformed fields", KeyfileException.Code.MALFORMED)

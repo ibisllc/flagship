@@ -59,6 +59,30 @@ class IsoBaseCacheTest {
     }
 
     @Test
+    fun refusesAnImageThatIsNotInTheAppsOwnPin() {
+        val iso = ByteArray(1_000) { it.toByte() }
+        val http = FakeBuilderHttp(
+            postBody = orderJson(IsoManifestDownload("https://cdn/d.iso", sha256Hex(iso), "13.6", iso.size.toLong(), "")),
+            downloadBytes = iso,
+        )
+        val pinned = IsoBaseCache(IsoManifestClient(http, "https://test/api/iso-manifest"), http, dir, "1.0", setOf(sha256Hex(byteArrayOf(1))))
+        assertThrows(IsoCacheException::class.java) { kotlinx.coroutines.runBlocking { pinned.ensure() } }
+        assertTrue("nothing is downloaded or kept", dir.listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun takesAnImageThePinNames() = runTest {
+        val iso = ByteArray(1_000) { it.toByte() }
+        val sha = sha256Hex(iso)
+        val http = FakeBuilderHttp(
+            postBody = orderJson(IsoManifestDownload("https://cdn/d.iso", sha, "13.6", iso.size.toLong(), "")),
+            downloadBytes = iso,
+        )
+        val pinned = IsoBaseCache(IsoManifestClient(http, "https://test/api/iso-manifest"), http, dir, "1.0", setOf(sha))
+        assertArrayEquals(iso, pinned.ensure().readBytes())
+    }
+
+    @Test
     fun shaMismatchDiscardsAndThrows() {
         val iso = ByteArray(5000) { 1 }
         val http = FakeBuilderHttp(

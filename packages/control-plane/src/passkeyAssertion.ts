@@ -189,6 +189,7 @@ export function parseCoseKey(cose: Uint8Array): PasskeyPublicKey {
   if (kty === 3 && alg === COSE_ALG_RS256) {
     const n = bytes(-1), e = bytes(-2);
     if (n.length < 256) throw new Error("RSA keys under 2048 bits are refused");
+    if (e.length !== 3 || e[0] !== 1 || e[1] !== 0 || e[2] !== 1) throw new Error("RSA keys must use the public exponent 65537");
     return { alg, n, e };
   }
   throw new Error("unsupported passkey key type or algorithm");

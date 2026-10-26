@@ -20,6 +20,10 @@ describe("the USB seed pins agree", () => {
     }
   });
 
+  it("is the one seed the Android app trusts (SeedPins.kt)", () => {
+    expect(read("apps/mobile/android/app/src/main/java/com/flagshipserver/app/builder/iso/SeedPins.kt")).toContain(`"${seedSha}"`);
+  });
+
   it("builds the seed on the stock base .com serves to every other burn", () => {
     const toml = read("apps/com/wrangler.toml");
     const manifest = /^FLAGSHIP_ISO_MANIFEST = '(.*)'$/m.exec(toml)![1]!;

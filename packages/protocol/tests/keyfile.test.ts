@@ -147,3 +147,14 @@ describe("keyfile vectors (test-vectors/keyfile/vectors.json)", () => {
     expect(code).toBe(c.error);
   });
 });
+
+describe("a hostile key file's own KDF cost", () => {
+  it("is refused before any key derivation", () => {
+    const file = wrapUmkToKeyfile(generateUMK(), PASS, META, FAST);
+    for (const kdf of [{ m: 2 ** 31 }, { t: 1000 }, { p: 1000 }, { m: -1 }]) {
+      const j = JSON.parse(file);
+      j.kdf = { ...j.kdf, ...kdf };
+      expect(() => unwrapUmkFromKeyfile(JSON.stringify(j), PASS), JSON.stringify(kdf)).toThrow(/out of range/);
+    }
+  });
+});

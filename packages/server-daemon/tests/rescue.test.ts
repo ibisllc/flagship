@@ -662,6 +662,17 @@ describe("admin devices, revocation and rotation without .com", () => {
     expect(rig.revocations.has(dev.grant.grantId)).toBe(true);
   });
 
+  it("junk posted to the revoke and rotation routes cannot make the admin key's own revocation wait", async () => {
+    rig = await startBox({ adminPinned: true });
+    const dev = admitAdminDevice(rig, 33, 3 * 86_400_000);
+    await rig.refreshBook();
+    for (let i = 0; i < 400; i++) {
+      await request(rig.port, "POST", "/api/rescue/revoke", { body: { junk: i } });
+      await request(rig.port, "POST", "/api/rescue/admin-root-rotation", { body: { junk: i } });
+    }
+    expect((await request(rig.port, "POST", "/api/rescue/revoke", { body: revoke(dev.grant.grantId) })).status).toBe(200);
+  });
+
   it("a revocation survives a restart of the box", async () => {
     rig = await startBox({ adminPinned: true });
     const dev = admitAdminDevice(rig, 32, 3 * 86_400_000);
@@ -884,6 +895,20 @@ describe("basic offline control with .com unreachable", () => {
     expect(rig.controls).toEqual([`app-stop ${SERVICE}`, `app-start ${SERVICE}`, `app-restart ${SERVICE}`]);
     expect(rig.notes.map((n) => n.kind)).toEqual(expect.arrayContaining(["server.offline.app-stopped", "server.offline.app-started", "server.offline.app-restarted"]));
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("an admin device granted minutes ago cannot sign offline orders, even on a session the root opened", async () => {
+    const fresh = admitAdminDevice(rig, 41, 2 * 3_600_000);
+    await rig.refreshBook();
+    const { token } = await openSession(rig.port, adminRoot);
+    const sn = await sessionNonceOf(rig.port, token);
+    const r = await sendControl(rig.port, token, controlOrder(sn, "app-stop", SERVICE), fresh.key);
+    expect(r.status).toBe(403);
+    expect(rig.controls).toEqual([]);
+    clock += 23 * 3_600_000;
+    const again = await openSession(rig.port, adminRoot);
+    const sn2 = await sessionNonceOf(rig.port, again.token);
+    expect((await sendControl(rig.port, again.token, controlOrder(sn2, "app-stop", SERVICE), fresh.key)).status).toBe(200);
   });
 
   it("restarts and shuts down the server after the reply has gone out", async () => {

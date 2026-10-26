@@ -162,6 +162,12 @@ describe("integrity", () => {
     expect(none?.status).toBe(400);
   });
 
+  it("a mixed-case server name is refused, so a lock can never sit under a name the lease lookup misses", async () => {
+    const o = { ...ownerOrder(1, "suspend"), serverDomain: "Kitchen.alice.flagship.services" };
+    expect((await ownerSet(o))?.status).toBe(400);
+    expect((await boxSet({ ...boxOrder(1, 1), serverDomain: "KITCHEN.alice.flagship.services" }))?.status).toBe(400);
+  });
+
   it("a record that cannot be written is reported as not durable, never as locked", async () => {
     deps.bootSuspensions = { get: async () => undefined, apply: async () => { throw new Error("down"); } };
     const r = await ownerSet(ownerOrder(1, "suspend"));

@@ -93,7 +93,13 @@ function aadBytes(env: {
   return new TextEncoder().encode(s);
 }
 
+/** A key file is untrusted input: its own Argon2 cost parameters must not be able to exhaust memory or time. */
+export const KEYFILE_ARGON_MAX: ArgonParams = { m: 1 << 20, t: 10, p: 16 };
+
 function deriveKey(passphrase: string, salt: Bytes, p: ArgonParams): Bytes {
+  if (![p.m, p.t, p.p].every(Number.isInteger) || p.m < 1 || p.t < 1 || p.p < 1 || p.m > KEYFILE_ARGON_MAX.m || p.t > KEYFILE_ARGON_MAX.t || p.p > KEYFILE_ARGON_MAX.p) {
+    throw new KeyfileError("key file KDF parameters out of range", "malformed");
+  }
   return argon2id(new TextEncoder().encode(passphrase), salt, {
     m: p.m,
     t: p.t,

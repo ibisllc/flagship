@@ -177,6 +177,54 @@ describe("startLanListener (live sockets)", () => {
   });
 });
 
+describe("startLanListener against a host that hogs the slots", () => {
+  let backend: net.Server;
+  let lan: LanListener;
+  const silent: net.Socket[] = [];
+  afterEach(async () => {
+    await lan.close();
+    for (const s of silent.splice(0)) s.destroy();
+    await new Promise<void>((r) => backend.close(() => r()));
+  });
+  async function setup(extra: Record<string, number>): Promise<number> {
+    // A box whose TLS server never answers: no handshake can make progress.
+    backend = net.createServer((s) => void silent.push(s));
+    await new Promise<void>((r) => backend.listen(0, "127.0.0.1", () => r()));
+    lan = await startLanListener({ port: 0, backendPort: (backend.address() as net.AddressInfo).port, zone: ZONE, listAddresses: () => ["127.0.0.1"], log: () => {}, ...extra });
+    return lan.endpoints()[0]!.port;
+  }
+  const closedWithin = (c: net.Socket, ms: number) =>
+    new Promise<boolean>((resolve) => {
+      const t = setTimeout(() => resolve(false), ms);
+      c.on("close", () => (clearTimeout(t), resolve(true)));
+    });
+
+  it("closes a connection that starts a handshake and never completes it", async () => {
+    const port = await setup({ handshakeTimeoutMs: 150 });
+    const c = net.connect(port, "127.0.0.1", () => c.write(Buffer.from([0x16, 0x03])));
+    expect(await closedWithin(c, 2000)).toBe(true);
+  });
+
+  it("lets one source hold only so many connections, and frees the slot when one closes", async () => {
+    const port = await setup({ maxPerSource: 2, handshakeTimeoutMs: 60_000 });
+    const hold = () => {
+      const c = net.connect(port, "127.0.0.1", () => c.write(Buffer.from([0x16])));
+      c.on("error", () => {});
+      return c;
+    };
+    const a = hold(), b = hold();
+    await new Promise((r) => setTimeout(r, 100));
+    const third = hold();
+    expect(await closedWithin(third, 1000)).toBe(true);
+    a.destroy();
+    await new Promise((r) => setTimeout(r, 100));
+    const fourth = hold();
+    expect(await closedWithin(fourth, 300)).toBe(false);
+    b.destroy();
+    fourth.destroy();
+  });
+});
+
 describe("startLanListener never takes the box down", () => {
   it("binds what it can, and says once why an address stays relay-only", async () => {
     const logs: string[] = [];

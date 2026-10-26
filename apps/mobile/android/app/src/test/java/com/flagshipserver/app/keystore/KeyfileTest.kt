@@ -103,6 +103,21 @@ class KeyfileTest {
     }
 
     @Test
+    fun unwrap_refusesHostileKdfCostBeforeDerivingAnything() {
+        val meta = Keyfile.Meta("alice", null, "2026-05-25T12:00:00.000Z")
+        val text = Keyfile.wrap(ByteArray(32) { 3 }, "the-right-pass", meta, FAST)
+        for (field in listOf("m" to "2147483647", "t" to "1000", "p" to "1000")) {
+            val hostile = text.replace(Regex("\"${field.first}\":\\s*\\d+"), "\"${field.first}\": ${field.second}")
+            try {
+                Keyfile.unwrap(hostile, "the-right-pass")
+                fail("expected MALFORMED for ${field.first}")
+            } catch (e: Keyfile.KeyfileException) {
+                assertEquals(Keyfile.KeyfileException.Code.MALFORMED, e.code)
+            }
+        }
+    }
+
+    @Test
     fun unwrap_wrongPassphraseThrowsBadPassphrase() {
         val seed = ByteArray(32) { 3 }
         val meta = Keyfile.Meta("alice", null, "2026-05-25T12:00:00.000Z")

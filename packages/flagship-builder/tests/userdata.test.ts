@@ -1141,13 +1141,16 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     // "premount start" is logged before the boot-fs mount; the accumulator is
     // seeded into the persistent log after the mount so the early lines survive.
     const startLog = b.indexOf('log_stage "premount start (ssid baked)"');
-    const mountAt = b.indexOf("mount /dev/disk/by-label/FLAGSHIP_BOOT", startLog);
+    const mountAt = b.indexOf('if mount_boot_fs "$FLAGSHIP_BOOTMNT"', startLog);
     expect(startLog).toBeGreaterThan(0);
     expect(mountAt).toBeGreaterThan(0);
     expect(startLog).toBeLessThan(mountAt);
     // Bounded wait for udev to settle the by-label symlink before mounting.
-    expect(b).toContain("while [ ! -e /dev/disk/by-label/FLAGSHIP_BOOT ]; do");
-    expect(b).toContain("+ 10 ))");
+    // ext4 is not loaded at init-premount, so it is loaded and named (packages/boot-chain bootFsMount.ts).
+    expect(b).toContain("while [ ! -e \"$_bnode\" ]; do");
+    expect(b).toContain("FLAGSHIP_BOOT_WAIT_SECS:-10");
+    expect(b).toContain("modprobe ext4");
+    expect(b).toContain('mount -t ext4 "$_bnode" "$1"');
     // The mount RESULT is logged either way, and the /run prefix is seeded in.
     expect(b).toContain('log_stage "boot fs mounted (persistent log live)"');
     expect(b).toContain('log_stage "boot fs mount FAILED — log stays in /run (survives pivot)"');
@@ -1178,7 +1181,7 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     // Every native builder runs the bundled engine, so this one pin covers them.
     const s = buildInitramfsWifiBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "3fecc9dad65ab1868f729569b5876b16576fe8f6e9521a458ad6e44f42cf383b",
+      "cc48321058213d513fa86648678b3cc001ce2330ce2756acb1fa4120d47475e5",
     );
   });
 });
@@ -1295,6 +1298,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
+      // Re-pinned 2026-10-25: the premounts mount FLAGSHIP_BOOT as ext4 after waiting for its link (bootFsMount.ts).
       // Re-pinned 2026-10-24: the bootstrap carries the verifier with the artifact's PQ half.
       // Re-pinned 2026-10-23 (architecture v2 milestone 5): new boxes install Podman and
       // write the box switch with the Rust path on (engineSetup.ts).
@@ -1312,7 +1316,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "8ee209f94218a1165687c602a494eebceb513a6074ab2872ba3c82ffd6731b95",
+      "2da940679a88b4fa750f12b7a2f0957c7f7d831f2e60ea9abc2f29a2367b93d9",
     );
   });
 

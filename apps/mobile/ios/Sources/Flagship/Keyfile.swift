@@ -94,6 +94,10 @@ public enum Keyfile {
     /// file's m (memory KiB) / t (iterations) / p (parallelism) onto the
     /// vendored reference C library via FlagshipArgon2. Pinned to argon2id + V13.
     static func deriveKey(passphrase: String, salt: Data, params: ArgonParams) throws -> SymmetricKey {
+        // A key file is untrusted input: its own cost parameters must not exhaust memory or trap on conversion.
+        guard (1...(1 << 20)).contains(params.m), (1...10).contains(params.t), (1...16).contains(params.p) else {
+            throw KeyfileError.malformed("KDF parameters out of range")
+        }
         let digest = try Argon2.hash(
             password: Data(passphrase.utf8),
             salt: salt,

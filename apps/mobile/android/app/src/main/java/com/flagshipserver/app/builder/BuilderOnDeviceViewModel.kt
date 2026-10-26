@@ -151,6 +151,7 @@ class BuilderOnDeviceViewModel(
                             http = OkHttpBuilderHttp(),
                             cacheDir = File(getApplication<Application>().cacheDir, "flagship-builder"),
                             builderVersion = builderVersion(),
+                            pinnedSha256 = com.flagshipserver.app.builder.iso.SeedPins.SHA256,
                         )
                         withContext(Dispatchers.IO) {
                             cache.ensure { phase ->

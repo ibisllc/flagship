@@ -62,12 +62,6 @@ const MAX_OUTSTANDING_NONCES = 256;
 const MAX_SESSIONS = 4;
 const WINDOW_MS = 60_000;
 const MAX_HELLOS_PER_WINDOW = 300;
-/**
- * Revocations and rotations are self-authenticating and the admin's way to cut a stolen device off,
- * so a flood of hellos (which anyone who can reach the relay can send) must never use their budget.
- * Each costs one signature check, so this only bounds that work.
- */
-const MAX_INTAKES_PER_WINDOW = 6000;
 const NOTE_REFUSALS_EVERY_MS = 10_000;
 
 /** The only backup routes a rescue token opens: method, rescue-relative path. */
@@ -187,7 +181,6 @@ export function buildRescue(deps: RescueDeps) {
     for (const [k, v] of sessions) if (v.signer.kind === "device" && v.signer.grantId === grantId) sessions.delete(k);
   });
   let hellos: number[] = [];
-  let intakes: number[] = [];
   let lastRefusalNote = -Infinity;
 
   const sweep = () => {
@@ -196,7 +189,6 @@ export function buildRescue(deps: RescueDeps) {
     for (const [k, v] of sessions) if (v.exp <= t) sessions.delete(k);
     for (const [k, at] of spentControl) if (t - at > 2 * RESCUE_HELLO_TTL_MS) spentControl.delete(k);
     hellos = hellos.filter((x) => t - x < WINDOW_MS);
-    intakes = intakes.filter((x) => t - x < WINDOW_MS);
   };
 
   function hello(req: HttpRequest): HttpResponse {
@@ -284,16 +276,8 @@ export function buildRescue(deps: RescueDeps) {
     return json(200, { token, expiresAt });
   }
 
-  /** Both intake routes are self-authenticating (a signature under the pinned admin root) and only ever remove authority. */
-  function intakeAllowed(): boolean {
-    if (intakes.length >= MAX_INTAKES_PER_WINDOW) return false;
-    intakes.push(now());
-    return true;
-  }
-
   async function revoke(req: HttpRequest): Promise<HttpResponse> {
     if (!deps.revocations) return err(404, "not available");
-    if (!intakeAllowed()) return err(429, "too many tries: wait a minute", "rate-limited");
     let b: { revoke?: Partial<RevokeDeviceCapabilityGrant>; signatureHex?: unknown };
     try {
       b = JSON.parse(req.body.toString("utf8")) as typeof b;
@@ -317,7 +301,6 @@ export function buildRescue(deps: RescueDeps) {
 
   async function rotate(req: HttpRequest): Promise<HttpResponse> {
     if (!deps.rotations) return err(404, "not available");
-    if (!intakeAllowed()) return err(429, "too many tries: wait a minute", "rate-limited");
     let b: { rotations?: Array<Partial<RotationEntry>> };
     try {
       b = JSON.parse(req.body.toString("utf8")) as typeof b;
@@ -358,6 +341,7 @@ export function buildRescue(deps: RescueDeps) {
     spentControl.set(order.nonce, now());
     const signer = deps.authorize(offlineControlCanonicalBytes(order), Buffer.from(b.signatureHex, "hex"), b.pqSignature);
     if (!signer) return refuseControl("not signed by this server's owner key, or not with the post-quantum signature this server requires");
+    if (signer.kind === "device" && cooling > 0 && now() - signer.grantIssuedAt < cooling) return refuseControl("this device became an admin too recently");
     const n = CONTROL_NOTES[order.action];
     if (order.action === "server-restart" || order.action === "server-shutdown") {
       note(n.kind, n.detail(order.target));

@@ -2766,7 +2766,7 @@ export class D1BootSuspensionStorage implements BootSuspensionStorage {
   async get(serverDomain: string): Promise<BootSuspensionState | undefined> {
     const r = await this.db
       .prepare("SELECT * FROM boot_suspensions WHERE server_domain = ?1")
-      .bind(serverDomain)
+      .bind(serverDomain.toLowerCase())
       .first<BootSuspensionRow>();
     return r ? rowToBootSuspension(r) : undefined;
   }
@@ -2873,7 +2873,7 @@ export class D1WatchBootKeyStorage implements WatchBootKeyStorage {
     try {
       const sus = await this.db
         .prepare("SELECT suspended FROM boot_suspensions WHERE server_domain = ?1")
-        .bind(serverDomain)
+        .bind(serverDomain.toLowerCase())
         .first<{ suspended: number }>();
       if (sus && sus.suspended !== 0) return undefined;
     } catch {
@@ -2946,7 +2946,7 @@ export class D1BoxSealedLeaseStorage implements BoxSealedLeaseStorage {
     try {
       const sus = await this.db
         .prepare("SELECT suspended FROM boot_suspensions WHERE server_domain = ?1")
-        .bind(serverDomain)
+        .bind(serverDomain.toLowerCase())
         .first<{ suspended: number }>();
       if (sus && sus.suspended !== 0) return undefined;
     } catch {

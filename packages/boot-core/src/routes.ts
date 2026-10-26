@@ -321,7 +321,7 @@ async function handleSetSuspension(
   const b = body as { order?: Record<string, unknown>; signature?: unknown };
   const o = b?.order ?? {};
   if (
-    typeof o.serverDomain !== "string" || o.serverDomain.length === 0 ||
+    typeof o.serverDomain !== "string" || o.serverDomain.length === 0 || o.serverDomain !== o.serverDomain.toLowerCase() ||
     !Number.isSafeInteger(o.epoch) || !Number.isSafeInteger(o.seq) || !Number.isSafeInteger(o.issuedAt) ||
     (o.action !== "suspend" && o.action !== "resume") ||
     typeof o.reason !== "string" || !SUSPENSION_REASONS.has(o.reason) ||

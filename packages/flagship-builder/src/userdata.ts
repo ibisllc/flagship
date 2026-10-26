@@ -272,6 +272,10 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
  * (UserData.wifiSetupScript) — keep the two in lockstep (cross-language sha pin).
  */
 export function wifiSetupScript(ssid: string, password: string): string {
+  // Typed by the owner at burn time; a line break could end the heredoc that carries them and run as root in the target.
+  if (/[\u0000-\u001f\u007f]/.test(ssid) || /[\u0000-\u001f\u007f]/.test(password)) {
+    throw new Error("the Wi-Fi name and password can't contain control characters or line breaks");
+  }
   return `#!/bin/bash
 set -u
 ROOT="\${1:-}"

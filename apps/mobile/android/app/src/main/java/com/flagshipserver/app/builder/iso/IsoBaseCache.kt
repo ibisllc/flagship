@@ -20,6 +20,8 @@ class IsoBaseCache(
     private val http: BuilderHttp,
     private val cacheDir: File,
     private val builderVersion: String,
+    /** When set, only an image with one of these SHA-256s is ever used or downloaded: the app's own pin, so `.com` is not the only thing vouching for the image. */
+    private val pinnedSha256: Set<String>? = null,
     private val log: (String) -> Unit = {},
 ) {
     sealed interface Phase {
@@ -36,7 +38,9 @@ class IsoBaseCache(
     /** Inspect the cache, ask the server, obey, return the local base-ISO file. */
     suspend fun ensure(progress: (Phase) -> Unit = {}): File {
         if (!cacheDir.exists()) cacheDir.mkdirs()
-        val existing = existingCachedIso(cacheDir)
+        val existing = existingCachedIso(cacheDir)?.takeIf { cached ->
+            pinnedSha256 == null || sha256OfFile(cached.file) in pinnedSha256
+        }
 
         // (a) Inspect + compute sha256.
         val current: IsoManifestCurrent? = if (existing != null) {
@@ -65,6 +69,9 @@ class IsoBaseCache(
             log("base-iso: server ordered no change — keeping ${existing.file.path}")
             progress(Phase.Ready(existing.file.path, sha, fromCache = true))
             return existing.file
+        }
+        if (pinnedSha256 != null && order.sha256.lowercase() !in pinnedSha256) {
+            throw IsoCacheException("the server offered an image this app does not trust (sha256 ${order.sha256.take(12)}…). Nothing was downloaded.")
         }
         return download(order, progress)
     }
