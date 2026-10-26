@@ -110,15 +110,18 @@ class GymLiveAccountTest : GymBase() {
     /** Device report 2026-10-18 (A-8): a build with no live pairing relay says
      *  so plainly instead of failing with the in-memory relay's error. */
     @Test
-    fun addADeviceSaysItIsNotAvailableYetWithoutALiveRelay() {
+    fun addADeviceOnALiveBackendStartsTheRealPairingNotTheMock() {
+        // A debug build on a real backend pairs over the live relay like a release build (Variant.devicePairingRelays);
+        // here the backend is unreachable, so the real start fails and offers Try again. Never the mock relay.
         launchLive("settings")
         waitUntilExists("settings-title")
         tap("settings-trusted-devices")
         waitUntilExistsDesc("trusted-devices-add", timeoutMs = 30_000)
         tapDesc("trusted-devices-add")
-        waitUntilExistsDesc("device-pairing-unavailable")
-        waitText("Adding a device from this phone isn't available yet. Use the web app.")
+        waitUntilExistsDesc("add-device")
+        waitUntilExists("add-device-retry", timeoutMs = 30_000)
+        assertTrue(descCount("device-pairing-unavailable") == 0)
         assertTrue(textCount("MockDevicePairingRelay") == 0)
-        gymShot("add-device-unavailable")
+        gymShot("add-device-live-unreachable")
     }
 }

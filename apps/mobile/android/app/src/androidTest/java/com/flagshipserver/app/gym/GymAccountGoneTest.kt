@@ -34,9 +34,9 @@ class GymAccountGoneTest : GymBase() {
         assertEquals("This account was removed", textOfTag("account-gone-title"))
         assertEquals("This account no longer exists on Flagship. This can happen after a reset.", textOfTag("account-gone-body"))
         assertEquals("Account: smoketest", textOfTag("account-gone-name"))
-        // The restore hint, then Create, then the quiet Remove; no rescue button.
+        // The restore hint, then (this device holds the admin root) the rescue button, Create, and the quiet Remove.
         assertEquals("If you saved a backup of your servers, you can restore it into a new account.", textOfTag("account-gone-restore-hint"))
-        assertEquals("no rescue button", 0, tagCount("account-gone-save"))
+        assertEquals("a device that holds the account's admin key offers to save the servers' data", 1, tagCount("account-gone-save"))
         assertEquals("Create a new account", textOfTag("account-gone-create"))
         assertEquals("Remove it from this device", textOfTag("account-gone-remove"))
         // The error toasts stay quiet while the screen is up.
