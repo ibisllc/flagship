@@ -135,6 +135,7 @@ impl ReleaseKeyVerifier {
             b.subject_id == CATALOG_BINDING_SUBJECT && b.ed25519_pub_hex.eq_ignore_ascii_case(&key)
         }) {
             let wire = BindingWire {
+                version: u8::try_from(w.v).unwrap_or(0),
                 role: &w.role,
                 subject_id: &w.subject_id,
                 ed25519_pub_hex: &w.ed25519_pub_hex,

@@ -93,6 +93,7 @@ fn companion(v: &Value) -> Result<CompanionWire<'_>, ReleaseError> {
 
 fn binding(v: &Value) -> BindingWire<'_> {
     BindingWire {
+        version: v["v"].as_u64().unwrap() as u8,
         role: v["role"].as_str().unwrap(),
         subject_id: v["subjectId"].as_str().unwrap(),
         ed25519_pub_hex: v["ed25519PubHex"].as_str().unwrap(),

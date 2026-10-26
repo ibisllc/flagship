@@ -43,6 +43,8 @@ const NOT_BOX_PURPOSES = [
   "flagship/service-access-mode/v2",
   "flagship/update-order/v1",
   "flagship/app-copy/v1",
+  // The compact release-key binding is signed by the maintainers' YubiKey and the release ML-DSA seed, never by a box.
+  "flagship/pq-key-binding/v2",
 ];
 
 describe("box signing purposes", () => {

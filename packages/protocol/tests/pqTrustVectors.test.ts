@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   PqTrustError,
   canonicalPqKeyBinding,
+  canonicalPqKeyBindingV2,
   hybridSign,
+  hybridSigMessage,
   legacyPolicyState,
   messagePurpose,
   signPqKeyBinding,
@@ -62,6 +64,31 @@ describe("pq key bindings (shared vectors)", () => {
     const secret = signerSecret("A");
     const w = signPqKeyBinding(st, (m) => hybridSign(secret, messagePurpose(m), m, { deterministic: true }));
     expect(w).toEqual(v.wire);
+  });
+
+  describe("compact release-key bindings (wire v2)", () => {
+    for (const v of V.bindingsV2.valid) {
+      it(`verifies ${v.name}`, () => {
+        expect(v.wire.v).toBe(2);
+        expect(Buffer.from(canonicalPqKeyBindingV2(v.wire)).toString("hex")).toBe(v.statementHex);
+        const b = verifyPqKeyBinding(v.wire, v.expect as PqBindingExpectation);
+        expect(b.mldsaPubHex).toBe(v.wire.mldsaPubHex);
+      });
+      it(`${v.name}: the message a YubiKey signs stays far below its ~3 KB PIV limit`, () => {
+        const pk = unhex(v.wire.ed25519PubHex + v.wire.mldsaPubHex);
+        const m = hybridSigMessage(pk, "flagship/pq-key-binding/v2", canonicalPqKeyBindingV2(v.wire));
+        expect(m.length).toBeLessThan(2_500);
+      });
+    }
+    for (const v of V.bindingsV2.invalid) {
+      it(`refuses ${v.name} with ${v.code}`, () => {
+        expect(code(() => verifyPqKeyBinding(v.wire, v.expect as PqBindingExpectation))).toBe(v.code);
+      });
+    }
+    it("v1 stays the statement of every other role: a v2 statement is refused for them", () => {
+      const w = V.bindings.valid.find((x: { name: string }) => x.name === "box-stk").wire;
+      expect(code(() => canonicalPqKeyBindingV2(w))).toBe("binding-role");
+    });
   });
 
   describe("gate", () => {

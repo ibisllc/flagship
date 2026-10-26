@@ -152,6 +152,7 @@ async function main(): Promise<void> {
     { name: "pinned", binding: "release", pin: "main", expect: { verified: [REL.keyId], errors: [] as string[] } },
     { name: "not-pinned", binding: "other", pin: "main", expect: { verified: [] as string[], errors: ["pq-key-not-pinned"] } },
     { name: "wrong-role", binding: "release-as-box-stk", pin: "main", expect: { verified: [] as string[], errors: ["binding-role"] } },
+    { name: "compact-on-another-role", binding: "compact-as-box-stk", pin: "main", expect: { verified: [] as string[], errors: ["binding-malformed"] } },
     { name: "tampered", binding: "release-tampered", pin: "main", expect: { verified: [] as string[], errors: ["bad-signature"] } },
   ];
 
@@ -166,7 +167,10 @@ async function main(): Promise<void> {
   const bindings: Record<string, PqKeyBindingWire | unknown> = {
     release: binding,
     other: otherBinding,
-    "release-as-box-stk": { ...binding, role: "box-stk" },
+    // Relabelled to another role on the v1 wire: refused for its role. On the compact v2 wire (the release key's own
+    // form) any other role is malformed, which "compact-as-box-stk" pins.
+    "release-as-box-stk": { ...binding, v: 1, role: "box-stk" },
+    "compact-as-box-stk": { ...binding, role: "box-stk" },
     "release-tampered": { ...binding, issuedAt: BOUND_AT + 1 },
   };
   const companions: Record<string, ReleaseEndorsementPqWire> = { C: pqC };

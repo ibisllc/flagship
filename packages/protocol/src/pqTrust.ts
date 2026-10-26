@@ -32,6 +32,15 @@ import {
 import type { Bytes } from "./types.js";
 
 export const TAG_PQ_KEY_BINDING = "flagship/pq-key-binding/v1";
+/**
+ * The compact `release-key` binding (wire `v: 2`). The v1 statement repeats the 1,952-byte ML-DSA public key as
+ * hex, which makes the Ed25519 half's message 6,095 bytes, more than a YubiKey's PIV applet accepts (about 3,043
+ * bytes); a release key's Ed25519 half lives on a YubiKey. v2 drops the repeat: M' already contains the hybrid
+ * public key (`hybridSigMessage`), so both halves still sign over both keys. Only the `release-key` role may use it.
+ *
+ *   flagship/pq-key-binding/v2|<role>|<subjectId>|<ed25519PubHex>|<issuedAt>
+ */
+export const TAG_PQ_KEY_BINDING_V2 = "flagship/pq-key-binding/v2";
 export const PQ_BINDING_ROLES = ["account-irk", "admin-root", "device", "box-stk", "boot-key", "release-key"] as const;
 export type PqBindingRole = (typeof PQ_BINDING_ROLES)[number];
 /** How far ahead of the verifier's clock a binding may be dated. */
@@ -84,7 +93,7 @@ export interface PqKeyBindingStatement {
 }
 
 export interface PqKeyBindingWire extends PqKeyBindingStatement {
-  v: 1;
+  v: 1 | 2;
   /** The hybrid signature (3373 bytes), lowercase hex. */
   signature: string;
 }
@@ -101,12 +110,29 @@ function checkStatement(s: PqKeyBindingStatement): void {
   if (!Number.isSafeInteger(s.issuedAt) || s.issuedAt < 0) fail("binding-malformed");
 }
 
-/** The statement both keys sign. */
+/** The statement both keys sign (wire v1). */
 export function canonicalPqKeyBinding(s: PqKeyBindingStatement): Bytes {
   checkStatement(s);
   return new TextEncoder().encode(
     [TAG_PQ_KEY_BINDING, s.role, s.subjectId, s.ed25519PubHex, s.mldsaPubHex, String(s.issuedAt)].join("|"),
   );
+}
+
+/** The compact statement (wire v2, see TAG_PQ_KEY_BINDING_V2); `release-key` only. */
+export function canonicalPqKeyBindingV2(s: PqKeyBindingStatement): Bytes {
+  checkStatement(s);
+  if (s.role !== "release-key") fail("binding-role");
+  return new TextEncoder().encode([TAG_PQ_KEY_BINDING_V2, s.role, s.subjectId, s.ed25519PubHex, String(s.issuedAt)].join("|"));
+}
+
+/** The statement of a binding of this wire version. */
+export function canonicalPqKeyBindingOf(s: PqKeyBindingStatement, version: 1 | 2): Bytes {
+  return version === 2 ? canonicalPqKeyBindingV2(s) : canonicalPqKeyBinding(s);
+}
+
+/** The hybrid purpose tag a binding of this wire version is signed under. */
+export function pqKeyBindingPurpose(version: 1 | 2): string {
+  return version === 2 ? TAG_PQ_KEY_BINDING_V2 : TAG_PQ_KEY_BINDING;
 }
 
 /** `ed25519 || mldsa65`, the hybrid suite's public key for this binding. */
@@ -161,7 +187,7 @@ export function pqKeyBindingFromWire(w: unknown): PqKeyBindingWire {
   if (typeof w !== "object" || w === null || Array.isArray(w)) return fail("binding-malformed");
   const o = w as Record<string, unknown>;
   const keys = Object.keys(o).sort().join(",");
-  if (keys !== "ed25519PubHex,issuedAt,mldsaPubHex,role,signature,subjectId,v" || o.v !== 1) fail("binding-malformed");
+  if (keys !== "ed25519PubHex,issuedAt,mldsaPubHex,role,signature,subjectId,v" || (o.v !== 1 && o.v !== 2)) fail("binding-malformed");
   if (typeof o.signature !== "string" || o.signature.length > 2 * 65536 || !HEX.test(o.signature)) fail("binding-malformed");
   const s = {
     role: o.role as PqBindingRole,
@@ -175,7 +201,9 @@ export function pqKeyBindingFromWire(w: unknown): PqKeyBindingWire {
   if (typeof s.issuedAt !== "number" || !Number.isSafeInteger(s.issuedAt) || s.issuedAt < 0) fail("binding-malformed");
   if (!isPqBindingRole(s.role)) fail("binding-role");
   if (typeof s.subjectId !== "string" || !SUBJECT.test(s.subjectId)) fail("binding-subject");
-  return { v: 1, ...s, signature: o.signature as string };
+  // The compact form exists for release keys (a YubiKey signs the Ed25519 half); every other role stays on v1.
+  if (o.v === 2 && s.role !== "release-key") fail("binding-malformed");
+  return { v: o.v as 1 | 2, ...s, signature: o.signature as string };
 }
 
 /**
@@ -199,7 +227,7 @@ export function verifyPqKeyBinding(wire: unknown, expect: PqBindingExpectation):
     fail("bad-public-key");
   }
   try {
-    hybridVerify(pk, TAG_PQ_KEY_BINDING, canonicalPqKeyBinding(w), sig);
+    hybridVerify(pk, pqKeyBindingPurpose(w.v), canonicalPqKeyBindingOf(w, w.v), sig);
   } catch (e) {
     if (e instanceof PqHybridError && e.code === "bad-public-key") fail("bad-public-key");
     fail("bad-signature");

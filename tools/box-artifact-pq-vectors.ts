@@ -13,7 +13,7 @@ import { dirname, resolve } from "node:path";
 import { canonicalBoxArtifact, signBoxArtifact, verifyBoxArtifact, type BoxArtifactManifest, type BoxArtifactSignature } from "../packages/protocol/src/boxArtifact.js";
 import { BOX_ARTIFACT_PQ_BINDING_SUBJECT, boxArtifactV1Digest, signBoxArtifactPq, type BoxArtifactPqPin } from "../packages/protocol/src/boxArtifactPq.js";
 import { hybridSign, hybridSigKeygen, pqKeyId, SUITE_HYBRID_SIG_ED25519_MLDSA65_V1 } from "../packages/protocol/src/pqHybrid.js";
-import { signPqKeyBinding, TAG_PQ_KEY_BINDING } from "../packages/protocol/src/pqTrust.js";
+import { canonicalPqKeyBindingV2, signPqKeyBinding, TAG_PQ_KEY_BINDING } from "../packages/protocol/src/pqTrust.js";
 
 const OUT = resolve(import.meta.dirname, "..", "packages/protocol/test-vectors/box-artifact/pq-vectors.json");
 const hex = (b: Uint8Array): string => Buffer.from(b).toString("hex");
@@ -48,6 +48,12 @@ const signers = [[0x31, 0x41], [0x32, 0x42], [0x33, 0x43]].map(([a, b]) => {
   const classical = signBoxArtifact(manifest, fill(a!));
   return { edSeed: hex(fill(a!)), mldsaSeed: hex(fill(b!)), ed25519PubHex, keyId: hex(pqKeyId(SUITE_HYBRID_SIG_ED25519_MLDSA65_V1, publicKey)), binding, classical, pq: signBoxArtifactPq(v1, secretKey, publicKey) };
 });
+// The compact (wire v2) form of the same bindings: what a YubiKey-held release key actually produces.
+const compactBindings = signers.map((s) => {
+  const st = { role: "release-key" as const, subjectId: BOX_ARTIFACT_PQ_BINDING_SUBJECT, ed25519PubHex: s.ed25519PubHex, mldsaPubHex: s.binding.mldsaPubHex, issuedAt: NOW };
+  const { secretKey } = hybridSigKeygen(fill(parseInt(s.edSeed.slice(0, 2), 16)), fill(parseInt(s.mldsaSeed.slice(0, 2), 16)));
+  return { v: 2 as const, ...st, signature: hex(hybridSign(secretKey, "flagship/pq-key-binding/v2", canonicalPqKeyBindingV2(st), { deterministic: true })) };
+});
 const trust = { keys: signers.map((s) => s.ed25519PubHex), threshold: 2 };
 const pin: BoxArtifactPqPin = { version: 1, keyIds: signers.slice(0, 2).map((s) => s.keyId).concat(signers[2]!.keyId), legacyManifests: [] };
 const full = (i: number): BoxArtifactSignature => ({ ...signers[i]!.classical, pq: signers[i]!.pq });
@@ -67,6 +73,11 @@ const cases: Case[] = [
   { name: "pinned: a key that is not in the pin", signatures: [full(0), full(1)], pin: { ...pin, keyIds: [signers[0]!.keyId] }, bindings, expect: { ok: false, code: "pq-signature-required" } },
   { name: "pinned: a binding with a forged signature", signatures: [full(0), full(1)], pin, bindings: [bindings[0], { ...bindings[1], signature: flip(bindings[1]!.signature) }], expect: { ok: false, code: "pq-signature-required" } },
   { name: "pinned: a binding for another purpose", signatures: [full(0), full(1)], pin, bindings: [bindings[0], { ...bindings[1], subjectId: "flagship-release" }], expect: { ok: false, code: "pq-signature-required" } },
+  { name: "pinned: compact (v2) release-key bindings", signatures: [full(0), full(1)], pin, bindings: compactBindings, expect: { ok: true } },
+  { name: "pinned: a compact binding with a forged signature", signatures: [full(0), full(1)], pin, bindings: [compactBindings[0], { ...compactBindings[1], signature: flip(compactBindings[1]!.signature) }], expect: { ok: false, code: "pq-signature-required" } },
+  { name: "pinned: a compact binding whose signature is the v1 form", signatures: [full(0), full(1)], pin, bindings: [compactBindings[0], { ...compactBindings[1], signature: bindings[1]!.signature }], expect: { ok: false, code: "pq-signature-required" } },
+  { name: "pinned: a v1 binding relabelled as compact", signatures: [full(0), full(1)], pin, bindings: [compactBindings[0], { ...bindings[1], v: 2 }], expect: { ok: false, code: "pq-signature-required" } },
+  { name: "pinned: a compact binding for another purpose", signatures: [full(0), full(1)], pin, bindings: [compactBindings[0], { ...compactBindings[1], subjectId: "flagship-release" }], expect: { ok: false, code: "pq-signature-required" } },
   { name: "pinned: a manifest signed before the cut-over", signatures: [bare(0), bare(1)], pin: { ...pin, legacyManifests: [boxArtifactV1Digest(v1)] }, bindings: [], expect: { ok: true } },
   { name: "pinned: still too few signers", signatures: [full(0)], pin, bindings, expect: { ok: false, code: "not-enough-signatures" } },
 ];

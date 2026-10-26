@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { canonicalCaEndorsement } from "@ibisllc/maintainers";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { classifyReleaseEndorsements, gateCaLeasesPq, signBoxArtifact, verifyBoxArtifact, type ReleasePqPin } from "@flagship/protocol";
+import { classifyReleaseEndorsements, gateCaLeasesPq, mldsa65PublicKey, signBoxArtifact, signReleasePqBinding, verifyBoxArtifact, type ReleasePqPin } from "@flagship/protocol";
 import * as K from "./pq-release-key.mjs";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -45,6 +45,37 @@ describe("paper code", () => {
     const bad = [...rows];
     bad[1] = (bad[1]![0] === "A" ? "B" : "A") + bad[1]!.slice(1);
     expect(() => K.seedFromPaper(bad)).toThrow(/row 2 has a typo/);
+  });
+});
+
+// The one thing fake YubiKeys cannot tell us: a real YubiKey's PIV applet takes about 3 KB of message per signature
+// (measured on firmware 5.7.4: 3,000 bytes sign, the 6,095-byte v1 binding is refused). Every message the Ed25519
+// half signs must stay well under that.
+describe("messages handed to the YubiKey stay inside its PIV limit", () => {
+  const PIV_SAFE = 2_700;
+  it("every release-key binding (the compact v2 form)", async () => {
+    const seed = new Uint8Array(32).fill(7);
+    const edSeed = new Uint8Array(32).fill(9);
+    const pubHex = Buffer.from(ed25519.getPublicKey(edSeed)).toString("hex");
+    const sizes: number[] = [];
+    const ed = { pubHex, sign: async (m: Uint8Array) => (sizes.push(m.length), ed25519.sign(m, edSeed)) };
+    for (const subject of ["flagship-ca-track", "flagship-box-artifact"]) {
+      const b = await K.signSubjectBinding(subject, ed, seed);
+      expect(b.v).toBe(2);
+    }
+    expect(sizes).toHaveLength(2);
+    for (const n of sizes) expect(n).toBeLessThan(PIV_SAFE);
+  });
+  it("the ceremony's own release binding (init)", async () => {
+    const seed = new Uint8Array(32).fill(7);
+    const edSeed = new Uint8Array(32).fill(9);
+    const pubHex = Buffer.from(ed25519.getPublicKey(edSeed)).toString("hex");
+    const mldsaPubHex = Buffer.from(mldsa65PublicKey(seed)).toString("hex");
+    let size = 0;
+    const b = await signReleasePqBinding({ ed25519PubHex: pubHex, mldsaPubHex, issuedAt: Date.now() }, async (m) => (size = m.length, ed25519.sign(m, edSeed)), seed);
+    expect(b.v).toBe(2);
+    expect(size).toBeGreaterThan(0);
+    expect(size).toBeLessThan(PIV_SAFE);
   });
 });
 

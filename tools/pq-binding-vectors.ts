@@ -13,7 +13,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { hybridSigKeygen, hybridSign, hybridSigMessage } from "../packages/protocol/src/pqHybrid.js";
-import { canonicalPqKeyBinding, messagePurpose, type PqKeyBindingStatement, type PqKeyBindingWire } from "../packages/protocol/src/pqTrust.js";
+import { canonicalPqKeyBinding, canonicalPqKeyBindingV2, messagePurpose, type PqKeyBindingStatement, type PqKeyBindingWire } from "../packages/protocol/src/pqTrust.js";
 import { canonicalBootKeyBindingV2 } from "../packages/protocol/src/bootKey.js";
 import { canonicalDaemonStatusReport } from "../packages/protocol/src/daemonStatus.js";
 
@@ -116,6 +116,45 @@ const invalid: Array<{ name: string; wire: unknown; expect: Record<string, unkno
   { name: "identity-ed25519-key", wire: { ...stk, ed25519PubHex: "01" + "00".repeat(31) }, expect: exp({ ...stk, ed25519PubHex: "01" + "00".repeat(31) }), code: "bad-public-key" },
 ].map((c) => ({ ...c, wire: JSON.parse(JSON.stringify(c.wire)) as unknown }));
 
+// ── compact release-key bindings (wire v2): the YubiKey-signable form, see TAG_PQ_KEY_BINDING_V2 ──
+function bind2(s: Signer, subjectId: string, issuedAt = ISSUED): PqKeyBindingWire {
+  const st: PqKeyBindingStatement = { role: "release-key", subjectId, ed25519PubHex: s.ed25519PubHex, mldsaPubHex: s.mldsaPubHex, issuedAt };
+  return { v: 2, ...st, signature: hsign(s, canonicalPqKeyBindingV2(st)) };
+}
+const validV2 = [
+  { name: "release-endorsement", wire: bind2(A, "flagship-release") },
+  { name: "ca-lease", wire: bind2(B, "flagship-ca-track") },
+  { name: "box-artifact", wire: bind2(C, "flagship-box-artifact") },
+].map((v) => ({ ...v, statementHex: hex(canonicalPqKeyBindingV2(v.wire)), expect: exp(v.wire, { minIssuedAt: ISSUED }) }));
+const rel = validV2[0]!.wire;
+const relSt: PqKeyBindingStatement = { role: "release-key", subjectId: rel.subjectId, ed25519PubHex: rel.ed25519PubHex, mldsaPubHex: rel.mldsaPubHex, issuedAt: rel.issuedAt };
+/** M' of the compact statement under `ed || ml`. */
+const mprime2 = (w: PqKeyBindingStatement) => hybridSigMessage(Buffer.from(w.ed25519PubHex + w.mldsaPubHex, "hex"), "flagship/pq-key-binding/v2", canonicalPqKeyBindingV2(w));
+const relPqSub = { ...rel, mldsaPubHex: C.mldsaPubHex };
+const relPqSubSig = rel.signature.slice(0, 128) + hex(hybridSign(new Uint8Array([...A.edSeed, ...C.mldsaSeed]), "flagship/pq-key-binding/v2", canonicalPqKeyBindingV2({ ...relSt, mldsaPubHex: C.mldsaPubHex }), { deterministic: true })).slice(128);
+const relEdSub = { ...rel, ed25519PubHex: C.ed25519PubHex };
+const relEdSubSig = hex(ed25519.sign(mprime2({ ...relSt, ed25519PubHex: C.ed25519PubHex }), C.edSeed)) + rel.signature.slice(128);
+const v1Sig = bind(A, "release-key", "flagship-release").signature;
+const invalidV2: Array<{ name: string; wire: unknown; expect: Record<string, unknown>; code: string }> = [
+  { name: "v1-signature-under-v2-wire", wire: { ...rel, signature: v1Sig }, expect: exp(rel), code: "bad-signature" },
+  { name: "v2-signature-under-v1-wire", wire: { ...rel, v: 1 }, expect: exp(rel), code: "bad-signature" },
+  { name: "pq-key-substituted", wire: { ...relPqSub, signature: relPqSubSig }, expect: exp(rel), code: "bad-signature" },
+  { name: "ed-key-substituted", wire: { ...relEdSub, signature: relEdSubSig }, expect: exp(relEdSub), code: "bad-signature" },
+  { name: "another-identity-pq-key", wire: { ...rel, mldsaPubHex: B.mldsaPubHex }, expect: exp(rel), code: "bad-signature" },
+  { name: "classical-only-signature", wire: { ...rel, signature: edsign(A, canonicalPqKeyBindingV2(relSt)) }, expect: exp(rel), code: "bad-signature" },
+  { name: "pq-half-zeroed", wire: { ...rel, signature: zero(rel.signature, 64, 3373) }, expect: exp(rel), code: "bad-signature" },
+  { name: "subject-relabelled", wire: { ...rel, subjectId: "flagship-ca-track" }, expect: exp({ ...rel, subjectId: "flagship-ca-track" }), code: "bad-signature" },
+  { name: "issued-at-relabelled", wire: { ...rel, issuedAt: ISSUED + 1 }, expect: exp(rel), code: "bad-signature" },
+  { name: "wrong-subject-expected", wire: rel, expect: exp(rel, { subjectId: "flagship-box-artifact" }), code: "binding-subject" },
+  { name: "not-the-trusted-ed25519-key", wire: rel, expect: exp(rel, { ed25519PubHex: B.ed25519PubHex }), code: "binding-key-mismatch" },
+  { name: "stale", wire: rel, expect: exp(rel, { minIssuedAt: ISSUED + 1 }), code: "binding-stale" },
+  { name: "dated-in-the-future", wire: rel, expect: exp(rel, { now: ISSUED - 300_001 }), code: "binding-future" },
+  // The compact form is the release-key role's only: any other role on wire v2 is malformed.
+  { name: "v2-on-device-role", wire: { ...bind(C, "device", "dev_7f3a9c"), v: 2 }, expect: exp({ role: "device", subjectId: "dev_7f3a9c", ed25519PubHex: C.ed25519PubHex }), code: "binding-malformed" },
+  { name: "v2-on-account-irk-role", wire: { ...bind(A, "account-irk", "alice"), v: 2 }, expect: exp({ role: "account-irk", subjectId: "alice", ed25519PubHex: A.ed25519PubHex }), code: "binding-malformed" },
+  { name: "version-3", wire: { ...rel, v: 3 }, expect: exp(rel), code: "binding-malformed" },
+].map((c) => ({ ...c, wire: JSON.parse(JSON.stringify(c.wire)) as unknown }));
+
 // ── gate ──
 const status = canonicalDaemonStatusReport({
   serverDomain: SERVER,
@@ -195,6 +234,7 @@ const out = {
   now: NOW,
   signers: [A, B, C].map((s) => ({ name: s.name, edSeedHex: hex(s.edSeed), mldsaSeedHex: hex(s.mldsaSeed), ed25519PubHex: s.ed25519PubHex, mldsaPubHex: s.mldsaPubHex })),
   bindings: { valid, invalid },
+  bindingsV2: { valid: validV2, invalid: invalidV2 },
   gate,
 };
 const text = JSON.stringify(out, null, 2) + "\n";

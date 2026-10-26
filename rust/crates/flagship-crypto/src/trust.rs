@@ -25,6 +25,10 @@ use crate::sig::{
 };
 
 pub const TAG_PQ_KEY_BINDING: &str = "flagship/pq-key-binding/v1";
+/// The compact `release-key` binding (wire `v: 2`): the statement leaves out the ML-DSA public key, which
+/// the hybrid message already carries, so a YubiKey (about 3 KB of message in its PIV applet) can sign the
+/// Ed25519 half. Only the `release-key` role may use it. Twin of `TAG_PQ_KEY_BINDING_V2` in pqTrust.ts.
+pub const TAG_PQ_KEY_BINDING_V2: &str = "flagship/pq-key-binding/v2";
 /// How far ahead of the verifier's clock a binding may be dated (ms).
 pub const MAX_SKEW_MS: u64 = 300_000;
 const MAX_SAFE_INTEGER: u64 = (1 << 53) - 1;
@@ -137,6 +141,8 @@ fn subject_ok(s: &str) -> bool {
 /// A binding as it travels (all hex lowercase).
 #[derive(Clone, Copy, Debug)]
 pub struct BindingWire<'a> {
+    /// The wire version: 1, or 2 for the compact `release-key` statement.
+    pub version: u8,
     pub role: &'a str,
     pub subject_id: &'a str,
     pub ed25519_pub_hex: &'a str,
@@ -192,12 +198,37 @@ impl VerifiedBinding {
     }
 }
 
-/// The statement both keys sign.
+/// The statement both keys sign (wire version 1).
 ///
 /// # Errors
 /// [`TrustError::BindingRole`], [`TrustError::BindingSubject`] or
 /// [`TrustError::BindingMalformed`].
 pub fn canonical_binding(
+    role: &str,
+    subject_id: &str,
+    ed25519_pub_hex: &str,
+    mldsa_pub_hex: &str,
+    issued_at: u64,
+) -> Result<Vec<u8>, TrustError> {
+    canonical_binding_versioned(
+        1,
+        role,
+        subject_id,
+        ed25519_pub_hex,
+        mldsa_pub_hex,
+        issued_at,
+    )
+}
+
+/// The statement both keys sign, for wire `version` 1 or 2. Version 2 is the compact `release-key` form:
+/// `flagship/pq-key-binding/v2|<role>|<subjectId>|<ed25519PubHex>|<issuedAt>`.
+///
+/// # Errors
+/// [`TrustError::BindingRole`], [`TrustError::BindingSubject`] or
+/// [`TrustError::BindingMalformed`] (a version other than 1 or 2); version 2 on another role is
+/// [`TrustError::BindingRole`].
+pub fn canonical_binding_versioned(
+    version: u8,
     role: &str,
     subject_id: &str,
     ed25519_pub_hex: &str,
@@ -215,11 +246,20 @@ pub fn canonical_binding(
     if issued_at > MAX_SAFE_INTEGER {
         return Err(TrustError::BindingMalformed);
     }
-    Ok(format!(
-        "{TAG_PQ_KEY_BINDING}|{}|{subject_id}|{ed25519_pub_hex}|{mldsa_pub_hex}|{issued_at}",
-        role.as_str()
-    )
-    .into_bytes())
+    match version {
+        1 => Ok(format!(
+            "{TAG_PQ_KEY_BINDING}|{}|{subject_id}|{ed25519_pub_hex}|{mldsa_pub_hex}|{issued_at}",
+            role.as_str()
+        )
+        .into_bytes()),
+        2 if role == Role::ReleaseKey => Ok(format!(
+            "{TAG_PQ_KEY_BINDING_V2}|{}|{subject_id}|{ed25519_pub_hex}|{issued_at}",
+            role.as_str()
+        )
+        .into_bytes()),
+        2 => Err(TrustError::BindingRole),
+        _ => Err(TrustError::BindingMalformed),
+    }
 }
 
 /// Verifies a binding, in the same order as the TypeScript port.
@@ -230,6 +270,9 @@ pub fn verify_binding(
     w: &BindingWire<'_>,
     e: &Expectation<'_>,
 ) -> Result<VerifiedBinding, TrustError> {
+    if w.version != 1 && w.version != 2 {
+        return Err(TrustError::BindingMalformed);
+    }
     parse_lower_hex(w.signature_hex, 0, 1 << 16).map_err(|_| TrustError::BindingMalformed)?;
     let ed = parse_lower_hex(w.ed25519_pub_hex, ED25519_PK_LEN, ED25519_PK_LEN)
         .map_err(|_| TrustError::BindingMalformed)?;
@@ -239,6 +282,10 @@ pub fn verify_binding(
         return Err(TrustError::BindingMalformed);
     }
     let role = Role::parse(w.role)?;
+    // The compact form is the release-key role's only (same refusal code as the TypeScript parser).
+    if w.version == 2 && role != Role::ReleaseKey {
+        return Err(TrustError::BindingMalformed);
+    }
     if !subject_ok(w.subject_id) {
         return Err(TrustError::BindingSubject);
     }
@@ -269,14 +316,20 @@ pub fn verify_binding(
     let key = HybridVerifyingKey::from_bytes(&pk).map_err(|_| TrustError::BadPublicKey)?;
     let sig =
         parse_lower_hex(w.signature_hex, 0, 1 << 16).map_err(|_| TrustError::BindingMalformed)?;
-    let stmt = canonical_binding(
+    let stmt = canonical_binding_versioned(
+        w.version,
         w.role,
         w.subject_id,
         w.ed25519_pub_hex,
         w.mldsa_pub_hex,
         w.issued_at,
     )?;
-    key.verify(TAG_PQ_KEY_BINDING, &stmt, &sig)
+    let purpose = if w.version == 2 {
+        TAG_PQ_KEY_BINDING_V2
+    } else {
+        TAG_PQ_KEY_BINDING
+    };
+    key.verify(purpose, &stmt, &sig)
         .map_err(|_| TrustError::BadSignature)?;
     let ed25519_pub = <[u8; ED25519_PK_LEN]>::try_from(ed.as_slice())
         .map_err(|_| TrustError::BindingMalformed)?;

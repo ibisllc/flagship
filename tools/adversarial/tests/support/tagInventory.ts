@@ -17,6 +17,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   // ---- bespoke (envelopeForgery.hybrid.test.ts)
   "flagship/hybrid-sig/ed25519-mldsa65/v1": "bespoke AT-ENV-20 (splice, strip, purpose swap, key-half substitution)",
   "flagship/pq-key-binding/v1": "bespoke AT-ENV-21",
+  "flagship/pq-key-binding/v2": "bespoke AT-ENV-21f-j (compact release-key binding; version confusion, key substitution, role restriction, YubiKey message size)",
   "flagship/release-endorsement/v2": "bespoke AT-ENV-23; vectors releaseEndorsementPqVectors.test.ts (22 refusal cases)",
   "flagship/box-artifact/v2": "bespoke AT-ENV-24; vectors boxArtifactPq.test.ts",
   "flagship/signed-time/v1": "bespoke AT-ENV-25; signedTime.test.ts",

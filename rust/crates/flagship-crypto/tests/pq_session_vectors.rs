@@ -48,6 +48,7 @@ fn parties(v: &Value) -> Vec<Party> {
         .map(|p| {
             let b = &p["binding"];
             let w = BindingWire {
+                version: b["v"].as_u64().unwrap() as u8,
                 role: b["role"].as_str().unwrap(),
                 subject_id: b["subjectId"].as_str().unwrap(),
                 ed25519_pub_hex: b["ed25519PubHex"].as_str().unwrap(),

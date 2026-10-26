@@ -429,6 +429,33 @@ wire      = { v: 1, role, subjectId, ed25519PubHex, mldsaPubHex, issuedAt, signa
 - The ML-DSA seed is 32 fresh bytes from the OS RNG, never derived from the
   Ed25519 seed or any other key (§5.1, open question 8).
 
+### 9.1.1 The compact `release-key` binding (wire `v: 2`)
+
+The Ed25519 half of a hybrid signature signs the whole hybrid message M' (§5), which for a v1 binding is
+6,095 bytes: the statement repeats the 1,952-byte ML-DSA public key as 3,904 hex characters, and M' carries
+it again. The `release-key` role's Ed25519 key lives on a YubiKey, whose PIV applet takes about 3 KB of message
+per signature (measured on firmware 5.7.4: 3,000 bytes sign; the 6,095-byte statement is refused). So the
+release key uses a statement without the repeat; M' still contains `ed25519_pk || mldsa65_pk`, so both halves
+still sign over both keys:
+
+```
+statement = "flagship/pq-key-binding/v2|<role>|<subjectId>|<ed25519PubHex>|<issuedAt>"
+signature = hybrid-sig(sk, purpose = "flagship/pq-key-binding/v2", payload = statement)
+wire      = { v: 2, role, subjectId, ed25519PubHex, mldsaPubHex, issuedAt, signature }
+```
+
+- Only `role: "release-key"` may use `v: 2`; any other role on `v: 2` is `binding-malformed`. Every other
+  role stays on v1, and v1 release-key bindings keep verifying. No verifier tries one version after the other:
+  the wire's `v` picks the statement and the purpose tag, and a different `v` is refused.
+- The purpose tag differs, so a v1 signature is not a v2 binding and the reverse (vectors
+  `bindingsV2.invalid`, adversarial AT-ENV-21g).
+- The message the YubiKey signs is about 2,190 bytes for a binding, and 2,273-2,535 for the per-release
+  companions (release endorsement, CA lease, box artifact); `scripts/pq-release-key.test.ts` fails if any of them
+  grows past 2,700.
+- Ports: TypeScript `pqTrust.ts` (`canonicalPqKeyBindingV2`), Rust `flagship-crypto` `trust.rs`
+  (`canonical_binding_versioned`), the box installer's `installer/verify-box-artifact.sh`; vectors
+  `bindingsV2` in `test-vectors/pq-binding/vectors.json` and the compact cases of `box-artifact/pq-vectors.json`.
+
 ### 9.2 Verification, in order (TS, Rust and webapp agree on every code)
 
 The verifier supplies what it already trusts: `role`, `subjectId`, the

@@ -884,10 +884,11 @@ export function vaultFromFlags({ fakeYubikey, identities = [] }) {
 
 /**
  * The `release-key` binding of the release key for another subject (the CA track, the box
- * artifact): the same Ed25519 token and ML-DSA seed, a statement naming that subject.
+ * artifact): the same Ed25519 token and ML-DSA seed, a statement naming that subject. Compact (wire v2): the
+ * YubiKey signs the Ed25519 half, and its PIV applet takes about 3 KB of message (the v1 statement is 6 KB).
  */
 export async function signSubjectBinding(subjectId, ed, seed, issuedAt = Date.now()) {
-  const { canonicalPqKeyBinding, hybridSignExternal, pqBindingPublicKey } = await import("@flagship/protocol");
+  const { canonicalPqKeyBindingV2, hybridSignExternal, pqBindingPublicKey } = await import("@flagship/protocol");
   const s = {
     role: "release-key",
     subjectId,
@@ -895,8 +896,8 @@ export async function signSubjectBinding(subjectId, ed, seed, issuedAt = Date.no
     mldsaPubHex: Buffer.from(mldsa65PublicKey(seed)).toString("hex"),
     issuedAt,
   };
-  const sig = await hybridSignExternal(pqBindingPublicKey(s), "flagship/pq-key-binding/v1", canonicalPqKeyBinding(s), ed.sign, seed);
-  return { v: 1, ...s, signature: Buffer.from(sig).toString("hex") };
+  const sig = await hybridSignExternal(pqBindingPublicKey(s), "flagship/pq-key-binding/v2", canonicalPqKeyBindingV2(s), ed.sign, seed);
+  return { v: 2, ...s, signature: Buffer.from(sig).toString("hex") };
 }
 
 function caPqDir(root, sub) {

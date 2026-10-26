@@ -140,7 +140,10 @@ if [ -n "$need_pq" ]; then
   while [ "$j" -lt "$nb" ] && [ "$j" -lt 32 ]; do
     b=".pqBindings[$j]"; j=$((j + 1))
     [ "$(jq -r "$b | keys | join(\",\")" "$manifest" 2>/dev/null)" = "ed25519PubHex,issuedAt,mldsaPubHex,role,signature,subjectId,v" ] || continue
-    [ "$(jq -r "$b.v" "$manifest")" = 1 ] && [ "$(jq -r "$b.role" "$manifest")" = release-key ] \
+    bv=$(jq -r "$b.v" "$manifest")
+    # Wire v1 repeats the ML-DSA key in the signed statement; v2 (the compact form a YubiKey can sign: its PIV
+    # applet takes about 3 KB of message) leaves it out, the hybrid message already carries it. Release keys only.
+    { [ "$bv" = 1 ] || [ "$bv" = 2 ]; } && [ "$(jq -r "$b.role" "$manifest")" = release-key ] \
       && [ "$(jq -r "$b.subjectId" "$manifest")" = flagship-box-artifact ] || continue
     bed=$(jq -r "$b.ed25519PubHex" "$manifest"); bml=$(jq -r "$b.mldsaPubHex" "$manifest")
     bat=$(jq -r "$b.issuedAt | if type==\"number\" then tostring else \"x\" end" "$manifest"); bsig=$(jq -r "$b.signature" "$manifest")
@@ -149,7 +152,11 @@ if [ -n "$need_pq" ]; then
     [ -z "${bound_ml[$bed]:-}" ] || continue
     kid=$( { printf '%02x' "${#KEYID_TAG}"; hex_of "$KEYID_TAG"; printf '000207c0%s%s' "$bed" "$bml"; } | xxd -r -p | openssl dgst -sha512 -binary | head -c 32 | xxd -p | tr -d '\n')
     [ -n "${pinned_ids[$kid]:-}" ] || continue
-    hybrid_verify "$bed" "$bml" "flagship/pq-key-binding/v1" "flagship/pq-key-binding/v1|release-key|flagship-box-artifact|$bed|$bml|$bat" "$bsig" || continue
+    if [ "$bv" = 2 ]; then
+      hybrid_verify "$bed" "$bml" "flagship/pq-key-binding/v2" "flagship/pq-key-binding/v2|release-key|flagship-box-artifact|$bed|$bat" "$bsig" || continue
+    else
+      hybrid_verify "$bed" "$bml" "flagship/pq-key-binding/v1" "flagship/pq-key-binding/v1|release-key|flagship-box-artifact|$bed|$bml|$bat" "$bsig" || continue
+    fi
     bound_ml["$bed"]="$bml"; bound_id["$bed"]="$kid"
   done
 fi

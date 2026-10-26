@@ -22,7 +22,7 @@ function bash4(): string | null {
 }
 function haveTools(): boolean {
   const ssl = spawnSync("openssl", ["version"], { encoding: "utf8" });
-  return ssl.status === 0 && /OpenSSL 3/.test(ssl.stdout) && spawnSync("jq", ["--version"]).status === 0 && spawnSync("xxd", ["-v"]).status !== 127;
+  return ssl.status === 0 && /OpenSSL [3-9]/.test(ssl.stdout) && spawnSync("jq", ["--version"]).status === 0 && spawnSync("xxd", ["-v"]).status !== 127;
 }
 const BASH = bash4();
 const run = BASH && haveTools() ? describe : describe.skip;

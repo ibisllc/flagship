@@ -144,6 +144,62 @@ describe("AT-ENV-21 pq-key-binding/v1", () => {
   });
 });
 
+describe("AT-ENV-21 pq-key-binding/v2 (the compact release-key binding a YubiKey can sign)", () => {
+  const NOW = 1_760_000_100_000;
+  const k = hybridSigKeygen(seed(21), seed(22));
+  const other = hybridSigKeygen(seed(23), seed(24));
+  const st: P.PqKeyBindingStatement = {
+    role: "release-key",
+    subjectId: "flagship-release",
+    ed25519PubHex: toHex(k.publicKey.subarray(0, 32)),
+    mldsaPubHex: toHex(k.publicKey.subarray(32)),
+    issuedAt: 1_760_000_000_000,
+  };
+  const sign2 = (statement: P.PqKeyBindingStatement, key = k) =>
+    toHex(hybridSign(key.secretKey, P.TAG_PQ_KEY_BINDING_V2, P.canonicalPqKeyBindingV2(statement), { deterministic: true }));
+  const wire2 = { v: 2, ...st, signature: sign2(st) };
+  const expect2: P.PqBindingExpectation = { role: "release-key", subjectId: "flagship-release", ed25519PubHex: st.ed25519PubHex, now: NOW };
+
+  it("AT-ENV-21f control: the compact binding verifies", () => {
+    expect(P.verifyPqKeyBinding(wire2, expect2).keyIdHex).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("AT-ENV-21g a v1 signature is not a v2 binding, and a v2 signature is not a v1 binding (catches: version confusion between the two statements)", () => {
+    const v1sig = toHex(hybridSign(k.secretKey, P.TAG_PQ_KEY_BINDING, P.canonicalPqKeyBinding(st), { deterministic: true }));
+    expect(throws(() => P.verifyPqKeyBinding({ ...wire2, signature: v1sig }, expect2))).toBe(true);
+    expect(throws(() => P.verifyPqKeyBinding({ ...wire2, v: 1 }, expect2))).toBe(true);
+    expect(throws(() => P.verifyPqKeyBinding({ ...wire2, v: 3 }, expect2))).toBe(true);
+    expect(throws(() => P.verifyPqKeyBinding({ ...wire2, v: undefined }, expect2))).toBe(true);
+  });
+
+  it("AT-ENV-21h the compact form leaves the ML-DSA key out of the statement but not out of the signed message: another ML-DSA key is refused (catches: PQ-key substitution behind the trusted Ed25519 key)", () => {
+    const swapped = { ...wire2, mldsaPubHex: toHex(other.publicKey.subarray(32)) };
+    expect(throws(() => P.verifyPqKeyBinding(swapped, expect2))).toBe(true);
+    // Even re-signed with the new ML-DSA seed under the genuine Ed25519 half, the Ed25519 half no longer matches.
+    const forgerKey = hybridSigKeygen(seed(21), seed(24));
+    const forgedSt = { ...st, mldsaPubHex: toHex(forgerKey.publicKey.subarray(32)) };
+    const forged = { v: 2, ...forgedSt, signature: toHex(hybridSign(forgerKey.secretKey, P.TAG_PQ_KEY_BINDING_V2, P.canonicalPqKeyBindingV2(forgedSt), { deterministic: true })) };
+    expect(throws(() => P.verifyPqKeyBinding(forged, { ...expect2, mldsaPubHex: st.mldsaPubHex }))).toBe(true);
+    // A classical-only signature, an edited date or an edited subject are refused too.
+    expect(throws(() => P.verifyPqKeyBinding({ ...wire2, signature: wire2.signature.slice(0, 128) }, expect2))).toBe(true);
+    expect(throws(() => P.verifyPqKeyBinding({ ...wire2, issuedAt: wire2.issuedAt + 1 }, expect2))).toBe(true);
+    expect(throws(() => P.verifyPqKeyBinding({ ...wire2, subjectId: "flagship-ca-track" }, { ...expect2, subjectId: "flagship-ca-track" }))).toBe(true);
+  });
+
+  it("AT-ENV-21i only the release-key role may use the compact form (catches: a device or box binding downgraded to the shorter statement)", () => {
+    for (const role of ["account-irk", "admin-root", "device", "box-stk", "boot-key"] as const) {
+      const w = makeBinding(role, "x", 31, 32).wire;
+      expect(throws(() => P.verifyPqKeyBinding({ ...w, v: 2 }, { role, subjectId: "x", ed25519PubHex: w.ed25519PubHex, now: NOW }))).toBe(true);
+      expect(throws(() => P.canonicalPqKeyBindingV2({ ...w, role }))).toBe(true);
+    }
+  });
+
+  it("AT-ENV-21j every message the YubiKey signs for a compact binding is far below its PIV limit (catches: the 6,095-byte v1 statement coming back)", () => {
+    const m = P.hybridSigMessage(k.publicKey, P.TAG_PQ_KEY_BINDING_V2, P.canonicalPqKeyBindingV2(st));
+    expect(m.length).toBeLessThan(2_500);
+  });
+});
+
 describe("AT-ENV-22 the critical-signature gate (verifyCriticalSignature)", () => {
   const NOW = 1_760_000_100_000;
   const b = makeBinding("admin-root", "alice", 11, 12);

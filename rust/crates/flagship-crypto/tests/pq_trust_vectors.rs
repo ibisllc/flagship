@@ -12,8 +12,8 @@
 use flagship_crypto::HybridSigningKey;
 use flagship_crypto::trust::{
     BindingWire, Envelope, Expectation, PolicyState, Profile, Role, Rollout, TAG_PQ_KEY_BINDING,
-    TrustError, VerifiedBinding, canonical_binding, hex, message_purpose, verify_binding,
-    verify_critical_signature,
+    TrustError, VerifiedBinding, canonical_binding, canonical_binding_versioned, hex,
+    message_purpose, verify_binding, verify_critical_signature,
 };
 use flagship_protocol::parse::parse_lower_hex;
 use serde_json::Value;
@@ -40,12 +40,12 @@ const WIRE_KEYS: [&str; 7] = [
 ];
 
 /// The JSON-level checks TypeScript makes before the typed ones: exact keys,
-/// `v: 1`, string fields, an integer issuedAt.
+/// `v: 1` or `v: 2`, string fields, an integer issuedAt.
 fn wire(v: &Value) -> Result<BindingWire<'_>, TrustError> {
     let o = v.as_object().ok_or(TrustError::BindingMalformed)?;
     let mut keys: Vec<&str> = o.keys().map(String::as_str).collect();
     keys.sort_unstable();
-    if keys != WIRE_KEYS || v["v"].as_u64() != Some(1) {
+    if keys != WIRE_KEYS || !matches!(v["v"].as_u64(), Some(1 | 2)) {
         return Err(TrustError::BindingMalformed);
     }
     for k in [
@@ -60,6 +60,7 @@ fn wire(v: &Value) -> Result<BindingWire<'_>, TrustError> {
         }
     }
     Ok(BindingWire {
+        version: u8::try_from(v["v"].as_u64().unwrap_or(0)).unwrap_or(0),
         role: s(v, "role"),
         subject_id: s(v, "subjectId"),
         ed25519_pub_hex: s(v, "ed25519PubHex"),
@@ -161,6 +162,51 @@ fn invalid_bindings_refuse_with_the_same_code() {
             s(c, "name")
         );
     }
+}
+
+#[test]
+fn compact_release_key_bindings_verify_and_refuse_like_typescript() {
+    let v = vectors();
+    for c in v["bindingsV2"]["valid"].as_array().unwrap() {
+        let w = &c["wire"];
+        assert_eq!(w["v"].as_u64(), Some(2));
+        let stmt = canonical_binding_versioned(
+            2,
+            s(w, "role"),
+            s(w, "subjectId"),
+            s(w, "ed25519PubHex"),
+            s(w, "mldsaPubHex"),
+            w["issuedAt"].as_u64().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(hex(&stmt), s(c, "statementHex"), "{}", s(c, "name"));
+        verify(w, &c["expect"]).unwrap_or_else(|e| panic!("{}: {e}", s(c, "name")));
+    }
+    for c in v["bindingsV2"]["invalid"].as_array().unwrap() {
+        let got = verify(&c["wire"], &c["expect"]).map(|_| ()).err();
+        assert_eq!(
+            got.map(TrustError::code),
+            Some(s(c, "code")),
+            "{}",
+            s(c, "name")
+        );
+    }
+}
+
+#[test]
+fn a_compact_statement_is_for_release_keys_only() {
+    let v = vectors();
+    let w = &v["bindings"]["valid"][3]["wire"];
+    assert_eq!(s(w, "role"), "box-stk");
+    let got = canonical_binding_versioned(
+        2,
+        s(w, "role"),
+        s(w, "subjectId"),
+        s(w, "ed25519PubHex"),
+        s(w, "mldsaPubHex"),
+        w["issuedAt"].as_u64().unwrap(),
+    );
+    assert_eq!(got.err().map(TrustError::code), Some("binding-role"));
 }
 
 fn policy(p: &Value) -> PolicyState {

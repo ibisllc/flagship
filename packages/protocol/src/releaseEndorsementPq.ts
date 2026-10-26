@@ -30,10 +30,11 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { GENESIS_DIGEST, type PolicyState } from "./assurancePolicy.js";
 import { ed25519VerifyStrict, hybridSignExternal, pqKeyId, SUITE_HYBRID_SIG_ED25519_MLDSA65_V1 } from "./pqHybrid.js";
 import {
-  canonicalPqKeyBinding,
+  canonicalPqKeyBindingV2,
   pqBindingPublicKey,
   PqTrustError,
   pqKeyBindingFromWire,
+  TAG_PQ_KEY_BINDING_V2,
   verifyCriticalSignature,
   verifyPqKeyBinding,
   type PqKeyBindingWire,
@@ -333,9 +334,10 @@ export async function signReleasePqBinding(
     mldsaPubHex: args.mldsaPubHex.toLowerCase(),
     issuedAt: args.issuedAt,
   };
-  const msg = canonicalPqKeyBinding(s);
-  const sig = await hybridSignExternal(pqBindingPublicKey(s), "flagship/pq-key-binding/v1", msg, ed25519Sign, mldsaSeed, opts);
-  return { v: 1, ...s, signature: toHex(sig) };
+  // The compact v2 statement: the Ed25519 half runs on a YubiKey, whose PIV applet takes about 3 KB of message.
+  const msg = canonicalPqKeyBindingV2(s);
+  const sig = await hybridSignExternal(pqBindingPublicKey(s), TAG_PQ_KEY_BINDING_V2, msg, ed25519Sign, mldsaSeed, opts);
+  return { v: 2, ...s, signature: toHex(sig) };
 }
 
 /** The companion for a v1 endorsement already signed by the same Ed25519 key. */
