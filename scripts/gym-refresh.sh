@@ -98,6 +98,12 @@ else
     git -C "$REPO" worktree add --detach "$WT" origin/gym >/dev/null
     say "created worktree $WT"
   fi
+  # gym-box-artifact.sh rewrites the trust file with the gym's key on every run; a build that failed halfway leaves that
+  # derived edit behind. It is regenerated each time, so drop it rather than stopping the next refresh.
+  if [ "$(git -C "$WT" status --porcelain)" = " M release/box-artifact-trust.json" ]; then
+    git -C "$WT" checkout -- release/box-artifact-trust.json
+    say "reset the gym key edit a failed artifact build left in release/box-artifact-trust.json"
+  fi
   [ -z "$(git -C "$WT" status --porcelain)" ] || die "$WT has uncommitted changes; commit or discard them first"
   START="${GYM_START_REF:-origin/gym}"
   [ "$START" = "origin/gym" ] || git -C "$REPO" fetch -q origin "${START#origin/}"
