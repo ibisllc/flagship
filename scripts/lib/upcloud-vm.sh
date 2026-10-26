@@ -86,9 +86,23 @@ vm_toolchains() { # vm_toolchains <repo> [log file]
   local node_v
   node_v=$(node -e 'console.log(require(process.argv[1]).node.minimum)' "$1/release/security-floor.json")
   say "installing toolchains (Node $node_v, Rust from rust-toolchain.toml, $VM_GO)"
-  "${VM_SSH[@]}" bash -s "$node_v" "$VM_GO" <<'SETUP' > "${2:-/dev/null}" 2>&1
+  # A fresh Debian 13 image can restart sshd while libraries upgrade, which drops this session ("Connection reset by
+  # peer", exit 255). needrestart is told not to, and the whole setup is safe to repeat, so it is retried once.
+  local setup_try
+  for setup_try in 1 2 3; do
+    vm_toolchains_once "$node_v" "${2:-/dev/null}" && return 0
+    local rc=$?
+    [ "$rc" -eq 255 ] || return "$rc"
+    say "the SSH session dropped during the toolchain setup; reconnecting (try $setup_try of 3)"
+    for _ in $(seq 1 60); do "${VM_SSH[@]}" true 2>/dev/null && break; sleep 5; done
+  done
+  return 255
+}
+
+vm_toolchains_once() { # vm_toolchains_once <node version> <log file>
+  "${VM_SSH[@]}" bash -s "$1" "$VM_GO" <<'SETUP' >> "$2" 2>&1
 set -euo pipefail
-export DEBIAN_FRONTEND=noninteractive
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l NEEDRESTART_SUSPEND=1
 apt-get -o DPkg::Lock::Timeout=600 update -q
 apt-get -o DPkg::Lock::Timeout=600 install -y -q git curl xz-utils build-essential pkg-config libssl-dev python3 jq openssl xxd cryptsetup gnupg dirmngr
 curl -fsSL "https://nodejs.org/dist/v$1/node-v$1-linux-x64.tar.xz" | tar -xJ -C /usr/local --strip-components=1
