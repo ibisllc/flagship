@@ -28,6 +28,7 @@ import { dirname, join } from "node:path";
 import type { CommandRunner } from "../serviceRunner.js";
 import { runSetupStep, runsUnprivileged } from "../privileged.js";
 import { dockerRepaired, wakeDocker } from "../dockerHealth.js";
+import { activeEngine, type EngineKind } from "../engine/engine.js";
 
 export const DATA_COMPOSE_FILE = "/opt/flagship/installer/data-services/docker-compose.yml";
 export const DATA_ENV_FILE = "/var/flagship/data-services.env";
@@ -89,6 +90,8 @@ export interface DataStackOptions {
   /** The checkout's unit, installed over an older one. Default: next to the compose file. */
   unitSource?: string;
   fs?: DataStackFs;
+  /** The engine the box runs apps on. Default: the daemon's active engine. */
+  engine?: () => EngineKind;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   /** How long to wait for the core healthchecks after a bring-up. Default 10 min. */
@@ -115,6 +118,7 @@ export class DataStack {
   private readonly unitFile: string;
   private readonly unitSource: string;
   private readonly fs: DataStackFs;
+  private readonly engine: () => EngineKind;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly now: () => number;
   private readonly log: (m: string) => void;
@@ -134,6 +138,7 @@ export class DataStack {
     this.unitFile = opts.unitFile ?? DATA_UNIT_FILE;
     this.unitSource = opts.unitSource ?? join(dirname(this.composeFile), DATA_UNIT_NAME);
     this.fs = opts.fs ?? realFs;
+    this.engine = opts.engine ?? activeEngine;
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.now = opts.now ?? (() => Date.now());
     this.log = opts.log ?? ((m) => console.log(m));
@@ -270,11 +275,14 @@ export class DataStack {
     if (needsStart) {
       if ((await this.unitState()) === "activating") {
         this.log("[data-layer] the data-services unit is already bringing the stack up; waiting");
-      } else if (!this.fs.exists(this.envFile)) {
-        // No secrets yet: init.sh makes them, then brings the stack up.
-        this.log("[data-layer] no data-services secrets yet; starting the data-services unit");
+      } else if (!this.fs.exists(this.envFile) || this.engine() === "podman") {
+        // No secrets yet: init.sh makes them, then brings the stack up. On Podman the unit is also the only
+        // way up: init.sh starts podman.socket and drives `podman compose`, while a bare docker-compose here
+        // looks for /var/run/docker.sock, which a Podman box does not have.
+        const noSecrets = !this.fs.exists(this.envFile);
+        this.log(noSecrets ? "[data-layer] no data-services secrets yet; starting the data-services unit" : `[data-layer] core stores not running (${describe(health)}); starting the data-services unit (Podman)`);
         if (!(await this.startUnit())) {
-          this.set({ state: "down", reason: "the data-services secrets don't exist and the unit couldn't start" });
+          this.set({ state: "down", reason: noSecrets ? "the data-services secrets don't exist and the unit couldn't start" : "the data-services unit couldn't start" });
           return "down";
         }
       } else {

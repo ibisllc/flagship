@@ -38,6 +38,7 @@ function rig(
     /** dockerd answers only after this many polls (`docker info` prints no version until then). */
     dockerUpAfterPolls?: number;
     sleep?: (ms: number) => Promise<void>;
+    engine?: "docker" | "podman";
   } = {},
 ) {
   const files: Record<string, string> = { [COMPOSE]: "services: {}", [ENV]: "X=1", [UNIT]: OLD_UNIT, [UNIT_SRC]: NEW_UNIT, ...(over.files ?? {}) };
@@ -99,6 +100,7 @@ function rig(
         polls++;
       }),
     now: () => t,
+    engine: () => over.engine ?? "docker",
     log: (m) => logs.push(m),
     maxRetries: 0,
   });
@@ -132,6 +134,21 @@ describe("DataStack at boot", () => {
     expect(await r.stack.ensure()).toBe("healthy");
     expect(r.calls).toContainEqual(["systemctl", "start", "--no-block", "flagship-data-services.service"]);
     expect(r.calls.some((c) => c.includes("up"))).toBe(false);
+  });
+
+  it("on a Podman box starts the root unit and never runs a bare compose (no docker.sock there)", async () => {
+    const r = rig({ engine: "podman", healAfterPolls: 2 });
+    expect(await r.stack.ensure()).toBe("healthy");
+    expect(r.calls).toContainEqual(["systemctl", "start", "--no-block", "flagship-data-services.service"]);
+    expect(r.calls.some((c) => c.includes("up"))).toBe(false);
+  });
+
+  it("on a Podman box a unit that will not start leaves it down with that reason", async () => {
+    const r = rig({ engine: "podman" });
+    const run = r.stack as unknown as { startUnit: () => Promise<boolean> };
+    run.startUnit = async () => false;
+    expect(await r.stack.ensure()).toBe("down");
+    expect(r.stack.status().reason).toMatch(/data-services unit couldn't start/);
   });
 
   it("waits for a unit that is already bringing the stack up, rather than racing it", async () => {
