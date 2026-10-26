@@ -28,6 +28,7 @@ import {
   type ArchV2SwitchOrder,
   type BoxStackTarget,
 } from "@flagship/protocol";
+import { PODMAN_REGISTRIES_BODY, PODMAN_REGISTRIES_CONF } from "./appSandbox/gvisor.js";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { applyRotationChain, fetchRotationChain } from "./adminRootRotationConsumer.js";
 import { writeFileDurable } from "./durableFile.js";
@@ -222,6 +223,7 @@ export async function applySwitchAsRoot(d: RootSwitchDeps): Promise<{ state: Swi
       await d.run("env", ["DEBIAN_FRONTEND=noninteractive", "apt-get", "update", "-q"]);
       await d.run("env", ["DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "-q", "--no-install-recommends", ...ENGINE_PACKAGES]);
       await files.write(COMPOSE_DROPIN_PATH, COMPOSE_DROPIN, 0o644);
+      await files.write(PODMAN_REGISTRIES_CONF, PODMAN_REGISTRIES_BODY, 0o644);
       await d.run("systemctl", ["enable", "podman.socket"]);
     }
     await files.write(configPath, `${JSON.stringify(targetConfig(order.target, new Date(d.now())))}\n`, 0o644);

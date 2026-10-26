@@ -4,6 +4,7 @@
  * trial keeps the switch only once the box is healthy with every app back, and otherwise puts
  * the switch file back as it was; a revert is refused once the switch was kept.
  */
+import { PODMAN_REGISTRIES_BODY, PODMAN_REGISTRIES_CONF } from "../src/appSandbox/gvisor.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { ed, signArchV2SwitchOrder, type ArchV2SwitchOrder, type PolicyState, GENESIS_DIGEST } from "@flagship/protocol";
 import {
@@ -85,6 +86,9 @@ describe("root's half of a switch", () => {
       "systemctl enable podman.socket",
     ]);
     expect(files.m.get(COMPOSE_DROPIN_PATH)).toBe(COMPOSE_DROPIN);
+    // Podman has no unqualified-search registry on Debian; docker-style image names need docker.io.
+    expect(files.m.get(PODMAN_REGISTRIES_CONF)).toBe(PODMAN_REGISTRIES_BODY);
+    expect(PODMAN_REGISTRIES_BODY).toContain('unqualified-search-registries = ["docker.io"]');
     expect(parseArchV2Config(files.m.get(ARCH_V2_CONFIG)!)).toMatchObject({ rust: "on", engine: "podman", source: "owner" });
     const rec = parseSwitchRecord(files.m.get(SWITCH_RECORD)!)!;
     expect(rec).toMatchObject({ state: "trial", target: "arch-v2", previousText: null, trialUntil: T + 1000 + TRIAL_MS });

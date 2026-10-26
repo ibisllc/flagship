@@ -139,6 +139,10 @@ ENGINE="${FLAGSHIP_ENGINE:-$(tr -cd 'a-z' < /var/lib/flagship/engine-active 2>/d
 if [ "$ENGINE" = podman ] && command -v podman >/dev/null 2>&1; then
     docker() { podman "$@"; }
     systemctl start podman.socket >/dev/null 2>&1 || true
+    # Podman has no unqualified-search registry on Debian: without this, `pgvector/pgvector@sha256:...` in the
+    # compose file dies with "short-name did not resolve". Same file the daemon's gVisor setup writes.
+    mkdir -p /etc/containers/registries.conf.d
+    printf '%s\n%s\n' '# Written by the Flagship daemon: docker-style image names resolve on docker.io, as they do under Docker.' 'unqualified-search-registries = ["docker.io"]' > /etc/containers/registries.conf.d/50-flagship.conf
     compose() { podman compose -f "$COMPOSE" ${WITH_BROWSER:+-f "$APP_BROWSER_COMPOSE"} --env-file "$SECRETS_FILE" "$@"; }
 # Debian's docker-compose package provides `docker compose`; older installs
 # may only have the standalone binary.

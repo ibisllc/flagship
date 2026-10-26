@@ -41,6 +41,13 @@ export function podmanRuntimeConf(runsc: string): string {
   return `# Written by the Flagship daemon: gVisor for every app (docs/app-runtimes.md §5.1).\n[engine.runtimes]\n${GVISOR_RUNTIME} = ["${runsc}"]\n`;
 }
 
+/**
+ * Podman has no unqualified-search registry on Debian, so a docker-style name (`pgvector/pgvector@sha256:...`)
+ * dies with "short-name did not resolve". Docker searches docker.io implicitly; this gives Podman the same.
+ */
+export const PODMAN_REGISTRIES_CONF = "/etc/containers/registries.conf.d/50-flagship.conf";
+export const PODMAN_REGISTRIES_BODY = `# Written by the Flagship daemon: docker-style image names resolve on docker.io, as they do under Docker.\nunqualified-search-registries = ["docker.io"]\n`;
+
 export function gvisorArch(nodeArch: string = process.arch): "x86_64" | "aarch64" | null {
   return nodeArch === "x64" ? "x86_64" : nodeArch === "arm64" ? "aarch64" : null;
 }
@@ -87,6 +94,8 @@ export interface EnsureGvisorOptions {
   daemonJson?: string;
   /** Podman's drop-in path (tests). */
   podmanConf?: string;
+  /** Default: next to podmanConf's sibling registries.conf.d (tests), else PODMAN_REGISTRIES_CONF. */
+  registriesConf?: string;
   /** Which engine to register with (default: the box's active engine). */
   engine?: EngineKind;
   arch?: "x86_64" | "aarch64" | null;
@@ -260,11 +269,14 @@ async function registerWithDocker(o: EnsureGvisorOptions, runsc: string, runtime
 async function registerWithPodman(o: EnsureGvisorOptions, runsc: string): Promise<void> {
   const path = o.podmanConf ?? PODMAN_RUNTIME_CONF;
   const want = podmanRuntimeConf(runsc);
-  const have = await readFile(path, "utf8").catch(() => null);
-  if (have === want) return;
-  await mkdir(join(path, ".."), { recursive: true });
-  await writeFile(`${path}.flagship-tmp`, want, { mode: 0o644 });
-  await rename(`${path}.flagship-tmp`, path);
+  const regPath = o.registriesConf ?? (o.podmanConf ? join(o.podmanConf, "..", "registries.conf.d", "50-flagship.conf") : PODMAN_REGISTRIES_CONF);
+  for (const [file, body] of [[path, want], [regPath, PODMAN_REGISTRIES_BODY]] as const) {
+    const have = await readFile(file, "utf8").catch(() => null);
+    if (have === body) continue;
+    await mkdir(join(file, ".."), { recursive: true });
+    await writeFile(`${file}.flagship-tmp`, body, { mode: 0o644 });
+    await rename(`${file}.flagship-tmp`, file);
+  }
 }
 
 /**
