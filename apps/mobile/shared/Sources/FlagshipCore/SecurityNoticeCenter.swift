@@ -170,6 +170,8 @@ public final class SecurityNoticeCenter {
     @ObservationIgnored private let lock: UpdateLock
     @ObservationIgnored private let client: SecurityNoticeClient
     @ObservationIgnored private let pin: String
+    /// The release PQ key ids a notice must carry a companion for (tests run unpinned).
+    @ObservationIgnored private let pqKeyIds: [String]
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let minInterval: TimeInterval
     @ObservationIgnored private let maxJitter: TimeInterval
@@ -190,8 +192,10 @@ public final class SecurityNoticeCenter {
         minInterval: TimeInterval = 15 * 60,
         maxJitter: TimeInterval = 10,
         lockEnabled: Bool = SecurityNoticeFeatures.lockEnabled,
+        pqKeyIds: [String] = ReleasePqPin.keyIds,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        self.pqKeyIds = pqKeyIds
         self.lockEnabled = lockEnabled
         self.storage = storage
         self.fetcher = fetcher
@@ -220,7 +224,7 @@ public final class SecurityNoticeCenter {
             let authority = SecurityNoticeAuthority.resolve(mandates: mandates, now: now(), pin: pin, minTip: state.tip)
             decided = SecurityNoticeVerifier.storedOutcome(
                 .init(highestSeq: state.highestSeq, notice: n), authorityKeys: authority.keys, client: client,
-                nowMs: Self.ms(now())
+                nowMs: Self.ms(now()), pqKeyIds: pqKeyIds
             )
         }
         // With the lock switched off a lock notice is only the update nag.
@@ -271,7 +275,7 @@ public final class SecurityNoticeCenter {
         let mandates = SecurityNoticeAuthority.decodeMandates(rawMandates) ?? []
         let authority = SecurityNoticeAuthority.resolve(mandates: mandates, now: now(), pin: pin, minTip: state.tip)
         let folded = SecurityNoticeVerifier.accept(.init(highestSeq: state.highestSeq, notice: nil),
-                                                   candidate: candidate, authorityKeys: authority.keys)
+                                                   candidate: candidate, authorityKeys: authority.keys, pqKeyIds: pqKeyIds)
         if folded.refused == nil, let n = folded.store.notice {
             let accepted: [String: Any] = ["version": 1, "notice": n.json(), "mandates": rawMandates]
             state.highestSeq = folded.store.highestSeq

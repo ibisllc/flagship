@@ -20,7 +20,7 @@ describe("webapp security notice: shared vectors", () => {
       const n = sn.parseSecurityNotice(p.notice);
       expect(n, p.name).not.toBeNull();
       expect(text(sn.canonicalSecurityNotice(n, n.signedBy)), p.name).toBe(p.canonical);
-      expect(await sn.verifySecurityNotice(n, [auth]), p.name).toEqual({ ok: true });
+      expect(await sn.verifySecurityNotice(n, [auth], []), p.name).toEqual({ ok: true });
     }
   });
 
@@ -28,7 +28,7 @@ describe("webapp security notice: shared vectors", () => {
     const sn = await load();
     for (const r of V.reject) {
       const n = sn.parseSecurityNotice(r.notice);
-      const got = n ? await sn.verifySecurityNotice(n, [auth]) : { ok: false, reason: "malformed" };
+      const got = n ? await sn.verifySecurityNotice(n, [auth], []) : { ok: false, reason: "malformed" };
       expect(got, r.name).toEqual({ ok: false, reason: r.expect });
     }
   });
@@ -61,7 +61,7 @@ describe("webapp security notice: shared vectors", () => {
     const sn = await load();
     for (const a of V.accept) {
       const st = { highestSeq: a.store.highestSeq, notice: a.store.notice ? sn.parseSecurityNotice(a.store.notice) : null };
-      const r = await sn.acceptSecurityNotice(st, a.candidate, a.authorityKeys);
+      const r = await sn.acceptSecurityNotice(st, a.candidate, a.authorityKeys, []);
       expect({ highestSeq: r.store.highestSeq, seq: r.store.notice ? r.store.notice.seq : null, refused: r.refused }, a.name).toEqual(a.expect);
     }
   });

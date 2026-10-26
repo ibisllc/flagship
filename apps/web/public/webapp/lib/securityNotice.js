@@ -293,10 +293,10 @@ export async function acceptSecurityNotice(store, candidate, authorityKeys, pqKe
 }
 
 /** The stored notice's outcome, re-verified against the authority NOW; unverifiable means nothing. */
-export async function storedSecurityNoticeOutcome(store, authorityKeys, client, now) {
+export async function storedSecurityNoticeOutcome(store, authorityKeys, client, now, pqKeyIds = RELEASE_PQ_KEY_IDS) {
   const n = store.notice;
   if (!n) return { action: "none", why: "kind-none" };
-  if (!(await verifySecurityNotice(n, authorityKeys)).ok) return { action: "none", why: "kind-none" };
+  if (!(await verifySecurityNotice(n, authorityKeys, pqKeyIds)).ok) return { action: "none", why: "kind-none" };
   return securityNoticeOutcome(n, client, now);
 }
 
@@ -413,13 +413,14 @@ export async function evaluateSecurityNotice({
   storage = safeStorage(),
   client = clientIdentity(),
   pin = BAKED_PIN,
+  pqKeyIds = RELEASE_PQ_KEY_IDS,
 } = {}) {
   const store = loadStore(storage);
   let outcome = NONE;
   const n = store.doc ? parseSecurityNotice(store.doc.notice) : null;
   if (n) {
     const { keys } = await noticeAuthority(store.doc.mandates, now, { pin, minTip: store.tip });
-    outcome = await storedSecurityNoticeOutcome({ highestSeq: store.highestSeq, notice: n }, keys, client, now);
+    outcome = await storedSecurityNoticeOutcome({ highestSeq: store.highestSeq, notice: n }, keys, client, now, pqKeyIds);
   }
   securityNotices.set(outcome);
   scheduleNextBoundary(n, now);
@@ -447,6 +448,7 @@ export async function refreshSecurityNotice({
   storage = safeStorage(),
   client = clientIdentity(),
   pin = BAKED_PIN,
+  pqKeyIds = RELEASE_PQ_KEY_IDS,
 } = {}) {
   try {
     if (typeof fetchImpl !== "function") return { fetched: false };
@@ -465,10 +467,11 @@ export async function refreshSecurityNotice({
       { highestSeq: store.highestSeq, notice: null },
       doc.notice,
       keys,
+      pqKeyIds,
     );
     if (folded.refused === null && folded.store.notice) {
       saveStore({ ...store, highestSeq: folded.store.highestSeq, doc: { version: 1, notice: folded.store.notice, mandates: doc.mandates }, tip }, storage);
-      await evaluateSecurityNotice({ now, storage, client, pin });
+      await evaluateSecurityNotice({ now, storage, client, pin, pqKeyIds });
     } else if (tip > store.tip) {
       saveStore({ ...store, tip }, storage);
     }

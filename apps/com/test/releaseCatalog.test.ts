@@ -25,8 +25,11 @@ function githubStub() {
   return { fetch, calls };
 }
 
+const UNPINNED = { version: 1 as const, keyIds: [] as string[], requirePqAfter: null };
+
 async function endorsements(): Promise<EndorsementSummary[]> {
-  return loadEndorsements(githubStub().fetch);
+  // The committed endorsements are the pre-PQ releases (the pin's marker is the newest): run unpinned.
+  return loadEndorsements(githubStub().fetch, undefined, { pin: UNPINNED });
 }
 
 /** The newest release: the one no other endorsement names as its previous. */
@@ -72,15 +75,15 @@ describe("release catalog for boxes that can't list their own", () => {
       put: async (k: string, r: Response) => void store.set(k, r),
     } as unknown as Cache;
     const url = (q: string) => new URL(`https://flagshipserver.com/api/releases${q}`);
-    const r1 = await handleReleases(url(`?current=${full("67cfd8da")}`), { fetch: gh.fetch, cache, now: () => 5 });
+    const r1 = await handleReleases(url(`?current=${full("67cfd8da")}`), { fetch: gh.fetch, cache, now: () => 5, releasePqPin: UNPINNED });
     expect(r1.status).toBe(200);
     const body = (await r1.json()) as { latest: { commit: string }; checkedAt: number; currentCommit: string };
     expect(body.latest.commit).toBe(await tip());
     expect(body.checkedAt).toBe(5);
     const listed = gh.calls.filter((u) => u.includes("/contents/")).length;
-    await handleReleases(url(`?current=${full("9873b83e")}`), { fetch: gh.fetch, cache });
+    await handleReleases(url(`?current=${full("9873b83e")}`), { fetch: gh.fetch, cache, releasePqPin: UNPINNED });
     expect(gh.calls.filter((u) => u.includes("/contents/")).length).toBe(listed);
-    expect((await handleReleases(url("?current=nope"), { fetch: gh.fetch, cache })).status).toBe(400);
+    expect((await handleReleases(url("?current=nope"), { fetch: gh.fetch, cache, releasePqPin: UNPINNED })).status).toBe(400);
   });
 });
 

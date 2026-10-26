@@ -213,6 +213,7 @@ export { controlCertHash };
  *   deps.fetchImpl  — fetch (defaults to global)
  *   deps.now        — () => epoch ms (defaults to Date.now)
  *   deps.pin        — baked pin (defaults to BAKED_PIN)
+ *   deps.caLeasePqPin — the CA lease PQ pin (defaults to CA_LEASE_PQ_PIN)
  *   deps.base       — .com base (defaults to APEX)
  */
 export async function refreshServerTrust(deps = {}) {
@@ -238,7 +239,7 @@ export async function refreshServerTrust(deps = {}) {
     return { ok: false, networkError: true };
   }
 
-  const result = await verifyComBlessing(body, nowMs, pin);
+  const result = await verifyComBlessing(body, nowMs, pin, deps.caLeasePqPin);
   const verdict = await serverTrust.setVerdict(result);
   return { ok: true, verdict };
 }

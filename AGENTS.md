@@ -226,7 +226,7 @@ emulator gym for offline control, CI QEMU lane for a burned stick. Still to do: 
 screenshots, `TODO-RM` markers, version bump to 0.3, the hardware acceptance run
 (`docs/runbooks/0.3-hardware-acceptance.md`) and the deploy (`docs/runbooks/0.3-deploy-sheet.md`, `scripts/release.sh`).
 Known: 0.3 ships classical-only endorsement until the PQ release key ceremony (`docs/runbooks/pq-release-key.md`); the crypto-graph
-strict check stays red until then. Webapp shell is v183.
+strict check stays red until then. Webapp shell is v184.
 
 ### Launch
 

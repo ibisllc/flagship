@@ -38,7 +38,7 @@ final class SecurityNoticeVectorTests: XCTestCase {
             let n = try XCTUnwrap(SecurityNotice.parse(row["notice"]), name)
             let canonical = try SecurityNoticeRules.canonical(n.body, signedBy: n.signedBy)
             XCTAssertEqual(String(decoding: canonical, as: UTF8.self), row["canonical"] as? String, name)
-            XCTAssertNil(SecurityNoticeVerifier.verify(n, authorityKeys: [authority]), name)
+            XCTAssertNil(SecurityNoticeVerifier.verify(n, authorityKeys: [authority], pqKeyIds: []), name)
         }
     }
 
@@ -52,7 +52,7 @@ final class SecurityNoticeVectorTests: XCTestCase {
                 XCTAssertEqual(expect, "malformed", name)
                 continue
             }
-            let refusal = SecurityNoticeVerifier.verify(n, authorityKeys: [authority])
+            let refusal = SecurityNoticeVerifier.verify(n, authorityKeys: [authority], pqKeyIds: [])
             XCTAssertEqual(refusal?.rawValue, expect, name)
         }
     }
@@ -114,7 +114,7 @@ final class SecurityNoticeVectorTests: XCTestCase {
                 notice: SecurityNotice.parse(s["notice"])
             )
             let keys = try XCTUnwrap(row["authorityKeys"] as? [String], name)
-            let result = SecurityNoticeVerifier.accept(start, candidate: row["candidate"], authorityKeys: keys)
+            let result = SecurityNoticeVerifier.accept(start, candidate: row["candidate"], authorityKeys: keys, pqKeyIds: [])
             let expect = try XCTUnwrap(row["expect"] as? [String: Any], name)
             XCTAssertEqual(result.store.highestSeq, (expect["highestSeq"] as! NSNumber).int64Value, name)
             XCTAssertEqual(result.refused?.rawValue, expect["refused"] as? String, name)

@@ -120,12 +120,16 @@ function nonceAndSig(): { nonce: Uint8Array; sig: string } {
   return { nonce, sig };
 }
 
+// Classical-only synthetic leases: run unpinned (the repo's own pin names the real release PQ key).
+const UNPINNED_CA = { version: 1 as const, keyIds: [] as string[], legacyLeases: [] as string[] };
+
 describe("RelayTrustVerifier (OBSERVE)", () => {
   it("verifies a good blessing + hubSig through the real chain", async () => {
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
       log: () => {},
@@ -140,6 +144,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
       log: () => {},
@@ -155,6 +160,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
       log: () => {},
@@ -174,6 +180,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
       log: () => {},
@@ -192,6 +199,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
       log: () => {},
@@ -210,6 +218,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
       log: () => {},
@@ -225,6 +234,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       // endorse a DIFFERENT hot key than the one that signed the blessing
       fetchImpl: chainMaterialFetch(kp(0xee).pubKey),
       now: () => NOW,
@@ -241,6 +251,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       fetchImpl: (async () => {
         throw new Error("network down");
       }) as unknown as typeof fetch,
@@ -259,6 +270,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       now: () => NOW,
       log: () => {},
@@ -275,6 +287,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
       comBaseUrl: "https://flagshipserver.com",
       servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
+      caLeasePqPin: UNPINNED_CA,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       now: () => NOW,
       log: () => {},

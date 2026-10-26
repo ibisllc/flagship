@@ -192,6 +192,7 @@ object Variant : AppVariant {
     override val stubCamera: Boolean get() = mockRun
     override val gymImportBackupFile: java.io.File? get() = GymSeams.importBackupFile
     override val noticePin: String get() = GymSeams.noticePin ?: MaintainersTrust.bakedPin
+    override val noticePqKeyIds: List<String> get() = if (GymSeams.noticePin != null) emptyList() else SecurityNoticeProtocol.RELEASE_PQ_KEY_IDS
     override fun noticeLockEnabled(): Boolean = true
     override fun noticeNowMs(): Long = System.currentTimeMillis() + GymSeams.noticeClockOffsetMs
     // A mock run has no `.com`: the poll finds no notice unless a scenario serves one.

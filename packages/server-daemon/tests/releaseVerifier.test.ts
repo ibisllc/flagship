@@ -118,6 +118,10 @@ function writeEndorsement(rootDir: string, e: ReleaseEndorsement): void {
   fs.writeFileSync(path.join(dir, `${e.semverTag}.json`), JSON.stringify(e), "utf8");
 }
 
+// These tests are about the maintainers folder and the classical authority chain, with classical-only fixtures: they run
+// unpinned (the repo's own pin names the real release PQ key, which needs hybrid companions these fixtures do not have).
+const UNPINNED = { version: 1 as const, keyIds: [] as string[], requirePqAfter: null };
+
 describe("verifyMaintainersFolder (v2 verify-forward-from-pin)", () => {
   it("reports current authority when the chain is valid", () => {
     const repo = makeRepoWith(11);
@@ -131,6 +135,7 @@ describe("verifyMaintainersFolder (v2 verify-forward-from-pin)", () => {
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
         pinnedMandateHash: mandatePinHash(genesis),
+        releasePqPin: UNPINNED,
       });
       expect(status.rootPolicyPresent).toBe(true);
       const releaseTrack = status.tracks.find((t) => t.track === "release");
@@ -159,6 +164,7 @@ describe("verifyMaintainersFolder (v2 verify-forward-from-pin)", () => {
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
         pinnedMandateHash: pin,
+        releasePqPin: UNPINNED,
       });
       const releaseTrack = status.tracks.find((t) => t.track === "release");
       expect(releaseTrack?.validMandates).toBe(0);
@@ -202,6 +208,7 @@ describe("verifyMaintainersFolder (v2 verify-forward-from-pin)", () => {
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
         pinnedMandateHash: mandatePinHash(genesis),
+        releasePqPin: UNPINNED,
       });
       expect(status.validEndorsements).toHaveLength(1);
       expect(status.currentRelease?.commitHash).toBe(commit);
@@ -232,6 +239,7 @@ describe("verifyMaintainersFolder (v2 verify-forward-from-pin)", () => {
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
         pinnedMandateHash: "",
+        releasePqPin: UNPINNED,
       });
       const releaseTrack = status.tracks.find((t) => t.track === "release");
       expect(releaseTrack?.validMandates).toBe(0);
@@ -337,6 +345,7 @@ describe("release endorsement ca-track fallback (rollout-plan §2)", () => {
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
         pinnedMandateHash: mandatePinHash(caGenesis),
+        releasePqPin: UNPINNED,
       });
       expect(status.validEndorsements).toHaveLength(1);
       expect(status.currentRelease?.commitHash).toBe(commit);
@@ -359,6 +368,7 @@ describe("release endorsement ca-track fallback (rollout-plan §2)", () => {
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
         pinnedMandateHash: mandatePinHash(caGenesis),
+        releasePqPin: UNPINNED,
       });
       expect(status.validEndorsements).toHaveLength(0);
       expect(status.currentRelease).toBe(null);
@@ -387,6 +397,7 @@ describe("release endorsement ca-track fallback (rollout-plan §2)", () => {
         // Pin the RELEASE genesis so the release track is the anchored, valid
         // chain and therefore preferred by resolveReleaseChain.
         pinnedMandateHash: mandatePinHash(relGenesis),
+        releasePqPin: UNPINNED,
       });
       expect(status.validEndorsements).toHaveLength(0);
       expect(status.currentRelease).toBe(null);
@@ -409,6 +420,7 @@ describe("release endorsement ca-track fallback (rollout-plan §2)", () => {
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
         pinnedMandateHash: mandatePinHash(relGenesis),
+        releasePqPin: UNPINNED,
       });
       expect(status.validEndorsements).toHaveLength(1);
       expect(status.currentRelease?.commitHash).toBe(commit);

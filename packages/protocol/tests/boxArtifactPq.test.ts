@@ -26,8 +26,9 @@ describe("the box artifact's PQ companion", () => {
     expect(r.ok ? { ok: true } : { ok: false, code: r.code }).toEqual(c.expect);
   });
 
-  it("ships with an empty pin: nothing changes until the key ceremony", () => {
-    expect(boxArtifactPqPinConfigured(BOX_ARTIFACT_PQ_PIN)).toBe(false);
+  it("ships with the release key pinned (the 2026-10-26 ceremony)", () => {
+    expect(boxArtifactPqPinConfigured(BOX_ARTIFACT_PQ_PIN)).toBe(true);
+    expect([...BOX_ARTIFACT_PQ_PIN.keyIds]).toEqual(["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"]);
   });
 });
 

@@ -230,7 +230,14 @@ describe("pin --ca-lease and --box-artifact", () => {
   it("pins the key for CA leases and lists every committed lease as signed before the cut-over", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pq-ca-pin-"));
     const pinFile = path.join(dir, "caLeasePq.ts");
-    fs.copyFileSync(path.join(REPO, "packages/protocol/src/caLeasePq.ts"), pinFile);
+    // The repo may already pin its real release key: start from the unpinned state this test is about.
+    fs.writeFileSync(
+      pinFile,
+      fs
+        .readFileSync(path.join(REPO, "packages/protocol/src/caLeasePq.ts"), "utf8")
+        .replace(/keyIds: Object\.freeze\(\[[^\]]*\]\)/, "keyIds: Object.freeze([])")
+        .replace(/legacyLeases: Object\.freeze\(\[[^\]]*\]\)/, "legacyLeases: Object.freeze([])"),
+    );
     const lines: string[] = [];
     K.pinCaLease(path.join(REPO, ".maintainers"), KEY, (m: string) => lines.push(m), pinFile);
     const src = fs.readFileSync(pinFile, "utf8");
@@ -244,7 +251,10 @@ describe("pin --ca-lease and --box-artifact", () => {
   it("pins the key for box artifacts and lists the given published manifests by digest", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pq-box-pin-"));
     const trust = path.join(dir, "box-artifact-trust.json");
-    fs.copyFileSync(path.join(REPO, "release/box-artifact-trust.json"), trust);
+    // Start from the unpinned state even once the repo pins its real release key.
+    const base = JSON.parse(fs.readFileSync(path.join(REPO, "release/box-artifact-trust.json"), "utf8"));
+    base.pq = { ...(base.pq ?? { version: 1 }), keyIds: [], legacyManifests: [] };
+    fs.writeFileSync(trust, JSON.stringify(base, null, 2) + "\n");
     const v = JSON.parse(fs.readFileSync(path.join(REPO, "packages/protocol/test-vectors/box-artifact/vectors.json"), "utf8"));
     const manifest = v.manifest ?? v.valid?.manifest ?? (v.cases ?? v.vectors)[0].manifest;
     const mf = path.join(dir, "m.manifest.json");

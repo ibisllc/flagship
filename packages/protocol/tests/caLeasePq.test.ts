@@ -17,7 +17,9 @@ describe("the CA lease's PQ companion", () => {
     expect(r.accepted.length + r.refused.length).toBe(V.leases.length);
   });
 
-  it("ships with an empty pin, so the committed leases count as before", () => {
-    expect(caLeasePqPinConfigured(CA_LEASE_PQ_PIN)).toBe(false);
+  it("ships with the release key pinned (the 2026-10-26 ceremony); the committed leases count as signed before the cut-over", () => {
+    expect(caLeasePqPinConfigured(CA_LEASE_PQ_PIN)).toBe(true);
+    expect([...CA_LEASE_PQ_PIN.keyIds]).toEqual(["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"]);
+    expect(CA_LEASE_PQ_PIN.legacyLeases.length).toBeGreaterThan(0);
   });
 });

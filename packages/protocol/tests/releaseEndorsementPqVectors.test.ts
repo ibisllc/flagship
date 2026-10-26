@@ -98,8 +98,10 @@ describe("release-endorsement v2 vectors", () => {
     });
   }
 
-  it("ships with no release key pinned (the v1 YubiKey endorsement alone until the ceremony)", () => {
-    expect(releasePqPinConfigured(RELEASE_PQ_PIN)).toBe(false);
+  it("ships with the release key pinned; dbdf2e08 (the last release signed before it) is the marker", () => {
+    expect(releasePqPinConfigured(RELEASE_PQ_PIN)).toBe(true);
+    expect([...RELEASE_PQ_PIN.keyIds]).toEqual(["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"]);
+    expect(RELEASE_PQ_PIN.requirePqAfter).toEqual({ releaseId: "978ca58f-a29a-4857-8afc-6dd6238ed223", commitHash: "dbdf2e08875ae55d9b575f390a29810670f9a54d" });
   });
 
   it("a signer that holds the wrong ML-DSA seed never yields a companion", async () => {

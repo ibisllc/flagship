@@ -294,11 +294,16 @@ function sign(argv: string[]): void {
 function verify(argv: string[]): void {
   const doc = JSON.parse(readFileSync(need(argv, "manifest"), "utf8")) as { manifest: BoxArtifactManifest; signatures: BoxArtifactSignature[] };
   const trustPath = arg(argv, "trust") ?? join(REPO, "release/box-artifact-trust.json");
-  const trust = JSON.parse(readFileSync(trustPath, "utf8")) as ReleaseTrust;
+  const trust = JSON.parse(readFileSync(trustPath, "utf8")) as ReleaseTrust & { pq?: { keyIds?: string[]; legacyManifests?: string[] } };
   const artifact = readFileSync(need(argv, "artifact"));
   const last = arg(argv, "last-sequence");
+  // The PQ pin in the trust file is what this run checks (release/box-artifact-trust.json names the real key); a trust file
+  // with no `pq` keeps the code's pin. The manifest file carries each signer's binding.
+  const pqPin = trust.pq ? { version: 1 as const, keyIds: trust.pq.keyIds ?? [], legacyManifests: trust.pq.legacyManifests ?? [] } : undefined;
   const r = verifyBoxArtifact(doc.manifest, doc.signatures, {
     trust,
+    ...(pqPin ? { pqPin } : {}),
+    pqBindings: (doc as { pqBindings?: unknown[] }).pqBindings ?? [],
     expectedArtifactSha256: doc.manifest.artifactSha256,
     expectedCommit: need(argv, "commit"),
     expectedArch: need(argv, "arch") as BoxArch,

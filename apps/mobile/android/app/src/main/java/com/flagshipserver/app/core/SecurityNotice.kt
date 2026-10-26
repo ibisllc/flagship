@@ -245,7 +245,7 @@ object SecurityNoticeProtocol {
      * `node scripts/pq-release-key.mjs pin`; a test checks they match. Empty: no release PQ key yet.
      */
     // BEGIN RELEASE_PQ_KEY_IDS (generated)
-    val RELEASE_PQ_KEY_IDS: List<String> = listOf()
+    val RELEASE_PQ_KEY_IDS: List<String> = listOf("1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434")
     // END RELEASE_PQ_KEY_IDS
 
     private fun pqShapeOk(e: JsonElement?): Boolean {
@@ -333,9 +333,9 @@ object SecurityNoticeProtocol {
     }
 
     /** The stored notice's outcome, re-verified against the authority NOW; unverifiable means nothing. */
-    fun storedOutcome(store: NoticeStore, authorityKeys: List<String>, client: NoticeClient, now: Long): NoticeOutcome {
+    fun storedOutcome(store: NoticeStore, authorityKeys: List<String>, client: NoticeClient, now: Long, pqKeyIds: List<String> = RELEASE_PQ_KEY_IDS): NoticeOutcome {
         val n = store.notice ?: return NoticeOutcome.nothing
-        if (verify(n, authorityKeys) != null) return NoticeOutcome.nothing
+        if (verify(n, authorityKeys, pqKeyIds) != null) return NoticeOutcome.nothing
         return outcome(n, client, now)
     }
 

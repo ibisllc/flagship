@@ -104,7 +104,7 @@ describe("the anonymous fetch", () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     await sn.refreshSecurityNotice({
       fetchImpl: okFetch({ version: 1, notice: c.sign(lockBody()), mandates: [c.mandate] }, calls),
-      now: NOW, storage: memStorage(), pin: c.pin, client: { platform: "web", build: 1, protocol: 1 },
+      now: NOW, storage: memStorage(), pin: c.pin, pqKeyIds: [], client: { platform: "web", build: 1, protocol: 1 },
     });
     expect(calls).toHaveLength(1);
     const { url, init } = calls[0]!;
@@ -126,7 +126,7 @@ describe("a verified update-required notice", () => {
     const storage = memStorage();
     const r = await sn.refreshSecurityNotice({
       fetchImpl: okFetch({ version: 1, notice: c.sign(lockBody()), mandates: [c.mandate] }),
-      now: NOW, storage, pin: c.pin, client: { platform: "web", build: 144, protocol: 1 },
+      now: NOW, storage, pin: c.pin, pqKeyIds: [], client: { platform: "web", build: 144, protocol: 1 },
     });
     expect(r.refused).toBeNull();
     expect(sn.securityNotices.outcome.action).toBe("lock");
@@ -161,7 +161,7 @@ describe("a verified update-required notice", () => {
       cf.installComFetchGuard();
       await sn.refreshSecurityNotice({
         fetchImpl: okFetch({ version: 1, notice: c.sign(lockBody()), mandates: [c.mandate] }),
-        now: NOW, storage: memStorage(), pin: c.pin, client: { platform: "web", build: 144, protocol: 1 },
+        now: NOW, storage: memStorage(), pin: c.pin, pqKeyIds: [], client: { platform: "web", build: 144, protocol: 1 },
       });
       await expect(fetch("https://home.u.flagship.services/api/screens/orders", { method: "POST" })).rejects.toMatchObject({ updateRequired: true });
       await expect(fetch("https://flagshipserver.com/api/accounts/u/read-token", { method: "POST" })).rejects.toMatchObject({ updateRequired: true });
@@ -185,7 +185,7 @@ describe("a verified update-required notice", () => {
     const s1 = memStorage();
     await sn.refreshSecurityNotice({
       fetchImpl: okFetch({ version: 1, notice: c.sign(lockBody({ platforms: { web: { minBuild: 144, minProtocol: 0 } } })), mandates: [c.mandate] }),
-      now: NOW, storage: s1, pin: c.pin, client: { platform: "web", build: 144, protocol: 1 },
+      now: NOW, storage: s1, pin: c.pin, pqKeyIds: [], client: { platform: "web", build: 144, protocol: 1 },
     });
     expect(sn.securityNotices.outcome).toMatchObject({ action: "none", why: "up-to-date" });
 
@@ -193,11 +193,11 @@ describe("a verified update-required notice", () => {
     const s2 = memStorage();
     await sn.refreshSecurityNotice({
       fetchImpl: okFetch({ version: 1, notice: c.sign(lockBody({ lockFrom: NOW + 3 * DAY })), mandates: [c.mandate] }),
-      now: NOW, storage: s2, pin: c.pin, client: { platform: "web", build: 144, protocol: 1 },
+      now: NOW, storage: s2, pin: c.pin, pqKeyIds: [], client: { platform: "web", build: 144, protocol: 1 },
     });
     expect(sn.securityNotices.outcome).toMatchObject({ action: "banner", style: "update" });
     expect((await imp("updateLock.js")).isUpdateLocked()).toBe(false);
-    await sn.evaluateSecurityNotice({ now: NOW + 3 * DAY + 1, storage: s2, pin: c.pin, client: { platform: "web", build: 144, protocol: 1 } });
+    await sn.evaluateSecurityNotice({ now: NOW + 3 * DAY + 1, storage: s2, pin: c.pin, pqKeyIds: [], client: { platform: "web", build: 144, protocol: 1 } });
     expect(sn.securityNotices.outcome.action).toBe("lock");
   });
 
@@ -208,17 +208,17 @@ describe("a verified update-required notice", () => {
     const client = { platform: "web", build: 144, protocol: 1 };
     await sn.refreshSecurityNotice({
       fetchImpl: okFetch({ version: 1, notice: c.sign(lockBody()), mandates: [c.mandate] }),
-      now: NOW, storage, pin: c.pin, client,
+      now: NOW, storage, pin: c.pin, pqKeyIds: [], client,
     });
     const offline = async () => { throw new TypeError("offline"); };
-    await sn.refreshSecurityNotice({ fetchImpl: offline, now: NOW + DAY, storage, pin: c.pin, client });
+    await sn.refreshSecurityNotice({ fetchImpl: offline, now: NOW + DAY, storage, pin: c.pin, pqKeyIds: [], client });
     expect(sn.securityNotices.outcome.action).toBe("lock");
-    await sn.evaluateSecurityNotice({ now: NOW + 10 * DAY - 1, storage, pin: c.pin, client });
+    await sn.evaluateSecurityNotice({ now: NOW + 10 * DAY - 1, storage, pin: c.pin, pqKeyIds: [], client });
     expect(sn.securityNotices.outcome.action).toBe("lock");
-    await sn.evaluateSecurityNotice({ now: NOW + 10 * DAY, storage, pin: c.pin, client });
+    await sn.evaluateSecurityNotice({ now: NOW + 10 * DAY, storage, pin: c.pin, pqKeyIds: [], client });
     expect(sn.securityNotices.outcome).toMatchObject({ action: "none", why: "expired" });
     expect((await imp("updateLock.js")).isUpdateLocked()).toBe(false);
-    await sn.evaluateSecurityNotice({ now: NOW + 400 * DAY, storage, pin: c.pin, client });
+    await sn.evaluateSecurityNotice({ now: NOW + 400 * DAY, storage, pin: c.pin, pqKeyIds: [], client });
     expect(sn.securityNotices.outcome.action).toBe("none");
   });
 
@@ -228,10 +228,10 @@ describe("a verified update-required notice", () => {
     const storage = memStorage();
     await sn.refreshSecurityNotice({
       fetchImpl: okFetch({ version: 1, notice: c.sign(lockBody()), mandates: [c.mandate] }),
-      now: NOW, storage, pin: c.pin, client: { platform: "web", build: 144, protocol: 1 },
+      now: NOW, storage, pin: c.pin, pqKeyIds: [], client: { platform: "web", build: 144, protocol: 1 },
     });
     expect(sn.securityNotices.outcome.action).toBe("lock");
-    await sn.evaluateSecurityNotice({ now: NOW, storage, pin: c.pin, client: { platform: "web", build: 999, protocol: 1 } });
+    await sn.evaluateSecurityNotice({ now: NOW, storage, pin: c.pin, pqKeyIds: [], client: { platform: "web", build: 999, protocol: 1 } });
     expect(sn.securityNotices.outcome.action).toBe("none");
     expect((await imp("updateLock.js")).isUpdateLocked()).toBe(false);
   });
@@ -241,7 +241,7 @@ describe("fail open", () => {
   const client = { platform: "web", build: 1, protocol: 1 };
   async function run(response: () => Promise<Response>, c = chain(7), storage = memStorage()) {
     const sn = await imp("securityNotice.js");
-    const r = await sn.refreshSecurityNotice({ fetchImpl: response, now: NOW, storage, pin: c.pin, client });
+    const r = await sn.refreshSecurityNotice({ fetchImpl: response, now: NOW, storage, pin: c.pin, pqKeyIds: [], client });
     return { sn, r, storage };
   }
   const json = (v: unknown, status = 200) => async () => new Response(JSON.stringify(v), { status });
@@ -302,7 +302,7 @@ describe("fail open", () => {
     const storage = memStorage();
     const r = await sn.refreshSecurityNotice({
       fetchImpl: json({ version: 1, notice: c.sign(lockBody()), mandates: [c.mandate] }),
-      now: Date.parse("2027-04-01T00:00:00Z"), storage, pin: c.pin, client,
+      now: Date.parse("2027-04-01T00:00:00Z"), storage, pin: c.pin, pqKeyIds: [], client,
     });
     expect(r.refused).toBe("unauthorized-signer");
     expect(sn.securityNotices.outcome.action).toBe("none");
@@ -312,9 +312,9 @@ describe("fail open", () => {
     const c = chain(14);
     const sn = await imp("securityNotice.js");
     const storage = memStorage();
-    await sn.refreshSecurityNotice({ fetchImpl: json({ version: 1, notice: c.sign(lockBody()), mandates: [c.mandate] }), now: NOW, storage, pin: c.pin, client });
+    await sn.refreshSecurityNotice({ fetchImpl: json({ version: 1, notice: c.sign(lockBody()), mandates: [c.mandate] }), now: NOW, storage, pin: c.pin, pqKeyIds: [], client });
     expect(sn.securityNotices.outcome.action).toBe("lock");
-    await sn.evaluateSecurityNotice({ now: NOW, storage, pin: chain(15).pin, client });
+    await sn.evaluateSecurityNotice({ now: NOW, storage, pin: chain(15).pin, pqKeyIds: [], client });
     expect(sn.securityNotices.outcome.action).toBe("none");
   });
 
@@ -339,11 +339,11 @@ describe("anti-rollback", () => {
     const storage = memStorage();
     const feed = (notice: unknown) => okFetch({ version: 1, notice, mandates: [c.mandate] });
     const clear = c.sign(lockBody({ seq: 8, kind: "none", lockFrom: 0, platforms: {}, advisoryId: "", reason: "", message: "" }));
-    await sn.refreshSecurityNotice({ fetchImpl: feed(c.sign(lockBody({ seq: 7 }))), now: NOW, storage, pin: c.pin, client });
+    await sn.refreshSecurityNotice({ fetchImpl: feed(c.sign(lockBody({ seq: 7 }))), now: NOW, storage, pin: c.pin, pqKeyIds: [], client });
     expect(sn.securityNotices.outcome.action).toBe("lock");
-    await sn.refreshSecurityNotice({ fetchImpl: feed(clear), now: NOW, storage, pin: c.pin, client });
+    await sn.refreshSecurityNotice({ fetchImpl: feed(clear), now: NOW, storage, pin: c.pin, pqKeyIds: [], client });
     expect(sn.securityNotices.outcome.action).toBe("none");
-    const r = await sn.refreshSecurityNotice({ fetchImpl: feed(c.sign(lockBody({ seq: 7 }))), now: NOW, storage, pin: c.pin, client });
+    const r = await sn.refreshSecurityNotice({ fetchImpl: feed(c.sign(lockBody({ seq: 7 }))), now: NOW, storage, pin: c.pin, pqKeyIds: [], client });
     expect(r.refused).toBe("stale");
     expect(sn.securityNotices.outcome.action).toBe("none");
     expect(sn.loadStore(storage).highestSeq).toBe(8);
@@ -365,11 +365,11 @@ describe("anti-rollback", () => {
     const storage = memStorage();
     const client = { platform: "web", build: 1, protocol: 1 };
     const full = [old.mandate, renewal];
-    const first = await sn.refreshSecurityNotice({ fetchImpl: okFetch({ version: 1, notice: old.sign(lockBody({ seq: 1, kind: "maintenance", lockFrom: 0, platforms: {}, advisoryId: "", reason: "", eventAt: 0, message: "We will update soon." })), mandates: full }), now: NOW, storage, pin: old.pin, client });
+    const first = await sn.refreshSecurityNotice({ fetchImpl: okFetch({ version: 1, notice: old.sign(lockBody({ seq: 1, kind: "maintenance", lockFrom: 0, platforms: {}, advisoryId: "", reason: "", eventAt: 0, message: "We will update soon." })), mandates: full }), now: NOW, storage, pin: old.pin, pqKeyIds: [], client });
     expect(first.refused).toBeNull();
     expect(sn.loadStore(storage).tip).toBe(Date.parse("2026-10-01T00:00:00.000Z"));
     // A hostile carrier replays only the chain from before the renewal.
-    const replay = await sn.refreshSecurityNotice({ fetchImpl: okFetch({ version: 1, notice: old.sign(lockBody({ seq: 2 })), mandates: [old.mandate] }), now: NOW, storage, pin: old.pin, client });
+    const replay = await sn.refreshSecurityNotice({ fetchImpl: okFetch({ version: 1, notice: old.sign(lockBody({ seq: 2 })), mandates: [old.mandate] }), now: NOW, storage, pin: old.pin, pqKeyIds: [], client });
     expect(replay.refused).toBe("unauthorized-signer");
   });
 });

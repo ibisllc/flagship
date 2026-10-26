@@ -426,7 +426,8 @@
 //       not only v1 (packages/protocol/test-vectors/keyfile).
 //  v183: lib/savedBackups.js converts the backup schedule with one UTC offset both ways (it drifted an hour
 //       in the week a clock change fell in). (Feature branches that used v183-v185 renumber on rebase.)
-const SHELL_VERSION = "v183";
+//  v184: the release PQ key is pinned (lib/releasePqPin.js), and lib/securityNotice.js takes the PQ pin as an option.
+const SHELL_VERSION = "v184";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

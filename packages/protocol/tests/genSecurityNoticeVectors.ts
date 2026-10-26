@@ -171,7 +171,7 @@ export function buildSecurityNoticeVectors(): unknown {
 
   const store = (highestSeq: number, notice: SecurityNotice | null): SecurityNoticeStore => ({ highestSeq, notice });
   const acc = (name: string, st: SecurityNoticeStore, candidate: unknown, keys: string[]) => {
-    const r = acceptSecurityNotice(st, candidate, keys);
+    const r = acceptSecurityNotice(st, candidate, keys, []);
     return {
       name,
       store: { highestSeq: st.highestSeq, notice: st.notice ? json(st.notice) : null },
@@ -198,7 +198,7 @@ export function buildSecurityNoticeVectors(): unknown {
   }
   for (const r of reject) {
     const parsed = parseSecurityNotice(r.notice);
-    const got = parsed ? (verifySecurityNotice(parsed, [authorityPub]) as { ok: boolean; reason?: string }) : { ok: false, reason: "malformed" };
+    const got = parsed ? (verifySecurityNotice(parsed, [authorityPub], []) as { ok: boolean; reason?: string }) : { ok: false, reason: "malformed" };
     if (got.ok || got.reason !== r.expect) throw new Error(`reject vector "${r.name}" gave ${JSON.stringify(got)}`);
   }
 

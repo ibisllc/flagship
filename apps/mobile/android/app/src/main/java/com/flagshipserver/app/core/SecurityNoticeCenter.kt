@@ -169,6 +169,8 @@ class SecurityNoticeCenter(
     private val jitterMs: () -> Long = { (Math.random() * JITTER_MS).toLong() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val lockEnabled: () -> Boolean = { Variant.noticeLockEnabled() },
+    /** The release PQ key ids a notice must carry a companion for (tests run unpinned). */
+    private val pqKeyIds: () -> List<String> = { SecurityNoticeProtocol.RELEASE_PQ_KEY_IDS },
 ) {
     private val lock = Mutex()
     private val inFlight = AtomicBoolean(false)
@@ -204,7 +206,7 @@ class SecurityNoticeCenter(
             val mandates = SecurityNoticeProtocol.parseMandates(doc["mandates"])
             if (notice != null && mandates != null) {
                 val auth = SecurityNoticeProtocol.authority(mandates, now, pin(), store.tip)
-                outcome = SecurityNoticeProtocol.storedOutcome(NoticeStore(store.highestSeq, notice), auth.keys, client, now)
+                outcome = SecurityNoticeProtocol.storedOutcome(NoticeStore(store.highestSeq, notice), auth.keys, client, now, pqKeyIds())
             }
         }
         // With the lock switched off a lock notice is only the update nag.
@@ -293,7 +295,7 @@ class SecurityNoticeCenter(
         val now = clock()
         val store = load()
         val auth = SecurityNoticeProtocol.authority(mandates, now, pin(), store.tip)
-        val folded = SecurityNoticeProtocol.accept(NoticeStore(store.highestSeq, null), notice, auth.keys)
+        val folded = SecurityNoticeProtocol.accept(NoticeStore(store.highestSeq, null), notice, auth.keys, pqKeyIds())
         val accepted = folded.store.notice
         if (folded.refused == null && accepted != null) {
             save(store.copy(highestSeq = folded.store.highestSeq, doc = SecurityNoticeProtocol.document(accepted.raw, mandatesJson), tip = auth.tip))
@@ -364,6 +366,7 @@ class SecurityNoticeCenter(
                     SecurityNoticeProtocol.CLIENT_PROTOCOL_LEVEL,
                 ),
                 pin = { Variant.noticePin },
+                pqKeyIds = { Variant.noticePqKeyIds },
                 clock = { Variant.noticeNowMs() },
                 jitterMs = { if (Variant.usesMockClients) 0 else (Math.random() * JITTER_MS).toLong() },
             )

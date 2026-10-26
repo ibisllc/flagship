@@ -44,6 +44,7 @@ class SecurityNoticeCenterTest {
         clock = { clock },
         jitterMs = { 0 },
         lockEnabled = { lockEnabled },
+        pqKeyIds = { emptyList() }, // classical-only fixtures: unpinned (the repo's pin names the real release PQ key)
     )
 
     private fun lockNotice(seq: Long = 3, lockFrom: Long = t0, auth: NoticeGymAuthority = a) = auth.notice(
@@ -363,6 +364,7 @@ class SecurityNoticeCenterTest {
             pin = { a.pin },
             clock = { clock },
             jitterMs = { 0 },
+            pqKeyIds = { emptyList() },
         )
         val first = async(kotlinx.coroutines.Dispatchers.Default) { c.refresh() }
         kotlinx.coroutines.delay(50)

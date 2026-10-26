@@ -155,12 +155,13 @@ describe("security-notice signing", () => {
     };
     const root = tmpRoot();
     const { body } = sn.buildBody(args(...REQUIRED, "--deprecate-protocol", "1", "--allow-unshipped"), { now: NOW, root });
-    const notice = await sn.signAndWrite({ body, signer, root, authorityKeys: [pub] });
+    // Classical-only fixture: run it unpinned (the repo's own pin names the real release PQ key).
+    const notice = await sn.signAndWrite({ body, signer, root, authorityKeys: [pub], pqKeyIds: [] });
     const onDisk = JSON.parse(fs.readFileSync(path.join(root, "notices", "current.json"), "utf8"));
     expect(onDisk).toEqual(JSON.parse(JSON.stringify(notice)));
     expect(fs.readdirSync(path.join(root, "notices", "history"))).toEqual(["0001-update-required.json"]);
     const parsed = parseSecurityNotice(onDisk)!;
-    expect(verifySecurityNotice(parsed, [pub])).toEqual({ ok: true });
+    expect(verifySecurityNotice(parsed, [pub], [])).toEqual({ ok: true });
     expect(securityNoticeOutcome(parsed, { platform: "ios", build: 11, protocol: 1 }, Date.parse("2026-11-02T00:00:00Z")).action).toBe("lock");
     expect(sn.highestSignedSeq(root)).toBe(1);
   });
@@ -214,7 +215,7 @@ describe("security-notice command line", () => {
   it("previews by default and writes nothing", () => {
     const root = tmpRoot();
     const r = run(["maintenance", "--message", "We will update Flagship on {date}. Flagship may be briefly unavailable.", "--event", "+3d", "--path", root, "--signing-key", "file:/nonexistent"]);
-    expect(r.status).toBe(0);
+    expect(r.status, r.stdout + r.stderr).toBe(0);
     expect(r.stdout).toMatch(/DRY RUN: nothing signed, nothing written/);
     expect(r.stdout).toMatch(/flagship\/security-notice\/v1\|/);
     expect(fs.existsSync(path.join(root, "notices"))).toBe(false);

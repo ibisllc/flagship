@@ -1316,7 +1316,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "2e285a0b30a73d0f6694dd73f1206ce9f79fcaff235965f5416d7e1806d76cf3",
+      "d2b726febe698acaa04f21e592d268d993fb002ab29c905783b7a9782d4e6a74",
     );
   });
 

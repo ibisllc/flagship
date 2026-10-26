@@ -60,7 +60,7 @@ class SecurityNoticeVectorsTest {
             val n = SecurityNoticeProtocol.parse(v["notice"])
             assertNotNull(v.s("name"), n)
             assertEquals(v.s("name"), v.s("canonical"), String(SecurityNoticeProtocol.canonical(n!!.raw, n.signedBy), Charsets.UTF_8))
-            assertNull(v.s("name"), SecurityNoticeProtocol.verify(n, listOf(authority)))
+            assertNull(v.s("name"), SecurityNoticeProtocol.verify(n, listOf(authority), emptyList()))
         }
     }
 
@@ -70,7 +70,7 @@ class SecurityNoticeVectorsTest {
         for (e in list) {
             val v = e.jsonObject
             val n = SecurityNoticeProtocol.parse(v["notice"])
-            val got = if (n == null) "malformed" else SecurityNoticeProtocol.verify(n, listOf(authority)) ?: "accepted"
+            val got = if (n == null) "malformed" else SecurityNoticeProtocol.verify(n, listOf(authority), emptyList()) ?: "accepted"
             assertEquals(v.s("name"), v.s("expect"), got)
         }
     }
@@ -120,7 +120,7 @@ class SecurityNoticeVectorsTest {
             val st = v["store"]!!.jsonObject
             val stored = st["notice"]?.takeIf { it !is JsonNull }?.let { SecurityNoticeProtocol.parse(it) }
             val keys = v["authorityKeys"]!!.jsonArray.map { it.jsonPrimitive.content }
-            val got = SecurityNoticeProtocol.accept(NoticeStore(st.l("highestSeq"), stored), v["candidate"], keys)
+            val got = SecurityNoticeProtocol.accept(NoticeStore(st.l("highestSeq"), stored), v["candidate"], keys, emptyList())
             val want = v["expect"]!!.jsonObject
             assertEquals(v.s("name"), want.l("highestSeq"), got.store.highestSeq)
             assertEquals(v.s("name"), want["seq"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.long, got.store.notice?.seq)

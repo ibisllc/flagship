@@ -88,6 +88,10 @@ interface AppVariant {
      *  one. A debug gym run may stand in a throwaway authority's. */
     val noticePin: String
 
+    /** The release PQ key ids a notice must carry a companion for: the pinned ones. A debug gym run that stands in
+     *  a throwaway authority (classical notices) runs unpinned. */
+    val noticePqKeyIds: List<String>
+
     /** May a signed "update required" notice lock the app? Off in release until the lock is fit to
      *  ship (docs/security-notices.md); the gym keeps it on in debug. */
     fun noticeLockEnabled(): Boolean

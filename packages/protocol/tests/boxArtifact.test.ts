@@ -15,6 +15,10 @@ const V = JSON.parse(readFileSync(new URL("../test-vectors/box-artifact/vectors.
 const floorFile = JSON.parse(readFileSync(new URL("../../../release/security-floor.json", import.meta.url), "utf8"));
 const unhex = (h: string) => new Uint8Array(Buffer.from(h, "hex"));
 
+// The shared v1 vectors are classical-only: they run unpinned (the repo's own pin names the real release PQ key; the
+// pinned behaviour is covered by boxArtifactPq.test.ts and the pq-vectors).
+const UNPINNED = { version: 1 as const, keyIds: [] as string[], legacyManifests: [] as string[] };
+
 describe("box artifact manifest (shared vectors)", () => {
   it("has the shared canonical bytes and a signature per authority", () => {
     expect(new TextDecoder().decode(canonicalBoxArtifact(V.manifest))).toBe(V.canonical);
@@ -24,7 +28,7 @@ describe("box artifact manifest (shared vectors)", () => {
   });
 
   it.each(V.cases as Array<{ name: string; signatures: never[]; options: never; expect: { ok: boolean; code?: string } }>)("$name", (c) => {
-    const r = verifyBoxArtifact(V.manifest, c.signatures, c.options);
+    const r = verifyBoxArtifact(V.manifest, c.signatures, { pqPin: UNPINNED, ...c.options });
     expect(r.ok).toBe(c.expect.ok);
     if (!r.ok) expect(r.code).toBe(c.expect.code);
   });
@@ -56,7 +60,7 @@ describe("what the manifest refuses to describe", () => {
   });
 
   it("ignores a garbage signature instead of throwing", () => {
-    const r = verifyBoxArtifact(m, [{ keyHex: V.publicKeys[0], signatureHex: "zz" }, V.signatures[0], V.signatures[1]], { trust: V.trust, verifierVersion: 1 });
+    const r = verifyBoxArtifact(m, [{ keyHex: V.publicKeys[0], signatureHex: "zz" }, V.signatures[0], V.signatures[1]], { trust: V.trust, verifierVersion: 1, pqPin: UNPINNED });
     expect(r.ok).toBe(true);
   });
 });

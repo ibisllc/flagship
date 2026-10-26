@@ -37,14 +37,14 @@ describe("security-notice vectors", () => {
       const n = parseSecurityNotice(p.notice);
       expect(n, p.name).not.toBeNull();
       expect(text(canonicalSecurityNotice(n!, n!.signedBy)), p.name).toBe(p.canonical);
-      expect(verifySecurityNotice(n!, [auth]), p.name).toEqual({ ok: true });
+      expect(verifySecurityNotice(n!, [auth], []), p.name).toEqual({ ok: true });
     }
   });
 
   it("refuses every reject with its reason", () => {
     for (const r of V.reject) {
       const n = parseSecurityNotice(r.notice);
-      const got = n ? verifySecurityNotice(n, [auth]) : { ok: false, reason: "malformed" };
+      const got = n ? verifySecurityNotice(n, [auth], []) : { ok: false, reason: "malformed" };
       expect(got, r.name).toEqual({ ok: false, reason: r.expect });
     }
   });
@@ -68,7 +68,7 @@ describe("security-notice vectors", () => {
   it("absorbs candidates the way the accept table says", () => {
     for (const a of V.accept) {
       const st: SecurityNoticeStore = { highestSeq: a.store.highestSeq, notice: a.store.notice ? parseSecurityNotice(a.store.notice) : null };
-      const r = acceptSecurityNotice(st, a.candidate, a.authorityKeys);
+      const r = acceptSecurityNotice(st, a.candidate, a.authorityKeys, []);
       expect({ highestSeq: r.store.highestSeq, seq: r.store.notice ? r.store.notice.seq : null, refused: r.refused }, a.name).toEqual(a.expect);
     }
   });
@@ -138,35 +138,35 @@ describe("security notice rules", () => {
       authority,
     );
     let st: SecurityNoticeStore = { highestSeq: 0, notice: null };
-    st = acceptSecurityNotice(st, lock, [auth]).store;
-    expect(storedSecurityNoticeOutcome(st, [auth], client, T0 + 2 * DAY).action).toBe("lock");
-    st = acceptSecurityNotice(st, clear, [auth]).store;
-    expect(storedSecurityNoticeOutcome(st, [auth], client, T0 + 2 * DAY).action).toBe("none");
-    const again = acceptSecurityNotice(st, lock, [auth]);
+    st = acceptSecurityNotice(st, lock, [auth], []).store;
+    expect(storedSecurityNoticeOutcome(st, [auth], client, T0 + 2 * DAY, []).action).toBe("lock");
+    st = acceptSecurityNotice(st, clear, [auth], []).store;
+    expect(storedSecurityNoticeOutcome(st, [auth], client, T0 + 2 * DAY, []).action).toBe("none");
+    const again = acceptSecurityNotice(st, lock, [auth], []);
     expect(again.refused).toBe("stale");
-    expect(storedSecurityNoticeOutcome(again.store, [auth], client, T0 + 2 * DAY).action).toBe("none");
+    expect(storedSecurityNoticeOutcome(again.store, [auth], client, T0 + 2 * DAY, []).action).toBe("none");
   });
 
   it("a stored lock shows nothing when the authority cannot be established", () => {
     const lock = signSecurityNotice(body(), authority);
     const st: SecurityNoticeStore = { highestSeq: lock.seq, notice: lock };
-    expect(storedSecurityNoticeOutcome(st, [auth], client, T0 + 2 * DAY).action).toBe("lock");
-    expect(storedSecurityNoticeOutcome(st, [], client, T0 + 2 * DAY).action).toBe("none");
-    expect(storedSecurityNoticeOutcome(st, ["00".repeat(32)], client, T0 + 2 * DAY).action).toBe("none");
+    expect(storedSecurityNoticeOutcome(st, [auth], client, T0 + 2 * DAY, []).action).toBe("lock");
+    expect(storedSecurityNoticeOutcome(st, [], client, T0 + 2 * DAY, []).action).toBe("none");
+    expect(storedSecurityNoticeOutcome(st, ["00".repeat(32)], client, T0 + 2 * DAY, []).action).toBe("none");
   });
 
   it("a fetch that fails or returns junk never changes the store", () => {
     const lock = signSecurityNotice(body(), authority);
     const st: SecurityNoticeStore = { highestSeq: lock.seq, notice: lock };
     for (const junk of [null, undefined, 5, "x", [], {}, { type: "SecurityNotice", version: 1 }] as unknown[]) {
-      expect(acceptSecurityNotice(st, junk, [auth]).store).toBe(st);
+      expect(acceptSecurityNotice(st, junk, [auth], []).store).toBe(st);
     }
   });
 
   it("rejects a notice whose signature is flipped by one bit", () => {
     const n = signSecurityNotice(body(), authority);
     const flipped: SecurityNotice = { ...n, signature: (n.signature[0] === "0" ? "1" : "0") + n.signature.slice(1) };
-    expect(verifySecurityNotice(flipped, [auth])).toEqual({ ok: false, reason: "signature-invalid" });
+    expect(verifySecurityNotice(flipped, [auth], [])).toEqual({ ok: false, reason: "signature-invalid" });
   });
 
   it("renders {date} through the caller's formatter", () => {

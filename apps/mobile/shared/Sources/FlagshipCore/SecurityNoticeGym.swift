@@ -122,7 +122,7 @@ public enum SecurityNoticeGym {
             guard let base else { return Date() }
             return base.addingTimeInterval(Date().timeIntervalSince(started))
         }
-        let center = SecurityNoticeCenter(storage: storage, fetcher: feed, client: client, pin: chain.pin, now: clock)
+        let center = SecurityNoticeCenter(storage: storage, fetcher: feed, client: client, pin: chain.pin, pqKeyIds: [], now: clock) // throwaway authority, classical notices: unpinned
         return (center, feed, value("-gym-notice-every").flatMap { Double($0) } ?? 2)
     }
 

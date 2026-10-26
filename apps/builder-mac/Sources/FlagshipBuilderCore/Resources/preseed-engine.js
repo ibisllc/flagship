@@ -116,12 +116,12 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       keys: ["2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7"],
       /** The hybrid PQ pin (boxArtifactPq.ts): signers' key ids, and manifests from before the cut-over. */
       pq: {
-        keyIds: [],
+        keyIds: ["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"],
         legacyManifests: []
       }
     },
     /** The installer's arguments for the PQ pin; empty while the pin names no key. */
-    pqInstallerArgs: "",
+    pqInstallerArgs: ' --pq-key-ids "1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"',
     /** The lowest Node a box may run. */
     nodeFloor: "24.22.1",
     /** What a new box is built on: Podman + the Rust path, or Docker + TS (the release gym decides). */

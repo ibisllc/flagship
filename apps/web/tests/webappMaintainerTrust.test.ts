@@ -31,6 +31,9 @@ async function loadTrust() {
 
 const NOW_MS = Date.parse(VECTORS.clientNow);
 
+// Classical-only fixtures: run unpinned (the repo's own CA lease pin names the real release PQ key).
+const UNPINNED_CA = { version: 1, keyIds: [], legacyLeases: [] };
+
 describe("maintainerTrust — canonical bytes match @ibisllc/maintainers", () => {
   it("mandatePinHash equals the package's pin for the fixture root", async () => {
     const t = await loadTrust();
@@ -107,12 +110,12 @@ describe("maintainerTrust — byte-identity vs the AUTHORITATIVE cross-platform 
   it("verifyComBlessing agrees with the authoritative verdict on every case", async () => {
     const t = await loadTrust();
     // trusted case
-    const good = await t.verifyComBlessing(AUTH.blessingResponse, AUTH.epochsMs.NOW, AUTH.pinnedMandateHash);
+    const good = await t.verifyComBlessing(AUTH.blessingResponse, AUTH.epochsMs.NOW, AUTH.pinnedMandateHash, UNPINNED_CA);
     expect(good.trusted).toBe(AUTH.expectedVerdict.trusted);
     expect(good.caPubkey).toBe(AUTH.expectedVerdict.caPubkey);
     // every negative case (each carries its own nowMs + baked pin)
     for (const c of AUTH.negativeCases) {
-      const r = await t.verifyComBlessing(c.response, c.nowMs, c.pin);
+      const r = await t.verifyComBlessing(c.response, c.nowMs, c.pin, UNPINNED_CA);
       expect(r.trusted).toBe(c.expectedVerdict.trusted); // verdict parity (label may differ)
     }
   });
@@ -122,7 +125,7 @@ describe("maintainerTrust — verifyComBlessing (the full verdict)", () => {
   for (const c of VECTORS.cases) {
     it(c.name, async () => {
       const t = await loadTrust();
-      const r = await t.verifyComBlessing(c.blessing, NOW_MS, VECTORS.pin);
+      const r = await t.verifyComBlessing(c.blessing, NOW_MS, VECTORS.pin, UNPINNED_CA);
       expect(r.trusted).toBe(c.expect.trusted);
       expect(r.reason).toBe(c.expect.reason);
     });
@@ -134,14 +137,14 @@ describe("maintainerTrust — verifyComBlessing (the full verdict)", () => {
     // the lease has lapsed. The verdict must still be trusted at CLIENT_NOW.
     const good = VECTORS.cases.find((c: { expect: { trusted: boolean } }) => c.expect.trusted);
     const tampered = { ...good.blessing, now: "2031-01-01T00:00:00.000Z" };
-    const r = await t.verifyComBlessing(tampered, NOW_MS, VECTORS.pin);
+    const r = await t.verifyComBlessing(tampered, NOW_MS, VECTORS.pin, UNPINNED_CA);
     expect(r.trusted).toBe(true);
   });
 
   it("a network/absent blessing yields no verdict (no-blessing), NOT untrusted-by-network", async () => {
     const t = await loadTrust();
-    expect((await t.verifyComBlessing(null, NOW_MS, VECTORS.pin)).reason).toBe("no-blessing");
-    expect((await t.verifyComBlessing(undefined, NOW_MS, VECTORS.pin)).reason).toBe("no-blessing");
+    expect((await t.verifyComBlessing(null, NOW_MS, VECTORS.pin, UNPINNED_CA)).reason).toBe("no-blessing");
+    expect((await t.verifyComBlessing(undefined, NOW_MS, VECTORS.pin, UNPINNED_CA)).reason).toBe("no-blessing");
   });
 
   it("a rogue .com cannot self-anchor: a chain at ITS OWN pin is rejected against the baked pin", async () => {
@@ -150,7 +153,7 @@ describe("maintainerTrust — verifyComBlessing (the full verdict)", () => {
     // (its own root). Verified against the BAKED pin, the served root isn't
     // found → no authority → untrusted.
     const good = VECTORS.cases.find((c: { expect: { trusted: boolean } }) => c.expect.trusted);
-    const r = await t.verifyComBlessing(good.blessing, NOW_MS, "11".repeat(32));
+    const r = await t.verifyComBlessing(good.blessing, NOW_MS, "11".repeat(32), UNPINNED_CA);
     expect(r.trusted).toBe(false);
     expect(r.reason).toBe("no-authorized-ca-keys");
   });

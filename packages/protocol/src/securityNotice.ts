@@ -473,10 +473,11 @@ export function storedSecurityNoticeOutcome(
   authorityKeys: readonly string[],
   client: SecurityNoticeClient,
   now: number,
+  pqKeyIds: readonly string[] = RELEASE_PQ_PIN.keyIds,
 ): SecurityNoticeOutcome {
   const n = store.notice;
   if (!n) return { action: "none", why: "kind-none" };
-  if (!verifySecurityNotice(n, authorityKeys).ok) return { action: "none", why: "kind-none" };
+  if (!verifySecurityNotice(n, authorityKeys, pqKeyIds).ok) return { action: "none", why: "kind-none" };
   return securityNoticeOutcome(n, client, now);
 }
 

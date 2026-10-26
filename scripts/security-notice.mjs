@@ -528,7 +528,8 @@ async function main() {
   if (body.reason) out(`  security reason:  ${body.reason}`);
   if (body.message) out(`  message:          ${securityNoticeText(body, (ms) => new Date(ms).toUTCString())}`);
   out(`  signing key:      ${signingKey}`);
-  const pqPlan = noticePqPlan({ noPq: args.noPq, root, signerPub });
+  // A signer that cannot be read has no binding to look for: the preview says so, and signing fails on the key itself.
+  const pqPlan = signerPub ? noticePqPlan({ noPq: args.noPq, root, signerPub }) : { describe: "unknown (the signing key could not be read)" };
   if (pqPlan.error) errors.push(pqPlan.error);
   out(`  PQ half:          ${pqPlan.describe ?? "(refused)"}`);
   out(`  signer pubkey:    ${signerPub ?? `(could not read: ${signerNote})`}`);

@@ -189,8 +189,8 @@ describe("sign and verify from the command line", () => {
     const seed = new Uint8Array(32).fill(0x55);
     writeFileSync(join(dir, "key.hex"), Buffer.from(seed).toString("hex"));
     const pub = Buffer.from(ed.getPublicKey(seed)).toString("hex");
-    writeFileSync(join(dir, "trust.json"), JSON.stringify({ keys: [pub], threshold: 1 }));
-    writeFileSync(join(dir, "other-trust.json"), JSON.stringify({ keys: ["1".repeat(64)], threshold: 1 }));
+    writeFileSync(join(dir, "trust.json"), JSON.stringify({ keys: [pub], threshold: 1, pq: { keyIds: [], legacyManifests: [] } })); // classical fixtures: unpinned
+    writeFileSync(join(dir, "other-trust.json"), JSON.stringify({ keys: ["1".repeat(64)], threshold: 1, pq: { keyIds: [], legacyManifests: [] } }));
     const here = new URL(".", import.meta.url).pathname;
     const tool = join(here, "../build.ts");
     const run = (...a: string[]) => spawnSync("npx", ["tsx", tool, ...a], { encoding: "utf8", cwd: join(here, "../../..") });

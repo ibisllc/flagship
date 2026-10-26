@@ -41,6 +41,9 @@ function fakeBlessingFetch(body: unknown, ok = true) {
   });
 }
 
+// Classical-only fixtures: run unpinned (the repo's own CA lease pin names the real release PQ key).
+const UNPINNED_CA = { version: 1, keyIds: [], legacyLeases: [] };
+
 describe("serverTrust — baked pin lockstep with protocol", () => {
   it("BAKED_PIN equals MAINTAINER_PINNED_MANDATE_HASH in packages/protocol", async () => {
     const t = await loadTrust();
@@ -71,6 +74,7 @@ describe("serverTrust — verdict semantics", () => {
       fetchImpl: fakeBlessingFetch(blessingOf("trusted: served key is the live-authorized hot CA key")),
       now: () => NOW_MS,
       pin: VECTORS.pin,
+      caLeasePqPin: UNPINNED_CA,
     });
     expect(r.ok).toBe(true);
     expect(t.serverTrust.isServerTrusted()).toBe(true);
@@ -83,6 +87,7 @@ describe("serverTrust — verdict semantics", () => {
       fetchImpl: fakeBlessingFetch(blessingOf("untrusted: served key is NOT the authorized key")),
       now: () => NOW_MS,
       pin: VECTORS.pin,
+      caLeasePqPin: UNPINNED_CA,
     });
     expect(t.serverTrust.isServerTrusted()).toBe(false);
     const certs = t.serverTrust.failingCerts();
@@ -99,6 +104,7 @@ describe("serverTrust — verdict semantics", () => {
       },
       now: () => NOW_MS,
       pin: VECTORS.pin,
+      caLeasePqPin: UNPINNED_CA,
     });
     expect(r.networkError).toBe(true);
     expect(t.serverTrust.verdict).toBeNull();
@@ -111,6 +117,7 @@ describe("serverTrust — verdict semantics", () => {
       fetchImpl: fakeBlessingFetch(null, false),
       now: () => NOW_MS,
       pin: VECTORS.pin,
+      caLeasePqPin: UNPINNED_CA,
     });
     expect(r.networkError).toBe(true);
     expect(t.serverTrust.verdict).toBeNull();
@@ -122,6 +129,7 @@ describe("serverTrust — verdict semantics", () => {
       fetchImpl: fakeBlessingFetch(blessingOf("untrusted: served key is NOT the authorized key")),
       now: () => NOW_MS,
       pin: VECTORS.pin,
+      caLeasePqPin: UNPINNED_CA,
     });
     const certHash = t.serverTrust.failingCerts()[0].certHash;
     expect(t.serverTrust.isServerTrusted()).toBe(false);
@@ -163,6 +171,7 @@ describe("comFetch — the .com chokepoint", () => {
       fetchImpl: fakeBlessingFetch(blessingOf("untrusted: served key is NOT the authorized key")),
       now: () => NOW_MS,
       pin: VECTORS.pin,
+      caLeasePqPin: UNPINNED_CA,
     });
     let called = false;
     (globalThis as { fetch: typeof fetch }).fetch = (async () => {
@@ -182,6 +191,7 @@ describe("comFetch — the .com chokepoint", () => {
       fetchImpl: fakeBlessingFetch(blessingOf("untrusted: served key is NOT the authorized key")),
       now: () => NOW_MS,
       pin: VECTORS.pin,
+      caLeasePqPin: UNPINNED_CA,
     });
     let hit = "";
     (globalThis as { fetch: typeof fetch }).fetch = (async (u: string) => {
@@ -223,6 +233,7 @@ describe("comFetch — global fetch guard (the true chokepoint)", () => {
         fetchImpl: fakeBlessingFetch(blessingOf("untrusted: served key is NOT the authorized key")),
         now: () => NOW_MS,
         pin: VECTORS.pin,
+      caLeasePqPin: UNPINNED_CA,
       });
       // A raw fetch (as e.g. lib/leases.js does) is now intercepted.
       await expect(

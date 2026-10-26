@@ -6,7 +6,9 @@
     "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7"
   ],
   "pq": {
-    "keyIds": [],
+    "keyIds": [
+      "1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"
+    ],
     "legacyManifests": []
   },
   "_pq": "The hybrid PQ pin for the artifact signers (packages/protocol/src/boxArtifactPq.ts): the key ids of their release-key bindings, and the v1 digests of manifests signed before the cut-over. Empty keyIds: classical k-of-n."

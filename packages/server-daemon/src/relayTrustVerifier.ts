@@ -31,6 +31,7 @@ import {
   ed,
   gateCaLeasesPq,
   type CaLeasePqMaterial,
+  type CaLeasePqPin,
   type ServiceBlessing,
 } from "@flagship/protocol";
 import {
@@ -81,6 +82,8 @@ export interface RelayTrustVerifierOptions {
   servicesApex: string;
   /** Baked maintainer pin. Defaults to the protocol constant. */
   pinnedMandateHash?: string;
+  /** The CA lease PQ pin. Defaults to the protocol constant (`CA_LEASE_PQ_PIN`). */
+  caLeasePqPin?: CaLeasePqPin;
   /** How long to cache the fetched maintainer chain. Default 1h. */
   chainCacheMs?: number;
   /** Test seam — replace global fetch. */
@@ -119,6 +122,7 @@ export class RelayTrustVerifier {
   private readonly comBaseUrl: string;
   private readonly servicesApex: string;
   private readonly pinnedMandateHash: string;
+  private readonly caLeasePqPin: CaLeasePqPin | undefined;
   private readonly chainCacheMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
@@ -129,6 +133,7 @@ export class RelayTrustVerifier {
     this.comBaseUrl = opts.comBaseUrl.replace(/\/$/, "");
     this.servicesApex = opts.servicesApex.toLowerCase();
     this.pinnedMandateHash = opts.pinnedMandateHash ?? MAINTAINER_PINNED_MANDATE_HASH;
+    this.caLeasePqPin = opts.caLeasePqPin;
     this.chainCacheMs = opts.chainCacheMs ?? DEFAULT_CHAIN_CACHE_MS;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.now = opts.now ?? trustedNow;
@@ -152,7 +157,7 @@ export class RelayTrustVerifier {
     // (caLeasePq.ts); `.com` cannot lift that by leaving the companions out.
     const material: MaintainerChainMaterial = {
       mandates: Array.isArray(body.mandates) ? body.mandates : [],
-      caEndorsements: gateCaLeasesPq(Array.isArray(body.caEndorsements) ? body.caEndorsements : [], body.caLeasePq, { now }).accepted,
+      caEndorsements: gateCaLeasesPq(Array.isArray(body.caEndorsements) ? body.caEndorsements : [], body.caLeasePq, { now, ...(this.caLeasePqPin ? { pin: this.caLeasePqPin } : {}) }).accepted,
     };
     this.cache = { material, fetchedAt: now };
     return material;

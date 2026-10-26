@@ -115,7 +115,7 @@ public struct SecurityNoticePq: Equatable, Sendable {
 /// `node scripts/pq-release-key.mjs pin`; a test checks they match. Empty: no release PQ key yet.
 public enum ReleasePqPin {
     // BEGIN RELEASE_PQ_KEY_IDS (generated)
-    public static let keyIds: [String] = []
+    public static let keyIds: [String] = ["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"]
     // END RELEASE_PQ_KEY_IDS
 }
 
@@ -429,10 +429,10 @@ extension SecurityNoticeVerifier {
     /// Fold a fetched candidate into the store. A candidate that is malformed,
     /// unsigned by the authority, or not newer than the highest seq verified
     /// is dropped and the store stays as it was.
-    public static func accept(_ store: Store, candidate: Any?, authorityKeys: [String]) -> (store: Store, refused: Rejection?) {
+    public static func accept(_ store: Store, candidate: Any?, authorityKeys: [String], pqKeyIds: [String] = ReleasePqPin.keyIds) -> (store: Store, refused: Rejection?) {
         if candidate == nil || candidate is NSNull { return (store, nil) }
         guard let n = SecurityNotice.parse(candidate) else { return (store, .malformed) }
-        if let bad = verify(n, authorityKeys: authorityKeys) { return (store, bad) }
+        if let bad = verify(n, authorityKeys: authorityKeys, pqKeyIds: pqKeyIds) { return (store, bad) }
         if n.seq <= store.highestSeq { return (store, .stale) }
         return (Store(highestSeq: n.seq, notice: n), nil)
     }
@@ -440,9 +440,9 @@ extension SecurityNoticeVerifier {
     /// The stored notice's outcome, re-verified against the authority NOW. If
     /// the authority cannot be established the answer is "nothing": a lock is
     /// never shown on trust alone.
-    public static func storedOutcome(_ store: Store, authorityKeys: [String], client: SecurityNoticeClient, nowMs: Int64) -> SecurityNoticeOutcome {
+    public static func storedOutcome(_ store: Store, authorityKeys: [String], client: SecurityNoticeClient, nowMs: Int64, pqKeyIds: [String] = ReleasePqPin.keyIds) -> SecurityNoticeOutcome {
         guard let n = store.notice else { return .none(why: "kind-none") }
-        if verify(n, authorityKeys: authorityKeys) != nil { return .none(why: "kind-none") }
+        if verify(n, authorityKeys: authorityKeys, pqKeyIds: pqKeyIds) != nil { return .none(why: "kind-none") }
         return outcome(n, client: client, nowMs: nowMs)
     }
 }

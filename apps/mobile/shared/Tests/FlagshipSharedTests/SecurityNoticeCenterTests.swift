@@ -41,7 +41,8 @@ final class SecurityNoticeCenterTests: XCTestCase {
         let center = SecurityNoticeCenter(
             storage: storage, fetcher: feed, lock: lock,
             client: SecurityNoticeClient(platform: "ios", build: build, protocolLevel: protocolLevel),
-            pin: pin ?? chain.pin, minInterval: 900, maxJitter: 0, lockEnabled: lockEnabled, now: { clock.now() }
+            pin: pin ?? chain.pin, minInterval: 900, maxJitter: 0, lockEnabled: lockEnabled,
+            pqKeyIds: [], now: { clock.now() } // classical-only fixtures: unpinned (the repo pins the real release PQ key)
         )
         return (center, feed, clock, lock)
     }

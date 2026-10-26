@@ -477,7 +477,7 @@ export async function authorizedCaKeys(endorsements, caChain, now, opts = {}) {
  * @param {string} [pinnedMandateHash]  the locally-baked anchor (REQUIRED in prod)
  * @returns {Promise<{trusted:boolean, caPubkey:string|null, reason:string}>}
  */
-export async function verifyComBlessing(blessing, nowMs, pinnedMandateHash) {
+export async function verifyComBlessing(blessing, nowMs, pinnedMandateHash, caLeasePqPin = CA_LEASE_PQ_PIN) {
   if (!blessing || typeof blessing !== "object") {
     return { trusted: false, caPubkey: null, reason: "no-blessing" };
   }
@@ -504,7 +504,7 @@ export async function verifyComBlessing(blessing, nowMs, pinnedMandateHash) {
   try {
     // Once the CA lease PQ pin names a key, a lease without its verified hybrid companion gives
     // no authority (pq-suites.md §16.3).
-    const leases = await gateCaLeasesPq(blessing.caEndorsements ?? [], blessing.caLeasePq, CA_LEASE_PQ_PIN, nowMs);
+    const leases = await gateCaLeasesPq(blessing.caEndorsements ?? [], blessing.caLeasePq, caLeasePqPin, nowMs);
     keys = await authorizedCaKeys(leases, chain, nowMs);
   } catch {
     return { trusted: false, caPubkey: servedKey, reason: "endorsement-error" };
@@ -521,7 +521,7 @@ export async function verifyComBlessing(blessing, nowMs, pinnedMandateHash) {
 // ── the CA lease's PQ half (packages/protocol/src/caLeasePq.ts; vectors test-vectors/ca-lease-pq) ──
 
 /** Mirrors `CA_LEASE_PQ_PIN` in caLeasePq.ts (a test keeps them equal). Empty: every lease counts. */
-export const CA_LEASE_PQ_PIN = Object.freeze({ version: 1, keyIds: Object.freeze([]), legacyLeases: Object.freeze([]) });
+export const CA_LEASE_PQ_PIN = Object.freeze({ version: 1, keyIds: Object.freeze(["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"]), legacyLeases: Object.freeze(["05992604e11f53b3ede67ac98c089faa8b45e23b6f543fdba1927a08df29f57f", "38d5ebb0d6ebf7742416076366ce3ef50c02273f91515224b2937c56e958c278", "6f11e97e0ce6fc6e77edf2aa2676c08fa2d73424803b5900cc22479194f4a363", "a1606216cf39cccc9d02e2d22d74874037da59f137bb065e55c9f6d9937f14a4"]) });
 const TAG_CA_LEASE_V2 = "flagship/ca-lease/v2";
 
 async function hybridKeyIdHex(pk) {

@@ -677,10 +677,11 @@ export function cmdPin(args, out, { pinFile = PIN_FILE, current = RELEASE_PQ_PIN
 }
 
 export const CA_LEASE_PIN_FILE = path.join(REPO, "packages", "protocol", "src", "caLeasePq.ts");
+export const CA_LEASE_WEB_MIRROR = path.join(REPO, "apps", "web", "public", "webapp", "lib", "maintainerTrust.js");
 export const BOX_ARTIFACT_TRUST_FILE = path.join(REPO, "release", "box-artifact-trust.json");
 
 /** CA_LEASE_PQ_PIN: this key, and every lease already committed counted as signed before the cut-over. */
-export function pinCaLease(root, keyId, out, pinFile = CA_LEASE_PIN_FILE) {
+export function pinCaLease(root, keyId, out, pinFile = CA_LEASE_PIN_FILE, webMirror = pinFile === CA_LEASE_PIN_FILE ? CA_LEASE_WEB_MIRROR : null) {
   const dir = path.join(root, "ca-endorsements");
   const legacy = new Set();
   for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
@@ -715,6 +716,14 @@ export function pinCaLease(root, keyId, out, pinFile = CA_LEASE_PIN_FILE) {
       ].join("\n"),
     ),
   );
+  // The webapp keeps a hand-mirrored copy of this pin (lib/maintainerTrust.js); a test fails when they differ.
+  if (webMirror && fs.existsSync(webMirror)) {
+    const web = fs.readFileSync(webMirror, "utf8");
+    const line = /^export const CA_LEASE_PQ_PIN = .*$/m;
+    if (!line.test(web)) throw new Error(`${webMirror} has no CA_LEASE_PQ_PIN line to update`);
+    const frozen = (xs) => `Object.freeze([${list(xs)}])`;
+    fs.writeFileSync(webMirror, web.replace(line, `export const CA_LEASE_PQ_PIN = Object.freeze({ version: 1, keyIds: ${frozen(keyIds)}, legacyLeases: ${frozen([...legacy].sort())} });`));
+  }
   out(`CA lease pin written: ${keyIds.length} key(s), ${legacy.size} lease(s) signed before the cut-over. Sign each new lease's companion with sign-ca-lease.`);
 }
 
