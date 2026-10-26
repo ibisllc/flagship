@@ -33,15 +33,15 @@ function copyOfTree(): string {
 }
 
 describe("release/version.json", () => {
-  it("is valid and carries the 0.2 Beta product version", () => {
+  it("is valid and carries the 0.3 Beta product version", () => {
     const { v, errors } = parseVersion(readFileSync(join(ROOT, "release/version.json"), "utf8"));
     expect(errors).toEqual([]);
-    expect(v.product).toBe("0.2");
+    expect(v.product).toBe("0.3");
     expect(v.label).toBe("Beta");
     expect(v.iosVersion).toBe("1.1");
     expect(v.iosBuild).toBe(5);
     expect(v.androidVersionCode).toBe(9);
-    expect(v.studio).toBe("0.2.0");
+    expect(v.studio).toBe("0.3.0");
   });
 
   it("keeps the iOS version above the approved 1.0 (4) and Android above Play's 8", () => {
@@ -57,7 +57,7 @@ describe("release/version.json", () => {
 
   it("puts the label beside the number on the homepage", () => {
     const html = readFileSync(join(ROOT, "apps/web/public/index.html"), "utf8");
-    expect(html).toContain("<span>v0.2 Beta</span>");
+    expect(html).toContain("<span>v0.3 Beta</span>");
     expect(html).not.toMatch(/v0\.1 alpha/);
   });
 
@@ -89,7 +89,7 @@ describe("drift is caught", () => {
   };
 
   it("an old homepage badge", () => {
-    const { findings } = drift("apps/web/public/index.html", "<span>v0.2 Beta</span>", "<span>v0.1 alpha</span>");
+    const { findings } = drift("apps/web/public/index.html", "<span>v0.3 Beta</span>", "<span>v0.1 alpha</span>");
     expect(findings.map((f: { key: string }) => f.key)).toEqual(["website:hero"]);
   });
 
@@ -104,7 +104,7 @@ describe("drift is caught", () => {
   });
 
   it("the Mac bundle still on 0.1.0", () => {
-    expect(drift("apps/builder-mac/Info.plist", "<string>0.2.0</string>", "<string>0.1.0</string>").findings[0].key).toBe("mac:plist");
+    expect(drift("apps/builder-mac/Info.plist", "<string>0.3.0</string>", "<string>0.1.0</string>").findings[0].key).toBe("mac:plist");
   });
 
   it("a Studio workflow that stopped reading the file", () => {
@@ -114,12 +114,12 @@ describe("drift is caught", () => {
 
   it("--write puts a drifted tree back", () => {
     const dir = copyOfTree();
-    writeFileSync(join(dir, "release/version.json"), JSON.stringify({ product: "0.3", label: "Beta", iosVersion: "1.2", iosBuild: 6, androidVersionCode: 10, studio: "0.3.0" }));
+    writeFileSync(join(dir, "release/version.json"), JSON.stringify({ product: "0.4", label: "Beta", iosVersion: "1.2", iosBuild: 6, androidVersionCode: 10, studio: "0.4.0" }));
     expect(checkVersions(repoAt(dir)).findings.length).toBeGreaterThan(0);
     const changed = writeVersions(dir);
     expect(changed).toContain("apps/web/public/index.html");
     expect(checkVersions(repoAt(dir)).findings).toEqual([]);
-    expect(readFileSync(join(dir, "apps/web/public/index.html"), "utf8")).toContain("<span>v0.3 Beta</span>");
+    expect(readFileSync(join(dir, "apps/web/public/index.html"), "utf8")).toContain("<span>v0.4 Beta</span>");
   });
 
   it("a studio version that disagrees with the product version", () => {

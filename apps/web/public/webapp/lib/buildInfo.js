@@ -16,7 +16,7 @@ export const PROTOCOL_LEVEL = 1;
 // The one product version every Flagship surface shows (release/version.json;
 // scripts/check-versions.mjs --write keeps these two in step). It is not a
 // protocol or wire version and nothing compares it.
-export const PRODUCT_VERSION = "0.2";
+export const PRODUCT_VERSION = "0.3";
 export const PRODUCT_LABEL = "Beta";
 
 export function aboutVersionLine() {

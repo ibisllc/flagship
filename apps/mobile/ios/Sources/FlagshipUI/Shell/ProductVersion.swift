@@ -5,7 +5,7 @@ import Foundation
 /// "Flagship 0.2 Beta (iOS 1.1, build 5)". `scripts/check-versions.mjs --write`
 /// keeps these constants in step with the file.
 enum ProductVersion {
-    static let product = "0.2"
+    static let product = "0.3"
     static let label = String(localized: "Beta")
 
     static var display: String { "\(product) \(label)" }
