@@ -99,7 +99,13 @@ export async function createDemoAccount(username: string): Promise<Account> {
   assert(ADMIN, "GYM_ADMIN_SECRET is required");
   const r = await postJson(
     `https://${CONTROL}/api/dev/sample-user/create`,
-    { username, accountName: `Gym ${username}`, idempotencyKey: idempotencyKey(username) },
+    {
+      username,
+      accountName: `Gym ${username}`,
+      idempotencyKey: idempotencyKey(username),
+      // The release gym runs every group on both container stacks (GYM_BOX_STACK=arch-v2|classic).
+      ...(process.env.GYM_BOX_STACK ? { stack: process.env.GYM_BOX_STACK } : {}),
+    },
     adminHeaders(),
     120_000,
   );

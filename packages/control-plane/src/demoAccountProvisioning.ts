@@ -25,6 +25,8 @@ export interface CreateDemoAccountBody {
   username?: unknown;
   accountName?: unknown;
   idempotencyKey?: unknown;
+  /** "arch-v2" or "classic": the container stack to build the box on (default: the release's). The release gym asks. */
+  stack?: unknown;
   region?: unknown;
   size?: unknown;
 }
@@ -213,6 +215,7 @@ export async function handleCreateDemoAccount(
     // only) AND pin adminRootPub in its config so its own self-check accepts it.
     adminRootPubHex: bytesToHex(admin.publicKey),
     adminRootPrivHex: bytesToHex(admin.privateKey),
+    ...(body.stack === "classic" || body.stack === "arch-v2" ? { stack: body.stack } : {}),
   });
   const providerName = `flagship-demo-${username}-${stableHex(username, idempotencyKey, "provider", 4)}`;
   try {

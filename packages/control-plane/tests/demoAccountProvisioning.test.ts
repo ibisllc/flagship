@@ -58,6 +58,21 @@ describe("atomic demo account provisioning", () => {
       .toBe(body.accountName);
   });
 
+  it("builds the box on the container stack the request names (the release gym runs both)", async () => {
+    const userDataOf = async (extra: Record<string, unknown>) => {
+      const { deps, createServerWithUserData } = harness();
+      const response = await handleCreateDemoAccount(deps, { ...body, username: `s${Math.random().toString(36).slice(2, 8)}`, idempotencyKey: `stack-test-${Math.random()}-0123456789`, ...extra });
+      expect(response.status).toBe(202);
+      return String((createServerWithUserData.mock.calls[0]![0] as { userData: string }).userData);
+    };
+    const bootstrapOf = (ud: string) => Buffer.from([...ud.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)][1]![1]!, "base64").toString("utf8");
+    const classic = bootstrapOf(await userDataOf({ stack: "classic" }));
+    const archV2 = bootstrapOf(await userDataOf({ stack: "arch-v2" }));
+    expect(archV2).toContain("/var/lib/flagship/arch-v2.json");
+    expect(classic).not.toContain("/var/lib/flagship/arch-v2.json");
+    expect(classic).toContain("docker.io");
+  });
+
   it("keeps provider failure retryable and never creates a second identity or provider server", async () => {
     let attempts = 0;
     const { storage, deps, createServerWithUserData } = harness(async () => {
