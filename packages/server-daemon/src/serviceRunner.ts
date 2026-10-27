@@ -1,10 +1,11 @@
-import { engineArgv } from "./engine/engine.js";
+import { activeEngine, engineArgv } from "./engine/engine.js";
 import { spawn } from "node:child_process";
 import { routePrivileged } from "./privileged.js";
 import { checkBuildContextDockerfile } from "./buildmodes/dockerfilePolicy.js";
 import { prepareRuntimeContext } from "./runtimes/buildContext.js";
 import { appSandboxRunArgs } from "./appSandbox/state.js";
-import { networkCreateArgs } from "./egress/networks.js";
+import { inspectNetwork, networkCreateArgs } from "./egress/networks.js";
+import { AddressPool, EndpointReconciler, LABEL_GENERATION, LABEL_SERVICE, endpoints, nextGeneration, parseObservation, publishFromEngine, type EndpointEnv, type EndpointKey, type ObserveFn } from "./endpoints.js";
 import { notifyContainersChanged, sandboxBuildArgs, sandboxRunArgs } from "./egress/sandboxNetworking.js";
 import { FILES_MOUNT, isFilesVolume } from "./dataLayer/naming.js";
 import type { BuildDiskWatch } from "./appQuota/buildGuard.js";
@@ -29,6 +30,8 @@ export interface AppSpec {
    * mounted read-write at `/data` while the rest of the root stays read-only.
    */
   filesVolume?: string;
+  /** Which process of the service this container is (the endpoint table's key); `main` for a single-process app. */
+  component?: string;
   /** Container name; default `flagship-<serviceId>`. An app group's component has its own (appGroups/names.ts). */
   containerName?: string;
   /** The command after the image (a group component's `start`), as argv: no shell. */
@@ -542,10 +545,10 @@ export function dockerBuildFailure(stdout: string, stderr: string): string | nul
 export type StartCheck = (spec: AppSpec) => Promise<{ ok: true } | { ok: false; reason: string }>;
 
 /** Any HTTP answer at all (a 404 or a 500 included) means the app is up. */
-async function httpAnswers(port: number, timeoutMs = 2000): Promise<boolean> {
+async function httpAnswers(host: string, port: number, timeoutMs = 2000): Promise<boolean> {
   const { request } = await import("node:http");
   return new Promise((resolve) => {
-    const req = request({ host: "127.0.0.1", port, path: "/", method: "GET", timeout: timeoutMs }, (res) => {
+    const req = request({ host, port, path: "/", method: "GET", timeout: timeoutMs }, (res) => {
       res.resume();
       resolve(true);
     });
@@ -553,6 +556,33 @@ async function httpAnswers(port: number, timeoutMs = 2000): Promise<boolean> {
     req.on("error", () => resolve(false));
     req.end();
   });
+}
+
+/** The endpoint-table key of an app container: its network says whether it is live or staging. */
+export function endpointKeyFor(spec: Pick<AppSpec, "serviceId" | "component">, network: string, role: EndpointKey["role"] = "http"): EndpointKey {
+  const env: EndpointEnv = network === "flagship-staging" ? "staging" : "live";
+  return { serviceId: spec.serviceId, env, component: spec.component ?? "main", role };
+}
+
+/** The key each deploy published under, so a start check asks about the container its runner just started. */
+const deployedKeys = new Map<string, EndpointKey>();
+const deployedKeyId = (spec: Pick<AppSpec, "serviceId" | "component">) => `${spec.serviceId}/${spec.component ?? "main"}`;
+
+/**
+ * A probe through the endpoint table: it asks the table, never takes an address, and counts the answer only if
+ * the incarnation it probed is still the current one when the probe returns (readiness belongs to an incarnation).
+ */
+export function tableAnswers(key: EndpointKey): () => Promise<boolean> {
+  return async () => {
+    const lease = endpoints.acquire(key);
+    if (!lease) return false;
+    try {
+      const ok = await httpAnswers(lease.endpoint.host, lease.endpoint.port);
+      return ok && lease.current();
+    } finally {
+      lease.release();
+    }
+  };
 }
 
 /**
@@ -568,7 +598,7 @@ export function buildStartCheck(
     timeoutMs?: number;
     intervalMs?: number;
     containerName?: (serviceId: string) => string;
-    answers?: (port: number) => Promise<boolean>;
+    answers?: (spec: AppSpec) => Promise<boolean>;
     sleep?: (ms: number) => Promise<void>;
     now?: () => number;
   } = {},
@@ -576,7 +606,7 @@ export function buildStartCheck(
   const timeoutMs = opts.timeoutMs ?? 60_000;
   const intervalMs = opts.intervalMs ?? 1000;
   const name = opts.containerName ?? ((id: string) => `flagship-${id}`);
-  const answers = opts.answers ?? ((port: number) => httpAnswers(port));
+  const answers = opts.answers ?? ((spec: AppSpec) => tableAnswers(deployedKeys.get(deployedKeyId(spec)) ?? endpointKeyFor(spec, "flagship-apps"))());
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const now = opts.now ?? (() => Date.now());
   return async (spec) => {
@@ -592,7 +622,7 @@ export function buildStartCheck(
     };
     const deadline = now() + timeoutMs;
     for (;;) {
-      if (await answers(spec.port)) return { ok: true };
+      if (await answers(spec)) return { ok: true };
       let state = "";
       try {
         state = (await cmd.capture("docker", ["inspect", "-f", "{{.State.Status}} {{.State.ExitCode}}", container])).stdout.trim();
@@ -619,6 +649,41 @@ export function buildStartCheck(
   };
 }
 
+/**
+ * Podman: one address pool per bridge, built from the bridge's own subnet, shared by every runner on it (the
+ * router's group runner included), so two owners never get one address.
+ */
+const addressPools = new Map<string, Promise<AddressPool>>();
+export function resetAddressPools(): void {
+  addressPools.clear();
+}
+
+/** The one reconciler: every container an AppRunner published is watched until it is stopped. */
+let reconciler: EndpointReconciler | null = null;
+let reconcilerCmd: CommandRunner | null = null;
+export function startEndpointReconciler(cmd: CommandRunner = realCommandRunner, log: (e: unknown) => void = () => {}): EndpointReconciler {
+  reconcilerCmd = cmd;
+  reconciler ??= new EndpointReconciler(endpoints, (c) => observer(reconcilerCmd!)(c));
+  reconciler.start(3000, log);
+  return reconciler;
+}
+export function stopEndpointReconciler(): void {
+  reconciler?.stop();
+}
+
+/** The engine's view of one container, as the typed record the endpoint table needs. */
+function observer(cmd: CommandRunner): ObserveFn {
+  return async (container) => {
+    if (!cmd.capture) return null;
+    try {
+      const { stdout } = await cmd.capture("docker", ["inspect", "--format", "{{json .}}", container]);
+      return parseObservation(stdout.trim());
+    } catch {
+      return null;
+    }
+  };
+}
+
 export class AppRunner {
   private readonly limits: ContainerLimits;
 
@@ -627,6 +692,32 @@ export class AppRunner {
     opts: AppRunnerOptions = {},
   ) {
     this.limits = resolveLimits(opts.limits);
+  }
+
+  private poolFor(network: string): Promise<AddressPool> {
+    let p = addressPools.get(network);
+    if (!p) {
+      p = (async () => {
+        const info = await inspectNetwork(this.cmd, network);
+        const subnet = info?.subnets[0];
+        if (!subnet) throw new Error(`the ${network} network has no subnet to give an app an address in`);
+        return new AddressPool(subnet, { reserved: info.gateways });
+      })();
+      p.catch(() => addressPools.delete(network));
+      addressPools.set(network, p);
+    }
+    return p;
+  }
+
+  /** The address a Podman app has for as long as the service exists; the pool is the only source of one. */
+  async addressFor(spec: Pick<AppSpec, "serviceId" | "component">): Promise<string> {
+    return (await this.poolFor(this.limits.network)).assign(deployedKeyId(spec));
+  }
+
+  /** The service is being deleted: its address goes back to the pool (after the quarantine). */
+  async releaseAddress(serviceId: string, component = "main"): Promise<void> {
+    const pool = await addressPools.get(this.limits.network)?.catch(() => null);
+    pool?.release(deployedKeyId({ serviceId, component }));
   }
 
   async deploy(spec: AppSpec): Promise<string[]> {
@@ -641,17 +732,28 @@ export class AppRunner {
       : null;
     if (gpu?.kind === "refused" || (gpu?.kind === "cpu" && spec.accelerator?.requirement.fallback !== "cpu-if-supported")) throw new Error(gpu.reason);
     if (gpu?.kind === "gpu") (await import("./gpu/broker.js")).checkGpuArgs(gpu.runArgs);
+    // Podman: no published port (unmanaged bridges forward nothing). The container gets the address its service
+    // owns and the daemon dials it through the endpoint table. Docker keeps its loopback publish.
+    const direct = activeEngine() === "podman" && !!spec.port;
+    const address = direct ? await this.addressFor(spec) : null;
+    const generation = nextGeneration();
+    const key = endpointKeyFor(spec, this.limits.network);
     const args = [
       "run",
       "-d",
       "--name",
       spec.containerName ?? this.containerName(spec.serviceId),
+      ...(address ? ["--ip", address] : []),
       // gVisor (docs/app-runtimes.md §5.1); throws while it isn't usable.
       ...(gpu?.kind === "gpu" ? [...gpu.runArgs, ...(await appSandboxRunArgs()).filter((x) => !x.startsWith("--runtime="))] : await appSandboxRunArgs()),
       ...this.hardeningArgs(spec.limits),
       ...Object.entries(spec.addHosts ?? {}).flatMap(([name, ip]) => ["--add-host", `${name}:${ip}`]),
       ...this.envArgs(spec.env),
-      ...this.portArgs(spec.port, spec.containerPort),
+      ...(direct ? [] : this.portArgs(spec.port, spec.containerPort)),
+      "--label",
+      `${LABEL_SERVICE}=${spec.serviceId}`,
+      "--label",
+      `${LABEL_GENERATION}=${generation}`,
       ...(spec.filesVolume ? filesMountArgs(spec.filesVolume) : []),
       spec.image,
       ...(spec.command ?? []),
@@ -661,7 +763,10 @@ export class AppRunner {
     assertNoHostPathInDockerArgs(args);
     await notifyContainersChanged();
     try {
+      // A new deploy never inherits the old one's endpoint or connections.
+      endpoints.beginStop(spec.serviceId, key.env);
       await this.cmd.run("docker", args);
+      await this.publishEndpoint(spec, key, generation, address);
       if (gpu?.kind === "gpu") await acceleratorHook?.afterRun(spec.serviceId, true);
     } catch (e) {
       if (gpu?.kind === "gpu") await acceleratorHook?.afterRun(spec.serviceId, false).catch(() => {});
@@ -672,7 +777,30 @@ export class AppRunner {
     return args;
   }
 
+  /**
+   * Make the container reachable through the endpoint table, but only the one this deploy created: the table
+   * checks its service, generation, network and address. A container that is not running yet is left to the start
+   * check, which reports why; any other mismatch is an error here, never a fallback.
+   */
+  private async publishEndpoint(spec: AppSpec, key: EndpointKey, generation: number, address: string | null): Promise<void> {
+    if (!spec.port) return;
+    deployedKeys.set(deployedKeyId(spec), key);
+    const container = spec.containerName ?? this.containerName(spec.serviceId);
+    const port = address ? (spec.containerPort ?? spec.port) : spec.port;
+    const r = await publishFromEngine(
+      endpoints,
+      key,
+      { serviceId: spec.serviceId, container, network: this.limits.network, address, port, generation },
+      observer(this.cmd),
+    );
+    if (!r.ok && !/not running|no such container/.test(r.reason)) throw new Error(`refusing to route to ${container}: ${r.reason}`);
+    reconciler?.watch(key, { serviceId: spec.serviceId, container, network: this.limits.network, address, port, generation });
+  }
+
   async stop(serviceId: string): Promise<void> {
+    const env = this.limits.network === "flagship-staging" ? "staging" : "live";
+    reconciler?.unwatch(serviceId, env);
+    endpoints.beginStop(serviceId, env);
     try {
       await this.cmd.run("docker", ["stop", this.containerName(serviceId)]);
       await this.cmd.run("docker", ["rm", this.containerName(serviceId)]);

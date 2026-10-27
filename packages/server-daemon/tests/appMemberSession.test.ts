@@ -5,6 +5,7 @@
  * real access + session stores. The owner and invited people sign in through
  * the knock page with their phone; the app sees who they are.
  */
+import { endpoints } from "../src/endpoints.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { request as httpRequest, createServer as createHttpServer, type IncomingHttpHeaders } from "node:http";
 import { createServer as createNetServer, type AddressInfo, type Server, type Socket } from "node:net";
@@ -60,6 +61,8 @@ beforeEach(async () => {
 });
 
 function makeApp(port: number, defaultRole = "member"): InstalledService {
+  // The proxy asks the endpoint table, as the runner publishes it after a deploy.
+  endpoints.publish({ serviceId: SVC, env: "live", component: "main", role: "http" }, { host: "127.0.0.1", port, generation: 1, incarnation: `test-${port}` });
   return {
     serviceId: SVC,
     creator: "alice",

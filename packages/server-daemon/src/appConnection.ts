@@ -20,6 +20,7 @@ import { STATUS_CODES, request as httpRequest, type IncomingMessage } from "node
 import type { Duplex } from "node:stream";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { PreparedAppRequest } from "./serviceProxy.js";
+import { endpoints, type EndpointKey, type EndpointLease } from "./endpoints.js";
 
 export interface AppConnectionLimits {
   /** Largest request head (request line + headers). Default 64 KiB. */
@@ -70,8 +71,8 @@ export interface AppConnectionOptions {
   gate: (req: HttpRequest) => Promise<HttpResponse | null>;
   /** Access decision + identity headers (`prepareAppRequest`). */
   prepare: (req: HttpRequest, info: { upgrade: boolean }) => Promise<PreparedAppRequest>;
-  /** Where the container listens. */
-  upstream: { host: string; port: number };
+  /** Where the container listens: a fixed address (tests, tools), or the endpoint table's answer for a service. */
+  upstream: { host: string; port: number } | { endpoint: EndpointKey };
   limiter: AppConnectionLimiter;
   limits?: Partial<AppConnectionLimits>;
 }
@@ -208,6 +209,12 @@ type BodyPlan =
 
 /** Serve one app request on `socket` (a terminated TLS socket). */
 export function handleAppConnection(socket: Duplex, opts: AppConnectionOptions): void {
+  /** Where this request goes: a fixed upstream, or a lease on the service's endpoint (registered before the dial). */
+  function upstreamTarget(): { host: string; port: number; lease?: EndpointLease } | null {
+    if (!("endpoint" in opts.upstream)) return opts.upstream;
+    const lease = endpoints.acquire(opts.upstream.endpoint);
+    return lease ? { host: lease.endpoint.host, port: lease.endpoint.port, lease } : null;
+  }
   const limits = { ...DEFAULT_APP_CONNECTION_LIMITS, ...(opts.limits ?? {}) };
   let buf: Buffer = Buffer.alloc(0);
   let done = false;
@@ -355,14 +362,21 @@ export function handleAppConnection(socket: Duplex, opts: AppConnectionOptions):
     if (plan.kind === "buffered") headers["content-length"] = String(plan.body.length);
     else if (plan.kind === "length") headers["content-length"] = String(plan.length);
     else if (plan.kind === "chunked") headers["transfer-encoding"] = "chunked";
+    const target = upstreamTarget();
+    if (!target) {
+      writeBuffered(socket, plain(503, "this app is not reachable right now"), head.method);
+      return;
+    }
     const upstreamReq = httpRequest({
-      host: opts.upstream.host,
-      port: opts.upstream.port,
+      host: target.host,
+      port: target.port,
       method: head.method,
       path: head.path,
       headers,
       agent: false,
     });
+    target.lease?.bind(upstreamReq);
+    upstreamReq.once("close", () => target.lease?.release());
     let responded = false;
     upstreamReq.on("response", (res) => {
       responded = true;
@@ -472,17 +486,31 @@ export function handleAppConnection(socket: Duplex, opts: AppConnectionOptions):
   }
 
   function forwardUpgrade(head: ParsedHead, headers: Record<string, string>, early: Buffer): void {
+    const target = upstreamTarget();
+    if (!target) {
+      writeBuffered(socket, plain(503, "this app is not reachable right now"), head.method);
+      return;
+    }
     const upstreamReq = httpRequest({
-      host: opts.upstream.host,
-      port: opts.upstream.port,
+      host: target.host,
+      port: target.port,
       method: head.method,
       path: head.path,
       headers,
       agent: false,
     });
+    target.lease?.bind(upstreamReq);
+    upstreamReq.once("close", () => {
+      if (!answeredUpgrade) target.lease?.release();
+    });
     let answered = false;
+    let answeredUpgrade = false;
     upstreamReq.on("upgrade", (res, upstream, upstreamHead) => {
       answered = true;
+      answeredUpgrade = true;
+      // The WebSocket lives as long as the generation does: invalidation destroys it, and so does its end.
+      target.lease?.bind(upstream);
+      upstream.once("close", () => target.lease?.release());
       const lines = [`HTTP/1.1 ${res.statusCode ?? 101} ${res.statusMessage || "Switching Protocols"}`];
       for (let i = 0; i + 1 < res.rawHeaders.length; i += 2) lines.push(`${res.rawHeaders[i]!}: ${res.rawHeaders[i + 1]!}`);
       socket.write(`${lines.join("\r\n")}\r\n\r\n`);

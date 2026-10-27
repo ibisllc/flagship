@@ -124,6 +124,8 @@ export class RuntimeRouter extends AppRunner {
   async forget(serviceId: string): Promise<void> {
     await this.wasi?.remove(serviceId).catch(() => {});
     this.kinds.delete(serviceId);
+    // The only event that frees the service's address (it is quarantined before anyone else can have it).
+    await this.releaseAddress(serviceId).catch(() => {});
   }
 
   /** The start check for any kind: a WASI app is checked by its runner, the rest by `base`. */

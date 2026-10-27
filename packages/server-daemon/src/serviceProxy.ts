@@ -16,7 +16,7 @@
  *        X-Flagship-Signature  : Ed25519 over the canonical-bytes of
  *                                {serviceId, user, role, timestamp}, with
  *                                user = role = "anonymous" for an anonymous visitor
- *   4. Forward the request to `127.0.0.1:<containerPort>` and stream the
+ *   4. Forward the request to the app's endpoint (endpoints.ts; fail closed with 503) and stream the
  *      response back (`appConnection.ts`; `handleAppRequest` buffers).
  *
  * The container has no network path that bypasses this proxy (the
@@ -37,6 +37,7 @@ import type { BoxSigner } from "./keyCustodian.js";
 import type { InstalledService } from "./servicePlatform.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import { NO_FRAME_HEADERS } from "./pageHeaders.js";
+import { endpoints } from "./endpoints.js";
 import type { UpdateServer } from "./updateServer.js";
 import type { ApiKeyAuthenticator } from "./appApiKeys.js";
 
@@ -298,8 +299,14 @@ export async function handleAppRequest(
 ): Promise<HttpResponse> {
   const p = await prepareAppRequest(app, req, deps);
   if (p.kind === "respond") return p.response;
-  const forward = deps.forward ?? defaultForward;
-  return forward("127.0.0.1", app.containerPort, { ...req, headers: p.headers });
+  if (deps.forward) return deps.forward("127.0.0.1", app.containerPort, { ...req, headers: p.headers });
+  const lease = endpoints.acquire({ serviceId: app.serviceId, env: "live", component: "main", role: "http" });
+  if (!lease) return { status: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "app-unavailable" }) };
+  try {
+    return await defaultForward(lease.endpoint.host, lease.endpoint.port, { ...req, headers: p.headers });
+  } finally {
+    lease.release();
+  }
 }
 
 function respond(status: number, body: unknown, headers: Record<string, string> = {}): PreparedAppRequest {

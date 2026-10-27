@@ -24,7 +24,7 @@ import {
 } from "./appApiKeys.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
 import { fileUsedNonceStore } from "./updateConsumer.js";
-import { AppRunner, buildStartCheck, realCommandRunner, setBuildDiskWatch, setFilesVolumeGuard, type CommandRunner } from "./serviceRunner.js";
+import { AppRunner, buildStartCheck, realCommandRunner, setBuildDiskWatch, setFilesVolumeGuard, startEndpointReconciler, stopEndpointReconciler, type CommandRunner } from "./serviceRunner.js";
 import { RuntimeRouter } from "./appRuntimes.js";
 import { wireAppRuntimes, type AppRuntimes } from "./appRuntimeWiring.js";
 import { runSetupStep, runsUnprivileged } from "./privileged.js";
@@ -512,7 +512,7 @@ export function appConnectionOptions(
         },
         info,
       ),
-    upstream: { host: "127.0.0.1", port: app.containerPort },
+    upstream: { endpoint: { serviceId: app.serviceId, env: "live", component: "main", role: "http" } },
     limiter: deps.limiter,
   };
 }
@@ -1440,6 +1440,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // ServicePlatform is wired only when host IRK + SWK are supplied.
   // One runner for container apps, app groups and WASI apps (appRuntimes.ts, P04/P05).
   const appRunner = new RuntimeRouter(realCommandRunner, {}, { onLog: (m) => console.warn(m) });
+  startEndpointReconciler(realCommandRunner, (e) => console.warn(`[endpoints] ${e instanceof Error ? e.message : String(e)}`));
   const serviceActivity = new ServiceActivity();
   if (runsUnprivileged()) await runSetupStep("container-links").catch((e: Error) => console.warn(`[runtime] container links: ${e.message}`));
   else await ensureContainerLinksUnmanaged(realCommandRunner, { log: (m) => console.warn(m) });
@@ -1883,6 +1884,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       relayLockdown.stop();
       if (renewalTimer) clearInterval(renewalTimer);
       aliasReconciler?.stop();
+      stopEndpointReconciler();
       await tunnel.close();
       lanDiscovery?.close();
       await lan?.close();
