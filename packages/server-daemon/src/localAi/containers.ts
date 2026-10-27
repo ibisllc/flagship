@@ -24,6 +24,8 @@ export const TRAIN_NAME_RE = /^flagship-aitrain-([0-9a-f]{16})$/;
 export const MODELS_MOUNT = `type=volume,src=${MODELS_VOLUME},dst=/models,readonly`;
 const DEV_FILES_RE = /^flagship-devfiles-[a-z0-9](?:-?[a-z0-9]){0,31}--[a-z0-9](?:-?[a-z0-9]){0,31}$/;
 export const SERVER_PORT = 8080;
+/** The endpoint table's service id for the one model server (endpoints.ts). */
+export const LOCAL_AI_SERVICE_ID = "local-ai";
 
 export function outVolume(hex: string): string {
   if (!/^[0-9a-f]{16}$/.test(hex)) throw new Error("bad job id");
@@ -41,7 +43,11 @@ export interface ServiceRun {
   name: string;
   image: string;
   modelSha256: string;
+  /** Docker: the loopback port published for the daemon. Podman publishes nothing (`address` is used). */
   hostPort: number;
+  /** Podman: the address this service owns on the staging network (the daemon dials it through the endpoint table). */
+  address?: string;
+  generation: number;
   contextTokens: number;
   threads: number;
   memoryMiB: number;
@@ -81,10 +87,13 @@ export function serviceRunArgs(r: ServiceRun): string[] {
     "1024",
     "--label",
     "flagship.role=local-ai",
+    "--label",
+    `flagship.service=${LOCAL_AI_SERVICE_ID}`,
+    "--label",
+    `flagship.generation=${r.generation}`,
     "--mount",
     MODELS_MOUNT,
-    "-p",
-    `127.0.0.1:${r.hostPort}:${SERVER_PORT}`,
+    ...(r.address ? ["--ip", r.address] : ["-p", `127.0.0.1:${r.hostPort}:${SERVER_PORT}`]),
     "-e",
     `LLAMA_API_KEY=${r.apiKey}`,
     r.image,
@@ -194,6 +203,7 @@ export function checkLocalAiRunArgs(args: readonly string[]): void {
     if (flag === "--mount") mounts.push(v);
     if (flag === "--network" && v === "host") throw new Error("refusing local-AI run: host networking");
     if (flag === "--user" && /^(root|0+)(:|$)/.test(v)) throw new Error("refusing local-AI run: root");
+    if (flag === "--ip" && !/^(\d{1,3}\.){3}\d{1,3}$/.test(v)) throw new Error("refusing local-AI run: --ip takes an address");
     if (flag === "-p" && !/^127\.0\.0\.1:[0-9]{2,5}:8080$/.test(v)) throw new Error("refusing local-AI run: the server is published on loopback only");
   }
   if (!image || !ALL_LOCAL_AI_IMAGES.includes(image)) throw new Error("refusing local-AI run: not a pinned local-AI image");

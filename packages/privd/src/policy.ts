@@ -589,7 +589,11 @@ function isDedicatedPostgresRun(sub: string, run: ParsedRun): boolean {
         ok = !seen.has(name);
         break;
       case "label":
-        ok = value === "flagship.role=dedicated-postgres";
+        // The role, and the identity the daemon's endpoint table checks (endpoints.ts): this key's service and a deploy number.
+        ok = value === "flagship.role=dedicated-postgres" || value === `flagship.service=pgd-${key}` || /^flagship\.generation=[0-9]{1,16}$/.test(value);
+        break;
+      case "ip":
+        ok = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(value) && !seen.has(name);
         break;
       case "restart":
         ok = value === "unless-stopped";

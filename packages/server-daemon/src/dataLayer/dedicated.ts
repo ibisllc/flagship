@@ -25,7 +25,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { composeServiceId } from "@flagship/protocol";
 import { writeFileDurable } from "../durableFile.js";
-import type { CommandRunner } from "../serviceRunner.js";
+import { assignAddress, dialsContainersDirectly, publishAndWatch, releaseAddressFor, stopEndpoint, type CommandRunner } from "../serviceRunner.js";
+import { endpoints, nextGeneration, type EndpointKey } from "../endpoints.js";
 import type { PostgresAdmin } from "./admin.js";
 
 export type DatabaseProfile = "shared" | "dedicated";
@@ -58,6 +59,9 @@ export function dedicatedKey(creator: string, slug: string): string {
   return createHash("sha256").update(`flagship/dedicated-pg/v1|${creator}|${slug}`).digest("hex").slice(0, 24);
 }
 export const dedicatedContainer = (key: string) => `flagship-pgd-${key}`;
+/** The endpoint table's service id for an app's own database. */
+export const dedicatedServiceId = (key: string) => `pgd-${key}`;
+const dedicatedEndpointKey = (key: string): EndpointKey => ({ serviceId: dedicatedServiceId(key), env: "live", component: "db", role: "data" });
 export const dedicatedVolume = (key: string) => `flagship-pgdata-${key}`;
 /** The instance's Unix-socket folder: its migration sandbox's only way in (migrationSandbox.ts). */
 export const dedicatedSocketVolume = (key: string) => `flagship-pgsock-${key}`;
@@ -94,6 +98,9 @@ export function dedicatedRunArgs(a: {
   sandbox: string[];
   network: string;
   image?: string;
+  /** Podman: the address this instance owns on `network` (no published port). Absent: Docker's loopback publish. */
+  address?: string;
+  generation?: number;
 }): string[] {
   if (!/^[0-9a-f]{24}$/.test(a.key)) throw new Error("bad instance key");
   if (!Number.isInteger(a.port) || a.port < 1024 || a.port > 65535) throw new Error("bad port");
@@ -104,6 +111,10 @@ export function dedicatedRunArgs(a: {
     dedicatedContainer(a.key),
     "--label",
     "flagship.role=dedicated-postgres",
+    "--label",
+    `flagship.service=${dedicatedServiceId(a.key)}`,
+    "--label",
+    `flagship.generation=${a.generation ?? 0}`,
     "--restart",
     "unless-stopped",
     ...a.sandbox,
@@ -132,8 +143,7 @@ export function dedicatedRunArgs(a: {
     // Passwords on the socket too: the image's default trusts local connections.
     "-e",
     "POSTGRES_INITDB_ARGS=--auth-local=scram-sha-256 --auth-host=scram-sha-256",
-    "-p",
-    `127.0.0.1:${a.port}:5432`,
+    ...(a.address ? ["--ip", a.address] : ["-p", `127.0.0.1:${a.port}:5432`]),
     "--mount",
     `type=volume,src=${dedicatedVolume(a.key)},dst=/var/lib/postgresql`,
     "--mount",
@@ -248,7 +258,10 @@ export class DedicatedPostgres {
   }
 
   private adminUrl(e: DedicatedEntry): string {
-    return `postgresql://${DEDICATED_ADMIN_USER}:${encodeURIComponent(e.adminPassword)}@127.0.0.1:${e.port}/postgres`;
+    // The host comes from the endpoint table (the instance this daemon started), never from a stored address.
+    const ep = endpoints.lookup(dedicatedEndpointKey(e.key));
+    if (!ep) throw new Error("the app's database is not reachable right now");
+    return `postgresql://${DEDICATED_ADMIN_USER}:${encodeURIComponent(e.adminPassword)}@${ep.host}:${ep.port}/postgres`;
   }
 
   private async waitReady(container: string): Promise<void> {
@@ -274,6 +287,17 @@ export class DedicatedPostgres {
     }
   }
 
+  /** The deploy number a container carries as a label (a container created by an earlier daemon run). */
+  private async generationOf(container: string): Promise<number | null> {
+    if (!this.deps.cmd.capture) return null;
+    try {
+      const out = (await this.deps.cmd.capture("docker", ["inspect", "-f", '{{index .Config.Labels "flagship.generation"}}', container])).stdout.trim();
+      return /^\d{1,16}$/.test(out) ? Number(out) : null;
+    } catch {
+      return null;
+    }
+  }
+
   private async exists(container: string): Promise<boolean> {
     if (!this.deps.cmd.capture) return false;
     try {
@@ -287,9 +311,21 @@ export class DedicatedPostgres {
   private async startEntry(e: DedicatedEntry): Promise<void> {
     const container = dedicatedContainer(e.key);
     await this.deps.volumes.prepare(dedicatedVolume(e.key), e.limits.diskBytes);
+    const network = this.deps.network ?? "flagship-apps";
+    const direct = dialsContainersDirectly();
+    const address = direct ? await assignAddress(this.deps.cmd, network, `db:${e.key}`) : undefined;
+    // A start or restart is a new incarnation: nothing keeps talking to the old one.
+    stopEndpoint(dedicatedServiceId(e.key), "live");
+    let generation = nextGeneration();
+    let unlabelled = false;
     if (!(await this.running(container))) {
-      if (await this.exists(container)) await this.deps.cmd.run("docker", ["start", container]);
-      else {
+      if (await this.exists(container)) {
+        // A container the engine kept keeps its labels: its generation is the one it was created with.
+        const had = await this.generationOf(container);
+        if (had !== null) generation = had;
+        else unlabelled = !direct;
+        await this.deps.cmd.run("docker", ["start", container]);
+      } else {
         const sandbox = (await this.deps.sandboxArgs?.().catch(() => [])) ?? [];
         await this.deps.cmd.run(
           "docker",
@@ -299,15 +335,24 @@ export class DedicatedPostgres {
             adminPassword: e.adminPassword,
             limits: e.limits,
             sandbox,
-            network: this.deps.network ?? "flagship-apps",
+            network,
+            generation,
+            ...(address ? { address } : {}),
             ...(this.deps.image ? { image: this.deps.image } : {}),
           }),
         );
       }
+    } else {
+      const had = await this.generationOf(container);
+      if (had !== null) generation = had;
+      else unlabelled = !direct;
     }
+    await publishAndWatch(this.deps.cmd, dedicatedEndpointKey(e.key), { serviceId: dedicatedServiceId(e.key), container, network, address: address ?? null, port: direct ? 5432 : e.port, generation, ...(unlabelled ? { unlabelled } : {}) });
     await this.waitReady(container);
     const links = this.deps.links();
-    if (links && !(await links.link(e.port, { host: "127.0.0.1", port: e.port }, composeServiceId(e.creator, e.slug)))) {
+    const ep = endpoints.lookup(dedicatedEndpointKey(e.key));
+    if (!ep) throw new Error("the app's database is not reachable right now");
+    if (links && !(await links.link(e.port, { host: ep.host, port: ep.port }, composeServiceId(e.creator, e.slug)))) {
       throw new Error("the box could not route the app's database");
     }
   }
@@ -355,7 +400,9 @@ export class DedicatedPostgres {
       const state = await this.deps.state.load();
       const e = state[key];
       const container = dedicatedContainer(key);
+      stopEndpoint(dedicatedServiceId(key), "live");
       await this.deps.cmd.run("docker", ["rm", "-f", container]).catch(() => {});
+      await releaseAddressFor(this.deps.network ?? "flagship-apps", `db:${key}`).catch(() => {});
       await this.deps.cmd.run("docker", ["volume", "rm", dedicatedSocketVolume(key)]).catch(() => {});
       if (e) await this.deps.links()?.unlink(e.port).catch(() => {});
       await this.deps.volumes.remove(dedicatedVolume(key)).catch((err: Error) => this.log(`${key}: volume not removed: ${err.message}`));

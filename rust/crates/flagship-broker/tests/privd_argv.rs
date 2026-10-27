@@ -249,6 +249,32 @@ fn an_apps_dedicated_database_runs_only_in_its_exact_shape() {
     );
 }
 
+#[test]
+fn a_dedicated_database_may_carry_its_own_address_and_endpoint_labels_and_nothing_else() {
+    let own = format!("flagship.service=pgd-{KEY}");
+    let ok = dedicated(
+        KEY,
+        &[
+            "--ip",
+            "10.89.1.2",
+            "--label",
+            &own,
+            "--label",
+            "flagship.generation=1793112048092",
+        ],
+    );
+    assert!(docker_v(&ok).is_ok());
+    // Another service's identity, a name that is not an address, or a second address: an ordinary run.
+    for bad in [
+        vec!["--label", "flagship.service=pgd-fedcba9876543210fedcba98"],
+        vec!["--label", "flagship.generation=x"],
+        vec!["--ip", "not-an-ip"],
+        vec!["--ip", "10.89.1.2", "--ip", "10.89.1.3"],
+    ] {
+        refused(docker_v(&dedicated(KEY, &bad)), "--cap-add is not allowed");
+    }
+}
+
 fn sc(argv: &[&str]) -> Result<PrivExec, PrivdError> {
     systemctl_exec(&args(json!({ "argv": argv })))
 }

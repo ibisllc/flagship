@@ -1255,6 +1255,9 @@ static DEDICATED_PASSWORD_RE: LazyLock<Regex> =
     LazyLock::new(|| re(r"^POSTGRES_PASSWORD=[A-Za-z0-9_-]{16,128}$"));
 static DEDICATED_PUBLISH_RE: LazyLock<Regex> =
     LazyLock::new(|| re(r"^127\.0\.0\.1:[1-9][0-9]{3,4}:5432$"));
+static DEDICATED_GENERATION_RE: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^flagship\.generation=[0-9]{1,16}$"));
+static DEDICATED_IP_RE: LazyLock<Regex> = LazyLock::new(|| re(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"));
 /// An app's dedicated database container (dataLayer/dedicated.ts dedicatedContainer).
 static DEDICATED_PG_CONTAINER: LazyLock<Regex> =
     LazyLock::new(|| re(r"^flagship-pgd-[0-9a-f]{24}$"));
@@ -1303,7 +1306,12 @@ fn is_dedicated_postgres_run(sub: &str, run: &ParsedRun) -> bool {
         let ok = match name {
             "detach" => value == "true",
             "name" => !seen.contains(&"name"),
-            "label" => value == "flagship.role=dedicated-postgres",
+            "label" => {
+                value == "flagship.role=dedicated-postgres"
+                    || value == format!("flagship.service=pgd-{key}")
+                    || DEDICATED_GENERATION_RE.is_match(value)
+            }
+            "ip" => DEDICATED_IP_RE.is_match(value) && !seen.contains(&"ip"),
             "restart" => value == "unless-stopped",
             "runtime" => value == APP_RUNTIME,
             "cap-drop" => value == "ALL",

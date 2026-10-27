@@ -10,10 +10,11 @@
  */
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
-import type { CommandRunner } from "../serviceRunner.js";
+import { assignAddress, dialsContainersDirectly, publishAndWatch, stopEndpoint, type CommandRunner } from "../serviceRunner.js";
+import { endpoints, nextGeneration, type EndpointKey } from "../endpoints.js";
 import type { AcceleratorBroker } from "../gpu/broker.js";
 import { localModel, memoryNeededMiB, serverImageFor, type LocalModel } from "./catalog.js";
-import { checkLocalAiRunArgs, serviceRunArgs } from "./containers.js";
+import { LOCAL_AI_SERVICE_ID, SERVER_PORT, checkLocalAiRunArgs, serviceRunArgs } from "./containers.js";
 import { place, PlacementRefused, type Placement } from "./devices.js";
 import type { ModelStore } from "./modelStore.js";
 
@@ -28,7 +29,7 @@ export class LocalAiUnavailable extends Error {
 }
 
 export interface LocalEndpoint {
-  /** `http://127.0.0.1:<port>`; the OpenAI routes are under `/v1`. */
+  /** The model server's address from the endpoint table (`http://host:port`); the OpenAI routes are under `/v1`. */
   baseUrl: string;
   apiKey: string;
   modelId: string;
@@ -95,6 +96,10 @@ export async function freeLoopbackPort(): Promise<number> {
   });
 }
 
+/** The staging bridge the model server runs on (egress/policy.ts), and its endpoint-table key. */
+const AI_NETWORK = "flagship-staging";
+const AI_KEY: EndpointKey = { serviceId: LOCAL_AI_SERVICE_ID, env: "staging", component: "model", role: "ai" };
+
 export class LocalInferenceService {
   private running: Running | null = null;
   private starting: Promise<Running> | null = null;
@@ -156,11 +161,13 @@ export class LocalInferenceService {
       if (r && this.inFlight > 0) throw new LocalAiUnavailable("This server's model is busy with another model's work; try again shortly.", "start-failed");
       r = await this.start(model);
     }
+    const ep = endpoints.lookup(AI_KEY);
+    if (!ep) throw new LocalAiUnavailable("The model server is not reachable right now.", "start-failed");
     this.inFlight++;
     this.lastUsed = this.now();
     let released = false;
     return {
-      baseUrl: `http://127.0.0.1:${r.port}`,
+      baseUrl: `http://${ep.host}:${ep.port}`,
       apiKey: r.apiKey,
       modelId: r.model.id,
       device: r.placement.kind,
@@ -228,7 +235,11 @@ export class LocalInferenceService {
     }
     this.stateValue = "starting";
     const apiKey = randomBytes(24).toString("base64url");
-    const port = await (this.d.freePort ?? freeLoopbackPort)();
+    const direct = dialsContainersDirectly();
+    // Docker publishes a loopback port; Podman gives the service its own address and publishes nothing.
+    const port = direct ? SERVER_PORT : await (this.d.freePort ?? freeLoopbackPort)();
+    const generation = nextGeneration();
+    let address: string | undefined;
     let sandboxArgs: string[];
     try {
       sandboxArgs = placement.kind === "gpu" ? [] : await this.d.sandboxArgs();
@@ -240,16 +251,28 @@ export class LocalInferenceService {
       throw new LocalAiUnavailable(this.reason, "sandbox");
     }
     const cpus = Math.max(1, Math.min(hw.cpus, 8));
+    try {
+      if (direct) address = await assignAddress(this.d.cmd, AI_NETWORK, `${AI_KEY.serviceId}/${AI_KEY.component}`);
+    } catch (e) {
+      await this.releasePlacement(placement);
+      this.stateValue = "failed";
+      this.pendingJob = null;
+      this.reason = "The model server could not be given an address on this server.";
+      this.log(`[local-ai] ${model.id}: ${(e as Error).message}`);
+      throw new LocalAiUnavailable(this.reason, "start-failed");
+    }
     const args = serviceRunArgs({
       name: container,
       image: serverImageFor(placement.kind === "gpu" ? placement.backend : null),
       modelSha256: model.sha256,
       hostPort: port,
+      generation,
       contextTokens: model.serveContextTokens,
       threads: cpus,
       memoryMiB: placement.kind === "gpu" ? Math.max(1024, Math.min(need, hw.memoryMiB)) : need,
       cpus: String(cpus),
       apiKey,
+      ...(address ? { address } : {}),
       gpuArgs: placement.kind === "gpu" ? placement.gpuArgs : [],
       sandboxArgs,
       networkArgs: this.d.networkArgs(),
@@ -257,11 +280,14 @@ export class LocalInferenceService {
     checkLocalAiRunArgs(args);
     try {
       await this.d.ensureNetwork();
+      stopEndpoint(AI_KEY.serviceId, AI_KEY.env);
       await this.d.cmd.run("docker", ["rm", "-f", container]).catch(() => {});
       await this.d.cmd.run("docker", args);
+      await publishAndWatch(this.d.cmd, AI_KEY, { serviceId: AI_KEY.serviceId, container, network: AI_NETWORK, address: address ?? null, port, generation });
       if (placement.kind === "gpu") await this.d.broker?.started(placement.allocationId).catch(() => {});
-      await this.waitHealthy(port, apiKey);
+      await this.waitHealthy(apiKey);
     } catch (e) {
+      stopEndpoint(AI_KEY.serviceId, AI_KEY.env);
       await this.d.cmd.run("docker", ["rm", "-f", container]).catch(() => {});
       await this.releasePlacement(placement);
       this.stateValue = "failed";
@@ -282,12 +308,20 @@ export class LocalInferenceService {
     return r;
   }
 
-  private async waitHealthy(port: number, apiKey: string): Promise<void> {
+  private async waitHealthy(apiKey: string): Promise<void> {
     const until = this.now() + (this.d.startTimeoutMs ?? 5 * 60_000);
     for (;;) {
       try {
-        const res = await this.fetchImpl(`http://127.0.0.1:${port}/health`, { headers: { authorization: `Bearer ${apiKey}` } });
-        if (res.ok) return;
+        const lease = endpoints.acquire(AI_KEY);
+        if (lease) {
+          try {
+            const res = await this.fetchImpl(`http://${lease.endpoint.host}:${lease.endpoint.port}/health`, { headers: { authorization: `Bearer ${apiKey}` } });
+            // Healthy only for the incarnation that was asked, and only while it is still the current one.
+            if (res.ok && lease.current()) return;
+          } finally {
+            lease.release();
+          }
+        }
       } catch {
         // not listening yet
       }
@@ -298,7 +332,9 @@ export class LocalInferenceService {
 
   /** A short generation right after start: the measured speed replaces the estimate. */
   private async measure(r: Running): Promise<void> {
-    const res = await this.fetchImpl(`http://127.0.0.1:${r.port}/v1/chat/completions`, {
+    const ep = endpoints.lookup(AI_KEY);
+    if (!ep) return;
+    const res = await this.fetchImpl(`http://${ep.host}:${ep.port}/v1/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${r.apiKey}` },
       body: JSON.stringify({ model: r.model.id, messages: [{ role: "user", content: "Count from one to ten." }], max_tokens: 32, cache_prompt: false }),
@@ -317,6 +353,7 @@ export class LocalInferenceService {
     if (!r) return;
     this.stateValue = "stopping";
     this.running = null;
+    stopEndpoint(AI_KEY.serviceId, AI_KEY.env);
     await this.d.cmd.run("docker", ["rm", "-f", r.container]).catch(() => {});
     await this.releasePlacement(r.placement);
     this.stateValue = "stopped";

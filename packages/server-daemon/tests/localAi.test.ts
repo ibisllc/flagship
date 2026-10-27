@@ -5,6 +5,9 @@
  * shapes. Hostile cases: a model digest mismatch, a redirect off the registry, a training job asking
  * for another app's data, a forged or stale order, an undeclared app, a spent quota.
  */
+import { endpoints } from "../src/endpoints.js";
+import { setActiveEngine } from "../src/engine/engine.js";
+import { resetAddressPools } from "../src/serviceRunner.js";
 import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { createServer, request as httpRequest, type Server } from "node:http";
@@ -229,6 +232,17 @@ function fakeCmd(capture?: (args: string[]) => { stdout: string; stderr?: string
     run: async (_c, a) => void runs.push(a),
     capture: async (_c, a) => {
       runs.push(a);
+      if (a[0] === "inspect" && a.includes("--format")) {
+        // What the engine would say about the container the last `run` named (Docker: loopback publish).
+        const run = [...runs].reverse().find((x) => x[0] === "run" && x[x.indexOf("--name") + 1] === a[a.length - 1]);
+        if (!run) return { stdout: "", stderr: "" };
+        const labels = Object.fromEntries(run.flatMap((x, i) => (x === "--label" ? [run[i + 1]!.split("=") as [string, string]] : [])));
+        const ip = run.includes("--ip") ? run[run.indexOf("--ip") + 1]! : "10.89.2.9";
+        return {
+          stdout: JSON.stringify({ Id: "cid", State: { Running: true, StartedAt: "t0" }, Config: { Labels: labels }, NetworkSettings: { Networks: { "flagship-staging": { IPAddress: ip } } } }),
+          stderr: "",
+        };
+      }
       const r = capture?.(a) ?? { stdout: "" };
       return { stdout: r.stdout, stderr: r.stderr ?? "" };
     },
@@ -305,6 +319,31 @@ describe("the model server: CPU, a GPU claim, or an honest no", () => {
     l.release();
     await new Promise((r) => setTimeout(r, 10));
     expect(store.installed("stories-260k")?.measuredTokensPerSecond).toBe(41.5);
+  });
+
+  it("on Podman the server has its own address and no published port, and the lease comes from the endpoint table", async () => {
+    setActiveEngine("podman");
+    try {
+      const cmd = fakeCmd((a) =>
+        a[0] === "network"
+          ? { stdout: JSON.stringify([{ name: "flagship-staging", id: "n", network_interface: "fs-staging", subnets: [{ subnet: "10.89.2.0/24", gateway: "10.89.2.1" }], options: { mode: "unmanaged" }, containers: {} }]) }
+          : { stdout: "" },
+      );
+      const { svc, store } = service({ cmd });
+      await store.load();
+      const l = await svc.lease();
+      const run = cmd.runs.find((a) => a[0] === "run")!;
+      expect(run).not.toContain("-p");
+      expect(run[run.indexOf("--ip") + 1]).toBe("10.89.2.2");
+      expect(l.baseUrl).toBe("http://10.89.2.2:8080");
+      await svc.stop();
+      await expect(svc.lease()).resolves.toBeDefined(); // a fresh start gets the same service address
+      l.release();
+    } finally {
+      setActiveEngine("docker");
+      resetAddressPools();
+      endpoints.invalidate("local-ai");
+    }
   });
 
   it("on a qualified GPU through the allocator, released when stopped", async () => {

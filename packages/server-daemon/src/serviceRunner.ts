@@ -5,7 +5,7 @@ import { checkBuildContextDockerfile } from "./buildmodes/dockerfilePolicy.js";
 import { prepareRuntimeContext } from "./runtimes/buildContext.js";
 import { appSandboxRunArgs } from "./appSandbox/state.js";
 import { inspectNetwork, networkCreateArgs } from "./egress/networks.js";
-import { AddressPool, EndpointReconciler, LABEL_GENERATION, LABEL_SERVICE, endpoints, nextGeneration, parseObservation, publishFromEngine, type EndpointEnv, type EndpointKey, type ObserveFn } from "./endpoints.js";
+import { AddressPool, EndpointReconciler, type ExpectedContainer, LABEL_GENERATION, LABEL_SERVICE, endpoints, nextGeneration, parseObservation, publishFromEngine, type EndpointEnv, type EndpointKey, type ObserveFn } from "./endpoints.js";
 import { notifyContainersChanged, sandboxBuildArgs, sandboxRunArgs } from "./egress/sandboxNetworking.js";
 import { FILES_MOUNT, isFilesVolume } from "./dataLayer/naming.js";
 import type { BuildDiskWatch } from "./appQuota/buildGuard.js";
@@ -684,6 +684,48 @@ function observer(cmd: CommandRunner): ObserveFn {
   };
 }
 
+/** Podman gives an app no published port: the daemon dials its container directly. Docker keeps its loopback publish. */
+export function dialsContainersDirectly(): boolean {
+  return activeEngine() === "podman";
+}
+
+/** The address a container's owner keeps on `network` for as long as the owner exists. */
+export async function assignAddress(cmd: CommandRunner, network: string, owner: string): Promise<string> {
+  let p = addressPools.get(network);
+  if (!p) {
+    p = (async () => {
+      const info = await inspectNetwork(cmd, network);
+      const subnet = info?.subnets[0];
+      if (!subnet) throw new Error(`the ${network} network has no subnet to give a container an address in`);
+      return new AddressPool(subnet, { reserved: info.gateways });
+    })();
+    p.catch(() => addressPools.delete(network));
+    addressPools.set(network, p);
+  }
+  return (await p).assign(owner);
+}
+
+export async function releaseAddressFor(network: string, owner: string): Promise<void> {
+  const pool = await addressPools.get(network)?.catch(() => null);
+  pool?.release(owner);
+}
+
+/**
+ * Publish a container's endpoint after the engine confirms it is the one this deploy created, and keep the table true to
+ * the engine from then on. A container that is not running yet is left to the caller's own readiness check.
+ */
+export async function publishAndWatch(cmd: CommandRunner, key: EndpointKey, want: ExpectedContainer): Promise<void> {
+  const r = await publishFromEngine(endpoints, key, want, observer(cmd));
+  if (!r.ok && !/not running|no such container/.test(r.reason)) throw new Error(`refusing to route to ${want.container}: ${r.reason}`);
+  reconciler?.watch(key, want);
+}
+
+/** A container is going away: close its connections and stop following it. (Its owner keeps its address.) */
+export function stopEndpoint(serviceId: string, env: EndpointEnv): void {
+  reconciler?.unwatch(serviceId, env);
+  endpoints.beginStop(serviceId, env);
+}
+
 export class AppRunner {
   private readonly limits: ContainerLimits;
 
@@ -694,30 +736,14 @@ export class AppRunner {
     this.limits = resolveLimits(opts.limits);
   }
 
-  private poolFor(network: string): Promise<AddressPool> {
-    let p = addressPools.get(network);
-    if (!p) {
-      p = (async () => {
-        const info = await inspectNetwork(this.cmd, network);
-        const subnet = info?.subnets[0];
-        if (!subnet) throw new Error(`the ${network} network has no subnet to give an app an address in`);
-        return new AddressPool(subnet, { reserved: info.gateways });
-      })();
-      p.catch(() => addressPools.delete(network));
-      addressPools.set(network, p);
-    }
-    return p;
-  }
-
   /** The address a Podman app has for as long as the service exists; the pool is the only source of one. */
   async addressFor(spec: Pick<AppSpec, "serviceId" | "component">): Promise<string> {
-    return (await this.poolFor(this.limits.network)).assign(deployedKeyId(spec));
+    return assignAddress(this.cmd, this.limits.network, deployedKeyId(spec));
   }
 
   /** The service is being deleted: its address goes back to the pool (after the quarantine). */
   async releaseAddress(serviceId: string, component = "main"): Promise<void> {
-    const pool = await addressPools.get(this.limits.network)?.catch(() => null);
-    pool?.release(deployedKeyId({ serviceId, component }));
+    await releaseAddressFor(this.limits.network, deployedKeyId({ serviceId, component }));
   }
 
   async deploy(spec: AppSpec): Promise<string[]> {
@@ -734,7 +760,7 @@ export class AppRunner {
     if (gpu?.kind === "gpu") (await import("./gpu/broker.js")).checkGpuArgs(gpu.runArgs);
     // Podman: no published port (unmanaged bridges forward nothing). The container gets the address its service
     // owns and the daemon dials it through the endpoint table. Docker keeps its loopback publish.
-    const direct = activeEngine() === "podman" && !!spec.port;
+    const direct = dialsContainersDirectly() && !!spec.port;
     const address = direct ? await this.addressFor(spec) : null;
     const generation = nextGeneration();
     const key = endpointKeyFor(spec, this.limits.network);
@@ -787,14 +813,15 @@ export class AppRunner {
     deployedKeys.set(deployedKeyId(spec), key);
     const container = spec.containerName ?? this.containerName(spec.serviceId);
     const port = address ? (spec.containerPort ?? spec.port) : spec.port;
-    const r = await publishFromEngine(
-      endpoints,
-      key,
-      { serviceId: spec.serviceId, container, network: this.limits.network, address, port, generation },
-      observer(this.cmd),
-    );
-    if (!r.ok && !/not running|no such container/.test(r.reason)) throw new Error(`refusing to route to ${container}: ${r.reason}`);
-    reconciler?.watch(key, { serviceId: spec.serviceId, container, network: this.limits.network, address, port, generation });
+    await publishAndWatch(this.cmd, key, { serviceId: spec.serviceId, container, network: this.limits.network, address, port, generation });
+  }
+
+  /** A container this runner started is being removed for good (not stopped to be replaced): close its connections, free its address. */
+  async retire(serviceId: string, component = "main"): Promise<void> {
+    const env = this.limits.network === "flagship-staging" ? "staging" : "live";
+    reconciler?.unwatch(serviceId, env);
+    endpoints.beginStop(serviceId, env);
+    await this.releaseAddress(serviceId, component).catch(() => {});
   }
 
   async stop(serviceId: string): Promise<void> {

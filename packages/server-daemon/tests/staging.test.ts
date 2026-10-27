@@ -5,6 +5,7 @@
  * `check_app` / `get_logs` reach only it.
  */
 
+import { endpoints } from "../src/endpoints.js";
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -174,6 +175,8 @@ describe("StagingRunner", () => {
     const app = await fakeApp("x".repeat(6000));
     const { runner } = setup({ port: app.port });
     await runner.stage({ buildId: "b2", files: FILES, slug: "notes" });
+    // The fake engine starts nothing; a real deploy publishes the verified endpoint.
+    endpoints.publish({ serviceId: "stg-b2", env: "staging", component: "main", role: "http" }, { host: "127.0.0.1", port: app.port, generation: 1, incarnation: "test" });
 
     const r = await runner.checkApp("b2", { path: "/items?x=1", method: "post", body: '{"a":1}' });
     expect(r).toMatchObject({ ok: true, status: 201, contentType: "application/json", truncated: true });

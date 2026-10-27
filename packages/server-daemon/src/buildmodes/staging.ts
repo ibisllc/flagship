@@ -42,6 +42,7 @@ import { pickPgUrlForApp } from "../runMigration.js";
 import { migrationFiles } from "../llm/serviceName.js";
 import { readCarriedBinaries } from "../llm/serviceSource.js";
 import { buildAppImage } from "./deployArtifact.js";
+import { endpoints, type EndpointLease } from "../endpoints.js";
 import {
   classifyEnvironmentFailure,
   classifyProvisioningError,
@@ -483,6 +484,7 @@ export class StagingRunner implements StagingHost {
     const run = this.running.get(buildId);
     this.running.delete(buildId);
     if (!BUILD_ID_RE.test(buildId)) return;
+    await this.runner.retire(`stg-${buildId}`);
     await this.deps.cmd.run("docker", ["rm", "-f", this.runner.containerName(`stg-${buildId}`)]).catch(() => {});
     if (run?.stores && this.deps.dataProvisioner) {
       await this.deps.dataProvisioner
@@ -771,7 +773,15 @@ export class StagingRunner implements StagingHost {
       headers["content-type"] = looksJson(body) ? "application/json" : "text/plain; charset=utf-8";
       headers["content-length"] = String(Buffer.byteLength(body));
     }
-    return sendLocal(run.port, { method, path, headers, body, timeoutMs: this.deps.checkTimeoutMs ?? 10_000 });
+    // Through the endpoint table, like every dial to a container: a copy that was replaced or stopped answers
+    // "not reachable", never the next occupant of its address.
+    const lease = endpoints.acquire({ serviceId: `stg-${buildId}`, env: "staging", component: "main", role: "http" });
+    if (!lease) return { ok: false, reason: "the test copy is not reachable right now" };
+    try {
+      return await sendLocal(lease, { method, path, headers, body, timeoutMs: this.deps.checkTimeoutMs ?? 10_000 });
+    } finally {
+      lease.release();
+    }
   }
 }
 
@@ -831,7 +841,7 @@ function isText(contentType: string): boolean {
 }
 
 function sendLocal(
-  port: number,
+  lease: EndpointLease,
   r: { method: string; path: string; headers: Record<string, string>; body?: string; timeoutMs: number },
 ): Promise<CheckAppResult> {
   return new Promise((resolve) => {
@@ -843,7 +853,7 @@ function sendLocal(
       }
     };
     const req = httpRequest(
-      { host: "127.0.0.1", port, method: r.method, path: r.path, headers: r.headers, timeout: r.timeoutMs },
+      { host: lease.endpoint.host, port: lease.endpoint.port, method: r.method, path: r.path, headers: r.headers, timeout: r.timeoutMs },
       (res) => {
         const chunks: Buffer[] = [];
         let size = 0;
@@ -874,6 +884,7 @@ function sendLocal(
       done({ ok: false, reason: `the app didn't answer within ${Math.round(r.timeoutMs / 1000)} s` });
     });
     req.on("error", (e) => done({ ok: false, reason: `the app didn't answer: ${e.message}` }));
+    lease.bind(req);
     if (r.body != null) req.write(r.body);
     req.end();
   });

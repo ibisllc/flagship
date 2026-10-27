@@ -310,6 +310,26 @@ export interface ExpectedContainer {
   address: string | null;
   port: number;
   generation: number;
+  /**
+   * Docker only: a container an earlier release created carries no labels. It is accepted as the service's own only if
+   * it has none at all (a container labelled for another service is still refused).
+   */
+  unlabelled?: boolean;
+}
+
+/** Whether the engine's record is the container the daemon expects (labels, deploy, running, place). */
+export function matchesExpected(o: ContainerObservation, want: ExpectedContainer): string | null {
+  if (want.unlabelled) {
+    if (o.serviceLabel !== null || o.generation !== null) return "the container is labelled for another deploy";
+  } else {
+    if (o.serviceLabel !== want.serviceId) return "the container is not labelled for this service";
+    if (o.generation !== want.generation) return "the container belongs to another deploy";
+  }
+  if (!o.running) return "the container is not running";
+  const ip = o.addresses[want.network];
+  if (!ip) return `the container is not on ${want.network}`;
+  if (want.address !== null && ip !== want.address) return "the container is not at the address assigned to its service";
+  return null;
 }
 
 export type PublishResult = { ok: true; endpoint: Endpoint } | { ok: false; reason: string };
@@ -327,12 +347,9 @@ export async function publishFromEngine(
 ): Promise<PublishResult> {
   const o = await observe(want.container);
   if (!o) return { ok: false, reason: "the engine has no such container" };
-  if (o.serviceLabel !== want.serviceId) return { ok: false, reason: "the container is not labelled for this service" };
-  if (o.generation !== want.generation) return { ok: false, reason: "the container belongs to another deploy" };
-  if (!o.running) return { ok: false, reason: "the container is not running" };
-  const ip = o.addresses[want.network];
-  if (!ip) return { ok: false, reason: `the container is not on ${want.network}` };
-  if (want.address !== null && ip !== want.address) return { ok: false, reason: "the container is not at the address assigned to its service" };
+  const bad = matchesExpected(o, want);
+  if (bad) return { ok: false, reason: bad };
+  const ip = o.addresses[want.network]!;
   const host = want.address === null ? "127.0.0.1" : ip;
   const endpoint: Endpoint = { host, port: want.port, generation: want.generation, incarnation: `${o.containerId}:${o.startedAt}` };
   table.publish(key, endpoint);
@@ -375,12 +392,7 @@ export class EndpointReconciler {
     for (const { key, want } of [...this.watched.values()]) {
       const before = this.table.lookup(key);
       const o = await this.observe(want.container);
-      const sound =
-        !!o &&
-        o.running &&
-        o.serviceLabel === want.serviceId &&
-        o.generation === want.generation &&
-        (want.address === null || o.addresses[want.network] === want.address);
+      const sound = !!o && matchesExpected(o, want) === null;
       if (!sound) {
         if (before) this.table.invalidate(key.serviceId, key.env);
         continue;

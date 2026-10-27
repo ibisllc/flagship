@@ -25,6 +25,15 @@ describe("a dedicated database through the broker", () => {
     expect(() => dockerExec({ argv: ["volume", "rm", dedicatedSocketVolume(KEY)] })).not.toThrow();
   });
 
+  it("may carry its own address and endpoint labels (Podman, endpoints.ts) and nothing else", () => {
+    const withIdentity = dedicatedRunArgs({ key: KEY, port: 41234, adminPassword: "Zm9vYmFyYmF6cXV4cXV1eHF1dXhxdXV4", limits: DEFAULT_DEDICATED_LIMITS, sandbox: ["--runtime=runsc"], network: "flagship-apps", address: "10.89.1.2", generation: 1793112048092 });
+    expect(withIdentity).not.toContain("-p");
+    for (const engine of ["docker", "podman"] as const) expect(() => dockerExec({ argv: withIdentity }, engine)).not.toThrow();
+    const swap = (from: string, to: string) => withIdentity.map((a) => (a === from ? to : a));
+    expect(() => dockerExec({ argv: swap(`flagship.service=pgd-${KEY}`, "flagship.service=pgd-fedcba9876543210fedcba98") })).toThrow(PrivdError);
+    expect(() => dockerExec({ argv: swap("10.89.1.2", "not-an-ip") })).toThrow(PrivdError);
+  });
+
   it("its migration sandbox reaches the database's socket read-only", () => {
     const plan = buildSandboxPlan({ target: { user: "u", password: "p", database: "d", port: 5432 }, socketVolume: dedicatedSocketVolume(KEY) });
     expect(() => dockerExec({ argv: plan.args })).not.toThrow();

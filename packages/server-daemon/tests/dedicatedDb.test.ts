@@ -4,12 +4,16 @@
  * the provisioner, the backup ops and the migration sandbox use it. The
  * hostile-database tests run on a real box: dedicatedDb.vm.test.ts.
  */
-import { describe, expect, it } from "vitest";
+import { endpoints } from "../src/endpoints.js";
+import { setActiveEngine } from "../src/engine/engine.js";
+import { resetAddressPools } from "../src/serviceRunner.js";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   DedicatedPostgres,
   dedicatedContainer,
   dedicatedKey,
   dedicatedRunArgs,
+  dedicatedServiceId,
   dedicatedVolume,
   diskRoomLeft,
   memoryDedicatedStateStore,
@@ -24,20 +28,33 @@ import { buildSandboxPlan } from "../src/migrationSandbox.js";
 function world(opts: { free?: number; total?: number; linkOk?: boolean; gateway?: boolean; absent?: boolean; state?: DedicatedStateStore } = {}) {
   const calls: string[] = [];
   const running = new Set<string>();
+  const started = new Map<string, string[]>();
   const cmd: CommandRunner = {
     run: async (c, a) => {
       calls.push(`${c} ${a.join(" ")}`);
       if (c === "docker" && a[0] === "run") {
         assertNoHostPathInDockerArgs(a);
         running.add(a[a.indexOf("--name") + 1]!);
+        started.set(a[a.indexOf("--name") + 1]!, a);
       }
       if (c === "docker" && a[0] === "rm") running.delete(a[a.length - 1]!);
     },
     capture: async (c, a) => {
       calls.push(`${c} ${a.join(" ")}`);
+      if (c === "docker" && a[0] === "network") {
+        return { stdout: JSON.stringify([{ name: "flagship-apps", id: "n1", network_interface: "fs-apps", subnets: [{ subnet: "10.89.1.0/24", gateway: "10.89.1.1" }], options: { mode: "unmanaged" }, containers: {} }]), stderr: "" };
+      }
       if (c === "docker" && a[0] === "inspect") {
         const n = a[a.length - 1]!;
         if (!running.has(n)) throw new Error("No such object");
+        const run = started.get(n);
+        const labels = Object.fromEntries((run ?? []).flatMap((x, i) => (x === "--label" ? [run![i + 1]!.split("=") as [string, string]] : [])));
+        if (a.includes("--format"))
+          return {
+            stdout: JSON.stringify({ Id: `id-${n}`, State: { Running: true, StartedAt: "t0" }, Config: { Labels: labels }, NetworkSettings: { Networks: { "flagship-apps": { IPAddress: run?.includes("--ip") ? run[run.indexOf("--ip") + 1] : "10.89.1.9" } } } }),
+            stderr: "",
+          };
+        if (a.some((x) => x.includes("flagship.generation"))) return { stdout: labels["flagship.generation"] ?? "", stderr: "" };
         return { stdout: a.includes("{{.State.Running}}") ? "true" : "id", stderr: "" };
       }
       return { stdout: "", stderr: "" };
@@ -82,6 +99,51 @@ function world(opts: { free?: number; total?: number; linkOk?: boolean; gateway?
   });
   return { d, calls, running, volumes, prealloc, linked, admins, adminObjs, book };
 }
+
+describe("a dedicated instance reached through the endpoint table", () => {
+  afterEach(() => {
+    setActiveEngine("docker");
+    resetAddressPools();
+    endpoints.invalidate(dedicatedServiceId(dedicatedKey("alice", "shop")));
+  });
+
+  it("Podman: its own address, no published port, the admin and the app link both go to that address on 5432", async () => {
+    setActiveEngine("podman");
+    const w = world();
+    await w.d.forApp("alice", "shop", { diskBytes: 100 * 2 ** 20 });
+    const run = w.calls.find((c) => c.startsWith("docker run"))!;
+    expect(run).not.toContain(" -p ");
+    expect(run).toMatch(/--ip 10\.89\.1\.2 /);
+    expect(w.admins[0]).toMatch(/@10\.89\.1\.2:5432\/postgres$/);
+    expect(w.linked.get(15400)).toBe("alice--shop");
+  });
+
+  it("Docker: an instance an earlier release created (no labels) is still taken as its service's own", async () => {
+    setActiveEngine("docker");
+    const key = dedicatedKey("alice", "shop");
+    const state = { [key]: { key, creator: "alice", slug: "shop", port: 15400, adminPassword: "pw", limits: DEFAULT_DEDICATED_LIMITS, createdAt: 1 } };
+    const w2 = world({ state: { load: async () => structuredClone(state) as never, save: async () => {} } });
+    w2.running.add(dedicatedContainer(key)); // running, never labelled
+    const r = await w2.d.startAll();
+    expect(r.failed).toEqual([]);
+    expect(endpoints.lookup({ serviceId: dedicatedServiceId(key), env: "live", component: "db", role: "data" })).toMatchObject({ host: "127.0.0.1", port: 15400 });
+  });
+
+  it("Docker: a container labelled for another service is refused", async () => {
+    setActiveEngine("docker");
+    const key = dedicatedKey("alice", "shop");
+    const state = { [key]: { key, creator: "alice", slug: "shop", port: 15400, adminPassword: "pw", limits: DEFAULT_DEDICATED_LIMITS, createdAt: 1 } };
+    const w = world({ state: { load: async () => structuredClone(state) as never, save: async () => {} } });
+    // another service's labelled container sits under this name
+    w.running.add(dedicatedContainer(key));
+    const orig = w.d as unknown as { deps: { cmd: CommandRunner } };
+    const cap = orig.deps.cmd.capture!;
+    orig.deps.cmd.capture = async (c, a) =>
+      a.includes("--format") ? { stdout: JSON.stringify({ Id: "x", State: { Running: true, StartedAt: "t" }, Config: { Labels: { "flagship.service": "pgd-other", "flagship.generation": "1" } }, NetworkSettings: { Networks: { "flagship-apps": { IPAddress: "10.0.0.5" } } } }), stderr: "" } : cap(c, a);
+    const r = await w.d.startAll();
+    expect(r.failed).toEqual([key]);
+  });
+});
 
 describe("a dedicated instance", () => {
   it("is held to its own memory, CPU, processes, connections, temp files and disk", () => {
