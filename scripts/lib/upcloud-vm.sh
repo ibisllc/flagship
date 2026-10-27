@@ -112,4 +112,31 @@ cd /root/fs/rust && /root/.cargo/bin/rustup show active-toolchain >/dev/null
 SETUP
 }
 
-vm_run() { "${VM_SSH[@]}" "export PATH=/usr/local/go/bin:/root/.cargo/bin:\$PATH; cd /root/fs && $1"; }
+# vm_run <command>: run it on the VM, detached, and follow it with short SSH calls. A single long session was reset
+# mid-build ("Connection reset by peer", at different steps on different runs), killing an hour of work; the command
+# keeps running when the connection drops, and only a VM that stays unreachable for ~10 minutes fails the run.
+# Output (stdout and stderr together) is printed as it grows; the exit status is the command's own.
+vm_run() {
+  local id="job$$_$RANDOM" b64 off=0 misses=0 chunk last body size rc
+  b64=$(printf 'export PATH=/usr/local/go/bin:/root/.cargo/bin:$PATH\ncd /root/fs\n%s\n' "$1" | base64 | tr -d '\n')
+  until "${VM_SSH[@]}" "echo $b64 | base64 -d > /root/$id.sh && (nohup bash /root/$id.sh > /root/$id.log 2>&1; echo \$? > /root/$id.rc) > /dev/null 2>&1 < /dev/null &" 2>/dev/null; do
+    misses=$((misses + 1)); [ "$misses" -lt 60 ] || { echo "the VM stayed unreachable while starting the job"; return 255; }
+    sleep 10
+  done
+  misses=0
+  while :; do
+    # The VM answers with the log bytes from $off on, then one marker line: @@<log size>@@<exit status, once finished>.
+    if chunk=$("${VM_SSH[@]}" "s=\$((\$(wc -c < /root/$id.log 2>/dev/null || echo 0))); tail -c +$((off + 1)) /root/$id.log 2>/dev/null | head -c \$((s - $off)); printf '\n@@%s@@%s\n' \$s \"\$(cat /root/$id.rc 2>/dev/null)\"" 2>/dev/null) && last=$(printf '%s\n' "$chunk" | tail -n 1) && [[ "$last" == @@*@@* ]]; then
+      misses=0
+      body=$(printf '%s\n' "$chunk" | sed '$d')
+      [ -z "$body" ] || printf '%s\n' "$body"
+      size=${last#@@}; size=${size%%@@*}; rc=${last##*@@}
+      off=$size
+      [ -z "$rc" ] || return "$rc"
+    else
+      misses=$((misses + 1))
+      [ "$misses" -lt 60 ] || { echo "the VM stayed unreachable for 10 minutes"; return 255; }
+    fi
+    sleep 10
+  done
+}
