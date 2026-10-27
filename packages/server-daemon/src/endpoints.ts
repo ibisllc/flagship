@@ -96,7 +96,7 @@ interface Entry {
 
 export class EndpointTable {
   private readonly entries = new Map<string, Entry>();
-  /** Services being stopped: nothing is admitted until the next publish. */
+  /** Services (or one component of a service) being stopped: nothing is admitted until the next publish. */
   private readonly draining = new Set<string>();
   private readonly leases = new Map<string, Set<EndpointLease>>();
 
@@ -104,11 +104,12 @@ export class EndpointTable {
   publish(key: EndpointKey, endpoint: Endpoint): void {
     this.entries.set(keyString(key), { endpoint });
     this.draining.delete(drainKey(key));
+    this.draining.delete(drainKey(key, key.component));
   }
 
   lookup(key: EndpointKey): Endpoint | null {
     const k = keyString(key);
-    if (this.draining.has(drainKey(key))) return null;
+    if (this.draining.has(drainKey(key)) || this.draining.has(drainKey(key, key.component))) return null;
     return this.entries.get(k)?.endpoint ?? null;
   }
 
@@ -121,7 +122,7 @@ export class EndpointTable {
       ep,
       () => {
         const cur = this.entries.get(k)?.endpoint;
-        return !!cur && !this.draining.has(drainKey(key)) && cur.incarnation === ep.incarnation && cur.generation === ep.generation;
+        return !!cur && !this.draining.has(drainKey(key)) && !this.draining.has(drainKey(key, key.component)) && cur.incarnation === ep.incarnation && cur.generation === ep.generation;
       },
       (l) => this.leases.get(k)?.delete(l),
     );
@@ -132,23 +133,23 @@ export class EndpointTable {
   }
 
   /** Stop admitting, drop the endpoint, and destroy every connection and pending dial for the service. */
-  invalidate(serviceId: string, env?: EndpointEnv): void {
+  invalidate(serviceId: string, env?: EndpointEnv, component?: string): void {
+    const hit = (k: string) => {
+      const [kEnv, kService, kComponent] = k.split("/");
+      return kService === serviceId && (!env || kEnv === env) && (component === undefined || kComponent === component);
+    };
     for (const k of [...this.entries.keys()]) {
-      const [kEnv, kService] = k.split("/");
-      if (kService !== serviceId || (env && kEnv !== env)) continue;
+      if (!hit(k)) continue;
       this.entries.delete(k);
       this.cancelLeases(k);
     }
-    for (const k of [...this.leases.keys()]) {
-      const [kEnv, kService] = k.split("/");
-      if (kService === serviceId && (!env || kEnv === env)) this.cancelLeases(k);
-    }
+    for (const k of [...this.leases.keys()]) if (hit(k)) this.cancelLeases(k);
   }
 
   /** The first step of a stop, replace, update or rollback: refuse new connections, close the old ones. */
-  beginStop(serviceId: string, env: EndpointEnv = "live"): void {
-    this.draining.add(drainKey({ serviceId, env }));
-    this.invalidate(serviceId, env);
+  beginStop(serviceId: string, env: EndpointEnv = "live", component?: string): void {
+    this.draining.add(drainKey({ serviceId, env }, component));
+    this.invalidate(serviceId, env, component);
   }
 
   /** Leases currently open for a service (tests, diagnostics). */
@@ -166,8 +167,8 @@ export class EndpointTable {
   }
 }
 
-function drainKey(k: { serviceId: string; env: EndpointEnv }): string {
-  return `${k.env}/${k.serviceId}`;
+function drainKey(k: { serviceId: string; env: EndpointEnv }, component?: string): string {
+  return component === undefined ? `${k.env}/${k.serviceId}` : `${k.env}/${k.serviceId}/${component}`;
 }
 
 /** The daemon's one table. */
@@ -234,6 +235,11 @@ export class AddressPool {
       return ip;
     }
     throw new Error("no free address on the app network");
+  }
+
+  /** Every owner whose name starts with `prefix` (a service and all of its components). */
+  releasePrefix(prefix: string): void {
+    for (const owner of [...this.byOwner.keys()]) if (owner.startsWith(prefix)) this.release(owner);
   }
 
   ownerOf(ip: string): string | undefined {
@@ -384,8 +390,10 @@ export class EndpointReconciler {
     this.watched.set(keyString(key), { key, want });
   }
 
-  unwatch(serviceId: string, env?: EndpointEnv): void {
-    for (const [k, w] of [...this.watched]) if (w.key.serviceId === serviceId && (!env || w.key.env === env)) this.watched.delete(k);
+  unwatch(serviceId: string, env?: EndpointEnv, component?: string): void {
+    for (const [k, w] of [...this.watched]) {
+      if (w.key.serviceId === serviceId && (!env || w.key.env === env) && (component === undefined || w.key.component === component)) this.watched.delete(k);
+    }
   }
 
   async tick(): Promise<void> {
@@ -394,12 +402,12 @@ export class EndpointReconciler {
       const o = await this.observe(want.container);
       const sound = !!o && matchesExpected(o, want) === null;
       if (!sound) {
-        if (before) this.table.invalidate(key.serviceId, key.env);
+        if (before) this.table.invalidate(key.serviceId, key.env, key.component);
         continue;
       }
       const incarnation = `${o.containerId}:${o.startedAt}`;
       if (!before || before.incarnation !== incarnation) {
-        if (before) this.table.invalidate(key.serviceId, key.env);
+        if (before) this.table.invalidate(key.serviceId, key.env, key.component);
         await publishFromEngine(this.table, key, want, async () => o);
       }
     }

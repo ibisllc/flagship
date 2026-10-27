@@ -710,6 +710,11 @@ export async function releaseAddressFor(network: string, owner: string): Promise
   pool?.release(owner);
 }
 
+/** The key an app container was published under by its last deploy (a start check and a member check ask through it). */
+export function deployedKey(spec: Pick<AppSpec, "serviceId" | "component">): EndpointKey | undefined {
+  return deployedKeys.get(deployedKeyId(spec));
+}
+
 /**
  * Publish a container's endpoint after the engine confirms it is the one this deploy created, and keep the table true to
  * the engine from then on. A container that is not running yet is left to the caller's own readiness check.
@@ -721,9 +726,9 @@ export async function publishAndWatch(cmd: CommandRunner, key: EndpointKey, want
 }
 
 /** A container is going away: close its connections and stop following it. (Its owner keeps its address.) */
-export function stopEndpoint(serviceId: string, env: EndpointEnv): void {
-  reconciler?.unwatch(serviceId, env);
-  endpoints.beginStop(serviceId, env);
+export function stopEndpoint(serviceId: string, env: EndpointEnv, component?: string): void {
+  reconciler?.unwatch(serviceId, env, component);
+  endpoints.beginStop(serviceId, env, component);
 }
 
 export class AppRunner {
@@ -742,8 +747,11 @@ export class AppRunner {
   }
 
   /** The service is being deleted: its address goes back to the pool (after the quarantine). */
-  async releaseAddress(serviceId: string, component = "main"): Promise<void> {
-    await releaseAddressFor(this.limits.network, deployedKeyId({ serviceId, component }));
+  async releaseAddress(serviceId: string, component?: string): Promise<void> {
+    // No component: the service and every component of it (an app group's members).
+    const pool = await addressPools.get(this.limits.network)?.catch(() => null);
+    if (component === undefined) pool?.releasePrefix(`${serviceId}/`);
+    else pool?.release(deployedKeyId({ serviceId, component }));
   }
 
   async deploy(spec: AppSpec): Promise<string[]> {
@@ -789,8 +797,8 @@ export class AppRunner {
     assertNoHostPathInDockerArgs(args);
     await notifyContainersChanged();
     try {
-      // A new deploy never inherits the old one's endpoint or connections.
-      endpoints.beginStop(spec.serviceId, key.env);
+      // A new deploy never inherits the old one's endpoint or connections (this component's: an app group's others stay up).
+      stopEndpoint(spec.serviceId, key.env, key.component);
       await this.cmd.run("docker", args);
       await this.publishEndpoint(spec, key, generation, address);
       if (gpu?.kind === "gpu") await acceleratorHook?.afterRun(spec.serviceId, true);
@@ -817,17 +825,15 @@ export class AppRunner {
   }
 
   /** A container this runner started is being removed for good (not stopped to be replaced): close its connections, free its address. */
-  async retire(serviceId: string, component = "main"): Promise<void> {
+  async retire(serviceId: string, component?: string): Promise<void> {
     const env = this.limits.network === "flagship-staging" ? "staging" : "live";
-    reconciler?.unwatch(serviceId, env);
-    endpoints.beginStop(serviceId, env);
+    stopEndpoint(serviceId, env, component);
     await this.releaseAddress(serviceId, component).catch(() => {});
   }
 
   async stop(serviceId: string): Promise<void> {
     const env = this.limits.network === "flagship-staging" ? "staging" : "live";
-    reconciler?.unwatch(serviceId, env);
-    endpoints.beginStop(serviceId, env);
+    stopEndpoint(serviceId, env, "main");
     try {
       await this.cmd.run("docker", ["stop", this.containerName(serviceId)]);
       await this.cmd.run("docker", ["rm", this.containerName(serviceId)]);

@@ -9,6 +9,7 @@
  * instead of a gVisor container, so the same code serves Docker and Podman
  * boxes.
  */
+import { endpoints, nextGeneration } from "../endpoints.js";
 import { mkdir, rm, writeFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { request } from "node:http";
@@ -177,6 +178,7 @@ export class WasiRunner {
     if (!this.deps.available()) throw new Error("this server cannot run WebAssembly apps yet: update the server first");
     const sid = spec.serviceId;
     const unit = wasiUnitName(sid);
+    endpoints.beginStop(sid, "live", "main");
     await this.systemctl("stop", unit).catch(() => "");
     const dir = wasiAppDir(sid, this.deps.appsDir ?? WASI_APPS_DIR);
     await mkdir(dir, { recursive: true, mode: 0o755 });
@@ -196,6 +198,10 @@ export class WasiRunner {
     await this.systemctl("daemon-reload");
     await this.systemctl("reset-failed", unit).catch(() => "");
     await this.systemctl("start", "--no-block", unit);
+    // The worker listens on the host's loopback (not a container): the same table answers for it, so the proxy has one path.
+    if (w.world === "http-proxy" && spec.port) {
+      endpoints.publish({ serviceId: sid, env: "live", component: "main", role: "http" }, { host: "127.0.0.1", port: spec.port, generation: nextGeneration(), incarnation: `wasi:${unit}:${Date.now()}` });
+    }
     this.log(`${sid}: started ${unit} (${w.world}, module ${w.moduleDigest.slice(0, 19)}…)`);
   }
 
@@ -227,6 +233,7 @@ export class WasiRunner {
   }
 
   async stop(serviceId: string): Promise<void> {
+    endpoints.beginStop(serviceId, "live", "main");
     await this.systemctl("stop", wasiUnitName(serviceId)).catch(() => "");
     await this.deps.broker.close(serviceId);
     this.contexts.delete(serviceId);

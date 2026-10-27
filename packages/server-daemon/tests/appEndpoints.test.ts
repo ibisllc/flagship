@@ -128,3 +128,23 @@ describe("AppRunner on Docker: the loopback publish is kept, through the same ta
     expect(endpoints.lookup(key)).toMatchObject({ host: "127.0.0.1", port: 41001 });
   });
 });
+
+describe("an app group's members each have an entry and an address", () => {
+  const member = (component: string, port: number) => ({ ...spec, component, port, containerName: `flagship-svc1.${component}` });
+  const keyOf = (component: string) => ({ ...key, component });
+
+  it("deploying one member leaves the others published, with a different address each", async () => {
+    setActiveEngine("podman");
+    const { cmd, runs } = fakeEngine({ podman: true });
+    const runner = new AppRunner(cmd);
+    await runner.deploy(member("worker", 41010));
+    const lease = endpoints.acquire(keyOf("worker"))!;
+    await runner.deploy(member("web", 41011));
+    expect(lease.current()).toBe(true);
+    expect(endpoints.lookup(keyOf("web"))!.host).not.toBe(endpoints.lookup(keyOf("worker"))!.host);
+    expect(runs.map((r) => r[r.indexOf("--ip") + 1])).toEqual(["10.89.1.2", "10.89.1.3"]);
+    // Removing the service frees every component's address.
+    await runner.releaseAddress("svc1");
+    endpoints.invalidate("svc1");
+  });
+});

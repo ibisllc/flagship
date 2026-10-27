@@ -21,8 +21,9 @@
  * (servicePlatform.redeploy). Stops run in reverse.
  */
 import { connect } from "node:net";
-import type { AppRunner, AppSpec, CommandRunner } from "../serviceRunner.js";
-import { componentContainerName, componentEnvName } from "./names.js";
+import { dialsContainersDirectly, deployedKey, stopEndpoint, type AppRunner, type AppSpec, type CommandRunner } from "../serviceRunner.js";
+import { endpoints, type EndpointKey } from "../endpoints.js";
+import { componentContainerName, componentEnvName, owningServiceId } from "./names.js";
 import { componentStartOrder } from "./plan.js";
 
 export interface GroupMemberSpec {
@@ -50,7 +51,7 @@ export interface GroupLinks {
   unlink(port: number): Promise<void>;
 }
 
-export type MemberCheck = (m: { container: string; hostPort?: number }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+export type MemberCheck = (m: { container: string; hostPort?: number; endpoint?: EndpointKey }) => Promise<{ ok: true } | { ok: false; reason: string }>;
 
 export interface GroupRunnerOptions {
   memberCheck?: MemberCheck;
@@ -61,6 +62,7 @@ export interface GroupRunnerOptions {
 export function memberSpecs(spec: AppSpec, gateway: string | null): { order: string[]; members: AppSpec[]; main: AppSpec } {
   const group = spec.group;
   if (!group) throw new Error("not an app group");
+  if (group.members.some((m) => m.name === "main")) throw new Error("a component cannot be called main (that is the routed process)");
   const order = componentStartOrder(group.members);
   const linked = group.members.filter((m) => m.port !== undefined);
   if (linked.length > 0 && !gateway) throw new Error("this server can't connect the app's processes: its egress gateway isn't running");
@@ -81,6 +83,8 @@ export function memberSpecs(spec: AppSpec, gateway: string | null): { order: str
     else delete env.PORT;
     return {
       serviceId: spec.serviceId,
+      // Its own entry in the endpoint table and its own address: one service, one address per process.
+      component: name,
       containerName: componentContainerName(spec.serviceId, name),
       image: m.image,
       env,
@@ -99,9 +103,9 @@ export function memberSpecs(spec: AppSpec, gateway: string | null): { order: str
   return { order, members, main };
 }
 
-function tcpAnswers(port: number, timeoutMs: number): Promise<boolean> {
+function tcpAnswers(host: string, port: number, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const s = connect({ host: "127.0.0.1", port, timeout: timeoutMs });
+    const s = connect({ host, port, timeout: timeoutMs });
     const done = (ok: boolean) => {
       s.destroy();
       resolve(ok);
@@ -116,7 +120,19 @@ function tcpAnswers(port: number, timeoutMs: number): Promise<boolean> {
 export function realMemberCheck(cmd: CommandRunner, opts: { timeoutMs?: number; intervalMs?: number } = {}): MemberCheck {
   const timeoutMs = opts.timeoutMs ?? 60_000;
   const intervalMs = opts.intervalMs ?? 1000;
-  return async ({ container, hostPort }) => {
+  /** A listening check through the endpoint table, counted only while the probed incarnation is still current. */
+  const listening = async (endpoint: EndpointKey | undefined, hostPort: number | undefined): Promise<boolean> => {
+    if (hostPort === undefined) return true;
+    if (!endpoint) return tcpAnswers("127.0.0.1", hostPort, 1000);
+    const lease = endpoints.acquire(endpoint);
+    if (!lease) return false;
+    try {
+      return (await tcpAnswers(lease.endpoint.host, lease.endpoint.port, 1000)) && lease.current();
+    } finally {
+      lease.release();
+    }
+  };
+  return async ({ container, hostPort, endpoint }) => {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       let state = "missing";
@@ -136,7 +152,7 @@ export function realMemberCheck(cmd: CommandRunner, opts: { timeoutMs?: number; 
         }
         return { ok: false, reason: `${status === "missing" ? "it's gone" : `it stopped (exit code ${code ?? "?"})`}${out ? `. Its last output:\n${out}` : ""}` };
       }
-      if (status === "running" && (hostPort === undefined || (await tcpAnswers(hostPort, 1000)))) return { ok: true };
+      if (status === "running" && (await listening(endpoint, hostPort))) return { ok: true };
       if (Date.now() >= deadline) return { ok: false, reason: hostPort === undefined ? "it never started running" : "nothing listened on its port" };
       await new Promise((r) => setTimeout(r, intervalMs));
     }
@@ -167,7 +183,11 @@ export class GroupRunner {
     try {
       for (const m of spec.group!.members) {
         if (m.port === undefined) continue;
-        const ok = await this.links!.link(m.linkPort!, { host: "127.0.0.1", port: m.hostPort! }, spec.serviceId);
+        // Podman: the member's own container address (the service owns it for as long as it exists); Docker: its loopback publish.
+        const target = dialsContainersDirectly()
+          ? { host: await this.app.addressFor({ serviceId: spec.serviceId, component: m.name }), port: m.port! }
+          : { host: "127.0.0.1", port: m.hostPort! };
+        const ok = await this.links!.link(m.linkPort!, target, spec.serviceId);
         if (!ok) throw new Error(`the box could not connect component ${m.name} (link port ${m.linkPort} unavailable)`);
         linked.push(m.linkPort!);
       }
@@ -179,6 +199,7 @@ export class GroupRunner {
         const check = await (this.opts.memberCheck ?? realMemberCheck(this.cmd))({
           container: member.containerName!,
           ...(member.port !== undefined ? { hostPort: member.port } : {}),
+          ...(deployedKey(member) ? { endpoint: deployedKey(member)! } : {}),
         });
         if (!check.ok) throw new Error(`component ${name} didn't start: ${check.reason}`);
         this.log(`${spec.serviceId}: started ${name} (${i + 1} of ${members.length + 1})`);
@@ -196,6 +217,8 @@ export class GroupRunner {
   }
 
   private async removeContainer(name: string): Promise<void> {
+    // flagship-<serviceId>[.<component>]: the whole service's endpoints go (a group stops together).
+    stopEndpoint(owningServiceId(name.replace(/^flagship-/, "")), "live");
     await this.cmd.run("docker", ["stop", name]).catch(() => {});
     await this.cmd.run("docker", ["rm", "-f", name]).catch(() => {});
   }
