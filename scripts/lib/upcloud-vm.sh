@@ -56,11 +56,13 @@ PY
 )
   UUID=$(vm_api -X POST -d "$body" "$VM_API/server" | python3 -c 'import sys,json;print(json.load(sys.stdin)["server"]["uuid"])')
   for _ in $(seq 1 90); do
-    s=$(vm_api "$VM_API/server/$UUID")
-    state=$(echo "$s" | python3 -c 'import sys,json;print(json.load(sys.stdin)["server"]["state"])')
+    # A poll right after creation can come back empty or half-formed (the API is eventually consistent): that is "not
+    # yet", not a failure.
+    s=$(vm_api "$VM_API/server/$UUID" 2>/dev/null) || { sleep 5; continue; }
+    state=$(echo "$s" | python3 -c 'import sys,json;print(json.load(sys.stdin)["server"]["state"])' 2>/dev/null) || { sleep 5; continue; }
     IP=$(echo "$s" | python3 -c 'import sys,json
 d=json.load(sys.stdin)["server"]
-print(next((a["address"] for i in d["networking"]["interfaces"]["interface"] if i["type"]=="public" for a in i["ip_addresses"]["ip_address"] if a["family"]=="IPv4"),""))')
+print(next((a["address"] for i in d["networking"]["interfaces"]["interface"] if i["type"]=="public" for a in i["ip_addresses"]["ip_address"] if a["family"]=="IPv4"),""))' 2>/dev/null) || { sleep 5; continue; }
     [ "$state" = started ] && [ -n "$IP" ] && break
     sleep 5
   done
