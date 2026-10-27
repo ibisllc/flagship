@@ -1,6 +1,6 @@
 # How the daemon reaches an app on Podman (decision B, 2026-10-27)
 
-Status: DESIGN, owner-approved direction; nothing below is built. Written after the first live gym run of arch-v2 on
+Status: DESIGN v2 (2026-10-27): owner-approved direction, reviewed; section 3a and section 8 settle the review points. Nothing below is built yet. Written after the first live gym run of arch-v2 on
 Debian 13 showed that no app on a Podman box is reachable.
 
 ## 1. The problem, as measured
@@ -30,7 +30,7 @@ gateway), host networking (defeats the egress isolation).
 Callers name a SERVICE; the resolver returns its current, verified endpoint. A caller never supplies an address.
 
 ```
-resolveEndpoint(serviceId, role) -> { host, port, generation } | unavailable
+resolveEndpoint({ serviceId, env, component, role }) -> { host, port, generation, incarnation } | unavailable
 ```
 
 Properties (each needs a test):
@@ -50,6 +50,43 @@ Properties (each needs a test):
    identity.
 
 Roles: `http` (proxy, readiness), `data` (dedicated database), `ai` (local AI). A role only picks the validated port.
+
+## 3a. Settled after review (owner and advisor, 2026-10-27)
+
+**Lookup key.** `serviceId` + `env` (`live` | `staging` | `build`) + `component` (`main` for a single-process app, the
+component name for an app group) + `role`. Live and staging copies of one app never share an answer.
+
+**Identity.** Two counters, both written as container labels by the daemon:
+`flagship.generation` (one per deploy: install, update, rollback; a rollback gets a FRESH number, never the old one) and
+`flagship.incarnation` (one per container start, read from the engine: the container id plus its `StartedAt`). An
+engine restart of the same container changes the incarnation, not the generation. Readiness belongs to an
+incarnation, and an endpoint is only trusted while its incarnation is current.
+
+**Observation.** The broker (engine parsing stays there) returns a typed record `{ containerId, generation, startedAt,
+running, networks: [{ name, ip }] }`, never raw inspect output (it can hold secrets). The resolver lives in the daemon,
+which owns routing, readiness and connection lifetimes.
+
+**Address-reuse fence (the part an inspect-then-connect cannot give).** An address is owned by one SERVICE for the life
+of that service on that box, not by a container:
+
+1. The daemon allocates each service a static address from a pool in the bridge subnet (`--ip`), recorded in the
+   installed-services store. Netavark never picks an address for an app. (This reverses the earlier "engine-assigned
+   first" rule: without it nothing prevents another app inheriting a dead app's address.)
+2. A stale dial can therefore only reach (a) nothing, or (b) a later incarnation of the SAME service, which is the
+   same app and the same permissions. It can never reach another app.
+3. An address returns to the pool only after: the endpoint is invalidated, every tracked connection and pending dial
+   for that service is closed, the container is removed, AND a quarantine has passed (60 s). Delete of the service is
+   the only event that frees it.
+4. Pending dials are registered BEFORE they connect, so an invalidation that races a dial cancels it.
+5. Order on any stop, replace, update or rollback: stop admitting new connections, close existing ones (WebSocket,
+   streaming HTTP, pooled sockets, pending dials), then stop and remove the container.
+6. The pool is checked at boot against the engine (an address held by a container that is not the recorded service's is
+   a fault: that service stays unavailable).
+
+To verify live before building on it: that Podman 5.4 honours `--ip` on an `unmanaged` bridge network.
+
+**One resolver, both engines.** Docker boxes resolve to their existing loopback mapping through the same interface, so
+generation, incarnation and invalidation semantics are shared and tested once.
 
 ## 4. What changes (inventory of this checkout)
 
@@ -93,9 +130,11 @@ separation; the `flagship_icc` bridge rules and the egress chains stay the singl
 4. The full applicable gym (both lanes for existing boxes), then load and resource-exhaustion tests.
 5. The existing-box upgrade and restore lanes pass.
 
-## 8. Open questions
+## 8. Decisions on the open questions
 
-- Resolver location: in the daemon (reading through the broker) or typed in the broker? Leaning daemon, broker supplies
-  the inspect result.
-- How a long-lived upgraded connection (WebSocket) is closed on generation change.
-- Whether the readiness probe should also check the container's generation label before trusting an answer.
+1. Resolver in the daemon; the broker supplies the typed observation (section 3a).
+2. Connections are tracked by service and incarnation and destroyed on invalidation (HTTP, streaming, WebSocket,
+   pending dials, pooled sockets); a transparent WebSocket proxy closes both sockets; a graceful close frame needs
+   protocol awareness and is not required.
+3. Readiness is per incarnation: probe the expected container, then accept only if that incarnation is still
+   current when the probe returns.
