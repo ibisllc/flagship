@@ -1,6 +1,9 @@
 import { Socket } from "node:net";
 import { FrameReader, PRIVD_PROTOCOL_VERSION, PrivdError, encodeFrame, type PrivdErrorCode, type PrivdResponse } from "./wire.js";
 
+const SLOW_DOWN_RETRIES = 10;
+const SLOW_DOWN_WAIT_MS = 1_100;
+
 /** A connection to the broker. One request at a time per call; reconnects on demand. */
 export class PrivdClient {
   private socket: Socket | null = null;
@@ -65,9 +68,17 @@ export class PrivdClient {
 
   async call(op: string, args: Record<string, unknown>): Promise<{ stdout?: string; stderr?: string }> {
     await this.connect();
-    const r = await this.rawCall(op, args);
-    if (!r.ok) throw new PrivdError(r.code as PrivdErrorCode, r.message);
-    return r.result;
+    for (let attempt = 0; ; attempt++) {
+      const r = await this.rawCall(op, args);
+      if (r.ok) return r.result;
+      // The broker caps each connection's request rate and answers a burst with "slow down" BEFORE running anything
+      // (the daemon's egress setup makes dozens of calls in a second): wait out the window and send it again.
+      if (r.code === "forbidden" && r.message === "slow down" && attempt < SLOW_DOWN_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, SLOW_DOWN_WAIT_MS));
+        continue;
+      }
+      throw new PrivdError(r.code as PrivdErrorCode, r.message);
+    }
   }
 
   power(action: "poweroff" | "reboot"): Promise<unknown> {

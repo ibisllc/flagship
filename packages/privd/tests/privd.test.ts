@@ -86,11 +86,11 @@ describe("what the broker will run", () => {
 });
 
 describe("the broker over its socket", () => {
-  async function rig(run: (e: Exec) => Promise<RunResult>) {
+  async function rig(run: (e: Exec) => Promise<RunResult>, maxPerSecond?: number) {
     const dir = await mkdtemp(join(tmpdir(), "privd-"));
     const socketPath = join(dir, "p.sock");
     const auditPath = join(dir, "audit.log");
-    const server = new PrivdServer({ socketPath, run, auditPath });
+    const server = new PrivdServer({ socketPath, run, auditPath, ...(maxPerSecond ? { maxPerSecond } : {}) });
     await server.start();
     const client = new PrivdClient(socketPath);
     return { server, client, auditPath, stop: async () => { client.close(); await server.stop(); } };
@@ -112,6 +112,15 @@ describe("the broker over its socket", () => {
     expect(audit).not.toContain("flush table"); // the script body is not logged
     await r.stop();
   });
+
+  it("a burst past the broker's request rate is slowed and still completes (the egress setup makes dozens of calls at once)", async () => {
+    ran.length = 0;
+    const r = await rig(ok, 3);
+    const results = await Promise.all(Array.from({ length: 9 }, () => r.client.docker(["ps"])));
+    expect(results).toHaveLength(9);
+    expect(ran).toHaveLength(9); // every call ran exactly once: "slow down" is answered before anything runs
+    await r.stop();
+  }, 20_000);
 
   it("reports a failing command and a timeout honestly", async () => {
     const failing = await rig(async () => ({ code: 3, stdout: "", stderr: "no such container", timedOut: false }));
