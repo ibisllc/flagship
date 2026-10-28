@@ -116,3 +116,25 @@ describe("preparing a build context", () => {
     expect(Object.keys(RUNTIMES).sort()).toEqual([...RUNTIME_BASES].sort());
   });
 });
+
+import { chmod, mkdir, mkdtemp, readFile as readF, stat, symlink, writeFile as writeF } from "node:fs/promises";
+import { tmpdir as tmp } from "node:os";
+import { join as j } from "node:path";
+import { openContextForApp } from "../src/runtimes/buildContext.js";
+
+describe("the build context is readable by the app's own user", () => {
+  it("opens files and folders written under umask 0077, keeps owner-only write, leaves links alone", async () => {
+    const d = await mkdtemp(j(tmp(), "ctx-"));
+    await mkdir(j(d, "sub"), { mode: 0o700 });
+    await writeF(j(d, "app.py"), "print(1)", { mode: 0o600 });
+    await writeF(j(d, "sub", "run.sh"), "#!/bin/sh", { mode: 0o700 });
+    await symlink("/etc/passwd", j(d, "link"));
+    await chmod(j(d, "sub"), 0o700);
+    await openContextForApp(d);
+    expect((await stat(j(d, "app.py"))).mode & 0o777).toBe(0o644);
+    expect((await stat(j(d, "sub", "run.sh"))).mode & 0o777).toBe(0o755);
+    expect((await stat(j(d, "sub"))).mode & 0o777).toBe(0o755);
+    expect((await stat(d)).mode & 0o777).toBe(0o755);
+    expect(await readF(j(d, "app.py"), "utf8")).toBe("print(1)");
+  });
+});
