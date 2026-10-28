@@ -49,6 +49,18 @@ export const core: Group = {
     const user = A.username;
     const { irk, adminRoot } = A.keys;
 
+    // A box answers its apex page before its app platform is up (the runtime starts after the data layer and the sandbox).
+    await rec.check("the box's app platform is up (GET /api/services answers, ≤ 6 min)", async () => {
+      const deadline = Date.now() + 6 * 60_000;
+      let last = "";
+      while (Date.now() < deadline) {
+        const r = await tryHttp(`https://${fqdn}/api/services`, {}, 15_000);
+        if (r.status !== 503 && r.status !== 404 && r.status !== 0) return `answered ${r.status}`;
+        last = `${r.status} ${short(r.text, 80)}`;
+        await sleep(5000);
+      }
+      throw new Error(`still ${last}`);
+    });
     await rec.check("control plane health 200", async () => {
       const r = await http(`https://${CONTROL}/api/health`);
       assert(r.status === 200, `got ${r.status}`);

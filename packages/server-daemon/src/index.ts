@@ -2797,7 +2797,9 @@ async function wireBrowserBundle(deps: {
   if (!APP_BROWSER.enabled || process.env.FLAGSHIP_DISABLE_BROWSER === "1") return null;
   try {
     deps.protectedTargets.startRefresh();
-    const bundle = await bootstrapBrowserBundle({
+    // The browser container may not exist (yet) on this box: an unreachable address must not hold the daemon's whole start
+    // (a connect to a black hole waits ~2 minutes). Past the limit the browser is off until the next start.
+    const bundleStart = bootstrapBrowserBundle({
       cdpEndpoint,
       dataDir: deps.dataDir,
       alertInbox: deps.alertInbox,
@@ -2816,6 +2818,11 @@ async function wireBrowserBundle(deps: {
       ...(deps.authority ? { authority: deps.authority } : {}),
       ...(deps.onGrantRequest ? { onGrantRequest: deps.onGrantRequest } : {}),
     });
+    bundleStart.catch(() => {});
+    const bundle = await Promise.race([
+      bundleStart,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`no answer from the browser at ${cdpEndpoint} within 20 s`)), 20_000).unref()),
+    ]);
     console.log(`[daemon] browser bundle online (CDP ${cdpEndpoint})`);
     return bundle;
   } catch (e) {
