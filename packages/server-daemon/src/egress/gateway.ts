@@ -212,7 +212,7 @@ export class EgressGateway {
   }
 
   /**
-   * Forward `<apps gateway>:port` to `target` on the host's loopback, for the
+   * Forward `<apps gateway>:port` to `target` (the host's loopback, or a container address on the apps bridge), for the
    * containers of `owner` only (its main process and its group members):
    * every other source is cut before a byte is forwarded. False when the
    * gateway doesn't enforce or the port is outside OWNED_PORT_RANGE or held
@@ -221,7 +221,9 @@ export class EgressGateway {
   async forwardOwnedPort(port: number, target: { host: string; port: number }, owner: string): Promise<boolean> {
     const gw = this.appsGateway();
     if (!gw || !Number.isInteger(port) || port < OWNED_PORT_RANGE.from || port > OWNED_PORT_RANGE.to) return false;
-    if (target.host !== "127.0.0.1") return false;
+    // Docker: the member's loopback publish. Podman: the member's own address on the apps bridge (never the gateway itself,
+    // never another network): the daemon connects, the app's container has no published port.
+    if (target.host !== "127.0.0.1" && (target.host === gw || !this.fromBridge("apps", target.host))) return false;
     const held = this.owned.get(port);
     if (held) {
       if (held.owner !== owner) return false;
