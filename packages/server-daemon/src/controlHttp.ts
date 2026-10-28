@@ -259,8 +259,10 @@ async function respond(res: ServerResponse, ctx: Ctx, req: HttpRequest): Promise
   let resp: HttpResponse;
   try {
     resp = await ctx.handler(req);
-  } catch {
+  } catch (e) {
     const id = randomBytes(6).toString("hex");
+    // The caller sees only the id; the journal (root and owner only) keeps the cause.
+    console.error(`[http] internal error ${id} on ${req.method} ${req.path.split("?")[0]}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
     resp = { status: 500, headers: { "content-type": "text/plain" }, body: `internal error (${id})` };
   }
   try {

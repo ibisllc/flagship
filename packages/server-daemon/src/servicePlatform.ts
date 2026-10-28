@@ -1417,12 +1417,19 @@ async function installService(deps: ServiceHttpDeps, req: HttpRequest): Promise<
   // Optionally add the host as owner. In the dev path we hold the IRK
   // here; in production the phone pre-signs the membership mutation
   // and ships it alongside the install request (TODO surface).
+  // The legacy membership log no longer decides who may use an app (the access store does), and under keyd the box
+  // key refuses to sign membership records on purpose: a refusal is reported, not an install failure.
+  let ownerMembership = false;
   if (r.addOwnerToMembership && deps.hostIrk) {
-    deps.platform.addHostAsOwner({
-      serviceId: installResult.app.serviceId,
-      hostIrk: deps.hostIrk,
-      role: "owner",
-    });
+    try {
+      ownerMembership = deps.platform.addHostAsOwner({
+        serviceId: installResult.app.serviceId,
+        hostIrk: deps.hostIrk,
+        role: "owner",
+      }).ok;
+    } catch (e) {
+      console.warn(`[services] ${installResult.app.serviceId}: owner membership record not written: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
   return {
     status: 200,
@@ -1432,6 +1439,7 @@ async function installService(deps: ServiceHttpDeps, req: HttpRequest): Promise<
       serviceId: installResult.app.serviceId,
       urlLabel: installResult.app.urlLabel,
       port: installResult.app.containerPort,
+      ownerMembership,
     }),
   };
 }
