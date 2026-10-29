@@ -267,6 +267,7 @@ export function buildLocalAiHttp(d: LocalAiHttpDeps) {
           lease.release();
           return json(200, { ok: true, service: ai.service.view() });
         } catch (e) {
+          if (!(e instanceof LocalAiUnavailable)) console.error(`[local-ai] start failed unexpectedly: ${(e as Error).stack ?? e}`);
           return json(503, { error: e instanceof LocalAiUnavailable ? e.message : "The model server didn't start.", code: e instanceof LocalAiUnavailable ? e.code : "start-failed" });
         }
       }

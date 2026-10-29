@@ -22,6 +22,8 @@ export const LOCAL_AI_USER = "10001:10001";
 export const SERVICE_NAME_RE = /^flagship-localai-([0-9a-f]{16})$/;
 export const TRAIN_NAME_RE = /^flagship-aitrain-([0-9a-f]{16})$/;
 export const MODELS_MOUNT = `type=volume,src=${MODELS_VOLUME},dst=/models,readonly`;
+/** The staging network's filtered resolver (the brokers allow exactly this mount). */
+const RESOLV_MOUNT_RE = /^type=bind,src=\/run\/(?:flagship-daemon\/)?flagship-resolv-[a-z0-9-]+\.conf,dst=\/etc\/resolv\.conf,readonly$/;
 const DEV_FILES_RE = /^flagship-devfiles-[a-z0-9](?:-?[a-z0-9]){0,31}--[a-z0-9](?:-?[a-z0-9]){0,31}$/;
 export const SERVER_PORT = 8080;
 /** The endpoint table's service id for the one model server (endpoints.ts). */
@@ -213,6 +215,7 @@ export function checkLocalAiRunArgs(args: readonly string[]): void {
   if (!service && !train) throw new Error("refusing local-AI run: not a local-AI container name");
   for (const m of mounts) {
     if (m === MODELS_MOUNT) continue;
+    if (RESOLV_MOUNT_RE.test(m)) continue;
     if (train && m === outMount(train[1]!)) continue;
     if (train && /^type=volume,src=([^,]+),dst=\/dataset,readonly$/.test(m) && DEV_FILES_RE.test(/src=([^,]+)/.exec(m)![1]!)) continue;
     throw new Error(`refusing local-AI run: mount ${m} is not allowed`);

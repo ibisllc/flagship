@@ -277,8 +277,8 @@ export class LocalInferenceService {
       sandboxArgs,
       networkArgs: this.d.networkArgs(),
     });
-    checkLocalAiRunArgs(args);
     try {
+      checkLocalAiRunArgs(args);
       await this.d.ensureNetwork();
       stopEndpoint(AI_KEY.serviceId, AI_KEY.env);
       await this.d.cmd.run("docker", ["rm", "-f", container]).catch(() => {});
