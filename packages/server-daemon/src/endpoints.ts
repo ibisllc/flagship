@@ -251,6 +251,13 @@ export class AddressPool {
     this.byIp.set(ip, `engine:${tag}`);
   }
 
+  /** A container already holds `ip` for `owner` (the owner is known from the container's name and service label). */
+  adopt(owner: string, ip: string): void {
+    if (this.byOwner.has(owner) || this.byIp.has(ip)) return this.occupy(ip, owner);
+    this.byOwner.set(owner, ip);
+    this.byIp.set(ip, owner);
+  }
+
   /** The engine no longer has the container behind an occupied address. */
   vacate(ip: string): void {
     if (this.byIp.get(ip)?.startsWith("engine:")) this.byIp.delete(ip);

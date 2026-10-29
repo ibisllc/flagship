@@ -87,6 +87,16 @@ describe("EndpointTable", () => {
   });
 });
 
+describe("AddressPool after a restart", () => {
+  it("gives a surviving container's owner its own address back, and hands nobody else an address the engine holds", () => {
+    const p = new AddressPool("10.89.1.0/24");
+    p.adopt("svc/main", "10.89.1.9");
+    p.occupy("10.89.1.2", "stray");
+    expect(p.assign("svc/main")).toBe("10.89.1.9");
+    expect(p.assign("other/main")).toBe("10.89.1.3");
+  });
+});
+
 describe("AddressPool", () => {
   it("gives an owner the same address every time and skips .1, the network and broadcast", () => {
     const p = new AddressPool("10.89.1.0/24");

@@ -690,14 +690,29 @@ export function dialsContainersDirectly(): boolean {
 }
 
 /** The address a container's owner keeps on `network` for as long as the owner exists. */
+/** The address owner a container's name and service label stand for (the string its deploy asked the pool with). */
+function ownerOfContainer(name: string, service: string): string | null {
+  const pgd = /^flagship-pgd-([0-9a-f]{24})$/.exec(name);
+  if (pgd) return `db:${pgd[1]}`;
+  if (/^flagship-localai-[0-9a-f]{16}$/.test(name)) return "local-ai/model";
+  if (!service) return null;
+  if (name === `flagship-${service}`) return `${service}/main`;
+  if (name.startsWith(`flagship-${service}.`)) return `${service}/${name.slice(`flagship-${service}.`.length)}`;
+  return null;
+}
+
 /** Addresses containers on this network already hold (a daemon restart forgets what it gave out; Podman refuses a duplicate). */
 async function seedFromEngine(cmd: CommandRunner, network: string, pool: AddressPool): Promise<void> {
   if (!cmd.capture) return;
   try {
-    const out = (await cmd.capture("docker", ["ps", "-a", "--filter", `network=${network}`, "--format", "{{.Names}}"])).stdout.split("\n").map((x) => x.trim()).filter(Boolean);
-    for (const name of out) {
-      const ip = (await cmd.capture("docker", ["inspect", "-f", `{{with index .NetworkSettings.Networks "${network}"}}{{.IPAddress}}{{end}}`, name])).stdout.trim();
-      if (/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) pool.occupy(ip, name);
+    const names = (await cmd.capture("docker", ["ps", "-a", "--filter", `network=${network}`, "--format", "{{.Names}}"])).stdout.split("\n").map((x) => x.trim()).filter(Boolean);
+    for (const name of names) {
+      const out = (await cmd.capture("docker", ["inspect", "-f", `{{with index .NetworkSettings.Networks "${network}"}}{{.IPAddress}}{{end}}|{{index .Config.Labels "${LABEL_SERVICE}"}}`, name])).stdout.trim();
+      const [ip = "", service = ""] = out.split("|");
+      if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) continue;
+      const owner = ownerOfContainer(name, service);
+      if (owner) pool.adopt(owner, ip);
+      else pool.occupy(ip, name);
     }
   } catch {
     // The engine will still refuse a duplicate; the pool just starts empty.
