@@ -231,7 +231,12 @@ export class EgressGateway {
       return true;
     }
     const entry = { owner, target, handle: null as unknown as ProxyServerHandle };
-    entry.handle = await startTcpForwarder(gw, port, () => entry.target, (src) => this.ownedBy(src) === owner);
+    entry.handle = await startTcpForwarder(gw, port, () => entry.target, (src) => {
+      if (this.ownedBy(src) === owner) return true;
+      // A container that started a moment ago is not in the table yet: look once, then decide.
+      if (!this.fromBridge("apps", src) || this.now() - this.lastRefresh <= 250) return false;
+      return this.refreshApps().then(() => this.ownedBy(src) === owner);
+    });
     this.owned.set(port, entry);
     return true;
   }

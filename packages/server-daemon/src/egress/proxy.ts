@@ -185,22 +185,36 @@ export async function startTcpForwarder(
   host: string,
   port: number,
   target: { host: string; port: number } | (() => { host: string; port: number }),
-  allowSrc: (srcIp: string) => boolean,
+  allowSrc: (srcIp: string) => boolean | Promise<boolean>,
 ): Promise<ProxyServerHandle> {
   const server: Server = createServer((client) => {
     client.on("error", () => {});
     const src = (client.remoteAddress ?? "").replace(/^::ffff:/i, "");
-    if (!allowSrc(src)) {
+    const verdict = allowSrc(src);
+    if (verdict === false) {
       client.destroy();
       return;
     }
+    if (verdict !== true) {
+      // A source the gateway has not seen yet (a container that just started): decided once it has looked again.
+      client.pause();
+      void verdict.then(
+        (ok) => (ok ? open(client) : client.destroy()),
+        () => client.destroy(),
+      );
+      return;
+    }
+    open(client);
+  });
+  function open(client: import("node:net").Socket): void {
     const up = connect(typeof target === "function" ? target() : target);
     up.on("error", () => client.destroy());
     client.on("close", () => up.destroy());
     up.on("close", () => client.destroy());
     client.pipe(up);
     up.pipe(client);
-  });
+    client.resume();
+  }
   server.maxConnections = 512;
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

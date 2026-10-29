@@ -201,6 +201,7 @@ export async function runSandboxedSql(o: RunSandboxedSqlOptions): Promise<void> 
       await o.cmd.run("docker", ["kill", plan.containerName], { timeoutMs: 15_000 }).catch(() => {});
     }
     const detail = boundedRedacted(err.stderr?.trim() || err.message, l.outputBytes, secrets);
+    console.warn(`[migration] ${o.member ? `${o.member.serviceId} via the gateway` : o.socketVolume ? "via a socket" : "on the sandbox network"}: ${timedOut ? "timed out" : detail.slice(0, 400)}`);
     throw new MigrationFailedError(timedOut ? `the migration ran past ${Math.round(l.wallClockMs / 1000)} s and was stopped` : `the migration failed: ${detail}`, timedOut ? "timed-out" : "failed");
   }
 }
