@@ -4,6 +4,7 @@
 // INSERT refused (reads and TRUNCATE still work); both show on server-detail,
 // app-detail and as Activity entries; freeing space brings writes back. The
 // policy goes back to "none" at the end so later groups aren't limited.
+import { appRuntime } from "./release03/runtimeShared.js";
 import { uninstall } from "./release03/util.js";
 import { signBackupPolicy, type BackupPolicyOrder } from "@flagship/protocol";
 import { pair } from "../lib/fleet.js";
@@ -165,6 +166,10 @@ export const quota: Group = {
       return `disk ${Math.round(d.disk.usedBytes / 2 ** 30)}/${Math.round(d.disk.totalBytes / 2 ** 30)} GB, capped=${d.capped}`;
     });
 
+    // A dedicated database (new boxes) has its own volume, sized by the app, and is not metered by the shared instance's
+    // role limits: its bound is the volume (app-groups-db fills one until it refuses). Only the shared profile has a budget.
+    const dedicated = (await appRuntime(b, session, serviceId)).database?.profile === "dedicated";
+
     let set = false;
     try {
       await rec.check("a phone policy with a small reserve is taken, and the app gets a budget for each store", async () => {
@@ -175,9 +180,9 @@ export const quota: Group = {
         set = true;
         const st = await until("budgets on app-detail", 6, async () => {
           const s = (await appDetail())?.storage;
-          return s?.files?.limitBytes > 0 && s?.postgres?.limitBytes > 0 ? s : null;
+          return s?.files?.limitBytes > 0 && (dedicated || s?.postgres?.limitBytes > 0) ? s : null;
         });
-        return `files ${Math.round(st.files.limitBytes / MiB)} MB, database ${Math.round(st.postgres.limitBytes / MiB)} MB`;
+        return `files ${Math.round(st.files.limitBytes / MiB)} MB, database ${dedicated ? "its own volume" : `${Math.round(st.postgres.limitBytes / MiB)} MB`}`;
       });
 
       let filesLimit = 0;
@@ -204,35 +209,41 @@ export const quota: Group = {
         return "4 MB written after freeing";
       });
 
-      await rec.check("filling the database past its budget gets INSERT refused within a tick; reads still work", async () => {
-        const pgLimit = Number((await appDetail())?.storage?.postgres?.limitBytes ?? 0);
-        const r = await get(`/fill-db?mb=${Math.ceil(pgLimit / MiB) + 8}`);
-        assert(r.status === 200, `fill-db ${r.status}: ${short(r.text)}`);
-        const refused = await until("INSERT refused", 5, async () => {
-          const w = await get("/db-write");
-          return w.json?.ok === false && /permission denied/.test(String(w.json.error)) ? String(w.json.error) : null;
+      if (dedicated) {
+        for (const n of ["filling the database past its budget gets INSERT refused within a tick; reads still work", "Activity has app.storage.full for the database", "TRUNCATE (allowed while blocked) frees it, and INSERT comes back within a tick"]) {
+          rec.skip(n, "the app has a dedicated database: bounded by its own volume, not by a role budget (app-groups-db covers it)");
+        }
+      } else {
+        await rec.check("filling the database past its budget gets INSERT refused within a tick; reads still work", async () => {
+          const pgLimit = Number((await appDetail())?.storage?.postgres?.limitBytes ?? 0);
+          const r = await get(`/fill-db?mb=${Math.ceil(pgLimit / MiB) + 8}`);
+          assert(r.status === 200, `fill-db ${r.status}: ${short(r.text)}`);
+          const refused = await until("INSERT refused", 5, async () => {
+            const w = await get("/db-write");
+            return w.json?.ok === false && /permission denied/.test(String(w.json.error)) ? String(w.json.error) : null;
+          });
+          const rd = await get("/db-read");
+          assert(rd.status === 200 && rd.json?.rows > 0, `read: ${short(rd.text)}`);
+          const s = (await appDetail())?.storage?.postgres;
+          assert(s?.writesBlocked === true && s?.stopped === false, `postgres: ${short(s)}`);
+          return short(refused, 100);
         });
-        const rd = await get("/db-read");
-        assert(rd.status === 200 && rd.json?.rows > 0, `read: ${short(rd.text)}`);
-        const s = (await appDetail())?.storage?.postgres;
-        assert(s?.writesBlocked === true && s?.stopped === false, `postgres: ${short(s)}`);
-        return short(refused, 100);
-      });
-      await rec.check("Activity has app.storage.full for the database", async () => {
-        return await until("Activity entry", 4, async () => {
-          const r = await http(`https://${b.fqdn}/api/screens/activity?limit=200`, { headers: H });
-          const e = (r.json?.entries ?? []).find((x: { kind?: string; target?: string; detail?: string }) => x.kind === "app.storage.full" && x.target === serviceId && /database/.test(String(x.detail)));
-          return e ? short(e.detail, 120) : null;
+        await rec.check("Activity has app.storage.full for the database", async () => {
+          return await until("Activity entry", 4, async () => {
+            const r = await http(`https://${b.fqdn}/api/screens/activity?limit=200`, { headers: H });
+            const e = (r.json?.entries ?? []).find((x: { kind?: string; target?: string; detail?: string }) => x.kind === "app.storage.full" && x.target === serviceId && /database/.test(String(x.detail)));
+            return e ? short(e.detail, 120) : null;
+          });
         });
-      });
-      await rec.check("TRUNCATE (allowed while blocked) frees it, and INSERT comes back within a tick", async () => {
-        const t = await get("/free-db");
-        assert(t.json?.truncated === true, `truncate: ${short(t.text)}`);
-        await until("INSERT allowed again", 5, async () => ((await get("/db-write")).json?.ok === true ? true : null));
-        const s = (await appDetail())?.storage?.postgres;
-        assert(s?.writesBlocked === false, `postgres: ${short(s)}`);
-        return "writes back";
-      });
+        await rec.check("TRUNCATE (allowed while blocked) frees it, and INSERT comes back within a tick", async () => {
+          const t = await get("/free-db");
+          assert(t.json?.truncated === true, `truncate: ${short(t.text)}`);
+          await until("INSERT allowed again", 5, async () => ((await get("/db-write")).json?.ok === true ? true : null));
+          const s = (await appDetail())?.storage?.postgres;
+          assert(s?.writesBlocked === false, `postgres: ${short(s)}`);
+          return "writes back";
+        });
+      }
     } finally {
       if (set) {
         await rec.check("the policy goes back to none, and the app's limits lift", async () => {
@@ -240,7 +251,7 @@ export const quota: Group = {
           assert(r.status === 200, `policy ${r.status}: ${short(r.text)}`);
           await until("limits lifted", 4, async () => {
             const s = (await appDetail())?.storage;
-            return s?.files?.limitBytes === null && s?.postgres?.limitBytes === null ? true : null;
+            return s?.files?.limitBytes === null && (dedicated || s?.postgres?.limitBytes === null) ? true : null;
           });
           return "none";
         });
