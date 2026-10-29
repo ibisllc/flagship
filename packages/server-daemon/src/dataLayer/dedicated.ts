@@ -23,6 +23,7 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { connect } from "node:net";
 import { composeServiceId } from "@flagship/protocol";
 import { writeFileDurable } from "../durableFile.js";
 import { assignAddress, dialsContainersDirectly, publishAndWatch, releaseAddressFor, stopEndpoint, type CommandRunner } from "../serviceRunner.js";
@@ -279,6 +280,29 @@ export class DedicatedPostgres {
     }
   }
 
+  /** The daemon's own dial, through the table, answers (the engine's check ran inside the container). */
+  private async waitDialable(key: EndpointKey): Promise<void> {
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      const lease = endpoints.acquire(key);
+      if (lease) {
+        try {
+          const ok = await new Promise<boolean>((resolve) => {
+            const sock = connect({ host: lease.endpoint.host, port: lease.endpoint.port, timeout: 1500 });
+            sock.once("connect", () => (sock.destroy(), resolve(true)));
+            sock.once("timeout", () => (sock.destroy(), resolve(false)));
+            sock.once("error", () => resolve(false));
+          });
+          if (ok && lease.current()) return;
+        } finally {
+          lease.release();
+        }
+      }
+      if (Date.now() > deadline) throw new Error("the app's database didn't answer on its address");
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+
   private async running(container: string): Promise<boolean> {
     if (!this.deps.cmd.capture) return false;
     try {
@@ -351,6 +375,7 @@ export class DedicatedPostgres {
     registerDedicatedPort(e.port, dedicatedEndpointKey(e.key));
     await publishAndWatch(this.deps.cmd, dedicatedEndpointKey(e.key), { serviceId: dedicatedServiceId(e.key), container, network, address: address ?? null, port: direct ? 5432 : e.port, generation, ...(unlabelled ? { unlabelled } : {}) });
     await this.waitReady(container);
+    if (!this.deps.waitReady) await this.waitDialable(dedicatedEndpointKey(e.key));
     const links = this.deps.links();
     const ep = endpoints.lookup(dedicatedEndpointKey(e.key));
     if (!ep) throw new Error("the app's database is not reachable right now");

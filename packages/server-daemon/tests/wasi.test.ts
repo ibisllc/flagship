@@ -279,8 +279,8 @@ describe("the capability broker (host calls)", () => {
     expect(fetched[0]!.headers).toEqual({ "x-k": "1" });
     const q = (await ask(sock, JSON.stringify({ op: "db_query", request: { sql: "select $1::int as n", params: [1] } }))) as { ok: boolean; result: { rows: Array<{ url: string; values: unknown[] }> } };
     expect(q.ok).toBe(true);
-    // As the app's own role, on the box's loopback.
-    expect(q.result.rows[0]!.url).toContain("@127.0.0.1:15400/d");
+    // As the app's own role; the connector (realPgConnect) points it at where the endpoint table says the instance is.
+    expect(q.result.rows[0]!.url).toContain("@host.flagship.internal:15400/d");
     expect(q.result.rows[0]!.values).toEqual([1]);
     expect(await ask(sock, "{not json")).toMatchObject({ ok: false, code: "failed" });
     expect(await ask(sock, JSON.stringify({ op: "spawn_shell" }))).toMatchObject({ ok: false, code: "denied" });

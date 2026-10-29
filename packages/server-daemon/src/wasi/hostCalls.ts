@@ -20,7 +20,7 @@ import { request as httpsRequest } from "node:https";
 import type { LookupFunction } from "node:net";
 import { decideAccess, isPublicAddress, type AccessRule } from "@flagship/protocol";
 import type { PostgresStore } from "../dataLayer/provisioner.js";
-import { loopbackPgUrl, realPgConnect, type PgConnect } from "../dataLayer/appSql.js";
+import { realPgConnect, type PgConnect } from "../dataLayer/appSql.js";
 import { CapabilityDenied, type CapabilityHandlers } from "./broker.js";
 
 export interface WasiAppContext {
@@ -200,7 +200,7 @@ export function wasiHostCalls(deps: WasiHostCallDeps): CapabilityHandlers {
         throw new CapabilityDenied("params must be at most 100 strings, numbers, booleans or nulls");
       }
       const timeoutMs = Math.max(100, Math.min(30_000, deadlineMs - Date.now()));
-      const client = await (deps.pgConnect ?? realPgConnect)({ pgUrl: loopbackPgUrl(store.url), timeoutMs });
+      const client = await (deps.pgConnect ?? realPgConnect)({ pgUrl: store.url, timeoutMs });
       try {
         const raw = await client.query({ text: sql, values: params, queryMode: "extended" });
         const r = Array.isArray(raw) ? raw[raw.length - 1]! : raw;
