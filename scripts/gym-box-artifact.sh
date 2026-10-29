@@ -126,7 +126,14 @@ if [ "$DRY" = "1" ]; then say "DRY-RUN: nothing uploaded or committed"; exit 0; 
 
 for f in "$OUT"/*; do
   say "upload $(basename "$f")"
-  (cd "$WT/apps/com" && npx wrangler r2 object put "$BUCKET/$(basename "$f")" --file "$f" --remote >/dev/null) || die "upload of $(basename "$f") failed"
+  # A 100 MB upload over a flaky link fails now and then ("fetch failed"): try again before throwing a 40-minute build away.
+  ok=0
+  for attempt in 1 2 3 4 5; do
+    if (cd "$WT/apps/com" && npx wrangler r2 object put "$BUCKET/$(basename "$f")" --file "$f" --remote >/dev/null); then ok=1; break; fi
+    say "upload of $(basename "$f") failed (attempt $attempt of 5); trying again"
+    sleep $((attempt * 15))
+  done
+  [ "$ok" = 1 ] || die "upload of $(basename "$f") failed"
 done
 # Boxes fetch gVisor from this bucket first (storage.googleapis.com refuses some clouds' addresses).
 (cd "$WT/apps/com" && PATH="$PWD/node_modules/.bin:$PATH" bash "$WT/scripts/publish-gvisor-mirror.sh" --bucket "$BUCKET" --skip-if-at "https://gym.flagshipserver.com/build/iso") \
