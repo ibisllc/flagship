@@ -446,6 +446,21 @@ describe("the owner key root keyd pins at the boot ceremony", () => {
   });
 });
 
+describe("the admin root keyd pins", () => {
+  it("is read from the AuthCode's signed `adminRootPubKey` field (the one the daemon reads), else the cloud-init sibling", async () => {
+    const { mkdtempSync, writeFileSync: write } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { writeOwnerAnchorFromConfig } = await import("../src/migrate.js");
+    const dir = mkdtempSync(join(tmpdir(), "keyd-root-"));
+    const cfg = join(dir, "server.json");
+    const blob = join(dir, "install-blob.json");
+    write(blob, JSON.stringify({ authCode: { userPubKey: "ab".repeat(32), adminRootPubKey: "ef".repeat(32) } }));
+    expect(writeOwnerAnchorFromConfig({ serverJson: cfg, installBlob: blob }, join(dir, "s1"))).toEqual({ irkPubHex: "ab".repeat(32), adminRootPubHex: "ef".repeat(32) });
+    write(blob, JSON.stringify({ authCode: { userPubKey: "ab".repeat(32) }, adminRootPubHex: "12".repeat(32) }));
+    expect(writeOwnerAnchorFromConfig({ serverJson: cfg, installBlob: blob }, join(dir, "s2"))).toEqual({ irkPubHex: "ab".repeat(32), adminRootPubHex: "12".repeat(32) });
+  });
+});
+
 describe("sign.identity: master only with the owner's evidence", () => {
   const MV = JSON.parse(readFileSync(join(import.meta.dirname, "../../protocol/test-vectors/identity-assertion/master-evidence.json"), "utf8"));
   it("matches every vector, and plain sign refuses master", async () => {

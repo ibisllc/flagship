@@ -175,7 +175,11 @@ export function writeOwnerAnchorFromConfig(
   const blob = read(sources.installBlob);
   const irk = hex32(cfg?.irkPublicKey) ?? hex32((blob?.authCode as Record<string, unknown> | undefined)?.userPubKey);
   if (!irk) return null;
-  const root = hex32(cfg?.adminRootPubHex) ?? hex32((blob?.authCode as Record<string, unknown> | undefined)?.adminRootPubHex);
+  // The pinned admin root rides inside the signed AuthCode as `adminRootPubKey` (the daemon reads the same field); a
+  // sibling `adminRootPubHex` is the cloud-init/demo spelling. Missing it leaves keyd without the key that signs grants
+  // and rank orders, so it would sign no `master` at all.
+  const code = blob?.authCode as Record<string, unknown> | undefined;
+  const root = hex32(cfg?.adminRootPubHex) ?? hex32(code?.adminRootPubKey) ?? hex32(code?.adminRootPubHex) ?? hex32(blob?.adminRootPubHex);
   const target = join(keydDir, "owner.json");
   const anchor: KeydOwnerAnchor = root ? { irkPubHex: irk, adminRootPubHex: root } : { irkPubHex: irk };
   if (existsSync(target) && readFileSync(target, "utf8") === JSON.stringify(anchor)) return anchor;

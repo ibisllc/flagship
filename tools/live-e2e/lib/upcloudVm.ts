@@ -107,6 +107,6 @@ export async function destroyVm(vm: Vm, log: (s: string) => void): Promise<void>
 
 /** rust/ (without build output), the GPU check workloads, the drill scripts and the release trust files, as one tarball. */
 export async function packRust(repo: string, out: string): Promise<void> {
-  const r = await run("tar", ["--exclude=rust/target", "--exclude=.git", "-czf", out, "-C", repo, "rust", "tools/gpu", "tools/arch-drills/m7", "release/box-artifact-trust.json", "release/gpu-catalog"]);
+  const r = await run("tar", ["--exclude=rust/target", "--exclude=.git", "-czf", out, "-C", repo, "rust", "tools/gpu", "tools/arch-drills/m7", "release/box-artifact-trust.json", "release/gpu-catalog", "packages/protocol/test-vectors/gpu-approval"]);
   if (r.code !== 0) throw new Error(`tar: ${r.stderr.slice(0, 200)}`);
 }
