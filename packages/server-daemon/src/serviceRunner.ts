@@ -804,6 +804,8 @@ export class AppRunner {
       if (gpu?.kind === "gpu") await acceleratorHook?.afterRun(spec.serviceId, true);
     } catch (e) {
       if (gpu?.kind === "gpu") await acceleratorHook?.afterRun(spec.serviceId, false).catch(() => {});
+      // A run that failed after the engine made the container leaves it "Created", holding its name and address.
+      await this.cmd.run("docker", ["rm", "-f", spec.containerName ?? this.containerName(spec.serviceId)]).catch(() => {});
       throw e;
     } finally {
       await notifyContainersChanged();

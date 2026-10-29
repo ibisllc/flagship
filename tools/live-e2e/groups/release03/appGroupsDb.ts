@@ -16,7 +16,7 @@ function groupManifest(slug: string, workerImage: string, version = "1.0.0"): Re
     version,
     runtime: { image: "docker.io/traefik/whoami:v1.10", port: 80 },
     components: [
-      { name: "api", image: "docker.io/traefik/whoami:v1.10", start: ["/whoami", "--port", "7000"], port: 7000 },
+      { name: "api", image: "docker.io/traefik/whoami:v1.10", start: ["--port", "7000"], port: 7000 },
       { name: "worker", image: workerImage, start: ["sleep", "86400"], startAfter: ["api"] },
     ],
   };
@@ -45,6 +45,8 @@ export const appGroupsDb: Group = {
     const slug = "grpshop";
     const sid = `${A.username}--${slug}`;
     const base = `https://${slug}.${b.fqdn}`;
+    // A run on a kept box starts clean: leftovers of an earlier run would answer "already installed".
+    for (const s of [slug, "dbhog", "dbsib"]) await uninstall(A, b, s);
 
     const up = await rec.check("a three-process app installs and serves", async () => {
       const r = await signedInstall(A, b, slug, groupManifest(slug, "docker.io/library/busybox:1.37"));

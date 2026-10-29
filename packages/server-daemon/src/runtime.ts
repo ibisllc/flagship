@@ -1540,9 +1540,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const dataStack = dataEnvFile ? new DataStack({ cmd: realCommandRunner, envFile: dataEnvFile }) : null;
   // Per-app disk limits (appQuota/): each files folder is its own sized
   // disk image, mounted here before any app starts; only on a real box
-  // (Linux, root), and FLAGSHIP_FILES_QUOTA=0 keeps plain volumes.
+  // (Linux, as root or through the broker), and FLAGSHIP_FILES_QUOTA=0 keeps plain volumes.
   const loopVolumes =
-    process.platform === "linux" && process.getuid?.() === 0 && process.env.FLAGSHIP_FILES_QUOTA !== "0"
+    process.platform === "linux" && (process.getuid?.() === 0 || runsUnprivileged()) && process.env.FLAGSHIP_FILES_QUOTA !== "0"
       ? new LoopVolumes(realCommandRunner)
       : null;
   if (loopVolumes) {
