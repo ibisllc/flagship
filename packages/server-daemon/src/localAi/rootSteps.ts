@@ -12,7 +12,10 @@ import type { ModelInstaller } from "./modelStore.js";
 
 /** The installed models' folder and the training output's, as the engine keeps them. */
 async function volumeDir(cmd: CommandRunner, volume: string): Promise<string> {
-  await cmd.run("docker", ["volume", "create", volume]);
+  // Docker's create is idempotent; Podman's refuses a volume that exists ("volume already exists", exit 125).
+  await cmd.run("docker", ["volume", "create", volume]).catch((e: Error) => {
+    if (!/already exists/i.test(e.message)) throw e;
+  });
   if (!cmd.capture) throw new Error("the volume's folder is not available");
   const dir = (await cmd.capture("docker", ["volume", "inspect", "-f", "{{.Mountpoint}}", volume])).stdout.trim();
   if (!/^\/var\/lib\/(?:docker\/volumes|containers\/storage\/volumes)\/[A-Za-z0-9_.-]+\/_data$/.test(dir)) throw new Error("unexpected volume folder");

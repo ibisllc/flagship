@@ -10,7 +10,7 @@
  * boxes.
  */
 import { endpoints, nextGeneration } from "../endpoints.js";
-import { mkdir, rm, writeFile, rename } from "node:fs/promises";
+import { chmod, mkdir, rm, writeFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { request } from "node:http";
 import type { PostgresStore } from "../dataLayer/provisioner.js";
@@ -145,10 +145,14 @@ function httpAnswers(port: number, timeoutMs = 2000): Promise<boolean> {
   });
 }
 
+/** Exactly `mode`, whatever the daemon's umask (0077 turned 0644 into 0600 and the worker's own user could not read its config). */
 async function writeAtomic(path: string, data: string | Uint8Array, mode: number): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o755 });
+  const dir = dirname(path);
+  await mkdir(dir, { recursive: true, mode: 0o755 });
+  await chmod(dir, 0o755);
   const tmp = `${path}.partial`;
   await writeFile(tmp, data, { mode });
+  await chmod(tmp, mode);
   await rename(tmp, path);
 }
 
