@@ -4,9 +4,13 @@ import { FrameReader, PRIVD_PROTOCOL_VERSION, PrivdError, encodeFrame, type Priv
 const SLOW_DOWN_RETRIES = 10;
 const SLOW_DOWN_WAIT_MS = 1_100;
 
-/** A connection to the broker. One request at a time per call; reconnects on demand. */
-export class PrivdClient {
-  private socket: Socket | null = null;
+/** At most this many connections to the broker: it answers one request at a time per connection. */
+const MAX_CONNECTIONS = 8;
+
+/** One socket to the broker, one request at a time on it. */
+class Conn {
+  socket: Socket | null = null;
+  inflight = 0;
   private reader = new FrameReader();
   private nextId = 1;
   private pending = new Map<number, (r: PrivdResponse) => void>();
@@ -14,7 +18,7 @@ export class PrivdClient {
 
   constructor(private readonly socketPath: string) {}
 
-  private async connect(): Promise<void> {
+  async connect(): Promise<void> {
     if (this.socket && !this.socket.destroyed) return;
     if (this.connecting) return this.connecting;
     this.connecting = new Promise<void>((resolve, reject) => {
@@ -58,26 +62,53 @@ export class PrivdClient {
     return this.connecting;
   }
 
-  private rawCall(op: string, args: Record<string, unknown>): Promise<PrivdResponse> {
+  rawCall(op: string, args: Record<string, unknown>): Promise<PrivdResponse> {
     return new Promise((resolve) => {
       const id = this.nextId++;
       this.pending.set(id, resolve);
       this.socket!.write(encodeFrame({ id, op, args }));
     });
   }
+}
+
+/**
+ * The broker, as the daemon sees it. A long call (a build, a migration, a dump) must not hold up every other call, so
+ * requests spread over a few connections: an idle one is used, a new one is opened while there is room.
+ */
+export class PrivdClient {
+  private readonly conns: Conn[] = [];
+
+  constructor(private readonly socketPath: string) {}
+
+  private pick(): Conn {
+    const idle = this.conns.find((c) => c.inflight === 0);
+    if (idle) return idle;
+    if (this.conns.length < MAX_CONNECTIONS) {
+      const c = new Conn(this.socketPath);
+      this.conns.push(c);
+      return c;
+    }
+    return this.conns.reduce((best, c) => (c.inflight < best.inflight ? c : best));
+  }
 
   async call(op: string, args: Record<string, unknown>): Promise<{ stdout?: string; stderr?: string }> {
-    await this.connect();
-    for (let attempt = 0; ; attempt++) {
-      const r = await this.rawCall(op, args);
-      if (r.ok) return r.result;
-      // The broker caps each connection's request rate and answers a burst with "slow down" BEFORE running anything
-      // (the daemon's egress setup makes dozens of calls in a second): wait out the window and send it again.
-      if (r.code === "forbidden" && r.message === "slow down" && attempt < SLOW_DOWN_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, SLOW_DOWN_WAIT_MS));
-        continue;
+    const conn = this.pick();
+    conn.inflight++;
+    try {
+      await conn.connect();
+      for (let attempt = 0; ; attempt++) {
+        const r = await conn.rawCall(op, args);
+        if (r.ok) return r.result;
+        // The broker caps each connection's request rate and answers a burst with "slow down" BEFORE running anything
+        // (the daemon's egress setup makes dozens of calls in a second): wait out the window and send it again.
+        if (r.code === "forbidden" && r.message === "slow down" && attempt < SLOW_DOWN_RETRIES) {
+          await new Promise((resolve) => setTimeout(resolve, SLOW_DOWN_WAIT_MS));
+          continue;
+        }
+        throw new PrivdError(r.code as PrivdErrorCode, r.message);
       }
-      throw new PrivdError(r.code as PrivdErrorCode, r.message);
+    } finally {
+      conn.inflight--;
     }
   }
 
@@ -139,7 +170,7 @@ export class PrivdClient {
   }
 
   close(): void {
-    this.socket?.destroy();
+    for (const c of this.conns) c.socket?.destroy();
   }
 }
 

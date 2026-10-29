@@ -4,6 +4,7 @@
 // INSERT refused (reads and TRUNCATE still work); both show on server-detail,
 // app-detail and as Activity entries; freeing space brings writes back. The
 // policy goes back to "none" at the end so later groups aren't limited.
+import { uninstall } from "./release03/util.js";
 import { signBackupPolicy, type BackupPolicyOrder } from "@flagship/protocol";
 import { pair } from "../lib/fleet.js";
 import { assert, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
@@ -119,6 +120,8 @@ export const quota: Group = {
     const session = await pair(A, b);
     const H = { "x-flagship-session": session };
     const serviceId = `${A.username}--${APP}`;
+    // A run on a kept box starts clean: an earlier run's app (and its database instance) would be reused half-made.
+    await uninstall(A, b, APP);
     const base = `https://${APP}.${b.fqdn}`;
     const get = (p: string, timeoutMs = 300_000) => http(`${base}${p}`, {}, timeoutMs);
     const appDetail = async () => (await http(`https://${b.fqdn}/api/screens/app-detail/${encodeURIComponent(serviceId)}`, { headers: H })).json;
