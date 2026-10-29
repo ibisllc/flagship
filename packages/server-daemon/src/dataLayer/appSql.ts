@@ -14,6 +14,7 @@
  * transaction), and a row query runs through a cursor so the box fetches at
  * most `maxRows + 1` rows however large the table is.
  */
+import { endpoints, type EndpointKey } from "../endpoints.js";
 
 export interface SqlColumn {
   name: string;
@@ -116,9 +117,25 @@ const SAVEPOINT = "flagship_console_cursor";
 const EXACT_COUNT_MAX_BYTES = 8 * 1024 * 1024;
 const CSV_BATCH_ROWS = 2000;
 
-/** The app role's URL, pointed at the loopback Postgres the box runs. */
+/**
+ * An app's own database is named in its credentials by the port the gateway forwards to it. The daemon itself
+ * reaches that instance where the endpoint table says it is (its own address on Podman, loopback on Docker).
+ */
+const dedicatedByPort = new Map<number, EndpointKey>();
+export function registerDedicatedPort(port: number, key: EndpointKey): void {
+  dedicatedByPort.set(port, key);
+}
+
+/** The app role's URL, pointed at the Postgres the box runs for it, as seen from the daemon. */
 export function loopbackPgUrl(pgUrl: string): string {
   const url = new URL(pgUrl);
+  const key = dedicatedByPort.get(Number(url.port));
+  const ep = key ? endpoints.lookup(key) : undefined;
+  if (ep) {
+    url.hostname = ep.host;
+    url.port = String(ep.port);
+    return url.toString();
+  }
   url.hostname = "127.0.0.1";
   return url.toString();
 }

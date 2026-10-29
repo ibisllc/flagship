@@ -28,6 +28,7 @@ import { writeFileDurable } from "../durableFile.js";
 import { assignAddress, dialsContainersDirectly, publishAndWatch, releaseAddressFor, stopEndpoint, type CommandRunner } from "../serviceRunner.js";
 import { endpoints, nextGeneration, type EndpointKey } from "../endpoints.js";
 import type { PostgresAdmin } from "./admin.js";
+import { registerDedicatedPort } from "./appSql.js";
 
 export type DatabaseProfile = "shared" | "dedicated";
 
@@ -347,6 +348,7 @@ export class DedicatedPostgres {
       if (had !== null) generation = had;
       else unlabelled = !direct;
     }
+    registerDedicatedPort(e.port, dedicatedEndpointKey(e.key));
     await publishAndWatch(this.deps.cmd, dedicatedEndpointKey(e.key), { serviceId: dedicatedServiceId(e.key), container, network, address: address ?? null, port: direct ? 5432 : e.port, generation, ...(unlabelled ? { unlabelled } : {}) });
     await this.waitReady(container);
     const links = this.deps.links();
