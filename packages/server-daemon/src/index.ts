@@ -5556,6 +5556,13 @@ function wireShutdownHooks(deps: {
     process.once("SIGTERM", () => deps.gossipLoop!.stop());
     process.once("SIGINT", () => deps.gossipLoop!.stop());
   }
+  // A listener on SIGTERM replaces Node's default exit, and the servers keep the loop alive: without this the daemon
+  // ignored systemd's stop for its whole 90 s and was killed, so every restart and update was a hard kill.
+  const exitSoon = () => {
+    setTimeout(() => process.exit(0), 2000);
+  };
+  process.once("SIGTERM", exitSoon);
+  process.once("SIGINT", exitSoon);
 }
 
 async function tryReadFile(path: string): Promise<string | null> {

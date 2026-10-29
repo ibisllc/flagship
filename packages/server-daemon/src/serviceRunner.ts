@@ -690,6 +690,20 @@ export function dialsContainersDirectly(): boolean {
 }
 
 /** The address a container's owner keeps on `network` for as long as the owner exists. */
+/** Addresses containers on this network already hold (a daemon restart forgets what it gave out; Podman refuses a duplicate). */
+async function seedFromEngine(cmd: CommandRunner, network: string, pool: AddressPool): Promise<void> {
+  if (!cmd.capture) return;
+  try {
+    const out = (await cmd.capture("docker", ["ps", "-a", "--filter", `network=${network}`, "--format", "{{.Names}}"])).stdout.split("\n").map((x) => x.trim()).filter(Boolean);
+    for (const name of out) {
+      const ip = (await cmd.capture("docker", ["inspect", "-f", `{{with index .NetworkSettings.Networks "${network}"}}{{.IPAddress}}{{end}}`, name])).stdout.trim();
+      if (/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) pool.occupy(ip, name);
+    }
+  } catch {
+    // The engine will still refuse a duplicate; the pool just starts empty.
+  }
+}
+
 export async function assignAddress(cmd: CommandRunner, network: string, owner: string): Promise<string> {
   let p = addressPools.get(network);
   if (!p) {
@@ -697,7 +711,9 @@ export async function assignAddress(cmd: CommandRunner, network: string, owner: 
       const info = await inspectNetwork(cmd, network);
       const subnet = info?.subnets[0];
       if (!subnet) throw new Error(`the ${network} network has no subnet to give a container an address in`);
-      return new AddressPool(subnet, { reserved: info.gateways });
+      const pool = new AddressPool(subnet, { reserved: info.gateways });
+      await seedFromEngine(cmd, network, pool);
+      return pool;
     })();
     p.catch(() => addressPools.delete(network));
     addressPools.set(network, p);

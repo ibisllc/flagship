@@ -242,6 +242,20 @@ export class AddressPool {
     for (const owner of [...this.byOwner.keys()]) if (owner.startsWith(prefix)) this.release(owner);
   }
 
+  /**
+   * An address a container already holds that this process did not give out (it survived a daemon restart, or was left by an
+   * earlier run). Nothing is assigned it until the owner is released or the container is gone.
+   */
+  occupy(ip: string, tag: string): void {
+    if (this.byIp.has(ip)) return;
+    this.byIp.set(ip, `engine:${tag}`);
+  }
+
+  /** The engine no longer has the container behind an occupied address. */
+  vacate(ip: string): void {
+    if (this.byIp.get(ip)?.startsWith("engine:")) this.byIp.delete(ip);
+  }
+
   ownerOf(ip: string): string | undefined {
     return this.byIp.get(ip);
   }
