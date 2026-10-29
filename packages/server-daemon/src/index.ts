@@ -2121,6 +2121,9 @@ async function main(): Promise<void> {
         onAppEvent: (kind, serviceId) => {
           // An uninstalled app's access state goes with it, so a reinstall
           // under the same id doesn't inherit its members or ranks.
+          // A new or redeployed app gets its freshness checkpoint now, not at the next minute tick: an invitee's first
+          // request right after the install would otherwise be turned away as stale.
+          if (kind !== "app.removed") setTimeout(() => void renewFreshnessRef.current?.().catch(() => {}), 0);
           if (kind === "app.removed") void serviceAccessRef.current?.forget(serviceId).catch(() => {});
           if (kind === "app.removed") void accessSyncRef.current?.forget(serviceId).catch(() => {});
           if (kind === "app.removed") for (const hook of appRemovedHooks) void hook(serviceId).catch(() => {});
@@ -5169,6 +5172,9 @@ async function wireOwnerHandlers(deps: {
       checkpoints.start();
       void timeSource.refresh().then(() => checkpoints.renewAll()).catch(() => {});
       externalFresh = (app) => leases.externalAccessAllowed(app.serviceId, 0);
+      renewFreshnessRef.current = async () => {
+        await checkpoints.renewAll();
+      };
       process.once("SIGTERM", () => { timeSource.stop(); checkpoints.stop(); });
     }
   }
@@ -6248,6 +6254,9 @@ export type {
   SiblingHandshakeClientManagerOptions,
   SiblingOpenFn,
 } from "./sibling/siblingHandshakeClient.js";
+
+/** Renews the app freshness checkpoints now (set once the authority clock runs). */
+const renewFreshnessRef: { current: (() => Promise<void>) | null } = { current: null };
 export { acceptSyncUpgrade } from "./sibling/siblingServer.js";
 export type { AcceptSyncUpgradeArgs } from "./sibling/siblingServer.js";
 

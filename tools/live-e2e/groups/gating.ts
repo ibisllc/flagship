@@ -37,6 +37,7 @@ import {
 } from "@flagship/protocol";
 import { pair, type Account, type Box } from "../lib/fleet.js";
 import { CONTROL, assert, cookieVal, http, postJson, short, sleep, tryHttp, type Resp } from "../lib/harness.js";
+import { uninstall } from "./release03/util.js";
 import type { Group } from "./types.js";
 
 /** The X-Flagship-* request headers whoami echoed back (lower-cased names). */
@@ -110,6 +111,8 @@ export const gating: Group = {
       tryHttp(`${app}${path}`, { headers: { accept: "text/html", ...headers } }, 45_000);
 
     const session = await pair(A, b);
+    // A run on a kept box starts from nothing: the probe app of an earlier run would answer "already installed".
+    await uninstall(A, b, slug);
     const installed = await rec.check("install the probe app (open, public route /pub/*)", async () => {
       await installWhoami(A, b, slug, { enabled: true, public_routes: ["/pub/*"] });
       await waitServing(`${app}/`);
