@@ -412,7 +412,7 @@ export const adversarial: Group = {
       await rec.check("AT-LIVE-19 privd's audit of a refused operation is readable to the owner — catches refusals nobody can see", async () => {
         if (!archV2) throw new SkipError("privd runs only on the arch-v2 stack");
         const req: JournalRequest = { serverId: fqdn, unit: "flagship-privd", lines: 200, issuedAt: Date.now() };
-        const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: hex(signJournalRequest(req, irk)) });
+        const r = await postJson(`https://${fqdn}/api/journal`, { request: req, signature: hex(signJournalRequest(req, adminRoot)) });
         if (r.status === 403 && /unit not allowed/.test(r.text)) {
           throw new SkipError("the signed journal reads only flagship-daemon and flagship-data-services, so privd's audit cannot be read from outside (an operator reads it with journalctl -u flagship-privd)");
         }
