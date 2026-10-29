@@ -3,7 +3,7 @@
 // `*.<user>.<apex>`, so the app's canonical `<app>.<user>` address serves over valid TLS from whichever
 // of the account's boxes the relay routes it to. Needs gossip, so the account's gossip key is deposited
 // first (lib/cgk.ts, as on feat/UX).
-import { depositCgk, waitGossiping } from "../../lib/cgk.js";
+import { depositCgk, relayTerminatesBroadcast, waitGossiping } from "../../lib/cgk.js";
 import { SERVICES, assert, certInfo, sanCovers, tryHttp } from "../../lib/harness.js";
 import { installWhoami } from "../gating.js";
 import type { Group } from "../types.js";
@@ -40,6 +40,10 @@ export const appNames: Group = {
       return "gossipActive on both";
     });
     if (!gossiping) return;
+    if (!(await relayTerminatesBroadcast(A.username))) {
+      rec.skip("the canonical <app>.<user> address serves over valid TLS from the box that holds it", "the relay does not terminate the account's gossip name (broadcast--<user>), so no box learns who leads: not provable until the relay serves it");
+      return;
+    }
 
     const slug = "appname";
     const canonical = `${slug}.${A.username}.${SERVICES}`;

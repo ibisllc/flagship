@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import { buildCgkDelivery, cgkDeliveryToCarrierHex, deriveCGK, signDeviceEndpointClaim } from "@flagship/protocol";
 import { pods, type Account, type Box } from "./fleet.js";
-import { CONTROL, assert, postJson, short, sleep, tryHttp } from "./harness.js";
+import { CONTROL, SERVICES, assert, postJson, short, sleep, tryHttp } from "./harness.js";
 
 export async function depositCgk(A: Account, boxes: Box[]): Promise<void> {
   const list = await pods(A.username);
@@ -53,4 +53,25 @@ export async function waitGossiping(boxes: Box[], ms = 8 * 60_000): Promise<bool
     await sleep(15_000);
   }
   return false;
+}
+
+/**
+ * Whether the relay answers a TLS handshake for the account's gossip fan-out name (`broadcast--<user>.<apex>`). Boxes post
+ * their gossip there; a relay with no terminator for it drops the connection, so no gossip reaches a sibling and nothing that
+ * needs a leader (a canonical `<app>.<user>` address) can be proven, whatever the boxes do.
+ */
+export async function relayTerminatesBroadcast(user: string): Promise<boolean> {
+  const { connect } = await import("node:tls");
+  const host = `broadcast--${user}.${SERVICES}`;
+  return new Promise((resolve) => {
+    const s = connect({ host, port: 443, servername: host, rejectUnauthorized: false, timeout: 15_000 }, () => {
+      s.destroy();
+      resolve(true);
+    });
+    s.on("error", () => resolve(false));
+    s.on("timeout", () => {
+      s.destroy();
+      resolve(false);
+    });
+  });
 }

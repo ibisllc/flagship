@@ -12,7 +12,7 @@
 import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signServerOrder, signUninstallService, signVoiciNameOrder, type ServerOrder, type UninstallServiceRequest, type VoiciNameOrder } from "@flagship/protocol";
-import { depositCgk, waitGossiping } from "../lib/cgk.js";
+import { depositCgk, relayTerminatesBroadcast, waitGossiping } from "../lib/cgk.js";
 import { pair, pods } from "../lib/fleet.js";
 import { CONTROL, SERVICES, assert, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import { installWhoami } from "./gating.js";
@@ -113,6 +113,12 @@ export const namedLinks: Group = {
       return "gossipActive on both";
     });
     if (!gossiping) return;
+    if (!(await relayTerminatesBroadcast(A.username))) {
+      for (const n of ["home leads in the server order and the canonical address serves", "when home stops running the app the canonical address still serves, from home2"]) {
+        rec.skip(n, "the relay does not terminate the account's gossip name (broadcast--<user>), so no box learns who leads: not provable until the relay serves it");
+      }
+      return;
+    }
     const stkOf = async (fqdn: string) => String((await pods(A.username)).find((p) => p.serverDomain === fqdn)?.identityPubKey ?? "").toLowerCase();
     const [s1, s2] = [await pair(A, b1), await pair(A, b2)];
     void s1;
