@@ -736,6 +736,15 @@ export async function assignAddress(cmd: CommandRunner, network: string, owner: 
   return (await p).assign(owner);
 }
 
+/** The engine says `conflictIp` is taken by something the pool did not place: never offer it again, and give the owner another. */
+export async function reassignAddress(cmd: CommandRunner, network: string, owner: string, conflictIp: string): Promise<string> {
+  await assignAddress(cmd, network, owner);
+  const pool = await addressPools.get(network)!;
+  pool.occupy(conflictIp, "unknown-holder");
+  pool.release(owner);
+  return pool.assign(owner);
+}
+
 export async function releaseAddressFor(network: string, owner: string): Promise<void> {
   const pool = await addressPools.get(network)?.catch(() => null);
   pool?.release(owner);
@@ -800,7 +809,7 @@ export class AppRunner {
     // Podman: no published port (unmanaged bridges forward nothing). The container gets the address its service
     // owns and the daemon dials it through the endpoint table. Docker keeps its loopback publish.
     const direct = dialsContainersDirectly() && !!spec.port;
-    const address = direct ? await this.addressFor(spec) : null;
+    let address = direct ? await this.addressFor(spec) : null;
     const generation = nextGeneration();
     const key = endpointKeyFor(spec, this.limits.network);
     const args = [
@@ -830,7 +839,19 @@ export class AppRunner {
     try {
       // A new deploy never inherits the old one's endpoint or connections (this component's: an app group's others stay up).
       stopEndpoint(spec.serviceId, key.env, key.component);
-      await this.cmd.run("docker", args);
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await this.cmd.run("docker", args);
+          break;
+        } catch (e) {
+          // A container the pool did not place (a migration sandbox, a one-off) holds the address: the engine says which.
+          const taken = address && attempt < 4 ? /requested ip address (\d{1,3}(?:\.\d{1,3}){3}) is already allocated/.exec(String((e as Error).message)) : null;
+          if (!taken) throw e;
+          await this.cmd.run("docker", ["rm", "-f", spec.containerName ?? this.containerName(spec.serviceId)]).catch(() => {});
+          address = await reassignAddress(this.cmd, this.limits.network, deployedKeyId(spec), taken[1]!);
+          args[args.indexOf("--ip") + 1] = address;
+        }
+      }
       await this.publishEndpoint(spec, key, generation, address);
       if (gpu?.kind === "gpu") await acceleratorHook?.afterRun(spec.serviceId, true);
     } catch (e) {

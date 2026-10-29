@@ -52,7 +52,11 @@ export function classifyEgressProbe(p: { reached?: unknown; error?: unknown } | 
   if (!p || typeof p !== "object") return "unclear";
   if (p.reached === true) return "reached";
   const e = String(p.error ?? "");
-  if (/ssl|certificate|wrong.version|eof occurred|handshake|tlsv|alert/i.test(e)) return "connected";
+  // The gateway intercepts every :443 connection, so the TCP connect always succeeds; for an address with no name it closes
+  // before any handshake (an EOF with nothing said). Anything that answered with TLS of its own (a certificate, a version, an
+  // alert) is someone real on the other side.
+  if (/unexpected_eof|eof occurred in violation/i.test(e)) return "fenced";
+  if (/ssl|certificate|wrong.version|handshake|tlsv|alert/i.test(e)) return "connected";
   if (/tunnel connection failed|\b40[37]\b|forbidden|refused|denied|blocked|not allowed|timed? ?out|unreachable|no route|name or service not known|nodename nor servname|getaddrinfo|name resolution|invalid url|bad request/i.test(e)) {
     return "fenced";
   }

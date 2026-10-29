@@ -4,13 +4,16 @@ import { setActiveEngine } from "../src/engine/engine.js";
 import { AppRunner, resetAddressPools, type CommandRunner } from "../src/serviceRunner.js";
 
 /** An engine that remembers what was run and answers `inspect` for the one container it "started". */
-function fakeEngine(opts: { podman: boolean; ipOverride?: string; labelOverride?: string; running?: boolean }) {
+function fakeEngine(opts: { podman: boolean; ipOverride?: string; labelOverride?: string; running?: boolean; conflictOnce?: boolean }) {
   const runs: string[][] = [];
   let started = 0;
   const cmd: CommandRunner = {
     async run(_c, args) {
       if (args[0] === "run") {
-        runs.push(args);
+        runs.push([...args]);
+        if (opts.conflictOnce && runs.length === 1) {
+          throw new Error(`exited with code 126: Error: IPAM error: requested ip address ${args[args.indexOf("--ip") + 1]} is already allocated to container ID abc123`);
+        }
         started++;
       }
     },
@@ -43,6 +46,18 @@ function fakeEngine(opts: { podman: boolean; ipOverride?: string; labelOverride?
   };
   return { cmd, runs };
 }
+
+describe("an address the engine says someone else holds", () => {
+  it("is never offered again: the deploy takes another one and publishes it", async () => {
+    setActiveEngine("podman");
+    const { cmd, runs } = fakeEngine({ podman: true, conflictOnce: true });
+    await new AppRunner(cmd).deploy(spec);
+    expect(runs).toHaveLength(2);
+    const ips = runs.map((r) => r[r.indexOf("--ip") + 1]);
+    expect(ips[0]).not.toBe(ips[1]);
+    expect(endpoints.lookup(key)?.host).toBe(ips[1]);
+  });
+});
 
 const spec = { serviceId: "svc1", image: "img@sha256:aa", port: 41001, containerPort: 8080 };
 const key = { serviceId: "svc1", env: "live" as const, component: "main", role: "http" as const };
