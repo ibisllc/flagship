@@ -30,11 +30,13 @@
  * could read who the members are).
  */
 import {
+  appRankCanonicalBytes,
   parseAppRankOrder,
   parseAppRankTarget,
   verifyAppRank,
   type AdminGrantView,
   type AppManifest,
+  type AppRankOrder,
   type AppMemberRoleTarget,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
@@ -137,10 +139,15 @@ export function buildRankEntryApplier(
       return "refused";
     }
     if (!core.adminSigned(order, sig, verifyAppRank)) return "refused";
-    const r = await core.applyRank(serviceRef, order);
+    const r = await core.applyRank(serviceRef, order, evidenceOf(order, sig));
     if (r === null) return "applied";
     return r.status === 409 ? "stale" : "refused";
   };
+}
+
+/** What keyd needs to sign `master` for this target later: the order's signature and its exact signed text. */
+function evidenceOf(order: AppRankOrder, sig: Uint8Array): string {
+  return `${Buffer.from(sig).toString("hex")}:${new TextDecoder().decode(appRankCanonicalBytes(order))}`;
 }
 
 function rankCore(opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">, flags: { anyShare?: boolean } = {}) {
@@ -164,6 +171,7 @@ function rankCore(opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">
     targetKey: string,
     role: string,
     issuedAt: number,
+    evidence?: string,
   ): Promise<HttpResponse | null> {
     const rank = ladderRole(role);
     if (!rank || !(MEMBER_ROLE_LADDER as readonly string[]).includes(role)) {
@@ -178,7 +186,7 @@ function rankCore(opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">
     if (target.kind === "grant" && !opts.store.grants(serviceId, target.aid).includes(target.inviteId)) {
       return err(422, "they didn't join through that invite");
     }
-    const r = await opts.store.setRole(serviceId, target, targetKey, rank, issuedAt);
+    const r = await opts.store.setRole(serviceId, target, targetKey, rank, issuedAt, evidence);
     if (r === "stale") return err(409, "a newer change was already made: sign it again");
     return null;
   }
@@ -191,7 +199,7 @@ function rankCore(opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">
   }
 
   /** Apply a verified app-rank order; null when applied. */
-  async function applyRank(serviceId: string, order: { target: string; rank: string; issuedAt: number }): Promise<HttpResponse | null> {
+  async function applyRank(serviceId: string, order: { target: string; rank: string; issuedAt: number }, evidence?: string): Promise<HttpResponse | null> {
     const target = parseAppRankTarget(order.target)!;
     if (target.kind === "device" || target.kind === "share") {
       const p = target.kind === "device" ? opts.store.principal(target.pub) : null;
@@ -200,11 +208,11 @@ function rankCore(opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">
         return err(422, "not an account that co-manages this server");
       }
       const key = target.kind === "device" ? rankKey(p!) : order.target;
-      const r = await opts.store.setAccountRank(serviceId, key, order.rank as AccountRank, order.issuedAt);
+      const r = await opts.store.setAccountRank(serviceId, key, order.rank as AccountRank, order.issuedAt, evidence);
       if (r === "stale") return err(409, "a newer change was already made: sign it again");
       return null;
     }
-    return applyInvitedTarget(serviceId, target, order.target, order.rank, order.issuedAt);
+    return applyInvitedTarget(serviceId, target, order.target, order.rank, order.issuedAt, evidence);
   }
 
   return { adminSigned, applyInvitedTarget, applyRank };
@@ -306,7 +314,7 @@ export function buildMemberRolesHttp(
     if (order.serviceRef !== serviceId) return err(400, "the order is for a different app");
     if (Math.abs(now() - order.issuedAt) > MEMBER_ROLE_MAX_SKEW_MS) return err(403, "the order is stale: sign it again");
     if (!adminSigned(order, b.sig, verifyAppRank)) return err(403, "only an admin device can change a rank");
-    const refused = await applyRank(serviceId, order);
+    const refused = await applyRank(serviceId, order, evidenceOf(order, b.sig));
     if (refused) return refused;
     opts.onEntry?.(serviceId, { kind: "rank", order, signature: Buffer.from(b.sig).toString("hex") });
     log(`[members] ${serviceId}: ${order.target.split(":")[0]} rank set to ${order.rank}`);

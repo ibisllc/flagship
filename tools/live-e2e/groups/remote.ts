@@ -5,6 +5,7 @@
 // The browser redeems the ticket on the box; the companion session reads but
 // can't write; a ticket works once; the owner sees it as a `remote` session
 // and revoking it ends it.
+import { createHash } from "node:crypto";
 import { randomBytes } from "node:crypto";
 import {
   base64UrlEncode,
@@ -148,7 +149,7 @@ export const remote: Group = {
         return "409";
       });
       const cs = { "x-flagship-session": companion };
-      await rec.check("the companion reads the server but every write is refused (companion-write-not-allowed)", async () => {
+      await rec.check("the companion reads the server but every write is refused (companion-write-not-allowed, or the central layer's route-not-allowed-for-session)", async () => {
         for (const p of ["/api/screens/server-detail", "/api/screens/apps-list", "/api/screens/activity?limit=5"]) {
           const r = await http(`https://${b.fqdn}${p}`, { headers: cs });
           assert(r.status === 200, `${p} ${r.status}: ${short(r.text)}`);
@@ -163,11 +164,12 @@ export const remote: Group = {
         for (const [p, body] of probes) {
           const r = await postJson(`https://${b.fqdn}${p}`, body, cs);
           got.push(`${p.split("/").slice(3).join("/")}=${r.status}`);
-          assert(r.status === 403 && /companion-write-not-allowed/.test(r.text), `${p} ${r.status}: ${short(r.text)}`);
+          assert(r.status === 403 && /companion-write-not-allowed|route-not-allowed-for-session/.test(r.text), `${p} ${r.status}: ${short(r.text)}`);
         }
         return got.join(" ");
       });
-      const prefix = companion.slice(0, 12);
+      // The box lists a session by the SHA-256 of its token (never a piece of the token itself).
+      const prefix = createHash("sha256").update(companion, "utf8").digest("hex");
       await rec.check("the owner lists it as a `remote` browser session (their own device session is `device`)", async () => {
         const r = await http(`https://${b.fqdn}/api/screens/paired-sessions/list`, { headers: s });
         assert(r.status === 200, `${r.status}: ${short(r.text)}`);

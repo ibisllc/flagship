@@ -138,6 +138,11 @@ export interface MemberRoles {
    */
   ranks: Record<string, string>;
   /**
+   * Order target → `<signatureHex>:<statement>` of the admin's verified `flagship/app-rank/v1` that last set it: what keyd
+   * needs before it signs `master` for that person (a rank an admin ordered is the only proof of it).
+   */
+  evidence: Record<string, string>;
+  /**
    * inviteId → `<issuedAt>:<signature>` of a withdraw this box holds, verified
    * when a join through that invite arrives (an admin's, or the creator's):
    * a withdrawn link lets nobody new in, whichever server they join on.
@@ -217,7 +222,7 @@ function higher(a: MemberRole | null, b: MemberRole | null): MemberRole | null {
 }
 
 function emptyRoles(): MemberRoles {
-  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {}, creators: {}, ranks: {}, withdrawn: {}, coManagers: {} };
+  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {}, creators: {}, ranks: {}, evidence: {}, withdrawn: {}, coManagers: {} };
 }
 
 function readCoManagers(v: unknown, into: Record<string, CoManagerRecord>): void {
@@ -253,9 +258,11 @@ function readRoles(v: unknown): MemberRoles {
   strMap(r.tiers, out.tiers);
   strMap(r.creators, out.creators);
   strMap(r.ranks, out.ranks);
+  strMap(r.evidence, out.evidence);
   strMap(r.withdrawn, out.withdrawn);
   readCoManagers(r.coManagers, out.coManagers);
   for (const [k, v] of Object.entries(out.creators)) if (!/^[0-9a-f]{64}$/.test(v)) delete out.creators[k];
+  for (const [k, v] of Object.entries(out.evidence)) if (!/^[0-9a-f]{128}:flagship\/app-rank\/v1\|/.test(v) || v.length > 4400) delete out.evidence[k];
   for (const [k, v] of Object.entries(out.withdrawn)) if (!/^\d+:[0-9a-f]{128}$/.test(v)) delete out.withdrawn[k];
   for (const [k, v] of Object.entries(out.ranks)) {
     if (!/^(device:[0-9a-f]{64}|share:[0-9a-f]{32})$/.test(k) || accountRank(v) === null) delete out.ranks[k];
@@ -275,6 +282,7 @@ function copyRoles(r: MemberRoles): MemberRoles {
     tiers: { ...r.tiers },
     creators: { ...r.creators },
     ranks: { ...r.ranks },
+    evidence: { ...r.evidence },
     withdrawn: { ...r.withdrawn },
     coManagers: Object.fromEntries(Object.entries(r.coManagers).map(([k, v]) => [k, { ...v }])),
   };
@@ -531,8 +539,22 @@ export class ServiceAccessStore {
    * no grant is in the book): the box then asserts no more than manager.
    */
   masterEvidence(serviceRef: string, p: Principal): { statement: string; signatureHex: string } | null {
+    // An admin's order made it master: that order, signed by the admin root, is the proof.
+    if (this.rankOverride(serviceRef, p) === "master") return this.storedEvidence(serviceRef, rankKey(p));
     if (p.kind !== "device" || p.tier !== "admin" || this.rankOverride(serviceRef, p)) return null;
     return this.principals?.grantStatementFor?.(p.pub) ?? null;
+  }
+
+  /** The admin's order that made an invited person (by their app AID) master, as keyd checks it; null when none. */
+  masterEvidenceForAid(serviceRef: string, aidHex: string): { statement: string; signatureHex: string } | null {
+    return this.storedEvidence(serviceRef, `aid:${aidHex.toLowerCase()}`);
+  }
+
+  private storedEvidence(serviceRef: string, targetKey: string): { statement: string; signatureHex: string } | null {
+    const v = this.byService.get(serviceRef)?.roles.evidence[targetKey];
+    if (!v) return null;
+    const i = v.indexOf(":");
+    return i === 128 ? { signatureHex: v.slice(0, 128), statement: v.slice(129) } : null;
   }
 
   /** An account device's or co-manager's rank in an app: the override, else the default; null when refused. */
@@ -910,11 +932,14 @@ export class ServiceAccessStore {
     targetKey: string,
     role: MemberRole,
     issuedAt: number,
+    evidence?: string,
   ): Promise<"ok" | "stale"> {
     const e = this.entry(serviceRef);
     const last = e.roles.seq[targetKey];
     if (last !== undefined && issuedAt <= last) return "stale";
     e.roles.seq[targetKey] = issuedAt;
+    if (evidence && role === "master") e.roles.evidence[targetKey] = evidence;
+    else delete e.roles.evidence[targetKey];
     if (target.kind === "aid") e.roles.aids[target.aid] = role;
     else if (target.kind === "invite") e.roles.invites[target.inviteId] = role;
     else e.roles.grants[`${target.inviteId}/${target.aid}`] = role;
@@ -997,12 +1022,14 @@ export class ServiceAccessStore {
   }
 
   /** Apply a verified override of an account device (`device:<pub>`) or co-manager (`share:<id>`). */
-  async setAccountRank(serviceRef: string, targetKey: string, rank: AccountRank, issuedAt: number): Promise<"ok" | "stale"> {
+  async setAccountRank(serviceRef: string, targetKey: string, rank: AccountRank, issuedAt: number, evidence?: string): Promise<"ok" | "stale"> {
     const e = this.entry(serviceRef);
     const last = e.roles.seq[targetKey];
     if (last !== undefined && issuedAt <= last) return "stale";
     e.roles.seq[targetKey] = issuedAt;
     e.roles.ranks[targetKey] = rank;
+    if (evidence && rank === "master") e.roles.evidence[targetKey] = evidence;
+    else delete e.roles.evidence[targetKey];
     await this.persist();
     return "ok";
   }

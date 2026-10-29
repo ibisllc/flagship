@@ -215,14 +215,16 @@ async function manageOnHome2(A: Account, B: Account, rec: Rec, b: Box): Promise<
   if (!opened) return;
   const bs = { "x-flagship-session": token };
   let fromCommit = "";
-  await rec.check("B sees the server (shares/me, server-detail, apps-list)", async () => {
+  await rec.check("B sees its share (shares/me); the owner screens are not B's to read (one authorization layer: a co-manager session reaches only /api/shares)", async () => {
     const me = await http(`https://${b.fqdn}/api/shares/me`, { headers: bs });
     assert(me.status === 200 && me.json?.shareId === sh.shareId, `me ${me.status}: ${short(me.text)}`);
     for (const p of ["/api/screens/server-detail", "/api/screens/apps-list"]) {
       const r = await http(`https://${b.fqdn}${p}`, { headers: bs });
-      assert(r.status === 200, `${p} ${r.status}: ${short(r.text)}`);
-      if (p.endsWith("server-detail")) fromCommit = String(r.json?.currentCommit ?? "");
+      assert(r.status === 403 && r.json?.code === "route-not-allowed-for-session", `${p} should be refused for a share session: ${r.status} ${short(r.text)}`);
     }
+    // The commit B's update starts from is the owner's server-detail (B's app learns it from .com's server list).
+    const d = await http(`https://${b.fqdn}/api/screens/server-detail`, { headers: os });
+    fromCommit = String(d.json?.currentCommit ?? "");
     return `canUpdate=${me.json.canUpdate}`;
   });
   await rec.check("B (manage) moves the box with a signed update: admitted (202), then the release gate refuses an unendorsed commit; a replay is 409", async () => {
@@ -299,23 +301,24 @@ async function viewOnHome(A: Account, B: Account, rec: Rec, b: Box): Promise<voi
   if (!view) return;
   const s = await openSession(b, sh);
   const bs = { "x-flagship-session": String(s.json?.token) };
-  await rec.check("VIEW: B reads the server, but the manage routes are refused (update, access requests: 403 manage-only)", async () => {
-    const d = await http(`https://${b.fqdn}/api/screens/server-detail`, { headers: bs });
-    assert(d.status === 200, `server-detail ${d.status}`);
+  await rec.check("VIEW: B's share says view, and the manage routes are refused (update: 403 manage-only; the owner screens: 403)", async () => {
+    const me = await http(`https://${b.fqdn}/api/shares/me`, { headers: bs });
+    assert(me.status === 200 && me.json?.level === "view" && me.json?.canUpdate === false, `me ${me.status}: ${short(me.text)}`);
+    const d = await http(`https://${b.fqdn}/api/screens/server-detail`, { headers: os });
     const update: ServerShareUpdate = { serverDomain: b.fqdn, shareId: sh.shareId, memberPubHex: sh.memberPubHex, targetCommit: "0".repeat(40), fromCommit: String(d.json?.currentCommit ?? "0".repeat(40)), nonce: randomBytes(32).toString("hex"), issuedAt: Date.now() };
     const u = await postJson(`https://${b.fqdn}/api/shares/update`, { update, signature: bytesToHex(signServerShareUpdate(update, sh.member)) }, bs);
     assert(u.status === 403 && u.json?.code === "manage-only", `update ${u.status}: ${short(u.text)}`);
     const ar = await http(`https://${b.fqdn}/api/screens/access-requests`, { headers: bs });
-    assert(ar.status === 403 && /manage-only/.test(ar.text), `access-requests ${ar.status}: ${short(ar.text)}`);
-    return "update 403 manage-only, access-requests 403 manage-only";
+    assert(ar.status === 403, `access-requests ${ar.status}: ${short(ar.text)}`);
+    return "update 403 manage-only, owner screens 403";
   });
   await rec.check("A raises the share to MANAGE (a newer grant, no acceptance); B's open session picks it up", async () => {
     await sleep(1100);
     const g = await postGrant(b, ownerSession, sh, "manage", A.keys.adminRoot, false);
     assert(g.status === 200 && g.json?.created === false, `regrant ${g.status}: ${short(g.text)}`);
-    const ar = await http(`https://${b.fqdn}/api/screens/access-requests`, { headers: bs });
-    assert(ar.status === 200, `access-requests after raise ${ar.status}: ${short(ar.text)}`);
-    return "access-requests 200";
+    const me = await http(`https://${b.fqdn}/api/shares/me`, { headers: bs });
+    assert(me.status === 200 && me.json?.level === "manage", `me after raise ${me.status}: ${short(me.text)}`);
+    return "shares/me says manage";
   });
 
   // ── .com: the offer row, the acceptance, start-up approval ──────────────
