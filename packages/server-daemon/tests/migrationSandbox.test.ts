@@ -96,3 +96,18 @@ describe("helpers", () => {
     expect(boundedRedacted("0123456789", 4, [])).toBe("…6789");
   });
 });
+
+describe("a dedicated database on a box that dials containers directly", () => {
+  it("runs as a member of the app on the apps network and reaches the instance through the gateway, with no socket and no extra privilege", () => {
+    const plan = buildSandboxPlan({
+      target: { user: "r", password: "p", database: "d", port: 15401 },
+      member: { serviceId: "alice--shop", network: "flagship-apps", netArgs: ["--dns", "10.89.2.1", "--add-host", "host.flagship.internal:10.89.2.1"] },
+    });
+    expect(plan.containerName).toMatch(/^flagship-alice--shop\.migrate-[0-9a-f]{12}$/);
+    expect(plan.args).toContain("--network=flagship-apps");
+    expect(plan.args.join(" ")).not.toContain("type=volume");
+    expect(plan.args.join(" ")).toContain("-h host.flagship.internal -p 15401");
+    expect(plan.args).toContain("--cap-drop=ALL");
+    expect(plan.args).toContain("--read-only");
+  });
+});

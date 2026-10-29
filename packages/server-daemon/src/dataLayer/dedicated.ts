@@ -498,6 +498,13 @@ export class DedicatedPostgres {
     return e ? dedicatedSocketVolume(e.key) : null;
   }
 
+  /** On a box that dials containers directly, the app whose instance is on `port`: its migrations go through the gateway like the app does. */
+  async memberForPort(port: number): Promise<string | null> {
+    if (!dialsContainersDirectly()) return null;
+    const e = Object.values(await this.deps.state.load()).find((x) => x.port === port);
+    return e ? composeServiceId(e.creator, e.slug) : null;
+  }
+
   async volumes(): Promise<string[]> {
     return Object.keys(await this.deps.state.load()).map(dedicatedVolume);
   }

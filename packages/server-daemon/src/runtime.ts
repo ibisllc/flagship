@@ -1,5 +1,6 @@
 import type { AuthorityHub } from "./authority/hub.js";
-import { sandboxedRunSql } from "./migrationSandbox.js";
+import { DATA_HOST_ALIAS, sandboxedRunSql } from "./migrationSandbox.js";
+import { sandboxRunArgs } from "./egress/sandboxNetworking.js";
 import { serveControlHttp, type ControlHttpOptions } from "./controlHttp.js";
 import { languageFor, t, VARY_LANGUAGE } from "./i18n/index.js";
 import { SealedInstalledServicesStore, type InstalledServicesStore } from "./installedServicesStore.js";
@@ -1660,7 +1661,18 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
             : null,
       onLog: (m) => console.warn(m),
       // Creator SQL runs in a one-shot sandbox, never in this process (SEC-MIG-002).
-      runSql: dataProvisioner ? sandboxedRunSql(realCommandRunner, undefined, (port) => appRuntimes.dedicated?.socketForPort(port) ?? Promise.resolve(null)) : null,
+      runSql: dataProvisioner
+        ? sandboxedRunSql(
+            realCommandRunner,
+            undefined,
+            (port) => appRuntimes.dedicated?.socketForPort(port) ?? Promise.resolve(null),
+            async (port) => {
+              const serviceId = (await appRuntimes.dedicated?.memberForPort(port)) ?? null;
+              const netArgs = serviceId ? sandboxRunArgs("flagship-apps", DATA_HOST_ALIAS) : null;
+              return serviceId && netArgs ? { serviceId, network: "flagship-apps", netArgs } : null;
+            },
+          )
+        : null,
       activity: serviceActivity,
     });
     void servicePlatformRef.current.restore().then(({ restored, failed }) => {
