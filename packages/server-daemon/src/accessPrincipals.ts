@@ -387,6 +387,11 @@ export class AccessPrincipals implements PrincipalResolver {
   ownerAidHex(): string | null {
     return this.ownerAid;
   }
+
+  /** The book's grant for an account device (master evidence for keyd); null when it holds none. */
+  grantStatementFor(pubHex: string): { statement: string; signatureHex: string } | null {
+    return this.book?.grantStatementFor(pubHex) ?? null;
+  }
 }
 
 function parseListed(r: unknown): ListedGrant | null {

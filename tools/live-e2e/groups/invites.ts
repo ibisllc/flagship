@@ -36,6 +36,7 @@ import {
 import { mintDeviceGrant, pair } from "../lib/fleet.js";
 import { CONTROL, KEK, assert, cookieVal, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import { echoedFlagshipHeaders, installWhoami, setMode, setModeWithIrk, waitServing } from "./gating.js";
+import { uninstall } from "./release03/util.js";
 import type { Group } from "./types.js";
 
 interface Invite {
@@ -64,6 +65,8 @@ export const invites: Group = {
     const friendB = deriveAppAccountId({ seed: new Uint8Array(32).fill(0xb2) }, serviceRef);
     const friendC = deriveAppAccountId({ seed: new Uint8Array(32).fill(0xc3) }, serviceRef);
     const session = await pair(A, b);
+    // A run on a kept box starts from nothing.
+    await uninstall(A, b, slug);
 
     const installed = await rec.check("install the probe app (default_role: master), members only", async () => {
       await installWhoami(A, b, slug, { enabled: true, default_role: "master" });
