@@ -63,7 +63,7 @@ export interface RootEntitlement {
 
 const TAG_ROOT_ENTITLEMENT = "flagship/root-entitlement/v1";
 
-function canonicalRootEntitlement(c: RootEntitlement): Bytes {
+export function canonicalRootEntitlement(c: RootEntitlement): Bytes {
   legacyFieldGuard("username", c.username);
   legacyFieldGuard("podCanonical", c.podCanonical);
   return new TextEncoder().encode(
@@ -128,7 +128,7 @@ export interface ServiceEntitlement {
 
 const TAG_SERVICE_ENTITLEMENT = "flagship/service-entitlement/v1";
 
-function canonicalServiceEntitlement(c: ServiceEntitlement): Bytes {
+export function canonicalServiceEntitlement(c: ServiceEntitlement): Bytes {
   legacyFieldGuard("username", c.username);
   for (const canonical of c.canonicals) legacyFieldGuard("canonical", canonical);
   // Sort canonicals so signing is order-independent.
@@ -197,7 +197,7 @@ export interface EntitlementRevocationList {
 
 const TAG_ENTITLEMENT_REVOKE = "flagship/entitlement-revoke/v1";
 
-function canonicalEntitlementRevocationList(r: EntitlementRevocationList): Bytes {
+export function canonicalEntitlementRevocationList(r: EntitlementRevocationList): Bytes {
   legacyFieldGuard("username", r.username);
   return new TextEncoder().encode(
     [
@@ -259,7 +259,7 @@ export interface TunnelHelloV2 {
 
 const TAG_TUNNEL_HELLO_V2 = "flagship/tunnel-hello/v2";
 
-function canonicalTunnelHelloV2(h: TunnelHelloV2): Bytes {
+export function canonicalTunnelHelloV2(h: TunnelHelloV2): Bytes {
   return new TextEncoder().encode(
     [
       TAG_TUNNEL_HELLO_V2,
@@ -387,7 +387,7 @@ function validateServiceGrantFields(g: ServiceGrant): void {
   }
 }
 
-function canonicalServiceGrant(g: ServiceGrant): Bytes {
+export function canonicalServiceGrant(g: ServiceGrant): Bytes {
   validateServiceGrantFields(g);
   const domains = [...g.serverDomains].map((d) => d.toLowerCase()).sort().join(",");
   const identities = [...g.serverIdentities].map((b) => hex(b)).sort().join(",");
