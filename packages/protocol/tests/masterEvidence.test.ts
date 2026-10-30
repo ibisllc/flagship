@@ -18,3 +18,27 @@ describe("master needs the owner's evidence", () => {
     }
   });
 });
+
+describe("an account device signs in under the owner's AID", () => {
+  const rand = (n: number) => Uint8Array.from(Array.from({ length: 32 }, (_, i) => (i * 7 + n) & 255));
+  const root = rand(1);
+  const rootPub = Buffer.from(ed25519.getPublicKey(root)).toString("hex");
+  const ownerAid = Buffer.from(ed25519.getPublicKey(rand(2)));
+  const device = Buffer.from(ed25519.getPublicKey(rand(3))).toString("hex");
+  const stable = (a: string, p: Uint8Array) => deriveServiceMemberStableId(deriveServiceSecret(swk, a), p);
+  const verify = (sig: string, m: Uint8Array, p: string) => ed25519.verify(Buffer.from(sig, "hex"), m, Buffer.from(p, "hex"));
+  const grant = `flagship/device-capability-grant/v2|g1|alice|d1|${device}|admin,browse|1|${Date.now() + 3_600_000}`;
+  const sig = Buffer.from(ed25519.sign(new TextEncoder().encode(grant), root)).toString("hex");
+  const msg = `flagship/inject/v1|alice--shop|${stable("alice--shop", ownerAid)}|master|1`;
+  const anchors = { irkPubHex: "00".repeat(32), adminRootPubHex: rootPub };
+
+  it("is proven by the grant of the device that signed in, though the member id comes from the AID", () => {
+    const ev = { appId: "alice--shop", identityPubHex: ownerAid.toString("hex"), signInPubHex: device, statement: grant, signatureHex: sig };
+    expect(checkMasterEvidence(msg, ev, anchors, Date.now(), stable, verify)).toBeNull();
+  });
+  it("is refused when the grant names another key, or no sign-in key is given (the AID is not the device)", () => {
+    const base = { appId: "alice--shop", identityPubHex: ownerAid.toString("hex"), statement: grant, signatureHex: sig };
+    expect(checkMasterEvidence(msg, { ...base, signInPubHex: "ab".repeat(32) }, anchors, Date.now(), stable, verify)).toBe("wrong-key");
+    expect(checkMasterEvidence(msg, base, anchors, Date.now(), stable, verify)).toBe("wrong-key");
+  });
+});

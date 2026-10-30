@@ -324,6 +324,8 @@ fn is_hex_len(s: &str, n: usize) -> bool {
 pub struct MasterEvidence<'a> {
     pub app_id: &'a str,
     pub identity_pub_hex: &'a str,
+    /// The key the owner's statement names (the device that signed in); the identity key when `None`.
+    pub sign_in_pub_hex: Option<&'a str>,
     pub statement: &'a str,
     pub signature_hex: &'a str,
 }
@@ -361,6 +363,10 @@ pub fn check_master_evidence(
     if stable_id_of(ev.app_id, &pub_bytes) != user {
         return Some("wrong-member");
     }
+    if ev.sign_in_pub_hex.is_some_and(|k| !is_hex_len(k, 64)) {
+        return Some("bad-evidence");
+    }
+    let key = ev.sign_in_pub_hex.unwrap_or(ev.identity_pub_hex);
     let root = admin_root_pub_hex.filter(|r| is_hex_len(r, 64));
     let signer = root.unwrap_or(irk_pub_hex);
     let p: Vec<&str> = ev.statement.split('|').collect();
@@ -370,7 +376,7 @@ pub fn check_master_evidence(
             if p.len() != 8 {
                 return Some("bad-evidence");
             }
-            if part(4) != ev.identity_pub_hex {
+            if part(4) != key {
                 return Some("wrong-key");
             }
             if root.is_some() && !part(5).split(',').any(|x| x == "admin") {
@@ -392,9 +398,10 @@ pub fn check_master_evidence(
             if part(1) != ev.app_id {
                 return Some("wrong-app");
             }
-            let dev = format!("device:{}", ev.identity_pub_hex);
-            let aid = format!("aid:{}", ev.identity_pub_hex);
-            if part(2) != dev && part(2) != aid {
+            let dev = format!("device:{key}");
+            let aid = format!("aid:{key}");
+            let own_aid = format!("aid:{}", ev.identity_pub_hex);
+            if part(2) != dev && part(2) != aid && part(2) != own_aid {
                 return Some("wrong-key");
             }
             if part(3) != "master" {
@@ -979,6 +986,7 @@ mod tests {
             let e = MasterEvidence {
                 app_id: &app,
                 identity_pub_hex: &idp,
+                sign_in_pub_hex: None,
                 statement: &st,
                 signature_hex: &sig,
             };

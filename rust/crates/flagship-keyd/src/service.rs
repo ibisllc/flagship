@@ -291,6 +291,7 @@ impl KeydService {
                         "identityPubHex",
                         "statement",
                         "signatureHex",
+                        "signInPubHex",
                     ],
                 )?;
                 let msg = hex_arg(a, "msg", HexBounds::range(1, 4096))?;
@@ -305,6 +306,11 @@ impl KeydService {
                 let identity = str_arg(a, "identityPubHex", 64)?;
                 let statement = str_arg(a, "statement", 4096)?;
                 let signature = str_arg(a, "signatureHex", 128)?;
+                let sign_in = if a.get("signInPubHex").is_some() {
+                    Some(str_arg(a, "signInPubHex", 64)?)
+                } else {
+                    None
+                };
                 if !crate::policy::is_service_id(app_id) {
                     return Err(KeydError::bad_request(
                         "appId must be <creator>--<slug> or <slug>",
@@ -313,6 +319,7 @@ impl KeydService {
                 let ev = crate::policy::MasterEvidence {
                     app_id,
                     identity_pub_hex: identity,
+                    sign_in_pub_hex: sign_in,
                     statement,
                     signature_hex: signature,
                 };

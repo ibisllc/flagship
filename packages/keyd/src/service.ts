@@ -146,7 +146,7 @@ export class KeydService {
         // A `master` identity assertion (identityAssertion.ts checkMasterEvidence): signed only with
         // the owner's evidence for that very sign-in key, checked here against owner.json and the
         // SWK, never on the daemon's word.
-        noExtraArgs(a, ["msg", "appId", "identityPubHex", "statement", "signatureHex"]);
+        noExtraArgs(a, ["msg", "appId", "identityPubHex", "statement", "signatureHex", "signInPubHex"]);
         const msg = hexArg(a, "msg", { min: 1, max: 4096 });
         const purpose = checkSign(msg, this.#pubHex, this.#purposes, { masterEvidence: true });
         if (!this.#owner) throw new KeydError("forbidden", "no owner key is pinned for this box");
@@ -156,6 +156,7 @@ export class KeydService {
           identityPubHex: strArg(a, "identityPubHex", 64),
           statement: strArg(a, "statement", 4096),
           signatureHex: strArg(a, "signatureHex", 128),
+          ...(a.signInPubHex !== undefined ? { signInPubHex: strArg(a, "signInPubHex", 64) } : {}),
         };
         if (!isServiceId(ev.appId)) throw new KeydError("bad-request", "appId must be <creator>--<slug> or <slug>");
         const refused = checkMasterEvidence(

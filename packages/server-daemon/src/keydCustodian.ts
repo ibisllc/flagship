@@ -120,7 +120,7 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
     return this.#mldsaPubHex;
   }
   /** A `master` assertion: keyd signs it only after checking the owner's evidence itself. */
-  signMasterIdentity(msg: Bytes, ev: { appId: string; identityPubHex: string; statement: string; signatureHex: string }): Bytes {
+  signMasterIdentity(msg: Bytes, ev: { appId: string; identityPubHex: string; signInPubHex?: string; statement: string; signatureHex: string }): Bytes {
     return unhex(this.#client.call("sign.identity", { msg: hex(msg), ...ev }).sig);
   }
 

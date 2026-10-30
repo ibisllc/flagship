@@ -52,7 +52,9 @@ export function buildAppSessionResolver(opts: AppSessionResolverOptions): Sessio
     // Someone outside the owner's own devices (an invited person, a co-manager) also needs a current
     // freshness checkpoint; a device of the owner's account never does.
     const external = !p || p.kind === "co-manager";
-    const masterEvidence = role !== "master" ? null : p ? opts.access.masterEvidence?.(app.serviceId, p) ?? null : opts.access.masterEvidenceForAid?.(app.serviceId, sess.aid) ?? null;
+    const proof = role !== "master" ? null : p ? opts.access.masterEvidence?.(app.serviceId, p) ?? null : opts.access.masterEvidenceForAid?.(app.serviceId, sess.aid) ?? null;
+    // The owner's statement names the key that signed in (an account device); the member id is derived from the owner's AID.
+    const masterEvidence = proof ? { ...proof, signInPubHex: sess.aid } : null;
     return { memberPub: identity, stableId: app.membership.stableIdFor(identity), role, ...(external ? { external: true } : {}), ...(masterEvidence ? { masterEvidence } : {}) };
 
     // An invited person's rank is what an admin's verified order set for them, else Member: the

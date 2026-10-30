@@ -54,7 +54,7 @@ export interface SessionInfo {
    */
   external?: boolean;
   /** For `master`: the owner's signed evidence keyd checks before it signs that rank. */
-  masterEvidence?: { statement: string; signatureHex: string };
+  masterEvidence?: { statement: string; signatureHex: string; signInPubHex?: string };
 }
 
 /**
@@ -258,6 +258,7 @@ export async function prepareAppRequest(
         signed = deps.injector.signMasterIdentity(new TextEncoder().encode(fields.join("|")), {
           appId: app.serviceId,
           identityPubHex: bytesToHex(session.memberPub),
+          ...(ev.signInPubHex ? { signInPubHex: ev.signInPubHex } : {}),
           statement: ev.statement,
           signatureHex: ev.signatureHex,
         });

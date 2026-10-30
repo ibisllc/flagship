@@ -102,7 +102,10 @@ export type MasterEvidenceRefusal =
 
 export interface MasterEvidence {
   appId: string;
+  /** The key the member id is derived from (an account device's is the owner's AID: one person, many devices). */
   identityPubHex: string;
+  /** The key the owner's statement names (the device that signed in); the identity key when omitted. */
+  signInPubHex?: string;
   statement: string;
   signatureHex: string;
 }
@@ -136,18 +139,20 @@ export function checkMasterEvidence(
   const pub = new Uint8Array(32);
   for (let i = 0; i < 32; i++) pub[i] = parseInt(ev.identityPubHex.slice(2 * i, 2 * i + 2), 16);
   if (stableIdOf(ev.appId, pub) !== a.user) return "wrong-member";
+  if (ev.signInPubHex !== undefined && (typeof ev.signInPubHex !== "string" || !HEX32.test(ev.signInPubHex))) return "bad-evidence";
+  const key = ev.signInPubHex ?? ev.identityPubHex;
   const root = anchors.adminRootPubHex && HEX32.test(anchors.adminRootPubHex) ? anchors.adminRootPubHex : null;
   const signer = root ?? anchors.irkPubHex;
   const p = ev.statement.split("|");
   if (p[0] === "flagship/device-capability-grant/v2") {
     if (p.length !== 8) return "bad-evidence";
-    if (p[4] !== ev.identityPubHex) return "wrong-key";
+    if (p[4] !== key) return "wrong-key";
     if (root && !p[5]!.split(",").includes("admin")) return "not-admin";
     if (!/^(0|[1-9][0-9]{0,15})$/.test(p[7]!) || Number(p[7]) <= now) return "expired";
   } else if (p[0] === "flagship/app-rank/v1") {
     if (p.length !== 5) return "bad-evidence";
     if (p[1] !== ev.appId) return "wrong-app";
-    if (p[2] !== `device:${ev.identityPubHex}` && p[2] !== `aid:${ev.identityPubHex}`) return "wrong-key";
+    if (p[2] !== `device:${key}` && p[2] !== `aid:${key}` && p[2] !== `aid:${ev.identityPubHex}`) return "wrong-key";
     if (p[3] !== "master") return "not-admin";
   } else {
     return "bad-evidence";
