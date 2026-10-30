@@ -6,6 +6,7 @@
 
 pub mod allocator;
 pub mod authority;
+pub mod blessing;
 pub mod com;
 pub mod echo;
 pub mod flow;
