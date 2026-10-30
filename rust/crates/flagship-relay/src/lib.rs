@@ -8,6 +8,7 @@ pub mod allocator;
 pub mod authority;
 pub mod blessing;
 pub mod com;
+pub mod config;
 pub mod echo;
 pub mod flow;
 pub mod frame;
