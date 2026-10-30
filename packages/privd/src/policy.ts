@@ -907,6 +907,8 @@ const LOOP_DEVICE = /^\/dev\/loop[0-9]{1,4}$/;
 /** The daemon's folder fingerprint (appQuota/loopVolumes.ts FOLDER_FINGERPRINT_SCRIPT), byte for byte. */
 export const FOLDER_FINGERPRINT_SCRIPT =
   `find "$1" \\( -type f -printf 'f %m %s %P\\n' \\) -o \\( -type d -printf 'd %m %P\\n' \\) -o \\( -printf '%y %P\\n' \\) | LC_ALL=C sort | sha256sum | cut -d' ' -f1`;
+/** The one-shot lock marker the premount honours on the next boot (server-daemon deadMan.ts BootUnlockModeSuppressor), byte for byte. */
+export const BOOT_LOCK_ONCE_SCRIPT = `printf 'approve-once\\n' > /boot/flagship-lock-once.new && mv -f /boot/flagship-lock-once.new /boot/flagship-lock-once`;
 const EGRESS_CHAIN = /^FLAGSHIP-EGRESS(?:6|-NAT|-FWD|-IN)$/;
 /** The sandbox bridges the daemon owns under Podman (egress/networks.ts ensureHostBridge). */
 const BOX_BRIDGE = /^fs-[a-z0-9-]{1,12}$/;
@@ -1007,6 +1009,9 @@ export function hostExec(args: Record<string, unknown>, mounts: MountsReader): E
     }
     case "fingerprint":
       if (a.length === 1 && (IMAGE_DATA.test(a[0]!) || DOCKER_VOLUME_DATA.test(a[0]!))) return { file: "/bin/sh", args: ["-c", FOLDER_FINGERPRINT_SCRIPT, "_", a[0]!], timeoutMs: 30 * 60_000 };
+      break;
+    case "bootlock":
+      if (a.length === 0) return { file: "/bin/sh", args: ["-c", BOOT_LOCK_ONCE_SCRIPT], timeoutMs: 15_000 };
       break;
     case "networkctl":
       if (a.length === 1 && a[0] === "reload") return { file: "/usr/bin/networkctl", args: a, timeoutMs: 30_000 };

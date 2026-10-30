@@ -70,6 +70,11 @@ export interface AutoUnlockSuppressor {
 export class BootUnlockModeSuppressor implements AutoUnlockSuppressor {
   constructor(private readonly path = "/boot/flagship-lock-once") {}
   async suppress(): Promise<void> {
+    // /boot is root's: an unprivileged daemon asks the broker for exactly this marker.
+    if (runsUnprivileged()) {
+      await privd().host("bootlock", []);
+      return;
+    }
     await writeFileDurable(this.path, "approve-once\n", 0o644);
   }
 }

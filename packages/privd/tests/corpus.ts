@@ -220,6 +220,9 @@ host("chmod", ["0777", `/var/lib/containers/storage/volumes/${VOL}/_data`]);
 host("fingerprint", [`${ROOT}/${VOL}/data`]);
 host("fingerprint", [`/var/lib/containers/storage/volumes/${VOL}/_data`]);
 host("networkctl", ["reload"]);
+host("bootlock", []);
+host("bootlock", ["x"]);
+host("bootlock", ["-c", "id"]);
 for (const [f, a] of [
   ["mkdir", ["0777", "/etc/cron.d"]], ["mkdir", ["4755", `${ROOT}/${VOL}`]], ["truncate", ["0", "/etc/shadow"]], ["fallocate", ["-l", "1", "/var/flagship/x"]],
   ["mkfs.ext4", ["/dev/sda1"]], ["mkfs.ext4", ["-q", "-F", "-b", "4096", "-T", "default", "-m", "0", "-E", "root_owner=0:0", `${ROOT}/${VOL}.img`]], ["touch", ["/etc/nologin"]],

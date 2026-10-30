@@ -40,6 +40,10 @@ pub const RELEASE_REPO: &str = "/opt/flagship";
 pub const FILES_IMAGE_ROOT: &str = "/var/lib/flagship-files";
 /// The image the daemon's files helpers run in (volumeDump.ts FILES_HELPER_IMAGE).
 pub const FILES_HELPER_IMAGE: &str = "pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0";
+/// The one-shot lock marker the premount honours on the next boot (server-daemon deadMan.ts
+/// BootUnlockModeSuppressor), byte for byte.
+const BOOT_LOCK_ONCE_SCRIPT: &str = "printf 'approve-once\\n' > /boot/flagship-lock-once.new && mv -f /boot/flagship-lock-once.new /boot/flagship-lock-once";
+
 /// The daemon's folder fingerprint (appQuota/loopVolumes.ts FOLDER_FINGERPRINT_SCRIPT), byte for byte.
 pub const FOLDER_FINGERPRINT_SCRIPT: &str = r#"find "$1" \( -type f -printf 'f %m %s %P\n' \) -o \( -type d -printf 'd %m %P\n' \) -o \( -printf '%y %P\n' \) | LC_ALL=C sort | sha256sum | cut -d' ' -f1"#;
 pub const SETUP_STEPS: &[&str] = &[
@@ -1948,6 +1952,13 @@ fn host_command(name: &str, a: &[String], mounts: MountsReader<'_>) -> Option<Pr
                     30 * 60_000,
                 )
             }),
+        "bootlock" => (n == 0).then(|| {
+            exec(
+                "/bin/sh",
+                vec!["-c".to_owned(), BOOT_LOCK_ONCE_SCRIPT.to_owned()],
+                15_000,
+            )
+        }),
         "networkctl" => {
             (n == 1 && s(0) == "reload").then(|| exec("/usr/bin/networkctl", all(), 30_000))
         }
@@ -2066,6 +2077,7 @@ const HOST_FILES: &[&str] = &[
     "rmdir",
     "mv",
     "fingerprint",
+    "bootlock",
     "networkctl",
     "ip",
     "sysctl",
