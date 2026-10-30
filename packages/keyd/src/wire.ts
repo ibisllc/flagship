@@ -47,6 +47,7 @@ export const OPS = [
   "acme.sign",
   "provision.swk",
   "provision.cgk",
+  "policy.rename",
 ] as const;
 export type Op = (typeof OPS)[number];
 

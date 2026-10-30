@@ -44,6 +44,7 @@ pub const OPS: &[&str] = &[
     "acme.sign",
     "provision.swk",
     "provision.cgk",
+    "policy.rename",
 ];
 
 pub type Args = Map<String, Value>;

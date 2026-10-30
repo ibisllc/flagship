@@ -55,6 +55,8 @@ pub struct KeydService {
     admin_root_hex: Option<String>,
     /// TS `ceremony`: the boot ceremony's one-time token and until when it lets a raw key in.
     ceremony: Option<(Key32, i64)>,
+    /// Where `policy.json` lives, so an owner-signed move to another name can be kept.
+    state_dir: Option<std::path::PathBuf>,
     clock: Clock,
 }
 
@@ -124,6 +126,7 @@ impl KeydService {
             owner: None,
             admin_root_hex: None,
             ceremony: None,
+            state_dir: None,
             clock: system_clock(),
         }
     }
@@ -140,6 +143,13 @@ impl KeydService {
         self.owner = key
             .filter(|_| !server_fqdn.is_empty())
             .map(|k| (k, server_fqdn.to_lowercase()));
+        self
+    }
+
+    /// keyd's state directory (`policy.json` is rewritten there when the owner moves the box to another name).
+    #[must_use]
+    pub fn with_state_dir(mut self, dir: std::path::PathBuf) -> Self {
+        self.state_dir = Some(dir);
         self
     }
 
@@ -641,6 +651,65 @@ impl KeydService {
                 let acct = self.acme()?;
                 let tls = self.tls()?;
                 done(acct.sign(&req, tls)?)
+            }
+            "policy.rename" => {
+                // The owner moves this box to another name in the same account (Migrate: the replacement takes the
+                // retired server's name). keyd takes the new name only from the owner's own signed root entitlement for
+                // THIS key, never on the daemon's word, and only inside the account zone the box already sits in.
+                no_extra_args(a, &["username", "podCanonical", "issuedAt", "signatureHex"])?;
+                let Some((irk, fqdn)) = &self.owner else {
+                    return Err(KeydError::forbidden("no owner key is pinned for this box"));
+                };
+                let username = str_arg(a, "username", 64)?.to_owned();
+                let canonical = str_arg(a, "podCanonical", 253)?.to_lowercase();
+                let issued_at = safe_integer(a.get("issuedAt")).ok_or_else(|| {
+                    KeydError::bad_request("issuedAt must be a non-negative integer")
+                })?;
+                let signature = hex_arg(a, "signatureHex", HexBounds::exact(64))?;
+                let zone = crate::files::account_zone_of(&canonical, crate::files::SERVICES_APEXES);
+                if zone.is_none()
+                    || zone != crate::files::account_zone_of(fqdn, crate::files::SERVICES_APEXES)
+                {
+                    return Err(KeydError::forbidden("a box moves only within its own account"));
+                }
+                let statement = format!(
+                    "flagship/root-entitlement/v1|{username}|{}|{canonical}|{issued_at}",
+                    self.pub_hex
+                );
+                let signer = match self
+                    .admin_root_hex
+                    .as_deref()
+                    .and_then(crate::crypto::from_hex)
+                    .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+                    .and_then(|b| ed25519_dalek::VerifyingKey::from_bytes(&b).ok())
+                {
+                    Some(root) => root,
+                    None => *irk,
+                };
+                let verified = <[u8; 64]>::try_from(signature.as_slice()).is_ok_and(|sig| {
+                    signer
+                        .verify_strict(statement.as_bytes(), &ed25519_dalek::Signature::from_bytes(&sig))
+                        .is_ok()
+                });
+                if !verified {
+                    return Err(KeydError::forbidden("the owner did not sign this move for this box"));
+                }
+                if canonical != *fqdn {
+                    if let Some(dir) = &self.state_dir {
+                        let path = dir.join("policy.json");
+                        let tmp = dir.join("policy.json.tmp");
+                        let body = format!("{{\"serverFqdn\":\"{canonical}\"}}");
+                        std::fs::write(&tmp, body)
+                            .and_then(|()| std::fs::rename(&tmp, &path))
+                            .map_err(|e| KeydError::failed(format!("could not keep the new name: {e}")))?;
+                    }
+                    let irk_keep = *irk;
+                    self.owner = Some((irk_keep, canonical.clone()));
+                    if let Some(tls) = self.tls.as_mut() {
+                        tls.set_allowed(crate::files::names_for(&canonical));
+                    }
+                }
+                done(obj! { "serverFqdn" => canonical })
             }
             "provision.swk" | "provision.cgk" => {
                 // Only on proof of authority (service.ts): a sealed delivery signed by the owner

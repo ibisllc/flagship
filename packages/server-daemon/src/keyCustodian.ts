@@ -88,6 +88,8 @@ export interface BoxSigner {
    * identityAssertion.ts checkMasterEvidence). Absent: the custodian has no separate key holder.
    */
   signMasterIdentity?(msg: Bytes, evidence: { appId: string; identityPubHex: string; signInPubHex?: string; statement: string; signatureHex: string }): Bytes;
+  /** Tell the key holder the owner moved this box to another name in its account (keyd verifies the owner's signed entitlement). */
+  moveToName?(e: { username: string; podCanonical: string; issuedAt: number }, signature: Bytes): void;
   /** Open a blob sealed TO the box identity (X25519 via the birational map). */
   unsealToBox(blob: Bytes): Bytes;
   /** Open a pairing order sealed to the box; refuses anything else that was sealed to it. */

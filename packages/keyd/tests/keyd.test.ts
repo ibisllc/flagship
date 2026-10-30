@@ -461,6 +461,39 @@ describe("the admin root keyd pins", () => {
   });
 });
 
+describe("policy.rename: the owner moves the box to another name in its account", () => {
+  it("takes the name only from the owner's signed entitlement for this key, inside the same account, and then allows certificates for it", async () => {
+    const { KeydService } = await import("../src/service.js");
+    const { TlsKeys } = await import("../src/tls.js");
+    const { namesFor } = await import("../src/migrate.js");
+    const { mkdtempSync, readFileSync: read } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const root = new Uint8Array(32).fill(9);
+    const rootPub = ed.getPublicKey(root);
+    const irk = ed.getPublicKey(new Uint8Array(32).fill(8));
+    const dir = mkdtempSync(join(tmpdir(), "keyd-rename-"));
+    const policyPath = join(dir, "policy.json");
+    const old = "home2.alice.gym.flagship.services";
+    const tls = new TlsKeys(new Set(namesFor(old)));
+    const svc = new KeydService({
+      identitySeed: SEED, tls, policyPath,
+      owner: { irkPubHex: Buffer.from(irk).toString("hex"), serverFqdn: old, adminRootPubHex: Buffer.from(rootPub).toString("hex") },
+    });
+    const hello = (svc.handle({ id: 1, op: "hello", args: { v: 1, component: "daemon" } }).result as { publicKey: string }).publicKey;
+    const sign = (user: string, canon: string, at: number, key = root) =>
+      Buffer.from(ed.sign(new TextEncoder().encode(["flagship/root-entitlement/v1", user, hello, canon, at].join("|")), key)).toString("hex");
+    const call = (canon: string, signatureHex: string, at = 5) => svc.handle({ id: 2, op: "policy.rename", args: { username: "alice", podCanonical: canon, issuedAt: at, signatureHex } });
+    const fresh = "home.alice.gym.flagship.services";
+    expect(() => tls.createKey([fresh])).toThrow();
+    expect(() => call(fresh, sign("alice", fresh, 5, new Uint8Array(32).fill(7)))).toThrow(/did not sign/);
+    expect(() => call("home.bob.gym.flagship.services", sign("alice", "home.bob.gym.flagship.services", 5))).toThrow(/own account/);
+    expect(() => call(fresh, sign("alice", "other.alice.gym.flagship.services", 5))).toThrow(/did not sign/);
+    expect(call(fresh, sign("alice", fresh, 5)).result).toEqual({ serverFqdn: fresh });
+    expect(() => tls.createKey([fresh, `*.${fresh}`])).not.toThrow();
+    expect(JSON.parse(read(policyPath, "utf8"))).toEqual({ serverFqdn: fresh });
+  });
+});
+
 describe("sign.identity: master only with the owner's evidence", () => {
   const MV = JSON.parse(readFileSync(join(import.meta.dirname, "../../protocol/test-vectors/identity-assertion/master-evidence.json"), "utf8"));
   it("matches every vector, and plain sign refuses master", async () => {

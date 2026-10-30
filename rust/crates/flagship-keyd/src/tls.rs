@@ -358,6 +358,11 @@ impl TlsKeys {
     }
 
     /// The names this box may ever have a certificate for.
+    /// The names this keyd may make a certificate for, after the owner moved the box to another name in its account.
+    pub fn set_allowed(&mut self, names: Vec<String>) {
+        self.allowed = names;
+    }
+
     pub fn names(&self) -> Vec<String> {
         self.allowed.clone()
     }

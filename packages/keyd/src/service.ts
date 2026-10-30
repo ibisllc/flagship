@@ -21,6 +21,8 @@ import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
 import { BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, checkSign, isPairingOrder, isServiceId } from "./policy.js";
 import { AcmeAccount, type AcmeRequest } from "./acme.js";
+import { accountZoneOf, namesFor } from "./migrate.js";
+import { renameSync, writeFileSync } from "node:fs";
 import { TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage } from "./tls.js";
 import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
 
@@ -57,6 +59,8 @@ export interface KeydServiceInit {
    * until when it lets a raw key in. Absent: no raw key is accepted over the socket.
    */
   ceremony?: { token: Uint8Array; notAfter: number } | null;
+  /** Where the box's `policy.json` lives, so an owner-signed move to another name can be kept. */
+  policyPath?: string;
   now?: () => number;
 }
 
@@ -77,7 +81,8 @@ export class KeydService {
   readonly #purposes: ReadonlySet<string>;
   readonly #tls: TlsKeys | null;
   readonly #acme: AcmeAccount | null;
-  readonly #owner: { irkPub: Uint8Array; serverFqdn: string; adminRootPubHex: string | null } | null;
+  #owner: { irkPub: Uint8Array; serverFqdn: string; adminRootPubHex: string | null } | null;
+  readonly #policyPath: string | null;
   #ceremony: { token: Uint8Array; notAfter: number } | null;
   readonly #now: () => number;
 
@@ -104,6 +109,7 @@ export class KeydService {
           }
         : null;
     this.#ceremony = init.ceremony && init.ceremony.token.length === 32 ? { token: init.ceremony.token.slice(), notAfter: init.ceremony.notAfter } : null;
+    this.#policyPath = init.policyPath ?? null;
     this.#now = init.now ?? Date.now;
   }
 
@@ -287,6 +293,38 @@ export class KeydService {
         }
         const key = gossip ? this.#cgkOrThrow() : hkdf(sha256, this.#cgkOrThrow(), new Uint8Array(0), new TextEncoder().encode(ACCESS_SYNC_KEY_INFO), 32);
         return { result: { mac: toHex(hmac(sha256, key, msg)) } };
+      }
+      case "policy.rename": {
+        // The owner moves this box to another name in the same account (Migrate: the replacement takes the retired
+        // server's name). keyd takes the new name only from the owner's own signed root entitlement for THIS key, never
+        // on the daemon's word, and only inside the account zone the box already sits in.
+        noExtraArgs(a, ["username", "podCanonical", "issuedAt", "signatureHex"]);
+        if (!this.#owner) throw new KeydError("forbidden", "no owner key is pinned for this box");
+        const username = strArg(a, "username", 64);
+        const canonical = strArg(a, "podCanonical", 253).toLowerCase();
+        if (typeof a.issuedAt !== "number" || !Number.isSafeInteger(a.issuedAt) || a.issuedAt < 0) throw new KeydError("bad-request", "issuedAt must be a non-negative integer");
+        const sig = strArg(a, "signatureHex", 128);
+        if (!/^[0-9a-f]{128}$/.test(sig)) throw new KeydError("bad-request", "signatureHex must be 128 hex characters");
+        const zone = accountZoneOf(canonical);
+        if (zone === null || zone !== accountZoneOf(this.#owner.serverFqdn)) throw new KeydError("forbidden", "a box moves only within its own account");
+        const statement = new TextEncoder().encode(["flagship/root-entitlement/v1", username, this.#pubHex, canonical, a.issuedAt].join("|"));
+        const signer = this.#owner.adminRootPubHex ?? toHex(this.#owner.irkPub);
+        let ok = false;
+        try {
+          ok = ed.verify(Buffer.from(sig, "hex"), statement, Buffer.from(signer, "hex"));
+        } catch {
+          ok = false;
+        }
+        if (!ok) throw new KeydError("forbidden", "the owner did not sign this move for this box");
+        if (canonical !== this.#owner.serverFqdn) {
+          if (this.#policyPath) {
+            writeFileSync(`${this.#policyPath}.tmp`, JSON.stringify({ serverFqdn: canonical }), { mode: 0o400 });
+            renameSync(`${this.#policyPath}.tmp`, this.#policyPath);
+          }
+          this.#owner = { ...this.#owner, serverFqdn: canonical };
+          this.#tls?.setAllowedNames(new Set(namesFor(canonical)));
+        }
+        return { result: { serverFqdn: canonical } };
       }
       case "tls.createKey": {
         noExtraArgs(a, ["names"]);

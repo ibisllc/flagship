@@ -122,6 +122,7 @@ fn run() -> Result<(), String> {
         .with_pq_seed(&pq_seed)?;
     if let (Some(irk), Some(f)) = (&owner, &owner_fqdn) {
         service = service.with_owner(irk, f);
+        service = service.with_state_dir(state.clone());
     }
     service =
         service.with_admin_root(flagship_keyd::files::load_admin_root_anchor(&state).as_deref());

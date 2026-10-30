@@ -618,6 +618,13 @@ pub const DEFAULT_RATE_LIMITS: &[(&str, Limit)] = &[
         },
     ),
     (
+        "policy.rename",
+        Limit {
+            per_second: 0.1,
+            burst: 3.0,
+        },
+    ),
+    (
         "*",
         Limit {
             per_second: 5000.0,

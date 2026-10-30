@@ -221,6 +221,14 @@ export class KeydCustodian implements BoxSigner, SwkOps, GossipOps {
     this.#client.call("provision.swk", { sealed: hex(sealed), ...proofArgs(proof) });
     this.#hasSwk = true;
   }
+  /**
+   * The owner moved this box to another name in its account (a replacement taking the retired server's name): hand keyd
+   * the owner's signed root entitlement for this key. keyd checks the signature and the account itself, then keeps the
+   * new name for the certificates it will make.
+   */
+  moveToName(e: { username: string; podCanonical: string; issuedAt: number }, signature: Bytes): void {
+    this.#client.call("policy.rename", { username: e.username, podCanonical: e.podCanonical, issuedAt: e.issuedAt, signatureHex: hex(signature) });
+  }
   provisionCgkSealed(sealed: Bytes, proof: DeliveryProof): void {
     this.#client.call("provision.cgk", { sealed: hex(sealed), ...proofArgs(proof) });
     this.#hasCgk = true;

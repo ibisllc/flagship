@@ -46,7 +46,7 @@ export class TlsKeys {
   private activeHandle: string | null = null;
 
   constructor(
-    private readonly allowedNames: ReadonlySet<string>,
+    private allowedNames: ReadonlySet<string>,
     private readonly dir: string | null = null,
     private readonly now: () => number = Date.now,
   ) {
@@ -87,6 +87,11 @@ export class TlsKeys {
   }
 
   /** The names this box may ever have a certificate for. */
+  /** The names this keyd may make a certificate for, after the owner moved the box to another name in its account. */
+  setAllowedNames(names: ReadonlySet<string>): void {
+    this.allowedNames = names;
+  }
+
   names(): string[] {
     return [...this.allowedNames];
   }

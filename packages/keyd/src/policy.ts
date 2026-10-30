@@ -238,5 +238,6 @@ export const DEFAULT_RATE_LIMITS: Record<string, { perSecond: number; burst: num
   "acme.create": { perSecond: 1 / 60, burst: 3 },
   "provision.swk": { perSecond: 0.1, burst: 3 },
   "provision.cgk": { perSecond: 0.1, burst: 3 },
+  "policy.rename": { perSecond: 0.1, burst: 3 },
   "*": { perSecond: 5000, burst: 10000 },
 };

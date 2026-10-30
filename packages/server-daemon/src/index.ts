@@ -3168,6 +3168,16 @@ async function loadEntitlementsOrExit(deps: {
         `entitlement bundle podPubKey (${bundlePubHex.slice(0, 16)}…) does not match server identity (${ourPubHex.slice(0, 16)}…)`,
       );
     }
+    // A key holder pinned to the name this box was built with learns the name the owner gave it since (Migrate): from the
+    // owner's own signed entitlement, which it verifies itself.
+    try {
+      (custodian as { moveToName?: (e: { username: string; podCanonical: string; issuedAt: number }, sig: Uint8Array) => void }).moveToName?.(
+        { username: loaded.rootEntitlement.username, podCanonical: loaded.rootEntitlement.podCanonical, issuedAt: loaded.rootEntitlement.issuedAt },
+        loaded.rootEntitlementSig,
+      );
+    } catch (e) {
+      console.warn(`[daemon] the key holder did not take the box's name from the owner's entitlement: ${(e as Error).message}`);
+    }
     console.log(
       `[daemon] loaded entitlement bundle for ${loaded.rootEntitlement.podCanonical} ` +
         `(${loaded.serviceEntitlement ? `${loaded.serviceEntitlement.canonicals.length} service canonicals` : "root-only"})`,
