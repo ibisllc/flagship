@@ -73,6 +73,23 @@ export function scrubEnvFile(path: string, variables: readonly string[]): boolea
 }
 
 /** Give the keyd user its state (only when running as root, i.e. as the migration step). */
+/**
+ * The install blob is written by the installer as root, 0600. The daemon (an unprivileged user) must read the recipe's
+ * one-time enrollment secret from it to prove its key in its first request, and must be able to remove the secret
+ * afterwards. The blob holds the signed AuthCode and the recipe, not keys (those move into keyd), so it passes to the
+ * daemon's user. A box that cannot name that user leaves it as it is.
+ */
+export function shareInstallBlobWithDaemon(blobPath: string, user = "flagship"): boolean {
+  if (typeof process.getuid !== "function" || process.getuid() !== 0 || !existsSync(blobPath)) return false;
+  try {
+    execFileSync("chown", [`${user}:${user}`, blobPath]);
+    chmodSync(blobPath, 0o600);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function handOverToKeydUser(dir: string, user: string, group: string): void {
   if (typeof process.getuid === "function" && process.getuid() === 0) {
     execFileSync("chown", ["-R", `${user}:${group}`, dir]);

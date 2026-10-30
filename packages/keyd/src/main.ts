@@ -6,7 +6,7 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { AcmeAccount } from "./acme.js";
 import { TlsKeys } from "./tls.js";
-import { CEREMONY_TOKEN_FILE, CEREMONY_WINDOW_MS, handOverToKeydUser, legacyTlsFiles, loadOwnerAnchor, loadPolicy, migrateKeyFiles, namesFor, scrubEnvFile, writeOwnerAnchorFromConfig, writePolicyFromEnv } from "./migrate.js";
+import { CEREMONY_TOKEN_FILE, CEREMONY_WINDOW_MS, handOverToKeydUser, legacyTlsFiles, loadOwnerAnchor, loadPolicy, migrateKeyFiles, namesFor, scrubEnvFile, shareInstallBlobWithDaemon, writeOwnerAnchorFromConfig, writePolicyFromEnv } from "./migrate.js";
 import { KEYD_CLIENT_GROUP, KEYD_USER } from "./unit.js";
 
 const STATE = process.env.FLAGSHIP_KEYD_STATE ?? "/var/lib/flagship-keyd";
@@ -24,6 +24,8 @@ async function main(): Promise<void> {
       { serverJson: process.env.FLAGSHIP_CONFIG ?? "/etc/flagship/server.json", installBlob: process.env.FLAGSHIP_INSTALL_BLOB ?? join(legacy, "install-blob.json") },
       STATE,
     );
+    // The daemon reads the recipe's enrollment secret from the install blob (first contact).
+    shareInstallBlobWithDaemon(process.env.FLAGSHIP_INSTALL_BLOB ?? join(legacy, "install-blob.json"));
     // A box that already serves TLS keeps serving: its certificate and key move into keyd and
     // are replaced by a key keyd makes as soon as the daemon can order one.
     let tlsImported = false;
