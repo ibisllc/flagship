@@ -59,6 +59,8 @@ if [ -f "$SECRETS" ]; then
 fi
 export FLAGSHIP_ADMIN_SECRET="${FLAGSHIP_ADMIN_SECRET:-${GYM_ADMIN_SECRET:-}}"
 export GYM_ADMIN_SECRET="${GYM_ADMIN_SECRET:-${FLAGSHIP_ADMIN_SECRET:-}}"
+# Production runs on Workers Paid (2026-10-20), so the 10 ms Free-plan figure is reported, not failed.
+export WORKERS_PLAN="${WORKERS_PLAN:-paid}"
 if [ "$DRY" = 0 ] && { [ -z "${GYM_ADMIN_SECRET:-}" ] || [ -z "${GYM_DEMO_IRK_KEK:-}" ]; }; then
   echo "✗ GYM_ADMIN_SECRET and GYM_DEMO_IRK_KEK are required (load $SECRETS)" >&2
   exit 2
