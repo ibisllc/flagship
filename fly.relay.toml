@@ -1,0 +1,109 @@
+# The Rust relay (flagship-relay, Dockerfile.relay) on the same Fly app, ports and checks as fly.toml.
+# Deploy: flyctl deploy -c fly.relay.toml --strategy=rolling -a <app>. Roll back by deploying fly.toml.
+# flagship.services on Fly — pure data plane (stateless pipe).
+#
+# After the .com / .services split, .com (Worker + D1) holds all
+# persistent state. This Fly app does only:
+#   - Raw-TCP SNI passthrough on :443 → routes browser TLS by SNI to
+#     the user's daemon over the tunnel WebSocket.
+#   - Tunnel-hub WS at :8443/tunnel — user daemons dial outbound and
+#     hold the connection. Multiplexed: one WS carries N TCP streams.
+#   - Peer-backup matchmaker (signaling only; no data flows here).
+#
+# Persistent state: NONE. Restart this app and clients reconnect.
+
+app = "flagship-services"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+# Deploy strategy: rolling with min_machines_running = 2 (#10).
+# Previous setting (strategy=immediate, min=1) killed the only machine
+# before the new one was healthy — every tunnel WS dropped, and the
+# reconnect supervisor (#7) only re-establishes after a backoff window.
+# On kill_signal the hub drains (apps/web/src/tunnel/drainOnSignal.ts): it
+# refuses new tunnels with 503, sends DRAIN_NOTICE to boxes that offered
+# drain-v1 (they dial a new tunnel at once, which lands on another machine,
+# and let the old one's streams finish), keeps serving for
+# FLAGSHIP_DRAIN_GRACE_MS (default 20 s, inside kill_timeout), then closes
+# what is left with 1012. Older boxes reconnect after that close. Streams are
+# not migrated.
+[deploy]
+  strategy = "rolling"
+  wait_timeout = "60s"
+
+[build]
+  dockerfile = "Dockerfile.relay"
+
+[env]
+  PORT = "3000"
+  TUNNEL_TCP_PORT = "8443"
+  RELAY_ECHO_PORT = "3001"
+
+# External :443 → internal :8443 (raw TCP). The SNI router peeks the
+# ClientHello, looks up which daemon's tunnel WS owns the SNI, and
+# splices the TCP stream over the WS. TLS terminates on the user's
+# daemon; we never see plaintext.
+[[services]]
+  protocol = "tcp"
+  internal_port = 8443
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [[services.ports]]
+    port = 443
+    handlers = []
+
+# External :8443 → internal :3000 (TLS-terminated by Fly with the
+# auto-issued cert for flagship-services.fly.dev). Hosts the tunnel-hub
+# WS endpoint at /tunnel + the residual /api/health used by Fly's own
+# health check.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [[services.ports]]
+    port = 8443
+    handlers = ["tls", "http"]
+
+  # External :80 → 301 to https:// at the Fly edge. A box serves ONLY HTTPS
+  # (TLS terminates on the daemon over the :443 passthrough), so a bare
+  # `http://<server>.<user>.flagship.services` would otherwise hang
+  # (ERR_EMPTY_RESPONSE). `force_https` bounces it to :443 where the SNI
+  # passthrough takes over. This only ever sees the plaintext Host — which Fly
+  # ALREADY reads from the :443 ClientHello SNI to route — never encrypted
+  # content, so it doesn't weaken the content-blind model.
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+# External :8444 → internal :3001, TLS ended by Fly (the app's fly.dev
+# certificate) with a PROXY-protocol header in front: the relay-address echo.
+# It answers which address the connection REALLY arrived at, so a phone can drop a
+# `.com`-recommended address that is a forwarder in front of this app
+# (docs/relay-addresses.md). It reads no user data and has no state.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3001
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [[services.ports]]
+    port = 8444
+    handlers = ["tls", "proxy_proto"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

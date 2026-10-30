@@ -138,3 +138,6 @@ temp
 
 # ---- self -------------------------------------------------------------------
 .dockerignore
+
+# ---- Rust build output (Dockerfile.relay builds from rust/ itself) ------------
+rust/target

@@ -1,0 +1,27 @@
+################################################################################
+# Flagship — the Rust `.services` data plane (flagship-relay) on Fly.
+#
+# Same ports and environment as the Node image (fly.toml [env]): PORT is the hub
+# (tunnel WebSocket, /api/health, /api/stats, /pb/m/<id>), TUNNEL_TCP_PORT the SNI
+# passthrough router, RELAY_ECHO_PORT the PROXY-protocol address echo. Secrets
+# are unchanged (SERVICES_CONTROL_SECRET, USAGE_REPORT_SECRET).
+# Select it with `flyctl deploy -c fly.relay.toml` (docs/architecture-v2/relay-transport.md).
+################################################################################
+
+FROM rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS builder
+WORKDIR /src
+COPY rust-toolchain.toml ./
+COPY rust rust/
+WORKDIR /src/rust
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/rust/target \
+    cargo build --release --locked -p flagship-relay --bin flagship-relay \
+ && install -D target/release/flagship-relay /out/flagship-relay
+
+FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin relay
+COPY --from=builder /out/flagship-relay /usr/local/bin/flagship-relay
+USER relay
+ENV PORT=3000 TUNNEL_TCP_PORT=8443 RELAY_ECHO_PORT=3001
+EXPOSE 3000 8443 3001
+ENTRYPOINT ["/usr/local/bin/flagship-relay"]
