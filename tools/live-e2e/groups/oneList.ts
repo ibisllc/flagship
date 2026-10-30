@@ -30,6 +30,7 @@ import {
   type ServerOrder,
 } from "@flagship/protocol";
 import { depositCgk } from "../lib/cgk.js";
+import { startIfStopped } from "../lib/upcloudVm.js";
 import { pair, pods } from "../lib/fleet.js";
 import { CONTROL, assert, cookieVal, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import { installWhoami, setMode, waitServing } from "./gating.js";
