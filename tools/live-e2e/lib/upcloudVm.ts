@@ -37,6 +37,25 @@ async function up(method: string, path: string, body?: unknown): Promise<{ statu
   return { status: r.status, json };
 }
 
+/**
+ * Start a stopped VM by uuid. A gym box has no boot worker to lock, so a "Lock and restart" order is a shutdown by design
+ * (never a reboot into an unrevoked lease) and the cloud does not bring it back: the harness plays the owner's power button.
+ */
+export async function startIfStopped(uuid: string, wait = 180_000): Promise<string> {
+  const deadline = Date.now() + wait;
+  let state = "";
+  while (Date.now() < deadline) {
+    state = String((await up("GET", `/server/${uuid}`)).json?.server?.state ?? "");
+    if (state === "stopped") {
+      await up("POST", `/server/${uuid}/start`);
+      return "started";
+    }
+    if (state === "started") return "already running";
+    await sleep(5_000);
+  }
+  return `still ${state}`;
+}
+
 export function run(cmd: string, args: string[], timeoutMs = 3_600_000): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 64 << 20 }, (err, stdout, stderr) => {

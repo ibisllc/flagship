@@ -163,6 +163,9 @@ export const oneList: Group = {
       const p = await postJson(`https://${b2.fqdn}/api/power`, { request: power, signature: bytesToHex(signPhoneOrder(power, A.keys.adminRoot)) });
       assert(p.status === 200, `restart home2 ${p.status}: ${short(p.text)}`);
       await until("home2 is down", async () => (await tryHttp(`https://${b2.fqdn}/api/front-page`, {}, 8_000)).status !== 200, 120_000, 3_000);
+      // A gym box has no boot worker, so the box turns the restart into a shutdown; the harness presses the power button.
+      const powered = b2.serverId ? await startIfStopped(b2.serverId) : "no server id";
+      rec.log(`home2 power: ${powered}`);
       const revoke = { inviteId, issuedAt: Date.now() };
       const signature = bytesToHex(signRevokeServiceInvite(revoke, A.keys.adminRoot));
       const w = await postJson(`https://${b1.fqdn}/api/service-access/invite-withdraw`, { revoke, signature });
