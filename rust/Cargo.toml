@@ -12,6 +12,7 @@ members = [
     "crates/flagship-relay",
     "crates/flagship-gpu",
     "crates/flagship-wasi",
+    "crates/flagship-updater",
 ]
 
 [workspace.package]
