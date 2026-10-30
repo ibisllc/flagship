@@ -234,7 +234,7 @@ describe("installUpdateGuard: the Rust updater", () => {
     const text = buildUpdateGuardScript({ repoPath: "/opt/flagship", dataDir: "/var/flagship" });
     expect(text).toContain(`if [ -x ${UPDATER_PATH} ]; then`);
     expect(text).toContain(`${UPDATER_PATH} guard --state "$state" --max-starts 8 && exit 0`);
-    expect(text.indexOf(UPDATER_PATH)).toBeLessThan(text.indexOf("update-pending.json"));
+    expect(text.indexOf(UPDATER_PATH)).toBeLessThan(text.indexOf('[ -f "$marker" ]'));
   });
 });
 
