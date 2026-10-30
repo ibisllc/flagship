@@ -16,6 +16,8 @@ export const stackSwitch: Group = {
   needs: ["A1"],
   phase: 11,
   async run({ A, rec, box }) {
+    // Not applicable to an arch-v2 pass (its boxes never start classic): the classic pass runs it.
+    if ((process.env.GYM_BOX_STACK || "arch-v2") !== "classic") return;
     const b = box("A1");
     const fqdn = b.fqdn;
     const user = A.username;
