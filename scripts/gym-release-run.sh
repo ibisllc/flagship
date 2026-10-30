@@ -12,7 +12,7 @@
 #
 #   bash scripts/gym-release-run.sh [--skip-refresh] [--groups a,b] [--dry-run]
 #
-# Env (passed through to scripts/gym-refresh.sh): GYM_BASE_REF, GYM_START_REF (e.g. origin/gym-ux to run
+# Env (passed through to scripts/gym-refresh.sh): GYM_REFRESH_ARGS (e.g. --skip-fly-deploy when only box code changed), GYM_BASE_REF, GYM_START_REF (e.g. origin/gym-ux to run
 # the UX branch's gym), and the gym secrets file (.gym-secrets.env: GYM_ADMIN_SECRET, GYM_DEMO_IRK_KEK).
 # GYM_SYNC_REPO (+ GYM_SYNC_BASE_REF, GYM_SYNC_NEXT_REF) turns the upstream-sync group on.
 # FLAGSHIP_GYM_LOCK overrides the lock path. The lock is a file naming its holder (release.sh and the
@@ -66,7 +66,8 @@ fi
 
 cd "$REPO"
 if [ "$REFRESH" = 1 ]; then
-  run bash scripts/gym-refresh.sh
+  # shellcheck disable=SC2086
+  run bash scripts/gym-refresh.sh ${GYM_REFRESH_ARGS:-}
 fi
 
 # Two passes (owner, 2026-10-24: the gym decides what new boxes are built on). arch-v2 runs every
