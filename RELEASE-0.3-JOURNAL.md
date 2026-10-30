@@ -211,7 +211,7 @@ agreed on 2026-10-30 that per-service certificates are retired (apps are served 
 - [ ] G4 (R3) Reverse proxy and streaming transport in the Rust ingress (bounded, backpressure, SSE/WebSocket/uploads, pins/SNI/ALPN).
 - [ ] G5 (R4) Authoritative access enforcement and journal at the effect boundary in Rust (shared conformance vectors first).
 - [ ] G6 (R6) Constrained backup/restore/migration effects behind keyd/broker (scoped paths, safe extraction).
-- [ ] G7 (R7) Qualify and activate the existing Rust relay (replacement rollout, mixed-version compatibility, rollback).
+- [ ] G7 (R7; 2026-10-30 read: `flagship-relay` is a library plus the wiring, 5.4k lines, NOT a running service; the doc `relay-transport.md` section 3 lists what is lacking before it can replace the TS hub: the real `HelloAuthority` (cert ids, RootEntitlement under admin root or IRK, ServiceEntitlement, STK lookup and binding, HELLO signature, ServiceGrants, revocation: needs the entitlement canonical forms in Rust plus `.com` lookups), the outbound relay (AI provider calls go through it: disabled today), eviction, blessing, peer-backup mailboxes, custom-domain pull, the gossip HTTP surface, `/api/health`+stats, the Fly image and a gym canary with mixed-version boxes. The allocator now carries the same own-zone claim fix as the TS hub) Qualify and activate the existing Rust relay (replacement rollout, mixed-version compatibility, rollback).
 - [ ] G8 (R8) Consolidate the existing Rust boundaries on amd64 and arm64; remove obsolete TS/Go/shell alternatives only after
       the upgrade/recovery paths are proven.
 - [ ] G9 (§2, §4) Retained-TypeScript hardening and inspectable/owner-built releases: execution-surface inventory, one
