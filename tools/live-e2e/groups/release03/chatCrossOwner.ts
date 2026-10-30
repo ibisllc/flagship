@@ -116,6 +116,9 @@ export const chatCrossOwner: Group = {
     const bb = box("B1");
     const sa = await pair(A, a);
     const sb = await pair(B, bb);
+    // A run on kept boxes starts from nothing (an earlier run's probe app would answer "already installed").
+    await uninstall(A, a, SLUG);
+    await uninstall(B, bb, SLUG);
 
     const gossip = await rec.check("both accounts' servers gossip, so each holds its app's canonical name", async () => {
       for (const [acct, b] of [[A, a], [B, bb]] as const) {

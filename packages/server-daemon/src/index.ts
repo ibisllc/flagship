@@ -108,6 +108,7 @@ import {
 import { buildServiceAccessWeb, KNOCK_HOLDER_COOKIE } from "./serviceAccessWeb.js";
 import { SESSION_COOKIE } from "./serviceAccess.js";
 import { ServerWildcardGrantStore, buildServerWildcardGrantHttp } from "./serverWildcardGrant.js";
+import { FileAppAuthTokens } from "./serviceAuthToken.js";
 import { enrollmentDeviceInfo, forgetEnrollmentSecret, showServerCode } from "./enrollment.js";
 import { buildGenerationGate, originGeneration } from "./appGeneration.js";
 import { ImportProvenanceStore } from "./buildmodes/appProvenance.js";
@@ -1598,6 +1599,13 @@ async function main(): Promise<void> {
       ? { serverDomain: env.serverFqdn, authority: () => ({ ownerIrkPub: cfg.irkPublicKey, ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}), username: cfg.userId }) }
       : {}),
   });
+  // The apps' own tokens (FLAGSHIP_APP_TOKEN: app chat, live siblings, the SDK) exist whether or not the app browser runs: a box
+  // with no Chromium still has apps that call it.
+  const appAuthTokens = browserBundle?.appAuthTokens ?? (await (async () => {
+    const t = new FileAppAuthTokens(join(dataDir, "app-tokens"));
+    await t.load();
+    return t;
+  })());
 
   // Lock & power-off + dead-man: one suppressor + one host-power runner,
   // shared by the manual `power-off` order and the dead-man timer so the
@@ -2110,7 +2118,7 @@ async function main(): Promise<void> {
         // apps declaring `data.stores` will refuse to install with a
         // clear error, but apps without data are unaffected.
         dataServicesEnvFile: process.env.FLAGSHIP_DATA_SERVICES_ENV ?? "/var/flagship/data-services.env",
-        appAuthTokens: browserBundle?.appAuthTokens,
+        appAuthTokens,
         domainGate: browserBundle?.domainGate,
         tabRegistry: browserBundle?.tabRegistry,
         pullStateStore,
