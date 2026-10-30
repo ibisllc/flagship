@@ -3,12 +3,10 @@
   "about": "Who may sign a box release artifact manifest (flagship/box-artifact/v1). Pre-GA this is the single maintainer holder key that also signs release endorsements (.maintainers/); plan section 8.3 replaces it with a distinct release track and a 2-of-N threshold before general availability. A test fails if a key here is not a current holder in .maintainers/keys. Raising the threshold or rotating a key means changing this file in Studio, the apps and the boxes' installer together.",
   "threshold": 1,
   "keys": [
-    "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7"
+    "b78652d5b438fbc33c9beb0d611c91fdab27af2b4324d1d65876a1dca20b1f89"
   ],
   "pq": {
-    "keyIds": [
-      "1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"
-    ],
+    "keyIds": [],
     "legacyManifests": []
   },
   "_pq": "The hybrid PQ pin for the artifact signers (packages/protocol/src/boxArtifactPq.ts): the key ids of their release-key bindings, and the v1 digests of manifests signed before the cut-over. Empty keyIds: classical k-of-n."
