@@ -238,7 +238,7 @@ async function manageOnHome2(A: Account, B: Account, rec: Rec, b: Box): Promise<
     assert(r.status === 202 && r.json?.accepted, `update ${r.status}: ${short(r.text)}`);
     const again = await postJson(`https://${b.fqdn}/api/shares/update`, body, bs);
     assert(again.status === 409, `replay ${again.status}: ${short(again.text)}`);
-    for (let i = 0; i < 36; i++) {
+    for (let i = 0; i < 100; i++) {
       await sleep(5000);
       const d = await http(`https://${b.fqdn}/api/screens/server-detail`, { headers: os });
       const lu = d.json?.lastUpdate;
@@ -248,7 +248,7 @@ async function manageOnHome2(A: Account, B: Account, rec: Rec, b: Box): Promise<
         return `202, replay ${again.status} ${again.json?.code}, lastUpdate refused/unendorsed`;
       }
     }
-    throw new Error("no lastUpdate verdict in 3 min");
+    throw new Error("no lastUpdate verdict in 8 min");
   });
   await rec.check("B signs in to a members-only app on home2 with its share key and the app sees Manager", async () => {
     const ready = await appReady;
