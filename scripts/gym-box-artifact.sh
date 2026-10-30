@@ -164,4 +164,9 @@ if [ -f "$CATALOG_KEY" ] && [ -f "$ROOT_FILE" ]; then
     say "the gym catalog was not signed (gym boxes on this release will refuse updates until it is)"
   fi
 fi
-if [ "$PUSH" = "1" ]; then (cd "$WT" && git push --force-with-lease origin gym >/dev/null) && say "pushed gym"; fi
+if [ "$PUSH" = "1" ]; then
+  (cd "$WT" && git push --force-with-lease origin gym >/dev/null) && say "pushed gym"
+  # The gym branch is force-pushed on every build, so an earlier artifact's commit stops being reachable and a box
+  # (the update group's B3 starts on one) could no longer fetch it: a tag keeps each one.
+  (cd "$WT" && git tag -f "gym-artifact-${COMMIT:0:12}" "$COMMIT" >/dev/null && git push -q origin "gym-artifact-${COMMIT:0:12}") || say "could not tag $COMMIT; a later update group may not find it"
+fi
