@@ -321,6 +321,24 @@ impl Allocator {
         }
     }
 
+    /// `<label>.<user>.<apex>`: exactly one label under the pod's own user zone. A box under the per-box wildcard
+    /// registers no per-app canonicals, so its apps' short names are not derivable from anything it registered; the
+    /// entitlement that admitted the pod names the user, and a sibling account's box never matches.
+    fn in_own_user_zone(&self, pod_canonical: &str, fqdn: &str) -> bool {
+        if !is_short_service_canonical(fqdn, &self.apex) {
+            return false;
+        }
+        let user_of = |f: &str| {
+            strip_apex(f, &self.apex)
+                .and_then(|h| h.rsplit('.').next())
+                .map(str::to_owned)
+        };
+        match (user_of(pod_canonical), user_of(fqdn)) {
+            (Some(a), Some(b)) => a == b,
+            _ => false,
+        }
+    }
+
     pub fn request_transfer(
         &mut self,
         pod_canonical: &str,
@@ -330,8 +348,22 @@ impl Allocator {
         let fq = fqdn.to_lowercase();
         let pod = self.pods.get(&pc).ok_or(TransferError::PodNotRegistered)?;
         let key = parse_set_key(&fq, &self.apex).ok_or(TransferError::NotParseable)?;
-        if !pod.derivable.contains(&fq) && !pod.canonicals.contains(&fq) {
+        let derivable = pod.derivable.contains(&fq) || pod.canonicals.contains(&fq);
+        let own_zone = !derivable && self.in_own_user_zone(&pc, &fq);
+        if !derivable && !own_zone {
             return Err(TransferError::NotDerivable);
+        }
+        if own_zone {
+            // Join the set so the name follows the box's socket death like any other held slot.
+            let set = self.set_entry(&key);
+            if !set.members.contains(&pc) {
+                set.members.set(&pc, &fq);
+            }
+            enqueue(set, &fq, &pc);
+            let ks = key.encode();
+            if let Some(p) = self.pods.get_mut(&pc) {
+                push_unique(&mut p.set_keys, &ks);
+            }
         }
         let set = self
             .sets
@@ -597,12 +629,57 @@ mod tests {
             a.find_holder("chess.alice.flagship.services").as_deref(),
             Some("cabin.alice.flagship.services")
         );
-        assert_eq!(
+        // Nothing the pod registered derives `notes`, but it is one label under the pod's own user zone: allowed.
+        assert!(
             a.request_transfer(
                 "cabin.alice.flagship.services",
                 "notes.alice.flagship.services"
-            ),
-            Err(TransferError::NotDerivable)
+            )
+            .is_ok()
         );
+        assert_eq!(
+            a.find_holder("notes.alice.flagship.services").as_deref(),
+            Some("cabin.alice.flagship.services")
+        );
+    }
+
+    #[test]
+    fn a_box_may_claim_an_app_name_in_its_own_zone_only() {
+        let mut a = Allocator::new(A);
+        a.add_pod("home.alice.flagship.services", &[], 1);
+        a.add_pod("cabin.alice.flagship.services", &[], 2);
+        assert!(
+            a.request_transfer(
+                "home.alice.flagship.services",
+                "chess.alice.flagship.services"
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            a.request_transfer(
+                "cabin.alice.flagship.services",
+                "chess.alice.flagship.services",
+            )
+            .map(|(_, previous)| previous),
+            Ok(Some("home.alice.flagship.services".to_owned()))
+        );
+        // The claiming box is a member of the set, so its death hands the name to the other box.
+        a.remove_pod("cabin.alice.flagship.services");
+        assert_eq!(
+            a.find_holder("chess.alice.flagship.services").as_deref(),
+            Some("home.alice.flagship.services")
+        );
+        // Another account's zone, deeper names and wildcards stay refused.
+        for fq in [
+            "chess.mary.flagship.services",
+            "a.b.alice.flagship.services",
+            "*.alice.flagship.services",
+        ] {
+            assert!(
+                a.request_transfer("home.alice.flagship.services", fq)
+                    .is_err(),
+                "{fq}"
+            );
+        }
     }
 }
