@@ -122,7 +122,7 @@ fn until_next_utc_midnight() -> Duration {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    Duration::from_secs(86_400 - now % 86_400)
+    Duration::from_secs(86_400u64.saturating_sub(now % 86_400))
 }
 
 impl<H: HttpPost> ComHostPolicy<H> {
@@ -156,7 +156,13 @@ impl<H: HttpPost> ComHostPolicy<H> {
                     c.remove(&oldest);
                 }
             }
-            c.insert(host.to_owned(), (ok, Instant::now() + ttl));
+            c.insert(
+                host.to_owned(),
+                (
+                    ok,
+                    Instant::now().checked_add(ttl).unwrap_or_else(Instant::now),
+                ),
+            );
         }
     }
 }
@@ -205,7 +211,7 @@ impl<H: HttpPost> HostPolicy for ComHostPolicy<H> {
                         && v.get("reason").and_then(Value::as_str) == Some("new-host-cap")
                         && let Ok(mut c) = self.inner.cap_until.lock()
                     {
-                        *c = Some(Instant::now() + until_next_utc_midnight());
+                        *c = Instant::now().checked_add(until_next_utc_midnight());
                     }
                     self.remember(&host, ok);
                     ok

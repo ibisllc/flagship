@@ -14,10 +14,12 @@ use flagship_relay::outbound::com_policy::{ComHostPolicy, HttpPost, Ttls};
 use flagship_relay::outbound::{HostPolicy, HostRow};
 use serde_json::{Value, json};
 
+type Call = (String, Vec<(String, String)>, Value);
+
 #[derive(Clone, Default)]
 struct Canned {
     answers: Arc<Mutex<HashMap<String, (u16, Value)>>>,
-    calls: Arc<Mutex<Vec<(String, Vec<(String, String)>, Value)>>>,
+    calls: Arc<Mutex<Vec<Call>>>,
 }
 
 impl Canned {
