@@ -15,6 +15,7 @@
 //! flagship-updater runtime verify  --lock F --target T --archive F --shasums F --shasums-sig F
 //! flagship-updater runtime install --lock F --target T [--runtimes D] (--archive F --shasums F --shasums-sig F | --fetch [--cache D])
 //! flagship-updater runtime status  --lock F --target T [--runtimes D]
+//! flagship-updater runtime manifest --manifest F --trust F [--state D] [--now MS]
 //! ```
 
 use crate::manifest;
@@ -283,6 +284,9 @@ fn run_runtime(args: &[String], out: &mut dyn Write, err: &mut dyn Write) -> u8 
         Ok(f) => f,
         Err(e) => return usage(err, &e),
     };
+    if sub == "manifest" {
+        return run_runtime_manifest(&f, out, err);
+    }
     let need = |k: &str| {
         f.get(k)
             .cloned()
@@ -445,4 +449,76 @@ fn flags_with_switches(
         }
     }
     Ok(m)
+}
+
+/// The trust file's keys, threshold and PQ pin (`release/box-artifact-trust.json`).
+fn trust_from_file(path: &str) -> Result<Trust, crate::refusal::Refusal> {
+    let bad = |d: &str| crate::refusal::Refusal::with("bad-trust", d.to_owned());
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).map_err(|e| bad(&e.to_string()))?)
+            .map_err(|_| bad("not JSON"))?;
+    let list = |x: Option<&serde_json::Value>| -> Vec<String> {
+        x.and_then(serde_json::Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|k| k.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    Ok(Trust {
+        keys: list(v.get("keys")),
+        threshold: v
+            .get("threshold")
+            .and_then(serde_json::Value::as_u64)
+            .ok_or_else(|| bad("threshold"))?,
+        pq_key_ids: list(v.get("pq").and_then(|p| p.get("keyIds"))),
+        legacy_manifests: list(v.get("pq").and_then(|p| p.get("legacyManifests"))),
+    })
+}
+
+/// `runtime manifest`: verifies a signed runtime manifest; with `--state` it also refuses a replayed or older one and
+/// records the accepted sequence.
+fn run_runtime_manifest(
+    f: &HashMap<String, String>,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> u8 {
+    let (Some(manifest), Some(trust)) = (f.get("manifest"), f.get("trust")) else {
+        return usage(err, "--manifest and --trust are required");
+    };
+    let result = (|| {
+        let file = runtime::manifest::parse(
+            &std::fs::read_to_string(manifest)
+                .map_err(|e| crate::refusal::Refusal::with("bad-manifest", e.to_string()))?,
+        )?;
+        let state = f.get("state").map(PathBuf::from);
+        let seq_path = state.as_ref().map(|d| d.join("runtime-sequence"));
+        let last = seq_path
+            .as_ref()
+            .and_then(|p| crate::fsutil::read_regular(p))
+            .and_then(|t| t.trim().parse::<u64>().ok());
+        let now = f
+            .get("now")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(now_ms);
+        let (v, _lock) =
+            runtime::manifest::verify_file(&file, &trust_from_file(trust)?, now, last)?;
+        if let Some(p) = seq_path {
+            crate::fsutil::write_durable(&p, format!("{}\n", v.sequence).as_bytes(), 0o644)
+                .map_err(|e| crate::refusal::Refusal::with("install-failed", e.to_string()))?;
+        }
+        Ok::<_, crate::refusal::Refusal>(v)
+    })();
+    match result {
+        Ok(v) => {
+            let _ = writeln!(
+                out,
+                "verified: node {} sequence {} valid until {} signed by {}",
+                v.version, v.sequence, v.valid_until, v.signers
+            );
+            0
+        }
+        Err(r) => fail(err, &r),
+    }
 }

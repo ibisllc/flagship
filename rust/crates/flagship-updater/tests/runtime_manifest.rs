@@ -92,3 +92,110 @@ fn a_malformed_manifest_file_is_refused() {
         assert_eq!(parse(bad).unwrap_err().code, "bad-manifest", "{bad}");
     }
 }
+
+#[test]
+fn the_cli_verifies_a_manifest_and_refuses_a_replay_once_the_sequence_is_recorded() {
+    use flagship_updater::cli::run;
+    // A real lock, signed with a throwaway key, through the repository's own tool, so the file is the published form.
+    let dir = std::env::temp_dir().join(format!("flagship-rtm-cli-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let key_hex = "07".repeat(32);
+    std::fs::write(dir.join("key"), &key_hex).unwrap();
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../..");
+    let tool = format!("{root}/tools/box-artifact/runtime-manifest.ts");
+    let sh = |args: &[&str]| {
+        let o = std::process::Command::new("npx")
+            .arg("tsx")
+            .arg(&tool)
+            .args(args)
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    sh(&[
+        "build",
+        "--sequence",
+        "4",
+        "--issued-at",
+        &(now - 1000).to_string(),
+        "--out",
+        dir.join("u.json").to_str().unwrap(),
+    ]);
+    sh(&[
+        "sign",
+        "--manifest",
+        dir.join("u.json").to_str().unwrap(),
+        "--out",
+        dir.join("s.json").to_str().unwrap(),
+        "--key-file",
+        dir.join("key").to_str().unwrap(),
+    ]);
+    let pubkey = flagship_crypto::trust::hex(
+        &ed25519_dalek::SigningKey::from_bytes(&[7u8; 32])
+            .verifying_key()
+            .to_bytes(),
+    );
+    std::fs::write(
+        dir.join("trust.json"),
+        json!({"keys": [pubkey], "threshold": 1, "pq": {"keyIds": [], "legacyManifests": []}})
+            .to_string(),
+    )
+    .unwrap();
+    let s = |v: &[&str]| v.iter().map(|x| (*x).to_owned()).collect::<Vec<_>>();
+    let call = |a: Vec<String>| {
+        let (mut o, mut e) = (Vec::new(), Vec::new());
+        let c = run(&a, &mut o, &mut e);
+        (
+            c,
+            String::from_utf8(o).unwrap(),
+            String::from_utf8(e).unwrap(),
+        )
+    };
+    let m = dir.join("s.json");
+    let t = dir.join("trust.json");
+    let st = dir.join("state");
+    std::fs::create_dir_all(&st).unwrap();
+    let args = s(&[
+        "runtime",
+        "manifest",
+        "--manifest",
+        m.to_str().unwrap(),
+        "--trust",
+        t.to_str().unwrap(),
+        "--state",
+        st.to_str().unwrap(),
+    ]);
+    let (c, out, e) = call(args.clone());
+    assert_eq!(c, 0, "{e}");
+    assert!(
+        out.starts_with("verified: node 24.22.1 sequence 4 "),
+        "{out}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(st.join("runtime-sequence"))
+            .unwrap()
+            .trim(),
+        "4"
+    );
+    let (c, _, e) = call(args);
+    assert_eq!((c, e.trim()), (1, "refused: rollback"));
+    // far in the future the same manifest is expired (freeze resistance)
+    let late = s(&[
+        "runtime",
+        "manifest",
+        "--manifest",
+        m.to_str().unwrap(),
+        "--trust",
+        t.to_str().unwrap(),
+        "--now",
+        &(now + 400 * 86_400_000).to_string(),
+    ]);
+    assert_eq!(call(late).2.trim(), "refused: expired");
+    let _ = std::fs::remove_dir_all(&dir);
+}
