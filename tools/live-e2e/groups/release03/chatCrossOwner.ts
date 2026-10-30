@@ -7,7 +7,7 @@ import { bytesToHex } from "@noble/hashes/utils";
 import { ed, signChatApproval, type ChatApprovalDecision, type ChatApprovalKind } from "@flagship/protocol";
 import { depositCgk, waitGossiping } from "../../lib/cgk.js";
 import { pair, type Account, type Box } from "../../lib/fleet.js";
-import { assert, http, postJson, short, tryHttp } from "../../lib/harness.js";
+import { SERVICES, assert, http, postJson, short, tryHttp } from "../../lib/harness.js";
 import { buildAndDeploy, finishAndWaitLive, mcpOpen } from "../../lib/mcpBuild.js";
 import type { Group } from "../types.js";
 import { allowEgress, uninstall, until } from "./util.js";
@@ -141,6 +141,10 @@ export const chatCrossOwner: Group = {
         const r = await tryHttp(`${app}/listen`);
         return r.json?.status === 200 ? r.json : undefined;
       });
+      // Only the instance that holds the app's canonical name talks to other owners (the box silently keeps a start local
+      // otherwise), so wait for that name to serve before the first send.
+      const canonical = `https://${SLUG}.${acct.username}.${SERVICES}/`;
+      await until(`${canonical} to serve`, 6 * 60_000, async () => ((await tryHttp(canonical, {}, 15_000)).status === 200 ? true : undefined));
       return { app, listen: l };
     };
     let appA = "";
