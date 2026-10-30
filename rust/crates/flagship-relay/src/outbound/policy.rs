@@ -55,11 +55,9 @@ pub fn vet_outbound_host(raw: &str) -> Option<String> {
 
 fn in_v4(a: Ipv4Addr, net: [u8; 4], bits: u32) -> bool {
     let (a, n) = (u32::from(a), u32::from(Ipv4Addr::from(net)));
-    let mask = if bits == 0 {
-        0
-    } else {
-        u32::MAX << (32 - bits)
-    };
+    let mask = u32::MAX
+        .checked_shl(32u32.saturating_sub(bits))
+        .unwrap_or(0);
     a & mask == n & mask
 }
 
@@ -83,11 +81,9 @@ const V4_FORBIDDEN: [([u8; 4], u32); 15] = [
 
 fn in_v6(a: Ipv6Addr, net: Ipv6Addr, bits: u32) -> bool {
     let (a, n) = (u128::from(a), u128::from(net));
-    let mask = if bits == 0 {
-        0
-    } else {
-        u128::MAX << (128 - bits)
-    };
+    let mask = u128::MAX
+        .checked_shl(128u32.saturating_sub(bits))
+        .unwrap_or(0);
     a & mask == n & mask
 }
 
