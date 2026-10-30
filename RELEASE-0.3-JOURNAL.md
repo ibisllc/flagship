@@ -91,7 +91,8 @@ account creation/recovery/transfer offline, boot unlock still via .com), then ac
 heavy security focus on everything new, then the four release stages, until the apps are live in
 the stores with new graphics, texts and descriptions of the whole range of improvements, and the
 website is updated. Record every step in this file's Log as you go (commit + push it each time).
-Not in 0.3 (decided): outbound proxy (later, recommended free BYO-proxy), marketplace/payments,
+Also in 0.3 (owner, 2026-10-30): the Rust migration and verifiable runtime distribution, plan section G and Appendix G
+(per-service certificates are retired, not built). Not in 0.3 (decided): outbound proxy (later, recommended free BYO-proxy), marketplace/payments,
 custom names/domains, retail, browser extension, other-OS installers, alpine, offline boot unlock /
 own control plane (next release; notes in docs/data-sovereignty.md).
 
@@ -189,6 +190,233 @@ own control plane (next release; notes in docs/data-sovereignty.md).
       to main (fast-forward); canary; store submissions (iOS + watch, Android + Wear), Studios.
 - [ ] F6 After launch: hall of fame (hof-jay), translation review request, hardware receipts, the
       weekly rate-limit check; rebase the feature branches onto main.
+
+### G. Rust migration and verifiable runtime distribution (owner direction, 2026-10-30; part of 0.3, built in this order)
+Owner: prefer Rust; never move existing Rust back to TypeScript; migrate for a concrete security, recovery or
+performance benefit, not a line count. The requirements are in "Appendix G" below (the former
+docs/rust-migration-todo.md, deleted when it was folded in here). Verify the implementer inventory on this branch
+before ticking anything (done 2026-10-30: keyd, broker, tlsd/ingress, boot, GPU, WASI, relay codec/core exist in
+`rust/crates`; `flagship-core` is 1.5k lines in shadow mode). Order: R1 and the runtime verification first; R2 before the
+proxy/controller handover; R4's authority contract before any migrated effect goes live; R7 qualifies independently.
+Keep the gateway route; `--host-uds=all` stays disabled. R5 (per-service certificates in keyd) is NOT in 0.3: the owner
+agreed on 2026-10-30 that per-service certificates are retired (apps are served under the per-user wildcard).
+- [ ] G1 (R1) Independent updater, rollback and recovery supervisor in Rust (staged version dir, atomic switch, health check,
+      recovery without Node, persisted update intent, schema-compatible rollback, never roll back keys/revocation/security floors).
+- [ ] G2 (§2-§3) Runtime lock + verifiable runtime distribution: version-controlled lock (exact Node patch version, per-target
+      URL, size, SHA-256, executable digest), signed runtime manifest on flagshipserver.com bound into the endorsed release,
+      official-upstream download with the signed SHASUMS256 check, safe extraction, activation through G1, owner-facing
+      verification view, the adversarial tests listed in Appendix G section 3.
+- [ ] G3 (R2) App reconciliation and runtime ownership in Rust core (reconciler, endpoint table, address pool, scheduling,
+      container and local-AI lifecycle; desired state persisted; adopt on restart; one writer; shadow mode performs no effects).
+- [ ] G4 (R3) Reverse proxy and streaming transport in the Rust ingress (bounded, backpressure, SSE/WebSocket/uploads, pins/SNI/ALPN).
+- [ ] G5 (R4) Authoritative access enforcement and journal at the effect boundary in Rust (shared conformance vectors first).
+- [ ] G6 (R6) Constrained backup/restore/migration effects behind keyd/broker (scoped paths, safe extraction).
+- [ ] G7 (R7) Qualify and activate the existing Rust relay (replacement rollout, mixed-version compatibility, rollback).
+- [ ] G8 (R8) Consolidate the existing Rust boundaries on amd64 and arm64; remove obsolete TS/Go/shell alternatives only after
+      the upgrade/recovery paths are proven.
+- [ ] G9 (§2, §4) Retained-TypeScript hardening and inspectable/owner-built releases: execution-surface inventory, one
+      qualified Node, frozen locks, unprivileged runtime, SBOM/provenance, isolated owner builds, reproducible-build comparisons.
+- [ ] G10 (§5) Completion evidence: startup/CPU/RSS/throughput/p95-p99 benchmarks on amd64 and arm64, shared vectors,
+      fuzzing, crash/power-loss, mixed-version and install/update/rollback tests, unsafe/FFI audit, production qualification.
+
+### Appendix G. Rust migration and verifiable runtime distribution: requirements (folded in from docs/rust-migration-todo.md, 2026-10-30)
+
+Owner direction, 2026-10-30: prefer Rust; do not move existing Rust back to TypeScript. Migrate for a concrete security,
+recovery or performance benefit, not a line-count target. This is an implementation list, not evidence of shipped
+capabilities. Basis: docs/architecture-v2/IMPLEMENTATION-PLAN.md sections 4.1-4.3 (ownership/IPC), 5 (Rust migration and
+benchmarks), 6 (key custody and ingress), 11 (relay) and 12 (packaging/rollback).
+
+Owner direction, 2026-10-30: prefer Rust; do not move existing Rust back to
+TypeScript. Migrate for a concrete security, recovery or performance benefit,
+not a line-count target. This is an implementation TODO, not evidence of shipped
+capabilities. Current open-work status remains in `AGENTS.md`.
+
+#### 1. Additional Rust work, in priority order
+
+The implementer's inventory reports keyd, broker, TLS ingress, boot, GPU and WASI
+already implemented in Rust, and a Rust relay awaiting production activation.
+Verify that inventory in the implementation branch before marking anything done;
+those implementations are not present in this main checkout.
+
+- [ ] **R1 — Independent updater, rollback and recovery supervisor.** Move the
+  platform update consumer and guard into Rust. Verify release authority, source
+  revision, artifact digests, platform compatibility and security floors before
+  activation. Stage a complete version separately, atomically switch, health-check
+  and recover without needing Node or a working new daemon. Persist update intent
+  and survive power loss at each stage. Database/schema compatibility is part of
+  rollback; switching executables alone is insufficient. Do not roll back keys,
+  revocation epochs or minimum-security state with app data. Starting points:
+  `packages/server-daemon/src/updateConsumer.ts` and `updateGuard.ts`.
+- [ ] **R2 — App reconciliation and runtime ownership.** Move the app reconciler,
+  endpoint table, address pool, resource scheduling and container lifecycle into
+  Rust core. Include local-AI container lifecycle, not its chat/provider business
+  logic. Persist desired state and operation outcomes. Adopt running workloads
+  after restart; use one writer per resource, fencing and idempotent operations.
+  Shadow evaluation must perform no effects. Prove handover and recovery without
+  duplicate launches, lost volumes or two active controllers.
+- [ ] **R3 — Reverse proxy and streaming transport.** Move remaining per-request
+  proxying, WebSockets and streaming into the Rust ingress/transport layer. Bound
+  connections, queues, body/header sizes, tasks and deadlines; enforce backpressure,
+  cancellation and fairness. Preserve HTTP, SSE, uploads, pins, SNI, ALPN and app
+  routing behavior. Keep unprivileged product handlers behind authenticated local
+  IPC; ingress must not become a general host-control process.
+- [ ] **R4 — Authoritative access enforcement and journal.** Establish shared
+  conformance vectors first, then move authority verification, replay protection,
+  revocation checks and durable access-journal transitions into Rust at the effect
+  boundary. Preserve per-app identities and existing admin/rank rules. A TS caller
+  cannot grant itself authority or bypass enforcement. Migrate relevant gossip/
+  sync validation and state transitions with this owner; leave message/workflow
+  orchestration in its existing language where it adds no authority. Inventory
+  remote APIs too: local IPC checks cannot repair authorization omitted upstream.
+- [ ] **R5 — Complete keyd support for per-service certificates.** Add key creation,
+  CSR construction/signing and opaque key handles for authorized additional names.
+  Independently validate name/delegation authority, generation, renewal and signing
+  context; callers cannot request arbitrary names or a generic signing oracle.
+  Exercise migrated apps under their old names. No daemon-held private-key escape
+  hatch. Keep ACME networking outside keyd; do not move working Rust ACME code to TS.
+  This is the previously deferred certificate feature, not permission to expand 0.3.
+- [ ] **R6 — Constrained backup/restore/migration effects.** Put secret-key
+  operations and privileged filesystem effects behind existing Rust keyd/broker
+  boundaries. Scope volume/path access and defend archive extraction against path
+  traversal, links and resource exhaustion. Keep the workflow in its current
+  language. Move remaining bulk archive/crypto streaming only when profiling or
+  isolation analysis establishes a benefit; use maintained crypto implementations.
+- [ ] **R7 — Qualify and activate the existing Rust relay.** Treat this as a
+  replacement rollout, not a new rewrite. Prove routing authorization, opaque box
+  TLS, echo, quotas, outbound streams, mailbox behavior, bounded flow control,
+  drain, mixed-version compatibility and reconnect behavior. Deploy from main
+  after gym/canary qualification with a compatible rollback. Relay redundancy is
+  separate; canonical broadcast addresses remain a separately deferred feature.
+- [ ] **R8 — Consolidate existing Rust boundaries.** Qualify keyd, broker, ingress,
+  boot, GPU and WASI on both architectures. Remove obsolete TS/Go/shell alternatives
+  only after proving upgrade, recovery and compatibility paths. Never silently
+  fall back to raw-key custody or weaker host isolation. Do not delete a necessary
+  recovery path simply because it uses another language.
+
+R1 and runtime verification are first. R2 precedes proxy/controller handover;
+R4's authority contract must exist before migrated effects become active. R7 can
+be qualified independently. Keep the gateway route and `--host-uds=all` disabled.
+
+Basis: [architecture implementation plan](architecture-v2/IMPLEMENTATION-PLAN.md)
+§§4.1–4.3 (ownership/IPC), 5 (Rust migration and benchmarks), 6 (key custody and
+ingress), 11 (relay) and 12 (packaging/rollback); the implementer's inventory and
+the owner's scope decisions in this discussion. Existing Rust is retained even
+where a new implementation might otherwise reasonably have been TS.
+
+#### 2. Retained TypeScript and runtime hardening
+
+- [ ] Inventory all retained execution surfaces: box API/product workflows,
+  AI/MCP/provider integrations, build tools, Workers, browser and gym. Record
+  required authority, secret access, runtime owner and patch mechanism. No broad
+  daemon rewrite; no Rust-to-TS migration. Workers/browser execution engines are
+  platform-managed and cannot be pinned like the box's Node executable.
+- [ ] Use one qualified Node.js runtime for retained box TS/JS unless a measured
+  compatibility/security requirement justifies another. TS is normally compiled
+  to JS and executed by Node; pin the TypeScript compiler separately. Do not
+  introduce Bun, Deno or a runtime TS loader merely to call it a safer interpreter.
+- [ ] Create a version-controlled runtime lock with exact patch version, OS,
+  architecture, libc/ABI requirements, official versioned download URL, archive
+  filename, byte size and SHA-256 for every supported target. Pin the extracted
+  executable digest too. No `latest`, major-only ranges or host `PATH` discovery.
+  Select actual versions and hashes during implementation from verified upstream
+  releases; this TODO supplies no guessed release numbers or checksums.
+- [ ] Select a security-supported release line; record upstream support end date,
+  advisory review date, known applicable vulnerabilities and compatibility results.
+  Maintain distinct recommended versions and minimum-security floors. Pinning is
+  not perpetual approval: monitor advisories, qualify patch updates promptly and
+  rotate pins through the authenticated release process.
+- [ ] Pin compiler, package manager, dependencies and native addons with integrity
+  metadata. Build with frozen locks; forbid fallback from a failed locked install
+  to dependency re-resolution. Review necessary lifecycle scripts and run them
+  only in an isolated build environment without production data or secrets.
+- [ ] Run retained Node processes as unprivileged users with narrow IPC capabilities,
+  filesystem/network access and resource limits. Sanitize environment, including
+  loader/preload settings, and launch an absolute verified executable. The daemon
+  cannot modify its runtime or approved code. Qualify `--jitless` where compatible
+  with required hardening and performance; do not assume it is free or universal.
+  Runtime permission switches supplement OS/process isolation, not replace it.
+
+#### 3. Official binary download; Flagship-published checksum
+
+The owner receives the pinned runtime binary from its official distributor,
+not a Flagship-repacked opaque runtime. Flagship publishes the exact approved
+checksum and release metadata at flagshipserver.com. This verifies approved bytes
+and upstream origin; it does not prove correspondence between binary and source.
+
+- [ ] Define a public, versioned runtime-manifest URL on `flagshipserver.com`
+  (new endpoint/path to implement, not an existing service). Publish a readable
+  page plus machine-readable signed metadata binding all runtime-lock fields,
+  Flagship release, sequence/version, validity and security floor. Bind its digest
+  into the endorsed release. The website serves metadata; it cannot mint new trust.
+- [ ] Authenticate that metadata using the existing pinned maintainer trust and
+  reviewed update/rotation mechanism, independent of the TLS connection to `.com`.
+  Add rollback/freeze resistance and bounded offline behavior. Do not trust a new
+  signing key fetched from the same page merely because the page supplied it.
+- [ ] Download the exact archive directly from the official versioned upstream
+  URL. Allow only reviewed upstream distribution/CDN redirects over HTTPS; refuse
+  arbitrary redirect destinations and oversized/truncated downloads. Cache by
+  digest. The user may manually supply the same official archive for offline use.
+- [ ] For Node, verify upstream signed `SHASUMS256.txt` using independently
+  provisioned approved Node release keys. Pin the keyring revision/fingerprints and
+  define authenticated rotation/revocation; never blindly import a key shipped with
+  the download. Confirm the exact archive filename and digest in the signed list.
+- [ ] Hash the downloaded archive locally and require agreement among its SHA-256,
+  the upstream signed checksum and the Flagship signed manifest. A discrepancy or
+  unverifiable signature blocks the new installation and leaves the current
+  healthy installation running. Never execute the candidate to identify its version
+  before verification.
+- [ ] Extract safely into a fresh version directory, rejecting escaping paths,
+  unsafe links and special files. Validate required files, permissions and the
+  executable digest, then run compatibility/health checks with reduced privileges.
+  Activate through R1; protect the installed tree against daemon modification.
+- [ ] Provide an owner-facing verification view: exact version/platform, official
+  source link, expected checksum from flagshipserver.com, locally computed checksum,
+  upstream-signature status, Flagship-signature status and active version. Publish
+  reproducible CLI instructions for independent checking, not just a green badge.
+- [ ] Test altered archives/metadata, substituted filenames, wrong architecture,
+  malicious redirects, stale/replayed metadata, revoked keys, interrupted downloads,
+  unsafe extraction, offline cached installs and failed activation. A healthy
+  current installation must not stop merely because metadata fetching fails.
+
+Official references: [Node binary verification](https://github.com/nodejs/node#verifying-binaries),
+[Node release keys](https://github.com/nodejs/release-keys), and
+[Node support policy](https://github.com/nodejs/Release#release-schedule).
+An upstream runtime is still a compiled binary. Source verification is a separate
+claim requiring a qualified reproducible build; checksums alone cannot provide it.
+
+#### 4. Inspectable releases and owner-built artifacts
+
+- [ ] Publish the exact source revision, dependency locks, toolchain identities,
+  build recipe, SBOM and provenance alongside each Flagship release. Preserve
+  inspectable TS sources and their relation to executed JS; do not obscure them
+  inside a mandatory single opaque executable.
+- [ ] Support owner builds in an isolated staging environment while the current
+  installation runs. No live keys/data in builds; no in-place production rebuild.
+  An unsuccessful build leaves the old installation intact. Use the same versioned
+  installation and recovery mechanism for downloaded and locally built artifacts.
+- [ ] Establish reproducible builds per platform for Flagship Rust and JS artifacts
+  and publish independent digest comparisons. Record unresolved differences rather
+  than claiming reproducibility. A locally built artifact matching the endorsed
+  digest can use that endorsement; a differing artifact requires an explicit
+  owner-authorized local-build policy and distinct provenance, never a forged or
+  inferred upstream binary endorsement.
+- [ ] Reconcile architecture plan §12.1 with this owner-build option and direct
+  official-runtime downloads: the release unit binds the exact runtime digest,
+  without requiring Flagship to redistribute its bytes. Builds stay isolated from
+  the trusted live installation. Preserve existing phone authorization and recovery.
+
+#### 5. Completion evidence
+
+- [ ] Benchmark cold/warm startup by phase, idle/loaded CPU, total RSS, streaming
+  throughput and p95/p99 latency on amd64 and arm64. Compare whole installations,
+  including IPC overhead. The reported two-minute startup and 25% CPU target are
+  inputs to investigate, not proven Rust gains.
+- [ ] Run shared protocol/authority vectors, relevant existing tests, parser fuzzing,
+  crash/power-loss recovery, mixed-version and real install/update/rollback tests.
+  Audit unsafe/FFI use and dependency changes; Rust alone is not a security proof.
+- [ ] Record production qualification before removing old implementations. Implement
+  unlaunched application work on its feature branch; keep this design TODO on main.
+  Update the single status entry in `AGENTS.md` as work lands.
 
 ## Log
 
