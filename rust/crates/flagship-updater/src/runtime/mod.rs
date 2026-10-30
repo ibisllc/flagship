@@ -16,6 +16,7 @@
 pub mod fetch;
 pub mod install;
 pub mod lock;
+pub mod manifest;
 pub mod upstream;
 
 pub use install::{Installed, RuntimeStatus, install, status};

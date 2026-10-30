@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { canonicalCaEndorsement } from "@ibisllc/maintainers";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { classifyReleaseEndorsements, gateCaLeasesPq, mldsa65PublicKey, signBoxArtifact, signReleasePqBinding, verifyBoxArtifact, type ReleasePqPin } from "@flagship/protocol";
+import { classifyReleaseEndorsements, gateCaLeasesPq, mldsa65PublicKey, signBoxArtifact, signReleasePqBinding, signRuntimeManifest, verifyBoxArtifact, verifyRuntimeManifest, type ReleasePqPin } from "@flagship/protocol";
 import * as K from "./pq-release-key.mjs";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -215,6 +215,23 @@ describe("pq-release-key ceremony (fake YubiKeys)", () => {
     expect(verifyBoxArtifact(doc.manifest, doc.signatures, { ...opts, pqBindings: doc.pqBindings } as never)).toMatchObject({ ok: true });
     const stripped = doc.signatures.map(({ pq: _pq, ...s }: { pq?: unknown }) => s);
     expect(verifyBoxArtifact(doc.manifest, stripped, { ...opts, pqBindings: doc.pqBindings } as never)).toMatchObject({ ok: false, code: "pq-signature-required" });
+  });
+
+  it("sign-runtime-manifest adds the companion and binding a pinned verifier needs", () => {
+    const RV = JSON.parse(fs.readFileSync(path.join(REPO, "packages/protocol/test-vectors/runtime-manifest/vectors.json"), "utf8"));
+    const seed = Buffer.from(V.keys.release!.edSeedHex, "hex");
+    const pub = Buffer.from(ed25519.getPublicKey(seed)).toString("hex");
+    const c = RV.cases[0];
+    // Dated now: the PQ binding the tool signs is dated now too, and a verifier refuses one from its future.
+    const manifest = { ...c.manifest, issuedAt: Date.now() - 1000, validUntil: Date.now() + 86_400_000 };
+    fs.writeFileSync(p("rt.json"), JSON.stringify({ manifest, signatures: [signRuntimeManifest(manifest, seed)], lockJson: c.lockText }));
+    const r = run("pq-release-key.mjs", ["sign-runtime-manifest", "--manifest", p("rt.json"), "--out", p("rt.pq.json"), "--signing-key", `file:${p("ed.hex")}`, "--key-file", p("key.age"), ...fake()]);
+    expect(r.status, r.stderr).toBe(0);
+    const doc = JSON.parse(fs.readFileSync(p("rt.pq.json"), "utf8"));
+    const opts = { trust: { keys: [pub], threshold: 1 }, lockText: doc.lockJson, lockSigners: [], now: Date.now(), pqPin: { version: 1 as const, keyIds: [keyId], legacyManifests: [] } };
+    expect(verifyRuntimeManifest(doc.manifest, doc.signatures, { ...opts, pqBindings: doc.pqBindings } as never)).toMatchObject({ ok: true });
+    const stripped = doc.signatures.map(({ pq: _pq, ...s }: { pq?: unknown }) => s);
+    expect(verifyRuntimeManifest(doc.manifest, stripped, { ...opts, pqBindings: doc.pqBindings } as never)).toMatchObject({ ok: false, code: "pq-signature-required" });
   });
 
   it("endorse-release refuses to sign a companion with a key that did not sign the endorsement", () => {

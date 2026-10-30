@@ -26,6 +26,7 @@
 //   node scripts/pq-release-key.mjs fake-yubikeys --fake-yubikey <dir>     (test mode only)
 //   node scripts/pq-release-key.mjs sign-ca-lease --endorsement <file> [--key-file] [--signing-key] [--path .maintainers]
 //   node scripts/pq-release-key.mjs sign-box-artifact --manifest <in.json> --out <out.json> [--key-file] [--signing-key]
+//   node scripts/pq-release-key.mjs sign-runtime-manifest --manifest <in.json> --out <out.json> [--key-file] [--signing-key]
 //
 //   sign-ca-lease      writes the CA lease's PQ companion (pq-suites.md §16.3) to
 //                      <path>/ca-pq/endorsements/<endorsementId>.json, the ca-track binding
@@ -822,6 +823,18 @@ async function main() {
       fs.writeFileSync(args.out, JSON.stringify(doc, null, 2) + "\n");
       out(`wrote ${args.out}`);
     },
+    "sign-runtime-manifest": async () => {
+      if (!args.manifest || !args.out) throw new UsageError("sign-runtime-manifest needs --manifest <in> and --out <out>");
+      const doc = await signRuntimeManifestCompanion({
+        doc: JSON.parse(fs.readFileSync(args.manifest, "utf8")),
+        signingKey: args.signingKey ?? "yubikey-piv:slot=9c",
+        vault: vaultFor(args),
+        keyFile: args.keyFile ?? DEFAULT_KEY_FILE,
+        out,
+      });
+      fs.writeFileSync(args.out, JSON.stringify(doc, null, 2) + "\n");
+      out(`wrote ${args.out}`);
+    },
     "fake-yubikeys": () => {
       if (!args.fakeYubikey) throw new UsageError("fake-yubikeys needs --fake-yubikey <dir>");
       for (const r of createFakeYubikeys(args.fakeYubikey)) out(r);
@@ -985,6 +998,45 @@ export async function signBoxArtifactCompanion({ doc, signingKey, vault, keyFile
     const bindings = p.verifiedBoxArtifactBindings(next.pqBindings, { version: 1, keyIds: [keyId], legacyManifests: [] }, now);
     const entry = next.signatures.find((s) => String(s.keyHex).toLowerCase() === ed.pubHex);
     if (!p.verifyBoxArtifactPq(canonical, ed.pubHex, entry.pq, bindings)) throw new Error("the new companion does not verify; nothing written");
+    return next;
+  });
+}
+
+/**
+ * Adds the PQ companion to the signer's signature in a signed runtime manifest file
+ * (`{ manifest, signatures, pqBindings?, lockJson }`; packages/protocol/src/runtimeManifest.ts). The same release key and
+ * `release-key` binding as the box artifact's, a different statement (`flagship/runtime-manifest/v2`).
+ */
+export async function signRuntimeManifestCompanion({ doc, signingKey, vault, keyFile, out = () => {}, now = Date.now() }) {
+  const p = await import("@flagship/protocol");
+  const ed = await loadEd25519Signer(signingKey);
+  const sigEntry = (doc.signatures ?? []).find((s) => String(s.keyHex).toLowerCase() === ed.pubHex);
+  if (!sigEntry) throw new Error(`the manifest has no Ed25519 signature by ${ed.pubHex.slice(0, 16)}; sign it first (tools/box-artifact/runtime-manifest.ts sign)`);
+  const canonical = p.canonicalRuntimeManifest(doc.manifest);
+  out("Opening the release ML-DSA key: PIN and touch on a YubiKey.");
+  return withSeed(vault, keyFile, async (seed) => {
+    const mldsaPubHex = Buffer.from(mldsa65PublicKey(seed)).toString("hex");
+    const pk = p.pqBindingPublicKey({ ed25519PubHex: ed.pubHex, mldsaPubHex });
+    const keyId = Buffer.from(p.pqKeyId(p.SUITE_HYBRID_SIG_ED25519_MLDSA65_V1, pk)).toString("hex");
+    out("Signing the PQ companion: approve on the YubiKey (PIN, then touch).");
+    const sig = await p.hybridSignExternal(pk, p.TAG_RUNTIME_MANIFEST_V2, p.canonicalRuntimeManifestV2(canonical, ed.pubHex, keyId), ed.sign, seed);
+    const existing = (doc.pqBindings ?? []).find((b) => b.ed25519PubHex === ed.pubHex && b.mldsaPubHex === mldsaPubHex && b.subjectId === p.BOX_ARTIFACT_PQ_BINDING_SUBJECT);
+    const binding = existing ?? (await signSubjectBinding(p.BOX_ARTIFACT_PQ_BINDING_SUBJECT, ed, seed, now));
+    const next = {
+      ...doc,
+      signatures: doc.signatures.map((s) => (String(s.keyHex).toLowerCase() === ed.pubHex ? { ...s, pq: { keyId, signatureHex: Buffer.from(sig).toString("hex") } } : s)),
+      pqBindings: [...(doc.pqBindings ?? []).filter((b) => b !== existing), binding],
+    };
+    // The check a verifier makes, against a pin naming only this key.
+    const r = p.verifyRuntimeManifest(next.manifest, next.signatures, {
+      trust: { keys: [ed.pubHex], threshold: 1 },
+      pqPin: { version: 1, keyIds: [keyId], legacyManifests: [] },
+      pqBindings: next.pqBindings,
+      lockText: next.lockJson,
+      lockSigners: [],
+      now,
+    });
+    if (!r.ok && r.code !== "expired") throw new Error(`the new companion does not verify (${r.code}); nothing written`);
     return next;
   });
 }

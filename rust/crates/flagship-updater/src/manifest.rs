@@ -174,6 +174,16 @@ fn pq_bindings(root: &Value) -> Vec<PqBindingWire> {
         .collect()
 }
 
+/// The `signatures` and `pqBindings` arrays of any signed manifest file (artifact or runtime).
+///
+/// # Errors
+/// `bad-manifest` when `signatures` is not an array.
+pub fn parse_signatures_and_bindings(
+    root: &Value,
+) -> Result<(Vec<SignatureEntry>, Vec<PqBindingWire>), Refusal> {
+    Ok((signatures(root)?, pq_bindings(root)))
+}
+
 /// Parses a manifest file's text.
 ///
 /// # Errors
