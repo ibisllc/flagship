@@ -138,3 +138,31 @@ separation; the `flagship_icc` bridge rules and the egress chains stay the singl
    protocol awareness and is not required.
 3. Readiness is per incarnation: probe the expected container, then accept only if that incarnation is still
    current when the probe returns.
+
+## 9. Built reality (2026-10-30)
+
+What the code does now, against sections 3a to 8:
+
+- **Built and unit-tested:** the table and leases (`endpoints.ts`), the address pool, the reconciler that follows engine restarts
+  (every 3 s), every consumer in section 4 (reverse proxy and WebSockets, readiness per incarnation, staging probes, local AI,
+  dedicated databases, WASI HTTP workers, app groups with an address per member). Both brokers accept `--ip` and the two endpoint
+  labels on a database run.
+- **Proven live** (Debian 13, Podman 5.4, gVisor, gym boxes): Podman honours `--ip` on the `unmanaged` bridge; an app runs with no
+  published port at its service address and the daemon user dials it; a reinstall gets the next address (quarantine); a killed
+  container answers 503 at once; app B cannot reach app A, the gateway's SSH port, or the internet except through the egress filter;
+  Podman's own IPAM refuses a second container on a held address.
+- **Found live and fixed:** the pool forgot what it had handed out after a restart (now seeded from the engine, `seedFromEngine`,
+  `adopt`/`occupy`); an install retries on an IPAM conflict; the dedicated-database URL was rewritten twice; a database
+  migration cannot share a Unix socket across gVisor sandboxes, so it runs as a member of the app on the apps network and dials
+  the instance through the gateway's owned port (the owner declined `--host-uds=all`: a separate design decision if a socket must
+  ever be shared, naming exactly which socket and which sandboxes); the single-connection broker blocked every other call behind a
+  long one (the client now pools up to 8 connections).
+- **Not built, still open:**
+  1. The broker returns the typed observation record (3a, "Observation"); today the daemon parses `inspect` itself.
+  2. The broker's `--ip` check is shape only; it does not yet confirm the address lies in the named network's subnet and is not
+     its gateway (it needs the engine's answer, so it belongs in the effect layer, not the pure policy).
+  3. The negative isolation tests of section 7 are manual probes, not a gym group.
+  4. The reboot, replacement, IP-reuse, concurrent-install and failed-update lanes of section 7 are not yet gym groups
+     (the reboot lane needs a LUKS gym box or hardware: a gym box has no boot worker, so a restart is a shutdown there).
+- **Moves to Rust core (release plan G3):** the table, pool and reconciler are the first slice of the Rust controller. The lease
+  semantics (destroy a connection when its endpoint is invalidated) belong with the proxy, so they move with it (G4).
