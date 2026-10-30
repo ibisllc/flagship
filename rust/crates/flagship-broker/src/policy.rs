@@ -37,6 +37,10 @@ pub const PRIVD_STATE_DIR: &str = "/var/lib/flagship-privd";
 /// Where the unprivileged daemon keeps files the broker may read or write for it.
 pub const DAEMON_TRANSFER_ROOTS: &[&str] = &["/var/flagship/", "/var/tmp/.flagship-"];
 pub const RELEASE_REPO: &str = "/opt/flagship";
+
+/// The release op runs the running release's Rust updater and falls back to the shell scripts for a release built
+/// without it. The text is the TypeScript privd's `RELEASE_LAUNCHER`, byte for byte (shared vectors).
+pub const RELEASE_LAUNCHER: &str = "u=/opt/flagship/installer/rust/flagship-updater\nif [ -x \"$u\" ]; then exec \"$u\" \"$@\"; fi\nc=$1; shift\ncase \"$c\" in\ninstall) exec /usr/bin/bash /opt/flagship/installer/install-box-artifact.sh \"$@\" ;;\nrestore) exec /usr/bin/bash /opt/flagship/installer/rollback-box-artifact.sh \"$@\" ;;\nesac\nexit 2\n";
 pub const FILES_IMAGE_ROOT: &str = "/var/lib/flagship-files";
 /// The image the daemon's files helpers run in (volumeDump.ts FILES_HELPER_IMAGE).
 pub const FILES_HELPER_IMAGE: &str = "pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0";
@@ -2242,9 +2246,12 @@ pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<Pri
     let action = args.get("action").and_then(Value::as_str);
     if action == Some("restore") {
         return Ok(exec(
-            "/usr/bin/bash",
+            "/bin/sh",
             vec![
-                format!("{RELEASE_REPO}/installer/rollback-box-artifact.sh"),
+                "-c".into(),
+                RELEASE_LAUNCHER.into(),
+                "flagship-release".into(),
+                "restore".into(),
                 commit.to_owned(),
             ],
             20 * 60_000,
@@ -2267,7 +2274,10 @@ pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<Pri
     let manifest = format!("{staged}/{name}.manifest.json");
     let artifact = format!("{staged}/{name}.tar.gz");
     let mut argv = vec![
-        format!("{RELEASE_REPO}/installer/install-box-artifact.sh"),
+        "-c".into(),
+        RELEASE_LAUNCHER.into(),
+        "flagship-release".into(),
+        "install".into(),
         "--manifest".into(),
         manifest.clone(),
         "--artifact".into(),
@@ -2306,7 +2316,7 @@ pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<Pri
                 to: artifact,
             },
         ],
-        ..exec("/usr/bin/bash", argv, 30 * 60_000)
+        ..exec("/bin/sh", argv, 30 * 60_000)
     })
 }
 

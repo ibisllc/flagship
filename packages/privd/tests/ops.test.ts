@@ -20,6 +20,7 @@ import {
   dockerFileExec,
   hostExec,
   iptablesRestoreExec,
+  RELEASE_LAUNCHER,
   releaseExec,
   setupExec,
   systemctlExec,
@@ -187,10 +188,16 @@ describe("releases, wipes and root steps", () => {
       { from: `/var/tmp/.flagship-update-${"b".repeat(12)}/flagship-box-${"b".repeat(12)}-arm64.manifest.json`, to: `/var/lib/flagship-privd/release/flagship-box-${"b".repeat(12)}-arm64.manifest.json` },
       { from: `/var/tmp/.flagship-update-${"b".repeat(12)}/flagship-box-${"b".repeat(12)}-arm64.tar.gz`, to: `/var/lib/flagship-privd/release/flagship-box-${"b".repeat(12)}-arm64.tar.gz` },
     ]);
+    expect(e.file).toBe("/bin/sh");
+    expect(e.args.slice(0, 4)).toEqual(["-c", RELEASE_LAUNCHER, "flagship-release", "install"]);
+    // The running release's Rust updater first; the shell scripts for a release built without it.
+    expect(RELEASE_LAUNCHER).toContain('u=/opt/flagship/installer/rust/flagship-updater\nif [ -x "$u" ]; then exec "$u" "$@"; fi\n');
+    expect(RELEASE_LAUNCHER).toContain("install) exec /usr/bin/bash /opt/flagship/installer/install-box-artifact.sh");
+    expect(RELEASE_LAUNCHER).toContain("restore) exec /usr/bin/bash /opt/flagship/installer/rollback-box-artifact.sh");
     expect(e.args).toContain("--min-sequence");
     expect(e.args[e.args.indexOf("--artifact") + 1]).toMatch(/^\/var\/lib\/flagship-privd\//);
     expect(e.args[e.args.indexOf("--trust-keys") + 1]).toBe("a".repeat(64));
-    expect(releaseExec({ action: "restore", commit: "d".repeat(40) }, trust, "arm64").args).toEqual(["/opt/flagship/installer/rollback-box-artifact.sh", "d".repeat(40)]);
+    expect(releaseExec({ action: "restore", commit: "d".repeat(40) }, trust, "arm64").args).toEqual(["-c", RELEASE_LAUNCHER, "flagship-release", "restore", "d".repeat(40)]);
     refused(() => releaseExec({ action: "install", commit: "main", sha256: "c".repeat(64) }, trust, "arm64"));
     refused(() => releaseExec({ action: "install", commit: "b".repeat(40), sha256: "c".repeat(64), trustKeys: "evil" }, trust, "arm64"), /unknown field/);
     refused(() => releaseExec({ action: "restore", commit: `${"d".repeat(40)} --state /etc` }, trust, "arm64"));

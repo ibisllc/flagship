@@ -8269,9 +8269,12 @@
    "expect": {
     "ok": true,
     "exec": {
-     "file": "/usr/bin/bash",
+     "file": "/bin/sh",
      "args": [
-      "/opt/flagship/installer/install-box-artifact.sh",
+      "-c",
+      "u=/opt/flagship/installer/rust/flagship-updater\nif [ -x \"$u\" ]; then exec \"$u\" \"$@\"; fi\nc=$1; shift\ncase \"$c\" in\ninstall) exec /usr/bin/bash /opt/flagship/installer/install-box-artifact.sh \"$@\" ;;\nrestore) exec /usr/bin/bash /opt/flagship/installer/rollback-box-artifact.sh \"$@\" ;;\nesac\nexit 2\n",
+      "flagship-release",
+      "install",
       "--manifest",
       "/var/lib/flagship-privd/release/flagship-box-bbbbbbbbbbbb-arm64.manifest.json",
       "--artifact",
@@ -8331,9 +8334,12 @@
    "expect": {
     "ok": true,
     "exec": {
-     "file": "/usr/bin/bash",
+     "file": "/bin/sh",
      "args": [
-      "/opt/flagship/installer/install-box-artifact.sh",
+      "-c",
+      "u=/opt/flagship/installer/rust/flagship-updater\nif [ -x \"$u\" ]; then exec \"$u\" \"$@\"; fi\nc=$1; shift\ncase \"$c\" in\ninstall) exec /usr/bin/bash /opt/flagship/installer/install-box-artifact.sh \"$@\" ;;\nrestore) exec /usr/bin/bash /opt/flagship/installer/rollback-box-artifact.sh \"$@\" ;;\nesac\nexit 2\n",
+      "flagship-release",
+      "install",
       "--manifest",
       "/var/lib/flagship-privd/release/flagship-box-bbbbbbbbbbbb-amd64.manifest.json",
       "--artifact",
@@ -8395,9 +8401,12 @@
    "expect": {
     "ok": true,
     "exec": {
-     "file": "/usr/bin/bash",
+     "file": "/bin/sh",
      "args": [
-      "/opt/flagship/installer/install-box-artifact.sh",
+      "-c",
+      "u=/opt/flagship/installer/rust/flagship-updater\nif [ -x \"$u\" ]; then exec \"$u\" \"$@\"; fi\nc=$1; shift\ncase \"$c\" in\ninstall) exec /usr/bin/bash /opt/flagship/installer/install-box-artifact.sh \"$@\" ;;\nrestore) exec /usr/bin/bash /opt/flagship/installer/rollback-box-artifact.sh \"$@\" ;;\nesac\nexit 2\n",
+      "flagship-release",
+      "install",
       "--manifest",
       "/var/lib/flagship-privd/release/flagship-box-bbbbbbbbbbbb-amd64.manifest.json",
       "--artifact",
@@ -8443,9 +8452,12 @@
    "expect": {
     "ok": true,
     "exec": {
-     "file": "/usr/bin/bash",
+     "file": "/bin/sh",
      "args": [
-      "/opt/flagship/installer/rollback-box-artifact.sh",
+      "-c",
+      "u=/opt/flagship/installer/rust/flagship-updater\nif [ -x \"$u\" ]; then exec \"$u\" \"$@\"; fi\nc=$1; shift\ncase \"$c\" in\ninstall) exec /usr/bin/bash /opt/flagship/installer/install-box-artifact.sh \"$@\" ;;\nrestore) exec /usr/bin/bash /opt/flagship/installer/rollback-box-artifact.sh \"$@\" ;;\nesac\nexit 2\n",
+      "flagship-release",
+      "restore",
       "dddddddddddddddddddddddddddddddddddddddd"
      ],
      "timeoutMs": 1200000

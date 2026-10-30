@@ -857,6 +857,13 @@ fn installs_a_release_from_a_root_copy_with_the_releases_own_trust() {
         e.copy_in[1].to,
         format!("/var/lib/flagship-privd/release/flagship-box-{short}-arm64.tar.gz")
     );
+    assert_eq!(e.file, "/bin/sh");
+    assert_eq!(e.args[..4], v(&["-c", flagship_broker::policy::RELEASE_LAUNCHER, "flagship-release", "install"]));
+    // The launcher prefers the running release's Rust updater and falls back to the shell scripts.
+    let l = flagship_broker::policy::RELEASE_LAUNCHER;
+    assert!(l.starts_with("u=/opt/flagship/installer/rust/flagship-updater\nif [ -x \"$u\" ]; then exec \"$u\" \"$@\"; fi\n"));
+    assert!(l.contains("install) exec /usr/bin/bash /opt/flagship/installer/install-box-artifact.sh \"$@\" ;;"));
+    assert!(l.contains("restore) exec /usr/bin/bash /opt/flagship/installer/rollback-box-artifact.sh \"$@\" ;;"));
     assert!(e.args.iter().any(|a| a == "--min-sequence"));
     let at = |f: &str| e.args[e.args.iter().position(|a| a == f).unwrap() + 1].clone();
     assert!(at("--artifact").starts_with("/var/lib/flagship-privd/"));
@@ -891,7 +898,10 @@ fn installs_a_release_from_a_root_copy_with_the_releases_own_trust() {
         .unwrap()
         .args,
         v(&[
-            "/opt/flagship/installer/rollback-box-artifact.sh",
+            "-c",
+            flagship_broker::policy::RELEASE_LAUNCHER,
+            "flagship-release",
+            "restore",
             &"d".repeat(40)
         ])
     );
@@ -1063,7 +1073,7 @@ fn every_new_op_is_answered_over_the_socket() {
             "/usr/bin/podman",
             "/usr/bin/networkctl",
             "/usr/sbin/iptables-restore",
-            "/usr/bin/bash",
+            "/bin/sh",
             "/usr/bin/rm",
             "/usr/local/bin/node"
         ]

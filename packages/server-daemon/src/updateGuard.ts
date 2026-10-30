@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -21,6 +22,12 @@ import { writeFileDurable } from "./durableFile.js";
  * always exits 0 so a guard problem can never keep the daemon from starting.
  * The daemon installs (and refreshes) it at startup, like the health reporter.
  */
+/**
+ * The Rust updater (rust/crates/flagship-updater), copied here from the running release when its SHA-256 equals the one the
+ * release's signed PINS.json names, so the guard can roll a broken release back without that release's own files. The bash
+ * guard below hands over to it and is only the fallback for a box without it.
+ */
+export const UPDATER_PATH = "/usr/local/sbin/flagship-updater";
 export const UPDATE_GUARD_SCRIPT_PATH = "/usr/local/sbin/flagship-update-guard.sh";
 export const ROLLBACK_SCRIPT_PATH = "/usr/local/sbin/flagship-rollback-release.sh";
 export const UPDATE_GUARD_DROPIN_PATH =
@@ -57,6 +64,11 @@ marker='${args.dataDir}/update-pending.json'
 starts_file='${args.dataDir}/update-guard-starts'
 outcome='${args.dataDir}/update-outcome.json'
 log() { echo "[update-guard] $*"; }
+
+# The Rust updater does all of this (marker, start counting, rollback, outcome) and reconciles a cut-short switch.
+if [ -x ${UPDATER_PATH} ]; then
+  ${UPDATER_PATH} guard --state "$state" --max-starts ${max} && exit 0
+fi
 
 [ -f "$marker" ] || { rm -f "$starts_file"; exit 0; }
 sha='^[0-9a-f]{40}$'
@@ -131,6 +143,9 @@ export interface UpdateGuardInstallOptions {
   write?: (path: string, content: string, mode: number) => Promise<void>;
   /** Only real boxes (systemd present) get the guard. */
   hasSystemd?: () => boolean;
+  /** Bytes of a file, or null when it is not there (tests inject it). */
+  readBinary?: (path: string) => Promise<Uint8Array | null>;
+  writeBinary?: (path: string, bytes: Uint8Array, mode: number) => Promise<void>;
   onLog?: (m: string) => void;
 }
 
@@ -158,9 +173,43 @@ export async function installUpdateGuard(opts: UpdateGuardInstallOptions): Promi
       changed = true;
     }
   }
+  if (await installUpdater(opts)) changed = true;
   if (changed) {
     await opts.run("systemctl", ["daemon-reload"]);
     opts.onLog?.("[self-update] update guard installed");
   }
   return changed;
+}
+
+/**
+ * Puts the running release's Rust updater at UPDATER_PATH, only when its SHA-256 equals the pin in the release's
+ * PINS.json (a binary the signed artifact does not vouch for is never installed). True when it changed.
+ */
+async function installUpdater(opts: UpdateGuardInstallOptions): Promise<boolean> {
+  const readBinary = opts.readBinary ?? (async (p) => (await readFile(p).catch(() => null)) as Uint8Array | null);
+  const writeBinary =
+    opts.writeBinary ??
+    (async (p, b, mode) => {
+      await mkdir(dirname(p), { recursive: true });
+      await writeFileDurable(p, b, mode);
+    });
+  const src = await readBinary(join(opts.repoPath, "installer/rust/flagship-updater"));
+  const pinsText = await readBinary(join(opts.repoPath, "installer/rust/PINS.json"));
+  if (!src || !pinsText) return false;
+  let pinned: unknown;
+  try {
+    pinned = (JSON.parse(Buffer.from(pinsText).toString("utf8")) as { binaries?: Record<string, unknown> }).binaries?.["flagship-updater"];
+  } catch {
+    return false;
+  }
+  const sha = createHash("sha256").update(src).digest("hex");
+  if (typeof pinned !== "string" || pinned.toLowerCase() !== sha) {
+    opts.onLog?.("[self-update] the release's updater does not match its pin; not installed");
+    return false;
+  }
+  const have = await readBinary(UPDATER_PATH);
+  if (have && createHash("sha256").update(have).digest("hex") === sha) return false;
+  await writeBinary(UPDATER_PATH, src, 0o700);
+  opts.onLog?.("[self-update] the Rust updater installed");
+  return true;
 }

@@ -1121,6 +1121,21 @@ const COMMIT = /^[0-9a-f]{40}$/;
 export const RELEASE_REPO = "/opt/flagship";
 
 /**
+ * The release op runs the running release's Rust updater (installer/rust/flagship-updater, the same flags and exit
+ * codes as the shell installers) and falls back to the shell scripts for a release built without it. One fixed
+ * script, arguments after it; the Rust broker carries the same text byte for byte (shared vectors).
+ */
+export const RELEASE_LAUNCHER = `u=${RELEASE_REPO}/installer/rust/flagship-updater
+if [ -x "$u" ]; then exec "$u" "$@"; fi
+c=$1; shift
+case "$c" in
+install) exec /usr/bin/bash ${RELEASE_REPO}/installer/install-box-artifact.sh "$@" ;;
+restore) exec /usr/bin/bash ${RELEASE_REPO}/installer/rollback-box-artifact.sh "$@" ;;
+esac
+exit 2
+`;
+
+/**
  * Install a downloaded release (the installer checks its signatures, digest, sequence and Node floor
  * against the trust the RUNNING release pins, never anything the daemon says) or roll back to one already
  * on disk. The staging folder is derived from the commit; the daemon only downloads into it.
@@ -1138,7 +1153,7 @@ export interface ReleaseTrust {
 export function releaseExec(args: Record<string, unknown>, trust: ReleaseTrust, arch: string): Exec {
   noExtra(args, ["action", "commit", "sha256"]);
   if (typeof args.commit !== "string" || !COMMIT.test(args.commit)) throw new PrivdError("bad-request", "commit must be 40 hex");
-  if (args.action === "restore") return { file: "/usr/bin/bash", args: [`${RELEASE_REPO}/installer/rollback-box-artifact.sh`, args.commit], timeoutMs: 20 * 60_000 };
+  if (args.action === "restore") return { file: "/bin/sh", args: ["-c", RELEASE_LAUNCHER, "flagship-release", "restore", args.commit], timeoutMs: 20 * 60_000 };
   if (args.action !== "install") throw new PrivdError("bad-request", "action is install or restore");
   if (typeof args.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(args.sha256)) throw new PrivdError("bad-request", "sha256 must be 64 hex");
   if (arch !== "amd64" && arch !== "arm64") throw new PrivdError("failed", "unknown architecture");
@@ -1147,13 +1162,13 @@ export function releaseExec(args: Record<string, unknown>, trust: ReleaseTrust, 
   const name = `flagship-box-${short}-${arch}`;
   const staged = `${PRIVD_STATE_DIR}/release`;
   return {
-    file: "/usr/bin/bash",
+    file: "/bin/sh",
     copyIn: [
       { from: `${dir}/${name}.manifest.json`, to: `${staged}/${name}.manifest.json` },
       { from: `${dir}/${name}.tar.gz`, to: `${staged}/${name}.tar.gz` },
     ],
     args: [
-      `${RELEASE_REPO}/installer/install-box-artifact.sh`,
+      "-c", RELEASE_LAUNCHER, "flagship-release", "install",
       "--manifest", `${staged}/${name}.manifest.json`,
       "--artifact", `${staged}/${name}.tar.gz`,
       "--trust-keys", trust.keys.join(","),

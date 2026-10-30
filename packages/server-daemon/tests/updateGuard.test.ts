@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -9,6 +10,7 @@ import {
   UPDATE_GUARD_DROPIN,
   UPDATE_GUARD_DROPIN_PATH,
   UPDATE_GUARD_SCRIPT_PATH,
+  UPDATER_PATH,
   buildUpdateGuardScript,
   installUpdateGuard,
 } from "../src/updateGuard.js";
@@ -179,6 +181,60 @@ describe("rollback-box-artifact.sh", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("installUpdateGuard: the Rust updater", () => {
+  const sha = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
+  const BIN = new TextEncoder().encode("ELF updater");
+  const harness = (pin: string | null, present = true) => {
+    const bins = new Map<string, Uint8Array>();
+    if (present) {
+      bins.set("/opt/flagship/installer/rust/flagship-updater", BIN);
+      if (pin !== null) bins.set("/opt/flagship/installer/rust/PINS.json", new TextEncoder().encode(JSON.stringify({ binaries: { "flagship-updater": pin } })));
+    }
+    const text = new Map<string, string>();
+    const runs: string[] = [];
+    const logs: string[] = [];
+    return {
+      bins, text, runs, logs,
+      opts: {
+        repoPath: "/opt/flagship", dataDir: "/var/flagship", hasSystemd: () => true,
+        read: async (p: string) => text.get(p) ?? null,
+        write: async (p: string, c: string) => void text.set(p, c),
+        readBinary: async (p: string) => bins.get(p) ?? null,
+        writeBinary: async (p: string, b: Uint8Array) => void bins.set(p, b),
+        run: async (cmd: string, args: string[]) => void runs.push([cmd, ...args].join(" ")),
+        onLog: (m: string) => void logs.push(m),
+      },
+    };
+  };
+
+  it("installs the updater only when its hash is the one the release pins, and only once", async () => {
+    const h = harness(sha(BIN));
+    expect(await installUpdateGuard(h.opts)).toBe(true);
+    expect(h.bins.get(UPDATER_PATH)).toEqual(BIN);
+    expect(await installUpdateGuard(h.opts)).toBe(false);
+  });
+
+  it("refuses a binary the pins do not vouch for", async () => {
+    const h = harness("0".repeat(64));
+    await installUpdateGuard(h.opts);
+    expect(h.bins.has(UPDATER_PATH)).toBe(false);
+    expect(h.logs.join("\n")).toContain("does not match its pin");
+    const none = harness(null);
+    await installUpdateGuard(none.opts);
+    expect(none.bins.has(UPDATER_PATH)).toBe(false);
+    const absent = harness(sha(BIN), false);
+    await installUpdateGuard(absent.opts);
+    expect(absent.bins.has(UPDATER_PATH)).toBe(false);
+  });
+
+  it("the guard script hands over to the updater and keeps the bash path as the fallback", () => {
+    const text = buildUpdateGuardScript({ repoPath: "/opt/flagship", dataDir: "/var/flagship" });
+    expect(text).toContain(`if [ -x ${UPDATER_PATH} ]; then`);
+    expect(text).toContain(`${UPDATER_PATH} guard --state "$state" --max-starts 8 && exit 0`);
+    expect(text.indexOf(UPDATER_PATH)).toBeLessThan(text.indexOf("update-pending.json"));
   });
 });
 
