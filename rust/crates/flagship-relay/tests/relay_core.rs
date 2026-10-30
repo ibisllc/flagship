@@ -67,6 +67,7 @@ async fn start_with(c: RelayConfig, meter: Option<Arc<dyn Meter>>) -> RunningRel
             meter,
             outbound: None,
             mailboxes: None,
+            stats_secret: None,
         },
     )
     .unwrap()
@@ -93,6 +94,7 @@ async fn start_with_outbound(
             meter: None,
             outbound: Some(outbound),
             mailboxes: None,
+            stats_secret: None,
         },
     )
     .unwrap()
@@ -444,6 +446,7 @@ async fn production_mode_refuses_an_authority_without_signatures() {
             meter: None,
             outbound: None,
             mailboxes: None,
+            stats_secret: None,
         },
     )
     .err();
@@ -932,6 +935,7 @@ mod mailboxes_through_the_hub {
                 meter: None,
                 outbound: None,
                 mailboxes: Some(reg),
+                stats_secret: None,
             },
         )
         .unwrap()
@@ -1049,5 +1053,251 @@ mod mailboxes_through_the_hub {
                 .iter()
                 .any(|x| x == payload::CAPABILITY_PB_MAIL_V1)
         );
+    }
+}
+
+mod http_surface {
+    use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+    use flagship_relay::frame::FRAME_PB_MAIL_REQ;
+    use flagship_relay::mail::{MailAssembler, MailKind, mail_response_frames};
+    use flagship_relay::mailbox::{MailboxRegistry, canonical_announce, mailbox_epoch, mailbox_id};
+    use flagship_relay::payload::MailboxAnnouncement;
+
+    async fn start_http(reg: Option<Arc<MailboxRegistry>>, secret: Option<&str>) -> RunningRelay {
+        let l = Listeners {
+            sni: TcpListener::bind("127.0.0.1:0").await.unwrap(),
+            hub: small_buffer_listener(),
+            echo: None,
+        };
+        relay::start(
+            cfg(),
+            l,
+            Collaborators {
+                authority: Arc::new(UnverifiedDevAuthority),
+                blessing: None,
+                meter: None,
+                outbound: None,
+                mailboxes: reg,
+                stats_secret: secret.map(str::to_owned),
+            },
+        )
+        .unwrap()
+    }
+
+    /// One HTTP/1.1 request; returns the status and the body.
+    async fn http(
+        r: &RunningRelay,
+        method: &str,
+        path: &str,
+        headers: &[(&str, &str)],
+        body: &[u8],
+    ) -> (u16, Vec<u8>, String) {
+        let mut s = TcpStream::connect(r.hub_addr).await.unwrap();
+        let mut req = format!(
+            "{method} {path} HTTP/1.1\r\nhost: relay.test\r\nconnection: close\r\ncontent-length: {}\r\n",
+            body.len()
+        );
+        for (k, v) in headers {
+            req.push_str(&format!("{k}: {v}\r\n"));
+        }
+        req.push_str("\r\n");
+        s.write_all(req.as_bytes()).await.unwrap();
+        s.write_all(body).await.unwrap();
+        let mut raw = Vec::new();
+        tokio::time::timeout(T, s.read_to_end(&mut raw))
+            .await
+            .unwrap()
+            .unwrap();
+        let split = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+        let head = String::from_utf8_lossy(&raw[..split]).to_string();
+        let status: u16 = head.split_whitespace().nth(1).unwrap().parse().unwrap();
+        (status, raw[split + 4..].to_vec(), head)
+    }
+
+    #[tokio::test]
+    async fn health_answers_and_unknown_paths_are_404() {
+        let r = start_http(None, None).await;
+        let (s, body, head) = http(&r, "GET", "/api/health", &[], b"").await;
+        assert_eq!(s, 200);
+        assert!(head.to_lowercase().contains("application/json"));
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            (
+                v["ok"].as_bool(),
+                v["service"].as_str(),
+                v["runtime"].as_str()
+            ),
+            (Some(true), Some("flagship.services"), Some("rust"))
+        );
+        assert!(
+            v["now"].as_str().unwrap().ends_with('Z') && v["now"].as_str().unwrap().contains('T')
+        );
+        for (m, p) in [
+            ("GET", "/"),
+            ("GET", "/nope"),
+            ("POST", "/api/health"),
+            ("GET", "/pb/m/abc"),
+        ] {
+            assert_eq!(http(&r, m, p, &[], b"").await.0, 404, "{m} {p}");
+        }
+    }
+
+    #[tokio::test]
+    async fn stats_need_the_shared_secret_and_are_off_without_one() {
+        let r = start_http(None, Some("hunter2")).await;
+        assert_eq!(http(&r, "GET", "/api/stats", &[], b"").await.0, 403);
+        assert_eq!(
+            http(&r, "GET", "/api/stats", &[("x-usage-secret", "wrong")], b"")
+                .await
+                .0,
+            403
+        );
+        let (s, body, _) = http(
+            &r,
+            "GET",
+            "/api/stats",
+            &[("x-usage-secret", "hunter2")],
+            b"",
+        )
+        .await;
+        assert_eq!(s, 200);
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(v["router"]["routed"].is_u64() && v["tunnelsOnline"].is_u64());
+        let off = start_http(None, None).await;
+        assert_eq!(
+            http(&off, "GET", "/api/stats", &[("x-usage-secret", "x")], b"")
+                .await
+                .0,
+            503
+        );
+    }
+
+    #[tokio::test]
+    async fn the_tunnel_path_refuses_a_plain_request_and_a_websocket_still_works() {
+        let r = start_http(None, None).await;
+        assert_eq!(http(&r, "GET", "/tunnel", &[], b"").await.0, 400);
+        let mut b = TestBox::connect(&r, TypeSet::V1).await;
+        b.hello("home", "alice", &[], &[], now_ms());
+        assert!(b.ack().await.ok);
+    }
+
+    #[tokio::test]
+    async fn an_owner_posts_an_envelope_and_the_holders_reply_comes_back() {
+        let reg = Arc::new(MailboxRegistry::default());
+        let r = start_http(Some(reg.clone()), None).await;
+        let mut b = TestBox::connect(&r, TypeSet::V1).await;
+        b.hello("home", "alice", &[], &[], now_ms());
+        b.ack().await;
+        let k = SigningKey::from_bytes(&[7; 32]);
+        let pik = flagship_crypto::trust::hex(&k.verifying_key().to_bytes());
+        let epoch = mailbox_epoch(now_ms());
+        let sig = flagship_crypto::trust::hex(
+            &k.sign(canonical_announce(&pik, epoch).as_bytes())
+                .to_bytes(),
+        );
+        let id = mailbox_id(&pik, epoch);
+        b.send(
+            &payload::mailbox_announce_frame(&[MailboxAnnouncement {
+                pik_pub_hex: pik,
+                epoch: epoch as f64,
+                sig_hex: sig,
+            }])
+            .unwrap(),
+        );
+        for _ in 0..200 {
+            if reg.has(&id) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // refusals first
+        let octet = [("content-type", "application/octet-stream")];
+        assert_eq!(http(&r, "POST", "/pb/m/NOT-HEX", &octet, b"x").await.0, 400);
+        assert_eq!(
+            http(&r, "POST", &format!("/pb/m/{id}"), &[], b"x").await.0,
+            400,
+            "needs application/octet-stream"
+        );
+        assert_eq!(
+            http(&r, "POST", &format!("/pb/m/{id}"), &octet, b"")
+                .await
+                .0,
+            400,
+            "an empty body"
+        );
+        assert_eq!(
+            http(
+                &r,
+                "POST",
+                &format!("/pb/m/{}", "0".repeat(32)),
+                &octet,
+                b"x"
+            )
+            .await
+            .0,
+            404,
+            "nobody holds it"
+        );
+
+        let path = format!("/pb/m/{id}");
+        let post = tokio::spawn({
+            let addr = r.hub_addr;
+            async move {
+                let mut s = TcpStream::connect(addr).await.unwrap();
+                let req = format!(
+                    "POST {path} HTTP/1.1\r\nhost: x\r\nconnection: close\r\ncontent-type: application/octet-stream\r\ncontent-length: 6\r\n\r\nsealed"
+                );
+                s.write_all(req.as_bytes()).await.unwrap();
+                let mut raw = Vec::new();
+                s.read_to_end(&mut raw).await.unwrap();
+                raw
+            }
+        });
+        let mut asm = MailAssembler::new(MailKind::Req);
+        let (stream, body) = loop {
+            let f = b.next_of(FRAME_PB_MAIL_REQ).await;
+            if let Some(body) = asm.push(&f.payload).unwrap() {
+                break (f.stream_id, body);
+            }
+        };
+        assert_eq!(body, b"sealed");
+        for f in mail_response_frames(stream, 200, b"reply") {
+            b.send(&f);
+        }
+        let raw = String::from_utf8_lossy(&post.await.unwrap()).to_string();
+        assert!(raw.starts_with("HTTP/1.1 200"), "{raw}");
+        assert!(
+            raw.to_lowercase().contains("cache-control: no-store") && raw.ends_with("reply"),
+            "{raw}"
+        );
+
+        // a holder that answers with an error status is a bad gateway
+        let post = tokio::spawn({
+            let addr = r.hub_addr;
+            let path = format!("/pb/m/{id}");
+            async move {
+                let mut s = TcpStream::connect(addr).await.unwrap();
+                let req = format!(
+                    "POST {path} HTTP/1.1\r\nhost: x\r\nconnection: close\r\ncontent-type: application/octet-stream\r\ncontent-length: 1\r\n\r\nx"
+                );
+                s.write_all(req.as_bytes()).await.unwrap();
+                let mut raw = Vec::new();
+                s.read_to_end(&mut raw).await.unwrap();
+                String::from_utf8_lossy(&raw).to_string()
+            }
+        });
+        let mut asm = MailAssembler::new(MailKind::Req);
+        let stream = loop {
+            let f = b.next_of(FRAME_PB_MAIL_REQ).await;
+            if asm.push(&f.payload).unwrap().is_some() {
+                break f.stream_id;
+            }
+        };
+        for f in mail_response_frames(stream, 500, b"") {
+            b.send(&f);
+        }
+        assert!(post.await.unwrap().starts_with("HTTP/1.1 502"));
     }
 }

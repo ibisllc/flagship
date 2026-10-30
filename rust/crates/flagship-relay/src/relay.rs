@@ -7,12 +7,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::sync::{Semaphore, watch};
 use tokio::task::JoinHandle;
-use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
-use tokio_tungstenite::tungstenite::http::StatusCode;
-use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 use crate::hello::HelloAuthority;
 use crate::hub::{self, BlessingSource, HubConfig, HubContext, SharedRegistry};
@@ -106,6 +103,8 @@ pub struct Collaborators {
     pub outbound: Option<Arc<crate::outbound::OutboundRelay>>,
     /// Peer-backup mailboxes; `None` leaves `pb-mail-v1` unadvertised.
     pub mailboxes: Option<Arc<crate::mailbox::MailboxRegistry>>,
+    /// `x-usage-secret` for `GET /api/stats`; `None` turns the route off.
+    pub stats_secret: Option<String>,
 }
 
 impl std::fmt::Debug for Collaborators {
@@ -132,17 +131,24 @@ pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<Running
         blessing: c.blessing,
         meter: c.meter.clone(),
         outbound: c.outbound,
-        mailboxes: c.mailboxes,
+        mailboxes: c.mailboxes.clone(),
         live: Arc::new(Mutex::new(HashMap::new())),
         draining: Arc::new(AtomicBool::new(false)),
     };
     let router = Router::new(router_cfg, registry.clone(), c.meter);
+    let app = crate::http::HttpApp::new(
+        ctx.clone(),
+        Arc::new(router.clone()),
+        c.mailboxes,
+        c.stats_secret,
+        cfg.ws_handshake_timeout,
+    );
     let (stop_accept, stop_rx) = watch::channel(false);
     let mut tasks = Vec::new();
     tasks.push(tokio::spawn(router.clone().run(l.sni, stop_rx.clone())));
     tasks.push(tokio::spawn(run_hub(
         l.hub,
-        ctx.clone(),
+        app,
         cfg.clone(),
         stop_rx.clone(),
     )));
@@ -167,7 +173,7 @@ pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<Running
 
 async fn run_hub(
     listener: TcpListener,
-    ctx: HubContext,
+    app: Arc<crate::http::HttpApp>,
     cfg: RelayConfig,
     mut stop: watch::Receiver<bool>,
 ) {
@@ -181,43 +187,13 @@ async fn run_hub(
                     drop(sock);
                     continue;
                 };
-                let ctx = ctx.clone();
-                let timeout = cfg.ws_handshake_timeout;
+                let app = app.clone();
                 tokio::spawn(async move {
-                    accept_tunnel(sock, ctx, timeout).await;
+                    crate::http::serve_connection(sock, app).await;
                     drop(permit);
                 });
             }
         }
-    }
-}
-
-async fn accept_tunnel(sock: TcpStream, ctx: HubContext, timeout: Duration) {
-    if ctx.draining.load(Ordering::Acquire) {
-        return;
-    }
-    let _ = sock.set_nodelay(true);
-    let ws_cfg = WebSocketConfig::default()
-        .max_message_size(Some(ctx.cfg.max_ws_message))
-        .max_frame_size(Some(ctx.cfg.max_ws_message));
-    // The error type is fixed by tungstenite's handshake `Callback` trait.
-    #[allow(clippy::result_large_err)]
-    let check = |req: &Request, resp: Response| -> Result<Response, ErrorResponse> {
-        if req.uri().path() == TUNNEL_PATH {
-            Ok(resp)
-        } else {
-            let mut e = ErrorResponse::new(None);
-            *e.status_mut() = StatusCode::NOT_FOUND;
-            Err(e)
-        }
-    };
-    let accepted = tokio::time::timeout(
-        timeout,
-        tokio_tungstenite::accept_hdr_async_with_config(sock, check, Some(ws_cfg)),
-    )
-    .await;
-    if let Ok(Ok(ws)) = accepted {
-        hub::run_tunnel(ws, ctx).await;
     }
 }
 

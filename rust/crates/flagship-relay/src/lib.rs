@@ -11,6 +11,7 @@ pub mod echo;
 pub mod flow;
 pub mod frame;
 pub mod hello;
+pub mod http;
 pub mod hub;
 pub mod json;
 pub mod mail;
