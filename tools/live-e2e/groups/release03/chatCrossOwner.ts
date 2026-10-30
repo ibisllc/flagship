@@ -5,7 +5,7 @@
 // Frames go to the receiving app's canonical name, so both accounts need gossip (lib/cgk.ts).
 import { bytesToHex } from "@noble/hashes/utils";
 import { ed, signChatApproval, type ChatApprovalDecision, type ChatApprovalKind } from "@flagship/protocol";
-import { depositCgk, relayTerminatesBroadcast, waitGossiping } from "../../lib/cgk.js";
+import { depositCgk, waitGossiping } from "../../lib/cgk.js";
 import { pair, type Account, type Box } from "../../lib/fleet.js";
 import { assert, http, postJson, short, tryHttp } from "../../lib/harness.js";
 import { buildAndDeploy, finishAndWaitLive, mcpOpen } from "../../lib/mcpBuild.js";
@@ -160,17 +160,6 @@ export const chatCrossOwner: Group = {
       assert(!(onA.json?.requests ?? []).some((x: ChatReq) => x.kind === "incoming"), "A already has an incoming request");
       return "held as outgoing on B";
     });
-    // A frame to another account's app travels to that app's canonical name, which a box learns through the account's gossip:
-    // without a relay that terminates `broadcast--<user>`, no box knows who holds it, so nothing past the local hold is provable.
-    if (!(await relayTerminatesBroadcast(A.username)) || !(await relayTerminatesBroadcast(B.username))) {
-      for (const n of [
-        "B's admin allows it (signed); A's admin sees the incoming request naming B's app as a claim",
-        "A's admin answers Always allow (signed); the message arrives at A's app",
-        "A's reply comes back to B's app",
-        "Always allow lets B's app start again without a prompt, and covers only that sender",
-      ]) rec.skip(n, "the relay does not terminate the accounts' gossip names (broadcast--<user>), so a frame cannot reach the other account's app: not provable until the relay serves it");
-      return;
-    }
     await rec.check("B's admin allows it (signed); A's admin sees the incoming request naming B's app as a claim", async () => {
       const out = await waitRequest(bb, sb, "outgoing");
       const r = await answer(B, bb, sb, out.requestId, "outgoing", "allow");

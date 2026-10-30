@@ -203,8 +203,10 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     fqdnForService,
   });
 
-  const broadcastUrl =
-    deps.broadcastUrl ?? `https://broadcast--${deps.user.toLowerCase()}.${apex}`;
+  // Siblings are reached on their own names (direct, no hub in the middle); an explicit broadcast URL still wins for a
+  // test or an older relay.
+  const broadcastUrl = deps.broadcastUrl;
+  const peerUrl = (domain: string): string => `https://${domain}/internal/gossip`;
 
   const readSelf = (): SelfAnnounceState => ({
     user: deps.user,
@@ -224,7 +226,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     readSelf,
     rankOf,
     ...(deps.extraSiblings ? { extraSiblings: deps.extraSiblings } : {}),
-    broadcastUrl,
+    ...(broadcastUrl ? { broadcastUrl } : { peerUrl }),
     intervalMs: deps.intervalMs ?? ANNOUNCE_INTERVAL_MS,
     livenessWindowMs: deps.livenessWindowMs ?? LIVENESS_WINDOW_MS,
     ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),

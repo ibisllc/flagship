@@ -79,8 +79,13 @@ export interface GossipLoopDeps {
    * the domain, the same on every box.
    */
   extraSiblings?: () => ViewMember[];
-  /** Broadcast endpoint, e.g. https://broadcast--harry.flagship.services . */
-  broadcastUrl: string;
+  /**
+   * Where a sibling listens: `https://<server>.<user>.<apex>/internal/gossip` (a box answers on its own name; the
+   * sealed frame authenticates itself). Boxes talk to each other directly, so nothing in the middle sees the traffic.
+   */
+  peerUrl?: (domain: string) => string;
+  /** A hub that fans one POST out to every sibling (the relay's broadcast name); not used when `peerUrl` is set. */
+  broadcastUrl?: string;
   intervalMs?: number;
   livenessWindowMs?: number;
   fetchImpl?: typeof fetch;
@@ -147,6 +152,30 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
       JSON.stringify({ announcement: a, mac, ...(s.order ? { serverOrder: s.order } : {}) }),
     );
     const sealed = crypto.seal(plaintext);
+    const targets = new Set<string>();
+    if (deps.peerUrl) {
+      const self = s.name.toLowerCase();
+      for (const m of siblings(now())) if (m.domain.toLowerCase() !== self) targets.add(m.domain.toLowerCase());
+    }
+    if (deps.peerUrl && targets.size > 0) {
+      // Every sibling, directly, in parallel: one that is down just misses this round.
+      await Promise.allSettled(
+        [...targets].map(async (domain) => {
+          try {
+            await fetchImpl(deps.peerUrl!(domain), {
+              method: "POST",
+              headers: { "content-type": "application/octet-stream" },
+              body: sealed,
+              signal: AbortSignal.timeout(8_000),
+            });
+          } catch (e) {
+            log(`[gossip] ${domain} did not take the frame: ${(e as Error).message}; retry next tick`);
+          }
+        }),
+      );
+      return;
+    }
+    if (!deps.broadcastUrl) return;
     try {
       await fetchImpl(deps.broadcastUrl, {
         method: "POST",
@@ -218,7 +247,7 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
       if (typeof timer === "object" && timer && "unref" in timer) {
         (timer as { unref?: () => void }).unref?.();
       }
-      log(`[gossip] loop started (announce every ${intervalMs}ms → ${deps.broadcastUrl})`);
+      log(`[gossip] loop started (announce every ${intervalMs}ms → ${deps.peerUrl ? "each sibling directly" : deps.broadcastUrl})`);
     },
     stop() {
       if (timer) {

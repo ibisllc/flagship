@@ -525,6 +525,31 @@ describe("gossip loop convergence", () => {
   });
 });
 
+describe("a box gossips to each sibling directly (nothing in the middle)", () => {
+  it("posts the one sealed frame to every sibling's own name, never to itself or a hub", async () => {
+    const posts: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      posts.push(url);
+      return { ok: true, status: 204, text: async () => "" } as Response;
+    }) as unknown as typeof fetch;
+    const loop = buildGossipLoop({
+      cgk: CGK,
+      view: new SiblingView(),
+      claimer: new MockClaimer(),
+      peerUrl: (d) => `https://${d}/internal/gossip`,
+      extraSiblings: () => [
+        { id: "b.harry.flagship.services", domain: "b.harry.flagship.services", stkHex: "cc".repeat(32), birthDate: 0, orderRank: 1, liveness: "live", services: [] },
+        { id: "self.harry.flagship.services", domain: "self.harry.flagship.services", stkHex: "bb".repeat(32), birthDate: 0, orderRank: 0, liveness: "live", services: [] },
+        { id: "c.harry.flagship.services", domain: "c.harry.flagship.services", stkHex: "dd".repeat(32), birthDate: 0, orderRank: 2, liveness: "live", services: [] },
+      ],
+      fetchImpl,
+      readSelf: () => ({ user: USER, name: "self.harry.flagship.services", birthAuthHex: "bb".repeat(32), birthDate: 500, order: null, services: [] }),
+    });
+    await loop.tick();
+    expect(posts.sort()).toEqual(["https://b.harry.flagship.services/internal/gossip", "https://c.harry.flagship.services/internal/gossip"]);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // 7. CGK provisioning (env path) + disabled-when-absent.
 // ─────────────────────────────────────────────────────────────────────────
