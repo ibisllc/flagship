@@ -20,7 +20,9 @@ services:
       flagship-browser:
         ipv4_address: 172.31.250.2
     tmpfs:
-      - /home/flagship/profile:size=512m,mode=0700,uid=1000
+      # Podman refuses uid= on a tmpfs: the profile is writable by the browser's user (uid 1000) through the mode instead.
+      # Only this container mounts it, and Chromium keeps its own files 0700 inside.
+      - /home/flagship/profile:size=512m,mode=1777
     command:
       - --proxy-server=http://172.31.250.1:18480
       - --proxy-bypass-list=<-loopback>
