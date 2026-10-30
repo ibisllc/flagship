@@ -293,8 +293,9 @@ export const localAi: Group = {
     await post("/service/stop", {}).catch(() => null);
     await rec.check("the owner deletes the model", async () => {
       const r = await post("/models/delete", { modelId: "stories-260k" });
-      assert(r.status === 200, `${r.status}: ${short(r.text)}`);
-      return "deleted";
+      // The harness sends a slow call again; if the box finished the first one, the second finds nothing to delete: gone is gone.
+      assert(r.status === 200 || (r.status === 404 && /isn't on this server/.test(r.text)), `${r.status}: ${short(r.text)}`);
+      return r.status === 200 ? "deleted" : "already gone";
     });
   },
 };

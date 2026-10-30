@@ -40,7 +40,7 @@ export const oneList: Group = {
   name: "one-list",
   title: "one access list per app across home + home2: follower orders reach the leader, joins and withdraws everywhere, catch-up after a restart, leader hand-over",
   needs: ["A1", "A2"],
-  phase: 8,
+  phase: 12,
   async run({ A, rec, box, dir }) {
     const b1 = box("A1");
     const b2 = box("A2");

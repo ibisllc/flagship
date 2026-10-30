@@ -28,7 +28,9 @@ export interface HttpInit {
 /**
  * One request. A connection that fails before any response (the hub tunnel
  * blipping, a box busy building) is retried twice, 5 s apart; the final error
- * names the cause. A request that got a response is never retried.
+ * names the cause. A request that got a response is never retried, and neither is a write that may have
+ * reached the box (a timeout or a reset after the request left): the box may have done it, and doing it twice
+ * ("You already have a service called …") fails a run for the harness's own doing.
  */
 export async function http(url: string, init: HttpInit = {}, timeoutMs = 45_000): Promise<Resp> {
   for (let attempt = 1; ; attempt++) {
@@ -37,7 +39,10 @@ export async function http(url: string, init: HttpInit = {}, timeoutMs = 45_000)
     } catch (e) {
       const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
       const why = cause?.code ?? cause?.message ?? (e instanceof Error ? e.message : String(e));
-      if (attempt >= 3) throw new Error(`fetch failed (${why}) after ${attempt} attempts: ${url}`);
+      const method = String(init.method ?? "GET").toUpperCase();
+      const neverSent = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"].includes(String(cause?.code ?? ""));
+      const retryable = method === "GET" || method === "HEAD" || neverSent;
+      if (attempt >= 3 || !retryable) throw new Error(`fetch failed (${why}) after ${attempt} attempt${attempt === 1 ? "" : "s"}: ${url}`);
       await sleep(5000);
     }
   }
