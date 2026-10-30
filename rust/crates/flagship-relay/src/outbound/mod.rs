@@ -2,6 +2,7 @@
 //! budgets and the session that dials, splices under the credit window and keeps only totals.
 
 pub mod budget;
+pub mod com_policy;
 pub mod policy;
 pub mod session;
 
