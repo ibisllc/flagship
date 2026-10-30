@@ -168,9 +168,10 @@ fn hello(
 
 async fn run(w: &World, b: &Built) -> Result<Vec<usize>, (String, u16)> {
     let parsed = parse_hello(b.json.to_string().as_bytes()).unwrap();
+    let revoked = w.dir.revoked.lock().unwrap().clone();
     DirectoryAuthority::new(Dir {
         account: w.dir.account.clone(),
-        revoked: Mutex::new(w.dir.revoked.lock().unwrap().clone()),
+        revoked: Mutex::new(revoked),
         stk: w.dir.stk.clone(),
         retired: w.dir.retired,
     })
