@@ -30,6 +30,7 @@ pub mod manifest;
 pub mod recover;
 pub mod refusal;
 pub mod release;
+pub mod runtime;
 pub mod verify;
 
 pub use refusal::Refusal;

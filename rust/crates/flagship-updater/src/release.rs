@@ -121,6 +121,39 @@ const REQUIRED: [&str; 5] = [
 
 const TSX_WRAPPER: &str = "#!/bin/sh\n# Run a TypeScript file with the box's own Node and tsx. No npm, no npx, no network.\nexec /opt/flagship/.runtime/node/bin/node /opt/flagship/node_modules/tsx/dist/cli.mjs \"$@\"\n";
 
+/// The Node bytes inside the artifact must be the official bytes its own (signed) runtime lock names: a builder
+/// cannot substitute another binary and still pass. An artifact without a lock predates the check.
+fn check_bundled_runtime(staging: &Path, arch: &str) -> Result<(), Failure> {
+    let Some(text) = read_regular(&staging.join("app/release/runtime-lock.json")) else {
+        return Ok(());
+    };
+    let lock = crate::runtime::Lock::parse(&text).map_err(|r| Failure {
+        exit: 3,
+        refusal: r,
+    })?;
+    let target = lock.target(&format!("linux-{arch}")).map_err(|r| Failure {
+        exit: 3,
+        refusal: r,
+    })?;
+    let exe = staging.join("app/.runtime/node/bin/node");
+    let meta = fs::metadata(&exe).map_err(|e| io_failed("read the bundled node", &e))?;
+    if meta.len() != target.executable_bytes {
+        return Err(tree_failed(
+            "runtime-mismatch",
+            "the bundled Node's size differs from the release's runtime lock",
+        ));
+    }
+    let digest =
+        crate::verify::sha256_file(&exe).map_err(|e| io_failed("hash the bundled node", &e))?;
+    if digest != target.executable_sha256 {
+        return Err(tree_failed(
+            "runtime-mismatch",
+            "the bundled Node is not the official binary the release's runtime lock names",
+        ));
+    }
+    Ok(())
+}
+
 fn read_sequence(paths: &Paths) -> Option<u64> {
     own_file(&paths.state.join("artifact-sequence"))?
         .trim()
@@ -293,6 +326,7 @@ fn stage_and_switch(
         refusal: r,
     })?;
     check_tree(staging, v)?;
+    check_bundled_runtime(staging, &v.arch)?;
     if dest.exists() {
         let same = same_tree(&staging.join("app"), &dest.join("app")).unwrap_or(false);
         if !same {

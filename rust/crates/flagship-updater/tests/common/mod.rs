@@ -255,6 +255,8 @@ pub struct Spec {
     pub build_info_commit: Option<String>,
     /// Leave this path out of the tree.
     pub omit: Option<&'static str>,
+    /// Ship a runtime lock in the tree: Some(true) names the bundled node's real digest, Some(false) another.
+    pub runtime_lock: Option<bool>,
 }
 
 impl Spec {
@@ -270,6 +272,7 @@ impl Spec {
             tamper: false,
             build_info_commit: None,
             omit: None,
+            runtime_lock: None,
         }
     }
 }
@@ -284,6 +287,25 @@ pub fn build(spec: &Spec) -> Built {
     let mut entries = release_entries(&info_commit, "amd64", spec.node_body);
     if let Some(omit) = spec.omit {
         entries.retain(|e| !matches!(e, Entry::File(n, _, _) if *n == omit));
+    }
+    if let Some(honest) = spec.runtime_lock {
+        let digest = if honest {
+            sha256_hex(spec.node_body)
+        } else {
+            "0".repeat(64)
+        };
+        let lock = serde_json::json!({
+            "schema": 1, "runtime": "node", "version": "24.22.1", "securityFloor": "24.22.1",
+            "upstream": {"base": "https://nodejs.org/dist/v24.22.1/", "shasums": "SHASUMS256.txt", "shasumsSignature": "SHASUMS256.txt.sig", "allowedHosts": ["nodejs.org"]},
+            "keyring": {"signers": [{"fingerprint": "0".repeat(40), "armored": "x"}]},
+            "targets": {"linux-amd64": {"file": "node-v24.22.1-linux-x64.tar.gz", "bytes": 1, "sha256": "1".repeat(64), "executable": "bin/node", "executableBytes": spec.node_body.len(), "executableSha256": digest}}
+        });
+        entries.push(Entry::Dir("flagship-box/app/release/"));
+        entries.push(Entry::File(
+            "flagship-box/app/release/runtime-lock.json",
+            lock.to_string().into_bytes(),
+            0o644,
+        ));
     }
     let artifact_bytes = tar_gz(&entries);
     let sha = sha256_hex(&artifact_bytes);

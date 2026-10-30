@@ -174,6 +174,23 @@ fn a_correctly_signed_tree_that_is_not_what_it_claims_is_refused() {
 }
 
 #[test]
+fn the_bundled_node_must_be_the_official_binary_the_releases_runtime_lock_names() {
+    let t = Tmp::new("inst");
+    let paths = temp_paths(&t);
+    let mut honest = Spec::new('a', 5);
+    honest.runtime_lock = Some(true);
+    install(&install_args(&build(&honest), &paths)).unwrap();
+    let t2 = Tmp::new("inst");
+    let paths2 = temp_paths(&t2);
+    let mut swapped = Spec::new('b', 6);
+    swapped.runtime_lock = Some(false);
+    let b = build(&swapped);
+    let f = install(&install_args(&b, &paths2)).unwrap_err();
+    assert_eq!((f.exit, f.refusal.code), (3, "runtime-mismatch"));
+    assert!(!paths2.current.exists() && !paths2.releases.join(&b.commit).exists());
+}
+
+#[test]
 fn restore_flips_back_and_never_lowers_the_sequence() {
     let t = Tmp::new("inst");
     let paths = temp_paths(&t);

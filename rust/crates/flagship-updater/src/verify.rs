@@ -3,7 +3,7 @@
 //! refusal codes. Nothing from the artifact judges itself: the manifest is checked against trust
 //! that came from the running release and a recipe, never from the artifact.
 
-use crate::manifest::{ManifestFile, PqBindingWire, is_hex};
+use crate::manifest::{ManifestFile, PqBindingWire, SignatureEntry, is_hex};
 use crate::refusal::Refusal;
 use flagship_crypto::key_id;
 use flagship_crypto::trust::{
@@ -58,7 +58,7 @@ pub struct Verified {
     pub signers: usize,
 }
 
-fn lower(s: &str) -> String {
+pub(crate) fn lower(s: &str) -> String {
     s.to_ascii_lowercase()
 }
 
@@ -91,7 +91,7 @@ pub fn sha256_file(path: &Path) -> std::io::Result<String> {
     Ok(encode_lower_hex(&h.finalize()))
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     encode_lower_hex(&Sha256::digest(bytes))
 }
 
@@ -103,7 +103,7 @@ fn semver_tuple(v: &str) -> Option<(u64, u64, u64)> {
     it.next().is_none().then_some((a, b, c))
 }
 
-fn trust_set(trust: &Trust) -> Result<HashSet<String>, Refusal> {
+pub(crate) fn trust_set(trust: &Trust) -> Result<HashSet<String>, Refusal> {
     if trust.threshold < 1 {
         return Err(Refusal::with("bad-trust", "threshold"));
     }
@@ -131,7 +131,7 @@ fn binding_key_id(ed: &str, ml: &str) -> Option<String> {
 }
 
 /// The `release-key` bindings in the manifest whose key id the pin names and that verify.
-fn bound_keys(
+pub(crate) fn bound_keys(
     wires: &[PqBindingWire],
     pinned: &HashSet<String>,
     now_ms: u64,
@@ -178,6 +178,97 @@ fn bound_keys(
     out
 }
 
+/// What a set of signatures covers and the trust they are counted against.
+#[derive(Debug)]
+pub struct Signed<'a> {
+    pub canonical: &'a str,
+    /// The classical purpose tag (also the canonical string's first field).
+    pub tag_v1: &'a str,
+    /// The tag of the hybrid companion statement `<tag_v2>|<v1 digest>|<signer>|<key id>`.
+    pub tag_v2: &'a str,
+    pub signatures: &'a [SignatureEntry],
+    pub authorised: &'a HashSet<String>,
+    pub threshold: u64,
+    pub need_pq: bool,
+    pub bound: &'a HashMap<String, (String, VerifiedBinding)>,
+    pub v1_digest: &'a str,
+}
+
+/// Counts distinct authorised signers whose Ed25519 signature (and, when `need_pq`, hybrid companion) verifies, and
+/// refuses unless at least `threshold` do. Shared by the artifact manifest and the runtime manifest.
+///
+/// # Errors
+/// `pq-signature-required` or `not-enough-signatures`.
+pub fn count_signatures(s: &Signed<'_>) -> Result<HashSet<String>, Refusal> {
+    let mut signed: HashSet<String> = HashSet::new();
+    let mut classical_only = 0usize;
+    for sig in s.signatures {
+        let key = lower(&sig.key_hex);
+        if !s.authorised.contains(&key) || signed.contains(&key) || !is_hex(&sig.signature_hex, 128)
+        {
+            continue;
+        }
+        let ed_ok = verify_critical_signature(
+            s.canonical.as_bytes(),
+            s.tag_v1,
+            Envelope {
+                suite: SUITE_ED,
+                signature_hex: &sig.signature_hex,
+            },
+            &key,
+            None,
+            &legacy_policy(),
+        )
+        .is_ok();
+        if !ed_ok {
+            continue;
+        }
+        if s.need_pq {
+            let companion_ok = match (&sig.pq, s.bound.get(&key)) {
+                (Some(pq), Some((id, binding))) if pq.key_id == *id => {
+                    let statement = format!("{}|{}|{key}|{id}", s.tag_v2, s.v1_digest);
+                    verify_critical_signature(
+                        statement.as_bytes(),
+                        s.tag_v2,
+                        Envelope {
+                            suite: SUITE_HYBRID,
+                            signature_hex: &pq.signature_hex,
+                        },
+                        &key,
+                        Some(binding),
+                        &pq_policy(),
+                    )
+                    .is_ok()
+                }
+                _ => false,
+            };
+            if !companion_ok {
+                classical_only = classical_only.saturating_add(1);
+                continue;
+            }
+        }
+        signed.insert(key);
+    }
+    let threshold = usize::try_from(s.threshold).unwrap_or(usize::MAX);
+    if signed.len() < threshold {
+        if s.need_pq && signed.len().saturating_add(classical_only) >= threshold {
+            return Err(Refusal::with(
+                "pq-signature-required",
+                format!(
+                    "{} of {} with their PQ signature",
+                    signed.len(),
+                    s.threshold
+                ),
+            ));
+        }
+        return Err(Refusal::with(
+            "not-enough-signatures",
+            format!("{} of {}", signed.len(), s.threshold),
+        ));
+    }
+    Ok(signed)
+}
+
 /// Verifies `file` against `artifact` and the pinned trust.
 ///
 /// # Errors
@@ -208,71 +299,17 @@ pub fn verify(
         HashMap::new()
     };
 
-    let mut signed: HashSet<String> = HashSet::new();
-    let mut classical_only = 0usize;
-    for s in &file.signatures {
-        let key = lower(&s.key_hex);
-        if !authorised.contains(&key) || signed.contains(&key) || !is_hex(&s.signature_hex, 128) {
-            continue;
-        }
-        let ed_ok = verify_critical_signature(
-            canonical.as_bytes(),
-            TAG_V1,
-            Envelope {
-                suite: SUITE_ED,
-                signature_hex: &s.signature_hex,
-            },
-            &key,
-            None,
-            &legacy_policy(),
-        )
-        .is_ok();
-        if !ed_ok {
-            continue;
-        }
-        if need_pq {
-            let companion_ok = match (&s.pq, bound.get(&key)) {
-                (Some(pq), Some((id, binding))) if pq.key_id == *id => {
-                    let statement = format!("{TAG_V2}|{v1_digest}|{key}|{id}");
-                    verify_critical_signature(
-                        statement.as_bytes(),
-                        TAG_V2,
-                        Envelope {
-                            suite: SUITE_HYBRID,
-                            signature_hex: &pq.signature_hex,
-                        },
-                        &key,
-                        Some(binding),
-                        &pq_policy(),
-                    )
-                    .is_ok()
-                }
-                _ => false,
-            };
-            if !companion_ok {
-                classical_only = classical_only.saturating_add(1);
-                continue;
-            }
-        }
-        signed.insert(key);
-    }
-    let threshold = usize::try_from(trust.threshold).unwrap_or(usize::MAX);
-    if signed.len() < threshold {
-        if need_pq && signed.len().saturating_add(classical_only) >= threshold {
-            return Err(Refusal::with(
-                "pq-signature-required",
-                format!(
-                    "{} of {} with their PQ signature",
-                    signed.len(),
-                    trust.threshold
-                ),
-            ));
-        }
-        return Err(Refusal::with(
-            "not-enough-signatures",
-            format!("{} of {}", signed.len(), trust.threshold),
-        ));
-    }
+    let signed = count_signatures(&Signed {
+        canonical: &canonical,
+        tag_v1: TAG_V1,
+        tag_v2: TAG_V2,
+        signatures: &file.signatures,
+        authorised: &authorised,
+        threshold: trust.threshold,
+        need_pq,
+        bound: &bound,
+        v1_digest: &v1_digest,
+    })?;
 
     if !expect.sha256.eq_ignore_ascii_case(&m.artifact_sha256) {
         return Err(Refusal::with("digest-mismatch", "recipe"));

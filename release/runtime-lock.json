@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "about": "The exact Node.js runtime a box runs, locked. The updater downloads the archive from the official upstream URL, checks the upstream's PGP-signed SHASUMS256.txt with the signer key below (carried in this signed lock and bound by its fingerprint; a key that arrives with the download is never trusted), and requires the archive, that signed list and this lock to agree byte for byte before anything is unpacked. This file is bound into the endorsed release by the signed artifact and published, signed, at flagshipserver.com/runtime. Raise it only from a verified upstream release; never lower it.",
+  "runtime": "node",
+  "version": "24.22.1",
+  "securityFloor": "24.22.1",
+  "support": {
+    "line": 24,
+    "codename": "Krypton",
+    "maintenanceFrom": "2026-10-20",
+    "endOfLife": "2028-04-30",
+    "source": "https://github.com/nodejs/Release/blob/main/schedule.json",
+    "checkedOn": "2026-10-30",
+    "advisoriesCheckedAgainst": "https://nodejs.org/en/blog/release/v24.22.1/ and https://nodejs.org/en/about/eol on 2026-10-22 (release/security-floor.json)"
+  },
+  "upstream": {
+    "base": "https://nodejs.org/dist/v24.22.1/",
+    "shasums": "SHASUMS256.txt",
+    "shasumsSignature": "SHASUMS256.txt.sig",
+    "allowedHosts": [
+      "nodejs.org"
+    ]
+  },
+  "keyring": {
+    "source": "https://github.com/nodejs/release-keys",
+    "revision": "481637f813e912c4aa3622d7964ab426c97b8e8d",
+    "checkedOn": "2026-10-30",
+    "signers": [
+      {
+        "fingerprint": "5be8a3f6c8a5c01d106c0ad820b1a390b168d356",
+        "armored": "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nmDMEaGA63BYJKwYBBAHaRw8BAQdAo/yU+MutacFmmn0CEX495goNrBxR24235XLM\ncvHYjfq0L0FudG9pbmUgZHUgSGFtZWwgPGR1aGFtZWxhbnRvaW5lMTk5NUBnbWFp\nbC5jb20+iI4EExYKADYWIQRb6KP2yKXAHRBsCtggsaOQsWjTVgUCaGA63AIbAwQL\nCQgHBBUKCQgFFgIDAQACHgUCF4AACgkQILGjkLFo01afgwEA/sLHqsj7ml2vyDoT\nKDPE8n9a80ZOh14OfnlOe0cCZA8BAMEOOk7QFI69DIlV1nMiqcFCqQFoSzBU2LkI\nR17p/j4NtDNBbnRvaW5lIGR1IEhhbWVsIDxhbnRvaW5lLmR1aGFtZWxAcGxhdGZv\ncm1hdGljLmRldj6IjgQTFgoANhYhBFvoo/bIpcAdEGwK2CCxo5CxaNNWBQJpsCMx\nAhsDBAsJCAcEFQoJCAUWAgMBAAIeAQIXgAAKCRAgsaOQsWjTVr/sAPwIBsG8g6ND\nzoNRTX1wPKBvfZg1NP7tYCyM5sxQfrpuLAEA05AhG4xBILfhL/f0pqR5jXfxg6gz\nT6WfeVeS6zeHZwe4OARoYDrcEgorBgEEAZdVAQUBAQdAQVmtih8AO3ryBQMR/22x\nWHVKLjAbCiH2cMxNH+iy1RQDAQgHiHgEGBYKACAWIQRb6KP2yKXAHRBsCtggsaOQ\nsWjTVgUCaGA63AIbDAAKCRAgsaOQsWjTVu8oAP9Bc+QY+9FikX3YvMgWAqiDlVOy\no0y6UIZGBMSQlF80wAD/d34LqtVIVe9oe5NO3xA75+6Ew8tGeAjUq/ovagr5dAU=\n=JsVv\n-----END PGP PUBLIC KEY BLOCK-----\n"
+      }
+    ],
+    "upstreamFingerprints": [
+      "4ed778f539e3634c779c87c6d7062848a1ab005c",
+      "94ae36675c464d64bafa68dd7434390bdbe9b9c5",
+      "1c050899334244a8af75e53792ef661d867b9dfa",
+      "b9ae9905ffd7803f25714661b63b535a4c206ca9",
+      "77984a986ebc2aa786bc0f66b01fbb92821c587a",
+      "71dcfd284a79c3b38668286bc97ec7a07ede3fc1",
+      "61fc681dfb92a079f1685e77973f295594ec4689",
+      "fd3a5288f042b6850c66b31f09fe44734eb7990e",
+      "8fcca13fef1d0c2e91008e09770f7a9a5ae15600",
+      "c4f0dfff4e8c1a8236409d08e73bc641cc11f4c8",
+      "890c08db8579162fee0df9db8beab4dfcf555ef4",
+      "c82fa3ae1cbedc6be46b9360c43cec45c17ab93c",
+      "dd8f2338bae7501e3dd5ac78c273792f7d83545d",
+      "a48c2bee680e841632cd4e44f07496b3eb3c1762",
+      "b9e2f5981aa6e0cd28160d9ff13993a75599653c",
+      "108f52b48db57bb0cc439b2997b01419bd92f80a",
+      "9554f04d7259f04124de6b476d5a82ac7e37093b",
+      "93c7e9e91b49e432c2f75674b0a78b0a6c481cf6",
+      "56730d5401028683275bd23c23efefe93c4cfffe",
+      "114f43ee0176b71c7bc219dd50a3051f888c628d",
+      "7937dfd2ab06298b2293c3187d33ff9d0246406d",
+      "74f12602b6f1c4e913faa37ad3a89613643b6201",
+      "141f07595b7b3ffe74309a937405533be57c7d57",
+      "dd792f5973c6de52c432cbdac77abfa00ddbf2b7",
+      "a363a499291cbbc940dd62e41f10027af002f8b0",
+      "cc68f5a3106ff448322e48ed27f5e38d5b0a215f",
+      "c0d6248439f1d5604aaffb4021d900ffdb233756",
+      "5be8a3f6c8a5c01d106c0ad820b1a390b168d356",
+      "655f3b5c1fb3fa8d1a0ca6bde4a7d232b936d2fd"
+    ]
+  },
+  "targets": {
+    "linux-amd64": {
+      "file": "node-v24.22.1-linux-x64.tar.gz",
+      "bytes": 58290700,
+      "sha256": "eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c",
+      "executable": "bin/node",
+      "executableBytes": 126879696,
+      "executableSha256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+      "glibc": "2.28"
+    },
+    "linux-arm64": {
+      "file": "node-v24.22.1-linux-arm64.tar.gz",
+      "bytes": 58021129,
+      "sha256": "33c37be234ba8bee041961047b19160f4d7d0f164e8e246f78bdd10feff148b3",
+      "executable": "bin/node",
+      "executableBytes": 123377224,
+      "executableSha256": "c8c5721679d8d1a09e9987e345d5f9a64899bb85f7a384783ba8a93e6e62348a",
+      "glibc": "2.28"
+    }
+  }
+}
