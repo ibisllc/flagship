@@ -14,6 +14,7 @@ pub mod hello;
 pub mod hub;
 pub mod json;
 pub mod mail;
+pub mod outbound;
 pub mod payload;
 pub mod pipe;
 pub mod registry;
