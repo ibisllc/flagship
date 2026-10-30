@@ -65,6 +65,7 @@ async fn start_with(c: RelayConfig, meter: Option<Arc<dyn Meter>>) -> RunningRel
             authority: Arc::new(UnverifiedDevAuthority),
             blessing: None,
             meter,
+            outbound: None,
         },
     )
     .unwrap()
@@ -72,6 +73,27 @@ async fn start_with(c: RelayConfig, meter: Option<Arc<dyn Meter>>) -> RunningRel
 
 async fn start() -> RunningRelay {
     start_with(cfg(), None).await
+}
+
+async fn start_with_outbound(
+    outbound: Arc<flagship_relay::outbound::OutboundRelay>,
+) -> RunningRelay {
+    let l = Listeners {
+        sni: TcpListener::bind("127.0.0.1:0").await.unwrap(),
+        hub: small_buffer_listener(),
+        echo: None,
+    };
+    relay::start(
+        cfg(),
+        l,
+        Collaborators {
+            authority: Arc::new(UnverifiedDevAuthority),
+            blessing: None,
+            meter: None,
+            outbound: Some(outbound),
+        },
+    )
+    .unwrap()
 }
 
 /// TLS 1.2-shaped ClientHello with one SNI entry, as `sni.test.ts` builds it.
@@ -418,6 +440,7 @@ async fn production_mode_refuses_an_authority_without_signatures() {
             authority: Arc::new(UnverifiedDevAuthority),
             blessing: None,
             meter: None,
+            outbound: None,
         },
     )
     .err();
@@ -790,4 +813,95 @@ async fn drain_stops_accepting_and_closes_tunnels() {
     let _ = id;
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert!(TcpStream::connect(sni).await.is_err() || r.tunnel_count() == 0);
+}
+
+mod outbound_through_the_hub {
+    use super::*;
+    use flagship_relay::authority::BoxFut;
+    use flagship_relay::frame::{FRAME_CLOSE_REMOTE, FRAME_OUTBOUND_RESULT};
+    use flagship_relay::outbound::{Connect, KnownHostsPolicy, Options, OutboundRelay, Resolve};
+    use std::net::{IpAddr, Ipv4Addr};
+
+    struct Public;
+    impl Resolve for Public {
+        fn resolve<'a>(&'a self, _h: &'a str) -> BoxFut<'a, Result<Vec<IpAddr>, ()>> {
+            Box::pin(async { Ok(vec![IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))]) })
+        }
+    }
+    struct Local(std::net::SocketAddr);
+    impl Connect for Local {
+        fn connect<'a>(&'a self, _a: IpAddr, _p: u16) -> BoxFut<'a, std::io::Result<TcpStream>> {
+            Box::pin(TcpStream::connect(self.0))
+        }
+    }
+
+    const ID: u32 = payload::OUTBOUND_STREAM_ID_BASE + 1;
+
+    #[tokio::test]
+    async fn without_an_outbound_relay_every_open_is_answered_disabled_and_nothing_is_advertised() {
+        let r = start().await;
+        let mut b = TestBox::connect(&r, TypeSet::V1).await;
+        b.hello("home", "alice", &[], &[], now_ms());
+        let a = b.ack().await;
+        assert!(a.ok);
+        assert!(
+            !a.capabilities
+                .unwrap_or_default()
+                .iter()
+                .any(|c| c == payload::CAPABILITY_OUTBOUND_V1)
+        );
+        b.send(&payload::outbound_open_frame(ID, "api.anthropic.com", 443).unwrap());
+        let f = b.next_of(FRAME_OUTBOUND_RESULT).await;
+        assert_eq!(
+            payload::parse_outbound_result(&f.payload),
+            Some((false, Some("disabled")))
+        );
+    }
+
+    #[tokio::test]
+    async fn with_one_the_capability_is_advertised_and_a_stream_runs_through_the_hub() {
+        let up = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let outbound = OutboundRelay::new(
+            Options::default(),
+            Arc::new(Public),
+            Arc::new(Local(up.local_addr().unwrap())),
+            Arc::new(KnownHostsPolicy),
+        );
+        let r = start_with_outbound(outbound).await;
+        let mut b = TestBox::connect(&r, TypeSet::V1).await;
+        b.hello("home", "alice", &[], &[], now_ms());
+        let a = b.ack().await;
+        assert!(a.ok);
+        assert!(
+            a.capabilities
+                .unwrap_or_default()
+                .iter()
+                .any(|c| c == payload::CAPABILITY_OUTBOUND_V1)
+        );
+
+        // a provider the policy knows
+        b.send(&payload::outbound_open_frame(ID, "api.anthropic.com", 443).unwrap());
+        let (mut upstream, _) = up.accept().await.unwrap();
+        let f = b.next_of(FRAME_OUTBOUND_RESULT).await;
+        assert_eq!(
+            payload::parse_outbound_result(&f.payload),
+            Some((true, None))
+        );
+        b.send(&Frame::new(ID, FRAME_DATA, b"ping".to_vec()));
+        let mut got = [0u8; 4];
+        upstream.read_exact(&mut got).await.unwrap();
+        assert_eq!(&got, b"ping");
+        upstream.write_all(b"pong").await.unwrap();
+        assert_eq!(collect(&mut b, ID, 4).await, b"pong");
+        drop(upstream);
+        let _ = b.next_of(FRAME_CLOSE_REMOTE).await;
+
+        // a host nobody listed
+        b.send(&payload::outbound_open_frame(ID + 1, "random.example.com", 443).unwrap());
+        let f = b.next_of(FRAME_OUTBOUND_RESULT).await;
+        assert_eq!(
+            payload::parse_outbound_result(&f.payload),
+            Some((false, Some("forbidden-host")))
+        );
+    }
 }

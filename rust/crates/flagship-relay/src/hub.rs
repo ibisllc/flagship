@@ -395,6 +395,8 @@ pub struct HubContext {
     pub authority: Arc<dyn HelloAuthority>,
     pub blessing: Option<Arc<dyn BlessingSource>>,
     pub meter: Option<Arc<dyn Meter>>,
+    /// Box-initiated outbound streams (`outbound-v1`); `None` answers every OUTBOUND_OPEN `disabled`, as a hub without it.
+    pub outbound: Option<Arc<crate::outbound::OutboundRelay>>,
     /// Every live tunnel, for drain.
     pub live: Arc<Mutex<HashMap<u64, Arc<Tunnel>>>>,
     pub draining: Arc<AtomicBool>,
@@ -426,12 +428,32 @@ enum Step {
     Close(u16, &'static str),
 }
 
+/// The tunnel as the outbound relay's frame sink: results, data and credit join the control queue (bounded by the stream
+/// window, so it cannot grow without limit).
+struct TunnelSink(Arc<Tunnel>);
+
+impl crate::outbound::Sink for TunnelSink {
+    fn send(&self, f: Frame) {
+        self.0.send_control(f);
+    }
+}
+
 struct Session {
     ctx: HubContext,
     tunnel: Arc<Tunnel>,
+    outbound: Option<crate::outbound::OutboundSession>,
     registered: Option<String>,
     last_issued_at: f64,
     decoder: FrameDecoder,
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        // The tunnel closed: drop every upstream without telling the box.
+        if let Some(o) = &self.outbound {
+            o.close();
+        }
+    }
 }
 
 impl Session {
@@ -452,6 +474,9 @@ impl Session {
         }
         if n.drain {
             caps.push(CAPABILITY_DRAIN_V1);
+        }
+        if self.ctx.outbound.is_some() {
+            caps.push(payload::CAPABILITY_OUTBOUND_V1);
         }
         (caps, n)
     }
@@ -508,15 +533,28 @@ impl Session {
                 Step::Continue
             }
             FRAME_OUTBOUND_OPEN => {
-                self.tunnel.send_control(payload::outbound_result_frame(
-                    f.stream_id,
-                    false,
-                    Some("disabled"),
-                ));
+                match &self.outbound {
+                    Some(o) => {
+                        o.handle_frame(f);
+                    }
+                    None => self.tunnel.send_control(payload::outbound_result_frame(
+                        f.stream_id,
+                        false,
+                        Some("disabled"),
+                    )),
+                }
                 Step::Continue
             }
-            FRAME_OUTBOUND_CREDIT => Step::Continue,
+            FRAME_OUTBOUND_CREDIT => {
+                if let Some(o) = &self.outbound {
+                    o.handle_frame(f);
+                }
+                Step::Continue
+            }
             FRAME_DATA | FRAME_CLOSE | FRAME_CLOSE_REMOTE if is_outbound_stream_id(f.stream_id) => {
+                if let Some(o) = &self.outbound {
+                    o.handle_frame(f);
+                }
                 Step::Continue
             }
             FRAME_DATA => {
@@ -571,6 +609,11 @@ impl Session {
         });
         self.registered = Some(pc.clone());
         self.last_issued_at = h.issued_at;
+        self.outbound = self
+            .ctx
+            .outbound
+            .as_ref()
+            .map(|r| r.session(&pc, Arc::new(TunnelSink(self.tunnel.clone()))));
         let trust = self
             .ctx
             .blessing
@@ -621,6 +664,9 @@ impl Session {
         }
         if negotiated.drain {
             caps.push(CAPABILITY_DRAIN_V1);
+        }
+        if self.ctx.outbound.is_some() {
+            caps.push(payload::CAPABILITY_OUTBOUND_V1);
         }
         let trust = self
             .ctx
@@ -742,6 +788,7 @@ where
     let mut session = Session {
         ctx: ctx.clone(),
         tunnel: tunnel.clone(),
+        outbound: None,
         registered: None,
         last_issued_at: 0.0,
         decoder: FrameDecoder::new(TypeSet::V1, ctx.cfg.max_ws_message),

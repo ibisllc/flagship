@@ -102,6 +102,8 @@ pub struct Collaborators {
     pub authority: Arc<dyn HelloAuthority>,
     pub blessing: Option<Arc<dyn BlessingSource>>,
     pub meter: Option<Arc<dyn Meter>>,
+    /// The outbound relay; `None` leaves `outbound-v1` unadvertised.
+    pub outbound: Option<Arc<crate::outbound::OutboundRelay>>,
 }
 
 impl std::fmt::Debug for Collaborators {
@@ -127,6 +129,7 @@ pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<Running
         authority: c.authority,
         blessing: c.blessing,
         meter: c.meter.clone(),
+        outbound: c.outbound,
         live: Arc::new(Mutex::new(HashMap::new())),
         draining: Arc::new(AtomicBool::new(false)),
     };

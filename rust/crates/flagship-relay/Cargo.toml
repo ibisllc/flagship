@@ -21,5 +21,5 @@ tokio-tungstenite = { version = "=0.30.0", default-features = false, features = 
 [dev-dependencies]
 ed25519-dalek = { version = "=3.0.0", default-features = false, features = ["fast", "zeroize"] }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
-tokio = { version = "=1.53.3", default-features = false, features = ["rt-multi-thread", "net", "io-util", "time", "sync", "macros"] }
+tokio = { version = "=1.53.3", default-features = false, features = ["rt-multi-thread", "net", "io-util", "time", "sync", "macros", "test-util"] }
 tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["connect", "handshake"] }
