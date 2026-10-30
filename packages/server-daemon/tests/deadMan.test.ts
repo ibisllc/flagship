@@ -83,6 +83,19 @@ describe("executeLockAndPower", () => {
     expect(r).toEqual({ mode: "off", requestedMode: "restart", suspension: "unconfirmed" });
   });
 
+  it("shuts down instead of restarting when the lock marker cannot be written (an unprivileged daemon cannot write /boot)", async () => {
+    const { events, runner } = recorder();
+    const suppressor: AutoUnlockSuppressor = {
+      suppress: async () => {
+        throw new Error("EACCES: permission denied, open '/boot/flagship-lock-once.tmp'");
+      },
+    };
+    const r = await executeLockAndPower({ mode: "restart", suppressor, runner, suspender: confirming(events), reason: "manual-lock" });
+    expect(events).toEqual(["suspend:manual-lock", "power:off"]);
+    expect(r.mode).toBe("off");
+    expect(r.requestedMode).toBe("restart");
+  });
+
   it("never restarts when there is no way to lock the boot worker", async () => {
     const { events, suppressor, runner } = recorder();
     const r = await executeLockAndPower({ mode: "restart", suppressor, runner });

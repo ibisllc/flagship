@@ -143,10 +143,17 @@ export async function executeLockAndPower(args: {
   suspender?: BootSuspender | null;
   reason?: "dead-man" | "manual-lock";
 }): Promise<LockResult> {
-  await args.suppressor.suppress();
+  let mode = args.mode;
+  try {
+    await args.suppressor.suppress();
+  } catch (e) {
+    // The one-shot marker could not be written (an unprivileged daemon cannot write /boot): a restart would come back
+    // up on its auto-unlock lease, so it becomes a shutdown. Never a reboot into an unrevoked lease, never a 500.
+    console.warn(`[dead-man] the lock marker was not written (${(e as Error).message}); the box shuts down instead of restarting`);
+    mode = "off";
+  }
   const reason = args.reason ?? "manual-lock";
   let suspension: LockResult["suspension"] = "unavailable";
-  let mode = args.mode;
   if (args.suspender) {
     const attempt = args.suspender
       .suspend(reason, args.mode === "restart" ? SUSPEND_WAIT_RESTART_MS : SUSPEND_WAIT_OFF_MS)
