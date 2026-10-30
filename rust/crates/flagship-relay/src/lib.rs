@@ -24,3 +24,4 @@ pub mod relay;
 pub mod router;
 pub mod sni;
 pub mod throttle;
+pub mod usage;
