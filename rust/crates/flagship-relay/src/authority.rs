@@ -59,7 +59,7 @@ fn fail(reason: &str, code: u16) -> AuthFailure {
 /// A JSON number that is a whole, non-negative integer within `Number.MAX_SAFE_INTEGER`.
 fn whole(v: f64) -> Option<u64> {
     (v.is_finite() && v >= 0.0 && v.fract() == 0.0 && v <= 9_007_199_254_740_991.0)
-        .then(|| v as u64)
+        .then_some(v as u64)
 }
 
 fn grant_of(wire: &Value) -> Option<ServiceGrant> {
