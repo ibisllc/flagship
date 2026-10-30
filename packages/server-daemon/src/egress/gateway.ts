@@ -16,7 +16,7 @@
  * rules.
  */
 import { getServers } from "node:dns";
-import { writeFile } from "node:fs/promises";
+import { chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AccessRule } from "@flagship/protocol";
 import { runDir } from "../privileged.js";
@@ -177,6 +177,9 @@ export class EgressGateway {
       const path = join(this.opts.rulesDir ?? runDir(), `flagship-resolv-${network}.conf`);
       try {
         await writeFile(path, `nameserver ${gw}\noptions ndots:0\n`, { mode: 0o644 });
+        // The daemon's umask is 0077, which makes the new file 0600: an app (another user) could not read its own
+        // resolver file, would fall back to 127.0.0.1 and resolve nothing, so no request ever reached the egress filter.
+        await chmod(path, 0o644);
         resolvConfs.set(network, path);
       } catch (e) {
         this.log(`[egress] resolv.conf for ${network} not written (${(e as Error).message})`);
