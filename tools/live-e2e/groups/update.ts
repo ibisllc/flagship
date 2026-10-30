@@ -1,11 +1,10 @@
 // Update this server (docs: AGENTS.md "Update this server"): the admin-root
 // signed update order to an ALREADY-ENDORSED release, deposited on .com with
 // IRK mailbox auth, consumed by the box (≤5 min poll), applied through the
-// endorsement gate, and reported back as lastUpdate. This box (B3) clones main, not the gym
-// branch: only main keeps the prod trust pin that lets a box list the endorsed
-// releases. Its HEAD is unendorsed, so the target is the newest endorsed release the
-// box lists (an "older" one): the release signature is what the box checks,
-// not the direction.
+// endorsement gate, and reported back as lastUpdate. This box (B3) is installed from the
+// gym's PREVIOUS signed artifact (shared-run.ts `updateFromCommit`; the gym's release index
+// keeps every artifact it built), so the newest release it lists is this run's artifact: a
+// real move to a newer signed release. The manifest signatures are what the box checks.
 import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signDeviceEndpointClaim, signUpdateOrder, type UpdateOrder } from "@flagship/protocol";

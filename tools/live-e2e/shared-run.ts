@@ -59,6 +59,27 @@ import { GROUPS, type Group, type GroupCtx, type Slot } from "./groups/index.js"
 import { acmeBudget } from "./lib/acmeProbe.js";
 import { WorkerTail, setCurrentTail } from "./lib/workerTail.js";
 
+/**
+ * The release the update group's box (B3) starts on. An update needs somewhere to go, so it starts one release behind: the
+ * newest earlier artifact in the gym's release index (the index keeps every artifact the gym built), else this release.
+ * GYM_UPDATE_FROM (a 40-hex commit) overrides it.
+ */
+async function updateFromCommit(): Promise<string> {
+  const pinned = process.env.GYM_UPDATE_FROM;
+  if (pinned && /^[0-9a-f]{40}$/.test(pinned)) return pinned;
+  try {
+    const r = await fetch(`https://${CONTROL}/build/iso/releases.json`);
+    const j = (await r.json()) as { releases?: Array<{ commit: string; sequence: number; arch?: string[] }> };
+    const earlier = (j.releases ?? [])
+      .filter((e) => /^[0-9a-f]{40}$/.test(e.commit) && e.commit !== BOX_RELEASE.commit && (e.arch ?? []).includes("amd64"))
+      .sort((a, b) => b.sequence - a.sequence)[0];
+    if (earlier) return earlier.commit;
+  } catch {
+    // The index is advice; without it the box starts on this release and the group reports that there is nothing to update to.
+  }
+  return process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit;
+}
+
 const args = process.argv.slice(2);
 const flag = (name: string): boolean => args.includes(name);
 const opt = (name: string): string | undefined => {
@@ -266,7 +287,7 @@ async function main(): Promise<number> {
           const extras = s[0] === "R"
             ? { provisionExtras: { swkHex: bytesToHex(deriveSWK({ seed: acct.keys.umk }, `home.${acct.username}.${SERVICES}`)), backupIntervalMs: 60_000 } }
             : s === "B3"
-              ? { installerGitRef: process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit }
+              ? { installerGitRef: await updateFromCommit() }
               : {};
           const b = await addBox(acct, SLOT_NAME[s], extras);
           saveFleet(dir, accounts);

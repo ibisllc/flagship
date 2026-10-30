@@ -35,10 +35,30 @@ export function buildReleaseIndex(dir: string, tags: Record<string, string> = {}
   return { releases };
 }
 
+/** The new index plus every release an earlier index named whose commit is not in it (the gym keeps its older artifacts in the bucket). */
+export function mergeReleaseIndex(current: { releases: ReleaseIndexEntry[] }, earlier: { releases?: unknown } | null): { releases: ReleaseIndexEntry[] } {
+  const byCommit = new Map(current.releases.map((e) => [e.commit, e]));
+  const old = Array.isArray(earlier?.releases) ? (earlier!.releases as ReleaseIndexEntry[]) : [];
+  for (const e of old) {
+    if (e && /^[0-9a-f]{40}$/.test(e.commit) && Number.isInteger(e.sequence) && Array.isArray(e.arch) && !byCommit.has(e.commit)) byCommit.set(e.commit, e);
+  }
+  return { releases: [...byCommit.values()].sort((a, b) => b.sequence - a.sequence) };
+}
+
 if (process.argv[1] && /release-index\.(ts|js)$/.test(process.argv[1])) {
   const dir = resolve(process.argv[2] ?? ".");
   const tagArg = process.argv.indexOf("--tags");
   const tags = Object.fromEntries((tagArg > 0 ? process.argv[tagArg + 1] ?? "" : "").split(",").filter(Boolean).map((p) => p.split("=") as [string, string]));
-  writeFileSync(join(dir, "releases.json"), JSON.stringify(buildReleaseIndex(dir, tags), null, 2) + "\n");
+  const mergeArg = process.argv.indexOf("--merge");
+  let earlier: { releases?: unknown } | null = null;
+  if (mergeArg > 0) {
+    try {
+      const src = process.argv[mergeArg + 1] ?? "";
+      earlier = JSON.parse(/^https?:/.test(src) ? await (await fetch(src)).text() : readFileSync(src, "utf8"));
+    } catch {
+      earlier = null;
+    }
+  }
+  writeFileSync(join(dir, "releases.json"), JSON.stringify(mergeReleaseIndex(buildReleaseIndex(dir, tags), earlier), null, 2) + "\n");
   console.log(`wrote ${join(dir, "releases.json")}`);
 }

@@ -138,7 +138,7 @@ done
 # Boxes fetch gVisor from this bucket first (storage.googleapis.com refuses some clouds' addresses).
 (cd "$WT/apps/com" && PATH="$PWD/node_modules/.bin:$PATH" bash "$WT/scripts/publish-gvisor-mirror.sh" --bucket "$BUCKET" --skip-if-at "https://gym.flagshipserver.com/build/iso") \
   || say "the gym's gVisor mirror was not published (app installs on gym boxes may fail to download gVisor)"
-(cd "$WT" && npx tsx tools/box-artifact/release-index.ts "$OUT" >/dev/null) && (cd "$WT/apps/com" && npx wrangler r2 object put "$BUCKET/releases.json" --file "$OUT/releases.json" --remote >/dev/null) || say "releases.json not published (the gym's Update button will not list this release)"
+(cd "$WT" && npx tsx tools/box-artifact/release-index.ts "$OUT" --merge "https://gym.flagshipserver.com/build/iso/releases.json" >/dev/null) && (cd "$WT/apps/com" && npx wrangler r2 object put "$BUCKET/releases.json" --file "$OUT/releases.json" --remote >/dev/null) || say "releases.json not published (the gym's Update button will not list this release)"
 
 node "$HERE/gym-box-release.mjs" write --worktree "$WT" --commit "$COMMIT" --sequence "$SEQ" --base-url "https://gym.flagshipserver.com/build/iso" >/dev/null
 (cd "$WT" && node scripts/gen-box-release.mjs --write >/dev/null)

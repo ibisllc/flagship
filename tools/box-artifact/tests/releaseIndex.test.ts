@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
-import { buildReleaseIndex } from "../release-index.js";
+import { describe, expect, it } from "vitest";
+import { buildReleaseIndex, mergeReleaseIndex } from "../release-index.js";
 
 it("joins both architectures of a release and orders newest first", () => {
   const dir = mkdtempSync(join(tmpdir(), "release-index-"));
@@ -21,4 +21,16 @@ it("joins both architectures of a release and orders newest first", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+describe("mergeReleaseIndex", () => {
+  const a = { commit: "a".repeat(40), sequence: 2, arch: ["amd64"] };
+  const b = { commit: "b".repeat(40), sequence: 1, arch: ["amd64"] };
+  it("keeps the new entries and adds earlier releases it does not name, newest first", () => {
+    expect(mergeReleaseIndex({ releases: [a] }, { releases: [b, { ...a, sequence: 9 }] }).releases).toEqual([a, b]);
+  });
+  it("ignores a missing or hostile earlier index", () => {
+    expect(mergeReleaseIndex({ releases: [a] }, null).releases).toEqual([a]);
+    expect(mergeReleaseIndex({ releases: [a] }, { releases: [{ commit: "x", sequence: "1", arch: 1 }, null] }).releases).toEqual([a]);
+  });
 });
