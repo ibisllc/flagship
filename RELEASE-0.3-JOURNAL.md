@@ -684,6 +684,7 @@ share a challenge location and require order-aware issuance enforcement.
 
 ## Log
 
+- 2026-10-30 gym 5 triage: B3 never registered because its previous-artifact commit was unreachable after the gym branch force-push (now one `gym-artifact-<sha12>` tag per build; `ddfc79f` tagged by hand), so the update/share update verdicts rerun in gym 6; chat-cross-owner sent before the app held its canonical name (the box silently keeps a start local when `lead.mayAdmit` is false, harness.ts:225; the group now waits for the canonical name); backups schedule check counts keys relative to its start; stack-switch moved to the classic pass only (TODO: add `stack-switch` to CLASSIC_GROUPS in scripts/gym-release-run.sh after gym 5 ends); local-ai-cpu needs UpCloud cores (quota 32, fleet uses most): run it after teardown or on a smaller plan; first-contact failure predates the harness fix (re-verify in gym 6).
 - 2026-10-30: folded PHONE-AND-BOX-TLS-SPEC.md into the plan as section H and Appendix H (proposed design, nothing built); the spec file was removed. Gym 5 arch-v2 pass: 467 passed, 9 failed (chat-cross-owner x3, first-contact (run predates the harness fix), share update verdict, backups schedule, local-ai-cpu (UpCloud core quota 32), stack-switch (ran on arch-v2, needs the classic pass), fleet home3 never registered).
 - 2026-10-24: owner made this session release manager; decisions above. UX rebased onto 0.3 (139),
   web/Android/iOS first contact finished; architecture replayed (138) and integrated (`ced988cfe`).
