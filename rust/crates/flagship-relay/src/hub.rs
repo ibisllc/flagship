@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::{Notify, watch};
+use tokio::sync::{Notify, oneshot, watch};
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
@@ -19,8 +19,8 @@ use crate::allocator::SetKey;
 use crate::flow::{DEFAULT_QUANTUM, FairQueue, RecvWindow, STREAM_INITIAL_WINDOW, SendWindow};
 use crate::frame::{
     self, FRAME_CLOSE, FRAME_CLOSE_REMOTE, FRAME_DATA, FRAME_DRAIN_NOTICE, FRAME_HELLO,
-    FRAME_OUTBOUND_CREDIT, FRAME_OUTBOUND_OPEN, FRAME_REQUEST_TRANSFER, FRAME_STREAM_CREDIT, Frame,
-    FrameDecoder, TypeSet,
+    FRAME_OUTBOUND_CREDIT, FRAME_OUTBOUND_OPEN, FRAME_PB_MAIL_RESP, FRAME_PB_MAILBOX_ANNOUNCE,
+    FRAME_REQUEST_TRANSFER, FRAME_STREAM_CREDIT, Frame, FrameDecoder, TypeSet,
 };
 use crate::hello::{self, AuthFailure, HelloAuthority, ParsedHello};
 use crate::payload::{
@@ -119,7 +119,26 @@ pub struct Tunnel {
     closed_tx: watch::Sender<bool>,
     budget: Arc<Budget>,
     cfg: Arc<HubConfig>,
+    /// Peer-backup mailbox requests waiting for the holder's reply, by the stream id they went out on.
+    mail: Mutex<MailState>,
 }
+
+#[derive(Debug, Default)]
+struct MailState {
+    next: u32,
+    waiting: HashMap<u32, MailWaiter>,
+}
+
+#[derive(Debug)]
+struct MailWaiter {
+    asm: crate::mail::MailAssembler,
+    tx: Option<oneshot::Sender<crate::mailbox::MailAnswer>>,
+}
+
+/// Mailbox stream ids live high in the hub-opened range, away from the visitor streams that count up from 1.
+const MAIL_STREAM_BASE: u32 = 0x7ff0_0000;
+/// How long a holder has to answer an envelope.
+const MAIL_TIMEOUT: Duration = Duration::from_secs(120);
 
 static NEXT_TUNNEL_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -148,6 +167,7 @@ impl Tunnel {
             up_space: Notify::new(),
             closed: AtomicBool::new(false),
             closed_tx,
+            mail: Mutex::new(MailState::default()),
             budget: Budget::new(cfg.tunnel_queue_bytes),
             cfg,
         })
@@ -338,6 +358,42 @@ impl Tunnel {
         self.up_space.notify_waiters();
     }
 
+    fn forget_mail(&self, id: u32) {
+        if let Ok(mut m) = self.mail.lock() {
+            m.waiting.remove(&id);
+        }
+    }
+
+    /// A reply frame from the holder: assemble it and, on the last frame, answer the waiting request.
+    fn on_mail_response(&self, id: u32, payload: &[u8]) {
+        let Ok(mut m) = self.mail.lock() else {
+            return;
+        };
+        let Some(w) = m.waiting.get_mut(&id) else {
+            return;
+        };
+        match w.asm.push(payload) {
+            Ok(None) => {}
+            Ok(Some(body)) => {
+                let status = w.asm.status;
+                if let Some(tx) = w.tx.take() {
+                    let _ = tx.send(crate::mailbox::MailAnswer { status, body });
+                }
+                m.waiting.remove(&id);
+            }
+            Err(_) => {
+                // A malformed or oversized reply: the requester gets a bad-gateway, the holder is not trusted further.
+                if let Some(tx) = w.tx.take() {
+                    let _ = tx.send(crate::mailbox::MailAnswer {
+                        status: 502,
+                        body: Vec::new(),
+                    });
+                }
+                m.waiting.remove(&id);
+            }
+        }
+    }
+
     pub fn close(&self) {
         if self.closed.swap(true, Ordering::AcqRel) {
             return;
@@ -397,6 +453,8 @@ pub struct HubContext {
     pub meter: Option<Arc<dyn Meter>>,
     /// Box-initiated outbound streams (`outbound-v1`); `None` answers every OUTBOUND_OPEN `disabled`, as a hub without it.
     pub outbound: Option<Arc<crate::outbound::OutboundRelay>>,
+    /// Peer-backup mailboxes (`pb-mail-v1`); `None` leaves the capability unadvertised and the frames ignored.
+    pub mailboxes: Option<Arc<crate::mailbox::MailboxRegistry>>,
     /// Every live tunnel, for drain.
     pub live: Arc<Mutex<HashMap<u64, Arc<Tunnel>>>>,
     pub draining: Arc<AtomicBool>,
@@ -438,6 +496,62 @@ impl crate::outbound::Sink for TunnelSink {
     }
 }
 
+/// Carries a mailbox envelope over this tunnel to the holder and waits for its reply.
+struct TunnelMail(Arc<Tunnel>);
+
+impl crate::mailbox::MailDeliver for TunnelMail {
+    fn deliver<'a>(
+        &'a self,
+        mailbox_id: &'a str,
+        envelope: &'a [u8],
+    ) -> crate::authority::BoxFut<'a, crate::mailbox::MailAnswer> {
+        Box::pin(async move {
+            let gone = || crate::mailbox::MailAnswer {
+                status: 502,
+                body: Vec::new(),
+            };
+            let (tx, rx) = oneshot::channel();
+            let id = {
+                let Ok(mut m) = self.0.mail.lock() else {
+                    return gone();
+                };
+                let id = MAIL_STREAM_BASE.saturating_add(m.next % 0x000f_0000);
+                m.next = m.next.wrapping_add(1);
+                m.waiting.insert(
+                    id,
+                    MailWaiter {
+                        asm: crate::mail::MailAssembler::new(crate::mail::MailKind::Resp),
+                        tx: Some(tx),
+                    },
+                );
+                id
+            };
+            match crate::mail::mail_request_frames(id, mailbox_id, envelope) {
+                Ok(frames) => {
+                    for f in frames {
+                        self.0.send_control(f);
+                    }
+                }
+                Err(_) => {
+                    self.0.forget_mail(id);
+                    return gone();
+                }
+            }
+            let mut closed = self.0.closed_signal();
+            let answer = tokio::select! {
+                a = tokio::time::timeout(MAIL_TIMEOUT, rx) => match a {
+                    Ok(Ok(answer)) => Some(answer),
+                    Ok(Err(_)) => None,
+                    Err(_) => Some(crate::mailbox::MailAnswer { status: 504, body: Vec::new() }),
+                },
+                _ = closed.changed() => None,
+            };
+            self.0.forget_mail(id);
+            answer.unwrap_or_else(gone)
+        })
+    }
+}
+
 struct Session {
     ctx: HubContext,
     tunnel: Arc<Tunnel>,
@@ -449,6 +563,9 @@ struct Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        if let Some(reg) = &self.ctx.mailboxes {
+            reg.drop_owner(self.tunnel.id);
+        }
         // The tunnel closed: drop every upstream without telling the box.
         if let Some(o) = &self.outbound {
             o.close();
@@ -477,6 +594,9 @@ impl Session {
         }
         if self.ctx.outbound.is_some() {
             caps.push(payload::CAPABILITY_OUTBOUND_V1);
+        }
+        if self.ctx.mailboxes.is_some() {
+            caps.push(payload::CAPABILITY_PB_MAIL_V1);
         }
         (caps, n)
     }
@@ -555,6 +675,21 @@ impl Session {
                 if let Some(o) = &self.outbound {
                     o.handle_frame(f);
                 }
+                Step::Continue
+            }
+            FRAME_PB_MAILBOX_ANNOUNCE => {
+                if let Some(reg) = &self.ctx.mailboxes
+                    && let Some(list) = payload::decode_mailbox_announce(&f.payload)
+                    && let Some(ids) = crate::mailbox::verify_announcements(&list, now_ms() as u64)
+                {
+                    let deliver: Arc<dyn crate::mailbox::MailDeliver> =
+                        Arc::new(TunnelMail(self.tunnel.clone()));
+                    reg.register(&ids, self.tunnel.id, &deliver);
+                }
+                Step::Continue
+            }
+            FRAME_PB_MAIL_RESP => {
+                self.tunnel.on_mail_response(f.stream_id, &f.payload);
                 Step::Continue
             }
             FRAME_DATA => {
@@ -667,6 +802,9 @@ impl Session {
         }
         if self.ctx.outbound.is_some() {
             caps.push(payload::CAPABILITY_OUTBOUND_V1);
+        }
+        if self.ctx.mailboxes.is_some() {
+            caps.push(payload::CAPABILITY_PB_MAIL_V1);
         }
         let trust = self
             .ctx

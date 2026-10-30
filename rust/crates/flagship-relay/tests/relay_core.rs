@@ -66,6 +66,7 @@ async fn start_with(c: RelayConfig, meter: Option<Arc<dyn Meter>>) -> RunningRel
             blessing: None,
             meter,
             outbound: None,
+            mailboxes: None,
         },
     )
     .unwrap()
@@ -91,6 +92,7 @@ async fn start_with_outbound(
             blessing: None,
             meter: None,
             outbound: Some(outbound),
+            mailboxes: None,
         },
     )
     .unwrap()
@@ -441,6 +443,7 @@ async fn production_mode_refuses_an_authority_without_signatures() {
             blessing: None,
             meter: None,
             outbound: None,
+            mailboxes: None,
         },
     )
     .err();
@@ -902,6 +905,149 @@ mod outbound_through_the_hub {
         assert_eq!(
             payload::parse_outbound_result(&f.payload),
             Some((false, Some("forbidden-host")))
+        );
+    }
+}
+
+mod mailboxes_through_the_hub {
+    use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+    use flagship_relay::frame::{FRAME_PB_MAIL_REQ, FRAME_PB_MAILBOX_ANNOUNCE};
+    use flagship_relay::mail::{MailAssembler, MailKind, mail_response_frames};
+    use flagship_relay::mailbox::{MailboxRegistry, canonical_announce, mailbox_epoch, mailbox_id};
+    use flagship_relay::payload::MailboxAnnouncement;
+
+    async fn start_mailboxes(reg: Arc<MailboxRegistry>) -> RunningRelay {
+        let l = Listeners {
+            sni: TcpListener::bind("127.0.0.1:0").await.unwrap(),
+            hub: small_buffer_listener(),
+            echo: None,
+        };
+        relay::start(
+            cfg(),
+            l,
+            Collaborators {
+                authority: Arc::new(UnverifiedDevAuthority),
+                blessing: None,
+                meter: None,
+                outbound: None,
+                mailboxes: Some(reg),
+            },
+        )
+        .unwrap()
+    }
+
+    fn announcement(seed: u8, epoch: u64) -> (MailboxAnnouncement, String) {
+        let k = SigningKey::from_bytes(&[seed; 32]);
+        let pik = flagship_crypto::trust::hex(&k.verifying_key().to_bytes());
+        let sig = flagship_crypto::trust::hex(
+            &k.sign(canonical_announce(&pik, epoch).as_bytes())
+                .to_bytes(),
+        );
+        let id = mailbox_id(&pik, epoch);
+        (
+            MailboxAnnouncement {
+                pik_pub_hex: pik,
+                epoch: epoch as f64,
+                sig_hex: sig,
+            },
+            id,
+        )
+    }
+
+    #[tokio::test]
+    async fn a_holder_announces_a_mailbox_and_an_envelope_goes_there_and_back() {
+        let reg = Arc::new(MailboxRegistry::default());
+        let r = start_mailboxes(reg.clone()).await;
+        let mut b = TestBox::connect(&r, TypeSet::V1).await;
+        b.hello("home", "alice", &[], &[], now_ms());
+        let a = b.ack().await;
+        assert!(
+            a.capabilities
+                .unwrap_or_default()
+                .iter()
+                .any(|c| c == payload::CAPABILITY_PB_MAIL_V1)
+        );
+
+        let (ann, id) = announcement(7, mailbox_epoch(now_ms()));
+        b.send(&payload::mailbox_announce_frame(&[ann]).unwrap());
+        for _ in 0..200 {
+            if reg.has(&id) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            reg.has(&id),
+            "the signed announcement registered the mailbox"
+        );
+
+        let reg2 = reg.clone();
+        let id2 = id.clone();
+        let deliver = tokio::spawn(async move { reg2.deliver(&id2, b"sealed envelope").await });
+        // the holder receives the request, however it is split into frames
+        let mut asm = MailAssembler::new(MailKind::Req);
+        let (stream, body) = loop {
+            let f = b.next_of(FRAME_PB_MAIL_REQ).await;
+            if let Some(body) = asm.push(&f.payload).unwrap() {
+                break (f.stream_id, body);
+            }
+        };
+        assert_eq!(
+            (asm.mailbox_id.as_str(), body.as_slice()),
+            (id.as_str(), &b"sealed envelope"[..])
+        );
+        for f in mail_response_frames(stream, 200, b"sealed reply") {
+            b.send(&f);
+        }
+        let answer = deliver.await.unwrap().unwrap();
+        assert_eq!(
+            (answer.status, answer.body.as_slice()),
+            (200, &b"sealed reply"[..])
+        );
+
+        // the tunnel closes: the mailbox is gone
+        drop(b);
+        for _ in 0..300 {
+            if !reg.has(&id) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(!reg.has(&id));
+        assert!(reg.deliver(&id, b"x").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_bad_or_stale_announcement_registers_nothing_and_without_a_registry_nothing_is_advertised()
+     {
+        let reg = Arc::new(MailboxRegistry::default());
+        let r = start_mailboxes(reg.clone()).await;
+        let mut b = TestBox::connect(&r, TypeSet::V1).await;
+        b.hello("home", "alice", &[], &[], now_ms());
+        b.ack().await;
+        let (mut bad, id) = announcement(8, mailbox_epoch(now_ms()));
+        bad.sig_hex = "00".repeat(64);
+        let (stale, id_stale) = announcement(9, mailbox_epoch(now_ms()).saturating_sub(9));
+        b.send(&payload::mailbox_announce_frame(&[bad]).unwrap());
+        b.send(&payload::mailbox_announce_frame(&[stale]).unwrap());
+        b.send(&Frame::new(
+            0,
+            FRAME_PB_MAILBOX_ANNOUNCE,
+            b"not json".to_vec(),
+        ));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(!reg.has(&id) && !reg.has(&id_stale));
+
+        let plain = start().await;
+        let mut c = TestBox::connect(&plain, TypeSet::V1).await;
+        c.hello("home", "alice", &[], &[], now_ms());
+        let a = c.ack().await;
+        assert!(
+            !a.capabilities
+                .unwrap_or_default()
+                .iter()
+                .any(|x| x == payload::CAPABILITY_PB_MAIL_V1)
         );
     }
 }

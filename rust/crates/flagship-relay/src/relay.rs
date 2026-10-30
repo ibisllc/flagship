@@ -104,6 +104,8 @@ pub struct Collaborators {
     pub meter: Option<Arc<dyn Meter>>,
     /// The outbound relay; `None` leaves `outbound-v1` unadvertised.
     pub outbound: Option<Arc<crate::outbound::OutboundRelay>>,
+    /// Peer-backup mailboxes; `None` leaves `pb-mail-v1` unadvertised.
+    pub mailboxes: Option<Arc<crate::mailbox::MailboxRegistry>>,
 }
 
 impl std::fmt::Debug for Collaborators {
@@ -130,6 +132,7 @@ pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<Running
         blessing: c.blessing,
         meter: c.meter.clone(),
         outbound: c.outbound,
+        mailboxes: c.mailboxes,
         live: Arc::new(Mutex::new(HashMap::new())),
         draining: Arc::new(AtomicBool::new(false)),
     };
