@@ -51,18 +51,17 @@ export const gpuReal: Group = {
         const r = await ssh(box, "M7_RUN_TESTS=1 bash /root/setup-box.sh /root/src.tar.gz 2>&1 | tail -n 20");
         if (!r.stdout.includes("cargo-test: ok")) throw new Error(r.stdout.slice(-1200));
       });
-      const ready = await ssh(box, "command -v nvidia-smi && nvidia-smi -L");
-      if (ready.code !== 0) {
-        await rec.check("prepare the NVIDIA stack (driver, toolkit, runsc-nvproxy)", async () => {
-          const r = await ssh(box, "bash /opt/flagship-m7/tools/arch-drills/m7/gpu-real.sh prepare-nvidia 2>&1 | tail -n 5; (sleep 2; reboot) &");
+      const env = IMAGE_ENV.filter((k) => process.env[k]).map((k) => `${k}=${process.env[k]}`).join(" ");
+      // One run does everything the card allows (driver prep, receipts, MIG, multi-GPU, passthrough); a
+      // host without the NVIDIA stack reboots once and the same command is run again.
+      await rec.check("the NVIDIA hardware run: stack, receipts and every stage this card supports (one run)", async () => {
+        const mega = () => ssh(box, `${env} bash /opt/flagship-m7/tools/arch-drills/m7/gpu-real.sh mega /root/gpu-receipt 2>&1 | tail -n 40`, 7_200_000);
+        let r = await mega();
+        if (/run 'gpu-real.sh mega/.test(r.stdout)) {
           await new Promise((r2) => setTimeout(r2, 120_000));
           for (let i = 0; i < 30 && (await ssh(box, "nvidia-smi -L", 20_000)).code !== 0; i++) await new Promise((r2) => setTimeout(r2, 10_000));
-          return r.stdout.trim().split("\n").at(-1);
-        });
-      }
-      const env = IMAGE_ENV.filter((k) => process.env[k]).map((k) => `${k}=${process.env[k]}`).join(" ");
-      await rec.check("run the NVIDIA receipts", async () => {
-        const r = await ssh(box, `${env} bash /opt/flagship-m7/tools/arch-drills/m7/gpu-real.sh qualify-nvidia /root/gpu-receipt 2>&1 | tail -n 40`, 7_200_000);
+          r = await mega();
+        }
         return r.stdout.split("\n").at(-1);
       });
       const s = await ssh(box, "cat /root/gpu-receipt/summary.json");

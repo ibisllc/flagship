@@ -9,6 +9,9 @@
 #   gpu-real.sh qualify-mig <out> <profiles>   H5 MIG layout + two concurrent partition jobs
 #   gpu-real.sh qualify-multi <out>            H7 gang admission + DDP train/resume (2+ GPUs)
 #   gpu-real.sh qualify-passthrough <out> <pci>  H8 VFIO bind/reset/release on this host
+#   gpu-real.sh mega <out>                     ONE run: prepare if needed (reboots, run again), then qualify-nvidia,
+#                                              MIG when the card has it, multi-GPU when 2+, passthrough when the card
+#                                              has an IOMMU group of its own; every stage lands in one summary.json
 #
 # Images: CUDA_DEVEL_BASE, CUDA_RUNTIME_BASE, TORCH_BASE, FFMPEG_NVIDIA_BASE, RENDER_BASE must be
 # name@sha256:<digest> references (the runbook says how to choose and record them).
@@ -135,6 +138,34 @@ qualify-passthrough)
   record "H8 passthrough qualification for $PCI" "$(jq --arg p "$PCI" '[.devices[]|select(.passthrough.ok)]|length>0' "$OUT/probe.json")" "$(jq -c '[.devices[].passthrough]' "$OUT/probe.json")"
   cat "/sys/bus/pci/devices/$PCI/reset_method" > "$OUT/reset_method.txt" 2>&1
   cat "/sys/kernel/iommu_groups/$(basename "$(readlink "/sys/bus/pci/devices/$PCI/iommu_group")")/type" > "$OUT/iommu-type.txt" 2>&1
+  ;;
+mega)
+  if ! command -v nvidia-smi >/dev/null || ! nvidia-smi -L >/dev/null 2>&1; then
+    log "no working NVIDIA stack yet: preparing it; the host reboots, then run 'gpu-real.sh mega $OUT' again"
+    "$0" prepare-nvidia "$OUT" && { (sleep 2; reboot) & exit 0; }
+    record "prepare the NVIDIA stack" false "prepare-nvidia failed"; exit 1
+  fi
+  "$0" qualify-nvidia "$OUT/nvidia"
+  jq -c '.[]' "$OUT/nvidia/summary.json" | while read -r row; do jq --argjson r "$row" '. + [$r]' "$SUMMARY" > "$SUMMARY.tmp" && mv "$SUMMARY.tmp" "$SUMMARY"; done
+  if nvidia-smi --query-gpu=mig.mode.current --format=csv,noheader 2>/dev/null | grep -qiv "N/A"; then
+    "$0" qualify-mig "$OUT/mig" 2>&1 | tail -n 3
+    jq -c '.[]' "$OUT/mig/summary.json" 2>/dev/null | while read -r row; do jq --argjson r "$row" '. + [$r]' "$SUMMARY" > "$SUMMARY.tmp" && mv "$SUMMARY.tmp" "$SUMMARY"; done
+  else
+    record "H5 MIG" true "skipped: the card has no MIG (not an A100/H100-class part)"
+  fi
+  if [ "$(nvidia-smi -L | wc -l)" -ge 2 ]; then
+    "$0" qualify-multi "$OUT/multi" 2>&1 | tail -n 3
+    jq -c '.[]' "$OUT/multi/summary.json" 2>/dev/null | while read -r row; do jq --argjson r "$row" '. + [$r]' "$SUMMARY" > "$SUMMARY.tmp" && mv "$SUMMARY.tmp" "$SUMMARY"; done
+  else
+    record "H7 multi-GPU" true "skipped: one GPU on this host"
+  fi
+  PCI=$(lspci -D -d 10de: | grep -iE "VGA|3D" | head -n1 | cut -d' ' -f1)
+  if [ -n "$PCI" ] && [ -d "/sys/kernel/iommu_groups" ] && [ -e "/sys/bus/pci/devices/$PCI/iommu_group" ]; then
+    "$0" qualify-passthrough "$OUT/passthrough" "$PCI" 2>&1 | tail -n 3
+    jq -c '.[]' "$OUT/passthrough/summary.json" 2>/dev/null | while read -r row; do jq --argjson r "$row" '. + [$r]' "$SUMMARY" > "$SUMMARY.tmp" && mv "$SUMMARY.tmp" "$SUMMARY"; done
+  else
+    record "H8 passthrough" true "skipped: no IOMMU group for the card (enable VT-d/AMD-Vi to qualify it)"
+  fi
   ;;
 *)
   sed -n '2,20p' "$0"; exit 2 ;;
