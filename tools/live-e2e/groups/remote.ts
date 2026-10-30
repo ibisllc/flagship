@@ -168,8 +168,8 @@ export const remote: Group = {
         }
         return got.join(" ");
       });
-      // The box lists a session by the SHA-256 of its token (never a piece of the token itself).
-      const prefix = createHash("sha256").update(companion, "utf8").digest("hex");
+      // The box lists a session by the first 16 hex characters of the SHA-256 of its token (never a piece of the token itself).
+      const prefix = createHash("sha256").update(companion, "utf8").digest("hex").slice(0, 16);
       await rec.check("the owner lists it as a `remote` browser session (their own device session is `device`)", async () => {
         const r = await http(`https://${b.fqdn}/api/screens/paired-sessions/list`, { headers: s });
         assert(r.status === 200, `${r.status}: ${short(r.text)}`);
