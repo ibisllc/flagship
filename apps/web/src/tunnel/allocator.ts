@@ -278,6 +278,15 @@ export class AppUserAllocator {
     return { affectedSets, shortenedsHeld };
   }
 
+  /** `fqdn` is exactly `<label>.<user>.<apex>` and the pod's own canonical sits in the same user zone. */
+  private inOwnUserZone(podCanonical: string, fqdn: string): boolean {
+    if (!isShortServiceCanonical(fqdn, this.apex)) return false;
+    const suffix = "." + this.apex;
+    const userOf = (f: string) => f.slice(0, -suffix.length).split(".").pop();
+    if (!podCanonical.endsWith(suffix)) return false;
+    return userOf(podCanonical) === userOf(fqdn);
+  }
+
   /**
    * Pod explicitly asks the hub to transfer ownership of `fqdn` to
    * itself. Validates: (a) pod is registered, (b) fqdn is parseable,
@@ -294,13 +303,24 @@ export class AppUserAllocator {
     if (!pod) return { ok: false, reason: "pod not registered" };
     const key = parseSetKey(fqdn, this.apex);
     if (!key) return { ok: false, reason: "fqdn not parseable" };
-    if (!pod.derivableShorteneds.has(fqdn) && !pod.canonicals.has(fqdn)) {
+    // A box under the per-box wildcard has no per-app canonicals, so its apps' short names are not
+    // derivable from anything it registered: a box may claim `<label>.<user>` in its OWN user zone
+    // (the entitlement that admitted the pod names that user; a sibling account's box never matches).
+    const ownZone = pod.derivableShorteneds.has(fqdn) || pod.canonicals.has(fqdn) ? false : this.inOwnUserZone(podCanonical, fqdn);
+    if (!pod.derivableShorteneds.has(fqdn) && !pod.canonicals.has(fqdn) && !ownZone) {
       return { ok: false, reason: "fqdn not derivable from any of pod's canonicals" };
     }
     const setKeyStr = encodeSetKey(key);
-    const set = this.sets.get(setKeyStr);
+    let set = this.sets.get(setKeyStr);
     if (!set) {
-      return { ok: false, reason: "fqdn not parseable" };
+      if (!ownZone) return { ok: false, reason: "fqdn not parseable" };
+      set = { key, members: new Map(), slotHolders: new Map(), candidateQueue: new Map() };
+      this.sets.set(setKeyStr, set);
+    }
+    if (ownZone) {
+      if (!set.members.has(podCanonical)) set.members.set(podCanonical, fqdn);
+      pod.setKeys.add(setKeyStr);
+      enqueueCandidate(set, fqdn, podCanonical);
     }
     const previousHolder = set.slotHolders.get(fqdn) ?? null;
     // Explicit transfer: move the requesting pod to the HEAD of the

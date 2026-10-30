@@ -290,22 +290,29 @@ describe("AppUserAllocator — requestTransfer", () => {
     expect(a.findHolderByFqdn("messenger.john.flagship.services")).toBe(WOODSHED);
   });
 
-  it("rejects transfer if requester has no derivable claim to the FQDN", () => {
+  it("lets a box claim an app's short name in its own user zone though nothing it registered derives it", () => {
     const a = new AppUserAllocator({ now: () => 1_000 });
-    a.addPod({
-      podCanonical: KITCHEN,
-      canonicals: ["messenger.kitchen.john.flagship.services"],
-    });
-    a.addPod({
-      podCanonical: WOODSHED,
-      canonicals: ["shittygame.woodshed.john.flagship.services"],
-    });
-    // Woodshed only has shittygame; can't claim messenger.john.
-    const r = a.requestTransfer({
-      podCanonical: WOODSHED,
-      fqdn: "messenger.john.flagship.services",
-    });
-    expect(r.ok).toBe(false);
+    a.addPod({ podCanonical: KITCHEN, canonicals: [] });
+    a.addPod({ podCanonical: WOODSHED, canonicals: [] });
+    const first = a.requestTransfer({ podCanonical: KITCHEN, fqdn: "messenger.john.flagship.services" });
+    expect(first.ok).toBe(true);
+    expect(a.findHolderByFqdn("messenger.john.flagship.services")).toBe(KITCHEN);
+    const second = a.requestTransfer({ podCanonical: WOODSHED, fqdn: "messenger.john.flagship.services" });
+    expect(second.ok).toBe(true);
+    if (second.ok) expect(second.previousHolder).toBe(KITCHEN);
+    expect(a.findHolderByFqdn("messenger.john.flagship.services")).toBe(WOODSHED);
+    // The claiming box is a member of the set, so its death hands the name to the other box.
+    a.removePod(WOODSHED);
+    expect(a.findHolderByFqdn("messenger.john.flagship.services")).toBe(KITCHEN);
+  });
+
+  it("rejects a claim in another account's zone, and names that are not one label under the user", () => {
+    const a = new AppUserAllocator({ now: () => 1_000 });
+    a.addPod({ podCanonical: WOODSHED, canonicals: [] });
+    expect(a.requestTransfer({ podCanonical: WOODSHED, fqdn: "messenger.mary.flagship.services" }).ok).toBe(false);
+    expect(a.requestTransfer({ podCanonical: WOODSHED, fqdn: "a.b.john.flagship.services" }).ok).toBe(false);
+    expect(a.requestTransfer({ podCanonical: WOODSHED, fqdn: "*.john.flagship.services" }).ok).toBe(false);
+    expect(a.findHolderByFqdn("messenger.mary.flagship.services")).toBeUndefined();
   });
 
   it("rejects transfer for an unregistered pod", () => {
