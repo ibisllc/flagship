@@ -67,17 +67,18 @@ import { WorkerTail, setCurrentTail } from "./lib/workerTail.js";
 async function updateFromCommit(): Promise<string> {
   const pinned = process.env.GYM_UPDATE_FROM;
   if (pinned && /^[0-9a-f]{40}$/.test(pinned)) return pinned;
+  const thisRelease = process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit;
   try {
     const r = await fetch(`https://${CONTROL}/build/iso/releases.json`);
     const j = (await r.json()) as { releases?: Array<{ commit: string; sequence: number; arch?: string[] }> };
     const earlier = (j.releases ?? [])
-      .filter((e) => /^[0-9a-f]{40}$/.test(e.commit) && e.commit !== BOX_RELEASE.commit && (e.arch ?? []).includes("amd64"))
+      .filter((e) => /^[0-9a-f]{40}$/.test(e.commit) && e.commit !== thisRelease && (e.arch ?? []).includes("amd64"))
       .sort((a, b) => b.sequence - a.sequence)[0];
     if (earlier) return earlier.commit;
   } catch {
     // The index is advice; without it the box starts on this release and the group reports that there is nothing to update to.
   }
-  return process.env.GYM_INSTALLER_GIT_REF || BOX_RELEASE.commit;
+  return thisRelease;
 }
 
 const args = process.argv.slice(2);
