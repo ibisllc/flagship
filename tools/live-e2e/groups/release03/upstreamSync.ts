@@ -2,14 +2,14 @@
 // then ask for a sync with a later ref: the box answers with a three-way proposal (what upstream changed,
 // conflicts, capability changes) and a NEW build holding the merge, which is not live until the owner
 // deploys it; the app's page names the repo it came from, and a sync at the version it runs is "up to
-// date" without opening a build. Needs a public fixture repo that is Flagship-ready at both refs (no AI): set GYM_SYNC_REPO
-// (and GYM_SYNC_BASE_REF / GYM_SYNC_NEXT_REF, default v1 / v2); without it the group is skipped.
+// date" without opening a build. Uses the public fixture repo ibisllc/flagship-sync-fixture (Flagship-ready at v1 and v2, no AI); GYM_SYNC_REPO
+// (and GYM_SYNC_BASE_REF / GYM_SYNC_NEXT_REF) override it.
 import { pair } from "../../lib/fleet.js";
 import { assert, http, postJson, short } from "../../lib/harness.js";
 import type { Group } from "../types.js";
 import { uninstall, until } from "./util.js";
 
-const REPO = process.env.GYM_SYNC_REPO || "";
+const REPO = process.env.GYM_SYNC_REPO || "https://github.com/ibisllc/flagship-sync-fixture";
 const BASE = process.env.GYM_SYNC_BASE_REF || "v1";
 const NEXT = process.env.GYM_SYNC_NEXT_REF || "v2";
 
