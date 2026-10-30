@@ -24,7 +24,7 @@ export const lifecycle: Group = {
   name: "lifecycle",
   title: "revoke → un-revoke (admin root) → delete (wipe-now order + release the name) on home2, and the box wipes itself",
   needs: ["A2"],
-  phase: 9,
+  phase: 13,
   async run({ A, rec, box }) {
     const b = box("A2");
     const user = A.username;
@@ -87,8 +87,8 @@ export const lifecycle: Group = {
     if (!ordered || !released) return;
     const orderedAt = Date.now();
     let stoppedAfterMs = 0;
-    await rec.check("home2 consumes the order, wipes itself and stops answering (≤ 12 min)", async () => {
-      const deadline = Date.now() + 12 * 60_000;
+    await rec.check("home2 consumes the order, wipes itself and stops answering (≤ 25 min)", async () => {
+      const deadline = Date.now() + 25 * 60_000;
       let last = "";
       while (Date.now() < deadline) {
         const r = await tryHttp(`https://${b.fqdn}/`, {}, 15_000);
@@ -102,12 +102,12 @@ export const lifecycle: Group = {
         }
         await sleep(20_000);
       }
-      throw new Error(`home2 still answers after 12 min (${last})`);
+      throw new Error(`home2 still answers after 25 min (${last})`);
     });
     // The decommission lane rings on the next heartbeat (5 min) and the wipe takes a little more.
-    await rec.check("the decommission order reached the box within the doorbell budget (heartbeat 5 min + wipe: ≤ 10 min)", async () => {
+    await rec.check("the decommission order reached the box within the doorbell budget (heartbeat 5 min + the wipe of every app's data: ≤ 20 min)", async () => {
       assert(stoppedAfterMs > 0, "home2 never stopped answering");
-      assert(stoppedAfterMs <= 10 * 60_000, `stopped ${(stoppedAfterMs / 60_000).toFixed(1)} min after the release`);
+      assert(stoppedAfterMs <= 20 * 60_000, `stopped ${(stoppedAfterMs / 60_000).toFixed(1)} min after the release`);
       return `${(stoppedAfterMs / 60_000).toFixed(1)} min`;
     });
   },
