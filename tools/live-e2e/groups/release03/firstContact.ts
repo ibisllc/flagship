@@ -52,7 +52,9 @@ export const firstContact: Group = {
     let req: Req | null = null;
     await rec.check("its first request (purpose entitlement) carries an enrollment proof that verifies with the recipe's secret", async () => {
       req = await until("the entitlement request", 25 * 60_000, async () => {
-        const r = await http(`https://${CONTROL}/api/users/${A.username}/secret-requests`);
+        // The phone's own listing (owner mailbox auth) carries the box's device-info hint; the per-user read-token
+        // listing leaves it out.
+        const r = await postJson(`https://${CONTROL}/api/secret-requests`, mailboxAuth(A));
         const hit = ((r.json?.requests ?? []) as Req[]).find((x) => x.serverDomain === b.fqdn && x.purpose === "entitlement");
         if (hit) return hit;
         const pod = (await pods(A.username)).find((p) => p.serverDomain === b.fqdn);
