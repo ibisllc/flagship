@@ -164,6 +164,7 @@ export const backups: Group = {
     }
 
     await rec.check("a daily schedule 10 minutes ahead makes a backup by itself, and keep-1-daily drops the older one", async () => {
+      const keysBefore = Number((await list()).keysLeft);
       const at = new Date(Date.now() + 10 * 60_000);
       const minuteOfDayUtc = at.getUTCHours() * 60 + at.getUTCMinutes();
       const put = await http(`https://${a.fqdn}/api/screens/server-archive/backups/schedule`, {
@@ -181,7 +182,7 @@ export const backups: Group = {
         if (sched.length && !l.running) {
           const older = (l.backups ?? []).find((x: { archiveId: string }) => x.archiveId === sv.archiveId);
           assert(!older, `retention kept the older backup: ${last}`);
-          assert(l.keysLeft === 3, `keysLeft ${l.keysLeft}`);
+          assert(l.keysLeft === keysBefore - sched.length, `keysLeft ${l.keysLeft}, was ${keysBefore} before ${sched.length} scheduled backup(s)`);
           return `scheduled backup ${sched[0].archiveId.slice(0, 8)}…; the older one is gone`;
         }
         await sleep(30_000);
