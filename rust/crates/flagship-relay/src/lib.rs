@@ -6,6 +6,7 @@
 
 pub mod allocator;
 pub mod authority;
+pub mod com;
 pub mod echo;
 pub mod flow;
 pub mod frame;
