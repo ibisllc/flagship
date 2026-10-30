@@ -76,7 +76,7 @@ fi
 # group on boxes built like a real new box (Podman + the Rust path); classic runs the groups that
 # cover the boxes already out there (Docker + TS), which this release updates in place.
 STACKS="${GYM_STACKS:-arch-v2 classic}"
-CLASSIC_GROUPS="${GYM_CLASSIC_GROUPS:-core,gating,invites,one-list,update,backups}"
+CLASSIC_GROUPS="${GYM_CLASSIC_GROUPS:-core,gating,invites,one-list,update,backups,stack-switch}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 report() { # report <run dir> <stack>
   local summary="$1/summary.json"
