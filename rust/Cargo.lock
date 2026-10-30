@@ -1475,6 +1475,8 @@ dependencies = [
 name = "flagship-relay"
 version = "0.3.0"
 dependencies = [
+ "ed25519-dalek 3.0.0",
+ "flagship-crypto",
  "futures-util",
  "rustls",
  "serde_json",

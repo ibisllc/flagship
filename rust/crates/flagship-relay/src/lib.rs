@@ -5,6 +5,7 @@
 //! Conformance with the TypeScript relay: `docs/architecture-v2/relay-transport.md`.
 
 pub mod allocator;
+pub mod authority;
 pub mod echo;
 pub mod flow;
 pub mod frame;
