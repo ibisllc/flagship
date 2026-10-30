@@ -13,15 +13,32 @@ import { SERVER_CODE_REQUEST, runSetupStep, runsUnprivileged } from "./privilege
 const HEX64 = /^[0-9a-f]{64}$/;
 export const SERVER_CODE_ISSUE = "/etc/issue.d/50-flagship-server-code.issue";
 
+/** keyd hands the blob to the unprivileged daemon at its migration, which can land after the daemon's first read. */
+async function readBlobWhenShared(path: string): Promise<string> {
+  for (let i = 0; ; i++) {
+    try {
+      return await readFile(path, "utf8");
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (i >= 20 || code !== "EACCES") throw e;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+}
+
 /** `{ enrollmentProof }` for the first request's deviceInfo, or `{}` when the recipe carried no secret. */
 export async function enrollmentDeviceInfo(o: { blobPath: string; serverDomain: string; stkPubHex: string }): Promise<{ enrollmentProof?: string }> {
   try {
-    const b = JSON.parse(await readFile(o.blobPath, "utf8")) as { enrollmentKeyHex?: unknown; authCode?: { serial?: unknown } };
+    const b = JSON.parse(await readBlobWhenShared(o.blobPath)) as { enrollmentKeyHex?: unknown; authCode?: { serial?: unknown } };
     const key = typeof b.enrollmentKeyHex === "string" ? b.enrollmentKeyHex.toLowerCase() : "";
     const serial = b.authCode?.serial;
-    if (!HEX64.test(key) || typeof serial !== "string") return {};
+    if (!HEX64.test(key) || typeof serial !== "string") {
+      console.log(`[enrollment] no proof: the install blob carries ${key ? "a malformed" : "no"} enrollment secret${typeof serial === "string" ? "" : " and no serial"}`);
+      return {};
+    }
     return { enrollmentProof: enrollmentProofHex(Buffer.from(key, "hex"), { serverDomain: o.serverDomain, stkPubHex: o.stkPubHex, authCodeSerial: serial }) };
-  } catch {
+  } catch (e) {
+    console.log(`[enrollment] no proof: ${(e as Error).message}`);
     return {};
   }
 }
