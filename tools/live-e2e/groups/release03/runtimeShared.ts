@@ -24,10 +24,18 @@ export async function uploadModule(box: Box, session: string, bytes: Uint8Array)
 
 /** POST a signed install or update (PUT) of `manifest`; returns the box's answer. */
 export async function signedInstall(acct: Account, box: Box, slug: string, manifest: Record<string, unknown>, update = false) {
-  const req: InstallServiceRequest = { serverId: box.fqdn, creator: acct.username, slug, manifestJson: JSON.stringify(manifest), addOwnerToMembership: true, issuedAt: Date.now() };
-  const body = { request: req, signature: bytesToHex(signInstallService(req, acct.keys.irk)) };
-  if (!update) return postJson(`https://${box.fqdn}/api/services`, body, {}, 240_000);
-  return http(`https://${box.fqdn}/api/services/${encodeURIComponent(`${acct.username}--${slug}`)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, 240_000);
+  // Installs on a box go through one queue: a request that waited behind other groups' installs is "stale" by the time its
+  // turn comes. That is the box's freshness rule, not a failure of this one: sign it again and send it again.
+  let last: Awaited<ReturnType<typeof postJson>> | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const req: InstallServiceRequest = { serverId: box.fqdn, creator: acct.username, slug, manifestJson: JSON.stringify(manifest), addOwnerToMembership: true, issuedAt: Date.now() };
+    const body = { request: req, signature: bytesToHex(signInstallService(req, acct.keys.irk)) };
+    last = !update
+      ? await postJson(`https://${box.fqdn}/api/services`, body, {}, 240_000)
+      : await http(`https://${box.fqdn}/api/services/${encodeURIComponent(`${acct.username}--${slug}`)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, 240_000);
+    if (!(last.status === 400 && /stale request/.test(last.text))) return last;
+  }
+  return last!;
 }
 
 export async function appRuntime(box: Box, session: string, serviceId: string): Promise<Record<string, any>> {

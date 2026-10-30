@@ -90,7 +90,8 @@ export const backups: Group = {
         const l = await list();
         const e = (l.backups ?? []).find((x: { archiveId: string }) => x.archiveId === run.json.archiveId);
         if (e && l.lastRun?.ok === true && !l.running) {
-          assert(l.keysLeft === 4, `keysLeft ${l.keysLeft}`);
+          // One key per backup: a scheduled backup that fired just before this one has used its own.
+          assert(l.keysLeft === 5 - (l.backups ?? []).length && l.keysLeft <= 4, `keysLeft ${l.keysLeft} with ${(l.backups ?? []).length} backup(s)`);
           assert(e.trigger === "now" && (e.apps ?? []).some((x: unknown) => JSON.stringify(x).includes(APP)), `entry ${short(e)}`);
           saved = e;
           return `${e.archiveId.slice(0, 8)}… ${e.bytes} B data, ${e.bundleBytes} B file`;

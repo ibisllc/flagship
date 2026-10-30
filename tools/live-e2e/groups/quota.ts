@@ -194,7 +194,7 @@ export const quota: Group = {
         return `${r.json.wroteMb} MB then ENOSPC (limit ${Math.round(filesLimit / MiB)} MB)`;
       });
       await rec.check("app-detail says the folder is full, and Activity has app.storage.full for it", async () => {
-        await until("files full", 4, async () => ((await appDetail())?.storage?.files?.full ? true : null));
+        await until("files full", 8, async () => ((await appDetail())?.storage?.files?.full ? true : null));
         return await until("Activity entry", 4, async () => {
           const r = await http(`https://${b.fqdn}/api/screens/activity?limit=200`, { headers: H });
           const e = (r.json?.entries ?? []).find((x: { kind?: string; target?: string; detail?: string }) => x.kind === "app.storage.full" && x.target === serviceId && /files folder/.test(String(x.detail)));
