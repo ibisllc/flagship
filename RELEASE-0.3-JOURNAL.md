@@ -92,6 +92,8 @@ heavy security focus on everything new, then the four release stages, until the 
 the stores with new graphics, texts and descriptions of the whole range of improvements, and the
 website is updated. Record every step in this file's Log as you go (commit + push it each time).
 Also in 0.3 (owner, 2026-10-30): the Rust migration and verifiable runtime distribution, plan section G and Appendix G
+Also in 0.3 (owner, 2026-10-30): phone and box TLS, phone-endpoint routing, box offline grace and malicious-app namespace isolation,
+plan section H and Appendix H (the former PHONE-AND-BOX-TLS-SPEC.md). A proposed design: nothing in it is built or validated yet.
 (per-service certificates are retired, not built). Not in 0.3 (decided): outbound proxy (later, recommended free BYO-proxy), marketplace/payments,
 custom names/domains, retail, browser extension, other-OS installers, alpine, offline boot unlock /
 own control plane (next release; notes in docs/data-sovereignty.md).
@@ -218,6 +220,35 @@ agreed on 2026-10-30 that per-service certificates are retired (apps are served 
       qualified Node, frozen locks, unprivileged runtime, SBOM/provenance, isolated owner builds, reproducible-build comparisons.
 - [ ] G10 (§5) Completion evidence: startup/CPU/RSS/throughput/p95-p99 benchmarks on amd64 and arm64, shared vectors,
       fuzzing, crash/power-loss, mixed-version and install/update/rollback tests, unsafe/FFI audit, production qualification.
+
+### H. Phone and box TLS, phone routing, offline grace, namespace isolation (owner direction, 2026-10-30; part of 0.3)
+Requirements are in "Appendix H" below (the former PHONE-AND-BOX-TLS-SPEC.md, removed from the working tree when folded in).
+It is a PROPOSED design: nothing is implemented, deployed or security-validated. Phone isolation may not be claimed until H1, H2
+and H5 pass their adversarial scenarios through the real harness, issuance service and relay. Verified against the current code
+2026-10-30 (cert finding): a box cert today carries SANs `<server>.<user>`, `*.<server>.<user>`, `*.<user>` with the box's own key,
+which matches the spec's box row; the bare `<user>` name is not issued to anyone yet. Per-service certificates stay retired (G).
+- [ ] H1 Trusted issuance service on `.com`: authenticate the device and its current grant, derive the exact order identifiers from
+      authorization, verify the CSR and names, own the ACME order lifecycle with service-held credentials (boxes lose arbitrary
+      access to the shared account-zone DNS-01 writer), publish only that order's challenge, verify the certificate before delivery,
+      refuse every box request for the bare user name (also mixed orders). Inventory existing certificates and prior ACME
+      authorizations first and decide how residual authority is closed (Appendix H, "Issuance boundary").
+- [ ] H2 Phone certificate for the bare `<user>.flagship.services` (one private key per phone, never uploaded) and the box wildcard
+      row; phone-side TLS termination; keep the bare name (NOT `admin.<user>`, which every box wildcard covers).
+- [ ] H3 Phone routing through the relay (TS hub and the Rust relay, G7): signed claim bound to account, phone identity, hostname,
+      session, freshness and a short lease; only an authorized admin phone; one holder at a time with relay-issued generations;
+      handover on explicit foreground acquisition; old connections stay; fail closed, never fall back to a box; exclusivity across
+      relay instances. Decide lease durations, replay protection, acquisition ordering, deadlines and revocation propagation first.
+- [ ] H4 Box offline grace: server-creation choice (one week / one month / indefinitely) enforced by a signed serving/routing lease
+      (account, server key, scope, times, revocation generation), renewed by any eligible admin phone, with certificate-issuance
+      authorization renewed alongside; relay closes long streams by a documented deadline; revocation beats renewal; show the
+      real next expiry and warn before it. Decide the constrained renewal credential (cannot add servers, widen names, change policy
+      or undo revocation; must not bypass the admin-root biometric) and the exact meaning of "one month".
+- [ ] H5 Malicious-app namespace isolation: app identity and hostnames bound to the trusted installation record, caller derived from
+      the harness boundary (not headers or the manifest), no app access to keyd, issuance or relay-claim credentials; host-only
+      `__Host-` cookies, exact origin checks, CSRF protection and no sibling CORS for phone-endpoint operations. Pairs with G3/G5.
+- [ ] H6 The eleven acceptance scenarios of Appendix H as gym groups (negative isolation, relay multi-instance, lease expiry with a
+      still-valid certificate, renewal policy, sibling-app web attacks), run through the real harness, issuance service and relay.
+- [ ] H7 CA limits: reuse each phone's valid certificate (no issuance per handover); schedule renewals within the issuance limits.
 
 ### Appendix G. Rust migration and verifiable runtime distribution: requirements (folded in from docs/rust-migration-todo.md, 2026-10-30)
 
@@ -418,8 +449,242 @@ claim requiring a qualified reproducible build; checksums alone cannot provide i
   unlaunched application work on its feature branch; keep this design TODO on main.
   Update the single status entry in `AGENTS.md` as work lands.
 
+### Appendix H. Phone and box TLS, routing and namespace isolation: requirements (folded in from PHONE-AND-BOX-TLS-SPEC.md, 2026-10-30)
+
+Status: proposed design from the owner discussion, 2026-10-30. This standalone
+spec records the agreed direction and remaining implementation decisions. It
+does not claim implementation, deployment, or completed security validation.
+
+### Purpose and trust model
+
+Preserve canonical app URLs on boxes while providing a phone-only HTTPS endpoint
+for interactive secret delivery, approvals, temporary sharing, and live sessions.
+TLS terminates on the selected device; Fly forwards encrypted traffic.
+
+Visitors and calling apps trust the hosting owner with plaintext delivered to
+that owner's app. A deliberately modified host can serve different software or
+lie about its app identity. TLS authenticates a hostname, not the executing code
+or its author. Author-signed packages establish provenance, not proof that a
+host actually executes those packages. Hardware-backed attestation is a possible
+future enhancement, outside this spec.
+
+This accepted trust does not excuse a malicious app escaping its sandbox or
+tricking the legitimate harness into acting as another app. Nor does it grant
+a box phone/admin authority. Boxes must not acquire account-management powers
+or impersonate the phone endpoint through their delegated credentials.
+
+### Certificate names
+
+Each device generates and retains its own private TLS key. Phones do not share
+one private key, and no private leaf key is uploaded to the issuance service.
+
+| Endpoint | Permitted certificate names |
+| --- | --- |
+| Each authorized admin phone | `user.flagship.services` |
+| Each authorized box | `box.user.flagship.services`, `*.box.user.flagship.services`, `*.user.flagship.services` |
+
+The account wildcard preserves canonical names such as
+`app-author.user.flagship.services`. It also covers sibling box names. This
+account-wide box TLS authority is an explicit tradeoff: certificate possession
+does not itself grant routing authority, but a compromised box that receives
+traffic for a sibling name can authenticate that name.
+
+`*.user.flagship.services` does not cover the bare `user.flagship.services`
+name. That bare name is reserved for authorized admin phones.
+
+#### Recommendation on `admin.user.flagship.services`
+
+Do not use `admin.user.flagship.services` as the protected phone endpoint: it is
+covered by every box's account wildcard. Adding this subdomain would weaken,
+not strengthen, the intended certificate boundary. Keep the bare user name.
+
+If a separately named admin endpoint becomes necessary, it needs a namespace
+outside every box's allowed certificate names and issuance authority, or
+independent authentication to a pinned phone key. A cosmetic subdomain is not
+an additional authorization boundary. The bare user endpoint must still
+authenticate callers and authorize each sensitive operation.
+
+### Issuance boundary: required before claiming phone isolation
+
+Wildcard exclusion at TLS verification is insufficient by itself. Both
+`*.user.flagship.services` and `user.flagship.services` use the DNS-01 TXT name
+`_acme-challenge.user.flagship.services`. A box allowed to publish arbitrary
+challenge values there can request a certificate for the bare phone name.
+Checking only the TXT record name, or enforcing policy only inside the box's
+keyd, does not prevent this on a modified host.
+
+The trusted issuance service must:
+
+1. Authenticate the requesting device and verify its current authorization,
+   binding account, device identity key, permitted names, and grant validity.
+2. Own and control the ACME order lifecycle using service-controlled ACME
+   credentials. Box-controlled ACME accounts must not retain arbitrary access
+   to the shared account-zone DNS challenge writer.
+3. Derive the exact permitted order identifiers from authorization, rather than
+   trusting a device's description of its requested challenge.
+4. Verify the CSR signature and exact requested names, bind the CSR/public key
+   to this authorized request, and reject extra names or mismatched identifiers.
+5. Publish only challenges belonging to that validated order, finalize only
+   its approved CSR, and verify the resulting certificate before delivery.
+6. Refuse every box request for the bare user name, including requests that
+   combine it with otherwise allowed box or wildcard names.
+
+The device supplies its CSR and receives the public certificate chain; its
+private TLS key remains on the device. Local keyd restrictions remain useful
+defense in depth, but the remote issuance service enforces the security boundary.
+
+This design still trusts the DNS/issuance operator for ordinary Web PKI
+authentication. Protecting secrets against a compromised operator requires
+independently verified phone keys and application-level encryption or signing.
+Browser verification code must itself come from a trusted source.
+
+Before rollout, inventory existing certificates and prior issuance authority.
+Closing the challenge endpoint does not invalidate certificates already issued
+or necessarily eliminate previously validated ACME authorizations. Migration
+must address that residual authority before advertising phone isolation.
+
+### Phone routing through Fly
+
+Reuse the existing device-requested relay routing model. The phone app being
+actively used requests the bare user's route through its outbound tunnel.
+
+- Only a currently authorized admin phone can claim `user.flagship.services`.
+  A box is rejected independently of what certificates it presents.
+- Each claim is signed and bound to the account, phone identity, hostname,
+  tunnel/session, freshness information, and a short routing-lease expiry.
+- One phone holds the route for new connections at a time. Multiple phones may
+  hold valid certificates for the same hostname, with different private keys.
+- Recommended handover: an explicit foreground acquisition supersedes the
+  current holder using a relay-issued generation. Renewal extends the current
+  holder's lease and cannot take ownership back after handover.
+- Existing connections stay with the original phone until closed or expired;
+  they are not transparently moved to another phone.
+- Disconnect, expiry, or revocation releases the route. If no eligible phone is
+  available, the relay fails closed and never falls back to a box.
+- Foreground status is honest-client behaviour, not a remotely provable fact.
+  The authorization boundary is admin-phone eligibility, not a claim of activity.
+
+Specify lease durations, replay protection, simultaneous acquisition ordering,
+cross-relay coordination, connection deadlines, and revocation propagation
+before implementation. The exclusivity rule must hold across relay instances.
+
+The hostname authenticates the account's phone endpoint, not a particular phone.
+Operations requiring a specific phone bind the application session to its device
+key. Reconnecting after handover requires fresh session authentication where
+appropriate; do not copy phone private keys to preserve connections.
+
+Phone hosting is an interactive facility, not an always-on availability promise.
+Mobile OS suspension, network changes, and battery policies interrupt tunnels.
+Fly remains in the network path, so the domain alone offers no latency guarantee.
+Do not replace asynchronous encrypted delivery flows with a mandatory live phone
+connection merely because this endpoint exists.
+
+### Box offline grace and expiring authority
+
+Server creation offers:
+
+> Keep this server reachable without an admin phone for…
+> One week / One month / Indefinitely
+
+This controls how long Flagship remote access continues without renewal from an
+authorized admin phone. It does not power off the server or prevent a modified
+host from serving through LAN access or unrelated infrastructure.
+
+Use a signed serving/routing lease as the enforcement mechanism. Expiring only
+the Let's Encrypt issuance grant is insufficient: an already-issued certificate
+remains usable until its certificate expiry, subject to revocation handling.
+
+- Bind the lease to the account, server identity key, allowed routing scope,
+  issuance/expiry times, and a version or revocation generation.
+- Renew while an eligible admin phone is available, according to the owner's
+  selected maximum grace period. Any eligible admin phone may renew.
+- Renew certificate-issuance authorization alongside the serving lease, with
+  independent checks in the issuance service and relay.
+- Relay expiry prevents new connections and closes existing connections by a
+  documented deadline; an indefinite stream must not evade the offline limit.
+- Revocation takes precedence over renewal and the indefinite option. A reused
+  server name with a different identity key cannot inherit old authority.
+- Indefinitely means no phone-contact deadline, not immunity to revocation or
+  an infinite certificate lifetime.
+- Show the actual next remote-access expiry and warn before it is reached.
+
+Silent renewal must not bypass biometric protection of the admin root. If renewal
+must work without reopening that root, use an explicitly authorized, constrained
+renewal credential. It may renew only existing approved servers within the owner's
+configured policy; it cannot add servers, widen names, change policy, or undo
+revocation. Credential lifetime, storage, rotation, and revocation require design.
+
+### Malicious-app namespace isolation
+
+Bind app identity and allowed hostnames to the trusted installation record made
+from the approved `flagship.json`. Do not treat an app-writable manifest, request
+header, advertised app name, or self-reported caller identity as authority.
+
+Derive the caller from the harness-controlled process/container boundary and
+resolve its routes through trusted installation state. A legitimate identity or
+namespace change requires a separate authorized update; runtime self-renaming
+must not change ownership. Apps cannot access host management credentials,
+keyd sockets, certificate issuance credentials, or relay claim credentials.
+
+Browser-facing phone operations must also resist sibling-app attacks: use
+host-only `__Host-` authentication cookies where cookies are used, exact origin
+checks for sensitive HTTP/WebSocket operations, explicit CSRF protection, and
+no broad sibling-origin CORS grants. Sibling subdomains can be same-site, so
+SameSite cookies alone do not establish app isolation.
+
+### Required acceptance scenarios
+
+Run adversarial scenarios through the actual harness, isolation boundary,
+issuance service, and relay where applicable, not only mocked policy functions.
+
+1. App A attempts to claim app B's canonical and box-local hostnames. Both fail;
+   legitimate traffic to A and B still reaches their respective installations.
+2. A modifies its `flagship.json` after installation to name B. Routing identity
+   remains unchanged, including after restart and reconciliation.
+3. A forges `Host`, forwarded headers, app identifiers, and caller metadata to
+   obtain B's traffic or authority. The harness rejects the impersonation.
+4. A attempts direct access to management, signing, keyd, issuance, and relay
+   claim interfaces. It cannot obtain another app's or the host's authority.
+5. A box with a valid account-wildcard grant requests the bare user's certificate,
+   including mixed-name orders and arbitrary DNS challenge values. Issuance fails.
+6. The same box attempts to claim the bare user's relay route. Routing fails
+   independently of certificate checks, including with a simulated valid cert.
+7. Two admin phones acquire and hand over the route. New connections follow the
+   accepted holder, old connections stay bound, and stale renewals cannot retake it.
+8. Phone disconnection, suspension, lease expiry, replay, and revocation never
+   route the bare user name to a box. Repeat across multiple relay instances.
+9. A box's serving lease expires while its TLS certificate is still valid. Remote
+   access ends within the specified deadline, including long-lived connections.
+10. Renewal succeeds within policy; revoked credentials, widened scope, expired
+    grants, and grants for a previous server identity are rejected.
+11. A malicious sibling web app attempts cookie injection, CSRF, cross-origin
+    reads, and WebSocket access against the phone endpoint. Sensitive operations
+    remain protected.
+
+### Readiness and remaining decisions
+
+This is a reasonable security model for trusting hosting owners while isolating
+ordinary apps and reserving the phone endpoint. It is not a completed security
+assessment. Phone isolation is blocked on trusted ACME-order control, migration
+of prior authority, independent relay authorization, and the adversarial tests.
+
+Before shipping, decide the routing/connection deadlines, renewal credential
+format, revocation propagation, exact meaning of one month, and certificate
+renewal scheduling. Account for CA issuance limits: separate phone keys do not
+avoid limits on repeated certificates with the same identifier set. Avoid issuing
+a certificate for every routing handover; reuse each phone's valid certificate.
+
+### Reference
+
+[RFC 8555 §7.1.3](https://www.rfc-editor.org/rfc/rfc8555.html#section-7.1.3)
+describes wildcard authorizations;
+[§8.4](https://www.rfc-editor.org/rfc/rfc8555.html#section-8.4) describes DNS-01
+challenge records. Together they explain why the wildcard and bare user name
+share a challenge location and require order-aware issuance enforcement.
+
 ## Log
 
+- 2026-10-30: folded PHONE-AND-BOX-TLS-SPEC.md into the plan as section H and Appendix H (proposed design, nothing built); the spec file was removed. Gym 5 arch-v2 pass: 467 passed, 9 failed (chat-cross-owner x3, first-contact (run predates the harness fix), share update verdict, backups schedule, local-ai-cpu (UpCloud core quota 32), stack-switch (ran on arch-v2, needs the classic pass), fleet home3 never registered).
 - 2026-10-24: owner made this session release manager; decisions above. UX rebased onto 0.3 (139),
   web/Android/iOS first contact finished; architecture replayed (138) and integrated (`ced988cfe`).
 - 2026-10-24: `ae9448cec` stack switch; `8007d3f8f` full-test-vm.sh + first-run fixes; `d7051eec9`
