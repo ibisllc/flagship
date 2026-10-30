@@ -625,3 +625,112 @@ fn the_runtime_commands_verify_install_and_report_with_exit_codes() {
     assert_eq!(call(s(&["runtime", "verify"])).0, 2);
     assert_eq!(call(base("frobnicate")).0, 2);
 }
+
+fn serving(f: &Fx) -> Canned {
+    let t = f.lock.target("linux-amd64").unwrap();
+    let gz = std::fs::read(&f.archive).unwrap();
+    canned(&[
+        (&f.lock.archive_url(t), 200, None, &gz),
+        (&f.lock.shasums_url(), 200, None, &f.shasums),
+        (&f.lock.signature_url(), 200, None, &f.sig),
+    ])
+}
+
+#[test]
+fn a_cold_fetch_fills_the_cache_and_an_offline_box_installs_from_it() {
+    use flagship_updater::runtime::fetch::fetch_into_cache;
+    let f = fixture();
+    let t = f.lock.target("linux-amd64").unwrap();
+    let cache = f.dir.path().join("cache");
+    let online = serving(&f);
+    let c = fetch_into_cache(&online, &f.lock, t, &cache).unwrap();
+    assert_eq!(
+        c.archive.file_name().unwrap().to_str().unwrap(),
+        format!("{}.tar.gz", t.sha256)
+    );
+    assert_eq!(online.seen.borrow().len(), 3);
+    // offline: nothing answers, the cache serves
+    let offline = canned(&[]);
+    let again = fetch_into_cache(&offline, &f.lock, t, &cache).unwrap();
+    assert_eq!(std::fs::read(&again.shasums).unwrap(), f.shasums);
+    let i = install(
+        &f.lock,
+        t,
+        &again.archive,
+        &std::fs::read(&again.shasums).unwrap(),
+        &std::fs::read(&again.signature).unwrap(),
+        &f.dir.path().join("rt"),
+    )
+    .unwrap();
+    assert!(i.new);
+    // the archive is not downloaded again while it is cached and matches
+    let counting = serving(&f);
+    fetch_into_cache(&counting, &f.lock, t, &cache).unwrap();
+    assert!(
+        !counting
+            .seen
+            .borrow()
+            .iter()
+            .any(|u| u.ends_with(".tar.gz"))
+    );
+}
+
+#[test]
+fn offline_with_an_empty_cache_fails_without_touching_anything() {
+    use flagship_updater::runtime::fetch::fetch_into_cache;
+    let f = fixture();
+    let t = f.lock.target("linux-amd64").unwrap();
+    let e = fetch_into_cache(&canned(&[]), &f.lock, t, &f.dir.path().join("cache")).unwrap_err();
+    assert_eq!(e.code, "download-failed");
+}
+
+#[test]
+fn a_poisoned_cache_entry_is_replaced_and_a_wrong_download_is_refused() {
+    use flagship_updater::runtime::fetch::fetch_into_cache;
+    let f = fixture();
+    let t = f.lock.target("linux-amd64").unwrap();
+    let cache = f.dir.path().join("cache");
+    std::fs::create_dir_all(&cache).unwrap();
+    std::fs::write(cache.join(format!("{}.tar.gz", t.sha256)), b"poison").unwrap();
+    let c = fetch_into_cache(&serving(&f), &f.lock, t, &cache).unwrap();
+    assert_eq!(
+        std::fs::read(&c.archive).unwrap(),
+        std::fs::read(&f.archive).unwrap()
+    );
+    // a mirror that serves other bytes under the right name
+    let evil = Tmp::new("rt-evil-cache");
+    let bad = canned(&[
+        (&f.lock.archive_url(t), 200, None, b"not node"),
+        (&f.lock.shasums_url(), 200, None, &f.shasums),
+        (&f.lock.signature_url(), 200, None, &f.sig),
+    ]);
+    let e = fetch_into_cache(&bad, &f.lock, t, evil.path()).unwrap_err();
+    assert_eq!(e.code, "checksum-mismatch");
+    assert!(!evil.path().join(format!("{}.tar.gz", t.sha256)).exists());
+}
+
+#[test]
+fn replayed_metadata_from_another_release_cannot_be_used_for_this_one() {
+    use flagship_updater::runtime::fetch::fetch_into_cache;
+    let f = fixture();
+    let t = f.lock.target("linux-amd64").unwrap();
+    // an old, validly signed list that names other files
+    let old = format!("{}  node-v20.0.0-linux-x64.tar.gz\n", "4".repeat(64)).into_bytes();
+    let gz = std::fs::read(&f.archive).unwrap();
+    let replay = canned(&[
+        (&f.lock.archive_url(t), 200, None, &gz),
+        (&f.lock.shasums_url(), 200, None, &old),
+        (&f.lock.signature_url(), 200, None, &f.key.sign(&old)),
+    ]);
+    let c = fetch_into_cache(&replay, &f.lock, t, &f.dir.path().join("cache")).unwrap();
+    let e = install(
+        &f.lock,
+        t,
+        &c.archive,
+        &std::fs::read(&c.shasums).unwrap(),
+        &std::fs::read(&c.signature).unwrap(),
+        &f.dir.path().join("rt"),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "checksum-missing");
+}

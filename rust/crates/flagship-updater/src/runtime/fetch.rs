@@ -188,3 +188,73 @@ fn download_inner(
         flagship_protocol::parse::encode_lower_hex(&hash.finalize()),
     ))
 }
+
+/// Where [`fetch_into_cache`] left the three inputs.
+#[derive(Clone, Debug)]
+pub struct Cached {
+    pub archive: std::path::PathBuf,
+    pub shasums: std::path::PathBuf,
+    pub signature: std::path::PathBuf,
+}
+
+/// Brings the archive, the signed checksum list and its signature into `cache`.
+///
+/// The archive is keyed by its digest (`<sha256>.tar.gz`), so a stale or foreign file is never mistaken for the
+/// locked one, and an archive that is already cached and matches is not downloaded again. The list and signature are
+/// refreshed when the network answers and otherwise the cached copies are used: a box that is offline installs from a
+/// cache the owner filled by hand with the same official files, and a failed metadata fetch changes nothing that is
+/// installed. Everything here is only fetched, never trusted: [`super::verify_archive`] judges it.
+///
+/// # Errors
+/// The download refusals, `checksum-mismatch` for a downloaded archive that is not the locked one, or
+/// `download-failed` when there is nothing to fall back on.
+pub fn fetch_into_cache(
+    client: &dyn Get,
+    lock: &super::Lock,
+    t: &super::Target,
+    cache: &Path,
+) -> Result<Cached, Refusal> {
+    std::fs::create_dir_all(cache).map_err(|e| Refusal::with("download-failed", e.to_string()))?;
+    let out = Cached {
+        archive: cache.join(format!("{}.tar.gz", t.sha256)),
+        shasums: cache.join(format!("{}.{}", lock.version, lock.shasums)),
+        signature: cache.join(format!("{}.{}", lock.version, lock.shasums_signature)),
+    };
+    let refresh = |dest: &Path, url: String, max: u64| -> Result<(), Refusal> {
+        let tmp = dest.with_extension("new");
+        match download(client, &url, &lock.allowed_hosts, max, &tmp) {
+            Ok(_) => std::fs::rename(&tmp, dest)
+                .map_err(|e| Refusal::with("download-failed", e.to_string())),
+            Err(e) if dest.is_file() => {
+                let _ = e;
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    };
+    refresh(&out.shasums, lock.shasums_url(), 1 << 20)?;
+    refresh(&out.signature, lock.signature_url(), 1 << 16)?;
+    let cached = crate::verify::sha256_file(&out.archive).is_ok_and(|d| d == t.sha256);
+    if !cached {
+        let part = cache.join(format!("{}.part", t.file));
+        download(
+            client,
+            &lock.archive_url(t),
+            &lock.allowed_hosts,
+            t.bytes,
+            &part,
+        )?;
+        let got = crate::verify::sha256_file(&part)
+            .map_err(|e| Refusal::with("download-failed", e.to_string()))?;
+        if got != t.sha256 {
+            let _ = std::fs::remove_file(&part);
+            return Err(Refusal::with(
+                "checksum-mismatch",
+                "the downloaded archive is not the locked one",
+            ));
+        }
+        std::fs::rename(&part, &out.archive)
+            .map_err(|e| Refusal::with("download-failed", e.to_string()))?;
+    }
+    Ok(out)
+}

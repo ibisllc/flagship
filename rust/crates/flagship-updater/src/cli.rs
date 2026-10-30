@@ -369,42 +369,16 @@ fn read_inputs(archive: &str, shasums: &str, sig: &str) -> Result<Inputs, crate:
     Ok((PathBuf::from(archive), rd(shasums)?, rd(sig)?))
 }
 
-/// Downloads the list, its signature and the archive from the official upstream into a cache directory.
+/// The inputs from the cache when it already holds a verified copy, else downloaded from the official upstream.
 fn fetch_inputs(
     lock: &runtime::Lock,
     t: &runtime::Target,
     cache: Option<PathBuf>,
 ) -> Result<Inputs, crate::refusal::Refusal> {
-    use runtime::fetch::{Ureq, download};
     let cache = cache.unwrap_or_else(|| PathBuf::from("/var/cache/flagship-runtimes"));
-    std::fs::create_dir_all(&cache)
-        .map_err(|e| crate::refusal::Refusal::with("download-failed", e.to_string()))?;
-    let client = Ureq::new(std::time::Duration::from_secs(30 * 60));
-    let shasums_path = cache.join(format!("{}.{}", lock.version, lock.shasums));
-    let sig_path = cache.join(format!("{}.{}", lock.version, lock.shasums_signature));
-    let archive = cache.join(format!("{}.part", t.file));
-    download(
-        &client,
-        &lock.shasums_url(),
-        &lock.allowed_hosts,
-        1 << 20,
-        &shasums_path,
-    )?;
-    download(
-        &client,
-        &lock.signature_url(),
-        &lock.allowed_hosts,
-        1 << 16,
-        &sig_path,
-    )?;
-    download(
-        &client,
-        &lock.archive_url(t),
-        &lock.allowed_hosts,
-        t.bytes,
-        &archive,
-    )?;
-    read_inputs_paths(&archive, &shasums_path, &sig_path)
+    let client = runtime::fetch::Ureq::new(std::time::Duration::from_secs(30 * 60));
+    let c = runtime::fetch::fetch_into_cache(&client, lock, t, &cache)?;
+    read_inputs_paths(&c.archive, &c.shasums, &c.signature)
 }
 
 fn read_inputs_paths(
