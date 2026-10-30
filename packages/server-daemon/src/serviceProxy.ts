@@ -41,6 +41,15 @@ import { endpoints } from "./endpoints.js";
 import type { UpdateServer } from "./updateServer.js";
 import type { ApiKeyAuthenticator } from "./appApiKeys.js";
 
+/** Why keyd would not sign master, once a minute per app: the app then sees manager, and without this nobody learns why. */
+const masterRefusedAt = new Map<string, number>();
+function noteMasterRefused(appId: string, why: string): void {
+  const now = Date.now();
+  if (now - (masterRefusedAt.get(appId) ?? 0) < 60_000) return;
+  masterRefusedAt.set(appId, now);
+  console.warn(`[identity] ${appId}: keyd did not sign master (${why}); the app sees manager`);
+}
+
 export interface SessionInfo {
   /** The member's identity key: the stable account id (AID) their session is bound to. */
   memberPub: Bytes;
@@ -253,6 +262,7 @@ export async function prepareAppRequest(
     // keyd refuses it) the box asserts manager, the most it signs on its own word.
     const ev = session?.masterEvidence;
     let signed: Bytes | null = null;
+    if (!ev) noteMasterRefused(app.serviceId, "the box holds no owner evidence for this sign-in key");
     if (ev && session) {
       try {
         signed = deps.injector.signMasterIdentity(new TextEncoder().encode(fields.join("|")), {
@@ -262,8 +272,9 @@ export async function prepareAppRequest(
           statement: ev.statement,
           signatureHex: ev.signatureHex,
         });
-      } catch {
+      } catch (e) {
         signed = null;
+        noteMasterRefused(app.serviceId, (e as Error).message);
       }
     }
     if (signed) {
