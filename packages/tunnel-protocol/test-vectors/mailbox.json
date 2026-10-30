@@ -1,0 +1,188 @@
+{
+  "schema": 1,
+  "now": 1760000000000,
+  "epoch": 2910,
+  "piks": {
+    "pik": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+    "other": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12"
+  },
+  "ids": [
+    {
+      "pik": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+      "epoch": 0,
+      "id": "3f93783f8edb7e210ace3c7350099e39",
+      "canonical": "flagship/pb-mailbox-announce/v1|db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d|0"
+    },
+    {
+      "pik": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+      "epoch": 1,
+      "id": "181f1a081b1e689a56911f6c4ffee9a7",
+      "canonical": "flagship/pb-mailbox-announce/v1|db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d|1"
+    },
+    {
+      "pik": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+      "epoch": 2,
+      "id": "c61376245f23f64917ed1631c9558d03",
+      "canonical": "flagship/pb-mailbox-announce/v1|db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d|2"
+    },
+    {
+      "pik": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+      "epoch": 2910,
+      "id": "b4e36f3ffdc2a2e6043bd94e411c41f0",
+      "canonical": "flagship/pb-mailbox-announce/v1|db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d|2910"
+    },
+    {
+      "pik": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+      "epoch": 2911,
+      "id": "7f9117510d1ef110f7ea44dc8dd6425b",
+      "canonical": "flagship/pb-mailbox-announce/v1|db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d|2911"
+    }
+  ],
+  "lists": [
+    {
+      "name": "the current epoch",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2910,
+          "sigHex": "d4075827ebede0879b8b9c44be1f411db096ff4c3ff422001437c8ca6461804ae31312fdfbe882093dbccb26534a77e25feee0cff258b4515fbae957165d8809"
+        }
+      ],
+      "ids": [
+        "b4e36f3ffdc2a2e6043bd94e411c41f0"
+      ]
+    },
+    {
+      "name": "the previous epoch",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2909,
+          "sigHex": "3691ce19dc71901b6cdedbe48ff34306aa21b9a3ca8bf4c084f2d3a47fc75f18f4d2fbb3dab3961a2fc702fecd6ad29c394f819226c72dbb33939f5290912e09"
+        }
+      ],
+      "ids": [
+        "18c98d07230c741479dd6833a2904437"
+      ]
+    },
+    {
+      "name": "the next epoch",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2911,
+          "sigHex": "36286bbb6e4e11ff976a09b5d1ff07df1bdd838870f557c4eaae8ff9e8f574a965fce03333b9d639c993918b208d97ad5cf83fee6cfd3682f7d757bedbe0ad08"
+        }
+      ],
+      "ids": [
+        "7f9117510d1ef110f7ea44dc8dd6425b"
+      ]
+    },
+    {
+      "name": "two epochs old",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2908,
+          "sigHex": "8a8f627c38a753de5cc69d984da4798d016b37bdd0926f5767ee77e574516590da4d0d7a74e7ee5cbadd750a661bc6c00e337b79025b529466792342f1e87c06"
+        }
+      ],
+      "ids": null
+    },
+    {
+      "name": "two epochs ahead",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2912,
+          "sigHex": "1523e0e542b2964ff57e3ae9f9c5658907bb4335ec69d86edace1fe07c527d2e466c2585fa497dd654e290c92c3d500512c333843108b214f398ffb15159d70a"
+        }
+      ],
+      "ids": null
+    },
+    {
+      "name": "two entries, both good",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2910,
+          "sigHex": "d4075827ebede0879b8b9c44be1f411db096ff4c3ff422001437c8ca6461804ae31312fdfbe882093dbccb26534a77e25feee0cff258b4515fbae957165d8809"
+        },
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2909,
+          "sigHex": "3691ce19dc71901b6cdedbe48ff34306aa21b9a3ca8bf4c084f2d3a47fc75f18f4d2fbb3dab3961a2fc702fecd6ad29c394f819226c72dbb33939f5290912e09"
+        }
+      ],
+      "ids": [
+        "b4e36f3ffdc2a2e6043bd94e411c41f0",
+        "18c98d07230c741479dd6833a2904437"
+      ]
+    },
+    {
+      "name": "two entries, the second stale",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2910,
+          "sigHex": "d4075827ebede0879b8b9c44be1f411db096ff4c3ff422001437c8ca6461804ae31312fdfbe882093dbccb26534a77e25feee0cff258b4515fbae957165d8809"
+        },
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2905,
+          "sigHex": "80dd60951d21b02d1972d99df260f42f425bcab506ddcb61cc72689f5249cb003f6e8c600981923bd38296f8fc46eaf0e9bb339b3fd14a0a3e4f96143967cc0c"
+        }
+      ],
+      "ids": null
+    },
+    {
+      "name": "a signature by another key",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2910,
+          "sigHex": "312de1797fc12bacfd840327c80dc0bdc17ac29220b22ee4d4eb0af52df7eb6e8c3f25e17ad67947907bbb2d5385a4874b6866f2af5a62d2eb9a18f20f0ff209"
+        }
+      ],
+      "ids": null
+    },
+    {
+      "name": "a flipped signature bit",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2910,
+          "sigHex": "d4075827ebede0879b8b9c44be1f411db096ff4c3ff422001437c8ca6461804ae31312fdfbe882093dbccb26534a77e25feee0cff258b4515fbae957165d8800"
+        }
+      ],
+      "ids": null
+    },
+    {
+      "name": "a signature over another epoch",
+      "list": [
+        {
+          "pikPubHex": "db995fe25169d141cab9bbba92baa01f9f2e1ece7df4cb2ac05190f37fcc1f9d",
+          "epoch": 2910,
+          "sigHex": "3691ce19dc71901b6cdedbe48ff34306aa21b9a3ca8bf4c084f2d3a47fc75f18f4d2fbb3dab3961a2fc702fecd6ad29c394f819226c72dbb33939f5290912e09"
+        }
+      ],
+      "ids": null
+    },
+    {
+      "name": "a different key claiming the first's signature",
+      "list": [
+        {
+          "pikPubHex": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+          "epoch": 2910,
+          "sigHex": "d4075827ebede0879b8b9c44be1f411db096ff4c3ff422001437c8ca6461804ae31312fdfbe882093dbccb26534a77e25feee0cff258b4515fbae957165d8809"
+        }
+      ],
+      "ids": null
+    },
+    {
+      "name": "an empty list",
+      "list": [],
+      "ids": []
+    }
+  ]
+}

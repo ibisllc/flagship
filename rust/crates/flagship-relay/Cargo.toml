@@ -11,6 +11,12 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+sha2 = { version = "=0.11.0", default-features = false }
+flagship-protocol = { path = "../flagship-protocol" }
+bytes = { version = "=1.12.1", default-features = false, features = ["std"] }
+http-body-util = { version = "=0.1.5", default-features = false }
+hyper = { version = "=1.12.0", default-features = false, features = ["http1", "server"] }
+hyper-util = { version = "=0.1.21", default-features = false, features = ["tokio"] }
 flagship-crypto = { path = "../flagship-crypto" }
 futures-util = { version = "=0.3.34", default-features = false, features = ["sink", "std"] }
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
