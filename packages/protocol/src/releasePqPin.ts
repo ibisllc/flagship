@@ -10,10 +10,11 @@
  */
 import type { ReleasePqPin } from "./releaseEndorsementPq.js";
 
+// ⚠️ GYM TEST BRANCH ONLY: the gym endorses releases with its own classical key K, so the pin names no PQ key here.
 // BEGIN RELEASE_PQ_PIN (generated)
 export const RELEASE_PQ_PIN: ReleasePqPin = Object.freeze({
   version: 1,
-  keyIds: Object.freeze(["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"]) as readonly string[],
-  requirePqAfter: { releaseId: "978ca58f-a29a-4857-8afc-6dd6238ed223", commitHash: "dbdf2e08875ae55d9b575f390a29810670f9a54d" },
+  keyIds: Object.freeze([]) as readonly string[],
+  requirePqAfter: null,
 });
 // END RELEASE_PQ_PIN
