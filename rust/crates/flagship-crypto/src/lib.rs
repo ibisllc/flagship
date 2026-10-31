@@ -12,6 +12,7 @@ pub mod release;
 pub mod service_invite;
 mod rng;
 pub mod seal;
+pub mod server_share;
 pub mod session;
 pub mod sig;
 pub mod trust;
