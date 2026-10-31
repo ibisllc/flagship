@@ -3,7 +3,7 @@
  * decisions of 2026-10-31). The relay enforces it; the issuance service reads the same records.
  *
  *   flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse>|<scopeSha256>|<issuedAt>
- *   flagship/renewal-key-delegation/v1|<account>|<renewalPub>|<deviceId>|<issuedAt>
+ *   flagship/renewal-key-delegation/v1|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>
  *   flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
  *   flagship/revocation-entry/v1|<sequence>|<kind>|<account>|<subject>|<generation>|<revokedAt>
  *   flagship/certificate-order/v1|<class>|<device>|<regGen>|<csrSha256>|<requestId>|<issuedAt>
@@ -24,6 +24,7 @@
  *
  * A box's exact control name never needs a lease (recovery stays possible); only app routes do.
  */
+import { p256 } from "@noble/curves/nist.js";
 import { sha256 } from "@noble/hashes/sha256";
 import { ed } from "./edSync.js";
 import { hex, legacyFieldGuard } from "./canonicalBase.js";
@@ -47,6 +48,8 @@ export const SERVING_CLOCK_SKEW_MS = 5 * 60_000;
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
+/** A SEC1 compressed P-256 point. */
+const P256_PUB = /^0[23][0-9a-f]{64}$/;
 const ACCOUNT = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const enc = (parts: Array<string | number>): Bytes => new TextEncoder().encode(parts.join("|"));
 
@@ -95,7 +98,12 @@ export function canonicalServingPolicy(p: ServingPolicy): Bytes {
 
 export interface RenewalKeyDelegation {
   account: string;
-  /** The device's hardware-held renewal key (Secure Enclave / StrongBox / non-extractable WebCrypto). */
+  /**
+   * The device's hardware-held renewal key: ECDSA P-256 (the only curve the Secure Enclave and StrongBox hold;
+   * a non-extractable WebCrypto key in the webapp), SEC1 compressed, 66 hex. Leases it signs carry a compact
+   * low-S `r‖s` signature over SHA-256 of the canonical bytes.
+   */
+  alg: "p256";
   renewalPub: string;
   /** The device it lives on (its account device key); removing the device revokes the renewal key too. */
   deviceId: string;
@@ -104,10 +112,11 @@ export interface RenewalKeyDelegation {
 
 export function canonicalRenewalKeyDelegation(d: RenewalKeyDelegation): Bytes {
   accountField(d.account);
-  hexField("renewalPub", d.renewalPub);
+  if (d.alg !== "p256") throw new Error("alg must be p256");
+  hexField("renewalPub", d.renewalPub, P256_PUB);
   hexField("deviceId", d.deviceId);
   intField("issuedAt", d.issuedAt);
-  return enc([TAG_RENEWAL_KEY_DELEGATION, d.account, d.renewalPub, d.deviceId, d.issuedAt]);
+  return enc([TAG_RENEWAL_KEY_DELEGATION, d.account, d.alg, d.renewalPub, d.deviceId, d.issuedAt]);
 }
 
 // ── serving-lease ─────────────────────────────────────────────────────────
@@ -151,7 +160,7 @@ export interface RevocationEntry {
   sequence: number;
   kind: RevocationKind;
   account: string;
-  /** The box's identity key, or the renewal key. */
+  /** The box's identity key (64 hex), or the renewal key (66 hex, compressed P-256). */
   subject: string;
   /** The box's registration generation that ends (0 for a renewal key). */
   generation: number;
@@ -162,7 +171,7 @@ export function canonicalRevocationEntry(e: RevocationEntry): Bytes {
   intField("sequence", e.sequence, 1);
   if (e.kind !== "box" && e.kind !== "renewal-key") throw new Error("kind must be box or renewal-key");
   accountField(e.account);
-  hexField("subject", e.subject);
+  hexField("subject", e.subject, e.kind === "box" ? HEX64 : P256_PUB);
   intField("generation", e.generation, e.kind === "box" ? 1 : 0);
   if (e.kind === "renewal-key" && e.generation !== 0) throw new Error("a renewal key's revocation has generation 0");
   intField("revokedAt", e.revokedAt);
@@ -242,6 +251,21 @@ export function verifyServingRecord<K extends ServingRecordKind>(kind: K, r: Rec
   try {
     if (!/^[0-9a-f]{128}$/.test(sigHex) || !HEX64.test(pubHex)) return false;
     return ed.verify(fromHex(sigHex), (CANONICAL[kind] as (x: RecordOf<K>) => Bytes)(r), fromHex(pubHex));
+  } catch {
+    return false;
+  }
+}
+
+/** The renewal key's signing rule: ECDSA P-256 over SHA-256 of the canonical bytes, compact low-S `r‖s`. */
+export function signServingLeaseP256(l: ServingLease, privateKey: Bytes): string {
+  return hex(p256.sign(canonicalServingLease(l), privateKey, { lowS: true }));
+}
+
+/** A lease signed by a delegated P-256 renewal key; refuses high-S and anything malformed. */
+export function verifyServingLeaseP256(l: ServingLease, sigHex: string, renewalPubHex: string): boolean {
+  try {
+    if (!/^[0-9a-f]{128}$/.test(sigHex) || !P256_PUB.test(renewalPubHex)) return false;
+    return p256.verify(fromHex(sigHex), canonicalServingLease(l), fromHex(renewalPubHex), { lowS: true });
   } catch {
     return false;
   }
@@ -377,7 +401,12 @@ export interface ServingInput {
   /** The admin key `.com` publishes for the account, and the one the box pinned (sent in its HELLO). */
   adminKeyFromCom: string;
   adminKeyFromBox: string;
-  policy: SignedServingRecord<ServingPolicy> | null;
+  /**
+   * The policies on hand: `.com`'s copy and the box's own (sent in HELLO). The highest policy generation that
+   * verifies and names this box counts, so neither side can quietly drop a stricter one. None at all: the default,
+   * indefinitely and stop-apps (a server nobody set a limit on).
+   */
+  policies: ReadonlyArray<SignedServingRecord<ServingPolicy>>;
   /** The leases the box presents; the best valid one counts. */
   leases: ReadonlyArray<SignedServingRecord<ServingLease> & { delegation?: SignedServingRecord<RenewalKeyDelegation> }>;
   revocations: RevocationState;
@@ -388,9 +417,7 @@ export interface ServingInput {
 export type ServingReason =
   | "admin-keys-differ"
   | "revoked"
-  | "no-policy"
   | "policy-signature"
-  | "policy-mismatch"
   | "no-lease"
   | "lease-expired";
 
@@ -409,10 +436,16 @@ export function servingDecision(i: ServingInput): ServingDecision {
   if (!HEX64.test(i.adminKeyFromCom) || i.adminKeyFromCom !== i.adminKeyFromBox) return { control: false, apps: false, reason: "admin-keys-differ", lock: false };
   if (boxRevoked(i.revocations, i.account, i.box, i.regGen)) return { control: false, apps: false, reason: "revoked", lock: false };
   const admin = i.adminKeyFromCom;
-  if (!i.policy) return { control: true, apps: false, reason: "no-policy", lock: false };
-  const p = i.policy.record;
-  if (!verifyServingRecord("serving-policy", p, i.policy.signature, admin)) return { control: true, apps: false, reason: "policy-signature", lock: false };
-  if (p.account !== i.account || p.box !== i.box || p.regGen !== i.regGen) return { control: true, apps: false, reason: "policy-mismatch", lock: false };
+  let p: ServingPolicy | null = null;
+  for (const c of i.policies) {
+    const r = c.record;
+    if (r.account !== i.account || r.box !== i.box || r.regGen !== i.regGen) continue;
+    if (!verifyServingRecord("serving-policy", r, c.signature, admin)) continue;
+    if (!p || r.policyGen > p.policyGen) p = r;
+  }
+  // A policy was offered but none verified: refuse rather than fall back to the default (no downgrade by forgery).
+  if (!p && i.policies.length > 0) return { control: true, apps: false, reason: "policy-signature", lock: false };
+  if (!p) return { control: true, apps: true, until: null, policyGen: 0, onLapse: "stop-apps" };
   if (p.grace === "indefinite") return { control: true, apps: true, until: null, policyGen: p.policyGen, onLapse: p.onLapse };
   const graceMs = GRACE_MS[p.grace];
   let best = 0;
@@ -441,5 +474,5 @@ function leaseSignedByAdmin(
   const d = l.delegation;
   if (!d || d.record.account !== account || revocations.renewalKeys.has(d.record.renewalPub)) return false;
   if (!verifyServingRecord("renewal-key-delegation", d.record, d.signature, admin)) return false;
-  return verifyServingRecord("serving-lease", l.record, l.signature, d.record.renewalPub);
+  return verifyServingLeaseP256(l.record, l.signature, d.record.renewalPub);
 }

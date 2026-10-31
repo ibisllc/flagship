@@ -12,7 +12,7 @@ use flagship_crypto::serving::{
     ServingPolicy, SignedLease, apply_revocation_entries, canonical_name_list,
     certificate_order_canonical, delegation_canonical, lease_canonical, name_list_sha256,
     policy_canonical, revocation_canonical, route_claim_canonical, route_collisions,
-    serving_decision, verify_canonical,
+    serving_decision, verify_canonical, verify_lease_p256,
 };
 use serde_json::Value;
 
@@ -41,6 +41,7 @@ fn policy(v: &Value) -> ServingPolicy {
 fn delegation(v: &Value) -> RenewalKeyDelegation {
     RenewalKeyDelegation {
         account: s(v, "account"),
+        alg: s(v, "alg"),
         renewal_pub: s(v, "renewalPub"),
         device_id: s(v, "deviceId"),
         issued_at: n(v, "issuedAt"),
@@ -104,11 +105,15 @@ fn every_record_has_the_same_canonical_bytes_and_signature() {
             "{}",
             r["kind"]
         );
-        assert!(verify_canonical(
-            &canonical,
-            &s(r, "signature"),
-            &s(r, "signerPub")
-        ));
+        let p256 = r["alg"] == "p256";
+        let check = |sig: &str| {
+            if p256 {
+                verify_lease_p256(&lease(rec), sig, &s(r, "signerPub"))
+            } else {
+                verify_canonical(&canonical, sig, &s(r, "signerPub"))
+            }
+        };
+        assert!(check(&s(r, "signature")), "{} {}", r["kind"], r["alg"]);
         let mut flipped = s(r, "signature");
         flipped.replace_range(
             0..2,
@@ -118,7 +123,7 @@ fn every_record_has_the_same_canonical_bytes_and_signature() {
                 "00"
             },
         );
-        assert!(!verify_canonical(&canonical, &flipped, &s(r, "signerPub")));
+        assert!(!check(&flipped));
     }
 }
 
@@ -166,7 +171,7 @@ fn relay_decisions_agree_with_typescript() {
     let v: Value = serde_json::from_str(VECTORS).unwrap();
     let revocation_key = s(&v, "revocationKeyPub");
     let decisions = v["decisions"].as_array().unwrap();
-    assert_eq!(decisions.len(), 14);
+    assert_eq!(decisions.len(), 17);
     for d in decisions {
         let i = &d["input"];
         let entries: Vec<(RevocationEntry, String)> = i["revocationEntries"]
@@ -183,8 +188,12 @@ fn relay_decisions_agree_with_typescript() {
             RevocationApply::Applied { state, .. } => state,
             other => panic!("{}: {other:?}", d["name"]),
         };
-        let pol = policy(&i["policy"]["record"]);
-        let pol_sig = s(&i["policy"], "signature");
+        let policies: Vec<(ServingPolicy, String)> = i["policies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (policy(&p["record"]), s(p, "signature")))
+            .collect();
         let leases: Vec<SignedLease> = i["leases"]
             .as_array()
             .unwrap()
@@ -207,7 +216,7 @@ fn relay_decisions_agree_with_typescript() {
             reg_gen: n(i, "regGen"),
             admin_key_from_com: &from_com,
             admin_key_from_box: &from_box,
-            policy: Some((&pol, &pol_sig)),
+            policies: &policies,
             leases: &leases,
             revocations: &state,
             now: n(i, "now"),

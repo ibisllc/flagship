@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse>|<scopeSha256>|<issuedAt>
-//! flagship/renewal-key-delegation/v1|<account>|<renewalPub>|<deviceId>|<issuedAt>
+//! flagship/renewal-key-delegation/v1|<account>|p256|<renewalPub>|<deviceId>|<issuedAt>
 //! flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
 //! flagship/revocation-entry/v1|<sequence>|<kind>|<account>|<subject>|<generation>|<revokedAt>
 //! flagship/certificate-order/v1|<class>|<device>|<regGen>|<csrSha256>|<requestId>|<issuedAt>
@@ -20,6 +20,8 @@
 use crate::entitlements::verify;
 use flagship_protocol::canonical_v1::CanonicalV1;
 use flagship_protocol::error::ProtocolError;
+use p256::ecdsa::signature::Verifier;
+use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256VerifyingKey};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -87,6 +89,15 @@ fn lower_hex(s: &str, len: usize) -> bool {
 
 fn hex64(name: &'static str, s: &str) -> Result<(), ServingError> {
     if lower_hex(s, 64) {
+        Ok(())
+    } else {
+        Err(ServingError::BadHex(name))
+    }
+}
+
+/// A SEC1 compressed P-256 point: `02` or `03` then 64 hex.
+fn p256_pub(name: &'static str, s: &str) -> Result<(), ServingError> {
+    if s.len() == 66 && (s.starts_with("02") || s.starts_with("03")) && lower_hex(s, 66) {
         Ok(())
     } else {
         Err(ServingError::BadHex(name))
@@ -236,6 +247,8 @@ pub fn policy_canonical(p: &ServingPolicy) -> Result<String, ServingError> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenewalKeyDelegation {
     pub account: String,
+    /// Always `p256`: the renewal key is ECDSA P-256, held by the Secure Enclave / StrongBox / WebCrypto.
+    pub alg: String,
     pub renewal_pub: String,
     pub device_id: String,
     pub issued_at: u64,
@@ -245,10 +258,14 @@ pub struct RenewalKeyDelegation {
 /// [`ServingError`] for any field out of shape.
 pub fn delegation_canonical(d: &RenewalKeyDelegation) -> Result<String, ServingError> {
     account(&d.account)?;
-    hex64("renewalPub", &d.renewal_pub)?;
+    if d.alg != "p256" {
+        return Err(ServingError::BadHex("alg"));
+    }
+    p256_pub("renewalPub", &d.renewal_pub)?;
     hex64("deviceId", &d.device_id)?;
     Ok(CanonicalV1::new(TAG_RENEWAL_KEY_DELEGATION)?
         .text(&d.account)?
+        .text(&d.alg)?
         .text(&d.renewal_pub)?
         .text(&d.device_id)?
         .uint(d.issued_at)?
@@ -329,7 +346,10 @@ pub struct RevocationEntry {
 pub fn revocation_canonical(e: &RevocationEntry) -> Result<String, ServingError> {
     at_least("sequence", e.sequence, 1)?;
     account(&e.account)?;
-    hex64("subject", &e.subject)?;
+    match e.kind {
+        RevocationKind::Box => hex64("subject", &e.subject)?,
+        RevocationKind::RenewalKey => p256_pub("subject", &e.subject)?,
+    }
     match e.kind {
         RevocationKind::Box => at_least("generation", e.generation, 1)?,
         RevocationKind::RenewalKey if e.generation != 0 => {
@@ -424,6 +444,46 @@ pub fn verify_canonical(
         Ok(c) => lower_hex(sig_hex, 128) && lower_hex(pub_hex, 64) && verify(c, sig_hex, pub_hex),
         Err(_) => false,
     }
+}
+
+/// A lease signed by a delegated P-256 renewal key: compact `r‖s` (128 hex) over SHA-256 of the canonical bytes,
+/// low-S only (a high-S twin is refused, as the TypeScript verifier does).
+#[must_use]
+pub fn verify_lease_p256(l: &ServingLease, sig_hex: &str, renewal_pub_hex: &str) -> bool {
+    let (Ok(canonical), true, true) = (
+        lease_canonical(l),
+        lower_hex(sig_hex, 128),
+        p256_pub("renewalPub", renewal_pub_hex).is_ok(),
+    ) else {
+        return false;
+    };
+    let (Some(sig_bytes), Some(pub_bytes)) = (from_hex(sig_hex), from_hex(renewal_pub_hex)) else {
+        return false;
+    };
+    let (Ok(sig), Ok(key)) = (
+        P256Signature::from_slice(&sig_bytes),
+        P256VerifyingKey::from_sec1_bytes(&pub_bytes),
+    ) else {
+        return false;
+    };
+    if sig.normalize_s().is_some() {
+        return false;
+    }
+    key.verify(canonical.as_bytes(), &sig).is_ok()
+}
+
+fn from_hex(s: &str) -> Option<Vec<u8>> {
+    let b = s.as_bytes();
+    if !b.len().is_multiple_of(2) {
+        return None;
+    }
+    b.chunks(2)
+        .map(|c| {
+            std::str::from_utf8(c)
+                .ok()
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+        })
+        .collect()
 }
 
 // ── the canonical name list ───────────────────────────────────────────────
@@ -591,7 +651,8 @@ pub struct ServingInput<'a> {
     pub reg_gen: u64,
     pub admin_key_from_com: &'a str,
     pub admin_key_from_box: &'a str,
-    pub policy: Option<(&'a ServingPolicy, &'a str)>,
+    /// `.com`'s copy and the box's own: the highest verified generation for this box counts; none is the default.
+    pub policies: &'a [(ServingPolicy, String)],
     pub leases: &'a [SignedLease],
     pub revocations: &'a RevocationState,
     pub now: u64,
@@ -629,15 +690,28 @@ pub fn serving_decision(i: &ServingInput<'_>) -> ServingDecision {
         return refuse(false, "revoked");
     }
     let admin = i.admin_key_from_com;
-    let Some((p, sig)) = i.policy else {
-        return refuse(true, "no-policy");
-    };
-    if !verify_canonical(&policy_canonical(p), sig, admin) {
+    let mut chosen: Option<&ServingPolicy> = None;
+    for (r, sig) in i.policies {
+        if r.account != i.account || r.box_pub != i.box_pub || r.reg_gen != i.reg_gen {
+            continue;
+        }
+        if !verify_canonical(&policy_canonical(r), sig, admin) {
+            continue;
+        }
+        if chosen.is_none_or(|c| r.policy_gen > c.policy_gen) {
+            chosen = Some(r);
+        }
+    }
+    let Some(p) = chosen else {
+        if i.policies.is_empty() {
+            return ServingDecision::Serve {
+                until: None,
+                policy_gen: 0,
+                on_lapse: OnLapse::StopApps,
+            };
+        }
         return refuse(true, "policy-signature");
-    }
-    if p.account != i.account || p.box_pub != i.box_pub || p.reg_gen != i.reg_gen {
-        return refuse(true, "policy-mismatch");
-    }
+    };
     let Some(grace) = p.grace.millis() else {
         return ServingDecision::Serve {
             until: None,
@@ -698,5 +772,5 @@ fn lease_signed_by_admin(
         return false;
     }
     verify_canonical(&delegation_canonical(d), dsig, admin)
-        && verify_canonical(&canonical, &l.signature, &d.renewal_pub)
+        && verify_lease_p256(&l.lease, &l.signature, &d.renewal_pub)
 }

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { p256 } from "@noble/curves/nist.js";
 import { describe, expect, it } from "vitest";
 import {
   applyRevocationEntries,
@@ -14,7 +15,9 @@ import {
   nameListSha256,
   routeCollisions,
   servingDecision,
+  signServingLeaseP256,
   signServingRecord,
+  verifyServingLeaseP256,
   verifyServingRecord,
   type RenewalKeyDelegation,
   type RevocationEntry,
@@ -30,7 +33,13 @@ const key = (n: number) => {
 };
 const admin = key(1);
 const otherAdmin = key(2);
-const renewal = key(3);
+/** A device's hardware renewal key: P-256. */
+const p256Key = (n: number) => {
+  const sk = new Uint8Array(32).fill(n);
+  return { sk, pub: hexOf(p256.getPublicKey(sk, true)) };
+};
+const renewal = p256Key(3);
+const p256Signed = (l: ServingLease, k = renewal) => ({ record: l, signature: signServingLeaseP256(l, k.sk) });
 const revoker = key(4);
 const box = key(5).pub;
 const device = key(6).pub;
@@ -52,7 +61,7 @@ const signed = <T,>(kind: Parameters<typeof signServingRecord>[0], record: T, si
   record,
   signature: hexOf(signServingRecord(kind, record as never, signer.sign)),
 });
-const delegation: RenewalKeyDelegation = { account: "alice", renewalPub: renewal.pub, deviceId: device, issuedAt: T0 };
+const delegation: RenewalKeyDelegation = { account: "alice", alg: "p256", renewalPub: renewal.pub, deviceId: device, issuedAt: T0 };
 const lease = (o: Partial<ServingLease> = {}): ServingLease => ({ ...leaseFor(policy(), T0, "ab".repeat(16))!, ...o });
 const input = (o: Partial<ServingInput> = {}): ServingInput => ({
   account: "alice",
@@ -60,8 +69,8 @@ const input = (o: Partial<ServingInput> = {}): ServingInput => ({
   regGen: 1,
   adminKeyFromCom: admin.pub,
   adminKeyFromBox: admin.pub,
-  policy: signed("serving-policy", policy()),
-  leases: [{ ...signed("serving-lease", lease(), renewal), delegation: signed("renewal-key-delegation", delegation) }],
+  policies: [signed("serving-policy", policy())],
+  leases: [{ ...p256Signed(lease()), delegation: signed("renewal-key-delegation", delegation) }],
   revocations: emptyRevocationState(),
   now: T0 + DAY,
   ...o,
@@ -102,7 +111,7 @@ describe("canonical bytes", () => {
 
 describe("indefinite (the default) needs no lease", () => {
   it("serves apps on the policy alone, with no end", () => {
-    const d = servingDecision(input({ policy: signed("serving-policy", policy({ grace: "indefinite" })), leases: [] }));
+    const d = servingDecision(input({ policies: [signed("serving-policy", policy({ grace: "indefinite" }))], leases: [] }));
     expect(d).toEqual({ control: true, apps: true, until: null, policyGen: 1, onLapse: "stop-apps" });
   });
 
@@ -122,14 +131,14 @@ describe("a finite grace", () => {
 
   it("lock-server: the same lease keeps the box unlocked; its lapse locks it too", () => {
     const locking = signed("serving-policy", policy({ onLapse: "lock-server" }));
-    expect(servingDecision(input({ policy: locking }))).toMatchObject({ apps: true, onLapse: "lock-server", until: T0 + 7 * DAY });
-    expect(servingDecision(input({ policy: locking, now: T0 + 7 * DAY }))).toMatchObject({ apps: false, reason: "lease-expired", lock: true });
-    expect(servingDecision(input({ policy: locking, leases: [] }))).toMatchObject({ reason: "no-lease", lock: true });
+    expect(servingDecision(input({ policies: [locking] }))).toMatchObject({ apps: true, onLapse: "lock-server", until: T0 + 7 * DAY });
+    expect(servingDecision(input({ policies: [locking], now: T0 + 7 * DAY }))).toMatchObject({ apps: false, reason: "lease-expired", lock: true });
+    expect(servingDecision(input({ policies: [locking], leases: [] }))).toMatchObject({ reason: "no-lease", lock: true });
   });
 
   it("a policy the box can't verify never locks it (only the owner's signed word can)", () => {
     const forged = signed("serving-policy", policy({ onLapse: "lock-server" }), otherAdmin);
-    expect(servingDecision(input({ policy: forged, leases: [] }))).toMatchObject({ reason: "policy-signature", lock: false });
+    expect(servingDecision(input({ policies: [forged], leases: [] }))).toMatchObject({ reason: "policy-signature", lock: false });
   });
 
   it("stops app routes once the lease ends; the control name stays", () => {
@@ -146,22 +155,22 @@ describe("a finite grace", () => {
 
   it("refuses a lease reaching further than the grace", () => {
     const long = lease({ notAfter: T0 + 30 * DAY });
-    expect(servingDecision(input({ leases: [{ ...signed("serving-lease", long, renewal), delegation: signed("renewal-key-delegation", delegation) }] }))).toMatchObject({ reason: "no-lease" });
+    expect(servingDecision(input({ leases: [{ ...p256Signed(long), delegation: signed("renewal-key-delegation", delegation) }] }))).toMatchObject({ reason: "no-lease" });
   });
 
   it("shortening the grace (a new policy generation) outdates older, longer leases", () => {
     const newer = signed("serving-policy", policy({ policyGen: 2, grace: "7d", issuedAt: T0 + DAY }));
     const thirty = policy({ grace: "30d" });
     const oldLease = { ...leaseFor(thirty, T0, "ef".repeat(16))! };
-    const d = servingDecision(input({ policy: newer, leases: [{ ...signed("serving-lease", oldLease, renewal), delegation: signed("renewal-key-delegation", delegation) }] }));
+    const d = servingDecision(input({ policies: [newer], leases: [{ ...p256Signed(oldLease), delegation: signed("renewal-key-delegation", delegation) }] }));
     expect(d).toMatchObject({ apps: false, reason: "no-lease" });
   });
 
   it("refuses a lease from a renewal key the admin never delegated, or one that was revoked", () => {
-    const stranger = key(9);
-    expect(servingDecision(input({ leases: [signed("serving-lease", lease(), stranger)] }))).toMatchObject({ reason: "no-lease" });
+    const stranger = p256Key(9);
+    expect(servingDecision(input({ leases: [p256Signed(lease(), stranger)] }))).toMatchObject({ reason: "no-lease" });
     const forgedDelegation = signed("renewal-key-delegation", { ...delegation, renewalPub: stranger.pub }, otherAdmin);
-    expect(servingDecision(input({ leases: [{ ...signed("serving-lease", lease(), stranger), delegation: forgedDelegation }] }))).toMatchObject({ reason: "no-lease" });
+    expect(servingDecision(input({ leases: [{ ...p256Signed(lease(), stranger), delegation: forgedDelegation }] }))).toMatchObject({ reason: "no-lease" });
     const entry: RevocationEntry = { sequence: 1, kind: "renewal-key", account: "alice", subject: renewal.pub, generation: 0, revokedAt: T0 };
     const pushed = signed("revocation-entry", entry, revoker);
     const r = applyRevocationEntries(emptyRevocationState(), [{ entry: pushed.record, signature: pushed.signature }], revoker.pub);
@@ -181,6 +190,42 @@ describe("a finite grace", () => {
   });
 });
 
+describe("policies from .com and from the box", () => {
+  it("none at all is the default: indefinitely, stop-apps", () => {
+    expect(servingDecision(input({ policies: [], leases: [] }))).toEqual({ control: true, apps: true, until: null, policyGen: 0, onLapse: "stop-apps" });
+  });
+
+  it("the highest generation that verifies counts, whichever side sent it (neither can drop a stricter one)", () => {
+    const loose = signed("serving-policy", policy({ grace: "indefinite", policyGen: 1 }));
+    const strict = signed("serving-policy", policy({ grace: "7d", policyGen: 2 }));
+    expect(servingDecision(input({ policies: [loose, strict], leases: [] }))).toMatchObject({ apps: false, reason: "no-lease" });
+    expect(servingDecision(input({ policies: [strict, loose], leases: [] }))).toMatchObject({ apps: false, reason: "no-lease" });
+  });
+
+  it("offered policies that all fail to verify refuse; they never fall back to the default", () => {
+    expect(servingDecision(input({ policies: [signed("serving-policy", policy({ grace: "indefinite" }), otherAdmin)], leases: [] }))).toMatchObject({ apps: false, reason: "policy-signature" });
+  });
+});
+
+describe("the renewal key is P-256", () => {
+  it("a delegation names it compressed, and refuses an Ed25519-shaped key", () => {
+    expect(verifyServingRecord("renewal-key-delegation", delegation, signed("renewal-key-delegation", delegation).signature, admin.pub)).toBe(true);
+    expect(() => signServingRecord("renewal-key-delegation", { ...delegation, renewalPub: key(9).pub }, admin.sign)).toThrow();
+    expect(() => signServingRecord("renewal-key-delegation", { ...delegation, alg: "ed25519" as never }, admin.sign)).toThrow();
+  });
+
+  it("verifies a low-S compact signature and refuses its high-S twin", () => {
+    const l = lease();
+    const sig = signServingLeaseP256(l, renewal.sk);
+    expect(verifyServingLeaseP256(l, sig, renewal.pub)).toBe(true);
+    const n = p256.Point.CURVE().n;
+    const sv = BigInt(`0x${sig.slice(64)}`);
+    const high = sig.slice(0, 64) + (n - sv).toString(16).padStart(64, "0");
+    expect(verifyServingLeaseP256(l, high, renewal.pub)).toBe(false);
+    expect(verifyServingLeaseP256({ ...l, notAfter: l.notAfter - 1 }, sig, renewal.pub)).toBe(false);
+  });
+});
+
 describe("lease trust: both admin keys must agree", () => {
   it("refuses everything when .com's key and the box's pinned key differ", () => {
     expect(servingDecision(input({ adminKeyFromCom: otherAdmin.pub }))).toMatchObject({ control: false, apps: false, reason: "admin-keys-differ" });
@@ -188,11 +233,11 @@ describe("lease trust: both admin keys must agree", () => {
   });
 
   it("a policy signed by another key gives no app routes", () => {
-    expect(servingDecision(input({ policy: signed("serving-policy", policy(), otherAdmin) }))).toMatchObject({ control: true, apps: false, reason: "policy-signature" });
+    expect(servingDecision(input({ policies: [signed("serving-policy", policy(), otherAdmin)] }))).toMatchObject({ control: true, apps: false, reason: "policy-signature" });
   });
 
   it("a policy for another box gives no app routes", () => {
-    expect(servingDecision(input({ policy: signed("serving-policy", policy({ box: key(8).pub })) }))).toMatchObject({ reason: "policy-mismatch" });
+    expect(servingDecision(input({ policies: [signed("serving-policy", policy({ box: key(8).pub }))] }))).toMatchObject({ reason: "policy-signature" });
   });
 });
 
@@ -213,7 +258,7 @@ describe("the pushed revocation log", () => {
     const r = applyRevocationEntries(emptyRevocationState(), asEntries(push(entry(1))), revoker.pub);
     if (!r.ok) throw new Error("apply failed");
     const p = signed("serving-policy", policy({ regGen: 2, grace: "indefinite" }));
-    expect(servingDecision(input({ regGen: 2, policy: p, leases: [], revocations: r.state }))).toMatchObject({ apps: true });
+    expect(servingDecision(input({ regGen: 2, policies: [p], leases: [], revocations: r.state }))).toMatchObject({ apps: true });
   });
 
   it("skips duplicates, stops at a gap, and refuses a bad signature, never changing the state passed in", () => {
@@ -264,12 +309,13 @@ describe("the canonical name list", () => {
 describe("shared vectors", () => {
   it("match this implementation", () => {
     const v = JSON.parse(readFileSync(new URL("../test-vectors/serving-authority/vectors.json", import.meta.url), "utf8")) as {
-      records: Array<{ kind: Parameters<typeof verifyServingRecord>[0]; record: never; canonical: string; signature: string; signerPub: string }>;
+      records: Array<{ kind: Parameters<typeof verifyServingRecord>[0]; record: never; canonical: string; signature: string; signerPub: string; alg: string }>;
       nameLists: Array<{ names: never; canonical: string; sha256: string }>;
     };
     expect(v.records.length).toBeGreaterThan(5);
     for (const r of v.records) {
-      expect(verifyServingRecord(r.kind, r.record, r.signature, r.signerPub)).toBe(true);
+      const ok = r.alg === "p256" ? verifyServingLeaseP256(r.record, r.signature, r.signerPub) : verifyServingRecord(r.kind, r.record, r.signature, r.signerPub);
+      expect(ok, `${r.kind} ${r.alg}`).toBe(true);
     }
     for (const n of v.nameLists) {
       expect(canonicalNameList(n.names)).toBe(n.canonical);
