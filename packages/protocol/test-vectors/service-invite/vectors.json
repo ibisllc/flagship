@@ -1,0 +1,148 @@
+{
+  "about": "Invite messages signed by packages/protocol/src/serviceInvite.ts (tools/service-invite-vectors.ts). Keys are raw Ed25519 seeds filled with one byte.",
+  "keys": {
+    "irk": {
+      "seedByte": 17,
+      "pub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737"
+    },
+    "friend": {
+      "seedByte": 34,
+      "pub": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+    },
+    "contact": {
+      "seedByte": 51,
+      "pub": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+    },
+    "author": {
+      "pub": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48"
+    }
+  },
+  "create": [
+    {
+      "name": "a single-use personal invite",
+      "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+      "authorAID": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "serviceRef": "harry--chess-club",
+      "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+      "issuedAt": 1760000000000,
+      "canonical": "flagship/service-invite/create/v1|5555555555555555555555555555555555555555555555555555555555555555|d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48|harry--chess-club|6666666666666666666666666666666666666666666666666666666666666666|abababababababababababababababababababababababababababababababababababababababab|1760000000000",
+      "signature": "7d6d8f340887d70adb73e95ddfcbf16d38cb5e8916746301c601e20636aabc7a68f19cee43ce1d01357581d3adf6efbd891e8cc936266246545081fbf7731f04"
+    },
+    {
+      "name": "a group link with a cap",
+      "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+      "authorAID": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "serviceRef": "harry--chess-club",
+      "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+      "issuedAt": 1760000000000,
+      "maxRedemptions": 25,
+      "canonical": "flagship/service-invite/create/v1|5555555555555555555555555555555555555555555555555555555555555555|d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48|harry--chess-club|6666666666666666666666666666666666666666666666666666666666666666|abababababababababababababababababababababababababababababababababababababababab|1760000000000|maxN=25",
+      "signature": "a2d3d8d7ebabaf2549de866e8820fcd5e7ef7eefd7cd2728316c0c0ccb89d19706d55b8fdfacc5a33e6aea1c48e7e0c3d6cdd07ceba8d3181a70913986ea520c"
+    },
+    {
+      "name": "a link that expires",
+      "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+      "authorAID": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "serviceRef": "harry--chess-club",
+      "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+      "issuedAt": 1760000000000,
+      "expiresAt": 1760086400000,
+      "canonical": "flagship/service-invite/create/v1|5555555555555555555555555555555555555555555555555555555555555555|d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48|harry--chess-club|6666666666666666666666666666666666666666666666666666666666666666|abababababababababababababababababababababababababababababababababababababababab|1760000000000|exp=1760086400000",
+      "signature": "650e36910d6ef5680745d40a86d80f8b414b7276edac56a09ff7a58a78db63bd2a57409933d7c90acc236800f58da1da39c325bbf242600846fd1c1524a24a04"
+    },
+    {
+      "name": "a group link with a cap that is unlimited and expires",
+      "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+      "authorAID": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "serviceRef": "harry--chess-club",
+      "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+      "issuedAt": 1760000000000,
+      "maxRedemptions": 0,
+      "expiresAt": 1760086400000,
+      "canonical": "flagship/service-invite/create/v1|5555555555555555555555555555555555555555555555555555555555555555|d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48|harry--chess-club|6666666666666666666666666666666666666666666666666666666666666666|abababababababababababababababababababababababababababababababababababababababab|1760000000000|maxN=0|exp=1760086400000",
+      "signature": "4d7f1ce6fe888a822e497cd8e5708c35236df36a5c9c86eea85a8b9584a365908b3bf09136d47349e54873855a0ff1fcf99e3dfcd19aab069978822a2587ad0a"
+    }
+  ],
+  "redeem": [
+    {
+      "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "visitorAID": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+      "redeemedAt": 1760000100000,
+      "canonical": "flagship/service-invite/redeem/v1|6666666666666666666666666666666666666666666666666666666666666666|a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0|1760000100000",
+      "signature": "6c2b361c2ee3b3eb5e7596e1cbf7c5ce91af974feecd189fa9cec0288d6888e2d70c97abdacc824929a8d553e69c3a46e03e6a06f8b33a0098b9efcaf8b2d10f"
+    }
+  ],
+  "accept": [
+    {
+      "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+      "serviceRef": "harry--chess-club",
+      "contactAID": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+      "acceptedAt": 1760000200000,
+      "canonical": "flagship/service-invite/accept/v1|5555555555555555555555555555555555555555555555555555555555555555|harry--chess-club|17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1760000200000",
+      "signature": "fed05a4cb3d97d751bd234ee9f1e8655820907defff26698fa811e867045dcdfd2354a71117ddc9e1cdd3fbec155120be6ee1014d083abebeb73818495def20a"
+    }
+  ],
+  "revoke": [
+    {
+      "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+      "issuedAt": 1760000300000,
+      "canonical": "flagship/service-invite/revoke/v1|5555555555555555555555555555555555555555555555555555555555555555|1760000300000",
+      "signature": "acccb7c0c4bda2cc12a59cfb8329b3eee6d899131b38ce8de436898210da6d262ba321d761cd659e1c244c781d0f85a2d2014710013cfde7fc3503f867acc903"
+    }
+  ],
+  "secretHash": [
+    {
+      "secretHex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expect": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+    },
+    {
+      "secretHex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "expect": "af9613760f72635fbdb44a5a0a63c39f12af30f950a6ee5c971be188e89c4051"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "a separator in the invite id",
+      "op": "create",
+      "inviteId": "a|b",
+      "authorAID": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "serviceRef": "harry--chess-club",
+      "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+      "issuedAt": 1760000000000
+    },
+    {
+      "name": "a control character in the service ref",
+      "op": "redeem-secret",
+      "secretHash": "x\u0007y",
+      "visitorAID": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+      "redeemedAt": 1
+    },
+    {
+      "name": "a negative cap",
+      "op": "create",
+      "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+      "authorAID": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "serviceRef": "harry--chess-club",
+      "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+      "issuedAt": 1760000000000,
+      "maxRedemptions": -1
+    },
+    {
+      "name": "a fractional expiry",
+      "op": "create",
+      "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+      "authorAID": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+      "serviceRef": "harry--chess-club",
+      "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+      "issuedAt": 1760000000000,
+      "expiresAt": 1.5
+    }
+  ]
+}

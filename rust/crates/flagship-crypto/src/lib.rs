@@ -9,6 +9,7 @@ pub mod entitlements;
 pub mod error;
 pub mod key_id;
 pub mod release;
+pub mod service_invite;
 mod rng;
 pub mod seal;
 pub mod session;
