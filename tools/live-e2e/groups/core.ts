@@ -7,14 +7,15 @@ import {
   signInstallService,
   signJournalRequest,
   signPhoneOrder,
-  signSetDeadManPolicy,
+  ed,
+  signServingRecord,
   signServiceEnvChange,
   serviceEnvValueSha256,
   signUninstallService,
   type InstallServiceRequest,
   type JournalRequest,
   type PhoneOrder,
-  type SetDeadManPolicy,
+  type ServingPolicy,
   type ServiceEnvChange,
   type UninstallServiceRequest,
 } from "@flagship/protocol";
@@ -225,30 +226,34 @@ export const core: Group = {
       assert(r.status >= 400 && r.status < 500, `expected 4xx, got ${r.status}`);
       return `rejected ${r.status}`;
     });
-    const deadman = (): SetDeadManPolicy => ({
-      serverId: fqdn,
-      enabled: false,
-      windowMs: 24 * 3_600_000,
-      graceMs: 3_600_000,
-      lockoutMode: "off",
-      issuedAt: Date.now(),
+    // The one dead-man setting: a serving policy. Sent as "indefinitely, stop serving apps", the default, so it
+    // changes nothing; only the admin root may set it on an admin-pinned box.
+    const servingPolicy = async (): Promise<ServingPolicy> => {
+      const d = await http(`https://${fqdn}/api/screens/server-detail`, { headers: session });
+      const sv = d.json?.serving;
+      assert(sv?.boxPub && sv?.scopeSha256, `server-detail.serving: ${short(sv)}`);
+      return { account: user, box: sv.boxPub, regGen: sv.regGen, policyGen: sv.policyGen + 1, grace: "indefinite", onLapse: "stop-apps", scopeSha256: sv.scopeSha256, issuedAt: Date.now() };
+    };
+    const postServing = (record: ServingPolicy, signature: string) => postJson(`https://${fqdn}/api/screens/serving`, { policy: { record, signature } }, session);
+    const signPolicy = (p: ServingPolicy, k: { privateKey: Uint8Array }) => bytesToHex(signServingRecord("serving-policy", p, (m) => ed.sign(m, k.privateKey)));
+    await rec.check("serving policy (the dead-man setting) refuses a forged signature", async () => {
+      const r = await postServing(await servingPolicy(), "00".repeat(64));
+      assert(r.status === 200 && r.json?.policyAdopted === false, `got ${r.status}: ${short(r.text)}`);
+      return `refused ${r.json?.refused?.[0]?.code ?? ""}`;
     });
-    await rec.check("dead-man policy rejects a forged signature", async () => {
-      const r = await postJson(`https://${fqdn}/api/deadman/policy`, { request: deadman(), signature: "00".repeat(64) });
-      assert(r.status === 401 || r.status === 403, `expected 401/403, got ${r.status}`);
-      return `rejected ${r.status}`;
+    await rec.check("serving policy refuses the owner IRK (admin-pinned box)", async () => {
+      const p = await servingPolicy();
+      const r = await postServing(p, signPolicy(p, irk));
+      assert(r.status === 200 && r.json?.policyAdopted === false, `got ${r.status}: ${short(r.text)}`);
+      return `refused ${r.json?.refused?.[0]?.code ?? ""}`;
     });
-    await rec.check("dead-man policy rejects the owner IRK (admin-pinned box)", async () => {
-      const req = deadman();
-      const r = await postJson(`https://${fqdn}/api/deadman/policy`, { request: req, signature: bytesToHex(signSetDeadManPolicy(req, irk)) });
-      assert(r.status === 401 || r.status === 403, `expected 401/403, got ${r.status}`);
-      return `rejected ${r.status}`;
-    });
-    await rec.check("dead-man policy set (admin-root signed, disabled — never arms) → 200", async () => {
-      const req = deadman();
-      const r = await postJson(`https://${fqdn}/api/deadman/policy`, { request: req, signature: bytesToHex(signSetDeadManPolicy(req, adminRoot)) });
-      assert(r.status === 200 && r.json?.enabled === false, `got ${r.status}: ${short(r.text)}`);
-      return "accepted (disarmed)";
+    await rec.check("serving policy set by the admin root (indefinitely, the default) is adopted; server-detail shows it", async () => {
+      const p = await servingPolicy();
+      const r = await postServing(p, signPolicy(p, adminRoot));
+      assert(r.status === 200 && r.json?.policyAdopted === true, `got ${r.status}: ${short(r.text)}`);
+      const d = await http(`https://${fqdn}/api/screens/server-detail`, { headers: session });
+      assert(d.json?.serving?.policyGen === p.policyGen && d.json.serving.until === null, `serving ${short(d.json?.serving)}`);
+      return `policyGen ${p.policyGen}, no time limit`;
     });
 
     const slug = "corewho";
