@@ -843,6 +843,7 @@ object MaintainersComTrust {
         blessing: MaintainerBlessing,
         nowMs: Long,
         bakedPinOverride: String? = null,
+        caLeasePqPin: CaLeasePq.Pin = CaLeasePq.PIN,
     ): Boolean {
         val pin = bakedPinOverride ?: MaintainersTrust.bakedPin
         if (pin.isEmpty()) return false
@@ -856,6 +857,7 @@ object MaintainersComTrust {
             blessing.caEndorsements,
             (pq?.get("bindings") as? kotlinx.serialization.json.JsonArray)?.toList() ?: emptyList(),
             (pq?.get("endorsements") as? kotlinx.serialization.json.JsonArray)?.toList() ?: emptyList(),
+            pin = caLeasePqPin,
             nowMs = nowMs,
         )
         val keys = MaintainersCaVerifier.authorizedCaKeys(leases, chain, nowMs)

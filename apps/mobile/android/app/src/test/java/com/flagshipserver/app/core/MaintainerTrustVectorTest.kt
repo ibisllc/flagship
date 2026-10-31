@@ -28,6 +28,8 @@ import org.robolectric.annotation.Config
 class MaintainerTrustVectorTest {
 
     companion object {
+        /** These fixtures predate the PQ ceremony: their CA leases carry no hybrid companion. */
+        val UNPINNED = CaLeasePq.Pin(keyIds = emptyList(), legacyLeases = emptyList())
         const val PIN = "a170c80dcf3b6d1d42fcc196c8d5f2dbec7a87db6a3d5d2692773442af4a62ee"
         const val MAINTAINER_PUB = "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc"
         const val HOT_CA_PUB = "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a"
@@ -180,26 +182,31 @@ class MaintainerTrustVectorTest {
     // --- verifyComBlessing (the feature's top-level verdict) ----------------
 
     @Test
+    fun aClassicalOnlyCaLeaseGivesNoAuthorityUnderTheBakedPqPin() {
+        assertFalse(MaintainersComTrust.verifyComBlessing(blessing(), WITHIN_MS, PIN))
+    }
+
+    @Test
     fun blessingTrustedWithinWindow() {
-        assertTrue(MaintainersComTrust.verifyComBlessing(blessing(), WITHIN_MS, PIN))
+        assertTrue(MaintainersComTrust.verifyComBlessing(blessing(), WITHIN_MS, PIN, caLeasePqPin = UNPINNED))
     }
 
     @Test
     fun blessingUntrustedWhenLapsed() {
-        assertFalse(MaintainersComTrust.verifyComBlessing(blessing(), AFTER_MS, PIN))
+        assertFalse(MaintainersComTrust.verifyComBlessing(blessing(), AFTER_MS, PIN, caLeasePqPin = UNPINNED))
     }
 
     @Test
     fun blessingUntrustedWhenComServesUnauthorizedKey() {
         assertFalse(
-            MaintainersComTrust.verifyComBlessing(blessing(caPubkey = ROGUE_PUB), WITHIN_MS, PIN),
+            MaintainersComTrust.verifyComBlessing(blessing(caPubkey = ROGUE_PUB), WITHIN_MS, PIN, caLeasePqPin = UNPINNED),
         )
     }
 
     @Test
     fun blessingUntrustedWhenComLowersTheFloor() {
         assertFalse(
-            MaintainersComTrust.verifyComBlessing(blessing(pin = "0".repeat(64)), WITHIN_MS, PIN),
+            MaintainersComTrust.verifyComBlessing(blessing(pin = "0".repeat(64)), WITHIN_MS, PIN, caLeasePqPin = UNPINNED),
         )
     }
 
@@ -207,13 +214,13 @@ class MaintainerTrustVectorTest {
     fun blessingUntrustedWhenSignedByRogue() {
         assertFalse(
             MaintainersComTrust.verifyComBlessing(
-                blessing(endorsements = listOf(endorsement(signedBy = ROGUE_PUB))), WITHIN_MS, PIN,
+                blessing(endorsements = listOf(endorsement(signedBy = ROGUE_PUB))), WITHIN_MS, PIN, caLeasePqPin = UNPINNED,
             ),
         )
     }
 
     @Test
     fun blessingFailsClosedOnEmptyBakedPin() {
-        assertFalse(MaintainersComTrust.verifyComBlessing(blessing(), WITHIN_MS, ""))
+        assertFalse(MaintainersComTrust.verifyComBlessing(blessing(), WITHIN_MS, "", caLeasePqPin = UNPINNED))
     }
 }

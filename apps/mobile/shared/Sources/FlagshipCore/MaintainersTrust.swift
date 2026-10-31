@@ -914,7 +914,8 @@ extension MaintainersTrust {
     public static func verifyComBlessing(
         _ blessing: MaintainerBlessing,
         now: Date,
-        bakedPinOverride: String? = nil
+        bakedPinOverride: String? = nil,
+        caLeasePqPin: CaLeasePq.Pin = CaLeasePq.pin
     ) -> Bool {
         let pin = bakedPinOverride ?? bakedPin
         guard !pin.isEmpty else { return false }
@@ -928,6 +929,7 @@ extension MaintainersTrust {
         let material = blessing.caLeasePqJSON.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) } as? [String: Any]
         let leases = CaLeasePq.gate(blessing.caEndorsements, bindings: material?["bindings"] as? [Any] ?? [],
                                     endorsements: material?["endorsements"] as? [Any] ?? [],
+                                    pin: caLeasePqPin,
                                     now: Int64(now.timeIntervalSince1970 * 1000))
         let keys = MaintainersCaVerifier.authorizedCaKeys(
             leases, caChain: chain, now: now

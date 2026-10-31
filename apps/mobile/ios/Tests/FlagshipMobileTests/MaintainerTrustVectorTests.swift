@@ -162,6 +162,15 @@ final class MaintainerTrustVectorTests: XCTestCase {
 
     // MARK: - verifyComBlessing (the feature's top-level verdict)
 
+    /// These fixtures predate the PQ ceremony: their CA leases carry no hybrid companion.
+    private static let unpinned = CaLeasePq.Pin(keyIds: [], legacyLeases: [])
+
+    func test_aClassicalOnlyCaLeaseGivesNoAuthorityUnderTheBakedPqPin() {
+        XCTAssertFalse(
+            MaintainersTrust.verifyComBlessing(
+                blessing(), now: date(Self.withinMs), bakedPinOverride: Self.pin))
+    }
+
     private func blessing(pin: String? = nil,
                           caPubkey: String? = nil,
                           mandates: [Mandate]? = nil,
@@ -177,13 +186,13 @@ final class MaintainerTrustVectorTests: XCTestCase {
     func testBlessingTrustedWithinWindow() {
         XCTAssertTrue(
             MaintainersTrust.verifyComBlessing(
-                blessing(), now: date(Self.withinMs), bakedPinOverride: Self.pin))
+                blessing(), now: date(Self.withinMs), bakedPinOverride: Self.pin, caLeasePqPin: Self.unpinned))
     }
 
     func testBlessingUntrustedWhenLapsed() {
         XCTAssertFalse(
             MaintainersTrust.verifyComBlessing(
-                blessing(), now: date(Self.afterMs), bakedPinOverride: Self.pin))
+                blessing(), now: date(Self.afterMs), bakedPinOverride: Self.pin, caLeasePqPin: Self.unpinned))
     }
 
     func testBlessingUntrustedWhenComServesUnauthorizedKey() {
@@ -191,7 +200,7 @@ final class MaintainerTrustVectorTests: XCTestCase {
         XCTAssertFalse(
             MaintainersTrust.verifyComBlessing(
                 blessing(caPubkey: Self.roguePub),
-                now: date(Self.withinMs), bakedPinOverride: Self.pin))
+                now: date(Self.withinMs), bakedPinOverride: Self.pin, caLeasePqPin: Self.unpinned))
     }
 
     func testBlessingUntrustedWhenComLowersTheFloor() {
@@ -199,7 +208,7 @@ final class MaintainerTrustVectorTests: XCTestCase {
         XCTAssertFalse(
             MaintainersTrust.verifyComBlessing(
                 blessing(pin: String(repeating: "0", count: 64)),
-                now: date(Self.withinMs), bakedPinOverride: Self.pin))
+                now: date(Self.withinMs), bakedPinOverride: Self.pin, caLeasePqPin: Self.unpinned))
     }
 
     func testBlessingUntrustedWhenSignedByRogue() {
@@ -208,12 +217,12 @@ final class MaintainerTrustVectorTests: XCTestCase {
         XCTAssertFalse(
             MaintainersTrust.verifyComBlessing(
                 blessing(endorsements: [bad]),
-                now: date(Self.withinMs), bakedPinOverride: Self.pin))
+                now: date(Self.withinMs), bakedPinOverride: Self.pin, caLeasePqPin: Self.unpinned))
     }
 
     func testBlessingFailsClosedOnEmptyBakedPin() {
         XCTAssertFalse(
             MaintainersTrust.verifyComBlessing(
-                blessing(), now: date(Self.withinMs), bakedPinOverride: ""))
+                blessing(), now: date(Self.withinMs), bakedPinOverride: "", caLeasePqPin: Self.unpinned))
     }
 }

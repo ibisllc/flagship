@@ -17,7 +17,10 @@ public enum CaLeasePq {
     }
 
     /// Mirrors `CA_LEASE_PQ_PIN` in caLeasePq.ts (a test keeps them equal).
-    public static let pin = Pin(keyIds: [], legacyLeases: [])
+    public static let pin = Pin(
+        keyIds: ["1c07f1ffe8e6e8b89d8b8c8c14544d6f065decfa67ea76ec50c30fadaadb9434"],
+        legacyLeases: ["05992604e11f53b3ede67ac98c089faa8b45e23b6f543fdba1927a08df29f57f", "38d5ebb0d6ebf7742416076366ce3ef50c02273f91515224b2937c56e958c278", "6f11e97e0ce6fc6e77edf2aa2676c08fa2d73424803b5900cc22479194f4a363", "a1606216cf39cccc9d02e2d22d74874037da59f137bb065e55c9f6d9937f14a4"]
+    )
 
     public static func v1Digest(_ e: CaEndorsement) -> String? {
         guard let bytes = try? MaintainersCanonical.canonicalCaEndorsement(e) else { return nil }
