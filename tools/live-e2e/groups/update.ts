@@ -136,9 +136,12 @@ export const update: Group = {
     // Evidence for the release journal: which program staged, switched and verified the release (the Rust
     // flagship-updater on an arch-v2 box, the shell installers as its fallback).
     await rec.check("the box's journal names what installed the release (info)", async () => {
-      const lines = (await journal(acct, b, 4000)).filter((l) => /flagship-updater|update-guard|\[self-update\]|release op|installer/i.test(l));
-      assert(lines.length > 0, "no update lines in the journal");
-      return lines.slice(-12).map((l) => l.replace(/^\S+ \S+ /, "").slice(0, 160)).join(" ⏎ ");
+      const re = /flagship-updater|update-guard|\[self-update\]|release op|installer|release/i;
+      const daemon = (await journal(acct, b, 4000)).filter((l) => re.test(l));
+      const broker = (await journal(acct, b, 4000, "flagship-broker").catch(() => [] as string[])).filter((l) => re.test(l));
+      assert(daemon.length > 0, "no update lines in the journal");
+      const fmt = (ls: string[]) => ls.slice(-8).map((l) => l.replace(/^\S+ \S+ /, "").slice(0, 160)).join(" ⏎ ");
+      return `daemon: ${fmt(daemon)} ‖ broker: ${broker.length ? fmt(broker) : "(no release lines)"}`;
     });
     }
   },

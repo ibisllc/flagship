@@ -36,8 +36,8 @@ export async function allowEgress(acct: Account, box: Box, session: string, serv
 }
 
 /** The box's daemon journal lines, read with the admin root. */
-export async function journal(acct: Account, box: Box, lines = 3000): Promise<string[]> {
-  const req: JournalRequest = { serverId: box.fqdn, unit: "flagship-daemon", lines, issuedAt: Date.now() };
+export async function journal(acct: Account, box: Box, lines = 3000, unit = "flagship-daemon"): Promise<string[]> {
+  const req: JournalRequest = { serverId: box.fqdn, unit, lines, issuedAt: Date.now() };
   const r = await postJson(`https://${box.fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, acct.keys.adminRoot)) });
   assert(r.status === 200, `journal ${r.status}: ${short(r.text)}`);
   return (r.json?.lines ?? r.json?.log ?? []) as string[];
