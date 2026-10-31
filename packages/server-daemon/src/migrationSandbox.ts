@@ -183,6 +183,8 @@ export interface RunSandboxedSqlOptions {
   /** The dedicated instance's socket volume, when the target is one. */
   socketVolume?: string;
   member?: { serviceId: string; network: string; netArgs: string[] };
+  /** Waits before each retry when psql never connected (tests shorten them). */
+  connectRetryDelaysMs?: number[];
 }
 
 /**
@@ -203,10 +205,21 @@ export async function runSandboxedSql(o: RunSandboxedSqlOptions): Promise<void> 
   const secrets = [o.target.password, encodeURIComponent(o.target.password)];
   // The no-internet bridge normally exists from boot; make sure of it (a duplicate create is harmless).
   if (!o.socketVolume && !o.member) await ensureDockerNetwork(o.cmd, MIGRATION_NETWORK);
-  try {
-    await o.cmd.capture("docker", plan.args, { timeoutMs: l.wallClockMs, input: o.sql, env: plan.env });
-  } catch (e) {
-    const err = e as Error & { stderr?: string };
+  const delays = o.connectRetryDelaysMs ?? CONNECT_RETRY_DELAYS_MS;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await o.cmd.capture("docker", plan.args, { timeoutMs: l.wallClockMs, input: o.sql, env: plan.env });
+      return;
+    } catch (e) {
+      const err = e as Error & { stderr?: string };
+      // psql never reached the server (a new instance's route through the gateway can lag its own
+      // readiness check by a few seconds), so no statement ran and trying again is safe.
+      if (attempt >= delays.length || !NEVER_CONNECTED_RE.test(err.stderr ?? "")) return failed(err);
+      await new Promise((r) => setTimeout(r, delays[attempt]));
+    }
+  }
+
+  async function failed(err: Error & { stderr?: string }): Promise<never> {
     const timedOut = /timed out/i.test(err.message);
     if (timedOut) {
       // The client was killed; the container may live on. Stop it by name.
@@ -217,6 +230,10 @@ export async function runSandboxedSql(o: RunSandboxedSqlOptions): Promise<void> 
     throw new MigrationFailedError(timedOut ? `the migration ran past ${Math.round(l.wallClockMs / 1000)} s and was stopped` : `the migration failed: ${detail}`, timedOut ? "timed-out" : "failed");
   }
 }
+
+/** psql's own words when it could not open the connection at all (libpq: `connection to server … failed: …`). */
+const NEVER_CONNECTED_RE = /^psql: error: connection to server (at|on) .* failed: /m;
+const CONNECT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000];
 
 /** Parse the opaque role/database/port out of an app's credential URL (the host is replaced by the alias). */
 export function targetFromPgUrl(pgUrl: string): MigrationTarget {

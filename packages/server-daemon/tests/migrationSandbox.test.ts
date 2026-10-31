@@ -93,6 +93,47 @@ describe("running a migration", () => {
     expect(killed.some((k) => /^kill flagship-migrate-[0-9a-f]{12}$/.test(k))).toBe(true);
   });
 
+  const neverConnected = 'psql: error: connection to server at "host.flagship.internal" (10.89.2.1), port 15400 failed: server closed the connection unexpectedly';
+
+  it("tries again when psql never reached the server, then succeeds", async () => {
+    let calls = 0;
+    await runSandboxedSql({
+      cmd: fake(async () => {
+        if (++calls < 3) throw Object.assign(new Error("docker exited with code 2"), { stderr: neverConnected });
+        return { stdout: "", stderr: "" };
+      }),
+      target,
+      sql: "x",
+      connectRetryDelaysMs: [1, 1, 1],
+    });
+    expect(calls).toBe(3);
+  });
+
+  it("gives up after the last retry with psql's words", async () => {
+    let calls = 0;
+    const err = await runSandboxedSql({
+      cmd: fake(async () => { calls++; throw Object.assign(new Error("docker exited with code 2"), { stderr: neverConnected }); }),
+      target,
+      sql: "x",
+      connectRetryDelaysMs: [1, 1],
+    }).catch((e) => e);
+    expect(calls).toBe(3);
+    expect(err.kind).toBe("failed");
+    expect(err.message).toContain("server closed the connection unexpectedly");
+  });
+
+  it("never runs a migration twice once it reached the server", async () => {
+    let calls = 0;
+    const err = await runSandboxedSql({
+      cmd: fake(async () => { calls++; throw Object.assign(new Error("docker exited with code 3"), { stderr: "psql:<stdin>:1: ERROR: server closed the connection unexpectedly" }); }),
+      target,
+      sql: "x",
+      connectRetryDelaysMs: [1, 1],
+    }).catch((e) => e);
+    expect(calls).toBe(1);
+    expect(err.kind).toBe("failed");
+  });
+
   it("a runner that cannot capture is reported unavailable, never run on the host", async () => {
     const err = await runSandboxedSql({ cmd: { run: async () => {} }, target, sql: "x" }).catch((e) => e);
     expect(err.kind).toBe("unavailable");
