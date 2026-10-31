@@ -1,4 +1,4 @@
-// Durable lock for a server (SEC-LOCK-001, SEC-DEADMAN-001): the webapp's side.
+// Durable lock for a server (SEC-LOCK-001): the webapp's side.
 //
 // Locking is two independent things and they are reported separately:
 //   1. the BOOT SUSPENSION at the boot worker: an owner-signed record that stops
@@ -249,57 +249,4 @@ export function describeLockResult(r) {
   const lock = r.lock === "confirmed" ? tr("locked: it can't unlock itself until you resume it") : tr("remote lock pending: it will be retried");
   if (!power) return tr("Locked at the boot service: {0}.", lock);
   return tr("{0}; {1}.", power, lock);
-}
-
-// ── dead-man: a lease never outlives the affirmation ────────────────────────
-
-/** The latest moment an auto-unlock lease may expire, or null when no switch is on. */
-export function leaseCapForDeadMan(deadMan, now = Date.now()) {
-  if (!deadMan || deadMan.enabled !== true) return null;
-  return Math.max(now, Number(deadMan.leaseExpiry) || 0);
-}
-
-/**
- * The TTL for a new lease: the normal TTL, shortened to the dead-man
- * affirmation deadline. Returns 0 when the switch has already lapsed (no lease).
- */
-export function boundedLeaseTtl(ttlMs, deadMan, now = Date.now()) {
-  if (!deadMan || deadMan.enabled !== true) return ttlMs;
-  const deadline = Number(deadMan.leaseExpiry) || 0;
-  if (deadline <= now) return 0;
-  return Math.min(ttlMs, deadline - now);
-}
-
-// ── the box's dead-man switch, remembered so renewals can bound themselves ──
-
-const DEADMAN_KEY = "flagship.deadManView.v1";
-const DEADMAN_FRESH_MS = 6 * 60 * 60 * 1000;
-
-function readViews(deps) {
-  try {
-    const raw = storage(deps)?.getItem(DEADMAN_KEY);
-    const o = raw ? JSON.parse(raw) : {};
-    return o && typeof o === "object" ? o : {};
-  } catch {
-    return {};
-  }
-}
-
-/** Remember what the box said about its switch. `view` null means "this box has none". */
-export function rememberDeadManView(serverDomain, view, deps = {}) {
-  const all = readViews(deps);
-  all[serverDomain] = { view: view ?? { enabled: false, leaseExpiry: 0 }, at: (deps.now || Date.now)() };
-  try {
-    storage(deps)?.setItem(DEADMAN_KEY, JSON.stringify(all));
-  } catch {
-    // nothing to remember into; renewals will treat the switch as unknown
-  }
-}
-
-/** The remembered switch, or undefined when we have no fresh answer (unknown ⇒ do not renew silently). */
-export function cachedDeadManView(serverDomain, deps = {}) {
-  const e = readViews(deps)[serverDomain];
-  if (!e || typeof e.at !== "number") return undefined;
-  if ((deps.now || Date.now)() - e.at > DEADMAN_FRESH_MS) return undefined;
-  return e.view;
 }

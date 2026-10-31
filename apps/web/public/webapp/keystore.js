@@ -889,6 +889,9 @@ export async function unlockUmk(passphrase, profileId = activeProfileId()) {
 
 export async function resetDevice(profileId = activeProfileId()) {
   await dbDel(wrappedUmkRecordKey(profileId));
+  // The serving renewal key belongs to this device's place in the account: a
+  // reset device starts again with none (a new login delegates a new one).
+  await dbDel(servingRenewalKeyRecordKey(profileId));
   // Also drop any tier-1 PIN: a PIN-wrapped copy of the UMK would otherwise
   // survive a tier-2/tier-3 wipe and defeat the "erases the key" promise.
   // Dynamic import avoids a static keystore↔pinLock cycle; best-effort.
@@ -944,6 +947,12 @@ export async function persistSeedForProfile(seed, cloudName, passphrase) {
 export async function forgetProfileKeys(profileId = activeProfileId()) {
   await resetDevice(profileId);
   await dbDel(adminRootRecordKey(profileId));
+}
+
+/** The IndexedDB record that holds this profile's serving renewal key (a
+ *  non-extractable ECDSA P-256 CryptoKey pair, lib/servingAuthority.js). */
+export function servingRenewalKeyRecordKey(profileId = activeProfileId()) {
+  return `flagship.servingRenewalKey.v1.${profileId}`;
 }
 
 /** Forget the bootstrap's DEFAULT record too. The first account's key is

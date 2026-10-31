@@ -22,6 +22,7 @@ const KNOWN: Record<string, string> = {
   "lib/serverShare.js": "share envelopes",
   "lib/serverShares.js": "share envelopes",
   "lib/pinLock.js": "local app-lock wrap key (never leaves the browser, signs nothing)",
+  "lib/servingAuthority.js": "the serving renewal key: a non-extractable WebCrypto ECDSA P-256 key in IndexedDB that signs only serving leases, delegated by the admin root; the admin root itself stays in the keystore",
   "lib/directoryKeyDelivery.js": "directory key envelopes",
   "lib/accountMetadata.js": "metadata sealing",
   "views/create-server.js": "recipe signing in the browser: to move to the phone",

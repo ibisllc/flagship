@@ -15,7 +15,7 @@ import { tr } from "./i18n.js";
 
 const HOST_ID = "flagship-modal-host";
 
-function ensureHost() {
+export function ensureHost() {
   let host = document.getElementById(HOST_ID);
   if (host) return host;
   host = document.createElement("div");
@@ -24,7 +24,7 @@ function ensureHost() {
   return host;
 }
 
-function buildOverlay() {
+export function buildOverlay() {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.setAttribute("role", "dialog");

@@ -7,16 +7,12 @@ import { routeBoot, InMemoryNonceStore, type BootRouteDeps, type DirectoryClient
 import { InMemoryBootSuspensionStorage, InMemoryBoxSealedLeaseStorage, InMemorySecretMailboxStorage } from "@flagship/storage";
 import { deriveIRK, ed, buildAutoUnlockLeaseV2, verifyBootSuspension, signBootSuspension } from "@flagship/protocol";
 import {
-  boundedLeaseTtl,
   canonicalBootSuspensionBytes,
-  cachedDeadManView,
   describeLockResult,
-  leaseCapForDeadMan,
   lockAndPower,
   markLockPending,
   pendingLocks,
   readSuspension,
-  rememberDeadManView,
   retryPendingLocks,
   setOwnerSuspension,
 } from "../public/webapp/lib/bootSuspension.js";
@@ -176,24 +172,12 @@ describe("lock and power", () => {
   });
 });
 
-describe("dead-man bounds on leases", () => {
-  it("caps a lease at the affirmation deadline and refuses one past a lapsed switch", () => {
-    expect(boundedLeaseTtl(7 * 86_400_000, { enabled: true, leaseExpiry: t + 60_000 }, t)).toBe(60_000);
-    expect(boundedLeaseTtl(1000, { enabled: true, leaseExpiry: t + 60_000 }, t)).toBe(1000);
-    expect(boundedLeaseTtl(1000, { enabled: true, leaseExpiry: t - 1 }, t)).toBe(0);
-    expect(boundedLeaseTtl(1000, { enabled: true, leaseExpiry: 0 }, t)).toBe(0);
-    expect(boundedLeaseTtl(1000, { enabled: false, leaseExpiry: 0 }, t)).toBe(1000);
-    expect(leaseCapForDeadMan({ enabled: false, leaseExpiry: 5 }, t)).toBeNull();
-  });
-
-  it("remembers what the box said, and forgets it after six hours", () => {
-    const storage = mem();
-    expect(cachedDeadManView(S, { storage, now: () => t })).toBeUndefined();
-    rememberDeadManView(S, { enabled: true, leaseExpiry: t + 1 }, { storage, now: () => t });
-    expect(cachedDeadManView(S, { storage, now: () => t + 1000 })).toEqual({ enabled: true, leaseExpiry: t + 1 });
-    expect(cachedDeadManView(S, { storage, now: () => t + 7 * 3_600_000 })).toBeUndefined();
-    rememberDeadManView(S, null, { storage, now: () => t });
-    expect(cachedDeadManView(S, { storage, now: () => t })).toEqual({ enabled: false, leaseExpiry: 0 });
+describe("the old dead-man switch is gone", () => {
+  it("bootSuspension.js no longer bounds leases by a dead-man affirmation", async () => {
+    const mod = await import("../public/webapp/lib/bootSuspension.js");
+    for (const gone of ["leaseCapForDeadMan", "boundedLeaseTtl", "rememberDeadManView", "cachedDeadManView"]) {
+      expect(gone in mod).toBe(false);
+    }
   });
 });
 

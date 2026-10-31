@@ -34,7 +34,7 @@ export const REMOVE_APP_ADMIN_ONLY = tr("Only an admin device can remove an app.
 export const ACCESS_ADMIN_ONLY = tr("Only an admin device can change this app's internet access.");
 export const API_KEYS_ADMIN_ONLY = tr("Only an admin device can create or revoke API keys.");
 export const DB_WRITE_ADMIN_ONLY = tr("Only an admin device can change this app's data.");
-/** The server page's orders (update, power, dead-man, front page, backup,
+/** The server page's orders (update, power, the time limit, front page, backup,
  *  migrate, share, transfer, revoke, delete) all sign under the admin root. */
 export const SERVER_ADMIN_ONLY = tr("Only an admin device can change this server. This device can see it.");
 export const SHARE_ADMIN_ONLY = tr("Only an admin device can share this server.");

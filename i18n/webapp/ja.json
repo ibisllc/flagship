@@ -3032,5 +3032,21 @@
   "Started a stack move": "アーキテクチャの移行を開始しました",
   "Finished a stack move": "アーキテクチャの移行が完了しました",
   "Updated how this server unlocks at start-up": "このサーバーの起動時のロック解除を更新しました",
-  "Kept the previous start-up unlock": "以前の起動時のロック解除を維持しました"
+  "Kept the previous start-up unlock": "以前の起動時のロック解除を維持しました",
+  "This server hasn't reported its setting yet. Update it, then try again.": "このサーバーはまだ設定を報告していません。更新してからもう一度お試しください。",
+  "if no admin opens Flagship": "（管理者が Flagship を開かない場合）",
+  "No time limit": "期限なし",
+  "Its apps are stopped until an admin opens Flagship": "管理者が Flagship を開くまで、アプリは停止しています",
+  "If no admin opens Flagship for:": "管理者が Flagship を開かない期間：",
+  "Then:": "その場合：",
+  "Stop serving its apps": "アプリの提供を停止する",
+  "Stop its apps and lock the server": "アプリを停止し、サーバーをロックする",
+  "Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.": "ロックするとサーバーはディスクがロックされた状態で再起動します。管理者がスマートフォンで承認するまで起動しません。",
+  "7 days": "7日",
+  "30 days": "30日",
+  "Never": "なし",
+  "Locks on {0}": "{0} にロック",
+  "Stays online until {0}": "{0} までオンライン",
+  "Change when this server stops": "このサーバーが停止するタイミングを変更",
+  "This signs a new setting for {0}.": "{0} の新しい設定に署名します。"
 }

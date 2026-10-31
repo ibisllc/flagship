@@ -12429,5 +12429,69 @@
   "Kept the previous start-up unlock": {
     "en": "Kept the previous start-up unlock",
     "ctx": "webapp/lib/activityFeed.js:41"
+  },
+  "This server hasn't reported its setting yet. Update it, then try again.": {
+    "en": "This server hasn't reported its setting yet. Update it, then try again.",
+    "ctx": "webapp/lib/servingAuthority.js:544"
+  },
+  "if no admin opens Flagship": {
+    "en": "if no admin opens Flagship",
+    "ctx": "webapp/lib/servingUi.js:23"
+  },
+  "No time limit": {
+    "en": "No time limit",
+    "ctx": "webapp/lib/servingUi.js:24"
+  },
+  "Its apps are stopped until an admin opens Flagship": {
+    "en": "Its apps are stopped until an admin opens Flagship",
+    "ctx": "webapp/lib/servingUi.js:25"
+  },
+  "If no admin opens Flagship for:": {
+    "en": "If no admin opens Flagship for:",
+    "ctx": "webapp/lib/servingUi.js:26"
+  },
+  "Then:": {
+    "en": "Then:",
+    "ctx": "webapp/lib/servingUi.js:27"
+  },
+  "Stop serving its apps": {
+    "en": "Stop serving its apps",
+    "ctx": "webapp/lib/servingUi.js:28"
+  },
+  "Stop its apps and lock the server": {
+    "en": "Stop its apps and lock the server",
+    "ctx": "webapp/lib/servingUi.js:29"
+  },
+  "Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.": {
+    "en": "Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.",
+    "ctx": "webapp/lib/servingUi.js:30"
+  },
+  "7 days": {
+    "en": "7 days",
+    "ctx": "webapp/lib/servingUi.js:33"
+  },
+  "30 days": {
+    "en": "30 days",
+    "ctx": "webapp/lib/servingUi.js:34"
+  },
+  "Never": {
+    "en": "Never",
+    "ctx": "webapp/lib/servingUi.js:35"
+  },
+  "Locks on {0}": {
+    "en": "Locks on {0}",
+    "ctx": "webapp/lib/servingUi.js:51"
+  },
+  "Stays online until {0}": {
+    "en": "Stays online until {0}",
+    "ctx": "webapp/lib/servingUi.js:51"
+  },
+  "Change when this server stops": {
+    "en": "Change when this server stops",
+    "ctx": "webapp/lib/servingUi.js:105"
+  },
+  "This signs a new setting for {0}.": {
+    "en": "This signs a new setting for {0}.",
+    "ctx": "webapp/lib/servingUi.js:106"
   }
 }

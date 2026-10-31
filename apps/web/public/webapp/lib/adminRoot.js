@@ -44,8 +44,6 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/order/set-front-page/v1", //   apex front page
   "flagship/server-order/v1", //           the owner's server order (who leads)
   "flagship/order/power-off/v1", //        power off / restart
-  "flagship/set-deadman-policy/v1", //     dead-man policy
-  "flagship/deadman-affirm/v1", //         dead-man affirmation
   "flagship/app-egress/v1", //             a live app's internet access (v1)
   "flagship/app-access/v1", //             a live app's access list
   "flagship/app-api-key/v1", //            a live app's API key

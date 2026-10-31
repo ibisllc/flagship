@@ -96,6 +96,7 @@ import { startChatAlerts } from "./lib/chatAlerts.js";
 import { startBrowserGrantAlerts } from "./lib/browserGrantAlerts.js";
 import { startRecoveryUpdatePrompt } from "./lib/recoveryUpdate.js";
 import { canSyncPushSetting, startPushSettingSync } from "./lib/pushSetting.js";
+import { canRenewServing, startServingRenewal } from "./lib/servingAuthority.js";
 import { unsubscribeFromWebPush } from "./lib/push.js";
 import { initServiceAccessView } from "./views/service-access.js";
 import { initInviteRedeemView, enterInviteRedeem } from "./views/invite-redeem.js";
@@ -696,6 +697,12 @@ async function boot() {
     isActive: () => canSyncPushSetting(sliversUnlocked),
     unsubscribe: unsubscribeFromWebPush,
   });
+
+  // The serving time limit (docs/architecture-v2/serving-wiring.md §4): on an
+  // admin device, every open of the app signs a fresh lease for each server
+  // whose policy is finite, with this device's renewal key. Silent; nothing
+  // under an indefinite policy.
+  startServingRenewal({ isActive: () => canRenewServing(sliversUnlocked) });
 
   // ── Maintainer-trust enforcement (docs/maintainer-trust-enforcement.md) ──
   // The persistent ALARMING-RED top sliver: one non-dismissible line per

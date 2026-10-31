@@ -2980,3 +2980,24 @@ video.scan-video { border-radius: var(--radius-md); max-height: 320px; backgroun
   flex-shrink: 0;
 }
 .key-row-more { padding: var(--space-2) var(--space-2) var(--space-2) 30px; border-top: 1px solid var(--border-soft); margin-top: var(--space-2); }
+
+/* The server page's dead-man line (lib/servingUi.js): one sentence; on an admin
+ * device it is a button that opens the editor sheet. */
+.serving-line { margin: 0; color: var(--ink); font-family: var(--font-sans); font-size: 15px; font-weight: 400; line-height: 1.45; text-align: left; }
+button.serving-line {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+  cursor: pointer;
+}
+button.serving-line:hover { background: transparent; color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule-strong); }
+.serving-line .serving-grace { color: var(--ink-muted); }
+.secure-option.disabled input { cursor: not-allowed; }

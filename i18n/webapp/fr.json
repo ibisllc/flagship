@@ -3032,5 +3032,21 @@
   "Started a stack move": "Changement d’architecture commencé",
   "Finished a stack move": "Changement d’architecture terminé",
   "Updated how this server unlocks at start-up": "Mise à jour de la façon dont ce serveur se déverrouille au démarrage",
-  "Kept the previous start-up unlock": "Déverrouillage au démarrage précédent conservé"
+  "Kept the previous start-up unlock": "Déverrouillage au démarrage précédent conservé",
+  "This server hasn't reported its setting yet. Update it, then try again.": "Ce serveur n'a pas encore indiqué son réglage. Mettez-le à jour, puis réessayez.",
+  "if no admin opens Flagship": "si aucun administrateur n'ouvre Flagship",
+  "No time limit": "Pas de limite de temps",
+  "Its apps are stopped until an admin opens Flagship": "Ses apps sont arrêtées jusqu'à ce qu'un administrateur ouvre Flagship",
+  "If no admin opens Flagship for:": "Si aucun administrateur n'ouvre Flagship pendant :",
+  "Then:": "Alors :",
+  "Stop serving its apps": "Arrêter de servir ses apps",
+  "Stop its apps and lock the server": "Arrêter ses apps et verrouiller le serveur",
+  "Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.": "Le verrouillage redémarre le serveur avec son disque verrouillé. Il ne redémarre que lorsqu'un administrateur l'approuve sur son téléphone.",
+  "7 days": "7 jours",
+  "30 days": "30 jours",
+  "Never": "Jamais",
+  "Locks on {0}": "Se verrouille le {0}",
+  "Stays online until {0}": "Reste en ligne jusqu'au {0}",
+  "Change when this server stops": "Modifier quand ce serveur s'arrête",
+  "This signs a new setting for {0}.": "Cela signe un nouveau réglage pour {0}."
 }

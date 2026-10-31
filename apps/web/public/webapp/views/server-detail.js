@@ -8,7 +8,6 @@ import { accountPods, anyCopying, appSandboxNotice, fetchServerApps, isPodOnline
 import { isCompanionProfile } from "../lib/companionGuard.js";
 import {
   enableLongLived,
-  bindLeasesToDeadMan,
   listLeases,
   revokeLease,
 } from "../lib/leases.js";
@@ -24,20 +23,12 @@ import {
   openDeleteServerDialog,
 } from "../lib/deleteServer.js";
 import { controlApex } from "../lib/apex.js";
-import {
-  sendPowerOff,
-  setDeadManPolicy,
-  affirmDeadMan,
-  DEADMAN_WINDOW_PRESETS,
-  DEADMAN_TIGHTEN_PRESET,
-  DEADMAN_DEFAULT_PRESET,
-  fmtRemaining,
-} from "../lib/lockAndPower.js";
+import { sendPowerOff } from "../lib/lockAndPower.js";
+import { servingCardHtml, wireServingLine } from "../lib/servingUi.js";
 import {
   describeLockResult,
   lockAndPower,
   readSuspension,
-  rememberDeadManView,
   retryPendingLocks,
   setOwnerSuspension,
   clearLockPending,
@@ -409,12 +400,6 @@ export const SERVER_ADMIN_ONLY_IDS = [
   "front-page-save",
   "power-off-btn",
   "power-restart-btn",
-  "deadman-window",
-  "deadman-lockout",
-  "deadman-enable-btn",
-  "deadman-disable-btn",
-  "deadman-tighten-btn",
-  "deadman-affirm-btn",
   "backup-start-btn",
   "migrate-start-btn",
   "update-server-btn",
@@ -500,6 +485,7 @@ export async function renderServerDetail() {
         <div class="row"><span class="label">${tr("Version")}</span><span class="value">${escapeHtml(shortCommit(body.currentCommit))}</span></div>
         <div class="row"><span class="label">${tr("Uptime")}</span><span class="value">${escapeHtml(fmtUptime(body.uptimeMs))}</span></div>
       </div>
+      ${servingCardHtml()}
       <h2 class="mt-4">${tr("Counters")}</h2>
       <div class="card">
         <div class="row"><span class="label">${tr("Apps installed")}</span><span class="value">${body.serviceCount}</span></div>
@@ -551,42 +537,6 @@ export async function renderServerDetail() {
           <button id="power-restart-btn" class="danger" data-power-mode="restart">${escapeHtml(powerLabel("restart", body))}</button>
         </div>
         <p class="note small hidden" id="power-status"></p>
-      </div>
-      <h2 class="mt-4">${tr("Dead-man heartbeat-lock")}</h2>
-      <div class="card" id="deadman-card">
-        <p class="note">
-          ${tr("Off by default. When on, you must periodically affirm — an explicit tap that signs \"keep this server unlocked?\". If the window lapses with no affirmation, the box locks itself ({0}). The phone apps own the real background reminders — this webapp can only show the countdown while it's open.", escapeHtml(isLuksBox(body) ? "turns off / restarts and waits for your approval to unlock" : "powers off / restarts"))}
-        </p>
-        <div class="row mt-2">
-          <span class="label">${tr("Status")}</span>
-          <span class="pill" id="deadman-pill">${tr("off")}</span>
-        </div>
-        <label class="caption mt-2">${tr("Window")}</label>
-        <select id="deadman-window" class="full-width">
-          ${DEADMAN_WINDOW_PRESETS.map(
-            (p) => `<option value="${escapeHtml(p.id)}"${p.id === DEADMAN_DEFAULT_PRESET.id ? " selected" : ""}>${escapeHtml(p.label)}</option>`,
-          ).join("")}
-        </select>
-        <label class="caption mt-2">${tr("Lockout action")}</label>
-        <select id="deadman-lockout" class="full-width">
-          <option value="off" selected>${tr("Turn off (default)")}</option>
-          <option value="restart">${tr("Restart")}</option>
-        </select>
-        <div class="row-2 mt-2">
-          <button id="deadman-enable-btn" class="full-width">${tr("Enable")}</button>
-          <button id="deadman-disable-btn" class="secondary full-width hidden">${tr("Disable")}</button>
-        </div>
-        <button id="deadman-tighten-btn" class="secondary full-width mt-2">${tr("Tighten now ({0})", escapeHtml(DEADMAN_TIGHTEN_PRESET.label.replace(/\s*\(.*\)/, "")))}</button>
-        <div id="deadman-affirm-block" class="mt-3 hidden">
-          <div class="row">
-            <span class="label">${tr("Time remaining")}</span>
-            <span class="value" id="deadman-remaining">—</span>
-          </div>
-          <button id="deadman-affirm-btn" class="full-width mt-2">${tr("Keep {0} unlocked", escapeHtml(body.serverFqdn.split(".")[0] || "server"))}</button>
-          <p class="note small mt-1">
-            ${tr("Reminders fire on the phone apps, not here — keep an eye on the countdown above while this tab is open.")}
-          </p>
-        </div>
       </div>
       ${debugAccessCardHtml(body.debugAccess, { isAdmin: isAdminDevice(session), fqdn: body.serverFqdn })}
       ${localAiEntryHtml()}
@@ -651,10 +601,9 @@ export async function renderServerDetail() {
     void wireServerKeyCard($("server-key-slot"), body.serverFqdn, detailPod).catch(() => {});
     wireAutoUnlock(body.serverFqdn);
     wireFrontPage(body);
-    rememberDeadManView(body.serverFqdn, body.deadMan ?? null);
     wireLockPower(body);
     wireLockState(body);
-    wireDeadMan(body);
+    void wireServingLine(body, { pod: detailPod }).catch(() => {});
     wireJournal(body);
     wireDebugAccess(body);
     wireLocalAiEntry(body.serverFqdn);
@@ -1319,172 +1268,6 @@ function openPowerConfirmDialog(body, mode, actionLabel, onConfirm) {
         reject(e);
       }
     });
-  });
-}
-
-// ---- Dead-man heartbeat-lock ------------------------------------------
-
-let deadManCountdownTimer = null;
-
-function selectedWindowPreset() {
-  const id = $("deadman-window")?.value;
-  return DEADMAN_WINDOW_PRESETS.find((p) => p.id === id) || DEADMAN_DEFAULT_PRESET;
-}
-
-function setDeadManEnabledUi(enabled, leaseExpiry) {
-  const pill = $("deadman-pill");
-  const disableBtn = $("deadman-disable-btn");
-  const enableBtn = $("deadman-enable-btn");
-  const affirmBlock = $("deadman-affirm-block");
-  if (pill) {
-    pill.textContent = enabled ? tr("on") : tr("off");
-    pill.dataset.on = enabled ? "1" : "";
-  }
-  if (enableBtn) enableBtn.textContent = enabled ? tr("Update window") : tr("Enable");
-  disableBtn?.classList.toggle("hidden", !enabled);
-  affirmBlock?.classList.toggle("hidden", !enabled);
-  if (enabled) startDeadManCountdown(leaseExpiry);
-  else stopDeadManCountdown();
-}
-
-function startDeadManCountdown(leaseExpiry) {
-  stopDeadManCountdown();
-  const el = $("deadman-remaining");
-  if (!el) return;
-  const render = () => {
-    if ($("view-server-detail")?.classList.contains("hidden")) {
-      stopDeadManCountdown();
-      return;
-    }
-    el.textContent =
-      typeof leaseExpiry === "number"
-        ? fmtRemaining(leaseExpiry, Date.now())
-        : tr("affirm to start the lease");
-  };
-  render();
-  if (typeof leaseExpiry === "number") {
-    deadManCountdownTimer = setInterval(render, 1000);
-  }
-}
-
-function stopDeadManCountdown() {
-  if (deadManCountdownTimer) {
-    clearInterval(deadManCountdownTimer);
-    deadManCountdownTimer = null;
-  }
-}
-
-async function applyDeadManPolicy(body, { enabled, preset, lockoutMode }) {
-  const session = getSession();
-  if (!session.umk) throw Object.assign(new Error(tr("Unlock the webapp first")), { code: "400" });
-  const baseUrl = baseOf(body);
-  if (!baseUrl) throw Object.assign(new Error(tr("Not paired with this server")), { code: "400" });
-  return setDeadManPolicy({
-    baseUrl,
-    enabled,
-    windowMs: preset.windowMs,
-    graceMs: preset.graceMs,
-    lockoutMode,
-    umk: session.umk,
-    // Slice D: set-dead-man-policy is a SENSITIVE order (admin root when present).
-    signWithIrk: sensitiveSigner(),
-  });
-}
-
-/**
- * The switch just changed or was affirmed (SEC-DEADMAN-001): remember its
- * deadline and make every auto-unlock lease respect it, in the same tap. If a
- * lease can't be bounded the error surfaces; the switch is not shown as safe.
- */
-async function boundLeasesAfter(body, result, enabled) {
-  const leaseExpiry = result?.leaseExpiry ?? result?.body?.leaseExpiry ?? null;
-  const view = { enabled, leaseExpiry: typeof leaseExpiry === "number" ? leaseExpiry : 0 };
-  rememberDeadManView(body.serverFqdn, view);
-  if (!enabled || !view.leaseExpiry) return;
-  await bindLeasesToDeadMan(body.serverFqdn, view);
-}
-
-function wireDeadMan(body) {
-  const enableBtn = $("deadman-enable-btn");
-  const disableBtn = $("deadman-disable-btn");
-  const tightenBtn = $("deadman-tighten-btn");
-  const affirmBtn = $("deadman-affirm-btn");
-
-  enableBtn?.addEventListener("click", async () => {
-    const lockoutMode = $("deadman-lockout")?.value === "restart" ? "restart" : "off";
-    enableBtn.disabled = true;
-    enableBtn.textContent = tr("Signing…");
-    try {
-      const r = await applyDeadManPolicy(body, { enabled: true, preset: selectedWindowPreset(), lockoutMode });
-      await boundLeasesAfter(body, r, true);
-      setDeadManEnabledUi(true, null);
-      toast(tr("Dead-man lock enabled — affirm to start the lease"), "ok");
-    } catch (e) {
-      toast(humanError(e), "err");
-    } finally {
-      enableBtn.disabled = false;
-      if (!$("deadman-pill")?.dataset.on) enableBtn.textContent = tr("Enable");
-    }
-  });
-
-  disableBtn?.addEventListener("click", async () => {
-    disableBtn.disabled = true;
-    try {
-      await applyDeadManPolicy(body, {
-        enabled: false,
-        preset: selectedWindowPreset(),
-        lockoutMode: $("deadman-lockout")?.value === "restart" ? "restart" : "off",
-      });
-      rememberDeadManView(body.serverFqdn, { enabled: false, leaseExpiry: 0 });
-      setDeadManEnabledUi(false, null);
-      toast(tr("Dead-man lock disabled"), "ok");
-    } catch (e) {
-      toast(humanError(e), "err");
-    } finally {
-      disableBtn.disabled = false;
-    }
-  });
-
-  tightenBtn?.addEventListener("click", async () => {
-    tightenBtn.disabled = true;
-    const lockoutMode = $("deadman-lockout")?.value === "restart" ? "restart" : "off";
-    try {
-      const r = await applyDeadManPolicy(body, { enabled: true, preset: DEADMAN_TIGHTEN_PRESET, lockoutMode });
-      await boundLeasesAfter(body, r, true);
-      const sel = $("deadman-window");
-      if (sel) sel.value = DEADMAN_TIGHTEN_PRESET.id;
-      setDeadManEnabledUi(true, null);
-      toast(tr("Tightened to {0}", DEADMAN_TIGHTEN_PRESET.label), "ok");
-    } catch (e) {
-      toast(humanError(e), "err");
-    } finally {
-      tightenBtn.disabled = false;
-    }
-  });
-
-  affirmBtn?.addEventListener("click", async () => {
-    const session = getSession();
-    if (!session.umk) return toast(tr("Unlock the webapp first"), "err");
-    const baseUrl = baseOf(body);
-    if (!baseUrl) return toast(tr("Not paired with this server"), "err");
-    affirmBtn.disabled = true;
-    affirmBtn.textContent = tr("Affirming…");
-    try {
-      const r = await affirmDeadMan({
-        baseUrl,
-        umk: session.umk,
-        // Slice D: dead-man affirmation is a SENSITIVE order (admin root when present).
-        signWithIrk: sensitiveSigner(),
-      });
-      await boundLeasesAfter(body, r, true);
-      setDeadManEnabledUi(true, r.leaseExpiry);
-      toast(tr("Affirmed — lease renewed"), "ok");
-    } catch (e) {
-      toast(humanError(e), "err");
-    } finally {
-      affirmBtn.disabled = false;
-      affirmBtn.textContent = tr("Keep {0} unlocked", body.serverFqdn.split(".")[0] || "server");
-    }
   });
 }
 

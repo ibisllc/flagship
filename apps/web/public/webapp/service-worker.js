@@ -427,7 +427,11 @@
 //  v183: lib/savedBackups.js converts the backup schedule with one UTC offset both ways (it drifted an hour
 //       in the week a clock change fell in). (Feature branches that used v183-v185 renumber on rebase.)
 //  v184: the release PQ key is pinned (lib/releasePqPin.js), and lib/securityNotice.js takes the PQ pin as an option.
-const SHELL_VERSION = "v184";
+//  v185: the serving time limit (docs/architecture-v2/serving-wiring.md §4): lib/servingAuthority.js keeps a
+//       non-extractable P-256 renewal key, delegates it once under the admin root and signs a lease for each
+//       finite policy on every open; the server page's one line and its editor (lib/servingUi.js) replace the
+//       dead-man card (set-deadman-policy / deadman-affirm are gone).
+const SHELL_VERSION = "v185";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -582,6 +586,8 @@ const OPTIONAL_SHELL = [
   "/lib/localPassphrase.js",
   "/lib/lockAndPower.js",
   "/lib/bootSuspension.js",
+  "/lib/servingAuthority.js",
+  "/lib/servingUi.js",
   "/lib/boxRelease.js",
   "/lib/loginTakeover.js",
   "/lib/maintainerTrust.js",

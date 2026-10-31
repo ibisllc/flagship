@@ -13,6 +13,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { verifyServingLeaseP256, verifyServingRecord } from "@flagship/protocol";
 import {
   ACCOUNT_ID,
   HOME,
@@ -20,6 +21,7 @@ import {
   OFFICE,
   STK,
   USER,
+  freshUnlock,
   homeCard as card,
   livePod,
   mock,
@@ -47,9 +49,8 @@ const COMMIT_LATEST = "52d0b375".padEnd(40, "3");
 const COMMIT_OTHER = "9873b83e".padEnd(40, "4");
 
 const POWER = ["/lib/lockAndPower.js", "canonicalPowerOffBytes"] as [string, string];
-const DEADMAN = ["/lib/lockAndPower.js", "canonicalDeadManPolicyBytes"] as [string, string];
-const affirmCanon = (r: { serverId: string; nonce: string; issuedAt: number }) =>
-  `flagship/deadman-affirm/v1|${r.serverId}|${r.nonce}|${r.issuedAt}`;
+const SERVING_POLICY = ["/lib/servingAuthority.js", "canonicalServingPolicy"] as [string, string];
+const SCOPE = "1b".repeat(32);
 const FRONT = ["/lib/frontPage.js", "canonicalSetFrontPageBytes"] as [string, string];
 const UPDATE = ["/lib/serverUpdate.js", "canonicalUpdateOrderBytes"] as [string, string];
 const DECOMMISSION = ["/lib/serverReplacement.js", "canonicalDecommissionBytes"] as [string, string];
@@ -627,53 +628,124 @@ test.describe("gym webapp server page and Home leftovers", () => {
     await expect(btn).toHaveText("Lock and restart");
   });
 
-  test("gym serverpage the dead-man lock enables, affirms, tightens and disables under the admin root", async ({ page }, testInfo) => {
+  test("gym serverpage the serving line shows the date and its editor changes the time limit under the admin root", async ({ page }, testInfo) => {
     const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = serverPage(await mock(page), HOME, [livePod(HOME)]);
-    const lease = Date.now() + 8 * 3_600_000;
-    m.post(`${HOME}/api/deadman/policy`, sensitive(page, keys, DEADMAN, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })));
-    m.post(`${HOME}/api/deadman/affirm`, sensitive(page, keys, affirmCanon, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true, leaseExpiry: lease } })));
+    const until = Date.now() + 6 * 86_400_000;
+    m.first("GET", `${HOME}/api/screens/server-detail`, serverDetail(HOME, {
+      currentCommit: COMMIT_RUNNING,
+      serving: { grace: "7d", onLapse: "stop-apps", until, policyGen: 2, regGen: 1, scopeSha256: SCOPE },
+    }));
+    const row = {
+      serverDomain: HOME,
+      boxPub: STK[HOME],
+      regGen: 1,
+      policy: { record: { account: USER, box: STK[HOME], regGen: 1, policyGen: 2, grace: "7d", onLapse: "stop-apps", scopeSha256: SCOPE, issuedAt: Date.now() - 86_400_000 }, signature: "00".repeat(64) },
+      until,
+      grace: "7d",
+      onLapse: "stop-apps",
+    };
+    m.get(`/api/accounts/${USER}/serving`, { servers: [row] });
+    m.post(`/api/accounts/${USER}/renewal-delegations`, { ok: true });
+    m.post(`/api/accounts/${USER}/serving-leases`, (c) => ({ json: { accepted: c.body.leases.length, refused: [] } }));
+    m.post(`/api/accounts/${USER}/serving-policy`, sensitive(page, keys, SERVING_POLICY, (b) => ({ arg: b.policy, sig: b.signature }), () => ({ json: { ok: true } })));
+    m.post(`${HOME}/api/screens/serving`, { ok: true });
     await fromHomeCard(page, HOME);
-    await scrollTo(page, "#deadman-card");
-    await expect(page.locator("#deadman-pill")).toHaveText("off");
-    await expect(page.locator("#deadman-disable-btn")).toBeHidden();
 
-    // 8 hours, restart on lockout, Enable.
-    await page.selectOption("#deadman-window", "8h");
-    await page.selectOption("#deadman-lockout", "restart");
-    await page.click("#deadman-enable-btn");
-    const on = await m.waitFor(`${HOME}/api/deadman/policy`);
-    expect(on.body.request).toMatchObject({ serverId: HOME, enabled: true, windowMs: 8 * 3_600_000, graceMs: 2 * 3_600_000, lockoutMode: "restart" });
-    expect(await signer(page, keys, DEADMAN, on.body.request, on.body.signature)).toBe("admin");
-    await expect(page.locator("#deadman-pill")).toHaveText("on");
-    await expect(page.locator("#deadman-enable-btn")).toHaveText("Update window");
-    await expect(page.locator("#deadman-remaining")).toHaveText("affirm to start the lease");
-    await shot(page, testInfo, "deadman-on");
+    // The one line: the date the apps stop if no admin opens Flagship, and the time limit.
+    const line = page.locator("#serving-line");
+    const date = await page.evaluate(async (u) => (await import("/lib/servingUi.js")).servingDate(u), until);
+    await expect(line).toHaveText(`Stays online until ${date} if no admin opens Flagship · 7 days`, { timeout: 10_000 });
+    await shot(page, testInfo, "serving-line");
 
-    // Affirm: a fresh nonce, signed, and the countdown starts.
-    await page.click("#deadman-affirm-btn");
-    const affirm = await m.waitFor(`${HOME}/api/deadman/affirm`);
-    expect(affirm.body.request.serverId).toBe(HOME);
-    expect(affirm.body.request.nonce).toMatch(/^[0-9a-f]{32}$/);
-    expect(await signer(page, keys, affirmCanon, affirm.body.request, affirm.body.signature)).toBe("admin");
-    await expect(page.locator("#deadman-remaining")).toHaveText(/^7h 59m \d+s left$/, { timeout: 10_000 });
-    await sawToast(page, "Affirmed — lease renewed");
+    // The editor: 7 days is the current choice; Never greys out locking.
+    await line.click();
+    const sheet = page.locator(".serving-sheet");
+    await expect(sheet.locator('[data-grace="7d"]')).toHaveAttribute("aria-checked", "true");
+    await expect(sheet).toContainText("If no admin opens Flagship for:");
+    await expect(sheet).toContainText("Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.");
+    await sheet.locator('[data-grace="indefinite"]').click();
+    await expect(sheet.locator('input[value="lock-server"]')).toBeDisabled();
+    await expect(sheet.locator('[data-lapse-option="lock-server"]')).toHaveClass(/disabled/);
+    await expect(sheet.locator('input[value="stop-apps"]')).toBeChecked();
+    await shot(page, testInfo, "serving-editor-never");
 
-    // Tighten now: the shortest window.
-    await page.click("#deadman-tighten-btn");
-    const tight = await m.waitFor(`${HOME}/api/deadman/policy`, "POST", 2);
-    expect(tight.body.request).toMatchObject({ enabled: true, windowMs: 5 * 60_000, graceMs: 2 * 60_000, lockoutMode: "restart" });
-    await expect(page.locator("#deadman-window")).toHaveValue("5m");
-    await sawToast(page, "Tightened to 5 minutes (tighten)");
+    // 30 days, and lock the server: signed with the admin root after a fresh unlock.
+    await sheet.locator('[data-grace="30d"]').click();
+    await expect(sheet.locator('input[value="lock-server"]')).toBeEnabled();
+    await sheet.locator('[data-lapse-option="lock-server"]').click();
+    const leasesBefore = m.sent(`/api/accounts/${USER}/serving-leases`).length;
+    await sheet.locator("[data-serving-save]").click();
+    await freshUnlock(page, "Change when this server stops");
+    const saved = await m.waitFor(`/api/accounts/${USER}/serving-policy`);
+    expect(saved.body.policy).toMatchObject({ account: USER, box: STK[HOME], regGen: 1, policyGen: 3, grace: "30d", onLapse: "lock-server", scopeSha256: SCOPE });
+    expect(await signer(page, keys, SERVING_POLICY, saved.body.policy, saved.body.signature)).toBe("admin");
+    expect(verifyServingRecord("serving-policy", saved.body.policy, saved.body.signature, keys.adminPubHex!)).toBe(true);
+    // The box gets the same signed policy, and a first lease is signed at once.
+    await expect.poll(() => m.sent(`${HOME}/api/screens/serving`).some((c) => c.body?.policy?.signature === saved.body.signature)).toBe(true);
+    const leased = await m.waitFor(`/api/accounts/${USER}/serving-leases`, "POST", leasesBefore + 1);
+    const lease = leased.body.leases[0];
+    expect(lease.lease).toMatchObject({ account: USER, box: STK[HOME], regGen: 1, policyGen: 3 });
+    expect(lease.lease.notAfter - lease.lease.issuedAt).toBe(30 * 86_400_000);
+    expect(verifyServingLeaseP256(lease.lease, lease.signature, lease.delegationPub)).toBe(true);
+    await expect(line).toContainText("Locks on", { timeout: 10_000 });
+    await expect(line).toContainText("· 30 days");
+    await sawToast(page, "Saved");
 
-    // Disable.
-    await page.click("#deadman-disable-btn");
-    const off = await m.waitFor(`${HOME}/api/deadman/policy`, "POST", 3);
-    expect(off.body.request.enabled).toBe(false);
-    expect(await signer(page, keys, DEADMAN, off.body.request, off.body.signature)).toBe("admin");
-    await expect(page.locator("#deadman-pill")).toHaveText("off");
-    await expect(page.locator("#deadman-affirm-block")).toBeHidden();
-    await sawToast(page, "Dead-man lock disabled");
+    // Never: no time limit, no lease.
+    const leasesNow = m.sent(`/api/accounts/${USER}/serving-leases`).length;
+    await line.click();
+    await page.locator('.serving-sheet [data-grace="indefinite"]').click();
+    await page.locator(".serving-sheet [data-serving-save]").click();
+    await freshUnlock(page, "Change when this server stops");
+    const never = await m.waitFor(`/api/accounts/${USER}/serving-policy`, "POST", 2);
+    expect(never.body.policy).toMatchObject({ policyGen: 4, grace: "indefinite", onLapse: "stop-apps" });
+    await expect(line).toHaveText("No time limit", { timeout: 10_000 });
+    expect(m.sent(`/api/accounts/${USER}/serving-leases`)).toHaveLength(leasesNow);
+  });
+
+  test("gym serverpage opening the app signs a lease for each finite time limit and none for no limit", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME), livePod(OFFICE)] });
+    const policy = (box: string, grace: string) => ({
+      record: { account: USER, box, regGen: 1, policyGen: 1, grace, onLapse: "stop-apps", scopeSha256: SCOPE, issuedAt: Date.now() - 86_400_000 },
+      signature: "00".repeat(64),
+    });
+    m.get(`/api/accounts/${USER}/serving`, {
+      servers: [
+        { serverDomain: HOME, boxPub: STK[HOME], regGen: 1, policy: policy(STK[HOME]!, "7d"), grace: "7d", onLapse: "stop-apps", until: null },
+        { serverDomain: OFFICE, boxPub: STK[OFFICE], regGen: 1, policy: policy(STK[OFFICE]!, "indefinite"), grace: "indefinite", onLapse: "stop-apps", until: null },
+      ],
+    });
+    m.post(`/api/accounts/${USER}/renewal-delegations`, { ok: true });
+    m.post(`/api/accounts/${USER}/serving-leases`, (c) => ({ json: { accepted: c.body.leases.length, refused: [] } }));
+    m.post(/\/api\/screens\/serving$/, { ok: true });
+    // The app comes to the foreground (a view is shown): no prompt, one call.
+    await renderHome(page);
+    await page.evaluate(() => document.dispatchEvent(new CustomEvent("flagship:view-shown", { detail: { id: "view-home" } })));
+    const posted = await m.waitFor(`/api/accounts/${USER}/serving-leases`);
+    expect(posted.body.leases).toHaveLength(1);
+    const [entry] = posted.body.leases;
+    expect(entry.lease).toMatchObject({ account: USER, box: STK[HOME], regGen: 1, policyGen: 1 });
+    expect(entry.lease.notAfter - entry.lease.issuedAt).toBe(7 * 86_400_000);
+
+    // The renewal key: delegated once by the admin root, non-extractable, and it signed the lease (low S).
+    const delegation = (await m.waitFor(`/api/accounts/${USER}/renewal-delegations`)).body;
+    expect(delegation.delegation).toMatchObject({ account: USER, alg: "p256", renewalPub: entry.delegationPub });
+    expect(verifyServingRecord("renewal-key-delegation", delegation.delegation, delegation.signature, keys.adminPubHex!)).toBe(true);
+    expect(verifyServingLeaseP256(entry.lease, entry.signature, entry.delegationPub)).toBe(true);
+    const stored = await page.evaluate(async () => {
+      const { loadRenewalKey } = await import("/lib/servingAuthority.js");
+      const rec = await loadRenewalKey();
+      return { extractable: rec?.privateKey.extractable, pub: rec?.pubHex };
+    });
+    expect(stored).toEqual({ extractable: false, pub: entry.delegationPub });
+
+    // Each box with a finite policy gets its lease too; the indefinite one gets nothing.
+    await expect.poll(() => m.sent(`${HOME}/api/screens/serving`).length).toBe(1);
+    expect(m.sent(`${OFFICE}/api/screens/serving`)).toEqual([]);
+    await shot(page, testInfo, "serving-renewal");
   });
 
   test("gym serverpage the journal reads the chosen unit and line count", async ({ page }, testInfo) => {
@@ -830,13 +902,21 @@ test.describe("gym webapp server page and Home leftovers", () => {
     await expect(page.locator("#view-build-source")).toBeVisible({ timeout: 10_000 });
   });
 
-  test("gym serverpage a non-admin device sees power, dead-man and front page off", async ({ page }, testInfo) => {
+  test("gym serverpage a non-admin device sees power and front page off, and the time limit without its editor", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "non-admin", servers: [HOME] });
     const m = serverPage(await mock(page), HOME, [livePod(HOME)]);
+    m.first("GET", `${HOME}/api/screens/server-detail`, serverDetail(HOME, {
+      currentCommit: COMMIT_RUNNING,
+      serving: { grace: "30d", onLapse: "lock-server", until: Date.now() + 20 * 86_400_000, policyGen: 1, regGen: 1, scopeSha256: SCOPE },
+    }));
     await fromHomeCard(page, HOME);
     const sentence = "Only an admin device can change this server. This device can see it.";
     await expect(page.locator("[data-server-admin-only]")).toHaveText(sentence, { timeout: 10_000 });
-    for (const id of ["#power-off-btn", "#power-restart-btn", "#deadman-window", "#deadman-lockout", "#deadman-enable-btn", "#deadman-tighten-btn", "#front-page-save"]) {
+    // The line shows; it is text, not a button that opens the editor.
+    await expect(page.locator("#serving-line")).toContainText("Locks on", { timeout: 10_000 });
+    await expect(page.locator("#serving-line")).toContainText("· 30 days");
+    expect(await page.locator("#serving-line").evaluate((el) => el.tagName)).toBe("P");
+    for (const id of ["#power-off-btn", "#power-restart-btn", "#front-page-save"]) {
       await expect(page.locator(id), id).toBeDisabled();
       await expect(page.locator(id), id).toHaveAttribute("title", sentence);
     }
@@ -848,7 +928,7 @@ test.describe("gym webapp server page and Home leftovers", () => {
     await expect(page.locator("#monitor-cpu-btn")).toBeEnabled();
     await scrollTo(page, "#lock-power-card");
     await shot(page, testInfo, "server-non-admin-controls");
-    expect(m.sent(/\/api\/(power|deadman|front-page)/)).toEqual([]);
+    expect(m.sent(/\/api\/(power|front-page|screens\/serving)|serving-(policy|leases)|renewal-delegations/)).toEqual([]);
   });
 
   test("gym serverpage Trusted devices finalizes a replacement once its grace is over", async ({ page }, testInfo) => {

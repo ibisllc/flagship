@@ -3032,5 +3032,21 @@
   "Started a stack move": "Empezó el cambio de arquitectura",
   "Finished a stack move": "Terminó el cambio de arquitectura",
   "Updated how this server unlocks at start-up": "Se actualizó cómo se desbloquea este servidor al arrancar",
-  "Kept the previous start-up unlock": "Se mantuvo el desbloqueo de arranque anterior"
+  "Kept the previous start-up unlock": "Se mantuvo el desbloqueo de arranque anterior",
+  "This server hasn't reported its setting yet. Update it, then try again.": "Este servidor aún no ha informado de su ajuste. Actualízalo y vuelve a intentarlo.",
+  "if no admin opens Flagship": "si ningún administrador abre Flagship",
+  "No time limit": "Sin límite de tiempo",
+  "Its apps are stopped until an admin opens Flagship": "Sus apps están detenidas hasta que un administrador abra Flagship",
+  "If no admin opens Flagship for:": "Si ningún administrador abre Flagship durante:",
+  "Then:": "Entonces:",
+  "Stop serving its apps": "Dejar de servir sus apps",
+  "Stop its apps and lock the server": "Detener sus apps y bloquear el servidor",
+  "Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.": "Al bloquearlo, el servidor se reinicia con el disco bloqueado. Solo vuelve a arrancar cuando un administrador lo aprueba en su teléfono.",
+  "7 days": "7 días",
+  "30 days": "30 días",
+  "Never": "Nunca",
+  "Locks on {0}": "Se bloquea el {0}",
+  "Stays online until {0}": "Sigue en línea hasta el {0}",
+  "Change when this server stops": "Cambiar cuándo se detiene este servidor",
+  "This signs a new setting for {0}.": "Esto firma un nuevo ajuste para {0}."
 }

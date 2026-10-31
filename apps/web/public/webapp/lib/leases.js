@@ -23,7 +23,7 @@ import { accountReadFetch } from "./accountRead.js";
 import { requirePinnedBoxKey } from "./boxKeyPins.js";
 import { bootKeyFor } from "./bootKey.js";
 import { fetchSealedDiskKey } from "./bootApproval.js";
-import { boundedLeaseTtl, cachedDeadManView, readSuspension, retryPendingLocks } from "./bootSuspension.js";
+import { readSuspension, retryPendingLocks } from "./bootSuspension.js";
 
 import { tr } from "./i18n.js";
 export const TAG_AUTO_UNLOCK_LEASE_V2 = "flagship/auto-unlock-lease/v2";
@@ -94,12 +94,6 @@ export async function enableLongLived(serverFqdn, ttlMs = DEFAULT_LONG_TTL_MS, d
   if (lock === null) throw new Error("couldn't check whether this server is locked; not depositing a lease");
   if (lock.suspended) throw new Error("this server is locked: resume it before turning auto-unlock back on");
 
-  // With the dead-man switch on, a lease may not outlive the affirmation that keeps the switch alive.
-  const deadMan = deps.deadMan !== undefined ? deps.deadMan : cachedDeadManView(serverFqdn, deps);
-  if (deadMan === undefined) throw new Error("couldn't tell whether the dead-man switch is on; open this server's page first");
-  ttlMs = boundedLeaseTtl(ttlMs, deadMan, now);
-  if (ttlMs <= 0) throw new Error("the dead-man switch has lapsed: keep this server unlocked first, then turn auto-unlock on");
-
   // 1. The box's pinned STK (docs/first-contact.md): the only key the lease may seal for. The
   // directory must still list the server, and a different key there is refused.
   const listedStk = await (deps.boxStk || directoryStk)(serverFqdn, session, { fetch: f, comBase });
@@ -165,25 +159,6 @@ export async function revokeLease(serverFqdn, leaseId, deps = {}) {
 }
 
 /**
- * After the dead-man switch is turned on or affirmed: make every lease respect
- * its deadline. Leases that would outlive it are revoked and, if auto-unlock was
- * on, one fresh lease bounded by the deadline takes their place. Returns what
- * it did; a failure to revoke is thrown, because a lease that outlives the
- * switch is the thing this prevents.
- */
-export async function bindLeasesToDeadMan(serverFqdn, deadMan, deps = {}) {
-  const now = (deps.now || Date.now)();
-  const active = await (deps.listLeases || listLeases)(serverFqdn);
-  if (active.length === 0) return { revoked: 0, deposited: null };
-  const cap = deadMan?.enabled ? Number(deadMan.leaseExpiry) || 0 : Infinity;
-  const tooLong = active.filter((l) => l.expiresAt > cap);
-  for (const l of tooLong) await (deps.revokeLease || revokeLease)(serverFqdn, l.leaseId, deps);
-  if (tooLong.length === 0 || cap <= now) return { revoked: tooLong.length, deposited: null };
-  const r = await (deps.enableLongLived || enableLongLived)(serverFqdn, DEFAULT_LONG_TTL_MS, { ...deps, deadMan });
-  return { revoked: tooLong.length, deposited: r };
-}
-
-/**
  * Re-deposit on `serverFqdn` when its newest lease has less than `windowMs`
  * left. Silent (the IRK is in the unlocked session); a server with no lease
  * (auto-unlock off) or one that can't be listed is left alone.
@@ -199,9 +174,7 @@ export async function renewIfExpiringSoon(serverFqdn, windowMs = RENEW_WINDOW_MS
   }
   if (active.length === 0) return [];
   const now = (deps.now || Date.now)();
-  // Never renew silently when we can't tell the server's state: a locked server stays locked,
-  // and a lease must stay inside the dead-man deadline. enableLongLived re-checks both.
-  if (cachedDeadManView(serverFqdn, deps) === undefined) return [];
+  // A locked server stays locked: enableLongLived checks the boot service first.
   const newest = active.reduce((a, b) => (b.expiresAt > a.expiresAt ? b : a));
   if (newest.expiresAt - now > windowMs) return [];
   try {

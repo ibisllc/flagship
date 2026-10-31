@@ -3032,5 +3032,21 @@
   "Started a stack move": "Architekturwechsel begonnen",
   "Finished a stack move": "Architekturwechsel abgeschlossen",
   "Updated how this server unlocks at start-up": "Entsperren dieses Servers beim Start aktualisiert",
-  "Kept the previous start-up unlock": "Bisheriges Entsperren beim Start beibehalten"
+  "Kept the previous start-up unlock": "Bisheriges Entsperren beim Start beibehalten",
+  "This server hasn't reported its setting yet. Update it, then try again.": "Dieser Server hat seine Einstellung noch nicht gemeldet. Aktualisiere ihn und versuche es dann erneut.",
+  "if no admin opens Flagship": "wenn kein Admin Flagship öffnet",
+  "No time limit": "Keine Zeitgrenze",
+  "Its apps are stopped until an admin opens Flagship": "Seine Apps sind gestoppt, bis ein Admin Flagship öffnet",
+  "If no admin opens Flagship for:": "Wenn kein Admin Flagship öffnet für:",
+  "Then:": "Dann:",
+  "Stop serving its apps": "Seine Apps nicht mehr bereitstellen",
+  "Stop its apps and lock the server": "Seine Apps stoppen und den Server sperren",
+  "Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.": "Beim Sperren startet der Server mit gesperrter Festplatte neu. Er startet erst wieder, wenn ein Admin es auf seinem Telefon bestätigt.",
+  "7 days": "7 Tage",
+  "30 days": "30 Tage",
+  "Never": "Nie",
+  "Locks on {0}": "Sperrt sich am {0}",
+  "Stays online until {0}": "Bleibt online bis {0}",
+  "Change when this server stops": "Ändern, wann dieser Server stoppt",
+  "This signs a new setting for {0}.": "Damit wird eine neue Einstellung für {0} signiert."
 }
