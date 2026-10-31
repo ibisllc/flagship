@@ -16,10 +16,22 @@ import { componentContainerName } from "./appGroups/names.js";
 import { randomBytes } from "node:crypto";
 import { assertNoHostPathInDockerArgs, ensureDockerNetwork, type CommandRunner } from "./serviceRunner.js";
 import { GVISOR_RUNTIME } from "./appSandbox/gvisor.js";
+import { sandboxRunArgs } from "./egress/sandboxNetworking.js";
 
 /** The data layer's own Postgres image: already on every box, carries psql. Pinned by digest. */
 export const MIGRATION_PSQL_IMAGE =
   "pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0";
+
+/**
+ * Where the data host name points for a sandbox on the staging bridge: that bridge's gateway, where the egress gateway
+ * forwards the data port (as for an app). Docker's `host-gateway` is docker0's address, which nothing listens on, so
+ * it is only the answer when the gateway is not enforcing.
+ */
+function dataHostEntry(): string {
+  const a = sandboxRunArgs(MIGRATION_NETWORK, DATA_HOST_ALIAS);
+  const i = a ? a.indexOf("--add-host") : -1;
+  return a && i >= 0 && a[i + 1] ? a[i + 1]! : `${DATA_HOST_ALIAS}:host-gateway`;
+}
 
 /** The bridge with no route to the internet; data stores answer over the host-gateway alias. */
 export const MIGRATION_NETWORK = "flagship-staging";
@@ -103,7 +115,7 @@ export function buildSandboxPlan(args: {
     ? { net: [`--network=${args.member.network}`, ...args.member.netArgs], host: ["-h", DATA_HOST_ALIAS, "-p", String(t.port)] }
     : args.socketVolume
     ? { net: ["--network=none", "--mount", `type=volume,src=${args.socketVolume},dst=/var/run/postgresql,readonly`], host: ["-h", "/var/run/postgresql", "-p", "5432"] }
-    : { net: [`--network=${MIGRATION_NETWORK}`, "--add-host", `${DATA_HOST_ALIAS}:host-gateway`], host: ["-h", DATA_HOST_ALIAS, "-p", String(t.port)] };
+    : { net: [`--network=${MIGRATION_NETWORK}`, "--add-host", dataHostEntry()], host: ["-h", DATA_HOST_ALIAS, "-p", String(t.port)] };
   const dockerArgs = [
     "run",
     "--rm",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { boundedRedacted, buildSandboxPlan, MigrationFailedError, runSandboxedSql, targetFromPgUrl, MIGRATION_PSQL_IMAGE, DEFAULT_MIGRATION_LIMITS } from "../src/migrationSandbox.js";
 import type { CommandRunner } from "../src/serviceRunner.js";
+import { setSandboxNetworking } from "../src/egress/sandboxNetworking.js";
 
 const target = { user: "r_abc123", password: "s3cret-pass-word", database: "d_abc123", port: 5432 };
 
@@ -28,6 +29,17 @@ describe("migration sandbox plan", () => {
     expect(a.join(" ")).not.toContain("--network=host");
   });
 
+  it("reaches the data host through the staging bridge's gateway when the gateway enforces, not docker0's host-gateway", () => {
+    setSandboxNetworking({ gateways: new Map([["flagship-staging", "172.19.0.1"]]), buildHosts: [] });
+    try {
+      const args = buildSandboxPlan({ target: { user: "u", password: "pw-pw-pw", database: "d", port: 5432 } }).args;
+      expect(args[args.indexOf("--add-host") + 1]).toBe("host.flagship.internal:172.19.0.1");
+    } finally {
+      setSandboxNetworking(null);
+    }
+    const plain = buildSandboxPlan({ target: { user: "u", password: "pw-pw-pw", database: "d", port: 5432 } }).args;
+    expect(plain[plain.indexOf("--add-host") + 1]).toBe("host.flagship.internal:host-gateway");
+  });
   it("is pinned by digest and reads the SQL from stdin", () => {
     expect(MIGRATION_PSQL_IMAGE).toMatch(/@sha256:[0-9a-f]{64}$/);
     expect(a).toContain(MIGRATION_PSQL_IMAGE);
