@@ -287,6 +287,9 @@ elif [ "${GYM_SKIP_BOX_ARTIFACT:-0}" = "1" ]; then
   say "GYM_SKIP_BOX_ARTIFACT=1: leaving the gym's box release as it is"
 else
   bash "$REPO/scripts/gym-box-artifact.sh" --worktree "$WT" $([ "$push" = "1" ] || echo --no-push) || die "gym box artifact failed"
+  # The update group's destination: one newer signed release, kept out of the index until that group runs.
+  bash "$REPO/scripts/gym-update-target.sh" build --worktree "$WT" $([ "$push" = "1" ] || echo --no-push) \
+    || say "no update target built (the live update group will report nothing to update to)"
 fi
 # Demo boxes install the gym's own box release, named by its exact commit (a branch name is refused).
 if [ -z "$GYM_INSTALLER_GIT_REF" ] && [ "$DRY" != "1" ]; then

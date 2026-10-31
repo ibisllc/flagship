@@ -2,10 +2,14 @@
 // signed update order to an ALREADY-ENDORSED release, deposited on .com with
 // IRK mailbox auth, consumed by the box (≤5 min poll), applied through the
 // endorsement gate, and reported back as lastUpdate. This box (B3) is installed from the
-// gym's PREVIOUS signed artifact (shared-run.ts `updateFromCommit`; the gym's release index
-// keeps every artifact it built), so the newest release it lists is this run's artifact: a
-// real move to a newer signed release. The manifest signatures are what the box checks.
+// gym's PREVIOUS signed artifact (shared-run.ts `updateFromCommit`) and moves itself to this
+// run's release at its first boot, so by now nothing newer is listed. The group then publishes the
+// gym's hidden update target (scripts/gym-update-target.sh: the gym tip, signed with the gym key,
+// one sequence later) and orders the move to it; it takes it out of the index again at the end.
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { bytesToHex } from "@noble/hashes/utils";
 import { signDeviceEndpointClaim, signUpdateOrder, type UpdateOrder } from "@flagship/protocol";
 import { pair, type Account } from "../lib/fleet.js";
@@ -22,6 +26,14 @@ export function mailboxAuth(acct: Account): { auth: Record<string, unknown>; aut
   };
 }
 
+const SCRIPT = fileURLToPath(new URL("../../../scripts/gym-update-target.sh", import.meta.url));
+const updateTarget = (mode: "publish" | "unpublish"): string =>
+  execFileSync("bash", [SCRIPT, mode, "--worktree", process.env.GYM_WORKTREE || `${homedir()}/.cache/flagship/gym-worktree`], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 300_000,
+  }).trim();
+
 export const update: Group = {
   name: "update",
   title: "update this server to an endorsed release (signed order → box applies → lastUpdate)",
@@ -34,6 +46,23 @@ export const update: Group = {
     const s = { "x-flagship-session": session };
     let current = "";
     let target = "";
+    const published = await rec.check("the gym's update target (a newer release signed with the gym key) is published to the index and catalog", async () => {
+      const out = updateTarget("publish");
+      await sleep(70_000); // the Worker serves the index and catalog with max-age 60
+      return out.split("\n").at(-1) ?? out;
+    });
+    if (!published) return;
+    try {
+      await orderAndWatch();
+    } finally {
+      try {
+        updateTarget("unpublish");
+      } catch (e) {
+        console.warn(`[update] the update target is still in releases.json (${(e as Error).message}); a box made later moves onto it at first boot`);
+      }
+    }
+
+    async function orderAndWatch(): Promise<void> {
     const found = await rec.check("the box lists endorsed releases and its own commit", async () => {
       const r = await http(`https://${b.fqdn}/api/screens/updates?refresh=1`, { headers: s }, 120_000);
       assert(r.status === 200, `${r.status}: ${short(r.text)}`);
@@ -42,6 +71,7 @@ export const update: Group = {
       const pick = r.json?.latest?.commit ? rel.find((x) => x.commit === r.json.latest.commit) : undefined;
       const choice = pick ?? rel.filter((x) => x.relation !== "current").sort((x, y) => String(y.endorsedAt).localeCompare(String(x.endorsedAt)))[0];
       assert(/^[0-9a-f]{40}$/.test(current) && choice?.commit, `current=${current} releases=${short(rel, 200)}`);
+      assert(choice.relation === "newer", `nothing newer than ${current.slice(0, 8)} is listed (picked ${choice.commit.slice(0, 8)}, ${choice.relation}): the catalog refuses a move back`);
       target = choice.commit;
       return `${current.slice(0, 8)} → ${target.slice(0, 8)} (${choice.relation})`;
     });
@@ -96,5 +126,6 @@ export const update: Group = {
       assert(appliedAfterMs <= 12 * 60_000, `applied ${(appliedAfterMs / 60_000).toFixed(1)} min after the order`);
       return `${(appliedAfterMs / 60_000).toFixed(1)} min`;
     });
+    }
   },
 };
