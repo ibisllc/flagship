@@ -104,11 +104,21 @@ export const stackSwitch: Group = {
 
     await rec.check("the app that ran before runs again on Podman, through the endpoint resolver", async () => served("served on Podman", 15));
 
-    await rec.check("the box reports the switch's trial or completion, and still answers its owner", async () => {
+    // The trial keeps the switch by itself once the box is healthy and every app is back (archV2Switch.ts
+    // settle, up to 20 min); until then another order is refused as in-progress, by design.
+    const settled = await rec.check("the switch's trial settles to done, and the box still answers its owner", async () => {
       const r = await call("/api/screens/server-detail");
       assert(r.status === 200, `${r.status}: ${short(r.text)}`);
-      return short(await stack(), 200);
+      const deadline = Date.now() + 25 * 60_000;
+      let s = await stack();
+      while (s.switch?.state === "trial" && Date.now() < deadline) {
+        await sleep(20_000);
+        s = await stack().catch(() => s);
+      }
+      assert(s.switch?.state === "done", `switch ${short(s.switch, 200)}`);
+      return short(s, 200);
     });
+    if (!settled) return;
 
     const back = await rec.check("the owner can go back: a signed order to classic returns the box to Docker with its app", async () => {
       const r = await call("/api/stack/switch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(order("classic")) });
