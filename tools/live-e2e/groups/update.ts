@@ -15,6 +15,7 @@ import { signDeviceEndpointClaim, signUpdateOrder, type UpdateOrder } from "@fla
 import { pair, type Account } from "../lib/fleet.js";
 import { CONTROL, assert, http, postJson, short, sleep } from "../lib/harness.js";
 import type { Group } from "./types.js";
+import { journal } from "./release03/util.js";
 
 export function mailboxAuth(acct: Account): { auth: Record<string, unknown>; authSignature: string } {
   const issuedAt = Date.now();
@@ -131,6 +132,13 @@ export const update: Group = {
       assert(appliedAfterMs > 0, "the box never applied it");
       assert(appliedAfterMs <= 12 * 60_000, `applied ${(appliedAfterMs / 60_000).toFixed(1)} min after the order`);
       return `${(appliedAfterMs / 60_000).toFixed(1)} min`;
+    });
+    // Evidence for the release journal: which program staged, switched and verified the release (the Rust
+    // flagship-updater on an arch-v2 box, the shell installers as its fallback).
+    await rec.check("the box's journal names what installed the release (info)", async () => {
+      const lines = (await journal(acct, b, 4000)).filter((l) => /flagship-updater|update-guard|\[self-update\]|release op|installer/i.test(l));
+      assert(lines.length > 0, "no update lines in the journal");
+      return lines.slice(-12).map((l) => l.replace(/^\S+ \S+ /, "").slice(0, 160)).join(" ⏎ ");
     });
     }
   },
