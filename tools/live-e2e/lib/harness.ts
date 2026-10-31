@@ -23,6 +23,8 @@ export interface HttpInit {
   method?: string;
   headers?: Record<string, string>;
   body?: string | Uint8Array;
+  /** The box applies this write at most once whatever happens (e.g. adding an id to a set): retry it like a read. */
+  idempotent?: boolean;
 }
 
 /**
@@ -41,7 +43,7 @@ export async function http(url: string, init: HttpInit = {}, timeoutMs = 45_000)
       const why = cause?.code ?? cause?.message ?? (e instanceof Error ? e.message : String(e));
       const method = String(init.method ?? "GET").toUpperCase();
       const neverSent = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"].includes(String(cause?.code ?? ""));
-      const retryable = method === "GET" || method === "HEAD" || neverSent;
+      const retryable = method === "GET" || method === "HEAD" || neverSent || init.idempotent === true;
       if (attempt >= 3 || !retryable) throw new Error(`fetch failed (${why}) after ${attempt} attempt${attempt === 1 ? "" : "s"}: ${url}`);
       await sleep(5000);
     }
@@ -52,7 +54,8 @@ async function httpOnce(url: string, init: HttpInit, timeoutMs: number): Promise
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetch(url, { ...init, body: init.body as BodyInit | undefined, signal: ctrl.signal, redirect: "manual" });
+    const { idempotent: _idempotent, ...req } = init;
+    const r = await fetch(url, { ...req, body: req.body as BodyInit | undefined, signal: ctrl.signal, redirect: "manual" });
     const text = await r.text();
     let json: any = null;
     try {
@@ -79,8 +82,8 @@ export async function tryHttp(url: string, init: HttpInit = {}, timeoutMs = 45_0
   }
 }
 
-export function postJson(url: string, body: unknown, headers: Record<string, string> = {}, timeoutMs = 30_000): Promise<Resp> {
-  return http(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) }, timeoutMs);
+export function postJson(url: string, body: unknown, headers: Record<string, string> = {}, timeoutMs = 30_000, opts: { idempotent?: boolean } = {}): Promise<Resp> {
+  return http(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), ...opts }, timeoutMs);
 }
 
 export function adminHeaders(): Record<string, string> {

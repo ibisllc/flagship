@@ -137,7 +137,8 @@ export const backups: Group = {
       assert(link.status === 200 && link.json?.path, `link ${link.status}: ${short(link.text)}`);
       const r = randomBytes(16).toString("hex");
       const approval: ArchiveDownloadApproval = { serverDomain: a.fqdn, archiveId: sv.archiveId, requestId: r, issuedAt: Date.now() };
-      const ok = await postJson(`https://${a.fqdn}/api/screens/server-archive/approve`, { approval, signature: bytesToHex(signArchiveDownloadApproval(approval, acct.keys.adminRoot)) }, s);
+      // Approving adds the request id to a set on the box, so a retry after a reset is safe.
+      const ok = await postJson(`https://${a.fqdn}/api/screens/server-archive/approve`, { approval, signature: bytesToHex(signArchiveDownloadApproval(approval, acct.keys.adminRoot)) }, s, 30_000, { idempotent: true });
       assert(ok.status === 200, `approve ${ok.status}: ${short(ok.text)}`);
       const res = await fetch(`https://${a.fqdn}${link.json.path}/bundle?r=${r}`, { headers: { range: "bytes=100-199" } });
       const got = Buffer.from(await res.arrayBuffer());
