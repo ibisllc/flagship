@@ -866,6 +866,8 @@ export function superviseTunnelClient(
         onDomainGranted: opts.onDomainGranted,
         onHelloAckTrust: opts.onHelloAckTrust,
         ...(opts.servingHello ? { servingHello: opts.servingHello } : {}),
+        ...(opts.mailboxAnnouncements ? { mailboxAnnouncements: opts.mailboxAnnouncements } : {}),
+        ...(opts.onMail ? { onMail: opts.onMail } : {}),
         keepAlive: { intervalMs: keepAliveIntervalMs, maxMissedPongs },
         wsFactory: opts.wsFactory,
         setIntervalImpl: opts.setIntervalImpl,

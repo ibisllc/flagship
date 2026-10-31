@@ -589,3 +589,22 @@ describe("superviseTunnelClient — edge cases", () => {
     await sup.close();
   });
 });
+
+describe("superviseTunnelClient — options reach every inner client", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("passes the peer-backup mailbox announcements and handler through (they were dropped, so no box announced its mailboxes)", async () => {
+    const { handles, startClient } = buildFakeClientFactory();
+    const mailboxAnnouncements = async () => [];
+    const onMail = async () => new Uint8Array();
+    superviseTunnelClient({ ...commonOpts(), mailboxAnnouncements, onMail, startClient, random: () => 0, initialJitterMs: 0 });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(handles[0]!.receivedOpts.mailboxAnnouncements).toBe(mailboxAnnouncements);
+    expect(handles[0]!.receivedOpts.onMail).toBe(onMail);
+  });
+});
