@@ -27,11 +27,6 @@
       "reason": "Linux writes the seed through the Node CLI's appliance-provision, which packages/flagship-builder/tests/appliance.test.ts checks against this section."
     },
     {
-      "check": "deep-links",
-      "key": "ios-lacks-host:deadman",
-      "reason": "Android's own dead-man reminder notification opens app/deadman/<server>; iOS's local reminder carries category deadman-affirm and serverDomain in userInfo instead of a link."
-    },
-    {
       "check": "signed-tags",
       "key": "android:flagship/umk-wrap/v1",
       "reason": "iOS Secure Enclave keystore wrapping, local storage only and never on the wire; Android wraps in the Android Keystore."

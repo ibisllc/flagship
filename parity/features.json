@@ -33,12 +33,22 @@
     },
     {
       "id": "server-page",
-      "title": "Server page: monitoring, Make leader, lock/power, dead-man, update, delete/revoke/un-revoke, Backup / Migrate (Backup/clone, Migrate to a new server)",
+      "title": "Server page: monitoring, Make leader, lock/power, the serving time limit, update, delete/revoke/un-revoke, Backup / Migrate (Backup/clone, Migrate to a new server)",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "DeadMan"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MonitoringPane.swift", "struct MonitoringPane"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift", "api/releases"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MigrateServerScreen.swift", "struct MigrateServerScreen"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "ServingLineCard"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MonitoringPane.swift", "struct MonitoringPane"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift", "api/releases"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MigrateServerScreen.swift", "struct MigrateServerScreen"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "Make leader"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerMonitoringSection.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/SecretMailboxClient.kt", "api/releases"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/MigrateServerScreen.kt", "fun MigrateServerScreen"]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/server-detail.js", "Make leader"], ["apps/web/public/webapp/lib/serverUpdate.js", "api/releases"], ["apps/web/public/webapp/lib/lockAndPower.js", "deadMan|DeadMan|dead-man"], ["apps/web/public/webapp/lib/serverMigration.js", "export"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/server-detail.js", "Make leader"], ["apps/web/public/webapp/lib/serverUpdate.js", "api/releases"], ["apps/web/public/webapp/lib/servingUi.js", "export function servingLineParts"], ["apps/web/public/webapp/lib/serverMigration.js", "export"]] }
+      }
+    },
+    {
+      "id": "serving-authority",
+      "title": "The serving time limit (the one dead-man setting): the server page line and an admin editor (7 days / 30 days / Never; lock the server), a hardware renewal key delegated by the admin root, leases signed silently on app open for finite policies (docs/architecture-v2/serving-wiring.md)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServingViews.swift", "struct ServingLineCard"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServingRenewal.swift", "public struct ServingRenewer"], ["apps/mobile/ios/Sources/Flagship/RenewalKey.swift", "SecureEnclave"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServingCard.kt", "internal fun ServingCard"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServingRenewer.kt", "class ServingRenewer"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/RenewalKey.kt", "AndroidKeyStore"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/servingUi.js", "export function servingLineParts"], ["apps/web/public/webapp/lib/servingAuthority.js", "export async function renewServingLeases"]] }
       }
     },
     {
