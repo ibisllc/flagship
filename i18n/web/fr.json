@@ -14,7 +14,6 @@
   "se93cede7f7": "Changer de thème",
   "s3980fa6732": "Menu",
   "s96195c1a46": "Mobile",
-  "s13acbefea1": "<1>En ligne</1> <2>·</2> <3>v0.2 bêta</3> <4>·</4> <5>depuis le 2026-05-05</5> <6>·</6> <7>1 489 tests, tous au vert</7> <8>·</8> <9>Brevet en instance</9>",
   "s6e89cd0496": "<1/>Vos données, sur <2>votre matériel</2>, avec un vrai cadenas vert.",
   "sc16cc4a041": "Branchez un petit boîtier chez vous. Associez-le à l’app mobile de votre appareil. Créez et partagez des services en privé sur <1>yours.flagship.services</1>, avec un certificat signé par une clé que seul votre matériel détient. Même nous ne pouvons pas écouter.",
   "scb03957d28": "<1> <2/> <3>iOS bientôt</3> </1> <4> <5/> <6>Android bientôt</6> </4> <7> <8>Utiliser l’app web</8> </7>",
@@ -570,5 +569,6 @@
   "se0287867e3": "<1>Constats de la revue corrigés.</1> Cette version corrige les constats bloquants d’une revue de sécurité de l’ensemble du produit et les 24 constats de notre propre suite de tests adverses, qui tourne désormais à chaque version.",
   "sd329c2c8a0": "<1>Les bases du post-quantique.</1> Les serveurs et les téléphones détiennent des clés ML-DSA-65 à côté de leurs clés Ed25519, un canal hybride (ML-KEM-768 avec X25519) a été développé, et iPhone et Android proposent un réglage « Protection post-quantique » à activer soi-même. Tout cela est en attente d’un examen externe.",
   "sb5e67497fd": "<1>Ce qui n’a pas changé.</1> Le TLS se termine toujours sur votre propre serveur, nous ne pouvons donc pas lire ce que vos apps envoient. Notre relais voit les métadonnées de connexion : quel serveur, quand et combien. Un modèle d’IA n’apprend jamais qui vous êtes ni où vous êtes.",
-  "s526b6ca09c": "<1>Tous les articles</1> · <2>Signaler une vulnérabilité</2>"
+  "s526b6ca09c": "<1>Tous les articles</1> · <2>Signaler une vulnérabilité</2>",
+  "se919c9a6e2": "<1>En ligne</1> <2>·</2> <3>v0.3 bêta</3> <4>·</4> <5>depuis le 2026-05-05</5> <6>·</6> <7>1 489 tests, tous au vert</7> <8>·</8> <9>Brevet en instance</9>"
 }

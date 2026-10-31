@@ -14,7 +14,6 @@
   "se93cede7f7": "Cambiar tema",
   "s3980fa6732": "Menú",
   "s96195c1a46": "Móvil",
-  "s13acbefea1": "<1>En vivo</1> <2>·</2> <3>v0.2 Beta</3> <4>·</4> <5>desde 2026-05-05</5> <6>·</6> <7>1.489 pruebas, todas en verde</7> <8>·</8> <9>Patente en trámite</9>",
   "s6e89cd0496": "<1/>Tus cosas, en <2>tu hardware</2>, con un candado verde de verdad.",
   "sc16cc4a041": "Conecta en casa una pequeña caja. Vincúlala con la app móvil de tu dispositivo. Crea y comparte servicios en privado en <1>yours.flagship.services</1>, con un certificado firmado por una clave que solo tiene tu hardware. Ni siquiera nosotros podemos espiar.",
   "scb03957d28": "<1> <2/> <3>iOS próximamente</3> </1> <4> <5/> <6>Android próximamente</6> </4> <7> <8>Usar la app web</8> </7>",
@@ -570,5 +569,6 @@
   "se0287867e3": "<1>Hallazgos de la revisión corregidos.</1> Esta versión corrige los hallazgos bloqueantes para el lanzamiento de una revisión de seguridad de todo el producto y los 24 hallazgos de nuestro propio conjunto de pruebas adversariales, que ahora se ejecuta en cada versión.",
   "sd329c2c8a0": "<1>Bases poscuánticas.</1> Los servidores y los teléfonos tienen claves ML-DSA-65 junto a sus claves Ed25519, está construido un canal híbrido (ML-KEM-768 con X25519), e iPhone y Android tienen un ajuste opcional, Protección poscuántica, que puedes activar. Todo ello está pendiente de revisión externa.",
   "sb5e67497fd": "<1>Lo que no ha cambiado.</1> El TLS sigue terminando en tu propio servidor, así que no podemos leer lo que envían tus apps. Nuestro relé ve metadatos de conexión: qué servidor, cuándo y cuánto. Un modelo de IA nunca sabe quién eres ni dónde estás.",
-  "s526b6ca09c": "<1>Todas las publicaciones</1> · <2>Reportar una vulnerabilidad</2>"
+  "s526b6ca09c": "<1>Todas las publicaciones</1> · <2>Reportar una vulnerabilidad</2>",
+  "se919c9a6e2": "<1>En vivo</1> <2>·</2> <3>v0.3 Beta</3> <4>·</4> <5>desde 2026-05-05</5> <6>·</6> <7>1.489 pruebas, todas en verde</7> <8>·</8> <9>Patente en trámite</9>"
 }
