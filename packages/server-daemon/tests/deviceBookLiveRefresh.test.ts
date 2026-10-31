@@ -58,6 +58,29 @@ describe("device book refresh", () => {
     expect(asked).toEqual([false, true]);
   });
 
+  it("a periodic refresh a moment ago doesn't stop an unknown key's live refresh; a live one does, for 30 s", async () => {
+    const asked: boolean[] = [];
+    let t = 1_000_000;
+    const b = new AccountDeviceBook({
+      path: join(mkdtempSync(join(tmpdir(), "book-")), "account-devices.json"),
+      username: "alice",
+      ownerIrkPub: () => ed.getPublicKey(new Uint8Array(32).fill(1)),
+      adminRootPub: () => undefined,
+      fetchGrants: async ({ live }) => (asked.push(live), { grants: [] }),
+      now: () => t,
+    });
+    await b.refresh();
+    t += 1_000;
+    await b.ensure("ab".repeat(32));
+    expect(asked).toEqual([false, true]);
+    t += 1_000;
+    await b.ensure("cd".repeat(32));
+    expect(asked).toEqual([false, true]);
+    t += 30_000;
+    await b.ensure("cd".repeat(32));
+    expect(asked).toEqual([false, true, true]);
+  });
+
   it("two live refreshes share one read", async () => {
     const { b, asked } = book();
     await Promise.all([b.refresh({ live: true }), b.refresh({ live: true })]);

@@ -124,7 +124,8 @@ export class AccountDeviceBook {
   private pqByPub = new Map<string, VerifiedPqKeyBinding>();
   private pqPins = new Map<string, PqPin>();
   private listedPq: ListedPqBindings = {};
-  private lastRefresh = 0;
+  /** The last refresh that asked `.com` itself (a periodic one may be the doorbell's replay of the last beat). */
+  private lastLiveRefresh = 0;
   private refreshing: Promise<void> | null = null;
   private refreshingLive = false;
   private readonly now: () => number;
@@ -153,7 +154,7 @@ export class AccountDeviceBook {
     if (live && this.refreshing && !this.refreshingLive) await this.refreshing.catch(() => {});
     this.refreshingLive = this.refreshing ? this.refreshingLive : live;
     this.refreshing ??= (async () => {
-      this.lastRefresh = this.now();
+      if (live) this.lastLiveRefresh = this.now();
       try {
         const body = (await this.opts.fetchGrants!({ live })) as { grants?: unknown; pqKeyBindings?: unknown } | null;
         if (!body || !Array.isArray(body.grants)) return;
@@ -168,11 +169,14 @@ export class AccountDeviceBook {
     await this.refreshing;
   }
 
-  /** Refresh when `pubHex` isn't known and the last refresh is older than `minRefreshMs`. */
+  /**
+   * Refresh when `pubHex` isn't known and the last live refresh is older than `minRefreshMs`. A periodic refresh
+   * doesn't count: it may be the doorbell's "unchanged" from before the device was added (gym 10, classic).
+   */
   async ensure(pubHex: string): Promise<void> {
     const pub = pubHex.toLowerCase();
     if (this.byPub.has(pub) || pub === this.opts.ownerAidHex?.toLowerCase()) return;
-    if (this.now() - this.lastRefresh < (this.opts.minRefreshMs ?? 30_000)) return;
+    if (this.now() - this.lastLiveRefresh < (this.opts.minRefreshMs ?? 30_000)) return;
     await this.refresh({ live: true });
   }
 
