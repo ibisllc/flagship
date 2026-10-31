@@ -2092,6 +2092,9 @@ export async function runAppSql(a: { pgUrl: string; sql: string }): Promise<void
   url.hostname = "127.0.0.1";
   const { Client } = await import("pg");
   const c = new Client({ connectionString: url.toString(), connectionTimeoutMillis: 5000 });
+  // A connection the server drops mid-query rejects that query; the client ALSO emits 'error', which with no listener
+  // kills the daemon (gym 14: an app filling its own database crashed the box for every app).
+  c.on("error", () => {});
   await c.connect();
   try {
     // The role's 30 s statement timeout (appQuota/pgQuota.ts) is for the app, not its migrations.

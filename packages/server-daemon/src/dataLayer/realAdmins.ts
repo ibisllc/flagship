@@ -37,6 +37,8 @@ export class RealPostgresAdmin implements PostgresAdmin {
       connectionString: overrideUrl ?? this.opts.adminUrl,
       connectionTimeoutMillis: this.opts.connectTimeoutMs ?? 5000,
     });
+    // A dropped connection already rejects the query; without a listener its 'error' event kills the daemon.
+    c.on("error", () => {});
     await c.connect();
     try {
       return await fn(c);

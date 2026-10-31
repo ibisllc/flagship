@@ -116,6 +116,8 @@ export class RealPgQuota implements PgQuotaAdmin {
       url = u.toString();
     }
     const c = new PgClient({ connectionString: url, connectionTimeoutMillis: this.opts.connectTimeoutMs ?? 5000 });
+    // A dropped connection already rejects the query; without a listener its 'error' event kills the daemon.
+    c.on("error", () => {});
     await c.connect();
     try {
       return await fn(c);

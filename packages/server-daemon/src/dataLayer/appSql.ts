@@ -168,6 +168,8 @@ export const realPgConnect: PgConnect = async ({ pgUrl, timeoutMs }) => {
     application_name: "flagship-console",
     types: TEXT_TYPES,
   });
+  // A dropped connection already rejects the query; without a listener its 'error' event kills the daemon.
+  c.on("error", () => {});
   await c.connect();
   return c as unknown as PgClientLike;
 };
