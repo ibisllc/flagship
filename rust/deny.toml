@@ -8,6 +8,10 @@ yanked = "deny"
 ignore = [
   # crypto-bigint 0.7 is on the fixed 0.7.6; 0.5.5 has no fixed release and is reached only as a
   # dev-dependency (p256 0.13 in flagship-ingress's tests). No shipped binary links it.
+  # Marvin attack: a timing side channel in RSA PRIVATE-key operations (decryption, signing). `rsa` is reached only
+  # through `pgp` in flagship-updater, which VERIFIES Node's release signatures against a pinned public key and
+  # never holds or uses an RSA private key. There is no fixed release to move to.
+  { id = "RUSTSEC-2023-0071", reason = "rsa is used by pgp only to verify signatures (public-key operations); the attack needs private-key operations" },
   { id = "RUSTSEC-2026-0387", reason = "only crypto-bigint 0.5.5 remains, test-only via p256 0.13 (dev-dependency of flagship-ingress)" },
 ]
 

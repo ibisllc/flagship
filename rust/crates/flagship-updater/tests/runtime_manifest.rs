@@ -103,6 +103,14 @@ fn the_cli_verifies_a_manifest_and_refuses_a_replay_once_the_sequence_is_recorde
     let key_hex = "07".repeat(32);
     std::fs::write(dir.join("key"), &key_hex).unwrap();
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../..");
+    if !std::path::Path::new(root)
+        .join("node_modules/.bin/tsx")
+        .exists()
+    {
+        // The TypeScript signer is the other half of this check; without `npm ci` there is nothing to compare against.
+        eprintln!("skipped: run `npm ci` at the repository root for the TypeScript signer");
+        return;
+    }
     let tool = format!("{root}/tools/box-artifact/runtime-manifest.ts");
     let sh = |args: &[&str]| {
         let o = std::process::Command::new("npx")
