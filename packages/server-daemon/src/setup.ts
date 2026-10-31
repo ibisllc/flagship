@@ -6,7 +6,7 @@
  * against root's own copies of the box's name and the owner's keys. The last line on stdout is the
  * step's JSON result; logs go to stderr.
  */
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -23,6 +23,7 @@ import { buildDebugSystem, realDebugCommandRunner } from "./debugAccessGate.js";
 import { writeFileDurable } from "./durableFile.js";
 import { showServerCode } from "./enrollment.js";
 import { loadArchV2Config, rootEngine, setActiveEngine } from "./engine/engine.js";
+import { migrateDockerToPodman, rollbackToDocker } from "./engine/migrate.js";
 import { installHealthReporter } from "./healthReporter.js";
 import { installRustStack } from "./rustStack/install.js";
 import { DAEMON_USER, SERVER_CODE_REQUEST } from "./privileged.js";
@@ -193,6 +194,9 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
   "wasi-runtime": wasiRuntime,
   // flagship-gpud (gpu/unit.ts), for a daemon that no longer runs as root.
   "gpu-broker": () => installGpudFromRelease(REPO, rootEngine(), log),
+  // The engine move itself (engine/migrate.ts): Podman, Docker's data and the copy between them are root's.
+  "engine-migrate": () => migrateDockerToPodman({ cmd, exists: existsSync, log }),
+  "engine-rollback": () => rollbackToDocker({ cmd, exists: existsSync, log }),
   // The owner's move between the classic stack and arch-v2 (archV2Switch.ts).
   "arch-v2-switch": async () => applySwitchAsRoot(await switchDeps()),
   "arch-v2-settle": async () => settleSwitchAsRoot(await switchDeps()),

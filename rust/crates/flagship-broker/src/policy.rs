@@ -65,6 +65,8 @@ pub const SETUP_STEPS: &[&str] = &[
     "gpu-broker",
     "arch-v2-switch",
     "arch-v2-settle",
+    "engine-migrate",
+    "engine-rollback",
     "boot-chain",
 ];
 

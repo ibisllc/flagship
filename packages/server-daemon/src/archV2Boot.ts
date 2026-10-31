@@ -8,7 +8,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { writeFileDurable } from "./durableFile.js";
 import { loadArchV2Config, setActiveEngine, type ArchV2Config, type EngineKind } from "./engine/engine.js";
-import { migrateDockerToPodman, readMigrationMarker, rollbackToDocker } from "./engine/migrate.js";
+import { migrateDockerToPodman, readMigrationMarker, rollbackToDocker, type MigrationOutcome } from "./engine/migrate.js";
 import { runSetupStep, runsUnprivileged } from "./privileged.js";
 import { installRustStack, rustStackRegressions, type RustStackOutcome } from "./rustStack/install.js";
 import { CORE_CHECKPOINT, CORE_DIR } from "./rustStack/units.js";
@@ -38,10 +38,13 @@ export async function bootArchV2(o: {
   if (o.switcher) await o.switcher.beforeEngine().catch((e: Error) => log(`[arch-v2-switch] ${e.message}`));
   let config = load();
   const deps = { cmd: o.cmd as Required<CommandRunner>, exists: existsSync, log };
+  // Podman, Docker's data and the copy between them are root's: an unprivileged daemon asks its helper to do the move.
+  const migrate = (): Promise<MigrationOutcome> => (runsUnprivileged() ? runSetupStep<MigrationOutcome>("engine-migrate").then((r) => r ?? { ok: false, engine: "docker", reason: "the engine step gave no result" }) : migrateDockerToPodman(deps));
+  const rollback = (): Promise<{ ok: boolean; reason?: string }> => (runsUnprivileged() ? runSetupStep<{ ok: boolean; reason?: string }>("engine-rollback").then((r) => r ?? { ok: false, reason: "the engine step gave no result" }) : rollbackToDocker(deps));
   let engine: EngineKind = "docker";
   let engineNote: string | undefined;
   if (config.engine === "podman") {
-    const m = await migrateDockerToPodman(deps).catch((e: Error) => ({ ok: false as const, engine: "docker" as const, reason: e.message }));
+    const m = await migrate().catch((e: Error) => ({ ok: false as const, engine: "docker" as const, reason: e.message }));
     if (m.ok) engine = "podman";
     else {
       engineNote = m.reason;
@@ -50,7 +53,7 @@ export async function bootArchV2(o: {
   } else {
     const marker = await readMigrationMarker(deps);
     if (marker?.result === "migrated") {
-      const r = await rollbackToDocker(deps);
+      const r = await rollback();
       engineNote = r.ok ? "switched back to Docker; its data from before the move is used again" : r.reason;
       log(`[engine] ${engineNote}`);
     }

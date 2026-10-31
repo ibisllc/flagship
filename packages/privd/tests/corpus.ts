@@ -445,6 +445,8 @@ add("setup", { step: "gpu-broker" });
 // The owner's stack switch (server-daemon archV2Switch.ts): root checks the signed order itself; no arguments pass.
 add("setup", { step: "arch-v2-switch" });
 add("setup", { step: "arch-v2-settle" });
+add("setup", { step: "engine-migrate" });
+add("setup", { step: "engine-rollback" });
 for (const bad of [{ step: "arch-v2-switch", target: "arch-v2" }, { step: "arch-v2" }, { step: "arch-v2-switch " }, { step: "arch-v2-revert" }]) add("setup", bad);
 // Local AI (packages/server-daemon/src/localAi/containers.ts): the model server and fine-tuning runs, pinned
 // images only, the models volume read-only, a job's own output volume, an app's STAGED sample data read-only.

@@ -15601,6 +15601,42 @@
    "name": "setup-650",
    "op": "setup",
    "args": {
+    "step": "engine-migrate"
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/local/bin/node",
+     "args": [
+      "/opt/flagship/packages/server-daemon/dist/setup.js",
+      "engine-migrate"
+     ],
+     "timeoutMs": 1800000
+    }
+   }
+  },
+  {
+   "name": "setup-651",
+   "op": "setup",
+   "args": {
+    "step": "engine-rollback"
+   },
+   "expect": {
+    "ok": true,
+    "exec": {
+     "file": "/usr/local/bin/node",
+     "args": [
+      "/opt/flagship/packages/server-daemon/dist/setup.js",
+      "engine-rollback"
+     ],
+     "timeoutMs": 1800000
+    }
+   }
+  },
+  {
+   "name": "setup-652",
+   "op": "setup",
+   "args": {
     "step": "arch-v2-switch",
     "target": "arch-v2"
    },
@@ -15611,7 +15647,7 @@
    }
   },
   {
-   "name": "setup-651",
+   "name": "setup-653",
    "op": "setup",
    "args": {
     "step": "arch-v2"
@@ -15623,7 +15659,7 @@
    }
   },
   {
-   "name": "setup-652",
+   "name": "setup-654",
    "op": "setup",
    "args": {
     "step": "arch-v2-switch "
@@ -15635,7 +15671,7 @@
    }
   },
   {
-   "name": "setup-653",
+   "name": "setup-655",
    "op": "setup",
    "args": {
     "step": "arch-v2-revert"
@@ -15647,7 +15683,7 @@
    }
   },
   {
-   "name": "docker-654",
+   "name": "docker-656",
    "op": "docker",
    "args": {
     "argv": [
@@ -15732,7 +15768,7 @@
    }
   },
   {
-   "name": "docker-655",
+   "name": "docker-657",
    "op": "docker",
    "args": {
     "argv": [
@@ -15819,7 +15855,7 @@
    }
   },
   {
-   "name": "docker-656",
+   "name": "docker-658",
    "op": "docker",
    "args": {
     "argv": [
@@ -15902,7 +15938,7 @@
    }
   },
   {
-   "name": "docker-657",
+   "name": "docker-659",
    "op": "docker",
    "args": {
     "argv": [
@@ -16006,7 +16042,7 @@
    }
   },
   {
-   "name": "docker-658",
+   "name": "docker-660",
    "op": "docker",
    "args": {
     "argv": [
@@ -16055,7 +16091,7 @@
    }
   },
   {
-   "name": "docker-659",
+   "name": "docker-661",
    "op": "docker",
    "args": {
     "argv": [
@@ -16102,7 +16138,7 @@
    }
   },
   {
-   "name": "docker-660",
+   "name": "docker-662",
    "op": "docker",
    "args": {
     "argv": [
@@ -16149,7 +16185,7 @@
    }
   },
   {
-   "name": "docker-661",
+   "name": "docker-663",
    "op": "docker",
    "args": {
     "argv": [
@@ -16196,7 +16232,7 @@
    }
   },
   {
-   "name": "docker-662",
+   "name": "docker-664",
    "op": "docker",
    "args": {
     "argv": [
@@ -16243,7 +16279,7 @@
    }
   },
   {
-   "name": "docker-663",
+   "name": "docker-665",
    "op": "docker",
    "args": {
     "argv": [
@@ -16290,7 +16326,7 @@
    }
   },
   {
-   "name": "docker-664",
+   "name": "docker-666",
    "op": "docker",
    "args": {
     "argv": [
@@ -16337,7 +16373,7 @@
    }
   },
   {
-   "name": "docker-665",
+   "name": "docker-667",
    "op": "docker",
    "args": {
     "argv": [
@@ -16383,7 +16419,7 @@
    }
   },
   {
-   "name": "docker-666",
+   "name": "docker-668",
    "op": "docker",
    "args": {
     "argv": [
@@ -16430,7 +16466,7 @@
    }
   },
   {
-   "name": "docker-667",
+   "name": "docker-669",
    "op": "docker",
    "args": {
     "argv": [
@@ -16479,7 +16515,7 @@
    }
   },
   {
-   "name": "docker-668",
+   "name": "docker-670",
    "op": "docker",
    "args": {
     "argv": [
@@ -16528,7 +16564,7 @@
    }
   },
   {
-   "name": "docker-669",
+   "name": "docker-671",
    "op": "docker",
    "args": {
     "argv": [
@@ -16577,7 +16613,7 @@
    }
   },
   {
-   "name": "docker-670",
+   "name": "docker-672",
    "op": "docker",
    "args": {
     "argv": [
@@ -16625,7 +16661,7 @@
    }
   },
   {
-   "name": "docker-671",
+   "name": "docker-673",
    "op": "docker",
    "args": {
     "argv": [
@@ -16673,7 +16709,7 @@
    }
   },
   {
-   "name": "docker-672",
+   "name": "docker-674",
    "op": "docker",
    "args": {
     "argv": [
@@ -16721,7 +16757,7 @@
    }
   },
   {
-   "name": "docker-673",
+   "name": "docker-675",
    "op": "docker",
    "args": {
     "argv": [
@@ -16771,7 +16807,7 @@
    }
   },
   {
-   "name": "docker-674",
+   "name": "docker-676",
    "op": "docker",
    "args": {
     "argv": [
@@ -16817,7 +16853,7 @@
    }
   },
   {
-   "name": "docker-675",
+   "name": "docker-677",
    "op": "docker",
    "args": {
     "argv": [
@@ -16863,7 +16899,7 @@
    }
   },
   {
-   "name": "docker-676",
+   "name": "docker-678",
    "op": "docker",
    "args": {
     "argv": [
@@ -16911,7 +16947,7 @@
    }
   },
   {
-   "name": "docker-677",
+   "name": "docker-679",
    "op": "docker",
    "args": {
     "argv": [
@@ -16959,7 +16995,7 @@
    }
   },
   {
-   "name": "docker-678",
+   "name": "docker-680",
    "op": "docker",
    "args": {
     "argv": [
@@ -17021,7 +17057,7 @@
    }
   },
   {
-   "name": "docker-679",
+   "name": "docker-681",
    "op": "docker",
    "args": {
     "argv": [
@@ -17083,7 +17119,7 @@
    }
   },
   {
-   "name": "host-680",
+   "name": "host-682",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17116,7 +17152,7 @@
    }
   },
   {
-   "name": "host-681",
+   "name": "host-683",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17149,7 +17185,7 @@
    }
   },
   {
-   "name": "host-682",
+   "name": "host-684",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17173,7 +17209,7 @@
    }
   },
   {
-   "name": "host-683",
+   "name": "host-685",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17197,7 +17233,7 @@
    }
   },
   {
-   "name": "host-684",
+   "name": "host-686",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17214,7 +17250,7 @@
    }
   },
   {
-   "name": "host-685",
+   "name": "host-687",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17231,7 +17267,7 @@
    }
   },
   {
-   "name": "host-686",
+   "name": "host-688",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17248,7 +17284,7 @@
    }
   },
   {
-   "name": "host-687",
+   "name": "host-689",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17265,7 +17301,7 @@
    }
   },
   {
-   "name": "host-688",
+   "name": "host-690",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17282,7 +17318,7 @@
    }
   },
   {
-   "name": "host-689",
+   "name": "host-691",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17299,7 +17335,7 @@
    }
   },
   {
-   "name": "host-690",
+   "name": "host-692",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17316,7 +17352,7 @@
    }
   },
   {
-   "name": "host-691",
+   "name": "host-693",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17333,7 +17369,7 @@
    }
   },
   {
-   "name": "host-692",
+   "name": "host-694",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17350,7 +17386,7 @@
    }
   },
   {
-   "name": "host-693",
+   "name": "host-695",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17367,7 +17403,7 @@
    }
   },
   {
-   "name": "host-694",
+   "name": "host-696",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17384,7 +17420,7 @@
    }
   },
   {
-   "name": "host-695",
+   "name": "host-697",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17400,7 +17436,7 @@
    }
   },
   {
-   "name": "host-696",
+   "name": "host-698",
    "op": "host",
    "args": {
     "file": "localai",
@@ -17417,7 +17453,7 @@
    }
   },
   {
-   "name": "wasi.logs-697",
+   "name": "wasi.logs-699",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17441,7 +17477,7 @@
    }
   },
   {
-   "name": "wasi.logs-698",
+   "name": "wasi.logs-700",
    "op": "wasi.logs",
    "args": {
     "instance": "fedcba9876543210",
@@ -17465,7 +17501,7 @@
    }
   },
   {
-   "name": "wasi.logs-699",
+   "name": "wasi.logs-701",
    "op": "wasi.logs",
    "args": {
     "lines": 1,
@@ -17489,7 +17525,7 @@
    }
   },
   {
-   "name": "wasi.logs-700",
+   "name": "wasi.logs-702",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17502,7 +17538,7 @@
    }
   },
   {
-   "name": "wasi.logs-701",
+   "name": "wasi.logs-703",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17515,7 +17551,7 @@
    }
   },
   {
-   "name": "wasi.logs-702",
+   "name": "wasi.logs-704",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17528,7 +17564,7 @@
    }
   },
   {
-   "name": "wasi.logs-703",
+   "name": "wasi.logs-705",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17541,7 +17577,7 @@
    }
   },
   {
-   "name": "wasi.logs-704",
+   "name": "wasi.logs-706",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17554,7 +17590,7 @@
    }
   },
   {
-   "name": "wasi.logs-705",
+   "name": "wasi.logs-707",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17567,7 +17603,7 @@
    }
   },
   {
-   "name": "wasi.logs-706",
+   "name": "wasi.logs-708",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef"
@@ -17579,7 +17615,7 @@
    }
   },
   {
-   "name": "wasi.logs-707",
+   "name": "wasi.logs-709",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789ABCDEF",
@@ -17592,7 +17628,7 @@
    }
   },
   {
-   "name": "wasi.logs-708",
+   "name": "wasi.logs-710",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcde",
@@ -17605,7 +17641,7 @@
    }
   },
   {
-   "name": "wasi.logs-709",
+   "name": "wasi.logs-711",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef0",
@@ -17618,7 +17654,7 @@
    }
   },
   {
-   "name": "wasi.logs-710",
+   "name": "wasi.logs-712",
    "op": "wasi.logs",
    "args": {
     "instance": "../../../var/log",
@@ -17631,7 +17667,7 @@
    }
   },
   {
-   "name": "wasi.logs-711",
+   "name": "wasi.logs-713",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef\n",
@@ -17644,7 +17680,7 @@
    }
   },
   {
-   "name": "wasi.logs-712",
+   "name": "wasi.logs-714",
    "op": "wasi.logs",
    "args": {
     "instance": "flagship-daemon",
@@ -17657,7 +17693,7 @@
    }
   },
   {
-   "name": "wasi.logs-713",
+   "name": "wasi.logs-715",
    "op": "wasi.logs",
    "args": {
     "instance": 5,
@@ -17670,7 +17706,7 @@
    }
   },
   {
-   "name": "wasi.logs-714",
+   "name": "wasi.logs-716",
    "op": "wasi.logs",
    "args": {
     "lines": 15
@@ -17682,7 +17718,7 @@
    }
   },
   {
-   "name": "wasi.logs-715",
+   "name": "wasi.logs-717",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17696,7 +17732,7 @@
    }
   },
   {
-   "name": "wasi.logs-716",
+   "name": "wasi.logs-718",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17713,7 +17749,7 @@
    }
   },
   {
-   "name": "wasi.logs-717",
+   "name": "wasi.logs-719",
    "op": "wasi.logs",
    "args": {
     "instance": "0123456789abcdef",
@@ -17727,7 +17763,7 @@
    }
   },
   {
-   "name": "wasi.logs-718",
+   "name": "wasi.logs-720",
    "op": "wasi.logs",
    "args": {},
    "expect": {
@@ -17737,7 +17773,7 @@
    }
   },
   {
-   "name": "wasi.logs-719",
+   "name": "wasi.logs-721",
    "op": "wasi.logs",
    "args": {
     "__proto__": {
@@ -17752,7 +17788,7 @@
    }
   },
   {
-   "name": "setup-720",
+   "name": "setup-722",
    "op": "setup",
    "args": {
     "step": "boot-chain"
@@ -17770,7 +17806,7 @@
    }
   },
   {
-   "name": "setup-721",
+   "name": "setup-723",
    "op": "setup",
    "args": {
     "step": "boot-chain",
@@ -17783,7 +17819,7 @@
    }
   },
   {
-   "name": "setup-722",
+   "name": "setup-724",
    "op": "setup",
    "args": {
     "step": "boot-chain",
@@ -17796,7 +17832,7 @@
    }
   },
   {
-   "name": "setup-723",
+   "name": "setup-725",
    "op": "setup",
    "args": {
     "step": "boot-chain-confirm"
@@ -17808,7 +17844,7 @@
    }
   },
   {
-   "name": "setup-724",
+   "name": "setup-726",
    "op": "setup",
    "args": {
     "step": "Boot-Chain"
@@ -17820,7 +17856,7 @@
    }
   },
   {
-   "name": "setup-725",
+   "name": "setup-727",
    "op": "setup",
    "args": {
     "step": "boot-chain\u0000"
@@ -17832,7 +17868,7 @@
    }
   },
   {
-   "name": "setup-726",
+   "name": "setup-728",
    "op": "setup",
    "args": {
     "step": [
@@ -28874,7 +28910,7 @@
    }
   },
   {
-   "name": "docker-654-podman",
+   "name": "docker-656-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -28960,7 +28996,7 @@
    }
   },
   {
-   "name": "docker-655-podman",
+   "name": "docker-657-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29048,7 +29084,7 @@
    }
   },
   {
-   "name": "docker-656-podman",
+   "name": "docker-658-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29132,7 +29168,7 @@
    }
   },
   {
-   "name": "docker-657-podman",
+   "name": "docker-659-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29237,7 +29273,7 @@
    }
   },
   {
-   "name": "docker-658-podman",
+   "name": "docker-660-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29287,7 +29323,7 @@
    }
   },
   {
-   "name": "docker-659-podman",
+   "name": "docker-661-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29335,7 +29371,7 @@
    }
   },
   {
-   "name": "docker-660-podman",
+   "name": "docker-662-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29383,7 +29419,7 @@
    }
   },
   {
-   "name": "docker-661-podman",
+   "name": "docker-663-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29431,7 +29467,7 @@
    }
   },
   {
-   "name": "docker-662-podman",
+   "name": "docker-664-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29479,7 +29515,7 @@
    }
   },
   {
-   "name": "docker-663-podman",
+   "name": "docker-665-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29527,7 +29563,7 @@
    }
   },
   {
-   "name": "docker-664-podman",
+   "name": "docker-666-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29575,7 +29611,7 @@
    }
   },
   {
-   "name": "docker-665-podman",
+   "name": "docker-667-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29622,7 +29658,7 @@
    }
   },
   {
-   "name": "docker-666-podman",
+   "name": "docker-668-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29670,7 +29706,7 @@
    }
   },
   {
-   "name": "docker-667-podman",
+   "name": "docker-669-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29720,7 +29756,7 @@
    }
   },
   {
-   "name": "docker-668-podman",
+   "name": "docker-670-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29770,7 +29806,7 @@
    }
   },
   {
-   "name": "docker-669-podman",
+   "name": "docker-671-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29820,7 +29856,7 @@
    }
   },
   {
-   "name": "docker-670-podman",
+   "name": "docker-672-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29869,7 +29905,7 @@
    }
   },
   {
-   "name": "docker-671-podman",
+   "name": "docker-673-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29918,7 +29954,7 @@
    }
   },
   {
-   "name": "docker-672-podman",
+   "name": "docker-674-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -29967,7 +30003,7 @@
    }
   },
   {
-   "name": "docker-673-podman",
+   "name": "docker-675-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30018,7 +30054,7 @@
    }
   },
   {
-   "name": "docker-674-podman",
+   "name": "docker-676-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30065,7 +30101,7 @@
    }
   },
   {
-   "name": "docker-675-podman",
+   "name": "docker-677-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30112,7 +30148,7 @@
    }
   },
   {
-   "name": "docker-676-podman",
+   "name": "docker-678-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30161,7 +30197,7 @@
    }
   },
   {
-   "name": "docker-677-podman",
+   "name": "docker-679-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30210,7 +30246,7 @@
    }
   },
   {
-   "name": "docker-678-podman",
+   "name": "docker-680-podman",
    "op": "docker",
    "args": {
     "argv": [
@@ -30273,7 +30309,7 @@
    }
   },
   {
-   "name": "docker-679-podman",
+   "name": "docker-681-podman",
    "op": "docker",
    "args": {
     "argv": [

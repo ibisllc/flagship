@@ -1194,7 +1194,7 @@ export function wipeExec(args: Record<string, unknown>): Exec {
 }
 
 /** The root steps the release does for the daemon (packages/server-daemon/src/setup.ts), by name only. */
-export const SETUP_STEPS = ["gvisor", "health-reporter", "update-guard", "container-links", "data-unit", "debug-access", "debug-access-close", "system-repair", "server-code", "rust-stack", "wasi-runtime", "gpu-broker", "arch-v2-switch", "arch-v2-settle", "boot-chain"] as const;
+export const SETUP_STEPS = ["gvisor", "health-reporter", "update-guard", "container-links", "data-unit", "debug-access", "debug-access-close", "system-repair", "server-code", "rust-stack", "wasi-runtime", "gpu-broker", "arch-v2-switch", "arch-v2-settle", "engine-migrate", "engine-rollback", "boot-chain"] as const;
 
 export function setupExec(args: Record<string, unknown>): Exec {
   noExtra(args, ["step"]);
