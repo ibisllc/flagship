@@ -17,6 +17,7 @@ import { appGroupsDb } from "./appGroupsDb.js";
 import { gpuReal } from "./gpuReal.js";
 import { gpuSim } from "./gpuSim.js";
 import { localAi, localAiCpu } from "./localAi.js";
+import { serving } from "./serving.js";
 import { stackSwitch } from "./stackSwitch.js";
 
 export const RELEASE_03_GROUPS: Group[] = [
@@ -39,4 +40,5 @@ export const RELEASE_03_GROUPS: Group[] = [
   localAiCpu,
   localAi,
   stackSwitch,
+  serving,
 ];
