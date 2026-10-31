@@ -4,13 +4,15 @@
 // then the group skips and says so. When it is there: the published catalog verifies against the pinned
 // root as a box checks it, and a box's journal says it accepted it.
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { EMPTY_TRUST_STATE, verifyReleaseCatalog, type RootMeta } from "@flagship/protocol";
 import { CONTROL, SkipError, assert, tryHttp } from "../../lib/harness.js";
 import type { Group } from "../types.js";
 import { journal } from "./util.js";
 
-const ROOT = join(import.meta.dirname, "../../../../release/catalog-root.json");
+// The gym's boxes run the gym branch, which pins the gym's root; the harness may run from another checkout.
+const ROOT = [join(process.env.GYM_WORKTREE || join(homedir(), ".cache/flagship/gym-worktree"), "release/catalog-root.json"), join(import.meta.dirname, "../../../../release/catalog-root.json")].find((p) => existsSync(p)) ?? "";
 
 export const releaseCatalog: Group = {
   name: "release-catalog",
@@ -20,7 +22,7 @@ export const releaseCatalog: Group = {
   async run({ A, rec, box }) {
     const base = `https://${CONTROL}/build/iso/catalog`;
     await rec.check("the published catalog verifies against the root this release pins", async () => {
-      if (!existsSync(ROOT)) throw new SkipError("no release/catalog-root.json in this checkout (the gym branch pins none yet)");
+      if (!ROOT) throw new SkipError("no release/catalog-root.json in the gym worktree or this checkout (the gym branch pins none yet)");
       const [timestamp, snapshot, targets] = await Promise.all(["timestamp", "snapshot", "targets"].map(async (f) => (await tryHttp(`${base}-${f}.json`)).json));
       if (!timestamp || !snapshot || !targets) throw new SkipError("no catalog published at /build/iso/catalog-*.json on the gym");
       const root = JSON.parse(readFileSync(ROOT, "utf8")) as RootMeta;
@@ -30,7 +32,7 @@ export const releaseCatalog: Group = {
       return `targets v${v.value.targets.version}, floor ${v.value.securityFloor}, ${v.value.targets.releases.length} releases`;
     });
     await rec.check("a box's journal says it accepted the catalog", async () => {
-      if (!existsSync(ROOT)) throw new SkipError("no pinned root");
+      if (!ROOT) throw new SkipError("no pinned root");
       const lines = await journal(A, box("A1"));
       const hit = lines.find((l) => l.includes("[release-catalog]"));
       if (!hit) throw new SkipError("the box logged nothing about the catalog (its release pins no root)");
