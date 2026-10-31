@@ -4,6 +4,7 @@
 //! Specification: `docs/architecture-v2/pq-suites.md`.
 
 mod ed25519_strict;
+pub mod access_orders;
 pub mod entitlements;
 pub mod error;
 pub mod key_id;
