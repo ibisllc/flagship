@@ -12,7 +12,7 @@ import { comRecord, edKey, lease, policy, revocation } from "./support/serving.j
 const ACCOUNT = "alice";
 
 /** A gate on a hand-driven clock and timer queue. */
-function rig(fetch: (u: string, b: string) => Promise<ComServingRecord | null>) {
+function rig(fetch: (u: string, b: string) => Promise<ComServingRecord | null>, logs: string[] = []) {
   let now = 10_000_000;
   const timers: Array<{ at: number; fn: () => void; id: number }> = [];
   let nextId = 1;
@@ -28,6 +28,7 @@ function rig(fetch: (u: string, b: string) => Promise<ComServingRecord | null>) 
       const i = timers.findIndex((t) => t.id === id);
       if (i >= 0) timers.splice(i, 1);
     },
+    log: (m) => logs.push(m),
   });
   const advance = (ms: number) => {
     now += ms;
@@ -147,6 +148,21 @@ describe("ServingGate", () => {
     gate.adoptRevocations(r.state);
     expect((await gate.attach(hello(box, admin.pub), handle().h)).view().control).toBe(false);
     expect((await gate.attach(hello(box, null), handle().h)).view().control).toBe(false);
+  });
+
+  it("logs a refused tunnel and each change of contact with .com, once per change", async () => {
+    const admin = edKey();
+    const logs: string[] = [];
+    const { gate, advance } = rig(async () => comRecord({ adminKey: admin.pub }), logs);
+    await gate.attach(hello(edKey().pub, edKey().pub), handle().h);
+    expect(logs.some((l) => /tunnel refused \(admin-keys-differ\)/.test(l))).toBe(true);
+    advance(60_000);
+    gate.tick();
+    gate.tick();
+    expect(logs.filter((l) => /contact with \.com: refuse-new/.test(l))).toHaveLength(1);
+    gate.noteContact();
+    gate.tick();
+    expect(logs.at(-1)).toBe("[serving] contact with .com: ok");
   });
 
   it("refuses new tunnels after 60 s without contact and closes every tunnel after 10 min", async () => {

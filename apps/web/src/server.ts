@@ -461,6 +461,7 @@ export async function start(opts: {
         const key = a?.adminRootPub ?? a?.irkPub;
         return key ? Buffer.from(key).toString("hex") : null;
       },
+      log: (m) => console.log(m),
     });
     const feed = new ServingFeedClient({
       comBaseUrl,

@@ -144,6 +144,8 @@ export interface ServingGateOptions {
   closeAllAfterMs?: number;
   /** A box whose record could not be read is asked again after this long. Default 30 s. */
   retryMs?: number;
+  /** One line per change worth reading in the relay's log (refusals, apps stopped or back, contact with `.com`). */
+  log?: (m: string) => void;
 }
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
@@ -195,6 +197,8 @@ export class ServingGate {
   private revocationState: RevocationState = emptyRevocationState();
   private lastContact: number;
   private lostClosed = false;
+  private loggedContact: "ok" | "refuse-new" | "lost" = "ok";
+  private readonly log: (m: string) => void;
   private latestSequence = 0;
   private refusedTunnels = 0;
   private interval: ReturnType<typeof setInterval> | null = null;
@@ -216,6 +220,7 @@ export class ServingGate {
     this.refuseNewAfterMs = opts.refuseNewAfterMs ?? 60_000;
     this.closeAllAfterMs = opts.closeAllAfterMs ?? 10 * 60_000;
     this.retryMs = opts.retryMs ?? 30_000;
+    this.log = opts.log ?? (() => {});
     // A relay that just started gets the same grace to reach `.com` as one that just lost it.
     this.lastContact = this.now();
   }
@@ -253,7 +258,12 @@ export class ServingGate {
 
   /** Close every tunnel once contact has been gone for `closeAllAfterMs`; they come back when it returns. */
   tick(): void {
-    if (this.contact() !== "lost" || this.lostClosed) return;
+    const c = this.contact();
+    if (c !== this.loggedContact) {
+      this.log(`[serving] contact with .com: ${c}${c === "ok" ? "" : ` (${Math.round((this.now() - this.lastContact) / 1000)} s without a frame)`}`);
+      this.loggedContact = c;
+    }
+    if (c !== "lost" || this.lostClosed) return;
     this.lostClosed = true;
     for (const set of [...this.boxes.values()]) {
       for (const b of [...set]) b.handle.closeTunnel(1013, "serving-feed-lost");
@@ -349,10 +359,15 @@ export class ServingGate {
     const next = this.decide(b);
     b.decision = next;
     this.clearBoxTimer(b);
+    const who = `${b.hello.podCanonical} (${b.hello.username})`;
     if (!next.control) {
       this.refusedTunnels += 1;
+      this.log(`[serving] ${who}: tunnel refused (${next.apps === false ? next.reason : "refused"})`);
       if (!o.initial) b.handle.closeTunnel(1008, next.apps === false ? next.reason : "refused");
       return;
+    }
+    if (prev.apps !== next.apps && (!o.initial || !next.apps)) {
+      this.log(`[serving] ${who}: app routes ${next.apps ? "served" : `stopped (${next.reason})`}`);
     }
     if (!o.initial && prev.apps !== next.apps) {
       if (!next.apps) b.handle.closeAppStreams();
