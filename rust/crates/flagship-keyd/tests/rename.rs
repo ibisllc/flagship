@@ -44,14 +44,31 @@ fn the_name_comes_only_from_the_owners_signed_entitlement_for_this_key_inside_th
         )
     };
     let other = SigningKey::from_bytes(&[7u8; 32]);
-    assert!(call(fresh, sign("alice", fresh, 5, &other)).is_err(), "someone else's signature");
     assert!(
-        call("home.bob.gym.flagship.services", sign("alice", "home.bob.gym.flagship.services", 5, &root)).is_err(),
+        call(fresh, sign("alice", fresh, 5, &other)).is_err(),
+        "someone else's signature"
+    );
+    assert!(
+        call(
+            "home.bob.gym.flagship.services",
+            sign("alice", "home.bob.gym.flagship.services", 5, &root)
+        )
+        .is_err(),
         "another account"
     );
-    assert!(call(fresh, sign("alice", "other.alice.gym.flagship.services", 5, &root)).is_err(), "a different name than signed");
+    assert!(
+        call(
+            fresh,
+            sign("alice", "other.alice.gym.flagship.services", 5, &root)
+        )
+        .is_err(),
+        "a different name than signed"
+    );
     let ok = call(fresh, sign("alice", fresh, 5, &root)).unwrap();
-    assert_eq!(ok.result.get("serverFqdn").and_then(Value::as_str), Some(fresh));
+    assert_eq!(
+        ok.result.get("serverFqdn").and_then(Value::as_str),
+        Some(fresh)
+    );
     let kept = std::fs::read_to_string(dir.join("policy.json")).unwrap();
     assert_eq!(kept, format!("{{\"serverFqdn\":\"{fresh}\"}}"));
     let _ = std::fs::remove_dir_all(&dir);

@@ -670,7 +670,9 @@ impl KeydService {
                 if zone.is_none()
                     || zone != crate::files::account_zone_of(fqdn, crate::files::SERVICES_APEXES)
                 {
-                    return Err(KeydError::forbidden("a box moves only within its own account"));
+                    return Err(KeydError::forbidden(
+                        "a box moves only within its own account",
+                    ));
                 }
                 let statement = format!(
                     "flagship/root-entitlement/v1|{username}|{}|{canonical}|{issued_at}",
@@ -688,11 +690,16 @@ impl KeydService {
                 };
                 let verified = <[u8; 64]>::try_from(signature.as_slice()).is_ok_and(|sig| {
                     signer
-                        .verify_strict(statement.as_bytes(), &ed25519_dalek::Signature::from_bytes(&sig))
+                        .verify_strict(
+                            statement.as_bytes(),
+                            &ed25519_dalek::Signature::from_bytes(&sig),
+                        )
                         .is_ok()
                 });
                 if !verified {
-                    return Err(KeydError::forbidden("the owner did not sign this move for this box"));
+                    return Err(KeydError::forbidden(
+                        "the owner did not sign this move for this box",
+                    ));
                 }
                 if canonical != *fqdn {
                     if let Some(dir) = &self.state_dir {
@@ -701,7 +708,9 @@ impl KeydService {
                         let body = format!("{{\"serverFqdn\":\"{canonical}\"}}");
                         std::fs::write(&tmp, body)
                             .and_then(|()| std::fs::rename(&tmp, &path))
-                            .map_err(|e| KeydError::failed(format!("could not keep the new name: {e}")))?;
+                            .map_err(|e| {
+                                KeydError::failed(format!("could not keep the new name: {e}"))
+                            })?;
                     }
                     let irk_keep = *irk;
                     self.owner = Some((irk_keep, canonical.clone()));

@@ -67,7 +67,9 @@ impl From<ProtocolError> for OrderError {
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
 fn lower_hex(s: &str, len: usize) -> bool {
-    s.len() == len && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    s.len() == len
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 /// `^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$`
@@ -75,14 +77,22 @@ fn service_ref_ok(s: &str) -> bool {
     let b = s.as_bytes();
     let alnum = |c: u8| c.is_ascii_digit() || c.is_ascii_lowercase();
     match (b.first(), b.last()) {
-        (Some(&first), Some(&last)) => b.len() <= 128 && alnum(first) && alnum(last) && b.iter().all(|&c| alnum(c) || c == b'-'),
+        (Some(&first), Some(&last)) => {
+            b.len() <= 128
+                && alnum(first)
+                && alnum(last)
+                && b.iter().all(|&c| alnum(c) || c == b'-')
+        }
         _ => false,
     }
 }
 
 /// `^[A-Za-z0-9._-]{1,128}$`
 fn invite_id_ok(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 128 && s.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'_' || c == b'-')
+    !s.is_empty()
+        && s.len() <= 128
+        && s.bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'_' || c == b'-')
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,30 +108,47 @@ pub enum AppRankTarget {
 #[must_use]
 pub fn parse_app_rank_target(t: &str) -> Option<AppRankTarget> {
     if let Some(h) = t.strip_prefix("device:") {
-        return lower_hex(h, 64).then(|| AppRankTarget::Device { pub_hex: h.to_string() });
+        return lower_hex(h, 64).then(|| AppRankTarget::Device {
+            pub_hex: h.to_string(),
+        });
     }
     if let Some(h) = t.strip_prefix("share:") {
-        return lower_hex(h, 32).then(|| AppRankTarget::Share { share_id: h.to_string() });
+        return lower_hex(h, 32).then(|| AppRankTarget::Share {
+            share_id: h.to_string(),
+        });
     }
     if let Some(h) = t.strip_prefix("aid:") {
         return lower_hex(h, 64).then(|| AppRankTarget::Aid { aid: h.to_string() });
     }
     if let Some(h) = t.strip_prefix("invite:") {
-        return invite_id_ok(h).then(|| AppRankTarget::Invite { invite_id: h.to_string() });
+        return invite_id_ok(h).then(|| AppRankTarget::Invite {
+            invite_id: h.to_string(),
+        });
     }
     if let Some(rest) = t.strip_prefix("grant:") {
         let (invite, aid) = rest.split_once('/')?;
-        return (invite_id_ok(invite) && lower_hex(aid, 64)).then(|| AppRankTarget::Grant { invite_id: invite.to_string(), aid: aid.to_string() });
+        return (invite_id_ok(invite) && lower_hex(aid, 64)).then(|| AppRankTarget::Grant {
+            invite_id: invite.to_string(),
+            aid: aid.to_string(),
+        });
     }
     None
 }
 
 fn check_ref(s: &str) -> Result<(), OrderError> {
-    if service_ref_ok(s) { Ok(()) } else { Err(OrderError::BadServiceRef) }
+    if service_ref_ok(s) {
+        Ok(())
+    } else {
+        Err(OrderError::BadServiceRef)
+    }
 }
 
 fn check_issued_at(at: u64) -> Result<(), OrderError> {
-    if at <= MAX_SAFE_INTEGER { Ok(()) } else { Err(OrderError::BadIssuedAt) }
+    if at <= MAX_SAFE_INTEGER {
+        Ok(())
+    } else {
+        Err(OrderError::BadIssuedAt)
+    }
 }
 
 // ── app-rank/v1 ──────────────────────────────────────────────────────
@@ -142,11 +169,21 @@ pub fn app_rank_canonical(o: &AppRankOrder) -> Result<String, OrderError> {
     if !APP_RANK_VALUES.contains(&o.rank.as_str()) {
         return Err(OrderError::BadRank);
     }
-    if o.rank == "refused" && !matches!(target, AppRankTarget::Device { .. } | AppRankTarget::Share { .. }) {
+    if o.rank == "refused"
+        && !matches!(
+            target,
+            AppRankTarget::Device { .. } | AppRankTarget::Share { .. }
+        )
+    {
         return Err(OrderError::RefusedTarget);
     }
     check_issued_at(o.issued_at)?;
-    Ok(CanonicalV1::new(TAG_APP_RANK)?.text(&o.service_ref)?.text(&o.target)?.text(&o.rank)?.uint(o.issued_at)?.finish_string())
+    Ok(CanonicalV1::new(TAG_APP_RANK)?
+        .text(&o.service_ref)?
+        .text(&o.target)?
+        .text(&o.rank)?
+        .uint(o.issued_at)?
+        .finish_string())
 }
 
 /// Never fails loudly: a malformed order simply does not verify.
@@ -173,11 +210,19 @@ pub fn service_access_mode_canonical(o: &ServiceAccessModeOrder) -> Result<Strin
         return Err(OrderError::BadMode);
     }
     check_issued_at(o.issued_at)?;
-    Ok(CanonicalV1::new(TAG_SERVICE_ACCESS_MODE_V2)?.text(&o.service_ref)?.text(&o.mode)?.uint(o.issued_at)?.finish_string())
+    Ok(CanonicalV1::new(TAG_SERVICE_ACCESS_MODE_V2)?
+        .text(&o.service_ref)?
+        .text(&o.mode)?
+        .uint(o.issued_at)?
+        .finish_string())
 }
 
 #[must_use]
-pub fn verify_service_access_mode(o: &ServiceAccessModeOrder, signature_hex: &str, public_key_hex: &str) -> bool {
+pub fn verify_service_access_mode(
+    o: &ServiceAccessModeOrder,
+    signature_hex: &str,
+    public_key_hex: &str,
+) -> bool {
     service_access_mode_canonical(o).is_ok_and(|c| verify(&c, signature_hex, public_key_hex))
 }
 
@@ -199,11 +244,19 @@ pub fn service_allow_remove_canonical(o: &ServiceAllowRemoveOrder) -> Result<Str
         return Err(OrderError::BadAid);
     }
     check_issued_at(o.issued_at)?;
-    Ok(CanonicalV1::new(TAG_SERVICE_ALLOW_REMOVE_V2)?.text(&o.service_ref)?.text(&o.aid)?.uint(o.issued_at)?.finish_string())
+    Ok(CanonicalV1::new(TAG_SERVICE_ALLOW_REMOVE_V2)?
+        .text(&o.service_ref)?
+        .text(&o.aid)?
+        .uint(o.issued_at)?
+        .finish_string())
 }
 
 #[must_use]
-pub fn verify_service_allow_remove(o: &ServiceAllowRemoveOrder, signature_hex: &str, public_key_hex: &str) -> bool {
+pub fn verify_service_allow_remove(
+    o: &ServiceAllowRemoveOrder,
+    signature_hex: &str,
+    public_key_hex: &str,
+) -> bool {
     service_allow_remove_canonical(o).is_ok_and(|c| verify(&c, signature_hex, public_key_hex))
 }
 
@@ -226,10 +279,18 @@ pub fn restored_access_approve_canonical(o: &RestoredAccessApproval) -> Result<S
         return Err(OrderError::BadDigest);
     }
     check_issued_at(o.issued_at)?;
-    Ok(CanonicalV1::new(TAG_RESTORED_ACCESS_APPROVE)?.text(&o.service_ref)?.text(&o.draft_sha256)?.uint(o.issued_at)?.finish_string())
+    Ok(CanonicalV1::new(TAG_RESTORED_ACCESS_APPROVE)?
+        .text(&o.service_ref)?
+        .text(&o.draft_sha256)?
+        .uint(o.issued_at)?
+        .finish_string())
 }
 
 #[must_use]
-pub fn verify_restored_access_approve(o: &RestoredAccessApproval, signature_hex: &str, public_key_hex: &str) -> bool {
+pub fn verify_restored_access_approve(
+    o: &RestoredAccessApproval,
+    signature_hex: &str,
+    public_key_hex: &str,
+) -> bool {
     restored_access_approve_canonical(o).is_ok_and(|c| verify(&c, signature_hex, public_key_hex))
 }

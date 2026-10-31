@@ -25,7 +25,9 @@ fn vectors() -> Value {
 }
 
 fn s(v: &Value, k: &str) -> String {
-    v[k].as_str().unwrap_or_else(|| panic!("{k} missing in {v}")).to_string()
+    v[k].as_str()
+        .unwrap_or_else(|| panic!("{k} missing in {v}"))
+        .to_string()
 }
 
 fn key_of(text: &str) -> EndpointKey {
@@ -91,9 +93,18 @@ fn expect_endpoint(got: Option<Endpoint>, want: &Value, what: &str) {
 fn pool_vectors() {
     for c in vectors()["pool"].as_array().unwrap() {
         let name = s(c, "name");
-        let reserved: Vec<String> = c["reserved"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect();
+        let reserved: Vec<String> = c["reserved"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap().to_string())
+            .collect();
         let reserved_refs: Vec<&str> = reserved.iter().map(String::as_str).collect();
-        let made = AddressPool::new(&s(c, "subnet"), &reserved_refs, c["quarantineMs"].as_u64().unwrap());
+        let made = AddressPool::new(
+            &s(c, "subnet"),
+            &reserved_refs,
+            c["quarantineMs"].as_u64().unwrap(),
+        );
         if c["constructError"].as_bool() == Some(true) {
             assert!(made.is_err(), "{name}: should refuse the subnet");
             continue;
@@ -119,8 +130,16 @@ fn pool_vectors() {
                 "occupy" => pool.occupy(&s(st, "ip"), &s(st, "tag")),
                 "adopt" => pool.adopt(&s(st, "owner"), &s(st, "ip")),
                 "vacate" => pool.vacate(&s(st, "ip")),
-                "ownerOf" => assert_eq!(pool.owner_of(&s(st, "ip")).map(str::to_string), opt_str(st, "expect"), "{what}"),
-                "addressOf" => assert_eq!(pool.address_of(&s(st, "owner")).map(str::to_string), opt_str(st, "expect"), "{what}"),
+                "ownerOf" => assert_eq!(
+                    pool.owner_of(&s(st, "ip")).map(str::to_string),
+                    opt_str(st, "expect"),
+                    "{what}"
+                ),
+                "addressOf" => assert_eq!(
+                    pool.address_of(&s(st, "owner")).map(str::to_string),
+                    opt_str(st, "expect"),
+                    "{what}"
+                ),
                 other => panic!("unknown pool op {other}"),
             }
         }
@@ -157,7 +176,9 @@ fn table_vectors() {
             let what = format!("{name}: {st}");
             match st["op"].as_str().unwrap() {
                 "publish" => table.publish(&key_of(&s(st, "key")), endpoint_of(&st["endpoint"])),
-                "lookup" => expect_endpoint(table.lookup(&key_of(&s(st, "key"))), &st["expect"], &what),
+                "lookup" => {
+                    expect_endpoint(table.lookup(&key_of(&s(st, "key"))), &st["expect"], &what)
+                }
                 "acquire" => {
                     let l = table.acquire(&key_of(&s(st, "key")));
                     assert_eq!(l.is_some(), st["expect"].as_bool().unwrap(), "{what}");
@@ -171,9 +192,21 @@ fn table_vectors() {
                         leases.insert(lease_name, l);
                     }
                 }
-                "current" => assert_eq!(leases[&s(st, "lease")].current(), st["expect"].as_bool().unwrap(), "{what}"),
-                "cancelled" => assert_eq!(cancelled.lock().unwrap().contains(&s(st, "lease")), st["expect"].as_bool().unwrap(), "{what}"),
-                "openLeases" => assert_eq!(table.open_leases(&s(st, "service")), usize::try_from(st["expect"].as_u64().unwrap()).unwrap(), "{what}"),
+                "current" => assert_eq!(
+                    leases[&s(st, "lease")].current(),
+                    st["expect"].as_bool().unwrap(),
+                    "{what}"
+                ),
+                "cancelled" => assert_eq!(
+                    cancelled.lock().unwrap().contains(&s(st, "lease")),
+                    st["expect"].as_bool().unwrap(),
+                    "{what}"
+                ),
+                "openLeases" => assert_eq!(
+                    table.open_leases(&s(st, "service")),
+                    usize::try_from(st["expect"].as_u64().unwrap()).unwrap(),
+                    "{what}"
+                ),
                 "invalidate" => table.invalidate(
                     &s(st, "service"),
                     opt_str(st, "env").and_then(|e| EndpointEnv::parse(&e)),
@@ -192,7 +225,9 @@ fn table_vectors() {
 
 mod reconciler {
     use super::*;
-    use flagship_core::endpoints::{EndpointReconciler, next_generation, publish_from_observation, PublishResult};
+    use flagship_core::endpoints::{
+        EndpointReconciler, PublishResult, next_generation, publish_from_observation,
+    };
 
     fn want() -> ExpectedContainer {
         ExpectedContainer {
@@ -224,14 +259,30 @@ mod reconciler {
     #[test]
     fn publishes_only_a_sound_container() {
         let t = EndpointTable::new();
-        assert_eq!(publish_from_observation(&t, &key(), &want(), None), PublishResult::Refused("the engine has no such container".into()));
+        assert_eq!(
+            publish_from_observation(&t, &key(), &want(), None),
+            PublishResult::Refused("the engine has no such container".into())
+        );
         assert!(t.lookup(&key()).is_none());
-        assert!(matches!(publish_from_observation(&t, &key(), &want(), Some(&obs("c1", "t1", false))), PublishResult::Refused(_)));
+        assert!(matches!(
+            publish_from_observation(&t, &key(), &want(), Some(&obs("c1", "t1", false))),
+            PublishResult::Refused(_)
+        ));
         assert!(t.lookup(&key()).is_none());
-        let PublishResult::Ok(e) = publish_from_observation(&t, &key(), &want(), Some(&obs("c1", "t1", true))) else {
+        let PublishResult::Ok(e) =
+            publish_from_observation(&t, &key(), &want(), Some(&obs("c1", "t1", true)))
+        else {
             panic!("not published")
         };
-        assert_eq!((e.host.as_str(), e.port, e.generation, e.incarnation.as_str()), ("10.89.2.5", 8080, 7, "c1:t1"));
+        assert_eq!(
+            (
+                e.host.as_str(),
+                e.port,
+                e.generation,
+                e.incarnation.as_str()
+            ),
+            ("10.89.2.5", 8080, 7, "c1:t1")
+        );
     }
 
     #[test]

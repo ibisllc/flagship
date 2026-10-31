@@ -43,13 +43,24 @@ fn js_string(v: Option<&Value>) -> String {
         Some(Value::String(s)) => s.clone(),
         Some(Value::Bool(b)) => b.to_string(),
         Some(Value::Number(n)) => n.to_string(),
-        Some(Value::Array(a)) => a.iter().map(|x| if x.is_null() { String::new() } else { js_string(Some(x)) }).collect::<Vec<_>>().join(","),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|x| {
+                if x.is_null() {
+                    String::new()
+                } else {
+                    js_string(Some(x))
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(","),
         Some(Value::Object(_)) => "[object Object]".to_string(),
     }
 }
 
 fn is_sig(v: Option<&Value>) -> bool {
-    v.and_then(Value::as_str).is_some_and(|s| s.len() == 128 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+    v.and_then(Value::as_str)
+        .is_some_and(|s| s.len() == 128 && s.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
 fn obj(v: Option<&Value>) -> Option<&Map<String, Value>> {
@@ -70,12 +81,18 @@ pub fn parse_entry(v: &Value) -> Option<AccessEntry> {
     let ok = match r.get("kind").and_then(Value::as_str)? {
         kind @ ("rank" | "mode" | "remove") => {
             let o = obj(r.get("order"))?;
-            if !is_sig(r.get("signature")) || !is_str(o.get("serviceRef")) || !is_num(o.get("issuedAt")) {
+            if !is_sig(r.get("signature"))
+                || !is_str(o.get("serviceRef"))
+                || !is_num(o.get("issuedAt"))
+            {
                 return None;
             }
             match kind {
                 "rank" => is_str(o.get("target")) && is_str(o.get("rank")),
-                "mode" => matches!(o.get("mode").and_then(Value::as_str), Some("open" | "restricted")),
+                "mode" => matches!(
+                    o.get("mode").and_then(Value::as_str),
+                    Some("open" | "restricted")
+                ),
                 _ => is_str(o.get("aid")),
             }
         }
@@ -83,19 +100,35 @@ pub fn parse_entry(v: &Value) -> Option<AccessEntry> {
             let d = obj(r.get("redeem"));
             obj(r.get("create")).is_some()
                 && is_sig(r.get("createSig"))
-                && d.is_some_and(|d| is_str(d.get("secretHash")) && is_str(d.get("visitorAID")) && is_num(d.get("redeemedAt")) && is_sig(d.get("aidSig")))
+                && d.is_some_and(|d| {
+                    is_str(d.get("secretHash"))
+                        && is_str(d.get("visitorAID"))
+                        && is_num(d.get("redeemedAt"))
+                        && is_sig(d.get("aidSig"))
+                })
         }
         "accept" => {
             let a = obj(r.get("accept"));
             obj(r.get("create")).is_some()
                 && is_sig(r.get("createSig"))
                 && is_sig(r.get("acceptSig"))
-                && a.is_some_and(|a| is_str(a.get("inviteId")) && is_str(a.get("serviceRef")) && is_str(a.get("contactAID")) && is_num(a.get("acceptedAt")))
+                && a.is_some_and(|a| {
+                    is_str(a.get("inviteId"))
+                        && is_str(a.get("serviceRef"))
+                        && is_str(a.get("contactAID"))
+                        && is_num(a.get("acceptedAt"))
+                })
         }
-        "withdraw" => obj(r.get("revoke")).is_some_and(|rv| is_str(rv.get("inviteId")) && is_num(rv.get("issuedAt"))) && is_sig(r.get("signature")),
+        "withdraw" => {
+            obj(r.get("revoke"))
+                .is_some_and(|rv| is_str(rv.get("inviteId")) && is_num(rv.get("issuedAt")))
+                && is_sig(r.get("signature"))
+        }
         "share" => {
             let g = obj(r.get("grant"));
-            if !g.is_some_and(|g| is_str(g.get("shareId")) && is_num(g.get("issuedAt"))) || !is_sig(r.get("signature")) {
+            if !g.is_some_and(|g| is_str(g.get("shareId")) && is_num(g.get("issuedAt")))
+                || !is_sig(r.get("signature"))
+            {
                 return None;
             }
             match r.get("end") {
@@ -124,8 +157,16 @@ pub fn entry_key(e: &AccessEntry) -> String {
         "rank" => format!("rank:{}", js_string(field("order", "target"))),
         "mode" => "mode".to_string(),
         "remove" => format!("remove:{}", js_string(field("order", "aid"))),
-        "join" => format!("join:{}/{}", js_string(field("create", "inviteId")), js_string(field("redeem", "visitorAID")).to_lowercase()),
-        "accept" => format!("join:{}/{}", js_string(field("accept", "inviteId")), js_string(field("accept", "contactAID")).to_lowercase()),
+        "join" => format!(
+            "join:{}/{}",
+            js_string(field("create", "inviteId")),
+            js_string(field("redeem", "visitorAID")).to_lowercase()
+        ),
+        "accept" => format!(
+            "join:{}/{}",
+            js_string(field("accept", "inviteId")),
+            js_string(field("accept", "contactAID")).to_lowercase()
+        ),
         "withdraw" => format!("withdraw:{}", js_string(field("revoke", "inviteId"))),
         "share" => format!("share:{}", js_string(field("grant", "shareId"))),
         _ => String::new(),
@@ -134,7 +175,12 @@ pub fn entry_key(e: &AccessEntry) -> String {
 
 /// The time that orders entries under one key (later wins for orders; first wins for joins and withdraws).
 fn entry_time(e: &AccessEntry) -> f64 {
-    let field = |outer: &str, inner: &str| e.0.get(outer).and_then(|o| o.get(inner)).and_then(Value::as_f64).unwrap_or(f64::NAN);
+    let field = |outer: &str, inner: &str| {
+        e.0.get(outer)
+            .and_then(|o| o.get(inner))
+            .and_then(Value::as_f64)
+            .unwrap_or(f64::NAN)
+    };
     match e.kind() {
         "rank" | "mode" | "remove" => field("order", "issuedAt"),
         "join" => field("redeem", "redeemedAt"),
@@ -252,7 +298,15 @@ impl AccessJournal {
                     }
                 }
             }
-            let peers = j.get("peers").and_then(Value::as_array).map(|a| a.iter().filter_map(|p| p.as_str().map(str::to_string)).collect()).unwrap_or_default();
+            let peers = j
+                .get("peers")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|p| p.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
             self.by_app.insert(app, AppJournal { entries, peers });
         }
     }
@@ -262,8 +316,19 @@ impl AccessJournal {
         let mut root = Map::new();
         for (app, j) in &self.by_app {
             let mut o = Map::new();
-            o.insert("entries".into(), Value::Object(j.entries.iter().map(|(k, e)| (k.clone(), e.0.clone())).collect()));
-            o.insert("peers".into(), Value::Array(j.peers.iter().cloned().map(Value::String).collect()));
+            o.insert(
+                "entries".into(),
+                Value::Object(
+                    j.entries
+                        .iter()
+                        .map(|(k, e)| (k.clone(), e.0.clone()))
+                        .collect(),
+                ),
+            );
+            o.insert(
+                "peers".into(),
+                Value::Array(j.peers.iter().cloned().map(Value::String).collect()),
+            );
             root.insert(app.clone(), Value::Object(o));
         }
         Value::Object(root).to_string()
@@ -286,11 +351,17 @@ impl AccessJournal {
     }
 
     pub fn entries(&self, service_ref: &str) -> Vec<&AccessEntry> {
-        self.by_app.get(service_ref).map(|j| j.entries.values().collect()).unwrap_or_default()
+        self.by_app
+            .get(service_ref)
+            .map(|j| j.entries.values().collect())
+            .unwrap_or_default()
     }
 
     pub fn keys(&self, service_ref: &str) -> Vec<&str> {
-        self.by_app.get(service_ref).map(|j| j.entries.keys().map(String::as_str).collect()).unwrap_or_default()
+        self.by_app
+            .get(service_ref)
+            .map(|j| j.entries.keys().map(String::as_str).collect())
+            .unwrap_or_default()
     }
 
     /// A short fingerprint of an app's entries: equal on two boxes exactly when they hold the same entries.
@@ -298,14 +369,22 @@ impl AccessJournal {
         let mut lines: Vec<String> = self
             .by_app
             .get(service_ref)
-            .map(|j| j.entries.iter().map(|(k, e)| format!("{k}={}", entry_hash(e))).collect())
+            .map(|j| {
+                j.entries
+                    .iter()
+                    .map(|(k, e)| format!("{k}={}", entry_hash(e)))
+                    .collect()
+            })
             .unwrap_or_default();
         lines.sort();
         sha256_hex(&lines.join("\n"))
     }
 
     pub fn peers(&self, service_ref: &str) -> Vec<String> {
-        self.by_app.get(service_ref).map(|j| j.peers.clone()).unwrap_or_default()
+        self.by_app
+            .get(service_ref)
+            .map(|j| j.peers.clone())
+            .unwrap_or_default()
     }
 
     /// Remember the other servers running an app (union; capped). Returns whether anything changed.

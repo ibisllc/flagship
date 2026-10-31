@@ -7,7 +7,9 @@
     clippy::indexing_slicing
 )]
 
-use flagship_core::access_journal::{AccessJournal, JOURNAL_CAP, entry_hash, entry_key, parse_entry};
+use flagship_core::access_journal::{
+    AccessJournal, JOURNAL_CAP, entry_hash, entry_key, parse_entry,
+};
 use serde_json::{Value, json};
 
 fn vectors() -> Value {
@@ -23,11 +25,21 @@ fn parse_and_key_vectors() {
     for c in vectors()["parse"].as_array().unwrap() {
         let name = c["name"].as_str().unwrap();
         match parse_entry(&c["entry"]) {
-            None => assert!(c["expect"].is_null(), "{name}: refused, but the twin accepted it"),
-            Some(e) => assert_eq!(entry_key(&e), c["expect"]["key"].as_str().unwrap(), "{name}"),
+            None => assert!(
+                c["expect"].is_null(),
+                "{name}: refused, but the twin accepted it"
+            ),
+            Some(e) => assert_eq!(
+                entry_key(&e),
+                c["expect"]["key"].as_str().unwrap(),
+                "{name}"
+            ),
         }
         if c["expect"].is_null() {
-            assert!(parse_entry(&c["entry"]).is_none(), "{name}: accepted, but the twin refused it");
+            assert!(
+                parse_entry(&c["entry"]).is_none(),
+                "{name}: accepted, but the twin refused it"
+            );
         }
     }
 }
@@ -37,14 +49,33 @@ fn add_vectors() {
     for c in vectors()["add"].as_array().unwrap() {
         let name = c["name"].as_str().unwrap();
         let mut j = AccessJournal::new();
-        let results: Vec<bool> = c["entries"].as_array().unwrap().iter().map(|raw| j.add("svc", parse_entry(raw).unwrap())).collect();
-        let want: Vec<bool> = c["expect"]["results"].as_array().unwrap().iter().map(|b| b.as_bool().unwrap()).collect();
+        let results: Vec<bool> = c["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|raw| j.add("svc", parse_entry(raw).unwrap()))
+            .collect();
+        let want: Vec<bool> = c["expect"]["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b.as_bool().unwrap())
+            .collect();
         assert_eq!(results, want, "{name}");
         let mut keys: Vec<&str> = j.keys("svc");
         keys.sort_unstable();
-        let want_keys: Vec<&str> = c["expect"]["keys"].as_array().unwrap().iter().map(|k| k.as_str().unwrap()).collect();
+        let want_keys: Vec<&str> = c["expect"]["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|k| k.as_str().unwrap())
+            .collect();
         assert_eq!(keys, want_keys, "{name}");
-        assert_eq!(j.digest("svc"), c["expect"]["digest"].as_str().unwrap(), "{name}");
+        assert_eq!(
+            j.digest("svc"),
+            c["expect"]["digest"].as_str().unwrap(),
+            "{name}"
+        );
     }
 }
 
@@ -52,7 +83,12 @@ fn add_vectors() {
 fn hash_vectors() {
     for c in vectors()["hash"].as_array().unwrap() {
         let e = parse_entry(&c["entry"]).unwrap();
-        assert_eq!(entry_hash(&e), c["expect"].as_str().unwrap(), "{}", c["name"].as_str().unwrap());
+        assert_eq!(
+            entry_hash(&e),
+            c["expect"].as_str().unwrap(),
+            "{}",
+            c["name"].as_str().unwrap()
+        );
     }
 }
 
@@ -67,8 +103,14 @@ fn the_journal_is_capped_per_app_but_a_known_key_can_still_be_replaced() {
         assert!(j.add("svc", parse_entry(&rank(&format!("t{i}"), 1)).unwrap()));
     }
     assert!(!j.add("svc", parse_entry(&rank("one-too-many", 1)).unwrap()));
-    assert!(j.add("svc", parse_entry(&rank("t0", 2)).unwrap()), "a newer order for a held key is not a new key");
-    assert!(j.add("other", parse_entry(&rank("t0", 1)).unwrap()), "another app has its own room");
+    assert!(
+        j.add("svc", parse_entry(&rank("t0", 2)).unwrap()),
+        "a newer order for a held key is not a new key"
+    );
+    assert!(
+        j.add("other", parse_entry(&rank("t0", 1)).unwrap()),
+        "another app has its own room"
+    );
 }
 
 #[test]
@@ -76,17 +118,29 @@ fn load_round_trips_and_marks_a_damaged_file_lost() {
     let mut j = AccessJournal::new();
     j.add("svc", parse_entry(&rank("t1", 5)).unwrap());
     assert!(j.note_peers("svc", &["Home2.User.example", "home3.user.example"]));
-    assert!(!j.note_peers("svc", &["home2.user.example"]), "already known, lower-cased");
+    assert!(
+        !j.note_peers("svc", &["home2.user.example"]),
+        "already known, lower-cased"
+    );
     let text = j.to_json();
 
     let mut back = AccessJournal::new();
     back.load(Some(&text));
     assert!(!back.was_lost());
     assert_eq!(back.digest("svc"), j.digest("svc"));
-    assert_eq!(back.peers("svc"), vec!["home2.user.example".to_string(), "home3.user.example".to_string()]);
+    assert_eq!(
+        back.peers("svc"),
+        vec![
+            "home2.user.example".to_string(),
+            "home3.user.example".to_string()
+        ]
+    );
 
     back.load(None);
-    assert!(!back.was_lost() && back.apps().is_empty(), "no file is an empty journal, not a lost one");
+    assert!(
+        !back.was_lost() && back.apps().is_empty(),
+        "no file is an empty journal, not a lost one"
+    );
     back.load(Some("{not json"));
     assert!(back.was_lost() && back.apps().is_empty());
     back.load(Some("[]"));

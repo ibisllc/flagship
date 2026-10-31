@@ -62,19 +62,33 @@ impl From<ProtocolError> for ShareError {
 }
 
 fn lower_hex(s: &str, len: usize) -> bool {
-    s.len() == len && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    s.len() == len
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn domain(d: &str) -> Result<(), ShareError> {
-    if d.is_empty() { Err(ShareError::EmptyDomain) } else { Ok(()) }
+    if d.is_empty() {
+        Err(ShareError::EmptyDomain)
+    } else {
+        Ok(())
+    }
 }
 
 fn share_id(s: &str) -> Result<(), ShareError> {
-    if lower_hex(s, 32) { Ok(()) } else { Err(ShareError::BadShareId) }
+    if lower_hex(s, 32) {
+        Ok(())
+    } else {
+        Err(ShareError::BadShareId)
+    }
 }
 
 fn pubkey(s: &str) -> Result<(), ShareError> {
-    if lower_hex(s, 64) { Ok(()) } else { Err(ShareError::BadPublicKey) }
+    if lower_hex(s, 64) {
+        Ok(())
+    } else {
+        Err(ShareError::BadPublicKey)
+    }
 }
 
 /// A label the owner may name a member: 1 to 64 code points, trimmed, with no separator or control character.
@@ -85,7 +99,9 @@ pub fn label_ok(raw: &str) -> bool {
     !raw.is_empty()
         && raw.chars().count() <= SHARE_LABEL_MAX
         && trimmed_both_ways
-        && !raw.chars().any(|c| c == '|' || c <= '\u{1f}' || c == '\u{7f}')
+        && !raw
+            .chars()
+            .any(|c| c == '|' || c <= '\u{1f}' || c == '\u{7f}')
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,7 +158,11 @@ pub struct ServerShareRevoke {
 pub fn revoke_canonical(r: &ServerShareRevoke) -> Result<String, ShareError> {
     domain(&r.server_domain)?;
     share_id(&r.share_id)?;
-    Ok(CanonicalV1::new(TAG_SERVER_SHARE_REVOKE)?.text(&r.server_domain)?.text(&r.share_id)?.uint(r.issued_at)?.finish_string())
+    Ok(CanonicalV1::new(TAG_SERVER_SHARE_REVOKE)?
+        .text(&r.server_domain)?
+        .text(&r.share_id)?
+        .uint(r.issued_at)?
+        .finish_string())
 }
 
 #[must_use]
@@ -236,6 +256,10 @@ pub fn accept_admin_canonical(a: &ServerShareAcceptAdmin) -> Result<String, Shar
 }
 
 #[must_use]
-pub fn verify_accept_admin(a: &ServerShareAcceptAdmin, signature_hex: &str, signer_pub_hex: &str) -> bool {
+pub fn verify_accept_admin(
+    a: &ServerShareAcceptAdmin,
+    signature_hex: &str,
+    signer_pub_hex: &str,
+) -> bool {
     accept_admin_canonical(a).is_ok_and(|c| verify(&c, signature_hex, signer_pub_hex))
 }

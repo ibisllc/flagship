@@ -6,10 +6,17 @@
 //! Shared verdicts: `packages/server-daemon/test-vectors/access-entries.json`, written by the TypeScript applier.
 
 use crate::access_journal::AccessEntry;
-use flagship_crypto::access_orders::{ServiceAccessModeOrder, ServiceAllowRemoveOrder, verify_service_access_mode, verify_service_allow_remove};
-use flagship_crypto::server_share::{ServerShareGrant, ServerShareLeave, ServerShareRevoke, verify_grant, verify_leave, verify_revoke};
+use flagship_crypto::access_orders::{
+    ServiceAccessModeOrder, ServiceAllowRemoveOrder, verify_service_access_mode,
+    verify_service_allow_remove,
+};
+use flagship_crypto::server_share::{
+    ServerShareGrant, ServerShareLeave, ServerShareRevoke, verify_grant, verify_leave,
+    verify_revoke,
+};
 use flagship_crypto::service_invite::{
-    AcceptServiceInvite, CreateServiceInvite, RedeemServiceInvite, RevokeServiceInvite, verify_accept, verify_create, verify_redeem, verify_revoke as verify_invite_revoke,
+    AcceptServiceInvite, CreateServiceInvite, RedeemServiceInvite, RevokeServiceInvite,
+    verify_accept, verify_create, verify_redeem, verify_revoke as verify_invite_revoke,
 };
 use serde_json::{Map, Value};
 
@@ -59,14 +66,41 @@ pub struct VerifiedCreate {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verified {
-    Mode { mode: String, issued_at: u64 },
-    Remove { aid: String, issued_at: u64 },
+    Mode {
+        mode: String,
+        issued_at: u64,
+    },
+    Remove {
+        aid: String,
+        issued_at: u64,
+    },
     /// A withdraw is always kept (a later join through the invite is refused once its creator is known); whether an
     /// admin signed it decides which apps it may prune.
-    Withdraw { invite_id: String, issued_at: u64, signature: String, admin_signed: bool },
-    Join { create: VerifiedCreate, visitor_aid: String, redeemed_at: u64 },
-    Accept { create: VerifiedCreate, contact_aid: String, accepted_at: u64 },
-    Share { share_id: String, member_pub: String, level: String, label: String, server_domain: String, issued_at: u64, ended: bool },
+    Withdraw {
+        invite_id: String,
+        issued_at: u64,
+        signature: String,
+        admin_signed: bool,
+    },
+    Join {
+        create: VerifiedCreate,
+        visitor_aid: String,
+        redeemed_at: u64,
+    },
+    Accept {
+        create: VerifiedCreate,
+        contact_aid: String,
+        accepted_at: u64,
+    },
+    Share {
+        share_id: String,
+        member_pub: String,
+        level: String,
+        label: String,
+        server_domain: String,
+        issued_at: u64,
+        ended: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,7 +112,9 @@ pub enum Verdict {
 }
 
 fn lower_hex(s: &str, len: usize) -> bool {
-    s.len() == len && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    s.len() == len
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn any_hex(s: &str, len: usize) -> bool {
@@ -97,7 +133,13 @@ fn decode_hex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
-    (0..s.len()).step_by(2).map(|i| s.get(i..i.saturating_add(2)).and_then(|p| u8::from_str_radix(p, 16).ok())).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| {
+            s.get(i..i.saturating_add(2))
+                .and_then(|p| u8::from_str_radix(p, 16).ok())
+        })
+        .collect()
 }
 
 fn obj(v: &Value) -> Option<&Map<String, Value>> {
@@ -110,11 +152,25 @@ fn admin_signed(t: &EntryTrust, verify: impl Fn(&str) -> bool) -> bool {
 
 /// `verifyComCreate`: the create's shape, its secret hash when one is expected, and a signature by one of the
 /// signers this box trusts (which also names the tier).
-fn verify_com_create(create: &Value, sig: &Value, expect_secret_hash: Option<&str>, t: &EntryTrust) -> Option<VerifiedCreate> {
+fn verify_com_create(
+    create: &Value,
+    sig: &Value,
+    expect_secret_hash: Option<&str>,
+    t: &EntryTrust,
+) -> Option<VerifiedCreate> {
     let c = obj(create)?;
     let sig = sig.as_str().filter(|s| any_hex(s, 128))?;
-    let (invite_id, author, service_ref, secret_hash, bundle) = (text(c, "inviteId")?, text(c, "authorAID")?, text(c, "serviceRef")?, text(c, "secretHash")?, text(c, "encryptedBundle")?);
-    if !any_hex(author, 64) || !any_hex(secret_hash, 64) || !c.get("issuedAt").is_some_and(Value::is_number) {
+    let (invite_id, author, service_ref, secret_hash, bundle) = (
+        text(c, "inviteId")?,
+        text(c, "authorAID")?,
+        text(c, "serviceRef")?,
+        text(c, "secretHash")?,
+        text(c, "encryptedBundle")?,
+    );
+    if !any_hex(author, 64)
+        || !any_hex(secret_hash, 64)
+        || !c.get("issuedAt").is_some_and(Value::is_number)
+    {
         return None;
     }
     if expect_secret_hash.is_some_and(|e| secret_hash.to_lowercase() != e) {
@@ -138,7 +194,10 @@ fn verify_com_create(create: &Value, sig: &Value, expect_secret_hash: Option<&st
         max_redemptions,
         expires_at,
     };
-    let (pub_hex, tier) = t.create_signers.iter().find(|(k, _)| verify_create(&candidate, sig, k))?;
+    let (pub_hex, tier) = t
+        .create_signers
+        .iter()
+        .find(|(k, _)| verify_create(&candidate, sig, k))?;
     Some(VerifiedCreate {
         invite_id: candidate.invite_id,
         service_ref: candidate.service_ref,
@@ -179,8 +238,15 @@ fn verify_share(e: &Value, t: &EntryTrust) -> Option<Verified> {
         match text(end, "kind")? {
             "revoke" => {
                 let r = obj(end.get("revoke")?)?;
-                let revoke = ServerShareRevoke { server_domain: text(r, "serverDomain")?.to_string(), share_id: text(r, "shareId")?.to_string(), issued_at: int(r, "issuedAt")? };
-                if revoke.share_id != g.share_id || revoke.server_domain != g.server_domain || !admin_signed(t, |k| verify_revoke(&revoke, end_sig, k)) {
+                let revoke = ServerShareRevoke {
+                    server_domain: text(r, "serverDomain")?.to_string(),
+                    share_id: text(r, "shareId")?.to_string(),
+                    issued_at: int(r, "issuedAt")?,
+                };
+                if revoke.share_id != g.share_id
+                    || revoke.server_domain != g.server_domain
+                    || !admin_signed(t, |k| verify_revoke(&revoke, end_sig, k))
+                {
                     return None;
                 }
             }
@@ -192,14 +258,26 @@ fn verify_share(e: &Value, t: &EntryTrust) -> Option<Verified> {
                     member_pub_hex: text(l, "memberPubHex")?.to_string(),
                     issued_at: int(l, "issuedAt")?,
                 };
-                if leave.share_id != g.share_id || leave.server_domain != g.server_domain || leave.member_pub_hex != g.member_pub_hex || !verify_leave(&leave, end_sig, &g.member_pub_hex) {
+                if leave.share_id != g.share_id
+                    || leave.server_domain != g.server_domain
+                    || leave.member_pub_hex != g.member_pub_hex
+                    || !verify_leave(&leave, end_sig, &g.member_pub_hex)
+                {
                     return None;
                 }
             }
         }
         ended = true;
     }
-    Some(Verified::Share { share_id: g.share_id, member_pub: g.member_pub_hex, level: g.level, label: g.label, server_domain: g.server_domain, issued_at: g.issued_at, ended })
+    Some(Verified::Share {
+        share_id: g.share_id,
+        member_pub: g.member_pub_hex,
+        level: g.level,
+        label: g.label,
+        server_domain: g.server_domain,
+        issued_at: g.issued_at,
+        ended,
+    })
 }
 
 /// Whether `entry`, handed over for `service_ref`, carries a proof this box accepts.
@@ -214,31 +292,58 @@ pub fn verify_entry(entry: &AccessEntry, service_ref: &str, t: &EntryTrust) -> V
             if o.contains_key("serverId") {
                 return None;
             }
-            let order = ServiceAccessModeOrder { service_ref: text(o, "serviceRef")?.to_string(), mode: text(o, "mode")?.to_string(), issued_at: int(o, "issuedAt")? };
+            let order = ServiceAccessModeOrder {
+                service_ref: text(o, "serviceRef")?.to_string(),
+                mode: text(o, "mode")?.to_string(),
+                issued_at: int(o, "issuedAt")?,
+            };
             let sig = text(e.as_object()?, "signature")?;
-            if order.service_ref != service_ref || !installed || !admin_signed(t, |k| verify_service_access_mode(&order, sig, k)) {
+            if order.service_ref != service_ref
+                || !installed
+                || !admin_signed(t, |k| verify_service_access_mode(&order, sig, k))
+            {
                 return None;
             }
-            Some(Verified::Mode { mode: order.mode, issued_at: order.issued_at })
+            Some(Verified::Mode {
+                mode: order.mode,
+                issued_at: order.issued_at,
+            })
         })(),
         Some("remove") => (|| {
             let o = obj(e.get("order")?)?;
             if o.contains_key("serverId") {
                 return None;
             }
-            let order = ServiceAllowRemoveOrder { service_ref: text(o, "serviceRef")?.to_string(), aid: text(o, "aid")?.to_string(), issued_at: int(o, "issuedAt")? };
+            let order = ServiceAllowRemoveOrder {
+                service_ref: text(o, "serviceRef")?.to_string(),
+                aid: text(o, "aid")?.to_string(),
+                issued_at: int(o, "issuedAt")?,
+            };
             let sig = text(e.as_object()?, "signature")?;
-            if order.service_ref != service_ref || !admin_signed(t, |k| verify_service_allow_remove(&order, sig, k)) {
+            if order.service_ref != service_ref
+                || !admin_signed(t, |k| verify_service_allow_remove(&order, sig, k))
+            {
                 return None;
             }
-            Some(Verified::Remove { aid: order.aid, issued_at: order.issued_at })
+            Some(Verified::Remove {
+                aid: order.aid,
+                issued_at: order.issued_at,
+            })
         })(),
         Some("withdraw") => (|| {
             let r = obj(e.get("revoke")?)?;
-            let revoke = RevokeServiceInvite { invite_id: text(r, "inviteId")?.to_string(), issued_at: int(r, "issuedAt")? };
+            let revoke = RevokeServiceInvite {
+                invite_id: text(r, "inviteId")?.to_string(),
+                issued_at: int(r, "issuedAt")?,
+            };
             let sig = text(e.as_object()?, "signature")?.to_string();
             let admin = admin_signed(t, |k| verify_invite_revoke(&revoke, &sig, k));
-            Some(Verified::Withdraw { invite_id: revoke.invite_id, issued_at: revoke.issued_at, signature: sig.to_lowercase(), admin_signed: admin })
+            Some(Verified::Withdraw {
+                invite_id: revoke.invite_id,
+                issued_at: revoke.issued_at,
+                signature: sig.to_lowercase(),
+                admin_signed: admin,
+            })
         })(),
         Some("join") => (|| {
             let d = obj(e.get("redeem")?)?;
@@ -248,29 +353,59 @@ pub fn verify_entry(entry: &AccessEntry, service_ref: &str, t: &EntryTrust) -> V
             if !lower_hex(&aid, 64) || !any_hex(secret_hash, 64) {
                 return None;
             }
-            let redeem = RedeemServiceInvite { secret_hash: secret_hash.to_lowercase(), visitor_aid: decode_hex(&aid)?, redeemed_at };
+            let redeem = RedeemServiceInvite {
+                secret_hash: secret_hash.to_lowercase(),
+                visitor_aid: decode_hex(&aid)?,
+                redeemed_at,
+            };
             if !verify_redeem(&redeem, text(d, "aidSig")?, &aid) {
                 return None;
             }
-            let create = verify_com_create(e.get("create")?, e.get("createSig")?, Some(&secret_hash.to_lowercase()), t)?;
+            let create = verify_com_create(
+                e.get("create")?,
+                e.get("createSig")?,
+                Some(&secret_hash.to_lowercase()),
+                t,
+            )?;
             if create.service_ref != service_ref || !installed {
                 return None;
             }
-            Some(Verified::Join { create, visitor_aid: aid, redeemed_at })
+            Some(Verified::Join {
+                create,
+                visitor_aid: aid,
+                redeemed_at,
+            })
         })(),
         Some("accept") => (|| {
             let a = obj(e.get("accept")?)?;
             let aid = text(a, "contactAID")?.to_lowercase();
-            let (invite_id, a_ref, accepted_at) = (text(a, "inviteId")?, text(a, "serviceRef")?, int(a, "acceptedAt")?);
+            let (invite_id, a_ref, accepted_at) = (
+                text(a, "inviteId")?,
+                text(a, "serviceRef")?,
+                int(a, "acceptedAt")?,
+            );
             let create = verify_com_create(e.get("create")?, e.get("createSig")?, None, t)?;
-            if create.invite_id != invite_id || create.service_ref != service_ref || a_ref != service_ref || !installed {
+            if create.invite_id != invite_id
+                || create.service_ref != service_ref
+                || a_ref != service_ref
+                || !installed
+            {
                 return None;
             }
-            let accept = AcceptServiceInvite { invite_id: invite_id.to_string(), service_ref: a_ref.to_string(), contact_aid: decode_hex(&aid)?, accepted_at };
+            let accept = AcceptServiceInvite {
+                invite_id: invite_id.to_string(),
+                service_ref: a_ref.to_string(),
+                contact_aid: decode_hex(&aid)?,
+                accepted_at,
+            };
             if !verify_accept(&accept, text(e.as_object()?, "acceptSig")?, &aid) {
                 return None;
             }
-            Some(Verified::Accept { create, contact_aid: aid, accepted_at })
+            Some(Verified::Accept {
+                create,
+                contact_aid: aid,
+                accepted_at,
+            })
         })(),
         _ => None,
     };

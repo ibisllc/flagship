@@ -66,7 +66,11 @@ pub fn create_canonical(c: &CreateServiceInvite) -> Result<String, ProtocolError
 
 fn guard(n: u64) -> Result<(), ProtocolError> {
     // The appended `maxN=` and `exp=` fields keep to the same safe-integer range as every other number.
-    if n > MAX_SAFE_INTEGER { Err(ProtocolError::IntegerRange) } else { Ok(()) }
+    if n > MAX_SAFE_INTEGER {
+        Err(ProtocolError::IntegerRange)
+    } else {
+        Ok(())
+    }
 }
 
 #[must_use]
@@ -86,11 +90,19 @@ pub struct RedeemServiceInvite {
 /// # Errors
 /// As [`create_canonical`].
 pub fn redeem_canonical(r: &RedeemServiceInvite) -> Result<String, ProtocolError> {
-    Ok(CanonicalV1::new(TAG_REDEEM)?.text(&r.secret_hash)?.hex(&r.visitor_aid).uint(r.redeemed_at)?.finish_string())
+    Ok(CanonicalV1::new(TAG_REDEEM)?
+        .text(&r.secret_hash)?
+        .hex(&r.visitor_aid)
+        .uint(r.redeemed_at)?
+        .finish_string())
 }
 
 #[must_use]
-pub fn verify_redeem(r: &RedeemServiceInvite, signature_hex: &str, visitor_aid_pub_hex: &str) -> bool {
+pub fn verify_redeem(
+    r: &RedeemServiceInvite,
+    signature_hex: &str,
+    visitor_aid_pub_hex: &str,
+) -> bool {
     redeem_canonical(r).is_ok_and(|s| verify(&s, signature_hex, visitor_aid_pub_hex))
 }
 
@@ -106,11 +118,20 @@ pub struct AcceptServiceInvite {
 /// # Errors
 /// As [`create_canonical`].
 pub fn accept_canonical(a: &AcceptServiceInvite) -> Result<String, ProtocolError> {
-    Ok(CanonicalV1::new(TAG_ACCEPT)?.text(&a.invite_id)?.text(&a.service_ref)?.hex(&a.contact_aid).uint(a.accepted_at)?.finish_string())
+    Ok(CanonicalV1::new(TAG_ACCEPT)?
+        .text(&a.invite_id)?
+        .text(&a.service_ref)?
+        .hex(&a.contact_aid)
+        .uint(a.accepted_at)?
+        .finish_string())
 }
 
 #[must_use]
-pub fn verify_accept(a: &AcceptServiceInvite, signature_hex: &str, contact_aid_pub_hex: &str) -> bool {
+pub fn verify_accept(
+    a: &AcceptServiceInvite,
+    signature_hex: &str,
+    contact_aid_pub_hex: &str,
+) -> bool {
     accept_canonical(a).is_ok_and(|s| verify(&s, signature_hex, contact_aid_pub_hex))
 }
 
@@ -123,7 +144,10 @@ pub struct RevokeServiceInvite {
 /// # Errors
 /// As [`create_canonical`].
 pub fn revoke_canonical(r: &RevokeServiceInvite) -> Result<String, ProtocolError> {
-    Ok(CanonicalV1::new(TAG_REVOKE)?.text(&r.invite_id)?.uint(r.issued_at)?.finish_string())
+    Ok(CanonicalV1::new(TAG_REVOKE)?
+        .text(&r.invite_id)?
+        .uint(r.issued_at)?
+        .finish_string())
 }
 
 #[must_use]

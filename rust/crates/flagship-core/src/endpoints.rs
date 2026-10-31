@@ -96,7 +96,11 @@ impl EndpointKey {
     }
 
     fn drain_key(&self, with_component: bool) -> String {
-        drain_key(&self.service_id, self.env, with_component.then_some(self.component.as_str()))
+        drain_key(
+            &self.service_id,
+            self.env,
+            with_component.then_some(self.component.as_str()),
+        )
     }
 }
 
@@ -155,7 +159,10 @@ pub struct Lease {
 
 impl std::fmt::Debug for Lease {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Lease").field("endpoint", &self.endpoint).field("key", &self.key).finish_non_exhaustive()
+        f.debug_struct("Lease")
+            .field("endpoint", &self.endpoint)
+            .field("key", &self.key)
+            .finish_non_exhaustive()
     }
 }
 
@@ -167,10 +174,20 @@ impl Lease {
             on_cancel();
             return;
         }
-        self.state.hooks.lock().unwrap_or_else(PoisonError::into_inner).push(Box::new(on_cancel));
+        self.state
+            .hooks
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(Box::new(on_cancel));
         // An invalidation between the check and the push would have missed the hook.
         if self.state.done.load(Ordering::SeqCst) {
-            let hooks = std::mem::take(&mut *self.state.hooks.lock().unwrap_or_else(PoisonError::into_inner));
+            let hooks = std::mem::take(
+                &mut *self
+                    .state
+                    .hooks
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner),
+            );
             for h in hooks {
                 h();
             }
@@ -197,7 +214,11 @@ impl Lease {
         if self.state.done.swap(true, Ordering::SeqCst) {
             return;
         }
-        self.state.hooks.lock().unwrap_or_else(PoisonError::into_inner).clear();
+        self.state
+            .hooks
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
         let mut g = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(set) = g.leases.get_mut(&self.key) {
             set.retain(|s| !Arc::ptr_eq(s, &self.state));
@@ -245,8 +266,15 @@ impl EndpointTable {
     pub fn acquire(&self, key: &EndpointKey) -> Option<Lease> {
         let endpoint = self.lookup(key)?;
         let k = key.key_string();
-        let state = Arc::new(LeaseState { done: AtomicBool::new(false), hooks: Mutex::new(Vec::new()) });
-        self.lock().leases.entry(k.clone()).or_default().push(Arc::clone(&state));
+        let state = Arc::new(LeaseState {
+            done: AtomicBool::new(false),
+            hooks: Mutex::new(Vec::new()),
+        });
+        self.lock()
+            .leases
+            .entry(k.clone())
+            .or_default()
+            .push(Arc::clone(&state));
         Some(Lease {
             endpoint,
             key: k,
@@ -290,7 +318,9 @@ impl EndpointTable {
 
     /// The first step of a stop, replace, update or rollback: refuse new connections, close the old ones.
     pub fn begin_stop(&self, service_id: &str, env: EndpointEnv, component: Option<&str>) {
-        self.lock().draining.insert(drain_key(service_id, env, component));
+        self.lock()
+            .draining
+            .insert(drain_key(service_id, env, component));
         self.invalidate(service_id, Some(env), component);
     }
 
@@ -372,7 +402,9 @@ impl AddressPool {
         }
         let bits: u32 = bits.parse().map_err(|_| bad())?;
         if !(16..=29).contains(&bits) {
-            return Err(PoolError::BadSubnet(format!("subnet /{bits} is outside the supported range")));
+            return Err(PoolError::BadSubnet(format!(
+                "subnet /{bits} is outside the supported range"
+            )));
         }
         let host_bits = 32u32.saturating_sub(bits);
         let mask = u32::MAX.checked_shl(host_bits).unwrap_or(0);
@@ -399,7 +431,10 @@ impl AddressPool {
         let mut n = self.first;
         while n <= self.last {
             let ip = format_ip(n);
-            if !(self.by_ip.contains_key(&ip) || self.quarantine.contains_key(&ip) || self.reserved.contains(&ip)) {
+            if !(self.by_ip.contains_key(&ip)
+                || self.quarantine.contains_key(&ip)
+                || self.reserved.contains(&ip))
+            {
                 self.by_owner.insert(owner.to_string(), ip.clone());
                 self.by_ip.insert(ip.clone(), owner.to_string());
                 return Ok(ip);
@@ -414,7 +449,12 @@ impl AddressPool {
 
     /// Every owner whose name starts with `prefix` (a service and all of its components).
     pub fn release_prefix(&mut self, prefix: &str, now_ms: u64) {
-        let owners: Vec<String> = self.by_owner.keys().filter(|o| o.starts_with(prefix)).cloned().collect();
+        let owners: Vec<String> = self
+            .by_owner
+            .keys()
+            .filter(|o| o.starts_with(prefix))
+            .cloned()
+            .collect();
         for o in owners {
             self.release(&o, now_ms);
         }
@@ -460,7 +500,8 @@ impl AddressPool {
             return;
         };
         self.by_ip.remove(&ip);
-        self.quarantine.insert(ip, now_ms.saturating_add(self.quarantine_ms));
+        self.quarantine
+            .insert(ip, now_ms.saturating_add(self.quarantine_ms));
     }
 }
 
@@ -496,7 +537,10 @@ fn label_number(text: &str) -> Option<i64> {
 
 fn is_ipv4_text(s: &str) -> bool {
     let parts: Vec<&str> = s.split('.').collect();
-    parts.len() == 4 && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+    parts.len() == 4
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// The fields the resolver needs from `inspect --format {{json .}}`, in Docker's and Podman's shared shape.
@@ -508,9 +552,16 @@ pub fn parse_observation(json: &str) -> Option<ContainerObservation> {
     };
     let obj = c.as_object()?;
     let state = obj.get("State").and_then(|v| v.as_object());
-    let labels = obj.get("Config").and_then(|v| v.get("Labels")).and_then(|v| v.as_object());
+    let labels = obj
+        .get("Config")
+        .and_then(|v| v.get("Labels"))
+        .and_then(|v| v.as_object());
     let mut addresses = BTreeMap::new();
-    if let Some(nets) = obj.get("NetworkSettings").and_then(|v| v.get("Networks")).and_then(|v| v.as_object()) {
+    if let Some(nets) = obj
+        .get("NetworkSettings")
+        .and_then(|v| v.get("Networks"))
+        .and_then(|v| v.as_object())
+    {
         for (name, n) in nets {
             if let Some(ip) = n.get("IPAddress").and_then(|v| v.as_str())
                 && is_ipv4_text(ip)
@@ -519,14 +570,30 @@ pub fn parse_observation(json: &str) -> Option<ContainerObservation> {
             }
         }
     }
-    let generation = labels.and_then(|l| l.get(LABEL_GENERATION)).and_then(|v| v.as_str()).and_then(label_number);
-    let id = obj.get("Id").and_then(|v| v.as_str()).filter(|s| !s.is_empty())?;
+    let generation = labels
+        .and_then(|l| l.get(LABEL_GENERATION))
+        .and_then(|v| v.as_str())
+        .and_then(label_number);
+    let id = obj
+        .get("Id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())?;
     Some(ContainerObservation {
         container_id: id.to_string(),
         generation,
-        service_label: labels.and_then(|l| l.get(LABEL_SERVICE)).and_then(|v| v.as_str()).map(str::to_string),
-        running: state.and_then(|s| s.get("Running")).and_then(|v| v.as_bool()) == Some(true),
-        started_at: state.and_then(|s| s.get("StartedAt")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        service_label: labels
+            .and_then(|l| l.get(LABEL_SERVICE))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        running: state
+            .and_then(|s| s.get("Running"))
+            .and_then(|v| v.as_bool())
+            == Some(true),
+        started_at: state
+            .and_then(|s| s.get("StartedAt"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         addresses,
     })
 }
@@ -620,7 +687,10 @@ pub struct EndpointReconciler {
 
 impl EndpointReconciler {
     pub fn new(table: EndpointTable) -> Self {
-        Self { table, watched: BTreeMap::new() }
+        Self {
+            table,
+            watched: BTreeMap::new(),
+        }
     }
 
     pub fn watch(&mut self, key: EndpointKey, want: ExpectedContainer) {
@@ -642,14 +712,16 @@ impl EndpointReconciler {
             let o = observe(&want.container);
             let Some(o) = o.filter(|o| matches_expected(o, want).is_none()) else {
                 if before.is_some() {
-                    self.table.invalidate(&key.service_id, Some(key.env), Some(&key.component));
+                    self.table
+                        .invalidate(&key.service_id, Some(key.env), Some(&key.component));
                 }
                 continue;
             };
             let incarnation = format!("{}:{}", o.container_id, o.started_at);
             if before.as_ref().is_none_or(|b| b.incarnation != incarnation) {
                 if before.is_some() {
-                    self.table.invalidate(&key.service_id, Some(key.env), Some(&key.component));
+                    self.table
+                        .invalidate(&key.service_id, Some(key.env), Some(&key.component));
                 }
                 publish_from_observation(&self.table, key, want, Some(&o));
             }
