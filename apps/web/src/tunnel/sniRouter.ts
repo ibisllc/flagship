@@ -524,7 +524,7 @@ function pipeToTunnel(
       tunnel.detachStream(streamId);
       client.end();
     },
-  });
+  }, sni);
 
   // visitor → box: stop reading the visitor while the tunnel's socket is backed up.
   const sendToBox = (bytes: Uint8Array) => {

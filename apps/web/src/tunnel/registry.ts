@@ -14,7 +14,8 @@ export interface RegisteredTunnel {
   /** Pod canonical FQDN (e.g. `kitchen.john.flagship.services`). Doubles as serverId. */
   readonly podCanonical: string;
   send(frame: Frame): void;
-  attachStream(streamId: number, callbacks: StreamCallbacks): void;
+  /** `sni` is the name the visitor asked for, so a box whose apps stop can have only its app streams closed. */
+  attachStream(streamId: number, callbacks: StreamCallbacks, sni?: string): void;
   detachStream(streamId: number): void;
   nextStreamId(): number;
   /** Stop reading frames from the box for `ms` (TCP backpressure on its
@@ -29,6 +30,16 @@ export interface RegisteredTunnel {
   /** True when the box's socket can take more now. Otherwise false, and `onWritable`
    *  runs once the bytes queued toward the box fall back to the low-water mark. */
   whenBoxWritable?(onWritable: () => void): boolean;
+  /**
+   * The box's current serving decision (docs/architecture-v2/serving-wiring.md §2): its exact control name routes
+   * while `control`, every other name only while `apps` too. Absent: no serving authority wired (dev, tests).
+   */
+  serving?(): ServingView;
+}
+
+export interface ServingView {
+  control: boolean;
+  apps: boolean;
 }
 
 /**
@@ -109,6 +120,7 @@ export class TunnelRegistry {
     return this.allocator.addPod({
       podCanonical: pc,
       canonicals: args.canonicals,
+      appsAllowed: args.tunnel.serving?.().apps ?? true,
     });
   }
 
@@ -149,6 +161,24 @@ export class TunnelRegistry {
    */
   findBySni(sni: string): RegisteredTunnel | undefined {
     const lower = sni.toLowerCase();
+    const t = this.resolveSni(lower);
+    if (!t?.serving) return t;
+    // A refused name resolves to nothing, so the router closes it exactly like a name nobody registered.
+    const v = t.serving();
+    if (!v.control) return undefined;
+    return v.apps || lower === t.podCanonical.toLowerCase() ? t : undefined;
+  }
+
+  /**
+   * A tunnel's serving decision changed: hand its app slots on (or take free ones back). Returns the sets whose
+   * snapshot changed. A tunnel that no longer holds its name is left alone.
+   */
+  setAppsAllowed(tunnel: RegisteredTunnel, allowed: boolean): AppUserSetKey[] {
+    if (!this.isCurrent(tunnel)) return [];
+    return this.allocator.setAppsAllowed(tunnel.podCanonical, allowed).affectedSets;
+  }
+
+  private resolveSni(lower: string): RegisteredTunnel | undefined {
     // A real SNI is a hostname; a literal `*` (e.g. someone replaying
     // a wildcard claim as an SNI) must never strip-match into a pod.
     if (lower.includes("*")) return undefined;

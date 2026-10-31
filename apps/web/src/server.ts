@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { hostname } from "node:os";
 import Fastify, { type FastifyInstance } from "fastify";
 import fastifyStatic from "@fastify/static";
 import { dirname, resolve } from "node:path";
@@ -85,6 +86,8 @@ import {
   coldStartRedirections,
 } from "./routes/controlRedirections.js";
 import { registerGossipFanout } from "./routes/gossipFanout.js";
+import { comServingFetcher, ServingGate } from "./tunnel/servingGate.js";
+import { ServingFeedClient } from "./tunnel/servingFeedClient.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -361,9 +364,13 @@ export async function start(opts: {
   // the `gym.` test Fly app sets FLAGSHIP_SERVICES_APEX.
   const servicesApex = process.env.FLAGSHIP_SERVICES_APEX ?? "flagship.services";
   const registry = new TunnelRegistry({ apex: servicesApex });
+  const comBaseUrl = process.env.FLAGSHIP_COM_BASE_URL ?? "https://flagshipserver.com";
   // #87 — custom-domain control channel. Must register before listen.
   const servicesControlSecret = process.env.SERVICES_CONTROL_SECRET;
   registerControlRedirections(app, { registry, secret: servicesControlSecret });
+
+  // Filled in once the serving authority starts (after listen); null while it is off.
+  let servingStats: () => unknown = () => null;
 
   // What the router has done since this machine started (docs/ops-command.md). Guarded by the
   // hub's shared secret; off when there is none.
@@ -381,6 +388,7 @@ export async function start(opts: {
         uptimeSec: Math.round(process.uptime()),
         tunnelsOnline: registry.size(),
         router: routerStats.snapshot(),
+        serving: servingStats(),
         now: new Date().toISOString(),
       };
     });
@@ -400,7 +408,6 @@ export async function start(opts: {
   await app.listen({ port: httpPort, host });
   // Authenticate tunnel HELLOs against .com's server registry over HTTPS.
   // 5-minute cache so reconnects don't hammer the API.
-  const comBaseUrl = process.env.FLAGSHIP_COM_BASE_URL ?? "https://flagshipserver.com";
   // Warm the RAM redirection table from .com before routing starts
   // (best-effort + 5s-bounded; push backfills anything missed).
   await coldStartRedirections({ registry, comBaseUrl, secret: servicesControlSecret });
@@ -437,6 +444,37 @@ export async function start(opts: {
     irkResolver.lookup(username);
   const authorityLookup = (username: string) =>
     irkResolver.lookupAuthority(username);
+
+  // The serving authority (docs/architecture-v2/serving-wiring.md §2): on when this relay is given `.com`'s
+  // revocation public key. It then fails closed: no new tunnels after 60 s without a frame from `.com`'s feed, and
+  // every tunnel closed after 10 min.
+  let serving: { gate: ServingGate; feed: ServingFeedClient } | undefined;
+  const revocationPub = process.env.FLAGSHIP_SERVING_REVOCATION_PUB?.trim().toLowerCase();
+  if (revocationPub && (surface === "services" || surface === "both")) {
+    if (!servicesControlSecret) {
+      throw new Error("FLAGSHIP_SERVING_REVOCATION_PUB is set but SERVICES_CONTROL_SECRET is not: the serving feed cannot authenticate");
+    }
+    const gate = new ServingGate({
+      fetchRecord: comServingFetcher({ comBaseUrl, secret: servicesControlSecret }),
+      adminKeyLookup: async (username) => {
+        const a = await irkResolver.lookupAuthority(username);
+        const key = a?.adminRootPub ?? a?.irkPub;
+        return key ? Buffer.from(key).toString("hex") : null;
+      },
+    });
+    const feed = new ServingFeedClient({
+      comBaseUrl,
+      secret: servicesControlSecret,
+      relayId: process.env.FLAGSHIP_RELAY_ID ?? process.env.FLY_MACHINE_ID ?? hostname(),
+      revocationKey: revocationPub,
+      gate,
+    });
+    gate.start();
+    feed.start();
+    serving = { gate, feed };
+    servingStats = () => ({ ...gate.stats(), feedConnection: feed.stats() });
+    console.log(`serving authority ON (feed ${comBaseUrl}/api/internal/serving-feed)`);
+  }
   // Per-user revoked-entitlement-cert set, pulled from .com's
   // phone-signed list and re-verified locally (the cache trusts the
   // IRK signature, not the Worker). Fail-open on a transient fetch
@@ -506,6 +544,7 @@ export async function start(opts: {
     revocationLookup,
     evictionLookup,
     ...(blessingProvider ? { blessingSource: blessingProvider } : {}),
+    ...(serving ? { serving: serving.gate } : {}),
   });
 
   // Public-egress metering. OFF unless USAGE_REPORT_SECRET is set — so
@@ -553,6 +592,8 @@ export async function start(opts: {
     async close() {
       meter?.stop();
       blessingProvider?.stop();
+      serving?.feed.stop();
+      serving?.gate.stop();
       if (router) await router.close();
       if (echo) await echo.close();
       await stopHub();

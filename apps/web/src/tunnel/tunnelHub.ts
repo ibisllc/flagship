@@ -20,6 +20,8 @@ import {
   FRAME_PB_MAILBOX_ANNOUNCE,
   FRAME_PB_MAIL_RESP,
   CAPABILITY_PB_MAIL_V1,
+  closeFrame,
+  HELLO_REFUSED_TRY_AGAIN,
   MailAssembler,
   decodeMailboxAnnounce,
   mailRequestFrames,
@@ -47,8 +49,11 @@ import {
   type ServiceGrantRoute,
   type Bytes,
   type RootEntitlement,
+  type ServingPolicy,
+  type SignedServingRecord,
   type TunnelHelloV2,
 } from "@flagship/protocol";
+import { parseSignedRecord, type ServingBox, type ServingGate, type ServingHello, type ServingTunnelHandle } from "./servingGate.js";
 import type { RegisteredTunnel, StreamCallbacks, TunnelRegistry } from "./registry.js";
 import { PauseReasons, SourcePauser } from "./throttle.js";
 
@@ -204,6 +209,12 @@ export interface TunnelHubOptions {
   mailboxes?: MailboxRegistry;
   /** How long a mailbox reply may take. Default 120 s. */
   mailTimeoutMs?: number;
+  /**
+   * The serving authority (docs/architecture-v2/serving-wiring.md §2). When set, every tunnel gets a decision: a
+   * box whose decision denies control is refused, one whose apps are stopped keeps only its control name, and no
+   * new tunnel is taken while contact with `.com`'s feed is lost. Omitted: every name a box proves routes.
+   */
+  serving?: ServingGate;
   now?: () => number;
 }
 
@@ -304,6 +315,7 @@ function attachTunnel(
   hub: HubState,
 ): void {
   let registered: RegisteredTunnel | null = null;
+  let servingBox: ServingBox | null = null;
   let outbound: OutboundSession | null = null;
   let boxOffersDrain = false;
   const ackCapabilities = (): string[] | undefined => {
@@ -321,6 +333,28 @@ function attachTunnel(
   >();
   let lastHelloIssuedAt = 0;
   const streams = new Map<number, StreamCallbacks>();
+  /** The SNI each visitor stream was opened for. */
+  const streamSni = new Map<number, string>();
+  const servingHandle: ServingTunnelHandle = {
+    closeTunnel(code, reason) {
+      connection.close(code, reason);
+    },
+    closeAppStreams() {
+      const control = registered?.podCanonical;
+      for (const [id, sni] of [...streamSni]) {
+        if (sni === control) continue;
+        const cb = streams.get(id);
+        streams.delete(id);
+        streamSni.delete(id);
+        send(closeFrame(id, false));
+        cb?.onRemoteClose();
+      }
+    },
+    onAppsChanged(apps) {
+      if (!registered) return;
+      for (const key of registry.setAppsAllowed(registered, apps)) broadcastSnapshot(registry, key);
+    },
+  };
   // Hub-opened stream ids stay below the box's outbound space, and a wrapped counter skips
   // ids still in use.
   let nextStream = 1;
@@ -488,6 +522,7 @@ function attachTunnel(
 
   ws.on("close", () => {
     closed = true;
+    servingBox?.detach();
     hub.connections.delete(connection);
     resolveClosed();
     cancelIdleClose();
@@ -512,6 +547,7 @@ function attachTunnel(
     }
     for (const cb of [...streams.values()]) cb.onRemoteClose();
     streams.clear();
+    streamSni.clear();
     outbound?.close();
     outbound = null;
   });
@@ -562,18 +598,46 @@ function attachTunnel(
         ws.close(1008, "claim rejected");
         return;
       }
+      let box: ServingBox | null = null;
+      if (opts.serving) {
+        if (!opts.serving.acceptingNewTunnels()) {
+          send(helloAckFrame(false, HELLO_REFUSED_TRY_AGAIN));
+          ws.close(1013, HELLO_REFUSED_TRY_AGAIN);
+          return;
+        }
+        box = await opts.serving.attach(servingHelloOf(helloOk), servingHandle);
+        if (closed) {
+          box.detach();
+          return;
+        }
+        if (!box.view().control) {
+          const reason = box.decision.apps === false ? box.decision.reason : "refused";
+          box.detach();
+          send(helloAckFrame(false, reason));
+          ws.close(1008, reason);
+          return;
+        }
+        servingBox = box;
+      }
       boxOffersDrain = helloOk.capabilities.includes(CAPABILITY_DRAIN_V1);
       const canonicals = built.canonicals;
       const tunnel: RegisteredTunnel = {
         podCanonical: helloOk.rootEntitlement.podCanonical.toLowerCase(),
         send,
-        attachStream: (id, cb) => streams.set(id, cb),
-        detachStream: (id) => streams.delete(id),
+        attachStream: (id, cb, sni) => {
+          streams.set(id, cb);
+          if (sni) streamSni.set(id, sni.toLowerCase());
+        },
+        detachStream: (id) => {
+          streams.delete(id);
+          streamSni.delete(id);
+        },
         nextStreamId: takeStreamId,
         holdInbound: (ms) => inbound.hold(ms),
         pauseInbound: (key) => holds.hold(key),
         resumeInbound: (key) => holds.release(key),
         whenBoxWritable,
+        ...(box ? { serving: () => box.view() } : {}),
       };
       const reg = registry.register({ tunnel, canonicals });
       registered = tunnel;
@@ -640,6 +704,11 @@ function attachTunnel(
       if (!built.ok) {
         send(helloAckFrame(false, built.reason));
         return;
+      }
+      if (servingBox) {
+        await servingBox.update(servingHelloOf(helloOk));
+        // A denied decision has already closed the tunnel.
+        if (closed || !servingBox.view().control) return;
       }
       const canonicals = built.canonicals;
       const reg = registry.register({ tunnel: registered, canonicals });
@@ -728,6 +797,7 @@ function attachTunnel(
       const cb = streams.get(f.streamId);
       if (cb) cb.onRemoteClose();
       streams.delete(f.streamId);
+      streamSni.delete(f.streamId);
       return;
     }
   }
@@ -755,6 +825,10 @@ interface ParsedHelloV2 {
   /** Extensions the box offers (`drain-v1`). Outside the signed envelope: it can only turn
    *  on features both ends implement. */
   capabilities: string[];
+  /** HELLO `servingAdminKey`: the admin key the box pinned; null when absent or not 64 lowercase hex. */
+  servingAdminKey: string | null;
+  /** HELLO `servingPolicy`: the box's stored signed policy, checked by `servingDecision`. */
+  servingPolicy: SignedServingRecord<ServingPolicy> | null;
 }
 
 interface ParsedAppGrant {
@@ -867,6 +941,19 @@ function parseHello(payload: Uint8Array): HelloParse {
           .slice(0, MAX_OFFERED_CAPABILITIES)
           .filter((c): c is string => typeof c === "string" && c.length <= 64)
       : [],
+    servingAdminKey:
+      typeof o.servingAdminKey === "string" && /^[0-9a-f]{64}$/.test(o.servingAdminKey) ? o.servingAdminKey : null,
+    servingPolicy: parseSignedRecord<ServingPolicy>(o.servingPolicy, "policy"),
+  };
+}
+
+function servingHelloOf(h: ParsedHelloV2): ServingHello {
+  return {
+    username: h.rootEntitlement.username.toLowerCase(),
+    boxPub: bytesToHex(h.rootEntitlement.podPubKey),
+    podCanonical: h.rootEntitlement.podCanonical,
+    adminKey: h.servingAdminKey,
+    policy: h.servingPolicy,
   };
 }
 

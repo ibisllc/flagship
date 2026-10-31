@@ -213,6 +213,25 @@ export function helloFrame(payload: {
 }
 
 /**
+ * Serving-authority fields a box adds to its HELLO JSON (docs/architecture-v2/serving-wiring.md §2). Both optional
+ * and outside the STK-signed envelope: they can only narrow what the box serves, since the relay checks every record
+ * against the admin key `.com` publishes. A box that sends no `servingAdminKey` keeps its control name but serves
+ * no app; a hub that predates them ignores them.
+ */
+export interface HelloServingFields {
+  /** The account admin key the box pinned (its admin root, else IRK), 64 lowercase hex. */
+  servingAdminKey?: string | null;
+  /** The box's stored signed `serving-policy/v1`: `{ record, signature }` (signature 128 hex), or null. */
+  servingPolicy?: { record: unknown; signature: string } | null;
+}
+
+/**
+ * HELLO_ACK `reason` (with WebSocket close 1013) when the relay takes no new tunnels for now, because it has lost
+ * contact with `.com`'s serving feed: the box reconnects with its usual backoff.
+ */
+export const HELLO_REFUSED_TRY_AGAIN = "try-again";
+
+/**
  * Optional maintainer-trust attachment carried on HELLO_ACK (relay-trust
  * wiring, docs/maintainer-trust-enforcement.md § "The relay blessing").
  *

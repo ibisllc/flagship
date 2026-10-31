@@ -39,6 +39,16 @@ kill_timeout = "30s"
   TUNNEL_TCP_PORT = "8443"
   RELAY_ECHO_PORT = "3001"
   FLAGSHIP_SURFACE = "services"
+  # Serving authority (docs/architecture-v2/serving-wiring.md §2): set
+  # FLAGSHIP_SERVING_REVOCATION_PUB to the 64-hex key `.com` serves at
+  # GET /api/serving/revocation-key (not a secret; it can live here once .com
+  # serves the feed). With it the hub keeps one WebSocket to .com's
+  # /api/internal/serving-feed (auth: SERVICES_CONTROL_SECRET, required),
+  # stops a box's app names when its signed policy says so, ends a revoked
+  # box's tunnel at once, and fails closed: no new tunnels after 60 s without a
+  # frame from the feed, every tunnel closed after 10 min. Deploy .com's feed
+  # first. FLAGSHIP_RELAY_ID names this relay to the feed (default: the Fly
+  # machine id). Unset: no serving authority (every name a box proves routes).
 
 # External :443 → internal :8443 (raw TCP). The SNI router peeks the
 # ClientHello, looks up which daemon's tunnel WS owns the SNI, and

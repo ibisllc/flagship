@@ -67,7 +67,8 @@ export interface TransferResult {
 export type TransferRejection =
   | { ok: false; reason: "fqdn not derivable from any of pod's canonicals" }
   | { ok: false; reason: "pod not registered" }
-  | { ok: false; reason: "fqdn not parseable" };
+  | { ok: false; reason: "fqdn not parseable" }
+  | { ok: false; reason: "apps stopped" };
 
 export interface RemovePodResult {
   /** Sets touched by the removal — need a fresh snapshot broadcast. */
@@ -123,6 +124,11 @@ interface SetEntry {
 export class AppUserAllocator {
   private readonly pods = new Map<string, PodEntry>();
   private readonly sets = new Map<string, SetEntry>();
+  /**
+   * Pods whose serving decision says `apps: false` (docs/architecture-v2/serving-wiring.md §2): they keep their
+   * own canonical but hold no app slot and are never an heir; they stay in candidate queues so they can come back.
+   */
+  private readonly appsStopped = new Set<string>();
   private readonly now: () => number;
   /**
    * The data-plane apex these FQDNs live under — `flagship.services` in
@@ -146,8 +152,13 @@ export class AppUserAllocator {
   addPod(args: {
     podCanonical: string;
     canonicals: string[];
+    /** False: the pod's serving decision stops its apps; it claims no slot. Default true. */
+    appsAllowed?: boolean;
   }): AddPodResult {
     const podCanonical = args.podCanonical.toLowerCase();
+    const appsAllowed = args.appsAllowed !== false;
+    if (appsAllowed) this.appsStopped.delete(podCanonical);
+    else this.appsStopped.add(podCanonical);
     // Defense-in-depth for A′ wildcard claims: the hub validates +
     // consumes `*.<podCanonical>` before register (routing rides the
     // registry's one-label-strip fallback), so a literal `*` reaching
@@ -224,6 +235,7 @@ export class AppUserAllocator {
       // wildcard + routed via the one-label strip), and a sibling box must
       // never inherit it on failover; so we gate strictly on the short form.
       if (
+        appsAllowed &&
         canonical !== podCanonical &&
         isShortServiceCanonical(canonical, this.apex) &&
         !set.slotHolders.has(canonical)
@@ -263,7 +275,7 @@ export class AppUserAllocator {
       // new pod joining never preempts the head — it goes to the tail
       // and waits.
       enqueueCandidate(set, shortened, podCanonical);
-      if (!set.slotHolders.has(shortened)) {
+      if (appsAllowed && !set.slotHolders.has(shortened)) {
         set.slotHolders.set(shortened, podCanonical);
         shortenedsHeld.push(shortened);
       }
@@ -301,6 +313,7 @@ export class AppUserAllocator {
     const fqdn = args.fqdn.toLowerCase();
     const pod = this.pods.get(podCanonical);
     if (!pod) return { ok: false, reason: "pod not registered" };
+    if (this.appsStopped.has(podCanonical)) return { ok: false, reason: "apps stopped" };
     const key = parseSetKey(fqdn, this.apex);
     if (!key) return { ok: false, reason: "fqdn not parseable" };
     // A box under the per-box wildcard has no per-app canonicals, so its apps' short names are not
@@ -383,12 +396,58 @@ export class AppUserAllocator {
       }
     }
     this.pods.delete(pc);
+    this.appsStopped.delete(pc);
     const affectedSets: AppUserSetKey[] = [];
     for (const k of affected) {
       const s = this.sets.get(k);
       if (s) affectedSets.push(s.key);
     }
     return { affectedSets, redistributed };
+  }
+
+  /**
+   * The pod's serving decision changed. Stopping hands every slot it holds to the next live, serving candidate (or
+   * frees it); resuming claims the free slots it is queued for, never one another pod holds.
+   */
+  setAppsAllowed(podCanonical: string, allowed: boolean): RemovePodResult {
+    const pc = podCanonical.toLowerCase();
+    const pod = this.pods.get(pc);
+    if (!pod || allowed === !this.appsStopped.has(pc)) return { affectedSets: [], redistributed: [] };
+    if (allowed) this.appsStopped.delete(pc);
+    else this.appsStopped.add(pc);
+    const affected = new Set<string>();
+    const redistributed: RemovePodResult["redistributed"] = [];
+    for (const setKeyStr of pod.setKeys) {
+      const set = this.sets.get(setKeyStr);
+      if (!set) continue;
+      if (!allowed) {
+        for (const [slot, holder] of [...set.slotHolders.entries()]) {
+          if (holder !== pc) continue;
+          const heir = this.pickHeir(set, slot);
+          if (heir) set.slotHolders.set(slot, heir);
+          else set.slotHolders.delete(slot);
+          redistributed.push({ fqdn: slot, from: pc, to: heir });
+          affected.add(setKeyStr);
+        }
+      } else {
+        for (const [slot, queue] of set.candidateQueue) {
+          if (slot === pc || set.slotHolders.has(slot) || !queue.includes(pc)) continue;
+          if (!pod.derivableShorteneds.has(slot) && !isShortServiceCanonical(slot, this.apex)) continue;
+          set.slotHolders.set(slot, pc);
+          affected.add(setKeyStr);
+        }
+      }
+    }
+    const affectedSets: AppUserSetKey[] = [];
+    for (const k of affected) {
+      const s = this.sets.get(k);
+      if (s) affectedSets.push(s.key);
+    }
+    return { affectedSets, redistributed };
+  }
+
+  appsAllowed(podCanonical: string): boolean {
+    return !this.appsStopped.has(podCanonical.toLowerCase());
   }
 
   /**
@@ -481,7 +540,7 @@ export class AppUserAllocator {
     const queue = set.candidateQueue.get(slot);
     if (queue) {
       for (const cand of queue) {
-        if (this.pods.has(cand) && set.members.has(cand)) {
+        if (this.pods.has(cand) && set.members.has(cand) && !this.appsStopped.has(cand)) {
           return cand;
         }
       }
@@ -489,7 +548,7 @@ export class AppUserAllocator {
     let best: { canonical: string; firstRegisteredAt: number } | null = null;
     for (const memberCanonical of set.members.keys()) {
       const pod = this.pods.get(memberCanonical);
-      if (!pod) continue;
+      if (!pod || this.appsStopped.has(memberCanonical)) continue;
       if (!best) best = { canonical: memberCanonical, firstRegisteredAt: pod.firstRegisteredAt };
       else if (
         pod.firstRegisteredAt < best.firstRegisteredAt ||
