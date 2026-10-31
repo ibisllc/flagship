@@ -1445,7 +1445,7 @@ run_kickoff() {
   say "  amd64 takes about an hour, arm64 (TCG) up to three. Step 14 collects them."
 }
 
-KNOWN_SECRETS=(ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_INFERENCE_ENDPOINT FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT ADAPTER_REVIEW_ANTHROPIC_KEY)
+KNOWN_SECRETS=(SERVING_REVOCATION_SEED ACCOUNT_READ_TOKEN_SECRET PB_TOKEN_RSA_JWK PB_FILLER_SECRET PB_TAG_SECRET FLAGSHIP_INFERENCE_TOKEN_SECRET FLAGSHIP_INFERENCE_ENDPOINT FLAGSHIP_RECOVERY_PROOF_SECRET FLAGSHIP_TOTP_KEK ADAPTER_ATTESTATION_SIGNING_KEY ADAPTER_COMPLAINT_SALT ADAPTER_REVIEW_ANTHROPIC_KEY)
 run_secrets() {
   ensure_wt
   local prod gym
@@ -1615,6 +1615,31 @@ run_com() {
   fi
   com_deploy || return $?
   com_checks zone
+  serving_relay_key
+}
+
+# The relay enforces the serving authority (docs/architecture-v2/serving-wiring.md) only once it holds the key
+# .com signs revocations with. It must come AFTER .com's feed is live: a relay holding the key with no feed refuses
+# new tunnels after a minute and closes them all after ten.
+serving_relay_key() {
+  hdr "Serving authority: the relay's revocation key"
+  local key; key=$(curl -fsS -m 15 "$COM_URL/api/serving/revocation-key" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const k=JSON.parse(s).publicKey;if(/^[0-9a-f]{64}$/.test(k))process.stdout.write(k)}catch{}})' || true)
+  if [ -z "$key" ]; then
+    warn ".com serves no revocation key (SERVING_REVOCATION_SEED not set?): the relay stays without the serving authority. Create it: cd apps/com && openssl rand -hex 32 | wrangler secret put SERVING_REVOCATION_SEED, then run this step again."
+    return 0
+  fi
+  say "  .com's revocation key: $key"
+  if flyctl secrets list -a flagship-services 2>/dev/null | grep -qw FLAGSHIP_SERVING_REVOCATION_PUB; then
+    say "  the relay already holds FLAGSHIP_SERVING_REVOCATION_PUB (Fly shows only a digest: if .com's key changed, set it again)."
+    confirm "Set it again to the key above anyway?" || return 0
+  else
+    confirm "Give the relay this key now (turns on the serving authority; a rolling restart)?" || { warn "the relay runs without the serving authority until this is set"; return 0; }
+  fi
+  XA "$WT" flyctl secrets set "FLAGSHIP_SERVING_REVOCATION_PUB=$key" -a flagship-services
+  PROBE_FAILS=0
+  probe_code ".services health" "$SERVICES_URL/api/health" 200 8
+  probe_end
+  say "  check by hand that the feed is up: curl -H 'x-usage-secret: <secret>' $SERVICES_URL/api/stats  (serving.contact true, feed.lag 0)"
 }
 require_gym_gate() {
   st_has done "$(step_index gym)" || fail "the gym gate (step $(step_index gym)) is not recorded: nothing deploys to prod until it passes"
