@@ -49,6 +49,11 @@ if [ "$DRY" = 0 ]; then
     || { echo "✗ could not take the gym lock (taken meanwhile)" >&2; exit 4; }
   trap 'rm -f "$LOCK"' EXIT
 fi
+# A sleeping Mac freezes the harness mid-group (gym 8's classic pass: a 20 s probe "took" 942 s and every
+# write in flight timed out), so the run keeps the machine awake until it ends.
+if [ "$DRY" = 0 ] && command -v caffeinate >/dev/null 2>&1; then
+  caffeinate -i -s -w $$ >/dev/null 2>&1 &
+fi
 
 SECRETS="${GYM_SECRETS_FILE:-$REPO/.gym-secrets.env}"
 if [ -f "$SECRETS" ]; then
