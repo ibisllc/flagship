@@ -89,6 +89,24 @@ describe("applyEndorsedUpdate as an operation", () => {
     expect(h.ops.list({ kind: "server-update" })[0]?.state).toBe("applied");
   });
 
+  it("returns the release gate's refusal (so it can be shown to the owner) and records the operation as failed", async () => {
+    const h = await hub();
+    const calls: string[] = [];
+    const out = await applyEndorsedUpdate(
+      {
+        swapper: swapper(calls),
+        pendingStore: pending(),
+        requestExit: () => {},
+        operations: { hub: h, grantDeps: ["root"] },
+        releaseAllowed: async () => ({ ok: false, reason: "not-in-catalog" }),
+      },
+      "aaaa1111", "bbbb2222", "test", { requester: "owner", by: "admin", signatureHex: "cd" },
+    );
+    expect(out).toEqual({ applied: false, reason: "unendorsed" });
+    expect(calls).toEqual([]);
+    expect(h.ops.list({ kind: "server-update" })[0]?.state).toBe("failed");
+  });
+
   it("does not swap when the grant was revoked before the swap", async () => {
     const h = await hub();
     await h.revoke("root", "signed out");

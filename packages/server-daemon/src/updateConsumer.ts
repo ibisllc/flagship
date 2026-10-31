@@ -615,6 +615,7 @@ export async function applyEndorsedUpdate(
   try {
     if (!opts.operations || !approval) return await applyEndorsedUpdateNow(opts, currentCommit, targetCommit, why);
     let outcome: UpdateConsumeOutcome = { applied: false, reason: "apply-failed" };
+    let refused = false;
     const ran = await runOrderOperation(
       opts.operations.hub,
       {
@@ -630,10 +631,17 @@ export async function applyEndorsedUpdate(
       },
       async (ctx) => {
         outcome = await applyEndorsedUpdateNow(opts, currentCommit, targetCommit, why, ctx);
-        if (!outcome.applied) throw new Error(`update not applied: ${outcome.reason}`);
+        // Thrown so the ledger records the operation as failed; the refusal itself is returned below.
+        if (!outcome.applied) {
+          refused = true;
+          throw new Error(`update not applied: ${outcome.reason}`);
+        }
         return { value: outcome, resultDigest: digestOf("server-update", targetCommit) };
       },
-    );
+    ).catch((e: unknown) => {
+      if (refused) return { ran: false as const, reason: "refused" as const };
+      throw e;
+    });
     if (ran.ran) return ran.value;
     if (ran.reason === "in-progress") return { applied: false, reason: "busy" };
     const last = outcome as UpdateConsumeOutcome;
