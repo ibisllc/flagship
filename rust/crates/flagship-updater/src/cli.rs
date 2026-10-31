@@ -194,7 +194,7 @@ pub fn run(args: &[String], out: &mut dyn Write, err: &mut dyn Write) -> u8 {
                 Ok(i) => {
                     let _ = writeln!(
                         out,
-                        "installed: {} {} sequence {}",
+                        "installed: {} {} sequence {} (flagship-updater)",
                         i.commit, i.arch, i.sequence
                     );
                     0

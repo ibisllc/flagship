@@ -64,7 +64,10 @@ fn install_takes_the_shell_installers_flags_and_exit_codes() {
     assert_eq!(code, 0, "{out}");
     assert_eq!(
         out.trim(),
-        format!("installed: {} amd64 sequence 5", b.commit)
+        format!(
+            "installed: {} amd64 sequence 5 (flagship-updater)",
+            b.commit
+        )
     );
     // the same again is the anti-rollback refusal: exit 1, "refused: rollback" on stderr
     let (code, _, err) = call(&args);

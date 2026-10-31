@@ -132,7 +132,7 @@ export function buildArtifactSwapper(opts: ArtifactSwapperOptions): ReleaseSwapp
         }
         log(`[self-update] verifying ${name}`);
         try {
-          await opts.runner("bash", [
+          const out = await opts.runner("bash", [
             join(opts.repoPath, "installer/install-box-artifact.sh"),
             "--manifest", manifestPath,
             "--artifact", artifactPath,
@@ -147,6 +147,9 @@ export function buildArtifactSwapper(opts: ArtifactSwapperOptions): ReleaseSwapp
               ? ["--pq-key-ids", BOX_ARTIFACT_PQ_PIN.keyIds.join(","), ...(BOX_ARTIFACT_PQ_PIN.legacyManifests.length ? ["--legacy-manifests", BOX_ARTIFACT_PQ_PIN.legacyManifests.join(",")] : [])]
               : []),
           ]);
+          // "installed: <commit> <arch> sequence <n>", with "(flagship-updater)" when the Rust updater did it.
+          const said = out?.stdout?.trim().split("\n").pop();
+          if (said) log(`[self-update] ${said.slice(0, 200)}`);
         } catch (e) {
           const code = (e as { code?: unknown }).code;
           if (code === 1) throw new ArtifactRefusedError(`the release was refused: ${(e as Error).message}`);
