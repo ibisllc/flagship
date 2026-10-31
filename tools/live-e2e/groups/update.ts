@@ -27,12 +27,18 @@ export function mailboxAuth(acct: Account): { auth: Record<string, unknown>; aut
 }
 
 const SCRIPT = fileURLToPath(new URL("../../../scripts/gym-update-target.sh", import.meta.url));
-const updateTarget = (mode: "publish" | "unpublish"): string =>
-  execFileSync("bash", [SCRIPT, mode, "--worktree", process.env.GYM_WORKTREE || `${homedir()}/.cache/flagship/gym-worktree`], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 300_000,
-  }).trim();
+const updateTarget = (mode: "publish" | "unpublish"): string => {
+  try {
+    return execFileSync("bash", [SCRIPT, mode, "--worktree", process.env.GYM_WORKTREE || `${homedir()}/.cache/flagship/gym-worktree`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 300_000,
+    }).trim();
+  } catch (e) {
+    const why = String((e as { stderr?: string }).stderr ?? "").trim().split("\n").at(-1);
+    throw new Error(why || (e as Error).message);
+  }
+};
 
 export const update: Group = {
   name: "update",
