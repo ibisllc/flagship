@@ -1104,6 +1104,7 @@ async function main(): Promise<void> {
         refreshReleaseCatalog({ base: BOX_RELEASE.artifactBase, roots, gate })
           .then((m) => console.log(`[release-catalog] ${m}`))
           .catch((e: Error) => console.warn(`[release-catalog] ${e.message}`));
+      releaseCatalogRefreshRef.current = refresh;
       void refresh();
       setInterval(() => void refresh(), 6 * 3_600_000).unref?.();
     }
@@ -2784,10 +2785,25 @@ export const BROWSER_EGRESS = { gateway: "172.31.250.1", browser: "172.31.250.2"
 
 /** The signed release catalog's gate, when the running release pins a catalog root (releaseCatalogFeed.ts). */
 const releaseCatalogRef: { current: ReleaseCatalogGate | null } = { current: null };
+/** Fetches the catalog now (bound beside the gate); at most once a minute when an update asks. */
+const releaseCatalogRefreshRef: { current: (() => Promise<void>) | null } = { current: null };
+let releaseCatalogAskedAt = 0;
 const updateReceiptsRef: { current: UpdateReceiptReporter | null } = { current: null };
-/** Every update path asks this before anything changes; with no catalog for this release it allows, as before. */
-const releaseAllowedByCatalog = (target: string, current: string) =>
-  releaseCatalogRef.current ? releaseCatalogRef.current.allowsUpdateTo(target, current) : Promise.resolve({ ok: true as const });
+/**
+ * Every update path asks this before anything changes; with no catalog for this release it allows, as before.
+ * A target the kept catalog doesn't list yet (or a stale catalog) is asked again after one fresh fetch: the box
+ * otherwise fetches every 6 h, and a release published since would be refused while the apps already offer it.
+ */
+const releaseAllowedByCatalog = async (target: string, current: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+  const gate = releaseCatalogRef.current;
+  if (!gate) return { ok: true };
+  const v = await gate.allowsUpdateTo(target, current);
+  if (v.ok || !["not-in-catalog", "stale-catalog", "no-catalog"].includes(v.reason) || !releaseCatalogRefreshRef.current) return v;
+  if (Date.now() - releaseCatalogAskedAt < 60_000) return v;
+  releaseCatalogAskedAt = Date.now();
+  await releaseCatalogRefreshRef.current();
+  return gate.allowsUpdateTo(target, current);
+};
 
 /** The authenticated clock, bound when the authority layer starts; chat leases read it. */
 const authClockRef: { current: AuthClock | null } = { current: null };
