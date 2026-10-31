@@ -667,7 +667,9 @@ async function applyEndorsedUpdateNow(
     const v = await opts.releaseAllowed(targetCommit, currentCommit).catch(() => ({ ok: false as const, reason: "catalog-unreadable" }));
     if (!v.ok) {
       log(`[self-update] the release catalog does not allow ${targetCommit} (${v.reason}); not applying`);
-      return { applied: false, reason: "catalog-refused" };
+      // A release the catalog never listed, or one under the security floor, is a final verdict the owner
+      // sees (as an unendorsed release); the rest (stale catalog, rollout cohort) can pass later.
+      return { applied: false, reason: v.reason === "not-in-catalog" || v.reason === "below-floor" ? "unendorsed" : "catalog-refused" };
     }
   }
   log(`[self-update] applying ${why} update ${currentCommit} → ${targetCommit}`);

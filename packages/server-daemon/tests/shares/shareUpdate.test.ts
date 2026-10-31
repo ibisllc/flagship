@@ -81,7 +81,7 @@ function memoryNonces(): UsedNonceStore {
   return { has: async (n) => used.has(n), mark: async (n) => void used.add(n) };
 }
 
-function setup(opts: { pending?: PendingVerifyMarker | null; endorsed?: string[] } = {}) {
+function setup(opts: { pending?: PendingVerifyMarker | null; endorsed?: string[]; catalog?: (target: string) => { ok: true } | { ok: false; reason: string } } = {}) {
   const auth = { ownerIrkPub: owner.publicKey, username: "harry" };
   const verifyOwnerGrant = (g: ServerShareGrant, sig: Uint8Array) =>
     authorizeSensitiveOrder({ ...auth, order: g, signature: sig, verify: verifyServerShareGrant });
@@ -114,6 +114,7 @@ function setup(opts: { pending?: PendingVerifyMarker | null; endorsed?: string[]
           swapper,
           pendingStore,
           requestExit: () => void exited++,
+          ...(opts.catalog ? { releaseAllowed: async (t: string) => opts.catalog!(t) } : {}),
         },
         from,
         target,
@@ -265,6 +266,26 @@ describe("a co-manager's update order", () => {
     expect(x.pendingStore.marker).toBeNull();
     expect(x.exited()).toBe(0);
     expect(x.outcomes).toEqual([expect.objectContaining({ outcome: "refused", reason: "unendorsed" })]);
+  });
+
+  it("a release the catalog never listed is the owner's verdict too (unendorsed), and nothing is installed", async () => {
+    const x = setup({ catalog: () => ({ ok: false, reason: "not-in-catalog" }) });
+    await grant(x, "manage");
+    const token = await signIn(x);
+    expect((await order(x, token, updateOf())).status).toBe(202);
+    expect(await x.lastApply()).toEqual({ applied: false, reason: "unendorsed" });
+    expect(x.commands).toEqual([]);
+    expect(x.outcomes).toEqual([expect.objectContaining({ outcome: "refused", reason: "unendorsed" })]);
+  });
+
+  it("a release outside this box's rollout cohort is not a verdict (it may pass later)", async () => {
+    const x = setup({ catalog: () => ({ ok: false, reason: "not-in-cohort" }) });
+    await grant(x, "manage");
+    const token = await signIn(x);
+    expect((await order(x, token, updateOf())).status).toBe(202);
+    expect(await x.lastApply()).toEqual({ applied: false, reason: "catalog-refused" });
+    expect(x.commands).toEqual([]);
+    expect(x.outcomes).toEqual([]);
   });
 
   it("refuses an order signed by any key but this share's", async () => {
