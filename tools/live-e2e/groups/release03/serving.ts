@@ -84,7 +84,7 @@ export const serving: Group = {
     };
 
     const ready = await rec.check("setup: an app is served and server-detail tells the policy's fields", async () => {
-      await installWhoami(acct, b, SLUG, { enabled: false });
+      await installWhoami(acct, b, SLUG, { enabled: true });
       await waitServing(app);
       const d = await http(`https://${b.fqdn}/api/screens/server-detail`, { headers: session });
       assert(d.json?.serving?.boxPub && d.json.serving.scopeSha256, `serving ${short(d.json?.serving)}`);
