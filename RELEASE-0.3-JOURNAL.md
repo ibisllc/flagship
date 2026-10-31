@@ -93,7 +93,7 @@ the stores with new graphics, texts and descriptions of the whole range of impro
 website is updated. Record every step in this file's Log as you go (commit + push it each time).
 Also in 0.3 (owner, 2026-10-30): the Rust migration and verifiable runtime distribution, plan section G and Appendix G
 Also in 0.3 (owner, 2026-10-30): phone and box TLS, phone-endpoint routing, box offline grace and malicious-app namespace isolation,
-plan section H and Appendix H (the former PHONE-AND-BOX-TLS-SPEC.md). A proposed design: nothing in it is built or validated yet.
+plan section H and Appendices H and I (the former PHONE-AND-BOX-TLS-SPEC.md and CONTROL-ENDPOINT-IMPLEMENTATION-SPEC.md). A proposed design: nothing in it is built or validated yet.
 (per-service certificates are retired, not built). Not in 0.3 (decided): outbound proxy (later, recommended free BYO-proxy), marketplace/payments,
 custom names/domains, retail, browser extension, other-OS installers, alpine, offline boot unlock /
 own control plane (next release; notes in docs/data-sovereignty.md).
@@ -222,7 +222,7 @@ agreed on 2026-10-30 that per-service certificates are retired (apps are served 
       fuzzing, crash/power-loss, mixed-version and install/update/rollback tests, unsafe/FFI audit, production qualification.
 
 ### H. Phone and box TLS, phone routing, offline grace, namespace isolation (owner direction, 2026-10-30; part of 0.3)
-Requirements are in "Appendix H" below (the former PHONE-AND-BOX-TLS-SPEC.md, removed from the working tree when folded in).
+Requirements are in "Appendix H" and "Appendix I" below (the former PHONE-AND-BOX-TLS-SPEC.md and CONTROL-ENDPOINT-IMPLEMENTATION-SPEC.md, removed from the working tree when folded in).
 It is a PROPOSED design: nothing is implemented, deployed or security-validated. Phone isolation may not be claimed until H1, H2
 and H5 pass their adversarial scenarios through the real harness, issuance service and relay. Verified against the current code
 2026-10-30 (cert finding): a box cert today carries SANs `<server>.<user>`, `*.<server>.<user>`, `*.<user>` with the box's own key,
@@ -238,15 +238,26 @@ which matches the spec's box row; the bare `<user>` name is not issued to anyone
       session, freshness and a short lease; only an authorized admin phone; one holder at a time with relay-issued generations;
       handover on explicit foreground acquisition; old connections stay; fail closed, never fall back to a box; exclusivity across
       relay instances. Decide lease durations, replay protection, acquisition ordering, deadlines and revocation propagation first.
-- [ ] H4 Box offline grace: server-creation choice (one week / one month / indefinitely) enforced by a signed serving/routing lease
-      (account, server key, scope, times, revocation generation), renewed by any eligible admin phone, with certificate-issuance
-      authorization renewed alongside; relay closes long streams by a documented deadline; revocation beats renewal; show the
-      real next expiry and warn before it. Decide the constrained renewal credential (cannot add servers, widen names, change policy
-      or undo revocation; must not bypass the admin-root biometric) and the exact meaning of "one month".
+- [ ] H4 Box offline grace (Appendix I): the owner chooses 7 days, 30 days or indefinitely at server creation; the phone re-signs about
+      daily a permission/app-serving lease (account, box identity and registration generation, policy generation, route and
+      certificate scope, times, unique id; indefinite is an explicit representation) via a narrowly delegated renewal key that
+      cannot add boxes, widen scope, extend past the grace, alter policy or undo revocation, and never bypasses the admin-root
+      biometric. The RELAY enforces expiry: stops admitting app streams, closes them within 5 s, leaves failover sets; the box's
+      exact control name stays routable and certifiable (recovery) until explicit revocation. Boxes renew their own certificates
+      only near expiry; the issuance service refuses early orders and orders without a valid permission. Show the real next expiry
+      and warn before it.
+- [ ] H8 Central status assertion and fail-closed revocation (Appendix I section 3-4): short-lived (<=60 s, refreshed every 20 s,
+      pushed on revoke) signed status per box with a monotonic revision; relays route only with a fresh unrevoked assertion;
+      revocation commits atomically before the admin sees success, terminates the whole tunnel, and is externally observable
+      within 65 s; the existing fail-open revocation list cannot be the only mechanism; per-stream route class and deadline.
+- [ ] H9 Separate control and app certificates (Appendix I section 2, 5-6): control cert exactly the control name, app cert an
+      approved subset of the wildcards, phone cert exactly the bare name; service-owned ACME account, DNS-01 performed centrally,
+      apex CAA `issue`/`issuewild` pinned to the service account with `validationmethods=dns-01` (zero per-account CAA), reserve
+      control names in the route allocator, migrate existing combined certificates and reusable ACME authorizations first.
 - [ ] H5 Malicious-app namespace isolation: app identity and hostnames bound to the trusted installation record, caller derived from
       the harness boundary (not headers or the manifest), no app access to keyd, issuance or relay-claim credentials; host-only
       `__Host-` cookies, exact origin checks, CSRF protection and no sibling CORS for phone-endpoint operations. Pairs with G3/G5.
-- [ ] H6 The eleven acceptance scenarios of Appendix H as gym groups (negative isolation, relay multi-instance, lease expiry with a
+- [ ] H6 The eleven acceptance scenarios of Appendix H and the ten recovery/revocation scenarios and malicious-app tests of Appendix I as gym groups (negative isolation, relay multi-instance, lease expiry with a
       still-valid certificate, renewal policy, sibling-app web attacks), run through the real harness, issuance service and relay.
 - [ ] H7 CA limits: reuse each phone's valid certificate (no issuance per handover); schedule renewals within the issuance limits.
 
@@ -584,7 +595,7 @@ connection merely because this endpoint exists.
 Server creation offers:
 
 > Keep this server reachable without an admin phone for…
-> One week / One month / Indefinitely
+> 7 days / 30 days / Indefinitely (owner, 2026-10-30; supersedes "One week / One month")
 
 This controls how long Flagship remote access continues without renewal from an
 authorized admin phone. It does not power off the server or prevent a modified
@@ -669,7 +680,7 @@ assessment. Phone isolation is blocked on trusted ACME-order control, migration
 of prior authority, independent relay authorization, and the adversarial tests.
 
 Before shipping, decide the routing/connection deadlines, renewal credential
-format, revocation propagation, exact meaning of one month, and certificate
+format, revocation propagation, (settled 2026-10-30: grace is 7 days / 30 days / indefinitely, see Appendix I), and certificate
 renewal scheduling. Account for CA issuance limits: separate phone keys do not
 avoid limits on repeated certificates with the same identifier set. Avoid issuing
 a certificate for every routing handover; reuse each phone's valid certificate.
@@ -681,6 +692,324 @@ describes wildcard authorizations;
 [§8.4](https://www.rfc-editor.org/rfc/rfc8555.html#section-8.4) describes DNS-01
 challenge records. Together they explain why the wildcard and bare user name
 share a challenge location and require order-aware issuance enforcement.
+
+### Appendix I. Revocable box recovery endpoint, relay-enforced app lease, central status: requirements (folded in from CONTROL-ENDPOINT-IMPLEMENTATION-SPEC.md, 2026-10-30)
+
+Owner decisions that shape it (2026-10-30): grace choices are **7 days, 30 days, indefinitely** (the word "month" is not used);
+the phone's routing claim has no fixed expiry and is kept alive by liveness on the already-authenticated tunnel connection (no
+per-beat signatures; about 2 minutes of silence ends routing; the beat carries the revocation sequence number); the dead-man is
+enforced by the relay's lease and by the issuance service refusing orders (the box renews its own certificates only near expiry,
+under the phone-signed permission); certificates keep normal lifetimes (relay enforcement, not certificate expiry, defines the app
+deadline); the box's exact control name stays reachable and certifiable after the app lease lapses, until the owner revokes.
+Proposed numeric deadlines below are defaults for implementation and review. Nothing in this appendix is built.
+
+Status: proposed implementation contract, 2026-10-30. No implementation or
+deployment is implied. This is a standalone spec; existing repository specs
+are not amended. Numeric deadlines below are proposed defaults for implementation
+and review, not claims about current behaviour.
+
+#### 1. Required behaviour
+
+A box retains remote access to its exact control hostname when its phone-renewed
+app-serving lease expires. The owner can explicitly revoke the box at any time;
+that removes all of its Flagship remote access, including recovery access.
+
+The exception is exemption from phone-contact expiry, not exemption from owner
+revocation, registration checks, relay authorization, or certificate policy.
+
+| State | Exact control route | App routes | Control cert issuance | App cert issuance |
+| --- | --- | --- | --- | --- |
+| Registered, not revoked, app lease valid | Allowed | Within lease scope | Allowed | Within grant scope |
+| Registered, not revoked, app lease expired | Allowed | Denied | Allowed | Denied |
+| Explicitly revoked | Denied | Denied | Denied | Denied |
+| Unknown identity or stale central authorization | Denied | Denied | Denied | Denied |
+
+“Allowed” always requires proof of the corresponding device key and all normal
+authentication checks. Recovery requests still require authenticated, authorized
+callers; a public TLS endpoint does not make its management API public.
+
+#### 2. Names and trust boundaries
+
+For account `user` and registered box `server`:
+
+- Control name: exactly `server.user.flagship.services`.
+- Box-local apps: authorized names beneath `server.user.flagship.services`.
+- Canonical apps: authorized names such as `app-author.user.flagship.services`.
+- Phone name: exactly `user.flagship.services`; never available to boxes.
+
+The control exception covers only the exact control name. It never grants
+`*.server.user.flagship.services`, `*.user.flagship.services`, the phone name,
+another box's name, or a custom domain. Reserve registered control names in the
+route allocator so an app alias cannot collide with them.
+
+Use separate control and app certificates, preferably with separate leaf keys:
+
+| Certificate class | Allowed SANs |
+| --- | --- |
+| Box control | Exactly the registered control name |
+| Box apps | Approved subset of `*.server.user.flagship.services` and `*.user.flagship.services`, requiring current app authority |
+| Admin phone | Exactly `user.flagship.services`, requiring current admin-phone authority |
+
+An account wildcard also covers sibling control names. It does not grant their
+routes, and native management clients must continue verifying the intended box's
+independently pinned identity. Ordinary browser Web PKI alone does not distinguish
+two boxes that both possess account-wildcard certificates.
+
+A modified server can serve arbitrary content at its control hostname. The
+relay cannot inspect or restrict HTTP paths inside end-to-end TLS. The product
+promise is removal of app-name routing, not proof that all app execution or
+content delivery has stopped. LAN and unrelated external access are out of scope.
+
+#### 3. Authority records
+
+Implement equivalent typed records using the repository's canonical signing
+conventions. Do not introduce a second account-admin trust root.
+
+#### Box registration
+
+Persist account identity, immutable box identity/public key, exact control name,
+registration generation, and revocation status. Bind all grants and routes to
+the immutable identity and generation, not merely the hostname.
+
+Explicit revocation is terminal for that generation. Re-enrollment requires a
+new owner-authorized generation; old credentials do not revive automatically.
+
+#### Owner app-serving policy
+
+The admin authorizes the box, app routing scope, certificate scope, policy
+generation, and maximum offline grace. UI choices (owner, 2026-10-30) are 7 days, 30 days, or indefinitely. Explain that this governs app access;
+recovery remains available until the box is revoked.
+
+Reducing the grace period or scope advances the policy generation and invalidates
+older broader leases. A delayed signed request cannot roll policy backward.
+
+#### App-serving lease
+
+Fields: version/purpose, account, box identity, registration generation, policy
+generation, route scope, certificate scope, issued-at, expiry, unique lease ID,
+and signature. Indefinite policy uses an explicit representation, not an
+overflow-sized timestamp. It remains subject to revocation and central freshness.
+
+Only an authorized admin or a narrowly delegated renewal key can renew. Renewal
+keys cannot add boxes, broaden scope, extend beyond the selected grace, alter
+policy, or reverse revocation. Bind their use to the current policy generation.
+Do not silently unlock or bypass biometric protection of the admin root.
+
+#### Central status assertion
+
+The control plane provides the relay with an authenticated, short-lived status
+assertion binding box identity, registration/policy generations, revocation
+status, and a monotonically increasing status revision. Maximum lifetime: 60
+seconds. Poll/refresh every 20 seconds and also push invalidations when possible.
+
+This assertion is separate from the phone-renewed app lease. The phone may be
+offline for weeks while the relay continues refreshing an unrevoked box's
+central status. A control-plane outage can therefore interrupt recovery access;
+that is the explicit cost of bounded revocation. Never claim unconditional
+availability and bounded revocation simultaneously during a partition.
+
+#### 4. Relay admission, routing, and termination
+
+Reuse the existing authenticated tunnel and routing-request mechanisms, but
+enforce authorization at route allocation and stream opening, not only HELLO.
+
+For each request, validate the signed binding to the connected device identity,
+registration generation, requested hostname, tunnel session, nonce/freshness,
+and applicable lease. Reject malformed names rather than normalizing ambiguous
+input into an authorized name.
+
+Routing algorithm:
+
+1. Require a fresh, unrevoked central status assertion for this identity.
+2. If the requested name equals its registered control name, authorize a control
+   route without requiring a phone-renewed app lease.
+3. Otherwise require a valid app lease and a trusted installed-app route binding
+   for that exact name. Wildcard certificate possession is not route authority.
+4. Reject the bare phone name for every box, irrespective of certificates.
+5. Reject routes belonging to a different box or account. Do not derive an app
+   route from a control-name exception or fall back to a wildcard on denial.
+
+Track route class, original SNI, identity/generations, and authorization deadline
+on every forwarded stream. Shared tunnels can remain open for control traffic
+after their app routes are removed.
+
+On app lease expiry:
+
+- Stop admitting app streams at the expiry deadline.
+- Remove the box from canonical-app allocations and failover candidate sets.
+- Close its existing app streams within five seconds.
+- Preserve its exact control route and control streams if central status is fresh.
+- Never redirect failed app traffic to the control name or the phone.
+
+On explicit revocation:
+
+- Atomically persist the revocation and advance the status revision before
+  returning a successful response to the admin.
+- Invalidate all routes, allocations, failover memberships, pending claims,
+  and parked requests for that box; terminate its entire tunnel and all streams.
+- Push to every relay instance. A relay that cannot receive the push loses its
+  cached authorization at expiry and must fail closed.
+- Require externally observable disconnection within 65 seconds of committed
+  revocation: at most 60 seconds of cached status plus five seconds of shutdown.
+- Reject reconnection and replay using old credentials or status assertions.
+
+Use monotonic deadlines for cached lifetimes and resist clock rollback. Do not
+extend a status assertion past its original expiry when fetching or forwarding
+it. Freshness checks must never fail open for this decision. If the existing
+revocation-list mechanism fails open on fetch failure, it cannot be the sole
+enforcement mechanism for this contract.
+
+Stream classification is based on TLS SNI, not inspection of encrypted HTTP.
+A malicious peer can tunnel application content over an allowed control
+connection; this is covered by the trust limitation in section 2. Legitimate
+frontends must enforce Host/SNI and route bindings and avoid cross-origin
+connection reuse bypassing the intended access checks.
+
+#### 5. Trusted certificate issuance
+
+The trusted issuance service (“H1” in the discussion) owns the ACME account and
+order lifecycle for control, app, and phone certificates. Devices own leaf keys.
+The control-name exception is a policy in this service, not permission for a box
+to issue independently through its own ACME account.
+
+Request contract: certificate class, device identity, registration generation,
+CSR, applicable authority/grant, request ID, freshness, and device signature.
+Derive permitted names from trusted state rather than accepting a request's SAN
+list as authorization.
+
+For every order:
+
+1. Check current registration and revocation against authoritative state; fail
+   closed when unavailable. Validate app/admin grants where required.
+2. Verify the CSR signature, approved key parameters, and exact allowed SAN set.
+   Reject additional identifiers, IP SANs, unrelated names, and mixed classes.
+3. Create the ACME order under the service-owned account with those exact names.
+4. Obtain and publish only the challenges from that order. Devices cannot submit
+   arbitrary TXT values for account-zone challenges.
+5. Recheck current authorization before challenge completion and finalization.
+   If revocation wins an in-flight race and a certificate is nevertheless issued,
+   enqueue its CA revocation and record the outcome; relay revocation still holds.
+6. Verify the returned chain, SANs, public-key binding, and validity before
+   returning the certificate to the requesting device.
+
+Default to centrally performed DNS-01 for all three classes. The box need not
+answer an ACME challenge through Fly. If a future deployment uses HTTP-01 or
+TLS-ALPN-01 for control certificates, it must update CAA method restrictions
+and preserve the same service-controlled order and authorization checks.
+
+Control-only renewal is allowed when the app lease has expired, but is forbidden
+after explicit revocation. App-certificate validity need not equal app-lease
+validity: relay enforcement defines the app access deadline.
+
+Rate-limit issuance per account/device and retain renewal state. Never create
+a new certificate for each route claim, reconnect, or phone handover.
+
+#### 6. CAA and DNS policy
+
+Keep zero per-account/per-box CAA records. Publish an inherited apex policy for
+both ordinary and wildcard issuance, pinned to the service-owned ACME account:
+
+```text
+flagship.services. CAA 0 issue "letsencrypt.org; accounturi=<service-account-uri>; validationmethods=dns-01"
+flagship.services. CAA 0 issuewild "letsencrypt.org; accounturi=<service-account-uri>; validationmethods=dns-01"
+```
+
+These are templates, not deployable values. Verify actual CA support, the
+production account URI, DNS inheritance, and any more-specific records before
+deployment. Remove permissive alternative CAA entries that would authorize
+issuance through other accounts. Account migration may temporarily authorize
+two service-controlled accounts, never arbitrary box-controlled accounts.
+
+CAA is an issuance backstop, not route authorization or revocation of existing
+certificates. DNS administrators and the trusted issuance service retain Web PKI
+authority; the phone's application-level identity checks remain necessary where
+the threat model includes compromise of those operators.
+
+#### 7. Recovery/control API
+
+The legitimate frontend serves only authenticated recovery/management operations
+at the control hostname. Keep ordinary app routing on app hostnames. Enforce
+current admin authorization for changes; being able to connect is not permission
+to change configuration, renew grants, or restore revoked authority.
+
+Keep native client identity pinning independent of TLS. Browser management uses
+host-only authentication cookies, exact Origin checks, CSRF protection, and
+restricted WebSocket/CORS admission. Do not trust sibling subdomains merely
+because they are same-site.
+
+#### 8. Malicious-app tests
+
+Use the actual harness and isolation boundary, not only mocked handlers. Install
+apps A and B from approved manifests and verify legitimate access to both before
+and after each attack.
+
+- A edits its runtime `flagship.json` to B's name, then restarts. Its trusted
+  installation identity and routes do not change.
+- A forges Host/forwarded headers, caller metadata, routing requests, or namespace
+  advertisements. It receives neither B's traffic nor B's authority.
+- A requests the control route or bare phone route. Both are denied.
+- A attempts access to management credentials, host/keyd sockets, certificate
+  APIs, and relay signing interfaces. Privilege does not cross the app boundary.
+- A attempts cross-origin management actions against the control/phone endpoints.
+  Sensitive operations require the correct caller authorization.
+
+#### 9. Acceptance tests for recovery and revocation
+
+1. Expire a box's app lease while its certificates and tunnel remain valid.
+   Canonical and box-local app routes stop; existing app streams close within
+   five seconds; authenticated control access continues.
+2. After expiry, request an exact control certificate successfully. Requests for
+   either wildcard, extra SANs, another box, or the phone name fail.
+3. Explicitly revoke an active box. Control and app access, including long-lived
+   streams and every relay instance, terminate within 65 seconds. Test both push
+   delivery and dropped pushes/partitioned relays.
+4. Keep a revoked box's valid TLS certificate. Prove it cannot receive a new route
+   or reconnect, and issuance/renewal is refused.
+5. Replay prior status assertions, app leases, claims, and renewal credentials;
+   try a reused hostname with a new key. None restores old authority.
+6. Race revocation against certificate issuance and relay reconnect. No race
+   permits access beyond the revocation deadline. Late-issued certificates enter
+   the CA-revocation queue and are observable.
+7. Disconnect the phone past the grace period while keeping the control plane
+   available. Recovery continues. Separately stop central status refresh; both
+   route classes fail closed when status expires.
+8. Verify policy reductions, indefinite grants, clock rollback, restart, failover,
+   and multi-relay cache expiry obey the same deadlines and generations.
+9. A valid box-wildcard holder attempts bare-user issuance through arbitrary DNS
+   challenges or mixed CSR/order names, then attempts a phone route. Issuance and
+   routing independently reject it.
+10. Verify the effective CAA policy and rejection of issuance from an unapproved
+    ACME account in a controlled test zone. Do not consume production rate limits
+    or temporarily weaken production CAA for testing.
+
+#### 10. Migration and delivery requirements
+
+- Inventory existing certs, ACME accounts/authorizations, DNS-writing endpoints,
+  route caches, and clients before changing authority.
+- Introduce separate control/app certificate storage and hostname selection;
+  handle old combined certificates explicitly during migration.
+- Deploy trusted issuance and verify renewals before enforcing account-pinned
+  CAA. Remove arbitrary device-controlled DNS challenge publication.
+- Address existing certificates and reusable ACME authorizations. Closing an
+  endpoint does not retroactively remove either. Do not advertise the new phone
+  isolation guarantee until residual authority is handled.
+- Deploy route/status enforcement across all relays before exposing the grace
+  setting. Old relays must not remain an authorization bypass.
+- Make revocation, status-refresh failures, active route class, lease expiry,
+  dropped streams, and certificate-revocation failures observable without logging
+  secrets. Show the owner the app-access deadline and revoked/recovery-only state.
+- Obtain targeted security review of issuance, relay revocation races, and app
+  isolation. Do not equate passing unit tests with the end-to-end guarantee.
+
+No existing server is made irrevocable. The final product promise is: app access
+may expire without losing recovery access, but explicit owner revocation removes
+all Flagship relay access within the documented deadline.
+
+#### References
+
+- [RFC 8659: CAA processing and inheritance](https://www.rfc-editor.org/rfc/rfc8659.html)
+- [RFC 8657: ACME account and validation-method binding](https://www.rfc-editor.org/rfc/rfc8657.html)
+- [RFC 8555: ACME](https://www.rfc-editor.org/rfc/rfc8555.html)
 
 ## Log
 
@@ -941,3 +1270,5 @@ share a challenge location and require order-aware issuance enforcement.
 - 2026-10-30 OWNER DECISION (H4, option B): normal certificate lifetimes (no short-lived profile); the box mints for as long as the lease in its phone-authorization allows; the dead-man grace options are therefore set larger than the certificate/renewal window (values to confirm; see below). CODE AUDIT (what exists today, read from `packages/control-plane/src/dns01.ts`, `packages/server-daemon/src/{serverWildcardGrant.ts,acme/letsEncryptIssuer.ts,acme/grantedAccountKey.ts}`): (1) A box's DNS-01 publish for its OWN name (`_acme-challenge.<server>.<user>`) is checked only for the box identity-key signature, freshness (5 min) and "server not revoked": NO phone permission and NO expiry. (2) The user-zone wildcard needs the admin's `server-wildcard-grant/v1`, which is once-per-server with no expiry (`issuedAt` only). (3) Tier-2 service-cert authority (1 h) is being retired. (4) The box holds the ACME account key (sealed grant, or self-generated) and the issuer falls back to TLS-ALPN-01 for NON-wildcard names, which never touches `.com`. So today's `.com` DNS-01 gate is the right chokepoint but is not yet a permission check, and non-wildcard names bypass it. To reuse it for the dead-man: add the phone-signed permission with `notAfter` X to every DNS-01 publish (own name included), check X against `.com`'s clock, and close the ALPN bypass (apex CAA `validationmethods=dns-01` plus `accounturi` pinned to the service-held ACME account, or the issuance service of H1 holding the credentials).
 - 2026-10-30 OWNER DECISION (H4 final shape): dead-man grace options are 30 days, 90 days, indefinite. Design: a box must present the admin-phone-signed permission whenever it wants a certificate, and the dead-man is just a nullable `notAfter` (expiry) field on that permission (null = indefinite); the issuance gate checks signature, revocation record and `notAfter` against its own clock. Requirement that follows: EVERY issuance path must pass the gate (own name, wildcards, no TLS-ALPN-01 side door), enforced by apex CAA (`validationmethods=dns-01`, `accounturi` = the service's ACME account) and/or the H1 issuance service holding the ACME credentials.
 - 2026-10-30 (owner pointed at `/Users/harrywinner/flagship/CONTROL-ENDPOINT-IMPLEMENTATION-SPEC.md`; read in full; NOT yet folded into the plan, file kept): it answers the dead-man/SSL questions. Answers taken from it: (a) the control exception: a registered, unrevoked box keeps its EXACT control name (route + control certificate) after its phone-renewed app-serving lease expires; app routes and app certificates stop; explicit owner revocation removes everything, recovery included. (b) Enforcement is the RELAY's, not certificate lifetime: the relay stops admitting app streams at lease expiry, closes existing app streams within 5 s, removes the box from canonical-app allocation and failover; app-certificate validity need not equal the lease. This removes the short-lived-certificate concern (options A/B) entirely. (c) Revocation: committed revocation advances a status revision; the relay needs a fresh (<=60 s, refreshed every 20 s) central status assertion per box, fails CLOSED, push on revoke; observable disconnect within 65 s; a control-plane outage interrupts recovery (stated cost). The existing revocation list fails open, so it cannot be the sole mechanism. (d) Renewal credential: a narrowly delegated renewal key bound to the policy generation (cannot add boxes, broaden scope, extend past grace, alter policy or undo revocation); indefinite is an explicit representation, not an overflow timestamp; monotonic deadlines. (e) Issuance: the H1 service owns the ACME account and all orders, derives names from trusted state, centrally performs DNS-01 for control, app and phone classes, rechecks authorization before finalization, enqueues CA revocation if a race still issues; separate control and app certificates/keys; apex CAA `issue`/`issuewild` pinned to the service account with `validationmethods=dns-01`, zero per-account CAA (this resolves the CAA-vs-per-user-account conflict). (f) Names: phone name never to boxes; control cert exactly the control name; app cert an approved subset of `*.server.user` and `*.user`; reserve control names in the route allocator. (g) Tests: 10 acceptance scenarios and malicious-app tests in sections 8-9. DIFFERENCE TO RECONCILE: the spec's grace choices are 7 days / 30 days / indefinite; the owner said 30 days / 90 days / indefinite.
+
+- 2026-10-30: folded CONTROL-ENDPOINT-IMPLEMENTATION-SPEC.md into the plan as Appendix I and items H4 (rewritten), H8, H9 (new), H6 (extended); grace is 7 days / 30 days / indefinitely (owner); the spec file was removed. Settled by it: relay-enforced app lease with a surviving exact control name, central status assertion (60 s, fail closed, 65 s revocation), delegated renewal key, service-owned ACME account with DNS-01 and apex CAA pins. Still open for H: whether control-plane outage may interrupt recovery (spec says yes, the stated cost), the owner-facing wording, and numeric defaults (status 60 s/20 s, stream close 5 s, revocation 65 s).
