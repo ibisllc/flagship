@@ -34,3 +34,41 @@ describe("the gateway's owned ports", () => {
     }
   });
 });
+
+describe("a container that started a moment ago", () => {
+  it("is judged by a read of the bridge that began after it called, never by one already in flight", async () => {
+    let t = 1_000;
+    const starts: number[] = [];
+    const gw = new EgressGateway({} as never) as unknown as {
+      now: () => number;
+      refreshing: Promise<void> | null;
+      refreshStartedAt: number;
+      lastRefresh: number;
+      refreshApps(): Promise<void>;
+      refreshAppsSince(since: number): Promise<void>;
+    };
+    gw.now = () => t;
+    let release: () => void = () => {};
+    gw.refreshApps = () => {
+      if (gw.refreshing) return gw.refreshing;
+      gw.refreshStartedAt = t;
+      starts.push(t);
+      gw.refreshing = new Promise<void>((r) => (release = r)).finally(() => {
+        gw.lastRefresh = t;
+        gw.refreshing = null;
+      });
+      return gw.refreshing;
+    };
+    void gw.refreshApps();
+    t = 1_010;
+    const caller = gw.refreshAppsSince(t);
+    t = 1_400;
+    release();
+    // The caller must not settle on the old read: it waits (250 ms apart) and starts a fresh one.
+    for (let i = 0; i < 100 && starts.length < 2; i++) await new Promise((r) => setTimeout(r, 20));
+    release();
+    await caller;
+    expect(starts).toEqual([1_000, 1_400]);
+    expect(gw.refreshStartedAt).toBeGreaterThanOrEqual(1_010);
+  });
+});

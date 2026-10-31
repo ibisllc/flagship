@@ -89,6 +89,8 @@ export class EgressGateway {
   private state: EgressStatus = { enforced: false, reason: "not started" };
   private refreshing: Promise<void> | null = null;
   private lastRefresh = 0;
+  /** When the refresh in flight (or the last one) began reading the bridge. */
+  private refreshStartedAt = 0;
   private readonly deniedAt = new Map<string, number>();
   private readonly live = new Set<{ src: string; host: string; close: () => void }>();
   private readonly owned = new Map<number, { owner: string; target: { host: string; port: number }; handle: ProxyServerHandle }>();
@@ -196,6 +198,7 @@ export class EgressGateway {
   refreshApps(): Promise<void> {
     if (this.refreshing) return this.refreshing;
     this.refreshing = (async () => {
+      this.refreshStartedAt = this.now();
       const spec = EGRESS_NETWORKS.find((n) => n.kind === "apps")!;
       const info = await inspectNetwork(this.opts.cmd, spec.network).catch(() => null);
       if (info) {
@@ -207,6 +210,22 @@ export class EgressGateway {
       this.refreshing = null;
     });
     return this.refreshing;
+  }
+
+  /**
+   * Resolves once a refresh that began at or after `since` has read the bridge. A caller that arrived while an older
+   * refresh was in flight must not take that one's answer: it began before the caller's container had its address (gym
+   * 14: a migration container was refused by its own app's database port on every retry). Refreshes stay one at a time
+   * and at least 250 ms apart, so a flood of unknown sources cannot run `network inspect` back to back.
+   */
+  async refreshAppsSince(since: number): Promise<void> {
+    for (let i = 0; i < 4; i++) {
+      if (this.refreshing) await this.refreshing.catch(() => {});
+      if (this.refreshStartedAt >= since && !this.refreshing) return;
+      const wait = this.lastRefresh + 250 - this.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      if (!this.refreshing && this.refreshStartedAt < since) await this.refreshApps();
+    }
   }
 
   /** The apps bridge's gateway address, when the gateway enforces (owned ports listen there). */
@@ -236,9 +255,9 @@ export class EgressGateway {
     const entry = { owner, target, handle: null as unknown as ProxyServerHandle };
     entry.handle = await startTcpForwarder(gw, port, () => entry.target, (src) => {
       if (this.ownedBy(src) === owner) return true;
-      // A container that started a moment ago is not in the table yet: look once, then decide.
-      if (!this.fromBridge("apps", src) || this.now() - this.lastRefresh <= 250) return false;
-      return this.refreshApps().then(() => this.ownedBy(src) === owner);
+      // A container that started a moment ago is not in the table yet: read the bridge once more, then decide.
+      if (!this.fromBridge("apps", src)) return false;
+      return this.refreshAppsSince(this.now()).then(() => this.ownedBy(src) === owner);
     });
     this.owned.set(port, entry);
     return true;
@@ -320,8 +339,8 @@ export class EgressGateway {
   allowSync(src: string, host: string): boolean | Promise<boolean> {
     const state = this.policyState();
     const s = classifySource(state, src);
-    if (s.kind === "apps" && s.serviceId === null && this.now() - this.lastRefresh > 1000) {
-      return this.refreshApps().then(() => decide(this.policyState(), src, host).allow);
+    if (s.kind === "apps" && s.serviceId === null) {
+      return this.refreshAppsSince(this.now()).then(() => decide(this.policyState(), src, host).allow);
     }
     return decide(state, src, host).allow;
   }
