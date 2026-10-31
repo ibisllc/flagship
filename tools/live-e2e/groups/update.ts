@@ -7,6 +7,7 @@
 // gym's hidden update target (scripts/gym-update-target.sh: the gym tip, signed with the gym key,
 // one sequence later) and orders the move to it; it takes it out of the index again at the end.
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -53,6 +54,21 @@ export const update: Group = {
     const s = { "x-flagship-session": session };
     let current = "";
     let target = "";
+    // The box first moves itself to the gym's current release (first-boot update). Publishing before that is done
+    // would let it first-boot straight onto the target (gym 13, classic pass: B3 was made just before this group).
+    const settled = await rec.check("the box has settled on the gym's current release (its first-boot update is done)", async () => {
+      const release = JSON.parse(readFileSync(`${process.env.GYM_WORKTREE || `${homedir()}/.cache/flagship/gym-worktree`}/release/box-release.json`, "utf8")) as { commit: string };
+      const deadline = Date.now() + 15 * 60_000;
+      let now = "";
+      while (Date.now() < deadline) {
+        const d = await http(`https://${b.fqdn}/api/screens/server-detail`, { headers: s }).catch(() => null);
+        now = String(d?.json?.currentCommit ?? "");
+        if (now === release.commit) return `on ${now.slice(0, 8)}`;
+        await sleep(15_000);
+      }
+      throw new Error(`still on ${now.slice(0, 8) || "?"}, not the gym release ${release.commit.slice(0, 8)}`);
+    });
+    if (!settled) return;
     const published = await rec.check("the gym's update target (a newer release signed with the gym key) is published to the index and catalog", async () => {
       const out = updateTarget("publish");
       await sleep(70_000); // the Worker serves the index and catalog with max-age 60
