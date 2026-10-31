@@ -1165,7 +1165,7 @@ async function main(): Promise<void> {
   // one whose code never gets far enough to run the gate (updateGuard.ts).
   void (
     runsUnprivileged()
-      ? runSetupStep("update-guard")
+      ? setupStepWhenBrokerAnswers("update-guard")
       : installUpdateGuard({
           repoPath: selfUpdateRepoPath,
           dataDir,
@@ -2804,6 +2804,23 @@ const releaseAllowedByCatalog = async (target: string, current: string): Promise
   await releaseCatalogRefreshRef.current();
   return gate.allowsUpdateTo(target, current);
 };
+
+/**
+ * A root step at start, retried while the broker's socket is not there yet: right after an update both restart
+ * and the daemon can come up first (gym 10: the new release's update guard was never installed).
+ */
+async function setupStepWhenBrokerAnswers(step: string, waitMs = 5 * 60_000): Promise<unknown> {
+  const deadline = Date.now() + waitMs;
+  for (let delay = 2_000; ; delay = Math.min(delay * 2, 30_000)) {
+    try {
+      return await runSetupStep(step);
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if ((code !== "ENOENT" && code !== "ECONNREFUSED") || Date.now() + delay > deadline) throw e;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
 
 /** The authenticated clock, bound when the authority layer starts; chat leases read it. */
 const authClockRef: { current: AuthClock | null } = { current: null };
