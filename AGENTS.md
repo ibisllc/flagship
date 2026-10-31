@@ -225,6 +225,14 @@ independent security review (fixes in; the OPEN list in the journal is for the o
 emulator gym for offline control, CI QEMU lane for a burned stick. Still to do: the live release gym twice (D2/D3), store
 screenshots, `TODO-RM` markers, version bump to 0.3, the hardware acceptance run
 (`docs/runbooks/0.3-hardware-acceptance.md`) and the deploy (`docs/runbooks/0.3-deploy-sheet.md`, `scripts/release.sh`).
+**2026-10-30 additions to 0.3 (plan G, H and Appendices G, H, I in the journal):** the Rust migration continues
+(G1 updater, G2 verifiable Node runtime, G3 endpoint table + address pool + reconciler and G5 access journal rules,
+admin orders, invite and share envelopes and entry verification in `rust/crates/flagship-{core,crypto}`, each with
+shared vectors that pass in TypeScript and Rust; G7 the Rust relay is built, `GYM_RELAY=rust` runs the gym on it);
+phone/box TLS, routing claims, the 7-day / 30-day / indefinite serving lease and revocable recovery are designed
+(`docs/architecture-v2/issuance-and-lease-records.md`, journal Appendices H and I) and not built. GPU hardware run:
+bases pinned in `tools/gpu/bases.env` (CUDA 12.4 for Debian 13's driver 550). Never edit `scripts/gym-*.sh`,
+`scripts/lib/*` or `tools/live-e2e` while a gym run is going.
 Known: 0.3 ships classical-only endorsement until the PQ release key ceremony (`docs/runbooks/pq-release-key.md`); the crypto-graph
 strict check stays red until then. Webapp shell is v184.
 
