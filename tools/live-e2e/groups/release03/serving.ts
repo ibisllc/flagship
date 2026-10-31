@@ -40,13 +40,24 @@ export const serving: Group = {
     const session = { "x-flagship-session": await pair(acct, b) };
     const app = `https://${SLUG}.${b.fqdn}/`;
     const control = `https://${b.fqdn}/api/front-page`;
-    const appUp = async () => (await tryHttp(app, { headers: { accept: "text/html" } }, 10_000)).status === 200;
+    // One attempt per probe (the harness's http() retries a failed GET twice, 5 s apart, which made a stop look 20 s late).
+    const appUp = async () => {
+      try {
+        const r = await fetch(app, { headers: { accept: "text/html" }, signal: AbortSignal.timeout(8_000), redirect: "manual" });
+        await r.arrayBuffer().catch(() => {});
+        return r.status === 200;
+      } catch {
+        return false;
+      }
+    };
     const controlUp = async () => (await tryHttp(control, {}, 10_000)).status === 200;
+    /** Polls until the app is (not) served; returns when the first probe that saw it began, measured from the call. */
     const until = async (want: boolean, seconds: number): Promise<number> => {
       const t0 = Date.now();
       while (Date.now() - t0 < seconds * 1000) {
-        if ((await appUp()) === want) return Date.now() - t0;
-        await sleep(2000);
+        const probeStart = Date.now();
+        if ((await appUp()) === want) return probeStart - t0;
+        await sleep(1000);
       }
       throw new Error(`the app was not ${want ? "served" : "stopped"} within ${seconds} s`);
     };
@@ -131,8 +142,9 @@ export const serving: Group = {
       await rec.check("when the last lease ends the app stops within seconds; the control name keeps answering", async () => {
         const end = lastNotAfter;
         await sleep(Math.max(0, end - Date.now() - 20_000));
+        const t0 = Date.now();
         const ms = await until(false, 60);
-        const late = Date.now() - end;
+        const late = t0 + ms - end;
         assert(await controlUp(), "the control name stopped answering");
         assert(late < 15_000, `stopped ${(late / 1000).toFixed(0)} s after the lease ended (the relay should close within 5 s)`);
         return `stopped ${(late / 1000).toFixed(1)} s after the lease ended (waited ${(ms / 1000).toFixed(0)} s)`;
