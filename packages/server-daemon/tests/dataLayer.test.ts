@@ -7,6 +7,9 @@ vi.mock("pg", () => {
     constructor(opts: { connectionString: string }) {
       this.url = opts.connectionString;
     }
+    on(): this {
+      return this;
+    }
     async connect(): Promise<void> {}
     async end(): Promise<void> {}
     async query(sql: string, params?: unknown[]): Promise<{ rows: unknown[]; fields: unknown[] }> {
