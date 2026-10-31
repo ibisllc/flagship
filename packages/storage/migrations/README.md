@@ -50,6 +50,7 @@ Bare `ALTER TABLE ... ADD COLUMN` (apply-once; re-run ⇒ `duplicate column name
 | `0045_recovery_acme_account_key.sql` | `wrapped_acme_account_key_b64` |
 | `0048_daemon_status_signed.sql`    | `report_json`, `signature_hex` |
 | `0086_repo_adapter_attempts_and_complaints.sql` | `repo_adapters.retired_day`, `repo_adapters.retired_reason` (the ALTERs are last; the CREATEs above them re-run cleanly) |
+| `0120_serving_authority.sql`      | `servers.reg_gen` (the ALTER is first; the CREATEs and triggers after it are guarded) |
 
 Apply-once `RENAME COLUMN` (re-run ⇒ `no such column`):
 

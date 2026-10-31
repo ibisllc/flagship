@@ -101,6 +101,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0118",
   // Canary update receipts: counts per release, cohort, profile and day (V02).
   "0119",
+  // The serving authority: servers.reg_gen, policies, delegations, leases, the revocation log and relay acks.
+  "0120",
 ];
 
 export interface SchemaStatusDeps {

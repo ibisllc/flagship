@@ -269,6 +269,7 @@ import { createUpCloudClient, parseUpCloudLabels } from "./upcloud.js";
 import { handleGymTeardown, type GymTeardownBody } from "./gymCloud.js";
 import { loadInferenceSettings } from "./inferenceModelRoutes.js";
 import { protectedAccountsFrom } from "./prodReap.js";
+import { SERVING_ACCOUNT_ROUTES, servingForBox, tryServingRoute, type ServingEnv } from "./servingAuthority.js";
 
 export interface ControlPlaneEnv {
   /**
@@ -297,6 +298,8 @@ export interface ControlPlaneEnv {
   /** Shared bearer secret for the .com↔.services custom-domain
    *  control channel (#87). Also set as a Fly secret on .services. */
   SERVICES_CONTROL_SECRET?: string;
+  /** Worker secret, 64 hex: the Ed25519 seed that signs the serving revocation log (servingAuthority.ts). */
+  SERVING_REVOCATION_SEED?: string;
   /** Base URL of the `.services` control channel (the :8443 TLS-term
    *  host). Needed to push the replace-time DELETE(old fqdn). */
   SERVICES_BASE_URL?: string;
@@ -933,6 +936,7 @@ const ACCOUNT_GONE_ROUTES: { re: RegExp; methods?: readonly string[] }[] = [
   { re: ROUTE_RE.ADMIN_ROOT_ROTATIONS_LIST },
   { re: ROUTE_RE.RE_PAIR_GET, methods: ["GET"] },
   { re: /^\/api\/users\/([^/]+)$/, methods: ["GET"] },
+  ...SERVING_ACCOUNT_ROUTES.map((re) => ({ re })),
 ];
 
 /**
@@ -1023,6 +1027,8 @@ function bootJson(body: unknown, status: number): Response {
  *  stream on a virtual clock). Production passes nothing. */
 export interface ControlPlaneOptions {
   stream?: { now?: () => number; sleep?: (ms: number) => Promise<void> };
+  /** The Worker's `ctx.waitUntil`, for work that may finish after the answer (feed pokes). */
+  waitUntil?: (p: Promise<unknown>) => void;
 }
 
 export async function tryControlPlane(
@@ -1080,6 +1086,17 @@ export async function tryControlPlane(
       }
       break;
     }
+  }
+
+  // The serving authority (docs/architecture-v2/serving-wiring.md §1).
+  if (path.startsWith("/api/accounts/") || path.startsWith("/api/internal/serving") || path === "/api/serving/revocation-key") {
+    // The feed binding is not a string, so it stays off ControlPlaneEnv (some helpers read it as a string map).
+    const serving = await tryServingRoute(request, env as ControlPlaneEnv & ServingEnv, {
+      usernames: storage.usernames,
+      gateRead: (u) => gateAccountRead(storage, env, request, u),
+      ...(options.waitUntil ? { waitUntil: options.waitUntil } : {}),
+    });
+    if (serving) return serving;
   }
 
   // Usage metering (feat/metering) — the relay reports per-account egress
@@ -2925,6 +2942,7 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           serverOrders: storage.serverOrders,
           pqTrust: storage.pqTrust,
+          serving: (server) => servingForBox(requestDb, server),
           doorbell: (server) =>
             buildBoxDoorbell(
               {

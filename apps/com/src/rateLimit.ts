@@ -188,7 +188,12 @@ export type RateLimitEndpoint =
   | "signed-time"
   // Canary update receipts (POST /api/update-receipts, updateReceipts.ts): anonymous by design, so the
   // network is the only axis; a box sends about one per update.
-  | "update-receipt";
+  | "update-receipt"
+  // The serving authority (servingAuthority.ts). Every admin device posts its leases each time Flagship
+  // is opened, one call for all the account's servers; the policy and delegation writes are rare and
+  // admin-signed. Per source and per account (the path names it); each verify is one or two signatures.
+  | "serving-lease"
+  | "serving-signed";
 
 /**
  * Endpoints that refuse when the counter can't be reached: each one gates
@@ -411,6 +416,14 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 6, windowSec: 3600 },
     { axis: "ip", limit: 24, windowSec: 86_400 },
   ],
+  "serving-lease": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "subject", limit: 240, windowSec: 3600 },
+  ],
+  "serving-signed": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "subject", limit: 60, windowSec: 3600 },
+  ],
 };
 
 export interface RateLimitInput {
@@ -608,7 +621,7 @@ export function retryAfterPhrase(sec: number): string {
  */
 /** The server or account a PQ binding or policy write is about (its rate-limit subject). */
 export function bindingSubject(endpoint: RateLimitEndpoint, pathname: string): string | undefined {
-  if (endpoint !== "pq-binding-put" && endpoint !== "assurance-policy-post") return undefined;
+  if (endpoint !== "pq-binding-put" && endpoint !== "assurance-policy-post" && endpoint !== "serving-lease" && endpoint !== "serving-signed") return undefined;
   const m = /^\/api\/(server|accounts)\/([^/]+)\//.exec(pathname);
   return m ? `${m[1]}:${decodeURIComponent(m[2]!).toLowerCase()}` : undefined;
 }
@@ -618,6 +631,8 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "PUT" && /^\/api\/server\/[^/]+\/(?:pq-key-binding|boot-key)$/.test(pathname)) return "pq-binding-put";
   if (m === "PUT" && /^\/api\/accounts\/[^/]+\/pq-key-bindings$/.test(pathname)) return "pq-binding-put";
   if (m === "POST" && /^\/api\/accounts\/[^/]+\/assurance-policy$/.test(pathname)) return "assurance-policy-post";
+  if (m === "POST" && /^\/api\/accounts\/[^/]+\/serving-leases$/.test(pathname)) return "serving-lease";
+  if (m === "POST" && /^\/api\/accounts\/[^/]+\/(?:serving-policy|renewal-delegations)$/.test(pathname)) return "serving-signed";
   if (m === "POST" && pathname === "/api/time") return "signed-time";
   if (m === "POST" && pathname === "/api/update-receipts") return "update-receipt";
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";

@@ -28,6 +28,7 @@ import { pickWebLocale } from "./localeRedirect.js";
 import { GA_WEB_LOCALES } from "./localeTable.generated.js";
 import { securityHeaders } from "./securityHeaders.js";
 import { tryControlPlane, tryBootHost, isAccountGoneResponse } from "./controlPlaneRoutes.js";
+import { mayCommitRevocation, pokeServingFeed, type ServingFeedNamespace } from "./servingAuthority.js";
 import {
   handleAdapterIndex,
   isAdapterIndexPath,
@@ -383,6 +384,9 @@ export interface RouteEnv {
   ADAPTER_COMPLAINT_SALT?: string;
   /** Shared secret gating /api/admin/* (see ControlPlaneEnv). */
   FLAGSHIP_ADMIN_SECRET?: string;
+  /** The serving authority's revocation-log seed and feed (servingAuthority.ts, servingFeed.ts). */
+  SERVING_REVOCATION_SEED?: string;
+  SERVING_FEED?: ServingFeedNamespace;
 }
 
 export interface BuildRelayNamespaceLike {
@@ -944,8 +948,14 @@ async function routeImpl(
   // these are served locally; otherwise fall through to the upstream proxy
   // (e.g. for the dev wrangler-without-d1 case).
   if (url.pathname.startsWith(PROXY_PREFIX) && env.DB) {
-    const cp = await tryControlPlane(buffered, env);
+    const cp = await tryControlPlane(buffered, env, ctx ? { waitUntil: (p) => ctx.waitUntil(p) } : {});
     if (cp) {
+      // A committed revocation is signed and pushed to the relays now, not at the feed's next beat.
+      if (cp.status < 300 && mayCommitRevocation(request.method, url.pathname)) {
+        const kick = pokeServingFeed(env, { type: "flush" });
+        if (ctx) ctx.waitUntil(kick);
+        else await kick;
+      }
       // An account-not-found answer costs the caller what an account/resolve
       // lookup does (docs/account-gone.md).
       if (isAccountGoneResponse(cp)) {

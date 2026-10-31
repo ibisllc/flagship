@@ -92,6 +92,14 @@ crons = ["0 */6 * * *", "*/10 * * * *"]
 name = "RATE_LIMITS"
 class_name = "RateLimitCounter"
 
+# The serving authority (docs/architecture-v2/serving-wiring.md §1): ONE instance every relay keeps a
+# hibernatable WebSocket to; it pushes the signed revocation log and "this box changed" notices.
+# The log is signed with the Worker secret SERVING_REVOCATION_SEED (64 hex, `openssl rand -hex 32`);
+# its public key (GET /api/serving/revocation-key) is set on each relay as FLAGSHIP_SERVING_REVOCATION_PUB.
+[[durable_objects.bindings]]
+name = "SERVING_FEED"
+class_name = "ServingFeed"
+
 # --- D1: the gym's OWN database (never wiped; runs use unique names) ---------------------------
 # PLACEHOLDER database_id — create the real DB once and paste its id here:
 #   cd apps/com && npx wrangler d1 create flagship-state-gym
@@ -131,6 +139,11 @@ renamed_classes = [{ from = "BurnerRelaySession", to = "BuilderRelaySession" }]
 tag = "v4"
 # The rate-limit counters (apps/com/src/rateLimitCounter.ts).
 new_sqlite_classes = ["RateLimitCounter"]
+
+[[migrations]]
+tag = "v5"
+# The serving authority's feed to the relays (apps/com/src/servingFeed.ts).
+new_sqlite_classes = ["ServingFeed"]
 
 [vars]
 # ⭐ THE FLIP (§6.5 / §12-G1): point the apex vars at the `gym.` apex. These are
@@ -216,6 +229,9 @@ UPCLOUD_EXTRA_LABELS = "flagship-env=gym"
 #                                  the gym Fly app (flyctl secrets set -a flagship-services-gym)
 #   DEMO_PUBLIC_SSH_KEY            optional (Hetzner only; HCLOUD_TOKEN is legacy)
 #   DEMO_IRK_KEK                   32-byte hex (openssl rand -hex 32) — deterministic demo IRKs
+#   SERVING_REVOCATION_SEED        32-byte hex (openssl rand -hex 32), the gym's own: signs the serving
+#                                  revocation log; its public key goes on the gym Fly app as
+#                                  FLAGSHIP_SERVING_REVOCATION_PUB
 #   SERVICES_HMAC_KEY             Worker↔Fly shared secret (match the gym Fly app's)
 #   CLOUDFLARE_DNS_API_TOKEN      Zone:DNS:Edit on flagship.services (for the gym `gym.` records)
 #   WEBPUSH_VAPID_PRIVATE_KEY_PEM  test VAPID pair (mint fresh; do NOT reuse prod's)

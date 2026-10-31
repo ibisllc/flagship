@@ -233,6 +233,14 @@ crons = ["0 */6 * * *", "*/10 * * * *"]
 name = "RATE_LIMITS"
 class_name = "RateLimitCounter"
 
+# The serving authority (docs/architecture-v2/serving-wiring.md §1): ONE instance every relay keeps a
+# hibernatable WebSocket to; it pushes the signed revocation log and "this box changed" notices.
+# The log is signed with the Worker secret SERVING_REVOCATION_SEED (64 hex, `openssl rand -hex 32`);
+# its public key (GET /api/serving/revocation-key) is set on each relay as FLAGSHIP_SERVING_REVOCATION_PUB.
+[[durable_objects.bindings]]
+name = "SERVING_FEED"
+class_name = "ServingFeed"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "flagship-state"
@@ -288,6 +296,11 @@ renamed_classes = [{ from = "BurnerRelaySession", to = "BuilderRelaySession" }]
 tag = "v4"
 # The rate-limit counters (apps/com/src/rateLimitCounter.ts).
 new_sqlite_classes = ["RateLimitCounter"]
+
+[[migrations]]
+tag = "v5"
+# The serving authority's feed to the relays (apps/com/src/servingFeed.ts).
+new_sqlite_classes = ["ServingFeed"]
 
 [vars]
 # Name dibs window (docs/naming-recovery-and-name-change.md §7, docs/named-links.md): six months
@@ -463,3 +476,9 @@ UPCLOUD_STORAGE_GB = "30"
 # Never appears in code, logs, or D1. Rotating it invalidates every
 # previously-issued demo IRK — a re-create of every demo user is
 # required after rotation.
+
+# Serving authority (apps/com/src/servingAuthority.ts): the revocation log's
+# Ed25519 seed. Generate once and never rotate casually (every relay pins the
+# public key, FLAGSHIP_SERVING_REVOCATION_PUB on the Fly app):
+#   wrangler secret put SERVING_REVOCATION_SEED   # paste output of `openssl rand -hex 32`
+# Without it the revocation routes answer 503 and the feed pushes nothing.
