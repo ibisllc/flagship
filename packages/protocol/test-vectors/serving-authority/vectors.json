@@ -1,0 +1,760 @@
+{
+  "about": "Serving authority (plan H, docs/architecture-v2/issuance-and-lease-records.md): canonical bytes and signatures of every record, canonical name lists, and relay decisions (revocationEntries are applied in order with revocationKeyPub first). Written by tools/serving-authority-vectors.ts from the TypeScript implementation.",
+  "revocationKeyPub": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+  "records": [
+    {
+      "kind": "serving-policy",
+      "record": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "policyGen": 1,
+        "grace": "7d",
+        "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+        "issuedAt": 1800000000000
+      },
+      "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d",
+      "signerPub": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "canonical": "flagship/serving-policy/v1|alice|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1|7d|1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb|1800000000000"
+    },
+    {
+      "kind": "serving-policy",
+      "record": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "policyGen": 1,
+        "grace": "indefinite",
+        "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+        "issuedAt": 1800000000000
+      },
+      "signature": "080f2cdcef5dd7a4fca446b9b8af9730316425fa258ccfd256032f2eb7f94100ddb2eec1d1e31211dac14a4d8fd104fab6ab50abb7d541ddd17ff52859a47c08",
+      "signerPub": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "canonical": "flagship/serving-policy/v1|alice|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1|indefinite|1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb|1800000000000"
+    },
+    {
+      "kind": "renewal-key-delegation",
+      "record": {
+        "account": "alice",
+        "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+        "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+        "issuedAt": 1800000000000
+      },
+      "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107",
+      "signerPub": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "canonical": "flagship/renewal-key-delegation/v1|alice|ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|1800000000000"
+    },
+    {
+      "kind": "serving-lease",
+      "record": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "policyGen": 1,
+        "leaseId": "abababababababababababababababab",
+        "issuedAt": 1800000000000,
+        "notAfter": 1800604800000
+      },
+      "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+      "signerPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+      "canonical": "flagship/serving-lease/v1|alice|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1|abababababababababababababababab|1800000000000|1800604800000"
+    },
+    {
+      "kind": "revocation-entry",
+      "record": {
+        "sequence": 1,
+        "kind": "box",
+        "account": "alice",
+        "subject": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "generation": 1,
+        "revokedAt": 1800086400000
+      },
+      "signature": "0c76c221b2532228fdcf312060736a137e65858326fa8eef8b5b132c6e8245060a991d6c8e3260c0f7c3f47fcdfe8e595ddd86abaf61fd8c4298d5ec690e5a08",
+      "signerPub": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+      "canonical": "flagship/revocation-entry/v1|1|box|alice|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1800086400000"
+    },
+    {
+      "kind": "revocation-entry",
+      "record": {
+        "sequence": 1,
+        "kind": "renewal-key",
+        "account": "alice",
+        "subject": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+        "generation": 0,
+        "revokedAt": 1800086400000
+      },
+      "signature": "493d339e07eccb96579fcb2836cb847fb9850eaaeb8465ac7288d5e2acc1bc4eef28abcf8955caafb102ce4a60694894f7a61d7daadcc5ff6209920763b18d03",
+      "signerPub": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+      "canonical": "flagship/revocation-entry/v1|1|renewal-key|alice|ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1|0|1800086400000"
+    },
+    {
+      "kind": "certificate-order",
+      "record": {
+        "class": "apps",
+        "device": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "csrSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "requestId": "22222222222222222222222222222222",
+        "issuedAt": 1800000000000
+      },
+      "signature": "bec09b473c4bc6c80623c30ef1c9ae86fcb0b5c450aff66b66ce0df629d5fcba49cfa90480ebbc6a196686099c8b3838319609beb6266974baf5468c804af301",
+      "signerPub": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+      "canonical": "flagship/certificate-order/v1|apps|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1111111111111111111111111111111111111111111111111111111111111111|22222222222222222222222222222222|1800000000000"
+    },
+    {
+      "kind": "route-claim",
+      "record": {
+        "account": "alice",
+        "phoneRoutePub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+        "hostname": "alice.flagship.services",
+        "generation": 3,
+        "sessionNonce": "33333333333333333333333333333333",
+        "issuedAt": 1800000000000
+      },
+      "signature": "a00d786f613cbcb4ed80b38815c0aceb96d8cc0fa5ce31ea7d753d67ed32c7e4904b5eb5edab15093342592e77ed687626f351ad25998e5e0eafc43a24fe2a02",
+      "signerPub": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+      "canonical": "flagship/route-claim/v1|alice|8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17|alice.flagship.services|3|33333333333333333333333333333333|1800000000000"
+    }
+  ],
+  "nameLists": [
+    {
+      "names": [
+        {
+          "class": "control",
+          "name": "home.alice.flagship.services"
+        },
+        {
+          "class": "apps",
+          "name": "*.home.alice.flagship.services"
+        },
+        {
+          "class": "apps",
+          "name": "*.alice.flagship.services"
+        }
+      ],
+      "canonical": "apps *.alice.flagship.services\napps *.home.alice.flagship.services\ncontrol home.alice.flagship.services",
+      "sha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb"
+    },
+    {
+      "names": [
+        {
+          "class": "phone",
+          "name": "alice.flagship.services"
+        },
+        {
+          "class": "control",
+          "name": "home2.alice.gym.flagship.services"
+        },
+        {
+          "class": "apps",
+          "name": "*.home2.alice.gym.flagship.services"
+        },
+        {
+          "class": "apps",
+          "name": "*.alice.gym.flagship.services"
+        }
+      ],
+      "canonical": "apps *.alice.gym.flagship.services\napps *.home2.alice.gym.flagship.services\ncontrol home2.alice.gym.flagship.services\nphone alice.flagship.services",
+      "sha256": "79165dd64ccdf345103e0ecc2027b495edf791a4c90408ecfcef2805e5ef82f1"
+    }
+  ],
+  "decisions": [
+    {
+      "name": "finite grace, delegated lease live",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": true,
+        "until": 1800604800000,
+        "policyGen": 1
+      }
+    },
+    {
+      "name": "indefinite needs no lease",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "indefinite",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "080f2cdcef5dd7a4fca446b9b8af9730316425fa258ccfd256032f2eb7f94100ddb2eec1d1e31211dac14a4d8fd104fab6ab50abb7d541ddd17ff52859a47c08"
+        },
+        "leases": [],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": true,
+        "until": null,
+        "policyGen": 1
+      }
+    },
+    {
+      "name": "lease ended",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800604800000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "lease-expired"
+      }
+    },
+    {
+      "name": "no lease",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+        },
+        "leases": [],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "no-lease"
+      }
+    },
+    {
+      "name": "admin keys differ",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": false,
+        "apps": false,
+        "reason": "admin-keys-differ"
+      }
+    },
+    {
+      "name": "policy signed by another key",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "ea6575a10d14e7d872b78656ad86952695f1c5f400bb49f6eae98e77374866097b7657fabc81bf840458c9dbf5666020a55d4068f7018a2aadf2206f3882930a"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "policy-signature"
+      }
+    },
+    {
+      "name": "lease longer than the grace",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1802592000000
+            },
+            "signature": "3fd48af2494cffc19392f44e262b67facd7fb72e9b54cd140c01ca78b462fc6d8251e772ce8cf85445048a8587d73615a9aa4e9011ec1c5db7b3658f4414e100",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "no-lease"
+      }
+    },
+    {
+      "name": "older policy generation",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 2,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "ae8c6887198b9f36eaa3c57f7b80fdaf59db97721de02b8c65e44ff6881eedefb50594b67df00ddb54477b0aed00e2667dd755405c75e13aa50f892febbffa00"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "no-lease"
+      }
+    },
+    {
+      "name": "undelegated renewal key",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909"
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "no-lease"
+      }
+    },
+    {
+      "name": "delegation signed by another key",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "fc7ba0ad020b18316b380e2423bbdebd80ebd7f792f758bd80a7502c67825469fdf4041a9cfce2915fa579e1084d5cccd6015ff1d4efdbe4636934aa1b5b1b0f"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "no-lease"
+      }
+    },
+    {
+      "name": "box revoked",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [
+          {
+            "entry": {
+              "sequence": 1,
+              "kind": "box",
+              "account": "alice",
+              "subject": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "generation": 1,
+              "revokedAt": 1800086400000
+            },
+            "signature": "0c76c221b2532228fdcf312060736a137e65858326fa8eef8b5b132c6e8245060a991d6c8e3260c0f7c3f47fcdfe8e595ddd86abaf61fd8c4298d5ec690e5a08"
+          }
+        ],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": false,
+        "apps": false,
+        "reason": "revoked"
+      }
+    },
+    {
+      "name": "renewal key revoked",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "7d",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [
+          {
+            "entry": {
+              "sequence": 1,
+              "kind": "renewal-key",
+              "account": "alice",
+              "subject": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+              "generation": 0,
+              "revokedAt": 1800086400000
+            },
+            "signature": "493d339e07eccb96579fcb2836cb847fb9850eaaeb8465ac7288d5e2acc1bc4eef28abcf8955caafb102ce4a60694894f7a61d7daadcc5ff6209920763b18d03"
+          }
+        ],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "no-lease"
+      }
+    }
+  ]
+}

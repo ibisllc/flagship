@@ -236,7 +236,9 @@ describe("app browser (SEC-BROWSER-002)", () => {
   // network's gateway. Whether the app browser is on is the release setting BOX_RELEASE.appBrowser.
   it("AT-EGR-09 the live box tells the browser judge and the pinning proxies its own names and addresses (catches: a guard whose input is never wired)", () => {
     const src = readFileSync(join(ROOT, "packages/server-daemon/src/index.ts"), "utf8");
-    const call = src.slice(src.indexOf("await bootstrapBrowserBundle({"), src.indexOf("await bootstrapBrowserBundle({") + 1200);
+    const at = src.search(/(?:await |= )bootstrapBrowserBundle\(\{/);
+    expect(at).toBeGreaterThan(0);
+    const call = src.slice(at, at + 1200);
     expect(call).toMatch(/protectedHosts\s*:/);
     expect(call).toMatch(/protectedAddresses\s*:/);
     expect(call).toMatch(/portLimited\s*:/);
