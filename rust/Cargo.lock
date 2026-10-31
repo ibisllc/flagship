@@ -1391,6 +1391,7 @@ dependencies = [
 name = "flagship-core"
 version = "0.3.0"
 dependencies = [
+ "flagship-crypto",
  "flagship-runtime",
  "rusqlite",
  "rustix",

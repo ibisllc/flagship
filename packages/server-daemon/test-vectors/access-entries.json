@@ -1,0 +1,539 @@
+{
+  "about": "Verdicts of serviceAccess.applyEntry on a fresh box (tests/accessEntryVectors.test.ts, UPDATE_ACCESS_VECTORS=1); read by rust/crates/flagship-core/tests/access_entry_vectors.rs. 'refused' = failed verification; 'ok' = applied, unchanged, stale or skipped.",
+  "trust": {
+    "installed": [
+      "alice--club"
+    ],
+    "adminSigners": [
+      "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0"
+    ],
+    "createSigners": [
+      {
+        "pub": "0d7550754e0800a5d237eef5826035766b9b3e5a15868a940ab289958788e3b0",
+        "tier": "admin"
+      },
+      {
+        "pub": "2df04125f0015afb47ce853aef8772094ff9498c14cb1b9e12973c2927da0fa6",
+        "tier": "member"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "a mode order signed by the admin root",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "mode",
+        "order": {
+          "serviceRef": "alice--club",
+          "mode": "restricted",
+          "issuedAt": 1699999999500
+        },
+        "signature": "92ef874519a29958e657b9b4053156129035ef66526c9264a2b4db531cb4a7249af61aa070a8bf2be8d626d2186de0a572b8d47dd270c3fca051db35f00af804"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a mode order signed by the owner IRK on an admin-pinned box is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "mode",
+        "order": {
+          "serviceRef": "alice--club",
+          "mode": "restricted",
+          "issuedAt": 1699999999500
+        },
+        "signature": "b4e3a37f488b50c4c803a486b729f18ee44bfa01bddf02fcfb483936e8572c26b987bb34eb488b34f08ff8bcc1e4b5d109236919875b07b79e51584fd3eef70e"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a mode order signed by a member device is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "mode",
+        "order": {
+          "serviceRef": "alice--club",
+          "mode": "restricted",
+          "issuedAt": 1699999999500
+        },
+        "signature": "b7f0ab726aa4d77cd66ad958a201d8309a73140d56ca8496be6f611de634f4a9a91e2bc130ded0f3772836d42c1e52c3ef45b5db6f5b483b0bf6c3f29ce4a409"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a mode order signed by a stranger is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "mode",
+        "order": {
+          "serviceRef": "alice--club",
+          "mode": "restricted",
+          "issuedAt": 1699999999500
+        },
+        "signature": "248c99c8f62af5bbf9007a31b164ddaeeea0d8889b9e59ac15b71de7856608dfa3a2db5e0ce6483a57807a0c3b7de2730e523c96f3cfce570f23812d2cef1b02"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a mode order for another app is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "mode",
+        "order": {
+          "serviceRef": "alice--other",
+          "mode": "restricted",
+          "issuedAt": 1699999999500
+        },
+        "signature": "92ef874519a29958e657b9b4053156129035ef66526c9264a2b4db531cb4a7249af61aa070a8bf2be8d626d2186de0a572b8d47dd270c3fca051db35f00af804"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a mode order whose time changed after signing is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "mode",
+        "order": {
+          "serviceRef": "alice--club",
+          "mode": "restricted",
+          "issuedAt": 1699999999501
+        },
+        "signature": "92ef874519a29958e657b9b4053156129035ef66526c9264a2b4db531cb4a7249af61aa070a8bf2be8d626d2186de0a572b8d47dd270c3fca051db35f00af804"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a mode order handed over for an app that is not installed here is refused",
+      "serviceRef": "alice--other",
+      "entry": {
+        "kind": "mode",
+        "order": {
+          "serviceRef": "alice--other",
+          "mode": "restricted",
+          "issuedAt": 1699999999500
+        },
+        "signature": "92ef874519a29958e657b9b4053156129035ef66526c9264a2b4db531cb4a7249af61aa070a8bf2be8d626d2186de0a572b8d47dd270c3fca051db35f00af804"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a removal signed by the admin root",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "remove",
+        "order": {
+          "serviceRef": "alice--club",
+          "aid": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+          "issuedAt": 1699999999700
+        },
+        "signature": "2ac9ffc5a08dbbb078507b42868ffaa1d690019d746e075a7ede2c642892234e25176d5f341d3acee82c754d0353772c61cb9b5430046a995f171a192a9f9f0a"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a removal signed by a stranger is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "remove",
+        "order": {
+          "serviceRef": "alice--club",
+          "aid": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+          "issuedAt": 1699999999700
+        },
+        "signature": "70ff9c3deeea41b977a94399ade199987dde22877db864ba9a6b480ad844d5e012d4d220429cffa1b44c4564c43fc11708673dab5fdab472801df8e4c074e50c"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a join through an admin-signed create",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "join",
+        "create": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "authorAID": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+          "serviceRef": "alice--club",
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+          "issuedAt": 1699999999000
+        },
+        "createSig": "3153050051732498290424a8043a98688dd2d10dc647627d1df3a23d2f81c0f3b1db5ecccef864af85e515ff372f582eb0132a47380528d21555d7ec5997b60b",
+        "redeem": {
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "visitorAID": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+          "redeemedAt": 1699999999600,
+          "aidSig": "e44fce72d600eea8f2f10266727c539dab4ca2d2af9ebb0918f4655a9efacb1ef577d369306dc05435e356eb9b44ea85deed1361bc5ac5da4f6f8a5a70a9250f"
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a join through a create signed by a stranger is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "join",
+        "create": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "authorAID": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+          "serviceRef": "alice--club",
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+          "issuedAt": 1699999999000
+        },
+        "createSig": "1894364d103062cfcffcd65a1fcb4374b9a1db1575893f4b83421e1aa5607c57e087bf4735026b73b1ca413653b8d047a40454dbf151219ce31a3285293fca0c",
+        "redeem": {
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "visitorAID": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+          "redeemedAt": 1699999999600,
+          "aidSig": "e44fce72d600eea8f2f10266727c539dab4ca2d2af9ebb0918f4655a9efacb1ef577d369306dc05435e356eb9b44ea85deed1361bc5ac5da4f6f8a5a70a9250f"
+        }
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a join whose redeem was signed by another key is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "join",
+        "create": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "authorAID": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+          "serviceRef": "alice--club",
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+          "issuedAt": 1699999999000
+        },
+        "createSig": "3153050051732498290424a8043a98688dd2d10dc647627d1df3a23d2f81c0f3b1db5ecccef864af85e515ff372f582eb0132a47380528d21555d7ec5997b60b",
+        "redeem": {
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "visitorAID": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+          "redeemedAt": 1699999999600,
+          "aidSig": "79697846acd7ef112cb9e3e48698a2c7bea6a51016db796441645634421674811ab8b2df71d5400092f83ca88b5782715bf4de300372725e52e5897352d5be0d"
+        }
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a join whose redeem names another secret than the create is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "join",
+        "create": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "authorAID": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+          "serviceRef": "alice--club",
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+          "issuedAt": 1699999999000
+        },
+        "createSig": "3153050051732498290424a8043a98688dd2d10dc647627d1df3a23d2f81c0f3b1db5ecccef864af85e515ff372f582eb0132a47380528d21555d7ec5997b60b",
+        "redeem": {
+          "secretHash": "7777777777777777777777777777777777777777777777777777777777777777",
+          "visitorAID": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+          "redeemedAt": 1699999999600,
+          "aidSig": "483d14703364f92602a9f9a315ec5f1d3242fe1d02d4643cee24bde741a9d84efa0a60cab979c161b3cd6fd332a8d1eab41814c7fb256365a5786ac4919e1807"
+        }
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a join through a create for another app is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "join",
+        "create": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "authorAID": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+          "serviceRef": "alice--other",
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+          "issuedAt": 1699999999000
+        },
+        "createSig": "1c9281e94526e0e39cd00152a0b98991c7779628a08f06d6f4f5536d77f6587eee55ead2f722848f2da55973c3fddac1f8fa883438d7f534827d0c23b992050c",
+        "redeem": {
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "visitorAID": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+          "redeemedAt": 1699999999600,
+          "aidSig": "e44fce72d600eea8f2f10266727c539dab4ca2d2af9ebb0918f4655a9efacb1ef577d369306dc05435e356eb9b44ea85deed1361bc5ac5da4f6f8a5a70a9250f"
+        }
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a join through a create signed by a member device",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "join",
+        "create": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "authorAID": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+          "serviceRef": "alice--club",
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+          "issuedAt": 1699999999000
+        },
+        "createSig": "f45459008fed3ebc8012c0ffd144f5f06d830c51cb09797743bf01211dedb017bea6f0c81a1940d77db8592438d05c3399602807d3b8f3defcdda7c3caa77705",
+        "redeem": {
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "visitorAID": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+          "redeemedAt": 1699999999600,
+          "aidSig": "e44fce72d600eea8f2f10266727c539dab4ca2d2af9ebb0918f4655a9efacb1ef577d369306dc05435e356eb9b44ea85deed1361bc5ac5da4f6f8a5a70a9250f"
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "an accept through an admin-signed create",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "accept",
+        "create": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "authorAID": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+          "serviceRef": "alice--club",
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+          "issuedAt": 1699999999000
+        },
+        "createSig": "3153050051732498290424a8043a98688dd2d10dc647627d1df3a23d2f81c0f3b1db5ecccef864af85e515ff372f582eb0132a47380528d21555d7ec5997b60b",
+        "accept": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "serviceRef": "alice--club",
+          "contactAID": "a3a3a0ddcbf14ef7996744c0f41eff577be041701e5e6dcd5a815a7d0d2e691e",
+          "acceptedAt": 1699999999800
+        },
+        "acceptSig": "91254b43fade2d896f0aafa06a37f070075b6b6693c6df4ae5663eea3e3bc6c8c9f215e651b9bb6e469591c18070a537d6968d0c3628504430631e42469b6808"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "an accept signed by another key than the contact is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "accept",
+        "create": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "authorAID": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+          "serviceRef": "alice--club",
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+          "issuedAt": 1699999999000
+        },
+        "createSig": "3153050051732498290424a8043a98688dd2d10dc647627d1df3a23d2f81c0f3b1db5ecccef864af85e515ff372f582eb0132a47380528d21555d7ec5997b60b",
+        "accept": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "serviceRef": "alice--club",
+          "contactAID": "a3a3a0ddcbf14ef7996744c0f41eff577be041701e5e6dcd5a815a7d0d2e691e",
+          "acceptedAt": 1699999999800
+        },
+        "acceptSig": "b958ffd310813ec73c352f710dcab8cb4201ef403f5235aa79a49730a6f16b41604d7a26e95b0dc4a5ee502bc71e3fe45bde297a50a02f3c46e79fffc95b3e05"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "an accept for another invite than the create's is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "accept",
+        "create": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "authorAID": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+          "serviceRef": "alice--club",
+          "secretHash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "encryptedBundle": "abababababababababababababababababababababababababababababababababababababababab",
+          "issuedAt": 1699999999000
+        },
+        "createSig": "3153050051732498290424a8043a98688dd2d10dc647627d1df3a23d2f81c0f3b1db5ecccef864af85e515ff372f582eb0132a47380528d21555d7ec5997b60b",
+        "accept": {
+          "inviteId": "9999999999999999999999999999999999999999999999999999999999999999",
+          "serviceRef": "alice--club",
+          "contactAID": "a3a3a0ddcbf14ef7996744c0f41eff577be041701e5e6dcd5a815a7d0d2e691e",
+          "acceptedAt": 1699999999800
+        },
+        "acceptSig": "2e3de2c9e3074255f2d0cadf9581fe1caea4de78095480183aaf1d0b91d6bbcd54baed636060f8505df72ca9b6db0c07ed97272b027087eb9d83caf8e2272703"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a withdraw signed by the admin root",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "withdraw",
+        "revoke": {
+          "inviteId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "issuedAt": 1699999999900
+        },
+        "signature": "dd1c82801f94ca196d7711ad140f5d59564f20ef21b1deab40971461c28112798819b7ffa0744e7b9e8effdd516fa2925d358b32edb91dcd8a826f3840382604"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a share grant signed by the admin root",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "serverDomain": "home.alice.flagship.services",
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "memberPubHex": "93db9f2ee0f7e39e942fb59441190bf20b9c43cfcc8a051a152499cf392b7a37",
+          "level": "manage",
+          "unlockAtBoot": false,
+          "seeAppData": false,
+          "label": "Sam",
+          "issuedAt": 1699999999100
+        },
+        "signature": "b9d41a122b39a540204df63a9e900253fbf842722f6609980d908d36c706010c4bf1db37dd8fea7f2c24382091f29e991a680d1412427f0c23e64895175ddd02"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a share grant signed by a stranger is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "serverDomain": "home.alice.flagship.services",
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "memberPubHex": "93db9f2ee0f7e39e942fb59441190bf20b9c43cfcc8a051a152499cf392b7a37",
+          "level": "manage",
+          "unlockAtBoot": false,
+          "seeAppData": false,
+          "label": "Sam",
+          "issuedAt": 1699999999100
+        },
+        "signature": "52f10021e02842ef2c734a19ac6b6d267beda8cdc92e2318537ded5055826737a468fc4e542dca48035270420940ebe5f2a364ad3392810cff36e63baca61107"
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a share grant ended by the member's own leave",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "serverDomain": "home.alice.flagship.services",
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "memberPubHex": "93db9f2ee0f7e39e942fb59441190bf20b9c43cfcc8a051a152499cf392b7a37",
+          "level": "manage",
+          "unlockAtBoot": false,
+          "seeAppData": false,
+          "label": "Sam",
+          "issuedAt": 1699999999100
+        },
+        "signature": "b9d41a122b39a540204df63a9e900253fbf842722f6609980d908d36c706010c4bf1db37dd8fea7f2c24382091f29e991a680d1412427f0c23e64895175ddd02",
+        "end": {
+          "kind": "leave",
+          "leave": {
+            "serverDomain": "home.alice.flagship.services",
+            "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+            "memberPubHex": "93db9f2ee0f7e39e942fb59441190bf20b9c43cfcc8a051a152499cf392b7a37",
+            "issuedAt": 1699999999200
+          },
+          "signature": "6b069ee695b9734efcb393cbe233d1f5c3098dcb0afa2a0e83ea51eb726ce1ef9ce2b5120bc57d74851f945137769067ca6b6f242dea2ff3d2a0f5aa94e8390c"
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a share grant ended by a leave signed by someone else is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "serverDomain": "home.alice.flagship.services",
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "memberPubHex": "93db9f2ee0f7e39e942fb59441190bf20b9c43cfcc8a051a152499cf392b7a37",
+          "level": "manage",
+          "unlockAtBoot": false,
+          "seeAppData": false,
+          "label": "Sam",
+          "issuedAt": 1699999999100
+        },
+        "signature": "b9d41a122b39a540204df63a9e900253fbf842722f6609980d908d36c706010c4bf1db37dd8fea7f2c24382091f29e991a680d1412427f0c23e64895175ddd02",
+        "end": {
+          "kind": "leave",
+          "leave": {
+            "serverDomain": "home.alice.flagship.services",
+            "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+            "memberPubHex": "93db9f2ee0f7e39e942fb59441190bf20b9c43cfcc8a051a152499cf392b7a37",
+            "issuedAt": 1699999999200
+          },
+          "signature": "55754dd3d452eac6b5b6beb80346b5f4534990a357b12ab5e16e1ee5e5aa485f77e1134ec02ea47778a1cd503eda514d859e708fbf3bd7acc0da165b1abe1f0b"
+        }
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a share grant ended by the admin's revoke",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "serverDomain": "home.alice.flagship.services",
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "memberPubHex": "93db9f2ee0f7e39e942fb59441190bf20b9c43cfcc8a051a152499cf392b7a37",
+          "level": "manage",
+          "unlockAtBoot": false,
+          "seeAppData": false,
+          "label": "Sam",
+          "issuedAt": 1699999999100
+        },
+        "signature": "b9d41a122b39a540204df63a9e900253fbf842722f6609980d908d36c706010c4bf1db37dd8fea7f2c24382091f29e991a680d1412427f0c23e64895175ddd02",
+        "end": {
+          "kind": "revoke",
+          "revoke": {
+            "serverDomain": "home.alice.flagship.services",
+            "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+            "issuedAt": 1699999999200
+          },
+          "signature": "ec120948934dd7996b097833cae79a245c2dcc8f9820d5dce4fcd7b760d8d19cd63e8c2c656209698f35f557ec588463aec42a0ca28c4510fcd25f42a5a00a06"
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a share grant ended by a stranger's revoke is refused",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "serverDomain": "home.alice.flagship.services",
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "memberPubHex": "93db9f2ee0f7e39e942fb59441190bf20b9c43cfcc8a051a152499cf392b7a37",
+          "level": "manage",
+          "unlockAtBoot": false,
+          "seeAppData": false,
+          "label": "Sam",
+          "issuedAt": 1699999999100
+        },
+        "signature": "b9d41a122b39a540204df63a9e900253fbf842722f6609980d908d36c706010c4bf1db37dd8fea7f2c24382091f29e991a680d1412427f0c23e64895175ddd02",
+        "end": {
+          "kind": "revoke",
+          "revoke": {
+            "serverDomain": "home.alice.flagship.services",
+            "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+            "issuedAt": 1699999999200
+          },
+          "signature": "225f3e18d49d1a472b8844d534585febcc80269a4d44d8c51f75fd0f49657c3146befe3b2659beb19f79f14907b51d00d7a4b1e263f4688a518abd10a28b6b0c"
+        }
+      },
+      "expect": "refused"
+    },
+    {
+      "name": "a rank entry is left to the rank applier",
+      "serviceRef": "alice--club",
+      "entry": {
+        "kind": "rank",
+        "order": {
+          "serviceRef": "alice--club",
+          "target": "device:2df04125f0015afb47ce853aef8772094ff9498c14cb1b9e12973c2927da0fa6",
+          "rank": "manager",
+          "issuedAt": 1699999999950
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": "ok"
+    }
+  ]
+}
