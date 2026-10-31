@@ -55,7 +55,21 @@ print(json.dumps({"server": {
 }}))
 PY
 )
-  UUID=$(vm_api -X POST -d "$body" "$VM_API/server" | python3 -c 'import sys,json;print(json.load(sys.stdin)["server"]["uuid"])')
+  UUID=$(vm_api -X POST -d "$body" "$VM_API/server" | python3 -c 'import sys,json;print(json.load(sys.stdin)["server"]["uuid"])' 2>/dev/null) || UUID=""
+  if [ -z "$UUID" ]; then
+    # The create call can time out after UpCloud made the server (it leaked an 8-core VM once): find it by its unique
+    # hostname so vm_down deletes it whatever happens next.
+    say "the create call gave no answer; looking for $name"
+    for _ in $(seq 1 18); do
+      UUID=$(vm_api "$VM_API/server" 2>/dev/null | python3 -c 'import sys,json
+n=sys.argv[1]
+print(next((s["uuid"] for s in json.load(sys.stdin)["servers"]["server"] if s.get("hostname")==n or s.get("title")==n),""))' "$name" 2>/dev/null) || UUID=""
+      [ -n "$UUID" ] && break
+      sleep 10
+    done
+    [ -n "$UUID" ] || { echo "the VM was not created"; return 1; }
+    say "found it: $UUID"
+  fi
   for _ in $(seq 1 90); do
     # A poll right after creation can come back empty or half-formed (the API is eventually consistent): that is "not
     # yet", not a failure.

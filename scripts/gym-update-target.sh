@@ -90,6 +90,14 @@ fetch update-target.json "$OUT/target.json" || die "no update-target.json: run g
 fetch releases.json "$OUT/index.json" || echo '{"releases":[]}' > "$OUT/index.json"
 COMMIT="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).commit)' "$OUT/target.json")"
 
+if [ "$MODE" = "publish" ]; then
+  # Only a target built from the release the gym's boxes install now is newer than it; an older run's would be a move
+  # back, which the catalog refuses (gym 12: the refresh's build failed and the previous target was published).
+  FROM_NOW="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).commit)' "$WT/release/box-release.json")"
+  FROM_T="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).from)' "$OUT/target.json")"
+  [ "$FROM_T" = "$FROM_NOW" ] || die "the update target ${COMMIT:0:12} was built from ${FROM_T:0:12}, not from this release ${FROM_NOW:0:12}: the refresh built no target this time"
+fi
+
 if [ "$MODE" = "unpublish" ]; then
   node -e 'const fs=require("node:fs");const [i,c]=process.argv.slice(1);const j=JSON.parse(fs.readFileSync(i,"utf8"));j.releases=(j.releases||[]).filter(e=>e.commit!==c);fs.writeFileSync(i,JSON.stringify(j,null,2)+"\n")' "$OUT/index.json" "$COMMIT"
   put "$OUT/index.json" releases.json
