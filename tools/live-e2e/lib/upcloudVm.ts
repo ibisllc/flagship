@@ -87,7 +87,7 @@ export async function createDebianVm(o: { dir: string; title: string; zone?: str
   const templates = await up("GET", "/storage/template");
   const tpl = (templates.json?.storages?.storage ?? []).find((s: { title: string }) => /Debian GNU\/Linux 13/i.test(s.title));
   if (!tpl) throw new Error("no Debian 13 template on UpCloud");
-  const r = await up("POST", "/server", {
+  const create = () => up("POST", "/server", {
     server: {
       zone: o.zone ?? "de-fra1",
       title: o.title,
@@ -100,6 +100,13 @@ export async function createDebianVm(o: { dir: string; title: string; zone?: str
       networking: { interfaces: { interface: [{ type: "public", ip_addresses: { ip_address: [{ family: "IPv4" }] } }] } },
     },
   });
+  // The account has a fixed core quota that boxes and other VMs share: wait for room (up to half an hour) rather than fail.
+  let r = await create();
+  for (const deadline = Date.now() + 30 * 60_000; r.status === 403 && r.json?.error?.error_code === "SERVER_CORE_LIMIT_REACHED" && Date.now() < deadline; ) {
+    o.log("UpCloud core quota is full; waiting for room");
+    await sleep(30_000);
+    r = await create();
+  }
   if (r.status !== 202) throw new Error(`UpCloud create ${r.status}: ${JSON.stringify(r.json).slice(0, 200)}`);
   const uuid: string = r.json.server.uuid;
   const ip: string = (r.json.server.ip_addresses?.ip_address ?? []).find((a: { access: string; family: string }) => a.access === "public" && a.family === "IPv4")?.address;

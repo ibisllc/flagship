@@ -265,7 +265,7 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
     rckPubKey: rck.publicKey,
   };
   const blobSignature = signInstallBlob(blob, irk);
-  const r = await postJson(
+  const provision = () => postJson(
     `https://${CONTROL}/api/gym/provision`,
     {
       installBlob: { ...JSON.parse(installBlobJsonShortString(blob, blobSignature)), ...(opts.blobExtras ?? {}) },
@@ -281,6 +281,13 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
     adminHeaders(),
     120_000,
   );
+  // UpCloud's account holds a fixed core quota; another group's VMs or boxes may be using it right now, so a
+  // refusal for cores waits for room (up to half an hour) instead of failing the group.
+  let r = await provision();
+  for (const deadline = Date.now() + 30 * 60_000; r.status === 502 && /SERVER_CORE_LIMIT_REACHED/.test(r.text) && Date.now() < deadline; ) {
+    await sleep(30_000);
+    r = await provision();
+  }
   assert(r.status === 200, `gym provision ${r.status}: ${short(r.text, 300)}`);
   const box: Box = { account: acct.username, serverName, fqdn: serverDomain, serverId: r.json.serverId, via: "gym-provision", online: false, serial: authCode.serial, ipv4: r.json.ipv4 ?? null };
   acct.boxes.push(box);

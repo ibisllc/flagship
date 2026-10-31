@@ -39,7 +39,7 @@ vm_down() {
 
 vm_up() { # vm_up <name> <label value>
   local name="$1" label="$2" body state s
-  trap vm_down EXIT
+  trap vm_down EXIT INT TERM HUP
   ssh-keygen -q -t ed25519 -N "" -f "$VM_WORK/key"
   say "creating $name ($VM_PLAN, $VM_ZONE)"
   body=$(python3 - "$name" "$VM_ZONE" "$VM_PLAN" "$VM_TEMPLATE" "$(cat "$VM_WORK/key.pub")" "$label" <<'PY'
