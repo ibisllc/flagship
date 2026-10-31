@@ -13,6 +13,7 @@ mod rng;
 pub mod seal;
 pub mod server_share;
 pub mod service_invite;
+pub mod serving;
 pub mod session;
 pub mod sig;
 pub mod trust;
