@@ -246,10 +246,12 @@ which matches the spec's box row; the bare `<user>` name is not issued to anyone
       exact control name stays routable and certifiable (recovery) until explicit revocation. Boxes renew their own certificates
       only near expiry; the issuance service refuses early orders and orders without a valid permission. Show the real next expiry
       and warn before it.
-- [ ] H8 Central status assertion and fail-closed revocation (Appendix I section 3-4): short-lived (<=60 s, refreshed every 20 s,
-      pushed on revoke) signed status per box with a monotonic revision; relays route only with a fresh unrevoked assertion;
-      revocation commits atomically before the admin sees success, terminates the whole tunnel, and is externally observable
-      within 65 s; the existing fail-open revocation list cannot be the only mechanism; per-stream route class and deadline.
+- [ ] H8 Pushed revocation (owner 2026-10-31; replaces the per-box status assertion of Appendix I sections 3-4):
+      tunnels are admitted only for registered, unrevoked boxes; `.com` keeps an append-only signed revocation log
+      with a monotonic sequence and pushes each entry to every relay instance (one long-lived connection per relay);
+      the relay ends that box's tunnel at once; gap or reconnect = fetch "since N" before admitting; one heartbeat per
+      relay a minute; the admin sees "confirmed by every relay"; no contact for ~1 min = no new tunnels, established
+      ones dropped after a 10 min grace. Formats: docs/architecture-v2/issuance-and-lease-records.md.
 - [ ] H9 Separate control and app certificates (Appendix I section 2, 5-6): control cert exactly the control name, app cert an
       approved subset of the wildcards, phone cert exactly the bare name; service-owned ACME account, DNS-01 performed centrally,
       apex CAA `issue`/`issuewild` pinned to the service account with `validationmethods=dns-01` (zero per-account CAA), reserve
