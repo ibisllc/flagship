@@ -1,0 +1,219 @@
+{
+  "about": "Shared verdicts for the endpoint table, the address pool and the container match, run by packages/server-daemon/tests/endpointVectors.test.ts (TypeScript) and rust/crates/flagship-core/tests/endpoint_vectors.rs (Rust). Steps run in order; a step with `now` sets the pool's clock first.",
+  "pool": [
+    {
+      "name": "owners get the first free addresses, skipping the network, the gateway and reserved ones",
+      "subnet": "10.89.2.0/24",
+      "reserved": ["10.89.2.3"],
+      "quarantineMs": 1000,
+      "steps": [
+        { "op": "assign", "now": 0, "owner": "a", "expect": "10.89.2.2" },
+        { "op": "assign", "now": 0, "owner": "b", "expect": "10.89.2.4" },
+        { "op": "assign", "now": 0, "owner": "a", "expect": "10.89.2.2" },
+        { "op": "ownerOf", "ip": "10.89.2.4", "expect": "b" },
+        { "op": "addressOf", "owner": "b", "expect": "10.89.2.4" },
+        { "op": "addressOf", "owner": "c", "expect": null }
+      ]
+    },
+    {
+      "name": "a released address is quarantined, then reusable",
+      "subnet": "10.89.2.0/24",
+      "reserved": [],
+      "quarantineMs": 1000,
+      "steps": [
+        { "op": "assign", "now": 0, "owner": "a", "expect": "10.89.2.2" },
+        { "op": "release", "now": 10, "owner": "a" },
+        { "op": "assign", "now": 500, "owner": "b", "expect": "10.89.2.3" },
+        { "op": "assign", "now": 1010, "owner": "c", "expect": "10.89.2.2" },
+        { "op": "addressOf", "owner": "a", "expect": null }
+      ]
+    },
+    {
+      "name": "releasing by prefix frees a service and all of its components",
+      "subnet": "10.89.2.0/24",
+      "reserved": [],
+      "quarantineMs": 1000,
+      "steps": [
+        { "op": "assign", "now": 0, "owner": "svc1/main", "expect": "10.89.2.2" },
+        { "op": "assign", "now": 0, "owner": "svc1/db", "expect": "10.89.2.3" },
+        { "op": "assign", "now": 0, "owner": "svc2/main", "expect": "10.89.2.4" },
+        { "op": "releasePrefix", "now": 5, "prefix": "svc1/" },
+        { "op": "addressOf", "owner": "svc1/main", "expect": null },
+        { "op": "addressOf", "owner": "svc1/db", "expect": null },
+        { "op": "addressOf", "owner": "svc2/main", "expect": "10.89.2.4" },
+        { "op": "assign", "now": 6, "owner": "d", "expect": "10.89.2.5" }
+      ]
+    },
+    {
+      "name": "an address a container already holds is occupied, adopted for its owner, or vacated",
+      "subnet": "10.89.2.0/24",
+      "reserved": [],
+      "quarantineMs": 1000,
+      "steps": [
+        { "op": "occupy", "ip": "10.89.2.2", "tag": "left-over" },
+        { "op": "ownerOf", "ip": "10.89.2.2", "expect": "engine:left-over" },
+        { "op": "assign", "now": 0, "owner": "a", "expect": "10.89.2.3" },
+        { "op": "adopt", "owner": "b", "ip": "10.89.2.9" },
+        { "op": "addressOf", "owner": "b", "expect": "10.89.2.9" },
+        { "op": "adopt", "owner": "c", "ip": "10.89.2.9" },
+        { "op": "addressOf", "owner": "c", "expect": null },
+        { "op": "ownerOf", "ip": "10.89.2.9", "expect": "b" },
+        { "op": "vacate", "ip": "10.89.2.9" },
+        { "op": "ownerOf", "ip": "10.89.2.9", "expect": "b" },
+        { "op": "vacate", "ip": "10.89.2.2" },
+        { "op": "ownerOf", "ip": "10.89.2.2", "expect": null },
+        { "op": "assign", "now": 0, "owner": "d", "expect": "10.89.2.2" }
+      ]
+    },
+    {
+      "name": "a full pool refuses",
+      "subnet": "10.89.2.0/29",
+      "reserved": [],
+      "quarantineMs": 1000,
+      "steps": [
+        { "op": "assign", "now": 0, "owner": "a", "expect": "10.89.2.2" },
+        { "op": "assign", "now": 0, "owner": "b", "expect": "10.89.2.3" },
+        { "op": "assign", "now": 0, "owner": "c", "expect": "10.89.2.4" },
+        { "op": "assign", "now": 0, "owner": "d", "expect": "10.89.2.5" },
+        { "op": "assign", "now": 0, "owner": "e", "expect": "10.89.2.6" },
+        { "op": "assign", "now": 0, "owner": "f", "expectError": true }
+      ]
+    },
+    { "name": "a /30 is outside the supported range", "subnet": "10.89.2.0/30", "reserved": [], "quarantineMs": 1000, "constructError": true, "steps": [] },
+    { "name": "a /8 is outside the supported range", "subnet": "10.0.0.0/8", "reserved": [], "quarantineMs": 1000, "constructError": true, "steps": [] },
+    { "name": "garbage is not a subnet", "subnet": "not-a-subnet", "reserved": [], "quarantineMs": 1000, "constructError": true, "steps": [] }
+  ],
+  "match": [
+    {
+      "name": "the expected container matches",
+      "observation": { "containerId": "c1", "generation": 7, "serviceLabel": "svc", "running": true, "startedAt": "t1", "addresses": { "flagship-apps": "10.89.2.5" } },
+      "want": { "serviceId": "svc", "container": "c", "network": "flagship-apps", "address": "10.89.2.5", "port": 8080, "generation": 7 },
+      "expect": null
+    },
+    {
+      "name": "another service's label is refused",
+      "observation": { "containerId": "c1", "generation": 7, "serviceLabel": "other", "running": true, "startedAt": "t1", "addresses": { "flagship-apps": "10.89.2.5" } },
+      "want": { "serviceId": "svc", "container": "c", "network": "flagship-apps", "address": "10.89.2.5", "port": 8080, "generation": 7 },
+      "expect": "the container is not labelled for this service"
+    },
+    {
+      "name": "another deploy is refused",
+      "observation": { "containerId": "c1", "generation": 6, "serviceLabel": "svc", "running": true, "startedAt": "t1", "addresses": { "flagship-apps": "10.89.2.5" } },
+      "want": { "serviceId": "svc", "container": "c", "network": "flagship-apps", "address": "10.89.2.5", "port": 8080, "generation": 7 },
+      "expect": "the container belongs to another deploy"
+    },
+    {
+      "name": "a stopped container is refused",
+      "observation": { "containerId": "c1", "generation": 7, "serviceLabel": "svc", "running": false, "startedAt": "t1", "addresses": { "flagship-apps": "10.89.2.5" } },
+      "want": { "serviceId": "svc", "container": "c", "network": "flagship-apps", "address": "10.89.2.5", "port": 8080, "generation": 7 },
+      "expect": "the container is not running"
+    },
+    {
+      "name": "the wrong network is refused",
+      "observation": { "containerId": "c1", "generation": 7, "serviceLabel": "svc", "running": true, "startedAt": "t1", "addresses": { "other-net": "10.89.2.5" } },
+      "want": { "serviceId": "svc", "container": "c", "network": "flagship-apps", "address": "10.89.2.5", "port": 8080, "generation": 7 },
+      "expect": "the container is not on flagship-apps"
+    },
+    {
+      "name": "the wrong address is refused",
+      "observation": { "containerId": "c1", "generation": 7, "serviceLabel": "svc", "running": true, "startedAt": "t1", "addresses": { "flagship-apps": "10.89.2.99" } },
+      "want": { "serviceId": "svc", "container": "c", "network": "flagship-apps", "address": "10.89.2.5", "port": 8080, "generation": 7 },
+      "expect": "the container is not at the address assigned to its service"
+    },
+    {
+      "name": "Docker's loopback publish accepts any address on the network",
+      "observation": { "containerId": "c1", "generation": 7, "serviceLabel": "svc", "running": true, "startedAt": "t1", "addresses": { "bridge": "172.17.0.2" } },
+      "want": { "serviceId": "svc", "container": "c", "network": "bridge", "address": null, "port": 8080, "generation": 7 },
+      "expect": null
+    },
+    {
+      "name": "an unlabelled container is accepted only when it has no labels at all",
+      "observation": { "containerId": "c1", "generation": null, "serviceLabel": null, "running": true, "startedAt": "t1", "addresses": { "bridge": "172.17.0.2" } },
+      "want": { "serviceId": "svc", "container": "c", "network": "bridge", "address": null, "port": 8080, "generation": 7, "unlabelled": true },
+      "expect": null
+    },
+    {
+      "name": "an unlabelled expectation refuses a labelled container",
+      "observation": { "containerId": "c1", "generation": 7, "serviceLabel": "other", "running": true, "startedAt": "t1", "addresses": { "bridge": "172.17.0.2" } },
+      "want": { "serviceId": "svc", "container": "c", "network": "bridge", "address": null, "port": 8080, "generation": 7, "unlabelled": true },
+      "expect": "the container is labelled for another deploy"
+    }
+  ],
+  "inspect": [
+    {
+      "name": "Podman's and Docker's shared inspect shape",
+      "json": "[{\"Id\":\"abc\",\"State\":{\"Running\":true,\"StartedAt\":\"2026-10-30T01:02:03Z\"},\"Config\":{\"Labels\":{\"flagship.service\":\"svc\",\"flagship.generation\":\"1793000000000\"}},\"NetworkSettings\":{\"Networks\":{\"flagship-apps\":{\"IPAddress\":\"10.89.2.5\"},\"none\":{\"IPAddress\":\"\"}}}}]",
+      "expect": { "containerId": "abc", "generation": 1793000000000, "serviceLabel": "svc", "running": true, "startedAt": "2026-10-30T01:02:03Z", "addresses": { "flagship-apps": "10.89.2.5" } }
+    },
+    {
+      "name": "a plain object works too and a missing generation is null",
+      "json": "{\"Id\":\"abc\",\"State\":{},\"Config\":{\"Labels\":{}},\"NetworkSettings\":{\"Networks\":{}}}",
+      "expect": { "containerId": "abc", "generation": null, "serviceLabel": null, "running": false, "startedAt": "", "addresses": {} }
+    },
+    { "name": "no id is no observation", "json": "{\"State\":{\"Running\":true}}", "expect": null },
+    { "name": "not JSON is no observation", "json": "nope", "expect": null },
+    {
+      "name": "a generation that is not an integer is null",
+      "json": "{\"Id\":\"abc\",\"Config\":{\"Labels\":{\"flagship.generation\":\"1.5\"}}}",
+      "expect": { "containerId": "abc", "generation": null, "serviceLabel": null, "running": false, "startedAt": "", "addresses": {} }
+    }
+  ],
+  "table": [
+    {
+      "name": "publish, look up, and a stop drains until the next publish",
+      "steps": [
+        { "op": "lookup", "key": "live/svc/main/http", "expect": null },
+        { "op": "publish", "key": "live/svc/main/http", "endpoint": { "host": "10.89.2.5", "port": 8080, "generation": 1, "incarnation": "c1:t1" } },
+        { "op": "lookup", "key": "live/svc/main/http", "expect": { "host": "10.89.2.5", "port": 8080, "generation": 1, "incarnation": "c1:t1" } },
+        { "op": "lookup", "key": "staging/svc/main/http", "expect": null },
+        { "op": "beginStop", "service": "svc", "env": "live" },
+        { "op": "lookup", "key": "live/svc/main/http", "expect": null },
+        { "op": "publish", "key": "live/svc/main/http", "endpoint": { "host": "10.89.2.5", "port": 8080, "generation": 2, "incarnation": "c1:t2" } },
+        { "op": "lookup", "key": "live/svc/main/http", "expect": { "host": "10.89.2.5", "port": 8080, "generation": 2, "incarnation": "c1:t2" } }
+      ]
+    },
+    {
+      "name": "a lease is current until its endpoint is invalidated, replaced or drained",
+      "steps": [
+        { "op": "publish", "key": "live/svc/main/http", "endpoint": { "host": "10.89.2.5", "port": 8080, "generation": 1, "incarnation": "c1:t1" } },
+        { "op": "acquire", "key": "live/svc/main/http", "lease": "L1", "expect": true },
+        { "op": "acquire", "key": "live/other/main/http", "lease": "Lx", "expect": false },
+        { "op": "current", "lease": "L1", "expect": true },
+        { "op": "openLeases", "service": "svc", "expect": 1 },
+        { "op": "publish", "key": "live/svc/main/http", "endpoint": { "host": "10.89.2.5", "port": 8080, "generation": 1, "incarnation": "c1:t2" } },
+        { "op": "current", "lease": "L1", "expect": false },
+        { "op": "acquire", "key": "live/svc/main/http", "lease": "L2", "expect": true },
+        { "op": "invalidate", "service": "svc" },
+        { "op": "current", "lease": "L2", "expect": false },
+        { "op": "cancelled", "lease": "L2", "expect": true },
+        { "op": "openLeases", "service": "svc", "expect": 0 },
+        { "op": "lookup", "key": "live/svc/main/http", "expect": null }
+      ]
+    },
+    {
+      "name": "invalidate narrows by environment and component",
+      "steps": [
+        { "op": "publish", "key": "live/svc/web/http", "endpoint": { "host": "10.89.2.5", "port": 80, "generation": 1, "incarnation": "a:1" } },
+        { "op": "publish", "key": "live/svc/db/data", "endpoint": { "host": "10.89.2.6", "port": 5432, "generation": 1, "incarnation": "b:1" } },
+        { "op": "publish", "key": "staging/svc/web/http", "endpoint": { "host": "10.89.1.5", "port": 80, "generation": 1, "incarnation": "c:1" } },
+        { "op": "invalidate", "service": "svc", "env": "live", "component": "web" },
+        { "op": "lookup", "key": "live/svc/web/http", "expect": null },
+        { "op": "lookup", "key": "live/svc/db/data", "expect": { "host": "10.89.2.6", "port": 5432, "generation": 1, "incarnation": "b:1" } },
+        { "op": "lookup", "key": "staging/svc/web/http", "expect": { "host": "10.89.1.5", "port": 80, "generation": 1, "incarnation": "c:1" } },
+        { "op": "invalidate", "service": "svc", "env": "live" },
+        { "op": "lookup", "key": "live/svc/db/data", "expect": null },
+        { "op": "lookup", "key": "staging/svc/web/http", "expect": { "host": "10.89.1.5", "port": 80, "generation": 1, "incarnation": "c:1" } }
+      ]
+    },
+    {
+      "name": "stopping one component drains only it",
+      "steps": [
+        { "op": "publish", "key": "live/svc/web/http", "endpoint": { "host": "10.89.2.5", "port": 80, "generation": 1, "incarnation": "a:1" } },
+        { "op": "publish", "key": "live/svc/db/data", "endpoint": { "host": "10.89.2.6", "port": 5432, "generation": 1, "incarnation": "b:1" } },
+        { "op": "beginStop", "service": "svc", "env": "live", "component": "web" },
+        { "op": "lookup", "key": "live/svc/web/http", "expect": null },
+        { "op": "lookup", "key": "live/svc/db/data", "expect": { "host": "10.89.2.6", "port": 5432, "generation": 1, "incarnation": "b:1" } }
+      ]
+    }
+  ]
+}

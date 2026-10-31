@@ -9,6 +9,7 @@
 //! - [`handover`]: take over from the TS controller: checkpoint, lock, adopt, compare, enable.
 
 pub mod controller;
+pub mod endpoints;
 pub mod handover;
 pub mod journal;
 pub mod lock;
