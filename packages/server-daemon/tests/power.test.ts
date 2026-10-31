@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ed, signPhoneOrder, type Keypair, type PhoneOrder } from "@flagship/protocol";
-import type { AutoUnlockSuppressor, HostPowerRunner } from "../src/deadMan.js";
-import { buildPowerHttp } from "../src/deadManHttp.js";
+import type { AutoUnlockSuppressor, HostPowerRunner } from "../src/hostPower.js";
+import { buildPowerHttp } from "../src/powerHttp.js";
 
 const SERVER = "home.alice.flagship.services";
 const NOW = 5_000_000;

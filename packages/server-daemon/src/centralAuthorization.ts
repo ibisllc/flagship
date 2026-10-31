@@ -53,7 +53,6 @@ const COMPANION_ALLOW: readonly RouteRule[] = [
   // A single-use upgrade ticket for the event stream; the stream handler itself still refuses a
   // Remote session on the build and browser routes.
   { prefix: "/api/screens/ws-ticket", methods: ["POST"] },
-  { prefix: "/api/deadman", methods: READ },
   { prefix: "/api/front-page", methods: READ },
   // The one write path: a request the owner approves from their own app.
   { prefix: "/api/companion/request-write", methods: ["POST"] },
@@ -86,7 +85,6 @@ export const ROUTE_FAMILIES: Readonly<Record<string, { owner: "session" | "signe
   "/api/pq-session": { owner: "public", note: "PQ session handshake and sealed calls; each inner request carries its own session or signature" },
   "/api/orders-from-user": { owner: "signed-order", note: "signed phone orders" },
   "/api/front-page": { owner: "public", note: "landing data" },
-  "/api/deadman": { owner: "session", note: "dead-man view and affirm" },
   "/api/backups": { owner: "session", note: "app backups; owner only" },
   "/api/peer-backup": { owner: "signed-order", note: "box to box" },
   "/api/app-copy": { owner: "signed-order", note: "box to box" },

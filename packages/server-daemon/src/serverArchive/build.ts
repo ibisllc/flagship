@@ -100,7 +100,7 @@ export const ARCHIVE_INCLUDES = [
 export const ARCHIVE_EXCLUDES = [
   "app images, the operating system and Flagship itself (the importing server rebuilds the apps)",
   "the server's own keys, certificate and address (the importing server has its own)",
-  "the dead-man switch (owner-signed for one server: set it again there)",
+  "how long it stays online with no admin opening Flagship (owner-signed for one server: set it again there)",
   "peer backups",
   "the Git host",
 ];

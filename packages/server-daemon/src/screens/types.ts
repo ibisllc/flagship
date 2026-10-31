@@ -107,11 +107,11 @@ export interface ServerDetailResponse {
    */
   lastUpdate?: UpdateOutcomeRecord | null;
   /**
-   * The dead-man switch as the box holds it. Every client bounds the
-   * auto-unlock leases it deposits by `leaseExpiry` while `enabled`
-   * (SEC-DEADMAN-001), so a lease can never outlive the affirmation.
+   * The owner's serving time limit (servingStore.ts; the one dead-man setting): how long the server keeps serving
+   * apps with no admin opening Flagship, what a lapse does, and the deadline (`until`, null = no time limit).
+   * `scopeSha256` is what a policy edit signs. Older daemons omit the field.
    */
-  deadMan?: { enabled: boolean; leaseExpiry: number; windowMs: number; graceMs: number; lockoutMode: "off" | "restart" };
+  serving?: import("../servingStore.js").ServingView;
   /**
    * Owner debug access (docs/recipe-delivery-and-remote-install.md): whether
    * an SSH key is let in as `debug`, until when, which key, and who signed

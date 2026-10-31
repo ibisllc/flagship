@@ -27,7 +27,6 @@ import {
   signCreateServiceInvite,
   signRedeemServiceInvite,
   signRevokeServiceInvite,
-  signSetDeadManPolicy,
   signDebugAccessGrant,
   verifyDebugAccessGrant,
   signRehomeAuthorization,
@@ -36,7 +35,9 @@ import {
   type CreateServiceInvite,
   type RedeemServiceInvite,
   type RevokeServiceInvite,
-  type SetDeadManPolicy,
+  ed,
+  signServingRecord,
+  type ServingPolicy,
   type DebugAccessGrant,
   type RehomeAuthorization,
 } from "@flagship/protocol";
@@ -72,6 +73,8 @@ export interface EnforcementTarget {
   readonly fqdn: string; // home.<user>.<servicesApex>
   readonly serviceSlug: string; // the restricted service label
   readonly serviceRef: string; // <user>--<slug>
+  /** An owner session on the box (the serving route answers only its owner). */
+  readonly session?: string;
 }
 
 export interface EnforcementContext {
@@ -189,31 +192,15 @@ export async function checkRestrictedMode(ctx: EnforcementContext): Promise<Chec
 // ── control 2 — admin gate rejects a non-admin on the real path ───────────────
 
 /**
- * A sensitive box order (dead-man policy — a real gated op that leaves NO lasting
- * state when `enabled:false`) is authorized ONLY by the account's pinned admin
- * master root. The membership owner IRK, a stranger and a forged signature are
- * all rejected (401/403).
+ * A sensitive box order (the serving policy, the one dead-man setting; sent as "indefinitely, stop serving apps", which
+ * is the default, so it changes nothing) is authorized ONLY by the account's pinned admin master root. The membership
+ * owner IRK, a stranger and a forged signature are all refused.
  */
 export async function checkAdminGate(ctx: EnforcementContext): Promise<CheckOutcome> {
   const { http, target, keys, now } = ctx;
-  const url = `https://${target.fqdn}/api/deadman/policy`;
-  const policy: SetDeadManPolicy = {
-    serverId: target.fqdn,
-    enabled: false, // NEVER arms — proves the control path, leaves no lockout
-    windowMs: 24 * 60 * 60 * 1000,
-    graceMs: 60 * 60 * 1000,
-    lockoutMode: "off",
-    issuedAt: now(),
-  };
-  const post = (sig: string) =>
-    http(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ request: policy, signature: sig }),
-    });
+  const headers: Record<string, string> = { "content-type": "application/json", ...(target.session ? { "x-flagship-session": target.session } : {}) };
   const adminRootHex = bytesToHex(keys.adminRoot.publicKey);
   const ownerHex = bytesToHex(keys.ownerIrk.publicKey);
-  const rejected = (r: WireResponse) => r.status === 401 || r.status === 403;
   return runCheck(
     {
       id: "admin-gate-nonadmin-rejected",
@@ -221,16 +208,37 @@ export async function checkAdminGate(ctx: EnforcementContext): Promise<CheckOutc
       title: "the pinned admin root authorizes a sensitive op; the membership IRK, a stranger and a forged signature are rejected",
     },
     async () => {
-      const admin = await post(bytesToHex(signSetDeadManPolicy(policy, keys.adminRoot)));
-      const membership = await post(bytesToHex(signSetDeadManPolicy(policy, keys.ownerIrk)));
-      const stranger = await post(bytesToHex(signSetDeadManPolicy(policy, keys.attacker)));
-      const forged = await post(ZERO_SIG);
+      const detail = await http(`https://${target.fqdn}/api/screens/server-detail`, { method: "GET", headers });
+      const sv = (detail.json as { serving?: { boxPub: string; regGen: number; policyGen: number; scopeSha256: string } }).serving;
+      if (!sv) throw new Error(`server-detail has no serving (${detail.status})`);
+      const policy = (gen: number): ServingPolicy => ({
+        account: target.user,
+        box: sv.boxPub,
+        regGen: sv.regGen,
+        policyGen: gen,
+        grace: "indefinite",
+        onLapse: "stop-apps",
+        scopeSha256: sv.scopeSha256,
+        issuedAt: now(),
+      });
+      const post = async (p: ServingPolicy, signature: string) => {
+        const r = await http(`https://${target.fqdn}/api/screens/serving`, { method: "POST", headers, body: JSON.stringify({ policy: { record: p, signature } }) });
+        const b = (r.json ?? {}) as { policyAdopted?: boolean; refused?: Array<{ code: string }> };
+        return { status: r.status, adopted: b.policyAdopted === true, code: b.refused?.[0]?.code ?? "" };
+      };
+      const sign = (p: ServingPolicy, k: { privateKey: Uint8Array }) => bytesToHex(signServingRecord("serving-policy", p, (m) => ed.sign(m, k.privateKey)));
+      const p1 = policy(sv.policyGen + 1);
+      const membership = await post(p1, sign(p1, keys.ownerIrk));
+      const stranger = await post(p1, sign(p1, keys.attacker));
+      const forged = await post(p1, ZERO_SIG);
+      const admin = await post(p1, sign(p1, keys.adminRoot));
       const membershipUnderRoot = requireMasterAdmin(ownerHex, target.user, adminRootHex, [], now());
+      const refused = (x: { adopted: boolean }) => !x.adopted;
       return [
-        { label: "admin-root-signed sensitive op is ACCEPTED", ok: admin.status === 200, detail: `${admin.status}` },
-        { label: "the membership owner IRK is REJECTED (not master admin)", ok: rejected(membership), detail: `${membership.status}` },
-        { label: "a NON-owner signature is rejected", ok: rejected(stranger), detail: `${stranger.status}` },
-        { label: "a forged signature is rejected", ok: rejected(forged), detail: `${forged.status}` },
+        { label: "admin-root-signed sensitive op is ACCEPTED", ok: admin.status === 200 && admin.adopted, detail: `${admin.status} adopted=${admin.adopted}` },
+        { label: "the membership owner IRK is REJECTED (not master admin)", ok: refused(membership), detail: `${membership.status} ${membership.code}` },
+        { label: "a NON-owner signature is rejected", ok: refused(stranger), detail: `${stranger.status} ${stranger.code}` },
+        { label: "a forged signature is rejected", ok: refused(forged), detail: `${forged.status} ${forged.code}` },
         {
           label: "[deterministic] a membership IRK is NOT master admin under the pinned root",
           ok: membershipUnderRoot.ok === false,

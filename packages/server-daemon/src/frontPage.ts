@@ -25,7 +25,7 @@ import { writeFileDurable } from "./durableFile.js";
 
 const H = { "content-type": "application/json" };
 
-/** One small persisted value, atomically replaced (deadman.json pattern). */
+/** One small persisted value, atomically replaced (front-page.json pattern). */
 export class FrontPageStore {
   private label: string | null = null;
   private readonly statePath: string;

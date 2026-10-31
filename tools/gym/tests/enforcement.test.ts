@@ -5,7 +5,7 @@ import {
   deriveAccountId,
   deriveHouseholdKey,
   ed,
-  verifySetDeadManPolicy,
+  verifyServingRecord,
   serviceInviteSecretHash,
   type Keypair,
 } from "@flagship/protocol";
@@ -177,21 +177,22 @@ describe("control 1 — restricted-mode on the real request path (GAP-1)", () =>
 
 describe("control 2 — admin gate rejects a non-admin on the real path", () => {
   const keys = makeKeys();
-  // ENFORCING box: verifies the dead-man policy signature under the pinned admin root.
-  const enforcingHttp: HttpFn = async (_url, init) => {
+  // The box's serving route: server-detail tells the policy's fields; a POST adopts a policy that verifies.
+  const servingBox = (signer: Uint8Array | "any"): HttpFn => async (url, init) => {
+    if (url.endsWith("/server-detail")) {
+      return R(200, "", { serving: { boxPub: "ab".repeat(32), regGen: 1, policyGen: 0, scopeSha256: "cd".repeat(32) } });
+    }
     const body = JSON.parse(init!.body!);
-    if (body.signature === ZERO_SIG) return R(401, "bad sig");
-    const ok = verifySetDeadManPolicy(body.request, hexToBytes(body.signature), keys.adminRoot.publicKey);
-    return ok ? R(200, JSON.stringify({ enabled: false })) : R(403, "requires master-admin authority");
+    const ok =
+      signer === "any" ||
+      (body.policy.signature !== ZERO_SIG && verifyServingRecord("serving-policy", body.policy.record, body.policy.signature, Buffer.from(signer).toString("hex")));
+    return R(200, "", { ok: true, policyAdopted: ok, refused: ok ? [] : [{ kind: "policy", code: "serving-policy-signature" }] });
   };
+  // ENFORCING box: verifies under the pinned admin root.
+  const enforcingHttp: HttpFn = servingBox(keys.adminRoot.publicKey);
   // A box still on the legacy owner-IRK path despite the pin.
-  const legacyHttp: HttpFn = async (_url, init) => {
-    const body = JSON.parse(init!.body!);
-    if (body.signature === ZERO_SIG) return R(401, "bad sig");
-    const ok = verifySetDeadManPolicy(body.request, hexToBytes(body.signature), keys.ownerIrk.publicKey);
-    return ok ? R(200, JSON.stringify({ enabled: false })) : R(403, "not the owner");
-  };
-  const bypassHttp: HttpFn = async () => R(200, JSON.stringify({ enabled: false }));
+  const legacyHttp: HttpFn = servingBox(keys.ownerIrk.publicKey);
+  const bypassHttp: HttpFn = servingBox("any");
 
   it("ENFORCED: admin root accepted; membership IRK, stranger and forged rejected", async () => {
     const o = await checkAdminGate(ctx(enforcingHttp, gatedRaw, keys));

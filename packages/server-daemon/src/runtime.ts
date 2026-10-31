@@ -256,6 +256,14 @@ export interface DaemonRuntimeOptions {
    */
   tunnelSupervisor?: import("./tunnel/tunnelClient.js").SupervisorOptions;
   /**
+   * The serving authority's HELLO fields (servingStore.ts). `rehelloRef` is set once the tunnel exists so a
+   * newly adopted policy reaches the relay without waiting for a reconnect.
+   */
+  servingHello?: {
+    fields: () => import("./tunnel/tunnelClient.js").ServingHelloFields;
+    rehelloRef?: { current: (() => void) | null };
+  };
+  /**
    * LAN-direct (docs/lan-direct.md): also accept connections on the box's
    * private LAN addresses at `port`, forwarded into the same loopback TLS
    * server the tunnel feeds. Omit to leave the box relay-only.
@@ -1228,6 +1236,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     resolveBackend: () =>
       relayLockdown.isRelayAllowed() ? { host: "127.0.0.1", port: tlsPort } : null,
     onHelloAckTrust,
+    ...(opts.servingHello ? { servingHello: opts.servingHello.fields } : {}),
     ...(opts.peerMail ? { mailboxAnnouncements: opts.peerMail.announcements, onMail: opts.peerMail.onMail } : {}),
     onDomainGranted: (e) => {
       siblingRouter.broadcastDomainGranted({
@@ -1242,6 +1251,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     ...(opts.tunnelSupervisor ?? {}),
   });
   void tunnelInitialDomains;
+  if (opts.servingHello?.rehelloRef) opts.servingHello.rehelloRef.current = () => void tunnel.rehello().catch(() => {});
   // The relay is one way in, not a precondition: a box whose relay or `.com`
   // is gone must still come up and serve its owner on the LAN with the
   // certificate it holds. The tunnel keeps dialing

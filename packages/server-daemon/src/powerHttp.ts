@@ -1,88 +1,13 @@
-import { executeLockAndPower, type AutoUnlockSuppressor, type BootSuspender, type HostPowerRunner } from "./deadMan.js";
-import type { DeadManController } from "./deadMan.js";
+import { executeLockAndPower, type AutoUnlockSuppressor, type BootSuspender, type HostPowerRunner } from "./hostPower.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
-import {
-  verifyPhoneOrder,
-  type AdminGrantView,
-  type DeadManAffirmation,
-  type PhoneOrder,
-  type SetDeadManPolicy,
-} from "@flagship/protocol";
+import { verifyPhoneOrder, type AdminGrantView, type PhoneOrder } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
-/**
- * Dead-man delivery surface — rides the same daemon HTTP plane as the
- * phone-order endpoint. Two routes, each an `{ request, signature }`
- * envelope verified inside the `DeadManController` against the box's
- * config-pinned owner IRK:
- *
- *   POST /api/deadman/policy   — IRK-signed `SetDeadManPolicy`
- *   POST /api/deadman/affirm   — IRK-signed `DeadManAffirmation`
- *
- * Returns null for any other path so it falls through the handler chain.
- */
 const H = { "content-type": "application/json" };
-
-export function buildDeadManHttp(controller: DeadManController) {
-  return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
-    if (req.path !== "/api/deadman/policy" && req.path !== "/api/deadman/affirm") {
-      return null;
-    }
-    if (req.method !== "POST") {
-      return { status: 405, headers: H, body: JSON.stringify({ error: "method not allowed" }) };
-    }
-    let env: { request?: Record<string, unknown>; signature?: unknown };
-    try {
-      env = JSON.parse(req.body.toString("utf8"));
-    } catch {
-      return { status: 400, headers: H, body: JSON.stringify({ error: "invalid json" }) };
-    }
-    const r = env.request;
-    if (!r || typeof r !== "object" || typeof env.signature !== "string") {
-      return { status: 400, headers: H, body: JSON.stringify({ error: "malformed body" }) };
-    }
-    let sig: Uint8Array;
-    try {
-      sig = hexToBytes(env.signature);
-    } catch {
-      return { status: 400, headers: H, body: JSON.stringify({ error: "invalid signature hex" }) };
-    }
-
-    if (req.path === "/api/deadman/policy") {
-      const policy = parsePolicy(r);
-      if (!policy) {
-        return { status: 400, headers: H, body: JSON.stringify({ error: "malformed policy" }) };
-      }
-      const ok = await controller.applyPolicy(policy, sig);
-      if (!ok) {
-        return { status: 403, headers: H, body: JSON.stringify({ error: "rejected" }) };
-      }
-      return {
-        status: 200,
-        headers: H,
-        body: JSON.stringify({ ok: true, enabled: policy.enabled, leaseExpiry: controller.leaseExpiry() }),
-      };
-    }
-
-    const affirm = parseAffirm(r);
-    if (!affirm) {
-      return { status: 400, headers: H, body: JSON.stringify({ error: "malformed affirmation" }) };
-    }
-    const ok = await controller.affirm(affirm, sig);
-    if (!ok) {
-      return { status: 403, headers: H, body: JSON.stringify({ error: "rejected" }) };
-    }
-    return {
-      status: 200,
-      headers: H,
-      body: JSON.stringify({ ok: true, leaseExpiry: controller.leaseExpiry() }),
-    };
-  };
-}
 
 /**
  * Manual power surface — `POST /api/power`. Rides the same daemon HTTP
- * plane as the dead-man endpoints and verifies against the SAME box
+ * plane as the other owner endpoints and verifies against the SAME box
  * config-pinned owner IRK (NOT the dead PSK/orders path: `psk.pub.hex` is
  * never written on a real Debian box, so `/api/orders-from-user` is inert
  * on metal). Body is an `{ request, signature }` envelope where `request`
@@ -91,7 +16,7 @@ export function buildDeadManHttp(controller: DeadManController) {
  * (UNCHANGED canonical bytes). On a valid IRK signature within the replay
  * window it runs the SHARED `executeLockAndPower` primitive — suppress the
  * silent auto-unlock, THEN power off/restart — the same primitive the
- * dead-man timer fires.
+ * serving lock fires.
  *
  * Returns null for any other path so it falls through the handler chain.
  */
@@ -111,7 +36,7 @@ export interface PowerHttpOptions {
   /** Posts the STK-signed boot suspension; without it a restart becomes a shutdown. */
   suspender?: BootSuspender | null;
   now?: () => number;
-  /** Replay window for `issuedAt`. Default 5 min — mirrors the dead-man. */
+  /** Replay window for `issuedAt`. Default 5 min. */
   maxAgeMs?: number;
 }
 
@@ -192,38 +117,6 @@ function parsePowerOff(r: Record<string, unknown>): Extract<PhoneOrder, { type: 
     return null;
   }
   return { type: "power-off", serverId: r.serverId, mode: r.mode, issuedAt: r.issuedAt };
-}
-
-function parsePolicy(r: Record<string, unknown>): SetDeadManPolicy | null {
-  if (
-    typeof r.serverId !== "string" ||
-    typeof r.enabled !== "boolean" ||
-    typeof r.windowMs !== "number" ||
-    typeof r.graceMs !== "number" ||
-    (r.lockoutMode !== "off" && r.lockoutMode !== "restart") ||
-    typeof r.issuedAt !== "number"
-  ) {
-    return null;
-  }
-  return {
-    serverId: r.serverId,
-    enabled: r.enabled,
-    windowMs: r.windowMs,
-    graceMs: r.graceMs,
-    lockoutMode: r.lockoutMode,
-    issuedAt: r.issuedAt,
-  };
-}
-
-function parseAffirm(r: Record<string, unknown>): DeadManAffirmation | null {
-  if (typeof r.serverId !== "string" || typeof r.nonce !== "string" || typeof r.issuedAt !== "number") {
-    return null;
-  }
-  try {
-    return { serverId: r.serverId, nonce: hexToBytes(r.nonce), issuedAt: r.issuedAt };
-  } catch {
-    return null;
-  }
 }
 
 function hexToBytes(hex: string): Uint8Array {

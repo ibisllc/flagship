@@ -110,6 +110,13 @@ export const defaultWebSocketFactory: WebSocketFactory = Object.assign(
   { OPEN: WebSocket.OPEN as number, CLOSED: WebSocket.CLOSED as number },
 );
 
+export interface ServingHelloFields {
+  /** The box's pinned sensitive-order key (admin root, else IRK), lowercase hex; null when it pins none. */
+  servingAdminKey: string | null;
+  /** The box's stored signed `serving-policy/v1` as `{record, signature}`, or null. */
+  servingPolicy: { record: unknown; signature: string } | null;
+}
+
 export interface TunnelClientOptions {
   /** ws:// or wss:// URL of the control-plane tunnel hub. */
   hubUrl: string;
@@ -180,6 +187,12 @@ export interface TunnelClientOptions {
    */
   mailboxAnnouncements?: () => Promise<MailboxAnnouncement[]>;
   onMail?: (mailboxId: string, envelope: Uint8Array) => Promise<Uint8Array>;
+  /**
+   * The serving authority (docs/architecture-v2/serving-wiring.md §2-3): every HELLO carries the box's pinned
+   * admin key and its stored owner-signed serving policy, so the relay can require both keys to agree and never
+   * take `.com`'s copy of the policy alone. Unsigned by the HELLO: the policy carries the admin's own signature.
+   */
+  servingHello?: () => ServingHelloFields;
   /** Test seam — replace WebSocket constructor + ready-state constants. */
   wsFactory?: WebSocketFactory;
   /** Test seam — replace setInterval/clearInterval (keep-alive cadence). */
@@ -329,6 +342,16 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     }
   }
 
+  function servingFields(): Partial<ServingHelloFields> {
+    if (!opts.servingHello) return {};
+    try {
+      const f = opts.servingHello();
+      return { servingAdminKey: f.servingAdminKey, servingPolicy: f.servingPolicy };
+    } catch {
+      return { servingAdminKey: null, servingPolicy: null };
+    }
+  }
+
   async function sendHello(): Promise<void> {
     const bundle = await opts.getEntitlements();
     const nonce = new Uint8Array(32);
@@ -379,6 +402,7 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       issuedAt,
       signature: bytesToHex(signature),
       ...(opts.onDrain ? { capabilities: [CAPABILITY_DRAIN_V1] } : {}),
+      ...servingFields(),
     });
     send({
       streamId: 0,
@@ -841,6 +865,7 @@ export function superviseTunnelClient(
         resolveBackend: opts.resolveBackend,
         onDomainGranted: opts.onDomainGranted,
         onHelloAckTrust: opts.onHelloAckTrust,
+        ...(opts.servingHello ? { servingHello: opts.servingHello } : {}),
         keepAlive: { intervalMs: keepAliveIntervalMs, maxMissedPongs },
         wsFactory: opts.wsFactory,
         setIntervalImpl: opts.setIntervalImpl,

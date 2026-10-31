@@ -12,7 +12,6 @@ import { onCorruptState, type CorruptStateReport } from "../src/durableFile.js";
 import { ServiceSessionStore, ServiceAccessStore } from "../src/serviceAccess.js";
 import { AccessJournal } from "../src/accessJournal.js";
 import { buildAccessSync } from "../src/accessSync.js";
-import { DeadManController } from "../src/deadMan.js";
 import {
   AdminRootPinLostError,
   claimAdminRootRotations,
@@ -105,38 +104,6 @@ describe("access state", () => {
   });
 });
 
-describe("dead-man switch", () => {
-  it("an unreadable state file arms the switch as missed, restarts after the grace, and stays armed", async () => {
-    const statePath = join(dir, "deadman.json");
-    await writeFile(statePath, '{"policy": {"enabled": true, "windowMs": 36');
-    let now = 1_000_000;
-    const events: string[] = [];
-    const mk = () =>
-      new DeadManController({
-        serverId: "home.alice.flagship.services",
-        irkPub: key(50).publicKey,
-        suppressor: { suppress: async () => void events.push("suppress") },
-        runner: { power: async (m) => void events.push(`power:${m}`) },
-        suspender: { suspend: async () => ({ confirmed: true as const }) },
-        statePath,
-        now: () => now,
-        setIntervalImpl: () => 0,
-        clearIntervalImpl: () => {},
-      });
-    const a = mk();
-    await a.start();
-    expect(a.policy()).toMatchObject({ enabled: true, lockoutMode: "restart" });
-    await keptAsideAndReported(statePath);
-    await a.checkOnce();
-    expect(events).toEqual([]);
-    now += a.policy().graceMs + 1;
-    await a.checkOnce();
-    expect(events).toEqual(["suppress", "power:restart"]);
-    const b = mk();
-    await b.start();
-    expect(b.policy().enabled).toBe(true);
-  });
-});
 
 describe("admin-root pin", () => {
   const USER = "alice";

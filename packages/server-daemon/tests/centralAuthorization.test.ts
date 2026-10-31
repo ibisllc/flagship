@@ -26,7 +26,7 @@ describe("companion (Remote) matrix", () => {
     expect(ok("GET", "/api/screens/services/chess/members?x=1")).toBe(true);
     expect(ok("POST", "/api/companion/request-write")).toBe(true);
     expect(ok("GET", "/api/companion/my-pending")).toBe(true);
-    expect(ok("GET", "/api/deadman")).toBe(true);
+    expect(ok("GET", "/api/deadman")).toBe(false);
   });
 
   it("cannot build, deploy, mint credentials, move backups, rotate identity or reach AI sessions", () => {
@@ -37,7 +37,7 @@ describe("companion (Remote) matrix", () => {
       ["GET", "/api/backups/app1"], ["POST", "/api/backups/app1"], ["GET", "/api/screens/server-archive"], ["GET", "/api/screens/app-backup/x"],
       ["POST", "/api/identity/rotate"], ["POST", "/api/screens/services/copy"], ["POST", "/api/screens/orders/send"],
       ["DELETE", "/api/screens/paired-sessions/x"], ["GET", "/api/screens/paired-sessions"], ["POST", "/api/screens/companion/mint-ticket"],
-      ["POST", "/api/service-access/invite"], ["POST", "/api/shares/accept"], ["POST", "/api/deadman/affirm"],
+      ["POST", "/api/service-access/invite"], ["POST", "/api/shares/accept"], ["POST", "/api/screens/serving"],
       ["GET", "/mcp/build/x"], ["POST", "/mcp/build/x"], ["GET", "/api/something-new"], ["POST", "/api/screens/anything"],
       ["PATCH", "/api/screens/server-detail"], ["DELETE", "/api/screens/server-detail"],
     ];

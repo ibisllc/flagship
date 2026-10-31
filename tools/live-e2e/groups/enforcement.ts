@@ -7,6 +7,7 @@ import { ed, deriveAccountId, deriveHouseholdKey, deriveIRK, type Keypair } from
 import { runEnforcementChecks, rollup, renderReport, type EnforcementKeys, type HttpFn, type RawFn, type WireResponse } from "../../gym/src/enforcement/index.js";
 import { CONTROL, SERVICES, http, rawTlsGet, writeJson } from "../lib/harness.js";
 import { installWhoami, setMode, waitServing } from "./gating.js";
+import { pair } from "../lib/fleet.js";
 import type { Group } from "./types.js";
 
 const httpFn: HttpFn = async (url, init) => {
@@ -51,12 +52,13 @@ export const enforcement: Group = {
     };
     const routed: HttpFn = ready
       ? httpFn
-      : (url, init) => (url.includes("/api/deadman/") ? httpFn(url, init) : Promise.reject(new Error("precondition: app not installed/restricted")));
+      : (url, init) => (/\/api\/screens\/(serving|server-detail)$/.test(url) ? httpFn(url, init) : Promise.reject(new Error("precondition: app not installed/restricted")));
+    const session = await pair(acct, b).catch(() => undefined);
     const outcomes = await runEnforcementChecks({
       http: routed,
       raw: rawFn,
       now: () => Date.now(),
-      target: { control: CONTROL, servicesApex: SERVICES, user: acct.username, fqdn: b.fqdn, serviceSlug: slug, serviceRef },
+      target: { control: CONTROL, servicesApex: SERVICES, user: acct.username, fqdn: b.fqdn, serviceSlug: slug, serviceRef, ...(session ? { session } : {}) },
       keys,
     });
     const report = rollup(outcomes);

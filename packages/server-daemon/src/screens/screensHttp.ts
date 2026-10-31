@@ -42,6 +42,8 @@ import { SERVER_WILDCARD_GRANT_PATH } from "../serverWildcardGrant.js";
 import { isAppApiKeysPath, type AppApiKeysHttp } from "../appApiKeys.js";
 import { ACCESS_ALERTS_PATH, buildAccessAlertSettingHttp, type AccessAlertSetting } from "../egress/accessAlertSetting.js";
 import { SERVER_ORDER_PATH, buildServerOrderHttp } from "../serverOrderHttp.js";
+import { SERVING_PATH, buildServingHttp } from "../servingHttp.js";
+import type { ServingStore } from "../servingStore.js";
 import type { ServerOrderHolder } from "../serverOrderHolder.js";
 import { DEBUG_PATH, DEBUG_REVOKE_PATH, buildDebugAccessHttp, type DebugAccessController } from "../debugAccessGate.js";
 import {
@@ -319,8 +321,11 @@ export interface ScreensHttpDeps {
   currentCommit?: (() => string | null) | null;
   /** The last update order's verdict (updateOutcome.ts), or null. */
   lastUpdate?: (() => UpdateOutcomeRecord | null) | null;
-  /** The dead-man switch's state for server-detail (deadMan.ts), or null when none is wired. */
-  deadMan?: (() => { enabled: boolean; leaseExpiry: number; windowMs: number; graceMs: number; lockoutMode: "off" | "restart" } | null) | null;
+  /**
+   * The serving authority (servingStore.ts): its view rides server-detail, and `/api/screens/serving` takes an
+   * admin's signed policy and leases. Absent ⇒ neither.
+   */
+  serving?: Pick<ServingStore, "offer" | "view"> | null;
   /** Endorsed releases this box could move to (updateReleases.ts). */
   releaseCatalog?: ReleaseCatalogSource | null;
   /** Recent install/uninstall events for server-detail. */
@@ -640,6 +645,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (deps.serverOrder && path === SERVER_ORDER_PATH) {
       const r = await buildServerOrderHttp({
         holder: deps.serverOrder,
+        denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
+      })(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.serving && path === SERVING_PATH) {
+      const r = await buildServingHttp({
+        store: deps.serving,
         denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
       })(path, method, req);
       if (r) return r;
@@ -1740,7 +1753,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     daemonVersion: deps.daemonVersion,
     currentCommit: deps.currentCommit?.() ?? null,
     lastUpdate: deps.lastUpdate?.() ?? null,
-    ...(deps.deadMan?.() ? { deadMan: deps.deadMan()! } : {}),
+    ...(deps.serving ? { serving: deps.serving.view() } : {}),
     ...(deps.debugAccess ? { debugAccess: deps.debugAccess.view() } : {}),
     appSandbox: appSandboxStatus(),
     startedAt: deps.startedAt,

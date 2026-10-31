@@ -907,7 +907,7 @@ const LOOP_DEVICE = /^\/dev\/loop[0-9]{1,4}$/;
 /** The daemon's folder fingerprint (appQuota/loopVolumes.ts FOLDER_FINGERPRINT_SCRIPT), byte for byte. */
 export const FOLDER_FINGERPRINT_SCRIPT =
   `find "$1" \\( -type f -printf 'f %m %s %P\\n' \\) -o \\( -type d -printf 'd %m %P\\n' \\) -o \\( -printf '%y %P\\n' \\) | LC_ALL=C sort | sha256sum | cut -d' ' -f1`;
-/** The one-shot lock marker the premount honours on the next boot (server-daemon deadMan.ts BootUnlockModeSuppressor), byte for byte. */
+/** The one-shot lock marker the premount honours on the next boot (server-daemon hostPower.ts BootUnlockModeSuppressor), byte for byte. */
 export const BOOT_LOCK_ONCE_SCRIPT = `printf 'approve-once\\n' > /boot/flagship-lock-once.new && mv -f /boot/flagship-lock-once.new /boot/flagship-lock-once`;
 const EGRESS_CHAIN = /^FLAGSHIP-EGRESS(?:6|-NAT|-FWD|-IN)$/;
 /** The sandbox bridges the daemon owns under Podman (egress/networks.ts ensureHostBridge). */

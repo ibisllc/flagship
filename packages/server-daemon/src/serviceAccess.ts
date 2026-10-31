@@ -15,7 +15,7 @@
  *     3. box adds boundAID to the local allow-list for the returned serviceRef.
  *
  * The mode + allow-list persist in one atomically-replaced JSON file (the
- * deadman.json / front-page.json pattern). The owner sets the mode with an
+ * front-page.json pattern). The owner sets the mode with an
  * IRK-signed `set-service-access-mode` envelope over the box's OWN pinned pipe
  * (the `/api/power` shape — NOT the dead PSK orders surface); flagshipserver.com
  * is never in that path.

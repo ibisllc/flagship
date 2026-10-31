@@ -90,7 +90,8 @@
         "apps/mobile/android/app/src/main/**/DeadManViewModel.kt",
         "apps/mobile/shared/Sources/FlagshipCore/PhoneEndpoint.swift",
         "apps/mobile/shared/Sources/FlagshipCore/SecretRequestCoordinator.swift",
-        "packages/server-daemon/src/deadMan*.ts",
+        "packages/server-daemon/src/serving*.ts",
+        "packages/server-daemon/src/hostPower.ts",
         "packages/boot-core/**"
       ]
     },

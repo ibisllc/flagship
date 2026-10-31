@@ -25,7 +25,6 @@ import {
   signPhoneOrder,
   signServerDecommission,
   signServersSelfDelete,
-  signSetDeadManPolicy,
   type InviteAcceptance,
   type InviteToken,
   type Keypair,
@@ -33,14 +32,13 @@ import {
   type PhoneOrder,
   type ServerDecommission,
   type ServersSelfDelete,
-  type SetDeadManPolicy,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "../src/adminAuthorityLocal.js";
 import { decodeAndVerifySelfDeleteCarrier } from "../src/selfDeleteConsumer.js";
 import { decodeAndVerifyDecommissionOrder } from "../src/decommissionConsumer.js";
 import { decodeAndVerifyEntitlementCarrier } from "../src/entitlementRelay.js";
-import { DeadManController, type AutoUnlockSuppressor, type HostPowerRunner } from "../src/deadMan.js";
-import { buildPowerHttp } from "../src/deadManHttp.js";
+import { type AutoUnlockSuppressor, type HostPowerRunner } from "../src/hostPower.js";
+import { buildPowerHttp } from "../src/powerHttp.js";
 import { buildFrontPageHttp, FrontPageStore } from "../src/frontPage.js";
 import { InviteStore, MembershipStore } from "../src/membership.js";
 import { serializeEntitlementBundle } from "../src/entitlementBundleStore.js";
@@ -237,45 +235,6 @@ describe("entitlementRelay — admin-gated box-online authorization", () => {
         stkPub: stk.publicKey,
       }).rootEntitlement.podCanonical,
     ).toBe(DOMAIN);
-  });
-});
-
-// ── dead-man policy ──────────────────────────────────────────────────────────
-describe("DeadManController.applyPolicy — admin-gated", () => {
-  const suppressor: AutoUnlockSuppressor = { suppress: async () => {} };
-  const runner: HostPowerRunner = { power: async () => {} };
-  function policy(): SetDeadManPolicy {
-    return {
-      serverId: DOMAIN,
-      enabled: true,
-      windowMs: 60_000,
-      graceMs: 0,
-      lockoutMode: "off",
-      issuedAt: 4_000,
-    };
-  }
-  function controller(adminRootPub?: Uint8Array) {
-    return new DeadManController({
-      serverId: DOMAIN,
-      irkPub: OWNER_IRK.publicKey,
-      ...(adminRootPub ? { adminRootPub } : {}),
-      username: USERNAME,
-      suppressor,
-      runner,
-      statePath: join(tmpdir(), `deadman-${Math.random().toString(36).slice(2)}.json`),
-      now: () => 4_000,
-    });
-  }
-  it("(a) admin present: admin-root ACCEPTED, owner-IRK REJECTED", async () => {
-    expect(await controller(ADMIN_ROOT.publicKey).applyPolicy(policy(), signSetDeadManPolicy(policy(), ADMIN_ROOT))).toBe(
-      true,
-    );
-    expect(await controller(ADMIN_ROOT.publicKey).applyPolicy(policy(), signSetDeadManPolicy(policy(), OWNER_IRK))).toBe(
-      false,
-    );
-  });
-  it("(b) admin absent: legacy owner-IRK still works", async () => {
-    expect(await controller().applyPolicy(policy(), signSetDeadManPolicy(policy(), OWNER_IRK))).toBe(true);
   });
 });
 

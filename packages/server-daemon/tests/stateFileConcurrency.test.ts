@@ -12,14 +12,10 @@ import {
   deriveSWK,
   ed,
   mintDevEntitlements,
-  signDeadManAffirmation,
-  signSetDeadManPolicy,
-  type DeadManAffirmation,
   type Keypair,
-  type SetDeadManPolicy,
 } from "@flagship/protocol";
 import { withFileLock, writeFileDurable } from "../src/durableFile.js";
-import { DeadManController, BootUnlockModeSuppressor } from "../src/deadMan.js";
+import { BootUnlockModeSuppressor } from "../src/hostPower.js";
 import { FrontPageStore } from "../src/frontPage.js";
 import { buildIdentityRotateHandlers } from "../src/identityRotateHttp.js";
 import { TokenSetSessionGate } from "../src/alertInboxHttp.js";
@@ -92,46 +88,7 @@ describe("durableFile", () => {
 });
 
 describe("stores survive twenty overlapping writes", () => {
-  it("dead-man: every affirmation's nonce is on disk after a reload", async () => {
-    const irk = key(50);
-    const SERVER = "home.alice.flagship.services";
-    const statePath = join(dir, "deadman.json");
-    const now = 1_000_000;
-    const mk = () =>
-      new DeadManController({
-        serverId: SERVER,
-        irkPub: irk.publicKey,
-        suppressor: { suppress: async () => {} },
-        runner: { power: async () => {} },
-        statePath,
-        now: () => now,
-        setIntervalImpl: () => 0,
-        clearIntervalImpl: () => {},
-      });
-    const a = mk();
-    await a.start();
-    const policy: SetDeadManPolicy = {
-      serverId: SERVER,
-      enabled: true,
-      windowMs: 24 * 3600_000,
-      graceMs: 6 * 3600_000,
-      lockoutMode: "off",
-      issuedAt: now,
-    };
-    expect(await a.applyPolicy(policy, signSetDeadManPolicy(policy, irk))).toBe(true);
-    const results = await Promise.all(
-      range().map((i) => {
-        const affirm: DeadManAffirmation = { serverId: SERVER, nonce: new Uint8Array(16).fill(i + 1), issuedAt: now };
-        return a.affirm(affirm, signDeadManAffirmation(affirm, irk));
-      }),
-    );
-    expect(results.every(Boolean)).toBe(true);
-    const saved = JSON.parse(await readFile(statePath, "utf8")) as { usedNonces: string[] };
-    expect(saved.usedNonces).toHaveLength(N);
-    await noTempLeft(dir);
-  });
-
-  it("dead-man suppressor: overlapping locks leave one whole marker", async () => {
+  it("lock suppressor: overlapping locks leave one whole marker", async () => {
     const path = join(dir, "flagship-lock-once");
     const s = new BootUnlockModeSuppressor(path);
     await Promise.all(range().map(() => s.suppress()));

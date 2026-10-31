@@ -31,7 +31,7 @@ export interface OrderExecutor {
   setBackupPolicy?(args: { enabled: boolean }): Promise<void> | void;
   shutDown?(): Promise<void> | void;
   // NOTE: the `power-off` PhoneOrder no longer rides this path. It is
-  // delivered via `POST /api/power` (deadManHttp.ts) and verified against
+  // delivered via `POST /api/power` (powerHttp.ts) and verified against
   // the OWNER IRK, because the PSK pubkey this orders endpoint verifies
   // against (`psk.pub.hex`) is never written on a real Debian box.
   revokeSelf?(args: { reason: string }): Promise<void> | void;

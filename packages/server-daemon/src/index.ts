@@ -85,16 +85,16 @@ import { buildBrowserProtected, type BrowserProtected } from "./browser/protecte
 import { buildCloneApp } from "./cloneService.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
 import {
-  DeadManController,
-  deadManViewRef,
   BootUnlockModeSuppressor,
   SystemctlPowerRunner,
   executeLockAndPower,
   type AutoUnlockSuppressor,
   type BootSuspender,
   type HostPowerRunner,
-} from "./deadMan.js";
-import { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
+} from "./hostPower.js";
+import { buildPowerHttp } from "./powerHttp.js";
+import { ServingStore } from "./servingStore.js";
+import { ServingLockController } from "./servingLock.js";
 import { BootSuspensionClient, bootBaseFromControl } from "./bootSuspensionClient.js";
 import { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
 import { buildJournalHttp, JournalctlReader } from "./journalHttp.js";
@@ -1845,6 +1845,26 @@ async function main(): Promise<void> {
       })
     : null;
   await serverOrder?.load();
+  // The owner's serving time limit (the one dead-man setting; servingStore.ts): verified under the pinned
+  // sensitive-order key, fed by the heartbeat reply and the admins' apps, sent in every HELLO.
+  const servingRehelloRef: { current: (() => void) | null } = { current: null };
+  const servingLockRef: { current: ServingLockController | null } = { current: null };
+  const servingStore =
+    cfg && env.serverFqdn
+      ? new ServingStore({
+          path: `${dataDir}/serving.json`,
+          account: cfg.userId,
+          boxPub: () => bytesToHexLocal(identityKeypair.publicKey),
+          adminKey: bytesToHexLocal(cfg.adminRootPub ?? cfg.irkPublicKey),
+          serverFqdn: env.serverFqdn,
+          onChange: () => {
+            servingRehelloRef.current?.();
+            void servingLockRef.current?.checkOnce();
+          },
+          log: (m) => console.log(m),
+        })
+      : null;
+  await servingStore?.load();
   const statusHeartbeatRef: { current: DaemonStatusHeartbeat | null } = { current: null };
   // A server created to restore a backup waits for it (docs/server-backup-
   // and-clone.md): the owner-signed restore order rides beside the pairing
@@ -1926,6 +1946,7 @@ async function main(): Promise<void> {
     readStkHybrid: () => stkHybridRef.current,
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
     onDoorbell: (raw: unknown) => doorbellRef.current?.update(raw),
+    ...(servingStore ? { onServing: (raw: unknown) => void servingStore.offer(raw, ".com") } : {}),
     ...(serverOrder
       ? {
           onServerOrder: (raw: unknown) => void serverOrder.offer(raw, ".com"),
@@ -2000,6 +2021,7 @@ async function main(): Promise<void> {
       ...(opaqueTls ? { opaqueTls } : {}),
       ...(doorbellRef.current ? { doorbell: doorbellRef.current } : {}),
       tunnelHubUrl: endpoints.endpoints.tunnelHub,
+      ...(servingStore ? { servingHello: { fields: () => servingStore.helloFields(), rehelloRef: servingRehelloRef } } : {}),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
       acmeEmail: env.acmeEmail!,
       acmeEnvironment: env.acmeEnvironment!,
@@ -2252,6 +2274,7 @@ async function main(): Promise<void> {
     // threading ~15 values through separate builders. Also starts the
     // update-pack scheduler. Same order + side effects as before.
     await wireRuntimeSurfaces({
+      servingStore,
       wildcardGrants,
       publisherPins,
       securitySliver,
@@ -2308,11 +2331,13 @@ async function main(): Promise<void> {
   // FLAGSHIP_RELAY_TRUST_ENFORCE; only the data-plane lockdown is).
   relayLockdownRef.current = runtime.relayLockdown;
 
-  // ---- Owner-IRK handlers: dead-man + power + front-page + journal ----
-  // Production-only (needs cfg.irkPublicKey). No enabled dead-man policy ⇒
-  // no timer, no behavior change. Mounts onto the live runtime + arms the
-  // dead-man SIGTERM/SIGINT stop hooks.
+  // ---- Owner-IRK handlers: serving lock + power + front-page + journal ----
+  // Production-only (needs cfg.irkPublicKey). Mounts onto the live runtime and
+  // starts the serving lock (it does nothing unless the owner's verified
+  // policy says lock-server).
   await wireOwnerHandlers({
+    servingStore,
+    servingLockRef,
     publisherPins,
     appRemovedHooks,
     serverOrder,
@@ -3238,6 +3263,7 @@ async function loadEntitlementsOrExit(deps: {
  * original inline block.
  */
 async function wireRuntimeSurfaces(deps: {
+  servingStore: ServingStore | null;
   wildcardGrants: ServerWildcardGrantStore | null;
   frontPage: FrontPageStore;
   activityLog: ActivityLog;
@@ -4578,7 +4604,7 @@ async function wireRuntimeSurfaces(deps: {
       );
       return () => store.readSync();
     })(),
-    deadMan: () => deadManViewRef.current?.() ?? null,
+    serving: deps.servingStore,
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     filesBytes: runtime.dataProvisioner ? (v: string) => runtime.dataProvisioner!.filesBytes(v) : null,
@@ -4837,6 +4863,8 @@ async function wireRuntimeSurfaces(deps: {
  * SIGTERM/SIGINT stop hooks. No-op (and no behavior change) when cfg is null.
  */
 async function wireOwnerHandlers(deps: {
+  servingStore: ServingStore | null;
+  servingLockRef: { current: ServingLockController | null };
   publisherPins: PublisherPins;
   appRemovedHooks: Array<(serviceId: string) => Promise<void>>;
   /** The STK's hybrid signer once `.com` holds its binding (architecture v2), else null. */
@@ -4878,19 +4906,23 @@ async function wireOwnerHandlers(deps: {
         signer: deps.custodian,
       })
     : null;
-  const deadMan = new DeadManController({
-    serverId: env.serverFqdn,
-    suspender,
-    irkPub: cfg.irkPublicKey,
-    // Slice D — gate policy/affirm on the pinned admin root when present.
-    ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
-    username: cfg.userId,
-    suppressor: autoUnlockSuppressor,
-    runner: hostPowerRunner,
-  });
-  await deadMan.start();
-  deadManViewRef.current = () => deadMan.view();
-  runtime.addHandler(buildDeadManHttp(deadMan));
+  // The owner's one dead-man setting (servingLock.ts): under a verified lock-server policy whose lease lapsed, the
+  // box restarts with its disk locked. Runs every minute and on every store change.
+  const servingLock = deps.servingStore
+    ? new ServingLockController({
+        store: deps.servingStore,
+        suppressor: autoUnlockSuppressor,
+        runner: hostPowerRunner,
+        suspender,
+        markerPath: `${process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship"}/serving-lock.json`,
+        note: async (kind, detail) => {
+          deps.activityLog.note(kind, detail, { ok: false });
+          await deps.activityLog.flush();
+        },
+      })
+    : null;
+  deps.servingLockRef.current = servingLock;
+  await servingLock?.start();
   runtime.addHandler(
     buildPowerHttp({
       serverId: env.serverFqdn,
@@ -5556,10 +5588,11 @@ async function wireOwnerHandlers(deps: {
     // members-only until an admin opens it again (ServiceAccessStore.load).
     accessMode: (serviceId) => (accessStore.mode(serviceId) === "open" ? "open" : "members-only"),
   });
-  process.once("SIGTERM", () => deadMan.stop());
-  process.once("SIGINT", () => deadMan.stop());
+  process.once("SIGTERM", () => servingLock?.stop());
+  process.once("SIGINT", () => servingLock?.stop());
+  const servingPolicy = deps.servingStore?.policy()?.record;
   console.log(
-    `[daemon] dead-man heartbeat-lock ${deadMan.policy().enabled ? "ARMED" : "idle (no policy)"}`,
+    `[daemon] serving time limit: ${servingPolicy ? `${servingPolicy.grace}, ${servingPolicy.onLapse} (policy ${servingPolicy.policyGen})` : "none (indefinitely)"}`,
   );
 }
 
@@ -6119,18 +6152,14 @@ export {
 export type { PersistedCert } from "./acme/persistentStore.js";
 export { buildOrdersHandler } from "./orders.js";
 export {
-  DeadManController,
   BootUnlockModeSuppressor,
   SystemctlPowerRunner,
   executeLockAndPower,
-} from "./deadMan.js";
-export type {
-  AutoUnlockSuppressor,
-  HostPowerRunner,
-  DeadManControllerOptions,
-  DeadManPolicyState,
-} from "./deadMan.js";
-export { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
+} from "./hostPower.js";
+export type { AutoUnlockSuppressor, HostPowerRunner } from "./hostPower.js";
+export { buildPowerHttp } from "./powerHttp.js";
+export { ServingStore, scopeSha256Of, type ServingView } from "./servingStore.js";
+export { ServingLockController, SERVING_LOCK_KIND } from "./servingLock.js";
 export { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
 export { buildJournalHttp, JournalctlReader, type JournalReader } from "./journalHttp.js";
 export {
