@@ -12493,5 +12493,13 @@
   "This signs a new setting for {0}.": {
     "en": "This signs a new setting for {0}.",
     "ctx": "webapp/lib/servingUi.js:106"
+  },
+  "This server locks when no admin opens Flagship, and its time has run out. Open Flagship on an admin device, then turn auto-unlock on.": {
+    "en": "This server locks when no admin opens Flagship, and its time has run out. Open Flagship on an admin device, then turn auto-unlock on.",
+    "ctx": "webapp/lib/leases.js:33"
+  },
+  "Couldn't remove this server's auto-unlock, so locking was not turned on. {0}": {
+    "en": "Couldn't remove this server's auto-unlock, so locking was not turned on. {0}",
+    "ctx": "webapp/lib/servingUi.js:93"
   }
 }

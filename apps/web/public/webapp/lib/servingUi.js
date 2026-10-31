@@ -14,11 +14,15 @@ import { buildOverlay, ensureHost } from "./modal.js";
 import { confirmFreshUnlock } from "./freshUnlock.js";
 import { toast } from "./toast.js";
 import {
+  GRACE_MS,
+  ServingPolicyError,
   canEditServing,
   fetchServing,
   saveServingPolicy,
   servingView,
 } from "./servingAuthority.js";
+import { listLeases, revokeLease } from "./leases.js";
+import { rememberServingState } from "./bootSuspension.js";
 
 export const SERVING_IF_NO_ADMIN = tr("if no admin opens Flagship");
 export const SERVING_NO_LIMIT = tr("No time limit");
@@ -62,6 +66,36 @@ export function servingCardHtml() {
   return `<div class="card hidden" id="serving-card"><div id="serving-line-slot"></div></div>`;
 }
 
+/**
+ * Before a policy that locks the server is saved: revoke every auto-unlock
+ * lease that would outlive its first deadline (SEC-DEADMAN-001), through the
+ * boot service. Throws when one can't be revoked; the policy is then not saved.
+ */
+export async function revokeLeasesOutliving(serverDomain, deadline, deps = {}) {
+  const active = await (deps.listLeases ?? listLeases)(serverDomain);
+  const tooLong = active.filter((l) => !(typeof l.expiresAt === "number" && l.expiresAt <= deadline));
+  for (const l of tooLong) await (deps.revokeLease ?? revokeLease)(serverDomain, l.leaseId, deps);
+  return tooLong.map((l) => l.leaseId);
+}
+
+/**
+ * The editor's Save: a choice that locks the server first drops the auto-unlock
+ * leases that would outlive the deadline; if that fails nothing is signed and the
+ * error says why. Then the policy is signed and sent (lib/servingAuthority.js).
+ */
+export async function saveServingChoice({ serverDomain, view, grace, onLapse }, deps = {}) {
+  const locks = onLapse === "lock-server" && grace !== "indefinite" && !!GRACE_MS[grace];
+  if (locks) {
+    const now = (deps.now ?? Date.now)();
+    try {
+      await revokeLeasesOutliving(serverDomain, now + GRACE_MS[grace], deps);
+    } catch (e) {
+      throw new ServingPolicyError(tr("Couldn't remove this server's auto-unlock, so locking was not turned on. {0}", String(e?.message || e)), 0, "auto-unlock-revoke");
+    }
+  }
+  return (deps.saveServingPolicy ?? saveServingPolicy)({ serverDomain, view, grace, onLapse }, deps);
+}
+
 function paint(view, editable) {
   const slot = document.getElementById("serving-line-slot");
   const card = document.getElementById("serving-card");
@@ -88,11 +122,13 @@ export async function wireServingLine(body, { pod = null, deps = {} } = {}) {
   const editable = canEditServing();
   let view = servingView({ detail: body?.serving ?? null, pod, serverDomain });
   paint(view, editable);
+  if (view) rememberServingState(serverDomain, view);
   const rows = await (deps.fetchServing ?? fetchServing)(username, deps).catch(() => null);
   const row = rows?.find((r) => String(r.serverDomain).toLowerCase() === serverDomain) ?? null;
   if (row) {
     view = servingView({ detail: body?.serving ?? null, row, pod, serverDomain });
     paint(view, editable);
+    if (view) rememberServingState(serverDomain, view);
   }
   const slot = document.getElementById("serving-line-slot");
   if (!editable || !slot) return;
@@ -110,7 +146,7 @@ export async function wireServingLine(body, { pod = null, deps = {} } = {}) {
       return;
     }
     try {
-      const r = await (deps.saveServingPolicy ?? saveServingPolicy)({ serverDomain, view, ...choice }, deps);
+      const r = await saveServingChoice({ serverDomain, view, ...choice }, deps);
       view = {
         ...view,
         grace: r.policy.grace,

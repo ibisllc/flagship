@@ -380,3 +380,74 @@ describe("the server page's line", () => {
     expect(servingLineParts({ grace: "7d", onLapse: "stop-apps", until: now - 1 }, now).lead).toBe("Its apps are stopped until an admin opens Flagship");
   });
 });
+
+describe("a serving policy that locks bounds auto-unlock (SEC-DEADMAN-001, as iOS / Android ServingLockLeaseBound)", () => {
+  it("caps a lease at the deadline, and allows none without a live one", async () => {
+    const { servingLockLeaseExpiry } = await import("../public/webapp/lib/bootSuspension.js");
+    expect(servingLockLeaseExpiry(1_000, false, null, 10)).toBe(1_000);
+    expect(servingLockLeaseExpiry(1_000, true, 500, 10)).toBe(500);
+    expect(servingLockLeaseExpiry(300, true, 500, 10)).toBe(300);
+    expect(servingLockLeaseExpiry(1_000, true, 5, 10)).toBeNull();
+    expect(servingLockLeaseExpiry(1_000, true, null, 10)).toBeNull();
+  });
+
+  it("remembers what a server's policy says, and forgets it after six hours", async () => {
+    const { rememberServingState, cachedServingState } = await import("../public/webapp/lib/bootSuspension.js");
+    const m = new Map<string, string>();
+    const storage = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+    const S = "home.alice.flagship.services";
+    expect(cachedServingState(S, { storage, now: () => 0 })).toBeUndefined();
+    rememberServingState(S, { grace: "7d", onLapse: "lock-server", until: 9_000 }, { storage, now: () => 0 });
+    expect(cachedServingState(S, { storage, now: () => 1 })).toEqual({ locks: true, until: 9_000 });
+    expect(cachedServingState(S, { storage, now: () => 7 * 3_600_000 })).toBeUndefined();
+    rememberServingState(S, { grace: "indefinite", onLapse: "lock-server", until: null }, { storage, now: () => 0 });
+    expect(cachedServingState(S, { storage, now: () => 1 })).toEqual({ locks: false, until: null });
+    rememberServingState(S, { grace: "30d", onLapse: "stop-apps", until: 5 }, { storage, now: () => 0 });
+    expect(cachedServingState(S, { storage, now: () => 1 })).toEqual({ locks: false, until: null });
+  });
+
+  it("renewal remembers each server's state, with the deadline its new lease sets", async () => {
+    const { cachedServingState } = await import("../public/webapp/lib/bootSuspension.js");
+    const m = new Map<string, string>();
+    const storage = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+    const w = world({ storage });
+    const rows = [
+      { serverDomain: "home.alice.flagship.services", policy: signPolicy(policy7d), until: 5 },
+      { serverDomain: "office.alice.flagship.services", policy: signPolicy({ ...policy7d, box: "22".repeat(32), grace: "indefinite", onLapse: "stop-apps" }) },
+    ];
+    await renewServingLeases({ ...w.deps, rows });
+    expect(cachedServingState("home.alice.flagship.services", { storage, now: w.deps.now })).toEqual({ locks: true, until: 1_800_000_000_000 + 7 * 86_400_000 });
+    expect(cachedServingState("office.alice.flagship.services", { storage, now: w.deps.now })).toEqual({ locks: false, until: null });
+  });
+
+  it("Lock on: revokes the auto-unlock leases that outlive the deadline before saving, and saves nothing when that fails", async () => {
+    const { saveServingChoice } = await import("../public/webapp/lib/servingUi.js");
+    const view = { grace: "7d", onLapse: "stop-apps", until: null, policyGen: 1, regGen: 2, scopeSha256: SCOPE, boxPub: BOX };
+    const now = 1_800_000_000_000;
+    const leases = [{ leaseId: "long", expiresAt: now + 8 * 86_400_000 }, { leaseId: "short", expiresAt: now + 86_400_000 }];
+    const order: string[] = [];
+    const save = vi.fn(async () => {
+      order.push("save");
+      return { policy: { grace: "7d", onLapse: "lock-server", policyGen: 2 }, until: now + 7 * 86_400_000 };
+    });
+    await saveServingChoice(
+      { serverDomain: "home.alice.flagship.services", view, grace: "7d", onLapse: "lock-server" },
+      { now: () => now, listLeases: async () => leases, revokeLease: async (_s: string, id: string) => void order.push(`revoke ${id}`), saveServingPolicy: save },
+    );
+    expect(order).toEqual(["revoke long", "save"]);
+
+    const failing = vi.fn(async () => ({}));
+    await expect(
+      saveServingChoice(
+        { serverDomain: "home.alice.flagship.services", view, grace: "7d", onLapse: "lock-server" },
+        { now: () => now, listLeases: async () => leases, revokeLease: async () => { throw new Error("revoke lease failed: 503"); }, saveServingPolicy: failing },
+      ),
+    ).rejects.toMatchObject({ message: "Couldn't remove this server's auto-unlock, so locking was not turned on. revoke lease failed: 503", code: "auto-unlock-revoke" });
+    expect(failing).not.toHaveBeenCalled();
+
+    // Not locking: no lease is touched.
+    const list = vi.fn(async () => leases);
+    await saveServingChoice({ serverDomain: "home.alice.flagship.services", view, grace: "30d", onLapse: "stop-apps" }, { now: () => now, listLeases: list, saveServingPolicy: save });
+    expect(list).not.toHaveBeenCalled();
+  });
+});

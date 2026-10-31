@@ -123,7 +123,10 @@ describe("the lease orders are IRK-signed", () => {
 describe("renewIfExpiringSoon", () => {
   const deps = (leases: Array<{ leaseId: string; expiresAt: number }>) => {
     const enable = vi.fn(async () => ({ leaseId: "new", expiresAt: NOW + 7 * 86_400_000 }));
-    return { enable, deps: { session: { umk: umkSeed }, now: () => NOW, listLeases: async () => leases, enableLongLived: enable } };
+    // This device knows the server's serving policy (no lock), so it may renew silently.
+    const known = JSON.stringify({ [DOMAIN]: { locks: false, until: null, at: NOW } });
+    const storage = { getItem: (k: string) => (k === "flagship.servingState.v1" ? known : null), setItem: () => {} };
+    return { enable, deps: { session: { umk: umkSeed }, now: () => NOW, listLeases: async () => leases, enableLongLived: enable, storage } };
   };
 
   it("re-deposits when the newest lease has under a day left", async () => {
@@ -192,6 +195,32 @@ describe("a locked server takes no lease (SEC-LOCK-001)", () => {
     expect(locked.fetch).not.toHaveBeenCalled();
     const unknown = base({ readSuspension: async () => null });
     await expect(enableLongLived(DOMAIN, 1000, unknown)).rejects.toThrow(/whether this server is locked/);
+  });
+
+  it("a serving policy that locks caps the lease at its deadline, and refuses one with none left", async () => {
+    const capped = base({ serving: { locks: true, until: NOW + 3_600_000 } });
+    const out = await enableLongLived(DOMAIN, 7 * 86_400_000, capped);
+    expect(out.expiresAt).toBe(NOW + 3_600_000);
+    expect(leaseBody(capped.fetch).expiresAt).toBe(NOW + 3_600_000);
+    const lapsed = base({ serving: { locks: true, until: NOW - 1 } });
+    await expect(enableLongLived(DOMAIN, 1000, lapsed)).rejects.toThrow("This server locks when no admin opens Flagship, and its time has run out. Open Flagship on an admin device, then turn auto-unlock on.");
+    const noDeadline = base({ serving: { locks: true, until: null } });
+    await expect(enableLongLived(DOMAIN, 1000, noDeadline)).rejects.toThrow(/time has run out/);
+    expect(noDeadline.fetch).not.toHaveBeenCalled();
+    const stopApps = base({ serving: { locks: false, until: null } });
+    expect((await enableLongLived(DOMAIN, 7 * 86_400_000, stopApps)).expiresAt).toBe(NOW + 7 * 86_400_000);
+  });
+
+  it("silent renewal leaves a server alone when its serving state is unknown", async () => {
+    const enable = vi.fn();
+    const m = new Map<string, string>();
+    const storage = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+    const r = await renewIfExpiringSoon(DOMAIN, 86_400_000, {
+      session: { umk: umkSeed }, now: () => NOW, listLeases: async () => [{ leaseId: "old", expiresAt: NOW + 1000 }],
+      enableLongLived: enable, storage,
+    });
+    expect(r).toEqual([]);
+    expect(enable).not.toHaveBeenCalled();
   });
 
   it("the old dead-man switch no longer bounds or blocks a lease", async () => {

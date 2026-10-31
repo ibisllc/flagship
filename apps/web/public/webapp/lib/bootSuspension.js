@@ -250,3 +250,57 @@ export function describeLockResult(r) {
   if (!power) return tr("Locked at the boot service: {0}.", lock);
   return tr("{0}; {1}.", power, lock);
 }
+
+// ── the serving policy's lock bounds every auto-unlock lease (SEC-DEADMAN-001) ──
+//
+// Under a serving policy whose `onLapse` is `lock-server`, a lease may not outlive
+// the deadline that would lock the server (else the box could unlock itself after
+// it locked), and with no live deadline there is no lease at all. Same rule as
+// iOS / Android `ServingLockLeaseBound`.
+
+/** The lease expiry to use, or null when no lease may be deposited (the policy locks and has no live deadline). */
+export function servingLockLeaseExpiry(requested, locks, until, now = Date.now()) {
+  if (!locks) return requested;
+  if (typeof until !== "number" || !Number.isFinite(until) || until <= now) return null;
+  return Math.min(requested, until);
+}
+
+const SERVING_STATE_KEY = "flagship.servingState.v1";
+const SERVING_STATE_FRESH_MS = 6 * 60 * 60 * 1000;
+
+function readServingStates(deps) {
+  try {
+    const raw = storage(deps)?.getItem(SERVING_STATE_KEY);
+    const o = raw ? JSON.parse(raw) : {};
+    return o && typeof o === "object" ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Remember what this device last learned of a server's serving policy:
+ * `{locks, until}` (locks only with `lock-server` under a time limit).
+ */
+export function rememberServingState(serverDomain, { onLapse, grace, until }, deps = {}) {
+  const all = readServingStates(deps);
+  const locks = onLapse === "lock-server" && grace !== "indefinite" && !!grace;
+  all[String(serverDomain).toLowerCase()] = {
+    locks,
+    until: locks && typeof until === "number" && until > 0 ? until : null,
+    at: (deps.now || Date.now)(),
+  };
+  try {
+    storage(deps)?.setItem(SERVING_STATE_KEY, JSON.stringify(all));
+  } catch {
+    // nothing to remember into: silent renewals treat the state as unknown
+  }
+}
+
+/** The remembered `{locks, until}`, or undefined when there's no fresh answer (unknown ⇒ no silent renewal). */
+export function cachedServingState(serverDomain, deps = {}) {
+  const e = readServingStates(deps)[String(serverDomain).toLowerCase()];
+  if (!e || typeof e.at !== "number") return undefined;
+  if ((deps.now || Date.now)() - e.at > SERVING_STATE_FRESH_MS) return undefined;
+  return { locks: e.locks === true, until: typeof e.until === "number" ? e.until : null };
+}

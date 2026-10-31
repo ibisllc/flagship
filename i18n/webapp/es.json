@@ -3048,5 +3048,7 @@
   "Locks on {0}": "Se bloquea el {0}",
   "Stays online until {0}": "Sigue en línea hasta el {0}",
   "Change when this server stops": "Cambiar cuándo se detiene este servidor",
-  "This signs a new setting for {0}.": "Esto firma un nuevo ajuste para {0}."
+  "This signs a new setting for {0}.": "Esto firma un nuevo ajuste para {0}.",
+  "This server locks when no admin opens Flagship, and its time has run out. Open Flagship on an admin device, then turn auto-unlock on.": "Este servidor se bloquea si ningún administrador abre Flagship, y su tiempo se ha agotado. Abre Flagship en un dispositivo de administrador y luego activa el desbloqueo automático.",
+  "Couldn't remove this server's auto-unlock, so locking was not turned on. {0}": "No se pudo quitar el desbloqueo automático de este servidor, así que el bloqueo no se activó. {0}"
 }

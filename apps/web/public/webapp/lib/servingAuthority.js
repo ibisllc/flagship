@@ -30,6 +30,7 @@ import { screensFetchForPod } from "./api.js";
 import { isCompanionProfile } from "./companionGuard.js";
 import { isDemoProfile } from "./demoAccount.js";
 import { SERVER_ADMIN_ONLY } from "./addServerGate.js";
+import { rememberServingState } from "./bootSuspension.js";
 
 import { tr } from "./i18n.js";
 export const TAG_SERVING_POLICY = "flagship/serving-policy/v1";
@@ -420,10 +421,18 @@ export async function renewServingLeases(deps = {}) {
   if (signer.kind === "admin") await ensureRenewalKey(deps).catch(() => null);
   const rows = deps.rows ?? (await fetchServing(accountOf(session), deps));
   if (!rows) return { signed: 0 };
+  // What each server's policy says, for the auto-unlock bound (lib/bootSuspension.js).
+  for (const row of rows) rememberServingState(row.serverDomain, rowState(row), deps);
   const signed = await signLeases(rows, { ...deps, session, profile, signer });
   if (!signed.length) return { signed: 0 };
   const r = await deliverLeases(signed, { ...deps, session });
   noteLeases(signed, deps);
+  if (r.ok) {
+    for (const x of signed) {
+      const row = rows.find((y) => y.serverDomain === x.serverDomain);
+      rememberServingState(x.serverDomain, { ...rowState(row), until: x.lease.notAfter }, deps);
+    }
+  }
   return { signed: signed.length, ...r };
 }
 
@@ -434,6 +443,11 @@ function noteLeases(signed) {
 }
 export function lastSignedUntil(serverDomain) {
   return lastSigned.get(String(serverDomain ?? "").toLowerCase()) ?? null;
+}
+
+function rowState(row) {
+  const p = row?.policy?.record;
+  return { grace: p?.grace ?? row?.grace ?? "indefinite", onLapse: p?.onLapse ?? row?.onLapse ?? "stop-apps", until: row?.until ?? null };
 }
 
 /** May this tab renew now: unlocked, an owner (not a remote browser), on an admin device. */
@@ -582,5 +596,6 @@ export async function saveServingPolicy({ serverDomain, view, grace, onLapse }, 
       until = signed[0].lease.notAfter;
     }
   }
+  rememberServingState(serverDomain, { grace: policy.grace, onLapse: policy.onLapse, until }, deps);
   return { policy, signature, until };
 }

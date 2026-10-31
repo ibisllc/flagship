@@ -23,11 +23,14 @@ import { accountReadFetch } from "./accountRead.js";
 import { requirePinnedBoxKey } from "./boxKeyPins.js";
 import { bootKeyFor } from "./bootKey.js";
 import { fetchSealedDiskKey } from "./bootApproval.js";
-import { readSuspension, retryPendingLocks } from "./bootSuspension.js";
+import { cachedServingState, readSuspension, retryPendingLocks, servingLockLeaseExpiry } from "./bootSuspension.js";
 
 import { tr } from "./i18n.js";
 export const TAG_AUTO_UNLOCK_LEASE_V2 = "flagship/auto-unlock-lease/v2";
 export const TAG_AUTO_UNLOCK_LEASE_REVOKE = "flagship/auto-unlock-lease-revoke/v1";
+
+/** Why no lease can be deposited under a serving policy that locks the server and has run out. */
+export const SERVING_LOCK_NO_LEASE = tr("This server locks when no admin opens Flagship, and its time has run out. Open Flagship on an admin device, then turn auto-unlock on.");
 
 const DEFAULT_LONG_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 // Renew a lease with less than this left: at the 7-day expiry, on the 6th day.
@@ -93,6 +96,13 @@ export async function enableLongLived(serverFqdn, ttlMs = DEFAULT_LONG_TTL_MS, d
   const lock = await (deps.readSuspension || readSuspension)(serverFqdn, deps);
   if (lock === null) throw new Error("couldn't check whether this server is locked; not depositing a lease");
   if (lock.suspended) throw new Error("this server is locked: resume it before turning auto-unlock back on");
+
+  // Under a serving policy that locks the server, a lease may not outlive the deadline that would
+  // lock it (SEC-DEADMAN-001); with no live deadline, no lease at all.
+  const serving = deps.serving !== undefined ? deps.serving : cachedServingState(serverFqdn, deps);
+  const expiresAt = servingLockLeaseExpiry(now + ttlMs, serving?.locks === true, serving?.until ?? null, now);
+  if (expiresAt === null) throw new Error(SERVING_LOCK_NO_LEASE);
+  ttlMs = expiresAt - now;
 
   // 1. The box's pinned STK (docs/first-contact.md): the only key the lease may seal for. The
   // directory must still list the server, and a different key there is refused.
@@ -174,7 +184,9 @@ export async function renewIfExpiringSoon(serverFqdn, windowMs = RENEW_WINDOW_MS
   }
   if (active.length === 0) return [];
   const now = (deps.now || Date.now)();
-  // A locked server stays locked: enableLongLived checks the boot service first.
+  // Never renew silently when we can't tell the server's state: a locked server stays locked
+  // (enableLongLived checks the boot service), and a lease must stay inside the serving deadline.
+  if (cachedServingState(serverFqdn, deps) === undefined) return [];
   const newest = active.reduce((a, b) => (b.expiresAt > a.expiresAt ? b : a));
   if (newest.expiresAt - now > windowMs) return [];
   try {
