@@ -140,7 +140,7 @@ done
   || say "the gym's gVisor mirror was not published (app installs on gym boxes may fail to download gVisor)"
 (cd "$WT" && npx tsx tools/box-artifact/release-index.ts "$OUT" --merge "https://gym.flagshipserver.com/build/iso/releases.json" >/dev/null) && (cd "$WT/apps/com" && npx wrangler r2 object put "$BUCKET/releases.json" --file "$OUT/releases.json" --remote >/dev/null) || say "releases.json not published (the gym's Update button will not list this release)"
 
-node "$HERE/gym-box-release.mjs" write --worktree "$WT" --commit "$COMMIT" --sequence "$SEQ" --base-url "https://gym.flagshipserver.com/build/iso" >/dev/null
+node "$HERE/gym-box-release.mjs" write --worktree "$WT" --commit "$COMMIT" --sequence "$SEQ" --base-url "https://gym.flagshipserver.com/build/iso" --floor-from-file "$OUT/releases.json" >/dev/null
 (cd "$WT" && node scripts/gen-box-release.mjs --write >/dev/null)
 (cd "$WT" && git add release packages/protocol/src packages/flagship-builder/src apps/mobile apps/web/public/webapp/lib/boxRelease.js packages/control-plane/src 2>/dev/null; \
   git -c user.name="flagship-gym" -c user.email="gym@flagshipserver.com" commit -q -m "gym: box release ${COMMIT:0:12} (sequence $SEQ)" -m "The gym's boxes install this signed artifact. Built and signed by scripts/gym-box-artifact.sh with the gym key.")

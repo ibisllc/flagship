@@ -47,13 +47,23 @@ export function planForWorktree(wt, now = new Date()) {
   return plan({ head, parent, changedByHead, current, now });
 }
 
-export function writeRelease(wt, { commit, sequence, baseUrl = GYM_ARTIFACT_BASE }) {
+/**
+ * The lowest sequence a gym box accepts: the oldest artifact the gym still serves. The gym's `update` group installs the
+ * PREVIOUS artifact on a fresh box and then updates it, so a floor at the newest sequence would refuse that install as a
+ * rollback. Falls back to `sequence` when the index names nothing usable.
+ */
+export function floorFor(releases, sequence) {
+  const seqs = (Array.isArray(releases) ? releases : []).map((r) => r?.sequence).filter((n) => Number.isInteger(n) && n > 0 && n <= sequence);
+  return seqs.length ? Math.min(...seqs) : sequence;
+}
+
+export function writeRelease(wt, { commit, sequence, baseUrl = GYM_ARTIFACT_BASE, floor }) {
   if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error("commit must be 40 lowercase hex");
   if (!Number.isInteger(sequence) || sequence < 1) throw new Error("sequence must be a positive integer");
   const path = join(wt, "release/box-release.json");
   const doc = JSON.parse(readFileSync(path, "utf8"));
   doc.commit = commit;
-  doc.sequence = sequence;
+  doc.sequence = floor ?? sequence;
   doc.artifactBase = baseUrl.replace(/\/+$/, "");
   writeFileSync(path, JSON.stringify(doc, null, 2) + "\n");
   return doc;
@@ -73,7 +83,17 @@ if (process.argv[1] && /gym-box-release\.mjs$/.test(process.argv[1])) {
   }
   if (cmd === "plan") console.log(JSON.stringify(planForWorktree(wt)));
   else if (cmd === "write") {
-    const out = writeRelease(wt, { commit: arg("commit", rest), sequence: Number(arg("sequence", rest)), baseUrl: arg("base-url", rest) });
+    const sequence = Number(arg("sequence", rest));
+    const indexFile = arg("floor-from-file", rest);
+    let floor;
+    if (indexFile) {
+      try {
+        floor = floorFor(JSON.parse(readFileSync(indexFile, "utf8")).releases, sequence);
+      } catch {
+        floor = undefined;
+      }
+    }
+    const out = writeRelease(wt, { commit: arg("commit", rest), sequence, baseUrl: arg("base-url", rest), ...(floor !== undefined ? { floor } : {}) });
     console.log(JSON.stringify(out));
   } else {
     console.error(`unknown command ${cmd}`);

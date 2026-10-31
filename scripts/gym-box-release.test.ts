@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error plain script module
-import { GYM_ARTIFACT_BASE, plan, sequenceFor, writeRelease } from "./gym-box-release.mjs";
+import { GYM_ARTIFACT_BASE, floorFor, plan, sequenceFor, writeRelease } from "./gym-box-release.mjs";
 
 const A = "a".repeat(40);
 const B = "b".repeat(40);
@@ -42,5 +42,22 @@ describe("the gym's box release", () => {
     expect(JSON.parse(readFileSync(join(wt, "release/box-release.json"), "utf8")).commit).toBe(B);
     expect(() => writeRelease(wt, { commit: "gym", sequence: 1 })).toThrow();
     expect(() => writeRelease(wt, { commit: B, sequence: 0 })).toThrow();
+  });
+});
+
+describe("the gym's sequence floor", () => {
+  it("is the oldest artifact the gym serves, so the update group can install the previous one", () => {
+    expect(floorFor([{ sequence: 202610302231 }, { sequence: 202610302040 }, { sequence: 202610301953 }], 202610302231)).toBe(202610301953);
+  });
+  it("ignores junk and never exceeds the new sequence", () => {
+    expect(floorFor([{ sequence: "x" }, { sequence: 0 }, { sequence: 202610309999 }], 202610302231)).toBe(202610302231);
+    expect(floorFor(undefined, 5)).toBe(5);
+  });
+  it("is what writeRelease records as the floor", () => {
+    const wt = mkdtempSync(join(tmpdir(), "gymfloor-"));
+    mkdirSync(join(wt, "release"));
+    writeFileSync(join(wt, "release/box-release.json"), JSON.stringify({ schema: 1, commit: "a".repeat(40), sequence: 1 }));
+    const out = writeRelease(wt, { commit: "b".repeat(40), sequence: 90, floor: 40 });
+    expect(out.sequence).toBe(40);
   });
 });
