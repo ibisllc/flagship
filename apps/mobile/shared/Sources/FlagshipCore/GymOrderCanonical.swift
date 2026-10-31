@@ -90,19 +90,11 @@ public enum GymOrderCanonical {
             else { return nil }
             return PowerOffOrder(serverId: server, mode: mode, issuedAt: at).canonicalBytes()
         }
-        signers.registerCanonical("deadman-policy") { p in
-            guard let r = p as? [String: Any], let server = r["serverId"] as? String, let enabled = r["enabled"] as? Bool,
-                  let window = int64(r["windowMs"]), let grace = int64(r["graceMs"]),
-                  let mode = (r["lockoutMode"] as? String).flatMap(PowerMode.init(rawValue:)), let at = int64(r["issuedAt"])
-            else { return nil }
-            return DeadManPolicy(serverId: server, enabled: enabled, windowMs: window, graceMs: grace,
-                                 lockoutMode: mode, issuedAt: at).canonicalBytes()
+        signers.registerCanonical("serving-policy") { p in
+            try? (p as? ServingPolicy)?.canonicalBytes()
         }
-        signers.registerCanonical("deadman-affirm") { p in
-            guard let r = p as? [String: Any], let server = r["serverId"] as? String,
-                  let nonce = (r["nonce"] as? String).flatMap(HexUtil.decode), let at = int64(r["issuedAt"])
-            else { return nil }
-            return DeadManAffirmation(serverId: server, nonce: nonce, issuedAt: at).canonicalBytes()
+        signers.registerCanonical("renewal-delegation") { p in
+            try? (p as? RenewalKeyDelegation)?.canonicalBytes()
         }
         signers.registerCanonical("front-page") { p in
             guard let r = p as? [String: Any], let server = r["serverId"] as? String, let label = r["label"] as? String,

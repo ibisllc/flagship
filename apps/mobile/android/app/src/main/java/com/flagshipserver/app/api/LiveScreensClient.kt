@@ -389,6 +389,9 @@ class LiveScreensClient(
         return request("/api/screens/server-order", ServerOrderDeliveryResponse.serializer(), "POST", body)
     }
 
+    override suspend fun postServing(body: BoxServingPost): BoxServingAck =
+        request("/api/screens/serving", BoxServingAck.serializer(), "POST", json.encodeToString(BoxServingPost.serializer(), body).toByteArray())
+
     override suspend fun serverWildcardGrantGranted(): Boolean =
         request("/api/screens/server-wildcard-grant", WildcardGrantStatus.serializer()).granted
 

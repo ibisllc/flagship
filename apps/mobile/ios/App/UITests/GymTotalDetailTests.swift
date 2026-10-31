@@ -5,7 +5,7 @@ import XCTest
 /// This class goes beyond GymTotalTests' "screen renders" tranche into control
 /// SWEEPS and multi-step flows the demo fixtures can drive without a backend:
 ///
-///   - D1: the server-detail control sweep (dead-man screen, journal unit picker
+///   - D1: the server-detail control sweep (dead-man line, journal unit picker
 ///     + fetch, front-page picker, decommission on a dead box) and the FULL
 ///     create-server step flow (name → boot-unlock → backup-policy).
 ///   - D2: the git fitness verdict (paste → check → verdict), the MCP connection
@@ -105,25 +105,18 @@ final class GymTotalDetailTests: XCTestCase {
         gymShot(app, "backup-passcode")
     }
 
-    /// D1: the dead-man (auto lock-down) card opens its dedicated screen; the
-    /// enable toggle + the keep-unlocked affirm control render. Stops at render
-    /// (no affirmation fired — Tier-1, no backend).
-    func test_serverDetailDeadManScreenOpens() throws {
+    /// D1: the dead-man line shows its date and opens the editor (stops at render).
+    func test_serverDetailServingLineOpensEditor() throws {
         let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         openPodDetail(app, named: "Home")
-        let open = app.buttons["sd-deadman-open"]
-        XCTAssertTrue(revealBySwipe(app, open), "Server-detail should render the dead-man (lock-down) card.")
-        gymShot(app, "server-detail-deadman-card")
+        let open = app.buttons["sd-serving-open"]
+        XCTAssertTrue(revealBySwipe(app, open), "Server-detail should render the dead-man line.")
+        XCTAssertTrue(open.label.contains("Stays online until "), open.label)
+        gymShot(app, "server-detail-serving-line")
         open.tap()
-        XCTAssertTrue(
-            app.navigationBars["Auto lock-down"].waitForExistence(timeout: 15),
-            "Tapping the dead-man card should push the Auto lock-down screen."
-        )
-        XCTAssertTrue(
-            app.switches["deadman-toggle"].waitForExistence(timeout: 10),
-            "The dead-man screen should render the enable toggle."
-        )
-        gymShot(app, "deadman-screen")
+        XCTAssertTrue(app.segmentedControls["serving-grace-picker"].waitForExistence(timeout: 15),
+                      "Tapping the line should open the editor.")
+        gymShot(app, "serving-editor")
     }
 
     /// D1: the Diagnostics journal card renders the unit picker + the View-journal

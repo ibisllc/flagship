@@ -260,6 +260,11 @@ interface ScreensClient {
     suspend fun deliverServerOrder(wire: com.flagshipserver.app.core.ServerOrderWire): ServerOrderDeliveryResponse =
         throw ScreensError.NotImplemented("server order")
 
+    /** `POST /api/screens/serving` (serving-wiring.md section 3): hand the box the owner's serving
+     *  policy, leases and delegations; it verifies each under its pinned admin key before keeping it. */
+    suspend fun postServing(body: BoxServingPost): BoxServingAck =
+        throw ScreensError.NotImplemented("serving")
+
     /** `GET /api/screens/server-wildcard-grant` (docs/first-contact.md): whether the box holds the
      *  admin's app-name certificate grant. A box from before answers 404. */
     suspend fun serverWildcardGrantGranted(): Boolean =

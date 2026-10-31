@@ -141,10 +141,6 @@ sealed interface DeepLink {
      *  know) it lands on Home, whose pending server cards show the progress. */
     data class InstallProgress(val serial: String? = null) : DeepLink
 
-    /** A dead-man reminder's tap (`…/app/deadman/<serverDomain>`): that server's
-     *  page, where its lock section has Affirm. */
-    data class Deadman(val serverDomain: String) : DeepLink
-
     /** Account pushes (`…/app/account/<page>?u=`, `…/app/settings/<page>`).
      *  The `u=` is not carried: the screens show the active account. */
     data object AccountSecurity : DeepLink
@@ -311,7 +307,6 @@ sealed interface DeepLink {
                     if (id.isEmpty()) null else VibeCodeChat(id, params["server"]?.takeIf { it.isNotEmpty() })
                 }
                 "install-progress" -> InstallProgress(params["serial"]?.takeIf { it.isNotEmpty() })
-                "deadman" -> uri.path?.trim('/')?.takeIf { it.isNotEmpty() }?.let { Deadman(it) }
                 "account" -> when (uri.pathSegments.firstOrNull()) {
                     "security" -> AccountSecurity
                     "devices", "re-pair" -> TrustedDevices

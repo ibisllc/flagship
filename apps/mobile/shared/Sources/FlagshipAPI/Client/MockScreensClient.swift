@@ -79,7 +79,32 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         var detail = try await serverDetailFixture()
         detail.appSandbox = appSandboxFixture
         if let lastUpdateFixture { detail.lastUpdate = lastUpdateFixture }
+        detail.serving = servingFixture
         return detail
+    }
+
+    /// The box's dead-man setting (server-detail `serving`): a 7-day policy renewed an hour ago.
+    public var servingFixture: ServingView? = ServingView(
+        grace: "7d", onLapse: "stop-apps",
+        until: Int64(Date().timeIntervalSince1970 * 1000) + 7 * 86_400_000 - 3_600_000,
+        policyGen: 1, regGen: 1, scopeSha256: String(repeating: "1b", count: 32), boxPub: String(repeating: "6e", count: 32))
+    /// What the apps handed this box (`POST /api/screens/serving`).
+    public private(set) var servingPosts: [BoxServingPost] = []
+
+    public func postServing(_ body: BoxServingPost) async throws {
+        try await tick()
+        if let p = body.policy {
+            try MockOrderSigners.shared.require(.sensitive, kind: "serving-policy", signatureHex: p.signature, payload: p.record)
+            let r = p.record
+            servingFixture = ServingView(grace: r.grace, onLapse: r.onLapse, until: r.grace == "indefinite" ? nil : servingFixture?.until,
+                                         policyGen: r.policyGen, regGen: r.regGen, scopeSha256: r.scopeSha256, boxPub: r.box)
+        }
+        if let lease = body.leases?.map(\.record).max(by: { $0.notAfter < $1.notAfter }),
+           let f = servingFixture, f.grace != "indefinite", lease.policyGen == f.policyGen {
+            servingFixture?.until = max(f.until ?? 0, lease.notAfter)
+        }
+        servingPosts.append(body)
+        GymProbe.note("box serving \(body.policy != nil ? "policy" : "leases \(body.leases?.count ?? 0)")")
     }
 
     private func serverDetailFixture() async throws -> ServerDetailResponse {

@@ -96,6 +96,14 @@ public protocol SecretMailboxClient: Sendable {
     /// authority and keeps the newest; 409 when a newer one is already stored.
     func postServerOrder(username: String, body: SignedServerOrderWire) async throws
 
+    /// The serving authority (docs/architecture-v2/serving-wiring.md section 1): the owner's
+    /// dead-man setting per server (account read token), the admin-signed policy, a device's
+    /// renewal-key delegation, and the leases admin devices sign when the app opens.
+    func fetchServing(username: String) async throws -> AccountServingResponse
+    func postServingPolicy(username: String, body: ServingPolicyPost) async throws
+    func postRenewalDelegation(username: String, body: RenewalDelegationPost) async throws
+    func postServingLeases(username: String, body: ServingLeasesPost) async throws -> ServingLeasesResult
+
     /// POST /api/server/:domain/update — phone, IRK mailbox-auth + ADMIN-authority
     /// order signature (docs/server-update-mechanism.md). Deposits the PUBLIC
     /// admin-signed `flagship/server-update/v1` order on `.com`'s update lane; the
@@ -121,7 +129,7 @@ public protocol SecretMailboxClient: Sendable {
     func putBootSuspension(order: BootSuspensionOrderWire, signatureHex: String, bootAuth: String) async throws -> BootSuspensionPutResult
 
     /// DELETE {boot}/api/boot/lease/:domain — revoke EVERY lease for the
-    /// server (owner-IRK). Used when the dead-man switch is switched on.
+    /// server (owner-IRK). Used when a serving policy that locks the server is set.
     func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws
 
     /// PUT {boot}/api/boot/watch-key — owner header: a copy of one server's disk key sealed to a watch's
@@ -147,6 +155,18 @@ public protocol SecretMailboxClient: Sendable {
 }
 
 public extension SecretMailboxClient {
+    func fetchServing(username: String) async throws -> AccountServingResponse {
+        throw ScreensClientError.notImplemented("serving")
+    }
+    func postServingPolicy(username: String, body: ServingPolicyPost) async throws {
+        throw ScreensClientError.notImplemented("serving")
+    }
+    func postRenewalDelegation(username: String, body: RenewalDelegationPost) async throws {
+        throw ScreensClientError.notImplemented("serving")
+    }
+    func postServingLeases(username: String, body: ServingLeasesPost) async throws -> ServingLeasesResult {
+        throw ScreensClientError.notImplemented("serving")
+    }
     func fetchBootKeyBinding(serverDomain: String) async throws -> BootKeyBindingWire? { nil }
     func fetchBoxPqKeyBinding(serverDomain: String) async throws -> Data? { nil }
     func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse {
@@ -1322,6 +1342,51 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
+    private func accountPath(_ username: String, _ tail: String) throws -> URL {
+        let encoded = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        guard let url = URL(string: baseUrl.absoluteString + "/api/accounts/\(encoded)/\(tail)") else {
+            throw ScreensClientError.http(status: 0, message: String(localized: "bad account URL"))
+        }
+        return url
+    }
+
+    private func postAccount(_ username: String, _ tail: String, body: Data) async throws -> Data {
+        var req = URLRequest(url: try accountPath(username, tail))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = body
+        let (data, resp) = try await urlSession.gatedData(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return data }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
+    public func fetchServing(username: String) async throws -> AccountServingResponse {
+        var req = URLRequest(url: try accountPath(username, "serving"))
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await urlSession.gatedData(for: $0)
+        }
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(AccountServingResponse.self, from: data)
+    }
+
+    public func postServingPolicy(username: String, body: ServingPolicyPost) async throws {
+        _ = try await postAccount(username, "serving-policy", body: try JSONEncoder().encode(body))
+    }
+
+    public func postRenewalDelegation(username: String, body: RenewalDelegationPost) async throws {
+        _ = try await postAccount(username, "renewal-delegations", body: try JSONEncoder().encode(body))
+    }
+
+    public func postServingLeases(username: String, body: ServingLeasesPost) async throws -> ServingLeasesResult {
+        let data = try await postAccount(username, "serving-leases", body: try JSONEncoder().encode(body))
+        return (try? JSONDecoder().decode(ServingLeasesResult.self, from: data)) ?? ServingLeasesResult(accepted: body.leases.count)
+    }
+
     public func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/update") else {
@@ -1557,7 +1622,7 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         revoked.append((request, bootAuth))
     }
     /// Servers whose every lease was revoked (`DELETE {boot}/api/boot/lease/:domain`, release 0.3's
-    /// SEC-DEADMAN-001: switching the dead-man lock on first drops every auto-unlock lease).
+    /// SEC-DEADMAN-001: setting a serving policy that locks first drops every auto-unlock lease).
     public private(set) var revokedAll: [(serverDomain: String, bootAuth: String)] = []
     /// The worker's handleRevokeAllLeases: an owner header for that server and route, then every lease goes.
     public func revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String) async throws {
@@ -1657,6 +1722,38 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
             throw e
         }
         cgkDeposits.append((serverDomain, body))
+    }
+    /// `.com`'s serving view (`GET /api/accounts/:u/serving`), and what was posted to it.
+    public var serving: [AccountServingEntry] = []
+    public private(set) var servingPolicies: [(username: String, body: ServingPolicyPost)] = []
+    public private(set) var renewalDelegations: [(username: String, body: RenewalDelegationPost)] = []
+    public private(set) var servingLeasePosts: [(username: String, body: ServingLeasesPost)] = []
+    public func fetchServing(username: String) async throws -> AccountServingResponse {
+        AccountServingResponse(servers: serving)
+    }
+    public func postServingPolicy(username: String, body: ServingPolicyPost) async throws {
+        try MockOrderSigners.shared.require(.sensitive, kind: "serving-policy", signatureHex: body.signature, payload: body.policy)
+        servingPolicies.append((username, body))
+        if let i = serving.firstIndex(where: { $0.boxPub == body.policy.box }) {
+            serving[i].policy = SignedServingRecord(record: body.policy, signature: body.signature)
+            serving[i].grace = body.policy.grace
+            serving[i].onLapse = body.policy.onLapse
+            if body.policy.grace == "indefinite" { serving[i].until = nil }
+        }
+        GymProbe.note("serving policy \(body.policy.grace) \(body.policy.onLapse) gen \(body.policy.policyGen)")
+    }
+    public func postRenewalDelegation(username: String, body: RenewalDelegationPost) async throws {
+        try MockOrderSigners.shared.require(.sensitive, kind: "renewal-delegation", signatureHex: body.signature, payload: body.delegation)
+        renewalDelegations.append((username, body))
+        GymProbe.note("renewal key delegated")
+    }
+    public func postServingLeases(username: String, body: ServingLeasesPost) async throws -> ServingLeasesResult {
+        servingLeasePosts.append((username, body))
+        for item in body.leases {
+            if let i = serving.firstIndex(where: { $0.boxPub == item.lease.box }) { serving[i].until = item.lease.notAfter }
+        }
+        GymProbe.note("serving leases \(body.leases.count)")
+        return ServingLeasesResult(accepted: body.leases.count)
     }
     public private(set) var serverOrders: [(username: String, body: SignedServerOrderWire)] = []
     /// When set, `postServerOrder` throws it once.

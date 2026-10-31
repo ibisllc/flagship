@@ -952,16 +952,6 @@
     "ctx": "core/DateFormat.kt:36 (prose)",
     "args": 1
   },
-  "h_m_left": {
-    "en": "%1$sh %2$sm left",
-    "ctx": "core/DeadManReminders.kt:48 (prose)",
-    "args": 2
-  },
-  "m_left": {
-    "en": "%1$sm left",
-    "ctx": "core/DeadManReminders.kt:48 (prose)",
-    "args": 1
-  },
   "anyone_with_this_key_can_read": {
     "en": "Anyone with this key can read everything on this server while it's on.",
     "ctx": "core/DebugAccess.kt:27 (prose)"
@@ -2268,20 +2258,6 @@
   "a_new_server_was_added_to": {
     "en": "A new server was added to your account.",
     "ctx": "push/AccountNoticePush.kt:14 (prose)"
-  },
-  "affirm_soon": {
-    "en": "Affirm soon",
-    "ctx": "push/DeadManReminderScheduler.kt:27 (prose)"
-  },
-  "keep_unlocked": {
-    "en": "Keep %1$s unlocked?",
-    "ctx": "push/DeadManReminderScheduler.kt:42 (arg of setContentTitle)",
-    "args": 1
-  },
-  "tap_to_affirm": {
-    "en": "%1$s — tap to affirm.",
-    "ctx": "push/DeadManReminderScheduler.kt:43 (prose)",
-    "args": 1
   },
   "open_flagship_to_see_whats_new": {
     "en": "Open Flagship to see what's new.",
@@ -6279,72 +6255,9 @@
     "ctx": "ui/screens/ServerDetailScreen.kt:1246 (prose)",
     "args": 1
   },
-  "lock_down_off": {
-    "en": "Lock-down off.",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1340 (prose)"
-  },
-  "lock_down_on_affirm_to_keep": {
-    "en": "Lock-down on. Affirm to keep %1$s unlocked.",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1342 (prose)",
-    "args": 1
-  },
-  "lock_down": {
-    "en": "Lock-down",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1351 (arg of FSSectionHeader)"
-  },
-  "auto_lock_down": {
-    "en": "Auto lock-down",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1360 (arg of Text)"
-  },
-  "if_you_dont_affirm_in_time": {
-    "en": "If you don't affirm in time, this server locks itself: it powers off (or restarts) and needs your phone to come back.",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1362 (arg of Text)"
-  },
-  "window": {
-    "en": "Window",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1377 (arg of Text)"
-  },
-  "on_lapse": {
-    "en": "On lapse",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1393 (arg of Text)"
-  },
   "restart": {
     "en": "Restart",
     "ctx": "ui/screens/ServerDetailScreen.kt:1395 (ui label)"
-  },
-  "stay_unlocked": {
-    "en": "Stay unlocked",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1413 (arg of Text)"
-  },
-  "locks_in": {
-    "en": "Locks in %1$s",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1418 (prose)",
-    "args": 1
-  },
-  "window_lapsed_affirm_now": {
-    "en": "Window lapsed — affirm now",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1419 (prose)"
-  },
-  "not_affirmed_yet_affirm_to_start": {
-    "en": "Not affirmed yet — affirm to start the window.",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1426 (arg of Text)"
-  },
-  "tighten_now_5_min": {
-    "en": "Tighten now (5 min)",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1434 (label=)"
-  },
-  "affirming": {
-    "en": "Affirming…",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1442 (prose)"
-  },
-  "keep_unlocked_2": {
-    "en": "Keep %1$s unlocked",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1442 (prose)",
-    "args": 1
-  },
-  "stay_confirmed": {
-    "en": "Stay confirmed.",
-    "ctx": "ui/screens/ServerDetailScreen.kt:1450 (prose)"
   },
   "software_update": {
     "en": "Software update",
@@ -9296,11 +9209,6 @@
     "en": "Couldn't complete that. Try again.",
     "ctx": "viewmodels/CompanionRequestsViewModel.kt:245 (prose)"
   },
-  "dead_man_lock_for": {
-    "en": "%1$s dead-man lock for %2$s",
-    "ctx": "viewmodels/DeadManViewModel.kt:86 (prose)",
-    "args": 2
-  },
   "couldnt_sign": {
     "en": "Couldn't sign: %1$s",
     "ctx": "viewmodels/DeadManViewModel.kt:105 (prose)",
@@ -10992,16 +10900,6 @@
   "recovery_rejected_by_an_admin": {
     "en": "Recovery rejected by an admin",
     "ctx": "viewmodels/AuditLogViewModel.kt:66 (prose)"
-  },
-  "remove_auto_unlock_for": {
-    "en": "Remove auto-unlock for %1$s",
-    "ctx": "viewmodels/DeadManViewModel.kt:98 (prose)",
-    "args": 1
-  },
-  "couldnt_remove_this_servers_auto_unlock": {
-    "en": "Couldn't remove this server's auto-unlock lease, so the lock-down was not turned on. %1$s",
-    "ctx": "viewmodels/DeadManViewModel.kt:103 (prose)",
-    "args": 1
   },
   "couldnt_lock_this_server_at_the": {
     "en": "Couldn't lock this server at the boot service, so it was not restarted. Shut it down instead? It will lock as soon as the service answers.",
@@ -13205,5 +13103,85 @@
   "offline_save_data": {
     "en": "Save my servers' data",
     "ctx": "Offline control entry points (prose)"
+  },
+  "serving_couldnt_sign": {
+    "en": "Couldn't sign the change. Try again.",
+    "ctx": "core/ServingPolicyEditor.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_couldnt_remove_auto_unlock": {
+    "en": "Couldn't remove this server's auto-unlock, so locking was not turned on. %1$s",
+    "ctx": "core/ServingPolicyEditor.kt (server page dead-man line, issuance-and-lease-records.md section 5)",
+    "args": 1
+  },
+  "serving_changed_on_another_device": {
+    "en": "This setting was changed on another device. Close it and try again.",
+    "ctx": "core/ServingPolicyEditor.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_account_refused": {
+    "en": "Your account didn't accept the change. Try again.",
+    "ctx": "core/ServingPolicyEditor.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_couldnt_save": {
+    "en": "Couldn't save the change. Check your connection and try again.",
+    "ctx": "core/ServingPolicyEditor.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_7_days": {
+    "en": "7 days",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_30_days": {
+    "en": "30 days",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_never": {
+    "en": "Never",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_no_time_limit": {
+    "en": "No time limit",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_stays_online_until": {
+    "en": "Stays online until %1$s",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)",
+    "args": 1
+  },
+  "serving_locks_on": {
+    "en": "Locks on %1$s",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)",
+    "args": 1
+  },
+  "serving_if_no_admin_opens": {
+    "en": "if no admin opens Flagship",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_waiting_for_an_admin": {
+    "en": "Waiting for an admin to open Flagship",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_change_when_stops": {
+    "en": "Change when %1$s stops if no admin opens Flagship",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)",
+    "args": 1
+  },
+  "serving_if_no_admin_opens_for": {
+    "en": "If no admin opens Flagship for:",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_then": {
+    "en": "Then:",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_stop_serving_its_apps": {
+    "en": "Stop serving its apps",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_stop_its_apps_and_lock": {
+    "en": "Stop its apps and lock the server",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "serving_locking_restarts_the_server": {
+    "en": "Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.",
+    "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
   }
 }

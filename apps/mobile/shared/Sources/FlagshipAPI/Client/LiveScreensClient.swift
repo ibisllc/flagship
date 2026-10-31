@@ -393,6 +393,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         try await request("/api/screens/server-order", method: "POST", body: try JSONEncoder().encode(order))
     }
+    private struct ServingAck: Decodable { let ok: Bool? }
+    public func postServing(_ body: BoxServingPost) async throws {
+        let _: ServingAck = try await request("/api/screens/serving", method: "POST", body: try JSONEncoder().encode(body))
+    }
     private struct WildcardGrantStatus: Decodable { let granted: Bool }
     private struct WildcardGrantAck: Decodable { let ok: Bool? }
     public func serverWildcardGrantStatus() async throws -> Bool {

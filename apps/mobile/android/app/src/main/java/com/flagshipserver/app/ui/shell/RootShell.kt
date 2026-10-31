@@ -116,7 +116,6 @@ fun RootShell(
             // A friend's acceptance reply: the Apps tab pushes the approve screen.
             is com.flagshipserver.app.core.DeepLink.AcceptInvite -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.InstallProgress -> RootDestination.HOME
-            is com.flagshipserver.app.core.DeepLink.Deadman -> RootDestination.HOME
             com.flagshipserver.app.core.DeepLink.AccountSecurity -> RootDestination.SETTINGS
             com.flagshipserver.app.core.DeepLink.TrustedDevices -> RootDestination.SETTINGS
             com.flagshipserver.app.core.DeepLink.AccountActivity -> RootDestination.ACTIVITY

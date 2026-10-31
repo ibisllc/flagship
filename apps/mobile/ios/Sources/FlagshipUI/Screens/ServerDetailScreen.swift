@@ -258,6 +258,9 @@ public struct ServerDetailScreen: View {
                         DebugAccessBanner(expiresAt: until)
                     }
                     overview(d: d, c: c)
+                    ServingLineCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn,
+                                    serving: d.serving, identityPubKeyHex: identityPubKeyHex,
+                                    onChanged: onRefreshDetail)
                     if !AdminOrderGate.allows(app) {
                         // The box takes this page's orders only under the
                         // admin root: say so once instead of offering them.
@@ -292,7 +295,6 @@ public struct ServerDetailScreen: View {
                     FrontPageCard(serverDomain: d.serverFqdn)
                     if AdminOrderGate.allows(app) {
                         LockPowerCard(serverDomain: d.serverFqdn)
-                        DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
                     }
                     JournalCard(serverDomain: d.serverFqdn)
                     ServerBackupsSection(serverDomain: d.serverFqdn)

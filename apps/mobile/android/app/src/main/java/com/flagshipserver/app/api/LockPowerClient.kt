@@ -1,16 +1,13 @@
-// Pod-direct delivery for the lock-&-power-off + dead-man primitives.
+// Pod-direct delivery for the lock-&-power-off primitives.
 // Unlike most BFF traffic these go STRAIGHT to the box (`https://<pod>`),
 // not through `.com` — the daemon verifies the signature locally against
-// its config-pinned owner IRK. All three are owner-IRK-signed: the manual
-// power surface (`/api/power`) pins the SAME box owner IRK as the dead-man
-// endpoints (the dead PSK/orders path is inert on a real Debian box).
+// its config-pinned owner key (the dead PSK/orders path is inert on a real
+// Debian box).
 //
-//   POST https://<pod>/api/power           { request, signature }  (IRK)
-//   POST https://<pod>/api/deadman/policy  { request, signature }  (IRK)
-//   POST https://<pod>/api/deadman/affirm  { request, signature }  (IRK)
+//   POST https://<pod>/api/power           { request, signature }
+//   POST https://<pod>/api/journal         { request, signature }
 //
-// Mirrors the iOS LockPowerClient + the daemon verify shape
-// (packages/server-daemon/src/deadManHttp.ts).
+// Mirrors the iOS LockPowerClient.
 
 package com.flagshipserver.app.api
 
@@ -66,56 +63,6 @@ data class OrderAck(
     val suspension: String? = null,
 )
 
-// ---------- dead-man policy (IRK-signed) -------------------------------
-
-@Serializable
-data class DeadManPolicyInner(
-    val serverId: String,
-    val enabled: Boolean,
-    val windowMs: Long,
-    val graceMs: Long,
-    /** "off" | "restart" */
-    val lockoutMode: String,
-    val issuedAt: Long,
-)
-
-@Serializable
-data class DeadManPolicyRequest(
-    val request: DeadManPolicyInner,
-    val signature: String,
-)
-
-@Serializable
-data class DeadManPolicyAck(
-    val ok: Boolean = false,
-    val enabled: Boolean = false,
-    /** The first affirmation deadline the box set when the switch was enabled (null from an older box). */
-    val leaseExpiry: Long? = null,
-)
-
-// ---------- dead-man affirmation (IRK-signed) --------------------------
-
-@Serializable
-data class DeadManAffirmInner(
-    val serverId: String,
-    /** Fresh per-affirmation nonce, lowercase hex. */
-    val nonce: String,
-    val issuedAt: Long,
-)
-
-@Serializable
-data class DeadManAffirmRequest(
-    val request: DeadManAffirmInner,
-    val signature: String,
-)
-
-@Serializable
-data class DeadManAffirmAck(
-    val ok: Boolean = false,
-    /** Epoch-ms the dead-man lease now expires at, per the daemon. */
-    @SerialName("leaseExpiry") val leaseExpiry: Long? = null,
-)
-
 // ---------- journal read (owner-IRK-signed diagnostics) ----------------
 
 @Serializable
@@ -153,22 +100,6 @@ class LockPowerClient(
             body,
             PowerOffOrderRequest.serializer(),
             OrderAck.serializer(),
-        )
-
-    suspend fun setDeadManPolicy(serverDomain: String, body: DeadManPolicyRequest): DeadManPolicyAck =
-        transport.postJsonForResponse(
-            "${podBaseUrl(serverDomain)}/api/deadman/policy",
-            body,
-            DeadManPolicyRequest.serializer(),
-            DeadManPolicyAck.serializer(),
-        )
-
-    suspend fun affirm(serverDomain: String, body: DeadManAffirmRequest): DeadManAffirmAck =
-        transport.postJsonForResponse(
-            "${podBaseUrl(serverDomain)}/api/deadman/affirm",
-            body,
-            DeadManAffirmRequest.serializer(),
-            DeadManAffirmAck.serializer(),
         )
 
     suspend fun readJournal(serverDomain: String, body: JournalRequestBody): JournalAck =

@@ -65,6 +65,8 @@ struct FlagshipApp: App {
             }
         }
         #endif
+        // A fresh install holds no serving renewal key: drop one a previous install left in the Keychain.
+        RenewalKey.discardIfFreshInstall()
         _appState = State(initialValue: state)
         _notices = State(initialValue: Self.makeNoticeCenter())
         // `.com` serves the account's servers, devices and app names only
@@ -153,9 +155,9 @@ struct FlagshipApp: App {
         // First contact: hand each server its app-name grant once it answers, and sign
         // owed grants at the next Face ID that opens the admin root.
         FirstContactUpkeep.install(clients: podClients)
-        // The lock/power-off + dead-man routes are signature-authed daemon
+        // The lock/power-off routes are signature-authed daemon
         // endpoints on the SAME box; share the box-pinned session so a rogue
-        // `.com` cert can't intercept a power-off / affirmation either.
+        // `.com` cert can't intercept a power-off either.
         self.liveLockPower = LiveLockPowerClient(urlSession: pinnedSession)
         self.liveFrontPage = LiveFrontPageClient(urlSession: pinnedSession)
         // Box-direct leadership read (`GET /api/leads`) rides the SAME box-pinned
@@ -579,9 +581,8 @@ struct FlagshipApp: App {
     // SecretRequestsContainer can fetch + answer the box's boot-secret
     // requests; Mock (empty inbox) in dev/preview.
     private let mockMailbox = MockSecretMailboxClient()
-    // Lock/power-off + dead-man box-direct client. Live (box-pinned session)
-    // in production; the in-process Mock (records sends, never auto-affirms)
-    // in dev/preview/demo.
+    // Lock/power-off box-direct client. Live (box-pinned session) in
+    // production; the in-process Mock in dev/preview/demo.
     private let mockLockPower = MockLockPowerClient()
     // Front-page (owner-assignable apex) box-direct client — same pinned
     // session and live/mock split as lock/power.
@@ -816,6 +817,9 @@ struct FlagshipApp: App {
                 }
                 .task {
                     await restorePersistedIdentity()
+                    // Renewal on use: opening the app on an admin device keeps its servers serving.
+                    ServingRenewal.install(app: appState, mailbox: activeMailbox, clients: activePodClients)
+                    await ServingRenewal.appOpened()
                 }
                 .task { startNotices() }
                 .task {
@@ -829,6 +833,7 @@ struct FlagshipApp: App {
                     if phase == .active {
                         noticesForeground()
                         RelayAddressRegistry.shared.startIfDue()
+                        Task { await ServingRenewal.appOpened() }
                     }
                     // The relay forwarder is a listener on this phone's loopback: close it (and the
                     // session that remembers its port) before suspension; the next need starts a new one.

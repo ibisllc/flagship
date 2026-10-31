@@ -1169,6 +1169,8 @@ public struct Keystore {
         }
         keychainDelete(account: KCKey.accountReadTokens)
         WrappingKeypair.deleteSEKeyIfExists(profile: id)
+        // The serving renewal key and its delegation record go with the account's keys.
+        RenewalKey.delete(profile: id)
         // Architecture v2: the PQ halves of this profile's identities go with them.
         pqRecordsDeleteAll(profile: id)
         PqKeyStore.shared.clearSession()

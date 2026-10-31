@@ -156,7 +156,7 @@ object Variant : AppVariant {
         GymProbe.relay = relay
         GymProbe.access = MockServiceAccessClient.shared
         cfg.chatVariant?.let { screens.chatVariant = it }
-        // Power, dead-man, journal and front page talk to the box directly.
+        // Power, journal and front page talk to the box directly.
         val boxDirect = MockBoxDirect()
         GymProbe.boxDirect = boxDirect
         PodDirect.transport = { boxDirect }

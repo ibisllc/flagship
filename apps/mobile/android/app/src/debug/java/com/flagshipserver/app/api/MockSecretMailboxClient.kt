@@ -195,6 +195,35 @@ class MockSecretMailboxClient : SecretMailboxClient {
         cgkDeposits.add(serverDomain to body)
     }
 
+    /** `.com`'s serving view (`GET /api/accounts/:u/serving`), and what was posted to it. */
+    val serving: MutableList<AccountServingEntry> = mutableListOf()
+    val servingPolicies: MutableList<Pair<String, ServingPolicyPost>> = mutableListOf()
+    val renewalDelegations: MutableList<Pair<String, RenewalDelegationPost>> = mutableListOf()
+    val servingLeasePosts: MutableList<Pair<String, ServingLeasesPost>> = mutableListOf()
+    override suspend fun fetchServing(username: String) = AccountServingResponse(serving.toList())
+    override suspend fun postServingPolicy(username: String, body: ServingPolicyPost) {
+        adminOnly("serving-policy", com.flagshipserver.app.core.ServingAuthority.canonical(body.policy), body.signature)
+        servingPolicies.add(username to body)
+        val i = serving.indexOfFirst { it.boxPub == body.policy.box }
+        if (i >= 0) serving[i] = serving[i].copy(
+            policy = com.flagshipserver.app.core.SignedServingPolicy(body.policy, body.signature),
+            grace = body.policy.grace, onLapse = body.policy.onLapse,
+            until = if (body.policy.grace == "indefinite") null else serving[i].until,
+        )
+    }
+    override suspend fun postRenewalDelegation(username: String, body: RenewalDelegationPost) {
+        adminOnly("renewal-delegation", com.flagshipserver.app.core.ServingAuthority.canonical(body.delegation), body.signature)
+        renewalDelegations.add(username to body)
+    }
+    override suspend fun postServingLeases(username: String, body: ServingLeasesPost): ServingLeasesResult {
+        servingLeasePosts.add(username to body)
+        for (item in body.leases) {
+            val i = serving.indexOfFirst { it.boxPub == item.lease.box }
+            if (i >= 0) serving[i] = serving[i].copy(until = item.lease.notAfter)
+        }
+        return ServingLeasesResult(accepted = body.leases.size)
+    }
+
     val serverOrders: MutableList<Pair<String, com.flagshipserver.app.core.ServerOrderWire>> = mutableListOf()
     /** When set, the next [postServerOrder] throws this, then clears it. */
     var serverOrderError: Throwable? = null

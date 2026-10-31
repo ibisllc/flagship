@@ -208,11 +208,6 @@
             </intent-filter>
         </service>
 
-        <!-- Dead-man affirmation reminder (T-6h/T-1h/T-15m alarms) -->
-        <receiver
-            android:name=".push.DeadManReminderReceiver"
-            android:exported="false" />
-
         <!-- Share a minted recipe file from the create-server delivery chooser
              (Save / share), a git import's flagship.app.json and a table's
              CSV export. Authority "<applicationId>.fileprovider"; paths in

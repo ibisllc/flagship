@@ -52,7 +52,7 @@ class GymServerPageTest : GymBase() {
             textOfTag("sd-server-admin-only"),
         )
         for (desc in listOf(
-            "sd-update-server", "sd-power-off", "sd-power-restart", "sd-deadman-toggle", "sd-backup-server",
+            "sd-update-server", "sd-power-off", "sd-power-restart", "sd-serving-line", "sd-backup-server",
             "sd-migrate-server", "sd-transfer-server", "sd-revoke-server", "sd-delete-server",
         )) {
             waitUntilExistsDesc(desc, 20_000)
@@ -209,34 +209,39 @@ class GymServerPageTest : GymBase() {
         gymShot("powering-off")
     }
 
-    // ─── Dead-man lock ───────────────────────────────────────────────────────
+    // ─── Dead-man line (serving policy) ──────────────────────────────────────
 
-    /** Turning the lock on signs the policy; a window and the lapse action
-     *  re-sign it; Keep unlocked affirms and shows the countdown. */
+    /** The line shows the date; the editor signs a new policy with the admin root (locking first
+     *  drops the auto-unlock leases); "Never" greys out locking. */
     @Test
-    fun deadManLockPolicyAndAffirm() {
+    fun servingLineEditorAndNever() {
         openServer()
-        waitUntilExistsDesc("sd-deadman-toggle", 20_000)
-        val toggle = composeRule.onNodeWithContentDescription("sd-deadman-toggle").scrollIfNeeded()
-        if (descCount("sd-deadman-affirm") == 0) toggle.performClick()
-        waitUntilExistsDesc("sd-deadman-affirm", 15_000)
-        val windows = composeRule.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("deadman window") {
-            it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription)?.any { d -> d.startsWith("deadman-window-") } == true
-        }).fetchSemanticsNodes()
-        assertTrue(windows.size >= 2)
-        // Release 0.3 (SEC-DEADMAN-001): switching the lock on first revoked every auto-unlock lease on the boot worker.
+        waitUntilExistsDesc("sd-serving-line", 20_000)
+        composeRule.onNodeWithContentDescription("sd-serving-line").scrollIfNeeded()
+        waitText("Stays online until")
+        waitText("if no admin opens Flagship · 7 days")
+        gymShot("serving-line")
+        tapDesc("sd-serving-line")
+        tapDesc("serving-grace-30d", 15_000)
+        tapDesc("serving-lapse-lock")
+        gymShot("serving-editor-lock")
+        tapDesc("serving-save")
+        assertSigned("serving-policy", "admin")
+        eventually(what = "the policy on .com") {
+            mailboxMock.servingPolicies.any { it.second.policy.grace == "30d" && it.second.policy.onLapse == "lock-server" && it.second.policy.policyGen == 2L }
+        }
+        // SEC-DEADMAN-001: a policy that locks first revokes every auto-unlock lease on the boot worker.
         assertTrue(mailboxMock.revokedAll.any { it.first.startsWith("home.") })
-        val before = boxDirect.calls.count { it.path == "/api/deadman/policy" }
-        composeRule.onNodeWithContentDescription("deadman-lockout-restart").scrollIfNeeded().performClick()
-        eventually(what = "re-signed") { boxDirect.calls.count { it.path == "/api/deadman/policy" } > before }
-        assertTrue(boxDirect.calls.last { it.path == "/api/deadman/policy" }.body.contains("\"restart\""))
-        assertSigned("deadman-policy", "admin")
-        tapDesc("sd-deadman-affirm")
-        assertSigned("deadman-affirm", "admin")
-        waitText("Locks in")
-        gymShot("deadman-on")
-        tapText("Tighten now (5 min)")
-        eventually(what = "tightened") { boxDirect.calls.last { it.path == "/api/deadman/policy" }.body.contains("300000") }
+        waitText("Locks on", 15_000)
+        tapDesc("sd-serving-line")
+        tapDesc("serving-grace-indefinite", 15_000)
+        composeRule.onNodeWithContentDescription("serving-lapse-lock").assertIsNotEnabled()
+        gymShot("serving-editor-never")
+        tapDesc("serving-save")
+        eventually(what = "the indefinite policy") {
+            mailboxMock.servingPolicies.any { it.second.policy.grace == "indefinite" && it.second.policy.policyGen == 3L }
+        }
+        waitText("No time limit", 15_000)
     }
 
     // ─── Front page and journal ──────────────────────────────────────────────

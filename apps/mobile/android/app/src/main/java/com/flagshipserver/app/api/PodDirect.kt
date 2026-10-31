@@ -1,4 +1,4 @@
-// Which transport the clients that talk to a box directly (power, dead-man,
+// Which transport the clients that talk to a box directly (power,
 // journal, front page) use: OkHttp, or a debug gym run's mock box
 // (MockBoxDirect, installed by the gym launch). A release build never changes it.
 //

@@ -38,8 +38,8 @@ public final class HomeViewModel {
             }
             #endif
             let resp = try await client.serverDetail()
-            // The box's word on its dead-man switch beats this phone's memory (SEC-DEADMAN-001).
-            if let view = resp.deadMan { DeadManStore().sync(serverDomain: resp.serverFqdn, from: view) }
+            // The box's word on its serving policy beats this phone's memory (it bounds auto-unlock leases).
+            if let view = resp.serving { ServingStateStore().record(resp.serverFqdn, view: view) }
             detail = .loaded(resp)
             needsPairing = false
         } catch {

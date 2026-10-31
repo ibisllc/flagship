@@ -144,12 +144,12 @@ final class BootSuspensionTests: XCTestCase {
         XCTAssertEqual(w.state.epoch, 2)
     }
 
-    func testDeadManBoundsALease() {
-        XCTAssertEqual(DeadManLeaseBound.expiry(requested: 1_000, enabled: false, deadline: nil, now: 10), 1_000)
-        XCTAssertEqual(DeadManLeaseBound.expiry(requested: 1_000, enabled: true, deadline: 500, now: 10), 500)
-        XCTAssertEqual(DeadManLeaseBound.expiry(requested: 300, enabled: true, deadline: 500, now: 10), 300)
-        XCTAssertNil(DeadManLeaseBound.expiry(requested: 1_000, enabled: true, deadline: 5, now: 10))
-        XCTAssertNil(DeadManLeaseBound.expiry(requested: 1_000, enabled: true, deadline: nil, now: 10))
+    func testALockingServingPolicyBoundsALease() {
+        XCTAssertEqual(ServingLockLeaseBound.expiry(requested: 1_000, locks: false, until: nil, now: 10), 1_000)
+        XCTAssertEqual(ServingLockLeaseBound.expiry(requested: 1_000, locks: true, until: 500, now: 10), 500)
+        XCTAssertEqual(ServingLockLeaseBound.expiry(requested: 300, locks: true, until: 500, now: 10), 300)
+        XCTAssertNil(ServingLockLeaseBound.expiry(requested: 1_000, locks: true, until: 5, now: 10))
+        XCTAssertNil(ServingLockLeaseBound.expiry(requested: 1_000, locks: true, until: nil, now: 10))
     }
 
     func testPendingLocksAreRememberedAndCleared() {

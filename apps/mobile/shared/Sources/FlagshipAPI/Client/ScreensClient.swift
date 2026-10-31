@@ -155,6 +155,9 @@ public protocol ScreensClient: Sendable {
     /// An older box answers 404 and gets the order from `.com` instead.
     @discardableResult
     func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck
+    /// `POST /api/screens/serving` (serving-wiring.md section 3): hand the box the owner's serving
+    /// policy, leases and delegations; it verifies each under its pinned admin key before keeping it.
+    func postServing(_ body: BoxServingPost) async throws
     /// `GET /api/screens/server-wildcard-grant` (docs/first-contact.md): whether
     /// the box holds the admin's app-name certificate grant.
     func serverWildcardGrantStatus() async throws -> Bool
@@ -629,6 +632,9 @@ public extension ScreensClient {
     }
     func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         throw ScreensClientError.notImplemented("server order")
+    }
+    func postServing(_ body: BoxServingPost) async throws {
+        throw ScreensClientError.notImplemented("serving")
     }
     func accessAlertsSetting() async throws -> AccessAlertsSetting {
         throw ScreensClientError.notImplemented("access alerts setting")

@@ -50,7 +50,7 @@ extension GymSweepSeams {
         // simulator's defaults (lock-down policies, pending updates).
         if args.contains("-smoke-server-fresh") {
             for pod in app.pods where !pod.fqdn.isEmpty {
-                DeadManStore().clear(for: pod.fqdn)
+                ServingStateStore().clear(pod.fqdn)
                 PendingUpdateStore().clear(serverFqdn: pod.fqdn)
             }
         }

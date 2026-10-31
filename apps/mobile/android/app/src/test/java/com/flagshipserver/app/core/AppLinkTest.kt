@@ -180,28 +180,12 @@ class AppLinkTest {
         assertEquals(DeepLink.InstallProgress(), AppLink.resolve(Uri.parse("flagship://install-progress")))
     }
 
-    @Test fun deadman_carriesServerDomain() {
-        assertEquals(
-            DeepLink.Deadman("home.alice.flagship.services"),
-            AppLink.resolve(Uri.parse("https://flagshipserver.com/app/deadman/home.alice.flagship.services")),
-        )
-        assertEquals(
-            DeepLink.Deadman("home.alice.flagship.services"),
-            AppLink.resolve(Uri.parse("flagship://deadman/home.alice.flagship.services")),
-        )
-        assertNull(AppLink.resolve(Uri.parse("https://flagshipserver.com/app/deadman")))
-    }
-
     // ── What the app itself emits round-trips ────────────────────────
 
     @Test fun endpointsAppRoute_roundTrips() {
         assertEquals("https://flagshipserver.com/app/secret-requests", Endpoints.appRoute("secret-requests"))
         assertEquals(DeepLink.SecretRequests, AppLink.resolve(Uri.parse(Endpoints.appRoute("secret-requests"))))
         assertEquals(DeepLink.VibeCodeChat("abc"), AppLink.resolve(Uri.parse(Endpoints.appRoute("vibecode/abc"))))
-        assertEquals(
-            DeepLink.Deadman("home.alice.flagship.services"),
-            AppLink.resolve(Uri.parse(Endpoints.appRoute("deadman/home.alice.flagship.services"))),
-        )
         assertEquals(
             DeepLink.InstallProgress("A B"),
             AppLink.resolve(Uri.parse(Endpoints.appRoute("install-progress", mapOf("serial" to "A B")))),

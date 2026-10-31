@@ -137,20 +137,10 @@ class BootLock(
         return last
     }
 
-    /** Revoke every lease for the server (the dead-man switch was turned on). */
+    /** Revoke every lease for the server (its serving policy now locks it when no admin opens Flagship). */
     suspend fun revokeAllLeases(serverDomain: String, signer: Ed25519Sign, pubHex: String) {
         val auth = BootAuth.ownerHeader(serverDomain, "DELETE", "/api/boot/lease/$serverDomain", signer, pubHex, now(), nonce())
         client.revokeAllBoxSealedLeases(serverDomain, auth)
-    }
-}
-
-/** A lease never outlives the dead-man affirmation that keeps the switch alive. */
-object DeadManLeaseBound {
-    /** The lease expiry to use, or null when no lease may be deposited (the switch is on and has no live deadline). */
-    fun expiry(requested: Long, enabled: Boolean, deadline: Long?, now: Long): Long? {
-        if (!enabled) return requested
-        if (deadline == null || deadline <= now) return null
-        return minOf(requested, deadline)
     }
 }
 

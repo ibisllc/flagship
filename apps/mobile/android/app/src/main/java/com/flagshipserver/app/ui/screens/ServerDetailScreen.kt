@@ -113,7 +113,6 @@ import com.flagshipserver.app.viewmodels.TransferGiverViewModel
 import com.flagshipserver.app.viewmodels.UpdateServerViewModel
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.core.LocalToastCenter
-import com.flagshipserver.app.core.DeadManReminders
 import com.flagshipserver.app.core.JournalUnits
 import com.flagshipserver.app.core.PendingUpdate
 import com.flagshipserver.app.core.PendingUpdateStore
@@ -132,7 +131,6 @@ import com.flagshipserver.app.core.BootLockStateStore
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
-import com.flagshipserver.app.push.DeadManReminderScheduler
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -146,11 +144,8 @@ import kotlinx.coroutines.launch
 import com.flagshipserver.app.viewmodels.ApprovalSource
 import com.flagshipserver.app.viewmodels.BootUnlockApprovalViewModel
 import com.flagshipserver.app.viewmodels.CoordinatorApprovalSource
-import com.flagshipserver.app.viewmodels.DeadManPhase
-import com.flagshipserver.app.viewmodels.DeadManViewModel
 import com.flagshipserver.app.viewmodels.FrontPagePhase
 import com.flagshipserver.app.viewmodels.FrontPageViewModel
-import com.flagshipserver.app.viewmodels.DeadManWindow
 import com.flagshipserver.app.viewmodels.HomeViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.MigrationViewModel
@@ -389,8 +384,15 @@ fun ServerDetailScreen(
         val revoked = pod?.isRevoked == true
         when (val d = detail) {
             is LoadingState.Loaded -> {
-                SyncDeadManFromBox(d.value)
+                SyncServingFromBox(d.value)
                 ServerInfoCard(d.value)
+                ServingCard(
+                    serverDomain = d.value.serverFqdn,
+                    serving = d.value.serving,
+                    identityPubKeyHex = pod?.identityPubKeyHex.orEmpty(),
+                    box = client,
+                    onChanged = { detailVm?.load() },
+                )
             }
             // The revoked card above already says why nothing loads.
             else -> if (!revoked) {
@@ -438,7 +440,6 @@ fun ServerDetailScreen(
             ShareServerCard(serverDomain = d.value.serverFqdn, podId = podId)
             FrontPageCard(serverDomain = d.value.serverFqdn)
             PowerCard(serverDomain = d.value.serverFqdn)
-            DeadManCard(serverDomain = d.value.serverFqdn)
             JournalCard(serverDomain = d.value.serverFqdn)
             debugVm?.let { vm -> DebugAccessCard(vm = vm, onChanged = { detailVm?.load() }) }
             onOpenLocalAi?.let { LocalAiCard(onOpen = it) }
@@ -610,7 +611,7 @@ private fun BootUnlockApprovalCard(
                                 if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null
                             },
                             pendingLeases = PendingLeaseStore.from(context),
-                            deadManBound = store::deadManBound,
+                            servingLockBound = store::servingLockBound,
                             lockedServer = BootLockStateStore.from(context)::lastKnownSuspended,
                             ownerPq = { m -> com.flagshipserver.app.keystore.QuantumSafetyService.ownerPqSigner(user, m) },
                             strictFor = { d -> com.flagshipserver.app.keystore.QuantumSafetyService.isStrict(user, d) },
@@ -1181,15 +1182,13 @@ private fun LeaderCard(serverDomain: String) {
 // create-time on the InstallBlob, never surfaced on the detail model), so we
 // default to LUKS labeling. Tracked as a gap — when the detail model gains the
 // flag, pass it here to flip to plain "Turn off"/"Restart" for non-LUKS boxes.
-/** The box's word on its dead-man switch beats this phone's memory (SEC-DEADMAN-001). */
+/** The box's word on its serving policy beats this phone's memory (it bounds auto-unlock leases). */
 @Composable
-private fun SyncDeadManFromBox(detail: ServerDetailResponse) {
+private fun SyncServingFromBox(detail: ServerDetailResponse) {
     val context = LocalContext.current
-    val dm = detail.deadMan ?: return
-    LaunchedEffect(detail.serverFqdn, dm) {
-        ServerSettingsStore.from(context).syncDeadMan(
-            detail.serverFqdn, dm.enabled, dm.windowMs, dm.graceMs, dm.lockoutMode, dm.leaseExpiry,
-        )
+    val v = detail.serving ?: return
+    LaunchedEffect(detail.serverFqdn, v) {
+        ServerSettingsStore.from(context).recordServing(detail.serverFqdn, v.onLapseValue, v.graceValue, v.until)
     }
 }
 
@@ -1327,7 +1326,7 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                     pending = null
                     scope.launch {
                         // The deriveIRK signer fires the biometric prompt inside
-                        // vm.run — no separate gate needed (matches DeadManCard).
+                        // vm.run — no separate gate needed.
                         vm.run(mode)
                         when (val p = vm.phase.value) {
                             is PowerOffPhase.Completed ->
@@ -1423,209 +1422,6 @@ private fun JournalCard(serverDomain: String) {
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                         )
                     }
-                }
-            }
-        }
-    }
-}
-
-// Dead-man heartbeat-lock opt-in + the manual affirmation loop. Toggle arms
-// the IRK-signed SetDeadManPolicy; a window picker (24h default, down to
-// minutes) + a one-tap "tighten now" + a lockout-action choice (off default /
-// restart). "Affirm now" sends an IRK-signed DeadManAffirmation and reschedules
-// the T-6h/T-1h/T-15m reminders. Mirror of iOS DeadManCard.
-@Composable
-private fun DeadManCard(serverDomain: String) {
-    val app = LocalAppState.current
-    val toasts = LocalToastCenter.current
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val username by app.currentUser.collectAsState()
-    val store = remember { ServerSettingsStore.from(context) }
-    val deadManMailbox = LocalSecretMailboxClient.current
-
-    val vm = remember(serverDomain) {
-        DeadManViewModel(
-            serverDomain = serverDomain,
-            username = { username },
-            // Slice D — dead-man policy/affirm is SENSITIVE: sign with the admin
-            // master root when this device holds one (else the owner IRK). The
-            // biometric gate is never silent.
-            signer = { reason -> Keystore.adminSigningKey(reason) },
-            // SEC-DEADMAN-001: turning the switch on first removes every auto-unlock lease.
-            bootLock = BootLock(deadManMailbox),
-        )
-    }
-    val phase by vm.phase.collectAsState()
-    val busy = phase is DeadManPhase.Signing || phase is DeadManPhase.Posting
-
-    // Hydrate from the per-server store so a return visit restores the armed
-    // state + window + lockout + the last lease deadline (mirror of iOS
-    // DeadManViewModel.init reading DeadManStore).
-    var enabled by remember(serverDomain) { mutableStateOf(store.deadManEnabled(serverDomain)) }
-    var window by remember(serverDomain) {
-        mutableStateOf(
-            DeadManWindow.fromMs(store.deadManWindowMs(serverDomain)) ?: DeadManWindow.DEFAULT,
-        )
-    }
-    var lockout by remember(serverDomain) {
-        mutableStateOf(PowerMode.fromWire(store.deadManLockoutMode(serverDomain)) ?: PowerMode.OFF)
-    }
-    var leaseExpiry by remember(serverDomain) { mutableStateOf(store.deadManLeaseExpiry(serverDomain)) }
-
-    // 1s ticker so the "Locks in …" countdown re-renders each second while
-    // armed (mirror of iOS LockPowerViews ticker + webapp startDeadManCountdown).
-    var nowTick by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(enabled, leaseExpiry) {
-        while (enabled) {
-            nowTick = System.currentTimeMillis()
-            kotlinx.coroutines.delay(1000)
-        }
-    }
-
-    fun applyPolicy(targetEnabled: Boolean, targetWindow: DeadManWindow, targetLockout: PowerMode) {
-        scope.launch {
-            val ok = vm.setPolicy(targetEnabled, targetWindow, targetLockout)
-            if (ok) {
-                enabled = targetEnabled
-                window = targetWindow
-                lockout = targetLockout
-                store.saveDeadManPolicy(
-                    serverDomain = serverDomain,
-                    enabled = targetEnabled,
-                    windowMs = targetWindow.windowMs,
-                    graceMs = vm.graceMs,
-                    lockoutMode = targetLockout.wire,
-                )
-                if (!targetEnabled) {
-                    leaseExpiry = null
-                    store.setDeadManLeaseExpiry(serverDomain, null)
-                    DeadManReminderScheduler.cancel(context, serverDomain)
-                    toasts.success(FSStrings.get(R.string.lock_down_off))
-                } else {
-                    // The box set the first deadline when it switched on; leases are bounded by it.
-                    vm.lastPolicyLeaseExpiry?.let {
-                        leaseExpiry = it
-                        store.setDeadManLeaseExpiry(serverDomain, it)
-                    }
-                    toasts.success(FSStrings.get(R.string.lock_down_on_affirm_to_keep, serverDomain.substringBefore('.')))
-                }
-            } else {
-                (vm.phase.value as? DeadManPhase.Failed)?.let { toasts.error(it.message) }
-            }
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
-        FSSectionHeader(stringResource(R.string.lock_down))
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.auto_lock_down), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            stringResource(R.string.if_you_dont_affirm_in_time),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    Switch(
-                        checked = enabled,
-                        enabled = !busy && !LocalServerReadOnly.current,
-                        onCheckedChange = { applyPolicy(it, window, lockout) },
-                        modifier = Modifier.semantics { contentDescription = "sd-deadman-toggle" },
-                    )
-                }
-
-                if (enabled) {
-                    FSCardDivider()
-                    Text(stringResource(R.string.window), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                        for (w in DeadManWindow.entries) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .fsFocusRing(8.dp).selectable(selected = window == w, enabled = !busy && !LocalServerReadOnly.current, onClick = { applyPolicy(true, w, lockout) })
-                                    .semantics { contentDescription = "deadman-window-${w.windowMs}" },
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(selected = window == w, onClick = null, enabled = !busy)
-                                Text(w.label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
-                            }
-                        }
-                    }
-
-                    Text(stringResource(R.string.on_lapse), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s4)) {
-                        for (m in listOf(PowerMode.OFF to stringResource(R.string.turn_off), PowerMode.RESTART to stringResource(R.string.restart))) {
-                            Row(
-                                Modifier
-                                    .fsFocusRing(8.dp).selectable(selected = lockout == m.first, enabled = !busy && !LocalServerReadOnly.current, onClick = { applyPolicy(true, window, m.first) })
-                                    .semantics { contentDescription = "deadman-lockout-${m.first.wire}" },
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(selected = lockout == m.first, onClick = null, enabled = !busy)
-                                Text(m.second, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
-                            }
-                        }
-                    }
-
-                    // Live countdown — re-renders each second off `nowTick`. Three
-                    // states mirror iOS LockPowerViews.leaseSection + webapp:
-                    // "Locks in …" while time remains, "Window lapsed" once it does,
-                    // and a "not affirmed yet" prompt when no lease exists.
-                    FSCardDivider()
-                    Text(stringResource(R.string.stay_unlocked), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-                    val exp = leaseExpiry
-                    if (exp != null) {
-                        val remaining = exp - nowTick
-                        Text(
-                            if (remaining > 0) fsString(R.string.locks_in, DeadManReminders.remainingLabel(exp, nowTick))
-                            else stringResource(R.string.window_lapsed_affirm_now),
-                            color = if (remaining > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.semantics { contentDescription = "sd-deadman-remaining" },
-                        )
-                    } else {
-                        Text(
-                            stringResource(R.string.not_affirmed_yet_affirm_to_start),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.semantics { contentDescription = "sd-deadman-remaining" },
-                        )
-                    }
-
-                    FSDangerButton(
-                        label = stringResource(R.string.tighten_now_5_min),
-                        onClick = { applyPolicy(true, DeadManWindow.TIGHTEN, lockout) },
-                        enabled = !busy && !LocalServerReadOnly.current,
-                        block = true,
-                    )
-                    FSPrimaryButton(
-                        // "Keep <server> unlocked" mirrors iOS LockPowerViews +
-                        // the webapp affirm CTA; busy reads "Affirming…".
-                        label = if (busy) stringResource(R.string.affirming) else fsString(R.string.keep_unlocked_2, serverDomain.substringBefore('.')),
-                        onClick = {
-                            scope.launch {
-                                val exp = vm.affirm()
-                                if (exp != null) {
-                                    leaseExpiry = exp
-                                    store.setDeadManLeaseExpiry(serverDomain, exp)
-                                    DeadManReminderScheduler.schedule(context, serverDomain, exp)
-                                    toasts.success(FSStrings.get(R.string.stay_confirmed))
-                                } else {
-                                    (vm.phase.value as? DeadManPhase.Failed)?.let { toasts.error(it.message) }
-                                }
-                            }
-                        },
-                        enabled = !busy && !LocalServerReadOnly.current,
-                        block = true,
-                        modifier = Modifier.semantics { contentDescription = "sd-deadman-affirm" },
-                    )
                 }
             }
         }

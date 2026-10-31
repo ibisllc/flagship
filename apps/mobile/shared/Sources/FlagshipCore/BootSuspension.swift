@@ -148,22 +148,23 @@ public struct BootLock: Sendable {
         return last
     }
 
-    /// Revoke every lease for the server (the dead-man switch was turned on).
+    /// Revoke every lease for the server (its serving policy now locks it when no admin opens Flagship).
     public func revokeAllLeases(serverDomain: String, irk: Curve25519.Signing.PrivateKey) async throws {
         let auth = try BootAuth.ownerHeader(serverDomain: serverDomain, method: "DELETE", path: "/api/boot/lease/\(serverDomain)", irk: irk, now: now(), nonce: nonce())
         try await client.revokeAllBoxSealedLeases(serverDomain: serverDomain, bootAuth: auth)
     }
 }
 
-/// How the dead-man switch bounds an auto-unlock lease: a lease never outlives
-/// the affirmation that keeps the switch alive.
-public enum DeadManLeaseBound {
-    /// The lease expiry to use, or nil when no lease may be deposited (the
-    /// switch is on and has no live deadline).
-    public static func expiry(requested: Int64, enabled: Bool, deadline: Int64?, now: Int64) -> Int64? {
-        guard enabled else { return requested }
-        guard let deadline, deadline > now else { return nil }
-        return min(requested, deadline)
+/// How a `lock-server` serving policy bounds an auto-unlock lease (SEC-DEADMAN-001, now the
+/// serving policy's lock): a lease never outlives the deadline that would lock the server, so a box
+/// taken away before it locks can't unlock itself after it.
+public enum ServingLockLeaseBound {
+    /// The lease expiry to use, or nil when no lease may be deposited (the policy locks and has no
+    /// live deadline).
+    public static func expiry(requested: Int64, locks: Bool, until: Int64?, now: Int64) -> Int64? {
+        guard locks else { return requested }
+        guard let until, until > now else { return nil }
+        return min(requested, until)
     }
 }
 

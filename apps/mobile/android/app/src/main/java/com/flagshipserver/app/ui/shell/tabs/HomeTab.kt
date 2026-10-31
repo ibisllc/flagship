@@ -257,14 +257,6 @@ fun HomeTab() {
                     else -> nav.popBackStack("home-root", inclusive = false)
                 }
             }
-            is DeepLink.Deadman -> {
-                // A cold start may not have the pod list yet; this re-runs when it lands.
-                if (pods.isEmpty()) return@LaunchedEffect
-                deepLinker.consume()
-                val pod = pods.firstOrNull { it.fqdn.equals(link.serverDomain, ignoreCase = true) }
-                if (pod != null) nav.navigate("server-detail/${pod.podId}")
-                else nav.popBackStack("home-root", inclusive = false)
-            }
             DeepLink.CreateServer -> {
                 deepLinker.consume()
                 nav.navigate("create-server")

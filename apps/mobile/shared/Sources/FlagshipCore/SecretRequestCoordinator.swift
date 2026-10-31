@@ -613,13 +613,13 @@ public final class SecretRequestCoordinator {
         let issuedAt = now()
         // A locked server takes no new lease: only an explicit, signed resume re-arms auto-unlock.
         if BootLockStateStore().lastKnownSuspended(request.serverDomain) == true { return nil }
-        // With the dead-man switch on, a lease may not outlive the affirmation that keeps it alive
+        // Under a serving policy that locks the server, a lease may not outlive the deadline
         // (SEC-DEADMAN-001); with no live deadline, no lease at all.
-        let dm = DeadManStore()
-        guard let expiresAt = DeadManLeaseBound.expiry(
+        let serving = ServingStateStore()
+        guard let expiresAt = ServingLockLeaseBound.expiry(
             requested: issuedAt + 365 * 24 * 60 * 60 * 1000,  // ~1 year; renewed on each approve
-            enabled: dm.isEnabled(for: request.serverDomain),
-            deadline: dm.leaseExpiry(for: request.serverDomain),
+            locks: serving.locks(request.serverDomain),
+            until: serving.until(request.serverDomain),
             now: issuedAt
         ) else { return nil }
         let leaseId = AutoUnlockLeaseV2.randomLeaseId()

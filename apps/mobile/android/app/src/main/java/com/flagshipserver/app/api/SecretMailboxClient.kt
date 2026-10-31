@@ -97,7 +97,7 @@ interface SecretMailboxClient {
         throw UnsupportedOperationException("watch boot key")
 
     /** DELETE {boot}/api/boot/lease/:domain — revoke EVERY lease for the
-     *  server (owner-IRK). Used when the dead-man switch is switched on. */
+     *  server (owner-IRK). Used when a serving policy that locks the server is set. */
     suspend fun revokeAllBoxSealedLeases(serverDomain: String, bootAuth: String): Unit =
         throw UnsupportedOperationException("revoke all leases")
 
@@ -141,6 +141,18 @@ interface SecretMailboxClient {
      *  (docs/server-order.md). `.com` checks the signature and keeps the newest;
      *  an order no newer than the stored one is a 409. */
     suspend fun postServerOrder(username: String, wire: com.flagshipserver.app.core.ServerOrderWire)
+
+    /** The serving authority (docs/architecture-v2/serving-wiring.md section 1): the owner's
+     *  dead-man setting per server (account read token), the admin-signed policy, a device's
+     *  renewal-key delegation, and the leases admin devices sign when the app opens. */
+    suspend fun fetchServing(username: String): AccountServingResponse =
+        throw ScreensError.NotImplemented("serving")
+    suspend fun postServingPolicy(username: String, body: ServingPolicyPost): Unit =
+        throw ScreensError.NotImplemented("serving")
+    suspend fun postRenewalDelegation(username: String, body: RenewalDelegationPost): Unit =
+        throw ScreensError.NotImplemented("serving")
+    suspend fun postServingLeases(username: String, body: ServingLeasesPost): ServingLeasesResult =
+        throw ScreensError.NotImplemented("serving")
 
     suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody)
 
@@ -1074,6 +1086,42 @@ class LiveSecretMailboxClient(
             contentType = "application/json",
             accept = setOf(200),
         )
+    }
+
+    private suspend fun <T> postAccount(username: String, tail: String, body: T, serializer: kotlinx.serialization.KSerializer<T>): ByteArray {
+        val encoded = java.net.URLEncoder.encode(username.lowercase(), "UTF-8")
+        return transport.execute(
+            method = "POST",
+            url = "$base/api/accounts/$encoded/$tail",
+            body = transport.json.encodeToString(serializer, body).toByteArray(Charsets.UTF_8),
+            contentType = "application/json",
+            accept = setOf(200, 201),
+        ).body
+    }
+
+    override suspend fun fetchServing(username: String): AccountServingResponse {
+        val encoded = java.net.URLEncoder.encode(username.lowercase(), "UTF-8")
+        return AccountReadTokens.authorize(username) { auth ->
+            transport.getJson(
+                "$base/api/accounts/$encoded/serving",
+                responseSerializer = AccountServingResponse.serializer(),
+                extraHeaders = auth,
+            )
+        }
+    }
+
+    override suspend fun postServingPolicy(username: String, body: ServingPolicyPost) {
+        postAccount(username, "serving-policy", body, ServingPolicyPost.serializer())
+    }
+
+    override suspend fun postRenewalDelegation(username: String, body: RenewalDelegationPost) {
+        postAccount(username, "renewal-delegations", body, RenewalDelegationPost.serializer())
+    }
+
+    override suspend fun postServingLeases(username: String, body: ServingLeasesPost): ServingLeasesResult {
+        val bytes = postAccount(username, "serving-leases", body, ServingLeasesPost.serializer())
+        return runCatching { transport.json.decodeFromString(ServingLeasesResult.serializer(), String(bytes, Charsets.UTF_8)) }
+            .getOrDefault(ServingLeasesResult(accepted = body.leases.size))
     }
 
     override suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody) {

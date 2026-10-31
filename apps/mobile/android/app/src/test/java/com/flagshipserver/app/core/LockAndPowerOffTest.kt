@@ -53,54 +53,6 @@ class LockAndPowerOffTest {
         assertFalse(verifies(sig, "flagship/order/power-off/v1|$server|restart|1", kp.publicKey))
     }
 
-    // ---- SetDeadManPolicy ----
-
-    @Test fun setDeadManPolicy_canonicalBytes_matchTs() {
-        val kp = keyPair(20)
-        val windowMs = 24L * 3600_000
-        val graceMs = 6L * 3600_000
-        val sig = Ed25519Sign(kp.privateKey).sign(
-            SetDeadManPolicy.canonicalBytes(server, true, windowMs, graceMs, PowerMode.OFF, 1000),
-        )
-        assertTrue(
-            verifies(sig, "flagship/set-deadman-policy/v1|$server|1|$windowMs|$graceMs|off|1000", kp.publicKey),
-        )
-    }
-
-    @Test fun setDeadManPolicy_enabledFlag_isInTheBytes() {
-        val kp = keyPair(21)
-        val w = 24L * 3600_000; val g = 6L * 3600_000
-        val sig = Ed25519Sign(kp.privateKey).sign(
-            SetDeadManPolicy.canonicalBytes(server, true, w, g, PowerMode.OFF, 1000),
-        )
-        // enabled=false → different bytes → must not verify.
-        assertFalse(verifies(sig, "flagship/set-deadman-policy/v1|$server|0|$w|$g|off|1000", kp.publicKey))
-        // lockoutMode=restart → different bytes → must not verify.
-        assertFalse(verifies(sig, "flagship/set-deadman-policy/v1|$server|1|$w|$g|restart|1000", kp.publicKey))
-    }
-
-    // ---- DeadManAffirmation ----
-
-    @Test fun deadManAffirmation_canonicalBytes_matchTs() {
-        val kp = keyPair(30)
-        val nonce = ByteArray(16) { 0xAB.toByte() }
-        val nonceHex = "ab".repeat(16)
-        val sig = Ed25519Sign(kp.privateKey).sign(
-            DeadManAffirmation.canonicalBytes(server, nonce, 2000),
-        )
-        assertTrue(verifies(sig, "flagship/deadman-affirm/v1|$server|$nonceHex|2000", kp.publicKey))
-    }
-
-    @Test fun deadManAffirmation_nonceTamper_breaksSignature() {
-        val kp = keyPair(32)
-        val nonce = ByteArray(16) { 0xAB.toByte() }
-        val sig = Ed25519Sign(kp.privateKey).sign(
-            DeadManAffirmation.canonicalBytes(server, nonce, 2000),
-        )
-        val otherHex = "cd".repeat(16)
-        assertFalse(verifies(sig, "flagship/deadman-affirm/v1|$server|$otherHex|2000", kp.publicKey))
-    }
-
     // ---- enum wire round-trips ----
 
     @Test fun powerMode_wire_roundTrips() {

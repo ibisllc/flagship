@@ -82,7 +82,7 @@ internal fun rememberApprovals(): ApprovalsModel<SecretRequestCoordinator.Verifi
                 irk = KeystoreIrkAccess(),
                 adminSigner = { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
                 pendingLeases = PendingLeaseStore.from(context),
-                deadManBound = store::deadManBound,
+                servingLockBound = store::servingLockBound,
                 lockedServer = BootLockStateStore.from(context)::lastKnownSuspended,
                 ownerPq = { m -> com.flagshipserver.app.keystore.QuantumSafetyService.ownerPqSigner(it, m) },
                 strictFor = { d -> com.flagshipserver.app.keystore.QuantumSafetyService.isStrict(it, d) },

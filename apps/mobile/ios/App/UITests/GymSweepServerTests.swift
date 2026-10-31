@@ -155,39 +155,43 @@ final class GymSweepServerTests: GymSweepCase {
         shot(app, "powering-off")
     }
 
-    /// Auto lock-down: turning it on, changing the window and what a lapse
-    /// does, tightening and affirming each send an admin-signed order.
-    func test_deadManPolicyWindowLockoutAffirm() throws {
+    /// The dead-man line (issuance-and-lease-records.md section 5): it shows the date, the editor
+    /// signs a new policy with the admin root, and "Never" greys out locking.
+    func test_servingLineEditorAndNever() throws {
         let app = launchServer()
         openServerPage(app, named: "Home")
-        let open = app.buttons["sd-deadman-open"]
-        XCTAssertTrue(reveal(app, open))
-        open.tap()
-        let toggle = app.switches["deadman-toggle"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
-        XCTAssertEqual(value(toggle), "0", "Lock-down starts off.")
-        toggle.tap()
-        // Release 0.3 (SEC-DEADMAN-001): switching the lock on first revokes every auto-unlock lease on the boot worker.
+        let line = app.buttons["sd-serving-open"]
+        XCTAssertTrue(reveal(app, line))
+        XCTAssertTrue(line.label.contains("Stays online until "), line.label)
+        XCTAssertTrue(line.label.contains("if no admin opens Flagship"), line.label)
+        XCTAssertTrue(line.label.contains("7 days"), line.label)
+        shot(app, "serving-line")
+        line.tap()
+        let grace = app.segmentedControls["serving-grace-picker"]
+        XCTAssertTrue(grace.waitForExistence(timeout: 10), "Tapping the line opens the editor.")
+        grace.buttons["30 days"].tap()
+        let lock = app.buttons["serving-lapse-lock"]
+        XCTAssertTrue(lock.isEnabled)
+        lock.tap()
+        shot(app, "serving-editor-lock")
+        app.buttons["serving-save"].tap()
+        // Locking drops every auto-unlock lease first (SEC-DEADMAN-001), then the policy goes to .com and the box.
         expectProbe(app, "revoked all leases home.")
-        expectProbe(app, "signed deadman-policy by admin-root")
-        let window = app.segmentedControls["deadman-window-picker"]
-        XCTAssertTrue(window.waitForExistence(timeout: 10), "On shows the window.")
-        window.buttons["8 hours"].tap()
-        wait(window.buttons["8 hours"], "isSelected == true")
-        app.buttons["deadman-tighten"].tap()
-        wait(window.buttons["15 minutes"], "isSelected == true")
-        let lockout = app.segmentedControls["deadman-lockout-picker"]
-        lockout.buttons["Restart"].tap()
-        wait(lockout.buttons["Restart"], "isSelected == true")
-        let affirm = app.buttons["deadman-affirm"]
-        XCTAssertTrue(reveal(app, affirm))
-        affirm.tap()
-        expectProbe(app, "signed deadman-affirm by admin-root")
-        XCTAssertTrue(text(app, containing: "stays unlocked").waitForExistence(timeout: 10))
-        shot(app, "deadman-on")
-        revealUp(app, toggle)
-        toggle.tap()
-        waitGone(window)
+        expectProbe(app, "signed serving-policy by admin-root")
+        expectProbe(app, "serving policy 30d lock-server gen 2")
+        waitGone(grace)
+        let locked = app.buttons["sd-serving-open"]
+        XCTAssertTrue(locked.waitForExistence(timeout: 10))
+        wait(locked, "label CONTAINS 'Locks on '")
+        locked.tap()
+        XCTAssertTrue(grace.waitForExistence(timeout: 10))
+        grace.buttons["Never"].tap()
+        wait(app.buttons["serving-lapse-lock"], "isEnabled == false")
+        shot(app, "serving-editor-never")
+        app.buttons["serving-save"].tap()
+        expectProbe(app, "serving policy indefinite stop-apps gen 3")
+        waitGone(grace)
+        wait(app.buttons["sd-serving-open"], "label CONTAINS 'No time limit'")
     }
 
     func test_monitoringRowsExpand() throws {
@@ -530,10 +534,13 @@ final class GymSweepServerTests: GymSweepCase {
         XCTAssertTrue(note.waitForExistence(timeout: 15))
         XCTAssertEqual(note.label, "Only an admin device can change this server. This device can see it.")
         XCTAssertTrue(reveal(app, app.buttons["sd-journal-fetch"]), "Reading the journal stays open.")
+        let line = app.buttons["sd-serving-open"]
+        XCTAssertTrue(reveal(app, line), "Every device sees the dead-man line.")
+        XCTAssertFalse(line.isEnabled, "Only an admin device changes it.")
         let danger = app.staticTexts["sd-danger-admin-only"]
         XCTAssertTrue(reveal(app, danger))
         XCTAssertEqual(danger.label, note.label)
-        for id in ["sd-power-off", "sd-power-restart", "sd-deadman-open", "sd-front-page-save", "sd-update-server",
+        for id in ["sd-power-off", "sd-power-restart", "sd-front-page-save", "sd-update-server",
                    "sd-backup-server", "sd-migrate-server", "sd-make-leader", "sd-transfer-server",
                    "sd-revoke-server", "sd-delete-server"] {
             XCTAssertFalse(app.buttons[id].exists, "\(id) is an admin device's.")

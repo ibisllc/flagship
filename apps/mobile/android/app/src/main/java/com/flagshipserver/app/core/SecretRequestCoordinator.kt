@@ -98,8 +98,8 @@ class SecretRequestCoordinator(
     private val pendingLeases: PendingLeases? = null,
     /** Pauses before the 2nd and 3rd try of a lease deposit that failed in passing. */
     private val leaseRetryDelaysMs: List<Long> = listOf(1_000L, 3_000L),
-    /** The dead-man switch as this phone last knew it, for a server. A lease never outlives its deadline. */
-    private val deadManBound: (serverDomain: String) -> DeadManBound? = { null },
+    /** The server's serving policy as this phone last knew it. Under one that locks, a lease never outlives its deadline. */
+    private val servingLockBound: (serverDomain: String) -> ServingLockBound? = { null },
     /** What this phone last confirmed about the server's lock: true = locked, null = never confirmed. */
     private val lockedServer: (serverDomain: String) -> Boolean? = { null },
     /** The box keys this phone pinned; a reply is never sealed to another. */
@@ -111,8 +111,8 @@ class SecretRequestCoordinator(
 ) {
     /** The owner key's hybrid public key and a signer for it. */
     class OwnerPqSigner(val publicKey: ByteArray, val sign: BootUnlockV2.OwnerSigner)
-    /** The dead-man switch's state for one server, as [DeadManLeaseBound] needs it. */
-    data class DeadManBound(val enabled: Boolean, val deadline: Long?)
+    /** A serving policy's lock for one server, as [ServingLockLeaseBound] needs it. */
+    data class ServingLockBound(val locks: Boolean, val until: Long?)
 
     sealed class CoordinatorException(message: String) : Exception(message) {
         object NoSealedLuksKey :
@@ -527,13 +527,13 @@ class SecretRequestCoordinator(
         val issuedAt = now()
         // A locked server takes no new lease: only an explicit, signed resume re-arms auto-unlock.
         if (lockedServer(serverDomain) == true) return null
-        // With the dead-man switch on, a lease may not outlive the affirmation that keeps it alive
+        // Under a serving policy that locks the server, a lease may not outlive the deadline
         // (SEC-DEADMAN-001); with no live deadline, no lease at all.
-        val dm = deadManBound(serverDomain)
-        val expiresAt = DeadManLeaseBound.expiry(
+        val dm = servingLockBound(serverDomain)
+        val expiresAt = ServingLockLeaseBound.expiry(
             requested = issuedAt + 365L * 24 * 60 * 60 * 1000,  // ~1 year; renewed each approve
-            enabled = dm?.enabled ?: false,
-            deadline = dm?.deadline,
+            locks = dm?.locks ?: false,
+            until = dm?.until,
             now = issuedAt,
         ) ?: return null
         val leaseId = AutoUnlockLeaseV2.randomLeaseId()
@@ -629,9 +629,9 @@ class SecretRequestCoordinator(
                 store.clear(server)
                 continue
             }
-            // A lease built before a lock, or past the dead-man deadline, must not be sent now.
-            val dm = deadManBound(server)
-            if (lockedServer(server) == true || (dm?.enabled == true && p.lease.expiresAt > (dm.deadline ?: 0L))) {
+            // A lease built before a lock, or past a locking serving deadline, must not be sent now.
+            val dm = servingLockBound(server)
+            if (lockedServer(server) == true || (dm?.locks == true && p.lease.expiresAt > (dm.until ?: 0L))) {
                 store.clear(server)
                 continue
             }

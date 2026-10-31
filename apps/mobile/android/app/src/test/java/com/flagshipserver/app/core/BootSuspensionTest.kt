@@ -175,12 +175,12 @@ class BootSuspensionTest {
     }
 
     @Test
-    fun deadManBoundsALease() {
-        assertEquals(1_000L, DeadManLeaseBound.expiry(1_000, false, null, 10))
-        assertEquals(500L, DeadManLeaseBound.expiry(1_000, true, 500, 10))
-        assertEquals(300L, DeadManLeaseBound.expiry(300, true, 500, 10))
-        assertNull(DeadManLeaseBound.expiry(1_000, true, 5, 10))
-        assertNull(DeadManLeaseBound.expiry(1_000, true, null, 10))
+    fun aLockingServingPolicyBoundsALease() {
+        assertEquals(1_000L, ServingLockLeaseBound.expiry(1_000, false, null, 10))
+        assertEquals(500L, ServingLockLeaseBound.expiry(1_000, true, 500, 10))
+        assertEquals(300L, ServingLockLeaseBound.expiry(300, true, 500, 10))
+        assertNull(ServingLockLeaseBound.expiry(1_000, true, 5, 10))
+        assertNull(ServingLockLeaseBound.expiry(1_000, true, null, 10))
     }
 
     @Test

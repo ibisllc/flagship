@@ -108,10 +108,9 @@ public extension EnvironmentValues {
     }
 }
 
-/// Box-direct delivery for the lock/power-off + dead-man envelopes. Dials
-/// the box's signature-authed daemon routes (`/api/power`,
-/// `/api/deadman/*`) over the box-pinned session. Defaults to the in-process
-/// Mock (records sends, never auto-affirms) so previews/tests are inert.
+/// Box-direct delivery for the lock/power-off envelopes. Dials the box's
+/// signature-authed daemon routes (`/api/power`, `/api/journal`) over the
+/// box-pinned session. Defaults to the in-process Mock so previews/tests are inert.
 private struct LockPowerClientKey: EnvironmentKey {
 #if DEBUG
     static let defaultValue: any LockPowerClient = MockLockPowerClient()

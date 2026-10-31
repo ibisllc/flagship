@@ -1,15 +1,13 @@
 import Foundation
 
-/// Box-direct delivery for the lock / power-off + dead-man envelopes.
+/// Box-direct delivery for the lock / power-off envelopes.
 ///
 /// Unlike the screens BFF (session-token-authed at `/api/screens/*`), these
-/// three daemon routes are SIGNATURE-authed `{ request, signature }` bodies —
+/// daemon routes are SIGNATURE-authed `{ request, signature }` bodies —
 /// the daemon verifies the Ed25519 signature against its config-pinned owner
 /// key, so no session token is needed:
 ///
 ///   POST https://<serverDomain>/api/power               (power-off PhoneOrder)
-///   POST https://<serverDomain>/api/deadman/policy      (SetDeadManPolicy)
-///   POST https://<serverDomain>/api/deadman/affirm      (DeadManAffirmation)
 ///
 /// The transport takes an already-built `request` dictionary + the hex
 /// signature so this layer stays free of the FlagshipCore envelope types
@@ -36,14 +34,6 @@ public protocol LockPowerClient: Sendable {
     /// to mint the box's paired-session token. Throws on non-2xx — the caller
     /// only persists the token after this returns.
     func pairSession(serverDomain: String, request: [String: Any], signatureHex: String) async throws
-
-    /// POST a signed `SetDeadManPolicy`. Returns the daemon's `{ ok, enabled }`.
-    func setDeadManPolicy(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManPolicyResult
-
-    /// POST a signed `DeadManAffirmation`. Returns `{ ok, leaseExpiry }` —
-    /// `leaseExpiry` is the new lease deadline in ms (the phone tracks
-    /// time-remaining + schedules its reminders off it).
-    func affirmDeadMan(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManAffirmResult
 
     /// POST a signed `JournalRequest` to `/api/journal`. Returns the daemon's
     /// `{ ok, unit, lines }` — the trailing journal lines for diagnostics.
@@ -80,24 +70,9 @@ public struct JournalResult: Equatable, Sendable {
     }
 }
 
-public struct DeadManPolicyResult: Equatable, Sendable {
-    public let ok: Bool
-    public let enabled: Bool
-    /// The first affirmation deadline the box set when the switch was enabled (0 from an older box).
-    public var leaseExpiry: Int64 = 0
-    public init(ok: Bool, enabled: Bool, leaseExpiry: Int64 = 0) { self.ok = ok; self.enabled = enabled; self.leaseExpiry = leaseExpiry }
-}
-
-public struct DeadManAffirmResult: Equatable, Sendable {
-    public let ok: Bool
-    /// New lease deadline in ms since epoch.
-    public let leaseExpiry: Int64
-    public init(ok: Bool, leaseExpiry: Int64) { self.ok = ok; self.leaseExpiry = leaseExpiry }
-}
-
 /// URLSession-backed implementation. Rides the BOX-pinned session (hard-fail
 /// cert-fingerprint pinning, A′ phase 4) exactly like the screens client, so
-/// a `.com` rogue cert can't intercept a power-off / affirmation in flight.
+/// a `.com` rogue cert can't intercept a power-off in flight.
 public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
     private let urlSession: URLSession
 
@@ -166,22 +141,6 @@ public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
         _ = try await post(serverDomain: serverDomain, path: "/api/orders-from-user", request: request, signatureHex: signatureHex)
     }
 
-    public func setDeadManPolicy(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManPolicyResult {
-        let data = try await post(serverDomain: serverDomain, path: "/api/deadman/policy", request: request, signatureHex: signatureHex)
-        let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        let ok = (obj?["ok"] as? Bool) ?? false
-        let enabled = (obj?["enabled"] as? Bool) ?? false
-        return DeadManPolicyResult(ok: ok, enabled: enabled, leaseExpiry: numberToInt64(obj?["leaseExpiry"]))
-    }
-
-    public func affirmDeadMan(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManAffirmResult {
-        let data = try await post(serverDomain: serverDomain, path: "/api/deadman/affirm", request: request, signatureHex: signatureHex)
-        let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        let ok = (obj?["ok"] as? Bool) ?? false
-        let expiry = numberToInt64(obj?["leaseExpiry"])
-        return DeadManAffirmResult(ok: ok, leaseExpiry: expiry)
-    }
-
     public func readJournal(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> JournalResult {
         let data = try await post(serverDomain: serverDomain, path: "/api/journal", request: request, signatureHex: signatureHex)
         let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -192,19 +151,9 @@ public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
     }
 }
 
-private func numberToInt64(_ v: Any?) -> Int64 {
-    if let n = v as? Int64 { return n }
-    if let n = v as? Int { return Int64(n) }
-    if let n = v as? Double { return Int64(n) }
-    if let n = v as? NSNumber { return n.int64Value }
-    return 0
-}
-
 #if DEBUG
 /// In-memory mock: records what was sent (so tests can assert wire shapes)
-/// and returns controllable results. The affirm path is NOT automatic — it
-/// only returns the configured `leaseExpiry` when the VM explicitly drives an
-/// affirmation, mirroring the security invariant that nothing auto-affirms.
+/// and returns controllable results.
 public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
     public struct Sent: Sendable {
         public let serverDomain: String
@@ -217,12 +166,6 @@ public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
     private var _sent: [Sent] = []
     public var sent: [Sent] { lock.withLock { _sent } }
 
-    /// Result the mock returns for `setDeadManPolicy`; defaults to echoing
-    /// the request's `enabled`.
-    public var policyResultOverride: DeadManPolicyResult?
-    /// Lease expiry the mock returns for `affirmDeadMan`. The mock never
-    /// affirms on its own — a test must call the affirm path to get this.
-    public var affirmLeaseExpiry: Int64 = 0
     /// Optional error to throw on the next call (any path), then cleared.
     public var nextError: Error?
 
@@ -242,20 +185,6 @@ public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
 
     public func pairSession(serverDomain: String, request: [String: Any], signatureHex: String) async throws {
         try record(serverDomain, "/api/orders-from-user", request, signatureHex)
-    }
-
-    public func setDeadManPolicy(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManPolicyResult {
-        try MockOrderSigners.shared.require(.sensitive, kind: "deadman-policy", signatureHex: signatureHex, payload: request)
-        try record(serverDomain, "/api/deadman/policy", request, signatureHex)
-        if let o = policyResultOverride { return o }
-        let enabled = (request["enabled"] as? Bool) ?? false
-        return DeadManPolicyResult(ok: true, enabled: enabled)
-    }
-
-    public func affirmDeadMan(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManAffirmResult {
-        try MockOrderSigners.shared.require(.sensitive, kind: "deadman-affirm", signatureHex: signatureHex, payload: request)
-        try record(serverDomain, "/api/deadman/affirm", request, signatureHex)
-        return DeadManAffirmResult(ok: true, leaseExpiry: affirmLeaseExpiry)
     }
 
     /// Lines the mock returns for `readJournal`.

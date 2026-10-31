@@ -58,96 +58,45 @@ class ServerSettingsStore(private val prefs: SharedPreferences) {
         }.apply()
     }
 
-    // ---- dead-man heartbeat-lock state ---------------------------------
+    // ---- serving policy (the owner's dead-man setting) --------------------
     //
-    // The phone's view of a server's dead-man policy (the daemon enforces; this
-    // drives the UI + reminder scheduling). Non-secret — no key material — so
-    // SharedPreferences is fine. Mirror of iOS DeadManStore (keyed by FQDN):
-    //   - enabled     the opt-in toggle (default OFF)
-    //   - windowMs    affirmation window (default 24h)
-    //   - graceMs     fixed grace past the window (default 6h; part of the
-    //                 signed policy, not user-exposed)
-    //   - lockoutMode "off" (default) or "restart"
-    //   - leaseExpiry last lease deadline the box reported (drives the
-    //                 "time remaining" countdown + reminder scheduling)
+    // What this phone last learned of a server's serving policy (non-secret; the box and the
+    // relay enforce it): whether it locks the server and the current deadline. Bounds auto-unlock
+    // leases (SEC-DEADMAN-001). Mirror of iOS ServingStateStore.
 
-    fun deadManEnabled(serverDomain: String): Boolean =
-        prefs.getBoolean(deadManEnabledKey(serverDomain), false)
+    fun servingLocks(serverDomain: String): Boolean = prefs.getBoolean(servingLocksKey(serverDomain), false)
 
-    fun deadManWindowMs(serverDomain: String): Long =
-        prefs.getLong(deadManWindowKey(serverDomain), DEFAULT_DEADMAN_WINDOW_MS)
-
-    fun deadManGraceMs(serverDomain: String): Long =
-        prefs.getLong(deadManGraceKey(serverDomain), DEFAULT_DEADMAN_GRACE_MS)
-
-    /** "off" (default) or "restart". */
-    fun deadManLockoutMode(serverDomain: String): String =
-        prefs.getString(deadManLockoutKey(serverDomain), "off") ?: "off"
-
-    /** Last lease deadline (ms) the box reported, or null if never affirmed. */
-    fun deadManLeaseExpiry(serverDomain: String): Long? {
-        val k = deadManExpiryKey(serverDomain)
+    fun servingUntil(serverDomain: String): Long? {
+        val k = servingUntilKey(serverDomain)
         return if (prefs.contains(k)) prefs.getLong(k, 0L) else null
     }
 
-    /** Persist the policy fields (NOT the lease expiry — that rides
-     *  [setDeadManLeaseExpiry] after a successful affirm). */
-    fun saveDeadManPolicy(
-        serverDomain: String,
-        enabled: Boolean,
-        windowMs: Long,
-        graceMs: Long,
-        lockoutMode: String,
-    ) {
+    fun recordServing(serverDomain: String, onLapse: ServingOnLapse, grace: ServingGrace, until: Long?) {
         prefs.edit().apply {
-            putBoolean(deadManEnabledKey(serverDomain), enabled)
-            putLong(deadManWindowKey(serverDomain), windowMs)
-            putLong(deadManGraceKey(serverDomain), graceMs)
-            putString(deadManLockoutKey(serverDomain), lockoutMode)
+            putBoolean(servingLocksKey(serverDomain), onLapse == ServingOnLapse.LOCK_SERVER && grace != ServingGrace.INDEFINITE)
+            if (until != null) putLong(servingUntilKey(serverDomain), until) else remove(servingUntilKey(serverDomain))
         }.apply()
     }
 
-    /** Take the box's own account of its switch (server-detail `deadMan`) as the truth, so a lease
-     *  deposited from this phone is bounded by the real deadline even when another device turned the
-     *  switch on or affirmed it. */
-    fun syncDeadMan(serverDomain: String, enabled: Boolean, windowMs: Long, graceMs: Long, lockoutMode: String, leaseExpiry: Long) {
-        saveDeadManPolicy(serverDomain, enabled, windowMs.takeIf { it > 0 } ?: deadManWindowMs(serverDomain),
-            graceMs.takeIf { it > 0 } ?: deadManGraceMs(serverDomain), lockoutMode)
-        setDeadManLeaseExpiry(serverDomain, if (enabled && leaseExpiry > 0) leaseExpiry else null)
+    fun clearServing(serverDomain: String) {
+        prefs.edit().remove(servingLocksKey(serverDomain)).remove(servingUntilKey(serverDomain)).apply()
     }
 
-    /** The switch's state for one server, as [DeadManLeaseBound] needs it. */
-    fun deadManBound(serverDomain: String) =
-        SecretRequestCoordinator.DeadManBound(deadManEnabled(serverDomain), deadManLeaseExpiry(serverDomain))
-
-    /** Record (or clear, with null) the lease deadline the box reported. */
-    fun setDeadManLeaseExpiry(serverDomain: String, expiry: Long?) {
-        prefs.edit().apply {
-            if (expiry != null) putLong(deadManExpiryKey(serverDomain), expiry)
-            else remove(deadManExpiryKey(serverDomain))
-        }.apply()
-    }
+    /** The serving lock for one server, as [ServingLockLeaseBound] needs it. */
+    fun servingLockBound(serverDomain: String) =
+        SecretRequestCoordinator.ServingLockBound(servingLocks(serverDomain), servingUntil(serverDomain))
 
     private fun modeKey(d: String) = "$MODE_PREFIX${d.lowercase()}"
     private fun leaseKey(d: String) = "$LEASE_PREFIX${d.lowercase()}"
-    private fun deadManEnabledKey(d: String) = "$DEADMAN_ENABLED_PREFIX${d.lowercase()}"
-    private fun deadManWindowKey(d: String) = "$DEADMAN_WINDOW_PREFIX${d.lowercase()}"
-    private fun deadManGraceKey(d: String) = "$DEADMAN_GRACE_PREFIX${d.lowercase()}"
-    private fun deadManLockoutKey(d: String) = "$DEADMAN_LOCKOUT_PREFIX${d.lowercase()}"
-    private fun deadManExpiryKey(d: String) = "$DEADMAN_EXPIRY_PREFIX${d.lowercase()}"
+    private fun servingLocksKey(d: String) = "$SERVING_LOCKS_PREFIX${d.lowercase()}"
+    private fun servingUntilKey(d: String) = "$SERVING_UNTIL_PREFIX${d.lowercase()}"
 
     companion object {
         private const val PREFS = "flagship.bootUnlock"
         private const val MODE_PREFIX = "mode."
         private const val LEASE_PREFIX = "leaseId."
-        private const val DEADMAN_ENABLED_PREFIX = "deadman.enabled."
-        private const val DEADMAN_WINDOW_PREFIX = "deadman.windowMs."
-        private const val DEADMAN_GRACE_PREFIX = "deadman.graceMs."
-        private const val DEADMAN_LOCKOUT_PREFIX = "deadman.lockout."
-        private const val DEADMAN_EXPIRY_PREFIX = "deadman.leaseExpiry."
-
-        const val DEFAULT_DEADMAN_WINDOW_MS = 24L * 3600_000
-        const val DEFAULT_DEADMAN_GRACE_MS = 6L * 3600_000
+        private const val SERVING_LOCKS_PREFIX = "serving.locks."
+        private const val SERVING_UNTIL_PREFIX = "serving.until."
 
         fun from(context: Context): ServerSettingsStore =
             ServerSettingsStore(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE))

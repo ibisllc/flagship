@@ -73,6 +73,31 @@ class MockScreensClient(
     /** Replaces the applied `lastUpdate` (a rollback, a refusal, one kept in recovery). */
     var lastUpdateFixture: LastUpdate? = null
 
+    /** The box's dead-man setting (server-detail `serving`): a 7-day policy renewed an hour ago. */
+    var servingFixture: ServingView? = ServingView(
+        grace = "7d", onLapse = "stop-apps", until = System.currentTimeMillis() + 7L * 86_400_000 - 3_600_000,
+        policyGen = 1, regGen = 1, scopeSha256 = "1b".repeat(32), boxPub = "6e".repeat(32),
+    )
+    /** What the apps handed this box (`POST /api/screens/serving`). */
+    val servingPosts: MutableList<BoxServingPost> = mutableListOf()
+
+    override suspend fun postServing(body: BoxServingPost): BoxServingAck {
+        tick()
+        body.policy?.let { p ->
+            MockSignatures.requireAdmin("serving-policy", com.flagshipserver.app.core.ServingAuthority.canonical(p.record), p.signature)
+            val r = p.record
+            servingFixture = ServingView(r.grace, r.onLapse, if (r.grace == "indefinite") null else servingFixture?.until,
+                r.policyGen, r.regGen, r.scopeSha256, r.box)
+        }
+        val best = body.leases?.maxByOrNull { it.record.notAfter }?.record
+        val f = servingFixture
+        if (best != null && f != null && f.grace != "indefinite" && best.policyGen == f.policyGen) {
+            servingFixture = f.copy(until = maxOf(f.until ?: 0L, best.notAfter))
+        }
+        servingPosts.add(body)
+        return BoxServingAck(ok = true, policyAdopted = body.policy != null, leasesAccepted = body.leases?.size ?: 0, serving = servingFixture)
+    }
+
     override suspend fun serverDetail(): ServerDetailResponse {
         tick()
         if (podContext in unreachablePodContexts) throw java.io.IOException("$podContext isn't answering")
@@ -103,6 +128,7 @@ class MockScreensClient(
                 previousCommit = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
             ),
             debugAccess = debugAccessState,
+            serving = servingFixture,
             storage = ServerStorage(
                 brake = "off",
                 capped = true,

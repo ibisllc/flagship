@@ -364,6 +364,8 @@ class MainActivity : FragmentActivity() {
             )
         }
         BiometricAuthority.onSessionUnlocked = {
+            // Renewal on use: the unlock that opens the admin root delegates the serving renewal key once.
+            com.flagshipserver.app.keystore.ServingRenewal.sessionUnlocked()
             com.flagshipserver.app.keystore.PqIdentityUpgrade.trigger()
             com.flagshipserver.app.keystore.QuantumSafetyService.activate(appState.currentUser.value, appState.activeProfile?.deviceId)
         }
@@ -406,6 +408,13 @@ class MainActivity : FragmentActivity() {
             // (docs/app-placement.md).
             val podClients: com.flagshipserver.app.core.PodClients = remember {
                 mocks?.podClients ?: com.flagshipserver.app.core.LivePodClients(okHttp, sessionStore)
+            }
+            // Renewal on use (serving-wiring.md section 4): opening the app on an admin device keeps
+            // its servers serving. Re-runs once the account is known.
+            val servingUser by appState.currentUser.collectAsState()
+            LaunchedEffect(effectiveMailbox, servingUser) {
+                com.flagshipserver.app.keystore.ServingRenewal.install(applicationContext, appState, effectiveMailbox, podClients)
+                com.flagshipserver.app.keystore.ServingRenewal.appOpened()
             }
 
             // Maintainer-trust check on launch (live only — the Mock control
@@ -875,6 +884,7 @@ class MainActivity : FragmentActivity() {
         super.onStart()
         foreground.value = true
         com.flagshipserver.app.core.SecurityNoticeCenter.shared?.onForeground()
+        com.flagshipserver.app.keystore.ServingRenewal.appOpened()
         // The visible activity owns the biometric prompt (another instance's
         // onDestroy must never leave key use without one).
         if (::biometric.isInitialized) BiometricAuthority.set(biometric)

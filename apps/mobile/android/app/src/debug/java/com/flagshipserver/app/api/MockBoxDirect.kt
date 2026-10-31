@@ -1,4 +1,4 @@
-// The pod-direct clients (power, dead-man, journal, front page) talk straight
+// The pod-direct clients (power, journal, front page) talk straight
 // to `https://<server>`, outside the screens session. Smoke mode swaps their
 // transport for MockBoxDirect, an in-memory box that answers them, checks each
 // sensitive order under the account's admin root the way the box does
@@ -46,23 +46,6 @@ class MockBoxDirect : JsonHttpTransport {
                 val mode = com.flagshipserver.app.core.PowerMode.fromWire(r.request.mode) ?: throw HttpException(400, "bad mode")
                 admin("power", com.flagshipserver.app.core.PowerOffOrder.canonicalBytes(r.request.serverId, mode, r.request.issuedAt), r.signature)
                 """{"ok":true,"mode":"${mode.wire}"}"""
-            }
-            "POST" to "/api/deadman/policy" -> {
-                val r = json.decodeFromString(DeadManPolicyRequest.serializer(), body)
-                val i = r.request
-                val mode = com.flagshipserver.app.core.PowerMode.fromWire(i.lockoutMode) ?: throw HttpException(400, "bad mode")
-                admin(
-                    "deadman-policy",
-                    com.flagshipserver.app.core.SetDeadManPolicy.canonicalBytes(i.serverId, i.enabled, i.windowMs, i.graceMs, mode, i.issuedAt),
-                    r.signature,
-                )
-                """{"ok":true,"enabled":${i.enabled}}"""
-            }
-            "POST" to "/api/deadman/affirm" -> {
-                val r = json.decodeFromString(DeadManAffirmRequest.serializer(), body)
-                val nonce = com.flagshipserver.app.core.HexUtil.decode(r.request.nonce) ?: throw HttpException(400, "bad nonce")
-                admin("deadman-affirm", com.flagshipserver.app.core.DeadManAffirmation.canonicalBytes(r.request.serverId, nonce, r.request.issuedAt), r.signature)
-                """{"ok":true,"leaseExpiry":${System.currentTimeMillis() + 7L * 24 * 3600_000}}"""
             }
             "POST" to "/api/journal" -> {
                 val r = json.decodeFromString(JournalRequestBody.serializer(), body)
