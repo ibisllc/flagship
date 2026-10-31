@@ -2,7 +2,7 @@
  * Who may serve what, and until when (plan H1-H9, docs/architecture-v2/issuance-and-lease-records.md; owner
  * decisions of 2026-10-31). The relay enforces it; the issuance service reads the same records.
  *
- *   flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<scopeSha256>|<issuedAt>
+ *   flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse>|<scopeSha256>|<issuedAt>
  *   flagship/renewal-key-delegation/v1|<account>|<renewalPub>|<deviceId>|<issuedAt>
  *   flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
  *   flagship/revocation-entry/v1|<sequence>|<kind>|<account>|<subject>|<generation>|<revokedAt>
@@ -15,6 +15,12 @@
  * app is opened, never further ahead than the grace, bound to the policy generation (shortening the grace advances
  * it, so an older, longer lease stops counting). A lease is checked against the admin key `.com` publishes AND the
  * key the box pinned; both must be the same key. Revocation is a signed, sequenced log `.com` pushes to the relays.
+ *
+ * One setting, two enforcers, one deadline (owner, 2026-10-31: the old box-enforced dead-man lock, deadMan.ts, is
+ * folded in here). `onLapse` says what happens when the lease runs out: `stop-apps` (the relay stops routing the
+ * box's apps) or `lock-server` (also: the box restarts with its disk locked and starts again only when an admin
+ * approves on a phone). The same lease keeps both going: the relay checks it for app routes, the box for staying
+ * unlocked. Locking needs a time limit.
  *
  * A box's exact control name never needs a lease (recovery stays possible); only app routes do.
  */
@@ -31,6 +37,8 @@ export const TAG_CERTIFICATE_ORDER = "flagship/certificate-order/v1";
 export const TAG_ROUTE_CLAIM = "flagship/route-claim/v1";
 
 export type ServingGrace = "7d" | "30d" | "indefinite";
+/** What happens when no admin device renewed within the grace. */
+export type ServingOnLapse = "stop-apps" | "lock-server";
 export const GRACE_MS: Readonly<Record<Exclude<ServingGrace, "indefinite">, number>> = { "7d": 7 * 86_400_000, "30d": 30 * 86_400_000 };
 /** The grace a new server starts with. */
 export const DEFAULT_SERVING_GRACE: ServingGrace = "indefinite";
@@ -63,6 +71,8 @@ export interface ServingPolicy {
   /** Advances on every new policy for this box (a shorter grace must outdate older leases). */
   policyGen: number;
   grace: ServingGrace;
+  /** `lock-server` only with a finite grace. */
+  onLapse: ServingOnLapse;
   /** SHA-256 of the box's canonical name list (canonicalNameList). */
   scopeSha256: string;
   issuedAt: number;
@@ -74,9 +84,11 @@ export function canonicalServingPolicy(p: ServingPolicy): Bytes {
   intField("regGen", p.regGen, 1);
   intField("policyGen", p.policyGen, 1);
   if (p.grace !== "7d" && p.grace !== "30d" && p.grace !== "indefinite") throw new Error("grace must be 7d, 30d or indefinite");
+  if (p.onLapse !== "stop-apps" && p.onLapse !== "lock-server") throw new Error("onLapse must be stop-apps or lock-server");
+  if (p.onLapse === "lock-server" && p.grace === "indefinite") throw new Error("locking needs a time limit");
   hexField("scopeSha256", p.scopeSha256);
   intField("issuedAt", p.issuedAt);
-  return enc([TAG_SERVING_POLICY, p.account, p.box, p.regGen, p.policyGen, p.grace, p.scopeSha256, p.issuedAt]);
+  return enc([TAG_SERVING_POLICY, p.account, p.box, p.regGen, p.policyGen, p.grace, p.onLapse, p.scopeSha256, p.issuedAt]);
 }
 
 // ── renewal-key-delegation ────────────────────────────────────────────────
@@ -383,23 +395,25 @@ export type ServingReason =
   | "lease-expired";
 
 export type ServingDecision =
-  | { control: true; apps: true; until: number | null; policyGen: number }
-  | { control: boolean; apps: false; reason: ServingReason };
+  | { control: true; apps: true; until: number | null; policyGen: number; onLapse: ServingOnLapse }
+  | { control: boolean; apps: false; reason: ServingReason; lock: boolean };
 
 /**
  * May this box's tunnel stay up (control), and may its app routes be served (apps)? Control needs only a registered,
  * unrevoked box whose admin keys agree; apps also need a valid policy and, under a finite grace, a live lease.
- * `until` is when app routes stop without a newer lease (null: indefinitely).
+ * `until` is when app routes stop without a newer lease (null: indefinitely), and `onLapse` what happens then.
+ * `lock` is true when the owner's verified policy says `lock-server` and no live lease is left: the box itself
+ * restarts with its disk locked (it calls this with its own pinned admin key as both keys).
  */
 export function servingDecision(i: ServingInput): ServingDecision {
-  if (!HEX64.test(i.adminKeyFromCom) || i.adminKeyFromCom !== i.adminKeyFromBox) return { control: false, apps: false, reason: "admin-keys-differ" };
-  if (boxRevoked(i.revocations, i.account, i.box, i.regGen)) return { control: false, apps: false, reason: "revoked" };
+  if (!HEX64.test(i.adminKeyFromCom) || i.adminKeyFromCom !== i.adminKeyFromBox) return { control: false, apps: false, reason: "admin-keys-differ", lock: false };
+  if (boxRevoked(i.revocations, i.account, i.box, i.regGen)) return { control: false, apps: false, reason: "revoked", lock: false };
   const admin = i.adminKeyFromCom;
-  if (!i.policy) return { control: true, apps: false, reason: "no-policy" };
+  if (!i.policy) return { control: true, apps: false, reason: "no-policy", lock: false };
   const p = i.policy.record;
-  if (!verifyServingRecord("serving-policy", p, i.policy.signature, admin)) return { control: true, apps: false, reason: "policy-signature" };
-  if (p.account !== i.account || p.box !== i.box || p.regGen !== i.regGen) return { control: true, apps: false, reason: "policy-mismatch" };
-  if (p.grace === "indefinite") return { control: true, apps: true, until: null, policyGen: p.policyGen };
+  if (!verifyServingRecord("serving-policy", p, i.policy.signature, admin)) return { control: true, apps: false, reason: "policy-signature", lock: false };
+  if (p.account !== i.account || p.box !== i.box || p.regGen !== i.regGen) return { control: true, apps: false, reason: "policy-mismatch", lock: false };
+  if (p.grace === "indefinite") return { control: true, apps: true, until: null, policyGen: p.policyGen, onLapse: p.onLapse };
   const graceMs = GRACE_MS[p.grace];
   let best = 0;
   let sawLease = false;
@@ -411,9 +425,10 @@ export function servingDecision(i: ServingInput): ServingDecision {
     sawLease = true;
     best = Math.max(best, r.notAfter);
   }
-  if (!sawLease) return { control: true, apps: false, reason: "no-lease" };
-  if (best <= i.now) return { control: true, apps: false, reason: "lease-expired" };
-  return { control: true, apps: true, until: best, policyGen: p.policyGen };
+  const lock = p.onLapse === "lock-server";
+  if (!sawLease) return { control: true, apps: false, reason: "no-lease", lock };
+  if (best <= i.now) return { control: true, apps: false, reason: "lease-expired", lock };
+  return { control: true, apps: true, until: best, policyGen: p.policyGen, onLapse: p.onLapse };
 }
 
 function leaseSignedByAdmin(

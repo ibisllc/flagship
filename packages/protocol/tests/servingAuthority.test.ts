@@ -43,6 +43,7 @@ const policy = (o: Partial<ServingPolicy> = {}): ServingPolicy => ({
   regGen: 1,
   policyGen: 1,
   grace: "7d",
+  onLapse: "stop-apps",
   scopeSha256: nameListSha256(boxNameList("home", "alice", "flagship.services")),
   issuedAt: T0,
   ...o,
@@ -70,7 +71,7 @@ describe("canonical bytes", () => {
   it("are fixed for the policy and the lease", () => {
     const p = policy();
     expect(new TextDecoder().decode(canonicalServingPolicy(p))).toBe(
-      `flagship/serving-policy/v1|alice|${box}|1|1|7d|${p.scopeSha256}|${T0}`,
+      `flagship/serving-policy/v1|alice|${box}|1|1|7d|stop-apps|${p.scopeSha256}|${T0}`,
     );
     expect(new TextDecoder().decode(canonicalServingLease(lease()))).toBe(
       `flagship/serving-lease/v1|alice|${box}|1|1|${"ab".repeat(16)}|${T0}|${T0 + 7 * DAY}`,
@@ -82,6 +83,8 @@ describe("canonical bytes", () => {
     expect(() => canonicalServingPolicy(policy({ account: "Alice" }))).toThrow();
     expect(() => canonicalServingPolicy(policy({ box: "AB".repeat(32) }))).toThrow();
     expect(() => canonicalServingPolicy(policy({ regGen: 0 }))).toThrow();
+    expect(() => canonicalServingPolicy(policy({ onLapse: "power-off" as never }))).toThrow();
+    expect(() => canonicalServingPolicy(policy({ grace: "indefinite", onLapse: "lock-server" }))).toThrow("locking needs a time limit");
     expect(() => canonicalServingLease(lease({ notAfter: T0 }))).toThrow();
     expect(() => canonicalServingLease(lease({ issuedAt: 1.5 }))).toThrow();
     expect(() => canonicalRouteClaim({ account: "alice", phoneRoutePub: device, hostname: "home.alice.flagship.services", generation: 1, sessionNonce: "cd".repeat(16), issuedAt: T0 })).toThrow();
@@ -100,7 +103,7 @@ describe("canonical bytes", () => {
 describe("indefinite (the default) needs no lease", () => {
   it("serves apps on the policy alone, with no end", () => {
     const d = servingDecision(input({ policy: signed("serving-policy", policy({ grace: "indefinite" })), leases: [] }));
-    expect(d).toEqual({ control: true, apps: true, until: null, policyGen: 1 });
+    expect(d).toEqual({ control: true, apps: true, until: null, policyGen: 1, onLapse: "stop-apps" });
   });
 
   it("an admin device has nothing to sign", () => {
@@ -110,7 +113,23 @@ describe("indefinite (the default) needs no lease", () => {
 
 describe("a finite grace", () => {
   it("serves apps until the best lease ends, renewed by any admin device's delegated key", () => {
-    expect(servingDecision(input())).toEqual({ control: true, apps: true, until: T0 + 7 * DAY, policyGen: 1 });
+    expect(servingDecision(input())).toEqual({ control: true, apps: true, until: T0 + 7 * DAY, policyGen: 1, onLapse: "stop-apps" });
+  });
+
+  it("stop-apps: the lapse stops app routes and never locks the box", () => {
+    expect(servingDecision(input({ now: T0 + 7 * DAY }))).toMatchObject({ apps: false, reason: "lease-expired", lock: false });
+  });
+
+  it("lock-server: the same lease keeps the box unlocked; its lapse locks it too", () => {
+    const locking = signed("serving-policy", policy({ onLapse: "lock-server" }));
+    expect(servingDecision(input({ policy: locking }))).toMatchObject({ apps: true, onLapse: "lock-server", until: T0 + 7 * DAY });
+    expect(servingDecision(input({ policy: locking, now: T0 + 7 * DAY }))).toMatchObject({ apps: false, reason: "lease-expired", lock: true });
+    expect(servingDecision(input({ policy: locking, leases: [] }))).toMatchObject({ reason: "no-lease", lock: true });
+  });
+
+  it("a policy the box can't verify never locks it (only the owner's signed word can)", () => {
+    const forged = signed("serving-policy", policy({ onLapse: "lock-server" }), otherAdmin);
+    expect(servingDecision(input({ policy: forged, leases: [] }))).toMatchObject({ reason: "policy-signature", lock: false });
   });
 
   it("stops app routes once the lease ends; the control name stays", () => {

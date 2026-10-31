@@ -10,12 +10,13 @@
         "regGen": 1,
         "policyGen": 1,
         "grace": "7d",
+        "onLapse": "stop-apps",
         "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
         "issuedAt": 1800000000000
       },
-      "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d",
+      "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a",
       "signerPub": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-      "canonical": "flagship/serving-policy/v1|alice|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1|7d|1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb|1800000000000"
+      "canonical": "flagship/serving-policy/v1|alice|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1|7d|stop-apps|1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb|1800000000000"
     },
     {
       "kind": "serving-policy",
@@ -25,12 +26,29 @@
         "regGen": 1,
         "policyGen": 1,
         "grace": "indefinite",
+        "onLapse": "stop-apps",
         "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
         "issuedAt": 1800000000000
       },
-      "signature": "080f2cdcef5dd7a4fca446b9b8af9730316425fa258ccfd256032f2eb7f94100ddb2eec1d1e31211dac14a4d8fd104fab6ab50abb7d541ddd17ff52859a47c08",
+      "signature": "adc5d9e95024fdc88db532220ed9cc55cefe6600f637e940751698f8c4c5222a856d3df7e2a57dad3d769ef7019d01d121f4798c61fb34ef9b2546e6b214810f",
       "signerPub": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-      "canonical": "flagship/serving-policy/v1|alice|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1|indefinite|1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb|1800000000000"
+      "canonical": "flagship/serving-policy/v1|alice|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1|indefinite|stop-apps|1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb|1800000000000"
+    },
+    {
+      "kind": "serving-policy",
+      "record": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "policyGen": 1,
+        "grace": "30d",
+        "onLapse": "lock-server",
+        "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+        "issuedAt": 1800000000000
+      },
+      "signature": "e755b5e17d8292561b89b1316a304b66ef9421756597d845b4d570a1ec93f5b3524d35360872f9336145474da19114659a2390e671111443c462bc06b3d38c0a",
+      "signerPub": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "canonical": "flagship/serving-policy/v1|alice|6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1|1|1|30d|lock-server|1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb|1800000000000"
     },
     {
       "kind": "renewal-key-delegation",
@@ -174,10 +192,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+          "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
         },
         "leases": [
           {
@@ -209,7 +228,8 @@
         "control": true,
         "apps": true,
         "until": 1800604800000,
-        "policyGen": 1
+        "policyGen": 1,
+        "onLapse": "stop-apps"
       }
     },
     {
@@ -227,10 +247,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "indefinite",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "080f2cdcef5dd7a4fca446b9b8af9730316425fa258ccfd256032f2eb7f94100ddb2eec1d1e31211dac14a4d8fd104fab6ab50abb7d541ddd17ff52859a47c08"
+          "signature": "adc5d9e95024fdc88db532220ed9cc55cefe6600f637e940751698f8c4c5222a856d3df7e2a57dad3d769ef7019d01d121f4798c61fb34ef9b2546e6b214810f"
         },
         "leases": [],
         "revocationEntries": [],
@@ -240,7 +261,8 @@
         "control": true,
         "apps": true,
         "until": null,
-        "policyGen": 1
+        "policyGen": 1,
+        "onLapse": "stop-apps"
       }
     },
     {
@@ -258,10 +280,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+          "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
         },
         "leases": [
           {
@@ -292,7 +315,8 @@
       "expected": {
         "control": true,
         "apps": false,
-        "reason": "lease-expired"
+        "reason": "lease-expired",
+        "lock": false
       }
     },
     {
@@ -310,10 +334,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+          "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
         },
         "leases": [],
         "revocationEntries": [],
@@ -322,7 +347,8 @@
       "expected": {
         "control": true,
         "apps": false,
-        "reason": "no-lease"
+        "reason": "no-lease",
+        "lock": false
       }
     },
     {
@@ -340,10 +366,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+          "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
         },
         "leases": [
           {
@@ -374,7 +401,8 @@
       "expected": {
         "control": false,
         "apps": false,
-        "reason": "admin-keys-differ"
+        "reason": "admin-keys-differ",
+        "lock": false
       }
     },
     {
@@ -392,10 +420,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "ea6575a10d14e7d872b78656ad86952695f1c5f400bb49f6eae98e77374866097b7657fabc81bf840458c9dbf5666020a55d4068f7018a2aadf2206f3882930a"
+          "signature": "cb21f92d12d12a08862e3ae25754c04c599f528924c1efe4e0f8c25ab1224c502e937bc8e607c7a885b8c7b562d6192cf8934b7ceb8c4e33453b3780a1631708"
         },
         "leases": [
           {
@@ -426,7 +455,8 @@
       "expected": {
         "control": true,
         "apps": false,
-        "reason": "policy-signature"
+        "reason": "policy-signature",
+        "lock": false
       }
     },
     {
@@ -444,10 +474,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+          "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
         },
         "leases": [
           {
@@ -478,7 +509,8 @@
       "expected": {
         "control": true,
         "apps": false,
-        "reason": "no-lease"
+        "reason": "no-lease",
+        "lock": false
       }
     },
     {
@@ -496,10 +528,11 @@
             "regGen": 1,
             "policyGen": 2,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "ae8c6887198b9f36eaa3c57f7b80fdaf59db97721de02b8c65e44ff6881eedefb50594b67df00ddb54477b0aed00e2667dd755405c75e13aa50f892febbffa00"
+          "signature": "c3adcf30159f27c48b0813a71898dff327e3b0e85a4a8f17ea6c521e6cbe70ed3f43d9ce35845dd1b355beb2474976b53780d8f24a9171c01d8a1abc571a3109"
         },
         "leases": [
           {
@@ -530,7 +563,8 @@
       "expected": {
         "control": true,
         "apps": false,
-        "reason": "no-lease"
+        "reason": "no-lease",
+        "lock": false
       }
     },
     {
@@ -548,10 +582,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+          "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
         },
         "leases": [
           {
@@ -573,7 +608,8 @@
       "expected": {
         "control": true,
         "apps": false,
-        "reason": "no-lease"
+        "reason": "no-lease",
+        "lock": false
       }
     },
     {
@@ -591,10 +627,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+          "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
         },
         "leases": [
           {
@@ -625,7 +662,117 @@
       "expected": {
         "control": true,
         "apps": false,
-        "reason": "no-lease"
+        "reason": "no-lease",
+        "lock": false
+      }
+    },
+    {
+      "name": "lock-server, lease live",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "30d",
+            "onLapse": "lock-server",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e755b5e17d8292561b89b1316a304b66ef9421756597d845b4d570a1ec93f5b3524d35360872f9336145474da19114659a2390e671111443c462bc06b3d38c0a"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800086400000
+      },
+      "expected": {
+        "control": true,
+        "apps": true,
+        "until": 1800604800000,
+        "policyGen": 1,
+        "onLapse": "lock-server"
+      }
+    },
+    {
+      "name": "lock-server, lease ended: lock",
+      "input": {
+        "account": "alice",
+        "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "regGen": 1,
+        "adminKeyFromCom": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "adminKeyFromBox": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "policy": {
+          "record": {
+            "account": "alice",
+            "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+            "regGen": 1,
+            "policyGen": 1,
+            "grace": "30d",
+            "onLapse": "lock-server",
+            "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
+            "issuedAt": 1800000000000
+          },
+          "signature": "e755b5e17d8292561b89b1316a304b66ef9421756597d845b4d570a1ec93f5b3524d35360872f9336145474da19114659a2390e671111443c462bc06b3d38c0a"
+        },
+        "leases": [
+          {
+            "record": {
+              "account": "alice",
+              "box": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+              "regGen": 1,
+              "policyGen": 1,
+              "leaseId": "abababababababababababababababab",
+              "issuedAt": 1800000000000,
+              "notAfter": 1800604800000
+            },
+            "signature": "e95f61859f9bd475892dafcc53dcb4b1be4013925bcc48d598c9909902f40278635236d4fa0db143075936c63f815dc421df0c70c82540a7e3f722253e5cb909",
+            "delegation": {
+              "record": {
+                "account": "alice",
+                "renewalPub": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+                "deviceId": "8a875fff1eb38451577acd5afee405456568dd7c89e090863a0557bc7af49f17",
+                "issuedAt": 1800000000000
+              },
+              "signature": "f8fcfd35afc4ac94befbb70e38b8977f491889250e8f64fe068d0a4fd8c92b8713e0265e80e0431d79ff56436e3096eb75524d1a91fe84d9e5d3f28e1e902107"
+            }
+          }
+        ],
+        "revocationEntries": [],
+        "now": 1800604800000
+      },
+      "expected": {
+        "control": true,
+        "apps": false,
+        "reason": "lease-expired",
+        "lock": true
       }
     },
     {
@@ -643,10 +790,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+          "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
         },
         "leases": [
           {
@@ -689,7 +837,8 @@
       "expected": {
         "control": false,
         "apps": false,
-        "reason": "revoked"
+        "reason": "revoked",
+        "lock": false
       }
     },
     {
@@ -707,10 +856,11 @@
             "regGen": 1,
             "policyGen": 1,
             "grace": "7d",
+            "onLapse": "stop-apps",
             "scopeSha256": "1bdf6b5c9528dd6376f4f02d531aa421be802476507ba57d0a80c3ad76f12feb",
             "issuedAt": 1800000000000
           },
-          "signature": "e17a67c90ecd251e0117872075792d9fd8ecc8eb67146e54deef922095a3e4d785c956a0249ef00c78e98fe72022eb21da579fbf2b7004b7596057ea8e58510d"
+          "signature": "1afa577e18e0f1556ea7765195d33efea31b2d59eb13b164b55eec0bd062063c0e7e6dacee914e6c501009221700932a5efbcc012445155162d242fb4877930a"
         },
         "leases": [
           {
@@ -753,7 +903,8 @@
       "expected": {
         "control": true,
         "apps": false,
-        "reason": "no-lease"
+        "reason": "no-lease",
+        "lock": false
       }
     }
   ]

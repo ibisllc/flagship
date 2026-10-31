@@ -43,8 +43,9 @@ function rec<K extends ServingRecordKind>(kind: K, record: unknown, signer = adm
 }
 
 const scope = nameListSha256(boxNameList("home", "alice", "flagship.services"));
-const policy7 = { account: "alice", box, regGen: 1, policyGen: 1, grace: "7d", scopeSha256: scope, issuedAt: T0 };
+const policy7 = { account: "alice", box, regGen: 1, policyGen: 1, grace: "7d", onLapse: "stop-apps", scopeSha256: scope, issuedAt: T0 };
 const policyInf = { ...policy7, grace: "indefinite" };
+const policyLock = { ...policy7, grace: "30d", onLapse: "lock-server" };
 const delegation = { account: "alice", renewalPub: renewal.pub, deviceId: device, issuedAt: T0 };
 const lease = leaseFor(policy7 as never, T0, "ab".repeat(16))!;
 const revBox: RevocationEntry = { sequence: 1, kind: "box", account: "alice", subject: box, generation: 1, revokedAt: T0 + DAY };
@@ -55,6 +56,7 @@ const claim = { account: "alice", phoneRoutePub: device, hostname: "alice.flagsh
 const records = [
   rec("serving-policy", policy7),
   rec("serving-policy", policyInf),
+  rec("serving-policy", policyLock),
   rec("renewal-key-delegation", delegation),
   rec("serving-lease", lease, renewal),
   rec("revocation-entry", revBox, revoker),
@@ -97,6 +99,8 @@ const cases: Case[] = [
   { name: "older policy generation", input: { ...base, policy: sp({ ...policy7, policyGen: 2 }) as never } },
   { name: "undelegated renewal key", input: { ...base, leases: [sl(lease)] as never } },
   { name: "delegation signed by another key", input: { ...base, leases: [{ ...sl(lease), delegation: sd(delegation, other) }] as never } },
+  { name: "lock-server, lease live", input: { ...base, policy: sp(policyLock) as never } },
+  { name: "lock-server, lease ended: lock", input: { ...base, policy: sp(policyLock) as never, now: T0 + 7 * DAY } },
   { name: "box revoked", input: { ...base, revocationEntries: [se(revBox)] } },
   { name: "renewal key revoked", input: { ...base, revocationEntries: [se(revKey)] } },
 ];

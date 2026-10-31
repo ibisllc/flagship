@@ -2,7 +2,7 @@
 //! `docs/architecture-v2/issuance-and-lease-records.md`, owner decisions of 2026-10-31), for the Rust relay.
 //!
 //! ```text
-//! flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<scopeSha256>|<issuedAt>
+//! flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse>|<scopeSha256>|<issuedAt>
 //! flagship/renewal-key-delegation/v1|<account>|<renewalPub>|<deviceId>|<issuedAt>
 //! flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
 //! flagship/revocation-entry/v1|<sequence>|<kind>|<account>|<subject>|<generation>|<revokedAt>
@@ -13,7 +13,8 @@
 //! Under an indefinite policy (the default) the policy alone authorizes serving: there are no leases. Under a finite
 //! one a lease (signed by the admin root, or by a renewal key the admin root delegated) reaches at most one grace past
 //! its issue and is bound to the policy generation. A lease counts only when `.com`'s published admin key and the
-//! box's pinned key are the same key. Revocation is a signed, sequenced log. Shared vectors:
+//! box's pinned key are the same key. Revocation is a signed, sequenced log. `onLapse` is what the lapse does:
+//! `stop-apps`, or `lock-server` (the box also restarts with its disk locked; the old dead-man lock folded in). Shared vectors:
 //! `packages/protocol/test-vectors/serving-authority`.
 
 use crate::entitlements::verify;
@@ -39,6 +40,8 @@ pub enum ServingError {
     BadHex(&'static str),
     BadNumber(&'static str),
     BadGrace,
+    BadOnLapse,
+    LockNeedsTimeLimit,
     BadKind,
     BadClass,
     BadHostname,
@@ -55,6 +58,8 @@ impl std::fmt::Display for ServingError {
             Self::BadHex(n) => write!(f, "{n} must be lowercase hex of the right length"),
             Self::BadNumber(n) => write!(f, "{n} is out of range"),
             Self::BadGrace => write!(f, "grace must be 7d, 30d or indefinite"),
+            Self::BadOnLapse => write!(f, "onLapse must be stop-apps or lock-server"),
+            Self::LockNeedsTimeLimit => write!(f, "locking needs a time limit"),
             Self::BadKind => write!(f, "kind must be box or renewal-key"),
             Self::BadClass => write!(f, "class must be control, apps or phone"),
             Self::BadHostname => write!(f, "hostname must be the account's own bare name"),
@@ -166,6 +171,33 @@ impl Grace {
     }
 }
 
+/// What happens when no admin device renewed within the grace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OnLapse {
+    StopApps,
+    LockServer,
+}
+
+impl OnLapse {
+    /// # Errors
+    /// [`ServingError::BadOnLapse`].
+    pub fn parse(s: &str) -> Result<Self, ServingError> {
+        match s {
+            "stop-apps" => Ok(Self::StopApps),
+            "lock-server" => Ok(Self::LockServer),
+            _ => Err(ServingError::BadOnLapse),
+        }
+    }
+
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::StopApps => "stop-apps",
+            Self::LockServer => "lock-server",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServingPolicy {
     pub account: String,
@@ -173,6 +205,7 @@ pub struct ServingPolicy {
     pub reg_gen: u64,
     pub policy_gen: u64,
     pub grace: Grace,
+    pub on_lapse: OnLapse,
     pub scope_sha256: String,
     pub issued_at: u64,
 }
@@ -184,6 +217,9 @@ pub fn policy_canonical(p: &ServingPolicy) -> Result<String, ServingError> {
     hex64("box", &p.box_pub)?;
     at_least("regGen", p.reg_gen, 1)?;
     at_least("policyGen", p.policy_gen, 1)?;
+    if p.on_lapse == OnLapse::LockServer && p.grace == Grace::Indefinite {
+        return Err(ServingError::LockNeedsTimeLimit);
+    }
     hex64("scopeSha256", &p.scope_sha256)?;
     Ok(CanonicalV1::new(TAG_SERVING_POLICY)?
         .text(&p.account)?
@@ -191,6 +227,7 @@ pub fn policy_canonical(p: &ServingPolicy) -> Result<String, ServingError> {
         .uint(p.reg_gen)?
         .uint(p.policy_gen)?
         .text(p.grace.as_str())?
+        .text(p.on_lapse.as_str())?
         .text(&p.scope_sha256)?
         .uint(p.issued_at)?
         .finish_string())
@@ -563,15 +600,28 @@ pub struct ServingInput<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServingDecision {
     /// The tunnel and the app routes; `until` is when app routes stop without a newer lease (None: never).
-    Serve { until: Option<u64>, policy_gen: u64 },
-    /// No app routes; `control` says whether the box's own control name stays routable.
-    Refuse { control: bool, reason: &'static str },
+    Serve {
+        until: Option<u64>,
+        policy_gen: u64,
+        on_lapse: OnLapse,
+    },
+    /// No app routes; `control` says whether the box's own control name stays routable, `lock` whether the
+    /// owner's verified policy has the box lock itself now.
+    Refuse {
+        control: bool,
+        reason: &'static str,
+        lock: bool,
+    },
 }
 
 /// The relay's whole rule (see the module doc).
 #[must_use]
 pub fn serving_decision(i: &ServingInput<'_>) -> ServingDecision {
-    let refuse = |control, reason| ServingDecision::Refuse { control, reason };
+    let refuse = |control, reason| ServingDecision::Refuse {
+        control,
+        reason,
+        lock: false,
+    };
     if !lower_hex(i.admin_key_from_com, 64) || i.admin_key_from_com != i.admin_key_from_box {
         return refuse(false, "admin-keys-differ");
     }
@@ -592,6 +642,7 @@ pub fn serving_decision(i: &ServingInput<'_>) -> ServingDecision {
         return ServingDecision::Serve {
             until: None,
             policy_gen: p.policy_gen,
+            on_lapse: p.on_lapse,
         };
     };
     let mut best: Option<u64> = None;
@@ -614,12 +665,18 @@ pub fn serving_decision(i: &ServingInput<'_>) -> ServingDecision {
         }
         best = Some(best.map_or(r.not_after, |b| b.max(r.not_after)));
     }
+    let lapsed = |reason| ServingDecision::Refuse {
+        control: true,
+        reason,
+        lock: p.on_lapse == OnLapse::LockServer,
+    };
     match best {
-        None => refuse(true, "no-lease"),
-        Some(b) if b <= i.now => refuse(true, "lease-expired"),
+        None => lapsed("no-lease"),
+        Some(b) if b <= i.now => lapsed("lease-expired"),
         Some(b) => ServingDecision::Serve {
             until: Some(b),
             policy_gen: p.policy_gen,
+            on_lapse: p.on_lapse,
         },
     }
 }

@@ -26,13 +26,14 @@ immutable identity public key (64 hex); `<gen>` is the registration generation (
 a new one; revocation is terminal for a generation).
 
 ```text
-flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<routeScopeSha256>|<certScopeSha256>|<issuedAt>
-    <grace> = 7d | 30d | indefinite        (never a large number standing in for "forever")
+flagship/serving-policy/v1|<account>|<box>|<regGen>|<policyGen>|<grace>|<onLapse>|<scopeSha256>|<issuedAt>
+    <grace>   = 7d | 30d | indefinite      (never a large number standing in for "forever")
+    <onLapse> = stop-apps | lock-server    (lock-server needs a finite grace)
 
 flagship/renewal-key-delegation/v1|<account>|<renewalPub>|<policyGen>|<expiresAt>
 
 flagship/serving-lease/v1|<account>|<box>|<regGen>|<policyGen>|<leaseId>|<issuedAt>|<notAfter>
-    <notAfter> = <ms> | none               (none only under an `indefinite` policy)
+    an indefinite policy has no leases at all: the policy alone authorizes serving and nothing is signed daily
     <leaseId>  = 32 hex, unique; a replayed or older lease for the same policy generation never extends authority
 
 flagship/revocation-entry/v1|<sequence>|<box>|<regGen>|<revokedAt>
@@ -89,3 +90,32 @@ flagship/certificate-order/v1|<class>|<device>|<regGen>|<csrSha256>|<requestId>|
 - Name lists: canonical, sorted, lowercase, one per line, each tagged `control`, `apps` or `phone`; the route
   allocator reserves every control name so no app alias can take one; shared vectors in TS, Swift, Kotlin and Rust
   and a collision test.
+
+## 5. One setting: the dead-man (owner, 2026-10-31)
+
+The old box-enforced dead-man lock (`deadMan.ts`: opt-in, a biometric affirmation, the box powers off or restarts
+with auto-unlock suppressed) and the relay-enforced serving lease are ONE setting with one renewal and one deadline.
+
+- **The record.** `serving-policy/v1` carries `onLapse`: `stop-apps` (the relay stops routing the box's apps) or
+  `lock-server` (also: the box restarts with its disk locked and starts again only when an admin approves on a
+  phone). It replaces `set-deadman-policy/v1`; `deadman-affirm/v1` is retired (the lease is the affirmation).
+- **The renewal.** Opening Flagship on any admin device signs the lease. The relay checks it for app routes; the box
+  checks the same lease (with its pinned admin key as both keys of `servingDecision`) and locks when `lock` is true.
+  The lock is the existing one-shot suppression (`/boot/flagship-lock-once`, the `bootlock` broker op) followed by
+  a restart; the old power-off option is dropped: a restart into the approval prompt is as locked and lets an admin
+  bring the server back remotely.
+- **Two enforcers, one deadline.** The relay's stop cannot be ignored by a compromised box; the box's lock protects
+  the disk. Both read `until`.
+- **The UI**, on the server page of all three apps, the only dead-man UI:
+
+  > **Stays online until 14 Nov** if no admin opens Flagship · *7 days*
+  > (with locking: **Locks on 14 Nov** if no admin opens Flagship; with Never: **No time limit**)
+
+  Tapping it (admins, Face ID) opens:
+
+  > **If no admin opens Flagship for:** 7 days · 30 days · Never
+  > **Then:** (•) Stop serving its apps  ( ) Stop its apps and lock the server
+  > *Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.*
+
+  "Never" greys out the second choice. Changing it signs a new policy (a shorter time advances the policy
+  generation). The old dead-man screens on iOS and Android and the box's `/api/deadman/*` go once this is wired.

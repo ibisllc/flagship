@@ -7,7 +7,7 @@
 )]
 
 use flagship_crypto::serving::{
-    CertificateOrder, Grace, RenewalKeyDelegation, RevocationApply, RevocationEntry,
+    CertificateOrder, Grace, OnLapse, RenewalKeyDelegation, RevocationApply, RevocationEntry,
     RevocationKind, RevocationState, RouteClaim, ServingDecision, ServingInput, ServingLease,
     ServingPolicy, SignedLease, apply_revocation_entries, canonical_name_list,
     certificate_order_canonical, delegation_canonical, lease_canonical, name_list_sha256,
@@ -33,6 +33,7 @@ fn policy(v: &Value) -> ServingPolicy {
         reg_gen: n(v, "regGen"),
         policy_gen: n(v, "policyGen"),
         grace: Grace::parse(&s(v, "grace")).unwrap(),
+        on_lapse: OnLapse::parse(&s(v, "onLapse")).unwrap(),
         scope_sha256: s(v, "scopeSha256"),
         issued_at: n(v, "issuedAt"),
     }
@@ -165,7 +166,7 @@ fn relay_decisions_agree_with_typescript() {
     let v: Value = serde_json::from_str(VECTORS).unwrap();
     let revocation_key = s(&v, "revocationKeyPub");
     let decisions = v["decisions"].as_array().unwrap();
-    assert_eq!(decisions.len(), 12);
+    assert_eq!(decisions.len(), 14);
     for d in decisions {
         let i = &d["input"];
         let entries: Vec<(RevocationEntry, String)> = i["revocationEntries"]
@@ -216,12 +217,14 @@ fn relay_decisions_agree_with_typescript() {
             ServingDecision::Serve {
                 until: e["until"].as_u64(),
                 policy_gen: n(e, "policyGen"),
+                on_lapse: OnLapse::parse(&s(e, "onLapse")).unwrap(),
             }
         } else {
             let reason: &'static str = Box::leak(s(e, "reason").into_boxed_str());
             ServingDecision::Refuse {
                 control: e["control"].as_bool().unwrap(),
                 reason,
+                lock: e["lock"].as_bool().unwrap(),
             }
         };
         assert_eq!(got, want, "{}", d["name"]);
