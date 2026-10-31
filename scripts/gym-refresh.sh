@@ -62,6 +62,8 @@ MAIN_CHECKOUT="$(dirname "$COMMON_DIR")"
 SECRETS_FILE="${GYM_SECRETS_FILE:-$MAIN_CHECKOUT/.gym-secrets.env}"
 UPCLOUD_TOKEN_FILE="${GYM_UPCLOUD_TOKEN_FILE:-$HOME/.config/flagship/upcloud-token}"
 FLY_APP="flagship-services-gym"
+# GYM_RELAY=rust runs the gym on the Rust relay (Dockerfile.relay); anything else keeps the Node hub.
+FLY_CONFIG="fly.gym.toml"; [ "${GYM_RELAY:-}" = rust ] && FLY_CONFIG="fly.gym.relay.toml"
 PROD_FLY_APP="flagship-services"
 D1="flagship-state-gym"
 CFG="wrangler.gym.toml"
@@ -316,9 +318,9 @@ else
   fi
   if [ "$fly_deploy" = "1" ]; then
     if [ "$DRY" = "1" ]; then
-      say "DRY-RUN would: flyctl deploy -c fly.gym.toml -a $FLY_APP --remote-only --strategy=immediate"
+      say "DRY-RUN would: flyctl deploy -c $FLY_CONFIG -a $FLY_APP --remote-only --strategy=immediate"
     else
-      (cd "$WT" && flyctl deploy -c fly.gym.toml -a "$FLY_APP" --remote-only --strategy=immediate --yes 2>&1 | tail -3 | sed 's/^/  /') \
+      (cd "$WT" && flyctl deploy -c "$FLY_CONFIG" -a "$FLY_APP" --remote-only --strategy=immediate --yes 2>&1 | tail -3 | sed 's/^/  /') \
         || die "gym Fly deploy failed"
     fi
   fi
