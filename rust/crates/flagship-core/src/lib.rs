@@ -8,6 +8,7 @@
 //!   generation, in shadow mode (decide, never act) or with effects.
 //! - [`handover`]: take over from the TS controller: checkpoint, lock, adopt, compare, enable.
 
+pub mod access_journal;
 pub mod controller;
 pub mod endpoints;
 pub mod handover;

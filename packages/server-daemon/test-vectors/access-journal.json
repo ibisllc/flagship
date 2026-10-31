@@ -1,0 +1,709 @@
+{
+  "about": "Shared verdicts for packages/server-daemon/src/accessJournal.ts: written by tests/accessJournalVectors.test.ts (UPDATE_ACCESS_VECTORS=1), read by rust/crates/flagship-core/tests/access_journal_vectors.rs.",
+  "parse": [
+    {
+      "name": "a rank order",
+      "entry": {
+        "kind": "rank",
+        "order": {
+          "serviceRef": "svc",
+          "target": "t1",
+          "rank": "manager",
+          "issuedAt": 10
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": {
+        "key": "rank:t1"
+      }
+    },
+    {
+      "name": "a rank with a number for the rank is refused",
+      "entry": {
+        "kind": "rank",
+        "order": {
+          "serviceRef": "svc",
+          "target": "t",
+          "rank": 3,
+          "issuedAt": 1
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": null
+    },
+    {
+      "name": "a rank with a short signature is refused",
+      "entry": {
+        "kind": "rank",
+        "order": {
+          "serviceRef": "svc",
+          "target": "t1",
+          "rank": "manager",
+          "issuedAt": 10
+        },
+        "signature": "abc"
+      },
+      "expect": null
+    },
+    {
+      "name": "an upper-case hex signature is fine",
+      "entry": {
+        "kind": "rank",
+        "order": {
+          "serviceRef": "svc",
+          "target": "t1",
+          "rank": "manager",
+          "issuedAt": 10
+        },
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "expect": {
+        "key": "rank:t1"
+      }
+    },
+    {
+      "name": "a mode order",
+      "entry": {
+        "kind": "mode",
+        "order": {
+          "serviceRef": "svc",
+          "mode": "restricted",
+          "issuedAt": 5
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": {
+        "key": "mode"
+      }
+    },
+    {
+      "name": "a mode that is neither open nor restricted is refused",
+      "entry": {
+        "kind": "mode",
+        "order": {
+          "serviceRef": "svc",
+          "mode": "sideways",
+          "issuedAt": 5
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": null
+    },
+    {
+      "name": "a removal",
+      "entry": {
+        "kind": "remove",
+        "order": {
+          "serviceRef": "svc",
+          "aid": "ab12",
+          "issuedAt": 7
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": {
+        "key": "remove:ab12"
+      }
+    },
+    {
+      "name": "a removal without an aid is refused",
+      "entry": {
+        "kind": "remove",
+        "order": {
+          "serviceRef": "svc",
+          "issuedAt": 1
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": null
+    },
+    {
+      "name": "a join keys on the invite and the lower-cased visitor",
+      "entry": {
+        "kind": "join",
+        "create": {
+          "inviteId": "inv1"
+        },
+        "createSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "redeem": {
+          "secretHash": "h",
+          "visitorAID": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "redeemedAt": 100,
+          "aidSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "expect": {
+        "key": "join:inv1/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "a join without an invite id keys on 'undefined'",
+      "entry": {
+        "kind": "join",
+        "create": {
+          "x": 1
+        },
+        "createSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "redeem": {
+          "secretHash": "h",
+          "visitorAID": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "redeemedAt": 100,
+          "aidSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "expect": {
+        "key": "join:undefined/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "a join with no redeem is refused",
+      "entry": {
+        "kind": "join",
+        "create": {},
+        "createSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": null
+    },
+    {
+      "name": "an accept shares the join key space",
+      "entry": {
+        "kind": "accept",
+        "create": {
+          "inviteId": "inv1"
+        },
+        "createSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "accept": {
+          "inviteId": "inv1",
+          "serviceRef": "svc",
+          "contactAID": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "acceptedAt": 100
+        },
+        "acceptSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": {
+        "key": "join:inv1/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "a withdraw",
+      "entry": {
+        "kind": "withdraw",
+        "revoke": {
+          "inviteId": "inv1",
+          "issuedAt": 9
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": {
+        "key": "withdraw:inv1"
+      }
+    },
+    {
+      "name": "a share",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "shareId": "sh1",
+          "issuedAt": 3,
+          "level": "manage"
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": {
+        "key": "share:sh1"
+      }
+    },
+    {
+      "name": "a share ended by a revoke",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "shareId": "sh1",
+          "issuedAt": 3,
+          "level": "manage"
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "end": {
+          "kind": "revoke",
+          "revoke": {
+            "shareId": "sh1"
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "expect": {
+        "key": "share:sh1"
+      }
+    },
+    {
+      "name": "a share ended by a leave",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "shareId": "sh1",
+          "issuedAt": 3,
+          "level": "manage"
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "end": {
+          "kind": "leave",
+          "leave": {
+            "shareId": "sh1"
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "expect": {
+        "key": "share:sh1"
+      }
+    },
+    {
+      "name": "a share with a null end is refused",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "shareId": "sh1",
+          "issuedAt": 3,
+          "level": "manage"
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "end": null
+      },
+      "expect": null
+    },
+    {
+      "name": "a share end of another kind is refused",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "shareId": "sh1",
+          "issuedAt": 3,
+          "level": "manage"
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "end": {
+          "kind": "explode",
+          "revoke": {},
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "expect": null
+    },
+    {
+      "name": "an unknown kind is refused",
+      "entry": {
+        "kind": "teleport"
+      },
+      "expect": null
+    },
+    {
+      "name": "a string is refused",
+      "entry": "rank",
+      "expect": null
+    },
+    {
+      "name": "an array is refused",
+      "entry": [],
+      "expect": null
+    },
+    {
+      "name": "null is refused",
+      "entry": null,
+      "expect": null
+    }
+  ],
+  "add": [
+    {
+      "name": "the newest order for a target wins, an older or equal one does not",
+      "entries": [
+        {
+          "kind": "rank",
+          "order": {
+            "serviceRef": "svc",
+            "target": "t1",
+            "rank": "member",
+            "issuedAt": 10
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "rank",
+          "order": {
+            "serviceRef": "svc",
+            "target": "t1",
+            "rank": "manager",
+            "issuedAt": 20
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "rank",
+          "order": {
+            "serviceRef": "svc",
+            "target": "t1",
+            "rank": "master",
+            "issuedAt": 15
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "rank",
+          "order": {
+            "serviceRef": "svc",
+            "target": "t1",
+            "rank": "master",
+            "issuedAt": 20
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "rank",
+          "order": {
+            "serviceRef": "svc",
+            "target": "t2",
+            "rank": "member",
+            "issuedAt": 1
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expect": {
+        "results": [
+          true,
+          true,
+          false,
+          false,
+          true
+        ],
+        "keys": [
+          "rank:t1",
+          "rank:t2"
+        ],
+        "digest": "4dbca5481c02025889f862b282b4a9e44230ae1476fe45f5aa0292c8a909ad18"
+      }
+    },
+    {
+      "name": "the same entry twice is not new",
+      "entries": [
+        {
+          "kind": "mode",
+          "order": {
+            "serviceRef": "svc",
+            "mode": "open",
+            "issuedAt": 5
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "mode",
+          "order": {
+            "serviceRef": "svc",
+            "mode": "open",
+            "issuedAt": 5
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "mode",
+          "order": {
+            "serviceRef": "svc",
+            "mode": "restricted",
+            "issuedAt": 6
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "mode",
+          "order": {
+            "serviceRef": "svc",
+            "mode": "open",
+            "issuedAt": 4
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expect": {
+        "results": [
+          true,
+          false,
+          true,
+          false
+        ],
+        "keys": [
+          "mode"
+        ],
+        "digest": "913cfe58f9c41100c56325e689d9de0884884b11cd4ebc7e2e6c3afb532631cd"
+      }
+    },
+    {
+      "name": "a join already held is kept as it is, a lower-case duplicate too",
+      "entries": [
+        {
+          "kind": "join",
+          "create": {
+            "inviteId": "inv1"
+          },
+          "createSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "redeem": {
+            "secretHash": "h",
+            "visitorAID": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+            "redeemedAt": 100,
+            "aidSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        {
+          "kind": "join",
+          "create": {
+            "inviteId": "inv1"
+          },
+          "createSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "redeem": {
+            "secretHash": "h",
+            "visitorAID": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "redeemedAt": 50,
+            "aidSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        {
+          "kind": "join",
+          "create": {
+            "inviteId": "inv1"
+          },
+          "createSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "redeem": {
+            "secretHash": "h",
+            "visitorAID": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+            "redeemedAt": 200,
+            "aidSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ],
+      "expect": {
+        "results": [
+          true,
+          false,
+          false
+        ],
+        "keys": [
+          "join:inv1/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        ],
+        "digest": "cb8afc2dbabd9782564b8e1e21e04d9f3b17de2a0be262f9032a120355853248"
+      }
+    },
+    {
+      "name": "a withdraw already held is kept",
+      "entries": [
+        {
+          "kind": "withdraw",
+          "revoke": {
+            "inviteId": "inv1",
+            "issuedAt": 9
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "withdraw",
+          "revoke": {
+            "inviteId": "inv1",
+            "issuedAt": 3
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "withdraw",
+          "revoke": {
+            "inviteId": "inv1",
+            "issuedAt": 12
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expect": {
+        "results": [
+          true,
+          false,
+          false
+        ],
+        "keys": [
+          "withdraw:inv1"
+        ],
+        "digest": "41e095a88f11158595ee79d3016e877c57c6903d8479c6233e3d76ca34e48d9f"
+      }
+    },
+    {
+      "name": "a share's end is final",
+      "entries": [
+        {
+          "kind": "share",
+          "grant": {
+            "shareId": "sh1",
+            "issuedAt": 3,
+            "level": "manage"
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "share",
+          "grant": {
+            "shareId": "sh1",
+            "issuedAt": 5,
+            "level": "manage"
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "share",
+          "grant": {
+            "shareId": "sh1",
+            "issuedAt": 4,
+            "level": "manage"
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": {
+            "kind": "revoke",
+            "revoke": {
+              "shareId": "sh1"
+            },
+            "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        {
+          "kind": "share",
+          "grant": {
+            "shareId": "sh1",
+            "issuedAt": 9,
+            "level": "manage"
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "share",
+          "grant": {
+            "shareId": "sh1",
+            "issuedAt": 10,
+            "level": "manage"
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": {
+            "kind": "leave",
+            "leave": {
+              "shareId": "sh1"
+            },
+            "signature": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        }
+      ],
+      "expect": {
+        "results": [
+          true,
+          true,
+          true,
+          false,
+          false
+        ],
+        "keys": [
+          "share:sh1"
+        ],
+        "digest": "1c23cb52921e792cfbe808b6133f34162e8b5fe1cc1f5dbeef61cc41c9c04cf2"
+      }
+    },
+    {
+      "name": "removals and ranks for the same person are separate keys",
+      "entries": [
+        {
+          "kind": "remove",
+          "order": {
+            "serviceRef": "svc",
+            "aid": "ab",
+            "issuedAt": 1
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "rank",
+          "order": {
+            "serviceRef": "svc",
+            "target": "ab",
+            "rank": "member",
+            "issuedAt": 1
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "kind": "remove",
+          "order": {
+            "serviceRef": "svc",
+            "aid": "ab",
+            "issuedAt": 2
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expect": {
+        "results": [
+          true,
+          true,
+          true
+        ],
+        "keys": [
+          "rank:ab",
+          "remove:ab"
+        ],
+        "digest": "8dda8b9ed726ec5506a9574ed7242dc33df9c3ec11ca44143cbaf0bc44310640"
+      }
+    }
+  ],
+  "hash": [
+    {
+      "name": "key order does not matter",
+      "entry": {
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "order": {
+          "issuedAt": 10,
+          "rank": "manager",
+          "target": "t1",
+          "serviceRef": "svc"
+        },
+        "kind": "rank"
+      },
+      "expect": "6096b416a0df2a1b04f23abccb22eb97655d7b648bf0ef68e27ad0cda7e13909"
+    },
+    {
+      "name": "nested values",
+      "entry": {
+        "kind": "share",
+        "grant": {
+          "shareId": "sh1",
+          "issuedAt": 3,
+          "level": "manage"
+        },
+        "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "end": {
+          "kind": "revoke",
+          "revoke": {
+            "shareId": "sh1",
+            "note": "q\"uote \\ and\nnewline"
+          },
+          "signature": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "expect": "17c073bf34b8d65ca0c59e0a0496c62f87e6684f8ef153692dab2c42cae87bef"
+    },
+    {
+      "name": "a join",
+      "entry": {
+        "kind": "join",
+        "create": {
+          "inviteId": "inv1"
+        },
+        "createSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "redeem": {
+          "secretHash": "h",
+          "visitorAID": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "redeemedAt": 100,
+          "aidSig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "expect": "e3cedf9085e8ab1457417c6280de7ec3ead84dc12a610f13e3ff426ab0dd6831"
+    }
+  ]
+}
