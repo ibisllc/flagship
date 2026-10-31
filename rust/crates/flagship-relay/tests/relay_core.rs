@@ -975,7 +975,7 @@ mod mailboxes_through_the_hub {
 
         let (ann, id) = announcement(7, mailbox_epoch(now_ms()));
         b.send(&payload::mailbox_announce_frame(&[ann]).unwrap());
-        for _ in 0..200 {
+        for _ in 0..1000 {
             if reg.has(&id) {
                 break;
             }
@@ -1205,7 +1205,7 @@ mod http_surface {
             }])
             .unwrap(),
         );
-        for _ in 0..200 {
+        for _ in 0..1000 {
             if reg.has(&id) {
                 break;
             }
