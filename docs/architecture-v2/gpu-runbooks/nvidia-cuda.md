@@ -15,10 +15,9 @@ version the receipt records), nvidia-container-toolkit (`nvidia-ctk`), gVisor ru
 # on the box, as root (debug access), with this tree unpacked by setup-box.sh
 bash /opt/flagship-m7/tools/arch-drills/m7/gpu-real.sh prepare-nvidia     # driver, toolkit, runsc-nvproxy
 reboot
-export CUDA_DEVEL_BASE=nvcr.io/nvidia/cuda@sha256:<13.0 devel digest>
-export TORCH_BASE=<pytorch with CUDA 13>@sha256:<digest>
-export RENDER_BASE=<debian or cuda runtime>@sha256:<digest>          # H9 render
-export FFMPEG_NVIDIA_BASE=<ffmpeg with nvenc/nvdec>@sha256:<digest>  # H9 video
+# The four bases are pinned by digest in tools/gpu/bases.env, which gpu-real.sh reads (CUDA 12.4 images: Debian 13's
+# own nvidia-driver is 550.163.01, which serves CUDA up to 12.4, and a CUDA 13 image refuses to start on it).
+# Export CUDA_DEVEL_BASE, TORCH_BASE, RENDER_BASE or FFMPEG_NVIDIA_BASE as name@sha256:<digest> only to override.
 bash /opt/flagship-m7/tools/arch-drills/m7/gpu-real.sh qualify-nvidia /root/gpu-receipt
 ```
 

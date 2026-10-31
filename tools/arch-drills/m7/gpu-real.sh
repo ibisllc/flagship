@@ -19,6 +19,9 @@ set -uo pipefail
 CMD="${1:-}"; OUT="${2:-/root/gpu-receipt}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TOOLS="$(cd "$HERE/../../gpu" 2>/dev/null && pwd || echo /opt/flagship-m7/tools/gpu)"
+# The check images' pinned bases (tools/gpu/bases.env); anything exported beforehand wins.
+# shellcheck source=/dev/null
+[ -f "$TOOLS/bases.env" ] && . "$TOOLS/bases.env"
 RUNSC_RELEASE=20260921.0
 GPUD=/usr/local/bin/flagship-gpud
 mkdir -p "$OUT"
