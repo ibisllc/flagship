@@ -40,7 +40,7 @@ export async function http(url: string, init: HttpInit = {}, timeoutMs = 45_000)
       const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
       const why = cause?.code ?? cause?.message ?? (e instanceof Error ? e.message : String(e));
       const method = String(init.method ?? "GET").toUpperCase();
-      const neverSent = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"].includes(String(cause?.code ?? ""));
+      const neverSent = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"].includes(String(cause?.code ?? ""));
       const retryable = method === "GET" || method === "HEAD" || neverSent;
       if (attempt >= 3 || !retryable) throw new Error(`fetch failed (${why}) after ${attempt} attempt${attempt === 1 ? "" : "s"}: ${url}`);
       await sleep(5000);
