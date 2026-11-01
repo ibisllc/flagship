@@ -274,7 +274,8 @@ export const core: Group = {
     await rec.check("the app's name gets the apps certificate (*.<fqdn>), not the control one", async () => {
       const name = `${slug}.${fqdn}`;
       let app = certInfo(name);
-      for (let i = 0; i < 12 && !app.sans.length; i++) {
+      // The apps order waits its turn behind the control order on the shared challenge name (about 2 min after boot).
+      for (let i = 0; i < 48 && !app.sans.length; i++) {
         await sleep(5000);
         app = certInfo(name);
       }

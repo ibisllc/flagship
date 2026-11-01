@@ -599,7 +599,7 @@ async function getOrder(s: Service, orderId: string): Promise<Response> {
 async function save(s: Service, row: OrderRow, set: Partial<OrderRow>, keepLock = false): Promise<void> {
   const cols = Object.keys(set);
   await s.db
-    .prepare(`UPDATE certificate_orders SET ${cols.map((c) => `${c} = ?`).join(", ")}, updated_at = ?${keepLock ? "" : ", lock_until = NULL"} WHERE order_id = ?`)
+    .prepare(`UPDATE certificate_orders SET ${cols.map((c) => `${c} = ?, `).join("")}updated_at = ?${keepLock ? "" : ", lock_until = NULL"} WHERE order_id = ?`)
     .bind(...cols.map((c) => (set as Record<string, unknown>)[c] ?? null), s.now, row.order_id)
     .run();
 }

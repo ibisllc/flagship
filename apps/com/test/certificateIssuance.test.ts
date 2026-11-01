@@ -3,7 +3,7 @@
  * fake ACME CA that checks DNS-01 against a fake zone. Each refusal rule of the journal's Appendix H "Issuance boundary"
  * (steps 1-6) and scenario 5 (a box with the account wildcard grant asks for the bare user name) is one case here.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { webcrypto } from "node:crypto";
 import { D1Storage, type D1Database } from "@flagship/storage";
 import {
@@ -218,6 +218,20 @@ describe("issuance: names come from .com's records", () => {
       // Whichever went first, the other stayed at "new" while it published and validated.
       expect(seen).toEqual(expect.arrayContaining([expect.stringMatching(/^(published\/new|new\/published)$/)]));
     } finally {
+      w.close();
+    }
+  });
+
+  it("waits out the DNS propagation spell without a failed step (gym 21: an empty update was invalid SQL)", async () => {
+    const w = await setup();
+    const warn = vi.spyOn(console, "warn");
+    try {
+      w.deps.propagationMs = 5000;
+      const { done } = await issue(w, { cls: "control", names: [SERVER] });
+      expect(done).toMatchObject({ status: "issued" });
+      expect(warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes("issuance-step-retry"))).toEqual([]);
+    } finally {
+      warn.mockRestore();
       w.close();
     }
   });
