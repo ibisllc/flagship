@@ -18,7 +18,7 @@ import { buildClaimedCanonicals } from "../src/tunnel/tunnelHub.js";
 import { ServingGate } from "../src/tunnel/servingGate.js";
 import { ServingFeedClient } from "../src/tunnel/servingFeedClient.js";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
-import { SimPhone, selfSignedPhoneCert } from "../../../tools/live-e2e/lib/phoneSim.js";
+import { SimPhone, isPhoneCert, sayHello, selfSignedPhoneCert } from "../../../tools/live-e2e/lib/phoneSim.js";
 
 const APEX = "flagship.services";
 const BARE = `alice.${APEX}`;
@@ -130,6 +130,21 @@ async function startRelay(id: string, ledger: MemoryPhoneRouteLedger, eligibilit
       await new Promise<void>((r) => http.close(() => r()));
     },
   };
+}
+
+/** A TLS visitor of the bare name through `relay`: the answering phone's label, or null. */
+function tlsVisit(relay: Relay, ca: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    let text = "";
+    // Both phones' certificates share one subject (as in the gym): match the peer by fingerprint, not a CA list.
+    const s = tlsConnect({ host: "127.0.0.1", port: relay.routerPort, servername: BARE, rejectUnauthorized: false });
+    s.setTimeout(3_000, () => s.destroy());
+    s.on("secureConnect", () => (isPhoneCert(s.getPeerCertificate().fingerprint256, ca) ? undefined : s.destroy()));
+    s.on("secureConnect", () => s.write(`GET /.well-known/flagship-phone HTTP/1.1\r\nhost: ${BARE}\r\n\r\n`));
+    s.on("data", (d) => (text += d.toString()));
+    s.on("close", () => resolve(/"phone":"([^"]+)"/.exec(text)?.[1] ?? null));
+    s.on("error", () => undefined);
+  });
 }
 
 /** A visitor of `sni` through `relay`: what came back before the relay or phone closed (or `holdMs` passed). */
@@ -415,6 +430,29 @@ describe("phone route through two relay instances sharing one ledger", () => {
     w.ledger.reachable = false;
     expect(await a.begin()).toMatchObject({ type: "refused", code: "unavailable" });
     expect((await visit(w.r1, BARE)).data).toBe("");
+  });
+
+  it("gym run 21, over TLS on one relay: hello, refusal, release, the standby claims and visitors reach it; its drop wakes the released phone", async () => {
+    const w = await world();
+    const c1 = selfSignedPhoneCert(BARE);
+    const c2 = selfSignedPhoneCert(BARE);
+    const ca = [c1.cert, c2.cert];
+    const p1 = await w.phone(w.r1, PHONE_A, "P1", c1);
+    expect(await p1.acquire()).toMatchObject({ type: "granted" });
+    expect(await tlsVisit(w.r1, ca)).toBe("P1");
+    expect(await sayHello({ ip: "127.0.0.1", port: w.r1.routerPort, hostname: BARE, account: "alice", seed: PHONE_B, ca })).toBe("P1");
+    const p2 = await w.phone(w.r1, PHONE_B, "P2", c2);
+    expect(await p2.acquire()).toMatchObject({ type: "refused", code: "route-held" });
+    expect(await tlsVisit(w.r1, ca)).toBe("P1");
+    expect(await p1.release()).toMatchObject({ type: "released" });
+    await p2.next((m) => m.type === "route-vacant");
+    expect(await p2.acquire()).toMatchObject({ type: "granted", generation: 2 });
+    for (let i = 0; i < 3; i++) expect(await tlsVisit(w.r1, ca)).toBe("P2");
+    // The released phone kept its tunnel: it is a standby and hears the next vacancy.
+    p2.terminate();
+    await p2.closed;
+    expect(await p1.next((m) => m.type === "route-vacant")).toMatchObject({ generation: 2 });
+    expect(await tlsVisit(w.r1, ca)).toBeNull();
   });
 
   it("TLS ends on the phone: the visitor's TLS peer is the phone's own certificate for exactly the bare name", async () => {
