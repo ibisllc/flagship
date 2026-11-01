@@ -50,7 +50,17 @@ export const update: Group = {
   async run({ B, rec, box }) {
     const acct = B!;
     const b = box("B3");
-    const session = await pair(acct, b);
+    // Gym 24 classic: B3 was paired while its first-boot update restarted the daemon (ECONNRESET): try again until it is back.
+    let session = "";
+    for (let i = 0; ; i++) {
+      try {
+        session = await pair(acct, b);
+        break;
+      } catch (e) {
+        if (i >= 12) throw e;
+        await sleep(15_000);
+      }
+    }
     const s = { "x-flagship-session": session };
     let current = "";
     let target = "";
