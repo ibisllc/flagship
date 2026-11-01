@@ -32,25 +32,6 @@ import type { Group } from "./types.js";
 
 const APP = "bkapp";
 
-/** One ustar header block (no data), any name: a crafted archive no tar writer would make. */
-function tarHeader(name: string, size: number): Buffer {
-  const h = Buffer.alloc(512);
-  h.write(name, 0, "latin1");
-  h.write("0000644\0", 100, "latin1");
-  h.write("0000000\0", 108, "latin1");
-  h.write("0000000\0", 116, "latin1");
-  h.write(size.toString(8).padStart(11, "0") + "\0", 124, "latin1");
-  h.write("00000000000\0", 136, "latin1");
-  h.write("0", 156, "latin1");
-  h.write("ustar\0", 257, "latin1");
-  h.write("00", 263, "latin1");
-  h.fill(0x20, 148, 156);
-  let sum = 0;
-  for (const b of h) sum += b;
-  h.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, "latin1");
-  return h;
-}
-
 const GiB = 1024 ** 3;
 
 function appFiles(): Record<string, string> {
