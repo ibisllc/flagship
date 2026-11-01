@@ -24,7 +24,9 @@ import {
 import { authCodeWire, issueAuthCode, newAuthCode } from "../../lib/fleet.js";
 import { CONTROL, SERVICES, SkipError, assert, certInfo, http, postJson, short, tryHttp } from "../../lib/harness.js";
 import { SimPhone } from "../../lib/phoneSim.js";
+import { installWhoami, waitServing } from "../gating.js";
 import type { Group } from "../types.js";
+import { uninstall } from "./util.js";
 
 async function csrFor(names: string[]): Promise<string> {
   const key = await acme.crypto.createPrivateEcdsaKey("P-256");
@@ -70,11 +72,18 @@ export const issuance: Group = {
       return `${c.sans.join(", ")} (${c.issuer})`;
     });
 
+    // The relay routes only names a box serves, so the app certificate is read on an app installed for it.
     await rec.check("an app name under A1 is served with the app certificate", async () => {
-      const c = certInfo(`issuance-probe.${b.fqdn}`);
-      assert(c.sans.includes(`*.${b.fqdn}`), `no *.${b.fqdn} on ${c.sans.join(", ")}`);
-      assert(!c.sans.includes(zone) && !c.sans.includes(b.fqdn), `the app certificate names ${c.sans.join(", ")}`);
-      return c.sans.join(", ");
+      await installWhoami(acct, b, "issprobe", { enabled: true });
+      try {
+        await waitServing(`https://issprobe.${b.fqdn}/`);
+        const c = certInfo(`issprobe.${b.fqdn}`);
+        assert(c.sans.includes(`*.${b.fqdn}`), `no *.${b.fqdn} on ${c.sans.join(", ")}`);
+        assert(!c.sans.includes(zone) && !c.sans.includes(b.fqdn), `the app certificate names ${c.sans.join(", ")}`);
+        return c.sans.join(", ");
+      } finally {
+        await uninstall(acct, b, "issprobe");
+      }
     });
 
     const serviceAccountUri = String(account.json?.accountUri ?? "");

@@ -1,17 +1,17 @@
-// App names get a certificate on every server (0.3): once a keyd box holds the admin's server-wildcard
-// grant (the demo and gym bootstrap mint it at install), its own certificate also names
-// `*.<user>.<apex>`, so the app's canonical `<app>.<user>` address serves over valid TLS from whichever
+// App names get a certificate on every server (0.3): once a box holds the admin's server-wildcard
+// grant (the demo and gym bootstrap mint it at install), its apps certificate also names
+// `*.<user>.<apex>` (plan H9: the control name has a certificate of its own), so the app's canonical `<app>.<user>` address serves over valid TLS from whichever
 // of the account's boxes the relay routes it to. Needs gossip, so the account's gossip key is deposited
 // first (lib/cgk.ts, as on feat/UX).
 import { depositCgk, waitGossiping } from "../../lib/cgk.js";
-import { SERVICES, assert, certInfo, sanCovers, tryHttp } from "../../lib/harness.js";
+import { SERVICES, assert, certInfo, tryHttp } from "../../lib/harness.js";
 import { installWhoami } from "../gating.js";
 import type { Group } from "../types.js";
 import { uninstall, until } from "./util.js";
 
 export const appNames: Group = {
   name: "app-names",
-  title: "each box's own certificate names *.<user>; <app>.<user> serves over valid TLS from the box that holds it",
+  title: "each box's apps certificate names *.<user>; <app>.<user> serves over valid TLS from the box that holds it",
   needs: ["A1", "A2"],
   phase: 8,
   parallel: false,
@@ -20,13 +20,12 @@ export const appNames: Group = {
     const b2 = box("A2");
     const account = `*.${A.username}.${SERVICES}`;
 
+    // Plan H9: the box's own name has a control certificate of exactly that name; the account wildcard lives on the
+    // apps certificate, checked below on the app's canonical address (the relay routes only names a box serves).
     for (const b of [b1, b2]) {
-      await rec.check(`${b.serverName}'s certificate names its own names and ${account}`, async () => {
-        const c = await until("the wider certificate", 12 * 60_000, async () => {
-          const ci = certInfo(b.fqdn);
-          return ci.sans.includes(account) ? ci : undefined;
-        }, 20_000);
-        assert(sanCovers(c.sans, b.fqdn) && c.sans.includes(`*.${b.fqdn}`), `sans=${c.sans.join(",")}`);
+      await rec.check(`${b.serverName}'s control certificate names exactly ${b.fqdn}`, () => {
+        const c = certInfo(b.fqdn);
+        assert(c.sans.length === 1 && c.sans[0] === b.fqdn, `sans=${c.sans.join(",")}`);
         assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer}`);
         return c.sans.join(", ");
       });
@@ -55,9 +54,9 @@ export const appNames: Group = {
       }, 15_000);
       return `${r.status}, ${r.text.length} B`;
     });
-    await rec.check(`the certificate served for ${canonical} is home's own, naming ${account}`, () => {
+    await rec.check(`the certificate served for ${canonical} is home's apps certificate, naming ${account}`, () => {
       const c = certInfo(canonical);
-      assert(c.sans.includes(account) && sanCovers(c.sans, b1.fqdn), `sans=${c.sans.join(",")}`);
+      assert(c.sans.includes(account) && c.sans.includes(`*.${b1.fqdn}`) && !c.sans.includes(b1.fqdn), `sans=${c.sans.join(",")}`);
       return c.sans.join(", ");
     });
     await uninstall(A, b1, slug);
