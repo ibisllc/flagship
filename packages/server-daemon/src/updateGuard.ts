@@ -82,7 +82,7 @@ hdir='${hardeningDir}'
 if [ -f "$hardening" ]; then
   mkdir -p "$hdir" && chmod 0755 "$hdir"
   now=$(date +%s)
-  read -r hcount hlast < "$hdir/starts" 2>/dev/null
+  { read -r hcount hlast < "$hdir/starts"; } 2>/dev/null
   [[ "\${hcount:-}" =~ ^[0-9]+$ && "\${hlast:-}" =~ ^[0-9]+$ ]] || { hcount=0; hlast=0; }
   [ $((now - hlast)) -le ${HARDENING_QUICK_SECS} ] || hcount=0
   hcount=$((hcount + 1))

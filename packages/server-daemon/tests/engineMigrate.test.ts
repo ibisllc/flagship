@@ -27,6 +27,7 @@ function world(opts: { dockerAnswers?: boolean; podman?: boolean; failLoad?: boo
     if (k.startsWith("docker volume inspect")) return JSON.stringify(volumes[args[args.length - 1]!]);
     if (k.startsWith("podman volume inspect")) return "/var/lib/containers/storage/volumes/forgejo-cache/_data\n";
     if (k.startsWith("podman load") && opts.failLoad) throw new Error("podman load failed");
+    if (k === "ip -o link show type bridge") return "3: docker0: <NO-CARRIER> mtu 1500\n7: br-0123456789ab: <BROADCAST> mtu 1500\n9: podman0: <BROADCAST> mtu 1500\n10: br0: <BROADCAST> mtu 1500\n";
     return "";
   };
   const deps: MigrationDeps = {
@@ -67,6 +68,10 @@ describe("Docker to Podman, once", () => {
     expect(k).toContain("podman volume create --opt type=none --opt o=bind --opt device=/var/lib/flagship-files/flagship-files-alice--notes/data flagship-files-alice--notes");
     expect(k).toContain("cp -a -- /var/lib/docker/volumes/forgejo-cache/_data/. /var/lib/containers/storage/volumes/forgejo-cache/_data/");
     expect(k).toContain("systemctl disable --now docker.socket docker.service");
+    // Its bridges go once it is stopped, so Podman can take the same subnets (gym 22); others stay.
+    expect(k.indexOf("ip link delete br-0123456789ab")).toBeGreaterThan(k.indexOf("systemctl disable --now docker.socket docker.service"));
+    expect(k).toContain("ip link delete docker0");
+    expect(k.some((x) => x === "ip link delete podman0" || x === "ip link delete br0")).toBe(false);
     // Docker's data is never removed.
     expect(k.some((x) => /rm -rf|volume rm|rmi|image rm/.test(x))).toBe(false);
     expect(w.files.get("/var/lib/flagship/engine-active")).toBe("podman\n");

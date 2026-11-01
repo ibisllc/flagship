@@ -214,9 +214,20 @@ export async function migrateDockerToPodman(deps: MigrationDeps): Promise<Migrat
     }
 
     // Docker's data stays where it is; dockerd stops and stays off.
+    let dockerStopped = true;
     await deps.cmd.run("systemctl", ["disable", "--now", "docker.socket", "docker.service"], { timeoutMs: 120_000 }).catch((e: Error) => {
+      dockerStopped = false;
       log(`[engine] could not stop Docker (${e.message}); it is left running beside Podman`);
     });
+    // A stopped dockerd leaves its bridges up, and Podman refuses a network whose subnet one of them holds (gym 22:
+    // flagship-browser's 172.31.250.0/24, so Postgres never started after the switch). Docker recreates them from
+    // its own records if the box goes back.
+    if (dockerStopped) {
+      const links = await out(deps, "ip", ["-o", "link", "show", "type", "bridge"]).catch(() => "");
+      for (const name of dockerBridgeNames(links)) {
+        await deps.cmd.run("ip", ["link", "delete", name]).catch((e: Error) => log(`[engine] could not remove Docker's bridge ${name}: ${e.message}`));
+      }
+    }
     await writeText(deps, markerPath, `${JSON.stringify(marker, null, 2)}\n`);
     await writeText(deps, activePath, "podman\n");
     log(`[engine] this server now runs its apps with Podman (${marker.images.length} image(s), ${marker.volumes.length} volume(s) moved)`);
@@ -226,6 +237,16 @@ export async function migrateDockerToPodman(deps: MigrationDeps): Promise<Migrat
     await deps.cmd.run("systemctl", ["start", "docker.service"], { timeoutMs: 60_000 }).catch(() => {});
     return { ok: false, engine: "docker", reason: `moving to Podman failed, so this server stays on Docker for now: ${(e as Error).message}` };
   }
+}
+
+/** Docker's own bridges in `ip -o link show type bridge` output: docker0 and its user networks' br-<12 hex>. */
+export function dockerBridgeNames(ipLinkOutput: string): string[] {
+  const names: string[] = [];
+  for (const line of ipLinkOutput.split("\n")) {
+    const m = /^\d+:\s+([^:@\s]+)[:@]/.exec(line);
+    if (m && (m[1] === "docker0" || /^br-[0-9a-f]{12}$/.test(m[1]!))) names.push(m[1]!);
+  }
+  return names;
 }
 
 /** The way back: Docker's untouched data comes back up; the marker records the rollback. */
