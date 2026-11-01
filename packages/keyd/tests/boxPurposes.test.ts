@@ -32,6 +32,12 @@ const SESSION_BOX_PURPOSES = new Set(["flagship/pq-session-accept/v1", "flagship
  * the tag is here and signs the hello through keyd's policy.
  */
 const RESCUE_BOX_PURPOSES = new Set(["flagship/rescue-hello/v1"]);
+/**
+ * The certificate order is signed through signServingRecord, which takes its tag as an argument
+ * (packages/server-daemon/src/acme/serviceIssuer.ts). Missing here, every keyd box refused to order
+ * its certificates (gym 19); packages/server-daemon/tests/serviceIssuance.test.ts covers the order.
+ */
+const ISSUANCE_BOX_PURPOSES = new Set(["flagship/certificate-order/v1"]);
 
 /** Signed by the owner, an admin or the account key, never by the box: keyd must refuse them. */
 const NOT_BOX_PURPOSES = [
@@ -64,7 +70,7 @@ describe("box signing purposes", () => {
   });
 
   it("lists nothing the box does not sign", () => {
-    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t) && !RESCUE_BOX_PURPOSES.has(t));
+    const idle = [...BOX_SIGN_PURPOSES].filter((t) => !signed.has(t) && !UNWIRED_BOX_PURPOSES.has(t) && !SESSION_BOX_PURPOSES.has(t) && !RESCUE_BOX_PURPOSES.has(t) && !ISSUANCE_BOX_PURPOSES.has(t));
     expect(idle).toEqual([]);
     for (const t of NOT_BOX_PURPOSES) expect(BOX_SIGN_PURPOSES.has(t), t).toBe(false);
   });
