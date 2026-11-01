@@ -65,9 +65,14 @@ export const aiChat: Group = {
           answered++;
           await postJson(`https://${b.fqdn}/api/screens/llm/sessions/${encodeURIComponent(id)}/reply`, { text: "Use your best judgement and keep it to one static page." }, s, 60_000);
         }
+        // The model may ask for a setting (an API key, say): an owner who has none declines, and the build goes on.
+        if (last.status === "awaiting-tool-response" && last.pendingRequest?.kind === "requestEnvVar" && answered < 3) {
+          answered++;
+          await postJson(`https://${b.fqdn}/api/screens/llm/sessions/${encodeURIComponent(id)}/tool-ack`, { toolUseId: last.pendingRequest.toolUseId, status: "declined" }, s, 60_000);
+        }
         await sleep(10_000);
       }
-      throw new Error(`timed out waiting for ${want} (last ${last.status} ${short(last.failureReason ?? "", 200)})`);
+      throw new Error(`timed out waiting for ${want} (last ${last.status} ${short(last.failureReason ?? "", 200)}${last.pendingRequest ? `; waiting on ${last.pendingRequest.kind} ${short(last.pendingRequest.input, 120)}, answered ${answered}` : ""})`);
     };
     let id = "";
     try {
