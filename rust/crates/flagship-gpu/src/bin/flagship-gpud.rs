@@ -20,6 +20,7 @@
 //!   --runsc-version <v> --cdi-generator <v> --vm-runtime-version <v>
 //!   --rocm-version <v> --level-zero-version <v>
 //! ```
+#![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
 use std::fs;

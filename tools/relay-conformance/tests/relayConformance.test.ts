@@ -751,6 +751,24 @@ for (const impl of IMPLS) {
         expect(await c.acquire()).toMatchObject({ type: "granted", generation: 3 });
       });
 
+      it("P07 gym run 21: after a release the standby's grant is routed, and the releaser (tunnel kept) is told only the next vacancy", async () => {
+        allGranted();
+        await start(phoneOpts(rk()));
+        await waitFor(() => com.feeds.size === 1, 5_000, "feed");
+        const a = await phone(relay!.hubPort, A, "phone-a");
+        expect(await a.acquire()).toMatchObject({ type: "granted", generation: 1 });
+        const b = await phone(relay!.hubPort, B, "phone-b");
+        expect(await b.acquire()).toMatchObject({ type: "refused", code: "route-held", generation: 1 });
+        expect(await a.release()).toMatchObject({ type: "released", generation: 1 });
+        expect(await b.next((q) => q.type === "route-vacant", 5_000)).toMatchObject({ generation: 1 });
+        expect(await b.acquire()).toMatchObject({ type: "granted", generation: 2 });
+        for (let i = 0; i < 3; i++) expect((await reach(relay!.sniPort)).label).toBe("phone-b");
+        b.close();
+        expect(await a.next((q) => q.type === "route-vacant", 5_000)).toMatchObject({ hostname: BARE, generation: 2 });
+        expect(a.control.some((q) => q.type === "route-vacant" && q.generation === 1)).toBe(false);
+        expect((await reach(relay!.sniPort)).text).toBe("");
+      });
+
       it("P04 a revoked admin grant closes the holder with 4403 and its streams within 5 s", async () => {
         allGranted();
         await start(phoneOpts(rk()));

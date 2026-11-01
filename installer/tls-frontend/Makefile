@@ -10,13 +10,15 @@ BINARY     := flagship-tlsd
 OUT_DIR    := dist
 GOFLAGS    := -trimpath -buildvcs=false
 LDFLAGS    := -s -w
-BUILD_ENV  := CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+# amd64 by default; `make GOARCH=arm64` builds the arm64 box's (tools/box-artifact/build.ts sets it per --arch).
+GOARCH     ?= amd64
+BUILD_ENV  := CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH)
 
 .PHONY: all build test vet clean verify-reproducible native
 
 all: build
 
-# The shipped artifact: static linux/amd64.
+# The shipped artifact: static linux/$(GOARCH).
 build:
 	$(BUILD_ENV) go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o $(OUT_DIR)/$(BINARY) .
 	@echo "built $(OUT_DIR)/$(BINARY)"

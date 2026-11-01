@@ -7,6 +7,7 @@
 //! privileged `flagship-gpud` owns the [`manager::DeviceManager`]; apps
 //! never see this crate. [`sim`] is a simulated host (sysfs, device nodes,
 //! vendor tool output) that drives the whole software path without a GPU.
+#![forbid(unsafe_code)]
 
 pub mod attach;
 pub mod catalog;

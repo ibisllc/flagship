@@ -6,6 +6,7 @@
  * Used by apps/web/tests/phoneRoute.test.ts and the live gym group release03/phoneRoute.ts.
  */
 import { Duplex } from "node:stream";
+import { X509Certificate } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -303,11 +304,14 @@ export async function sayHello(o: { ip: string; port?: number; hostname: string;
       s.destroy();
       resolve(v);
     };
-    const s = tlsConnect({ host: o.ip, port: o.port ?? 443, servername: o.hostname, ca: o.ca, checkServerIdentity: () => undefined });
+    // Phones' self-signed certificates share one subject, so a CA list of several cannot verify each: accept the
+    // handshake and require the peer to be one of the known phone certificates instead.
+    const s = tlsConnect({ host: o.ip, port: o.port ?? 443, servername: o.hostname, rejectUnauthorized: false });
     s.setTimeout(8_000, () => finish(null));
-    s.on("secureConnect", () =>
-      s.write(`GET / HTTP/1.1\r\nhost: ${o.hostname}\r\nx-flagship-presence-device: ${devicePub}\r\nx-flagship-presence-at: ${issuedAt}\r\nx-flagship-presence-sig: ${sig}\r\nconnection: close\r\n\r\n`),
-    );
+    s.on("secureConnect", () => {
+      if (!isPhoneCert(s.getPeerCertificate()?.fingerprint256, o.ca)) return finish(null);
+      s.write(`GET / HTTP/1.1\r\nhost: ${o.hostname}\r\nx-flagship-presence-device: ${devicePub}\r\nx-flagship-presence-at: ${issuedAt}\r\nx-flagship-presence-sig: ${sig}\r\nconnection: close\r\n\r\n`);
+    });
     s.on("data", (d) => (text += d.toString()));
     s.on("end", () => finish(/^HTTP\/1\.1 2\d\d/.test(text) ? (/"phone":"([^"]+)"/.exec(text)?.[1] ?? "?") : null));
     s.on("error", () => finish(null));
@@ -494,4 +498,9 @@ export function parseHttpAnswer(text: string): PhoneHttpAnswer | null {
     headers[k] = headers[k] === undefined ? v : `${headers[k]}\n${v}`;
   }
   return { status: Number(m[1]), headers, body: text.slice(end + 4) };
+}
+
+/** Is `fingerprint256` (as node's getPeerCertificate gives it) the fingerprint of one of `pems`? */
+export function isPhoneCert(fingerprint256: string | undefined, pems: string[]): boolean {
+  return !!fingerprint256 && pems.some((p) => new X509Certificate(p).fingerprint256 === fingerprint256);
 }

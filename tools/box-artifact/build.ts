@@ -136,6 +136,51 @@ export function assertTargetBinaries(nodeModules: string, cpu: "x64" | "arm64"):
   if (wrong.length > 0) throw new Error(`the artifact carries binaries for other platforms: ${wrong.map((d) => `@esbuild/${d}`).join(", ")}`);
 }
 
+/** The Rust target triple for a box architecture: always passed explicitly, so a build on either host makes the same bytes. */
+export function rustTarget(arch: BoxArch): "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu" {
+  return arch === "amd64" ? "x86_64-unknown-linux-gnu" : "aarch64-unknown-linux-gnu";
+}
+
+/** The box architecture this builder runs on, or null on a non-Linux host (where every Rust build is a cross build). */
+export function hostBoxArch(platform: string = process.platform, cpu: string = process.arch): BoxArch | null {
+  if (platform !== "linux") return null;
+  return cpu === "x64" ? "amd64" : cpu === "arm64" ? "arm64" : null;
+}
+
+/**
+ * The environment a cross build needs: the target's GNU linker and C compiler (ring and aws-lc-sys compile C).
+ * A native build needs nothing extra. Debian's cross toolchains are named `<triple-without-unknown>-gcc`.
+ */
+export function crossCompileEnv(arch: BoxArch, host: BoxArch | null): Record<string, string> {
+  if (host === arch) return {};
+  const t = rustTarget(arch);
+  const gnu = arch === "amd64" ? "x86_64-linux-gnu" : "aarch64-linux-gnu";
+  const up = t.toUpperCase().replace(/-/g, "_");
+  const us = t.replace(/-/g, "_");
+  return {
+    [`CARGO_TARGET_${up}_LINKER`]: `${gnu}-gcc`,
+    [`CC_${us}`]: `${gnu}-gcc`,
+    [`CXX_${us}`]: `${gnu}-g++`,
+    [`AR_${us}`]: `${gnu}-ar`,
+  };
+}
+
+/**
+ * The ELF machine of a binary: what it really runs on, whatever its name or the build flags claim. A cross build
+ * that silently fell back to the host compiler would otherwise ship an amd64 binary inside an arm64 artifact.
+ */
+export function elfArch(bytes: Uint8Array): BoxArch | "other" {
+  if (bytes.length < 20 || bytes[0] !== 0x7f || bytes[1] !== 0x45 || bytes[2] !== 0x4c || bytes[3] !== 0x46) return "other";
+  if (bytes[4] !== 2 || bytes[5] !== 1) return "other"; // 64-bit little-endian only
+  const machine = bytes[18]! | (bytes[19]! << 8);
+  return machine === 0x3e ? "amd64" : machine === 0xb7 ? "arm64" : "other";
+}
+
+export function assertElfArch(path: string, arch: BoxArch): void {
+  const got = elfArch(readFileSync(path));
+  if (got !== arch) throw new Error(`${basename(path)} is built for ${got}, not ${arch}`);
+}
+
 async function build(argv: string[]): Promise<void> {
   const commit = need(argv, "commit");
   if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error("--commit must be a full 40-hex commit, never a branch, tag or abbreviation");
@@ -214,6 +259,9 @@ async function build(argv: string[]): Promise<void> {
       });
     }
 
+    for (const b of [unsealBinary, tlsdBinary]) assertElfArch(b, arch);
+    assertElfArch(join(nodeDir, "bin/node"), arch);
+
     const epoch = Number(git(repo, "show", "-s", "--format=%ct", commit));
 
     // The Rust keyd, broker and core (engine-and-rust-path.md §5): the toolchain pinned by
@@ -234,7 +282,8 @@ async function build(argv: string[]): Promise<void> {
         const home = process.env["CARGO_HOME"] ?? join(process.env["HOME"] ?? "/root", ".cargo");
         rustc = execFileSync("rustc", ["--version"], { cwd: join(src, "rust"), encoding: "utf8" }).trim();
         cargoVersion = execFileSync("cargo", ["--version"], { cwd: join(src, "rust"), encoding: "utf8" }).trim();
-        execFileSync("cargo", ["build", "--release", "--locked", "-p", "flagship-keyd", "-p", "flagship-broker", "-p", "flagship-core", "-p", "flagship-wasi", "-p", "flagship-gpu", "-p", "flagship-updater", "-p", "flagship-access", "-p", "flagship-ingress"], {
+        const target = rustTarget(arch);
+        execFileSync("cargo", ["build", "--release", "--locked", "--target", target, "-p", "flagship-keyd", "-p", "flagship-broker", "-p", "flagship-core", "-p", "flagship-wasi", "-p", "flagship-gpu", "-p", "flagship-updater", "-p", "flagship-access", "-p", "flagship-ingress"], {
           cwd: join(src, "rust"),
           stdio: "inherit",
           env: {
@@ -243,14 +292,16 @@ async function build(argv: string[]): Promise<void> {
             SOURCE_DATE_EPOCH: String(epoch),
             CARGO_INCREMENTAL: "0",
             RUSTFLAGS: `--remap-path-prefix=${src}=/flagship --remap-path-prefix=${home}=/cargo -C link-arg=-Wl,--build-id=none`,
+            ...crossCompileEnv(arch, hostBoxArch()),
           },
         });
-        binDir = join(targetDir, "release");
+        binDir = join(targetDir, target, "release");
       }
       rustBinaries = {};
       const hashes: Record<string, string> = {};
       for (const name of RUST_BINARIES) {
         const p = join(binDir, name);
+        assertElfArch(p, arch);
         rustBinaries[name] = p;
         hashes[name] = sha256(readFileSync(p));
       }
@@ -306,7 +357,7 @@ async function build(argv: string[]): Promise<void> {
         id: builderId(process.env, arg(argv, "builder-id")),
         runId: process.env["GITHUB_RUN_ID"] ?? null, workflow: process.env["GITHUB_WORKFLOW_REF"] ?? null, runner: process.env["RUNNER_NAME"] ?? null,
       },
-      steps: ["git archive", "verify node archive", "npm ci --ignore-scripts (frozen lock, target os/cpu)", `tsc -b packages/server-daemon (typescript ${tsVersion})`, "go build installer/unseal-helper", "go build installer/tls-frontend", ...(rust ? ["cargo build --release --locked"] : []), "assemble deterministic tar.gz"],
+      steps: ["git archive", "verify node archive", "npm ci --ignore-scripts (frozen lock, target os/cpu)", `tsc -b packages/server-daemon (typescript ${tsVersion})`, "go build installer/unseal-helper", "go build installer/tls-frontend", ...(rust ? [`cargo build --release --locked --target ${rustTarget(arch)}`] : []), "assemble deterministic tar.gz"],
       flags,
     }), null, 2) + "\n";
 

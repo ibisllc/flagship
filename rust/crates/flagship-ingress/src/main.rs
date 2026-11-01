@@ -1,4 +1,5 @@
 //! flagship-ingress: the box's TLS frontend, holding no private key (README.md).
+#![forbid(unsafe_code)]
 
 use std::io::Write;
 use std::process::ExitCode;

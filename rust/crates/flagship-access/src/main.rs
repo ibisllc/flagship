@@ -3,6 +3,7 @@
 //! Environment: `FLAGSHIP_ACCESS_SOCKET` (`/run/flagship-access/access.sock`), `FLAGSHIP_ACCESS_STATE`
 //! (`/var/flagship/data/flagship-access/service-access.json`), `FLAGSHIP_ACCESS_SESSIONS`
 //! (`/var/flagship/service-sessions.json`), `FLAGSHIP_ACCESS_ALLOW_UIDS` (`0`: the uids admitted).
+#![forbid(unsafe_code)]
 
 use flagship_access::server::{Context, peer_uid, serve_connection};
 use std::io::Write;

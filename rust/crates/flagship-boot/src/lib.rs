@@ -13,6 +13,7 @@
 //! [`canonical`] (signed `SecretRequest` and box-auth headers), [`identity`]
 //! (the Ed25519 PKCS#8 boot key, `/boot/flagship-boot-key.pem`), [`lease`]
 //! (the owner-signed auto-unlock lease check).
+#![forbid(unsafe_code)]
 
 pub mod canonical;
 pub mod compat;

@@ -9,6 +9,7 @@
 //! only, no sockets, a memory and table ceiling, a fuel budget, a wall-clock
 //! deadline that also cancels host calls blocked inside WASI, and a bound on
 //! how many runs (and so host calls) the worker serves at once.
+#![forbid(unsafe_code)]
 
 mod cgi;
 mod config;

@@ -21,6 +21,7 @@
 //! A rollback flips back to a release that is already on disk and was verified when it was
 //! installed. It never rolls back keys, revocation epochs or the minimum-security state: those
 //! live in the state directory and in keyd, which this crate never touches.
+#![forbid(unsafe_code)]
 
 pub mod cli;
 pub mod extract;

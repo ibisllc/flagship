@@ -11,6 +11,7 @@
 //! (`<dir>/ts-checkpoint.json`), `FLAGSHIP_CORE_STATUS` (`/run/flagship-core/status.json`),
 //! `FLAGSHIP_CORE_INTERVAL_SECS` (60), and for `serve` `FLAGSHIP_CORE_SOCKET`
 //! (`/run/flagship-core/core.sock`) and `FLAGSHIP_CORE_ALLOW_UIDS` (who may connect; root always).
+#![forbid(unsafe_code)]
 
 use flagship_core::apps::AppController;
 use flagship_core::handover::TsCheckpoint;

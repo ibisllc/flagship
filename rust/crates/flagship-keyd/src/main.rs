@@ -1,5 +1,6 @@
 //! `flagship-keyd serve`: the Rust backend. Same environment and state directory as the TS
 //! `main.ts`. `migrate` stays with the TS backend.
+#![forbid(unsafe_code)]
 
 use std::io::Write;
 use std::path::PathBuf;

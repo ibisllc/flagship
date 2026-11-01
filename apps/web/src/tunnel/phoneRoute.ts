@@ -414,6 +414,8 @@ export class PhoneRoutes {
     const r = await this.opts.ledger.apply({ op: "release", hostname: h.hostname, generation: h.generation, sessionId: s.id });
     if (!s.closed) s.handle.send({ type: "released", hostname: h.hostname, generation: h.generation, confirmed: r?.ok === true });
     this.notifyVacant(h.hostname, h.generation);
+    // Its tunnel stays open, so it waits as a standby too, but only for a later vacancy (not the one it just made).
+    if (!s.closed) this.enterStandby(s, h.hostname, h.generation + 1);
   }
 
   /** Renew every held route now (the timer's work; tests call it directly). */
@@ -485,7 +487,7 @@ export class PhoneRoutes {
     return { sessions: this.sessions.size, holding: this.holders.size, standby, refused: { ...this.refused }, lost: { ...this.lost } };
   }
 
-  private enterStandby(s: PhoneSession, hostname: string): void {
+  private enterStandby(s: PhoneSession, hostname: string, notifiedFloor = 0): void {
     this.leaveStandby(s);
     s.standby = hostname;
     let st = this.standbys.get(hostname);
@@ -493,6 +495,7 @@ export class PhoneRoutes {
       st = { sessions: new Set(), poll: this.setRepeat(() => void this.pollStandby(hostname), this.opts.standbyPollMs ?? PHONE_ROUTE_STANDBY_POLL_MS), notified: 0 };
       this.standbys.set(hostname, st);
     }
+    st.notified = Math.max(st.notified, notifiedFloor);
     st.sessions.add(s);
   }
 

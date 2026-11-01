@@ -1,5 +1,6 @@
 //! `flagship-boot`: with no subcommand it is the v1 `flagship-unseal` helper;
 //! `flagship-boot unlock ...` runs the whole early-boot unlock.
+#![forbid(unsafe_code)]
 
 use std::os::unix::ffi::OsStringExt;
 use std::process::ExitCode;

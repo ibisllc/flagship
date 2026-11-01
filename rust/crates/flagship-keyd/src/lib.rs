@@ -3,6 +3,7 @@
 //! Same wire protocol, operations, error codes, rate limits, audit lines and state files as the
 //! TS service, so either backend can run against the same `/var/lib/flagship-keyd`. On top of
 //! it: peer-credential caller checks, no core dumps, and zeroized key memory.
+#![forbid(unsafe_code)]
 
 pub mod acme;
 pub mod archive;

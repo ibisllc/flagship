@@ -114,7 +114,7 @@ fn the_socket_handler_reads_the_state_and_sessions_itself() {
     .unwrap();
     std::fs::write(
         dir.join("sessions.json"),
-        json!({ "good": { "serviceRef": "alice--club", "aid": friend, "expiresAt": 9.0e15 }, "old": { "serviceRef": "alice--club", "aid": friend, "expiresAt": 1 } }).to_string(),
+        json!({ "good": { "serviceRef": "alice--club", "aid": friend, "expiresAt": 9.0e15 }, "upper": { "serviceRef": "alice--club", "aid": friend.to_uppercase(), "expiresAt": 9.0e15 }, "old": { "serviceRef": "alice--club", "aid": friend, "expiresAt": 1 } }).to_string(),
     )
     .unwrap();
     let ctx = Context {
@@ -126,6 +126,8 @@ fn the_socket_handler_reads_the_state_and_sessions_itself() {
     };
     assert_eq!(ask("good")["role"], "member");
     assert_eq!(ask("old")["outcome"], "deny");
+    // The socket path reads the session file itself and must not normalise what decide refuses.
+    assert_eq!(ask("upper")["outcome"], "deny");
     assert_eq!(ask("forged")["outcome"], "deny");
     // A caller that claims a mode or an allow-list grants nothing: only the file counts.
     let forged = handle_decide(&ctx, &json!({ "serviceRef": "alice--club", "routedHost": "club.h.alice.flagship.services", "mode": "open", "allow": ["e1"], "method": "GET", "path": "/" })).unwrap();

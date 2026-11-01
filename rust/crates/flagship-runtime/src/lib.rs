@@ -4,6 +4,7 @@
 //! capability that binds an [`ExecutionPlan`] digest, resolves every host object the plan refers
 //! to, and only then hands this crate a [`ResolvedWorkload`]. An adapter turns that into one fixed
 //! argv for one pinned engine binary; there is no generic passthrough.
+#![forbid(unsafe_code)]
 
 pub mod containerd;
 pub mod engine;

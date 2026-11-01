@@ -12,6 +12,7 @@
 //! - [`server`]: the local socket the daemon asks (shadow or authoritative).
 //!
 //! Shared verdicts: `packages/protocol/test-vectors/access-enforcement/`.
+#![forbid(unsafe_code)]
 
 pub mod decide;
 pub mod origin;

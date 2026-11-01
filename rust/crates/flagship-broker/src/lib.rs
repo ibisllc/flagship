@@ -7,6 +7,7 @@
 //!   capability bound to the exact object it acts on before it acts.
 //!
 //! Callers are identified by the kernel (SO_PEERCRED), never by what they write.
+#![forbid(unsafe_code)]
 
 pub mod audit;
 pub mod capability;

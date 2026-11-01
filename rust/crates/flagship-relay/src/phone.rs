@@ -864,7 +864,7 @@ impl PhoneRoutes {
             Some(LedgerResult::Refused(code, entry)) => {
                 // An eligible phone refused because the route is taken (or was just taken) waits as a standby.
                 if code == "route-held" || code == "stale-generation" {
-                    self.enter_standby(s, &offer.hostname);
+                    self.enter_standby(s, &offer.hostname, 0);
                 }
                 let code = if code == "stale-generation" {
                     "route-held"
@@ -946,6 +946,10 @@ impl PhoneRoutes {
             "confirmed": matches!(r, Some(LedgerResult::Ok(_)))}),
         );
         self.notify_vacant(&h.hostname, h.generation);
+        // Its tunnel stays open, so it waits as a standby too, but only for a later vacancy (not the one it just made).
+        if !s.closed() {
+            self.enter_standby(s, &h.hostname, h.generation.saturating_add(1));
+        }
     }
 
     pub async fn renew(&self, s: &Arc<PhoneSession>) {
@@ -1113,7 +1117,8 @@ impl PhoneRoutes {
         json!({"sessions": st.sessions.len(), "holding": st.holders.len(), "standby": standby, "refused": st.refused, "lost": st.lost})
     }
 
-    fn enter_standby(&self, s: &Arc<PhoneSession>, hostname: &str) {
+    /// `notified_floor`: vacancies below it are not told to this standby (a releaser waits for a later one).
+    fn enter_standby(&self, s: &Arc<PhoneSession>, hostname: &str, notified_floor: u64) {
         let Ok(mut st) = self.0.st.lock() else { return };
         Self::leave_standby_locked(&mut st, s);
         if let Ok(mut ss) = s.st.lock() {
@@ -1142,6 +1147,7 @@ impl PhoneRoutes {
             );
         }
         if let Some(sb) = st.standbys.get_mut(hostname) {
+            sb.notified = sb.notified.max(notified_floor);
             sb.sessions.push(Arc::clone(s));
         }
     }

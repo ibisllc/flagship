@@ -13,7 +13,7 @@ import { bytesToHex } from "@noble/hashes/utils";
 import { ed, signRevokeDeviceCapabilityGrant } from "@flagship/protocol";
 import { mintDeviceGrant } from "../../lib/fleet.js";
 import { CONTROL, SERVICES, SkipError, assert, http, postJson, short, sleep } from "../../lib/harness.js";
-import { SimPhone, sayHello, selfSignedPhoneCert } from "../../lib/phoneSim.js";
+import { SimPhone, isPhoneCert, sayHello, selfSignedPhoneCert } from "../../lib/phoneSim.js";
 import type { Group } from "../types.js";
 
 /** What one visitor reached: the phone's label, or null (closed without an answer). */
@@ -27,11 +27,13 @@ async function visit(ip: string, hostname: string, ca: string[], timeoutMs = 8_0
       s.destroy();
       resolve(v);
     };
-    const s = tlsConnect({ host: ip, port: 443, servername: hostname, ca, checkServerIdentity: () => undefined });
+    // The phones' self-signed certificates share one subject, so a CA list of several cannot verify each (run 21: every
+    // visitor of phone 2 closed): accept the handshake and require the peer to be one of the phone certificates.
+    const s = tlsConnect({ host: ip, port: 443, servername: hostname, rejectUnauthorized: false });
     s.setTimeout(timeoutMs, () => finish(null));
     s.on("secureConnect", () => {
-      const cn = s.getPeerCertificate()?.subject?.CN;
-      if (cn !== hostname) return finish(`wrong-cert:${String(cn)}`);
+      const peer = s.getPeerCertificate();
+      if (!isPhoneCert(peer?.fingerprint256, ca)) return finish(`wrong-cert:${String(peer?.subject?.CN)}`);
       s.write(`GET /.well-known/flagship-phone HTTP/1.1\r\nhost: ${hostname}\r\nconnection: close\r\n\r\n`);
     });
     s.on("data", (d) => (text += d.toString()));

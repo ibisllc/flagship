@@ -2,6 +2,7 @@
 //!
 //! Status: draft, pending Q01 external cryptographic review. The box pilot (keyd's hybrid sign, `trust`) uses it.
 //! Specification: `docs/architecture-v2/pq-suites.md`.
+#![forbid(unsafe_code)]
 
 pub mod access_orders;
 mod ed25519_strict;

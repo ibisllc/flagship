@@ -1,0 +1,64 @@
+[package]
+name = "flagship-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "BUSL-1.1"
+publish = false
+
+# Its own workspace: cargo-fuzz needs nightly and sanitizer flags the main workspace must not see.
+# The relay's targets live in crates/flagship-relay/fuzz; these cover the box's newer parsers.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+flagship-ingress = { path = "../crates/flagship-ingress" }
+flagship-broker = { path = "../crates/flagship-broker" }
+flagship-access = { path = "../crates/flagship-access" }
+libfuzzer-sys = "=0.4.12"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[bin]]
+name = "ingress_request_head"
+path = "fuzz_targets/ingress_request_head.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ingress_response_head"
+path = "fuzz_targets/ingress_response_head.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ingress_chunked"
+path = "fuzz_targets/ingress_chunked.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "broker_tarcheck"
+path = "fuzz_targets/broker_tarcheck.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "access_path"
+path = "fuzz_targets/access_path.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "access_origin"
+path = "fuzz_targets/access_origin.rs"
+test = false
+doc = false
+bench = false

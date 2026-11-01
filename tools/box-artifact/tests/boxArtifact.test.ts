@@ -12,7 +12,7 @@ import { gunzipSync } from "node:zlib";
 import { afterAll, describe, expect, it } from "vitest";
 import { ed } from "../../../packages/protocol/src/edSync.js";
 import { assembleArtifact, isRustBinaryName, skipInApp, type BuildInfo } from "../assemble.js";
-import { archiveDigestFromShasums, assertNodeMeetsFloor, assertTargetBinaries, loadNodePins, RUST_BINARIES } from "../build.js";
+import { archiveDigestFromShasums, assertElfArch, assertNodeMeetsFloor, assertTargetBinaries, crossCompileEnv, elfArch, hostBoxArch, loadNodePins, RUST_BINARIES, rustTarget } from "../build.js";
 import { buildSbom, componentsWithoutIntegrity, sbomLockSha256 } from "../sbom.js";
 import { buildTar, checkArchivePath, gzipDeterministic } from "../tar.js";
 
@@ -234,5 +234,36 @@ describe("Rust binary names", () => {
     for (const bad of ["flagship-", "flagship-a/b", "../flagship-keyd", "flagship-Keyd", "keyd", "flagship--x", "flagship-x-"]) {
       expect(isRustBinaryName(bad), bad).toBe(false);
     }
+  });
+});
+
+describe("both architectures (G8)", () => {
+  const elf = (machine: number, cls = 2) => {
+    const b = new Uint8Array(64);
+    b.set([0x7f, 0x45, 0x4c, 0x46, cls, 1], 0);
+    b[18] = machine & 0xff; b[19] = machine >> 8;
+    return b;
+  };
+  it("reads the ELF machine and refuses a binary built for the other architecture", () => {
+    expect(elfArch(elf(0x3e))).toBe("amd64");
+    expect(elfArch(elf(0xb7))).toBe("arm64");
+    expect(elfArch(elf(0xb7, 1))).toBe("other");
+    expect(elfArch(new TextEncoder().encode("#!/bin/sh\necho hi\n"))).toBe("other");
+    const p = join(root, "fake-arm64");
+    writeFileSync(p, elf(0xb7));
+    expect(() => assertElfArch(p, "arm64")).not.toThrow();
+    expect(() => assertElfArch(p, "amd64")).toThrow(/built for arm64, not amd64/);
+  });
+  it("always names the Rust target and sets the cross toolchain only when the host differs", () => {
+    expect(rustTarget("amd64")).toBe("x86_64-unknown-linux-gnu");
+    expect(rustTarget("arm64")).toBe("aarch64-unknown-linux-gnu");
+    expect(hostBoxArch("linux", "x64")).toBe("amd64");
+    expect(hostBoxArch("linux", "arm64")).toBe("arm64");
+    expect(hostBoxArch("darwin", "arm64")).toBeNull();
+    expect(crossCompileEnv("arm64", "arm64")).toEqual({});
+    expect(crossCompileEnv("arm64", "amd64")).toMatchObject({
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: "aarch64-linux-gnu-gcc", CC_aarch64_unknown_linux_gnu: "aarch64-linux-gnu-gcc",
+    });
+    expect(crossCompileEnv("amd64", "arm64")).toMatchObject({ CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: "x86_64-linux-gnu-gcc" });
   });
 });

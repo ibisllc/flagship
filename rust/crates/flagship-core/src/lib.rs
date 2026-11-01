@@ -10,6 +10,7 @@
 //! - [`apps`]: the app reconciler on an arch-v2 box (G3): desired workloads, the address pool,
 //!   scheduling ([`schedule`]) and generations, with the daemon as the executor of its effects.
 //! - [`ipc`]: core's socket, where the daemon syncs and settles.
+#![forbid(unsafe_code)]
 
 pub mod access_entry;
 pub mod access_journal;

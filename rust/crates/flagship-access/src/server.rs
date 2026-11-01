@@ -44,7 +44,9 @@ fn session_for(ctx: &Context, token: &str) -> Option<SessionFact> {
     let v: Value = serde_json::from_str(&text).ok()?;
     let e = v.get(token)?;
     let service_ref = e.get("serviceRef")?.as_str()?.to_owned();
-    let aid = e.get("aid")?.as_str()?.to_lowercase();
+    // Kept as written: `decide` refuses an aid that is not lower-case hex (shared vector "a session whose key is
+    // not lower-case hex is anonymous"); lower-casing it here made the socket path admit what the contract refuses.
+    let aid = e.get("aid")?.as_str()?.to_owned();
     let expires = e.get("expiresAt")?.as_f64()?;
     let closed = e.get("closed").and_then(Value::as_bool) == Some(true);
     #[allow(clippy::cast_precision_loss)]

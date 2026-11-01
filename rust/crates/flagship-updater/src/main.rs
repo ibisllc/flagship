@@ -1,4 +1,5 @@
 //! `flagship-updater`: see the crate docs and [`flagship_updater::cli`].
+#![forbid(unsafe_code)]
 
 use std::process::ExitCode;
 

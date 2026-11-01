@@ -8,6 +8,7 @@
 //!
 //! Errors are printed without host paths; the box passes them through the
 //! model redactor before any AI reads them.
+#![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
 use std::io::Write;

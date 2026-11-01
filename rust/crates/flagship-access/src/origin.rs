@@ -22,7 +22,13 @@ pub fn normalize_origin(raw: &str) -> Option<String> {
     };
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = rest.get(..end)?;
-    if authority.contains(['\\', ' ', '\t', '\r', '\n', '@']) || authority.is_empty() {
+    // Only printable ASCII: a browser sends a punycoded host, a control or non-ASCII space is never part of one, and
+    // `trim` on a second pass would eat a trailing one, so accepting them made the result non-idempotent (fuzz:
+    // access_origin found `\v` and U+00A0). Refusing gives no origin, which counts as cross-origin: fail closed.
+    if authority.contains(['\\', '@'])
+        || !authority.chars().all(|c| c.is_ascii_graphic())
+        || authority.is_empty()
+    {
         return None;
     }
     let (host, port) = if let Some(after) = authority.strip_prefix('[') {
@@ -44,6 +50,11 @@ pub fn normalize_origin(raw: &str) -> Option<String> {
         }
     };
     if host.is_empty() || host == "[]" {
+        return None;
+    }
+    // Outside an IPv6 literal a host never holds ':', '[' or ']' (the TS twin's URL parse refuses them). Accepting one
+    // made the result non-idempotent: `http://a:b:80` gave `http://a:b`, which then gave `http://a` (fuzz: access_origin).
+    if !host.starts_with('[') && host.contains([':', '[', ']']) {
         return None;
     }
     let host = host.to_ascii_lowercase();
@@ -97,6 +108,29 @@ pub fn is_cross_origin_unsafe(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_control_character_in_the_host_is_no_origin() {
+        assert_eq!(normalize_origin("http://\u{0}\u{b}?.2xh"), None);
+        assert_eq!(normalize_origin("https://a\u{7f}.b"), None);
+        // A trailing one is trimmed off the whole value first, as before.
+        assert_eq!(
+            normalize_origin("http://t\u{a0}").as_deref(),
+            Some("http://t")
+        );
+        assert_eq!(normalize_origin("http://t\u{a0}/x"), None);
+    }
+
+    #[test]
+    fn an_unbracketed_host_with_a_colon_or_bracket_is_no_origin() {
+        assert_eq!(normalize_origin("http://0[::"), None);
+        assert_eq!(normalize_origin("http://a:b:80"), None);
+        assert_eq!(normalize_origin("http://a]:80"), None);
+        assert_eq!(
+            normalize_origin("http://[::1]:8080").as_deref(),
+            Some("http://[::1]:8080")
+        );
+    }
 
     #[test]
     fn origins() {

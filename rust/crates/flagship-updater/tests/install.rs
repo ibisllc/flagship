@@ -569,7 +569,11 @@ fn an_accepted_runtime_manifest_is_recorded_and_an_older_one_is_then_refused() {
 fn put_dropins(paths: &flagship_updater::release::Paths) {
     let d = paths.systemd.join("flagship-daemon.service.d");
     fs::create_dir_all(&d).unwrap();
-    fs::write(d.join("45-hardening.conf"), "[Service]\nProtectSystem=full\n").unwrap();
+    fs::write(
+        d.join("45-hardening.conf"),
+        "[Service]\nProtectSystem=full\n",
+    )
+    .unwrap();
     fs::write(d.join("40-privd.conf"), "[Service]\nUser=flagship\n").unwrap();
 }
 
@@ -580,7 +584,10 @@ fn restore_removes_the_drop_ins_an_older_release_does_not_know() {
     restore(&paths, &a).unwrap();
     let d = paths.systemd.join("flagship-daemon.service.d");
     assert!(!d.join("45-hardening.conf").exists());
-    assert!(d.join("40-privd.conf").exists(), "only this release line's drop-ins go");
+    assert!(
+        d.join("40-privd.conf").exists(),
+        "only this release line's drop-ins go"
+    );
     assert_eq!(
         flagship_updater::release::RELEASE_DROPINS,
         &["flagship-daemon.service.d/45-hardening.conf"]
@@ -593,7 +600,12 @@ fn the_guards_rollback_removes_them_too() {
     put_dropins(&paths);
     marker(&paths, &a, &b, "applying", 0);
     assert_eq!(guard(&paths, 8), GuardAction::RolledBack { to: a.clone() });
-    assert!(!paths.systemd.join("flagship-daemon.service.d/45-hardening.conf").exists());
+    assert!(
+        !paths
+            .systemd
+            .join("flagship-daemon.service.d/45-hardening.conf")
+            .exists()
+    );
 }
 
 #[test]

@@ -1,0 +1,60 @@
+# Rust consolidation (release plan G8 / Appendix G R8)
+
+Status as of 2026-11-01. This is the inventory of the TypeScript, Go and shell implementations that a
+Rust component replaces or shadows, with the proof that exists and the proof still missing before the
+old one may go. **Nothing has been removed.** No alternative below has every required proof yet.
+
+## Removal rule
+
+An old implementation is removed only when all of these hold (R8, IMPLEMENTATION-PLAN §12.2):
+
+1. **Upgrade**: a box on the previous supported release updates to a release whose Rust component is
+   the only one, live in the gym (both stacks where both exist), and passes its health gate.
+2. **Recovery**: rollback to the previous release, a crash of the Rust component, and a box whose
+   binary is missing or fails its pin all end in a working box, proven live, not only in unit tests.
+3. **Compatibility**: every shared vector (wire, policy, canonical bytes) passes on both sides, and
+   mixed-version peers (old box/new relay, new box/old relay, old client) are proven.
+4. **arm64**: the Rust binary is built, tested and run on arm64 (the Apple-silicon VM appliance).
+5. **Production qualification**: canary cohorts per §12.3.
+
+And never: fall back silently to raw-key custody or weaker isolation; delete a recovery path that is
+still needed only because of its language (a shell rollback that needs nothing but bash and jq is a
+feature for a box whose own release is broken).
+
+## Inventory
+
+| # | Old implementation (paths) | Replaced/shadowed by | Selector today | Proof that exists | Proof still needed |
+|---|---|---|---|---|---|
+| 1 | TS keyd: `packages/keyd/src/*` (`main.ts`, `server.ts`, `service.ts`, `acme.ts`, `tls.ts`, `migrate.ts`) | `rust/crates/flagship-keyd` (same socket, same state, wire v1) | `flagship-rust-select` (`packages/server-daemon/src/rustStack/units.ts`): Rust when the box is arch-v2, the release pins the binary and it has not failed 3 quick starts; else the TS keyd drop-in `30-rust.conf` falls back | Rust keyd tests incl. `tests/hostile.rs`; arch-v2 gym passes ran with the Rust units on (gym 10: arch-v2 500/0/4, 46 groups; migrate 10/10 "keyd rename" in gym 4) | A gym check that asserts which keyd served (`/run/flagship-rust/keyd.status`) rather than inferring it; a live crash-and-fallback drill; classic boxes still run TS keyd only; arm64 live run. The TS keyd also owns `migrate` (raw key files → keyd state): keep it until no supported box can still hold legacy files |
+| 2 | Raw-key daemon path: `FLAGSHIP_IDENTITY_PRIV_HEX` in `/etc/flagship/daemon.env` (`packages/server-daemon/src/index.ts`), bootstrap register `--priv-hex` (`packages/flagship-builder/src/userdata.ts`) | keyd custody (either keyd) | keyd's `migrate` scrubs the env file; register signs through `--keyd-socket` when the variable is gone | keyd migration unit tests; live installs register through keyd | Proof that no supported box (incl. classic, VM appliances) still starts with the raw key; after that the env-variable path is a below-floor rollback target and must be refused, not kept as a fallback (R8: no silent raw-key fallback) |
+| 3 | TS privd: `packages/privd/src/*` | `rust/crates/flagship-broker` (same v1 socket + typed v2 socket for core) | `flagship-rust-select` for `broker`; TS privd on the same v1 socket as fallback | Shared policy vectors `packages/privd/tests/vectors/v1-policy.json` (TS and Rust, `privd_v1.rs`, `typed_authority.rs`); arch-v2 gym green (gym 10) | Live crash/fallback drill; classic stack still TS-only; arm64 live run; the release op launcher text is shared byte for byte (keep both until the TS one is retired with the classic stack) |
+| 4 | Shell installers: `installer/install-box-artifact.sh`, `installer/rollback-box-artifact.sh`, the `RELEASE_LAUNCHER` fallback in `packages/privd/src/policy.ts` | `rust/crates/flagship-updater` (`install`, `restore`, same flags/exit codes) | Launcher runs `installer/rust/flagship-updater` when executable, else the shell scripts | **G1 proven live for install**: gym 17 `update` group, arch-v2 box journal "installed: 33c43eb8… amd64 sequence 202611010301 (flagship-updater)", health gate committed. 70 updater unit tests | Live `restore`/rollback by the updater; update from a release built without the updater (the shell path is what such a box runs); arm64. The shell scripts are also the bootstrap verifier path (`verify-box-artifact.sh` runs before any artifact code): that one stays by design |
+| 5 | Bash update guard + rollback: `buildUpdateGuardScript` in `packages/server-daemon/src/updateGuard.ts` → `/usr/local/sbin/flagship-update-guard.sh`, `flagship-rollback-release.sh` | `flagship-updater guard`, copied pin-checked to `/usr/local/sbin/flagship-updater` | Bash guard hands over to the Rust updater when present and pin-correct | Unit tests; `ebcbfeebc` (guard install retries until the broker answers) from gym 10 | Live guard hand-over and an interrupted-apply rollback by the Rust guard (G1 "still to prove"). The bash guard needs only bash and jq, so it is the recovery path for a box whose release (including its Rust binary) is broken: keep it as last resort even after the hand-over is proven |
+| 6 | Go TLS frontend `flagship-tlsd`: `installer/tls-frontend/*` | `rust/crates/flagship-ingress` | Owner's signed `flagship/rust-ownership/v1` order, `proxy: ts|rust` (`rustStack/ownership.ts`), drop-in `40-rust-ingress.conf` (`rustStack/ingress.ts`); falls back to Go tlsd after 3 failed runs | TS↔Rust app-proxy vectors; ingress tests (`tests/ingress.rs`); gym group `rust-core` written (`tools/live-e2e/groups/release03/rustCore.ts`) | G4 "not yet run live": the `rust-core` group live; default stays `ts`; mixed-version; arm64. Go tlsd is the automatic fallback that keeps the owner able to turn the setting off: removing it needs the Rust ingress proven as the default first |
+| 7 | TS app proxy in the daemon (the request path behind tlsd) | `flagship-ingress` proxy (`proxy.rs`) with the daemon's decision (`rustProxyDecide.ts`) | Same `proxy` setting as #6 | As #6 | As #6 |
+| 8 | TS access decision in the proxy (`packages/server-daemon/src/accessAuthority.ts` and the proxy) | `rust/crates/flagship-access` | `FLAGSHIP_ACCESS_AUTHORITY=ts|shadow|rust`; default `shadow` when the socket exists (arch-v2), `ts` otherwise; `rust` fails closed | 95/22 shared vectors `packages/protocol/test-vectors/access-enforcement/` on both sides; shadow runs in every arch-v2 gym (disagreements counted) | G5: writes and account-people classification are still TS; a gym run in `rust` mode; shadow disagreement count recorded as zero over a canary period |
+| 9 | TS app reconciliation in the daemon (deploy/stop/restart of app containers) | `rust/crates/flagship-core` (`serve`, reconciler) | `reconciler: shadow|rust` in the same ownership order; default `shadow` (core acts on nothing) | Core tests; cut-over refuses unless shadow agreed on the last passes | G3 "not yet run live": `rust-core` gym group (adopt across restart, crash restart); default stays `shadow` |
+| 10 | Go unseal helper `flagship-unseal`: `installer/unseal-helper/*`, shipped in the artifact as `installer/flagship-unseal` and copied into the initramfs (`packages/boot-chain/src/initramfs.ts`, `unlockPremount.ts`) | `rust/crates/flagship-boot` (no subcommand = v1 `flagship-unseal`; `unlock` = whole early-boot unlock) | None: the artifact does not ship `flagship-boot` (`RUST_BINARIES` in `tools/box-artifact/build.ts` omits it); boxes run Go only | Rust boot crate tests; shared vectors `packages/boot-core/tests/bootUnsealVectors.test.ts`; `tools/unseal-crosscheck` | Everything live: shipping it, initramfs wiring, unlock on a real box (amd64 and arm64), recovery when the initramfs helper is broken. The Go helper is in the boot path of every box: highest bar |
+| 11 | TS relay hub: `apps/web/src/tunnel/*` (`tunnelHub.ts`, `sniRouter.ts`, `outboundRelay.ts`, …) on Fly | `rust/crates/flagship-relay` (library + wiring) | Not deployable yet (G7: not a running service) | Codec/core tests, fuzz targets (`frame_decode`, `sni_parse`, `payload_parse`), `tools/relay-conformance` harness | All of G7: HelloAuthority, outbound relay, eviction, blessing, mailboxes, gossip, health, Fly image, gym canary with mixed-version boxes |
+| 12 | `packages/hello-daemon` | Not a Rust replacement; demo daemon kept for chain smoke tests | n/a | n/a | Out of scope for R8 |
+
+`flagship-wasi` (`flagship-wasi-worker`) and `flagship-gpu` (`flagship-gpud`) have no older
+implementation: without the Rust binary, WASI apps and GPU allocation are unavailable (the daemon reports
+"the GPU service is not running"), never served by a weaker path. Gym evidence: gpu-sim 95/0 and
+wasi-apps green in the arch-v2 passes (gym 4, gym 8).
+
+## arm64
+
+| Component | arm64 build | arm64 test | arm64 live |
+|---|---|---|---|
+| Rust crates (all) | `rust-toolchain.toml` pins both Linux targets; `box-artifact.yml` builds arm64 on `ubuntu-24.04-arm` | `.github/workflows/rust.yml` runs fmt, clippy, tests and the privileged-boundary tests on `ubuntu-24.04-arm` (fixed 2026-10-30, journal "G8 finding") | Not proven: no arm64 box has run the arch-v2 stack in the gym (UpCloud has no arm64 plans) |
+| Go `flagship-tlsd`, `flagship-unseal` | `build.ts` sets `GOARCH` per `--arch`; `installer/tls-frontend/Makefile` and `installer/unseal-helper/Makefile` hard-coded `GOARCH=amd64` until 2026-11-01; they now take `make GOARCH=arm64` (default amd64) | Go tests are arch-neutral | Same as above |
+| Shell installers / guard | Arch-neutral (bash, jq, openssl) | `scripts/install-box-artifact.test.ts` uses `--arch arm64` | Not proven on arm64 |
+| VM build path | Fixed 2026-11-01 (G8): `scripts/box-artifact-vm.sh --arch amd64,arm64` cross-builds arm64 on the amd64 UpCloud VM (Debian aarch64 GNU toolchain, `GOARCH`, `npm --cpu`, the official arm64 Node); `scripts/gym-box-artifact.sh --arch` passes it through. `build.ts` now always passes `cargo --target <triple>` and refuses any Rust, Go or Node binary whose ELF machine is not the artifact's arch (without `--target`, an arm64 artifact built on an amd64 host would have carried the host's amd64 Rust binaries; no path did that yet, CI builds arm64 natively). The Go Makefiles take `GOARCH` (default amd64) | Box binaries for aarch64 run `cargo test` under qemu-user and their benchmarks natively on arm64 (`scripts/bench`, results in `benchmarks-0.3.md`) | Not proven: no arm64 box installed from a signed arm64 artifact in the gym |
+
+## What may be removed now
+
+Nothing. The nearest candidates are the shell installers (#4), whose install path is proven live, but
+their restore path is not, a box built without the updater still needs them, and the bootstrap verifier
+must stay outside the artifact by design. Re-evaluate each row when its "proof still needed" column is
+empty, and record the gym run that proved it here.

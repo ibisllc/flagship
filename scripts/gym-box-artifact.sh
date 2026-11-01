@@ -8,7 +8,7 @@
 #
 #   1. plans     skips when the tip already is its release commit (scripts/gym-box-release.mjs)
 #   2. builds    on a throwaway UpCloud VM (scripts/box-artifact-vm.sh: Linux, the steps of
-#                box-artifact.yml, with the Rust binaries a box on the arch-v2 stack runs; amd64), never
+#                box-artifact.yml, with the Rust binaries a box on the arch-v2 stack runs; arm64 cross-built), never
 #                in GitHub Actions; --local builds here instead, without the Rust binaries (such a box
 #                falls back to the TS path, so the arch-v2 gym pass would not test the Rust stack)
 #   3. signs     tools/box-artifact/build.ts sign with the gym key, then verifies against the trust file
@@ -105,8 +105,7 @@ fi
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 if [ "$LOCAL" = "0" ] && [ "$DRY" != "1" ]; then
-  [ "$ARCHES" = "amd64" ] || die "the VM build makes amd64 only; build arm64 with --local"
-  bash "$HERE/box-artifact-vm.sh" --repo "$WT" --commit "$COMMIT" --sequence "$SEQ" --out "$OUT" || die "the VM build failed"
+  bash "$HERE/box-artifact-vm.sh" --repo "$WT" --commit "$COMMIT" --sequence "$SEQ" --out "$OUT" --arch "$ARCHES" || die "the VM build failed"
 fi
 for ARCH in ${ARCHES//,/ }; do
   say "build $COMMIT $ARCH (sequence $SEQ)"

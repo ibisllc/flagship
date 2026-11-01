@@ -19,6 +19,7 @@
 //! (the shared-vector shape, conformance.rs); it executes nothing.
 //! - `FLAGSHIP_BROKER_AUTHORITY_KEYS`: `keyId:hex32,…`, the pinned capability authorities. With
 //!   none, every capability-bearing operation is refused; the read-only ones still answer.
+#![forbid(unsafe_code)]
 
 use flagship_broker::audit::Audit;
 use flagship_broker::capability::Ed25519Authority;
