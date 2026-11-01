@@ -51,7 +51,8 @@ export const serverOrder: Group = {
       });
       await rec.check(`${label}: each box adopts it (POST /api/screens/server-order)`, async () => {
         for (const [b, s] of [[b1, s1], [b2, s2]] as const) {
-          const r = await postJson(`https://${b.fqdn}/api/screens/server-order`, { order, signature }, { "x-flagship-session": s });
+          // Adopting the same signed order twice is a no-op, so a Fly backhaul reset may be retried (gym 18).
+          const r = await postJson(`https://${b.fqdn}/api/screens/server-order`, { order, signature }, { "x-flagship-session": s }, 30_000, { idempotent: true });
           assert(r.status === 200 && r.json?.heldIssuedAt === order.issuedAt, `${b.serverName}: ${r.status} ${short(r.text)}`);
         }
         return "both hold it";

@@ -306,7 +306,8 @@ async function viewOnHome(A: Account, B: Account, rec: Rec, b: Box): Promise<voi
     assert(me.status === 200 && me.json?.level === "view" && me.json?.canUpdate === false, `me ${me.status}: ${short(me.text)}`);
     const d = await http(`https://${b.fqdn}/api/screens/server-detail`, { headers: os });
     const update: ServerShareUpdate = { serverDomain: b.fqdn, shareId: sh.shareId, memberPubHex: sh.memberPubHex, targetCommit: "0".repeat(40), fromCommit: String(d.json?.currentCommit ?? "0".repeat(40)), nonce: randomBytes(32).toString("hex"), issuedAt: Date.now() };
-    const u = await postJson(`https://${b.fqdn}/api/shares/update`, { update, signature: bytesToHex(signServerShareUpdate(update, sh.member)) }, bs);
+    // A refusal changes nothing, so a Fly backhaul reset may be retried (gym 18).
+    const u = await postJson(`https://${b.fqdn}/api/shares/update`, { update, signature: bytesToHex(signServerShareUpdate(update, sh.member)) }, bs, 30_000, { idempotent: true });
     assert(u.status === 403 && u.json?.code === "manage-only", `update ${u.status}: ${short(u.text)}`);
     const ar = await http(`https://${b.fqdn}/api/screens/access-requests`, { headers: bs });
     assert(ar.status === 403, `access-requests ${ar.status}: ${short(ar.text)}`);
