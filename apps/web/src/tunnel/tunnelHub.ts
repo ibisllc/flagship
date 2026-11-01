@@ -93,9 +93,10 @@ export interface RelayBlessingSource {
 export interface TunnelAuthLookup {
   /**
    * Look up a server's registered tunnel-auth (STK) pubkey. Returns
-   * null if the server is unknown / revoked.
+   * null if the server is unknown / revoked. `presented` is the key the
+   * HELLO claims: a cache must not refuse it on a cached answer that differs.
    */
-  (serverId: string): Bytes | null | Promise<Bytes | null>;
+  (serverId: string, presented?: Bytes): Bytes | null | Promise<Bytes | null>;
 }
 
 export interface IrkLookup {
@@ -1160,7 +1161,7 @@ async function authenticateHello(
     issuedAt: hello.issuedAt,
   };
   if (opts.authLookup) {
-    const stkPub = await opts.authLookup(hello.serverId);
+    const stkPub = await opts.authLookup(hello.serverId, hello.rootEntitlement.podPubKey);
     if (!stkPub) {
       return { ok: false, reason: "serverId not registered with .com", closeCode: 1008 };
     }

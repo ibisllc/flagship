@@ -64,7 +64,7 @@ export function lease(p: SignedServingRecord<ServingPolicy>, admin: Ed, issuedAt
 }
 
 export function comRecord(o: Partial<ComServingRecord> & { adminKey: string }): ComServingRecord {
-  return { regGen: 1, policy: null, leases: [], ...o };
+  return { regGen: 1, revoked: false, policy: null, leases: [], ...o };
 }
 
 export function revocation(seq: number, account: string, subject: string, key: Ed, kind: "box" | "renewal-key" = "box") {

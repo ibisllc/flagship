@@ -227,22 +227,52 @@ async fn a_servers_stk_comes_from_the_registry_unless_it_is_revoked() {
     );
     let d = dir(&c, Ttls::default());
     assert_eq!(
-        d.stk("home.john.flagship.services").await.as_deref(),
+        d.stk("home.john.flagship.services", &stk).await.as_deref(),
         Some(stk.as_str())
     );
     assert_eq!(
-        d.stk("Home.John.flagship.services").await.as_deref(),
+        d.stk("Home.John.flagship.services", &stk).await.as_deref(),
         Some(stk.as_str()),
         "case-insensitive cache key"
     );
     assert_eq!(c.calls("home.john"), 1);
     for p in ["gone", "odd", "missing", "unreachable"] {
         assert_eq!(
-            d.stk(&format!("{p}.john.flagship.services")).await,
+            d.stk(&format!("{p}.john.flagship.services"), &stk).await,
             None,
             "{p}"
         );
     }
+}
+
+#[tokio::test]
+async fn a_cached_stk_that_differs_from_the_hello_is_asked_again() {
+    let c = Canned::default();
+    let path = "/api/server/by-domain/home.john.flagship.services";
+    let (k1, k2) = ("ab".repeat(32), "cd".repeat(32));
+    c.put(path, 200, json!({"identityPubKey": k1}));
+    let d = dir(&c, Ttls::default());
+    let name = "home.john.flagship.services";
+    assert_eq!(d.stk(name, &k1).await.as_deref(), Some(k1.as_str()));
+    // The name is registered again with a new key: the new key's HELLO is answered from a fresh read at once.
+    c.put(path, 200, json!({"identityPubKey": k2}));
+    assert_eq!(d.stk(name, &k2).await.as_deref(), Some(k2.as_str()));
+    assert_eq!(c.calls("home.john"), 2);
+    // The fresh answer replaced the cached one: the old key now gets the new key back (and its HELLO is refused).
+    assert_eq!(d.stk(name, &k1).await.as_deref(), Some(k2.as_str()));
+    assert_eq!(c.calls("home.john"), 3);
+    assert_eq!(d.stk(name, &k2).await.as_deref(), Some(k2.as_str()));
+    assert_eq!(
+        c.calls("home.john"),
+        3,
+        "a matching cached key is not asked again"
+    );
+    // A definitive refusal drops the cached key.
+    c.put(path, 404, json!({}));
+    assert_eq!(d.stk(name, &k1).await, None);
+    c.put(path, 200, json!({"identityPubKey": k1}));
+    assert_eq!(d.stk(name, &k2).await.as_deref(), Some(k1.as_str()));
+    assert_eq!(c.calls("home.john"), 5);
 }
 
 #[tokio::test]

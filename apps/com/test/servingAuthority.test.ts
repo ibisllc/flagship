@@ -294,6 +294,28 @@ describe("the revocation log", () => {
     }
   });
 
+  it("a name registered again with a new key: the old key is unknown to the relay's record, the new key is current", async () => {
+    const { env, storage, close } = await setup();
+    try {
+      const name = "home.alice.flagship.services";
+      const NEW = hex(ed.getPublicKey(seed(11)));
+      await storage.servers.revoke(name, "lost", 1_000);
+      const revoked = await internal(env, `/api/internal/serving/alice/${BOX}`);
+      expect(revoked.status).toBe(200);
+      expect(await revoked.json()).toMatchObject({ regGen: 1, revoked: true });
+      await storage.servers.put({ serverDomain: name, username: "alice", identityPubKeyHex: NEW, registeredAt: 2_000 });
+      const old = await internal(env, `/api/internal/serving/alice/${BOX}`);
+      expect(old.status).toBe(404);
+      expect(await old.json()).toMatchObject({ code: "serving-unknown-box" });
+      const now = await internal(env, `/api/internal/serving/alice/${NEW}`);
+      expect(now.status).toBe(200);
+      expect(await now.json()).toMatchObject({ revoked: false });
+      expect((await internal(env, `/api/internal/serving/nobody/${NEW}`)).status).toBe(404);
+    } finally {
+      close();
+    }
+  });
+
   it("serves the public key and refuses the internal routes without the control secret", async () => {
     const { env, close } = await setup();
     try {

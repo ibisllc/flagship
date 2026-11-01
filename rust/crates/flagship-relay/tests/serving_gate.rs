@@ -19,12 +19,13 @@ use flagship_crypto::serving::{
 };
 use flagship_relay::allocator::{Allocator, TransferError};
 use flagship_relay::authority::BoxFut;
+use flagship_relay::com::HttpGet;
 use flagship_relay::registry::{Registry, ServingView};
 use flagship_relay::serving::{
-    ComServingRecord, Contact, GateConfig, GateDecision, ServingFetch, ServingGate, ServingHandle,
-    ServingHello, parse_com_serving_record,
+    ComServingFetch, ComServingRecord, Contact, GateConfig, GateDecision, ServingFetch,
+    ServingFetched, ServingGate, ServingHandle, ServingHello, parse_com_serving_record,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 
 const APEX: &str = "flagship.services";
 
@@ -49,11 +50,11 @@ fn now() -> u64 {
 }
 
 struct Fake {
-    rec: Mutex<Option<ComServingRecord>>,
+    rec: Mutex<Option<ServingFetched>>,
 }
 
 impl ServingFetch for Fake {
-    fn record<'a>(&'a self, _: &'a str, _: &'a str) -> BoxFut<'a, Option<ComServingRecord>> {
+    fn record<'a>(&'a self, _: &'a str, _: &'a str) -> BoxFut<'a, Option<ServingFetched>> {
         let r = self.rec.lock().unwrap().clone();
         Box::pin(async move { r })
     }
@@ -81,13 +82,16 @@ impl ServingHandle for Calls {
 }
 
 fn gate(rec: Option<ComServingRecord>, cfg: GateConfig) -> ServingGate {
-    ServingGate::new(
+    gate_on(
         Arc::new(Fake {
-            rec: Mutex::new(rec),
+            rec: Mutex::new(rec.map(ServingFetched::Record)),
         }),
         cfg,
-        Box::new(|_| {}),
     )
+}
+
+fn gate_on(fake: Arc<Fake>, cfg: GateConfig) -> ServingGate {
+    ServingGate::new(fake, cfg, Box::new(|_| {}))
 }
 
 fn hello(admin: Option<&SigningKey>, boxk: &SigningKey) -> ServingHello {
@@ -119,6 +123,7 @@ fn record(admin: &SigningKey) -> ComServingRecord {
     ComServingRecord {
         admin_key: Some(pubhex(admin)),
         reg_gen: 1,
+        revoked: false,
         policy: None,
         leases: Vec::new(),
     }
@@ -225,6 +230,150 @@ async fn a_pushed_revocation_closes_the_box() {
     assert_eq!(*calls.0.lock().unwrap(), vec!["close 1008 revoked"]);
     assert_eq!(b.decision().reason(), "revoked");
     assert_eq!(g.stats().revoked, 1);
+}
+
+#[tokio::test]
+async fn an_unknown_box_is_refused_and_an_open_tunnel_closed() {
+    let admin = key(1);
+    let boxk = key(2);
+    let calls = Arc::new(Calls::default());
+    let g = gate_on(
+        Arc::new(Fake {
+            rec: Mutex::new(Some(ServingFetched::UnknownBox)),
+        }),
+        GateConfig::default(),
+    );
+    for pinned in [Some(&admin), None] {
+        let b = g.attach(hello(pinned, &boxk), calls.clone()).await;
+        assert_eq!(
+            b.decision(),
+            GateDecision::Deny {
+                control: false,
+                reason: "unknown-box".into()
+            }
+        );
+        b.detach();
+    }
+    assert!(calls.0.lock().unwrap().is_empty());
+
+    // The name moves to another key while the old key's tunnel is open: `.com` no longer knows the old key.
+    let fake = Arc::new(Fake {
+        rec: Mutex::new(Some(ServingFetched::Record(record(&admin)))),
+    });
+    let g = gate_on(Arc::clone(&fake), GateConfig::default());
+    let b = g.attach(hello(Some(&admin), &boxk), calls.clone()).await;
+    assert!(b.decision().apps());
+    *fake.rec.lock().unwrap() = Some(ServingFetched::UnknownBox);
+    g.changed("alice", &pubhex(&boxk)).await;
+    assert_eq!(*calls.0.lock().unwrap(), vec!["close 1008 unknown-box"]);
+    assert_eq!(g.stats().refused_tunnels, 1);
+}
+
+#[tokio::test]
+async fn a_revoked_record_is_refused_on_every_path() {
+    let admin = key(1);
+    let boxk = key(2);
+    let calls = Arc::new(Calls::default());
+    let revoked = ComServingRecord {
+        revoked: true,
+        ..record(&admin)
+    };
+    let no_admin = ComServingRecord {
+        admin_key: None,
+        ..revoked.clone()
+    };
+    for rec in [revoked, no_admin] {
+        let g = gate(Some(rec), GateConfig::default());
+        for pinned in [Some(&admin), None] {
+            let b = g.attach(hello(pinned, &boxk), calls.clone()).await;
+            assert_eq!(
+                b.decision(),
+                GateDecision::Deny {
+                    control: false,
+                    reason: "revoked".into()
+                }
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_revocation_log_counts_when_com_names_no_admin_key() {
+    let boxk = key(2);
+    let rk = key(3);
+    let rec = ComServingRecord {
+        admin_key: None,
+        ..record(&key(1))
+    };
+    let g = gate(Some(rec), GateConfig::default());
+    let e = RevocationEntry {
+        sequence: 1,
+        kind: RevocationKind::Box,
+        account: "alice".into(),
+        subject: pubhex(&boxk),
+        generation: 1,
+        revoked_at: 5,
+    };
+    let sig = sign(&rk, &revocation_canonical(&e).unwrap());
+    let RevocationApply::Applied { state, .. } =
+        apply_revocation_entries(&RevocationState::default(), &[(e, sig)], &pubhex(&rk))
+    else {
+        panic!("not applied");
+    };
+    g.adopt_revocations(state);
+    let b = g
+        .attach(hello(Some(&key(1)), &boxk), Arc::new(Calls::default()))
+        .await;
+    assert_eq!(b.decision().reason(), "revoked");
+    assert!(!b.decision().control());
+}
+
+struct Answer(Mutex<Result<(u16, Value), String>>);
+
+impl HttpGet for Answer {
+    fn get_json(&self, _: &str) -> Result<(u16, Value), String> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+#[tokio::test]
+async fn com_fetch_tells_an_unknown_box_from_an_outage() {
+    let ask = |a: Result<(u16, Value), String>| async move {
+        let f = ComServingFetch::new(
+            "https://com.test",
+            Answer(Mutex::new(a)),
+            Box::new(|_| Box::pin(async { None })),
+        );
+        f.record("alice", &"ab".repeat(32)).await
+    };
+    assert!(matches!(
+        ask(Ok((
+            404,
+            json!({"error": "x", "code": "serving-unknown-box"})
+        )))
+        .await,
+        Some(ServingFetched::UnknownBox)
+    ));
+    assert!(
+        ask(Ok((404, json!({"error": "not found"}))))
+            .await
+            .is_none()
+    );
+    assert!(
+        ask(Ok((503, json!({"code": "serving-unknown-box"}))))
+            .await
+            .is_none()
+    );
+    assert!(ask(Err("connection refused".into())).await.is_none());
+    let Some(ServingFetched::Record(r)) = ask(Ok((
+        200,
+        json!({"adminKey": "cd".repeat(32), "regGen": 2, "revoked": true, "leases": []}),
+    )))
+    .await
+    else {
+        panic!("no record");
+    };
+    assert!(r.revoked && r.reg_gen == 2);
 }
 
 #[tokio::test]

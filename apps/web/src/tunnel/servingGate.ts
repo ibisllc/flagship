@@ -25,13 +25,18 @@ export interface ComServingRecord {
   /** The account's sensitive-order key (admin root, else IRK), hex. */
   adminKey: string | null;
   regGen: number;
+  /** `.com` has revoked this registration (the name was revoked and not re-registered). */
+  revoked: boolean;
   policy: SignedServingRecord<ServingPolicy> | null;
   /** Leases joined with the delegation that signed them, when one did. */
   leases: LeaseInput[];
 }
 
-/** Null: `.com` could not be asked, or does not know the box. */
-export type ServingRecordFetch = (username: string, boxPub: string) => Promise<ComServingRecord | null>;
+/** `.com` answered that the account has no server under this key (deleted, or its name now belongs to another key). */
+export const UNKNOWN_BOX = "unknown-box";
+
+/** Null: `.com` could not be asked (an outage, not an answer). */
+export type ServingRecordFetch = (username: string, boxPub: string) => Promise<ComServingRecord | typeof UNKNOWN_BOX | null>;
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -74,7 +79,7 @@ export function parseComServingRecord(body: unknown): ComServingRecord | null {
       for (const d of delegations) leases.push({ ...l, delegation: d });
     }
   }
-  return { adminKey, regGen: o.regGen, policy, leases };
+  return { adminKey, regGen: o.regGen, revoked: o.revoked === true, policy, leases };
 }
 
 /** Reads `.com`'s internal serving record with the services control secret. */
@@ -94,6 +99,10 @@ export function comServingFetcher(opts: {
           signal: AbortSignal.timeout(opts.timeoutMs ?? 5_000),
         },
       );
+      if (res.status === 404) {
+        const body = (await res.json().catch(() => null)) as { code?: unknown } | null;
+        return body?.code === "serving-unknown-box" ? UNKNOWN_BOX : null;
+      }
       if (!res.ok) return null;
       return parseComServingRecord(await res.json());
     } catch {
@@ -124,8 +133,9 @@ export interface ServingTunnelHandle {
   onAppsChanged(apps: boolean): void;
 }
 
-/** `unavailable`: `.com`'s record for the box could not be read, so no decision could be made (apps stay off). */
-export type ServingGateReason = ServingReason | "unavailable";
+/** `unavailable`: `.com`'s record for the box could not be read, so no decision could be made (apps stay off).
+ *  `unknown-box`: `.com` answered that the account has no server under this key (the tunnel is refused). */
+export type ServingGateReason = ServingReason | "unavailable" | typeof UNKNOWN_BOX;
 
 export type GateDecision =
   | { control: true; apps: true; until: number | null }
@@ -154,6 +164,8 @@ const REFRESH_CONCURRENCY = 8;
 export class ServingBox {
   decision: GateDecision = { control: true, apps: false, reason: "unavailable" };
   com: ComServingRecord | null = null;
+  /** `.com`'s last answer was "no such box". */
+  unknown = false;
   timer: unknown = null;
   fetchGen = 0;
   closed = false;
@@ -343,11 +355,17 @@ export class ServingGate {
   async refresh(b: ServingBox, o: { initial?: boolean } = {}): Promise<GateDecision> {
     const gen = ++b.fetchGen;
     const rec = await this.opts.fetchRecord(b.hello.username, b.hello.boxPub);
-    let comKey: string | null = rec?.adminKey ?? null;
-    if (rec && !comKey && this.opts.adminKeyLookup) comKey = await this.opts.adminKeyLookup(b.hello.username).catch(() => null);
+    let comKey: string | null = rec && rec !== UNKNOWN_BOX ? rec.adminKey : null;
+    if (rec && rec !== UNKNOWN_BOX && !comKey && this.opts.adminKeyLookup) comKey = await this.opts.adminKeyLookup(b.hello.username).catch(() => null);
     if (b.closed || gen !== b.fetchGen) return b.decision;
-    // A record read is not contact: only the feed carries revocations.
-    if (rec) b.com = comKey === rec.adminKey ? rec : { ...rec, adminKey: comKey };
+    // A record read is not contact: only the feed carries revocations. An outage keeps the last answer.
+    if (rec === UNKNOWN_BOX) {
+      b.com = null;
+      b.unknown = true;
+    } else if (rec) {
+      b.com = comKey === rec.adminKey ? rec : { ...rec, adminKey: comKey };
+      b.unknown = false;
+    }
     this.redecide(b, { initial: o.initial === true, failed: !rec });
     return b.decision;
   }
@@ -381,12 +399,16 @@ export class ServingGate {
   }
 
   private decide(b: ServingBox): GateDecision {
+    if (b.unknown) return { control: false, apps: false, reason: UNKNOWN_BOX };
     const rec = b.com;
-    if (!rec || !rec.adminKey) return { control: true, apps: false, reason: "unavailable" };
+    if (!rec) return { control: true, apps: false, reason: "unavailable" };
     const { username, boxPub } = b.hello;
-    if (!b.hello.adminKey) {
-      // An older box that pins nothing keeps its control name (recovery stays possible) but serves no app.
+    if (rec.revoked) return { control: false, apps: false, reason: "revoked" };
+    // `servingDecision` checks the revocation log itself; the paths that stop short of it check it here.
+    if (!rec.adminKey || !b.hello.adminKey) {
       if (boxRevoked(this.revocationState, username, boxPub, rec.regGen)) return { control: false, apps: false, reason: "revoked" };
+      if (!rec.adminKey) return { control: true, apps: false, reason: "unavailable" };
+      // An older box that pins nothing keeps its control name (recovery stays possible) but serves no app.
       return { control: true, apps: false, reason: "admin-keys-differ" };
     }
     const d = servingDecision({

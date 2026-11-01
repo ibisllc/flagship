@@ -41,7 +41,8 @@ Routes (all JSON; errors `{error, code}` with a sentence):
   when a server is revoked or deleted (`kind: box`, its regGen) and when a device is removed (`kind: renewal-key` for
   each of its delegations). Pushed at once.
 - Internal, for the relay (auth: the existing services control secret header): `GET
-  /api/internal/serving/:u/:boxPub` → `{adminKey, regGen, policy?, leases[], delegations[]}`; `GET
+  /api/internal/serving/:u/:boxPub` → `{adminKey, regGen, revoked, policy?, leases[], delegations[]}` (404
+  `serving-unknown-box` when the account has no server under that key: deleted, or its name now belongs to another key); `GET
   /api/internal/serving-revocations?since=N` → `{entries:[{entry, signature}], sequence}`.
 - **Feed**: Durable Object `ServingFeed`, one instance; relays connect by WebSocket to
   `/api/internal/serving-feed?relay=<id>` (same control secret). Frames (JSON): relay→`{type:"hello", since}`;
@@ -57,6 +58,10 @@ Routes (all JSON; errors `{error, code}` with a sentence):
 - `ServingFeedClient`: one connection per relay process; applies revocations with `applyRevocationEntries`, persists
   nothing (on start it reads since 0), acks; on a gap it reads `serving-revocations?since`. A box revocation ends that
   box's tunnel at once.
+- `.com`'s answer decides even before the log does: 404 `serving-unknown-box` refuses (and closes) the tunnel
+  (`unknown-box`), a record with `revoked: true` refuses it (`revoked`); only an outage (no answer, 5xx) keeps the
+  control name (`unavailable`, apps off). The STK cache (`/api/server/by-domain`, 5 min) decides only a HELLO that
+  presents the cached key; any other key is answered from a fresh read.
 - Lost contact: no frame for 60 s → refuse NEW tunnels (HELLO answered "try again", the box retries); 10 min →
   close every tunnel until the feed is back.
 - Per box, a decision from `servingDecision` with `adminKeyFromCom` (the existing per-user authority lookup's admin key,

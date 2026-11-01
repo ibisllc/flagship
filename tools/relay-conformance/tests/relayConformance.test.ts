@@ -552,6 +552,43 @@ for (const impl of IMPLS) {
         expect(st.status === 200 || st.status === 503).toBe(true);
       });
 
+      it("S20 a name registered again with a new key: the old key is refused, the new key accepted at once; unknown and revoked boxes are refused", async () => {
+        const revocationKey = rk();
+        await start({ serving: { revocationPub: revocationKey.pub } });
+        await waitFor(() => com.feeds.size === 1, 5_000, "the relay's feed connection");
+        const a = com.account("alice");
+        const opts = { serving: { servingAdminKey: hex(a.irk.publicKey) } };
+        const k1 = boxIdentity(com, a, "home");
+        record(k1);
+        const first = await connect(k1, opts);
+        expect((await first.raw.ack()).ok).toBe(true);
+        // `.com` moves the name to k2 in place: k1 has no server any more, though the relay still caches k1's STK.
+        const k2 = boxIdentity(com, a, "home");
+        com.serving.delete(`alice|${hex(k1.stk.publicKey)}`);
+        record(k2);
+        com.pushChanged("alice", hex(k1.stk.publicKey));
+        expect(await first.raw.closed).toEqual({ code: 1008, reason: "unknown-box" });
+        const old = await connect(k1, opts);
+        expect(await old.raw.ack()).toMatchObject({ ok: false, reason: "unknown-box" });
+        expect((await old.raw.closed).code).toBe(1008);
+        const fresh = await connect(k2, opts);
+        expect((await fresh.raw.ack()).ok).toBe(true);
+        const ctl = await Visitor.open(relay!.sniPort, clientHello(k2.pod));
+        await openOn(fresh.raw, k2.pod);
+        ctl.sock.destroy();
+        // A box `.com` has no server for, under a name it does know.
+        const ghost = boxIdentity(com, a, "cabin");
+        const g = await connect(ghost, opts);
+        expect(await g.raw.ack()).toMatchObject({ ok: false, reason: "unknown-box" });
+        // A revoked registration, before the log has said so; also for a box that pins no admin key.
+        const gone = boxIdentity(com, a, "shed");
+        record(gone, { revoked: true });
+        const r1 = await connect(gone, opts);
+        expect(await r1.raw.ack()).toMatchObject({ ok: false, reason: "revoked" });
+        const r2 = await connect(gone);
+        expect(await r2.raw.ack()).toMatchObject({ ok: false, reason: "revoked" });
+      });
+
       it("S16 feed contact: no new tunnels after the quiet threshold, every tunnel closed after the second", async () => {
         const revocationKey = rk();
         await start({ serving: { revocationPub: revocationKey.pub, refuseNewMs: 1_000, closeAllMs: 3_000, checkMs: 100 } });

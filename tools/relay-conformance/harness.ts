@@ -87,6 +87,7 @@ export interface Account {
 export interface ServingRecordBody {
   adminKey: string | null;
   regGen: number;
+  revoked?: boolean;
   policy: unknown;
   leases: unknown[];
   delegations: unknown[];
@@ -263,7 +264,7 @@ export class MockCom {
     if ((m = p.match(/^\/api\/internal\/serving\/([^/]+)\/([^/]+)$/))) {
       if (!internal) return send(403, { error: "forbidden" });
       const r = this.serving.get(`${decodeURIComponent(m[1]!)}|${decodeURIComponent(m[2]!)}`);
-      return r ? send(200, r) : send(404, { error: "unknown box" });
+      return r ? send(200, { revoked: false, ...r }) : send(404, { error: "unknown box", code: "serving-unknown-box" });
     }
     if (p === "/api/internal/phone-route/ledger") {
       if (!internal) return send(403, { error: "forbidden" });

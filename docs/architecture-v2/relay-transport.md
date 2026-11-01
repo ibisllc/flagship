@@ -237,6 +237,7 @@ unset in production). Each scenario asserts the same answer on both: ack reasons
 | S15 | Lease end: the app stream closes within 5 s of `notAfter`, the control stream keeps flowing, the app name stops routing, the control name still routes |
 | S16 | Feed contact: quiet past the first threshold → new HELLO answered `try-again` (1013); past the second → every tunnel closed 1013 `serving-feed-lost`; the feed back → tunnels accepted |
 | S17 | `/api/health` |
+| S20 | A name registered again with a new key: the old key's HELLO is refused `unknown-box` (its open tunnel closed 1008), the new key's HELLO is accepted at once despite the cached STK; an unknown box is refused `unknown-box`; a record with `revoked: true` is refused `revoked` |
 | S18 | Outbound success: an allowed host whose (faked) public address is dialled on 443; bytes both ways through the splice |
 | S19 | `/api/stats` `recentMisses` names a `no-box-registered` miss |
 | P01 | Phone route: an eligible phone claims the vacant bare name (generation 1); a visitor and its presence bytes reach it verbatim; `holding` on a second begin |

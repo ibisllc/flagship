@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { applyRevocationEntries } from "@flagship/protocol";
 import {
+  comServingFetcher,
   parseComServingRecord,
   ServingGate,
+  UNKNOWN_BOX,
   type ComServingRecord,
   type ServingHello,
   type ServingTunnelHandle,
@@ -12,7 +14,7 @@ import { comRecord, edKey, lease, policy, revocation } from "./support/serving.j
 const ACCOUNT = "alice";
 
 /** A gate on a hand-driven clock and timer queue. */
-function rig(fetch: (u: string, b: string) => Promise<ComServingRecord | null>, logs: string[] = []) {
+function rig(fetch: (u: string, b: string) => Promise<ComServingRecord | typeof UNKNOWN_BOX | null>, logs: string[] = []) {
   let now = 10_000_000;
   const timers: Array<{ at: number; fn: () => void; id: number }> = [];
   let nextId = 1;
@@ -199,6 +201,92 @@ describe("ServingGate", () => {
     await new Promise((r) => setImmediate(r));
     expect(b.view()).toEqual({ control: true, apps: true });
     expect(calls.apps).toEqual([true]);
+  });
+});
+
+describe("ServingGate: .com's definitive answers", () => {
+  it("a box .com has no server for is refused, pinned or not", async () => {
+    const admin = edKey();
+    const { gate } = rig(async () => UNKNOWN_BOX);
+    const { h, calls } = handle();
+    for (const pinned of [admin.pub, null]) {
+      const b = await gate.attach(hello(edKey().pub, pinned), h);
+      expect(b.decision).toEqual({ control: false, apps: false, reason: "unknown-box" });
+    }
+    expect(calls.closed).toEqual([]);
+    expect(gate.stats().refusedTunnels).toBe(2);
+  });
+
+  it("an open tunnel closes when its name moves to another key (.com no longer knows the old key)", async () => {
+    const admin = edKey();
+    const box = edKey().pub;
+    let moved = false;
+    const { gate } = rig(async () => (moved ? UNKNOWN_BOX : comRecord({ adminKey: admin.pub })));
+    const { h, calls } = handle();
+    const b = await gate.attach(hello(box, admin.pub), h);
+    expect(b.view()).toEqual({ control: true, apps: true });
+    moved = true;
+    await gate.changed(ACCOUNT, box);
+    expect(calls.closed).toEqual(["unknown-box"]);
+    expect(b.view().control).toBe(false);
+  });
+
+  it("an outage after an unknown-box answer does not bring the tunnel back", async () => {
+    const admin = edKey();
+    let answer: ComServingRecord | typeof UNKNOWN_BOX | null = UNKNOWN_BOX;
+    const { gate } = rig(async () => answer);
+    const b = await gate.attach(hello(edKey().pub, admin.pub), handle().h);
+    answer = null;
+    await b.update(b.hello);
+    expect(b.decision).toMatchObject({ control: false, reason: "unknown-box" });
+  });
+
+  it("a record .com marks revoked is refused on every path, before the log says so", async () => {
+    const admin = edKey();
+    for (const adminKey of [admin.pub, null]) {
+      const { gate } = rig(async () => ({ ...comRecord({ adminKey: admin.pub }), adminKey, revoked: true }));
+      for (const pinned of [admin.pub, null]) {
+        const b = await gate.attach(hello(edKey().pub, pinned), handle().h);
+        expect(b.decision).toEqual({ control: false, apps: false, reason: "revoked" });
+      }
+    }
+  });
+
+  it("the revocation log counts when .com's record names no admin key", async () => {
+    const rk = edKey();
+    const box = edKey().pub;
+    const { gate } = rig(async () => ({ ...comRecord({ adminKey: edKey().pub }), adminKey: null }));
+    const r = applyRevocationEntries(gate.revocations, [revocation(1, ACCOUNT, box, rk)], rk.pub);
+    if (!r.ok) throw new Error(r.reason);
+    gate.adoptRevocations(r.state);
+    const b = await gate.attach(hello(box, edKey().pub), handle().h);
+    expect(b.decision).toEqual({ control: false, apps: false, reason: "revoked" });
+  });
+});
+
+describe("comServingFetcher", () => {
+  const fetcher = (status: number, body: unknown) =>
+    comServingFetcher({
+      comBaseUrl: "https://com.test",
+      secret: "s",
+      fetchImpl: (async () => new Response(JSON.stringify(body), { status })) as typeof fetch,
+    });
+
+  it("tells .com's unknown-box answer from an outage", async () => {
+    const box = "ab".repeat(32);
+    expect(await fetcher(404, { error: "x", code: "serving-unknown-box" })(ACCOUNT, box)).toBe(UNKNOWN_BOX);
+    expect(await fetcher(404, { error: "not found" })(ACCOUNT, box)).toBeNull();
+    expect(await fetcher(503, { code: "serving-unknown-box" })(ACCOUNT, box)).toBeNull();
+    const failing = comServingFetcher({
+      comBaseUrl: "https://com.test",
+      secret: "s",
+      fetchImpl: (async () => {
+        throw new Error("offline");
+      }) as typeof fetch,
+    });
+    expect(await failing(ACCOUNT, box)).toBeNull();
+    const rec = await fetcher(200, { adminKey: "cd".repeat(32), regGen: 2, revoked: true, leases: [] })(ACCOUNT, box);
+    expect(rec).toMatchObject({ regGen: 2, revoked: true });
   });
 });
 

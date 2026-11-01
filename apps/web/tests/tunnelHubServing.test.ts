@@ -30,7 +30,7 @@ import {
 } from "@flagship/tunnel-protocol";
 import { TunnelRegistry, type StreamCallbacks } from "../src/tunnel/registry.js";
 import { startTunnelHub } from "../src/tunnel/tunnelHub.js";
-import { ServingGate, type ComServingRecord } from "../src/tunnel/servingGate.js";
+import { ServingGate, UNKNOWN_BOX, type ComServingRecord } from "../src/tunnel/servingGate.js";
 import { comRecord, edKey, hex, lease, policy, revocation, type Ed } from "./support/serving.js";
 
 const HOME = "home.alice.flagship.services";
@@ -51,7 +51,7 @@ interface Rig {
   gate: ServingGate;
 }
 
-async function rig(fetchRecord: () => Promise<ComServingRecord | null>, gateOpts: { refuseNewAfterMs?: number } = {}): Promise<Rig> {
+async function rig(fetchRecord: () => Promise<ComServingRecord | typeof UNKNOWN_BOX | null>, gateOpts: { refuseNewAfterMs?: number } = {}): Promise<Rig> {
   const registry = new TunnelRegistry();
   const app = Fastify({ logger: false });
   await app.listen({ port: 0, host: "127.0.0.1" });
@@ -163,6 +163,24 @@ describe("tunnel hub + serving authority", () => {
     expect(await b.ack).toEqual({ ok: false, reason: "admin-keys-differ" });
     expect(await b.closed).toBe(1008);
     expect(r.registry.size()).toBe(0);
+  });
+
+  it("refuses a box .com has no server for, and one whose registration .com marks revoked", async () => {
+    const admin = edKey();
+    r = await rig(async () => UNKNOWN_BOX);
+    const b = await connectBox(r.port, { servingAdminKey: admin.pub });
+    boxes.push(b);
+    expect(await b.ack).toEqual({ ok: false, reason: "unknown-box" });
+    expect(await b.closed).toBe(1008);
+    expect(r.registry.size()).toBe(0);
+    r.gate.stop();
+    await r.stop();
+    await r.app.close();
+    r = await rig(async () => comRecord({ adminKey: admin.pub, revoked: true }));
+    const c = await connectBox(r.port, {});
+    boxes.push(c);
+    expect(await c.ack).toEqual({ ok: false, reason: "revoked" });
+    expect(await c.closed).toBe(1008);
   });
 
   it("answers try-again (close 1013) while contact with .com's feed is lost", async () => {

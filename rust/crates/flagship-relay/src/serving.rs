@@ -25,8 +25,22 @@ pub struct ComServingRecord {
     /// The account's sensitive-order key (admin root, else IRK), hex.
     pub admin_key: Option<String>,
     pub reg_gen: u64,
+    /// `.com` has revoked this registration (the name was revoked and not re-registered).
+    pub revoked: bool,
     pub policy: Option<(ServingPolicy, String)>,
     pub leases: Vec<SignedLease>,
+}
+
+/// `unknown-box`: `.com` answered that the account has no server under this key (deleted, or its name now belongs to
+/// another key).
+pub const UNKNOWN_BOX: &str = "unknown-box";
+
+/// `.com`'s definitive answer about a box.
+#[derive(Debug, Clone)]
+pub enum ServingFetched {
+    Record(ComServingRecord),
+    /// [`UNKNOWN_BOX`].
+    UnknownBox,
 }
 
 fn is_hex64(s: &str) -> bool {
@@ -162,6 +176,7 @@ pub fn parse_com_serving_record(body: &Value) -> Option<ComServingRecord> {
     Some(ComServingRecord {
         admin_key,
         reg_gen,
+        revoked: o.get("revoked").and_then(Value::as_bool) == Some(true),
         policy,
         leases,
     })
@@ -169,12 +184,12 @@ pub fn parse_com_serving_record(body: &Value) -> Option<ComServingRecord> {
 
 /// Where the gate reads `.com`'s record and the account's sensitive-order key.
 pub trait ServingFetch: Send + Sync + 'static {
-    /// `None`: `.com` could not be asked, or does not know the box.
+    /// `None`: `.com` could not be asked (an outage, not an answer).
     fn record<'a>(
         &'a self,
         username: &'a str,
         box_pub: &'a str,
-    ) -> BoxFut<'a, Option<ComServingRecord>>;
+    ) -> BoxFut<'a, Option<ServingFetched>>;
     /// The per-account authority lookup's admin key (admin root, else IRK); used when `.com`'s record names none.
     fn admin_key<'a>(&'a self, username: &'a str) -> BoxFut<'a, Option<String>>;
 }
@@ -213,7 +228,7 @@ impl<H: HttpGet> ServingFetch for ComServingFetch<H> {
         &'a self,
         username: &'a str,
         box_pub: &'a str,
-    ) -> BoxFut<'a, Option<ComServingRecord>> {
+    ) -> BoxFut<'a, Option<ServingFetched>> {
         Box::pin(async move {
             let url = format!(
                 "{}/api/internal/serving/{}/{}",
@@ -226,7 +241,12 @@ impl<H: HttpGet> ServingFetch for ComServingFetch<H> {
                 .await
                 .ok()?;
             match got {
-                Ok((200, body)) => parse_com_serving_record(&body),
+                Ok((200, body)) => parse_com_serving_record(&body).map(ServingFetched::Record),
+                Ok((404, body))
+                    if body.get("code").and_then(Value::as_str) == Some("serving-unknown-box") =>
+                {
+                    Some(ServingFetched::UnknownBox)
+                }
                 _ => None,
             }
         })
@@ -265,7 +285,8 @@ pub enum GateDecision {
     Serve {
         until: Option<u64>,
     },
-    /// `unavailable`: `.com`'s record for the box could not be read (apps stay off).
+    /// `unavailable`: `.com`'s record for the box could not be read (apps stay off); [`UNKNOWN_BOX`]: `.com` has no
+    /// such box (the tunnel is refused).
     Deny {
         control: bool,
         reason: String,
@@ -340,6 +361,8 @@ struct BoxState {
     hello: ServingHello,
     decision: GateDecision,
     com: Option<ComServingRecord>,
+    /// `.com`'s last answer was "no such box".
+    unknown: bool,
     timer: Option<tokio::task::AbortHandle>,
     fetch_gen: u64,
     closed: bool,
@@ -647,6 +670,7 @@ impl ServingGate {
                     reason: "unavailable".into(),
                 },
                 com: None,
+                unknown: false,
                 timer: None,
                 fetch_gen: 0,
                 closed: false,
@@ -719,8 +743,12 @@ impl ServingGate {
                 bs.hello.box_pub.clone(),
             )
         };
-        let rec = self.0.fetch.record(&user, &box_pub).await;
-        let mut com_key = rec.as_ref().and_then(|r| r.admin_key.clone());
+        let fetched = self.0.fetch.record(&user, &box_pub).await;
+        let rec = match &fetched {
+            Some(ServingFetched::Record(r)) => Some(r),
+            _ => None,
+        };
+        let mut com_key = rec.and_then(|r| r.admin_key.clone());
         if rec.is_some() && com_key.is_none() {
             com_key = self.0.fetch.admin_key(&user).await;
         }
@@ -731,40 +759,50 @@ impl ServingGate {
             if bs.closed || fetch_gen != bs.fetch_gen {
                 return bs.decision.clone();
             }
-            // A record read is not contact: only the feed carries revocations.
-            if let Some(mut r) = rec.clone() {
-                r.admin_key = com_key;
-                bs.com = Some(r);
+            // A record read is not contact: only the feed carries revocations. An outage keeps the last answer.
+            match &fetched {
+                Some(ServingFetched::UnknownBox) => {
+                    bs.com = None;
+                    bs.unknown = true;
+                }
+                Some(ServingFetched::Record(r)) => {
+                    let mut r = r.clone();
+                    r.admin_key = com_key;
+                    bs.com = Some(r);
+                    bs.unknown = false;
+                }
+                None => {}
             }
         }
-        self.redecide(b, initial, rec.is_none());
+        self.redecide(b, initial, fetched.is_none());
         b.decision()
     }
 
     fn decide(&self, bs: &BoxState, revs: &RevocationState) -> GateDecision {
-        let unavailable = GateDecision::Deny {
-            control: true,
-            reason: "unavailable".into(),
+        let deny = |control: bool, reason: &str| GateDecision::Deny {
+            control,
+            reason: reason.into(),
         };
+        if bs.unknown {
+            return deny(false, UNKNOWN_BOX);
+        }
         let Some(rec) = &bs.com else {
-            return unavailable;
-        };
-        let Some(com_key) = &rec.admin_key else {
-            return unavailable;
+            return deny(true, "unavailable");
         };
         let h = &bs.hello;
-        let Some(box_key) = &h.admin_key else {
-            // An older box that pins nothing keeps its control name (recovery stays possible) but serves no app.
+        if rec.revoked {
+            return deny(false, "revoked");
+        }
+        // `serving_decision` checks the revocation log itself; the paths that stop short of it check it here.
+        let (Some(com_key), Some(box_key)) = (&rec.admin_key, &h.admin_key) else {
             if box_revoked(revs, &h.username, &h.box_pub, rec.reg_gen) {
-                return GateDecision::Deny {
-                    control: false,
-                    reason: "revoked".into(),
-                };
+                return deny(false, "revoked");
             }
-            return GateDecision::Deny {
-                control: true,
-                reason: "admin-keys-differ".into(),
-            };
+            if rec.admin_key.is_none() {
+                return deny(true, "unavailable");
+            }
+            // An older box that pins nothing keeps its control name (recovery stays possible) but serves no app.
+            return deny(true, "admin-keys-differ");
         };
         let policies: Vec<(ServingPolicy, String)> =
             rec.policy.iter().chain(h.policy.iter()).cloned().collect();

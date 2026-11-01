@@ -45,7 +45,7 @@ impl Directory for Dir {
     fn revoked<'a>(&'a self, _u: &'a str) -> BoxFut<'a, Option<HashSet<String>>> {
         Box::pin(async { self.revoked.lock().unwrap().clone() })
     }
-    fn stk<'a>(&'a self, _s: &'a str) -> BoxFut<'a, Option<String>> {
+    fn stk<'a>(&'a self, _s: &'a str, _p: &'a str) -> BoxFut<'a, Option<String>> {
         Box::pin(async { self.stk.clone() })
     }
     fn retired<'a>(&'a self, _p: &'a str, _k: &'a str) -> BoxFut<'a, bool> {

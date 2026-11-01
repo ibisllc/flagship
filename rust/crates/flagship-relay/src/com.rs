@@ -270,27 +270,40 @@ impl<H: HttpGet> Directory for ComDirectory<H> {
         })
     }
 
-    fn stk<'a>(&'a self, server_id: &'a str) -> BoxFut<'a, Option<String>> {
+    fn stk<'a>(&'a self, server_id: &'a str, presented: &'a str) -> BoxFut<'a, Option<String>> {
         Box::pin(async move {
             let key = server_id.to_ascii_lowercase();
-            if let Some(hit) = fresh(&self.inner.stk, &key, self.inner.ttl.stk) {
+            // A cached key decides only a HELLO that presents it: the name may have moved to a new key since.
+            if let Some(hit) = fresh(&self.inner.stk, &key, self.inner.ttl.stk)
+                && hit.eq_ignore_ascii_case(presented)
+            {
                 return Some(hit);
             }
             let (status, body) = self
                 .get(format!("/api/server/by-domain/{}", segment(server_id)))
                 .await?;
+            let forget = || {
+                if let Ok(mut m) = self.inner.stk.lock() {
+                    m.remove(&key);
+                }
+            };
             if status != 200
                 || body
                     .get("revoked")
                     .is_some_and(|r| !matches!(r, Value::Null | Value::Bool(false)))
             {
+                forget();
                 return None;
             }
-            let stk = body
+            let Some(stk) = body
                 .get("identityPubKey")
                 .and_then(Value::as_str)
-                .filter(|k| is_hex64(k))?
-                .to_owned();
+                .filter(|k| is_hex64(k))
+                .map(str::to_owned)
+            else {
+                forget();
+                return None;
+            };
             store(&self.inner.stk, &key, stk.clone());
             Some(stk)
         })

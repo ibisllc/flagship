@@ -35,8 +35,9 @@ pub trait Directory: Send + Sync + 'static {
     /// The account's revoked cert ids, already checked against the IRK's signature on the list; `None` when the list
     /// cannot be had (the hub fails open then).
     fn revoked<'a>(&'a self, username: &'a str) -> BoxFut<'a, Option<HashSet<String>>>;
-    /// The STK (hex) registered for a server, `None` when it is unknown or revoked.
-    fn stk<'a>(&'a self, server_id: &'a str) -> BoxFut<'a, Option<String>>;
+    /// The STK (hex) registered for a server, `None` when it is unknown or revoked. `presented` is the key the HELLO
+    /// claims: a cache must not refuse it on a cached answer that differs.
+    fn stk<'a>(&'a self, server_id: &'a str, presented: &'a str) -> BoxFut<'a, Option<String>>;
     /// True when this STK has been retired for the pod (graceful decommission). A lookup outage answers `false`.
     fn retired<'a>(&'a self, pod_canonical: &'a str, stk_hex: &'a str) -> BoxFut<'a, bool>;
 }
@@ -171,7 +172,7 @@ impl<D: Directory> DirectoryAuthority<D> {
 
         let stk = self
             .dir
-            .stk(&h.server_id)
+            .stk(&h.server_id, &root.pod_pub_key_hex)
             .await
             .ok_or_else(|| fail("serverId not registered with .com", 1008))?;
         // The STK must be the cert's podPubKey: closes a substitution loophole.

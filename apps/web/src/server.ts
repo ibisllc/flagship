@@ -87,6 +87,7 @@ import {
 } from "./routes/controlRedirections.js";
 import { registerGossipFanout } from "./routes/gossipFanout.js";
 import { comServingFetcher, ServingGate } from "./tunnel/servingGate.js";
+import { comStkLookup } from "./tunnel/stkLookup.js";
 import { ServingFeedClient } from "./tunnel/servingFeedClient.js";
 import { comPhoneEligibility, comPhoneRouteLedger, PhoneRoutes } from "./tunnel/phoneRoute.js";
 import { startPhoneTunnel, type PhoneTunnelHandle } from "./tunnel/phoneTunnel.js";
@@ -408,34 +409,10 @@ export async function start(opts: {
   const mailboxes = (surface === "services" || surface === "both") && process.env.FLAGSHIP_PB_MAIL !== "off" ? new MailboxRegistry() : undefined;
   if (mailboxes) registerMailboxRelay(app, { mailboxes });
   await app.listen({ port: httpPort, host });
-  // Authenticate tunnel HELLOs against .com's server registry over HTTPS.
-  // 5-minute cache so reconnects don't hammer the API.
   // Warm the RAM redirection table from .com before routing starts
   // (best-effort + 5s-bounded; push backfills anything missed).
   await coldStartRedirections({ registry, comBaseUrl, secret: servicesControlSecret });
-  const remoteAuthCache = new Map<string, { pub: Uint8Array; expiresAt: number }>();
-  const remoteAuthLookup = async (serverId: string): Promise<Uint8Array | null> => {
-    const local = authLookupFromRegistry(serverRegistry)(serverId);
-    if (local) return local;
-    const cached = remoteAuthCache.get(serverId);
-    if (cached && cached.expiresAt > Date.now()) return cached.pub;
-    try {
-      const resp = await fetch(
-        `${comBaseUrl}/api/server/by-domain/${encodeURIComponent(serverId)}`,
-      );
-      if (!resp.ok) return null;
-      const body = (await resp.json()) as { identityPubKey?: string; revoked?: unknown };
-      if (!body.identityPubKey || body.revoked) return null;
-      const pub = new Uint8Array(body.identityPubKey.length / 2);
-      for (let i = 0; i < pub.length; i++) {
-        pub[i] = parseInt(body.identityPubKey.slice(i * 2, i * 2 + 2), 16);
-      }
-      remoteAuthCache.set(serverId, { pub, expiresAt: Date.now() + 5 * 60_000 });
-      return pub;
-    } catch {
-      return null;
-    }
-  };
+  const remoteAuthLookup = comStkLookup({ comBaseUrl, local: authLookupFromRegistry(serverRegistry) });
   // Resolve username → IRK pubkey from .com so the hub can verify the
   // Ed25519 signatures on each root/service entitlement (and on the
   // signed revocation list). Without this the hub would accept any
