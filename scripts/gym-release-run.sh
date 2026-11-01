@@ -133,6 +133,8 @@ for STACK in $STACKS; do
   c=$?
   set -e
   [ "$DRY" = 1 ] && continue
+  # A pass that wrote no summary proved nothing, whatever its exit code.
+  [ -f "$REPO/$RUN_DIR/summary.json" ] || { echo "✗ the $STACK pass wrote no summary"; [ "$c" = 0 ] || [ "$c" = 3 ] && c=4; }
   report "$RUN_DIR" "$STACK"
   if [ "$STACK" = classic ]; then CODE_CLASSIC=$c; else
     CODE_ARCH=$c

@@ -224,7 +224,8 @@ async function main(): Promise<number> {
     const leftover = Number(z?.body?.dnsWouldDelete ?? 0) + (Array.isArray(z?.body?.servers) ? z.body.servers.length : 0);
     if (leftover) {
       log(`another run's gym servers or DNS records are still up (${leftover}); reap them with tools/live-e2e/sweep-cli.ts --destroy once no gym run is in progress`);
-      return 3;
+      // Not 3 ("something skipped"): nothing ran, and gym 19's classic pass read as green.
+      return 4;
     }
     if (zoneRecords !== null) {
       // Root wildcard (docs/wildcard-dns.md): the zone holds 4 records at rest and an
