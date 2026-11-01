@@ -1,5 +1,7 @@
 # Multi-region Fly rollout (iad + fra + syd)
 
+> **Blocked (2026-11-01):** more than one relay machine needs the relay mesh first (AGENTS.md "Make Fly redundant"): today a relay cannot forward a visitor to the machine holding the box's tunnel, so extra machines drop about half of new visits.
+
 **Status:** Planning. Trigger criterion documented; deploy commands
 ready to execute when the trigger fires.
 

@@ -307,8 +307,16 @@ of the last check here: **not yet checked**.
      reachable IPv6 address, not one that depends on Fly. To cost out: the regional registry's
      membership and fees, an IPv6 allocation, and an upstream or colo that will announce it.
   Keep: SNI passthrough with the box terminating TLS, the PROXY-header echo on `:8444`, and the
-  release.sh relay-echo check after any relay deploy. Cheap first step before any of this:
-  `flyctl scale count 2` for a second machine.
+  release.sh relay-echo check after any relay deploy. NOT a cheap first step (checked 2026-11-01):
+  `flyctl scale count 2`. A relay cannot forward to another relay machine, so a visitor that lands
+  on the machine without the box's tunnel waits out the hold timeout and is dropped (about half of
+  new visits with two machines; the gym's `relay-instances` group is built around this). Agreed
+  direction (owner, 2026-11-01): a relay mesh. Boxes keep one tunnel to the nearest healthy relay
+  and reconnect elsewhere at once when it drops; relays hold authenticated links to each other
+  (relay blessing) and forward a visitor to the relay holding the box's tunnel (TLS still ends on
+  the box, so the mesh carries only ciphertext); `.com` keeps the box→relay directory; Cloudflare
+  Load Balancing (DNS-only, health-checked) spreads visitors, so relays (any provider) can be added
+  or removed without touching boxes. Tunnels to two relays stay an optional later extra.
 
 - **The `flagship.services` DNS zone is nearly full (2026-10-16); the fix is on
   `main`, not deployed (2026-10-18).** Cloudflare Free caps the zone at 200
@@ -1718,7 +1726,7 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
   `/Applications/Xcode-27.1.0-Release.Candidate.app` (`DEVELOPER_DIR`).
 - Android: Gradle needs `JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`.
 - This Mac's disk is tight; clear DerivedData and simulator data before big builds.
-- `.services` Fly deploys use `--strategy=rolling` (as `fly.toml` says; two machines, DrainNotice).
+- `.services` Fly deploys use `--strategy=rolling` (as `fly.toml` says; ONE machine in production: the second exists only during a rolling deploy, while the old one drains its boxes onto it with DrainNotice; `min_machines_running = 2` does not add one).
   `--strategy=immediate` drops every box's tunnel for ~20 s: don't use it once real boxes are attached.
 
 ### When in doubt
