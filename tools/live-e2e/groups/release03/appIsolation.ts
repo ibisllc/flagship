@@ -84,7 +84,9 @@ def probe(fqdn):
     gw = gateway()
     targets = [("169.254.169.254", 80), ("127.0.0.1", 9090), ("127.0.0.1", 2375)]
     if gw:
-        targets += [(gw, 9090), (gw, 2375), (gw, 22), (gw, 443), (gw, 8443), (gw, 10250)]
+        # The gateway's :80/:443 are the egress proxy by design (registries are reached through it), so a bare
+        # connect there proves nothing; the URL probes below check the box's own API is out of reach.
+        targets += [(gw, 9090), (gw, 2375), (gw, 22), (gw, 8443), (gw, 10250)]
     for h, port in targets:
         try:
             c = socket.create_connection((h, port), timeout=3); c.close()

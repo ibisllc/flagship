@@ -124,7 +124,14 @@ export function renderFirewall(plan: FirewallPlan): { v4: string; v6: string } {
     // The host's own addresses (the bridge gateway, LAN, public): only DNS is redirected there. A :80/:443 to the
     // box itself stays un-redirected and lands on the IN chain's reject, so no host listener on 443/80 (LAN-direct,
     // tlsd) is ever one hop from an app, and the probe is refused rather than answered by the proxy.
-    nat.push(`-A ${CHAIN_NAT} -i ${b} -p tcp -m multiport --dports 80,443 -m addrtype --dst-type LOCAL -j RETURN`);
+    // Except the bridge's own gateway: builds reach registries through it (sandboxBuildArgs maps each allowed
+    // registry name to the gateway with --add-host), so its :80/:443 must still land on the proxy (gym 23: pip got
+    // "connection refused" from pypi.org once the gateway was exempted too).
+    nat.push(
+      `-A ${CHAIN_NAT} -i ${b} -p tcp --dport 443 -m addrtype --dst-type LOCAL --limit-iface-in -j REDIRECT --to-ports ${tls}`,
+      `-A ${CHAIN_NAT} -i ${b} -p tcp --dport 80 -m addrtype --dst-type LOCAL --limit-iface-in -j REDIRECT --to-ports ${http}`,
+      `-A ${CHAIN_NAT} -i ${b} -p tcp -m multiport --dports 80,443 -m addrtype --dst-type LOCAL -j RETURN`,
+    );
     nat.push(
       `-A ${CHAIN_NAT} -i ${b} -p tcp --dport 443 -j REDIRECT --to-ports ${tls}`,
       `-A ${CHAIN_NAT} -i ${b} -p tcp --dport 80 -j REDIRECT --to-ports ${http}`,
