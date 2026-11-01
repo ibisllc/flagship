@@ -174,6 +174,7 @@ function serverDetailBody(overrides: Record<string, unknown> = {}): Record<strin
     serviceCount: 2,
     pairedSessionCount: 1,
     recentInstallEvents: [],
+    serving: { grace: "indefinite", onLapse: "stop-apps", until: null, policyGen: 0, regGen: 1, scopeSha256: "ab".repeat(32), boxPub: "cd".repeat(32) },
     ...overrides,
   };
 }
@@ -420,7 +421,7 @@ test.describe("gym webapp total", () => {
     // D1-A6..A11 — the server-detail screen is the lifecycle CONTROL surface.
     // Seed a paired pod + route ONLY its ServerDetailResponse; the full card set
     // (cert / counters / auto-unlock / live metrics / front-page / lock & power
-    // / dead-man / journal / danger-zone) renders from that one body. Every
+    // / the serving time limit / journal / danger-zone) renders from that one body. Every
     // other daemon read (metrics, leases, front-page, /api/services) stays
     // un-routed → 404 → its card degrades to its placeholder, never breaking the
     // page. Pure render assertion, no action fired (non-destructive).
@@ -435,7 +436,7 @@ test.describe("gym webapp total", () => {
     // The load-bearing control sections each render their card.
     await expect(page.locator("#auto-unlock-card")).toBeVisible({ timeout: 10_000 });
     await expect(page.locator("#lock-power-card")).toBeVisible();
-    await expect(page.locator("#deadman-card")).toBeVisible();
+    await expect(page.locator("#serving-card")).toBeVisible();
     await expect(page.locator("#journal-card")).toBeVisible();
     await expect(page.locator("#front-page-card")).toBeVisible();
     await expect(page.locator("#danger-zone-card")).toBeVisible();

@@ -546,7 +546,7 @@ const TOTAL: readonly Scenario[] = [
   // set renders + the destructive ceremonies OPEN (Cancel → non-destructive).
   webTotal(
     "web-total-server-detail-sections",
-    "D1-A6..A11: server-detail renders its full control card set (auto-unlock / lock-power / dead-man / journal / front-page / danger-zone) from a routed BFF.",
+    "D1-A6..A11: server-detail renders its full control card set (auto-unlock / lock-power / serving time limit / journal / front-page / danger-zone) from a routed BFF.",
     "gym total webapp server-detail renders its control sections",
     {
       steps: [

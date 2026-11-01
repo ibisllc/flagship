@@ -548,7 +548,7 @@ test.describe("gym webapp sharing", () => {
     await expect(page.locator("[data-share-admin-only]")).toHaveText("Only an admin device can share this server.");
     // The rest of the page's orders are off too, with one line why.
     await expect(page.locator("[data-server-admin-only]")).toHaveText("Only an admin device can change this server. This device can see it.");
-    for (const id of ["#update-server-btn", "#backup-start-btn", "#migrate-start-btn", "#power-off-btn", "#delete-server-btn", "#revoke-server-btn", "#transfer-start-btn", "#deadman-enable-btn"]) {
+    for (const id of ["#update-server-btn", "#backup-start-btn", "#migrate-start-btn", "#power-off-btn", "#delete-server-btn", "#revoke-server-btn", "#transfer-start-btn"]) {
       await expect(page.locator(id), id).toBeDisabled();
     }
     await scrollToShares(page);
