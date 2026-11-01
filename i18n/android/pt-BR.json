@@ -3217,5 +3217,10 @@
   "runtime_cmd_server": "3. No servidor (com o acesso de depuração ativado)",
   "runtime_note_swapped": "Este servidor executa um Node.js que não é o fixado pela sua versão.",
   "runtime_note_refused": "O manifesto de runtime assinado do Flagship foi recusado (%1$s).",
-  "runtime_note_newer_lock": "Esta versão fixa um Node.js mais recente que o do manifesto publicado."
+  "runtime_note_newer_lock": "Esta versão fixa um Node.js mais recente que o do manifesto publicado.",
+  "rank_member": "Membro",
+  "rank_manager": "Gerente",
+  "rank_master": "Mestre",
+  "invite_active": "ativo",
+  "invite_sent_not_opened_yet": "convite enviado — ainda não aberto"
 }

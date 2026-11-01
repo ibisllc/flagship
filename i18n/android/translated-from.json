@@ -3157,5 +3157,10 @@
   "runtime_cmd_server": "b9fc85a71de0",
   "runtime_note_swapped": "0a9c2112df54",
   "runtime_note_refused": "499b21c7519a",
-  "runtime_note_newer_lock": "3445de921d73"
+  "runtime_note_newer_lock": "3445de921d73",
+  "rank_member": "d6d9c22c28ce",
+  "rank_manager": "118716c1f3f8",
+  "rank_master": "3a9b1a99328e",
+  "invite_active": "db0fb2bf5ebc",
+  "invite_sent_not_opened_yet": "5425319ed1d8"
 }

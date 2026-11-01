@@ -282,11 +282,11 @@ public enum WatchProtocol {
 
         public static func label(for state: String) -> String {
             switch state {
-            case "online":  return "Online"
-            case "offline": return "Offline"
+            case "online":  return String(localized: "Online")
+            case "offline": return String(localized: "Offline")
             case "waiting": return String(localized: "Waiting to start")
             case "pending": return String(localized: "Setting up")
-            default:        return "Unknown"
+            default:        return String(localized: "Unknown")
             }
         }
     }

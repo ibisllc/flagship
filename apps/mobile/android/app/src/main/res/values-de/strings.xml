@@ -3220,4 +3220,9 @@
     <string name="runtime_note_swapped">Dieser Server führt ein Node.js aus, das nicht das von seiner Version festgelegte ist.</string>
     <string name="runtime_note_refused">Das signierte Laufzeit-Manifest von Flagship wurde abgelehnt (%1$s).</string>
     <string name="runtime_note_newer_lock">Diese Version legt ein neueres Node.js fest als das veröffentlichte Manifest.</string>
+    <string name="rank_member">Mitglied</string>
+    <string name="rank_manager">Manager</string>
+    <string name="rank_master">Master</string>
+    <string name="invite_active">aktiv</string>
+    <string name="invite_sent_not_opened_yet">Einladung gesendet – noch nicht geöffnet</string>
 </resources>

@@ -15,5 +15,11 @@
   "Servers": "サーバー",
   "Recent activity": "最近のアクティビティ",
   "All quiet": "特になし",
-  "Boot approvals and account changes show up here.": "起動の承認とアカウントの変更がここに表示されます。"
+  "Boot approvals and account changes show up here.": "起動の承認とアカウントの変更がここに表示されます。",
+  "Online": "オンライン",
+  "Offline": "オフライン",
+  "Waiting to start": "起動待ち",
+  "Setting up": "セットアップ中",
+  "Unknown": "不明",
+  "Leader": "リーダー"
 }

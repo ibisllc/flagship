@@ -3220,4 +3220,9 @@
     <string name="runtime_note_swapped">このサーバーは、リリースで固定された Node.js とは異なる Node.js を実行しています。</string>
     <string name="runtime_note_refused">Flagship の署名付きランタイムマニフェストは拒否されました（%1$s）。</string>
     <string name="runtime_note_newer_lock">このリリースは、公開されたマニフェストより新しい Node.js を固定しています。</string>
+    <string name="rank_member">メンバー</string>
+    <string name="rank_manager">マネージャー</string>
+    <string name="rank_master">マスター</string>
+    <string name="invite_active">有効</string>
+    <string name="invite_sent_not_opened_yet">招待を送信済み — まだ開かれていません</string>
 </resources>

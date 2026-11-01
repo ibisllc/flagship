@@ -3217,5 +3217,10 @@
   "runtime_cmd_server": "3. Auf dem Server (mit eingeschaltetem Debug-Zugang)",
   "runtime_note_swapped": "Dieser Server führt ein Node.js aus, das nicht das von seiner Version festgelegte ist.",
   "runtime_note_refused": "Das signierte Laufzeit-Manifest von Flagship wurde abgelehnt (%1$s).",
-  "runtime_note_newer_lock": "Diese Version legt ein neueres Node.js fest als das veröffentlichte Manifest."
+  "runtime_note_newer_lock": "Diese Version legt ein neueres Node.js fest als das veröffentlichte Manifest.",
+  "rank_member": "Mitglied",
+  "rank_manager": "Manager",
+  "rank_master": "Master",
+  "invite_active": "aktiv",
+  "invite_sent_not_opened_yet": "Einladung gesendet – noch nicht geöffnet"
 }

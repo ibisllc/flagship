@@ -19,4 +19,9 @@
     <string name="set_a_screen_lock_on_this_watch">请为这块手表设置屏幕锁定，才能用它批准。</string>
     <string name="unlock_this_watch_to_approve">请解锁这块手表再批准。</string>
     <string name="put_this_watch_on_your_wrist">请把这块手表戴在手腕上再批准。</string>
+    <string name="online">在线</string>
+    <string name="offline">离线</string>
+    <string name="pending">待处理</string>
+    <string name="unknown">未知</string>
+    <string name="leader">主服务器</string>
 </resources>

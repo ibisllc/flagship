@@ -35,6 +35,12 @@ class MockServiceAccessClient : ServiceAccessClient() {
     val removals: MutableList<String> = mutableListOf()
     val withdrawals: MutableList<String> = mutableListOf()
 
+    /** Store screenshots (StoreWorld): [ref] in [mode] with these invites already redeemed. */
+    fun seed(ref: String, mode: String, rows: List<ServiceInviteRow>) {
+        modes[ref] = mode
+        invites += rows
+    }
+
     /** Back to every app open with no invites (a new gym launch; one process runs them all). */
     fun reset() {
         modes.clear()

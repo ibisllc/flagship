@@ -19,4 +19,9 @@
     <string name="set_a_screen_lock_on_this_watch">このウォッチで承認するには、画面ロックを設定してください。</string>
     <string name="unlock_this_watch_to_approve">承認するには、このウォッチのロックを解除してください。</string>
     <string name="put_this_watch_on_your_wrist">承認するには、このウォッチを手首に着けてください。</string>
+    <string name="online">オンライン</string>
+    <string name="offline">オフライン</string>
+    <string name="pending">保留中</string>
+    <string name="unknown">不明</string>
+    <string name="leader">リーダー</string>
 </resources>

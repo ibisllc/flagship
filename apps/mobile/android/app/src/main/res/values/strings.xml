@@ -3224,4 +3224,9 @@
     <string name="runtime_note_swapped">This server runs a Node.js that is not the one its release locks.</string>
     <string name="runtime_note_refused">Flagship\'s signed runtime manifest was refused (%1$s).</string>
     <string name="runtime_note_newer_lock">This release locks a newer Node.js than the published manifest.</string>
+    <string name="rank_member">Member</string>
+    <string name="rank_manager">Manager</string>
+    <string name="rank_master">Master</string>
+    <string name="invite_active">active</string>
+    <string name="invite_sent_not_opened_yet">invite sent — not opened yet</string>
 </resources>

@@ -17,9 +17,9 @@ public enum AppMemberRole: String, Codable, CaseIterable, Sendable, Identifiable
     public var id: String { rawValue }
     public var label: String {
         switch self {
-        case .member: return "Member"
-        case .manager: return "Manager"
-        case .master: return "Master"
+        case .member: return String(localized: "Member")
+        case .manager: return String(localized: "Manager")
+        case .master: return String(localized: "Master")
         }
     }
     /// Master is shown with a crown (`crown.fill`).

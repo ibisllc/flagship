@@ -2965,5 +2965,14 @@
   "This release locks a newer Node.js than the published manifest.": "Cette version fixe un Node.js plus récent que celui du manifeste publié.",
   "1. Node's signed checksum list": "1. La liste de sommes de contrôle signée de Node",
   "2. Flagship's signed manifest": "2. Le manifeste signé de Flagship",
-  "3. On the server (with debug access on)": "3. Sur le serveur (avec l'accès de débogage activé)"
+  "3. On the server (with debug access on)": "3. Sur le serveur (avec l'accès de débogage activé)",
+  "All": "Tous",
+  "Member": "Membre",
+  "Manager": "Gestionnaire",
+  "Master": "Maître",
+  "+ Add person": "+ Ajouter une personne",
+  "+ Add group": "+ Ajouter un groupe",
+  "active": "actif",
+  "invite sent — not opened yet": "invitation envoyée — pas encore ouverte",
+  "1 server": "1 serveur"
 }

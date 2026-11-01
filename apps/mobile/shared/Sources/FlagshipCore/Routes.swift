@@ -229,10 +229,10 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
 
     public var title: String {
         switch self {
-        case .home:     return "Home"
-        case .apps:     return "Services"
-        case .activity: return "Activity"
-        case .settings: return "Settings"
+        case .home:     return String(localized: "Home")
+        case .apps:     return String(localized: "Services")
+        case .activity: return String(localized: "Activity")
+        case .settings: return String(localized: "Settings")
         }
     }
 

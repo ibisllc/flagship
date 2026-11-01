@@ -81,5 +81,25 @@
   "put_this_watch_on_your_wrist": {
     "en": "Put this watch on your wrist to approve.",
     "ctx": "WatchPresence.kt"
+  },
+  "online": {
+    "en": "Online",
+    "ctx": "apps/mobile/android/wear/src/main/java/com/flagshipserver/wear/WearMainActivity.kt:100"
+  },
+  "offline": {
+    "en": "Offline",
+    "ctx": "apps/mobile/android/wear/src/main/java/com/flagshipserver/wear/WearMainActivity.kt:101"
+  },
+  "pending": {
+    "en": "Pending",
+    "ctx": "apps/mobile/android/wear/src/main/java/com/flagshipserver/wear/WearMainActivity.kt:102"
+  },
+  "unknown": {
+    "en": "Unknown",
+    "ctx": "apps/mobile/android/wear/src/main/java/com/flagshipserver/wear/WearMainActivity.kt:103"
+  },
+  "leader": {
+    "en": "Leader",
+    "ctx": "apps/mobile/android/wear/src/main/java/com/flagshipserver/wear/WearMainActivity.kt:148"
   }
 }

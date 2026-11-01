@@ -74,6 +74,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public var appSandboxFixture: AppSandbox?
     /// Replaces the fixture's applied `lastUpdate` (a rollback, a refusal, one kept in recovery).
     public var lastUpdateFixture: LastUpdate?
+    /// Replaces the whole generated detail (the store screenshots' own boxes).
+    public var serverDetailOverride: ServerDetailResponse?
 
     public func serverDetail() async throws -> ServerDetailResponse {
         var detail = try await serverDetailFixture()
@@ -110,6 +112,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     private func serverDetailFixture() async throws -> ServerDetailResponse {
         try await tick()
         if unreachablePodIds.contains(podContext) { throw URLError(.cannotConnectToHost) }
+        if let serverDetailOverride { return serverDetailOverride }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let oneDay: Int64 = 24 * 3600 * 1000
         // Vary fixture per current pod so the switcher visibly

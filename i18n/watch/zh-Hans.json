@@ -15,5 +15,11 @@
   "Servers": "服务器",
   "Recent activity": "最近活动",
   "All quiet": "一切正常",
-  "Boot approvals and account changes show up here.": "启动批准和账户变更会显示在这里。"
+  "Boot approvals and account changes show up here.": "启动批准和账户变更会显示在这里。",
+  "Online": "在线",
+  "Offline": "离线",
+  "Waiting to start": "等待启动",
+  "Setting up": "正在设置",
+  "Unknown": "未知",
+  "Leader": "主服务器"
 }

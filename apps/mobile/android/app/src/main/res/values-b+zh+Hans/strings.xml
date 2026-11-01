@@ -3220,4 +3220,9 @@
     <string name="runtime_note_swapped">此服务器运行的 Node.js 不是其版本锁定的那一个。</string>
     <string name="runtime_note_refused">Flagship 签名的运行时清单被拒绝（%1$s）。</string>
     <string name="runtime_note_newer_lock">此版本锁定的 Node.js 比已发布的清单更新。</string>
+    <string name="rank_member">成员</string>
+    <string name="rank_manager">管理者</string>
+    <string name="rank_master">主控</string>
+    <string name="invite_active">已激活</string>
+    <string name="invite_sent_not_opened_yet">邀请已发送 — 尚未打开</string>
 </resources>

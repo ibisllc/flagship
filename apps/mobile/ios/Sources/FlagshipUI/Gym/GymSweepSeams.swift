@@ -82,6 +82,7 @@ public enum GymSweepSeams {
         accelerators(args, app, mocks)
         stack(args, app, mocks)
         onboarding(args, app, mocks)
+        storeWorld(args, app, mocks)
     }
 
     /// The value after `flag` in the launch arguments, if any.

@@ -13308,5 +13308,25 @@
   "runtime_note_newer_lock": {
     "en": "This release locks a newer Node.js than the published manifest.",
     "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "rank_member": {
+    "en": "Member",
+    "ctx": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppMemberRoles.kt:20"
+  },
+  "rank_manager": {
+    "en": "Manager",
+    "ctx": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppMemberRoles.kt:21"
+  },
+  "rank_master": {
+    "en": "Master",
+    "ctx": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppMemberRoles.kt:22"
+  },
+  "invite_active": {
+    "en": "active",
+    "ctx": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceAccessScreen.kt:777"
+  },
+  "invite_sent_not_opened_yet": {
+    "en": "invite sent — not opened yet",
+    "ctx": "apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceAccessScreen.kt:777"
   }
 }

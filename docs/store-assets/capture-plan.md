@@ -70,20 +70,20 @@ Fix the clock to the same moment the webapp captures use (2026-10-21 09:00 UTC) 
 
 ## Running them
 
+The tests exist (2026-11-01): iOS `StoreCaptureTests` (UI test) and the Watch app's `-watch-store-world` launch;
+Android `StoreCaptureTest` (instrumented) and the Wear OS app's `StoreWatchCaptureTest` (Robolectric, since the phone
+emulator can't hold the watch build). Each platform has one wrapper that builds, runs every ga language and device,
+and cleans up after itself:
+
 ```sh
-# iOS (one simulator per device folder; repeat per language)
-TEST_RUNNER_STORE_LANG=ja TEST_RUNNER_STORE_OUT=$PWD/store/captures/ios/ja/iphone-6.9 \
-xcodebuild test -project apps/mobile/ios/App/FlagshipApp.xcodeproj -scheme FlagshipApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \
-  -only-testing:FlagshipAppUITests/StoreCaptureTests
-# Android (JAVA_HOME as in AGENTS.md; repeat per AVD and language)
-./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.flagshipserver.app.gym.StoreCaptureTest \
-  -Pandroid.testInstrumentationRunnerArguments.storeLang=ja
-adb pull /sdcard/Download/store/ja store/captures/android/ja/phone
+bash scripts/store-assets/capture-ios.sh       # iPhone 6.9", iPad 13", Apple Watch Ultra; [--lang ja,de] [--device ipad-13]
+bash scripts/store-assets/capture-android.sh   # phone, 7" and 10" tablets (one AVD, resized), Wear OS; [--lang ...] [--device ...]
 npm run store-assets:render
 ```
 
-`AppStoreScreenshotTests.test_captureShowcase` (iOS, smoke fixtures) is the closest existing test: `StoreCaptureTests`
-can start as a copy of it with the store-world flag, the per-slide states above, `<id>.png` file names, and a loop
-the runner drives per language. Write a small wrapper (`scripts/store-assets/capture-ios.sh`,
-`capture-android.sh`) once the tests exist, so `npm run store-assets` can run them when a simulator or AVD is present.
+iOS creates its store simulators for the run and deletes them and its DerivedData after (`--keep-build` keeps both);
+Android boots `flagship_api35` headless without saving a snapshot, lifts the AVD's screen-lock PIN for the run
+(`STORE_AVD_PIN`, default 1234) and puts it back. The seam is `-smoke-store-world` (iOS, the world's JSON in the
+`FLAGSHIP_STORE_WORLD` launch environment) and `flagship.smokeStoreWorld` (Android, the JSON as an extra);
+`-smoke-store-waiting` / `flagship.smokeStoreWaiting` has cabin ask to start. Times are relative to the moment of
+capture (the app's clock is not fixed), so absolute dates on the backups slide are the capture day.

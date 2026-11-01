@@ -103,7 +103,7 @@ private struct ServerStatusRow: View {
             Circle().fill(color).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(server.name).font(.caption).lineLimit(1)
-                Text(WatchProtocol.ServersProjection.label(for: server.state) + (server.isLeader ? " · Leader" : ""))
+                Text(WatchProtocol.ServersProjection.label(for: server.state) + (server.isLeader ? " · " + String(localized: "Leader") : ""))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

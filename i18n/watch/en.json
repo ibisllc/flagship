@@ -76,5 +76,29 @@
   "Boot approvals and account changes show up here.": {
     "en": "Boot approvals and account changes show up here.",
     "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:78"
+  },
+  "Online": {
+    "en": "Online",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:285"
+  },
+  "Offline": {
+    "en": "Offline",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:286"
+  },
+  "Waiting to start": {
+    "en": "Waiting to start",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:287"
+  },
+  "Setting up": {
+    "en": "Setting up",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:288"
+  },
+  "Unknown": {
+    "en": "Unknown",
+    "ctx": "apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift:289"
+  },
+  "Leader": {
+    "en": "Leader",
+    "ctx": "apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift:106"
   }
 }

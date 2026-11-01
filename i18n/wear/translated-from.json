@@ -16,5 +16,10 @@
   "open_the_approve_page_on_this_watch": "002f8bcf8d60",
   "set_a_screen_lock_on_this_watch": "251892755322",
   "unlock_this_watch_to_approve": "8ec9998261df",
-  "put_this_watch_on_your_wrist": "0508ed541120"
+  "put_this_watch_on_your_wrist": "0508ed541120",
+  "online": "b11148e2002e",
+  "offline": "cff17bc0d0c9",
+  "pending": "f83b90713416",
+  "unknown": "14c4849191d0",
+  "leader": "8189bd2ee3f0"
 }

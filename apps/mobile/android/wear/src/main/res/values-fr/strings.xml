@@ -19,4 +19,9 @@
     <string name="set_a_screen_lock_on_this_watch">Définissez un verrouillage d’écran sur cette montre pour approuver depuis celle-ci.</string>
     <string name="unlock_this_watch_to_approve">Déverrouillez cette montre pour approuver.</string>
     <string name="put_this_watch_on_your_wrist">Mettez cette montre à votre poignet pour approuver.</string>
+    <string name="online">En ligne</string>
+    <string name="offline">Hors ligne</string>
+    <string name="pending">En attente</string>
+    <string name="unknown">Inconnu</string>
+    <string name="leader">Principal</string>
 </resources>

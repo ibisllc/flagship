@@ -3217,5 +3217,10 @@
   "runtime_cmd_server": "3. サーバー上で（デバッグアクセスをオンにして）",
   "runtime_note_swapped": "このサーバーは、リリースで固定された Node.js とは異なる Node.js を実行しています。",
   "runtime_note_refused": "Flagship の署名付きランタイムマニフェストは拒否されました（%1$s）。",
-  "runtime_note_newer_lock": "このリリースは、公開されたマニフェストより新しい Node.js を固定しています。"
+  "runtime_note_newer_lock": "このリリースは、公開されたマニフェストより新しい Node.js を固定しています。",
+  "rank_member": "メンバー",
+  "rank_manager": "マネージャー",
+  "rank_master": "マスター",
+  "invite_active": "有効",
+  "invite_sent_not_opened_yet": "招待を送信済み — まだ開かれていません"
 }

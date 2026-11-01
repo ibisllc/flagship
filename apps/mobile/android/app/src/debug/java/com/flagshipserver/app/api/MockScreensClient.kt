@@ -101,6 +101,7 @@ class MockScreensClient(
     override suspend fun serverDetail(): ServerDetailResponse {
         tick()
         if (podContext in unreachablePodContexts) throw java.io.IOException("$podContext isn't answering")
+        storeDetails[podContext]?.let { return it }
         val day = 24L * 3600 * 1000
         val pod = podContext
         val serviceCount = (abs(pod.hashCode()) % 5) + 1
@@ -151,9 +152,14 @@ class MockScreensClient(
     /** Gym: a failure for the apps list (e.g. a name the phone's resolver can't find). */
     var appsListFailure: Throwable? = null
 
+    /** Store screenshots (StoreWorld): what each box, by podContext label, lists and reports instead of the fixtures. */
+    val storeApps: MutableMap<String, AppsListResponse> = mutableMapOf()
+    val storeDetails: MutableMap<String, ServerDetailResponse> = mutableMapOf()
+
     override suspend fun appsList(): AppsListResponse {
         tick()
         appsListFailure?.let { throw it }
+        if (storeApps.isNotEmpty()) return storeApps[podContext] ?: AppsListResponse(emptyList())
         // url mirrors the live daemon's tier-1 form
         // `https://<urlLabel>.<serverFqdn>` (screensHttp builds it off the
         // box's per-box wildcard name — cert model A′).
@@ -924,7 +930,7 @@ class MockScreensClient(
 
     override suspend fun appDetail(serviceId: String): AppDetailResponse {
         tick()
-        val app = appsList().apps.firstOrNull { it.serviceId == serviceId }
+        val app = (storeApps.values.flatMap { it.apps } + appsList().apps).firstOrNull { it.serviceId == serviceId }
             ?: throw ScreensError.Http(404, "no such app")
         return AppDetailResponse(
             app = app,

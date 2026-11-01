@@ -2965,5 +2965,14 @@
   "This release locks a newer Node.js than the published manifest.": "此版本锁定的 Node.js 比已发布的清单更新。",
   "1. Node's signed checksum list": "1. Node 签名的校验和列表",
   "2. Flagship's signed manifest": "2. Flagship 签名的清单",
-  "3. On the server (with debug access on)": "3. 在服务器上（开启调试访问）"
+  "3. On the server (with debug access on)": "3. 在服务器上（开启调试访问）",
+  "All": "全部",
+  "Member": "成员",
+  "Manager": "管理者",
+  "Master": "主控",
+  "+ Add person": "+ 添加个人",
+  "+ Add group": "+ 添加群组",
+  "active": "已激活",
+  "invite sent — not opened yet": "邀请已发送 — 尚未打开",
+  "1 server": "1 台服务器"
 }

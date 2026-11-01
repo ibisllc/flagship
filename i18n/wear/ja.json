@@ -16,5 +16,10 @@
   "open_the_approve_page_on_this_watch": "承認するには、このウォッチで承認ページを開いてください。",
   "set_a_screen_lock_on_this_watch": "このウォッチで承認するには、画面ロックを設定してください。",
   "unlock_this_watch_to_approve": "承認するには、このウォッチのロックを解除してください。",
-  "put_this_watch_on_your_wrist": "承認するには、このウォッチを手首に着けてください。"
+  "put_this_watch_on_your_wrist": "承認するには、このウォッチを手首に着けてください。",
+  "online": "オンライン",
+  "offline": "オフライン",
+  "pending": "保留中",
+  "unknown": "不明",
+  "leader": "リーダー"
 }

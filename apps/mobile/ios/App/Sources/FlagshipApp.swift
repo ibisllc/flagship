@@ -266,6 +266,12 @@ struct FlagshipApp: App {
         // which deliberately lands on the lock screen to test the trap (D4-E1).
         // Gym-only; production never passes `-smoke-mode`.
         let wantLocked = args.contains("-smoke-locked")
+        // `-smoke-theme light|dark` (store screenshots): the in-app Appearance choice, since the
+        // simulator's own appearance can't be switched reliably from a UI test on iPad.
+        if let i = args.firstIndex(of: "-smoke-theme"), i + 1 < args.count,
+           let theme = PrivacySettings.ThemeMode(rawValue: args[i + 1]) {
+            privacy.themeMode = theme
+        }
         privacy.requireBiometricAtLaunch = wantLocked
         app.requireBiometricAtLaunch = wantLocked
         app.isUnlocked = !wantLocked
@@ -620,6 +626,9 @@ struct FlagshipApp: App {
     private let accessFixture = AccessFixtureOnce()
     private var accessFixtureKeys: ServiceAccessKeys? {
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-smoke-mode"), args.contains("-smoke-store-world"), GymLaunch.usesMocks {
+            return accessFixture.keys { GymSweepSeams.storeAccessKeys() }
+        }
         guard args.contains("-smoke-mode"), args.contains("-smoke-access-fixture"), GymLaunch.usesMocks else { return nil }
         return accessFixture.keys {
             ServiceAccessFixture.seed(access: mockServiceAccess, screens: mockClient,

@@ -305,9 +305,9 @@ public struct ServiceAccessScreen: View {
             FSSectionLabel(String(localized: "Members (\(people.count))"), id: "service-access-members-title")
             if vm?.canInvite == true {
                 HStack(spacing: FS.space.s3) {
-                    FSSecondaryButton("+ Add person", block: true) { openAdd(.person) }
+                    FSSecondaryButton(String(localized: "+ Add person"), block: true) { openAdd(.person) }
                         .accessibilityIdentifier("service-access-add-person")
-                    FSSecondaryButton("+ Add group", block: true) { openAdd(.group) }
+                    FSSecondaryButton(String(localized: "+ Add group"), block: true) { openAdd(.group) }
                         .accessibilityIdentifier("service-access-add-group")
                 }
             } else if let why = vm?.inviteBlockedReason {
@@ -571,7 +571,7 @@ public struct ServiceAccessScreen: View {
             return cap == 0 ? String(localized: "\(used) joined") : String(localized: "\(used) of \(cap) joined")
         }
         if p.manual && !p.bound { return "you approve · not yet in" }
-        return p.bound ? "active" : "invite sent — not opened yet"
+        return p.bound ? String(localized: "active") : String(localized: "invite sent — not opened yet")
     }
 
     @ViewBuilder

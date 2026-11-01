@@ -3217,5 +3217,10 @@
   "runtime_cmd_server": "3. 在服务器上（开启调试访问）",
   "runtime_note_swapped": "此服务器运行的 Node.js 不是其版本锁定的那一个。",
   "runtime_note_refused": "Flagship 签名的运行时清单被拒绝（%1$s）。",
-  "runtime_note_newer_lock": "此版本锁定的 Node.js 比已发布的清单更新。"
+  "runtime_note_newer_lock": "此版本锁定的 Node.js 比已发布的清单更新。",
+  "rank_member": "成员",
+  "rank_manager": "管理者",
+  "rank_master": "主控",
+  "invite_active": "已激活",
+  "invite_sent_not_opened_yet": "邀请已发送 — 尚未打开"
 }

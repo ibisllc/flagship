@@ -16,5 +16,10 @@
   "open_the_approve_page_on_this_watch": "Abre la página Aprobar en este reloj para aprobar.",
   "set_a_screen_lock_on_this_watch": "Configura un bloqueo de pantalla en este reloj para aprobar desde él.",
   "unlock_this_watch_to_approve": "Desbloquea este reloj para aprobar.",
-  "put_this_watch_on_your_wrist": "Ponte este reloj en la muñeca para aprobar."
+  "put_this_watch_on_your_wrist": "Ponte este reloj en la muñeca para aprobar.",
+  "online": "En línea",
+  "offline": "Sin conexión",
+  "pending": "Pendiente",
+  "unknown": "Desconocido",
+  "leader": "Líder"
 }

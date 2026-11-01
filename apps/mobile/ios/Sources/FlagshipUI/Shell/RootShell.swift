@@ -480,7 +480,7 @@ private struct Sidebar: View {
                     Text(user)
                         .font(FS.font.scaled(15, weight: .semibold))
                         .foregroundColor(c.text)
-                    Text("\(app.pods.count) \(app.pods.count == 1 ? "server" : "servers")")
+                    Text(app.pods.count == 1 ? String(localized: "1 server") : String(localized: "\(app.pods.count) servers"))
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                 }

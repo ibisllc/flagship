@@ -8,6 +8,8 @@
 package com.flagshipserver.app.ui.shell
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.res.stringResource
+import com.flagshipserver.app.R
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -165,8 +167,8 @@ private fun CompactShell(
                         NavigationBarItem(
                             selected = dest == selected,
                             onClick = { onSelect(dest) },
-                            icon = { Icon(iconFor(dest), contentDescription = dest.label) },
-                            label = { Text(dest.label, maxLines = 1) },
+                            icon = { Icon(iconFor(dest), contentDescription = labelFor(dest)) },
+                            label = { Text(labelFor(dest), maxLines = 1) },
                             modifier = Modifier.testTag("tab-${dest.key}"),
                         )
                     }
@@ -189,8 +191,8 @@ private fun ExpandedShell(
                 NavigationRailItem(
                     selected = dest == selected,
                     onClick = { onSelect(dest) },
-                    icon = { Icon(iconFor(dest), contentDescription = dest.label) },
-                    label = { Text(dest.label) },
+                    icon = { Icon(iconFor(dest), contentDescription = labelFor(dest)) },
+                    label = { Text(labelFor(dest)) },
                     modifier = Modifier.testTag("tab-${dest.key}"),
                 )
             }
@@ -221,6 +223,16 @@ private fun TabContent(selected: RootDestination, padding: PaddingValues) {
         }
     }
 }
+
+@Composable
+private fun labelFor(dest: RootDestination) = stringResource(
+    when (dest) {
+        RootDestination.HOME -> R.string.home
+        RootDestination.APPS -> R.string.services
+        RootDestination.ACTIVITY -> R.string.activity
+        RootDestination.SETTINGS -> R.string.settings
+    },
+)
 
 private fun iconFor(dest: RootDestination) = when (dest) {
     RootDestination.HOME -> Icons.Outlined.Home

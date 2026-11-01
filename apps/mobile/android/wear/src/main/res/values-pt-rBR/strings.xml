@@ -19,4 +19,9 @@
     <string name="set_a_screen_lock_on_this_watch">Defina um bloqueio de tela neste relógio para aprovar por ele.</string>
     <string name="unlock_this_watch_to_approve">Desbloqueie este relógio para aprovar.</string>
     <string name="put_this_watch_on_your_wrist">Coloque este relógio no pulso para aprovar.</string>
+    <string name="online">Online</string>
+    <string name="offline">Offline</string>
+    <string name="pending">Pendente</string>
+    <string name="unknown">Desconhecido</string>
+    <string name="leader">Líder</string>
 </resources>

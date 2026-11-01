@@ -15,5 +15,11 @@
   "Servers": "Servidores",
   "Recent activity": "Atividade recente",
   "All quiet": "Tudo tranquilo",
-  "Boot approvals and account changes show up here.": "Aprovações de inicialização e alterações da conta aparecem aqui."
+  "Boot approvals and account changes show up here.": "Aprovações de inicialização e alterações da conta aparecem aqui.",
+  "Online": "Online",
+  "Offline": "Offline",
+  "Waiting to start": "Aguardando para iniciar",
+  "Setting up": "Configurando",
+  "Unknown": "Desconhecido",
+  "Leader": "Líder"
 }

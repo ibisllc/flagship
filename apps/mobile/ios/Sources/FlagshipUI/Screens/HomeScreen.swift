@@ -1137,10 +1137,10 @@ public enum HomeStatusFilter: CaseIterable, Hashable {
 
     var label: String {
         switch self {
-        case .all:     return "All"
-        case .online:  return "Online"
-        case .pending: return "Pending"
-        case .offline: return "Offline"
+        case .all:     return String(localized: "All")
+        case .online:  return String(localized: "Online")
+        case .pending: return String(localized: "Pending")
+        case .offline: return String(localized: "Offline")
         }
     }
 

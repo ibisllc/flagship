@@ -21,4 +21,9 @@
     <string name="set_a_screen_lock_on_this_watch">Set a screen lock on this watch to approve from it.</string>
     <string name="unlock_this_watch_to_approve">Unlock this watch to approve.</string>
     <string name="put_this_watch_on_your_wrist">Put this watch on your wrist to approve.</string>
+    <string name="online">Online</string>
+    <string name="offline">Offline</string>
+    <string name="pending">Pending</string>
+    <string name="unknown">Unknown</string>
+    <string name="leader">Leader</string>
 </resources>

@@ -80,6 +80,10 @@ data class SmokeModeConfig(
     /** Offline control's in-process box (GymRescue): "found" | "not-found" | "wrong-key" |
      *  "expired-cert" | "interrupt" | "stranger". */
     val rescue: String? = null,
+    /** store/demo-world.json's JSON: the made-up world the store screenshots show (StoreWorld). */
+    val storeWorld: String? = null,
+    /** With [storeWorld]: cabin is waiting for its start-up approval. */
+    val storeWaiting: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -102,6 +106,8 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_RATE_LIMITED = "flagship.smokeRateLimited"
         const val EXTRA_SMOKE_CHAT = "flagship.smokeChat"
         const val EXTRA_SMOKE_RESCUE = "flagship.smokeRescue"
+        const val EXTRA_SMOKE_STORE_WORLD = "flagship.smokeStoreWorld"
+        const val EXTRA_SMOKE_STORE_WAITING = "flagship.smokeStoreWaiting"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -138,6 +144,8 @@ data class SmokeModeConfig(
                     ?.takeIf { it in setOf("ready", "failed", "env") },
                 rescue = intent.getStringExtra(EXTRA_SMOKE_RESCUE)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("found", "not-found", "wrong-key", "expired-cert", "interrupt", "stranger") },
+                storeWorld = intent.getStringExtra(EXTRA_SMOKE_STORE_WORLD),
+                storeWaiting = intent.getBooleanExtra(EXTRA_SMOKE_STORE_WAITING, false),
             )
         }
     }
@@ -160,7 +168,10 @@ object SmokeMode {
             GymSeams.bypassBiometricGates = true
             return config.tab
         }
-        if (!appState.isPaired.value) {
+        val store = StoreWorld.parse(config.storeWorld)
+        if (store != null) {
+            appState.completeOnboarding(username = store.account, pods = store.pods(config.storeWaiting, System.currentTimeMillis()))
+        } else if (!appState.isPaired.value) {
             val user = config.username
             val pods = when (config.podsVariant) {
                 "awaiting-unlock" -> DemoFixtures.samplePodsWithAwaitingUnlock(user)

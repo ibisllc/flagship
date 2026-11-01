@@ -774,7 +774,7 @@ private fun PersonRow(
                     val sub = if (person.isGroup) {
                         if (person.maxRedemptions == 0) fsString(R.string.joined, person.redemptions)
                         else fsString(R.string.of_joined, person.redemptions, person.maxRedemptions)
-                    } else if (person.bound) "active" else "invite sent — not opened yet"
+                    } else if (person.bound) stringResource(R.string.invite_active) else stringResource(R.string.invite_sent_not_opened_yet)
                     Text(
                         sub,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

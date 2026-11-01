@@ -16,5 +16,10 @@
   "open_the_approve_page_on_this_watch": "请在这块手表上打开批准页面再批准。",
   "set_a_screen_lock_on_this_watch": "请为这块手表设置屏幕锁定，才能用它批准。",
   "unlock_this_watch_to_approve": "请解锁这块手表再批准。",
-  "put_this_watch_on_your_wrist": "请把这块手表戴在手腕上再批准。"
+  "put_this_watch_on_your_wrist": "请把这块手表戴在手腕上再批准。",
+  "online": "在线",
+  "offline": "离线",
+  "pending": "待处理",
+  "unknown": "未知",
+  "leader": "主服务器"
 }

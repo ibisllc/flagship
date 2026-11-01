@@ -203,7 +203,7 @@ struct ServerBackupsCard: View {
                     .foregroundColor(c.text)
                     .accessibilityIdentifier("sd-backups-policy")
                 Spacer()
-                Button(vm.policyKind == "unset" ? String(localized: "Choose") : "Change") { editingPolicy = true }
+                Button(vm.policyKind == "unset" ? String(localized: "Choose") : String(localized: "Change")) { editingPolicy = true }
                     .font(FS.font.bodySm())
                     .disabled(!vm.isAdminDevice)
                     .accessibilityIdentifier("sd-backups-policy-change")

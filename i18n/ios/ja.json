@@ -2965,5 +2965,14 @@
   "This release locks a newer Node.js than the published manifest.": "このリリースは、公開されたマニフェストより新しい Node.js を固定しています。",
   "1. Node's signed checksum list": "1. Node の署名付きチェックサム一覧",
   "2. Flagship's signed manifest": "2. Flagship の署名付きマニフェスト",
-  "3. On the server (with debug access on)": "3. サーバー上で（デバッグアクセスをオンにして）"
+  "3. On the server (with debug access on)": "3. サーバー上で（デバッグアクセスをオンにして）",
+  "All": "すべて",
+  "Member": "メンバー",
+  "Manager": "マネージャー",
+  "Master": "マスター",
+  "+ Add person": "+ 人を追加",
+  "+ Add group": "+ グループを追加",
+  "active": "有効",
+  "invite sent — not opened yet": "招待を送信済み — まだ開かれていません",
+  "1 server": "1 台のサーバー"
 }

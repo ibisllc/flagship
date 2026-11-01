@@ -95,6 +95,16 @@ internal fun WearApp(
 }
 
 @Composable
+private fun statusLabel(statusRaw: String): String = stringResource(
+    when (statusRaw) {
+        "online" -> R.string.online
+        "offline" -> R.string.offline
+        "pending" -> R.string.pending
+        else -> R.string.unknown
+    },
+)
+
+@Composable
 private fun Home(data: WatchContext, onApproval: (PendingApproval) -> Unit) {
     val listState = rememberScalingLazyListState()
     val approvals = WatchProjection.approvals(data)
@@ -135,7 +145,7 @@ private fun Home(data: WatchContext, onApproval: (PendingApproval) -> Unit) {
                         onClick = {},
                         label = { Text(pod.name, maxLines = 1) },
                         secondaryLabel = {
-                            Text(PodStatusText.label(pod.statusRaw) + if (pod.isLeader) " · Leader" else "", maxLines = 1)
+                            Text(statusLabel(pod.statusRaw) + if (pod.isLeader) " · " + stringResource(R.string.leader) else "", maxLines = 1)
                         },
                         icon = { StatusDot(pod.statusRaw) },
                         colors = ChipDefaults.secondaryChipColors(),

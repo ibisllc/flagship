@@ -1,5 +1,6 @@
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.R
 import com.google.crypto.tink.subtle.Ed25519Sign
 
 /**
@@ -17,9 +18,9 @@ enum class AppMemberRole(val wire: String) {
 
     val label: String
         get() = when (this) {
-            MEMBER -> "Member"
-            MANAGER -> "Manager"
-            MASTER -> "Master"
+            MEMBER -> FSStrings.get(R.string.rank_member)
+            MANAGER -> FSStrings.get(R.string.rank_manager)
+            MASTER -> FSStrings.get(R.string.rank_master)
         }
 
     val crowned: Boolean get() = this == MASTER

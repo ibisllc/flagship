@@ -89,6 +89,7 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
     @discardableResult
     private func seedShowcaseIfRequested() -> Bool {
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-watch-store-world") { return seedStoreWorld(waiting: args.contains("-watch-store-waiting")) }
         guard args.contains("-watch-showcase") || args.contains("-watch-showcase-install") else { return false }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         if args.contains("-watch-showcase") {
@@ -117,6 +118,31 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
                 updatedAt: Date(), active: true
             )
         }
+        return true
+    }
+
+    /// Store screenshots (docs/store-assets/capture-plan.md): store/demo-world.json's servers, from the
+    /// `FLAGSHIP_STORE_WORLD` launch environment; with `waiting`, one asks to start.
+    private func seedStoreWorld(waiting: Bool) -> Bool {
+        struct World: Decodable {
+            struct Server: Decodable { let name: String; let fqdn: String; let leader: Bool }
+            struct Waiting: Decodable { let server: String; let askedMinutesAgo: Int64 }
+            let servers: [Server]
+            let unlockRequest: Waiting
+        }
+        guard let json = ProcessInfo.processInfo.environment["FLAGSHIP_STORE_WORLD"],
+              let world = try? JSONDecoder().decode(World.self, from: Data(json.utf8)) else { return false }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let asking = { (s: World.Server) in waiting && s.name == world.unlockRequest.server }
+        servers = .init(servers: (world.servers.filter(\.leader) + world.servers.filter { !$0.leader }).map {
+            .init(name: $0.name, fqdn: $0.fqdn, state: asking($0) ? "waiting" : "online", isLeader: $0.leader)
+        })
+        securityAlerts = .init(
+            pendingApprovals: world.servers.filter(asking).map {
+                .init(requestId: "store-\($0.name)", serverFqdn: $0.fqdn,
+                      requestedAt: now - world.unlockRequest.askedMinutesAgo * 60_000, ip: nil)
+            },
+            recentEvents: [])
         return true
     }
     #endif

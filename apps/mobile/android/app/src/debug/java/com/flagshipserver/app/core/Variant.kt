@@ -98,7 +98,10 @@ object Variant : AppVariant {
         realBackendLaunch = cfg.live
         if (cfg.live) return GymLaunch(tab, mocks = null)
 
-        val screens = MockScreensClient()
+        val store = StoreWorld.parse(cfg.storeWorld)
+        val now = System.currentTimeMillis()
+        val storeBoxes = store?.boxes(cfg.storeWaiting, now)
+        val screens = if (store != null && storeBoxes != null) storeBoxes.getValue(store.servers.first { it.leader }.name) else MockScreensClient()
         // The access dialogs ask about each waiting host in turn: give Plants a
         // second one so Allow and Deny can both be answered (iOS has two).
         if (cfg.seedAccessAlert) {
@@ -131,9 +134,12 @@ object Variant : AppVariant {
             app.currentPod?.let { listOf(AccessBox(it.podId, it.fqdn, screens)) }.orEmpty()
         }
         val flagshipServer = MockFlagshipServerClient()
+        // The store world's account has cloud recovery, so Home shows no setup nudge.
+        if (store != null) flagshipServer.cloudRecoveryByUser = mapOf(store.account to true)
         val relay = MockQrRelayClient()
         val transfer = MockServerTransferClient()
         val mailbox = MockSecretMailboxClient()
+        store?.seed(cfg.storeWaiting, now, mailbox, MockServiceAccessClient.shared)
         if (cfg.podsVariant == "pending-ghost") {
             // Same `.com` answer a real account gives: Home2 is an open order.
             mailbox.pendingOrders = listOf(
@@ -171,7 +177,7 @@ object Variant : AppVariant {
                 nameDibs = MockNameDibsClient(),
                 voiciName = MockVoiciNameClient(),
                 mailbox = mailbox,
-                podClients = FixedPodClients(screens, build),
+                podClients = storeBoxes?.let { StorePodClients(it, build) } ?: FixedPodClients(screens, build),
                 shares = shares,
                 accessBoxes = accessBoxes,
                 chatBoxes = { app -> app.currentPod?.let { listOf(AccessBox(it.podId, it.fqdn, screens)) }.orEmpty() },

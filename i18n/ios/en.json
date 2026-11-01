@@ -12878,5 +12878,41 @@
     "en": "A server shared with you is asking you to unlock it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "All": {
+    "en": "All",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift:1140"
+  },
+  "Member": {
+    "en": "Member",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift:20"
+  },
+  "Manager": {
+    "en": "Manager",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift:21"
+  },
+  "Master": {
+    "en": "Master",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift:22"
+  },
+  "+ Add person": {
+    "en": "+ Add person",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:308"
+  },
+  "+ Add group": {
+    "en": "+ Add group",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:310"
+  },
+  "active": {
+    "en": "active",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:574"
+  },
+  "invite sent — not opened yet": {
+    "en": "invite sent — not opened yet",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift:574"
+  },
+  "1 server": {
+    "en": "1 server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift:483"
   }
 }
