@@ -876,12 +876,26 @@ export class AppRunner {
       return this.deployDirect(spec);
     }
     let args: string[] = [];
+    let deployed = false;
     await core.ensure(w, {
       deploy: async (o) => {
+        deployed = true;
         args = await this.deployDirect(spec, o);
       },
     });
+    // Gym 24: core adopted the running container (no deploy effect), so nothing told the proxy where it is.
+    if (!deployed) await this.publishAdopted(spec);
     return args;
+  }
+
+  /** The endpoint of a container core adopted as it runs: its own generation and address, as the engine reports them. */
+  private async publishAdopted(spec: AppSpec): Promise<void> {
+    if (!spec.port) return;
+    const o = await observer(this.cmd)(spec.containerName ?? this.containerName(spec.serviceId));
+    if (!o?.running || o.generation === null) throw new Error("the Rust controller reports the app running, but the engine has no running container for it");
+    const address = dialsContainersDirectly() ? (o.addresses[this.limits.network] ?? null) : null;
+    if (dialsContainersDirectly() && !address) throw new Error(`the adopted container has no address on ${this.limits.network}`);
+    await this.publishEndpoint(spec, endpointKeyFor(spec, this.limits.network), o.generation, address);
   }
 
   /**

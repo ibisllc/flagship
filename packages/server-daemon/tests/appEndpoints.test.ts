@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { endpoints } from "../src/endpoints.js";
 import { setActiveEngine } from "../src/engine/engine.js";
 import { AppRunner, resetAddressPools, type CommandRunner } from "../src/serviceRunner.js";
+import { setCoreOwnership, type CoreOwnership } from "../src/rustStack/coreOwnership.js";
 
 /** An engine that remembers what was run and answers `inspect` for the one container it "started". */
 function fakeEngine(opts: { podman: boolean; ipOverride?: string; labelOverride?: string; running?: boolean; conflictOnce?: boolean }) {
@@ -161,5 +162,26 @@ describe("an app group's members each have an entry and an address", () => {
     // Removing the service frees every component's address.
     await runner.releaseAddress("svc1");
     endpoints.invalidate("svc1");
+  });
+});
+
+describe("an app the Rust controller adopts as it runs (gym 24)", () => {
+  it("is published from the engine: the proxy finds it although no deploy ran", async () => {
+    setActiveEngine("podman");
+    const { cmd, runs } = fakeEngine({ podman: true });
+    await new AppRunner(cmd).deploy(spec);
+    const address = runs[0]![runs[0]!.indexOf("--ip") + 1];
+    // The daemon restarts under the Rust reconciler: its table is empty and core keeps the container.
+    endpoints.invalidate("svc1");
+    expect(endpoints.lookup(key)).toBeNull();
+    setCoreOwnership({ live: () => true, ensure: async () => {}, note: () => {}, noteStopped: () => {}, stopTimer: () => {} } as unknown as CoreOwnership);
+    try {
+      await new AppRunner(cmd).resume(spec);
+    } finally {
+      setCoreOwnership(null);
+    }
+    expect(runs).toHaveLength(1);
+    expect(endpoints.lookup(key)?.host).toBe(address);
+    expect(endpoints.lookup(key)?.port).toBe(8080);
   });
 });
