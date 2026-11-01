@@ -311,6 +311,9 @@ public struct ServerDetailScreen: View {
                     if d.debugAccess != nil {
                         DebugAccessCard(serverDomain: d.serverFqdn, view: d.debugAccess, onChanged: onRefreshDetail)
                     }
+                    if let rt = d.runtime, rt.isUsable {
+                        RuntimeCard(view: rt)
+                    }
                 }
                 // The health report comes from the directory, not the box, so
                 // it still shows when the box's own detail can't load.

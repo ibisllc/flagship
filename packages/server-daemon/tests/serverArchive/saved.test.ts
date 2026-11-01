@@ -38,6 +38,9 @@ import { buildServerArchiveService, RESTORE_PATH, SAVED_PATH } from "../../src/s
 import type { HttpRequest } from "../../src/runtime.js";
 import { swkOps, testCustodian } from "../helpers/keyCustody.js";
 import { writeSourceTree } from "../../src/llm/serviceSource.js";
+import { miniTar } from "../helpers/miniTar.js";
+import { KeydServer, KeydService } from "@flagship/keyd";
+import { keydCallerFor, keydCustody, type ArchiveKeyCustody } from "../../src/serverArchive/archiveKeys.js";
 
 // Every temp dir a test makes is removed afterwards: the 5 GiB sparse-file test left real 5 GiB
 // files behind on NTFS, which filled a disk.
@@ -92,7 +95,7 @@ function fakeOps() {
     dumpDatabase: async (s, out) => writeFile(out, `rows-of-${s.database}`),
     listDump: async () => "; Archive created\n",
     restoreDatabase: async (_s, p) => void restoredDbs.push(await readFile(p, "utf8")),
-    archiveFiles: async (v, _c, out) => writeFile(out, `files-of-${v}`),
+    archiveFiles: async (v, _c, out) => writeFile(out, miniTar(`files-of-${v}`)),
     restoreFiles: async () => {},
   };
   return { ops, images, restoredDbs };
@@ -120,7 +123,7 @@ const rng = (n: number) => {
   return b;
 };
 
-async function world(over: { free?: () => number; disk?: number; sized?: number; scheduleActive?: () => boolean; migrate?: { pause: MigratePause } } = {}) {
+async function world(over: { free?: () => number; disk?: number; sized?: number; scheduleActive?: () => boolean; migrate?: { pause: MigratePause }; keys?: ArchiveKeyCustody } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "saved-backups-"));
   const clock = { t: Date.UTC(2026, 9, 14, 12) };
   const src = platformFor(srcBox, "s".repeat(40));
@@ -148,6 +151,7 @@ async function world(over: { free?: () => number; disk?: number; sized?: number;
         ...(over.scheduleActive ? { scheduleActive: over.scheduleActive } : {}),
       },
       ...(over.migrate ? { migrate: over.migrate } : {}),
+      ...(over.keys ? { keys: over.keys } : {}),
       now: () => clock.t,
     });
   const svc = make();
@@ -741,5 +745,68 @@ describe("restore from peer backups", () => {
     expect((await tcall("POST", `${RESTORE_PATH}/commit`, { key: Buffer.from(opened.contentKey).toString("hex") })).status).toBe(202);
     await target.settle();
     expect((await tcall("GET", RESTORE_PATH)).json().restore).toMatchObject({ state: "done", apps: [{ serviceId: SERVICE, state: "done" }] });
+  });
+});
+
+describe("backup keys in flagship-keyd (plan G6)", () => {
+  async function keydFor(dir: string) {
+    const service = new KeydService({ identitySeed: new Uint8Array(32).fill(9), archivePoolPath: join(dir, "archive-keks.json") });
+    const server = new KeydServer({ socketPath: join(dir, "k.sock"), service, rateLimits: { "*": { perSecond: 1e5, burst: 1e5 } } });
+    await server.start();
+    return { sock: join(dir, "k.sock"), stop: () => server.stop() };
+  }
+
+  it("the deposited keys and every content key stay in keyd; the backup opens with the account key and restores", async () => {
+    const kd = mkdtempSync(join(tmpdir(), "kd-"));
+    const k = await keydFor(kd);
+    try {
+      const custody = keydCustody(keydCallerFor(k.sock));
+      const w = await world({ keys: custody });
+      const keys = await giveKeys(w, 2);
+      // The daemon's own file holds no account key; keyd's does.
+      expect(await readFile(join(w.dir, "server-backups", "keys.json"), "utf8").catch(() => "")).not.toContain(keys[0]!.kekHex);
+      expect(await readFile(join(kd, "archive-keks.json"), "utf8")).toContain(keys[1]!.kekHex);
+      const id = await runNow(w);
+      const v = (await call(w.svc, "GET", SAVED_PATH)).json();
+      expect(v.keysLeft).toBe(1);
+      expect(v.lastRun).toMatchObject({ ok: true, archiveId: id });
+      expect(v.isolation).toMatchObject({ keys: "keyd" });
+      expect(v.isolation.counts.keydArchives).toBeGreaterThanOrEqual(1);
+      expect(v.isolation.counts.keydFrames).toBeGreaterThanOrEqual(2);
+      // Used once: gone from keyd's pool on disk.
+      expect(await readFile(join(kd, "archive-keks.json"), "utf8")).not.toContain(keys[0]!.kekHex);
+      const file = parseBackupFile(String((await call(w.svc, "GET", `${SAVED_PATH}/${id}/backup-file`)).body));
+      const opened = openBackupWithAccountKey(file, deriveServerArchiveKey(UMK, id))!;
+      expect(opened.body.apps).toEqual([{ serviceId: SERVICE, name: "notes" }]);
+      // A restart reads the pool back from keyd.
+      const again = w.make();
+      await again.init();
+      expect((await call(again, "GET", SAVED_PATH)).json().keysLeft).toBe(1);
+    } finally {
+      await k.stop();
+    }
+  });
+
+  it("keys an earlier release kept on disk move into keyd once", async () => {
+    const w = await world();
+    const keys = await giveKeys(w, 3);
+    expect(await readFile(join(w.dir, "server-backups", "keys.json"), "utf8")).toContain(keys[0]!.kekHex);
+    const kd = mkdtempSync(join(tmpdir(), "kd-"));
+    const k = await keydFor(kd);
+    try {
+      const moved = buildServerArchiveService({
+        dir: join(w.dir, "archives"),
+        build: { serverFqdn: SRC, apps: () => [], containerName: () => "", ops: fakeOps().ops, envStore: null, access: null, accessList: null },
+        restore: { serverFqdn: SRC, platform: w.src.platform, dataProvisioner: null, ops: fakeOps().ops, signInstall: (r) => srcBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
+        saved: { dir: join(w.dir, "server-backups"), authorizeKeys: () => true },
+        keys: keydCustody(keydCallerFor(k.sock)),
+      });
+      await moved.init();
+      expect((await call(moved, "GET", SAVED_PATH)).json().keysLeft).toBe(3);
+      expect(await readFile(join(w.dir, "server-backups", "keys.json"), "utf8")).not.toContain(keys[0]!.kekHex);
+      expect(await readFile(join(kd, "archive-keks.json"), "utf8")).toContain(keys[2]!.kekHex);
+    } finally {
+      await k.stop();
+    }
   });
 });

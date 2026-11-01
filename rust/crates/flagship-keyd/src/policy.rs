@@ -625,6 +625,27 @@ pub const DEFAULT_RATE_LIMITS: &[(&str, Limit)] = &[
         },
     ),
     (
+        "archive.pool.add",
+        Limit {
+            per_second: 0.1,
+            burst: 5.0,
+        },
+    ),
+    (
+        "archive.create",
+        Limit {
+            per_second: 0.1,
+            burst: 10.0,
+        },
+    ),
+    (
+        "archive.import",
+        Limit {
+            per_second: 0.1,
+            burst: 10.0,
+        },
+    ),
+    (
         "*",
         Limit {
             per_second: 5000.0,

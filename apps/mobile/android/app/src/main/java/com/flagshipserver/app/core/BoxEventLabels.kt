@@ -38,6 +38,7 @@ object BoxEventLabels {
         "server.state.corrupt" to FSStrings.get(R.string.this_server_found_a_damaged_settings),
         "server.bootchain.refreshed" to FSStrings.get(R.string.activity_bootchain_refreshed),
         "server.bootchain.rolled-back" to FSStrings.get(R.string.activity_bootchain_rolled_back),
+        "server.sandbox.removed" to FSStrings.get(R.string.activity_sandbox_removed),
         "server.debug-access.granted" to FSStrings.get(R.string.debug_access_turned_on),
         "server.debug-access.renewed" to FSStrings.get(R.string.debug_access_renewed),
         "server.debug-access.expired" to FSStrings.get(R.string.debug_access_ended),

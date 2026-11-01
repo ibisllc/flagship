@@ -28,6 +28,36 @@ import { filesArchiveDockerArgs, filesSizeDockerArgs } from "../volumeDump.js";
 import { describe, dockerFailure, dockerRepaired, wakeDocker } from "../dockerHealth.js";
 import { routePrivileged } from "../privileged.js";
 import { realCommandRunner, type CommandRunner } from "../serviceRunner.js";
+import { runsUnprivileged } from "../privileged.js";
+import { brokerActive, brokerCall } from "../rustStack/brokerClient.js";
+import { BROKER_V1_SOCKET } from "../rustStack/units.js";
+import { archiveIsolationStats } from "../serverArchive/isolation.js";
+
+/**
+ * On an arch-v2 box (the Rust broker is on and this process is unprivileged) an app's files folder
+ * is read, written and measured by the broker's `appdata.files` (plan G6): the request names the
+ * app, the broker derives its volume and requires it mounted, runs the helper in its locked shape,
+ * and checks a restore's tar while copying it. Elsewhere the helper runs through docker as before.
+ */
+export function brokerFilesActive(): boolean {
+  return runsUnprivileged() && brokerActive();
+}
+
+const PROD_FILES_PREFIX = "flagship-files-";
+
+export async function brokerFiles(action: "dump" | "restore" | "size", volume: string, path?: string, socketPath = BROKER_V1_SOCKET): Promise<string> {
+  if (!volume.startsWith(PROD_FILES_PREFIX)) throw new Error(`not an app's files volume: ${volume}`);
+  const installation = volume.slice(PROD_FILES_PREFIX.length);
+  archiveIsolationStats.brokerFiles++;
+  try {
+    const r = (await brokerCall("appdata.files", { action, installation, ...(path ? { path } : {}) }, socketPath, TIMEOUT_MS)) as { stdout?: string };
+    console.log(`[server-archive] the broker ${action === "dump" ? "read" : action === "restore" ? "wrote" : "measured"} the files folder of ${installation}`);
+    return r?.stdout ?? "";
+  } catch (e) {
+    archiveIsolationStats.brokerRefusals++;
+    throw e;
+  }
+}
 
 export interface AppCopyOps {
   saveImage(image: string, outPath: string): Promise<void>;
@@ -286,6 +316,25 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
       };
     },
     archiveFiles: async (volume, container, outPath) => {
+      if (brokerFilesActive()) {
+        const running = (await exec("docker", ["ps", "-q", "--filter", `name=^${container}$`, "--filter", "status=running"])).trim() !== "";
+        if (running) await exec("docker", ["pause", container]);
+        try {
+          await mkdir(dirname(outPath), { recursive: true, mode: 0o700 });
+          const tmp = `${outPath}.partial`;
+          await rm(tmp, { force: true });
+          try {
+            await brokerFiles("dump", volume, tmp);
+            await rename(tmp, outPath);
+          } catch (e) {
+            await rm(tmp, { force: true });
+            throw e;
+          }
+        } finally {
+          if (running) await exec("docker", ["unpause", container]).catch(() => "");
+        }
+        return;
+      }
       // Only a running container is paused here: one the caller already paused (quiesce) is left to it.
       const running = (await exec("docker", ["ps", "-q", "--filter", `name=^${container}$`, "--filter", "status=running"])).trim() !== "";
       if (running) await exec("docker", ["pause", container]);
@@ -296,6 +345,10 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
       }
     },
     restoreFiles: async (volume, inPath) => {
+      if (brokerFilesActive()) {
+        await brokerFiles("restore", volume, inPath);
+        return;
+      }
       await exec("docker", filesArchiveDockerArgs(volume, "restore", opts.helperImage), { stdinFrom: inPath });
     },
     databaseBytes: async (store) => {
@@ -307,6 +360,7 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
       );
       return bytesFrom(out, "a database");
     },
-    filesBytes: async (volume) => bytesFrom(await exec("docker", filesSizeDockerArgs(volume, opts.helperImage)), "a files folder"),
+    filesBytes: async (volume) =>
+      bytesFrom(brokerFilesActive() ? await brokerFiles("size", volume) : await exec("docker", filesSizeDockerArgs(volume, opts.helperImage)), "a files folder"),
   };
 }

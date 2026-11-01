@@ -28,7 +28,7 @@ import { readCarriedBinaries, readServiceSource } from "../llm/serviceSource.js"
 import { WasiModuleStore } from "../wasi/moduleStore.js";
 import type { CopyAccessEntry, CopySourceTree } from "../appCopy/wire.js";
 import type { ArchivedApiKey } from "../appApiKeys.js";
-import { sealDataFile } from "./format.js";
+import { sealDataFile, type ArchiveKey } from "./format.js";
 import { createHash } from "node:crypto";
 
 /** How an importing box gets an app's image without the backup carrying it. */
@@ -259,7 +259,7 @@ async function addFile(pack: tar.Pack, name: string, path: string, size: number)
 
 export async function buildServerArchive(
   deps: ArchiveBuildDeps,
-  args: { archiveId: string; key: Buffer; outPath: string; onProgress?: (done: number, total: number, appName: string) => void },
+  args: { archiveId: string; key: ArchiveKey; outPath: string; onProgress?: (done: number, total: number, appName: string) => void },
 ): Promise<ArchiveBuildResult> {
   const now = deps.now ?? (() => Date.now());
   const log = deps.log ?? (() => {});

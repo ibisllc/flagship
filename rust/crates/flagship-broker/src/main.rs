@@ -11,6 +11,10 @@
 //! - `FLAGSHIP_BROKER_ENGINE_FILE` (`/var/lib/flagship/engine-active`), read for every v1 request;
 //!   `FLAGSHIP_BROKER_ENGINE` (`podman` or `docker`, default `docker`) only while that file is absent
 //!
+//! `flagship-broker check-tar --profile volume|archive [--max-entries n …]` reads a tar on stdin and
+//! prints one verdict line (tarcheck.rs, the shared archive-extraction vectors); exit 0 when the
+//! archive passes, 1 when it is refused. It writes nothing.
+//!
 //! `flagship-broker check-v1` reads v1 requests as JSON lines on stdin and prints each verdict
 //! (the shared-vector shape, conformance.rs); it executes nothing.
 //! - `FLAGSHIP_BROKER_AUTHORITY_KEYS`: `keyId:hex32,…`, the pinned capability authorities. With
@@ -125,6 +129,38 @@ fn check_v1() -> Result<(), String> {
     Ok(())
 }
 
+/// `check-tar`: the archive extraction check over stdin; one JSON verdict on stdout.
+fn check_tar(args: &[String]) -> Result<bool, String> {
+    let mut profile = flagship_broker::tarcheck::Profile::Volume;
+    let mut limits = flagship_broker::tarcheck::Limits::default();
+    let mut it = args.iter();
+    while let Some(flag) = it.next() {
+        let value = it.next().ok_or(format!("{flag} needs a value"))?;
+        let n = || {
+            value
+                .parse::<u64>()
+                .map_err(|_| format!("{flag} takes a number"))
+        };
+        match flag.as_str() {
+            "--profile" => {
+                profile = flagship_broker::tarcheck::Profile::parse(value)
+                    .ok_or("--profile is volume or archive")?;
+            }
+            "--max-entries" => limits.max_entries = n()?,
+            "--max-entry-bytes" => limits.max_entry_bytes = n()?,
+            "--max-total-bytes" => limits.max_total_bytes = n()?,
+            "--max-name-bytes" => limits.max_name_bytes = n()?,
+            "--max-pax-bytes" => limits.max_pax_bytes = n()?,
+            "--max-name-total-bytes" => limits.max_name_total_bytes = n()?,
+            _ => return Err(format!("unknown flag {flag}")),
+        }
+    }
+    let v = flagship_broker::tarcheck::check(std::io::stdin().lock(), profile, &limits);
+    let mut out = std::io::stdout().lock();
+    writeln!(out, "{}", flagship_broker::tarcheck::verdict_json(&v)).map_err(|e| e.to_string())?;
+    Ok(v.is_ok())
+}
+
 /// No secrets are handed to the broker yet (core's effect port is not written).
 #[derive(Debug)]
 struct NoSecrets;
@@ -182,6 +218,13 @@ fn run() -> Result<(), String> {
     }
     if cmd == "check-v1" {
         return check_v1();
+    }
+    if cmd == "check-tar" {
+        let args: Vec<String> = std::env::args().skip(2).collect();
+        if !check_tar(&args)? {
+            std::process::exit(1);
+        }
+        return Ok(());
     }
     if cmd != "serve" {
         return Err(format!("unknown command {cmd}"));

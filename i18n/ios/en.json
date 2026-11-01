@@ -1073,6 +1073,10 @@
     "en": "Kept the previous start-up unlock",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:184"
   },
+  "Turned off this server's extra sandbox after it kept failing to start": {
+    "en": "Turned off this server's extra sandbox after it kept failing to start",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:185"
+  },
   "Event": {
     "en": "Event",
     "ctx": "apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift:195"
@@ -12774,5 +12778,105 @@
     "en": "A server shared with you is asking you to unlock it.",
     "ctx": "packages/control-plane/src/pushBridge.ts (APNs alert, shown by iOS from loc-key)",
     "manual": true
+  },
+  "Your server runs the official Node.js binary from nodejs.org. Flagship publishes its exact checksum, signed by Flagship's release keys.": {
+    "en": "Your server runs the official Node.js binary from nodejs.org. Flagship publishes its exact checksum, signed by Flagship's release keys.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:20"
+  },
+  "Node.js": {
+    "en": "Node.js",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:24"
+  },
+  "Platform": {
+    "en": "Platform",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:25"
+  },
+  "Flagship signature": {
+    "en": "Flagship signature",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:27"
+  },
+  "Node's signature": {
+    "en": "Node's signature",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:29"
+  },
+  "Check it yourself": {
+    "en": "Check it yourself",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:49"
+  },
+  "Details": {
+    "en": "Details",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:46"
+  },
+  "Expected checksum (flagshipserver.com)": {
+    "en": "Expected checksum (flagshipserver.com)",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:62"
+  },
+  "Computed on this server": {
+    "en": "Computed on this server",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:64"
+  },
+  "Expected executable": {
+    "en": "Expected executable",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:66"
+  },
+  "Official source": {
+    "en": "Official source",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:68"
+  },
+  "Run these on any computer to check the same facts without trusting this app.": {
+    "en": "Run these on any computer to check the same facts without trusting this app.",
+    "ctx": "apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift:128"
+  },
+  "Verified": {
+    "en": "Verified",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:114"
+  },
+  "Not published yet": {
+    "en": "Not published yet",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:115"
+  },
+  "Can't reach flagshipserver.com": {
+    "en": "Can't reach flagshipserver.com",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:116"
+  },
+  "Checked when this release was built": {
+    "en": "Checked when this release was built",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:124"
+  },
+  "Not checked": {
+    "en": "Not checked",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:125"
+  },
+  "Matches": {
+    "en": "Matches",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:133"
+  },
+  "Does not match": {
+    "en": "Does not match",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:134"
+  },
+  "This server runs a Node.js that is not the one its release locks.": {
+    "en": "This server runs a Node.js that is not the one its release locks.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:140"
+  },
+  "Flagship's signed runtime manifest was refused (%@).": {
+    "en": "Flagship's signed runtime manifest was refused (%@).",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:144"
+  },
+  "This release locks a newer Node.js than the published manifest.": {
+    "en": "This release locks a newer Node.js than the published manifest.",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:147"
+  },
+  "1. Node's signed checksum list": {
+    "en": "1. Node's signed checksum list",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:160"
+  },
+  "2. Flagship's signed manifest": {
+    "en": "2. Flagship's signed manifest",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:169"
+  },
+  "3. On the server (with debug access on)": {
+    "en": "3. On the server (with debug access on)",
+    "ctx": "apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift:176"
   }
 }

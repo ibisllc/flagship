@@ -20,12 +20,15 @@ use flagship_core::apps::{
 use flagship_core::journal::Journal;
 use flagship_core::schedule::Capacity;
 
-static CLOCK: AtomicU64 = AtomicU64::new(1_800_000_000_000);
+// One clock per test thread: a shared one let a parallel test's advance() run out another test's backoff.
+thread_local! {
+    static CLOCK: std::cell::Cell<u64> = const { std::cell::Cell::new(1_800_000_000_000) };
+}
 fn clock() -> u64 {
-    CLOCK.load(Ordering::SeqCst)
+    CLOCK.with(|c| c.get())
 }
 fn advance(ms: u64) {
-    CLOCK.fetch_add(ms, Ordering::SeqCst);
+    CLOCK.with(|c| c.set(c.get() + ms));
 }
 
 const NET: &str = "flagship-apps";

@@ -48,6 +48,15 @@ export const OPS = [
   "provision.swk",
   "provision.cgk",
   "policy.rename",
+  "archive.pool.add",
+  "archive.pool.list",
+  "archive.create",
+  "archive.import",
+  "archive.sealFrame",
+  "archive.openFrame",
+  "archive.sealBody",
+  "archive.openBody",
+  "archive.close",
 ] as const;
 export type Op = (typeof OPS)[number];
 

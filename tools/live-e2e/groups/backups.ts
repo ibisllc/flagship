@@ -5,9 +5,12 @@
 // (4 MiB pieces and an approved browser link with Range), which imports onto
 // home2 waiting for it; a schedule makes one by itself and retention drops
 // the older; and the policy's limit refuses new apps until it is lifted.
-import { createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
+  BACKUP_DATA_MAGIC,
+  backupFrameAad,
+  backupFrameNonce,
   deriveServerArchiveKey,
   openBackupWithAccountKey,
   parseBackupFile,
@@ -19,15 +22,51 @@ import {
 } from "@flagship/protocol";
 import { splitBundle } from "../lib/bundle.js";
 import { pair, type Account, type Box } from "../lib/fleet.js";
-import { assert, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
+import { SkipError, assert, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import { buildAndDeploy, finishAndWaitLive, mcpOpen } from "../lib/mcpBuild.js";
-import { armRestore, uploadAndRestore } from "../lib/restore.js";
+import { RESTORE_CHUNK, armRestore, uploadAndRestore } from "../lib/restore.js";
 import { installWhoami } from "./gating.js";
 import { depositKeys } from "./migrate.js";
 import { pyAppFiles } from "./runtimes.js";
 import type { Group } from "./types.js";
 
 const APP = "bkapp";
+
+/** One ustar header block (no data), any name: a crafted archive no tar writer would make. */
+function tarHeader(name: string, size: number): Buffer {
+  const h = Buffer.alloc(512);
+  h.write(name, 0, "latin1");
+  h.write("0000644\0", 100, "latin1");
+  h.write("0000000\0", 108, "latin1");
+  h.write("0000000\0", 116, "latin1");
+  h.write(size.toString(8).padStart(11, "0") + "\0", 124, "latin1");
+  h.write("00000000000\0", 136, "latin1");
+  h.write("0", 156, "latin1");
+  h.write("ustar\0", 257, "latin1");
+  h.write("00", 263, "latin1");
+  h.fill(0x20, 148, 156);
+  let sum = 0;
+  for (const b of h) sum += b;
+  h.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, "latin1");
+  return h;
+}
+
+/**
+ * A data file sealed exactly as a box seals one (one frame, the last), whose tar holds a manifest
+ * and an entry that climbs out of the restore's folder. Integrity is fine; the content is hostile.
+ */
+function craftedArchive(archiveId: string, key: Buffer): Buffer {
+  const manifest = Buffer.from(JSON.stringify({ v: 1, archiveId, apps: [] }));
+  const pad = (b: Buffer) => Buffer.concat([b, Buffer.alloc((512 - (b.length % 512)) % 512)]);
+  const evil = Buffer.from("not yours\n");
+  const tar = Buffer.concat([tarHeader("manifest.json", manifest.length), pad(manifest), tarHeader("../../etc/flagship-evil", evil.length), pad(evil), Buffer.alloc(1024)]);
+  const c = createCipheriv("aes-256-gcm", key, backupFrameNonce(0));
+  c.setAAD(backupFrameAad(archiveId, true));
+  const body = Buffer.concat([c.update(tar), c.final(), c.getAuthTag()]);
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(body.length);
+  return Buffer.concat([Buffer.from(BACKUP_DATA_MAGIC, "utf8"), len, body]);
+}
 const GiB = 1024 ** 3;
 
 function appFiles(): Record<string, string> {
@@ -148,11 +187,13 @@ export const backups: Group = {
       return "206, same bytes";
     });
 
+    let restoredSession: string | null = null;
     if (downloaded && data && contentKey) {
       const d = data as Buffer;
       const key = contentKey as Uint8Array;
       await rec.check("home2, waiting for this backup, imports the data part and runs the app with its row and file", async () => {
         const session = await armRestore(acct, b2, { archiveId: sv.archiveId, bytes: sv.bytes, sha256: sv.sha256 });
+        restoredSession = session;
         const done = await uploadAndRestore(b2, session, sv.archiveId, d, key);
         let r = await tryHttp(`https://${APP}.${b2.fqdn}/read`);
         for (let i = 0; i < 36 && r.status !== 200; i++) {
@@ -163,6 +204,52 @@ export const backups: Group = {
         return short(done, 160);
       });
     }
+
+    // Plan G6: on an arch-v2 box the keys of a backup live in flagship-keyd, an app's files folder is
+    // read and written by the broker, and archives are checked by the Rust extraction checker. B2 is
+    // used by no later group, so it may be left waiting for the crafted backup below.
+    await rec.check("arch-v2: the backup and the restore went through keyd and the broker, and a crafted archive is refused by the Rust check", async () => {
+      if ((process.env.GYM_BOX_STACK || "arch-v2") !== "arch-v2") throw new SkipError("classic pass: keys and files stay in the daemon there");
+      const mine = (await list()).isolation;
+      if (!mine) throw new SkipError("the box does not report where its backup effects ran (older than this release)");
+      assert(mine.keys === "keyd" && mine.counts?.keydArchives >= 1 && mine.counts?.keydFrames >= 1, `home keys: ${short(mine)}`);
+      assert(mine.files === "broker" && mine.counts?.brokerFiles >= 1, `home files: ${short(mine)}`);
+      assert(restoredSession, "the restore onto home2 did not run");
+      const rs = { "x-flagship-session": restoredSession as string };
+      const theirs = (await http(`https://${b2.fqdn}/api/screens/server-restore`, { headers: rs })).json?.isolation;
+      assert(theirs?.keys === "keyd" && theirs.counts?.keydArchives >= 1, `home2 keys: ${short(theirs)}`);
+      assert(theirs.files === "broker" && theirs.counts?.brokerFiles >= 1, `home2 files: ${short(theirs)}`);
+      assert(theirs.extraction === "rust" && theirs.counts?.tarChecksRust >= 1, `home2 checker: ${short(theirs)}`);
+
+      const archiveId = randomBytes(16).toString("hex");
+      const ckey = randomBytes(32);
+      const crafted = craftedArchive(archiveId, ckey);
+      const session = await armRestore(acct, b2, { archiveId, bytes: crafted.length, sha256: createHash("sha256").update(crafted).digest("hex") });
+      const s2 = { "x-flagship-session": session };
+      const st = await postJson(`https://${b2.fqdn}/api/screens/server-restore/start`, { archiveId, bytes: crafted.length }, s2);
+      assert(st.status === 202, `start ${st.status}: ${short(st.text)}`);
+      for (let offset = 0; offset < crafted.length; offset += RESTORE_CHUNK) {
+        const r = await http(`https://${b2.fqdn}/api/screens/server-restore/chunk?offset=${offset}`, {
+          method: "POST",
+          headers: { "content-type": "application/octet-stream", ...s2 },
+          body: crafted.subarray(offset, offset + RESTORE_CHUNK),
+        });
+        assert(r.status === 200, `chunk ${r.status}: ${short(r.text)}`);
+      }
+      const c = await postJson(`https://${b2.fqdn}/api/screens/server-restore/commit`, { key: ckey.toString("hex") }, s2);
+      assert(c.status === 202, `commit ${c.status}: ${short(c.text)}`);
+      let job: { state?: string; reason?: string } | undefined;
+      for (let i = 0; i < 30; i++) {
+        await sleep(3000);
+        job = (await tryHttp(`https://${b2.fqdn}/api/screens/server-restore`, { headers: s2 })).json?.restore;
+        if (job?.state === "failed" || job?.state === "done") break;
+      }
+      assert(job?.state === "failed", `the crafted archive was not refused: ${short(job)}`);
+      assert(/extraction check \(rust\).*\(path-escape\)/.test(job.reason ?? ""), `refused, but not by the Rust check: ${short(job.reason, 200)}`);
+      const after = (await http(`https://${b2.fqdn}/api/screens/server-restore`, { headers: s2 })).json?.isolation;
+      assert(after?.lastRefusal?.code === "path-escape" && after.lastRefusal.checker === "rust", `lastRefusal ${short(after?.lastRefusal)}`);
+      return `home keyd ${mine.counts.keydArchives}/${mine.counts.keydFrames}, broker ${mine.counts.brokerFiles}; home2 broker ${theirs.counts.brokerFiles}, rust checks ${theirs.counts.tarChecksRust}; crafted: ${short(job.reason, 90)}`;
+    });
 
     await rec.check("a daily schedule 10 minutes ahead makes a backup by itself, and keep-1-daily drops the older one", async () => {
       const keysBefore = Number((await list()).keysLeft);

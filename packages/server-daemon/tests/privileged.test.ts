@@ -203,7 +203,7 @@ describe("installing the broker", () => {
   it("switches the daemon only once the broker answers", async () => {
     const up = base({ brokerAnswers: async () => true });
     expect(await installPrivd(up.o)).toBe("switched");
-    expect(up.written).toEqual(["/etc/systemd/system/flagship-privd.service", "/etc/systemd/system/flagship-daemon.service.d/40-privd.conf"]);
+    expect(up.written).toEqual(["/etc/systemd/system/flagship-privd.service", "/etc/systemd/system/flagship-daemon.service.d/40-privd.conf", "/etc/systemd/system/flagship-daemon.service.d/45-hardening.conf"]);
     expect(up.handedOver()).toBe(true);
     expect(up.runs).toContain("systemctl restart flagship-privd.service");
 

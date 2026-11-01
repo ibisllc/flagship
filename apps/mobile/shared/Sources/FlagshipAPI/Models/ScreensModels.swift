@@ -98,6 +98,8 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public var debugAccess: DebugAccessView? = nil
     /// Each app's disk use against its limits and the disk brake (docs/app-runtimes.md 5.3). Absent from older daemons.
     public var storage: ServerStorage? = nil
+    /// The Node.js the box runs and how it checks out (RuntimeVerificationModel.swift). Absent from older daemons.
+    public var runtime: RuntimeVerificationView? = nil
 }
 
 /// Owner debug access as the box reports it (docs/recipe-delivery-and-remote-install.md

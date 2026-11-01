@@ -240,6 +240,8 @@ pub struct Built {
     pub sha: String,
     pub trust: Trust,
     pub commit: String,
+    /// The exact runtime lock text inside the artifact, when it carries one.
+    pub lock_text: Option<String>,
 }
 
 pub struct Spec {
@@ -288,6 +290,7 @@ pub fn build(spec: &Spec) -> Built {
     if let Some(omit) = spec.omit {
         entries.retain(|e| !matches!(e, Entry::File(n, _, _) if *n == omit));
     }
+    let mut lock_text = None;
     if let Some(honest) = spec.runtime_lock {
         let digest = if honest {
             sha256_hex(spec.node_body)
@@ -306,6 +309,7 @@ pub fn build(spec: &Spec) -> Built {
             lock.to_string().into_bytes(),
             0o644,
         ));
+        lock_text = Some(lock.to_string());
     }
     let artifact_bytes = tar_gz(&entries);
     let sha = sha256_hex(&artifact_bytes);
@@ -379,7 +383,40 @@ pub fn build(spec: &Spec) -> Built {
         sha,
         trust,
         commit,
+        lock_text,
     }
+}
+
+/// A runtime manifest file signed by signer `seed` (classical), for the lock text given.
+pub fn signed_runtime_manifest(
+    seed: u8,
+    lock_text: &str,
+    version: &str,
+    floor: &str,
+    sequence: u64,
+    valid_until: u64,
+    revoked: &[&str],
+) -> String {
+    let m = flagship_updater::runtime::manifest::RuntimeManifest {
+        version: version.into(),
+        lock_sha256: sha256_hex(lock_text.as_bytes()),
+        security_floor: floor.into(),
+        release: "0.3".into(),
+        sequence,
+        issued_at: 1_700_000_000_000,
+        valid_until,
+        revoked_signers: revoked.iter().map(|s| (*s).to_owned()).collect(),
+    };
+    let s = Signer::new(seed);
+    let sig = s.ed.sign(m.canonical().unwrap().as_bytes());
+    serde_json::json!({
+        "manifest": {"runtime": "node", "version": m.version, "lockSha256": m.lock_sha256, "securityFloor": m.security_floor,
+            "release": m.release, "sequence": m.sequence, "issuedAt": m.issued_at, "validUntil": m.valid_until,
+            "revokedSigners": m.revoked_signers},
+        "signatures": [{"keyHex": s.ed_hex(), "signatureHex": hex(&sig.to_bytes())}],
+        "lockJson": lock_text,
+    })
+    .to_string()
 }
 
 pub fn temp_paths(t: &Tmp) -> Paths {
@@ -388,6 +425,7 @@ pub fn temp_paths(t: &Tmp) -> Paths {
         current: t.path().join("opt-flagship"),
         state: t.path().join("state"),
         bin: t.path().join("bin"),
+        systemd: t.path().join("systemd"),
     }
 }
 
@@ -402,5 +440,6 @@ pub fn install_args(b: &Built, paths: &Paths) -> InstallArgs {
         node_floor: "22.0.0".into(),
         min_sequence: None,
         paths: paths.clone(),
+        runtime_manifest: None,
     }
 }

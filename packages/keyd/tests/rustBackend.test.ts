@@ -844,3 +844,67 @@ describe.skipIf(!HAVE_BIN)("master evidence in the Rust keyd", () => {
   });
 });
 
+
+describe.skipIf(!HAVE_BIN)("server-archive keys in the Rust keyd (plan G6)", () => {
+  it("gives the TS backend's answers, codes and messages, and identical frames", async () => {
+    const k = await startRust();
+    const t = mkdtempSync(join(tmpdir(), "tkeyd-archive-"));
+    const service = new KeydService({ identitySeed: SEED, swk: SWK, cgk: CGK, archivePoolPath: join(t, "archive-keks.json") });
+    const server = new KeydServer({ socketPath: join(t, "k.sock"), service, rateLimits: OPEN_LIMITS });
+    await server.start();
+    try {
+      const rc = await client(k.sock);
+      const tc = await client(join(t, "k.sock"));
+      const both = async (op: string, args: Record<string, unknown>) => {
+        const run = async (c: KeydClient) => {
+          try {
+            return { ok: true as const, r: await c.call(op as never, args) };
+          } catch (e) {
+            const err = e as { code?: string; message?: string };
+            return { ok: false as const, code: err.code, message: err.message };
+          }
+        };
+        return [await run(rc), await run(tc)] as const;
+      };
+      const id = "00112233445566778899aabbccddeeff";
+      const key = "40".repeat(32);
+      for (const [op, args] of [
+        ["archive.import", { archiveId: "XY", key }],
+        ["archive.import", { archiveId: id, key: "00" }],
+        ["archive.import", { archiveId: id, key, extra: 1 }],
+        ["archive.pool.add", { keys: [] }],
+        ["archive.pool.add", { keys: [{ archiveId: id }] }],
+        ["archive.create", { archiveId: id }],
+        ["archive.sealFrame", { handle: "nope", index: 0, last: true, plain: "" }],
+        ["archive.openBody", { handle: "nope", nonce: "00", sealed: "00" }],
+        ["archive.close", { handle: "nope" }],
+        ["archive.pool.list", {}],
+      ] as const) {
+        const [r, s] = await both(op, args as Record<string, unknown>);
+        expect(r, `${op} ${JSON.stringify(args)}`).toEqual(s);
+      }
+      // The same key and frame index give the same frame from either backend.
+      const [hr, ht] = await both("archive.import", { archiveId: id, key });
+      expect(hr.ok && ht.ok).toBe(true);
+      const fr = await rc.call("archive.sealFrame" as never, { handle: (hr as { r: { handle: string } }).r.handle, index: 0, last: true, plain: hex(enc("one frame")) });
+      const ft = await tc.call("archive.sealFrame" as never, { handle: (ht as { r: { handle: string } }).r.handle, index: 0, last: true, plain: hex(enc("one frame")) });
+      expect(fr.frame).toBe(ft.frame);
+      const again = await both("archive.sealFrame", { handle: "x", index: 0, last: true, plain: "" });
+      expect(again[0]).toEqual(again[1]);
+      // The pool is the same file format: what one wrote the other reads.
+      await rc.call("archive.pool.add" as never, { keys: [{ archiveId: id, kekHex: "3e".repeat(32) }] });
+      const pool = JSON.parse(readFileSync(join(k.dir, "archive-keks.json"), "utf8")) as { keys: Array<{ archiveId: string }> };
+      expect(pool.keys.map((x) => x.archiveId)).toEqual([id]);
+      expect(statSync(join(k.dir, "archive-keks.json")).mode & 0o077).toBe(0);
+      const made = await rc.call("archive.create" as never, { archiveId: id });
+      expect((made.slot as { kind: string }).kind).toBe("account");
+      expect(JSON.parse(readFileSync(join(k.dir, "archive-keks.json"), "utf8")).keys).toEqual([]);
+      rc.close();
+      tc.close();
+    } finally {
+      await server.stop();
+      rmSync(t, { recursive: true, force: true });
+      await k.cleanup();
+    }
+  });
+});

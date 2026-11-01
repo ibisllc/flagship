@@ -47,6 +47,7 @@ import type { AppEnvStore } from "../serviceEnvStore.js";
 import { writeSourceTree } from "../llm/serviceSource.js";
 import type { AppCopyOps } from "./ops.js";
 import { makeLanFetch, type LanFetch } from "./lanFetch.js";
+import { checkTarFile } from "../serverArchive/tarCheck.js";
 import { AppCopyStore, type CopyHeld, type CopyRecord } from "./store.js";
 import {
   APP_COPY_CHUNK_BYTES,
@@ -417,7 +418,12 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
             if (path) await opts.ops.restoreDatabase(cred, path);
           }
           const filesPath = files.get("files");
-          if (filesPath && data?.files) await opts.ops.restoreFiles(data.files.volume, filesPath);
+          if (filesPath && data?.files) {
+            // Another box's tar: checked before anything unpacks it (and again by the broker on an arch-v2 box).
+            const v = await checkTarFile(filesPath, "volume");
+            if (!v.ok) throw new Error(`its files were not copied: the archive was refused by the extraction check (${v.checker}): ${v.message} (${v.code})`);
+            await opts.ops.restoreFiles(data.files.volume, filesPath);
+          }
           opts.store.setProgress(rec.copyId, P.start);
         },
       });

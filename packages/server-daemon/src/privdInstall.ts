@@ -1,12 +1,15 @@
 import { existsSync } from "node:fs";
-import { chmod, chown, lchown, lstat, mkdir, readFile, readdir } from "node:fs/promises";
+import { chmod, chown, lchown, lstat, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { PrivdClient } from "@flagship/privd";
 import {
+  DAEMON_HARDENING_DROPIN_PATH,
   DAEMON_USER,
+  HARDENING_STATE_DIR,
   PRIVD_DAEMON_DROPIN_PATH,
   PRIVD_HELPER,
   PRIVD_UNIT_PATH,
+  daemonHardeningDropIn,
   daemonPrivdDropIn,
   privdSetupScript,
   privdUnit,
@@ -82,6 +85,7 @@ export async function installPrivd(o: PrivdInstallOptions): Promise<PrivdInstall
     }
     await (o.handOver ?? (() => handOverState({ log })))();
     await write(PRIVD_DAEMON_DROPIN_PATH, daemonPrivdDropIn(helper), 0o644);
+    await write(DAEMON_HARDENING_DROPIN_PATH, daemonHardeningDropIn(), 0o644);
     await o.run("systemctl", ["daemon-reload"]);
     // The Rust keyd admits callers by uid (SO_PEERCRED), and the daemon's new uid joins its list
     // only when keyd selects again; keyd's restart restarts this daemon too, which is what follows.
@@ -94,6 +98,93 @@ export async function installPrivd(o: PrivdInstallOptions): Promise<PrivdInstall
     log(`[privd] could not install: ${(e as Error).message}; the daemon keeps running as root`);
     return "failed";
   }
+}
+
+/**
+ * Keep the unprivileged daemon's sandbox drop-in current, as root (the "update-guard" setup step, every
+ * boot): present exactly when the daemon runs as `flagship` (its privd drop-in is there), so a box that
+ * gave up root before the sandbox existed gets it, and a root daemon never runs under it. True when it
+ * changed; it applies from the daemon's next start.
+ */
+export async function refreshDaemonHardening(o: {
+  run: (cmd: string, args: string[]) => Promise<unknown>;
+  read?: (path: string) => Promise<string | null>;
+  write?: (path: string, content: string, mode: number) => Promise<void>;
+  remove?: (path: string) => Promise<void>;
+  onLog?: (m: string) => void;
+  dataDir?: string;
+  hardeningStateDir?: string;
+}): Promise<boolean> {
+  const read = o.read ?? (async (p) => await readFile(p, "utf8").catch(() => null));
+  const write = o.write ?? (async (p, c, mode) => { await mkdir(dirname(p), { recursive: true }); await writeFileDurable(p, c, mode); });
+  const remove = o.remove ?? (async (p) => { await rm(p, { force: true }); });
+  const disabledPath = join(o.hardeningStateDir ?? HARDENING_STATE_DIR, "disabled.json");
+  const unprivileged = (await read(PRIVD_DAEMON_DROPIN_PATH))?.includes(`User=${DAEMON_USER}`) === true;
+  // The update guard took the sandbox away after a crash loop under it: not again for the same release.
+  const disabled = sandboxDisabledRecord(await read(disabledPath));
+  const current = commitOf(await read(join(o.dataDir ?? "/var/flagship", "artifact-current.json")));
+  const heldOff = disabled !== null && (disabled.commit === "" || disabled.commit === current);
+  const have = await read(DAEMON_HARDENING_DROPIN_PATH);
+  const want = unprivileged && !heldOff ? daemonHardeningDropIn() : null;
+  if (have === want) return false;
+  if (want === null) await remove(DAEMON_HARDENING_DROPIN_PATH);
+  else {
+    await write(DAEMON_HARDENING_DROPIN_PATH, want, 0o644);
+    if (disabled) await remove(disabledPath);
+  }
+  await o.run("systemctl", ["daemon-reload"]);
+  o.onLog?.(`[privd] the daemon's sandbox drop-in ${want === null ? "removed (the daemon runs as root)" : "updated"}; it applies from the next start`);
+  return true;
+}
+
+export interface SandboxDisabled {
+  at: number;
+  commit: string;
+  starts: number;
+}
+
+/** The guard's record of taking the sandbox away (world-readable, root-written), or null. */
+export function sandboxDisabledRecord(text: string | null): SandboxDisabled | null {
+  if (!text) return null;
+  try {
+    const j = JSON.parse(text) as Partial<SandboxDisabled>;
+    if (typeof j.at !== "number" || typeof j.starts !== "number") return null;
+    return { at: j.at, commit: typeof j.commit === "string" && /^[0-9a-f]{40}$/.test(j.commit) ? j.commit : "", starts: j.starts };
+  } catch {
+    return null;
+  }
+}
+
+function commitOf(text: string | null): string | null {
+  try {
+    const c = text ? (JSON.parse(text) as { commit?: unknown }).commit : null;
+    return typeof c === "string" ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Says once, in Activity, that the guard removed the sandbox (the daemon reads the record; it cannot write it). */
+export async function noteSandboxDisabled(o: {
+  note: (kind: string, detail: string, extra?: { ok?: boolean }) => void;
+  dataDir: string;
+  hardeningStateDir?: string;
+  read?: (path: string) => Promise<string | null>;
+  write?: (path: string, content: string) => Promise<void>;
+}): Promise<boolean> {
+  const read = o.read ?? (async (p) => await readFile(p, "utf8").catch(() => null));
+  const write = o.write ?? (async (p, c) => await writeFileDurable(p, c, 0o600));
+  const r = sandboxDisabledRecord(await read(join(o.hardeningStateDir ?? HARDENING_STATE_DIR, "disabled.json")));
+  if (!r) return false;
+  const marker = join(o.dataDir, "sandbox-disabled-noted");
+  if ((await read(marker))?.trim() === String(r.at)) return false;
+  o.note(
+    "server.sandbox.removed",
+    `The server's program kept failing to start under its extra sandbox (${r.starts} quick starts in a row), so the sandbox was turned off for this release. The server works as before with less isolation; the next release turns it back on.`,
+    { ok: false },
+  );
+  await write(marker, String(r.at));
+  return true;
 }
 
 async function brokerAnswers(socket: string, timeoutMs: number): Promise<boolean> {

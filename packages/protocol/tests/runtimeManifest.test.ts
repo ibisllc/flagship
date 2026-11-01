@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { canonicalRuntimeManifest, verifyRuntimeManifest, type RuntimeManifest } from "../src/runtimeManifest.js";
+import { canonicalRuntimeManifest, checkReleaseLock, verifyRuntimeManifest, type RuntimeManifest } from "../src/runtimeManifest.js";
 
 const vectors = JSON.parse(readFileSync(new URL("../test-vectors/runtime-manifest/vectors.json", import.meta.url), "utf8"));
 
@@ -24,7 +24,7 @@ describe("runtime manifest vectors", () => {
   it("the canonical bytes are the documented form", () => {
     const m = vectors.cases[0].manifest as RuntimeManifest;
     expect(Buffer.from(canonicalRuntimeManifest(m)).toString()).toBe(vectors.canonicalV1);
-    expect(vectors.canonicalV1).toMatch(/^flagship\/runtime-manifest\/v1\|node\|24\.22\.1\|[0-9a-f]{64}\|24\.22\.1\|12\|\d+\|\d+\|-$/);
+    expect(vectors.canonicalV1).toMatch(/^flagship\/runtime-manifest\/v1\|node\|24\.22\.1\|[0-9a-f]{64}\|24\.22\.1\|0\.3\|12\|\d+\|\d+\|-$/);
   });
 
   it("refuses to canonicalise a malformed manifest", () => {
@@ -42,4 +42,14 @@ describe("runtime manifest vectors", () => {
     const b = "b".repeat(40);
     expect(canonicalRuntimeManifest({ ...m, revokedSigners: [b, a] })).toEqual(canonicalRuntimeManifest({ ...m, revokedSigners: [a, b] }));
   });
+});
+
+describe("a verified manifest binds the endorsed release's lock", () => {
+  for (const c of vectors.releaseLock) {
+    it(c.name, () => {
+      const r = checkReleaseLock(c.manifest as RuntimeManifest, c.release);
+      expect(r.ok).toBe(c.expect.ok);
+      if (!r.ok) expect(r.code).toBe(c.expect.code);
+    });
+  }
 });

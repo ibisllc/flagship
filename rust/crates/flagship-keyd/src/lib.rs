@@ -5,6 +5,7 @@
 //! it: peer-credential caller checks, no core dumps, and zeroized key memory.
 
 pub mod acme;
+pub mod archive;
 pub mod crypto;
 pub mod der;
 pub mod files;

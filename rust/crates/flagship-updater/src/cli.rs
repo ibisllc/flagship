@@ -9,12 +9,15 @@
 //! flagship-updater install --manifest F --artifact F --trust-keys K --threshold N --expect-sha256 H
 //!                          --expect-commit C --arch A --node-floor V [--min-sequence N] [--pq-key-ids K]
 //!                          [--legacy-manifests D] [--releases D] [--current P] [--state D] [--bin D]
-//! flagship-updater restore <commit> [--releases D] [--current P] [--state D] [--bin D]
+//!                          [--runtime-manifest F]
+//! flagship-updater restore <commit> [--releases D] [--current P] [--state D] [--bin D] [--systemd D]
 //! flagship-updater guard     [--max-starts N] [--releases D] [--current P] [--state D] [--bin D]
 //! flagship-updater reconcile [--releases D] [--current P] [--state D] [--bin D]
-//! flagship-updater runtime verify  --lock F --target T --archive F --shasums F --shasums-sig F
-//! flagship-updater runtime install --lock F --target T [--runtimes D] (--archive F --shasums F --shasums-sig F | --fetch [--cache D])
-//! flagship-updater runtime status  --lock F --target T [--runtimes D]
+//! flagship-updater runtime verify  --lock F --target T --archive F --shasums F --shasums-sig F [MANIFEST]
+//! flagship-updater runtime install --lock F --target T [--runtimes D] (--archive F --shasums F --shasums-sig F | --fetch [--cache D]) [MANIFEST]
+//! flagship-updater runtime status  --lock F --target T [--runtimes D] [--executable P] [MANIFEST]
+//!     MANIFEST = --manifest F --trust F [--state D] [--now MS]: the signed runtime manifest must name exactly this
+//!     lock before anything is fetched or unpacked; `status` only reports what it says and never fails on it.
 //! flagship-updater runtime manifest --manifest F --trust F [--state D] [--now MS]
 //! ```
 
@@ -51,6 +54,7 @@ fn paths_of(f: &HashMap<String, String>) -> Paths {
         current: pick("current", d.current),
         state: pick("state", d.state),
         bin: pick("bin", d.bin),
+        systemd: pick("systemd", d.systemd),
     }
 }
 
@@ -189,6 +193,7 @@ pub fn run(args: &[String], out: &mut dyn Write, err: &mut dyn Write) -> u8 {
                 node_floor: floor,
                 min_sequence: f.get("min-sequence").and_then(|v| v.parse().ok()),
                 paths: paths_of(&f),
+                runtime_manifest: f.get("runtime-manifest").map(PathBuf::from),
             };
             match install(&a) {
                 Ok(i) => {
@@ -306,15 +311,46 @@ fn run_runtime(args: &[String], out: &mut dyn Write, err: &mut dyn Write) -> u8 
     let runtimes = f
         .get("runtimes")
         .map_or_else(|| PathBuf::from("/opt/flagship-runtimes"), PathBuf::from);
+    let state = f
+        .get("state")
+        .map_or_else(|| runtimes.clone(), PathBuf::from);
+    let now = f
+        .get("now")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or_else(now_ms);
     if sub == "status" {
         return match runtime::status(&lock, &target, &runtimes) {
             Ok(s) => {
-                let _ = writeln!(out, "{}", status_json(&s));
+                let mut v = status_value(&s);
+                if let Some(exe) = f.get("executable") {
+                    let digest = crate::verify::sha256_file(std::path::Path::new(exe)).ok();
+                    v.insert("activeExecutable".into(), serde_json::json!({
+                        "path": exe,
+                        "matchesLock": digest.as_deref() == Some(s.expected_executable_sha256.as_str()),
+                        "sha256": digest,
+                    }));
+                }
+                if f.contains_key("manifest") {
+                    v.insert(
+                        "flagshipSignature".into(),
+                        manifest_report(&f, &lock, now, &state),
+                    );
+                }
+                let _ = writeln!(out, "{}", serde_json::Value::Object(v));
                 0
             }
             Err(r) => fail(err, &r),
         };
     }
+    // The published manifest must name exactly this lock before anything is downloaded or unpacked.
+    let gate = if f.contains_key("manifest") {
+        match manifest_gate(&f, &lock, now, &state) {
+            Ok(g) => Some(g),
+            Err(r) => return fail(err, &r),
+        }
+    } else {
+        None
+    };
     let t = match lock.target(&target) {
         Ok(t) => t.clone(),
         Err(r) => return fail(err, &r),
@@ -343,7 +379,13 @@ fn run_runtime(args: &[String], out: &mut dyn Write, err: &mut dyn Write) -> u8 
             }
             Err(r) => fail(err, &r),
         },
-        "install" => match runtime::install(&lock, &t, &archive, &shasums, &sig, &runtimes) {
+        "install" => match runtime::install(&lock, &t, &archive, &shasums, &sig, &runtimes)
+            .and_then(|i| {
+                if let Some(g) = &gate {
+                    runtime::manifest::accept(g, &trust_of(&f)?, now, &state, true)?;
+                }
+                Ok(i)
+            }) {
             Ok(i) => {
                 let _ = writeln!(
                     out,
@@ -395,6 +437,79 @@ fn read_inputs_paths(
             .map_err(|e| crate::refusal::Refusal::with("download-failed", e.to_string()))
     };
     Ok((archive.to_path_buf(), rd(shasums)?, rd(sig)?))
+}
+
+fn trust_of(f: &HashMap<String, String>) -> Result<Trust, crate::refusal::Refusal> {
+    trust_from_file(f.get("trust").ok_or_else(|| {
+        crate::refusal::Refusal::with("bad-trust", "--trust is required with --manifest")
+    })?)
+}
+
+fn read_manifest(
+    f: &HashMap<String, String>,
+) -> Result<runtime::manifest::RuntimeManifestFile, crate::refusal::Refusal> {
+    let path = f.get("manifest").map(String::as_str).unwrap_or_default();
+    runtime::manifest::parse(
+        &std::fs::read_to_string(path)
+            .map_err(|e| crate::refusal::Refusal::with("manifest-unavailable", e.to_string()))?,
+    )
+}
+
+/// Verifies the manifest (without recording it) and requires it to carry exactly `lock`.
+fn manifest_gate(
+    f: &HashMap<String, String>,
+    lock: &runtime::Lock,
+    now: u64,
+    state: &std::path::Path,
+) -> Result<runtime::manifest::RuntimeManifestFile, crate::refusal::Refusal> {
+    let file = read_manifest(f)?;
+    let (v, _) = runtime::manifest::accept(&file, &trust_of(f)?, now, state, false)?;
+    if v.lock_sha256 != lock.sha256 {
+        return Err(crate::refusal::Refusal::with(
+            "runtime-manifest-mismatch",
+            "the signed runtime manifest names another lock",
+        ));
+    }
+    Ok(file)
+}
+
+/// What the owner-facing view shows about the Flagship signature; never an error.
+fn manifest_report(
+    f: &HashMap<String, String>,
+    lock: &runtime::Lock,
+    now: u64,
+    state: &std::path::Path,
+) -> serde_json::Value {
+    let file = match read_manifest(f) {
+        Ok(file) => file,
+        Err(r) => return serde_json::json!({ "status": r.code }),
+    };
+    let m = &file.manifest;
+    let mut b = serde_json::Map::new();
+    b.insert("sequence".into(), m.sequence.into());
+    b.insert("release".into(), m.release.clone().into());
+    b.insert("version".into(), m.version.clone().into());
+    b.insert("lockSha256".into(), m.lock_sha256.clone().into());
+    b.insert("validUntil".into(), m.valid_until.into());
+    b.insert("securityFloor".into(), m.security_floor.clone().into());
+    b.insert("matchesLock".into(), (m.lock_sha256 == lock.sha256).into());
+    match trust_of(f).and_then(|t| runtime::manifest::accept(&file, &t, now, state, false)) {
+        Ok((v, _)) => {
+            b.insert("signers".into(), v.signers.into());
+            b.insert("status".into(), "verified".into());
+        }
+        Err(r) => {
+            b.insert("status".into(), r.code.into());
+        }
+    }
+    serde_json::Value::Object(b)
+}
+
+fn status_value(s: &runtime::RuntimeStatus) -> serde_json::Map<String, serde_json::Value> {
+    match serde_json::from_str(&status_json(s)) {
+        Ok(serde_json::Value::Object(m)) => m,
+        _ => serde_json::Map::new(),
+    }
 }
 
 fn status_json(s: &runtime::RuntimeStatus) -> String {

@@ -277,7 +277,8 @@ import {
   defaultShareSessionPath,
   startShareEndsPoller,
 } from "./shares/sharesHttp.js";
-import { ensureDocker, realAppCopyOps } from "./appCopy/ops.js";
+import { brokerFilesActive, ensureDocker, realAppCopyOps } from "./appCopy/ops.js";
+import { keydCallerFor, keydCustody, type KeydArchiveCustody } from "./serverArchive/archiveKeys.js";
 import { buildAppCopySource } from "./appCopy/source.js";
 import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
@@ -312,7 +313,7 @@ import {
   privdDebugSystem,
   realDebugCommandRunner,
 } from "./debugAccessGate.js";
-import { installPrivd } from "./privdInstall.js";
+import { installPrivd, noteSandboxDisabled } from "./privdInstall.js";
 import { runSetupStep, runsUnprivileged } from "./privileged.js";
 import {
   buildSwkDepositPoller,
@@ -366,6 +367,7 @@ import {
   type UpdateBootGateOutcome,
   type UpdateHealthSignal,
 } from "./updateHealthGate.js";
+import { RuntimeVerification } from "./runtimeVerification.js";
 import { fileUpdateOutcomeStore, onUpdateOutcome, updateOutcomeActivity } from "./updateOutcome.js";
 import { buildReleaseCatalog } from "./updateReleases.js";
 import { runFirstBootUpdate } from "./firstBootUpdate.js";
@@ -940,6 +942,9 @@ async function main(): Promise<void> {
     warnedMarkerPath: `${dataDir}/appliance-disk-key-warning.json`,
     note: (kind, detail) => activityLog.note(kind, detail, { ok: false }),
   }).catch((e: Error) => console.warn(`[disk-key] check failed: ${e.message}`));
+  // The update guard took the sandbox drop-in away after a crash loop under it (privdInstall.ts).
+  void noteSandboxDisabled({ note: (kind, detail, extra) => activityLog.note(kind, detail, extra), dataDir })
+    .catch((e: Error) => console.warn(`[sandbox] notice failed: ${e.message}`));
   // The owner-assigned front page (its own route below, and server backups).
   const frontPage = new FrontPageStore();
   await frontPage.load();
@@ -3322,6 +3327,24 @@ async function loadEntitlementsOrExit(deps: {
  * separate functions. Construction order + side effects are identical to the
  * original inline block.
  */
+/**
+ * Archive keys in flagship-keyd when it runs and answers the archive operations (plan G6); null
+ * keeps them in this process, as on a box without keyd.
+ */
+async function archiveKeyCustody(): Promise<KeydArchiveCustody | null> {
+  const socket = process.env.FLAGSHIP_KEYD_SOCKET;
+  if (!socket || !existsSync(socket)) return null;
+  const caller = keydCallerFor(socket);
+  try {
+    await caller.call("archive.pool.list", {});
+    console.log("[server-archive] backup keys are held by flagship-keyd");
+    return keydCustody(caller);
+  } catch (e) {
+    console.warn(`[server-archive] flagship-keyd does not hold backup keys (${(e as Error).message}); they stay in this process`);
+    return null;
+  }
+}
+
 async function wireRuntimeSurfaces(deps: {
   servingStore: ServingStore | null;
   wildcardGrants: ServerWildcardGrantStore | null;
@@ -4197,7 +4220,10 @@ async function wireRuntimeSurfaces(deps: {
     const platform = runtime.servicePlatform;
     if (!cfg || !platform || !env.serverFqdn) return null;
     const ops = realAppCopyOps();
+    const archiveKeys = await archiveKeyCustody();
     const service = buildServerArchiveService({
+      ...(archiveKeys ? { keys: archiveKeys } : {}),
+      filesThroughBroker: brokerFilesActive,
       dir: join(dataDir, "archives"),
       uploadDir: join(dataDir, "restore-upload"),
       wait: deps.restoreWait,
@@ -4665,6 +4691,16 @@ async function wireRuntimeSurfaces(deps: {
       return () => store.readSync();
     })(),
     serving: deps.servingStore,
+    runtimeVerification: (() => {
+      const rv = RuntimeVerification.open({
+        repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+        dataDir: process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship",
+        controlBaseUrl: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
+        log: (m) => console.log(m),
+      });
+      rv?.start();
+      return rv;
+    })(),
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     filesBytes: runtime.dataProvisioner ? (v: string) => runtime.dataProvisioner!.filesBytes(v) : null,

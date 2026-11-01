@@ -13,7 +13,7 @@
  * of restoring half a server. The box never reads the slots: the owner's app
  * hands it the content key to seal, and again to open.
  */
-import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
+import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { open, readFile, stat, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
@@ -21,15 +21,15 @@ import { pipeline } from "node:stream/promises";
 import {
   BACKUP_DATA_MAGIC,
   BACKUP_FRAME_BYTES,
-  backupFrameAad,
-  backupFrameNonce,
-  openBackupBody,
+  BACKUP_MAGIC,
+  BACKUP_VERSION,
+  parseBackupBody,
   parseBackupFile,
-  sealBackupFile,
   serializeBackupFile,
   type BackupBody,
   type BackupSlot,
 } from "@flagship/protocol";
+import { localCipher, type ArchiveCipher } from "./archiveKeys.js";
 
 export const ARCHIVE_FRAME_BYTES = BACKUP_FRAME_BYTES;
 const TAG_BYTES = 16;
@@ -38,25 +38,17 @@ const MAGIC = Buffer.from(BACKUP_DATA_MAGIC, "utf8");
 
 export class ArchiveError extends Error {}
 
-function sealFrame(key: Buffer, archiveId: string, index: number, last: boolean, plain: Buffer): Buffer {
-  const c = createCipheriv("aes-256-gcm", key, backupFrameNonce(index));
-  c.setAAD(backupFrameAad(archiveId, last));
-  const body = Buffer.concat([c.update(plain), c.final(), c.getAuthTag()]);
-  const len = Buffer.alloc(4);
-  len.writeUInt32BE(body.length);
-  return Buffer.concat([len, body]);
-}
+/** The archive's key: raw bytes held here, or a cipher whose key may live in flagship-keyd. */
+export type ArchiveKey = Buffer | ArchiveCipher;
 
-function openFrame(key: Buffer, archiveId: string, index: number, last: boolean, body: Buffer): Buffer {
-  if (body.length < TAG_BYTES) throw new ArchiveError("the backup's data file is damaged");
-  const d = createDecipheriv("aes-256-gcm", key, backupFrameNonce(index));
-  d.setAAD(backupFrameAad(archiveId, last));
-  d.setAuthTag(body.subarray(body.length - TAG_BYTES));
-  try {
-    return Buffer.concat([d.update(body.subarray(0, body.length - TAG_BYTES)), d.final()]);
-  } catch {
-    throw new ArchiveError("the backup's data file can't be opened: wrong key, or it was changed or cut short");
+function cipherOf(key: ArchiveKey, archiveId: string): ArchiveCipher {
+  if (!Buffer.isBuffer(key)) {
+    if (key.archiveId !== archiveId) throw new ArchiveError("that key is for another backup");
+    return key;
   }
+  if (key.length !== 32) throw new ArchiveError("the backup key must be 32 bytes");
+  // The caller keeps (and zeroes) its buffer; this cipher only borrows it.
+  return localCipher(key, archiveId);
 }
 
 /**
@@ -65,12 +57,12 @@ function openFrame(key: Buffer, archiveId: string, index: number, last: boolean,
  */
 export async function sealDataFile(
   plain: Readable,
-  key: Buffer,
+  key: ArchiveKey,
   archiveId: string,
   outPath: string,
   frameBytes: number = ARCHIVE_FRAME_BYTES,
 ): Promise<{ bytes: number; sha256: string }> {
-  if (key.length !== 32) throw new ArchiveError("the backup key must be 32 bytes");
+  const cipher = cipherOf(key, archiveId);
   if (frameBytes < 1024 || frameBytes > MAX_FRAME_BYTES) throw new ArchiveError("bad frame size");
   const hash = createHash("sha256");
   let bytes = 0;
@@ -81,8 +73,11 @@ export async function sealDataFile(
     let pending: Buffer = Buffer.alloc(0);
     let held: Buffer | null = null;
     let index = 0;
-    const emit = (plainFrame: Buffer, last: boolean): Buffer => {
-      const out = sealFrame(key, archiveId, index++, last, plainFrame);
+    const emit = async (plainFrame: Buffer, last: boolean): Promise<Buffer> => {
+      const body = await cipher.sealFrame(index++, last, plainFrame);
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(body.length);
+      const out = Buffer.concat([len, body]);
       hash.update(out);
       bytes += out.length;
       return out;
@@ -91,24 +86,24 @@ export async function sealDataFile(
       pending = pending.length === 0 ? (chunk as Buffer) : Buffer.concat([pending, chunk as Buffer]);
       while (pending.length >= frameBytes) {
         // One frame is held back so the last one can be sealed as the last.
-        if (held) yield emit(held, false);
+        if (held) yield await emit(held, false);
         held = pending.subarray(0, frameBytes);
         pending = pending.subarray(frameBytes);
       }
     }
     if (pending.length > 0) {
-      if (held) yield emit(held, false);
+      if (held) yield await emit(held, false);
       held = pending;
     }
-    yield emit(held ?? Buffer.alloc(0), true);
+    yield await emit(held ?? Buffer.alloc(0), true);
   }
   await pipeline(Readable.from(frames(), { objectMode: false }), createWriteStream(outPath, { mode: 0o600 }));
   return { bytes, sha256: hash.digest("hex") };
 }
 
 /** Open a data file into its tar stream, verifying every frame (and that the last one is last). */
-export function openDataFile(path: string, key: Buffer, archiveId: string): Readable {
-  if (key.length !== 32) throw new ArchiveError("the backup key must be 32 bytes");
+export function openDataFile(path: string, key: ArchiveKey, archiveId: string): Readable {
+  const cipher = cipherOf(key, archiveId);
   async function* plain(): AsyncGenerator<Buffer> {
     const total = (await stat(path)).size;
     const fh = await open(path, "r");
@@ -129,7 +124,8 @@ export function openDataFile(path: string, key: Buffer, archiveId: string): Read
         await fh.read(body, 0, n, pos + 4);
         pos += 4 + n;
         const last = pos === total;
-        yield openFrame(key, archiveId, index++, last, body);
+        if (body.length < TAG_BYTES) throw new ArchiveError("the backup's data file is damaged");
+        yield await cipher.openFrame(index++, last, body);
         if (last) return;
       }
     } finally {
@@ -142,9 +138,10 @@ export function openDataFile(path: string, key: Buffer, archiveId: string): Read
 /** Write the backup file: the slots the owner's app made, and the body sealed under the content key. */
 export async function writeBackupFile(
   path: string,
-  a: { archiveId: string; key: Buffer; slots: BackupSlot[]; body: BackupBody; nonce: Buffer },
+  a: { archiveId: string; key: ArchiveKey; slots: BackupSlot[]; body: BackupBody },
 ): Promise<{ bytes: number; text: string }> {
-  const text = serializeBackupFile(sealBackupFile(a.archiveId, a.key, a.slots, a.body, a.nonce));
+  const { nonce, sealed } = await cipherOf(a.key, a.archiveId).sealBody(Buffer.from(JSON.stringify(a.body), "utf8"));
+  const text = serializeBackupFile({ magic: BACKUP_MAGIC, v: BACKUP_VERSION, archiveId: a.archiveId, slots: a.slots, bodyNonceHex: nonce.toString("hex"), bodyHex: sealed.toString("hex") });
   await writeFile(path, text, { mode: 0o600 });
   return { bytes: Buffer.byteLength(text), text };
 }
@@ -156,7 +153,7 @@ export async function writeBackupFile(
  */
 export async function checkDataFile(
   path: string,
-  key: Buffer,
+  key: ArchiveKey,
   archiveId: string,
   expected: { bytes: number; sha256: string },
 ): Promise<{ plainBytes: number }> {
@@ -180,7 +177,7 @@ export async function checkDataFile(
  */
 export async function checkBackupFile(
   path: string,
-  key: Buffer,
+  key: ArchiveKey,
   archiveId: string,
   expected: { dataBytes: number; dataSha256: string; apps: number },
 ): Promise<void> {
@@ -192,12 +189,14 @@ export async function checkBackupFile(
   }
   if (file.archiveId !== archiveId) throw new ArchiveError("the backup file names another backup");
   if (file.slots.length === 0) throw new ArchiveError("the backup file has no key slot");
-  let body;
+  let body: BackupBody | null;
   try {
-    body = openBackupBody(file, key);
+    const plain = await cipherOf(key, archiveId).openBody(Buffer.from(file.bodyNonceHex, "hex"), Buffer.from(file.bodyHex, "hex"));
+    body = parseBackupBody(plain.toString("utf8"));
   } catch {
     throw new ArchiveError("the backup file's sealed part does not open with the backup's key");
   }
+  if (!body) throw new ArchiveError("the backup file's sealed part does not open with the backup's key");
   if (body.data.bytes !== expected.dataBytes || body.data.sha256 !== expected.dataSha256) {
     throw new ArchiveError("the backup file describes a different data file than the one written");
   }

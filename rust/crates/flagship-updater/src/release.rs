@@ -25,6 +25,38 @@ pub struct Paths {
     pub current: PathBuf,
     pub state: PathBuf,
     pub bin: PathBuf,
+    /// Where the daemon's systemd drop-ins live (`/etc/systemd/system`).
+    pub systemd: PathBuf,
+}
+
+/// Drop-ins this release line writes that an older release does not know (packages/privd unit.ts
+/// `RELEASE_DROPINS`, and the same list in `rollback-box-artifact.sh`). A restore removes them, so
+/// the release it flips back to never runs under settings it cannot take back.
+pub const RELEASE_DROPINS: &[&str] = &["flagship-daemon.service.d/45-hardening.conf"];
+
+/// Removes `RELEASE_DROPINS`; on the real box, asks systemd to reload in the background (a restore
+/// may run inside the daemon's own `ExecStartPre`; its next start reads the units again).
+/// Returns the drop-ins it removed.
+pub fn remove_release_dropins(paths: &Paths) -> Vec<String> {
+    let mut removed = Vec::new();
+    for d in RELEASE_DROPINS {
+        let p = paths.systemd.join(d);
+        if fs::symlink_metadata(&p).is_ok() && fs::remove_file(&p).is_ok() {
+            removed.push((*d).to_owned());
+        }
+    }
+    if !removed.is_empty()
+        && paths.systemd == Path::new("/etc/systemd/system")
+        && Path::new("/run/systemd/system").is_dir()
+    {
+        let _ = std::process::Command::new("/usr/bin/systemctl")
+            .arg("daemon-reload")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+    }
+    removed
 }
 
 impl Default for Paths {
@@ -34,6 +66,7 @@ impl Default for Paths {
             current: "/opt/flagship".into(),
             state: "/var/flagship".into(),
             bin: "/usr/local/bin".into(),
+            systemd: "/etc/systemd/system".into(),
         }
     }
 }
@@ -102,6 +135,9 @@ pub struct InstallArgs {
     /// "Sequence N or higher" on a box with no history.
     pub min_sequence: Option<u64>,
     pub paths: Paths,
+    /// The signed runtime manifest from flagshipserver.com, when the box has one (G2). Verified against the same
+    /// release trust; it must accept the artifact's own runtime lock. Absent, the artifact's signed lock alone decides.
+    pub runtime_manifest: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -123,7 +159,8 @@ const TSX_WRAPPER: &str = "#!/bin/sh\n# Run a TypeScript file with the box's own
 
 /// The Node bytes inside the artifact must be the official bytes its own (signed) runtime lock names: a builder
 /// cannot substitute another binary and still pass. An artifact without a lock predates the check.
-fn check_bundled_runtime(staging: &Path, arch: &str) -> Result<(), Failure> {
+fn check_bundled_runtime(staging: &Path, v: &Verified, a: &InstallArgs) -> Result<(), Failure> {
+    let arch = &v.arch;
     let Some(text) = read_regular(&staging.join("app/release/runtime-lock.json")) else {
         return Ok(());
     };
@@ -131,6 +168,15 @@ fn check_bundled_runtime(staging: &Path, arch: &str) -> Result<(), Failure> {
         exit: 3,
         refusal: r,
     })?;
+    if lock.version != v.node_version {
+        return Err(tree_failed(
+            "runtime-mismatch",
+            "the release's runtime lock is not the Node version its signed manifest names",
+        ));
+    }
+    if let Some(path) = &a.runtime_manifest {
+        check_runtime_manifest(path, &text, &lock, a)?;
+    }
     let target = lock.target(&format!("linux-{arch}")).map_err(|r| Failure {
         exit: 3,
         refusal: r,
@@ -152,6 +198,31 @@ fn check_bundled_runtime(staging: &Path, arch: &str) -> Result<(), Failure> {
         ));
     }
     Ok(())
+}
+
+/// The published runtime manifest binds the release: verified under the release trust, never older than one the box
+/// accepted, unexpired, and accepting this release's lock. Recorded only once the release is otherwise acceptable.
+fn check_runtime_manifest(
+    path: &Path,
+    lock_text: &str,
+    lock: &crate::runtime::Lock,
+    a: &InstallArgs,
+) -> Result<(), Failure> {
+    let refused = |r: Refusal| Failure {
+        exit: 1,
+        refusal: r,
+    };
+    let text = read_regular(path)
+        .ok_or_else(|| refused(Refusal::with("bad-manifest", "no runtime manifest file")))?;
+    let file = crate::runtime::manifest::parse(&text).map_err(refused)?;
+    let (v, _) = crate::runtime::manifest::accept(&file, &a.trust, now_ms(), &a.paths.state, false)
+        .map_err(refused)?;
+    let signers: Vec<String> = lock.signers.iter().map(|s| s.fingerprint.clone()).collect();
+    crate::runtime::manifest::check_release_lock(&v, lock_text, &lock.version, &signers)
+        .map_err(refused)?;
+    crate::runtime::manifest::accept(&file, &a.trust, now_ms(), &a.paths.state, true)
+        .map(|_| ())
+        .map_err(refused)
 }
 
 fn read_sequence(paths: &Paths) -> Option<u64> {
@@ -326,7 +397,7 @@ fn stage_and_switch(
         refusal: r,
     })?;
     check_tree(staging, v)?;
-    check_bundled_runtime(staging, &v.arch)?;
+    check_bundled_runtime(staging, v, a)?;
     if dest.exists() {
         let same = same_tree(&staging.join("app"), &dest.join("app")).unwrap_or(false);
         if !same {
@@ -486,6 +557,7 @@ pub fn restore(paths: &Paths, commit: &str) -> Result<(), Failure> {
         0o644,
     )
     .map_err(|e| io_failed("write artifact-current.json", &e))?;
+    remove_release_dropins(paths);
     Intent::clear(&paths.state).map_err(|e| io_failed("clear intent", &e))?;
     Ok(())
 }

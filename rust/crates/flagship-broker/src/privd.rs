@@ -364,6 +364,7 @@ mod bind_source_tests {
             stdout_file: None,
             env: Default::default(),
             copy_in: Vec::new(),
+            stdin_tar_check: false,
         }
     }
 

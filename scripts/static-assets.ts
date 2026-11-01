@@ -166,6 +166,8 @@ export const MUST_REACH_WORKER: readonly string[] = [
   "/api/users/alice/pods",
   "/api/screens/events",
   "/api/_status/probe",
+  "/api/runtime/manifest",
+  "/runtime",
   "/build/iso/flagship-base.iso",
   "/build",
   "/build/",

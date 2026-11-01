@@ -178,11 +178,13 @@ fn the_bundled_node_must_be_the_official_binary_the_releases_runtime_lock_names(
     let t = Tmp::new("inst");
     let paths = temp_paths(&t);
     let mut honest = Spec::new('a', 5);
+    honest.node_version = "24.22.1";
     honest.runtime_lock = Some(true);
     install(&install_args(&build(&honest), &paths)).unwrap();
     let t2 = Tmp::new("inst");
     let paths2 = temp_paths(&t2);
     let mut swapped = Spec::new('b', 6);
+    swapped.node_version = "24.22.1";
     swapped.runtime_lock = Some(false);
     let b = build(&swapped);
     let f = install(&install_args(&b, &paths2)).unwrap_err();
@@ -399,4 +401,205 @@ fn a_cut_short_intent_file_is_ignored_not_trusted() {
     .unwrap();
     assert!(Intent::read(&paths.state).is_none());
     reconcile(&paths);
+}
+
+#[test]
+fn the_signed_manifest_must_name_the_runtime_lock_the_release_carries() {
+    let t = Tmp::new("inst");
+    let paths = temp_paths(&t);
+    // the signed artifact manifest says 24.1.0, the lock inside says 24.22.1
+    let mut lying = Spec::new('a', 5);
+    lying.runtime_lock = Some(true);
+    let b = build(&lying);
+    let f = install(&install_args(&b, &paths)).unwrap_err();
+    assert_eq!((f.exit, f.refusal.code), (3, "runtime-mismatch"));
+    assert!(!paths.current.exists());
+}
+
+fn honest_release(c: char, seq: u64) -> common::Built {
+    let mut s = Spec::new(c, seq);
+    s.node_version = "24.22.1";
+    s.runtime_lock = Some(true);
+    build(&s)
+}
+
+const FAR: u64 = 4_000_000_000_000;
+
+#[test]
+fn the_published_runtime_manifest_binds_the_endorsed_release() {
+    let fp0 = "0".repeat(40);
+    type Make = Box<dyn Fn(&str) -> String>;
+    let cases: Vec<(&str, Make, &str)> = vec![
+        (
+            "another lock for the same version",
+            Box::new(|l: &str| {
+                common::signed_runtime_manifest(
+                    1,
+                    &format!("{l} "),
+                    "24.22.1",
+                    "24.22.1",
+                    3,
+                    FAR,
+                    &[],
+                )
+            }),
+            "runtime-manifest-mismatch",
+        ),
+        (
+            "the manifest of the release's own lock",
+            Box::new(|l: &str| {
+                common::signed_runtime_manifest(1, l, "24.22.1", "24.22.1", 3, FAR, &[])
+            }),
+            "",
+        ),
+        (
+            "a newer runtime and floor than the release",
+            Box::new(|l: &str| {
+                let n = l.replace("24.22.1", "24.30.0");
+                common::signed_runtime_manifest(1, &n, "24.30.0", "24.30.0", 3, FAR, &[])
+            }),
+            "runtime-below-floor",
+        ),
+        (
+            "an upstream signer the manifest withdraws",
+            {
+                let fp = fp0.clone();
+                Box::new(move |l: &str| {
+                    common::signed_runtime_manifest(
+                        1,
+                        l,
+                        "24.22.1",
+                        "24.22.1",
+                        3,
+                        FAR,
+                        &[fp.as_str()],
+                    )
+                })
+            },
+            "signer-revoked",
+        ),
+        (
+            "an expired manifest (freeze)",
+            Box::new(|l: &str| {
+                common::signed_runtime_manifest(
+                    1,
+                    l,
+                    "24.22.1",
+                    "24.22.1",
+                    3,
+                    1_700_000_000_001,
+                    &[],
+                )
+            }),
+            "expired",
+        ),
+        (
+            "a manifest signed by a key nobody authorised",
+            Box::new(|l: &str| {
+                common::signed_runtime_manifest(9, l, "24.22.1", "24.22.1", 3, FAR, &[])
+            }),
+            "not-enough-signatures",
+        ),
+    ];
+    for (label, make, code) in cases {
+        let t = Tmp::new("inst");
+        let paths = temp_paths(&t);
+        let b = honest_release('a', 5);
+        let mpath = t.path().join("runtime-manifest.json");
+        std::fs::write(&mpath, make(b.lock_text.as_deref().unwrap())).unwrap();
+        let mut a = install_args(&b, &paths);
+        a.runtime_manifest = Some(mpath);
+        let r = install(&a);
+        if code.is_empty() {
+            r.unwrap();
+            continue;
+        }
+        let f = r.unwrap_err();
+        assert_eq!((f.exit, f.refusal.code), (1, code), "{label}");
+        assert!(
+            !paths.current.exists() && !paths.releases.join(&b.commit).exists(),
+            "{label}: nothing switched"
+        );
+        assert!(
+            !paths.state.join("runtime-manifest-accepted").exists(),
+            "{label}: nothing recorded"
+        );
+    }
+}
+
+#[test]
+fn an_accepted_runtime_manifest_is_recorded_and_an_older_one_is_then_refused() {
+    let t = Tmp::new("inst");
+    let paths = temp_paths(&t);
+    let a1 = honest_release('a', 5);
+    let lock = a1.lock_text.clone().unwrap();
+    let m = |seq| {
+        let p = t.path().join(format!("m{seq}.json"));
+        std::fs::write(
+            &p,
+            common::signed_runtime_manifest(1, &lock, "24.22.1", "24.22.1", seq, FAR, &[]),
+        )
+        .unwrap();
+        p
+    };
+    let mut args = install_args(&a1, &paths);
+    args.runtime_manifest = Some(m(7));
+    install(&args).unwrap();
+    assert!(
+        std::fs::read_to_string(paths.state.join("runtime-manifest-accepted"))
+            .unwrap()
+            .starts_with("7 ")
+    );
+    // the same manifest again is fine (a box re-reads the current one)
+    let b = honest_release('b', 6);
+    let mut again = install_args(&b, &paths);
+    again.runtime_manifest = Some(m(7));
+    install(&again).unwrap();
+    // a replayed older one is refused and the running release stays
+    let c = honest_release('c', 7);
+    let mut old = install_args(&c, &paths);
+    old.runtime_manifest = Some(m(6));
+    let f = install(&old).unwrap_err();
+    assert_eq!((f.exit, f.refusal.code), (1, "rollback"));
+    assert_eq!(current_commit(&paths).as_deref(), Some(b.commit.as_str()));
+    // without a manifest (fetching it failed) the signed lock alone decides: a healthy update still installs
+    install(&install_args(&c, &paths)).unwrap();
+}
+
+fn put_dropins(paths: &flagship_updater::release::Paths) {
+    let d = paths.systemd.join("flagship-daemon.service.d");
+    fs::create_dir_all(&d).unwrap();
+    fs::write(d.join("45-hardening.conf"), "[Service]\nProtectSystem=full\n").unwrap();
+    fs::write(d.join("40-privd.conf"), "[Service]\nUser=flagship\n").unwrap();
+}
+
+#[test]
+fn restore_removes_the_drop_ins_an_older_release_does_not_know() {
+    let (_t, paths, a, _b) = two_installed();
+    put_dropins(&paths);
+    restore(&paths, &a).unwrap();
+    let d = paths.systemd.join("flagship-daemon.service.d");
+    assert!(!d.join("45-hardening.conf").exists());
+    assert!(d.join("40-privd.conf").exists(), "only this release line's drop-ins go");
+    assert_eq!(
+        flagship_updater::release::RELEASE_DROPINS,
+        &["flagship-daemon.service.d/45-hardening.conf"]
+    );
+}
+
+#[test]
+fn the_guards_rollback_removes_them_too() {
+    let (_t, paths, a, b) = two_installed();
+    put_dropins(&paths);
+    marker(&paths, &a, &b, "applying", 0);
+    assert_eq!(guard(&paths, 8), GuardAction::RolledBack { to: a.clone() });
+    assert!(!paths.systemd.join("flagship-daemon.service.d/45-hardening.conf").exists());
+}
+
+#[test]
+fn a_restore_with_no_drop_ins_is_unchanged() {
+    let (_t, paths, a, _b) = two_installed();
+    restore(&paths, &a).unwrap();
+    assert!(!paths.systemd.exists());
+    assert!(flagship_updater::release::remove_release_dropins(&paths).is_empty());
 }

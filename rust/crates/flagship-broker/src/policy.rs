@@ -30,6 +30,9 @@ pub struct PrivExec {
     pub stdout_file: Option<String>,
     pub env: BTreeMap<String, String>,
     pub copy_in: Vec<CopyIn>,
+    /// The runner checks the stdin file as a files-folder tar (tarcheck.rs, the volume profile)
+    /// while copying it into its own folder, and feeds the command that checked copy (plan G6).
+    pub stdin_tar_check: bool,
 }
 
 /// The broker's own folder: root only.
@@ -2322,6 +2325,117 @@ pub fn release_exec(args: &Args, trust: &ReleaseTrust, arch: &str) -> Result<Pri
     })
 }
 
+// ── appdata.files ─────────────────────────────────────────────────────────
+
+/// An app installation, `<creator>--<slug>` (server-daemon dataLayer/naming.ts LABEL).
+static INSTALLATION_RE: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^[a-z0-9](?:-?[a-z0-9]){0,31}--[a-z0-9](?:-?[a-z0-9]){0,31}$"));
+
+/// `appdata.files {action, installation, path?}` (plan G6): an app's files folder read for a backup
+/// (`dump`, into the daemon's transfer file `path`), written on a restore (`restore`, from `path`,
+/// which the runner checks as a tar and copies before the helper sees it) or measured (`size`).
+/// The caller names the app; the broker derives the volume from it and requires that volume's
+/// quota image to be mounted where the box mounts it, so only an installed app's own folder is
+/// reached, in the helper's locked shape, never a path the caller chose.
+pub fn appdata_files_exec(
+    args: &Args,
+    engine: EngineKind,
+    mounts: MountsReader<'_>,
+) -> Result<PrivExec, PrivdError> {
+    no_extra(args, &["action", "installation", "path"])?;
+    let action = match args.get("action").and_then(Value::as_str) {
+        Some(a @ ("dump" | "restore" | "size")) => a,
+        _ => return Err(bad("action is dump, restore or size")),
+    };
+    let installation = match args.get("installation").and_then(Value::as_str) {
+        Some(i) if INSTALLATION_RE.is_match(i) => i,
+        _ => return Err(bad("installation must be <creator>--<slug>")),
+    };
+    let volume = format!("flagship-files-{installation}");
+    let mount_point = format!("{FILES_IMAGE_ROOT}/{volume}");
+    let mounted = mounts()
+        .lines()
+        .any(|l| l.split(' ').nth(1) == Some(mount_point.as_str()));
+    if !mounted {
+        return Err(forbidden("that app has no files folder on this server"));
+    }
+    let path = match (action, args.get("path")) {
+        ("size", None) => None,
+        ("size", Some(_)) => return Err(bad("size takes no path")),
+        (_, Some(Value::String(p))) => Some(transfer_path(p)?),
+        _ => return Err(bad("dump and restore need a path")),
+    };
+    let caps: &[&str] = match action {
+        "restore" => &[
+            "--cap-add",
+            "CHOWN",
+            "--cap-add",
+            "DAC_OVERRIDE",
+            "--cap-add",
+            "FOWNER",
+            "--cap-add",
+            "FSETID",
+        ],
+        _ => &["--cap-add", "DAC_READ_SEARCH"],
+    };
+    let mut a: Vec<String> = vec!["run".into()];
+    if action == "restore" {
+        a.push("-i".into());
+    }
+    a.extend(owned(&["--rm", "--network", "none", "--cap-drop", "ALL"]));
+    a.extend(owned(caps));
+    a.extend(owned(&[
+        "--security-opt",
+        "no-new-privileges",
+        "--read-only",
+        "--user",
+        "0:0",
+        "--mount",
+    ]));
+    a.push(format!(
+        "type=volume,src={volume},dst=/data{}",
+        if action == "restore" { "" } else { ",readonly" }
+    ));
+    a.extend(owned(&["--entrypoint"]));
+    match action {
+        "size" => a.extend(owned(&["du", FILES_HELPER_IMAGE, "-sb", "/data"])),
+        "dump" => a.extend(owned(&[
+            "tar",
+            FILES_HELPER_IMAGE,
+            "--numeric-owner",
+            "-cf",
+            "-",
+            "-C",
+            "/data",
+            ".",
+        ])),
+        _ => a.extend(owned(&[
+            "tar",
+            FILES_HELPER_IMAGE,
+            "--numeric-owner",
+            "-xpf",
+            "-",
+            "-C",
+            "/data",
+        ])),
+    }
+    validate_docker_args(&a)?;
+    let (file, argv) = for_engine(a, engine, true, &no_gpu_claims)?;
+    Ok(PrivExec {
+        file,
+        args: argv,
+        timeout_ms: 60 * 60_000,
+        stdin_file: if action == "restore" {
+            path.clone()
+        } else {
+            None
+        },
+        stdout_file: if action == "dump" { path } else { None },
+        stdin_tar_check: action == "restore",
+        ..PrivExec::default()
+    })
+}
+
 pub fn wipe_exec(args: &Args) -> Result<PrivExec, PrivdError> {
     no_extra(args, &["target"])?;
     if args.get("target").and_then(Value::as_str) != Some("data") {
@@ -2455,6 +2569,7 @@ pub fn validate_request(
         "nft.apply" => nft_exec(args),
         "release" => release_exec(args, ctx.trust, ctx.arch),
         "wipe" => wipe_exec(args),
+        "appdata.files" => appdata_files_exec(args, ctx.engine, ctx.mounts),
         "setup" => setup_exec(args),
         "wasi.unit" => wasi_unit_exec(args),
         "wasi.logs" => wasi_logs_exec(args),

@@ -13,7 +13,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { ed } from "../../../packages/protocol/src/edSync.js";
 import { assembleArtifact, isRustBinaryName, skipInApp, type BuildInfo } from "../assemble.js";
 import { archiveDigestFromShasums, assertNodeMeetsFloor, assertTargetBinaries, loadNodePins, RUST_BINARIES } from "../build.js";
-import { buildSbom, componentsWithoutIntegrity } from "../sbom.js";
+import { buildSbom, componentsWithoutIntegrity, sbomLockSha256 } from "../sbom.js";
 import { buildTar, checkArchivePath, gzipDeterministic } from "../tar.js";
 
 const root = mkdtempSync(join(tmpdir(), "box-artifact-test-"));
@@ -146,7 +146,7 @@ describe("sbom", () => {
   it("lists every installed package in a stable order and flags a missing integrity hash", () => {
     const s = buildSbom(lock);
     expect(s.components.map((c) => c.name)).toEqual(["a", "b", "c"]);
-    expect(s.lockSha256).toBe(sha(lock));
+    expect(sbomLockSha256(s)).toBe(sha(lock));
     expect(componentsWithoutIntegrity(s)).toEqual(["c@3.0.0"]);
     expect(JSON.stringify(buildSbom(lock))).toBe(JSON.stringify(s));
   });

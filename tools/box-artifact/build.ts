@@ -4,7 +4,7 @@
  *
  *   build  --commit <40hex> --arch amd64|arm64 --out <dir> [--repo <path>]
  *          [--node-archive <file> --node-shasums <file> --node-shasums-sig <file>]
- *          [--skip-pgp] [--sequence N]
+ *          [--skip-pgp] [--sequence N] [--no-rust] [--builder-id <uri>]
  *   sign   --manifest <unsigned.json> --out <signed.json> (--key-file <hexseed> | --signer-cmd <cmd>)
  *   verify --manifest <signed.json> --artifact <file> --commit <40hex> --arch <arch>
  *          [--trust release/box-artifact-trust.json] [--last-sequence N]
@@ -31,6 +31,7 @@ import {
   type ReleaseTrust,
 } from "../../packages/protocol/src/boxArtifact.js";
 import { assembleArtifact, type BuildInfo } from "./assemble.js";
+import { buildProvenance, builderId } from "./provenance.js";
 import { buildSbom, componentsWithoutIntegrity } from "./sbom.js";
 
 const HERE = dirname(new URL(import.meta.url).pathname);
@@ -100,6 +101,23 @@ function arg(argv: string[], name: string): string | undefined {
 /** The Rust binaries every box artifact carries (rustStack/units.ts names them the same way). */
 export const RUST_BINARIES = ["flagship-keyd", "flagship-broker", "flagship-core", "flagship-wasi-worker", "flagship-gpud", "flagship-updater", "flagship-access", "flagship-ingress"] as const;
 
+/**
+ * The TypeScript compiler is pinned on its own (release plan G9): the root package.json names one exact
+ * version and the installed compiler is that version, so the JavaScript the box runs comes from a known tsc.
+ */
+export function assertCompilerPinned(rootPackageJson: string, installedVersion: string): string {
+  const spec = (JSON.parse(rootPackageJson) as { devDependencies?: Record<string, string> }).devDependencies?.["typescript"];
+  if (!spec || !/^\d+\.\d+\.\d+$/.test(spec)) throw new Error(`the root package.json must pin typescript to one exact version (has ${spec ?? "none"})`);
+  if (installedVersion !== spec) throw new Error(`installed typescript ${installedVersion} is not the pinned ${spec}`);
+  return spec;
+}
+
+/** Lock paths (`node_modules/...`) that are on disk after the install: what the artifact really carries. */
+export function installedLockPaths(lockText: string, root: string): Set<string> {
+  const lock = JSON.parse(lockText) as { packages?: Record<string, unknown> };
+  return new Set(Object.keys(lock.packages ?? {}).filter((p) => p.includes("node_modules/") && existsSync(join(root, p, "package.json"))));
+}
+
 function need(argv: string[], name: string): string {
   const v = arg(argv, name);
   if (!v) throw new Error(`missing --${name}`);
@@ -167,7 +185,12 @@ async function build(argv: string[]): Promise<void> {
     const npmCpu = arch === "amd64" ? "x64" : "arm64";
     execFileSync("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund", "--include-workspace-root", "--workspace=packages/server-daemon", "--os=linux", `--cpu=${npmCpu}`], { cwd: src, stdio: "inherit" });
     assertTargetBinaries(join(src, "node_modules"), npmCpu);
-    execFileSync("npx", ["tsc", "-b", "packages/server-daemon"], { cwd: src, stdio: "inherit" });
+    // The compiler from the lockfile, run by path: nothing resolves a tsc from PATH or the network.
+    const tsVersion = assertCompilerPinned(
+      readFileSync(join(src, "package.json"), "utf8"),
+      (JSON.parse(readFileSync(join(src, "node_modules/typescript/package.json"), "utf8")) as { version: string }).version,
+    );
+    execFileSync(process.execPath, [join(src, "node_modules/typescript/bin/tsc"), "-b", "packages/server-daemon"], { cwd: src, stdio: "inherit" });
 
     // The early-boot unseal helper, compiled here with a pinned toolchain so no compiler is needed on the box.
     const unsealBinary = arg(argv, "unseal-binary") ?? join(work, "flagship-unseal");
@@ -201,6 +224,7 @@ async function build(argv: string[]): Promise<void> {
     const rustPrebuilt = arg(argv, "rust-bin-dir");
     let rust: BuildInfo["rust"];
     let rustBinaries: Record<string, string> | undefined;
+    let cargoVersion: string | undefined;
     let rustPinsJson: string | undefined;
     if (!argv.includes("--no-rust")) {
       let binDir = rustPrebuilt;
@@ -209,6 +233,7 @@ async function build(argv: string[]): Promise<void> {
         const targetDir = join(work, "cargo-target");
         const home = process.env["CARGO_HOME"] ?? join(process.env["HOME"] ?? "/root", ".cargo");
         rustc = execFileSync("rustc", ["--version"], { cwd: join(src, "rust"), encoding: "utf8" }).trim();
+        cargoVersion = execFileSync("cargo", ["--version"], { cwd: join(src, "rust"), encoding: "utf8" }).trim();
         execFileSync("cargo", ["build", "--release", "--locked", "-p", "flagship-keyd", "-p", "flagship-broker", "-p", "flagship-core", "-p", "flagship-wasi", "-p", "flagship-gpu", "-p", "flagship-updater", "-p", "flagship-access", "-p", "flagship-ingress"], {
           cwd: join(src, "rust"),
           stdio: "inherit",
@@ -243,16 +268,48 @@ async function build(argv: string[]): Promise<void> {
       ...(rustBinaries ? { rustBinaries, rustPinsJson } : {}), info,
     });
 
-    const sbomText = JSON.stringify(sbom, null, 2) + "\n";
-    const provenance = JSON.stringify({
-      schema: 1, commit, arch, sourceDateEpoch: epoch,
-      builder: { ci: process.env["GITHUB_ACTIONS"] === "true", runId: process.env["GITHUB_RUN_ID"] ?? null, workflow: process.env["GITHUB_WORKFLOW_REF"] ?? null, runner: process.env["RUNNER_NAME"] ?? null },
-      tools: { node: process.version, npm: execFileSync("npm", ["--version"], { encoding: "utf8" }).trim(), go: goVersion },
-      inputs: { lockSha256: info.lockSha256, nodeSha256: pin.sha256, nodeVersion: pins.node.version, ...(rust ? { rust } : {}) },
-      steps: ["git archive", "verify node archive", "npm ci --ignore-scripts", "tsc -b packages/server-daemon", "go build installer/unseal-helper", "go build installer/tls-frontend", ...(rust ? ["cargo build --release --locked (keyd, broker, core)"] : []), "assemble deterministic tar.gz"],
-    }, null, 2) + "\n";
-
     const name = `flagship-box-${commit.slice(0, 12)}-${arch}`;
+    const goSums: Record<string, string> = {};
+    for (const dir of ["installer/unseal-helper", "installer/tls-frontend"]) {
+      if (existsSync(join(src, dir, "go.sum"))) goSums[dir] = readFileSync(join(src, dir, "go.sum"), "utf8");
+    }
+    const cargoLockText = existsSync(join(src, "rust/Cargo.lock")) ? readFileSync(join(src, "rust/Cargo.lock"), "utf8") : undefined;
+    const sbomText = JSON.stringify(buildSbom({
+      npmLock: lockText, ...(cargoLockText ? { cargoLock: cargoLockText } : {}), goSums,
+      node: { version: pins.node.version, file: pin.file, sha256: pin.sha256, url: pins.node.downloadBase + pin.file },
+      installed: installedLockPaths(lockText, src), commit, arch, sourceDateEpoch: epoch,
+    }), null, 2) + "\n";
+    const flags = [
+      ...(argv.includes("--no-rust") ? ["--no-rust"] : []), ...(rustPrebuilt ? ["--rust-bin-dir"] : []),
+      ...(argv.includes("--skip-pgp") ? ["--skip-pgp"] : []), ...(arg(argv, "unseal-binary") ? ["--unseal-binary"] : []),
+      ...(arg(argv, "tlsd-binary") ? ["--tlsd-binary"] : []), ...(arg(argv, "node-archive") ? ["--node-archive"] : []),
+    ];
+    const materials = [
+      { uri: "file:package-lock.json", sha256: info.lockSha256 },
+      { uri: pins.node.downloadBase + pin.file, sha256: pin.sha256 },
+      ...(cargoLockText ? [{ uri: "file:rust/Cargo.lock", sha256: sha256(cargoLockText) }] : []),
+      ...["rust/rust-toolchain.toml", "installer/unseal-helper/go.mod", "installer/tls-frontend/go.mod", "release/runtime-lock.json", "tools/box-artifact/node-pins.json"]
+        .filter((f) => existsSync(join(src, f)))
+        .map((f) => ({ uri: `file:${f}`, sha256: sha256(readFileSync(join(src, f))) })),
+    ];
+    const provenance = JSON.stringify(buildProvenance({
+      artifact: { name: `${name}.tar.gz`, sha256: art.sha256 },
+      sbom: { name: `${name}.sbom.json`, sha256: sha256(sbomText) },
+      commit, arch, sequence, sourceDateEpoch: epoch,
+      ...(process.env["GITHUB_REPOSITORY"] ? { repository: `https://github.com/${process.env["GITHUB_REPOSITORY"]}` } : {}),
+      materials,
+      toolchain: {
+        node: process.version, npm: execFileSync("npm", ["--version"], { encoding: "utf8" }).trim(), typescript: tsVersion, go: goVersion,
+        ...(rust ? { rustc: rust.rustc } : {}), ...(cargoVersion ? { cargo: cargoVersion } : {}),
+      },
+      builder: {
+        id: builderId(process.env, arg(argv, "builder-id")),
+        runId: process.env["GITHUB_RUN_ID"] ?? null, workflow: process.env["GITHUB_WORKFLOW_REF"] ?? null, runner: process.env["RUNNER_NAME"] ?? null,
+      },
+      steps: ["git archive", "verify node archive", "npm ci --ignore-scripts (frozen lock, target os/cpu)", `tsc -b packages/server-daemon (typescript ${tsVersion})`, "go build installer/unseal-helper", "go build installer/tls-frontend", ...(rust ? ["cargo build --release --locked"] : []), "assemble deterministic tar.gz"],
+      flags,
+    }), null, 2) + "\n";
+
     writeFileSync(join(out, `${name}.tar.gz`), art.tarGz);
     writeFileSync(join(out, `${name}.sbom.json`), sbomText);
     writeFileSync(join(out, `${name}.provenance.json`), provenance);

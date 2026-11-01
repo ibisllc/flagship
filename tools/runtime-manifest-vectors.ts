@@ -11,7 +11,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { BOX_ARTIFACT_PQ_BINDING_SUBJECT, type BoxArtifactPqPin } from "../packages/protocol/src/boxArtifactPq.js";
-import { canonicalRuntimeManifest, signRuntimeManifest, signRuntimeManifestPq, verifyRuntimeManifest, type RuntimeManifest, type RuntimeManifestSignature } from "../packages/protocol/src/runtimeManifest.js";
+import { canonicalRuntimeManifest, checkReleaseLock, signRuntimeManifest, signRuntimeManifestPq, verifyRuntimeManifest, type RuntimeManifest, type RuntimeManifestSignature } from "../packages/protocol/src/runtimeManifest.js";
 import { hybridSign, hybridSigKeygen, pqKeyId, SUITE_HYBRID_SIG_ED25519_MLDSA65_V1 } from "../packages/protocol/src/pqHybrid.js";
 import { signPqKeyBinding, TAG_PQ_KEY_BINDING } from "../packages/protocol/src/pqTrust.js";
 
@@ -29,6 +29,7 @@ const manifest: RuntimeManifest = {
   version: "24.22.1",
   lockSha256: sha(lockText),
   securityFloor: "24.22.1",
+  release: "0.3",
   sequence: 12,
   issuedAt: NOW - 86_400_000,
   validUntil: NOW + 30 * 86_400_000,
@@ -97,6 +98,7 @@ const cases: Case[] = [
     const m = { ...manifest, securityFloor: "99.0.0" };
     return { ...base, name: "a version below the manifest's own floor", manifest: m, signatures: resign(m), expect: { ok: false, code: "bad-manifest" } } as Case;
   })(),
+  { ...base, name: "a tampered release", manifest: { ...manifest, release: "0.4" }, signatures: [bare(0)], expect: { ok: false, code: "not-enough-signatures" } },
   { ...base, name: "pinned: the signer with its PQ companion", pin, bindings, signatures: [full(0)], expect: { ok: true } },
   { ...base, name: "pinned: the PQ half stripped", pin, bindings, signatures: [bare(0)], expect: { ok: false, code: "pq-signature-required" } },
   { ...base, name: "pinned: a forged companion", pin, bindings, signatures: [{ ...bare(0), pq: { keyId: signers[0]!.keyId, signatureHex: flip(signers[0]!.pq.signatureHex) } }], expect: { ok: false, code: "pq-signature-required" } },
@@ -104,6 +106,19 @@ const cases: Case[] = [
   { ...base, name: "pinned: the binding is missing", pin, bindings: [], signatures: [full(0)], expect: { ok: false, code: "pq-signature-required" } },
   { ...base, name: "pinned: a key the pin does not name", pin: { ...pin, keyIds: [signers[1]!.keyId] }, bindings, signatures: [full(0)], expect: { ok: false, code: "pq-signature-required" } },
 ];
+
+// How a verified manifest binds an endorsed release's own lock (checkReleaseLock).
+const releaseLock = [
+  { name: "the release carries the manifest's own lock", release: { lockText, version: "24.22.1", signers: [SIGNER_FP] }, expect: { ok: true } },
+  { name: "a newer runtime than the manifest names", release: { lockText: lockText.replace("24.22.1", "24.23.0"), version: "24.23.0", signers: [SIGNER_FP] }, expect: { ok: true } },
+  { name: "another lock for the same version", release: { lockText: lockText + " ", version: "24.22.1", signers: [SIGNER_FP] }, expect: { ok: false, code: "runtime-manifest-mismatch" } },
+  { name: "a runtime below the manifest's floor", release: { lockText, version: "24.22.0", signers: [SIGNER_FP] }, expect: { ok: false, code: "runtime-below-floor" } },
+  { name: "a lock naming a signer the manifest revokes", manifest: { ...manifest, revokedSigners: [OTHER_FP] }, release: { lockText: lockText.replace("24.22.1", "24.23.0"), version: "24.23.0", signers: [OTHER_FP] }, expect: { ok: false, code: "signer-revoked" } },
+].map((c) => {
+  const r = checkReleaseLock(c.manifest ?? manifest, c.release);
+  if (r.ok !== c.expect.ok || (!r.ok && r.code !== c.expect.code)) throw new Error(`release-lock vector "${c.name}": got ${JSON.stringify(r)}`);
+  return { ...c, manifest: c.manifest ?? manifest };
+});
 
 const out = {
   schema: 1,
@@ -116,6 +131,7 @@ const out = {
     if (r.ok !== c.expect.ok || (!r.ok && r.code !== c.expect.code)) throw new Error(`vector "${c.name}": expected ${JSON.stringify(c.expect)}, got ${JSON.stringify(r)}`);
     return c;
   }),
+  releaseLock,
 };
 const text = JSON.stringify(out, null, 2) + "\n";
 if (process.argv.includes("--check")) {

@@ -659,6 +659,16 @@
       }
     },
     {
+      "id": "runtime-verification",
+      "title": "Server page Runtime section (release plan G2): the Node.js version and platform, Flagship's and Node's signature state, whether this server's executable matches its lock, the checksums, and Check it yourself commands",
+      "ref": "web",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/runtimeVerification.js", "export function runtimeCommands"], ["apps/web/public/webapp/views/runtime-verification.js", "runtime-card"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/RuntimeVerificationModel.swift", "public var commands"], ["apps/mobile/shared/Tests/FlagshipSharedTests/RuntimeVerificationVectorTests.swift", "runtime-verification/vectors.json"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/RuntimeCard.swift", "struct RuntimeCheckSheet"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/RuntimeVerification.kt", "val commands"], ["apps/mobile/android/app/src/test/java/com/flagshipserver/app/api/RuntimeVerificationVectorsTest.kt", "runtime-verification/vectors.json"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/RuntimeSection.kt", "fun RuntimeCheckDialog"]] }
+      }
+    },
+    {
       "id": "scheduled-backups",
       "title": "Backups section: backup policy (phone / peer / none) with its size limit, scheduled backups (last / next run, schedule, saved list with Download and Delete, Back up now), one .flagship file; phones keep a copy",
       "ref": "ios",

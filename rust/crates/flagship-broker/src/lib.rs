@@ -22,5 +22,6 @@ pub mod release;
 pub mod runner;
 pub mod server;
 pub mod state;
+pub mod tarcheck;
 pub mod typed;
 pub mod wire;

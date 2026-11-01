@@ -207,3 +207,38 @@ fn the_cli_verifies_a_manifest_and_refuses_a_replay_once_the_sequence_is_recorde
     assert_eq!(call(late).2.trim(), "refused: expired");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_verified_manifest_binds_the_release_lock_as_typescript_does() {
+    use flagship_updater::runtime::manifest::{Verified, check_release_lock};
+    let v: Value = serde_json::from_str(VECTORS).unwrap();
+    let cases = v["releaseLock"].as_array().unwrap();
+    assert!(cases.len() >= 5);
+    for c in cases {
+        let m = &c["manifest"];
+        let verified = Verified {
+            version: m["version"].as_str().unwrap().to_owned(),
+            release: m["release"].as_str().unwrap().to_owned(),
+            security_floor: m["securityFloor"].as_str().unwrap().to_owned(),
+            lock_sha256: m["lockSha256"].as_str().unwrap().to_owned(),
+            revoked_signers: strings(&m["revokedSigners"]),
+            digest: String::new(),
+            sequence: m["sequence"].as_u64().unwrap(),
+            valid_until: m["validUntil"].as_u64().unwrap(),
+            signers: 1,
+        };
+        let r = &c["release"];
+        let got = check_release_lock(
+            &verified,
+            r["lockText"].as_str().unwrap(),
+            r["version"].as_str().unwrap(),
+            &strings(&r["signers"]),
+        );
+        let name = c["name"].as_str().unwrap();
+        match (c["expect"]["ok"].as_bool().unwrap(), got) {
+            (true, Ok(())) => {}
+            (false, Err(e)) => assert_eq!(Some(e.code), c["expect"]["code"].as_str(), "{name}"),
+            (want, got) => panic!("{name}: expected ok={want}, got {got:?}"),
+        }
+    }
+}

@@ -21,6 +21,7 @@ import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
 import { BOX_SIGN_PURPOSES, SWK_HKDF_LABELS, UNSEAL_PURPOSES, checkSign, isPairingOrder, isServiceId } from "./policy.js";
 import { AcmeAccount, type AcmeRequest } from "./acme.js";
+import { ArchiveKeys } from "./archive.js";
 import { accountZoneOf, namesFor } from "./migrate.js";
 import { renameSync, writeFileSync } from "node:fs";
 import { TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage } from "./tls.js";
@@ -61,6 +62,8 @@ export interface KeydServiceInit {
   ceremony?: { token: Uint8Array; notAfter: number } | null;
   /** Where the box's `policy.json` lives, so an owner-signed move to another name can be kept. */
   policyPath?: string;
+  /** Where the server-archive account keys an admin device deposited are kept (`archive-keks.json`); absent keeps them in memory. */
+  archivePoolPath?: string;
   now?: () => number;
 }
 
@@ -85,6 +88,7 @@ export class KeydService {
   readonly #policyPath: string | null;
   #ceremony: { token: Uint8Array; notAfter: number } | null;
   readonly #now: () => number;
+  readonly #archive: ArchiveKeys;
 
   constructor(init: KeydServiceInit) {
     if (init.identitySeed.length !== 32) throw new Error("keyd: identity seed must be 32 bytes");
@@ -111,6 +115,7 @@ export class KeydService {
     this.#ceremony = init.ceremony && init.ceremony.token.length === 32 ? { token: init.ceremony.token.slice(), notAfter: init.ceremony.notAfter } : null;
     this.#policyPath = init.policyPath ?? null;
     this.#now = init.now ?? Date.now;
+    this.#archive = new ArchiveKeys(init.archivePoolPath ?? null, this.#now);
   }
 
   get publicKeyHex(): string {
@@ -127,6 +132,7 @@ export class KeydService {
     this.#cgk = null;
     this.#tls?.destroy();
     this.#acme?.destroy();
+    this.#archive.destroy();
   }
 
   /** Which operations a connection may use before it has said hello: none. */
@@ -494,6 +500,16 @@ export class KeydService {
         }
         return { result: { stored: true } };
       }
+      case "archive.pool.add":
+      case "archive.pool.list":
+      case "archive.create":
+      case "archive.import":
+      case "archive.sealFrame":
+      case "archive.openFrame":
+      case "archive.sealBody":
+      case "archive.openBody":
+      case "archive.close":
+        return { result: this.#archive.handle(req.op, a) };
       default:
         throw new KeydError("unknown-op", "unknown operation");
     }

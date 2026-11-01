@@ -38,6 +38,7 @@ import {
 } from "./adapterIndex.js";
 import { handleInferenceModelRoutes, isInferenceModelPath } from "./inferenceModelRoutes.js";
 import { handleSecurityNotices, isSecurityNoticesPath } from "./securityNotices.js";
+import { handleRuntimeManifest, isRuntimeManifestPath, isRuntimePagePath, redirectToRuntimePage } from "./runtimeManifest.js";
 import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetworkRoutes.js";
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
 import { CANARY_REPORT_PATH, UPDATE_RECEIPT_PATH, handleCanaryReport, handleUpdateReceipt } from "./updateReceipts.js";
@@ -690,6 +691,14 @@ async function routeImpl(
   // answered before the rate limiter, which keys on the caller.
   if (isSecurityNoticesPath(url.pathname)) {
     return handleSecurityNotices(request, env, ctx);
+  }
+
+  // The signed runtime manifest (release plan G2) and its page: static, keyed to nobody, signed offline.
+  if (isRuntimeManifestPath(url.pathname)) {
+    return handleRuntimeManifest(request);
+  }
+  if (isRuntimePagePath(url.pathname)) {
+    return redirectToRuntimePage(url);
   }
 
   // AI model menus: Flagship Inference's catalog and the capability table.

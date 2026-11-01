@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { HARDENING_MAX_QUICK_STARTS, HARDENING_QUICK_SECS, HARDENING_STATE_DIR } from "@flagship/privd/unit";
 import { writeFileDurable } from "./durableFile.js";
 
 /**
@@ -49,7 +50,14 @@ export function buildUpdateGuardScript(args: {
   maxStarts?: number;
   /** The script that flips back to an installed release (default: the copy the daemon installs). */
   rollbackScript?: string;
+  /** Where the daemon's drop-ins live (tests). */
+  systemdDir?: string;
+  /** Root-only folder for the sandbox's crash-loop count and removal record (tests). */
+  hardeningStateDir?: string;
 }): string {
+  const systemdDir = args.systemdDir ?? "/etc/systemd/system";
+  const hardeningDir = args.hardeningStateDir ?? HARDENING_STATE_DIR;
+  if (!SAFE_PATH.test(systemdDir) || !SAFE_PATH.test(hardeningDir)) throw new Error("unsafe path");
   if (!SAFE_PATH.test(args.repoPath)) throw new Error("unsafe repo path");
   if (!SAFE_PATH.test(args.dataDir)) throw new Error("unsafe data dir");
   const rollbackScript = args.rollbackScript ?? ROLLBACK_SCRIPT_PATH;
@@ -64,6 +72,30 @@ marker='${args.dataDir}/update-pending.json'
 starts_file='${args.dataDir}/update-guard-starts'
 outcome='${args.dataDir}/update-outcome.json'
 log() { echo "[update-guard] $*"; }
+
+# The unprivileged daemon's sandbox limits itself (privd unit.ts daemonHardeningDropIn): when the daemon has
+# started ${HARDENING_MAX_QUICK_STARTS} times in a row, each within ${HARDENING_QUICK_SECS} s of the one before, while the
+# sandbox drop-in is in place, the drop-in goes and the box runs unhardened rather than not at all. The record
+# keeps the root setup step from writing it back for this release (privdInstall.ts refreshDaemonHardening).
+hardening='${systemdDir}/flagship-daemon.service.d/45-hardening.conf'
+hdir='${hardeningDir}'
+if [ -f "$hardening" ]; then
+  mkdir -p "$hdir" && chmod 0755 "$hdir"
+  now=$(date +%s)
+  read -r hcount hlast < "$hdir/starts" 2>/dev/null
+  [[ "\${hcount:-}" =~ ^[0-9]+$ && "\${hlast:-}" =~ ^[0-9]+$ ]] || { hcount=0; hlast=0; }
+  [ $((now - hlast)) -le ${HARDENING_QUICK_SECS} ] || hcount=0
+  hcount=$((hcount + 1))
+  if [ "$hcount" -ge ${HARDENING_MAX_QUICK_STARTS} ]; then
+    rm -f "$hardening" "$hdir/starts"
+    hcommit=$(jq -r '.commit // empty' "$state/artifact-current.json" 2>/dev/null)
+    t=$(mktemp "$hdir/.disabled.XXXXXX") && printf '{"at":%s,"commit":"%s","starts":%s}' "$(( now * 1000 ))" "$hcommit" "$hcount" > "$t" && chmod 0644 "$t" && mv -f "$t" "$hdir/disabled.json"
+    log "the daemon's sandbox drop-in was removed after $hcount quick starts in a row; the daemon runs without it until a new release"
+    if [ '${systemdDir}' = /etc/systemd/system ] && [ -d /run/systemd/system ]; then (systemctl daemon-reload >/dev/null 2>&1 &); fi
+  else
+    t=$(mktemp "$hdir/.starts.XXXXXX") && echo "$hcount $now" > "$t" && mv -f "$t" "$hdir/starts"
+  fi
+fi
 
 # The Rust updater does all of this (marker, start counting, rollback, outcome) and reconciles a cut-short switch.
 if [ -x ${UPDATER_PATH} ]; then

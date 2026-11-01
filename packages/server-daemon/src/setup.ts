@@ -33,6 +33,7 @@ import { WASI_APPS_DIR, WASI_MODULES_DIR } from "./wasi/unit.js";
 import { localCommandRunner, type CommandRunner } from "./serviceRunner.js";
 import { repairSystemPackages } from "./systemRepair.js";
 import { installUpdateGuard } from "./updateGuard.js";
+import { refreshDaemonHardening } from "./privdInstall.js";
 import { FILES_HELPER_IMAGE } from "./volumeDump.js";
 
 const REPO = "/opt/flagship";
@@ -179,7 +180,12 @@ export const STEPS: Record<string, () => Promise<unknown>> = {
     if (!env.FLAGSHIP_CONTROL_PLANE_BASE_URL || !env.FLAGSHIP_SUBDOMAIN) return false;
     return installHealthReporter({ controlPlaneBaseUrl: env.FLAGSHIP_CONTROL_PLANE_BASE_URL, serverDomain: env.FLAGSHIP_SUBDOMAIN, run, onLog: log });
   },
-  "update-guard": () => installUpdateGuard({ repoPath: REPO, dataDir: DATA_DIR, run, onLog: log }),
+  "update-guard": async () => {
+    const guard = await installUpdateGuard({ repoPath: REPO, dataDir: DATA_DIR, run, onLog: log });
+    // The unprivileged daemon's sandbox (privdInstall.ts): this step runs as root on every boot.
+    const sandbox = await refreshDaemonHardening({ run, onLog: log });
+    return guard || sandbox;
+  },
   "container-links": () => ensureContainerLinksUnmanaged(localCommandRunner, { log }),
   "data-unit": syncDataUnit,
   "debug-access": openDebugAccess,

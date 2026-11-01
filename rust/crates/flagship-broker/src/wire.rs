@@ -22,6 +22,7 @@ pub const OPS: &[&str] = &[
     "setup",
     "wasi.unit",
     "wasi.logs",
+    "appdata.files",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

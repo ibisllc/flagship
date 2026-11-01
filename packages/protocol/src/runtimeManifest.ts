@@ -5,7 +5,9 @@
  *
  * Canonical bytes, tag first, `|`-separated like every signed message:
  *
- *   flagship/runtime-manifest/v1|<runtime>|<version>|<lockSha256>|<securityFloor>|<sequence>|<issuedAt>|<validUntil>|<revoked>
+ *   flagship/runtime-manifest/v1|<runtime>|<version>|<lockSha256>|<securityFloor>|<release>|<sequence>|<issuedAt>|<validUntil>|<revoked>
+ *
+ * `release` is the Flagship product release the lock ships with (release/version.json `product`, e.g. `0.3`).
  *
  * `revoked` is the sorted, comma-joined list of upstream signer fingerprints the manifest withdraws (40 lowercase hex
  * each), or `-`. A verifier refuses a manifest that is past `validUntil` (freeze resistance), whose `sequence` is not
@@ -30,6 +32,7 @@ export const TAG_RUNTIME_MANIFEST_V2 = "flagship/runtime-manifest/v2";
 const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+const RELEASE = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$/;
 
 export interface RuntimeManifest {
   runtime: "node";
@@ -37,6 +40,8 @@ export interface RuntimeManifest {
   /** SHA-256 of the exact bytes of release/runtime-lock.json. */
   lockSha256: string;
   securityFloor: string;
+  /** The Flagship product release, `major.minor` or `major.minor.patch`. */
+  release: string;
   sequence: number;
   issuedAt: number;
   validUntil: number;
@@ -58,6 +63,7 @@ export interface RuntimeManifestSignature {
 export function assertRuntimeManifest(m: RuntimeManifest): void {
   if (m.runtime !== "node") throw new Error("runtime-manifest: runtime must be node");
   if (!SEMVER.test(m.version) || !SEMVER.test(m.securityFloor)) throw new Error("runtime-manifest: version and securityFloor must be major.minor.patch");
+  if (!RELEASE.test(m.release)) throw new Error("runtime-manifest: release must be major.minor[.patch]");
   if (!HEX64.test(m.lockSha256)) throw new Error("runtime-manifest: lockSha256 must be 64 lowercase hex characters");
   for (const [n, v] of [["sequence", m.sequence], ["issuedAt", m.issuedAt], ["validUntil", m.validUntil]] as const) {
     if (!Number.isSafeInteger(v) || v < 0) throw new Error(`runtime-manifest: bad ${n}`);
@@ -71,7 +77,7 @@ export function canonicalRuntimeManifest(m: RuntimeManifest): Bytes {
   assertRuntimeManifest(m);
   const revoked = m.revokedSigners.length ? [...m.revokedSigners].sort().join(",") : "-";
   return new TextEncoder().encode(
-    [TAG_RUNTIME_MANIFEST, m.runtime, m.version, m.lockSha256, m.securityFloor, m.sequence, m.issuedAt, m.validUntil, revoked].join("|"),
+    [TAG_RUNTIME_MANIFEST, m.runtime, m.version, m.lockSha256, m.securityFloor, m.release, m.sequence, m.issuedAt, m.validUntil, revoked].join("|"),
   );
 }
 
@@ -178,4 +184,22 @@ export function verifyRuntimeManifest(
   if (o.lockSigners.some((f) => revoked.has(f.toLowerCase()))) return { ok: false, code: "signer-revoked" };
   if (compareSemver(m.version, m.securityFloor) < 0) return { ok: false, code: "bad-manifest", detail: "version below its own floor" };
   return { ok: true, signers: [...signed].sort() };
+}
+
+export type ReleaseLockRefusal = "runtime-below-floor" | "runtime-manifest-mismatch" | "signer-revoked";
+
+/**
+ * How a VERIFIED runtime manifest binds an endorsed release's own lock (the one its signed artifact carries). A release
+ * may lock a newer runtime than the manifest names (it ships before the manifest is republished), but never one below
+ * the manifest's floor, never a different lock for the same version, and never one that names a withdrawn signer.
+ */
+export function checkReleaseLock(
+  m: RuntimeManifest,
+  release: { lockText: string; version: string; signers: readonly string[] },
+): { ok: true } | { ok: false; code: ReleaseLockRefusal } {
+  if (!SEMVER.test(release.version) || compareSemver(release.version, m.securityFloor) < 0) return { ok: false, code: "runtime-below-floor" };
+  if (release.version === m.version && hex(sha256(new TextEncoder().encode(release.lockText))) !== m.lockSha256) return { ok: false, code: "runtime-manifest-mismatch" };
+  const revoked = new Set(m.revokedSigners);
+  if (release.signers.some((f) => revoked.has(f.toLowerCase()))) return { ok: false, code: "signer-revoked" };
+  return { ok: true };
 }

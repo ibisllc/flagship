@@ -58,6 +58,8 @@ pub struct KeydService {
     /// Where `policy.json` lives, so an owner-signed move to another name can be kept.
     state_dir: Option<std::path::PathBuf>,
     clock: Clock,
+    /// Server-archive keys (archive.rs): the deposited account keys and the open content keys.
+    archive: crate::archive::ArchiveKeys,
 }
 
 impl std::fmt::Debug for KeydService {
@@ -128,6 +130,7 @@ impl KeydService {
             ceremony: None,
             state_dir: None,
             clock: system_clock(),
+            archive: crate::archive::ArchiveKeys::load(None),
         }
     }
 
@@ -150,6 +153,13 @@ impl KeydService {
     #[must_use]
     pub fn with_state_dir(mut self, dir: std::path::PathBuf) -> Self {
         self.state_dir = Some(dir);
+        self
+    }
+
+    /// Where the server-archive account keys are kept (`archive-keks.json` in keyd's state).
+    #[must_use]
+    pub fn with_archive_pool(mut self, path: std::path::PathBuf) -> Self {
+        self.archive = crate::archive::ArchiveKeys::load(Some(path));
         self
     }
 
@@ -208,6 +218,7 @@ impl KeydService {
         if let Some(a) = &mut self.acme {
             a.destroy();
         }
+        self.archive.destroy();
     }
 
     fn stk(&self) -> KeydResult<&ed25519_dalek::SigningKey> {
@@ -820,13 +831,19 @@ impl KeydService {
                 }
                 done(obj! { "stored" => true })
             }
+            "archive.pool.add" | "archive.pool.list" | "archive.create" | "archive.import"
+            | "archive.sealFrame" | "archive.openFrame" | "archive.sealBody"
+            | "archive.openBody" | "archive.close" => {
+                let now = (self.clock)();
+                done(self.archive.handle(op, a, now)?)
+            }
             _ => Err(KeydError::new(ErrorCode::UnknownOp, "unknown operation")),
         }
     }
 }
 
 /// `typeof v === "number" && Number.isSafeInteger(v) && v >= 0`, as the integer it is.
-fn safe_integer(v: Option<&Value>) -> Option<u64> {
+pub(crate) fn safe_integer(v: Option<&Value>) -> Option<u64> {
     const MAX_SAFE: f64 = 9_007_199_254_740_991.0;
     let n = match v? {
         Value::Number(n) => n,

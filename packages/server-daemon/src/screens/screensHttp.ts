@@ -328,6 +328,8 @@ export interface ScreensHttpDeps {
   serving?: Pick<ServingStore, "offer" | "view"> | null;
   /** Endorsed releases this box could move to (updateReleases.ts). */
   releaseCatalog?: ReleaseCatalogSource | null;
+  /** The runtime verification view for server-detail (runtimeVerification.ts). */
+  runtimeVerification?: { view(): import("../runtimeVerification.js").RuntimeVerificationView | null } | null;
   /** Recent install/uninstall events for server-detail. */
   installEventLog?: InstallEventLog | null;
   /** Tab ownership for app-detail / browser-tabs. */
@@ -1765,6 +1767,10 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     pairedSessionCount: deps.pairedSessions?.list().length ?? 0,
     recentInstallEvents,
     ...(deps.storage ? { storage: deps.storage.server() } : {}),
+    ...(() => {
+      const runtime = deps.runtimeVerification?.view() ?? null;
+      return runtime ? { runtime } : {};
+    })(),
   };
 }
 

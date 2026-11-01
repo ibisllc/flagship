@@ -4,9 +4,13 @@
  * release/runtime-lock.json. The published file is `{ manifest, signatures, pqBindings?, lockJson }`; `lockJson` is the
  * exact text of the lock, so `manifest.lockSha256` can be checked by anyone with `shasum -a 256`.
  *
- *   build  --sequence N [--valid-days 45] [--revoke FP,FP] [--lock release/runtime-lock.json] --out unsigned.json
+ *   build  --sequence N [--valid-days 45] [--revoke FP,FP] [--lock release/runtime-lock.json] [--release 0.3] --out unsigned.json
+ *          (`--release` defaults to release/version.json `product`; `--sequence` must be above the published one)
  *   sign   --manifest unsigned.json --out signed.json (--key-file <hexseed> | --signer-cmd <cmd>)
  *   verify --manifest signed.json [--trust release/box-artifact-trust.json] [--last-sequence N] [--now ms]
+ *   publish --manifest signed.json [--to release/runtime-manifest.json]
+ *          verifies against the repository's release trust and lock, refuses a sequence that is not above the committed
+ *          one, and writes the file flagshipserver.com serves (/api/runtime/manifest) once committed and deployed.
  *
  * `--signer-cmd` is the box artifact's contract (scripts/yubikey-sign.mjs): it reads the canonical bytes on stdin and
  * prints `<pubkeyhex> <signaturehex>`. The PQ companion is added by `node scripts/pq-release-key.mjs
@@ -47,13 +51,14 @@ function need(argv: string[], name: string): string {
 
 const sha256 = (b: string | Buffer): string => createHash("sha256").update(b).digest("hex");
 
-export function buildRuntimeManifest(lockText: string, o: { sequence: number; issuedAt: number; validDays: number; revoked?: string[] }): Doc {
+export function buildRuntimeManifest(lockText: string, o: { sequence: number; issuedAt: number; validDays: number; release: string; revoked?: string[] }): Doc {
   const lock = JSON.parse(lockText) as { version: string; securityFloor: string; runtime: string; keyring?: { signers?: { fingerprint: string }[] } };
   const manifest: RuntimeManifest = {
     runtime: lock.runtime as "node",
     version: lock.version,
     lockSha256: sha256(lockText),
     securityFloor: lock.securityFloor,
+    release: o.release,
     sequence: o.sequence,
     issuedAt: o.issuedAt,
     validUntil: o.issuedAt + o.validDays * 86_400_000,
@@ -69,6 +74,7 @@ function build(argv: string[]): void {
     sequence: Number(need(argv, "sequence")),
     issuedAt: Number(arg(argv, "issued-at") ?? Date.now()),
     validDays: Number(arg(argv, "valid-days") ?? 45),
+    release: arg(argv, "release") ?? (JSON.parse(readFileSync(join(REPO, "release/version.json"), "utf8")) as { product: string }).product,
     revoked: (arg(argv, "revoke") ?? "").split(",").filter(Boolean).map((f) => f.toLowerCase()),
   });
   writeFileSync(need(argv, "out"), JSON.stringify(doc, null, 2) + "\n");
@@ -120,13 +126,41 @@ function verify(argv: string[]): void {
   console.log(`verified: node ${doc.manifest.version} sequence ${doc.manifest.sequence}, signed by ${r.signers.length} authorized key(s)`);
 }
 
+export const PUBLISHED_PATH = join(REPO, "release/runtime-manifest.json");
+
+/** Checks a signed manifest for publication: release trust, the committed lock, and a sequence above the published one. */
+export function checkForPublication(doc: Doc, o: { trust: Parameters<typeof verifyRuntimeManifestFile>[1]; lockText: string; published: Doc | null; now: number }): string | null {
+  if (doc.lockJson !== o.lockText) return "the manifest does not carry the committed release/runtime-lock.json";
+  const r = verifyRuntimeManifestFile(doc, o.trust, o.now, o.published?.manifest.sequence);
+  return r.ok ? null : `refused: ${r.code}${r.detail ? ` (${r.detail})` : ""}`;
+}
+
+function publish(argv: string[]): void {
+  const doc = JSON.parse(readFileSync(need(argv, "manifest"), "utf8")) as Doc;
+  const to = arg(argv, "to") ?? PUBLISHED_PATH;
+  const published = JSON.parse(readFileSync(to, "utf8")) as Doc | null;
+  const why = checkForPublication(doc, {
+    trust: JSON.parse(readFileSync(join(REPO, "release/box-artifact-trust.json"), "utf8")),
+    lockText: readFileSync(join(REPO, "release/runtime-lock.json"), "utf8"),
+    published,
+    now: Date.now(),
+  });
+  if (why) {
+    console.error(why);
+    process.exit(1);
+  }
+  writeFileSync(to, JSON.stringify(doc, null, 2) + "\n");
+  console.log(`wrote ${to}: commit it and deploy .com to publish sequence ${doc.manifest.sequence}`);
+}
+
 const cmd = process.argv[2];
 if (process.argv[1] && basename(process.argv[1]).startsWith("runtime-manifest")) {
   try {
     if (cmd === "build") build(process.argv.slice(3));
     else if (cmd === "sign") sign(process.argv.slice(3));
     else if (cmd === "verify") verify(process.argv.slice(3));
-    else throw new Error("usage: runtime-manifest.ts build|sign|verify ... (see the header)");
+    else if (cmd === "publish") publish(process.argv.slice(3));
+    else throw new Error("usage: runtime-manifest.ts build|sign|verify|publish ... (see the header)");
   } catch (e) {
     console.error((e as Error).message);
     process.exit(1);

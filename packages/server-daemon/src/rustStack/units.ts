@@ -20,6 +20,8 @@
  * reason are written to /run/flagship-rust/<component>.status for the daemon and its update gate.
  */
 
+import { UNSET_ENV_LINE } from "@flagship/privd/unit";
+
 export const RUST_STATE_DIR = "/var/lib/flagship-rust";
 export const RUST_RUN_DIR = "/run/flagship-rust";
 export const RUST_SELECT_PATH = "/usr/local/sbin/flagship-rust-select";
@@ -263,6 +265,7 @@ StateDirectoryMode=0700
 Environment=FLAGSHIP_BROKER_V1_SOCKET=${BROKER_V1_SOCKET}
 Environment=FLAGSHIP_BROKER_SOCKET=${BROKER_TYPED_SOCKET}
 Environment=FLAGSHIP_BROKER_STATE=/var/lib/flagship-broker
+${UNSET_ENV_LINE}
 # No User=: a system service is root already. An explicit User=root together with NoNewPrivileges=yes makes systemd (Debian 13, v257)
 # drop CAP_SETUID from the service, and NoNewPrivs then keeps every child from getting it back; runsc's gofer needs it
 # (setuid), so every gVisor container failed with 'fork/exec /proc/self/exe: operation not permitted'.
@@ -303,6 +306,7 @@ Environment=FLAGSHIP_CORE_DIR=${CORE_DIR}
 Environment=FLAGSHIP_CORE_BROKER=${BROKER_TYPED_SOCKET}
 Environment=FLAGSHIP_CORE_STATUS=${CORE_STATUS}
 Environment=FLAGSHIP_CORE_SOCKET=${CORE_SOCKET_PATH}
+${UNSET_ENV_LINE}
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -357,6 +361,7 @@ RestartSec=5
 RuntimeDirectory=flagship-access
 RuntimeDirectoryMode=0750
 Environment=FLAGSHIP_ACCESS_SOCKET=${ACCESS_SOCKET_PATH}
+${UNSET_ENV_LINE}
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

@@ -12501,5 +12501,109 @@
   "Couldn't remove this server's auto-unlock, so locking was not turned on. {0}": {
     "en": "Couldn't remove this server's auto-unlock, so locking was not turned on. {0}",
     "ctx": "webapp/lib/servingUi.js:93"
+  },
+  "Verified": {
+    "en": "Verified",
+    "ctx": "webapp/lib/runtimeVerification.js:26"
+  },
+  "Not published yet": {
+    "en": "Not published yet",
+    "ctx": "webapp/lib/runtimeVerification.js:28"
+  },
+  "Can't reach flagshipserver.com": {
+    "en": "Can't reach flagshipserver.com",
+    "ctx": "webapp/lib/runtimeVerification.js:30"
+  },
+  "Checked when this release was built": {
+    "en": "Checked when this release was built",
+    "ctx": "webapp/lib/runtimeVerification.js:40"
+  },
+  "Not checked": {
+    "en": "Not checked",
+    "ctx": "webapp/lib/runtimeVerification.js:41"
+  },
+  "Matches": {
+    "en": "Matches",
+    "ctx": "webapp/lib/runtimeVerification.js:46"
+  },
+  "Does not match": {
+    "en": "Does not match",
+    "ctx": "webapp/lib/runtimeVerification.js:46"
+  },
+  "This server runs a Node.js that is not the one its release locks.": {
+    "en": "This server runs a Node.js that is not the one its release locks.",
+    "ctx": "webapp/lib/runtimeVerification.js:52"
+  },
+  "Flagship's signed runtime manifest was refused ({0}).": {
+    "en": "Flagship's signed runtime manifest was refused ({0}).",
+    "ctx": "webapp/lib/runtimeVerification.js:55"
+  },
+  "This release locks a newer Node.js than the published manifest.": {
+    "en": "This release locks a newer Node.js than the published manifest.",
+    "ctx": "webapp/lib/runtimeVerification.js:57"
+  },
+  "1. Node's signed checksum list": {
+    "en": "1. Node's signed checksum list",
+    "ctx": "webapp/lib/runtimeVerification.js:67"
+  },
+  "2. Flagship's signed manifest": {
+    "en": "2. Flagship's signed manifest",
+    "ctx": "webapp/lib/runtimeVerification.js:79"
+  },
+  "3. On the server (with debug access on)": {
+    "en": "3. On the server (with debug access on)",
+    "ctx": "webapp/lib/runtimeVerification.js:89"
+  },
+  "Your server runs the official Node.js binary from nodejs.org. Flagship publishes its exact checksum, signed by Flagship's release keys.": {
+    "en": "Your server runs the official Node.js binary from nodejs.org. Flagship publishes its exact checksum, signed by Flagship's release keys.",
+    "ctx": "webapp/views/runtime-verification.js:38"
+  },
+  "Node.js": {
+    "en": "Node.js",
+    "ctx": "webapp/views/runtime-verification.js:39"
+  },
+  "Platform": {
+    "en": "Platform",
+    "ctx": "webapp/views/runtime-verification.js:40"
+  },
+  "Flagship signature": {
+    "en": "Flagship signature",
+    "ctx": "webapp/views/runtime-verification.js:42"
+  },
+  "Node's signature": {
+    "en": "Node's signature",
+    "ctx": "webapp/views/runtime-verification.js:43"
+  },
+  "Details": {
+    "en": "Details",
+    "ctx": "webapp/views/runtime-verification.js:47"
+  },
+  "Expected checksum (flagshipserver.com)": {
+    "en": "Expected checksum (flagshipserver.com)",
+    "ctx": "webapp/views/runtime-verification.js:48"
+  },
+  "Expected executable": {
+    "en": "Expected executable",
+    "ctx": "webapp/views/runtime-verification.js:49"
+  },
+  "Computed on this server": {
+    "en": "Computed on this server",
+    "ctx": "webapp/views/runtime-verification.js:50"
+  },
+  "Official source": {
+    "en": "Official source",
+    "ctx": "webapp/views/runtime-verification.js:51"
+  },
+  "Check it yourself": {
+    "en": "Check it yourself",
+    "ctx": "webapp/views/runtime-verification.js:53"
+  },
+  "Run these on any computer to check the same facts without trusting this app.": {
+    "en": "Run these on any computer to check the same facts without trusting this app.",
+    "ctx": "webapp/views/runtime-verification.js:78"
+  },
+  "Turned off this server's extra sandbox after it kept failing to start": {
+    "en": "Turned off this server's extra sandbox after it kept failing to start",
+    "ctx": "webapp/lib/activityFeed.js:42"
   }
 }

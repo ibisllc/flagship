@@ -1,7 +1,9 @@
 # Relay transport: Rust relay, framing extension and conformance (ARCH-N01 / ARCH-N02)
 
-Status: proposed, built on branch `arch/relay` (2026-10-23), not deployed. Code:
-`rust/crates/flagship-relay`. Plan: `IMPLEMENTATION-PLAN.md` §5.1 item 7, §11, §14.
+Status: built on `release/0.3`, qualified locally against the TS hub (§7, 2026-11-01), not deployed. Code:
+`rust/crates/flagship-relay` (binary `flagship-relay`, image `Dockerfile.relay`, Fly configs `fly.relay.toml` /
+`fly.gym.relay.toml`). Plan: `IMPLEMENTATION-PLAN.md` §5.1 item 7, §11, §14; release plan G7 (R7). Rollout and
+rollback: §8.
 
 The Rust relay is a drop-in for the `.services` data plane (`apps/web/src/tunnel`,
 `apps/web/src/lib/addressEcho.ts`): raw-TCP SNI passthrough, the tunnel hub WebSocket at
@@ -125,33 +127,37 @@ R = reproduced (tested), P = partial, L = lacking, X = Rust-only extension.
 | Hub | Refuse to start as `.services` without signature verification | R | `require_verified_authority` |
 | Hub | First frame must be HELLO; `parseHello` checks | R | Same reason strings and close codes |
 | Hub | HELLO age, serverId = podCanonical, pod shape, user zone, service-entitlement expiry / username / key binding | R | `hello::structural_checks` |
-| Hub | Cert ids (SHA-256), RootEntitlement under admin root or IRK, ServiceEntitlement, STK lookup and binding, HELLO signature, ServiceGrants (signature, window, pod, revocation), revocation list | L | Behind the `HelloAuthority` trait; no implementation in this crate yet (needs `flagship-crypto` and `.com` lookups with the TS cache TTLs) |
-| Hub | Eviction ("replaced", fail-open) | P | Hook and refusal path; lookup and 30 s cache lacking |
+| Hub | Cert ids (SHA-256), RootEntitlement under admin root or IRK, ServiceEntitlement, STK lookup and binding, HELLO signature, ServiceGrants (signature, window, pod, revocation), revocation list | R | `DirectoryAuthority` on `flagship_crypto::entitlements` (18 shared vectors) and `ComDirectory` (the TS routes and TTLs); §7 S01/S02 give the TS reason strings |
+| Hub | Eviction ("replaced", fail-open) | R | `/api/server/<pod>/eviction-chain`, 30 s cache; §7 S09 |
 | Hub | `buildClaimedCanonicals` (own wildcard only, no foreign zone) | R | |
 | Hub | HELLO refresh (podCanonical fixed, issuedAt must advance) | R | |
 | Hub | DOMAIN_GRANTED snapshots on register / unregister / transfer | R | |
 | Hub | REQUEST_TRANSFER | R | Without the TS crash (§4) |
-| Hub | Relay blessing + `hubSig` on HELLO_ACK | P | Attached from a `BlessingSource`; hub key, `.com` blessing fetch, refresh and nonce signing lacking |
+| Hub | Relay blessing + `hubSig` on HELLO_ACK | R | `HubBlessing`: hub key (`FLAGSHIP_HUB_KEY_PATH`), `POST /api/services/hub-blessing` every 12 h, nonce signing; §7 S01 |
 | Hub | Decode error → `HELLO_ACK{ok:false}` + close 1002 | R | |
 | Hub | Tunnel close → visitor streams closed, unregister, snapshots | R | Unregisters only if the closing tunnel is still the registered one (§4) |
 | Hub | Idle close when no canonicals | n/a | Dead code in TS (the list always holds the pod) |
-| Hub | Outbound relay (`outbound-v1`: DNS, public-address and host policy, budgets, credit, 15-min totals) | L | Not advertised; OUTBOUND_OPEN answered `disabled`, as a TS hub without it |
-| Hub | Peer-backup mailboxes (`pb-mail-v1`, PIK-signed announce, `/pb/m/<id>`) | L | Not advertised; frames ignored, as a TS hub without it |
+| Hub | Outbound relay (`outbound-v1`: DNS, public-address and host policy, budgets, credit, 15-min totals) | R | `outbound::` (policy on 50 host and 64 address TS verdicts, `ComHostPolicy`); §7 S07 compares refusals; a successful splice to a public host is tested in `tests/outbound_session.rs` only (a local harness has no public address) |
+| Hub | Peer-backup mailboxes (`pb-mail-v1`, PIK-signed announce, `/pb/m/<id>`) | R | Shared vectors (`mailbox.json`); §7 S08 |
 | Registry | Allocator (FCFS slots, candidate queues, heir choice), `findBySni` order, nudge rule, user lookups | R | Rule-for-rule port with unit tests |
-| Registry | Custom-domain redirections | P | Table and lookup order; `.com` push channel, cold-start pull and lazy resolver lacking |
+| Registry | Custom-domain redirections | P | Table and lookup order only. The push channel, cold-start pull and lazy resolver are Pro (`feat/custom-domains`) and stay unported by decision |
 | Router | ClientHello peek with size cap and deadline | R+X | Larger bounds, multi-record reassembly, pending-hello cap |
 | Router | Drop on no SNI / bad hello, counters | R | |
 | Router | Park on miss: single-flight per name, nudge every box of the account, poll, replay | R | Bytes a parked visitor may send are now bounded (TS: unbounded) |
 | Router | Delayed drop of first-party misses (timing-indistinguishable), capped | R | |
-| Router | Per-account metering and over-quota slow-down, both directions | P | `Meter` trait, token bucket, pause both directions; `.com` report/lease protocol lacking |
-| Router | `routerStats` / `GET /api/stats` | P | Counters; missed-name ring and HTTP route lacking |
-| Gossip | `broadcast--<user>` POST fan-out to `/internal/gossip` | L | Registry lookup and stream origination exist; the HTTP surface does not |
+| Router | Per-account metering and over-quota slow-down, both directions | R | `UsageMeter` (`/api/usage/report`, budget leases, LeaseBook port); §7 S06 |
+| Router | `routerStats` / `GET /api/stats` | P | Route (x-usage-secret), counters and the `serving` block; the missed-name ring is not ported |
+| Gossip | `broadcast--<user>` POST fan-out to `/internal/gossip` | L | Dropped by owner decision (2026-10-30): never formed live (AGENTS "One access list per app") |
 | Echo | PROXY v1/v2, JSON body, 5 s, buffer cap | R | A non-numeric v1 port is refused (TS answers `null`) |
 | Flow | Per-stream credit, fair scheduling | X | `stream-credit-v1`, DRR |
-| Flow | Bounded queues, slow-receiver cut for v1 peers | X | TS buffers without bound |
-| Drain | Stop accepting, notify, grace, close | X | `drain-v1`; TS has no drain |
+| Flow | Bounded queues, slow-receiver cut for v1 peers | R+X | TS bounds and back-pressures since fix/relay-fix; §7 S12 (a stalled visitor never stalls a sibling) |
+| Drain | Stop accepting, notify, grace, close | R | `drain-v1` on both; both keep serving until every tunnel has gone or the grace ends, then close 1012; §7 S10 |
 | PQ | PQ route and blessing authority bindings (N02) | L | Waits on Q02/Q04 |
-| HTTP | `/api/health` and the rest of the `:3000` surface | L | |
+| HTTP | `/api/health`, `/api/stats`, `/pb/m/<id>` on the hub port | R | `/api/health` adds `runtime: "rust"` (how the canary tells the two apart); §7 S06, S08, S17 |
+| Serving | Serving gate: `servingAdminKey` / `servingPolicy` in HELLO, `.com` record (`/api/internal/serving/:u/:boxPub`), `servingDecision`, app streams closed at `until`, control name stays, apps stopped hold no slot | R | `serving.rs` on `flagship_crypto::serving` (shared vectors); §7 S13–S15 |
+| Serving | Pushed revocation feed (`/api/internal/serving-feed`, acks, gap catch-up), contact rules (no new tunnels after 60 s quiet, close all after 10 min) | R | `serving_feed.rs` (tokio-tungstenite over tokio-rustls with webpki roots); §7 S14, S16 |
+| Registry | A box's control name is never an app slot (H9); the bare `<account>.<apex>` never resolves to a box | R | The phone route itself is not ported (§7 gaps) |
+| Phone | `/phone-tunnel`, route claims, ledger, eligibility (H3) | L | Being reworked in TS (vacancy-only claims, 2026-11-01); ported after it settles. Until then the bare name never routes on the Rust relay, as a TS hub with `FLAGSHIP_PHONE_ROUTE=off` |
 
 ## 4. Defects found in the TypeScript relay
 
@@ -197,8 +203,74 @@ the peek deadline, the null REQUEST_TRANSFER, over-quota slow-down, the PROXY ec
 
 ## 6. Next
 
-Implement `HelloAuthority` on `flagship-crypto` with the TS lookups and caches, then the
-blessing provider, the outbound relay and mailboxes; the HTTP surface (health, stats, gossip,
-mailbox, redirection control); `.com` metering leases; a box-side `stream-credit-v1` /
-`drain-v1` in `tunnelClient.ts`; then a mixed-fleet gym run (old and new boxes on one Rust
-hub) and the §5.3 benchmarks against the TS relay before any canary.
+After the canary (§8): the phone route (H3) once its TS rework settles; the missed-name ring in `/api/stats`;
+a box-side `stream-credit-v1` in `tunnelClient.ts`; the §5.3 benchmarks against the TS relay; PQ route and blessing
+bindings (N02, waiting on Q02/Q04).
+
+## 7. Conformance harness (both implementations)
+
+`tools/relay-conformance/tests/relayConformance.test.ts` runs one scenario list against the TS hub (`server.ts`
+`start()` in process) and the Rust binary (spawned), both pointed at one mock `.com`
+(`tools/relay-conformance/harness.ts`) that serves the internal routes the TS hub uses: `/api/username/<u>`,
+`/api/cert-revocations/<u>`, `/api/server/by-domain/<id>`, `/api/server/<pod>/eviction-chain`,
+`/api/services/hub-blessing`, `/api/usage/report`, `/api/outbound/check|report`, `/api/internal/serving/<u>/<box>`,
+`/api/internal/serving-revocations` and the `/api/internal/serving-feed` WebSocket. Both relays get the same
+environment (`PORT`, `TUNNEL_TCP_PORT`, `RELAY_ECHO_PORT`, ...); the lost-contact thresholds are shortened with
+`FLAGSHIP_SERVING_REFUSE_NEW_MS`, `FLAGSHIP_SERVING_CLOSE_ALL_MS`, `FLAGSHIP_SERVING_CHECK_MS` (both read them;
+unset in production). Each scenario asserts the same answer on both: ack reasons verbatim, close codes, bytes.
+
+| Id | Scenario |
+|---|---|
+| S01 | HELLO admission; capabilities; `hubSig` over the nonce verifies under the blessed hub key; `.com` asked on the TS routes |
+| S02 | Refusals: no HELLO, not JSON, unknown server, wrong STK signature, entitlements not under the IRK, stale HELLO, a claim in another account's zone, a revoked root entitlement (same reason strings and close codes) |
+| S03 | Routing by SNI (control name, `<app>.<user>`, `<app>.<server>.<user>`), ClientHello and later bytes verbatim both ways (70 KB reply), closes both ways |
+| S04 | Unknown name, the account's bare name, no TLS: closed, nothing opened on the box |
+| S05 | `:8444` echo, PROXY v1 and v2: identical JSON |
+| S06 | Usage reported per account; an over-quota lease slows the account; `/api/stats` guarded by `x-usage-secret` |
+| S07 | Outbound: loopback, a forbidden port, metadata hosts refused with the same codes; `FLAGSHIP_OUTBOUND_RELAY=off` → not advertised, `disabled` |
+| S08 | Peer-backup mailbox: PIK-signed announce, `POST /pb/m/<id>` carried to the box and back; unknown id 404 |
+| S09 | Eviction: a retired STK is answered `replaced` (1008) |
+| S10 | Drain: `drain-v1` box gets `DRAIN_NOTICE {graceMs}`, a v1 box nothing; no new tunnels; all closed 1012 after the grace |
+| S11 | Reconnect: the old tunnel's close leaves the new one routed; HELLO refresh replay refused, advance accepted |
+| S12 | A visitor that never reads (8 MiB queued) does not stall a sibling stream; the relay stays healthy |
+| S13 | Serving: matching admin key serves; differing key refused `admin-keys-differ` (1008); no key → control name only |
+| S14 | Serving feed: a pushed box revocation ends the tunnel and its routes and is acked; a revoked box is refused; a gap is filled from `serving-revocations?since`; an entry under another key is ignored |
+| S15 | Lease end: the app stream closes within 5 s of `notAfter`, the control stream keeps flowing, the app name stops routing, the control name still routes |
+| S16 | Feed contact: quiet past the first threshold → new HELLO answered `try-again` (1013); past the second → every tunnel closed 1013 `serving-feed-lost`; the feed back → tunnels accepted |
+| S17 | `/api/health` |
+| M01 | Mixed versions: the current daemon tunnel client (`superviseTunnelClient`, no new capabilities) registers and serves (`<pod>`, `<app>.<user>`) |
+| M02 | Relay restart on the same address: the box reconnects by itself |
+| M03 | Rollback and forward: the same box moves Rust → TS (and TS → Rust) across a drain with no change on the box |
+
+Run: `cargo build -p flagship-relay --bin flagship-relay` then `npx vitest run tools/relay-conformance` (the Rust half
+is skipped, and says so, without the binary; `FLAGSHIP_RELAY_BIN` points elsewhere). `bash scripts/relay-canary.sh
+local` runs both steps plus `cargo test -p flagship-relay`.
+
+Not covered by the harness: a successful outbound splice (needs a public address; `tests/outbound_session.rs` covers
+it with an injected dialer), custom-domain redirections and gossip (not ported, above), the phone route (not ported),
+`stream-credit-v1` (Rust only; `tests/relay_core.rs`).
+
+## 8. Rollout and rollback
+
+The Rust relay is a drop-in image for the same Fly app: same ports, same `[env]`, same secrets
+(`SERVICES_CONTROL_SECRET`, `USAGE_REPORT_SECRET`), same `.com` routes. Boxes need nothing: they redial the same
+address after a deploy (M02), and a `drain-v1` box redials at the notice. A rollback is the same move the other way
+(M03). Steps (`scripts/relay-canary.sh` prints them; `gym --run` runs the gym ones with a prompt before each):
+
+1. **Local**: `bash scripts/relay-canary.sh local` green on the commit to ship (cargo test, the §7 suite on both).
+2. **Gym canary** (the gym relay app is the canary; prod untouched): `GYM_RELAY=rust bash scripts/gym-refresh.sh`
+   deploys `fly.gym.relay.toml`; `tools/relay-conformance/live-check.ts --expect rust` confirms which relay answers
+   (`/api/health` `runtime`) and the `:8444` echo; then a kept mixed fleet (`shared-run.ts --groups
+   core,gating,enforcement,one-list,serving,backups,ai-chat,update --keep`: B3 runs main's daemon, the other boxes
+   this release). Rollback drill with the fleet up: `flyctl deploy -c fly.gym.toml` (Node, rolling) →
+   `live-check.ts --expect ts --fleet <fleet.json>` (every box answers again, untouched) → forward again with
+   `fly.gym.relay.toml` → `live-check.ts --expect rust --fleet ...` → `core` on the kept fleet → teardown.
+3. **Prod** (owner, from `main`, never `--strategy=immediate`): `flyctl deploy -c fly.relay.toml -a flagship-services
+   --strategy=rolling`; `live-check.ts --relay flagship-services.fly.dev --expect rust`; the release script's relay
+   echo check; watch `npm run ops -- services` (tunnels online back to the pre-deploy count) for 30 minutes.
+4. **Rollback**: `flyctl deploy -a flagship-services --strategy=rolling` (the default `fly.toml` + `Dockerfile`).
+   Nothing else changes: no box, no `.com`, no DNS.
+
+Before step 3: `.com` must serve the serving feed if `FLAGSHIP_SERVING_REVOCATION_PUB` is set (both relays then fail
+closed without it), and the phone route must either be ported or accepted as off for the canary window (the TS hub
+routes the bare name only with the serving authority on and `FLAGSHIP_PHONE_ROUTE` not `off`).

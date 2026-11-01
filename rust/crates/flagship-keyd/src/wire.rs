@@ -45,6 +45,15 @@ pub const OPS: &[&str] = &[
     "provision.swk",
     "provision.cgk",
     "policy.rename",
+    "archive.pool.add",
+    "archive.pool.list",
+    "archive.create",
+    "archive.import",
+    "archive.sealFrame",
+    "archive.openFrame",
+    "archive.sealBody",
+    "archive.openBody",
+    "archive.close",
 ];
 
 pub type Args = Map<String, Value>;

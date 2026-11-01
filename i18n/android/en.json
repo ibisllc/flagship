@@ -12772,6 +12772,10 @@
     "en": "Kept the previous start-up unlock",
     "ctx": "core/BoxEventLabels.kt (Activity)"
   },
+  "activity_sandbox_removed": {
+    "en": "Turned off this server's extra sandbox after it kept failing to start",
+    "ctx": "core/BoxEventLabels.kt (Activity)"
+  },
   "offline_control": {
     "en": "Offline control",
     "ctx": "OfflineControlScreen / OfflineControlViewModel (prose)"
@@ -13183,5 +13187,126 @@
   "serving_locking_restarts_the_server": {
     "en": "Locking restarts the server with its disk locked. It starts again only when an admin approves on their phone.",
     "ctx": "ui/screens/ServingCard.kt (server page dead-man line, issuance-and-lease-records.md section 5)"
+  },
+  "runtime_title": {
+    "en": "Runtime",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_intro": {
+    "en": "Your server runs the official Node.js binary from nodejs.org. Flagship publishes its exact checksum, signed by Flagship's release keys.",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_node": {
+    "en": "Node.js",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_platform": {
+    "en": "Platform",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_running": {
+    "en": "Running",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_flagship_signature": {
+    "en": "Flagship signature",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_node_signature": {
+    "en": "Node's signature",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_on_this_server": {
+    "en": "On this server",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_verified": {
+    "en": "Verified",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_not_published": {
+    "en": "Not published yet",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_unavailable": {
+    "en": "Can't reach flagshipserver.com",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_expired": {
+    "en": "Expired",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_refused": {
+    "en": "Refused",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_checked_at_release": {
+    "en": "Checked when this release was built",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_not_checked": {
+    "en": "Not checked",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_matches": {
+    "en": "Matches",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_does_not_match": {
+    "en": "Does not match",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_details": {
+    "en": "Details",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_expected_checksum": {
+    "en": "Expected checksum (flagshipserver.com)",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_computed_here": {
+    "en": "Computed on this server",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_expected_executable": {
+    "en": "Expected executable",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_official_source": {
+    "en": "Official source",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_check_yourself": {
+    "en": "Check it yourself",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_check_intro": {
+    "en": "Run these on any computer to check the same facts without trusting this app.",
+    "ctx": "ui/screens/RuntimeSection.kt (runtime section)"
+  },
+  "runtime_cmd_node": {
+    "en": "1. Node's signed checksum list",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_cmd_manifest": {
+    "en": "2. Flagship's signed manifest",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_cmd_server": {
+    "en": "3. On the server (with debug access on)",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_note_swapped": {
+    "en": "This server runs a Node.js that is not the one its release locks.",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
+  },
+  "runtime_note_refused": {
+    "en": "Flagship's signed runtime manifest was refused (%1$s).",
+    "ctx": "api/RuntimeVerification.kt (runtime section)",
+    "args": 1
+  },
+  "runtime_note_newer_lock": {
+    "en": "This release locks a newer Node.js than the published manifest.",
+    "ctx": "api/RuntimeVerification.kt (runtime section)"
   }
 }

@@ -36,6 +36,9 @@ pub fn exec_json(e: &PrivExec) -> Value {
             .collect();
         m.insert("env".into(), Value::Object(env));
     }
+    if e.stdin_tar_check {
+        m.insert("stdinTarCheck".into(), Value::from(true));
+    }
     if !e.copy_in.is_empty() {
         let c: Vec<Value> = e
             .copy_in

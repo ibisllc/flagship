@@ -52,7 +52,7 @@ describe("a hostile archive is refused while it streams", () => {
       { name: "manifest.json ", body: manifest },
     ]) {
       const f = await archiveOf([e]);
-      await expect(checkArchiveContents(f, KEY, ID), e.name).rejects.toThrow(/unexpected/);
+      await expect(checkArchiveContents(f, KEY, ID), e.name).rejects.toThrow(/unexpected|extraction check/);
     }
   });
 

@@ -465,6 +465,9 @@ export async function start(opts: {
         return key ? Buffer.from(key).toString("hex") : null;
       },
       log: (m) => console.log(m),
+      // Lost-contact thresholds (60 s / 10 min) and the check cadence; tests and the relay conformance harness shorten them.
+      ...envMs("FLAGSHIP_SERVING_REFUSE_NEW_MS", "refuseNewAfterMs"),
+      ...envMs("FLAGSHIP_SERVING_CLOSE_ALL_MS", "closeAllAfterMs"),
     });
     const relayId = process.env.FLAGSHIP_RELAY_ID ?? process.env.FLY_MACHINE_ID ?? hostname();
     // The phone's bare name (plan H3, docs/architecture-v2/phone-route.md) needs `.com`'s ledger and eligibility, so
@@ -487,7 +490,7 @@ export async function start(opts: {
       gate,
       ...(phoneRoutes ? { phone: phoneRoutes } : {}),
     });
-    gate.start();
+    gate.start(envMs("FLAGSHIP_SERVING_CHECK_MS", "checkMs").checkMs);
     feed.start();
     serving = { gate, feed };
     servingStats = () => ({ ...gate.stats(), feedConnection: feed.stats(), ...(phoneRoutes ? { phoneRoutes: phoneRoutes.stats() } : {}) });
@@ -621,6 +624,11 @@ export async function start(opts: {
       await app.close();
     },
   };
+}
+
+function envMs<K extends string>(name: string, key: K): { [P in K]?: number } {
+  const n = Number(process.env[name]);
+  return (process.env[name] && Number.isFinite(n) && n >= 0 ? { [key]: n } : {}) as { [P in K]?: number };
 }
 
 const invokedDirectly = import.meta.url === `file://${process.argv[1]}`;

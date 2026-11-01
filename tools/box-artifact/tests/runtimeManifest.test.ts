@@ -25,6 +25,7 @@ describe("runtime-manifest tool", () => {
       const signed = JSON.parse(readFileSync(join(dir, "s.json"), "utf8"));
       expect(signed.manifest.version).toBe(JSON.parse(LOCK).version);
       expect(signed.lockJson).toBe(LOCK);
+      expect(signed.manifest.release).toBe(JSON.parse(readFileSync(join(import.meta.dirname, "../../../release/version.json"), "utf8")).product);
       expect(verifyRuntimeManifestFile(signed, trust, NOW + 1000).ok).toBe(true);
       expect(verifyRuntimeManifestFile(signed, trust, NOW + 100 * 86_400_000)).toMatchObject({ ok: false, code: "expired" });
       expect(verifyRuntimeManifestFile(signed, trust, NOW + 1000, 3)).toMatchObject({ ok: false, code: "rollback" });
@@ -43,6 +44,24 @@ describe("runtime-manifest tool", () => {
   }, 60_000);
 
   it("refuses a lock that does not parse into a manifest", () => {
-    expect(() => buildRuntimeManifest(JSON.stringify({ runtime: "node", version: "x", securityFloor: "1.0.0" }), { sequence: 1, issuedAt: NOW, validDays: 30 })).toThrow();
+    expect(() => buildRuntimeManifest(JSON.stringify({ runtime: "node", version: "x", securityFloor: "1.0.0" }), { sequence: 1, issuedAt: NOW, validDays: 30, release: "0.3" })).toThrow();
+  });
+});
+
+describe("runtime-manifest publication", () => {
+  it("publishes only a manifest of the committed lock whose sequence is above the published one", async () => {
+    const { checkForPublication } = await import("../runtime-manifest.js");
+    const { signRuntimeManifest } = await import("../../../packages/protocol/src/runtimeManifest.js");
+    const make = (sequence: number, lockText = LOCK) => {
+      const d = buildRuntimeManifest(lockText, { sequence, issuedAt: NOW, validDays: 30, release: "0.3" });
+      d.signatures = [signRuntimeManifest(d.manifest, SEED)];
+      return d;
+    };
+    const o = { trust, lockText: LOCK, now: NOW + 1000 };
+    expect(checkForPublication(make(5), { ...o, published: null })).toBeNull();
+    expect(checkForPublication(make(5), { ...o, published: make(4) })).toBeNull();
+    expect(checkForPublication(make(4), { ...o, published: make(4) })).toBe("refused: rollback");
+    expect(checkForPublication(make(5, LOCK + " "), { ...o, published: null })).toMatch(/committed/);
+    expect(checkForPublication(make(5), { ...o, trust: { keys: ["ab".repeat(32)], threshold: 1 }, published: null })).toMatch(/not-enough-signatures/);
   });
 });

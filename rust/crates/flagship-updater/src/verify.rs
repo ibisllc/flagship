@@ -56,6 +56,8 @@ pub struct Verified {
     pub arch: String,
     pub sequence: u64,
     pub signers: usize,
+    /// The Node version the signed manifest says the artifact bundles.
+    pub node_version: String,
 }
 
 pub(crate) fn lower(s: &str) -> String {
@@ -352,5 +354,6 @@ pub fn verify(
         arch: m.arch.clone(),
         sequence: m.sequence,
         signers: signed.len(),
+        node_version: m.node_version.clone(),
     })
 }

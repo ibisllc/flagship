@@ -442,6 +442,7 @@ fun ServerDetailScreen(
             PowerCard(serverDomain = d.value.serverFqdn)
             JournalCard(serverDomain = d.value.serverFqdn)
             debugVm?.let { vm -> DebugAccessCard(vm = vm, onChanged = { detailVm?.load() }) }
+            d.value.runtimeView?.let { RuntimeSection(it) }
             onOpenLocalAi?.let { LocalAiCard(onOpen = it) }
             // The box's GPUs: who holds or waits for each, and Stop (gpu/http.ts).
             client?.let { AcceleratorsCard(serverDomain = d.value.serverFqdn, client = it) }

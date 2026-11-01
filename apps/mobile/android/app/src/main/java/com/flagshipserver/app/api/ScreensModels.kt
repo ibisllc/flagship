@@ -504,7 +504,11 @@ data class ServerDetailResponse(
     val debugAccess: DebugAccessView? = null,
     /** Disk use and each app's limits (docs/app-runtimes.md 5.3). Absent from older daemons. */
     val storage: ServerStorage? = null,
-)
+    /** The Node.js the box runs and how it checks out; read through [runtimeView]. Absent from older daemons. */
+    val runtime: kotlinx.serialization.json.JsonObject? = null,
+) {
+    val runtimeView: RuntimeVerificationView? get() = RuntimeVerificationView.from(runtime)
+}
 
 /** One store's use and limit (`limitBytes` null: no limit but the disk). */
 @Serializable

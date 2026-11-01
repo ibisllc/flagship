@@ -83,6 +83,12 @@ jobs:
         if: matrix.shard == 1
         run: npx tsx tools/test-vectors.ts --check
 
+      # Release plan G2: release/runtime-lock.json and every other Node pin (artifact pins, security floor, box
+      # release floors, the box CI jobs) agree, and the signed runtime manifest's shared vectors are current.
+      - name: Runtime lock agrees with every Node pin
+        if: matrix.shard == 1
+        run: npx vitest run scripts/runtime-pins.test.ts && npx tsx tools/runtime-manifest-vectors.ts --check && node tools/runtime-verification-vectors.mjs --check
+
       - name: Run the unit suite (shard ${{ matrix.shard }} of 4)
         run: npx vitest run --shard=${{ matrix.shard }}/4
 

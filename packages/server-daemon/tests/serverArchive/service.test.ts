@@ -5,7 +5,8 @@
  * a server that isn't waiting, another backup, a changed data file, a wrong
  * key, an app that is already there, a companion session.
  */
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,6 +48,9 @@ import tar from "tar-stream";
 import { Readable as NodeReadable } from "node:stream";
 import { checkArchiveContents } from "../../src/serverArchive/restore.js";
 import { checkDataFile, openDataFile, sealDataFile } from "../../src/serverArchive/format.js";
+import { miniTar, miniTarText } from "../helpers/miniTar.js";
+import { KeydServer, KeydService } from "@flagship/keyd";
+import { keydCallerFor, keydCustody, type ArchiveKeyCustody } from "../../src/serverArchive/archiveKeys.js";
 
 const owner = deriveIRK({ seed: new Uint8Array(32).fill(42) });
 const srcBox = testCustodian({ identityPriv: new Uint8Array(32).fill(3), swk: new Uint8Array(32).fill(4), cgk: new Uint8Array(32).fill(5) });
@@ -134,8 +138,8 @@ function fakeOps() {
       restoredInto.push(s);
       restoredDbs.push(await readFile(p, "utf8"));
     },
-    archiveFiles: async (v, _c, out) => writeFile(out, `files-of-${v}`),
-    restoreFiles: async (_v, p) => void restoredFiles.push(await readFile(p, "utf8")),
+    archiveFiles: async (v, _c, out) => writeFile(out, miniTar(`files-of-${v}`)),
+    restoreFiles: async (_v, p) => void restoredFiles.push(miniTarText(await readFile(p))),
   };
   return { ops, images, restoredDbs, restoredFiles, dumpedFrom, restoredInto };
 }
@@ -173,7 +177,7 @@ function platformFor(box: typeof srcBox, nameKey: string, dedicatedPort?: number
   return { platform, provisioner };
 }
 
-async function world(o: { dstFree?: () => number; srcOwnDb?: boolean; dstOwnDb?: boolean } = {}) {
+async function world(o: { dstFree?: () => number; srcOwnDb?: boolean; dstOwnDb?: boolean; keys?: ArchiveKeyCustody } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "server-archive-"));
   const src = platformFor(srcBox, "s".repeat(40), o.srcOwnDb ? 15400 : undefined);
   const request = { serverId: SRC, creator: "harry", slug: "notes", manifestJson: JSON.stringify(MANIFEST), addOwnerToMembership: true, issuedAt: Date.now() };
@@ -234,6 +238,7 @@ async function world(o: { dstFree?: () => number; srcOwnDb?: boolean; dstOwnDb?:
     },
     note: (k) => void events.push(k),
     freeBytes: async () => 1e12,
+    ...(o.keys ? { keys: o.keys } : {}),
   });
   const targetWait: { current: RestoreWait | null } = { current: null };
   const targetService = buildServerArchiveService({
@@ -256,6 +261,7 @@ async function world(o: { dstFree?: () => number; srcOwnDb?: boolean; dstOwnDb?:
     },
     note: (k) => void events.push(k),
     freeBytes: async () => o.dstFree?.() ?? 1e12,
+    ...(o.keys ? { keys: o.keys } : {}),
   });
   return { dir, src, dst, srcEnv, dstEnv, sOps, tOps, sourceService, targetService, targetWait, sourceWait, events, builds, pulls, srcClones, dstClones };
 }
@@ -599,7 +605,7 @@ describe("Backup/clone server", () => {
     const notWaiting = await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length });
     expect(notWaiting.status).toBe(409);
     expect(asJson(notWaiting).code).toBe("not-waiting");
-    expect(asJson(await call(w.targetService, "GET", RESTORE_PATH))).toEqual({ waiting: null, restore: null });
+    expect(asJson(await call(w.targetService, "GET", RESTORE_PATH))).toMatchObject({ waiting: null, restore: null });
     w.targetWait.current = await waitingFor(w.dir, DST, file, { archiveId: "ff".repeat(16) });
     const other = await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length });
     expect(asJson(other).code).toBe("other-backup");
@@ -1250,5 +1256,50 @@ describe("If we are ever forced to cut you off: a backup moves to a brand-new ac
     const r = await b.platform.install({ request, signature: dstBox.signInstallService(request), verify: verifyInstallService });
     expect(r.ok).toBe(true);
     expect(b.pulls.map((p) => p.canonicalUrl)).toEqual([expect.stringContaining("harry")]);
+  });
+});
+
+describe("arch-v2 effects (plan G6)", () => {
+  it("with flagship-keyd holding the keys, Back up now and the restore seal and open every frame there", async () => {
+    const kd = mkdtempSync(join(tmpdir(), "kd-"));
+    const service = new KeydService({ identitySeed: new Uint8Array(32).fill(9) });
+    const server = new KeydServer({ socketPath: join(kd, "k.sock"), service, rateLimits: { "*": { perSecond: 1e5, burst: 1e5 } } });
+    await server.start();
+    try {
+      const w = await world({ keys: keydCustody(keydCallerFor(join(kd, "k.sock"))) });
+      const file = await backUp(w);
+      w.targetWait.current = await waitingFor(w.dir, DST, file);
+      await upload(w.targetService, file);
+      expect((await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() })).status).toBe(202);
+      await w.targetService.settle();
+      const view = asJson(await call(w.targetService, "GET", RESTORE_PATH));
+      expect(view.restore).toMatchObject({ state: "done", apps: [{ serviceId: SERVICE, state: "done" }] });
+      expect(view.isolation).toMatchObject({ keys: "keyd", extraction: "ts" });
+      expect(view.isolation.counts.keydArchives).toBeGreaterThanOrEqual(2);
+      expect(view.isolation.counts.keydFrames).toBeGreaterThanOrEqual(3);
+      // The same bytes a daemon-held key makes: the file opens without keyd too.
+      expect(file.subarray(0, 24).toString("utf8")).toBe("flagship-backup-data/v2\n");
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it("an app whose files tar links out of its folder is not restored, and says why", async () => {
+    const w = await world();
+    const evil = Buffer.from(
+      (JSON.parse(readFileSync(join(fileURLToPath(new URL("../../../../", import.meta.url)), "packages/protocol/test-vectors/archive-extraction/vectors.json"), "utf8")) as { cases: Array<{ name: string; tarB64: string }> }).cases.find((c) => c.name === "a symlink that climbs out")!.tarB64,
+      "base64",
+    );
+    w.sOps.ops.archiveFiles = async (_v, _c, out) => writeFile(out, evil);
+    const file = await backUp(w);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    await upload(w.targetService, file);
+    expect((await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() })).status).toBe(202);
+    await w.targetService.settle();
+    const view = asJson(await call(w.targetService, "GET", RESTORE_PATH));
+    expect(view.restore.apps[0]).toMatchObject({ serviceId: SERVICE, state: "failed" });
+    expect(view.restore.apps[0].reason).toMatch(/refused by the extraction check \((ts|rust)\): .*\(symlink-escape\)/);
+    expect(w.tOps.restoredFiles).toHaveLength(0);
+    expect(view.isolation.counts.archivesRefused).toBeGreaterThanOrEqual(1);
   });
 });

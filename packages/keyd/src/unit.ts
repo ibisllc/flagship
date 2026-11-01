@@ -37,6 +37,10 @@ export const KEYD_REQUIRED_PROPERTIES: Readonly<Record<string, string>> = {
   UMask: "0077",
 };
 
+/** Loader, Node and OpenSSL variables every Flagship unit drops (the same list as packages/privd unit.ts UNSAFE_ENV). */
+export const KEYD_UNSET_ENV_LINE =
+  "UnsetEnvironment=NODE_OPTIONS NODE_PATH NODE_EXTRA_CA_CERTS NODE_TLS_REJECT_UNAUTHORIZED NODE_ICU_DATA NODE_V8_COVERAGE NODE_REPL_EXTERNAL_MODULE NODE_COMPILE_CACHE NODE_REDIRECT_WARNINGS LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT GCONV_PATH MALLOC_CONF OPENSSL_CONF OPENSSL_MODULES OPENSSL_ENGINES SSL_CERT_FILE SSL_CERT_DIR";
+
 export const KEYD_UNIT_PATH = "/etc/systemd/system/flagship-keyd.service";
 export const KEYD_DAEMON_DROPIN_PATH = "/etc/systemd/system/flagship-daemon.service.d/20-keyd.conf";
 
@@ -63,6 +67,7 @@ ExecStartPre=+/usr/bin/env FLAGSHIP_KEYD_STATE=${KEYD_STATE_DIR} FLAGSHIP_KEYD_L
 ExecStart=${node} --jitless ${entry} serve
 Environment=FLAGSHIP_KEYD_STATE=${KEYD_STATE_DIR}
 Environment=FLAGSHIP_KEYD_SOCKET=${KEYD_SOCKET}
+${KEYD_UNSET_ENV_LINE}
 RuntimeDirectory=${KEYD_RUNTIME_DIR}
 RuntimeDirectoryMode=0750
 StateDirectory=flagship-keyd

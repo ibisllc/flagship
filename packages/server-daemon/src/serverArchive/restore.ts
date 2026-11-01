@@ -41,11 +41,19 @@ import type { CopyAccessEntry, CopySourceTree } from "../appCopy/wire.js";
 import { writeSourceTree } from "../llm/serviceSource.js";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { openDataFile, ArchiveError } from "./format.js";
+import { openDataFile, ArchiveError, type ArchiveKey } from "./format.js";
+import { checkTarFile, tarCheckSink, type TarLimits, type TarVerdict } from "./tarCheck.js";
 import { ArchiveLimits } from "./limits.js";
 import { WasiModuleStore } from "../wasi/moduleStore.js";
 import { auditDumpToc, describeExecutable, ownerChanged, pinnedImageRef } from "./restoreAudit.js";
 import type { ArchiveAppMeta, ArchiveManifest } from "./build.js";
+
+/** The outer archive under the shared check: regular files only, and the bounds of limits.ts. */
+const ARCHIVE_TAR_LIMITS: Partial<TarLimits> = { maxEntries: 4096, maxEntryBytes: 512 * 1024 ** 3, maxTotalBytes: 512 * 1024 ** 3 };
+
+function refusedArchive(v: Extract<TarVerdict, { ok: false }>): ArchiveError {
+  return new ArchiveError(`the archive was refused by the extraction check (${v.checker}): ${v.message} (${v.code})`);
+}
 
 const IMAGE_RE = /^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$/;
 const ENTRY_RE = /^(manifest\.json|apps\/[a-z0-9][a-z0-9-]*--[a-z0-9][a-z0-9-]*\/(meta\.json|files\.tar|source\.json|module\.wasm|db-\d{1,3}\.dump))$/;
@@ -109,7 +117,7 @@ async function sha256File(path: string): Promise<string> {
 }
 
 /** Unpack the sealed data file into `dir`. Refuses any entry that isn't one of the expected files. */
-async function unpack(archivePath: string, key: Buffer, archiveId: string, dir: string, limits = new ArchiveLimits()): Promise<void> {
+async function unpack(archivePath: string, key: ArchiveKey, archiveId: string, dir: string, limits = new ArchiveLimits()): Promise<void> {
   const extract = tar.extract();
   const done = new Promise<void>((resolve, reject) => {
     extract.on("entry", (header, stream, next) => {
@@ -186,7 +194,7 @@ function validMeta(v: unknown, serviceId: string): ArchiveAppMeta {
  * present with the SHA-256 recorded for it when it was made. Needs no disk. A backup whose
  * apps or database dumps are cut or missing fails here instead of at the restore.
  */
-export async function checkArchiveContents(archivePath: string, key: Buffer, archiveId: string, limits = new ArchiveLimits()): Promise<{ apps: number; expandedBytes: number }> {
+export async function checkArchiveContents(archivePath: string, key: ArchiveKey, archiveId: string, limits = new ArchiveLimits()): Promise<{ apps: number; expandedBytes: number }> {
   const sums = new Map<string, string>();
   let expandedBytes = 0;
   const texts = new Map<string, string>();
@@ -236,10 +244,23 @@ export async function checkArchiveContents(archivePath: string, key: Buffer, arc
     extract.on("error", reject);
   });
   const src = openDataFile(archivePath, key, archiveId);
+  // The same plaintext also goes through the extraction check (the Rust checker when the release
+  // carries it), so a crafted archive is refused by the rules both checkers share.
+  const sink = await tarCheckSink("archive", ARCHIVE_TAR_LIMITS);
+  src.on("data", (c: Buffer) => sink.write(c));
   src.on("error", (e) => extract.destroy(e));
   extract.on("error", () => src.destroy());
   src.pipe(extract);
-  await done;
+  try {
+    await done;
+  } catch (e) {
+    const v = await sink.end();
+    // The checker's reason is the more precise one, unless it only saw the stream stop.
+    if (!v.ok && v.code !== "truncated") throw refusedArchive(v);
+    throw e;
+  }
+  const verdict = await sink.end();
+  if (!verdict.ok) throw refusedArchive(verdict);
   let manifest: ArchiveManifest;
   try {
     manifest = JSON.parse(texts.get("manifest.json") ?? "") as ArchiveManifest;
@@ -270,7 +291,7 @@ export interface ArchiveContents {
 export async function unpackArchive(
   deps: ArchiveRestoreDeps,
   archivePath: string,
-  key: Buffer,
+  key: ArchiveKey,
   archiveId: string,
   dir: string,
 ): Promise<ArchiveContents> {
@@ -435,7 +456,12 @@ async function installOne(
           await deps.ops.restoreDatabase(cred, dump);
         }
         const files = path("files");
-        if (files && data?.files) await deps.ops.restoreFiles(data.files.volume, files);
+        if (files && data?.files) {
+          // The folder's own tar is checked before anything unpacks it (and again by the broker on an arch-v2 box).
+          const v = await checkTarFile(files, "volume");
+          if (!v.ok) throw new Error(`its files were not restored: the archive was refused by the extraction check (${v.checker}): ${v.message} (${v.code})`);
+          await deps.ops.restoreFiles(data.files.volume, files);
+        }
       },
     });
     delete held.postgres;

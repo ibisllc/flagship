@@ -43,6 +43,7 @@ import { buildScreensHttp } from "../src/screens/screensHttp.js";
 import type { HttpRequest } from "../src/runtime.js";
 import { readServiceSource, writeSourceTree } from "../src/llm/serviceSource.js";
 import { swkOps, testCustodian } from "./helpers/keyCustody.js";
+import { miniTar, miniTarText } from "./helpers/miniTar.js";
 
 // 8 MiB chunks made the multi-chunk test gzip, hash and write ~70 MB of
 // random bytes, which ran past the 30 s timeout on a loaded machine. Both
@@ -120,10 +121,10 @@ function fakeOps(over: Partial<AppCopyOps> = {}) {
     },
     archiveFiles: async (v, c, out) => {
       paused.push(c);
-      await writeFile(out, `files-of-${v}`);
+      await writeFile(out, miniTar(`files-of-${v}`));
     },
     restoreFiles: async (v, p) => {
-      restoredFiles.push({ volume: v, content: await readFile(p, "utf8") });
+      restoredFiles.push({ volume: v, content: miniTarText(await readFile(p)) });
     },
     ...over,
   };

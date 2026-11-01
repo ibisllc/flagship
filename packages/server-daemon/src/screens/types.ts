@@ -150,6 +150,12 @@ export interface ServerDetailResponse {
    * read-only). Older daemons omit the field.
    */
   storage?: ServerStorage;
+  /**
+   * The runtime verification view (release plan G2): the locked Node, its official source, the checksum Flagship
+   * publishes for it, the one computed here from the running executable, and both signatures. Older daemons and
+   * releases without a runtime lock omit the field.
+   */
+  runtime?: import("../runtimeVerification.js").RuntimeVerificationView;
 }
 
 /** One store's use and limit (`limitBytes` null: no limit but the disk). */

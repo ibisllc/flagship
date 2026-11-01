@@ -55,7 +55,10 @@ import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { ARCHIVE_EXCLUDES, ARCHIVE_INCLUDES, buildServerArchive, estimateServerArchive, type ArchiveBuildDeps } from "./build.js";
-import { ARCHIVE_FRAME_BYTES, ArchiveError, checkBackupFile, checkDataFile, writeBackupFile } from "./format.js";
+import { ARCHIVE_FRAME_BYTES, ArchiveError, checkBackupFile, checkDataFile, writeBackupFile, type ArchiveKey } from "./format.js";
+import { daemonCustody, localCipher, type ArchiveCipher, type ArchiveKeyCustody, type KeydArchiveCustody } from "./archiveKeys.js";
+import { isolationView } from "./isolation.js";
+import { rustTarChecker } from "./tarCheck.js";
 import { checkArchiveContents, installArchive, unpackArchive, type ArchiveRestoreDeps, type RestoreAppResult } from "./restore.js";
 import type { RestoreWait } from "./restoreWait.js";
 import { KEY_POOL_LOW, KEY_POOL_MAX, SAVED_BACKUP_FILE, SAVED_DATA_FILE, SavedBackups, type SavedBackupMeta, type SavedState } from "./saved.js";
@@ -144,6 +147,10 @@ export interface ServerArchiveServiceOptions {
   migrate?: { pause: MigratePause };
   /** Fetch for a box-to-box pull and the link probe (tests). */
   fetchImpl?: typeof fetch;
+  /** Who holds archive keys (plan G6): flagship-keyd where it runs, else this process. */
+  keys?: ArchiveKeyCustody;
+  /** Whether app files folders go through the broker (shown on the views). */
+  filesThroughBroker?: () => boolean;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -279,7 +286,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
    */
   async function makeArchive(a: {
     archiveId: string;
-    key: Buffer;
+    key: ArchiveKey;
     slots: BackupSlot[];
     dataPath: string;
     backupPath: string;
@@ -325,7 +332,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       excludes: ARCHIVE_EXCLUDES,
       data: { fileName: a.dataName, bytes: r.bytes, sha256: r.sha256, frameBytes: ARCHIVE_FRAME_BYTES },
     };
-    const written = await writeBackupFile(a.backupPath, { archiveId: a.archiveId, key: a.key, slots: a.slots, body, nonce: randomBytes(12) });
+    const written = await writeBackupFile(a.backupPath, { archiveId: a.archiveId, key: a.key, slots: a.slots, body });
     // "Ready" and "saved" mean the file was read back and opened, not just written: the size and
     // hash are the ones just made and every frame decrypts. It covers both the one-off backup
     // (the file the owner downloads) and the saved and scheduled ones. A backup that fails this
@@ -366,8 +373,17 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       backup = job;
       await dropBackupFiles();
       note("server.backup.started", "Started a backup of this server.");
-      const key = Buffer.from(b.key, "hex");
       const archiveId = b.archiveId;
+      // The content key goes to keyd at once where it runs; this request's copy is zeroed.
+      let key: ArchiveCipher;
+      try {
+        key = await custody.importKey(archiveId, Buffer.from(b.key, "hex"));
+      } catch (e) {
+        running = false;
+        job.state = "failed";
+        job.reason = `this server's key service refused the backup's key: ${(e as Error).message}`;
+        return err(503, job.reason);
+      }
       void makeArchive({
         archiveId,
         key,
@@ -385,7 +401,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           job.bundleSha256 = r.bundleSha256;
           job.apps = r.apps;
           job.left = r.left;
-          key.fill(0);
+          void key.close();
           note(
             "server.backup.created",
             `Backup ready and checked: ${r.apps.length} app${r.apps.length === 1 ? "" : "s"}.` +
@@ -397,7 +413,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         .catch(async (e: Error) => {
           job.state = "failed";
           job.reason = e.message || "the backup couldn't be made";
-          key.fill(0);
+          void key.close();
           await dropBackupFiles();
           note("server.backup.failed", `The backup failed: ${job.reason}`, false);
           log(`[server-archive] backup failed: ${job.reason}`);
@@ -756,8 +772,15 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   // -------------------------------------------------------------------------
 
   const store = opts.saved ? new SavedBackups(opts.saved.dir) : null;
+  const custody: ArchiveKeyCustody = opts.keys ?? daemonCustody;
+  const keydPool: KeydArchiveCustody | null = custody.kind === "keyd" ? (custody as KeydArchiveCustody) : null;
+  let extraction: "rust" | "ts" = "ts";
+  void rustTarChecker().then((b) => (extraction = b ? "rust" : "ts")).catch(() => {});
+  /** The pool as this process keeps it on disk (classic custody: every entry carries its key). */
+  const heldKeys = () => keyPool.filter((k): k is { archiveId: string; kekHex: string } => typeof k.kekHex === "string");
+  const isolation = () => isolationView(custody.kind, opts.filesThroughBroker?.() ? "broker" : "daemon", extraction);
   let savedState: SavedState | null = null;
-  let keyPool: Array<{ archiveId: string; kekHex: string }> = [];
+  let keyPool: Array<{ archiveId: string; kekHex?: string }> = [];
   let savedJob: {
     archiveId: string;
     trigger: "schedule" | "now";
@@ -852,7 +875,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (purpose === "migrate") await opts.migrate!.pause.pause();
     // The key leaves the pool (on disk) before it is used, so it is never used twice.
     keyPool = keyPool.slice(1);
-    await store.saveKeys(keyPool);
+    // Under keyd the key leaves keyd's pool (its disk) when keyd takes it; here only the ids are held.
+    if (!keydPool) await store.saveKeys(heldKeys());
     s.usedIds.push(k.archiveId);
     const startedAt = now();
     if (trigger === "schedule") {
@@ -865,14 +889,24 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     running = true;
     const job = { archiveId: k.archiveId, trigger, startedAt, progress: { done: 0, total: 0, app: "" } } as NonNullable<typeof savedJob>;
     savedJob = job;
-    const key = randomBytes(32);
-    const kek = Buffer.from(k.kekHex, "hex");
     const stem = savedStem(startedAt);
     const dir = store.buildingDir(k.archiveId);
+    let key: ArchiveCipher | null = null;
     void (async () => {
       await mkdir(dir, { recursive: true, mode: 0o700 });
-      const slot = wrapAccountSlot(k.archiveId, key, kek, randomBytes(12));
-      kek.fill(0);
+      let slot: BackupSlot;
+      if (keydPool) {
+        // keyd takes the account key out of its pool, makes the content key and wraps it: neither is seen here.
+        const made = await keydPool.create(k.archiveId);
+        key = made.cipher;
+        slot = made.slot;
+      } else {
+        const raw = randomBytes(32);
+        const kek = Buffer.from(k.kekHex ?? "", "hex");
+        slot = wrapAccountSlot(k.archiveId, raw, kek, randomBytes(12));
+        kek.fill(0);
+        key = localCipher(raw, k.archiveId);
+      }
       return makeArchive({
         archiveId: k.archiveId,
         key,
@@ -934,7 +968,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         if (purpose === "migrate") await opts.migrate!.pause.resume("The backup for the move failed, so this server's apps are running again.").catch(() => {});
       })
       .finally(async () => {
-        key.fill(0);
+        await (key as ArchiveCipher | null)?.close();
         savedJob = null;
         running = false;
         await rm(scratch, { recursive: true, force: true }).catch(() => {});
@@ -964,6 +998,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       ...(keyPool.length === 0 && s.schedule.frequency !== "off" ? { waitingReason: NO_KEYS } : {}),
       usedBytes: backups.reduce((n, m) => n + m.bytes + m.backupBytes, 0),
       backups,
+      isolation: isolation(),
     };
   }
 
@@ -1005,9 +1040,15 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (!opts.saved!.authorizeKeys(d, Buffer.from(b.signature, "hex"))) return err(403, "only an admin device of this account can approve backups");
     const s = await state();
     const have = new Set([...keyPool.map((k) => k.archiveId), ...s.usedIds]);
-    const fresh = keys.filter((k) => !have.has(k.archiveId));
-    keyPool = [...keyPool, ...fresh].slice(0, KEY_POOL_MAX);
-    await store!.saveKeys(keyPool);
+    const fresh = keys.filter((k) => !have.has(k.archiveId)).slice(0, Math.max(0, KEY_POOL_MAX - keyPool.length));
+    if (keydPool) {
+      // The account keys go to keyd; this process keeps only which archives they are for.
+      if (fresh.length > 0) await keydPool.poolAdd(fresh.map((k) => ({ archiveId: k.archiveId, kekHex: k.kekHex })));
+      keyPool = (await keydPool.poolIds()).map((archiveId) => ({ archiveId }));
+    } else {
+      keyPool = [...keyPool, ...fresh].slice(0, KEY_POOL_MAX);
+      await store!.saveKeys(heldKeys());
+    }
     return json(200, await savedView());
   }
 
@@ -1191,7 +1232,14 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const job = restore;
     job.state = "checking";
     job.reason = undefined;
-    const key = Buffer.from(b.key, "hex");
+    let key: ArchiveCipher;
+    try {
+      key = await custody.importKey(w.archiveId, Buffer.from(b.key, "hex"));
+    } catch (e) {
+      running = false;
+      job.state = "ready";
+      return err(503, `this server's key service refused the backup's key: ${(e as Error).message}`);
+    }
     opts.wait?.setRestoring(true);
     note("server.restore.started", "Restoring this server's backup.");
     void (async () => {
@@ -1247,7 +1295,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         note("server.restore.failed", `${job.reason}. This server is still waiting for its backup.`, false);
         log(`[server-archive] restore failed: ${job.reason}`);
       } finally {
-        key.fill(0);
+        await key.close();
         running = false;
         await rm(unpackDir, { recursive: true, force: true }).catch(() => {});
         await rm(scratch, { recursive: true, force: true }).catch(() => {});
@@ -1466,7 +1514,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           ...(restore.reason ? { reason: restore.reason } : {}),
         }
       : null;
-    return { waiting: waiting(), restore: r };
+    return { waiting: waiting(), restore: r, isolation: isolation() };
   }
 
   return {
@@ -1529,6 +1577,16 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         await store.init();
         savedState = await store.loadState();
         keyPool = await store.loadKeys();
+        if (keydPool) {
+          // Keys an earlier release kept on disk here move into keyd once, then the file holds none.
+          const legacy = keyPool.filter((k): k is { archiveId: string; kekHex: string } => typeof k.kekHex === "string");
+          if (legacy.length > 0) {
+            await keydPool.poolAdd(legacy.map((k) => ({ archiveId: k.archiveId, kekHex: k.kekHex })));
+            await store.saveKeys([]);
+            log(`[server-archive] moved ${legacy.length} backup key(s) into flagship-keyd`);
+          }
+          keyPool = (await keydPool.poolIds()).map((archiveId) => ({ archiveId }));
+        }
       }
     },
     /** One look at the schedule (the daemon calls it every few minutes). */

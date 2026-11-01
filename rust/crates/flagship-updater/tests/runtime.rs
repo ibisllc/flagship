@@ -734,3 +734,339 @@ fn replayed_metadata_from_another_release_cannot_be_used_for_this_one() {
     .unwrap_err();
     assert_eq!(e.code, "checksum-missing");
 }
+
+#[test]
+fn a_substituted_filename_or_the_wrong_architecture_is_refused() {
+    let f = fixture();
+    // the signed list carries this archive's digest, but under the other architecture's name
+    let digest = &f.lock.targets["linux-amd64"].sha256;
+    let swapped = format!(
+        "{}  node-v24.22.1-linux-x64.tar.gz\n{digest}  node-v24.22.1-linux-arm64.tar.gz\n",
+        "9".repeat(64)
+    )
+    .into_bytes();
+    assert_eq!(
+        refused(&f, &swapped, &f.key.sign(&swapped)),
+        "checksum-mismatch"
+    );
+    // the amd64 archive offered for the arm64 target
+    let g = fixture_with(|v| {
+        v["targets"]["linux-arm64"] = json!({"file": "node-v24.22.1-linux-arm64.tar.gz", "bytes": v["targets"]["linux-amd64"]["bytes"], "sha256": "9".repeat(64), "executable": "bin/node", "executableBytes": 1, "executableSha256": "1".repeat(64)});
+    });
+    let arm = g.lock.target("linux-arm64").unwrap();
+    let e = install(
+        &g.lock,
+        arm,
+        &g.archive,
+        &g.shasums,
+        &g.sig,
+        &g.dir.path().join("rt"),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "checksum-mismatch");
+    // a target the lock does not name at all
+    assert_eq!(
+        g.lock.target("linux-riscv64").unwrap_err().code,
+        "bad-runtime-lock"
+    );
+}
+
+#[test]
+fn an_interrupted_download_leaves_nothing_in_the_cache() {
+    use flagship_updater::runtime::fetch::fetch_into_cache;
+    let f = fixture();
+    let t = f.lock.target("linux-amd64").unwrap();
+    let gz = std::fs::read(&f.archive).unwrap();
+    let cut = canned(&[
+        (&f.lock.archive_url(t), 200, None, &gz[..gz.len() / 2]),
+        (&f.lock.shasums_url(), 200, None, &f.shasums),
+        (&f.lock.signature_url(), 200, None, &f.sig),
+    ]);
+    let cache = f.dir.path().join("cache");
+    let e = fetch_into_cache(&cut, &f.lock, t, &cache).unwrap_err();
+    assert!(
+        ["size-mismatch", "checksum-mismatch", "download-failed"].contains(&e.code),
+        "{}",
+        e.code
+    );
+    assert!(!cache.join(format!("{}.tar.gz", t.sha256)).exists());
+    // the next run completes it
+    fetch_into_cache(&serving(&f), &f.lock, t, &cache).unwrap();
+}
+
+#[test]
+fn a_refused_install_leaves_the_running_runtime_alone() {
+    let f = fixture();
+    let t = f.lock.target("linux-amd64").unwrap();
+    let rt = f.dir.path().join("rt");
+    let ok = install(&f.lock, t, &f.archive, &f.shasums, &f.sig, &rt).unwrap();
+    let other = Key::new("other");
+    let e = install(
+        &f.lock,
+        t,
+        &f.archive,
+        &f.shasums,
+        &other.sign(&f.shasums),
+        &rt,
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "upstream-signature");
+    assert_eq!(std::fs::read(&ok.executable).unwrap(), f.exe);
+    assert!(status(&f.lock, "linux-amd64", &rt).unwrap().matches_lock);
+    // a version whose executable fails its check after unpacking (a failed activation) leaves only the old one
+    let g =
+        fixture_with(|v| v["targets"]["linux-amd64"]["executableSha256"] = json!("6".repeat(64)));
+    let gt = g.lock.target("linux-amd64").unwrap();
+    std::fs::copy(&g.archive, f.dir.path().join("g.tar.gz")).unwrap();
+    let e = install(
+        &g.lock,
+        gt,
+        &f.dir.path().join("g.tar.gz"),
+        &g.shasums,
+        &g.sig,
+        &rt,
+    );
+    assert_eq!(e.unwrap_err().code, "bad-runtime");
+    let left: Vec<_> = std::fs::read_dir(&rt)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(left, vec![ok.dir.file_name().unwrap().to_owned()]);
+}
+
+/// The CLI with the published manifest: a fixture lock written as text, a trust file naming signer 1.
+struct ManifestFx {
+    f: Fx,
+    lock_path: std::path::PathBuf,
+    lock_text: String,
+    trust: std::path::PathBuf,
+    sums: std::path::PathBuf,
+    sig: std::path::PathBuf,
+}
+
+fn manifest_fx() -> ManifestFx {
+    let f = fixture();
+    let d = f.dir.path().to_path_buf();
+    let t = f.lock.target("linux-amd64").unwrap();
+    let lock_text = json!({
+        "schema": 1, "runtime": "node", "version": "24.22.1", "securityFloor": "24.22.1",
+        "upstream": {"base": "https://nodejs.org/dist/v24.22.1/", "shasums": "SHASUMS256.txt", "shasumsSignature": "SHASUMS256.txt.sig", "allowedHosts": ["nodejs.org"]},
+        "keyring": {"signers": [{"fingerprint": f.key.fingerprint(), "armored": f.key.armored()}]},
+        "targets": {"linux-amd64": {"file": t.file, "bytes": t.bytes, "sha256": t.sha256, "executable": "bin/node", "executableBytes": t.executable_bytes, "executableSha256": t.executable_sha256}}
+    })
+    .to_string();
+    let lock_path = d.join("lock.json");
+    std::fs::write(&lock_path, &lock_text).unwrap();
+    let trust = d.join("trust.json");
+    std::fs::write(
+        &trust,
+        json!({"keys": [common::Signer::new(1).ed_hex()], "threshold": 1}).to_string(),
+    )
+    .unwrap();
+    let (sums, sig) = (d.join("SHASUMS256.txt"), d.join("SHASUMS256.txt.sig"));
+    std::fs::write(&sums, &f.shasums).unwrap();
+    std::fs::write(&sig, &f.sig).unwrap();
+    ManifestFx {
+        f,
+        lock_path,
+        lock_text,
+        trust,
+        sums,
+        sig,
+    }
+}
+
+const FAR: u64 = 4_000_000_000_000;
+const NOW: &str = "1800000000000";
+
+fn cli(a: &[String]) -> (u8, String, String) {
+    let (mut o, mut e) = (Vec::new(), Vec::new());
+    let c = flagship_updater::cli::run(a, &mut o, &mut e);
+    (
+        c,
+        String::from_utf8(o).unwrap(),
+        String::from_utf8(e).unwrap(),
+    )
+}
+
+impl ManifestFx {
+    fn write_manifest(&self, name: &str, body: &str) -> String {
+        let p = self.f.dir.path().join(name);
+        std::fs::write(&p, body).unwrap();
+        p.to_str().unwrap().to_owned()
+    }
+    fn args(&self, sub: &str, manifest: &str, files: bool) -> Vec<String> {
+        let d = self.f.dir.path();
+        let mut a: Vec<String> = [
+            "runtime",
+            sub,
+            "--lock",
+            self.lock_path.to_str().unwrap(),
+            "--target",
+            "linux-amd64",
+            "--runtimes",
+            d.join("rt").to_str().unwrap(),
+            "--state",
+            d.join("state").to_str().unwrap(),
+            "--manifest",
+            manifest,
+            "--trust",
+            self.trust.to_str().unwrap(),
+            "--now",
+            NOW,
+        ]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+        if files {
+            for (k, v) in [
+                ("--archive", &self.f.archive),
+                ("--shasums", &self.sums),
+                ("--shasums-sig", &self.sig),
+            ] {
+                a.push(k.to_owned());
+                a.push(v.to_str().unwrap().to_owned());
+            }
+        }
+        a
+    }
+}
+
+#[test]
+fn the_manifest_the_signed_list_and_the_archive_must_all_agree_before_an_install() {
+    let x = manifest_fx();
+    let fp = x.f.key.fingerprint();
+    for (label, body, code) in [
+        (
+            "another lock",
+            common::signed_runtime_manifest(
+                1,
+                &format!("{} ", x.lock_text),
+                "24.22.1",
+                "24.22.1",
+                4,
+                FAR,
+                &[],
+            ),
+            "runtime-manifest-mismatch",
+        ),
+        (
+            "altered metadata",
+            common::signed_runtime_manifest(1, &x.lock_text, "24.22.1", "24.22.1", 4, FAR, &[])
+                .replace("\"sequence\":4", "\"sequence\":5"),
+            "not-enough-signatures",
+        ),
+        (
+            "stale (expired) metadata",
+            common::signed_runtime_manifest(
+                1,
+                &x.lock_text,
+                "24.22.1",
+                "24.22.1",
+                4,
+                1_700_000_000_001,
+                &[],
+            ),
+            "expired",
+        ),
+        (
+            "the upstream key is revoked",
+            common::signed_runtime_manifest(
+                1,
+                &x.lock_text,
+                "24.22.1",
+                "24.22.1",
+                4,
+                FAR,
+                &[fp.as_str()],
+            ),
+            "signer-revoked",
+        ),
+        (
+            "an unauthorised signer",
+            common::signed_runtime_manifest(2, &x.lock_text, "24.22.1", "24.22.1", 4, FAR, &[]),
+            "not-enough-signatures",
+        ),
+    ] {
+        let m = x.write_manifest("m.json", &body);
+        let (c, _, e) = cli(&x.args("install", &m, true));
+        assert_eq!(c, 1, "{label}: {e}");
+        assert!(e.starts_with(&format!("refused: {code}")), "{label}: {e}");
+        assert!(
+            !x.f.dir.path().join("rt").exists(),
+            "{label}: nothing unpacked"
+        );
+    }
+    // agreement installs and records the sequence; a replay of an older one is then refused
+    let m5 = x.write_manifest(
+        "m5.json",
+        &common::signed_runtime_manifest(1, &x.lock_text, "24.22.1", "24.22.1", 5, FAR, &[]),
+    );
+    let (c, out, e) = cli(&x.args("install", &m5, true));
+    assert_eq!(c, 0, "{e}");
+    assert!(out.starts_with("installed: "));
+    let m4 = x.write_manifest(
+        "m4.json",
+        &common::signed_runtime_manifest(1, &x.lock_text, "24.22.1", "24.22.1", 4, FAR, &[]),
+    );
+    let (c, _, e) = cli(&x.args("verify", &m4, true));
+    assert_eq!(c, 1);
+    assert!(e.starts_with("refused: rollback"), "{e}");
+    // the same manifest again is fine
+    assert_eq!(cli(&x.args("verify", &m5, true)).0, 0);
+}
+
+#[test]
+fn status_reports_the_flagship_signature_and_never_fails_on_missing_metadata() {
+    let x = manifest_fx();
+    let m = x.write_manifest(
+        "m.json",
+        &common::signed_runtime_manifest(1, &x.lock_text, "24.22.1", "24.22.1", 5, FAR, &[]),
+    );
+    assert_eq!(cli(&x.args("install", &m, true)).0, 0);
+    let exe = x.f.dir.path().join("active-node");
+    std::fs::write(&exe, &x.f.exe).unwrap();
+    let mut a = x.args("status", &m, false);
+    a.extend(["--executable".to_owned(), exe.to_str().unwrap().to_owned()]);
+    let (c, out, _) = cli(&a);
+    assert_eq!(c, 0);
+    let v: Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(v["flagshipSignature"]["status"], "verified");
+    assert_eq!(v["flagshipSignature"]["sequence"], 5);
+    assert_eq!(v["flagshipSignature"]["release"], "0.3");
+    assert_eq!(v["flagshipSignature"]["matchesLock"], true);
+    assert_eq!(v["activeExecutable"]["matchesLock"], true);
+    assert_eq!(v["upstreamSigner"], x.f.key.fingerprint());
+    // the site is down: the healthy runtime is still reported healthy, the signature as unavailable
+    let gone = x.f.dir.path().join("nope.json");
+    let (c, out, _) = cli(&x.args("status", gone.to_str().unwrap(), false));
+    assert_eq!(c, 0);
+    let v: Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(
+        (
+            v["matchesLock"].as_bool(),
+            v["flagshipSignature"]["status"].as_str()
+        ),
+        (Some(true), Some("manifest-unavailable"))
+    );
+    // an expired manifest is reported, the runtime stays
+    let old = x.write_manifest(
+        "old.json",
+        &common::signed_runtime_manifest(
+            1,
+            &x.lock_text,
+            "24.22.1",
+            "24.22.1",
+            5,
+            1_700_000_000_001,
+            &[],
+        ),
+    );
+    let v: Value = serde_json::from_str(cli(&x.args("status", &old, false)).1.trim()).unwrap();
+    assert_eq!(v["flagshipSignature"]["status"], "expired");
+    assert_eq!(v["installed"], true);
+    // a swapped active executable shows
+    std::fs::write(&exe, b"other").unwrap();
+    let v: Value = serde_json::from_str(cli(&a).1.trim()).unwrap();
+    assert_eq!(v["activeExecutable"]["matchesLock"], false);
+}

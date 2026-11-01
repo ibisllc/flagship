@@ -182,6 +182,7 @@ public enum BoxEventLabels {
         "server.state.corrupt": String(localized: "This server found a damaged settings file and locked it down"),
         "server.bootchain.refreshed": String(localized: "Updated how this server unlocks at start-up"),
         "server.bootchain.rolled-back": String(localized: "Kept the previous start-up unlock"),
+        "server.sandbox.removed": String(localized: "Turned off this server's extra sandbox after it kept failing to start"),
     ]
 
     /// The row's title, or nil when the entry isn't worth a row (the log also

@@ -263,6 +263,8 @@ fn failed(stderr: String) -> ExecOutput {
 pub struct SystemRunner {
     pub account_name: String,
     pub passwd: PathBuf,
+    /// The broker's own folder for checked copies (root only).
+    pub scratch: PathBuf,
 }
 
 impl Default for SystemRunner {
@@ -270,6 +272,66 @@ impl Default for SystemRunner {
         Self {
             account_name: "flagship".into(),
             passwd: PathBuf::from("/etc/passwd"),
+            scratch: PathBuf::from(format!("{}/checked", crate::policy::PRIVD_STATE_DIR)),
+        }
+    }
+}
+
+/// Counts of checked copies since the broker started (plan G6), for the audit and the daemon.
+pub static TAR_CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static TAR_REFUSALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Copy `src` into a new file in `scratch` (made 0700) while checking it as a files-folder tar
+/// (tarcheck.rs); returns a read descriptor on the copy, whose name is already gone. The command
+/// reads exactly the bytes that were checked, whatever happens to the daemon's file meanwhile.
+///
+/// # Errors
+/// The refusal (`code` and sentence) or the I/O error, as text.
+pub fn checked_tar_copy(src: OwnedFd, scratch: &Path) -> Result<OwnedFd, String> {
+    use std::sync::atomic::Ordering;
+    std::os::unix::fs::DirBuilderExt::mode(std::fs::DirBuilder::new().recursive(true), 0o700)
+        .create(scratch)
+        .map_err(|e| e.to_string())?;
+    let dir = walk_dir(&std::fs::canonicalize(scratch).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let name = format!("tar-{}-{stamp}", std::process::id());
+    let w = openat(
+        &dir,
+        name.as_str(),
+        OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::from_raw_mode(0o600),
+    )
+    .map_err(|e| e.to_string())?;
+    let r = openat(
+        &dir,
+        name.as_str(),
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    );
+    let _ = rustix::fs::unlinkat(&dir, name.as_str(), rustix::fs::AtFlags::empty());
+    let r = r.map_err(|e| e.to_string())?;
+    TAR_CHECKS.fetch_add(1, Ordering::Relaxed);
+    let checked = crate::tarcheck::check_copy(
+        std::io::BufReader::with_capacity(256 * 1024, std::fs::File::from(src)),
+        Box::new(std::io::BufWriter::with_capacity(
+            256 * 1024,
+            std::fs::File::from(w),
+        )),
+        crate::tarcheck::Profile::Volume,
+        &crate::tarcheck::Limits::default(),
+    );
+    match checked {
+        Ok(_) => Ok(r),
+        Err(e) => {
+            TAR_REFUSALS.fetch_add(1, Ordering::Relaxed);
+            Err(format!(
+                "the files archive was refused: {} ({})",
+                e.message(),
+                e.code()
+            ))
         }
     }
 }
@@ -299,13 +361,26 @@ impl V1Runner for SystemRunner {
             };
             Ok((stdin, stdout))
         })();
-        let (stdin_fd, stdout_fd) = match opened {
+        let (mut stdin_fd, stdout_fd) = match opened {
             Ok(fds) => fds,
             Err(m) => {
                 drop_copies(e);
                 return failed(m);
             }
         };
+        if e.stdin_tar_check {
+            let Some(src) = stdin_fd.take() else {
+                drop_copies(e);
+                return failed(refuse("a checked archive needs a stdin file"));
+            };
+            match checked_tar_copy(src, &self.scratch) {
+                Ok(fd) => stdin_fd = Some(fd),
+                Err(m) => {
+                    drop_copies(e);
+                    return failed(m);
+                }
+            }
+        }
         let out = spawn(e, stdin_fd, stdout_fd);
         drop_copies(e);
         out

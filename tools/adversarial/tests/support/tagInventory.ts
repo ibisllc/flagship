@@ -70,7 +70,7 @@ export const CLASSIFIED_TAGS: Record<string, string> = {
   "flagship/trust-exception/v1": "vectors trustException.test.ts (allowed device keys, multi-signature)",
   "flagship/arch-v2-switch/v1": "vectors archV2Switch.test.ts, archV2SwitchVectors.test.ts (owner-signed stack switch)",
   "flagship/rust-ownership/v1": "vectors rustOwnership.test.ts (owner-signed move of app reconciling and proxying between the TS daemon and the Rust core/ingress)",
-  "flagship/runtime-manifest/v1": "vectors runtimeManifest.test.ts + test-vectors/runtime-manifest (19 cases TS and Rust: tampered fields, wrong signer, stale, revoked)",
+  "flagship/runtime-manifest/v1": "vectors runtimeManifest.test.ts + test-vectors/runtime-manifest (20 cases TS and Rust: tampered fields and release, wrong signer, stale, revoked; 5 release-lock bindings)",
   "flagship/runtime-manifest/v2": "vectors runtimeManifest.test.ts (the PQ companion over the v1 bytes; same cases)",
   // ---- serving authority (plan H; servingAuthority.test.ts + test-vectors/serving-authority, not wired to a verifier yet)
   "flagship/serving-policy/v1": "vectors servingAuthority.test.ts (other signer, other box, tampered grace)",

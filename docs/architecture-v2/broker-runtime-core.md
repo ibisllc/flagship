@@ -426,3 +426,18 @@ inside the daemon's deploy effect); effects through the broker's typed socket (n
 issuer of §9, R4); the endpoint table the TS proxy dials (core keeps its own records and the
 addresses). The proxy's authority stays in the daemon's decision; when the R4 access library is
 authoritative it plugs into that one decision point (`rustProxyDecide.ts` `decide`).
+
+## 12. App files folders for backups and copies (plan G6, 2026-11-01)
+
+The v1 socket gains `appdata.files {action: dump|restore|size, installation, path?}` (Rust broker
+only; the TS privd does not have it, and the daemon uses it only when the Rust broker is the one
+running). The caller names an installation (`<creator>--<slug>`); the broker derives the volume
+`flagship-files-<installation>`, refuses unless its quota image is mounted at
+`/var/lib/flagship-files/<volume>` (the kernel's mount table is the install state it trusts), and
+builds the files helper's argv itself (same locked shape as `filesArchiveDockerArgs`). `path` is a
+daemon transfer file, opened by the runner as for `docker.file`. For `restore` the runner reads the
+daemon's file once, checking it as a files-folder tar (`tarcheck.rs`, volume profile) while copying
+it into `/var/lib/flagship-privd/checked/` (the name unlinked at once), and gives the helper that
+copy, so what is extracted is exactly what was checked; a refusal names its code. `flagship-broker
+check-tar --profile volume|archive` runs the same checker over stdin for the daemon. Tests:
+`tests/appdata_files.rs`, `tests/tarcheck_vectors.rs` (shared vectors with the TS twin).

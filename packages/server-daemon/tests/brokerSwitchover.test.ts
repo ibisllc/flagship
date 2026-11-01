@@ -15,7 +15,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PrivdServer, SETUP_STEPS, dockerExec, dockerFileExec, iccTable, podmanArgv, type Exec, type RunResult } from "@flagship/privd";
 import { dockerBuildArgs } from "../src/serviceRunner.js";
 import { filesArchiveDockerArgs, filesSizeDockerArgs } from "../src/volumeDump.js";
-import { PRIVD_DAEMON_DROPIN_PATH, PRIVD_UNIT_PATH, daemonPrivdDropIn, privdUnit } from "@flagship/privd/unit";
+import { DAEMON_HARDENING_DROPIN_PATH, PRIVD_DAEMON_DROPIN_PATH, PRIVD_UNIT_PATH, daemonPrivdDropIn, privdUnit } from "@flagship/privd/unit";
 import { privilegedHelperFor, rustStackAsRoot } from "../src/archV2Boot.js";
 import { engineArgv } from "../src/engine/engine.js";
 import { renderIccTable } from "../src/egress/firewall.js";
@@ -68,7 +68,7 @@ describe("installPrivd with the Rust broker", () => {
     const up = base({ brokerAnswers: async (s) => ((asked = s), true) }, { "/run/flagship-rust/keyd.choice": "rust\n" });
     expect(await installPrivd(up.o)).toBe("switched");
     expect(asked).toBe(BROKER_V1_SOCKET);
-    expect([...up.written.keys()]).toEqual([PRIVD_DAEMON_DROPIN_PATH]);
+    expect([...up.written.keys()]).toEqual([PRIVD_DAEMON_DROPIN_PATH, DAEMON_HARDENING_DROPIN_PATH]);
     expect(up.written.get(PRIVD_DAEMON_DROPIN_PATH)).toBe(daemonPrivdDropIn(BROKER_HELPER));
     expect(up.written.get(PRIVD_DAEMON_DROPIN_PATH)).toMatch(/^Environment=FLAGSHIP_PRIVD_SOCKET=\/run\/flagship-broker\/privd\.sock$/m);
     expect(up.written.get(PRIVD_DAEMON_DROPIN_PATH)).toMatch(/^Wants=flagship-broker\.service$/m);

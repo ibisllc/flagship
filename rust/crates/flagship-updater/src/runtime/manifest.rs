@@ -21,6 +21,8 @@ pub struct RuntimeManifest {
     pub version: String,
     pub lock_sha256: String,
     pub security_floor: String,
+    /// The Flagship product release (`major.minor[.patch]`).
+    pub release: String,
     pub sequence: u64,
     pub issued_at: u64,
     pub valid_until: u64,
@@ -39,6 +41,12 @@ pub struct RuntimeManifestFile {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Verified {
     pub version: String,
+    pub release: String,
+    pub security_floor: String,
+    pub lock_sha256: String,
+    pub revoked_signers: Vec<String>,
+    /// SHA-256 of the canonical v1 bytes: two manifests with one sequence must be the same manifest.
+    pub digest: String,
     pub sequence: u64,
     pub valid_until: u64,
     pub signers: usize,
@@ -58,10 +66,24 @@ fn semver(v: &str) -> Option<(u64, u64, u64)> {
     it.next().is_none().then_some(t)
 }
 
+fn release_ok(r: &str) -> bool {
+    let parts: Vec<&str> = r.split('.').collect();
+    (2..=3).contains(&parts.len())
+        && parts.iter().all(|p| {
+            !p.is_empty()
+                && p.len() <= 9
+                && p.bytes().all(|b| b.is_ascii_digit())
+                && (*p == "0" || !p.starts_with('0'))
+        })
+}
+
 impl RuntimeManifest {
     fn check(&self) -> Result<(), Refusal> {
         if semver(&self.version).is_none() || semver(&self.security_floor).is_none() {
             return Err(bad("version"));
+        }
+        if !release_ok(&self.release) {
+            return Err(bad("release"));
         }
         if !is_hex(&self.lock_sha256, 64) {
             return Err(bad("lockSha256"));
@@ -75,7 +97,7 @@ impl RuntimeManifest {
         Ok(())
     }
 
-    /// `flagship/runtime-manifest/v1|node|<version>|<lockSha256>|<floor>|<sequence>|<issuedAt>|<validUntil>|<revoked>`.
+    /// `flagship/runtime-manifest/v1|node|<version>|<lockSha256>|<floor>|<release>|<sequence>|<issuedAt>|<validUntil>|<revoked>`.
     ///
     /// # Errors
     /// `bad-manifest` for a field the canonical form cannot carry.
@@ -89,10 +111,11 @@ impl RuntimeManifest {
             revoked.join(",")
         };
         Ok(format!(
-            "{TAG_V1}|node|{}|{}|{}|{}|{}|{}|{revoked}",
+            "{TAG_V1}|node|{}|{}|{}|{}|{}|{}|{}|{revoked}",
             self.version,
             self.lock_sha256,
             self.security_floor,
+            self.release,
             self.sequence,
             self.issued_at,
             self.valid_until
@@ -135,6 +158,7 @@ pub fn parse(text: &str) -> Result<RuntimeManifestFile, Refusal> {
         version: s("version")?,
         lock_sha256: s("lockSha256")?,
         security_floor: s("securityFloor")?,
+        release: s("release")?,
         sequence: n("sequence")?,
         issued_at: n("issuedAt")?,
         valid_until: n("validUntil")?,
@@ -221,6 +245,11 @@ pub fn verify_manifest(
     }
     Ok(Verified {
         version: m.version.clone(),
+        release: m.release.clone(),
+        security_floor: m.security_floor.clone(),
+        lock_sha256: m.lock_sha256.clone(),
+        revoked_signers: m.revoked_signers.clone(),
+        digest: v1_digest,
         sequence: m.sequence,
         valid_until: m.valid_until,
         signers: signed.len(),
@@ -245,5 +274,88 @@ pub fn verify_file(
     }
     let signers: Vec<String> = lock.signers.iter().map(|s| s.fingerprint.clone()).collect();
     let v = verify_manifest(file, &signers, trust, now_ms, last_sequence)?;
+    Ok((v, lock))
+}
+
+/// How a VERIFIED manifest binds an endorsed release's own lock (the one its signed artifact carries); the twin of
+/// `checkReleaseLock` in TypeScript. A release may lock a newer runtime than the manifest names (it ships before the
+/// manifest is republished), but never one below the manifest's floor, never a different lock for the same version,
+/// and never one that names a withdrawn signer.
+///
+/// # Errors
+/// `runtime-below-floor`, `runtime-manifest-mismatch` or `signer-revoked`.
+pub fn check_release_lock(
+    m: &Verified,
+    lock_text: &str,
+    version: &str,
+    signers: &[String],
+) -> Result<(), Refusal> {
+    match (semver(version), semver(&m.security_floor)) {
+        (Some(v), Some(f)) if v >= f => {}
+        _ => return Err(Refusal::new("runtime-below-floor")),
+    }
+    if version == m.version && sha256_hex(lock_text.as_bytes()) != m.lock_sha256 {
+        return Err(Refusal::new("runtime-manifest-mismatch"));
+    }
+    if signers
+        .iter()
+        .any(|f| m.revoked_signers.iter().any(|r| r.eq_ignore_ascii_case(f)))
+    {
+        return Err(Refusal::new("signer-revoked"));
+    }
+    Ok(())
+}
+
+/// What a box last accepted: `<state>/runtime-manifest-accepted` holds `<sequence> <digest>`.
+const ACCEPTED: &str = "runtime-manifest-accepted";
+
+fn read_accepted(state: &std::path::Path) -> Option<(u64, String)> {
+    let t = crate::fsutil::read_regular(&state.join(ACCEPTED))?;
+    let mut it = t.split_whitespace();
+    let seq = it.next()?.parse().ok()?;
+    Some((seq, it.next()?.to_owned()))
+}
+
+/// Verifies a manifest for USE on a box: the sequence may equal the last accepted one only when it is the very same
+/// manifest (a box re-reads the current one every day), never lower. With `record`, an accepted manifest is recorded
+/// so a later replay of an older one is refused even after the newer one disappears from the site; a status read
+/// passes `false` and changes nothing.
+///
+/// # Errors
+/// The refusals of [`verify_file`]; `rollback` also for a different manifest under an already accepted sequence.
+pub fn accept(
+    file: &RuntimeManifestFile,
+    trust: &Trust,
+    now_ms: u64,
+    state: &std::path::Path,
+    record: bool,
+) -> Result<(Verified, Lock), Refusal> {
+    let last = read_accepted(state);
+    let (v, lock) = verify_file(
+        file,
+        trust,
+        now_ms,
+        last.as_ref().map(|(s, _)| s.saturating_sub(1)),
+    )?;
+    if let Some((seq, digest)) = &last
+        && v.sequence == *seq
+        && v.digest != *digest
+    {
+        return Err(Refusal::with(
+            "rollback",
+            "another manifest under an accepted sequence",
+        ));
+    }
+    if record && last.as_ref().is_none_or(|(seq, _)| v.sequence > *seq) {
+        std::fs::create_dir_all(state)
+            .and_then(|()| {
+                crate::fsutil::write_durable(
+                    &state.join(ACCEPTED),
+                    format!("{} {}\n", v.sequence, v.digest).as_bytes(),
+                    0o644,
+                )
+            })
+            .map_err(|e| Refusal::with("install-failed", e.to_string()))?;
+    }
     Ok((v, lock))
 }

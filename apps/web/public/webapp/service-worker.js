@@ -431,7 +431,10 @@
 //       non-extractable P-256 renewal key, delegates it once under the admin root and signs a lease for each
 //       finite policy on every open; the server page's one line and its editor (lib/servingUi.js) replace the
 //       dead-man card (set-deadman-policy / deadman-affirm are gone).
-const SHELL_VERSION = "v185";
+//  v186: the server page's Runtime section (release plan G2; lib/runtimeVerification.js + views/runtime-verification.js):
+//       the locked Node, its official source, Flagship's signed checksum, the one computed on the server, both
+//       signatures, and a "Check it yourself" sheet.
+const SHELL_VERSION = "v186";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -486,6 +489,7 @@ const OPTIONAL_SHELL = [
   "/lib/accountRead.js",
   "/lib/serverOrder.js",
   "/lib/debugAccess.js",
+  "/lib/runtimeVerification.js",
   "/lib/freshUnlock.js",
   "/lib/totp.js",
   "/lib/edToMont.js",
@@ -660,6 +664,7 @@ const OPTIONAL_SHELL = [
   "/views/server-sharing.js",
   "/views/server-backups.js",
   "/views/debug-access.js",
+  "/views/runtime-verification.js",
   "/views/accelerators.js",
   "/views/stack-switch.js",
   "/views/local-ai.js",

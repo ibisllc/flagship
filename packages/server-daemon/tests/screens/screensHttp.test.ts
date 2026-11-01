@@ -224,6 +224,18 @@ describe("screens HTTP — P1.1 server-detail", () => {
     // No provider wired (not a git checkout) ⇒ honest null, never a guess.
     expect(body.currentCommit).toBeNull();
     expect(body.lastUpdate).toBeNull();
+    expect(body.runtime).toBeUndefined();
+  });
+
+  it("carries the runtime verification view when the release reports one", async () => {
+    const view = { runtime: "node", version: "24.22.1", flagship: { status: "verified" } };
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      runtimeVerification: { view: () => view as never },
+    });
+    const r = await handle(req({ path: "/api/screens/server-detail", headers: { "x-flagship-session": "tok-good" } }));
+    expect(JSON.parse(r!.body as string).runtime).toEqual(view);
   });
 });
 

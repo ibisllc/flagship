@@ -392,6 +392,42 @@ Not covered: a backup that was never made (a cut-off account's servers are
 unreachable through `.com`), and the unlock of the OLD server after the cut-off
 (it needs `.com` at every boot).
 
+## Keys, files and extraction on an arch-v2 box (plan G6/R6, 2026-11-01)
+
+The workflow (schedule, policy, routes, the restore wait) stays in the daemon. Three effects move
+behind the Rust boundaries:
+
+- **Keys in flagship-keyd.** Where keyd runs and answers the `archive.*` operations
+  (`packages/keyd/src/archive.ts`, Rust twin `rust/crates/flagship-keyd/src/archive.rs`), the
+  account keys an admin device deposits go into keyd's `archive-keks.json` (keys an older release
+  kept in `server-backups/keys.json` move there once, at start), and every content key lives
+  behind an opaque handle: `archive.create` takes one pool key out (on disk first), makes the
+  content key and returns only the account slot; `archive.import` takes the key the owner's app
+  sent for Back up now or a restore, and the daemon zeroes its copy before the request returns.
+  The daemon then asks keyd to seal and open each frame and the body. keyd seals frames once each,
+  in order (the nonce is the frame index), allows 8 open handles and drops one idle for 2 hours.
+  Without keyd (a classic box) the keys stay in the daemon as before. The deposit's admin
+  signature is still checked by the daemon, not keyd; the plaintext tar still passes through the
+  daemon (it reads and writes the apps), so keyd protects the keys, not the content.
+- **Files folders through the broker.** On an arch-v2 box (the daemon unprivileged, the Rust broker
+  on) an app's files folder is dumped, restored and measured by the broker's v1 `appdata.files
+  {action, installation, path}`: the daemon names the app; the broker derives
+  `flagship-files-<installation>`, requires its quota image mounted at
+  `/var/lib/flagship-files/<volume>`, builds the locked helper itself and, for a restore, checks the
+  tar while copying it into its own folder, so the helper reads exactly the checked bytes.
+  Database dumps and restores still go through `docker.file exec`, as before.
+- **The extraction check.** Every archive is checked before anything unpacks it, by the Rust
+  checker (`flagship-broker check-tar`, `tarcheck.rs`) when the release carries it, else by its TS
+  twin (`serverArchive/tarCheck.ts`): the server archive (regular files only) as its plaintext
+  streams past, and each app's files tar before a restore or an app copy writes it. Both pass the
+  shared vectors in `packages/protocol/test-vectors/archive-extraction/` (built by
+  `tools/archive-extraction-vectors.mjs`): absolute or `..` names, links leaving the folder or
+  walking through another link, hard links to anything but an earlier file, devices, FIFOs, sparse
+  files, duplicates, and entry, size and name-memory bombs are refused.
+
+The backups and restore views carry `isolation` (`keys`, `files`, `extraction` and counts since the
+daemon started); the gym's `backups` group checks it on arch-v2 and sends a crafted archive.
+
 ## Routes (owner sessions only; companions and shares are refused)
 
 ```

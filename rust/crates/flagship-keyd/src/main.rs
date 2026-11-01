@@ -124,6 +124,7 @@ fn run() -> Result<(), String> {
         service = service.with_owner(irk, f);
         service = service.with_state_dir(state.clone());
     }
+    service = service.with_archive_pool(state.join("archive-keks.json"));
     service =
         service.with_admin_root(flagship_keyd::files::load_admin_root_anchor(&state).as_deref());
     if let Some((token, not_after)) = ceremony {
