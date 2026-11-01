@@ -139,10 +139,9 @@ export const issuance: Group = {
     try {
       await rec.check("register a throwaway server whose key the harness holds", async () => {
         const code = newAuthCode(acct, label);
-        if (!acct.demo) {
-          const i = await issueAuthCode(code, acct.keys.irk, acct.keys.adminRoot);
-          assert(i.status === 200, `auth-code issue ${i.status}: ${short(i.text)}`);
-        }
+        // Registration takes only an issued serial, demo accounts included (gym 21: "unknown serial").
+        const i = await issueAuthCode(code, acct.keys.irk, acct.keys.adminRoot);
+        assert(i.status === 200, `auth-code issue ${i.status}: ${short(i.text)}`);
         const request = {
           authCode: code,
           authCodeUserSignature: signAuthCode(code, acct.keys.irk),

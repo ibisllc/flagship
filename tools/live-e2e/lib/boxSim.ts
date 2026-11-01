@@ -61,10 +61,9 @@ export function simKey(): Keypair {
 /** Registers `<label>.<user>.<apex>` on the gym `.com` with a key the harness holds (what the box daemon does). */
 export async function registerSimServer(acct: Account, label = `sim${randomBytes(3).toString("hex")}`, stk: Keypair = simKey()): Promise<SimServer & { status: number; text: string }> {
   const code = newAuthCode(acct, label);
-  if (!acct.demo) {
-    const i = await issueAuthCode(code, acct.keys.irk, acct.keys.adminRoot);
-    assert(i.status === 200, `auth-code issue ${i.status}: ${short(i.text)}`);
-  }
+  // Registration takes only an issued serial, demo accounts included (gym 21: "unknown serial").
+  const i = await issueAuthCode(code, acct.keys.irk, acct.keys.adminRoot);
+  assert(i.status === 200, `auth-code issue ${i.status}: ${short(i.text)}`);
   const request = {
     authCode: code,
     authCodeUserSignature: signAuthCode(code, acct.keys.irk),
