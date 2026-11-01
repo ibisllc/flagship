@@ -915,6 +915,10 @@ export class AppRunner {
       // gVisor (docs/app-runtimes.md §5.1); throws while it isn't usable.
       ...(gpu?.kind === "gpu" ? [...gpu.runArgs, ...(await appSandboxRunArgs()).filter((x) => !x.startsWith("--runtime="))] : await appSandboxRunArgs()),
       ...this.hardeningArgs(spec.limits),
+      // An app that crashes comes back (the engine backs off between tries); one the box stops stays stopped.
+      // Gym 21: an app that exited by itself stayed down until something redeployed it.
+      "--restart",
+      "on-failure:10",
       ...Object.entries(spec.addHosts ?? {}).flatMap(([name, ip]) => ["--add-host", `${name}:${ip}`]),
       ...this.envArgs(spec.env),
       ...(direct ? [] : this.portArgs(spec.port, spec.containerPort)),
