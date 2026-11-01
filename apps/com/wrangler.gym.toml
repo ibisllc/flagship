@@ -207,7 +207,9 @@ CA_ENDORSEMENT_ENFORCE = "true"
 # (Postgres 18, gVisor app sandboxes, builds). Every server carries the
 # flagship-env=gym label, which is all /api/gym/teardown will ever delete.
 DEMO_CLOUD_PROVIDER = "upcloud"
-UPCLOUD_ZONE = "de-fra1"
+# us-nyc1, beside the gym relay (Fly iad): from de-fra1 every box tunnel crossed the Atlantic inside Fly's network,
+# and Fly's edge-to-machine backhaul dropped connections in bursts in gyms 13-15 (dozens a minute), failing writes.
+UPCLOUD_ZONE = "us-nyc1"
 UPCLOUD_PLAN = "STARTER-4xCPU-8GB"
 # Debian 13 (Trixie): what a real new box runs (the ISO pins 13.6.0) and what the 0.3 box installer's packages and
 # Podman 5 flags (--interface-name, unmanaged bridges, docker-cli) are written for. Bookworm (…20070100) has Podman 4.3.
