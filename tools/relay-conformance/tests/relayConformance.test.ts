@@ -1,7 +1,7 @@
 /**
  * The relay conformance suite (G7 / R7): every scenario runs against the TypeScript hub and the Rust relay with the
  * same mock `.com`, the same boxes and the same visitors, and must give the same observable answer on both. The Rust
- * half needs the binary (`cargo build -p flagship-relay --bin flagship-relay`, or FLAGSHIP_RELAY_BIN); without it that
+ * half needs the binary (`cargo build -p flagship-relay --bin flagship-relay --features conformance`, or FLAGSHIP_RELAY_BIN; the feature only lets S18 fake a public address); without it that
  * half is skipped and says so. Scenario ids are listed in docs/architecture-v2/relay-transport.md §7.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -27,7 +27,9 @@ import {
   mailResponseFrames,
   outboundOpenFrame,
   parseOutboundResult,
+  FRAME_OUTBOUND_CREDIT,
 } from "@flagship/tunnel-protocol";
+import { SimPhone } from "../../live-e2e/lib/phoneSim.js";
 import { superviseTunnelClient, type SupervisedTunnelClient } from "../../../packages/server-daemon/src/tunnel/tunnelClient.js";
 import { lease, policy, revocation, type Ed } from "../../../apps/web/tests/support/serving.js";
 import {
@@ -45,6 +47,7 @@ import {
   httpPost,
   key,
   mailboxAnnouncement,
+  phoneEligibility,
   revokeCert,
   sleep,
   waitFor,
@@ -663,6 +666,187 @@ for (const impl of IMPLS) {
         await roundTrip(relay.sniPort, `notes.alice.${APEX}`);
         await roundTrip(relay.sniPort, b.pod);
       }, 40_000);
+    });
+
+    describe("phone route (the bare name, H3)", () => {
+      const seed = (n: number) => new Uint8Array(32).fill(n);
+      const ADMIN = { privateKey: seed(1), publicKey: ed.getPublicKey(seed(1)) };
+      const [A, B, C, MEMBER] = [seed(2), seed(3), seed(6), seed(4)];
+      const BARE = `alice.${APEX}`;
+      const allGranted = () =>
+        com.phoneEligibility.set("alice", phoneEligibility("alice", ADMIN, [{ seed: A }, { seed: B }, { seed: C }, { seed: MEMBER, scopes: ["browse"] }]));
+      const phoneOpts = (rk: string, id = "relay-1"): RelayOptions => ({ serving: { revocationPub: rk }, phone: true, relayId: id });
+      const phone = async (port: number, s: Uint8Array, label: string) => {
+        const p = await SimPhone.connect(`ws://127.0.0.1:${port}/phone-tunnel`, { account: "alice", seed: s, label });
+        cleanups.push(() => p.terminate());
+        return p;
+      };
+      const reach = async (port: number, extra = "") => {
+        const hello = clientHello(BARE);
+        const v = await Visitor.open(port, Buffer.concat([Buffer.from(hello), Buffer.from(extra)]));
+        await Promise.race([v.done, waitFor(() => v.received.length > 0, 5_000).catch(() => undefined)]);
+        const text = v.received.toString("latin1");
+        v.sock.destroy();
+        return { label: text.slice(0, text.indexOf(":")), text, hello };
+      };
+      const rk = () => hex(ed.getPublicKey(seed(9)));
+
+      it("P01 an eligible phone claims the vacant name; visitors and presence bytes reach it verbatim; never a box", async () => {
+        allGranted();
+        await start(phoneOpts(rk()));
+        await waitFor(() => com.feeds.size === 1, 5_000, "feed");
+        const a = await phone(relay!.hubPort, A, "phone-a");
+        expect(await a.acquire()).toMatchObject({ type: "granted", hostname: BARE, generation: 1, leaseMs: 60_000 });
+        const presence = "GET / HTTP/1.1\r\nhost: alice.flagship.services\r\nx-flagship-presence-device: ab\r\n\r\n";
+        const r = await reach(relay!.sniPort, presence);
+        expect(r.label).toBe("phone-a");
+        expect(r.text).toContain("x-flagship-presence-device: ab");
+        // A second begin while holding is refused.
+        a.send({ type: "begin", account: "alice" });
+        expect(await a.next((m) => m.type === "refused")).toMatchObject({ code: "holding", generation: 1 });
+      });
+
+      it("P02 refusals: not-eligible (member grant, unknown key), bad-signature, wrong-generation, no-challenge, not-holder, malformed", async () => {
+        allGranted();
+        await start(phoneOpts(rk()));
+        await waitFor(() => com.feeds.size === 1, 5_000, "feed");
+        const m = await phone(relay!.hubPort, MEMBER, "member");
+        expect(await m.acquire()).toMatchObject({ type: "refused", code: "not-eligible" });
+        const x = await phone(relay!.hubPort, seed(7), "stranger");
+        expect(await x.acquire()).toMatchObject({ type: "refused", code: "not-eligible" });
+        const a = await phone(relay!.hubPort, A, "phone-a");
+        const ch = await a.begin();
+        const bad = a.sign(ch);
+        expect(await a.sendClaim({ claim: bad.claim, signature: "00".repeat(64) })).toMatchObject({ type: "refused", code: "bad-signature" });
+        const ch2 = await a.begin();
+        expect(await a.sendClaim(a.sign(ch2, { generation: Number(ch2.generation) + 1 }))).toMatchObject({ type: "refused", code: "wrong-generation" });
+        expect(await a.sendClaim(a.sign(ch2))).toMatchObject({ type: "refused", code: "no-challenge" });
+        a.send({ type: "release", release: {}, signature: "00" });
+        expect(await a.next((q) => q.type === "refused")).toMatchObject({ code: "not-holder" });
+        a.send({ type: "begin", account: "Not An Account" });
+        expect(await a.next((q) => q.type === "refused")).toMatchObject({ code: "malformed" });
+        expect((await reach(relay!.sniPort)).text).toBe("");
+      });
+
+      it("P03 vacancy-only: a second phone is refused route-held and waits; the holder leaving makes it vacant; release is signed", async () => {
+        allGranted();
+        await start(phoneOpts(rk()));
+        await waitFor(() => com.feeds.size === 1, 5_000, "feed");
+        const a = await phone(relay!.hubPort, A, "phone-a");
+        expect(await a.acquire()).toMatchObject({ type: "granted", generation: 1 });
+        const b = await phone(relay!.hubPort, B, "phone-b");
+        expect(await b.acquire()).toMatchObject({ type: "refused", code: "route-held", generation: 1 });
+        expect((await reach(relay!.sniPort)).label).toBe("phone-a");
+        a.close();
+        expect(await b.next((q) => q.type === "route-vacant", 5_000)).toMatchObject({ hostname: BARE, generation: 1 });
+        expect(await b.acquire()).toMatchObject({ type: "granted", generation: 2 });
+        expect((await reach(relay!.sniPort)).label).toBe("phone-b");
+        const c = await phone(relay!.hubPort, C, "phone-c");
+        expect(await c.acquire()).toMatchObject({ type: "refused", code: "route-held", generation: 2 });
+        expect(await b.release({ generation: 1 })).toMatchObject({ type: "refused", code: "wrong-generation" });
+        expect(await b.release()).toMatchObject({ type: "released", hostname: BARE, generation: 2, confirmed: true });
+        expect(await b.next((q) => q.type === "lost")).toMatchObject({ reason: "released" });
+        expect(await c.next((q) => q.type === "route-vacant", 5_000)).toMatchObject({ generation: 2 });
+        expect((await reach(relay!.sniPort)).text).toBe("");
+        expect(await c.acquire()).toMatchObject({ type: "granted", generation: 3 });
+      });
+
+      it("P04 a revoked admin grant closes the holder with 4403 and its streams within 5 s", async () => {
+        allGranted();
+        await start(phoneOpts(rk()));
+        await waitFor(() => com.feeds.size === 1, 5_000, "feed");
+        const a = await phone(relay!.hubPort, A, "phone-a");
+        expect(await a.acquire()).toMatchObject({ type: "granted" });
+        const v = await Visitor.open(relay!.sniPort, clientHello(BARE));
+        await waitFor(() => v.received.length > 0, 5_000, "the visitor's stream");
+        com.phoneEligibility.set("alice", phoneEligibility("alice", ADMIN, [{ seed: B }]));
+        const t0 = Date.now();
+        com.pushPhoneEligibility("alice");
+        await a.closed;
+        expect(a.closedWith?.code).toBe(4403);
+        await Promise.race([v.done, sleep(5_000)]);
+        expect(v.ended).toBe(true);
+        expect(Date.now() - t0).toBeLessThan(5_000);
+        expect((await reach(relay!.sniPort)).text).toBe("");
+      });
+
+      const twoRelays = async () => {
+        await start(phoneOpts(rk(), "relay-1"));
+        const r2 = await impl.start(com, phoneOpts(rk(), "relay-2"));
+        cleanups.push(() => r2.kill());
+        await waitFor(() => com.feeds.size === 2, 5_000, "both feeds");
+        return r2;
+      };
+
+      it("P05 across instances: a standby on another relay is told route-vacant by the ledger's push", async () => {
+        allGranted();
+        const r2 = await twoRelays();
+        const a = await phone(relay!.hubPort, A, "phone-a");
+        expect(await a.acquire()).toMatchObject({ type: "granted", generation: 1 });
+        const b = await phone(r2.hubPort, B, "phone-b");
+        expect(await b.acquire()).toMatchObject({ type: "refused", code: "route-held", generation: 1 });
+        // The other relay does not route a name its own sessions do not hold.
+        expect((await reach(r2.sniPort)).text).toBe("");
+        a.close();
+        expect(await b.next((q) => q.type === "route-vacant", 5_000)).toMatchObject({ hostname: BARE, generation: 1 });
+        expect(await b.acquire()).toMatchObject({ type: "granted", generation: 2 });
+        expect((await reach(r2.sniPort)).label).toBe("phone-b");
+      }, 40_000);
+
+      it("P06 a lost vacancy push: the standby relay's 15 s ledger re-read tells it", async () => {
+        allGranted();
+        const r2 = await twoRelays();
+        const a = await phone(relay!.hubPort, A, "phone-a");
+        expect(await a.acquire()).toMatchObject({ type: "granted", generation: 1 });
+        const b = await phone(r2.hubPort, B, "phone-b");
+        expect(await b.acquire()).toMatchObject({ type: "refused", code: "route-held" });
+        com.phonePush = false;
+        a.close();
+        const t0 = Date.now();
+        expect(await b.next((q) => q.type === "route-vacant", 20_000)).toMatchObject({ generation: 1 });
+        expect(Date.now() - t0).toBeLessThan(17_000);
+      }, 45_000);
+    });
+
+    it("S18 outbound: a successful splice to an allowed host's (faked) public address, both directions", async () => {
+      const upstream = createNetServer((sock) => sock.on("data", (d) => sock.write(Buffer.concat([Buffer.from("up:"), d]))));
+      await new Promise<void>((r) => upstream.listen(0, "127.0.0.1", () => r()));
+      cleanups.push(() => new Promise<void>((r) => upstream.close(() => r())));
+      const port = (upstream.address() as { port: number }).port;
+      await start({ outboundUpstream: { host: "api.openai.com", publicIp: "8.8.8.8", local: `127.0.0.1:${port}` } });
+      const a = com.account("alice");
+      const b = boxIdentity(com, a, "home");
+      const { raw } = await connect(b);
+      expect((await raw.ack()).ok).toBe(true);
+      const id = 0x8000_0001;
+      raw.send(outboundOpenFrame(id, { host: "api.openai.com", port: 443 }));
+      const res = await raw.waitFrame((x) => x.type === FRAME_OUTBOUND_RESULT && x.streamId === id, 10_000, "OUTBOUND_RESULT");
+      expect(parseOutboundResult(res.payload)).toEqual({ ok: true });
+      raw.send(dataFrame(id, new TextEncoder().encode("hello-provider")));
+      await waitFor(() => dataOf(raw, id).toString().includes("up:hello-provider"), 5_000, "the upstream's answer at the box");
+      expect(dataOf(raw, id).toString()).toBe("up:hello-provider");
+      raw.send(closeFrame(id));
+      await sleep(200);
+      expect(raw.frames.some((f) => f.type === FRAME_OUTBOUND_CREDIT || f.type === FRAME_DATA)).toBe(true);
+    });
+
+    it("S19 /api/stats lists the names that missed (no box registered), newest last, at most 20", async () => {
+      await start({ usage: { flushMs: 60_000 } });
+      const a = com.account("alice");
+      const b = boxIdentity(com, a, "home");
+      const { raw } = await connect(b);
+      expect((await raw.ack()).ok).toBe(true);
+      // A name of an account with no box online is a "no-box-registered" miss (dropped after the hold).
+      const v = await Visitor.open(relay!.sniPort, clientHello(`nobody.bob.${APEX}`));
+      await Promise.race([v.done, sleep(8_000)]);
+      const st = await httpGet(relay!.hubPort, "/api/stats", { "x-usage-secret": USAGE_SECRET });
+      const router = (st.body as { router: { recentMisses: Array<{ at: string; domain: string; kind: string }>; noBoxRegistered: number } }).router;
+      // The TS hub's counters are process-wide (earlier scenarios in this process add to them): read the newest.
+      expect(router.recentMisses.length).toBeGreaterThanOrEqual(1);
+      expect(router.recentMisses.length).toBeLessThanOrEqual(20);
+      const last = router.recentMisses[router.recentMisses.length - 1]!;
+      expect(last).toMatchObject({ domain: `nobody.bob.${APEX}`, kind: "no-box-registered" });
+      expect(new Date(last.at).getTime()).toBeGreaterThan(Date.now() - 60_000);
     });
 
     it("S17 /api/health answers on the hub port", async () => {

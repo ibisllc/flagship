@@ -14,9 +14,21 @@ pub struct ServingView {
     pub apps: bool,
 }
 
+pub type PhoneLookupFn<T> = dyn Fn(&str) -> Option<T> + Send + Sync;
+
+/// Who holds each account's bare name (the phone routes); unset, the bare name never routes.
+pub struct PhoneLookup<T>(pub Box<PhoneLookupFn<T>>);
+
+impl<T> std::fmt::Debug for PhoneLookup<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PhoneLookup")
+    }
+}
+
 #[derive(Debug)]
 pub struct Registry<T> {
     tunnels: HashMap<String, T>,
+    phone: Option<PhoneLookup<T>>,
     /// Per pod, set by the serving gate; absent = no serving authority wired (every name routes).
     serving: HashMap<String, ServingView>,
     redirections: HashMap<String, String>,
@@ -73,6 +85,7 @@ impl<T: Clone> Registry<T> {
         let apex = apex.to_lowercase();
         Self {
             tunnels: HashMap::new(),
+            phone: None,
             serving: HashMap::new(),
             redirections: HashMap::new(),
             known_box_canonicals: HashSet::new(),
@@ -111,6 +124,11 @@ impl<T: Clone> Registry<T> {
         self.allocator
             .set_apps_allowed(&pc, view.apps)
             .affected_sets
+    }
+
+    /// Route each account's bare name to the phone that holds it.
+    pub fn set_phone_routes(&mut self, lookup: Option<PhoneLookup<T>>) {
+        self.phone = lookup;
     }
 
     pub fn serving_of(&self, pod_canonical: &str) -> Option<ServingView> {
@@ -158,13 +176,13 @@ impl<T: Clone> Registry<T> {
     /// Exact (canonical or held slot), then one leftmost-label strip, then the pod's own
     /// canonical, then custom-domain redirections, in that order (`findBySni`).
     ///
-    /// An account's bare `<account>.<apex>` name is its admin phones' (plan H3) and never resolves to a box; this relay
-    /// has no phone route yet, so it resolves to nothing. A box whose serving decision refuses a name resolves to
+    /// An account's bare `<account>.<apex>` name is its admin phones' (plan H3): it resolves only from the phone routes,
+    /// never to a box. A box whose serving decision refuses a name resolves to
     /// nothing for it, so the router closes it exactly like a name nobody registered.
     pub fn find_by_sni(&self, sni: &str) -> Option<T> {
         let lower = sni.to_lowercase();
         if bare_account(&lower, &self.apex) {
-            return None;
+            return self.phone.as_ref().and_then(|p| (p.0)(&lower));
         }
         let pc = self.resolve(&lower)?;
         match self.serving.get(&pc) {

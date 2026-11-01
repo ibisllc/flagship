@@ -95,6 +95,8 @@ struct Inner<H: HttpGet> {
     catching_up: tokio::sync::Mutex<()>,
     catch_up_again: AtomicBool,
     log: Box<dyn Fn(&str) + Send + Sync>,
+    /// The phone routes: `phone-route` and `phone-eligibility` frames, and a resync on reconnect.
+    phone: Mutex<Option<crate::phone::PhoneRoutes>>,
 }
 
 pub struct ServingFeedClient<H: HttpGet> {
@@ -199,7 +201,15 @@ impl<H: HttpGet> ServingFeedClient<H> {
                 catching_up: tokio::sync::Mutex::new(()),
                 catch_up_again: AtomicBool::new(false),
                 log,
+                phone: Mutex::new(None),
             }),
+        }
+    }
+
+    /// Hand the feed's phone frames to these routes.
+    pub fn set_phone(&self, routes: crate::phone::PhoneRoutes) {
+        if let Ok(mut p) = self.inner.phone.lock() {
+            *p = Some(routes);
         }
     }
 
@@ -274,6 +284,9 @@ async fn run_connection<H: HttpGet>(inner: &Arc<Inner<H>>, ws: Ws, ever: &mut bo
                     if *ever {
                         let gate = inner.gate.clone();
                         tokio::spawn(async move { gate.refresh_all().await });
+                        if let Some(p) = inner.phone.lock().ok().and_then(|p| p.clone()) {
+                            tokio::spawn(async move { p.resync().await });
+                        }
                     }
                     *ever = true;
                 }
@@ -313,6 +326,26 @@ fn on_frame<H: HttpGet>(inner: &Arc<Inner<H>>, f: &Value) {
             inner.gate.note_latest_sequence(seq);
             if seq > inner.gate.revocations().sequence {
                 spawn_catch_up(inner);
+            }
+        }
+        Some("phone-route") => {
+            let (Some(h), Some(g)) = (
+                f.get("hostname").and_then(Value::as_str),
+                f.get("generation").and_then(Value::as_u64),
+            ) else {
+                return;
+            };
+            if let Some(p) = inner.phone.lock().ok().and_then(|p| p.clone()) {
+                p.pushed(h, g, f.get("vacant") == Some(&Value::Bool(true)));
+            }
+        }
+        Some("phone-eligibility") => {
+            if let (Some(u), Some(p)) = (
+                f.get("username").and_then(Value::as_str),
+                inner.phone.lock().ok().and_then(|p| p.clone()),
+            ) {
+                let u = u.to_owned();
+                tokio::spawn(async move { p.eligibility_changed(&u).await });
             }
         }
         Some("changed") => {
@@ -367,9 +400,17 @@ fn spawn_catch_up<H: HttpGet>(inner: &Arc<Inner<H>>) {
 /// Single flight; a gap noticed while one runs reruns it once it ends.
 async fn catch_up<H: HttpGet>(inner: &Arc<Inner<H>>) {
     inner.catch_up_again.store(true, Ordering::SeqCst);
-    let Ok(_guard) = inner.catching_up.try_lock() else {
-        return;
-    };
+    // A request that lands just as the running pass ends is picked up by the re-check after the guard is dropped.
+    while inner.catch_up_again.load(Ordering::SeqCst) {
+        let Ok(guard) = inner.catching_up.try_lock() else {
+            return;
+        };
+        catch_up_pass(inner).await;
+        drop(guard);
+    }
+}
+
+async fn catch_up_pass<H: HttpGet>(inner: &Arc<Inner<H>>) {
     while inner.catch_up_again.swap(false, Ordering::SeqCst) {
         let gate = &inner.gate;
         let since = gate.revocations().sequence;

@@ -108,6 +108,8 @@ pub struct Collaborators {
     /// The serving authority and its feed's counters; `None` leaves it off (every admitted box serves its names).
     pub serving: Option<crate::serving::ServingGate>,
     pub serving_feed: Option<Arc<crate::serving_feed::FeedStats>>,
+    /// The phone route (needs the serving authority); `None` leaves the bare name closed.
+    pub phone: Option<crate::phone::PhoneRoutes>,
 }
 
 impl std::fmt::Debug for Collaborators {
@@ -125,6 +127,11 @@ pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<Running
     let hub_addr = addr(&l.hub)?;
     let echo_addr = l.echo.as_ref().map(addr).transpose()?;
     let registry: SharedRegistry = Arc::new(Mutex::new(Registry::new(&cfg.hub.apex)));
+    if let (Some(p), Ok(mut r)) = (c.phone.clone(), registry.lock()) {
+        r.set_phone_routes(Some(crate::registry::PhoneLookup(Box::new(move |host| {
+            p.tunnel_for(host)
+        }))));
+    }
     let mut router_cfg = cfg.router.clone();
     router_cfg.apex.clone_from(&cfg.hub.apex);
     let ctx = HubContext {
@@ -137,6 +144,7 @@ pub fn start(cfg: RelayConfig, l: Listeners, c: Collaborators) -> Result<Running
         mailboxes: c.mailboxes.clone(),
         serving: c.serving,
         serving_feed: c.serving_feed,
+        phone: c.phone.clone(),
         live: Arc::new(Mutex::new(HashMap::new())),
         draining: Arc::new(AtomicBool::new(false)),
     };

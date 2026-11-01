@@ -102,5 +102,5 @@ release from a session that holds nothing), `wrong-session`, `wrong-generation`,
   a UI for the holder's last-seen list. A hello records the device key it names; it is not yet checked against the
   account's device list.
 - Visitors that land on a relay instance not holding the phone's tunnel are closed (no cross-instance forwarding).
-- The Rust relay (G7) has no phone route yet; it must resolve the bare name from the same ledger and never from a box.
+- The Rust relay (G7) ports it (`rust/crates/flagship-relay/src/phone.rs`); `tools/relay-conformance` P01–P06 run the same scenarios against both relays.
 - Device-level runs: SE-backed TLS identity on iOS and Keystore-backed `SSLEngine` on Android are unproven on hardware.

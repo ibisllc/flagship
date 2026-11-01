@@ -114,7 +114,7 @@ struct State {
 pub struct Tunnel {
     pub id: u64,
     state: Mutex<State>,
-    wake: Notify,
+    pub(crate) wake: Notify,
     /// Wakes visitor readers waiting for room in their uplink lane.
     up_space: Notify,
     closed: AtomicBool,
@@ -158,7 +158,7 @@ pub struct StreamHandle {
 }
 
 impl Tunnel {
-    fn new(cfg: Arc<HubConfig>) -> Arc<Self> {
+    pub(crate) fn new(cfg: Arc<HubConfig>) -> Arc<Self> {
         let (closed_tx, _) = watch::channel(false);
         Arc::new(Self {
             id: NEXT_TUNNEL_ID.fetch_add(1, Ordering::Relaxed),
@@ -353,7 +353,7 @@ impl Tunnel {
     }
 
     /// Box closed (or broke) a stream: drain what is queued, then FIN the visitor.
-    fn remote_close(&self, id: u32, abort: bool) {
+    pub(crate) fn remote_close(&self, id: u32, abort: bool) {
         let entry = self.state.lock().ok().and_then(|mut s| {
             s.data.remove(id);
             s.streams.get_mut(&id).map(|e| {
@@ -400,6 +400,48 @@ impl Tunnel {
                 }
                 m.waiting.remove(&id);
             }
+        }
+    }
+
+    /// The name visitors of this tunnel are metered and closed by (the phone route sets and clears it).
+    pub(crate) fn set_pod_canonical(&self, pc: Option<String>) {
+        if let Ok(mut s) = self.state.lock() {
+            s.pod_canonical = pc;
+        }
+    }
+
+    /// One encoded frame for a carrier that sends exactly one frame per message (the phone tunnel).
+    pub(crate) fn next_frame(&self) -> Option<Vec<u8>> {
+        let mut out = Vec::new();
+        {
+            let mut s = self.state.lock().ok()?;
+            if let Some(f) = s.control.pop_front() {
+                let _ = frame::encode_frame_into(f.stream_id, f.frame_type, &f.payload, &mut out);
+            } else {
+                let (id, chunk) = s.data.pop(64 * 1024)?;
+                let _ = frame::encode_frame_into(id, FRAME_DATA, &chunk, &mut out);
+            }
+        }
+        self.up_space.notify_waiters();
+        Some(out)
+    }
+
+    /// Peer DATA for a hub-opened stream on a carrier without credit: queued toward the visitor, waiting at most `grace`
+    /// for room, else the stream is cut (visitor reset, `CLOSE` to the peer).
+    pub(crate) async fn deliver(&self, id: u32, data: Vec<u8>) {
+        let down = self.state.lock().ok().and_then(|s| {
+            s.streams
+                .get(&id)
+                .filter(|e| !e.remote_closed)
+                .map(|e| e.down.clone())
+        });
+        let Some(down) = down else { return };
+        if let Err(PushError::Full) = down.push_within(data, self.cfg.slow_receiver_grace).await {
+            self.remote_close(id, true);
+            if let Ok(mut s) = self.state.lock() {
+                s.streams.remove(&id);
+            }
+            self.send_control(Frame::new(id, FRAME_CLOSE, Vec::new()));
         }
     }
 
@@ -514,6 +556,8 @@ pub struct HubContext {
     /// The serving authority (`serving-wiring.md` §2); `None`: every admitted box serves every name it claims.
     pub serving: Option<crate::serving::ServingGate>,
     pub serving_feed: Option<Arc<crate::serving_feed::FeedStats>>,
+    /// The phones' bare names (`/phone-tunnel`); `None`: the bare name never routes.
+    pub phone: Option<crate::phone::PhoneRoutes>,
     /// Every live tunnel, for drain.
     pub live: Arc<Mutex<HashMap<u64, Arc<Tunnel>>>>,
     pub draining: Arc<AtomicBool>,

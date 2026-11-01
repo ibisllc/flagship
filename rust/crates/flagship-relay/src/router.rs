@@ -49,9 +49,21 @@ impl Default for RouterConfig {
     }
 }
 
-/// `routerStats`: counters only.
+/// Most recent misses `/api/stats` lists (`routerStats.ts` `MAX_MISSED`).
+pub const MAX_MISSED: usize = 20;
+
+/// One name nobody claimed: when (Unix ms), the name, and `hold-timeout` or `no-box-registered`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissedName {
+    pub at_ms: u64,
+    pub domain: String,
+    pub kind: &'static str,
+}
+
+/// `routerStats`: counters and the last few missed names.
 #[derive(Debug, Default)]
 pub struct RouterStats {
+    pub recent: std::sync::Mutex<std::collections::VecDeque<MissedName>>,
     pub routed: AtomicU64,
     pub bad: AtomicU64,
     pub parked: AtomicU64,
@@ -61,6 +73,29 @@ pub struct RouterStats {
     pub no_user: AtomicU64,
     pub refused_busy: AtomicU64,
     pub peek_timeouts: AtomicU64,
+}
+
+impl RouterStats {
+    pub fn missed(&self, kind: &'static str, domain: &str) {
+        if let Ok(mut r) = self.recent.lock() {
+            r.push_back(MissedName {
+                at_ms: crate::hub::now_ms() as u64,
+                domain: domain.to_lowercase(),
+                kind,
+            });
+            while r.len() > MAX_MISSED {
+                r.pop_front();
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn recent_misses(&self) -> Vec<MissedName> {
+        self.recent
+            .lock()
+            .map(|r| r.iter().cloned().collect())
+            .unwrap_or_default()
+    }
 }
 
 fn bump(c: &AtomicU64) {
@@ -189,6 +224,7 @@ impl Router {
         }
         if user.is_some() {
             bump(&self.stats.no_box_registered);
+            self.stats.missed("no-box-registered", &sni);
             self.delayed_drop(sock).await;
             return;
         }
@@ -269,7 +305,10 @@ impl Router {
                 bump(&self.stats.released);
                 self.pipe(sock, t, &domain, initial).await;
             }
-            None => bump(&self.stats.hold_timeouts),
+            None => {
+                bump(&self.stats.hold_timeouts);
+                self.stats.missed("hold-timeout", &domain);
+            }
         }
     }
 

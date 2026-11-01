@@ -16,7 +16,8 @@ use flagship_relay::config::Settings;
 use flagship_relay::hub::BlessingSource;
 use flagship_relay::mailbox::MailboxRegistry;
 use flagship_relay::outbound::com_policy::{ComHostPolicy, HttpPost, Ttls as PolicyTtls, UreqPost};
-use flagship_relay::outbound::{HostPolicy, KnownHostsPolicy, Options, OutboundRelay, System};
+use flagship_relay::outbound::{HostPolicy, KnownHostsPolicy, Options, OutboundRelay};
+use flagship_relay::phone::{ComPhone, PhoneConfig, PhoneRoutes};
 use flagship_relay::relay::{self, Collaborators, Listeners, RelayConfig};
 use flagship_relay::serving::{ComServingFetch, GateConfig, ServingGate};
 use flagship_relay::serving_feed::{FeedConfig, ServingFeedClient};
@@ -24,6 +25,91 @@ use flagship_relay::throttle::{Meter, over_quota_bytes_per_sec};
 use flagship_relay::usage::{UsageConfig, UsageMeter};
 use tokio::net::TcpListener;
 use tokio::signal::unix::{SignalKind, signal};
+
+#[cfg(not(feature = "conformance"))]
+fn outbound_resolver() -> Arc<dyn flagship_relay::outbound::Resolve> {
+    Arc::new(flagship_relay::outbound::System)
+}
+
+#[cfg(not(feature = "conformance"))]
+fn outbound_connector() -> Arc<dyn flagship_relay::outbound::Connect> {
+    Arc::new(flagship_relay::outbound::System)
+}
+
+/// `<host>=<public address>=<local ip:port>`: the host resolves to the public address (so every address rule still
+/// runs on it) and a dial to that address on 443 goes to the local upstream. Test builds only.
+#[cfg(feature = "conformance")]
+mod conformance {
+    use std::net::{IpAddr, SocketAddr};
+    use std::sync::Arc;
+
+    use flagship_relay::authority::BoxFut;
+    use flagship_relay::outbound::{Connect, Resolve, System};
+
+    #[derive(Debug, Clone)]
+    pub struct Upstream {
+        host: String,
+        public: IpAddr,
+        local: SocketAddr,
+    }
+
+    pub fn upstream() -> Option<Upstream> {
+        let v = std::env::var("FLAGSHIP_OUTBOUND_CONFORMANCE_UPSTREAM").ok()?;
+        let mut p = v.split('=');
+        Some(Upstream {
+            host: p.next()?.to_owned(),
+            public: p.next()?.parse().ok()?,
+            local: p.next()?.parse().ok()?,
+        })
+    }
+
+    impl Resolve for Upstream {
+        fn resolve<'a>(&'a self, host: &'a str) -> BoxFut<'a, Result<Vec<IpAddr>, ()>> {
+            if host.eq_ignore_ascii_case(&self.host) {
+                let a = self.public;
+                return Box::pin(async move { Ok(vec![a]) });
+            }
+            System.resolve(host)
+        }
+    }
+
+    impl Connect for Upstream {
+        fn connect<'a>(
+            &'a self,
+            addr: IpAddr,
+            port: u16,
+        ) -> BoxFut<'a, std::io::Result<tokio::net::TcpStream>> {
+            if addr == self.public && port == 443 {
+                return Box::pin(tokio::net::TcpStream::connect(self.local));
+            }
+            System.connect(addr, port)
+        }
+    }
+
+    pub fn resolver() -> Arc<dyn Resolve> {
+        upstream().map_or_else(
+            || Arc::new(System) as Arc<dyn Resolve>,
+            |u| Arc::new(u) as Arc<dyn Resolve>,
+        )
+    }
+
+    pub fn connector() -> Arc<dyn Connect> {
+        upstream().map_or_else(
+            || Arc::new(System) as Arc<dyn Connect>,
+            |u| Arc::new(u) as Arc<dyn Connect>,
+        )
+    }
+}
+
+#[cfg(feature = "conformance")]
+fn outbound_resolver() -> Arc<dyn flagship_relay::outbound::Resolve> {
+    conformance::resolver()
+}
+
+#[cfg(feature = "conformance")]
+fn outbound_connector() -> Arc<dyn flagship_relay::outbound::Connect> {
+    conformance::connector()
+}
 
 const OUTBOUND_STATS_EVERY: Duration = Duration::from_secs(15 * 60);
 
@@ -119,13 +205,26 @@ async fn run(s: Settings) -> Result<(), String> {
                 UreqGet::new(Duration::from_secs(10)).with_bearer(secret),
                 Box::new(log),
             );
+            // The phone's bare name (plan H3) rides on the serving authority: `.com`'s ledger and eligibility.
+            let phone = s.phone_route.then(|| {
+                PhoneRoutes::new(
+                    &s.relay_id,
+                    &s.apex,
+                    Arc::new(ComPhone::new(&s.com_base_url, secret)),
+                    PhoneConfig::default(),
+                    Box::new(log),
+                )
+            });
+            if let Some(p) = &phone {
+                feed.set_phone(p.clone());
+            }
             serving_tasks.push(gate.spawn());
             serving_tasks.push(feed.spawn());
             log(&format!(
                 "serving authority ON (feed {}/api/internal/serving-feed)",
                 s.com_base_url
             ));
-            Some((gate, feed.stats()))
+            Some((gate, feed.stats(), phone))
         }
         _ => None,
     };
@@ -177,8 +276,8 @@ async fn run(s: Settings) -> Result<(), String> {
         };
         OutboundRelay::new(
             Options::default(),
-            Arc::new(System),
-            Arc::new(System),
+            outbound_resolver(),
+            outbound_connector(),
             policy,
         )
     });
@@ -218,8 +317,9 @@ async fn run(s: Settings) -> Result<(), String> {
         outbound,
         mailboxes: s.pb_mail.then(|| Arc::new(MailboxRegistry::default())),
         stats_secret: s.usage_secret.clone(),
-        serving: serving.as_ref().map(|(g, _)| g.clone()),
-        serving_feed: serving.as_ref().map(|(_, f)| Arc::clone(f)),
+        serving: serving.as_ref().map(|(g, _, _)| g.clone()),
+        serving_feed: serving.as_ref().map(|(_, f, _)| Arc::clone(f)),
+        phone: serving.as_ref().and_then(|(_, _, p)| p.clone()),
     };
     let running = relay::start(cfg, listeners, collab).map_err(|e| e.to_string())?;
     log(&format!(

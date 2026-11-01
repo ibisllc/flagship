@@ -174,11 +174,17 @@ fn stats(app: &HttpApp, req: &Request<Incoming>) -> Resp {
                 "routed": n(&s.routed), "bad": n(&s.bad), "parked": n(&s.parked), "released": n(&s.released),
                 "holdTimeouts": n(&s.hold_timeouts), "noBoxRegistered": n(&s.no_box_registered), "noUser": n(&s.no_user),
                 "refusedBusy": n(&s.refused_busy), "peekTimeouts": n(&s.peek_timeouts), "activeStreams": app.router.active_streams(),
+                "recentMisses": s.recent_misses().iter().map(|m| serde_json::json!({
+                    "at": iso(m.at_ms / 1000, u32::try_from(m.at_ms % 1000).unwrap_or(0)), "domain": m.domain, "kind": m.kind,
+                })).collect::<Vec<_>>(),
             },
             "serving": app.hub.serving.as_ref().map(|g| {
                 let mut v = g.stats().to_json();
                 if let (Some(o), Some(f)) = (v.as_object_mut(), &app.hub.serving_feed) {
                     o.insert("feedConnection".into(), f.to_json());
+                }
+                if let (Some(o), Some(p)) = (v.as_object_mut(), &app.hub.phone) {
+                    o.insert("phoneRoutes".into(), p.stats());
                 }
                 v
             }),
@@ -221,6 +227,37 @@ fn tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
             let ws = WebSocketStream::from_raw_socket(TokioIo::new(up), Role::Server, Some(ws_cfg))
                 .await;
             hub::run_tunnel(ws, ctx).await;
+        }
+    });
+    let mut r = Response::new(Full::new(Bytes::new()));
+    *r.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
+    r.headers_mut()
+        .insert(UPGRADE, HeaderValue::from_static("websocket"));
+    r.headers_mut()
+        .insert(CONNECTION, HeaderValue::from_static("Upgrade"));
+    if let Ok(v) = HeaderValue::from_str(&accept) {
+        r.headers_mut().insert("sec-websocket-accept", v);
+    }
+    r
+}
+
+fn phone_tunnel(app: &Arc<HttpApp>, mut req: Request<Incoming>) -> Resp {
+    let Some(routes) = app.hub.phone.clone() else {
+        return error(StatusCode::NOT_FOUND, "not found");
+    };
+    let Some(accept) = upgrade_ok(&req) else {
+        return error(StatusCode::BAD_REQUEST, "a WebSocket upgrade is required");
+    };
+    let cfg = app.hub.cfg.clone();
+    let ws_cfg = WebSocketConfig::default()
+        .max_message_size(Some(2 * crate::frame::MAX_FRAME_PAYLOAD + 64))
+        .max_frame_size(Some(2 * crate::frame::MAX_FRAME_PAYLOAD + 64));
+    let on_upgrade = hyper::upgrade::on(&mut req);
+    tokio::spawn(async move {
+        if let Ok(up) = on_upgrade.await {
+            let ws = WebSocketStream::from_raw_socket(TokioIo::new(up), Role::Server, Some(ws_cfg))
+                .await;
+            crate::phone::run_phone_tunnel(ws, routes, cfg).await;
         }
     });
     let mut r = Response::new(Full::new(Bytes::new()));
@@ -300,6 +337,7 @@ async fn handle(app: Arc<HttpApp>, req: Request<Incoming>) -> Result<Resp, Infal
     let method = req.method().clone();
     Ok(match (method, path.as_str()) {
         (_, TUNNEL_PATH) => tunnel(&app, req),
+        (_, crate::phone::PHONE_TUNNEL_PATH) => phone_tunnel(&app, req),
         (Method::GET, "/api/health") => health(&app),
         (Method::GET, "/api/stats") => stats(&app, &req),
         (Method::POST, p) if p.starts_with("/pb/m/") => {

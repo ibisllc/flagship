@@ -6,7 +6,7 @@
  * the real daemon tunnel client (`packages/server-daemon/src/tunnel/tunnelClient.ts`, the "old box" of the
  * mixed-version scenarios); visitors are plain TCP sockets that send a TLS ClientHello.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { connect as netConnect, createServer as createNetServer, type Socket } from "node:net";
 import { existsSync } from "node:fs";
@@ -27,11 +27,30 @@ import {
   type Keypair,
 } from "@flagship/protocol";
 import { decodeFrame, encodeFrame, FRAME_HELLO, FRAME_HELLO_ACK, parseHelloAck, type Frame } from "@flagship/tunnel-protocol";
+import { emptyPhoneRouteEntry, liveEntry, signDeviceCapabilityGrant, type PhoneRouteEntry } from "@flagship/protocol";
+import { applyLedgerOp, type LedgerOp } from "../../apps/web/src/tunnel/phoneRoute.js";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 
 export const APEX = "flagship.services";
 export const REPO = resolve(import.meta.dirname, "../..");
 export const RUST_BIN = process.env.FLAGSHIP_RELAY_BIN ?? resolve(REPO, "rust/target/debug/flagship-relay");
-export const rustAvailable = (): boolean => existsSync(RUST_BIN);
+let built: boolean | undefined;
+/**
+ * S18 needs the test-only `conformance` feature, and any plain `cargo test` rebuilds the same binary without it,
+ * so unless FLAGSHIP_RELAY_BIN names a binary, the suite builds its own once (no cargo: the Rust half skips).
+ */
+export const rustAvailable = (): boolean => {
+  if (process.env.FLAGSHIP_RELAY_BIN) return existsSync(RUST_BIN);
+  if (built === undefined) {
+    const r = spawnSync("cargo", ["build", "-q", "-p", "flagship-relay", "--bin", "flagship-relay", "--features", "conformance"], {
+      cwd: resolve(REPO, "rust"),
+      stdio: "inherit",
+      timeout: 15 * 60_000,
+    });
+    built = r.status === 0 && existsSync(RUST_BIN);
+  }
+  return built;
+};
 
 export const hex = (b: Uint8Array): string => Buffer.from(b).toString("hex");
 export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -93,6 +112,11 @@ export class MockCom {
   usageAnswer: (u: string) => unknown = (u) => ({ username: u, admit: true });
   readonly paths: string[] = [];
   blessed: { hubKeyPub: string; hubHost: string } | null = null;
+  /** `.com`'s phone-route ledger (the ServingFeed DO's) and each account's admin-grant answer. */
+  readonly phoneLedger = new Map<string, PhoneRouteEntry>();
+  readonly phoneEligibility = new Map<string, unknown>();
+  /** Off: committed acquisitions and vacancies are not pushed (the relays' 15 s ledger re-read must catch them). */
+  phonePush = true;
   feedUp = true;
   beatMs = 200;
   private beat: ReturnType<typeof setInterval> | null = null;
@@ -148,6 +172,10 @@ export class MockCom {
 
   pushChanged(username: string, boxPub: string): void {
     for (const ws of this.feeds) ws.send(JSON.stringify({ type: "changed", username, boxPub }));
+  }
+
+  pushPhoneEligibility(username: string): void {
+    for (const ws of this.feeds) ws.send(JSON.stringify({ type: "phone-eligibility", username }));
   }
 
   private onFeed(ws: WebSocket): void {
@@ -237,6 +265,25 @@ export class MockCom {
       const r = this.serving.get(`${decodeURIComponent(m[1]!)}|${decodeURIComponent(m[2]!)}`);
       return r ? send(200, r) : send(404, { error: "unknown box" });
     }
+    if (p === "/api/internal/phone-route/ledger") {
+      if (!internal) return send(403, { error: "forbidden" });
+      if (req.method === "GET") {
+        const h = url.searchParams.get("hostname") ?? "";
+        return send(200, { entry: liveEntry(this.phoneLedger.get(h) ?? emptyPhoneRouteEntry(), Date.now()) });
+      }
+      const op = (await this.body(req)) as LedgerOp;
+      const r = applyLedgerOp(this.phoneLedger.get(op.hostname) ?? emptyPhoneRouteEntry(), op, Date.now());
+      if (r.ok) this.phoneLedger.set(op.hostname, r.entry);
+      if (r.ok && op.op !== "renew" && this.phonePush) {
+        for (const ws of this.feeds) ws.send(JSON.stringify({ type: "phone-route", hostname: op.hostname, generation: op.generation, vacant: op.op === "release" }));
+      }
+      return send(200, r);
+    }
+    if ((m = p.match(/^\/api\/internal\/phone-route\/([^/]+)\/eligibility$/))) {
+      if (!internal) return send(403, { error: "forbidden" });
+      const e = this.phoneEligibility.get(decodeURIComponent(m[1]!));
+      return e ? send(200, e) : send(404, { error: "unknown account" });
+    }
     if (p === "/api/internal/serving-revocations") {
       if (!internal) return send(403, { error: "forbidden" });
       const since = Number(url.searchParams.get("since") ?? 0);
@@ -309,6 +356,37 @@ export async function helloPayload(b: BoxIdentity, o: HelloOptions = {}): Promis
       ...(o.capabilities ? { capabilities: o.capabilities } : {}),
       ...(o.serving ?? {}),
     },
+  };
+}
+
+/** `.com`'s eligibility answer: each seed is a device with an admin-root-signed grant of `scopes` (default admin). */
+export function phoneEligibility(account: string, adminRoot: Keypair, devices: Array<{ seed: Uint8Array; scopes?: string[]; signerRoot?: "admin-root" | "membership" }>): unknown {
+  const now = Date.now();
+  return {
+    adminRootPub: hex(adminRoot.publicKey),
+    grants: devices.map((d) => {
+      const pub = ed.getPublicKey(d.seed);
+      const g = {
+        grantId: hex(pub).slice(0, 32),
+        username: account,
+        deviceId: hex(pub).slice(32),
+        devicePubKey: pub,
+        scopes: (d.scopes ?? ["admin"]) as never,
+        issuedAt: now - 60_000,
+        expiresAt: now + 30 * 86_400_000,
+      };
+      return {
+        grantId: g.grantId,
+        username: g.username,
+        deviceId: g.deviceId,
+        devicePubHex: hex(pub),
+        scopes: d.scopes ?? ["admin"],
+        issuedAt: g.issuedAt,
+        expiresAt: g.expiresAt,
+        signatureHex: hex(signDeviceCapabilityGrant(g, adminRoot)),
+        signerRoot: d.signerRoot ?? "admin-root",
+      };
+    }),
   };
 }
 
@@ -473,6 +551,11 @@ export interface RelayOptions {
   usage?: { flushMs?: number; overQuotaKbps?: number };
   outbound?: boolean;
   drainGraceMs?: number;
+  /** The phone route (needs `serving`). */
+  phone?: boolean;
+  relayId?: string;
+  /** A successful outbound splice: `host` resolves to `publicIp`, and a dial to it on 443 reaches `local`. */
+  outboundUpstream?: { host: string; publicIp: string; local: string };
   /** Reuse these ports (a restart or a rollback onto the same addresses). */
   ports?: { hub: number; sni: number; echo: number };
 }
@@ -502,9 +585,13 @@ function relayEnv(com: MockCom, o: RelayOptions, ports: { hub: number; sni: numb
     FLAGSHIP_HUB_HOST: APEX,
     FLAGSHIP_DRAIN_GRACE_MS: String(o.drainGraceMs ?? 1_000),
     FLAGSHIP_OUTBOUND_RELAY: o.outbound === false ? "off" : "on",
-    FLAGSHIP_RELAY_ID: "conformance",
-    FLAGSHIP_PHONE_ROUTE: "off",
+    FLAGSHIP_RELAY_ID: o.relayId ?? "conformance",
+    FLAGSHIP_PHONE_ROUTE: o.phone ? "on" : "off",
   };
+  if (o.outboundUpstream) {
+    const u = o.outboundUpstream;
+    env.FLAGSHIP_OUTBOUND_CONFORMANCE_UPSTREAM = `${u.host}=${u.publicIp}=${u.local}`;
+  }
   if (o.usage) {
     env.USAGE_REPORT_SECRET = USAGE_SECRET;
     env.USAGE_FLUSH_MS = String(o.usage.flushMs ?? 200);
@@ -524,14 +611,44 @@ const RELAY_ENV_KEYS = [
   "SERVICES_CONTROL_SECRET", "FLAGSHIP_HUB_HOST", "FLAGSHIP_DRAIN_GRACE_MS", "FLAGSHIP_OUTBOUND_RELAY", "FLAGSHIP_RELAY_ID",
   "FLAGSHIP_PHONE_ROUTE", "USAGE_REPORT_SECRET", "USAGE_FLUSH_MS", "FLAGSHIP_OVER_QUOTA_KBPS", "FLAGSHIP_SERVING_REVOCATION_PUB",
   "FLAGSHIP_SERVING_REFUSE_NEW_MS", "FLAGSHIP_SERVING_CLOSE_ALL_MS", "FLAGSHIP_SERVING_CHECK_MS", "FLAGSHIP_PB_MAIL",
+  "FLAGSHIP_OUTBOUND_CONFORMANCE_UPSTREAM",
 ];
 
 async function ports(o: RelayOptions): Promise<{ hub: number; sni: number; echo: number }> {
   return o.ports ?? { hub: await freePort(), sni: await freePort(), echo: await freePort() };
 }
 
+const nodeRequire = createRequire(import.meta.url);
+let unpatchUpstream: (() => void) | null = null;
+
+/**
+ * The TS hub's twin of the Rust `conformance` feature: in this process only, `host` resolves to `publicIp` and a dial
+ * to it on 443 goes to `local`. Every other lookup and dial is untouched. Undone when the relay stops.
+ */
+function patchUpstream(u: { host: string; publicIp: string; local: string }): void {
+  const dns = nodeRequire("node:dns") as typeof import("node:dns");
+  const net = nodeRequire("node:net") as typeof import("node:net");
+  const lookup = dns.promises.lookup;
+  const connect = net.connect;
+  const [lh, lp] = [u.local.slice(0, u.local.lastIndexOf(":")), Number(u.local.slice(u.local.lastIndexOf(":") + 1))];
+  (dns.promises as { lookup: unknown }).lookup = (async (host: string, opts: unknown) =>
+    host.toLowerCase() === u.host ? [{ address: u.publicIp, family: 4 }] : (lookup as (...a: unknown[]) => unknown)(host, opts)) as never;
+  (net as { connect: unknown }).connect = ((...args: unknown[]) => {
+    const a = args[0] as { host?: string; port?: number };
+    if (typeof a === "object" && a?.host === u.publicIp && a.port === 443) return connect({ host: lh, port: lp });
+    return (connect as (...x: unknown[]) => unknown)(...args);
+  }) as never;
+  syncBuiltinESMExports();
+  unpatchUpstream = () => {
+    (dns.promises as { lookup: unknown }).lookup = lookup;
+    (net as { connect: unknown }).connect = connect;
+    syncBuiltinESMExports();
+  };
+}
+
 export async function startTs(com: MockCom, o: RelayOptions = {}): Promise<RunningRelayTarget> {
   const p = await ports(o);
+  if (o.outboundUpstream) patchUpstream(o.outboundUpstream);
   const env = relayEnv(com, o, p);
   for (const k of RELAY_ENV_KEYS) delete process.env[k];
   Object.assign(process.env, env);
@@ -546,6 +663,8 @@ export async function startTs(com: MockCom, o: RelayOptions = {}): Promise<Runni
     await h.drain(0);
     h.app.server.closeAllConnections();
     await h.close();
+    unpatchUpstream?.();
+    unpatchUpstream = null;
   };
   return {
     impl: "ts",

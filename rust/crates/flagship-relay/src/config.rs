@@ -43,6 +43,8 @@ pub struct Settings {
     pub serving_refuse_new: Duration,
     pub serving_close_all: Duration,
     pub serving_check: Duration,
+    /// `FLAGSHIP_PHONE_ROUTE=off` leaves the bare name closed even with the serving authority on.
+    pub phone_route: bool,
 }
 
 fn port(vars: &HashMap<String, String>, name: &str) -> Result<Option<u16>, String> {
@@ -117,6 +119,7 @@ impl Settings {
             serving_check: millis(vars, "FLAGSHIP_SERVING_CHECK_MS")
                 .filter(|d| !d.is_zero())
                 .unwrap_or(Duration::from_secs(5)),
+            phone_route: vars.get("FLAGSHIP_PHONE_ROUTE").map(String::as_str) != Some("off"),
         })
     }
 }

@@ -10,6 +10,12 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Test builds only (tools/relay-conformance): FLAGSHIP_OUTBOUND_CONFORMANCE_UPSTREAM maps one host to a public-looking
+# address and that address to a local upstream, so a successful outbound splice can be compared with the TS hub. The
+# release image (Dockerfile.relay) never enables it.
+conformance = []
+
 [dependencies]
 sha2 = { version = "=0.11.0", default-features = false }
 flagship-protocol = { path = "../flagship-protocol" }
@@ -18,6 +24,7 @@ http-body-util = { version = "=0.1.5", default-features = false }
 hyper = { version = "=1.12.0", default-features = false, features = ["http1", "server"] }
 hyper-util = { version = "=0.1.21", default-features = false, features = ["tokio"] }
 flagship-crypto = { path = "../flagship-crypto" }
+flagship-access = { path = "../flagship-access" }
 futures-util = { version = "=0.3.34", default-features = false, features = ["sink", "std"] }
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 serde_json = { version = "=1.0.151", default-features = false, features = ["std"] }

@@ -20,6 +20,7 @@ pub mod mail;
 pub mod mailbox;
 pub mod outbound;
 pub mod payload;
+pub mod phone;
 pub mod pipe;
 pub mod registry;
 pub mod relay;

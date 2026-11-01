@@ -1494,6 +1494,7 @@ version = "0.3.0"
 dependencies = [
  "bytes",
  "ed25519-dalek 3.0.0",
+ "flagship-access",
  "flagship-crypto",
  "flagship-protocol",
  "futures-util",

@@ -146,7 +146,7 @@ R = reproduced (tested), P = partial, L = lacking, X = Rust-only extension.
 | Router | Park on miss: single-flight per name, nudge every box of the account, poll, replay | R | Bytes a parked visitor may send are now bounded (TS: unbounded) |
 | Router | Delayed drop of first-party misses (timing-indistinguishable), capped | R | |
 | Router | Per-account metering and over-quota slow-down, both directions | R | `UsageMeter` (`/api/usage/report`, budget leases, LeaseBook port); §7 S06 |
-| Router | `routerStats` / `GET /api/stats` | P | Route (x-usage-secret), counters and the `serving` block; the missed-name ring is not ported |
+| Router | `routerStats` / `GET /api/stats` | R | Route (x-usage-secret), counters, `recentMisses` (last 20, `no-box-registered` / `hold-timeout`) and the `serving` block (with `phoneRoutes`); §7 S19 |
 | Gossip | `broadcast--<user>` POST fan-out to `/internal/gossip` | L | Dropped by owner decision (2026-10-30): never formed live (AGENTS "One access list per app") |
 | Echo | PROXY v1/v2, JSON body, 5 s, buffer cap | R | A non-numeric v1 port is refused (TS answers `null`) |
 | Flow | Per-stream credit, fair scheduling | X | `stream-credit-v1`, DRR |
@@ -157,7 +157,7 @@ R = reproduced (tested), P = partial, L = lacking, X = Rust-only extension.
 | Serving | Serving gate: `servingAdminKey` / `servingPolicy` in HELLO, `.com` record (`/api/internal/serving/:u/:boxPub`), `servingDecision`, app streams closed at `until`, control name stays, apps stopped hold no slot | R | `serving.rs` on `flagship_crypto::serving` (shared vectors); §7 S13–S15 |
 | Serving | Pushed revocation feed (`/api/internal/serving-feed`, acks, gap catch-up), contact rules (no new tunnels after 60 s quiet, close all after 10 min) | R | `serving_feed.rs` (tokio-tungstenite over tokio-rustls with webpki roots); §7 S14, S16 |
 | Registry | A box's control name is never an app slot (H9); the bare `<account>.<apex>` never resolves to a box | R | The phone route itself is not ported (§7 gaps) |
-| Phone | `/phone-tunnel`, route claims, ledger, eligibility (H3) | L | Being reworked in TS (vacancy-only claims, 2026-11-01); ported after it settles. Until then the bare name never routes on the Rust relay, as a TS hub with `FLAGSHIP_PHONE_ROUTE=off` |
+| Phone | `/phone-tunnel`, vacancy-only claims, `route-held` + standby, `route-vacant` across instances (feed push + 15 s ledger re-read), `route-release/v1`, admin-grant eligibility from `.com`, revocation → 4403 | R | `phone.rs` (claim/release checked against `test-vectors/phone-route`); §7 P01–P06 |
 
 ## 4. Defects found in the TypeScript relay
 
@@ -203,8 +203,7 @@ the peek deadline, the null REQUEST_TRANSFER, over-quota slow-down, the PROXY ec
 
 ## 6. Next
 
-After the canary (§8): the phone route (H3) once its TS rework settles; the missed-name ring in `/api/stats`;
-a box-side `stream-credit-v1` in `tunnelClient.ts`; the §5.3 benchmarks against the TS relay; PQ route and blessing
+After the canary (§8): a box-side `stream-credit-v1` in `tunnelClient.ts`; the §5.3 benchmarks against the TS relay; PQ route and blessing
 bindings (N02, waiting on Q02/Q04).
 
 ## 7. Conformance harness (both implementations)
@@ -238,17 +237,29 @@ unset in production). Each scenario asserts the same answer on both: ack reasons
 | S15 | Lease end: the app stream closes within 5 s of `notAfter`, the control stream keeps flowing, the app name stops routing, the control name still routes |
 | S16 | Feed contact: quiet past the first threshold → new HELLO answered `try-again` (1013); past the second → every tunnel closed 1013 `serving-feed-lost`; the feed back → tunnels accepted |
 | S17 | `/api/health` |
+| S18 | Outbound success: an allowed host whose (faked) public address is dialled on 443; bytes both ways through the splice |
+| S19 | `/api/stats` `recentMisses` names a `no-box-registered` miss |
+| P01 | Phone route: an eligible phone claims the vacant bare name (generation 1); a visitor and its presence bytes reach it verbatim; `holding` on a second begin |
+| P02 | Refusals: `not-eligible` (a non-admin grant, an unknown key), `bad-signature`, `wrong-generation`, `no-challenge` (nonce reused), `not-holder`, `malformed`; nothing routes |
+| P03 | Vacancy-only: a second phone gets `route-held` with the holder's generation and waits; the holder leaving → `route-vacant`, claim → generation 2; signed release (`released`, `lost released`), wrong-generation release refused |
+| P04 | The holder's admin grant revoked (`phone-eligibility` push) → closed 4403 and its visitor stream ended within 5 s |
+| P05 | Two relays, one ledger: the standby on the other relay gets `route-vacant` from the feed push; the other relay never routes a name it does not hold |
+| P06 | The same with the push lost: the standby relay's 15 s ledger re-read tells it (< 17 s) |
 | M01 | Mixed versions: the current daemon tunnel client (`superviseTunnelClient`, no new capabilities) registers and serves (`<pod>`, `<app>.<user>`) |
 | M02 | Relay restart on the same address: the box reconnects by itself |
 | M03 | Rollback and forward: the same box moves Rust → TS (and TS → Rust) across a drain with no change on the box |
 
-Run: `cargo build -p flagship-relay --bin flagship-relay` then `npx vitest run tools/relay-conformance` (the Rust half
+Run: `cargo build -p flagship-relay --bin flagship-relay --features conformance` then `npx vitest run tools/relay-conformance` (the Rust half
 is skipped, and says so, without the binary; `FLAGSHIP_RELAY_BIN` points elsewhere). `bash scripts/relay-canary.sh
 local` runs both steps plus `cargo test -p flagship-relay`.
 
-Not covered by the harness: a successful outbound splice (needs a public address; `tests/outbound_session.rs` covers
-it with an injected dialer), custom-domain redirections and gossip (not ported, above), the phone route (not ported),
-`stream-credit-v1` (Rust only; `tests/relay_core.rs`).
+S18 fakes the provider's public address: the Rust binary built with the test-only `conformance` cargo feature reads
+`FLAGSHIP_OUTBOUND_CONFORMANCE_UPSTREAM=<host>=<public ip>=<local ip:port>` (the release image never enables the
+feature, so production has no such variable); the TS hub, in process, gets the same mapping by patching `dns.promises.lookup`
+and `net.connect` in the test process only. Every policy rule still runs on the public address.
+
+Not covered by the harness: custom-domain redirections and gossip (not ported, above), `stream-credit-v1` (Rust only;
+`tests/relay_core.rs`).
 
 ## 8. Rollout and rollback
 
@@ -272,5 +283,4 @@ address after a deploy (M02), and a `drain-v1` box redials at the notice. A roll
    Nothing else changes: no box, no `.com`, no DNS.
 
 Before step 3: `.com` must serve the serving feed if `FLAGSHIP_SERVING_REVOCATION_PUB` is set (both relays then fail
-closed without it), and the phone route must either be ported or accepted as off for the canary window (the TS hub
-routes the bare name only with the serving authority on and `FLAGSHIP_PHONE_ROUTE` not `off`).
+closed without it); the phone route rides on it on both relays (`FLAGSHIP_PHONE_ROUTE=off` turns it off on both).

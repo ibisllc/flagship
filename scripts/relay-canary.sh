@@ -33,7 +33,8 @@ step() {
 case "$what" in
   local)
     export PATH="/opt/homebrew/opt/rustup/bin:$PATH" CARGO_INCREMENTAL=0
-    (cd rust && cargo test -p flagship-relay && cargo build -p flagship-relay --bin flagship-relay)
+    # The test-only `conformance` feature lets S18 fake a provider's public address; the release image never enables it.
+    (cd rust && cargo test -p flagship-relay && cargo build -p flagship-relay --bin flagship-relay --features conformance)
     npx vitest run tools/relay-conformance
     ;;
   gym)
