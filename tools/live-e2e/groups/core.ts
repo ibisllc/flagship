@@ -73,8 +73,13 @@ export const core: Group = {
       return `${r.text.length}B html`;
     });
     // Plan H9: the control name has a certificate of its own (exactly that name); app names get the apps certificate.
-    await rec.check("box presents a Let's Encrypt control cert for exactly its FQDN", () => {
-      const c = certInfo(fqdn);
+    await rec.check("box presents a Let's Encrypt control cert for exactly its FQDN", async () => {
+      // One handshake can be lost to a Fly reset (gym 22 classic: no answer once, the same certificate a minute later).
+      let c = certInfo(fqdn);
+      for (let i = 0; i < 6 && !c.issuer; i++) {
+        await sleep(5_000);
+        c = certInfo(fqdn);
+      }
       assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer || "<none>"}`);
       assert(c.sans.length === 1 && c.sans[0] === fqdn, `control sans=${c.sans.join(",")}`);
       return c.sans.join(", ");
