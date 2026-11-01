@@ -116,6 +116,55 @@ describe("TLS keys held by keyd", () => {
     expect(() => t2.remove(handle)).toThrow(/in service/);
   });
 
+  it("serves a control and an apps certificate side by side, by slot, and a default-only activate clears the slots", async () => {
+    const t1 = new TlsKeys(ALLOWED, dir);
+    const control = t1.createKey([FQDN]).handle;
+    const apps = t1.createKey([`*.${FQDN}`]).handle;
+    t1.install(control, await issueFor(t1.csr(control)));
+    expect(() => t1.activate(apps, "apps")).toThrow(/install a certificate/);
+    t1.install(apps, await issueFor(t1.csr(apps)));
+    t1.activate(control);
+    expect(t1.servingCerts().map((c) => [c.slot, c.handle])).toEqual([["default", control]]);
+    t1.activate(control, "control");
+    t1.activate(apps, "apps");
+    expect(t1.servingCerts().map((c) => [c.slot, c.handle, c.names])).toEqual([
+      ["control", control, [FQDN]],
+      ["apps", apps, [`*.${FQDN}`]],
+      ["default", control, [FQDN]],
+    ]);
+    expect(t1.active()?.handle).toBe(control);
+    expect(() => t1.remove(apps)).toThrow(/in service/);
+    expect(t1.list().find((k) => k.handle === apps)?.active).toBe(true);
+    // A restart keeps both slots.
+    const t2 = new TlsKeys(ALLOWED, dir);
+    expect(t2.servingCerts().map((c) => c.slot)).toEqual(["control", "apps", "default"]);
+    // An older daemon's one-certificate activate means one certificate for every name again.
+    t2.activate(apps);
+    expect(t2.servingCerts().map((c) => [c.slot, c.handle])).toEqual([["default", apps]]);
+    expect(new TlsKeys(ALLOWED, dir).servingCerts().map((c) => [c.slot, c.handle])).toEqual([["default", apps]]);
+    t2.remove(control);
+  });
+
+  it("takes a slot over the socket and lists every certificate in service with tls.active", async () => {
+    const k = await startInProcess({ tls: new TlsKeys(ALLOWED) }, { rateLimits: { "*": { perSecond: 1000, burst: 1000 } } });
+    try {
+      const c = new KeydClient({ socketPath: k.sock, component: "tlsd" });
+      await c.connect();
+      const h = String((await c.call("tls.createKey", { names: [FQDN] })).handle);
+      await c.call("tls.install", { handle: h, chain: await issueFor(Uint8Array.from(Buffer.from(String((await c.call("tls.csr", { handle: h })).csr), "hex"))) });
+      await expect(c.call("tls.activate", { handle: h, slot: "other" })).rejects.toMatchObject({ code: "bad-request", message: "slot must be control or apps" });
+      await expect(c.call("tls.activate", { handle: h, slot: null })).rejects.toMatchObject({ code: "bad-request" });
+      expect(await c.call("tls.active")).toEqual({ active: null, serving: [] });
+      await c.call("tls.activate", { handle: h, slot: "control" });
+      const r = await c.call("tls.active");
+      expect(r.active).toBeNull();
+      expect((r.serving as Array<{ slot: string; handle: string }>).map((x) => [x.slot, x.handle])).toEqual([["control", h]]);
+      c.close();
+    } finally {
+      await k.stop();
+    }
+  });
+
   it("works over the socket and never returns the private key", async () => {
     const k = await startInProcess({ tls: new TlsKeys(ALLOWED) }, { rateLimits: { "*": { perSecond: 1000, burst: 1000 } } });
     try {

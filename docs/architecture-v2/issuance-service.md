@@ -163,9 +163,11 @@ more. Boxes no longer hold ACME account keys for the services apex. Migration of
   `tls.csr`; signs the order with the custodian; polls) and `acme/boxCertificates.ts` (two certificates, renewal in the
   last third plus up to 3 days of jitter, back-off, reuse across restarts). Classic stack: `CertManager` serves the
   control certificate for exactly the box's name and the app certificate for every other name.
-- **Open (arch-v2):** keyd and the Rust ingress serve ONE active certificate. The box activates its app certificate when
-  it also covers its own name (`*.<user>`, with the admin's grant), else its control certificate (its own name always
-  answers; app names then fail TLS until the ingress picks a keyd key per SNI).
+- **Arch-v2:** keyd holds a default certificate (what an older frontend serves for every name: the app certificate when
+  it also covers the box's own name via `*.<user>`, else the control one) and, with both valid, a `control` and an
+  `apps` slot (`tls.activate {handle, slot}`; `tls.active` lists them under `serving`). flagship-tlsd and
+  flagship-ingress serve the box's exact name the control certificate, any other name the apps one, then any in-date
+  certificate that covers the name; a default-only activate clears the slots.
 - **Open (relay):** `AppUserAllocator.reserveControlNames` takes the registered control names from `.com`; connected
   boxes' own names are reserved already. Feeding the list belongs to the relay work (H3).
 - **Phone (H2):** sign `certificate-order/v1` with the phone's account device key (`device`), `regGen` 0, no `server`;

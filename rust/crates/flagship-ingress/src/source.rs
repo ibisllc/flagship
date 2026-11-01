@@ -1,10 +1,12 @@
-//! The certificate in service, reloaded from keyd on a timer and on demand. A handshake
+//! The certificates in service, reloaded from keyd on a timer and on demand. A handshake
 //! reads only memory; keyd is asked again in the background, so a renewal takes effect for
-//! new connections while existing ones keep their session.
+//! new connections while existing ones keep their session. A box holds up to two: a control
+//! certificate for exactly its own name and an apps certificate for its app names, and each
+//! handshake gets the one for its SNI (`pick`), as flagship-tlsd does.
 
 use std::fmt;
 use std::sync::{Arc, PoisonError, RwLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
@@ -16,8 +18,13 @@ use crate::signer::{ActiveHandles, KeydSigningKey};
 
 #[derive(Debug)]
 pub struct Loaded {
+    pub slot: &'static str,
     pub cert: ServingCert,
     pub chain_pem: String,
+    /// keyd's not-after in Unix milliseconds; 0 when keyd did not say.
+    pub not_after_ms: i64,
+    /// The names keyd made the key for (the leaf's SANs are a subset).
+    pub names: Vec<String>,
     pub key: Arc<CertifiedKey>,
 }
 
@@ -51,7 +58,7 @@ impl std::error::Error for ReloadError {}
 pub struct CertSource {
     keyd: Arc<KeydClient>,
     handles: Arc<ActiveHandles>,
-    current: RwLock<Option<Arc<Loaded>>>,
+    current: RwLock<Option<Arc<Vec<Arc<Loaded>>>>>,
     nudge: Notify,
 }
 
@@ -66,47 +73,79 @@ impl CertSource {
         }
     }
 
-    pub fn current(&self) -> Option<Arc<Loaded>> {
+    pub fn current(&self) -> Option<Arc<Vec<Arc<Loaded>>>> {
         self.current
             .read()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
 
-    /// Ask keyd what is in service. On any failure the certificate already held stays in
+    /// Ask keyd what is in service. On any failure the certificates already held stay in
     /// service (flagship-tlsd does the same); signing still needs keyd, so nothing is served
     /// without it.
     pub fn reload(&self) -> Result<Reload, ReloadError> {
-        let active = self
-            .keyd
-            .active()
-            .map_err(ReloadError::Keyd)?
-            .ok_or(ReloadError::NoneInService)?;
+        let served = self.keyd.serving().map_err(ReloadError::Keyd)?;
+        if served.is_empty() {
+            return Err(ReloadError::NoneInService);
+        }
         let had = self.current();
         if let Some(cur) = &had
-            && cur.cert.handle == active.handle
-            && cur.chain_pem == active.chain_pem
+            && cur.len() == served.len()
+            && cur.iter().zip(&served).all(|(c, s)| {
+                c.slot == s.slot
+                    && c.cert.handle == s.cert.handle
+                    && c.chain_pem == s.cert.chain_pem
+            })
         {
             return Ok(Reload::Unchanged);
         }
-        let cert = ServingCert::from_active(&active).map_err(ReloadError::Cert)?;
-        let signing = KeydSigningKey::new(
-            Arc::clone(&self.keyd),
-            Arc::clone(&self.handles),
-            cert.handle.clone(),
-            cert.spki.clone(),
-            cert.public_point().to_vec(),
-        );
-        let key = Arc::new(CertifiedKey::new(cert.chain.clone(), Arc::new(signing)));
-        let handle = cert.handle.clone();
-        let loaded = Arc::new(Loaded {
-            cert,
-            chain_pem: active.chain_pem,
-            key,
-        });
-        // Permit the new key before any handshake can pick it; the old one keeps its grace.
-        self.handles.switch_to(&handle);
-        *self.current.write().unwrap_or_else(PoisonError::into_inner) = Some(loaded);
+        let mut next: Vec<Arc<Loaded>> = Vec::with_capacity(served.len());
+        let mut first_error = None;
+        for s in served {
+            // The same key in two places (a slot and the default) shares one signer.
+            let reused = had
+                .iter()
+                .flat_map(|v| v.iter())
+                .chain(next.iter())
+                .find(|c| c.cert.handle == s.cert.handle && c.chain_pem == s.cert.chain_pem)
+                .map(|c| (c.cert.clone(), Arc::clone(&c.key)));
+            let (cert, key) = match reused {
+                Some(r) => r,
+                None => match ServingCert::from_active(&s.cert) {
+                    Ok(cert) => {
+                        let signing = KeydSigningKey::new(
+                            Arc::clone(&self.keyd),
+                            Arc::clone(&self.handles),
+                            cert.handle.clone(),
+                            cert.spki.clone(),
+                            cert.public_point().to_vec(),
+                        );
+                        let key =
+                            Arc::new(CertifiedKey::new(cert.chain.clone(), Arc::new(signing)));
+                        (cert, key)
+                    }
+                    Err(e) => {
+                        first_error.get_or_insert(e);
+                        continue;
+                    }
+                },
+            };
+            next.push(Arc::new(Loaded {
+                slot: s.slot,
+                cert,
+                chain_pem: s.cert.chain_pem,
+                not_after_ms: s.cert.not_after_ms,
+                names: s.cert.names,
+                key,
+            }));
+        }
+        if next.is_empty() {
+            return Err(first_error.map_or(ReloadError::NoneInService, ReloadError::Cert));
+        }
+        // Permit the new keys before any handshake can pick them; dropped ones keep their grace.
+        let handles: Vec<String> = next.iter().map(|c| c.cert.handle.clone()).collect();
+        self.handles.set(&handles);
+        *self.current.write().unwrap_or_else(PoisonError::into_inner) = Some(Arc::new(next));
         Ok(if had.is_some() {
             Reload::Switched
         } else {
@@ -163,7 +202,43 @@ impl CertSource {
     }
 }
 
-/// rustls's view of the source: a certificate only for a name it covers.
+/// The certificate for a name: the control certificate for exactly the name it was made for,
+/// the apps certificate for any other, then whatever else covers the name. An in-date
+/// certificate wins over an expired one; one that does not cover the name is never served.
+pub fn pick<'a>(certs: &'a [Arc<Loaded>], name: &str, now_ms: i64) -> Option<&'a Arc<Loaded>> {
+    let name = name.trim_end_matches('.').to_ascii_lowercase();
+    let control_name = certs.iter().any(|c| {
+        c.slot == "control"
+            && c.names
+                .iter()
+                .any(|n| !n.starts_with("*.") && n.eq_ignore_ascii_case(&name))
+    });
+    let order: [&str; 3] = if control_name {
+        ["control", "apps", "default"]
+    } else {
+        ["apps", "control", "default"]
+    };
+    let in_date = |c: &Loaded| c.not_after_ms == 0 || c.not_after_ms > now_ms;
+    for want_in_date in [true, false] {
+        for slot in order {
+            if let Some(c) = certs
+                .iter()
+                .find(|c| c.slot == slot && (!want_in_date || in_date(c)) && c.cert.covers(&name))
+            {
+                return Some(c);
+            }
+        }
+    }
+    None
+}
+
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+}
+
+/// rustls's view of the source: a certificate only for a name one covers.
 #[derive(Debug)]
 pub struct Resolver(pub Arc<CertSource>);
 
@@ -174,6 +249,6 @@ impl ResolvesServerCert for Resolver {
             self.0.request_reload();
             return None;
         };
-        cur.cert.covers(name).then(|| Arc::clone(&cur.key))
+        pick(&cur, name, now_ms()).map(|c| Arc::clone(&c.key))
     }
 }

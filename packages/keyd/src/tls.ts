@@ -19,6 +19,22 @@ const MAX_KEYS = 8;
 const HANDLE = /^[0-9a-f]{32}$/;
 const NAME = /^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
+/**
+ * Where a key serves. `default` is the one certificate an older frontend serves for every name; `control` and `apps`
+ * let a frontend choose by SNI (the box's own name gets the control certificate, app names the apps one, plan H9).
+ */
+export const TLS_SLOTS = ["control", "apps"] as const;
+export type TlsSlot = (typeof TLS_SLOTS)[number];
+
+export interface ServingCert {
+  slot: TlsSlot | "default";
+  handle: string;
+  chainPem: string;
+  notAfter: number;
+  names: string[];
+  legacy: boolean;
+}
+
 interface StoredKey {
   names: string[];
   privHex: string;
@@ -44,6 +60,7 @@ export interface TlsKeyInfo {
 export class TlsKeys {
   private readonly keys = new Map<string, StoredKey>();
   private activeHandle: string | null = null;
+  private slots: Partial<Record<TlsSlot, string>> = {};
 
   constructor(
     private allowedNames: ReadonlySet<string>,
@@ -69,6 +86,17 @@ export class TlsKeys {
       const h = readFileSync(active, "utf8").trim();
       if (this.keys.has(h)) this.activeHandle = h;
     }
+    for (const slot of TLS_SLOTS) {
+      const f = join(dir, `active-${slot}`);
+      if (!existsSync(f)) continue;
+      const h = readFileSync(f, "utf8").trim();
+      if (this.keys.get(h)?.chainPem) this.slots[slot] = h;
+    }
+  }
+
+  /** Whether the key is in service anywhere: the default certificate or a slot. */
+  private serving(handle: string): boolean {
+    return handle === this.activeHandle || TLS_SLOTS.some((s) => this.slots[s] === handle);
   }
 
   private persist(handle: string): void {
@@ -106,7 +134,7 @@ export class TlsKeys {
     // Old keys that never got a certificate, or were replaced, make room for new ones.
     if (this.keys.size >= MAX_KEYS) {
       for (const [h, k] of this.keys) {
-        if (h !== this.activeHandle && (!k.notAfter || k.notAfter < this.now())) this.remove(h);
+        if (!this.serving(h) && (!k.notAfter || k.notAfter < this.now())) this.remove(h);
         if (this.keys.size < MAX_KEYS) break;
       }
       if (this.keys.size >= MAX_KEYS) throw new KeydError("forbidden", "too many TLS keys; remove one first");
@@ -193,15 +221,38 @@ export class TlsKeys {
     return { handle, notAfter, names };
   }
 
-  activate(handle: string): void {
+  /**
+   * Put a key in service. Without a slot it becomes the one default certificate and every slot is cleared (one
+   * certificate for every name, as before slots existed); with a slot it serves that class of names beside it.
+   */
+  activate(handle: string, slot?: TlsSlot): void {
     const k = this.get(handle);
     if (!k.chainPem) throw new KeydError("forbidden", "install a certificate before serving with this key");
-    this.activeHandle = handle;
+    if (slot === undefined) {
+      this.activeHandle = handle;
+      this.slots = {};
+    } else {
+      this.slots[slot] = handle;
+    }
     if (this.dir) {
       mkdirSync(this.dir, { recursive: true, mode: 0o700 });
-      writeFileSync(join(this.dir, "active.tmp"), handle, { mode: 0o400 });
-      renameSync(join(this.dir, "active.tmp"), join(this.dir, "active"));
+      const file = slot === undefined ? "active" : `active-${slot}`;
+      writeFileSync(join(this.dir, `${file}.tmp`), handle, { mode: 0o400 });
+      renameSync(join(this.dir, `${file}.tmp`), join(this.dir, file));
+      if (slot === undefined) for (const s of TLS_SLOTS) rmSync(join(this.dir, `active-${s}`), { force: true });
     }
+  }
+
+  /** Every certificate in service, slots first (control, apps), then the default one. */
+  servingCerts(): ServingCert[] {
+    const out: ServingCert[] = [];
+    const add = (slot: TlsSlot | "default", h: string | null | undefined) => {
+      const k = h ? this.keys.get(h) : undefined;
+      if (h && k?.chainPem) out.push({ slot, handle: h, chainPem: k.chainPem, notAfter: k.notAfter ?? 0, names: k.names, legacy: k.legacy === true });
+    };
+    for (const s of TLS_SLOTS) add(s, this.slots[s]);
+    add("default", this.activeHandle);
+    return out;
   }
 
   active(): { handle: string; chainPem: string; notAfter: number; names: string[]; legacy: boolean } | null {
@@ -229,14 +280,14 @@ export class TlsKeys {
       spkiHex: k.spkiHex,
       createdAt: k.createdAt,
       notAfter: k.notAfter ?? null,
-      active: handle === this.activeHandle,
+      active: this.serving(handle),
       legacy: k.legacy === true,
     }));
   }
 
   remove(handle: string): void {
     this.get(handle);
-    if (handle === this.activeHandle) throw new KeydError("forbidden", "the key in service cannot be removed");
+    if (this.serving(handle)) throw new KeydError("forbidden", "the key in service cannot be removed");
     this.keys.delete(handle);
     if (this.dir) rmSync(join(this.dir, `${handle}.json`), { force: true });
   }
@@ -245,6 +296,8 @@ export class TlsKeys {
   destroy(): void {
     for (const k of this.keys.values()) k.privHex = "0".repeat(64);
     this.keys.clear();
+    this.activeHandle = null;
+    this.slots = {};
   }
 }
 

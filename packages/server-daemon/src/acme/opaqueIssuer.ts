@@ -11,7 +11,10 @@ export const LE_DIRECTORY: Record<LeEnvironment, string> = {
 export interface OpaqueTlsKeyd {
   acme: KeydAcmeApi;
   active(): Promise<{ handle: string; chainPem: string; notAfter: number; names: string[]; legacy: boolean } | null>;
-  activate(handle: string): Promise<void>;
+  /** Without a slot: the one default certificate (clears the slots). With one: that class of names beside it. */
+  activate(handle: string, slot?: "control" | "apps"): Promise<void>;
+  /** The certificates in service by slot, or null from a keyd that serves only one. */
+  serving?(): Promise<Array<{ slot: string; handle: string }> | null>;
   /** Remove keys that came from the old process's PEM files and are no longer in service. */
   pruneLegacy?(): Promise<void>;
   /** PKCS#10 (DER) for a key keyd made, for exactly the names it was made for (the issuance service's request). */

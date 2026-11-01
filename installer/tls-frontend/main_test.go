@@ -56,6 +56,10 @@ type fakeKeyd struct {
 	path   string
 	mu     sync.Mutex
 	active *fakeCert
+	// slots, when set, are answered in tls.active's serving list (keyd with control and apps
+	// slots); without them the answer has no serving list, like a keyd from before slots.
+	slots  map[string]*fakeCert
+	signed map[string]int
 	down   bool
 	signs  int
 	ln     net.Listener
@@ -103,8 +107,11 @@ func (k *fakeKeyd) serve(c net.Conn) {
 		}
 		json.Unmarshal(buf, &req)
 		k.mu.Lock()
-		down, active := k.down, k.active
+		down, active, slots := k.down, k.active, k.slots
 		k.mu.Unlock()
+		entry := func(slot string, c *fakeCert) map[string]any {
+			return map[string]any{"slot": slot, "handle": c.handle, "chainPem": c.chain, "notAfter": c.cert.NotAfter.UnixMilli(), "names": c.cert.DNSNames}
+		}
 		if down {
 			return
 		}
@@ -113,16 +120,46 @@ func (k *fakeKeyd) serve(c net.Conn) {
 		case "hello":
 			res["result"] = map[string]any{"v": 1}
 		case "tls.active":
-			res["result"] = map[string]any{"active": map[string]any{"handle": active.handle, "chainPem": active.chain, "notAfter": active.cert.NotAfter.UnixMilli(), "names": active.cert.DNSNames}}
+			r := map[string]any{"active": nil}
+			if active != nil {
+				r["active"] = entry("default", active)
+			}
+			if slots != nil {
+				list := []any{}
+				for _, slot := range []string{"control", "apps"} {
+					if c := slots[slot]; c != nil {
+						list = append(list, entry(slot, c))
+					}
+				}
+				if active != nil {
+					list = append(list, entry("default", active))
+				}
+				r["serving"] = list
+			}
+			res["result"] = r
 		case "tls.sign":
+			h, _ := req.Args["handle"].(string)
+			key := (*ecdsa.PrivateKey)(nil)
+			for _, c := range append([]*fakeCert{active}, slots["control"], slots["apps"]) {
+				if c != nil && c.handle == h {
+					key = c.key
+				}
+			}
 			k.mu.Lock()
 			k.signs++
+			if k.signed == nil {
+				k.signed = map[string]int{}
+			}
+			k.signed[h]++
 			k.mu.Unlock()
 			msg, err := keydSignedInput(req.Args)
 			var sig []byte
+			if err == nil && key == nil {
+				err = errors.New("no such key")
+			}
 			if err == nil {
 				d := sha256.Sum256(msg)
-				sig, err = ecdsa.SignASN1(rand.Reader, active.key, d[:])
+				sig, err = ecdsa.SignASN1(rand.Reader, key, d[:])
 			}
 			if err != nil {
 				res = map[string]any{"id": req.ID, "ok": false, "code": "failed", "message": err.Error()}
@@ -388,5 +425,101 @@ func TestTLS12HandshakeSignsServerKeyExchangeThroughKeyd(t *testing.T) {
 func TestBuildCertificateNeedsAnECDSALeaf(t *testing.T) {
 	if _, err := buildCertificate(newKeydClient("/x", "x"), &activeCert{Handle: "h", ChainPEM: "not pem"}); err == nil {
 		t.Fatal("garbage accepted")
+	}
+}
+
+func TestServesTheControlCertificateForTheBoxNameAndTheAppsCertificateForAppNames(t *testing.T) {
+	control := newFakeCert(t, "control", "home.alice.flagship.services")
+	apps := newFakeCert(t, "apps", "*.home.alice.flagship.services")
+	// The default certificate is the control one (no account wildcard): before slots, every app
+	// name got it and browsers refused it (gym 20).
+	kd := startFakeKeyd(t, control)
+	kd.slots = map[string]*fakeCert{"control": control, "apps": apps}
+	up := startUpstream(t)
+	addr, _ := startFrontend(t, kd, up, time.Second)
+
+	for _, tc := range []struct {
+		sni  string
+		want *fakeCert
+	}{
+		{"home.alice.flagship.services", control},
+		{"chess.home.alice.flagship.services", apps},
+		{"CHESS.home.alice.flagship.services", apps},
+	} {
+		c, err := client(t, addr, tc.sni, tc.want.cert, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.sni, err)
+		}
+		if got := c.ConnectionState().PeerCertificates[0]; !got.Equal(tc.want.cert) {
+			t.Fatalf("%s got the %s certificate", tc.sni, got.DNSNames)
+		}
+		c.Close()
+	}
+	kd.mu.Lock()
+	signedControl, signedApps := kd.signed["control"], kd.signed["apps"]
+	kd.mu.Unlock()
+	if signedControl == 0 || signedApps == 0 {
+		t.Fatalf("each certificate's own key must sign: %v", kd.signed)
+	}
+	if c, err := client(t, addr, "evil.example.com", control.cert, func(c *tls.Config) { c.InsecureSkipVerify = true }); err == nil {
+		c.Close()
+		t.Fatal("a name no certificate covers got one")
+	}
+}
+
+func TestOneCertificateFromAnOlderKeydServesEveryNameItCovers(t *testing.T) {
+	combined := newFakeCert(t, "one", "home.alice.flagship.services", "*.home.alice.flagship.services", "*.alice.flagship.services")
+	kd := startFakeKeyd(t, combined)
+	up := startUpstream(t)
+	addr, _ := startFrontend(t, kd, up, time.Second)
+	for _, sni := range []string{"home.alice.flagship.services", "chess.home.alice.flagship.services", "blog.alice.flagship.services"} {
+		c, err := client(t, addr, sni, combined.cert, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", sni, err)
+		}
+		c.Close()
+	}
+}
+
+func TestPickPrefersTheClassThenAnyCoveringInDateCertificate(t *testing.T) {
+	cert := func(fc *fakeCert) *tls.Certificate {
+		c, err := buildCertificate(nil, &activeCert{Handle: fc.handle, ChainPEM: fc.chain})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	control := cert(newFakeCert(t, "c", "home.alice.flagship.services"))
+	apps := cert(newFakeCert(t, "a", "*.home.alice.flagship.services", "*.alice.flagship.services"))
+	both := cert(newFakeCert(t, "d", "home.alice.flagship.services", "*.home.alice.flagship.services"))
+	now := time.Now()
+	set := []slotCert{{slot: "control", cert: control}, {slot: "apps", cert: apps}, {slot: "default", cert: both}}
+	for sni, want := range map[string]*tls.Certificate{
+		"home.alice.flagship.services":       control,
+		"home.alice.flagship.services.":      control,
+		"chess.home.alice.flagship.services": apps,
+		"blog.alice.flagship.services":       apps,
+	} {
+		if got, err := pick(set, sni, now); err != nil || got != want {
+			t.Fatalf("%s: got %v, %v", sni, got, err)
+		}
+	}
+	// An expired apps certificate gives way to the in-date default that covers the name...
+	later := apps.Leaf.NotAfter.Add(time.Minute)
+	set2 := []slotCert{{slot: "control", cert: control}, {slot: "apps", cert: apps}, {slot: "default", cert: cert(newFakeCert(t, "d2", "home.alice.flagship.services", "*.home.alice.flagship.services"))}}
+	set2[2].cert.Leaf.NotAfter = later.Add(time.Hour)
+	if got, _ := pick(set2, "chess.home.alice.flagship.services", later); got != set2[2].cert {
+		t.Fatal("an expired certificate won over an in-date one")
+	}
+	// ...but with nothing else covering the name, the expired one is still served (as before).
+	if got, _ := pick(set2[:2], "blog.alice.flagship.services", later); got != apps {
+		t.Fatal("the only covering certificate was not served")
+	}
+	// A name only the default covers never gets the control or apps certificate.
+	if _, err := pick([]slotCert{{slot: "control", cert: control}}, "chess.home.alice.flagship.services", now); err == nil {
+		t.Fatal("the control certificate was served for an app name it does not cover")
+	}
+	if _, err := pick(set, "", now); err == nil {
+		t.Fatal("no SNI got a certificate")
 	}
 }

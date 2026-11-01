@@ -33,8 +33,8 @@ pub struct ActiveHandles {
 
 #[derive(Debug, Default)]
 struct HandlesState {
-    active: Option<String>,
-    previous: Option<(String, Instant)>,
+    active: Vec<String>,
+    previous: Vec<(String, Instant)>,
 }
 
 impl ActiveHandles {
@@ -47,20 +47,35 @@ impl ActiveHandles {
     }
 
     pub fn switch_to(&self, handle: &str) {
+        self.set(&[handle.to_owned()]);
+    }
+
+    /// The keys in service now (a box serves a control and an apps certificate side by side);
+    /// each one dropped keeps its grace.
+    pub fn set(&self, handles: &[String]) {
         let mut s = self.state.write().unwrap_or_else(PoisonError::into_inner);
-        if s.active.as_deref() == Some(handle) {
-            return;
-        }
-        s.previous = s.active.take().map(|h| (h, Instant::now()));
-        s.active = Some(handle.to_owned());
+        let grace = self.grace;
+        s.previous
+            .retain(|(h, at)| at.elapsed() < grace && !handles.contains(h));
+        let dropped: Vec<String> = s
+            .active
+            .iter()
+            .filter(|h| !handles.contains(h))
+            .cloned()
+            .collect();
+        let now = Instant::now();
+        s.previous.extend(dropped.into_iter().map(|h| (h, now)));
+        s.active = handles.to_vec();
     }
 
     pub fn permits(&self, handle: &str) -> bool {
         let s = self.state.read().unwrap_or_else(PoisonError::into_inner);
-        if s.active.as_deref() == Some(handle) {
+        if s.active.iter().any(|h| h == handle) {
             return true;
         }
-        matches!(&s.previous, Some((h, at)) if h == handle && at.elapsed() < self.grace)
+        s.previous
+            .iter()
+            .any(|(h, at)| h == handle && at.elapsed() < self.grace)
     }
 }
 
@@ -221,6 +236,13 @@ mod tests {
         std::thread::sleep(Duration::from_millis(50));
         assert!(!h.permits("a") && h.permits("b"));
         assert!(!h.permits("c"));
+        // Two in service at once; dropping one leaves it its grace.
+        h.set(&["b".into(), "c".into()]);
+        assert!(h.permits("b") && h.permits("c"));
+        h.set(&["c".into()]);
+        assert!(h.permits("b") && h.permits("c"));
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!h.permits("b") && h.permits("c"));
     }
 
     #[test]

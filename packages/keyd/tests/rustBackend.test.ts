@@ -529,7 +529,8 @@ describe.skipIf(!HAVE_BIN)("the Rust keyd backend", () => {
         ["tls.createKey", { names: ["*.alice.flagship.services", `*.${FQDN}`] }, false], ["tls.createKey", { names: ["*.flagship.services"] }, true],
         ["tls.csr", { handle: "nope" }, true], ["tls.csr", { handle: blob(16) }, true], ["tls.csr", {}, true],
         ["tls.install", { handle: blob(16), chain: "not pem!" }, true], ["tls.install", { handle: blob(16), chain: "abc" }, true], ["tls.install", { handle: "x", chain: "abc" }, true],
-        ["tls.activate", { handle: blob(16) }, true], ["tls.sign", { handle: blob(16), digest: blob(31) }, true], ["tls.sign", { handle: blob(16), digest: blob(32) }, true],
+        ["tls.activate", { handle: blob(16) }, true], ["tls.activate", { handle: blob(16), slot: "apps" }, true], ["tls.activate", { handle: blob(16), slot: "x" }, true],
+        ["tls.activate", { handle: blob(16), slot: null }, true], ["tls.activate", { handle: "x", slot: 1 }, true], ["tls.sign", { handle: blob(16), digest: blob(31) }, true], ["tls.sign", { handle: blob(16), digest: blob(32) }, true],
         ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(32)) }, true], ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(33)) }, true], ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(49)) }, true],
         ["tls.sign", { handle: blob(16), tls: "1.1", transcriptHash: blob(32) }, true], ["tls.sign", { handle: blob(16), ...t13(new Uint8Array(32)), clientRandom: blob(32) }, true],
         ["tls.sign", { handle: blob(16), ...t12() }, true], ["tls.sign", { handle: blob(16), ...t12({ clientRandom: blob(31) }) }, true],
@@ -651,6 +652,17 @@ describe.skipIf(!HAVE_BIN)("TLS keys in the Rust keyd", () => {
       expect(hex(again.signHandshake(rh, tls12ServerSignedMessage(new Uint8Array(32).fill(1), new Uint8Array(32).fill(2), P256_PARAMS)))).toBe((await c.call("tls.sign", { handle: rh, ...t12() })).sig);
       expect(hex(again.csr(rh))).toBe((await c.call("tls.csr", { handle: rh })).csr);
       expect(again.list().find((x) => x.handle === rh)?.spkiHex).toBe(r.spki);
+      // Slots (control and apps side by side): Rust writes them, TS reads them, and tls.active agrees.
+      await c.call("tls.activate", { handle, slot: "control" });
+      await c.call("tls.activate", { handle: rh, slot: "apps" });
+      const served = (await c.call("tls.active")).serving as Array<{ slot: string; handle: string }>;
+      expect(served.map((x) => [x.slot, x.handle])).toEqual([["control", handle], ["apps", rh], ["default", rh]]);
+      const withSlots = new TlsKeys(ALLOWED, join(dir, "tls"));
+      expect(withSlots.servingCerts()).toEqual(served);
+      await expect(c.call("tls.remove", { handle })).rejects.toMatchObject({ message: "the key in service cannot be removed" });
+      await c.call("tls.activate", { handle: rh });
+      expect(((await c.call("tls.active")).serving as unknown[]).length).toBe(1);
+      expect(new TlsKeys(ALLOWED, join(dir, "tls")).servingCerts().map((x) => x.slot)).toEqual(["default"]);
       c.close();
       await k.stop();
     } finally {

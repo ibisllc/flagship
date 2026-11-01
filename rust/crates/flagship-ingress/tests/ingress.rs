@@ -74,6 +74,7 @@ fn short_dir(tag: &str) -> PathBuf {
 #[derive(Clone)]
 struct FakeCert {
     handle: String,
+    names: Vec<String>,
     chain_pem: String,
     ca: CertificateDer<'static>,
     key: p256::ecdsa::SigningKey,
@@ -96,6 +97,7 @@ fn fake_cert(handle: &str, names: &[&str]) -> FakeCert {
     let key = p256::ecdsa::SigningKey::from_pkcs8_der(&leaf_key.serialize_der()).unwrap();
     FakeCert {
         handle: handle.into(),
+        names: names.iter().map(|s| (*s).to_owned()).collect(),
         chain_pem: leaf.pem(),
         ca: ca.der().clone(),
         key,
@@ -105,6 +107,9 @@ fn fake_cert(handle: &str, names: &[&str]) -> FakeCert {
 #[derive(Default)]
 struct KeydState {
     active: Option<FakeCert>,
+    /// `(slot, cert, notAfter)`: when set, tls.active carries a `serving` list (keyd with
+    /// control and apps slots); without, it answers like a keyd from before slots.
+    slots: Vec<(&'static str, FakeCert, i64)>,
     down: bool,
     signs: usize,
     oversize: bool,
@@ -183,17 +188,36 @@ fn serve_keyd(mut c: StdUnixStream, st: &Mutex<KeydState>) {
                     s.hellos += 1;
                     json!({"id": id, "ok": true, "result": {"v": 1, "publicKey": "00", "hasSwk": true, "hasCgk": true}})
                 }
-                "tls.active" => match &s.active {
-                    None => json!({"id": id, "ok": true, "result": {"active": null}}),
-                    Some(a) => json!({"id": id, "ok": true, "result": {"active": {
-                        "handle": a.handle, "chainPem": a.chain_pem, "notAfter": 0, "names": [HOME], "legacy": false}}}),
-                },
+                "tls.active" => {
+                    let entry = |slot: &str, a: &FakeCert, not_after: i64| {
+                        json!({"slot": slot, "handle": a.handle, "chainPem": a.chain_pem,
+                            "notAfter": not_after, "names": a.names, "legacy": false})
+                    };
+                    let mut result =
+                        json!({"active": s.active.as_ref().map(|a| entry("default", a, 0))});
+                    if !s.slots.is_empty() {
+                        let mut list: Vec<Value> = s
+                            .slots
+                            .iter()
+                            .map(|(slot, c, na)| entry(slot, c, *na))
+                            .collect();
+                        list.extend(s.active.as_ref().map(|a| entry("default", a, 0)));
+                        result["serving"] = Value::Array(list);
+                    }
+                    json!({"id": id, "ok": true, "result": result})
+                }
                 "tls.sign" => {
                     s.signs += 1;
                     let handle = req["args"]["handle"].as_str().unwrap();
                     let message = keyd_signed_input(&req["args"]);
-                    match &s.active {
-                        Some(a) if a.handle == handle => {
+                    let held = s
+                        .active
+                        .iter()
+                        .chain(s.slots.iter().map(|(_, c, _)| c))
+                        .find(|c| c.handle == handle)
+                        .cloned();
+                    match &held {
+                        Some(a) => {
                             let key = s.wrong_key.clone().unwrap_or_else(|| a.key.clone());
                             let sig: p256::ecdsa::Signature =
                                 p256::ecdsa::signature::Signer::sign(&key, &message);
@@ -1046,4 +1070,114 @@ async fn client_bytes_reach_the_daemon_verbatim() {
     assert_eq!(echo(&mut c, forged).await, forged.to_vec());
     let (h, _) = up.headers.recv().await.unwrap();
     assert_eq!(h["sni"], HOME);
+}
+
+/// A box without the account's wildcard holds a control certificate for exactly its name and
+/// an apps certificate for `*.<server>.<user>`; keyd's default is the control one. Each name
+/// must get its own (gym 20: every app name got the control certificate).
+#[tokio::test(flavor = "multi_thread")]
+async fn serves_the_control_certificate_for_the_box_and_the_apps_one_for_app_names() {
+    let control = fake_cert("control", &[HOME]);
+    let apps = fake_cert("apps", &["*.home.alice.flagship.services"]);
+    let kd = FakeKeyd::start(Some(control.clone()));
+    kd.set(|s| s.slots = vec![("control", control.clone(), 0), ("apps", apps.clone(), 0)]);
+    let up = start_upstream().await;
+    let ing = start_ingress(
+        &kd,
+        &up,
+        test_limits(),
+        KxPolicy::PreferHybrid,
+        Duration::from_secs(1),
+    )
+    .await;
+    // Each certificate has its own CA, so trusting one CA proves which certificate came back.
+    assert!(
+        connect(ing.addr, HOME, &control.ca, ClientOpts::default())
+            .await
+            .is_ok()
+    );
+    assert!(
+        connect(ing.addr, CHESS, &apps.ca, ClientOpts::default())
+            .await
+            .is_ok()
+    );
+    assert!(
+        connect(ing.addr, CHESS, &control.ca, ClientOpts::default())
+            .await
+            .is_err()
+    );
+    assert!(
+        connect(ing.addr, HOME, &apps.ca, ClientOpts::default())
+            .await
+            .is_err()
+    );
+    assert!(
+        connect(
+            ing.addr,
+            "chess.bob.flagship.services",
+            &apps.ca,
+            ClientOpts::default()
+        )
+        .await
+        .is_err()
+    );
+    // Before slots (no serving list): the one default certificate, as on an older keyd.
+    kd.set(|s| s.slots.clear());
+    ing.source.reload().unwrap();
+    assert!(
+        connect(ing.addr, HOME, &control.ca, ClientOpts::default())
+            .await
+            .is_ok()
+    );
+    assert!(
+        connect(ing.addr, CHESS, &control.ca, ClientOpts::default())
+            .await
+            .is_err()
+    );
+}
+
+/// An expired apps certificate gives way to an in-date one that covers the name; with nothing
+/// else covering it, the expired one is still served (as with one certificate).
+#[tokio::test(flavor = "multi_thread")]
+async fn prefers_an_in_date_certificate_that_covers_the_name() {
+    let combined = fake_cert("both", &[HOME, "*.home.alice.flagship.services"]);
+    let control = fake_cert("control", &[HOME]);
+    let apps = fake_cert(
+        "apps",
+        &[
+            "*.home.alice.flagship.services",
+            "*.alice.flagship.services",
+        ],
+    );
+    let kd = FakeKeyd::start(Some(combined.clone()));
+    kd.set(|s| s.slots = vec![("control", control.clone(), 0), ("apps", apps.clone(), 1)]);
+    let up = start_upstream().await;
+    let ing = start_ingress(
+        &kd,
+        &up,
+        test_limits(),
+        KxPolicy::PreferHybrid,
+        Duration::from_secs(1),
+    )
+    .await;
+    assert!(
+        connect(ing.addr, CHESS, &combined.ca, ClientOpts::default())
+            .await
+            .is_ok()
+    );
+    assert!(
+        connect(
+            ing.addr,
+            "blog.alice.flagship.services",
+            &apps.ca,
+            ClientOpts::default()
+        )
+        .await
+        .is_ok()
+    );
+    assert!(
+        connect(ing.addr, HOME, &control.ca, ClientOpts::default())
+            .await
+            .is_ok()
+    );
 }

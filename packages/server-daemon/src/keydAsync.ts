@@ -35,8 +35,12 @@ export function keydTlsKeyd(client: KeydClient): OpaqueTlsKeyd {
       const r = (await client.call("tls.active")).active as { handle: string; chainPem: string; notAfter: number; names: string[]; legacy?: boolean } | null;
       return r ? { handle: r.handle, chainPem: r.chainPem, notAfter: r.notAfter, names: r.names, legacy: r.legacy === true } : null;
     },
-    async activate(handle) {
-      await client.call("tls.activate", { handle });
+    async activate(handle, slot) {
+      await client.call("tls.activate", slot ? { handle, slot } : { handle });
+    },
+    async serving() {
+      const r = (await client.call("tls.active")).serving;
+      return Array.isArray(r) ? (r as Array<{ slot: string; handle: string }>).map((s) => ({ slot: String(s.slot), handle: String(s.handle) })) : null;
     },
     async csr(handle) {
       const r = await client.call("tls.csr", { handle });

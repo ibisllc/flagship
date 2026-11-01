@@ -18,6 +18,7 @@ import { CertManager } from "../src/certManager.js";
 import { PersistentAcmeStore } from "../src/acme/persistentStore.js";
 import { BoxCertificates, type KeydCertSlots } from "../src/acme/boxCertificates.js";
 import { IssuanceDeferred, keydCsrSource, localCsrSource, ServiceIssuer, type CsrSource } from "../src/acme/serviceIssuer.js";
+import { TlsKeys, namesFor, type TlsSlot } from "@flagship/keyd";
 
 const APEX = "flagship.services";
 const SERVER = `home.alice.${APEX}`;
@@ -63,6 +64,21 @@ async function world(o: { grant?: boolean } = {}) {
       },
     });
   return { sqlite, ca, dns, clock, issuer, close: () => sqlite.close() };
+}
+
+/** keyd's real TLS key store behind the daemon's interfaces: keys never leave it, certificates are checked on install. */
+function realKeyd() {
+  const tls = new TlsKeys(new Set(namesFor(SERVER)));
+  const keyd: KeydCertSlots = {
+    install: async (h, chain) => tls.install(h, chain),
+    activate: async (h, slot?: TlsSlot) => tls.activate(h, slot),
+    serving: async () => tls.servingCerts().map((c) => ({ slot: c.slot, handle: c.handle })),
+    list: async () => tls.list(),
+    active: async () => tls.active(),
+  };
+  const csr = keydCsrSource({ tlsCreateKey: async (names) => ({ handle: tls.createKey(names).handle }), tlsCsr: async (h) => tls.csr(h) });
+  const served = () => Object.fromEntries(tls.servingCerts().map((c) => [c.slot, c.names.slice().sort()]));
+  return { tls, keyd, csr, served };
 }
 
 const sanOf = (pem: string) => new X509Certificate(pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/)![0]).subjectAltName;
@@ -143,40 +159,44 @@ describe("box certificates through the issuance service", () => {
     }
   });
 
-  it("with the key in keyd: installs both and keeps the app certificate active when it also covers the box's name", async () => {
+  it("with the key in keyd and the account wildcard: the app certificate is the default, and each class has its slot", async () => {
     const w = await world({ grant: true });
     try {
-      const keys = new Map<string, { names: string[]; keys: CryptoKeyPair; chain?: string; notAfter?: number }>();
-      let active: string | null = null;
-      let n = 0;
-      const keyd: KeydCertSlots = {
-        install: async (h, chain) => {
-          const k = keys.get(h)!;
-          k.chain = chain;
-          k.notAfter = Date.parse(new X509Certificate(chain.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/)![0]).validTo);
-          return { notAfter: k.notAfter, names: k.names };
-        },
-        activate: async (h) => {
-          active = h;
-        },
-        list: async () => [...keys].map(([handle, k]) => ({ handle, names: k.names, notAfter: k.notAfter ?? null, active: handle === active, legacy: false })),
-        active: async () => {
-          const k = active ? keys.get(active) : undefined;
-          return k?.chain ? { handle: active!, chainPem: k.chain, notAfter: k.notAfter!, names: k.names } : null;
-        },
-      };
-      const csr = keydCsrSource({
-        tlsCreateKey: async (names) => {
-          const handle = (++n).toString(16).padStart(32, "0");
-          keys.set(handle, { names, keys: (await makeCsr(names)).keys });
-          return { handle };
-        },
-        tlsCsr: async (h) => (await makeCsr(keys.get(h)!.names, { keys: keys.get(h)!.keys })).der,
-      });
-      const certs = new BoxCertificates({ issuer: w.issuer(csr), serverFqdn: SERVER, certManager: new CertManager(), keyd, now: () => w.clock.t, random: () => 0 });
+      const k = realKeyd();
+      const certs = new BoxCertificates({ issuer: w.issuer(k.csr), serverFqdn: SERVER, certManager: new CertManager(), keyd: k.keyd, now: () => w.clock.t, random: () => 0 });
       await certs.tick();
-      expect(keys.size).toBe(2);
-      expect(keys.get(active!)!.names.sort()).toEqual([`*.alice.${APEX}`, `*.${SERVER}`]);
+      expect(k.tls.list()).toHaveLength(2);
+      expect(k.served()).toEqual({ control: [SERVER], apps: [`*.alice.${APEX}`, `*.${SERVER}`], default: [`*.alice.${APEX}`, `*.${SERVER}`] });
+    } finally {
+      w.close();
+    }
+  });
+
+  it("with the key in keyd and no account wildcard: the box's name keeps the control certificate and app names get the apps one (gym 20)", async () => {
+    const w = await world();
+    try {
+      const k = realKeyd();
+      const certs = new BoxCertificates({ issuer: w.issuer(k.csr), serverFqdn: SERVER, certManager: new CertManager(), keyd: k.keyd, now: () => w.clock.t, random: () => 0 });
+      await certs.tick();
+      expect(k.served()).toEqual({ control: [SERVER], apps: [`*.${SERVER}`], default: [SERVER] });
+      // Steady state: another tick changes nothing.
+      const before = k.tls.servingCerts().map((c) => c.handle);
+      await certs.tick();
+      expect(k.tls.servingCerts().map((c) => c.handle)).toEqual(before);
+    } finally {
+      w.close();
+    }
+  });
+
+  it("with a keyd that serves only one certificate: the control one stays the default, as before slots", async () => {
+    const w = await world();
+    try {
+      const k = realKeyd();
+      const { serving: _gone, ...oneOnly } = k.keyd;
+      void _gone;
+      const certs = new BoxCertificates({ issuer: w.issuer(k.csr), serverFqdn: SERVER, certManager: new CertManager(), keyd: oneOnly, now: () => w.clock.t, random: () => 0 });
+      await certs.tick();
+      expect(k.served()).toEqual({ default: [SERVER] });
     } finally {
       w.close();
     }

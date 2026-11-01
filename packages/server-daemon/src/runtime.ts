@@ -1339,7 +1339,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       ? {
           keyd: {
             install: (h: string, chain: string) => keydTls.acme.tlsInstall(h, chain),
-            activate: (h: string) => keydTls.activate(h),
+            activate: (h: string, slot?: "control" | "apps") => keydTls.activate(h, slot),
+            ...(keydTls.serving ? { serving: () => keydTls.serving!() } : {}),
             list: () => keydTls.list!(),
             active: () => keydTls.active(),
           },

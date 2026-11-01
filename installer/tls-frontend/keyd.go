@@ -132,16 +132,36 @@ type activeCert struct {
 	Names    []string
 }
 
-func (c *keydClient) active() (*activeCert, error) {
+// servingCert is one certificate keyd has in service and where: "control" (the box's own
+// name), "apps" (its app names) or "default" (the one certificate an older keyd serves for
+// every name).
+type servingCert struct {
+	Slot string `json:"slot"`
+	activeCert
+}
+
+// serving lists every certificate keyd has in service. A keyd from before slots answers
+// tls.active with only the default certificate; that is a list of one.
+func (c *keydClient) serving() ([]servingCert, error) {
 	res, err := c.call("tls.active", map[string]any{})
 	if err != nil {
 		return nil, err
+	}
+	if raw, ok := res["serving"]; ok {
+		var list []servingCert
+		if err := json.Unmarshal(raw, &list); err != nil {
+			return nil, err
+		}
+		return list, nil
 	}
 	var a *activeCert
 	if err := json.Unmarshal(res["active"], &a); err != nil {
 		return nil, err
 	}
-	return a, nil
+	if a == nil {
+		return nil, nil
+	}
+	return []servingCert{{Slot: "default", activeCert: *a}}, nil
 }
 
 // keydSigner is a crypto.MessageSigner whose private key stays in keyd. crypto/tls hands it the

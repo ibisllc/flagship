@@ -36,27 +36,35 @@ type config struct {
 	minTLS     uint16
 }
 
-// certSource hands out the certificate in service, refreshed from keyd every few seconds so a
-// renewal takes effect without dropping connections.
+// certSource hands out the certificates in service, refreshed from keyd every few seconds so a
+// renewal takes effect without dropping connections. A box holds up to two: a control
+// certificate for exactly its own name and an apps certificate for its app names; each
+// handshake gets the one for its SNI (see pick).
 type certSource struct {
 	client  *keydClient
 	refresh time.Duration
 	mu      sync.Mutex
-	cur     *tls.Certificate
-	handle  string
+	cur     []slotCert
 	at      time.Time
 }
 
-func (s *certSource) get() (*tls.Certificate, error) {
+type slotCert struct {
+	slot   string
+	handle string
+	chain  string
+	cert   *tls.Certificate
+}
+
+func (s *certSource) get() ([]slotCert, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.cur != nil && time.Since(s.at) < s.refresh {
 		return s.cur, nil
 	}
-	a, err := s.client.active()
-	if err != nil || a == nil {
+	list, err := s.client.serving()
+	if err != nil || len(list) == 0 {
 		if s.cur != nil {
-			// keyd is briefly unreachable: keep serving the certificate we have.
+			// keyd is briefly unreachable: keep serving the certificates we have.
 			return s.cur, nil
 		}
 		if err == nil {
@@ -64,16 +72,69 @@ func (s *certSource) get() (*tls.Certificate, error) {
 		}
 		return nil, err
 	}
-	if a.Handle == s.handle && s.cur != nil {
-		s.at = time.Now()
-		return s.cur, nil
+	built := make(map[string]*tls.Certificate, len(s.cur))
+	for _, c := range s.cur {
+		built[c.handle+"\x00"+c.chain] = c.cert
 	}
-	c, err := buildCertificate(s.client, a)
-	if err != nil {
-		return nil, err
+	next := make([]slotCert, 0, len(list))
+	for _, a := range list {
+		c := built[a.Handle+"\x00"+a.ChainPEM]
+		if c == nil {
+			if c, err = buildCertificate(s.client, &a.activeCert); err != nil {
+				log.Printf("tlsd: skipping the %s certificate: %v", a.Slot, err)
+				continue
+			}
+			built[a.Handle+"\x00"+a.ChainPEM] = c
+		}
+		next = append(next, slotCert{slot: a.Slot, handle: a.Handle, chain: a.ChainPEM, cert: c})
 	}
-	s.cur, s.handle, s.at = c, a.Handle, time.Now()
-	return c, nil
+	if len(next) == 0 {
+		if s.cur != nil {
+			return s.cur, nil
+		}
+		return nil, errors.New("no usable certificate in service")
+	}
+	s.cur, s.at = next, time.Now()
+	return next, nil
+}
+
+// pick chooses the certificate for a name: the control certificate for exactly the name it
+// was issued for, the apps certificate for any other, then whatever else covers the name. An
+// in-date certificate always wins over an expired one; a certificate that does not cover the
+// name is never served.
+func pick(certs []slotCert, sni string, now time.Time) (*tls.Certificate, error) {
+	if sni == "" {
+		return nil, errors.New("no server name")
+	}
+	name := strings.ToLower(strings.TrimSuffix(sni, "."))
+	controlName := false
+	for _, c := range certs {
+		if c.slot != "control" {
+			continue
+		}
+		for _, n := range c.cert.Leaf.DNSNames {
+			if !strings.HasPrefix(n, "*.") && strings.EqualFold(n, name) {
+				controlName = true
+			}
+		}
+	}
+	order := []string{"apps", "control", "default"}
+	if controlName {
+		order = []string{"control", "apps", "default"}
+	}
+	for _, inDate := range []bool{true, false} {
+		for _, slot := range order {
+			for _, c := range certs {
+				if c.slot != slot || (inDate && !now.Before(c.cert.Leaf.NotAfter)) {
+					continue
+				}
+				if c.cert.Leaf.VerifyHostname(name) == nil {
+					return c.cert, nil
+				}
+			}
+		}
+	}
+	return nil, fmt.Errorf("no certificate for %q", sni)
 }
 
 func (s *certSource) tlsConfig(minVersion uint16) *tls.Config {
@@ -81,15 +142,12 @@ func (s *certSource) tlsConfig(minVersion uint16) *tls.Config {
 		MinVersion: minVersion,
 		NextProtos: []string{"http/1.1"},
 		GetCertificate: func(h *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			c, err := s.get()
+			certs, err := s.get()
 			if err != nil {
 				return nil, err
 			}
-			// Only a name the certificate covers; anything else gets no certificate.
-			if h.ServerName == "" || c.Leaf.VerifyHostname(h.ServerName) != nil {
-				return nil, fmt.Errorf("no certificate for %q", h.ServerName)
-			}
-			return c, nil
+			// Only a name a certificate covers; anything else gets no certificate.
+			return pick(certs, h.ServerName, time.Now())
 		},
 	}
 }

@@ -201,11 +201,16 @@ fn num(v: Option<&Value>) -> Option<i64> {
         .or_else(|| v.as_f64().filter(|f| f.is_finite()).map(|f| f as i64))
 }
 
+/// Where a key serves beside the default certificate, so a frontend can choose by SNI: the
+/// box's own name gets the `control` certificate, app names the `apps` one (`TLS_SLOTS` in tls.ts).
+pub const TLS_SLOTS: [&str; 2] = ["control", "apps"];
+
 pub struct TlsKeys {
     allowed: Vec<String>,
     dir: Option<PathBuf>,
     keys: Vec<(String, StoredKey)>,
     active: Option<String>,
+    slots: [Option<String>; 2],
     now: Clock,
 }
 
@@ -215,6 +220,7 @@ impl std::fmt::Debug for TlsKeys {
             .field("allowed", &self.allowed)
             .field("keys", &self.keys.len())
             .field("active", &self.active)
+            .field("slots", &self.slots)
             .finish_non_exhaustive()
     }
 }
@@ -226,6 +232,7 @@ impl TlsKeys {
             dir: dir.clone(),
             keys: Vec::new(),
             active: None,
+            slots: [None, None],
             now,
         };
         if let Some(d) = dir {
@@ -257,6 +264,22 @@ impl TlsKeys {
                 self.active = Some(h.to_owned());
             }
         }
+        for (i, slot) in TLS_SLOTS.iter().enumerate() {
+            if let Ok(text) = fs::read_to_string(dir.join(format!("active-{slot}"))) {
+                let h = text.trim();
+                if self.find(h).is_some_and(|k| k.chain_pem.is_some())
+                    && let Some(s) = self.slots.get_mut(i)
+                {
+                    *s = Some(h.to_owned());
+                }
+            }
+        }
+    }
+
+    /// Whether the key is in service anywhere: the default certificate or a slot.
+    fn serving(&self, handle: &str) -> bool {
+        self.active.as_deref() == Some(handle)
+            || self.slots.iter().any(|s| s.as_deref() == Some(handle))
     }
 
     fn read_stored(path: &Path) -> Option<StoredKey> {
@@ -391,8 +414,7 @@ impl TlsKeys {
                 .keys
                 .iter()
                 .filter(|(h, k)| {
-                    Some(h) != self.active.as_ref()
-                        && k.not_after.is_none_or(|na| na == 0 || na < now)
+                    !self.serving(h) && k.not_after.is_none_or(|na| na == 0 || na < now)
                 })
                 .map(|(h, _)| h.clone())
                 .collect();
@@ -501,18 +523,67 @@ impl TlsKeys {
         Ok((not_before, not_after, got))
     }
 
-    pub fn activate(&mut self, handle: &str) -> KeydResult<()> {
+    /// Put a key in service. Without a slot it becomes the one default certificate and every
+    /// slot is cleared; with a slot (an index into `TLS_SLOTS`) it serves that class of names.
+    pub fn activate(&mut self, handle: &str, slot: Option<usize>) -> KeydResult<()> {
         if self.get(handle)?.chain_pem.is_none() {
             return Err(KeydError::forbidden(
                 "install a certificate before serving with this key",
             ));
         }
-        self.active = Some(handle.to_owned());
+        let file = match slot {
+            None => {
+                self.active = Some(handle.to_owned());
+                self.slots = [None, None];
+                "active".to_owned()
+            }
+            Some(i) => {
+                let (Some(s), Some(name)) = (self.slots.get_mut(i), TLS_SLOTS.get(i)) else {
+                    return Err(KeydError::bad_request("slot must be control or apps"));
+                };
+                *s = Some(handle.to_owned());
+                format!("active-{name}")
+            }
+        };
         if let Some(dir) = &self.dir {
             ensure_dir(dir, 0o700).map_err(io_failed)?;
-            write_atomic(&dir.join("active"), handle.as_bytes(), 0o400).map_err(io_failed)?;
+            write_atomic(&dir.join(&file), handle.as_bytes(), 0o400).map_err(io_failed)?;
+            if slot.is_none() {
+                for name in TLS_SLOTS {
+                    match fs::remove_file(dir.join(format!("active-{name}"))) {
+                        Ok(()) => {}
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(e) => return Err(io_failed(e)),
+                    }
+                }
+            }
         }
         Ok(())
+    }
+
+    /// Every certificate in service, slots first (control, apps), then the default one.
+    pub fn serving_certs(&self) -> Vec<Value> {
+        let entry = |slot: &str, h: &str| {
+            let k = self.find(h)?;
+            let chain = k.chain_pem.as_ref()?;
+            Some(Value::Object(obj! {
+                "slot" => slot,
+                "handle" => h,
+                "chainPem" => chain.clone(),
+                "notAfter" => k.not_after.unwrap_or(0),
+                "names" => k.names.clone(),
+                "legacy" => k.legacy,
+            }))
+        };
+        let mut out: Vec<Value> = TLS_SLOTS
+            .iter()
+            .zip(self.slots.iter())
+            .filter_map(|(name, h)| entry(name, h.as_deref()?))
+            .collect();
+        if let Some(v) = self.active.as_deref().and_then(|h| entry("default", h)) {
+            out.push(v);
+        }
+        out
     }
 
     pub fn active(&self) -> Value {
@@ -559,7 +630,7 @@ impl TlsKeys {
                     "spkiHex" => k.spki_hex.clone(),
                     "createdAt" => k.created_at,
                     "notAfter" => k.not_after.map_or(Value::Null, Value::from),
-                    "active" => Some(h) == self.active.as_ref(),
+                    "active" => self.serving(h),
                     "legacy" => k.legacy,
                 })
             })
@@ -568,7 +639,7 @@ impl TlsKeys {
 
     pub fn remove(&mut self, handle: &str) -> KeydResult<()> {
         self.get(handle)?;
-        if self.active.as_deref() == Some(handle) {
+        if self.serving(handle) {
             return Err(KeydError::forbidden("the key in service cannot be removed"));
         }
         self.keys.retain(|(h, _)| h != handle);
@@ -586,6 +657,7 @@ impl TlsKeys {
     pub fn destroy(&mut self) {
         self.keys.clear();
         self.active = None;
+        self.slots = [None, None];
     }
 }
 
@@ -771,7 +843,12 @@ mod tests {
             t.sign_handshake(&h, &tls13_server_signed_message(&[0; 32]))
                 .is_err()
         );
-        assert!(t.activate(&h).is_err());
+        assert!(t.activate(&h, None).is_err());
+        // Slots need an installed certificate too; serving and removal rules are pinned against
+        // the TS backend in packages/keyd/tests/rustBackend.test.ts.
+        assert!(t.activate(&h, Some(1)).is_err());
+        assert!(t.serving_certs().is_empty());
+        assert!(t.remove(&h).is_ok());
         assert_eq!(
             t.create_key(&["evil.example.com".into()]).unwrap_err().code,
             crate::wire::ErrorCode::Forbidden

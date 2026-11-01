@@ -11,7 +11,10 @@ import { IssuanceDeferred, IssuanceRefused, type BoxCertClass, type IssuedCertif
  */
 export interface KeydCertSlots {
   install(handle: string, chainPem: string): Promise<{ notAfter: number; names: string[] }>;
-  activate(handle: string): Promise<void>;
+  /** Without a slot: the one default certificate, served for every name by an older frontend (clears the slots). */
+  activate(handle: string, slot?: BoxCertClass): Promise<void>;
+  /** The certificates in service by slot; null (or absent) when keyd serves only one. */
+  serving?(): Promise<Array<{ slot: string; handle: string }> | null>;
   list(): Promise<Array<{ handle: string; names: string[]; notAfter: number | null; active: boolean; legacy: boolean }>>;
   active(): Promise<{ handle: string; chainPem: string; notAfter: number; names: string[] } | null>;
 }
@@ -31,7 +34,7 @@ export interface BoxCertificatesOptions {
   certManager: CertManager;
   /** Classic: the PEM store (key + chain in this process). */
   store?: PersistentAcmeStore | null;
-  /** Arch-v2: the keys live in flagship-keyd and the ingress serves keyd's one active certificate. */
+  /** Arch-v2: the keys live in flagship-keyd; the frontend serves each name the certificate of its class. */
   keyd?: KeydCertSlots;
   onInstalled?(cls: BoxCertClass, cert: CertMaterial, notAfter: number, names: string[]): void;
   onAttemptFailed?(cls: BoxCertClass, attempt: number, error: string): void;
@@ -189,9 +192,11 @@ export class BoxCertificates {
   }
 
   /**
-   * keyd's ingress serves ONE active certificate. The app certificate is active when it also covers the control name
-   * (`*.<user>`) and is valid; otherwise the control certificate is, so the box's own name always answers (recovery).
-   * Serving both by SNI needs the ingress to choose per name (open item, docs/architecture-v2/issuance-service.md §8).
+   * keyd's default certificate is what an older frontend serves for every name: the app certificate when it also
+   * covers the control name (`*.<user>`) and is valid, otherwise the control certificate, so the box's own name always
+   * answers (recovery). With both valid, each also goes in its slot, and the frontend (flagship-tlsd, flagship-ingress)
+   * serves the box's own name the control certificate and every app name the apps one (gym 20: without the account
+   * wildcard, app names got the control certificate). A keyd without slots keeps the one default.
    */
   private async activateKeyd(): Promise<void> {
     const keyd = this.o.keyd!;
@@ -205,6 +210,20 @@ export class BoxCertificates {
     if (active?.handle !== pick.handle) {
       await keyd.activate(pick.handle);
       active = await keyd.active().catch(() => null);
+    }
+    const validControl = control?.handle && control.notAfter > now ? control.handle : null;
+    const validApps = apps?.handle && apps.notAfter > now ? apps.handle : null;
+    if (validControl && validApps && keyd.serving) {
+      try {
+        const serving = await keyd.serving();
+        if (serving) {
+          for (const [slot, handle] of [["control", validControl], ["apps", validApps]] as const) {
+            if (!serving.some((s) => s.slot === slot && s.handle === handle)) await keyd.activate(handle, slot);
+          }
+        }
+      } catch (e) {
+        console.warn(`[certs] could not serve the control and apps certificates side by side: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
     if (!active) return;
     try {

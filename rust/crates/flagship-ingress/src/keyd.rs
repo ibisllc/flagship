@@ -57,6 +57,18 @@ pub struct ActiveCert {
     pub names: Vec<String>,
 }
 
+/// Where keyd serves a certificate: `control` (the box's own name), `apps` (its app names) or
+/// `default` (the one certificate a keyd from before slots serves for every name).
+pub const SLOTS: [&str; 3] = ["control", "apps", "default"];
+/// keyd has at most three entries in service (two slots and the default).
+const MAX_SERVING: usize = 8;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServedCert {
+    pub slot: &'static str,
+    pub cert: ActiveCert,
+}
+
 #[derive(Debug)]
 struct Conn {
     stream: UnixStream,
@@ -140,6 +152,45 @@ impl KeydClient {
             Some(Value::Null) => Ok(None),
             Some(Value::Object(a)) => parse_active(a).map(Some),
             Some(_) => Err(KeydError::Invalid("active is not an object")),
+        }
+    }
+
+    /// Every certificate keyd has in service. A keyd from before slots answers `tls.active`
+    /// without a `serving` list; its one active certificate is then the `default` entry.
+    pub fn serving(&self) -> Result<Vec<ServedCert>, KeydError> {
+        let res = self.call("tls.active", json!({}))?;
+        match res.get("serving") {
+            Some(Value::Array(list)) => {
+                if list.len() > MAX_SERVING {
+                    return Err(KeydError::Invalid("serving has too many entries"));
+                }
+                list.iter()
+                    .map(|v| {
+                        let Value::Object(o) = v else {
+                            return Err(KeydError::Invalid("serving entry is not an object"));
+                        };
+                        let slot = o
+                            .get("slot")
+                            .and_then(Value::as_str)
+                            .and_then(|s| SLOTS.iter().find(|n| **n == s))
+                            .ok_or(KeydError::Invalid("serving entry has no known slot"))?;
+                        Ok(ServedCert {
+                            slot,
+                            cert: parse_active(o)?,
+                        })
+                    })
+                    .collect()
+            }
+            Some(_) => Err(KeydError::Invalid("serving is not a list")),
+            None => match res.get("active") {
+                None => Err(KeydError::Invalid("no active field")),
+                Some(Value::Null) => Ok(Vec::new()),
+                Some(Value::Object(a)) => Ok(vec![ServedCert {
+                    slot: "default",
+                    cert: parse_active(a)?,
+                }]),
+                Some(_) => Err(KeydError::Invalid("active is not an object")),
+            },
         }
     }
 

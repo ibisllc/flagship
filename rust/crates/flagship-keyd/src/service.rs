@@ -17,7 +17,7 @@ use crate::policy::{
     is_pairing_order, is_service_id,
 };
 use crate::tls::{
-    Clock, TlsKeys, is_ecdhe_params, system_clock, tls12_server_signed_message,
+    Clock, TLS_SLOTS, TlsKeys, is_ecdhe_params, system_clock, tls12_server_signed_message,
     tls13_server_signed_message,
 };
 use crate::wire::{
@@ -562,14 +562,25 @@ impl KeydService {
                 done(obj! { "notBefore" => not_before, "notAfter" => not_after, "names" => names })
             }
             "tls.activate" => {
-                no_extra_args(a, &["handle"])?;
+                no_extra_args(a, &["handle", "slot"])?;
+                let slot = match a.get("slot") {
+                    None => None,
+                    Some(v) => Some(
+                        v.as_str()
+                            .and_then(|s| TLS_SLOTS.iter().position(|n| *n == s))
+                            .ok_or_else(|| {
+                                KeydError::bad_request("slot must be control or apps")
+                            })?,
+                    ),
+                };
                 let tls = self.tls_mut()?;
-                tls.activate(str_arg(a, "handle", 32)?)?;
+                tls.activate(str_arg(a, "handle", 32)?, slot)?;
                 done(obj! { "active" => true })
             }
             "tls.active" => {
                 no_extra_args(a, &[])?;
-                done(obj! { "active" => self.tls()?.active() })
+                let tls = self.tls()?;
+                done(obj! { "active" => tls.active(), "serving" => tls.serving_certs() })
             }
             "tls.sign" => {
                 // keyd builds the signed input from the TLS fields: the certificate key signs TLS

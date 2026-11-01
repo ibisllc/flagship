@@ -24,7 +24,7 @@ import { AcmeAccount, type AcmeRequest } from "./acme.js";
 import { ArchiveKeys } from "./archive.js";
 import { accountZoneOf, namesFor } from "./migrate.js";
 import { renameSync, writeFileSync } from "node:fs";
-import { TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage } from "./tls.js";
+import { TLS_SLOTS, TlsKeys, isEcdheParams, tls12ServerSignedMessage, tls13ServerSignedMessage, type TlsSlot } from "./tls.js";
 import { KEYD_PROTOCOL_VERSION, KeydError, hexArg, noExtraArgs, pemArg, strArg, toHex, type KeydRequest } from "./wire.js";
 
 const GOSSIP_TAG = "flagship/gossip/v2|";
@@ -349,13 +349,19 @@ export class KeydService {
         return { result: { notBefore: r.notBefore, notAfter: r.notAfter, names: r.names } };
       }
       case "tls.activate": {
-        noExtraArgs(a, ["handle"]);
-        this.#tlsOrThrow().activate(strArg(a, "handle", 32));
+        noExtraArgs(a, ["handle", "slot"]);
+        let slot: TlsSlot | undefined;
+        if (a.slot !== undefined) {
+          if (typeof a.slot !== "string" || !(TLS_SLOTS as readonly string[]).includes(a.slot)) throw new KeydError("bad-request", "slot must be control or apps");
+          slot = a.slot as TlsSlot;
+        }
+        this.#tlsOrThrow().activate(strArg(a, "handle", 32), slot);
         return { result: { active: true } };
       }
       case "tls.active": {
         noExtraArgs(a, []);
-        return { result: { active: this.#tlsOrThrow().active() } };
+        const tls = this.#tlsOrThrow();
+        return { result: { active: tls.active(), serving: tls.servingCerts() } };
       }
       case "tls.sign": {
         // keyd builds the signed input itself from the TLS fields, so the certificate key signs
