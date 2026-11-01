@@ -306,7 +306,7 @@ export const relayAuthority: Group = {
       let grantId = "";
       const delegated = (l: ServingLease): SignedLease => ({ lease: l, signature: signServingLeaseP256(l, renewalSk), delegationPub: renewalPub });
       await rec.check("H10: a renewal key delegated to a throwaway device renews; an undelegated P-256 key does not", async () => {
-        const g = await mintDeviceGrant(acct, randomBytes(16).toString("hex"), device, ["browse"], acct.keys.adminRoot);
+        const g = await mintDeviceGrant(acct, randomBytes(16).toString("hex"), device, ["browse"], acct.keys.irk);
         assert(g.status === 200 && typeof g.json?.grantId === "string", `device grant ${g.status}: ${short(g.text)}`);
         grantId = g.json.grantId as string;
         const stranger = p256.utils.randomSecretKey();
